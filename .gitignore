@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+.venv/
+venv/
+*.egg-info/
+.eggs/
+
+# Env / секреты
+.env
+.env.*
+!.env.example
+
+# SQLite и данные
+backend/data/*.db
+backend/data/*.db-*
+
+# Node / фронт
+frontend/node_modules/
+frontend/dist/
+
+# IDE / OS
+.idea/
+.vscode/
+!.vscode/extensions.json
+.DS_Store
+Thumbs.db
+
+# Логи
+*.log

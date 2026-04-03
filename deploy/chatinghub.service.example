@@ -1,0 +1,23 @@
+# /etc/systemd/system/chatinghub.service
+# Подставьте User, WorkingDirectory, PORT (тот же, что в nginx proxy_pass).
+
+[Unit]
+Description=Chating Hub (FastAPI + static frontend)
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/chatinghub/backend
+Environment=PORT=18080
+EnvironmentFile=-/opt/chatinghub/backend/.env
+ExecStart=/opt/chatinghub/backend/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 18080
+Restart=on-failure
+RestartSec=5
+
+# Ограничение прав (опционально, пути подправьте)
+# NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target
