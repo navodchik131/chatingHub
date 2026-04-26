@@ -321,7 +321,7 @@ async def api_delete_studio_model_image(
         abs_path.relative_to(BACKEND_DIR.resolve())
     except ValueError:
         raise HTTPException(status_code=400, detail="Некорректный путь файла") from None
-    session.delete(img)
+    await session.delete(img)
     await session.commit()
     if abs_path.is_file():
         abs_path.unlink(missing_ok=True)
@@ -340,7 +340,7 @@ async def api_delete_studio_model(
     if not m or m.user_id != oid:
         raise HTTPException(status_code=404, detail="Модель не найдена")
     d = _model_dir(oid, model_id)
-    session.delete(m)
+    await session.delete(m)
     await session.commit()
     if d.is_dir() and str(d).startswith(str(BACKEND_DIR.resolve())):
         shutil.rmtree(d, ignore_errors=True)

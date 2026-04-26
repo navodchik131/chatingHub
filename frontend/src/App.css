@@ -1753,6 +1753,45 @@ a.studio-download {
     left: 50%;
     transform: translateX(-50%);
   }
+
+  /* Кабинет / студия: одна колонка, без горизонтального «три в ряд» */
+  .model-card-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .account-panel,
+  .studio-panel {
+    padding: 1rem 0.9rem 1.1rem;
+  }
+
+  .account-cabinet-tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    gap: 0.3rem;
+    scrollbar-width: thin;
+  }
+
+  .account-cabinet-tab {
+    flex: 0 0 auto;
+  }
+
+  .studio-grid {
+    max-width: 100%;
+  }
+
+  .cabinet-status-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .studio-check span {
+    font-size: 0.8rem;
+    line-height: 1.45;
+  }
+
+  .top {
+    padding: 0.7rem 0.8rem;
+  }
 }
 
 .team-perm-grid {
