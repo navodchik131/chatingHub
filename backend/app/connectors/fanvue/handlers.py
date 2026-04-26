@@ -15,6 +15,7 @@ from app.db.repo import add_message, get_or_create_conversation, get_user_with_b
 from app.schemas import MessageOut
 from app.services.realtime import hub
 from app.services.translation import translate_to_russian
+from app.services.webpush import notify_inbound_message
 
 log = logging.getLogger(__name__)
 
@@ -126,6 +127,13 @@ async def ingest_fanvue_message_received(
             "conversation_id": conv.id,
             "message": MessageOut.model_validate(row).model_dump(mode="json"),
         },
+    )
+    preview = (translated or text_s)[:200]
+    await notify_inbound_message(
+        owner_user_id,
+        conversation_id=conv.id,
+        title=f"{display} · Fanvue",
+        body=preview,
     )
     log.info("ingested fanvue DM user=%s conv=%s fan=%s", owner_user_id, conv.id, fan_uuid)
     return {"ok": True, "conversation_id": conv.id, "message_id": row.id}

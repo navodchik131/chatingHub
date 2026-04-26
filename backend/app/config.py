@@ -96,9 +96,25 @@ class Settings(BaseSettings):
         "http://127.0.0.1:8080,http://localhost:8080"
     )
 
+    # Web Push (VAPID). npx web-push generate-vapid-keys
+    vapid_private_key: str = Field(default="", description="PEM or raw base64 private key")
+    vapid_public_key: str = Field(default="")
+    vapid_sub: str = Field(
+        default="",
+        description="Контакт для VAPID claims, напр. mailto:ops@example.com",
+    )
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [x.strip() for x in self.cors_origins.split(",") if x.strip()]
+
+    @property
+    def web_push_configured(self) -> bool:
+        return bool(
+            (self.vapid_private_key or "").strip()
+            and (self.vapid_public_key or "").strip()
+            and (self.vapid_sub or "").strip()
+        )
 
 
 settings = Settings()

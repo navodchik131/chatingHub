@@ -22,6 +22,7 @@ from app.db.session import SessionLocal
 from app.schemas import MessageOut
 from app.services.realtime import hub
 from app.services.translation import translate_to_russian
+from app.services.webpush import notify_inbound_message
 
 log = logging.getLogger(__name__)
 
@@ -118,6 +119,13 @@ async def ingest_telegram_dm(
             "conversation_id": conv_id,
             "message": payload,
         },
+    )
+    preview = (translated or text)[:200]
+    await notify_inbound_message(
+        owner_user_id,
+        conversation_id=conv_id,
+        title=f"{display} · Telegram",
+        body=preview,
     )
     log.info(
         "ingested telegram DM user=%s conv=%s topic=%s source=%s",

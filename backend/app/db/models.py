@@ -94,6 +94,11 @@ class User(Base):
     wavespeed_connection: Mapped[WavespeedConnection | None] = relationship(
         "WavespeedConnection", back_populates="user", uselist=False
     )
+    push_subscriptions: Mapped[list["PushSubscription"]] = relationship(
+        "PushSubscription",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
 
 
 class Subscription(Base):
@@ -250,6 +255,26 @@ class WavespeedConnection(Base):
     )
 
     user: Mapped[User] = relationship("User", back_populates="wavespeed_connection")
+
+
+class PushSubscription(Base):
+    """Подписка Web Push (браузер) для владельца пространства (тот же user_id, что и WS hub)."""
+
+    __tablename__ = "push_subscriptions"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    endpoint: Mapped[str] = mapped_column(Text, unique=True, index=True)
+    p256dh: Mapped[str] = mapped_column(String(256))
+    auth: Mapped[str] = mapped_column(String(256))
+    user_agent: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+    user: Mapped[User] = relationship("User", back_populates="push_subscriptions")
 
 
 class UserStudioModel(Base):

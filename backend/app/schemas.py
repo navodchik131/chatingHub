@@ -153,3 +153,35 @@ class IntegrationStatusOut(BaseModel):
     telegram_webhook_registered: bool = False
     integration_hint: str | None = None
     wavespeed_configured: bool = False
+
+
+class PushSubscribeIn(BaseModel):
+    endpoint: str
+    keys: dict[str, str]
+
+    @field_validator("endpoint")
+    @classmethod
+    def strip_endpoint(cls, v: object) -> str:
+        s = str(v or "").strip()
+        if len(s) < 8:
+            raise ValueError("invalid endpoint")
+        return s
+
+    @field_validator("keys", mode="after")
+    @classmethod
+    def webpush_keys(cls, v: dict[str, str]) -> dict[str, str]:
+        if "p256dh" not in v or "auth" not in v:
+            raise ValueError("keys must include p256dh and auth")
+        return {k: str(v[k]) for k in v}
+
+
+class PushUnsubscribeIn(BaseModel):
+    endpoint: str
+
+    @field_validator("endpoint")
+    @classmethod
+    def strip_endpoint(cls, v: object) -> str:
+        s = str(v or "").strip()
+        if len(s) < 8:
+            raise ValueError("invalid endpoint")
+        return s

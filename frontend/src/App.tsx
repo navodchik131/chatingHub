@@ -1,6 +1,12 @@
 import EmojiPicker, { type EmojiClickData, Theme } from 'emoji-picker-react'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { apiFetch, getToken, setToken } from './api'
+import {
+  getPushSubscriptionState,
+  subscribeWebPush,
+  unsubscribeWebPush,
+  webPushEnvironmentOk,
+} from './webPush'
 import { formatApiErrorDetail } from './apiErrors'
 import { AuthPanel } from './AuthPanel'
 import './App.css'
@@ -115,6 +121,7 @@ interface HealthInfo {
   stripe_configured?: boolean
   openai_studio_configured?: boolean
   studio_prompt_credit_cost?: number
+  web_push_configured?: boolean
 }
 
 interface UserMe {
@@ -263,6 +270,10 @@ export default function App() {
   const [newModelProfile, setNewModelProfile] = useState('')
   const [newModelFiles, setNewModelFiles] = useState<File[]>([])
   const [wsApiKey, setWsApiKey] = useState('')
+  const [webPushState, setWebPushState] = useState<
+    'unknown' | 'loading' | 'on' | 'off' | 'denied' | 'unsupported' | 'no_vapid'
+  >('unknown')
+  const [pushBusy, setPushBusy] = useState(false)
   const [generateWavespeed, setGenerateWavespeed] = useState(true)
   const [studioGenImageUrl, setStudioGenImageUrl] = useState<string | null>(null)
   const [studioWavespeedMsg, setStudioWavespeedMsg] = useState<string | null>(null)
@@ -316,6 +327,32 @@ export default function App() {
   const refreshIntegrations = useCallback(async () => {
     const r = await apiFetch('/api/integrations')
     if (r.ok) setInteg((await r.json()) as IntegrationStatus)
+  }, [])
+
+  const enableWebPush = useCallback(async () => {
+    setPushBusy(true)
+    setError(null)
+    try {
+      await subscribeWebPush()
+      setWebPushState('on')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setPushBusy(false)
+    }
+  }, [])
+
+  const disableWebPush = useCallback(async () => {
+    setPushBusy(true)
+    setError(null)
+    try {
+      await unsubscribeWebPush()
+      setWebPushState('off')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setPushBusy(false)
+    }
   }, [])
 
   const loadStudioModels = useCallback(async () => {
@@ -407,6 +444,36 @@ export default function App() {
     if (!authed || !canChat) return
     loadConversations().catch((e) => setError(String(e)))
   }, [loadConversations, loadHealth, authed, canChat])
+
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search).get('conv')
+    if (!q) return
+    const id = parseInt(q, 10)
+    if (Number.isNaN(id)) return
+    if (conversations.some((c) => c.id === id)) {
+      setSelectedId(id)
+    }
+  }, [conversations])
+
+  useEffect(() => {
+    if (!accountOpen || accountTab !== 'integrations' || !authed || !canChat) return
+    if (!health?.web_push_configured) {
+      setWebPushState('no_vapid')
+      return
+    }
+    if (!webPushEnvironmentOk()) {
+      setWebPushState('unsupported')
+      return
+    }
+    if (Notification.permission === 'denied') {
+      setWebPushState('denied')
+      return
+    }
+    setWebPushState('loading')
+    void getPushSubscriptionState().then((s) => {
+      setWebPushState(s ? 'on' : 'off')
+    })
+  }, [accountOpen, accountTab, authed, canChat, health?.web_push_configured])
 
   useEffect(() => {
     prevMsgLenRef.current = 0
@@ -1237,6 +1304,59 @@ export default function App() {
                   {health?.openai_studio_configured ? (
                     <p className="cabinet-status-detail muted">
                       Сборка JSON: {health.studio_prompt_credit_cost ?? '—'} кр.
+                    </p>
+                  ) : null}
+                </div>
+
+                <div
+                  className={`cabinet-status-card ${
+                    webPushState === 'on' ? 'is-ok' : 'is-warn'
+                  }`}
+                >
+                  <div className="cabinet-status-title">Уведомления (телефон / браузер)</div>
+                  <div className="cabinet-status-badge">
+                    {webPushState === 'loading' || webPushState === 'unknown'
+                      ? '…'
+                      : webPushState === 'on'
+                        ? 'Включены'
+                        : webPushState === 'denied'
+                          ? 'Запрещены в браузере'
+                          : webPushState === 'unsupported'
+                            ? 'Не поддерживается'
+                            : webPushState === 'no_vapid'
+                              ? 'Нет ключей на сервере'
+                              : 'Выключены'}
+                  </div>
+                  <p className="cabinet-status-detail muted">
+                    Web Push при новом входящем сообщении. На сервере: <code className="mono">VAPID_*</code>, в проде —
+                    HTTPS.
+                  </p>
+                  {webPushState === 'denied' ? (
+                    <p className="cabinet-status-detail muted">
+                      Разрешите уведомления для этого сайта в настройках браузера.
+                    </p>
+                  ) : null}
+                  {canChat && health?.web_push_configured && webPushEnvironmentOk() ? (
+                    <p className="cabinet-status-detail cabinet-status-row">
+                      {webPushState === 'on' ? (
+                        <button
+                          type="button"
+                          className="ghost-btn"
+                          disabled={pushBusy}
+                          onClick={() => void disableWebPush()}
+                        >
+                          Отключить push
+                        </button>
+                      ) : webPushState === 'off' ? (
+                        <button
+                          type="button"
+                          className="ghost-btn"
+                          disabled={pushBusy}
+                          onClick={() => void enableWebPush()}
+                        >
+                          Включить уведомления
+                        </button>
+                      ) : null}
                     </p>
                   ) : null}
                 </div>

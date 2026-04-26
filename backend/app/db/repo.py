@@ -6,7 +6,14 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.db.models import Conversation, Message, MessageDirection, Platform, User
+from app.db.models import (
+    Conversation,
+    Message,
+    MessageDirection,
+    Platform,
+    PushSubscription,
+    User,
+)
 
 
 async def get_user_with_billing(session: AsyncSession, user_id: int) -> User | None:
@@ -193,3 +200,61 @@ async def unread_inbound_count(
         )
     )
     return int(await session.scalar(stmt) or 0)
+
+
+async def list_push_subscriptions(
+    session: AsyncSession, user_id: int
+) -> list[PushSubscription]:
+    r = await session.execute(
+        select(PushSubscription).where(PushSubscription.user_id == user_id)
+    )
+    return list(r.scalars().all())
+
+
+async def upsert_push_subscription(
+    session: AsyncSession,
+    user_id: int,
+    endpoint: str,
+    p256dh: str,
+    auth: str,
+    user_agent: str | None,
+) -> None:
+    stmt = select(PushSubscription).where(PushSubscription.endpoint == endpoint)
+    row = (await session.execute(stmt)).scalar_one_or_none()
+    if row:
+        row.user_id = user_id
+        row.p256dh = p256dh
+        row.auth = auth
+        row.user_agent = user_agent
+        return
+    session.add(
+        PushSubscription(
+            user_id=user_id,
+            endpoint=endpoint,
+            p256dh=p256dh,
+            auth=auth,
+            user_agent=user_agent,
+        )
+    )
+
+
+async def delete_push_subscription(
+    session: AsyncSession, user_id: int, endpoint: str
+) -> bool:
+    stmt = select(PushSubscription).where(
+        PushSubscription.user_id == user_id,
+        PushSubscription.endpoint == endpoint,
+    )
+    row = (await session.execute(stmt)).scalar_one_or_none()
+    if not row:
+        return False
+    await session.delete(row)
+    return True
+
+
+async def delete_push_subscription_by_id(
+    session: AsyncSession, sub_id: int
+) -> None:
+    row = await session.get(PushSubscription, sub_id)
+    if row:
+        await session.delete(row)

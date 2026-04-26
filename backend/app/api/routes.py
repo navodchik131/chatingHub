@@ -7,6 +7,7 @@ from fastapi import APIRouter
 from app.api.billing_routes import router as billing_router
 from app.api.chat_routes import router as chat_router
 from app.api.integrations_routes import router as integrations_router
+from app.api.push_routes import router as push_router
 from app.api.studio_routes import router as studio_router
 from app.api.webhooks_routes import router as webhooks_router
 from app.api.workspace_routes import router as workspace_router
@@ -16,6 +17,7 @@ router = APIRouter(prefix="/api")
 router.include_router(auth_router)
 router.include_router(workspace_router)
 router.include_router(chat_router)
+router.include_router(push_router)
 router.include_router(webhooks_router)
 router.include_router(integrations_router)
 router.include_router(billing_router)
