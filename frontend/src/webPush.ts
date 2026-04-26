@@ -20,12 +20,38 @@ export function urlBase64ToUint8Array(base64String: string): Uint8Array {
   return out
 }
 
-const swUrl = () => new URL('sw.js', import.meta.env.BASE_URL).href
-const swScope = () => import.meta.env.BASE_URL || '/'
+/** Vite: BASE_URL обычно «/»; `new URL(..., "/")` даёт Invalid base URL — база только absolute URL. */
+function resolveAppBaseUrl(): string {
+  const raw = import.meta.env.BASE_URL
+  if (raw && (raw.startsWith('http://') || raw.startsWith('https://'))) {
+    return raw.endsWith('/') ? raw : `${raw}/`
+  }
+  let part = typeof raw === 'string' && raw.length > 0 ? raw : '/'
+  if (!part.startsWith('/')) part = `/${part}`
+  if (!part.endsWith('/')) part = `${part}/`
+  if (typeof window === 'undefined') {
+    return part
+  }
+  return new URL(part, window.location.origin).href
+}
+
+function serviceWorkerScriptUrl(): string {
+  return new URL('sw.js', resolveAppBaseUrl()).href
+}
+
+/** Путь scope для register(): «/» или «/app/» */
+function serviceWorkerScopePath(): string {
+  if (typeof window === 'undefined') {
+    return (import.meta.env.BASE_URL as string) || '/'
+  }
+  const p = new URL(resolveAppBaseUrl()).pathname
+  if (p === '' || p === '/') return '/'
+  return p.endsWith('/') ? p : `${p}/`
+}
 
 export async function getPushSubscriptionState(): Promise<PushSubscription | null> {
   if (!webPushEnvironmentOk()) return null
-  const reg = await navigator.serviceWorker.getRegistration(swScope())
+  const reg = await navigator.serviceWorker.getRegistration()
   if (!reg) return null
   return reg.pushManager.getSubscription()
 }
@@ -39,7 +65,9 @@ export async function subscribeWebPush(): Promise<void> {
   if (kr.status === 503) throw new Error('Сервер не настроил VAPID (ключи в .env)')
   if (!kr.ok) throw new Error('Не удалось получить ключ VAPID')
   const { public_key: pub } = (await kr.json()) as { public_key: string }
-  const reg = await navigator.serviceWorker.register(swUrl(), { scope: swScope() })
+  const reg = await navigator.serviceWorker.register(serviceWorkerScriptUrl(), {
+    scope: serviceWorkerScopePath(),
+  })
   await reg.update()
   const sub = await reg.pushManager.subscribe({
     userVisibleOnly: true,
@@ -56,7 +84,7 @@ export async function subscribeWebPush(): Promise<void> {
 
 export async function unsubscribeWebPush(): Promise<void> {
   if (!webPushEnvironmentOk()) return
-  const reg = await navigator.serviceWorker.getRegistration(swScope())
+  const reg = await navigator.serviceWorker.getRegistration()
   if (!reg) return
   const sub = await reg.pushManager.getSubscription()
   if (!sub) return
