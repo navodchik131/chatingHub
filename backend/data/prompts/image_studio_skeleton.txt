@@ -1,0 +1,98 @@
+Ты собираешь один финальный промпт json формата
+
+вот исходный промпт в котором ты будешь все менять
+
+{
+  "subject": {
+    "description": "A young woman in her early 20s with long wavy black hair has just woken up and is sitting on the edge of the bed in a casual morning selfie. She is wrapped in a soft blanket, holding the phone with one hand and taking a selfie. The blanket is loosely draped around her body, revealing a deep cleavage, but her breasts are modestly covered by the blanket. She looks sleepy and relaxed, with natural messy morning hair.",
+    "age": "early 20s",
+    "expression": {
+      "eyes": "soft and slightly sleepy, looking directly into the camera",
+      "mouth": "gentle natural smile with lips slightly parted",
+      "overall": "cozy, intimate, just-woke-up morning vibe"
+    },
+    "hair": {
+      "color": "deep black",
+      "style": "long wavy black hair, messy and natural after sleep, some strands falling over her face and shoulders",
+      "effect": "realistic morning bedhead look"
+    },
+    "body": {
+      "frame": "slim and curvaceous",
+      "chest": "deep natural cleavage visible, but breasts covered by the blanket",
+      "legs": "sitting on the edge of the bed, bare legs partially visible under the blanket",
+      "skin": {
+        "visible_areas": "face, neck, shoulders, upper chest and cleavage",
+        "tone": "fair warm with light freckles",
+        "texture": "natural soft skin with realistic morning texture"
+      }
+    },
+    "pose": {
+      "position": "sitting on the edge of the bed, taking a selfie",
+      "base": "body slightly turned toward the camera, wrapped in a blanket, one hand holding the phone for selfie, other hand holding the blanket near her chest",
+      "overall": "cozy casual morning selfie pose"
+    },
+    "clothing": {
+      "top": {
+        "type": "none",
+        "details": "completely wrapped in a soft light-colored blanket, deep cleavage visible, breasts modestly covered"
+      },
+      "bottom": {
+        "type": "none",
+        "details": "bare legs partially visible under the blanket"
+      }
+    }
+  },
+  "photography": {
+    "camera_style": "casual realistic smartphone selfie, unpolished everyday morning photo with slight natural shake",
+    "angle": "slightly high angle selfie, front-facing camera look",
+    "shot_type": "medium close-up from waist up",
+    "aspect_ratio": "9:16 vertical",
+    "texture": "natural phone grain, realistic skin and fabric texture, no heavy filtering",
+    "lighting": "soft natural morning light coming from the window, gentle and uneven",
+    "depth_of_field": "natural phone depth — face and upper body in focus, slight softness in the background"
+  },
+  "background": {
+    "setting": "ordinary simple apartment bedroom",
+    "elements": [
+      "unmade bed with crumpled sheets",
+      "plain walls",
+      "soft morning light from window",
+      "everyday messy bedroom details"
+    ],
+    "lighting": "soft natural morning light",
+    "atmosphere": "cozy, lived-in, realistic morning in a normal apartment"
+  },
+  "the_vibe": {
+    "mood": "intimate, cozy, just-woke-up morning",
+    "intimacy": "very personal casual selfie",
+    "caption_energy": "Good morning... 🖤"
+  },
+  "constraints": {
+    "must_keep": [
+      "selfie angle",
+      "sitting on the edge of the bed",
+      "wrapped in a blanket",
+      "deep cleavage visible but breasts covered",
+      "long wavy black hair",
+      "just woke up, natural morning look",
+      "ordinary apartment setting",
+      "casual non-ideal smartphone selfie"
+    ],
+    "avoid": [
+      "blonde hair",
+      "perfect hair",
+      "studio lighting",
+      "heavily blurred background",
+      "full nudity",
+      "exposed breasts",
+      "professional photo look",
+      "airport or uniform",
+      "standing pose"
+    ]
+  },
+  "negative_prompt": "blonde hair, perfect model look, studio lighting, heavy blur, bokeh, exposed breasts, full nudity, deformed hands, extra fingers, bad anatomy, over-smiling, makeup overload, airport, uniform, watermark, text, low quality"
+}
+
+твоя задача, если есть картинка то нужно взять с нее одежду позу, ракурс, окружение, но не внешность модели.
+
+Из текста пользователя возьми описание и что надо сделать. в итоге должен быть промпт как основной, только с исправленными всеми ньюансами

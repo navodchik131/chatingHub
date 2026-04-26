@@ -10,6 +10,7 @@ from aiogram.client.session.aiohttp import AiohttpSession
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+
 from app.api.routes import router as api_router
 from app.config import settings
 from app.connectors.telegram.setup import dp
@@ -28,8 +29,8 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 
-def _create_telegram_bot() -> Bot:
-    token = settings.bot_token
+def _create_legacy_telegram_bot() -> Bot:
+    token = settings.legacy_bot_token.strip()
     proxy = (settings.telegram_proxy or "").strip()
     if proxy:
         session = AiohttpSession(proxy=proxy)
@@ -41,30 +42,29 @@ def _create_telegram_bot() -> Bot:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
-    log.info("SQLite: %s", settings.database_url)
+    log.info("Database URL: %s", settings.database_url)
     bot: Bot | None = None
     polling_task: asyncio.Task[None] | None = None
-    if settings.bot_token:
-        bot = _create_telegram_bot()
+    legacy_tok = settings.legacy_bot_token.strip()
+    legacy_uid = settings.legacy_user_id
+    if legacy_tok and legacy_uid > 0:
+        bot = _create_legacy_telegram_bot()
         set_bot_dp(bot, dp)
         try:
             me = await bot.get_me()
             set_telegram_api_ok(me.username)
-            log.info("Telegram API доступен: @%s", me.username)
+            log.info("Telegram API доступен (legacy polling): @%s", me.username)
         except Exception as e:
             set_telegram_api_error(str(e))
-            log.error(
-                "Нет связи с api.telegram.org: %s. "
-                "Сообщения в бота не будут приходить, пока не заработает HTTPS к Telegram "
-                "(VPN, другая сеть, или TELEGRAM_PROXY в .env — см. README).",
-                e,
-            )
+            log.error("Нет связи с api.telegram.org (legacy): %s", e)
         polling_task = asyncio.create_task(dp.start_polling(bot))
-        log.info("Telegram polling task started")
+        log.info("Telegram legacy polling started for user_id=%s", legacy_uid)
     else:
         set_bot_dp(None, None)
         set_telegram_api_not_configured()
-        log.warning("BOT_TOKEN empty — polling disabled, only API/UI for development")
+        log.info(
+            "Telegram legacy polling выключен. Используйте интеграции + webhook (PUBLIC_APP_URL)."
+        )
     yield
     if polling_task:
         polling_task.cancel()
@@ -87,7 +87,6 @@ app.add_middleware(
 )
 app.include_router(api_router)
 
-# Одна команда: сборка фронта (npm run build) → отдаём SPA с того же порта
 _frontend_dist = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "..", "frontend", "dist")
 )

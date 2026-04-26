@@ -1,0 +1,17 @@
+{
+  "name": "Chating Hub",
+  "short_name": "Chating",
+  "description": "Инбокс Telegram / Fanvue с переводом",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f7f8fa",
+  "theme_color": "#f7f8fa",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

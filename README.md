@@ -4,9 +4,27 @@
 
 ## Стек
 
-- **Backend:** Python, FastAPI, aiogram 3, SQLAlchemy async, SQLite  
+- **Backend:** Python, FastAPI, aiogram 3, SQLAlchemy async, PostgreSQL (прод) / SQLite (локально)  
 - **Frontend:** React, TypeScript, Vite  
 - **Перевод:** DeepL (если задан `DEEPL_API_KEY`), иначе публичный LibreTranslate  
+- **SaaS:** регистрация, JWT, кредиты и подписка (Stripe), интеграции Telegram/Fanvue на пользователя, шифрование секретов (Fernet)
+
+Подробная архитектура: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+### Docker (PostgreSQL + API со встроенным фронтом)
+
+Из корня репозитория задайте в `.env` минимум `JWT_SECRET`, `FERNET_KEY`, `PUBLIC_APP_URL` (HTTPS в проде), затем:
+
+```bash
+docker compose up --build
+```
+
+Интерфейс: http://localhost:8080 — сначала **регистрация**, затем в «Кабинете» подключите Telegram и Fanvue.  
+Пример переменных: [deploy/env.example](deploy/env.example).
+
+Локальная SQLite-база из старых версий **несовместима** с новой схемой (нужен `user_id` у диалогов): удалите `backend/data/app.db` или перейдите на PostgreSQL.
+
+**Локально протестировать Telegram webhook (HTTPS):** [docs/ngrok.md](docs/ngrok.md).
 
 ## Запуск
 
@@ -20,7 +38,9 @@ pip install -r requirements.txt
 copy .env.example .env
 ```
 
-В `.env` укажите `BOT_TOKEN` (от [@BotFather](https://t.me/BotFather)). Опционально: `DEEPL_API_KEY`.
+В `.env` для **SaaS** укажите `JWT_SECRET`, `FERNET_KEY`, при необходимости `DATABASE_URL` (PostgreSQL) и ключи Stripe — см. `backend/.env.example`. Интеграции Telegram/Fanvue задаются в UI после регистрации.
+
+Для **legacy** long polling одного бота: `BOT_TOKEN` и `LEGACY_USER_ID` (id пользователя в БД после регистрации). Опционально: `DEEPL_API_KEY`.
 
 База SQLite по умолчанию: **`backend/data/app.db`** (путь абсолютный, не зависит от того, из какой папки запущен Python). Проверка: откройте в браузере **`/api/health`** — там путь к файлу и счётчики записей.
 
@@ -101,32 +121,24 @@ TELEGRAM_PROXY=http://127.0.0.1:7890
 
 ## Fanvue
 
-Интеграция по [документации Fanvue](https://api.fanvue.com/docs): вебхук входящих сообщений и REST API для ответов.
+Интеграция по [документации Fanvue](https://api.fanvue.com/docs).
 
-### Переменные окружения (`backend/.env`)
+### SaaS (личный кабинет)
+
+После входа откройте **Кабинет** и сохраните: access token, UUID создателя (`recipientUuid` в вебхуке), signing secret. В интерфейсе показывается точный URL вебхука вида:
+
+`https://<ваш-домен>/api/webhooks/fanvue/<секрет>`
+
+Его нужно указать в Developer Area → Webhooks. Событие **Message Received** требует scope `read:chat`; для ответов из UI — `write:chat`.
+
+### Устаревший режим (один глобальный токен в `.env`)
 
 | Переменная | Назначение |
 |------------|------------|
-| `FANVUE_WEBHOOK_SECRET` | Секрет подписи вебхука (Developer Area → приложение → Webhooks → View Signing Secret). Без него вебхук принимается **без** проверки подписи (в лог пишется предупреждение). |
-| `FANVUE_ACCESS_TOKEN` | Bearer-токен OAuth создателя со scope `write:chat` — нужен, чтобы отправлять ответы из UI. |
-| `FANVUE_API_VERSION` | По умолчанию `2025-06-26` (заголовок `X-Fanvue-API-Version`). |
-| `FANVUE_API_BASE` | По умолчанию `https://api.fanvue.com`. |
+| `FANVUE_WEBHOOK_SECRET` | Глобальный секрет (не используется в мультитенантном вебхуке) |
+| `FANVUE_ACCESS_TOKEN` | Глобальный токен (не используется, если токен задан в кабинете) |
 
-### URL вебхука
-
-Укажите в кабинете разработчика Fanvue, например:
-
-`https://<ваш-домен>/api/connectors/fanvue/webhook`
-
-Для локальной отладки — туннель (ngrok и т.п.) с HTTPS.
-
-Событие **Message Received** требует scope `read:chat` у подключённого приложения. Входящие пишутся в те же `Conversation` / `Message` с `platform=fanvue`. Идентификаторы: `external_chat_id` = UUID фана (отправителя), `external_topic_id` = UUID создателя (получателя вебхука).
-
-Событие **Message Read** подтверждается ответом `200`, содержимое можно не хранить (непрочитанные в приложении считаются по своей логике).
-
-### Отправка ответов
-
-`POST /chats/{userUuid}/message` с телом `{"text": "..."}` — в пути `userUuid` это UUID собеседника (фана), совпадает с `external_chat_id` диалога.
+Идентификаторы в БД: `external_chat_id` = UUID фана, `external_topic_id` = UUID создателя.
 
 ## Развёртывание на сервере (Linux, nginx, закрытый UI)
 

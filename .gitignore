@@ -16,6 +16,7 @@ venv/
 # SQLite и данные
 backend/data/*.db
 backend/data/*.db-*
+backend/data/studio_user_models/
 
 # Node / фронт
 frontend/node_modules/

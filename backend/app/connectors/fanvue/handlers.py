@@ -1,4 +1,4 @@
-"""Приём вебхуков Fanvue и запись в БД."""
+"""Приём вебхуков Fanvue и запись в БД (мультитенант)."""
 
 from __future__ import annotations
 
@@ -10,8 +10,8 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import Message, MessageDirection, Platform
-from app.db.repo import add_message, get_or_create_conversation
+from app.db.models import Conversation, Message, MessageDirection, Platform
+from app.db.repo import add_message, get_or_create_conversation, get_user_with_billing
 from app.schemas import MessageOut
 from app.services.realtime import hub
 from app.services.translation import translate_to_russian
@@ -23,16 +23,20 @@ def _meta_needle_fanvue_message_uuid(message_uuid: str) -> str:
     return f'"fanvue_message_uuid": "{message_uuid}"'
 
 
-async def _fanvue_inbound_exists(session: AsyncSession, message_uuid: str) -> bool:
+async def _fanvue_inbound_exists(
+    session: AsyncSession, owner_user_id: int, message_uuid: str
+) -> bool:
     if not message_uuid:
         return False
     needle = _meta_needle_fanvue_message_uuid(message_uuid)
     n = await session.scalar(
         select(func.count())
         .select_from(Message)
+        .join(Conversation, Message.conversation_id == Conversation.id)
         .where(
             Message.direction == MessageDirection.inbound,
             Message.meta.contains(needle),
+            Conversation.user_id == owner_user_id,
         )
     )
     return int(n or 0) > 0
@@ -41,10 +45,8 @@ async def _fanvue_inbound_exists(session: AsyncSession, message_uuid: str) -> bo
 async def ingest_fanvue_message_received(
     session: AsyncSession,
     body: dict[str, Any],
+    owner_user_id: int,
 ) -> dict[str, Any]:
-    """
-    Обрабатывает payload вебхука «новое сообщение» (см. Message Received в доке Fanvue).
-    """
     msg = body.get("message") or {}
     sender = body.get("sender") or {}
     recipient_uuid = body.get("recipientUuid")
@@ -70,9 +72,13 @@ async def ingest_fanvue_message_received(
 
     creator_uuid = str(recipient_uuid or "").strip() or "default"
 
-    if message_uuid and await _fanvue_inbound_exists(session, message_uuid):
+    if message_uuid and await _fanvue_inbound_exists(session, owner_user_id, message_uuid):
         log.debug("fanvue duplicate webhook message %s", message_uuid)
         return {"ok": True, "skipped": "duplicate"}
+
+    user = await get_user_with_billing(session, owner_user_id)
+    if not user:
+        raise ValueError("user not found")
 
     display = sender.get("displayName") or sender.get("handle") or fan_uuid
     if not isinstance(display, str):
@@ -82,6 +88,7 @@ async def ingest_fanvue_message_received(
 
     conv = await get_or_create_conversation(
         session,
+        owner_user_id,
         Platform.fanvue,
         fan_uuid,
         creator_uuid,
@@ -112,14 +119,15 @@ async def ingest_fanvue_message_received(
     await session.commit()
     await session.refresh(row)
 
-    await hub.broadcast(
+    await hub.broadcast_user(
+        owner_user_id,
         {
             "type": "new_message",
             "conversation_id": conv.id,
             "message": MessageOut.model_validate(row).model_dump(mode="json"),
-        }
+        },
     )
-    log.info("ingested fanvue DM conv=%s fan=%s", conv.id, fan_uuid)
+    log.info("ingested fanvue DM user=%s conv=%s fan=%s", owner_user_id, conv.id, fan_uuid)
     return {"ok": True, "conversation_id": conv.id, "message_id": row.id}
 
 

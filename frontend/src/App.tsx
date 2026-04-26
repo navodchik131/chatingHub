@@ -1,6 +1,18 @@
 import EmojiPicker, { type EmojiClickData, Theme } from 'emoji-picker-react'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { apiFetch, getToken, setToken } from './api'
+import { formatApiErrorDetail } from './apiErrors'
+import { AuthPanel } from './AuthPanel'
 import './App.css'
+import {
+  DEFAULT_MEMBER_PERMISSIONS,
+  MEMBER_PERMISSION_LABELS,
+  PERM_INTEGRATIONS,
+  PERM_STUDIO_GENERATE,
+  PERM_STUDIO_MODELS,
+  hasAllBits,
+  togglePermission,
+} from './workspacePermissions'
 
 type Platform = 'telegram' | 'fanvue'
 
@@ -14,6 +26,7 @@ interface Conversation {
   updated_at: string
   last_message_preview: string | null
   unread_count?: number
+  has_avatar?: boolean
 }
 
 interface ChatMessage {
@@ -22,6 +35,8 @@ interface ChatMessage {
   text_original: string
   text_translated: string | null
   created_at: string
+  /** Локальный черновик до ответа сервера (перевод ещё готовится). */
+  pending?: boolean
 }
 
 function platformLabel(p: Platform): string {
@@ -29,19 +44,129 @@ function platformLabel(p: Platform): string {
   return 'Fanvue'
 }
 
+/** Загрузка аватара с авторизацией (JWT не передать через обычный src у img). */
+function useConversationAvatarBlob(convId: number | null, hasAvatar: boolean) {
+  const [url, setUrl] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (convId == null || !hasAvatar) {
+      setUrl((u) => {
+        if (u) URL.revokeObjectURL(u)
+        return null
+      })
+      return
+    }
+    let cancelled = false
+    void (async () => {
+      const r = await apiFetch(`/api/conversations/${convId}/avatar`)
+      if (cancelled || !r.ok) return
+      const blob = await r.blob()
+      if (cancelled) return
+      const u = URL.createObjectURL(blob)
+      setUrl((prev) => {
+        if (prev) URL.revokeObjectURL(prev)
+        return u
+      })
+    })()
+    return () => {
+      cancelled = true
+      setUrl((u) => {
+        if (u) URL.revokeObjectURL(u)
+        return null
+      })
+    }
+  }, [convId, hasAvatar])
+
+  return url
+}
+
+function ConvAvatarThumb({ conv }: { conv: Conversation }) {
+  const url = useConversationAvatarBlob(conv.id, Boolean(conv.has_avatar))
+  const letter = (conv.user_display_name ?? '?').slice(0, 1).toUpperCase()
+  return (
+    <span className="conv-avatar" aria-hidden>
+      {url ? <img src={url} alt="" /> : letter}
+    </span>
+  )
+}
+
+function ThreadAvatar({ conv }: { conv: Conversation }) {
+  const url = useConversationAvatarBlob(conv.id, Boolean(conv.has_avatar))
+  const letter = (conv.user_display_name ?? '?').slice(0, 1).toUpperCase()
+  return (
+    <div className="thread-avatar" aria-hidden>
+      {url ? <img src={url} alt="" /> : letter}
+    </div>
+  )
+}
+
 interface HealthInfo {
   ok: boolean
-  database_file: string
-  backend_dir: string
-  conversations_count: number
-  messages_count: number
-  telegram_bot_configured: boolean
+  mode?: string
+  database_file?: string
+  backend_dir?: string
+  conversations_count?: number
+  messages_count?: number
+  legacy_telegram_polling?: boolean
   telegram_api_reachable?: boolean | null
   telegram_bot_username?: string | null
   telegram_api_error?: string | null
   telegram_proxy_configured?: boolean
-  fanvue_webhook_secret_configured?: boolean
-  fanvue_access_token_configured?: boolean
+  stripe_configured?: boolean
+  openai_studio_configured?: boolean
+  studio_prompt_credit_cost?: number
+}
+
+interface UserMe {
+  id: number
+  email: string
+  subscription_status: string
+  credits_balance: number
+  is_workspace_owner: boolean
+  workspace_owner_id: number
+  member_login: string | null
+  permissions_mask: number
+  owner_email: string
+}
+
+interface WorkspaceMemberRow {
+  id: number
+  member_login: string
+  permissions_mask: number
+  is_active: boolean
+}
+
+interface IntegrationStatus {
+  telegram_configured: boolean
+  telegram_bot_username: string | null
+  fanvue_configured: boolean
+  fanvue_creator_uuid: string | null
+  fanvue_webhook_url: string | null
+  telegram_webhook_url: string | null
+  telegram_webhook_registered?: boolean
+  integration_hint?: string | null
+  wavespeed_configured?: boolean
+}
+
+interface StudioModelImage {
+  id: number
+  url: string
+}
+
+interface UserStudioModel {
+  id: number
+  name: string
+  profile_text: string
+  image_count: number
+  images?: StudioModelImage[]
+}
+
+type AccountCabinetTab = 'integrations' | 'models' | 'team'
+
+interface StudioAspectPreset {
+  key: string
+  label: string
+  size: string
 }
 
 export default function App() {
@@ -56,13 +181,203 @@ export default function App() {
   const [showJumpDown, setShowJumpDown] = useState(false)
 
   const wsRef = useRef<WebSocket | null>(null)
-  const sendingRef = useRef(false)
+  const selectedIdRef = useRef<number | null>(null)
+  const pendingOutboundIdRef = useRef(0)
   const messagesContainerRef = useRef<HTMLDivElement | null>(null)
   const composerRef = useRef<HTMLDivElement | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
   const lastTextareaSelRef = useRef({ start: 0, end: 0 })
   const emojiWrapRef = useRef<HTMLDivElement | null>(null)
   const prevMsgLenRef = useRef(0)
+
+  const [isMobileLayout, setIsMobileLayout] = useState(false)
+  const [authReady, setAuthReady] = useState(false)
+  const [authed, setAuthed] = useState(false)
+  const [me, setMe] = useState<UserMe | null>(null)
+  const {
+    isOwner,
+    canChat,
+    canStudioGenerate,
+    canStudioModels,
+    canIntegrations,
+    canStudioAny,
+    hasAnyMainSection,
+  } = useMemo(() => {
+    if (!me) {
+      return {
+        isOwner: false,
+        canChat: false,
+        canStudioGenerate: false,
+        canStudioModels: false,
+        canIntegrations: false,
+        canStudioAny: false,
+        hasAnyMainSection: false,
+      }
+    }
+    const owner = me.is_workspace_owner
+    const m = me.permissions_mask
+    const chat = owner || hasAllBits(m, 1)
+    const gen = owner || hasAllBits(m, PERM_STUDIO_GENERATE)
+    const models = owner || hasAllBits(m, PERM_STUDIO_MODELS)
+    const integ = owner || hasAllBits(m, PERM_INTEGRATIONS)
+    const studioAny = owner || !!(m & (PERM_STUDIO_GENERATE | PERM_STUDIO_MODELS))
+    return {
+      isOwner: owner,
+      canChat: chat,
+      canStudioGenerate: gen,
+      canStudioModels: models,
+      canIntegrations: integ,
+      canStudioAny: studioAny,
+      hasAnyMainSection: chat || studioAny,
+    }
+  }, [me])
+
+  const [accountOpen, setAccountOpen] = useState(false)
+  const [accountTab, setAccountTab] = useState<AccountCabinetTab>('integrations')
+  const [workspaceMembers, setWorkspaceMembers] = useState<WorkspaceMemberRow[]>([])
+  const [teamBusy, setTeamBusy] = useState(false)
+  const [newTeamLogin, setNewTeamLogin] = useState('')
+  const [newTeamPassword, setNewTeamPassword] = useState('')
+  const [newTeamMask, setNewTeamMask] = useState(DEFAULT_MEMBER_PERMISSIONS)
+  const [memberEditPassword, setMemberEditPassword] = useState<Record<number, string>>({})
+  const [memberMaskEdits, setMemberMaskEdits] = useState<Record<number, number>>({})
+  const [integ, setInteg] = useState<IntegrationStatus | null>(null)
+  const [modelDrafts, setModelDrafts] = useState<Record<number, { name: string; profile_text: string }>>(
+    {},
+  )
+  const [modelSavingId, setModelSavingId] = useState<number | null>(null)
+  const [tgToken, setTgToken] = useState('')
+  const [fvToken, setFvToken] = useState('')
+  const [fvCreator, setFvCreator] = useState('')
+  const [fvSecret, setFvSecret] = useState('')
+
+  const [appSection, setAppSection] = useState<'chat' | 'studio'>('chat')
+  const [studioDesc, setStudioDesc] = useState('')
+  const [studioFile, setStudioFile] = useState<File | null>(null)
+  const [studioResult, setStudioResult] = useState('')
+  const [studioSceneFromRef, setStudioSceneFromRef] = useState('')
+  const [studioBusy, setStudioBusy] = useState(false)
+  const [studioModels, setStudioModels] = useState<UserStudioModel[]>([])
+  const [studioSelectedModelId, setStudioSelectedModelId] = useState<number | null>(null)
+  const [newModelName, setNewModelName] = useState('')
+  const [newModelProfile, setNewModelProfile] = useState('')
+  const [newModelFiles, setNewModelFiles] = useState<File[]>([])
+  const [wsApiKey, setWsApiKey] = useState('')
+  const [generateWavespeed, setGenerateWavespeed] = useState(true)
+  const [studioGenImageUrl, setStudioGenImageUrl] = useState<string | null>(null)
+  const [studioWavespeedMsg, setStudioWavespeedMsg] = useState<string | null>(null)
+  const [studioWsSingleRef, setStudioWsSingleRef] = useState(true)
+  const [studioAspectPresets, setStudioAspectPresets] = useState<StudioAspectPreset[]>([])
+  const [studioOutputAspect, setStudioOutputAspect] = useState('9:16')
+
+  useEffect(() => {
+    selectedIdRef.current = selectedId
+  }, [selectedId])
+
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 720px)')
+    const apply = () => setIsMobileLayout(mq.matches)
+    apply()
+    mq.addEventListener('change', apply)
+    return () => mq.removeEventListener('change', apply)
+  }, [])
+
+  useEffect(() => {
+    const boot = async () => {
+      const t = getToken()
+      if (!t) {
+        setAuthed(false)
+        setAuthReady(true)
+        return
+      }
+      const r = await apiFetch('/api/auth/me')
+      if (!r.ok) {
+        setToken(null)
+        setAuthed(false)
+      } else {
+        setMe((await r.json()) as UserMe)
+        setAuthed(true)
+      }
+      setAuthReady(true)
+    }
+    void boot()
+  }, [])
+
+  const refreshMe = useCallback(async () => {
+    const r = await apiFetch('/api/auth/me')
+    if (r.ok) setMe((await r.json()) as UserMe)
+  }, [])
+
+  const refreshWorkspaceMembers = useCallback(async () => {
+    const r = await apiFetch('/api/workspace/members')
+    if (r.ok) setWorkspaceMembers((await r.json()) as WorkspaceMemberRow[])
+  }, [])
+
+  const refreshIntegrations = useCallback(async () => {
+    const r = await apiFetch('/api/integrations')
+    if (r.ok) setInteg((await r.json()) as IntegrationStatus)
+  }, [])
+
+  const loadStudioModels = useCallback(async () => {
+    const r = await apiFetch('/api/studio/models')
+    if (r.ok) setStudioModels((await r.json()) as UserStudioModel[])
+  }, [])
+
+  useEffect(() => {
+    setModelDrafts(
+      Object.fromEntries(
+        studioModels.map((m) => [m.id, { name: m.name, profile_text: m.profile_text }]),
+      ) as Record<number, { name: string; profile_text: string }>,
+    )
+  }, [studioModels])
+
+  useEffect(() => {
+    if (!me || !accountOpen) return
+    if (accountTab === 'models' && !canStudioModels) setAccountTab('integrations')
+    if (accountTab === 'team' && !isOwner) setAccountTab('integrations')
+  }, [me, accountOpen, accountTab, canStudioModels, isOwner])
+
+  useEffect(() => {
+    if (!me) return
+    if (appSection === 'chat' && !canChat && canStudioAny) setAppSection('studio')
+    if (appSection === 'studio' && !canStudioAny && canChat) setAppSection('chat')
+  }, [me?.id, appSection, canChat, canStudioAny])
+
+  useEffect(() => {
+    if (authed && accountOpen) void refreshIntegrations()
+  }, [authed, accountOpen, refreshIntegrations])
+
+  useEffect(() => {
+    if (!authed) return
+    const needModels =
+      (appSection === 'studio' && canStudioAny) ||
+      (accountOpen && accountTab === 'models' && canStudioModels)
+    if (needModels) void loadStudioModels()
+  }, [authed, accountOpen, accountTab, appSection, canStudioAny, canStudioModels, loadStudioModels])
+
+  useEffect(() => {
+    if (authed && accountOpen && accountTab === 'team' && isOwner) void refreshWorkspaceMembers()
+  }, [authed, accountOpen, accountTab, isOwner, refreshWorkspaceMembers])
+
+  useEffect(() => {
+    setMemberMaskEdits(Object.fromEntries(workspaceMembers.map((x) => [x.id, x.permissions_mask])))
+  }, [workspaceMembers])
+
+  useEffect(() => {
+    if (authed && appSection === 'studio') void refreshIntegrations()
+  }, [authed, appSection, refreshIntegrations])
+
+  useEffect(() => {
+    if (!authed || appSection !== 'studio') return
+    fetch('/api/studio/output-aspects')
+      .then((r) => r.json())
+      .then((d: { aspects?: StudioAspectPreset[] }) => {
+        if (Array.isArray(d.aspects) && d.aspects.length > 0) setStudioAspectPresets(d.aspects)
+      })
+      .catch(() => {
+        /* ignore */
+      })
+  }, [authed, appSection])
 
   const loadHealth = useCallback(async () => {
     const r = await fetch('/api/health')
@@ -72,14 +387,14 @@ export default function App() {
   }, [])
 
   const loadConversations = useCallback(async () => {
-    const r = await fetch('/api/conversations')
+    const r = await apiFetch('/api/conversations')
     if (!r.ok) throw new Error('Не удалось загрузить диалоги')
     const data: Conversation[] = await r.json()
     setConversations(data)
   }, [])
 
   const loadMessages = useCallback(async (id: number) => {
-    const r = await fetch(`/api/conversations/${id}/messages`)
+    const r = await apiFetch(`/api/conversations/${id}/messages`)
     if (!r.ok) throw new Error('Не удалось загрузить сообщения')
     const data: ChatMessage[] = await r.json()
     setMessages(data)
@@ -89,8 +404,9 @@ export default function App() {
     loadHealth().catch(() => {
       /* backend down */
     })
+    if (!authed || !canChat) return
     loadConversations().catch((e) => setError(String(e)))
-  }, [loadConversations, loadHealth])
+  }, [loadConversations, loadHealth, authed, canChat])
 
   useEffect(() => {
     prevMsgLenRef.current = 0
@@ -109,7 +425,7 @@ export default function App() {
     loadMessages(selectedId)
       .then(async () => {
         if (cancelled) return
-        await fetch(`/api/conversations/${selectedId}/read`, { method: 'POST' })
+        await apiFetch(`/api/conversations/${selectedId}/read`, { method: 'POST' })
         void loadConversations()
       })
       .catch((e) => setError(String(e)))
@@ -122,10 +438,16 @@ export default function App() {
   }, [selectedId, loadMessages, loadConversations])
 
   useEffect(() => {
-    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const ws = new WebSocket(`${proto}//${location.host}/api/ws`)
-    wsRef.current = ws
-    ws.onmessage = (ev) => {
+    if (!authed) return
+    const tok = getToken()
+    if (!tok) return
+
+    let cancelled = false
+    let retryTimer: ReturnType<typeof setTimeout> | undefined
+    let attempt = 0
+    let ws: WebSocket | null = null
+
+    const onMessage = (ev: MessageEvent) => {
       try {
         const payload = JSON.parse(ev.data as string) as {
           type: string
@@ -134,13 +456,25 @@ export default function App() {
         }
         if (payload.type === 'new_message') {
           void loadHealth()
-          if (selectedId === payload.conversation_id && payload.message) {
+          const sid = selectedIdRef.current
+          if (sid != null && sid === payload.conversation_id && payload.message) {
             const mid = Number(payload.message.id)
+            const incoming = payload.message as ChatMessage
             setMessages((prev) => {
               if (prev.some((m) => Number(m.id) === mid)) return prev
-              return [...prev, payload.message!]
+              let next = prev
+              if (incoming.direction === 'outbound') {
+                const txt = incoming.text_original
+                const i = next.findIndex(
+                  (m) => m.pending && m.direction === 'outbound' && m.text_original === txt,
+                )
+                if (i !== -1) {
+                  next = next.slice(0, i).concat(next.slice(i + 1))
+                }
+              }
+              return [...next, incoming]
             })
-            void fetch(`/api/conversations/${selectedId}/read`, { method: 'POST' })
+            void apiFetch(`/api/conversations/${sid}/read`, { method: 'POST' })
           }
           void loadConversations()
         }
@@ -148,14 +482,40 @@ export default function App() {
         /* ignore */
       }
     }
-    ws.onerror = () => {
-      /* dev: backend may be down */
+
+    const connect = () => {
+      if (cancelled) return
+      const t = getToken()
+      if (!t) return
+      const proto = location.protocol === 'https:' ? 'wss:' : 'ws:'
+      const q = encodeURIComponent(t)
+      ws = new WebSocket(`${proto}//${location.host}/api/ws?token=${q}`)
+      wsRef.current = ws
+      ws.onopen = () => {
+        attempt = 0
+      }
+      ws.onmessage = onMessage
+      ws.onerror = () => {
+        /* dev: backend may be down */
+      }
+      ws.onclose = () => {
+        wsRef.current = null
+        if (cancelled) return
+        const delay = Math.min(30_000, 800 * 2 ** Math.min(attempt, 6))
+        attempt += 1
+        retryTimer = setTimeout(connect, delay)
+      }
     }
+
+    connect()
+
     return () => {
-      ws.close()
+      cancelled = true
+      if (retryTimer) clearTimeout(retryTimer)
+      ws?.close()
       wsRef.current = null
     }
-  }, [loadConversations, loadHealth, selectedId])
+  }, [loadConversations, loadHealth, authed])
 
   useEffect(() => {
     const onDoc = (e: MouseEvent) => {
@@ -264,44 +624,414 @@ export default function App() {
 
   const sendReply = async () => {
     if (selectedId == null || !draft.trim()) return
-    if (sendingRef.current) return
-    sendingRef.current = true
+    const convId = selectedId
+    const text = draft.trim()
+    pendingOutboundIdRef.current -= 1
+    const tempId = pendingOutboundIdRef.current
+    const optimistic: ChatMessage = {
+      id: tempId,
+      direction: 'outbound',
+      text_original: text,
+      text_translated: null,
+      created_at: new Date().toISOString(),
+      pending: true,
+    }
     setError(null)
+    setDraft('')
+    setEmojiOpen(false)
+    setMessages((prev) => [...prev, optimistic])
+    requestAnimationFrame(() => scrollToBottom(true))
     try {
-      const r = await fetch(`/api/conversations/${selectedId}/reply`, {
+      const r = await apiFetch(`/api/conversations/${convId}/reply`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: draft.trim() }),
+        body: JSON.stringify({ text }),
       })
       if (!r.ok) {
         const err = await r.json().catch(() => ({}))
-        setError((err as { detail?: string }).detail ?? r.statusText)
+        setError(formatApiErrorDetail(err) || r.statusText)
+        setMessages((prev) => {
+          if (selectedIdRef.current !== convId) return prev
+          return prev.filter((m) => m.id !== tempId)
+        })
+        setDraft((d) => (d.trim() ? `${text}\n\n${d}` : text))
         return
       }
       const msg: ChatMessage = await r.json()
       const mid = Number(msg.id)
       setMessages((prev) => {
-        if (prev.some((m) => Number(m.id) === mid)) return prev
-        return [...prev, msg]
+        if (selectedIdRef.current !== convId) return prev
+        const without = prev.filter((m) => m.id !== tempId)
+        if (without.some((m) => Number(m.id) === mid)) return without
+        return [...without, msg]
       })
-      setDraft('')
-      setEmojiOpen(false)
       void loadHealth()
       void loadConversations()
+      void refreshMe()
       requestAnimationFrame(() => scrollToBottom(true))
-    } finally {
-      sendingRef.current = false
+    } catch {
+      setMessages((prev) => {
+        if (selectedIdRef.current !== convId) return prev
+        return prev.filter((m) => m.id !== tempId)
+      })
+      setDraft((d) => (d.trim() ? `${text}\n\n${d}` : text))
+      setError('Не удалось отправить сообщение')
     }
+  }
+
+  const refineStudioPrompt = async () => {
+    setError(null)
+    if (!studioDesc.trim() && !studioFile && studioSelectedModelId == null) {
+      setError('Добавьте описание, референс и/или выберите сохранённую модель.')
+      return
+    }
+    setStudioBusy(true)
+    setStudioSceneFromRef('')
+    setStudioGenImageUrl(null)
+    setStudioWavespeedMsg(null)
+    try {
+      const fd = new FormData()
+      fd.append('description', studioDesc.trim())
+      if (studioSelectedModelId != null) fd.append('model_id', String(studioSelectedModelId))
+      if (studioFile) fd.append('image', studioFile)
+      fd.append('output_aspect', studioOutputAspect)
+      fd.append('generate_wavespeed', generateWavespeed ? '1' : '0')
+      fd.append('wavespeed_single_reference', studioWsSingleRef ? '1' : '0')
+      const r = await apiFetch('/api/studio/refine-prompt', { method: 'POST', body: fd })
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        setError(formatApiErrorDetail(j) || r.statusText)
+        return
+      }
+      const data = (await r.json()) as {
+        refined_prompt: string
+        reference_scene_description?: string | null
+        generated_image_url?: string | null
+        wavespeed_message?: string | null
+      }
+      setStudioResult(data.refined_prompt)
+      setStudioSceneFromRef(data.reference_scene_description?.trim() ?? '')
+      setStudioGenImageUrl(data.generated_image_url?.trim() || null)
+      setStudioWavespeedMsg(data.wavespeed_message?.trim() || null)
+      void refreshMe()
+    } catch (e) {
+      setError(e instanceof TypeError && e.message === 'Failed to fetch' ? 'Сеть: не удалось связаться с сервером (проверьте, что бэкенд запущен и порт / proxy).' : (e instanceof Error ? e.message : 'Неизвестная ошибка запроса'))
+    } finally {
+      setStudioBusy(false)
+    }
+  }
+
+  const saveWavespeed = async () => {
+    setError(null)
+    const k = wsApiKey.trim()
+    if (k.length < 8) {
+      setError('Вставьте API-ключ WaveSpeed (личный кабинет wavespeed.ai).')
+      return
+    }
+    const r = await apiFetch('/api/integrations/wavespeed', {
+      method: 'PUT',
+      body: JSON.stringify({ api_key: k }),
+    })
+    if (!r.ok) {
+      const j = await r.json().catch(() => ({}))
+      setError(formatApiErrorDetail(j) || r.statusText)
+      return
+    }
+    setWsApiKey('')
+    setInteg((await r.json()) as IntegrationStatus)
+  }
+
+  const createStudioModel = async () => {
+    setError(null)
+    const name = newModelName.trim()
+    if (!name) {
+      setError('Укажите название модели.')
+      return
+    }
+    const fd = new FormData()
+    fd.append('name', name)
+    fd.append('profile_text', newModelProfile.trim())
+    for (const f of newModelFiles) fd.append('images', f)
+    const r = await apiFetch('/api/studio/models', { method: 'POST', body: fd })
+    if (!r.ok) {
+      const j = await r.json().catch(() => ({}))
+      setError(formatApiErrorDetail(j) || r.statusText)
+      return
+    }
+    setNewModelName('')
+    setNewModelProfile('')
+    setNewModelFiles([])
+    void loadStudioModels()
+  }
+
+  const deleteStudioModel = async (id: number) => {
+    setError(null)
+    const r = await apiFetch(`/api/studio/models/${id}`, { method: 'DELETE' })
+    if (!r.ok) {
+      const j = await r.json().catch(() => ({}))
+      setError(formatApiErrorDetail(j) || r.statusText)
+      return
+    }
+    if (studioSelectedModelId === id) setStudioSelectedModelId(null)
+    void loadStudioModels()
+  }
+
+  const patchStudioModel = async (id: number) => {
+    const d = modelDrafts[id]
+    if (!d) return
+    setError(null)
+    setModelSavingId(id)
+    try {
+      const r = await apiFetch(`/api/studio/models/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: d.name.trim(), profile_text: d.profile_text }),
+      })
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        setError(formatApiErrorDetail(j) || r.statusText)
+        return
+      }
+      void loadStudioModels()
+    } finally {
+      setModelSavingId(null)
+    }
+  }
+
+  const appendStudioModelImages = async (id: number, files: FileList | null) => {
+    if (!files?.length) return
+    setError(null)
+    setModelSavingId(id)
+    try {
+      const fd = new FormData()
+      for (const f of Array.from(files)) fd.append('images', f)
+      const r = await apiFetch(`/api/studio/models/${id}/images`, { method: 'POST', body: fd })
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        setError(formatApiErrorDetail(j) || r.statusText)
+        return
+      }
+      void loadStudioModels()
+    } finally {
+      setModelSavingId(null)
+    }
+  }
+
+  const deleteStudioModelImage = async (modelId: number, imageId: number) => {
+    setError(null)
+    const r = await apiFetch(`/api/studio/models/${modelId}/images/${imageId}`, {
+      method: 'DELETE',
+    })
+    if (!r.ok) {
+      const j = await r.json().catch(() => ({}))
+      setError(formatApiErrorDetail(j) || r.statusText)
+      return
+    }
+    void loadStudioModels()
+  }
+
+  const saveTelegram = async () => {
+    setError(null)
+    const tok = tgToken.trim()
+    if (tok.length < 15) {
+      setError('Вставьте полный токен бота от BotFather (обычно длиннее 40 символов).')
+      return
+    }
+    const r = await apiFetch('/api/integrations/telegram', {
+      method: 'PUT',
+      body: JSON.stringify({ bot_token: tok }),
+    })
+    if (!r.ok) {
+      const j = await r.json().catch(() => ({}))
+      setError(formatApiErrorDetail(j) || r.statusText)
+      return
+    }
+    setTgToken('')
+    setInteg((await r.json()) as IntegrationStatus)
+    void refreshMe()
+  }
+
+  const saveFanvue = async () => {
+    setError(null)
+    const r = await apiFetch('/api/integrations/fanvue', {
+      method: 'PUT',
+      body: JSON.stringify({
+        access_token: fvToken.trim(),
+        creator_uuid: fvCreator.trim(),
+        webhook_signing_secret: fvSecret.trim(),
+      }),
+    })
+    if (!r.ok) {
+      const j = await r.json().catch(() => ({}))
+      setError(formatApiErrorDetail(j) || r.statusText)
+      return
+    }
+    setFvToken('')
+    setFvSecret('')
+    setInteg((await r.json()) as IntegrationStatus)
+    void refreshMe()
+  }
+
+  const createWorkspaceMember = async () => {
+    setError(null)
+    const login = newTeamLogin.trim().toLowerCase()
+    if (login.length < 3) {
+      setError('Логин сотрудника: от 3 символов (латиница, цифры, подчёркивание).')
+      return
+    }
+    if (newTeamPassword.length < 8) {
+      setError('Пароль сотрудника: минимум 8 символов.')
+      return
+    }
+    setTeamBusy(true)
+    try {
+      const r = await apiFetch('/api/workspace/members', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          member_login: login,
+          password: newTeamPassword,
+          permissions_mask: newTeamMask,
+        }),
+      })
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        setError(formatApiErrorDetail(j) || r.statusText)
+        return
+      }
+      setNewTeamLogin('')
+      setNewTeamPassword('')
+      setNewTeamMask(DEFAULT_MEMBER_PERMISSIONS)
+      void refreshWorkspaceMembers()
+    } finally {
+      setTeamBusy(false)
+    }
+  }
+
+  const saveWorkspaceMemberRow = async (row: WorkspaceMemberRow) => {
+    setError(null)
+    const mask = memberMaskEdits[row.id] ?? row.permissions_mask
+    const pwd = (memberEditPassword[row.id] || '').trim()
+    if (pwd.length > 0 && pwd.length < 8) {
+      setError('Новый пароль: минимум 8 символов или оставьте поле пустым.')
+      return
+    }
+    setTeamBusy(true)
+    try {
+      const body: { permissions_mask: number; password?: string } = { permissions_mask: mask }
+      if (pwd.length >= 8) body.password = pwd
+      const r = await apiFetch(`/api/workspace/members/${row.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        setError(formatApiErrorDetail(j) || r.statusText)
+        return
+      }
+      setMemberEditPassword((p) => ({ ...p, [row.id]: '' }))
+      void refreshWorkspaceMembers()
+    } finally {
+      setTeamBusy(false)
+    }
+  }
+
+  const setWorkspaceMemberActive = async (row: WorkspaceMemberRow, active: boolean) => {
+    setError(null)
+    const r = await apiFetch(`/api/workspace/members/${row.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ is_active: active }),
+    })
+    if (!r.ok) {
+      const j = await r.json().catch(() => ({}))
+      setError(formatApiErrorDetail(j) || r.statusText)
+      return
+    }
+    void refreshWorkspaceMembers()
+  }
+
+  const removeWorkspaceMember = async (id: number) => {
+    if (!window.confirm('Удалить участника? Его доступ будет отозван.')) return
+    setError(null)
+    const r = await apiFetch(`/api/workspace/members/${id}`, { method: 'DELETE' })
+    if (!r.ok) {
+      const j = await r.json().catch(() => ({}))
+      setError(formatApiErrorDetail(j) || r.statusText)
+      return
+    }
+    void refreshWorkspaceMembers()
+  }
+
+  const startCheckout = async () => {
+    setError(null)
+    const r = await apiFetch('/api/billing/checkout', { method: 'POST' })
+    if (!r.ok) {
+      const j = await r.json().catch(() => ({}))
+      setError(formatApiErrorDetail(j) || r.statusText)
+      return
+    }
+    const data = (await r.json()) as { url: string }
+    window.location.href = data.url
+  }
+
+  if (!authReady) {
+    return (
+      <div className="app">
+        <div className="app-bg" aria-hidden />
+        <p className="muted" style={{ padding: '2rem' }}>
+          Загрузка…
+        </p>
+      </div>
+    )
+  }
+
+  if (!authed) {
+    return (
+      <div className="app app-auth">
+        <div className="app-bg" aria-hidden />
+        <header className="top top-auth">
+          <div className="top-brand">
+            <span className="logo-mark" aria-hidden />
+            <div>
+              <h1>Chating Hub</h1>
+              <p className="sub">SaaS-кабинет: регистрация и подключение своих ботов</p>
+            </div>
+          </div>
+        </header>
+        <main className="auth-page">
+          <AuthPanel
+            onSuccess={async () => {
+              const r = await apiFetch('/api/auth/me')
+              if (r.ok) setMe((await r.json()) as UserMe)
+              setAuthed(true)
+            }}
+          />
+        </main>
+      </div>
+    )
   }
 
   const selected = conversations.find((c) => c.id === selectedId)
 
+  const layoutClass = [
+    'layout',
+    isMobileLayout ? 'mobile' : '',
+    isMobileLayout && selectedId != null ? 'thread-focus' : '',
+  ]
+    .filter(Boolean)
+    .join(' ')
+
+  const appClass = ['app', isMobileLayout && selectedId != null ? 'mobile-chat-open' : '']
+    .filter(Boolean)
+    .join(' ')
+
   return (
-    <div className="app">
+    <div className={appClass}>
       <div className="app-bg" aria-hidden />
       <header className="top">
         <div className="top-brand">
-          <span className="logo-dot" />
+          <span className="logo-mark" aria-hidden />
           <div>
             <h1>Chating Hub</h1>
             <p className="sub">
@@ -309,51 +1039,817 @@ export default function App() {
             </p>
           </div>
         </div>
+        <div className="top-actions">
+          {me ? (
+            <div
+              className="user-pill"
+              title={
+                me.is_workspace_owner
+                  ? me.email
+                  : `${me.owner_email} · сотрудник «${me.member_login ?? '—'}»`
+              }
+            >
+              <span className="user-pill-email">
+                {me.is_workspace_owner ? me.email : `${me.owner_email} · ${me.member_login ?? '—'}`}
+              </span>
+              <span className="user-pill-meta">
+                {me.credits_balance} кр. · {me.subscription_status}
+              </span>
+            </div>
+          ) : null}
+          <button type="button" className="ghost-btn" onClick={() => setAccountOpen((o) => !o)}>
+            Кабинет
+          </button>
+          <button
+            type="button"
+            className="ghost-btn"
+            onClick={() => {
+              setToken(null)
+              setAuthed(false)
+              setMe(null)
+              setConversations([])
+              setSelectedId(null)
+            }}
+          >
+            Выйти
+          </button>
+        </div>
       </header>
 
       {error && <div className="banner error">{error}</div>}
 
-      {health?.telegram_bot_configured && health.telegram_api_reachable === false && (
+      {hasAnyMainSection ? (
+        <nav className="section-nav" aria-label="Разделы приложения">
+          {canChat ? (
+            <button
+              type="button"
+              className={appSection === 'chat' ? 'section-tab active' : 'section-tab'}
+              onClick={() => setAppSection('chat')}
+            >
+              Диалоги
+            </button>
+          ) : null}
+          {canStudioAny ? (
+            <button
+              type="button"
+              className={appSection === 'studio' ? 'section-tab active' : 'section-tab'}
+              onClick={() => setAppSection('studio')}
+            >
+              Генерация картинок
+            </button>
+          ) : null}
+        </nav>
+      ) : (
+        <div className="banner info" style={{ margin: '0 1rem' }}>
+          Нет доступа к диалогам и студии по правам аккаунта. Откройте кабинет или обратитесь к владельцу.
+        </div>
+      )}
+
+      {health?.legacy_telegram_polling && health.telegram_api_reachable === false && (
         <div className="banner error">
-          Нет связи с Telegram API (обычно блокировка исходящего HTTPS к api.telegram.org).
-          Включите VPN или задайте <code>TELEGRAM_PROXY</code> в <code>backend/.env</code> и
-          перезапустите сервер. Детали: {health.telegram_api_error ?? '—'}
+          Нет связи с Telegram API (legacy polling). Включите VPN или задайте{' '}
+          <code>TELEGRAM_PROXY</code> в <code>backend/.env</code>. Детали:{' '}
+          {health.telegram_api_error ?? '—'}
+        </div>
+      )}
+
+      {accountOpen && (
+        <div className="account-panel">
+          <div className="account-panel-header">
+            <h3>Кабинет</h3>
+            <button type="button" className="ghost-btn account-panel-close" onClick={() => setAccountOpen(false)}>
+              Закрыть
+            </button>
+          </div>
+          <div className="account-cabinet-tabs" role="tablist" aria-label="Разделы кабинета">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={accountTab === 'integrations'}
+              className={accountTab === 'integrations' ? 'account-cabinet-tab active' : 'account-cabinet-tab'}
+              onClick={() => setAccountTab('integrations')}
+            >
+              Ключи и статусы
+            </button>
+            {canStudioModels ? (
+              <button
+                type="button"
+                role="tab"
+                aria-selected={accountTab === 'models'}
+                className={accountTab === 'models' ? 'account-cabinet-tab active' : 'account-cabinet-tab'}
+                onClick={() => setAccountTab('models')}
+              >
+                Модели студии
+              </button>
+            ) : null}
+            {isOwner ? (
+              <button
+                type="button"
+                role="tab"
+                aria-selected={accountTab === 'team'}
+                className={accountTab === 'team' ? 'account-cabinet-tab active' : 'account-cabinet-tab'}
+                onClick={() => setAccountTab('team')}
+              >
+                Команда
+              </button>
+            ) : null}
+          </div>
+
+          {accountTab === 'integrations' && (
+            <div className="account-cabinet-pane" role="tabpanel">
+              <p className="cabinet-lead muted">
+                Статусы интеграций и поля для обновления ключей. Telegram: токен BotFather и HTTPS{' '}
+                <span className="mono">{health?.mode === 'saas' ? 'PUBLIC_APP_URL' : 'ваш URL'}</span> для
+                webhook.
+              </p>
+
+              <div className="cabinet-status-grid">
+                <div
+                  className={`cabinet-status-card ${integ?.telegram_configured ? 'is-ok' : 'is-warn'}`}
+                >
+                  <div className="cabinet-status-title">Telegram</div>
+                  <div className="cabinet-status-badge">
+                    {integ?.telegram_configured ? 'Подключён' : 'Не настроен'}
+                  </div>
+                  {integ?.telegram_configured ? (
+                    <p className="cabinet-status-detail cabinet-status-row">
+                      <span className="mono">@{integ.telegram_bot_username ?? '—'}</span>
+                      {integ.telegram_webhook_registered ? (
+                        <span className="cabinet-status-pill ok">Webhook OK</span>
+                      ) : (
+                        <span className="cabinet-status-pill warn">Webhook не подтверждён</span>
+                      )}
+                    </p>
+                  ) : (
+                    <p className="cabinet-status-detail muted">Сохраните токен бота ниже.</p>
+                  )}
+                  {integ?.telegram_webhook_url ? (
+                    <p className="mono cabinet-status-url">{integ.telegram_webhook_url}</p>
+                  ) : null}
+                </div>
+
+                <div className={`cabinet-status-card ${integ?.fanvue_configured ? 'is-ok' : 'is-warn'}`}>
+                  <div className="cabinet-status-title">Fanvue</div>
+                  <div className="cabinet-status-badge">
+                    {integ?.fanvue_configured ? 'Подключён' : 'Не настроен'}
+                  </div>
+                  {integ?.fanvue_creator_uuid ? (
+                    <p className="cabinet-status-detail mono">Creator: {integ.fanvue_creator_uuid}</p>
+                  ) : (
+                    <p className="cabinet-status-detail muted">Нужны token, UUID и signing secret.</p>
+                  )}
+                  {integ?.fanvue_webhook_url ? (
+                    <p className="mono cabinet-status-url">{integ.fanvue_webhook_url}</p>
+                  ) : null}
+                </div>
+
+                <div
+                  className={`cabinet-status-card ${integ?.wavespeed_configured ? 'is-ok' : 'is-warn'}`}
+                >
+                  <div className="cabinet-status-title">WaveSpeed</div>
+                  <div className="cabinet-status-badge">
+                    {integ?.wavespeed_configured ? 'Ключ сохранён' : 'Ключ не задан'}
+                  </div>
+                  <p className="cabinet-status-detail muted">
+                    Seedream 4.5 Edit · нужен HTTPS <code className="mono">PUBLIC_APP_URL</code> для референсов.
+                  </p>
+                </div>
+
+                <div
+                  className={`cabinet-status-card ${health?.stripe_configured ? 'is-ok' : 'is-warn'}`}
+                >
+                  <div className="cabinet-status-title">Оплата (Stripe)</div>
+                  <div className="cabinet-status-badge">
+                    {health?.stripe_configured ? 'Готов к checkout' : 'Не настроен на сервере'}
+                  </div>
+                  <p className="cabinet-status-detail muted">
+                    Подписка оформляется через Stripe Checkout (кнопка ниже).
+                  </p>
+                </div>
+
+                <div
+                  className={`cabinet-status-card ${health?.openai_studio_configured ? 'is-ok' : 'is-warn'}`}
+                >
+                  <div className="cabinet-status-title">Студия промпта</div>
+                  <div className="cabinet-status-badge">
+                    {health?.openai_studio_configured ? 'OpenAI OK' : 'Нет OPENAI_API_KEY'}
+                  </div>
+                  {health?.openai_studio_configured ? (
+                    <p className="cabinet-status-detail muted">
+                      Сборка JSON: {health.studio_prompt_credit_cost ?? '—'} кр.
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+
+              {integ?.integration_hint ? (
+                <div className="banner info cabinet-hint-banner">{integ.integration_hint}</div>
+              ) : null}
+
+              {!canIntegrations ? (
+                <p className="cabinet-lead muted">
+                  Изменение ключей недоступно по правам. Статусы выше — только для просмотра.
+                </p>
+              ) : null}
+              <h4 className="account-sub">Обновить ключи</h4>
+              <div className="account-grid cabinet-keys-form">
+                <label>
+                  WaveSpeed API key
+                  <input
+                    type="password"
+                    autoComplete="off"
+                    value={wsApiKey}
+                    onChange={(e) => setWsApiKey(e.target.value)}
+                    placeholder="Ключ из личного кабинета WaveSpeed"
+                    disabled={!canIntegrations}
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="ghost-btn"
+                  disabled={!canIntegrations}
+                  onClick={() => void saveWavespeed()}
+                >
+                  Сохранить WaveSpeed
+                </button>
+                <label>
+                  Telegram bot token
+                  <input
+                    type="password"
+                    autoComplete="off"
+                    value={tgToken}
+                    onChange={(e) => setTgToken(e.target.value)}
+                    placeholder="123456:ABC…"
+                    disabled={!canIntegrations}
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="ghost-btn"
+                  disabled={!canIntegrations}
+                  onClick={() => void saveTelegram()}
+                >
+                  Сохранить Telegram
+                </button>
+                <label>
+                  Fanvue access token
+                  <input
+                    type="password"
+                    value={fvToken}
+                    onChange={(e) => setFvToken(e.target.value)}
+                    placeholder="Bearer / access token"
+                    disabled={!canIntegrations}
+                  />
+                </label>
+                <label>
+                  Fanvue creator UUID
+                  <input
+                    value={fvCreator}
+                    onChange={(e) => setFvCreator(e.target.value)}
+                    placeholder="UUID создателя"
+                    disabled={!canIntegrations}
+                  />
+                </label>
+                <label>
+                  Fanvue webhook signing secret
+                  <input
+                    type="password"
+                    value={fvSecret}
+                    onChange={(e) => setFvSecret(e.target.value)}
+                    placeholder="Секрет подписи вебхука"
+                    disabled={!canIntegrations}
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="ghost-btn"
+                  disabled={!canIntegrations}
+                  onClick={() => void saveFanvue()}
+                >
+                  Сохранить Fanvue
+                </button>
+                {isOwner ? (
+                  <button type="button" className="send-btn cabinet-checkout-btn" onClick={() => void startCheckout()}>
+                    Оформить подписку (Stripe)
+                  </button>
+                ) : (
+                  <p className="muted" style={{ gridColumn: '1 / -1' }}>
+                    Оформление подписки доступно только владельцу аккаунта.
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {accountTab === 'models' && canStudioModels && (
+            <div className="account-cabinet-pane" role="tabpanel">
+              <p className="cabinet-lead muted">
+                Модели подставляются в промпт на вкладке «Генерация картинок». До 5 фото на модель. Можно
+                править название, описание, добавлять и удалять снимки.
+              </p>
+
+              <h4 className="account-sub">Новая модель</h4>
+              <div className="account-grid studio-models-block cabinet-new-model">
+                <label>
+                  Название
+                  <input
+                    value={newModelName}
+                    onChange={(e) => setNewModelName(e.target.value)}
+                    placeholder="Например: Анна — чёрные волосы"
+                  />
+                </label>
+                <label>
+                  Описание внешности
+                  <textarea
+                    rows={3}
+                    value={newModelProfile}
+                    onChange={(e) => setNewModelProfile(e.target.value)}
+                    placeholder="Волосы, возраст, типаж, кожа…"
+                  />
+                </label>
+                <label>
+                  Фото (до 5)
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/gif"
+                    multiple
+                    onChange={(e) => {
+                      const list = e.target.files ? Array.from(e.target.files) : []
+                      setNewModelFiles(list.slice(0, 5))
+                    }}
+                  />
+                  {newModelFiles.length > 0 ? (
+                    <span className="muted" style={{ fontSize: '0.85rem' }}>
+                      Выбрано файлов: {newModelFiles.length}
+                    </span>
+                  ) : null}
+                </label>
+                <button type="button" className="send-btn" onClick={() => void createStudioModel()}>
+                  Создать модель
+                </button>
+              </div>
+
+              {studioModels.length === 0 ? (
+                <p className="muted cabinet-empty-models">Пока нет моделей — создайте первую выше.</p>
+              ) : (
+                <div className="model-card-grid">
+                  {studioModels.map((m) => {
+                    const draft = modelDrafts[m.id] ?? { name: m.name, profile_text: m.profile_text }
+                    const busy = modelSavingId === m.id
+                    const imgs = m.images ?? []
+                    return (
+                      <article key={m.id} className="model-card">
+                        <div className="model-card-head">
+                          <h4 className="model-card-title">Модель #{m.id}</h4>
+                          <button
+                            type="button"
+                            className="ghost-btn danger-text model-card-delete"
+                            disabled={busy}
+                            onClick={() => {
+                              if (window.confirm('Удалить модель и все её фото?')) void deleteStudioModel(m.id)
+                            }}
+                          >
+                            Удалить
+                          </button>
+                        </div>
+                        <div className="model-card-thumbs" aria-label="Референсы">
+                          {imgs.length === 0 ? (
+                            <span className="model-card-no-photos muted">Нет фото</span>
+                          ) : (
+                            imgs.map((im) => (
+                              <div key={im.id} className="model-thumb-wrap">
+                                <img src={im.url} alt="" className="model-thumb" loading="lazy" />
+                                <button
+                                  type="button"
+                                  className="model-thumb-remove"
+                                  title="Удалить фото"
+                                  disabled={busy}
+                                  onClick={() => void deleteStudioModelImage(m.id, im.id)}
+                                >
+                                  ×
+                                </button>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                        <label className="model-card-field">
+                          Название
+                          <input
+                            value={draft.name}
+                            disabled={busy}
+                            onChange={(e) =>
+                              setModelDrafts((prev) => ({
+                                ...prev,
+                                [m.id]: {
+                                  ...(prev[m.id] ?? {
+                                    name: m.name,
+                                    profile_text: m.profile_text,
+                                  }),
+                                  name: e.target.value,
+                                },
+                              }))
+                            }
+                          />
+                        </label>
+                        <label className="model-card-field">
+                          Описание
+                          <textarea
+                            rows={4}
+                            value={draft.profile_text}
+                            disabled={busy}
+                            onChange={(e) =>
+                              setModelDrafts((prev) => ({
+                                ...prev,
+                                [m.id]: {
+                                  ...(prev[m.id] ?? {
+                                    name: m.name,
+                                    profile_text: m.profile_text,
+                                  }),
+                                  profile_text: e.target.value,
+                                },
+                              }))
+                            }
+                          />
+                        </label>
+                        <div className="model-card-actions">
+                          <label className="model-card-add-files">
+                            <input
+                              type="file"
+                              accept="image/jpeg,image/png,image/webp,image/gif"
+                              multiple
+                              className="sr-only-input"
+                              disabled={busy || m.image_count >= 5}
+                              onChange={(e) => {
+                                void appendStudioModelImages(m.id, e.target.files)
+                                e.target.value = ''
+                              }}
+                            />
+                            <span className="ghost-btn model-card-add-btn">Добавить фото</span>
+                          </label>
+                          <button
+                            type="button"
+                            className="send-btn"
+                            disabled={busy || !draft.name.trim()}
+                            onClick={() => void patchStudioModel(m.id)}
+                          >
+                            {busy ? 'Сохранение…' : 'Сохранить изменения'}
+                          </button>
+                        </div>
+                      </article>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {accountTab === 'team' && isOwner && (
+            <div className="account-cabinet-pane" role="tabpanel">
+              <p className="cabinet-lead muted">
+                Сотрудники входят с email владельца (ваш), отдельным логином команды и паролем. Кредиты и
+                подписка — на владельце; права ниже ограничивают разделы.
+              </p>
+              <h4 className="account-sub">Новый участник</h4>
+              <div className="account-grid cabinet-keys-form">
+                <label>
+                  Логин (латиница, цифры, _ · 3–32)
+                  <input
+                    value={newTeamLogin}
+                    onChange={(e) => setNewTeamLogin(e.target.value)}
+                    placeholder="например operator_1"
+                    autoComplete="off"
+                    disabled={teamBusy}
+                  />
+                </label>
+                <label>
+                  Пароль (мин. 8)
+                  <input
+                    type="password"
+                    value={newTeamPassword}
+                    onChange={(e) => setNewTeamPassword(e.target.value)}
+                    autoComplete="new-password"
+                    disabled={teamBusy}
+                  />
+                </label>
+                <div style={{ gridColumn: '1 / -1' }} className="team-perm-grid">
+                  {MEMBER_PERMISSION_LABELS.map(({ bit, label }) => (
+                    <label key={bit} className="studio-label studio-check">
+                      <input
+                        type="checkbox"
+                        checked={hasAllBits(newTeamMask, bit)}
+                        disabled={teamBusy}
+                        onChange={(e) => setNewTeamMask((m) => togglePermission(m, bit, e.target.checked))}
+                      />
+                      <span>{label}</span>
+                    </label>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  className="send-btn"
+                  disabled={teamBusy || newTeamLogin.trim().length < 3 || newTeamPassword.length < 8}
+                  onClick={() => void createWorkspaceMember()}
+                >
+                  {teamBusy ? 'Создание…' : 'Создать участника'}
+                </button>
+              </div>
+
+              <h4 className="account-sub">Участники</h4>
+              {workspaceMembers.length === 0 ? (
+                <p className="muted">Пока никого нет — добавьте первого выше.</p>
+              ) : (
+                <ul className="team-member-list">
+                  {workspaceMembers.map((row) => {
+                    const mask = memberMaskEdits[row.id] ?? row.permissions_mask
+                    const pwd = memberEditPassword[row.id] ?? ''
+                    return (
+                      <li key={row.id} className="team-member-card">
+                        <div className="team-member-head">
+                          <strong className="mono">{row.member_login}</strong>
+                          <label className="studio-label studio-check">
+                            <input
+                              type="checkbox"
+                              checked={row.is_active}
+                              disabled={teamBusy}
+                              onChange={(e) => void setWorkspaceMemberActive(row, e.target.checked)}
+                            />
+                            <span>Активен</span>
+                          </label>
+                        </div>
+                        <div className="team-perm-grid">
+                          {MEMBER_PERMISSION_LABELS.map(({ bit, label }) => (
+                            <label key={bit} className="studio-label studio-check">
+                              <input
+                                type="checkbox"
+                                checked={hasAllBits(mask, bit)}
+                                disabled={teamBusy}
+                                onChange={(e) =>
+                                  setMemberMaskEdits((prev) => ({
+                                    ...prev,
+                                    [row.id]: togglePermission(mask, bit, e.target.checked),
+                                  }))
+                                }
+                              />
+                              <span>{label}</span>
+                            </label>
+                          ))}
+                        </div>
+                        <label>
+                          Новый пароль (необязательно)
+                          <input
+                            type="password"
+                            value={pwd}
+                            autoComplete="new-password"
+                            disabled={teamBusy}
+                            onChange={(e) =>
+                              setMemberEditPassword((p) => ({ ...p, [row.id]: e.target.value }))
+                            }
+                          />
+                        </label>
+                        <div className="team-member-actions">
+                          <button
+                            type="button"
+                            className="ghost-btn"
+                            disabled={teamBusy}
+                            onClick={() => void saveWorkspaceMemberRow(row)}
+                          >
+                            Сохранить права и пароль
+                          </button>
+                          <button
+                            type="button"
+                            className="ghost-btn danger-text"
+                            disabled={teamBusy}
+                            onClick={() => void removeWorkspaceMember(row.id)}
+                          >
+                            Удалить
+                          </button>
+                        </div>
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+            </div>
+          )}
         </div>
       )}
 
       {health && (
         <div className="health-strip" title={health.database_file}>
-          База: {health.conversations_count} диалогов, {health.messages_count} сообщений
-          · Telegram:{' '}
-          {!health.telegram_bot_configured ? (
-            <span className="warn">нет BOT_TOKEN</span>
-          ) : health.telegram_api_reachable === true ? (
-            <span className="ok">
-              API OK @{health.telegram_bot_username ?? '?'}
-            </span>
-          ) : health.telegram_api_reachable === false ? (
-            <span className="warn">API недоступен</span>
-          ) : (
-            <span className="muted">проверка…</span>
-          )}
-          {health.telegram_proxy_configured ? (
-            <span className="ok"> · прокси</span>
-          ) : null}
-          {health.fanvue_access_token_configured != null ? (
-            <span title="Fanvue API для отправки ответов">
+          Режим: {health.mode ?? '—'} · всего в БД: {health.conversations_count ?? 0} диалогов,{' '}
+          {health.messages_count ?? 0} сообщений
+          {health.legacy_telegram_polling ? (
+            <>
               {' '}
-              · Fanvue:{' '}
-              {health.fanvue_access_token_configured ? (
-                <span className="ok">токен задан</span>
+              · legacy polling Telegram:{' '}
+              {health.telegram_api_reachable === true ? (
+                <span className="ok">API OK @{health.telegram_bot_username ?? '?'}</span>
+              ) : health.telegram_api_reachable === false ? (
+                <span className="warn">API недоступен</span>
               ) : (
-                <span className="warn">нет FANVUE_ACCESS_TOKEN</span>
+                <span className="muted">проверка…</span>
               )}
+            </>
+          ) : (
+            <span className="muted"> · интеграции через личный кабинет (webhook)</span>
+          )}
+          {health.stripe_configured ? <span className="ok"> · Stripe</span> : (
+            <span className="warn"> · Stripe не настроен</span>
+          )}
+          {health.telegram_proxy_configured ? <span className="ok"> · прокси TG</span> : null}
+          {health.openai_studio_configured ? (
+            <span className="ok">
+              {' '}
+              · студия промпта OpenAI ({health.studio_prompt_credit_cost ?? '—'} кр.)
             </span>
-          ) : null}
+          ) : (
+            <span className="warn"> · студия: нет OPENAI_API_KEY</span>
+          )}
         </div>
       )}
 
-      <div className="layout">
+      {hasAnyMainSection && appSection === 'studio' && canStudioAny && (
+        <section className="studio-panel" aria-labelledby="studio-heading">
+          <h2 id="studio-heading">Генерация картинок — промпт</h2>
+          {!canStudioGenerate ? (
+            <div className="banner info">
+              По правам аккаунта недоступна сборка промпта и запуск WaveSpeed. Вы можете просматривать
+              интерфейс; при необходимости попросите владельца выдать право «Генерация».
+            </div>
+          ) : null}
+          <p className="muted studio-lead">
+            Шаблон JSON — <code className="mono">backend/data/prompts/image_studio_skeleton.txt</code>, текст
+            первого шага (описание референса) —{' '}
+            <code className="mono">image_studio_reference_describe.txt</code>. При загрузке картинки сначала
+            уходит запрос с этим текстом, ответ добавляется ко второму запросу вместе с вашим текстом и
+            профилем выбранной модели из кабинета. Кредиты списываются один раз за сборку. Формат кадра
+            влияет на JSON и на параметр <code className="mono">size</code> в WaveSpeed.
+          </p>
+          <div className="studio-grid">
+            <label className="studio-label">
+              Формат итогового изображения
+              <select
+                value={studioOutputAspect}
+                onChange={(e) => setStudioOutputAspect(e.target.value)}
+              >
+                {studioAspectPresets.length > 0 ? (
+                  studioAspectPresets.map((p) => (
+                    <option key={p.key} value={p.key}>
+                      {p.label} ({p.size} px)
+                    </option>
+                  ))
+                ) : (
+                  <option value="9:16">9:16 — вертикаль (1080×1920)</option>
+                )}
+              </select>
+            </label>
+            <label className="studio-label">
+              Модель из кабинета (опционально)
+              <select
+                value={studioSelectedModelId ?? ''}
+                onChange={(e) => {
+                  const v = e.target.value
+                  setStudioSelectedModelId(v === '' ? null : Number(v))
+                }}
+              >
+                <option value="">— не выбрана —</option>
+                {studioModels.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="studio-label">
+              Референс сцены / позы (изображение)
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/gif"
+                onChange={(e) => {
+                  const f = e.target.files?.[0] ?? null
+                  setStudioFile(f)
+                }}
+              />
+              {studioFile ? (
+                <span className="muted" style={{ fontSize: '0.85rem' }}>
+                  {studioFile.name} — сначала описание фото, затем сборка JSON.
+                </span>
+              ) : (
+                <span className="muted" style={{ fontSize: '0.85rem' }}>
+                  При загрузке: шаг 1 — описание позы и сцены (EN), шаг 2 — финальный JSON.
+                </span>
+              )}
+            </label>
+            <label className="studio-label">
+              Что должно получиться
+              <textarea
+                rows={5}
+                placeholder="Например: девушка делает разминку в спортзале, вид сбоку, мягкий свет из окон…"
+                value={studioDesc}
+                onChange={(e) => setStudioDesc(e.target.value)}
+              />
+            </label>
+            <label className="studio-label studio-check">
+              <input
+                type="checkbox"
+                checked={studioWsSingleRef}
+                onChange={(e) => setStudioWsSingleRef(e.target.checked)}
+              />
+              <span>
+                Только первое фото модели в WaveSpeed (на сайте часто один референс; несколько
+                снимков иногда усиливают фильтр).
+              </span>
+            </label>
+            <label className="studio-label studio-check">
+              <input
+                type="checkbox"
+                checked={generateWavespeed}
+                onChange={(e) => setGenerateWavespeed(e.target.checked)}
+              />
+              <span>
+                Затем сгенерировать картинку в WaveSpeed (
+                <a
+                  href="https://wavespeed.ai/models/bytedance/seedream-v4.5/edit"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Seedream 4.5 Edit
+                </a>
+                ): в запрос уйдут финальный промпт и фото выбранной модели. Нужны ключ WaveSpeed, модель с
+                фото и HTTPS <code className="mono">PUBLIC_APP_URL</code>.
+              </span>
+            </label>
+            <div className="studio-actions">
+              <button
+                type="button"
+                className="send-btn"
+                disabled={
+                  studioBusy ||
+                  !canStudioGenerate ||
+                  (!studioDesc.trim() && !studioFile && studioSelectedModelId == null) ||
+                  !health?.openai_studio_configured
+                }
+                onClick={() => void refineStudioPrompt()}
+              >
+                {studioBusy ? 'Запрос…' : 'Собрать промпт (OpenAI)'}
+              </button>
+              <span className="muted" style={{ fontSize: '0.85rem' }}>
+                Стоимость: {health?.studio_prompt_credit_cost ?? '—'} кред.
+                {!health?.openai_studio_configured ? ' — задайте OPENAI_API_KEY в backend/.env' : null}
+              </span>
+            </div>
+            {studioSceneFromRef ? (
+              <label className="studio-label">
+                Описание с референса (шаг 1, EN)
+                <textarea
+                  className="studio-output"
+                  readOnly
+                  rows={6}
+                  value={studioSceneFromRef}
+                />
+              </label>
+            ) : null}
+            <label className="studio-label">
+              Готовый промпт (JSON)
+              <textarea
+                className="studio-output"
+                readOnly
+                rows={12}
+                placeholder="Результат появится здесь"
+                value={studioResult}
+              />
+            </label>
+            {studioWavespeedMsg && !studioGenImageUrl ? (
+              <div className="banner info">{studioWavespeedMsg}</div>
+            ) : null}
+            {studioWavespeedMsg && studioGenImageUrl ? (
+              <p className="muted" style={{ fontSize: '0.85rem' }}>
+                {studioWavespeedMsg}
+              </p>
+            ) : null}
+            {studioGenImageUrl ? (
+              <div className="studio-generated">
+                <h3 className="studio-generated-title">Результат WaveSpeed</h3>
+                <div className="studio-generated-frame">
+                  <img src={studioGenImageUrl} alt="Сгенерировано Seedream" className="studio-gen-img" />
+                </div>
+                <a
+                  className="send-btn studio-download"
+                  href={studioGenImageUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  download="seedream-result.png"
+                >
+                  Скачать изображение
+                </a>
+              </div>
+            ) : null}
+          </div>
+        </section>
+      )}
+
+      {hasAnyMainSection && appSection === 'chat' && canChat && (
+      <div className={layoutClass}>
         <aside className="sidebar">
           <div className="sidebar-head">
             <h2>Диалоги</h2>
@@ -379,6 +1875,8 @@ export default function App() {
                     }
                     onClick={() => setSelectedId(c.id)}
                   >
+                    <ConvAvatarThumb conv={c} />
+                    <span className="conv-main">
                     <span className="conv-row-top">
                       <span className="plat">{platformLabel(c.platform)}</span>
                       {unread > 0 ? (
@@ -396,6 +1894,7 @@ export default function App() {
                     {c.last_message_preview && (
                       <span className="preview">{c.last_message_preview}</span>
                     )}
+                    </span>
                   </button>
                 </li>
               )
@@ -415,9 +1914,19 @@ export default function App() {
           {selected && (
             <>
               <div className="thread-head">
-                <div className="thread-avatar" aria-hidden>
-                  {(selected.user_display_name ?? '?').slice(0, 1).toUpperCase()}
-                </div>
+                {isMobileLayout ? (
+                  <button
+                    type="button"
+                    className="back-btn"
+                    onClick={() => setSelectedId(null)}
+                    aria-label="Назад к списку диалогов"
+                  >
+                    <span className="back-btn-icon" aria-hidden>
+                      ‹
+                    </span>
+                  </button>
+                ) : null}
+                <ThreadAvatar conv={selected} />
                 <div className="thread-head-text">
                   <h3>{selected.user_display_name ?? 'Диалог'}</h3>
                   <span className="meta">
@@ -446,7 +1955,9 @@ export default function App() {
                         className={
                           m.direction === 'inbound'
                             ? 'bubble in msg-enter'
-                            : 'bubble out msg-enter'
+                            : m.pending
+                              ? 'bubble out msg-enter bubble-out-pending'
+                              : 'bubble out msg-enter'
                         }
                       >
                         {m.direction === 'inbound' ? (
@@ -459,8 +1970,14 @@ export default function App() {
                         ) : (
                           <>
                             <div className="ru">{m.text_original}</div>
-                            <div className="orig" title="Ушло пользователю">
-                              → {m.text_translated ?? '—'}
+                            <div
+                              className={m.pending ? 'orig bubble-pending-meta' : 'orig'}
+                              title="Ушло пользователю"
+                            >
+                              →{' '}
+                              {m.pending
+                                ? 'перевод и отправка…'
+                                : m.text_translated ?? '—'}
                             </div>
                           </>
                         )}
@@ -506,7 +2023,7 @@ export default function App() {
                       {emojiOpen && (
                         <div className="emoji-popover">
                           <EmojiPicker
-                            theme={Theme.DARK}
+                            theme={Theme.LIGHT}
                             onEmojiClick={onEmojiPick}
                             width={320}
                             height={380}
@@ -560,6 +2077,7 @@ export default function App() {
           )}
         </main>
       </div>
+      )}
     </div>
   )
 }

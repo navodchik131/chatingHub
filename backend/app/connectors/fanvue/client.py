@@ -19,15 +19,14 @@ class FanvueAPIError(Exception):
         super().__init__(f"Fanvue API {status}: {body[:500]}")
 
 
-async def send_direct_message(fan_user_uuid: str, text: str) -> str:
-    """
-    POST /chats/{userUuid}/message — userUuid это собеседник (фан),
-    с которым ведётся переписка. Нужны scope ``write:chat`` и Bearer-токен.
-    Возвращает messageUuid из ответа.
-    """
-    token = (settings.fanvue_access_token or "").strip()
+async def send_direct_message(
+    access_token: str,
+    fan_user_uuid: str,
+    text: str,
+) -> str:
+    token = (access_token or "").strip()
     if not token:
-        raise FanvueAPIError(503, "FANVUE_ACCESS_TOKEN is not set")
+        raise FanvueAPIError(503, "Fanvue access token is not set")
 
     base = (settings.fanvue_api_base or "https://api.fanvue.com").rstrip("/")
     url = f"{base}/chats/{fan_user_uuid}/message"

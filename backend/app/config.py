@@ -1,10 +1,9 @@
 from pathlib import Path
 
-from pydantic import Field, field_validator
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine.url import make_url
 
-# Каталог backend (где лежит app/) — пути к SQLite не зависят от текущей рабочей директории
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 
 
@@ -19,16 +18,11 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    bot_token: str = ""
-    # HTTP(S) или SOCKS5 прокси до api.telegram.org (если прямой доступ блокируется)
-    # Пример: http://127.0.0.1:7890 или socks5://127.0.0.1:1080
-    telegram_proxy: str | None = None
     database_url: str = Field(default_factory=_default_sqlite_url)
 
     @field_validator("database_url", mode="after")
     @classmethod
     def sqlite_absolute_path(cls, v: str) -> str:
-        """Относительные sqlite-пути привязываем к каталогу backend (не к cwd)."""
         if not v.startswith("sqlite+aiosqlite"):
             return v
         u = make_url(v)
@@ -39,13 +33,59 @@ class Settings(BaseSettings):
             p = (BACKEND_DIR / p).resolve()
         p.parent.mkdir(parents=True, exist_ok=True)
         return f"sqlite+aiosqlite:///{p.as_posix()}"
-    # DeepL: https://www.deepl.com/pro-api — free tier uses api-free.deepl.com
+
+    # --- Auth / SaaS ---
+    jwt_secret: str = Field(default="dev-change-me")
+    jwt_algorithm: str = "HS256"
+    jwt_expire_minutes: int = 60 * 24 * 7
+    fernet_key: str = Field(default="")
+
+    public_app_url: str = Field(default="http://127.0.0.1:8080")
+
+    signup_bonus_credits: int = Field(default=50)
+    credit_cost_inbound_translation: int = Field(default=1)
+    credit_cost_outbound_translation: int = Field(default=1)
+
+    # --- Студия: доработка промпта через OpenAI (кредиты списываются с пользователя) ---
+    openai_api_key: str = Field(default="")
+    # Совместимый с OpenAI прокси (например локальный) или кастомный эндпоинт: …/v1
+    openai_base_url: str = Field(default="https://api.openai.com/v1")
+    # Опционально, если в кабинете OpenAI несколько org
+    openai_organization: str = Field(default="")
+    openai_studio_model: str = Field(default="gpt-4o-mini")
+    openai_studio_model_vision: str = Field(default="gpt-4o")
+    credit_cost_studio_prompt_refine: int = Field(default=2)
+    image_studio_skeleton_path: str = Field(default="data/prompts/image_studio_skeleton.txt")
+    image_studio_skeleton_inline: str = Field(default="")
+    image_studio_reference_describe_path: str = Field(
+        default="data/prompts/image_studio_reference_describe.txt"
+    )
+    image_studio_reference_describe_inline: str = Field(default="")
+
+    wavespeed_api_base: str = Field(default="https://api.wavespeed.ai")
+    # Опционально: JSON-объект, полями дополняется тело POST к WaveSpeed (для полей из DevTools Playground).
+    wavespeed_extra_json: str = Field(default="")
+
+    stripe_secret_key: str = Field(default="")
+    stripe_webhook_secret: str = Field(default="")
+    stripe_price_subscription: str = Field(default="")
+    billing_success_path: str = "/?billing=success"
+    billing_cancel_path: str = "/?billing=cancel"
+
+    # --- Legacy single-bot polling (локальная отладка) ---
+    legacy_bot_token: str = Field(
+        default="",
+        validation_alias=AliasChoices("LEGACY_BOT_TOKEN", "BOT_TOKEN"),
+    )
+    legacy_user_id: int = Field(default=0, validation_alias=AliasChoices("LEGACY_USER_ID"))
+    telegram_proxy: str | None = None
+
+    # --- Translation ---
     deepl_api_key: str | None = None
     deepl_use_free: bool = True
-    # Если DeepL нет — можно задать URL LibreTranslate (свой инстанс)
     libretranslate_url: str | None = None
 
-    # Fanvue: https://api.fanvue.com/docs — вебхук + отправка в чат (OAuth Bearer)
+    # Глобальный Fanvue (только обратная совместимость; в SaaS токен в БД)
     fanvue_webhook_secret: str = ""
     fanvue_access_token: str = ""
     fanvue_api_version: str = "2025-06-26"

@@ -1,0 +1,12 @@
+# Секреты — передавать через `env_file` в docker-compose, не печь в образ
+**/.env
+!**/.env.example
+.git
+**/__pycache__
+**/*.pyc
+.venv
+venv
+frontend/node_modules
+frontend/dist
+backend/data/*.db
+backend/data/*.db-*
