@@ -56,7 +56,28 @@ def _wavespeed_envelope_error(resp_json: dict[str, Any]) -> str | None:
 
 
 def _first_output_url(outputs: Any) -> str | None:
-    """WaveSpeed обычно отдаёт outputs: [url, ...], иногда элементы-объекты с полем url."""
+    """
+    WaveSpeed: data.outputs — массив URL; в ряде ответов встречаются одна строка-URL
+    или JSON-строка с массивом (нестыковки в OpenAPI).
+    """
+    if outputs is None:
+        return None
+    if isinstance(outputs, str):
+        s = outputs.strip()
+        if s.startswith("http://") or s.startswith("https://"):
+            return s
+        if s.startswith("["):
+            try:
+                return _first_output_url(json.loads(s))
+            except (json.JSONDecodeError, TypeError):
+                return None
+        return None
+    if isinstance(outputs, dict):
+        for k in ("url", "uri", "image", "output", "src", "result"):
+            v = outputs.get(k)
+            if isinstance(v, str) and v.strip().startswith("http"):
+                return v.strip()
+        return None
     if not isinstance(outputs, list) or not outputs:
         return None
     first = outputs[0]
@@ -66,7 +87,44 @@ def _first_output_url(outputs: Any) -> str | None:
         for k in ("url", "uri", "image", "output", "src"):
             v = first.get(k)
             if isinstance(v, str) and v.strip():
+                v = v.strip()
+                if v.startswith("http"):
+                    return v
+    return None
+
+
+def _image_url_from_prediction(d: dict[str, Any]) -> str | None:
+    """Достаёт ссылку на сгенерированное изображение из объекта prediction (разные варианты API)."""
+    for key in ("outputs", "output", "result", "image_url", "url"):
+        if key in d:
+            u = _first_output_url(d.get(key))
+            if u:
+                return u
+            v = d.get(key)
+            if isinstance(v, str) and v.strip().startswith("http"):
                 return v.strip()
+    imgs = d.get("images")
+    if isinstance(imgs, list) and imgs:
+        u = _first_output_url(imgs)
+        if u:
+            return u
+    urls = d.get("urls")
+    if isinstance(urls, dict):
+        for k in ("get", "result", "output", "image", "download"):
+            x = urls.get(k)
+            if isinstance(x, str) and x.strip().startswith("http"):
+                return x.strip()
+    return None
+
+
+def _task_id_from_prediction(d: dict[str, Any]) -> str | None:
+    for k in ("id", "taskId", "task_id", "prediction_id", "requestId"):
+        v = d.get(k)
+        if v is None:
+            continue
+        s = str(v).strip()
+        if s:
+            return s
     return None
 
 
@@ -114,8 +172,7 @@ async def seedream_v45_edit_image_url(
     body: dict[str, Any] = {
         "images": image_urls[:10],
         "prompt": prompt.strip(),
-        # Документация WaveSpeed по умолчанию false; sync=true иногда даёт пустой/ошибочный ответ при HTTP 200.
-        "enable_sync_mode": False,
+        "enable_sync_mode": bool(settings.wavespeed_seedream_sync),
         "enable_base64_output": False,
     }
     if size and size.strip():
@@ -173,12 +230,11 @@ async def seedream_v45_edit_image_url(
                 f"WaveSpeed: {env_err}. Проверьте баланс и параметры; если ошибка общая (try again) — подождите и повторите."
             )
         d = _unwrap_data(resp)
-        outs = d.get("outputs")
-        u0 = _first_output_url(outs)
+        u0 = _image_url_from_prediction(d)
         if u0:
             return u0
 
-        task_id = d.get("id")
+        task_id = _task_id_from_prediction(d)
         status = (d.get("status") or "").lower()
         if status == "failed":
             raise RuntimeError(str(d.get("error") or "WaveSpeed task failed"))
@@ -186,7 +242,7 @@ async def seedream_v45_edit_image_url(
             raise RuntimeError(
                 str(
                     d.get("error")
-                    or "WaveSpeed: статус completed, но нет ссылки на изображение в outputs"
+                    or "WaveSpeed: статус completed, но нет ссылки на изображение (проверьте ответ в логах сервера)"
                 )
             )
 
@@ -217,20 +273,19 @@ async def seedream_v45_edit_image_url(
                 )
             pd = _unwrap_data(raw_poll)
             st = (pd.get("status") or "").lower()
-            outs2 = pd.get("outputs")
             if st == "failed":
                 raise RuntimeError(str(pd.get("error") or "WaveSpeed task failed"))
             if st == "completed":
-                u = _first_output_url(outs2)
+                u = _image_url_from_prediction(pd)
                 if u:
                     return u
                 raise RuntimeError(
                     str(
                         pd.get("error")
-                        or "WaveSpeed: задача completed, но outputs пустой или неизвестный формат"
+                        or "WaveSpeed: задача completed, но нет URL изображения (неизвестный формат outputs)"
                     )
                 )
-            u = _first_output_url(outs2)
+            u = _image_url_from_prediction(pd)
             if u:
                 return u
 

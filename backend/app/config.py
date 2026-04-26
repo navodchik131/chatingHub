@@ -63,6 +63,8 @@ class Settings(BaseSettings):
     image_studio_reference_describe_inline: str = Field(default="")
 
     wavespeed_api_base: str = Field(default="https://api.wavespeed.ai")
+    # Seedream: true = дождаться результата в ответе POST (реже баги polling). false = async + poll.
+    wavespeed_seedream_sync: bool = Field(default=True)
     # Опционально: JSON-объект, полями дополняется тело POST к WaveSpeed (для полей из DevTools Playground).
     wavespeed_extra_json: str = Field(default="")
 
