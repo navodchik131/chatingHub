@@ -480,10 +480,11 @@ async def api_studio_refine_prompt(
                         if "something went wrong" in low or "try again" in low:
                             wavespeed_message = (
                                 f"{wavespeed_message} "
-                                "— Частые причины: кредиты/ключ в wavespeed.ai, перегрузка API; "
-                                "или с их сервера не скачивается референс. Нужен PUBLIC_APP_URL=https://… "
-                                "на тот же бэкенд, что в браузере; откройте в новой вкладке "
-                                f"{pub}/api/studio/public-model-image?… — должен отдаться PNG/JPG (код 200)."
+                                "Часто это: баланс/лимит на wavespeed.ai, кратковременный сбой API "
+                                "(см. status.wavespeed.ai) или слишком тяжёлый/нестандартный запрос. "
+                                "Повторите позже. Если сбой стабилен — в backend/.env поставьте "
+                                "WAVESPEED_SEEDREAM_SYNC=false (режим с опросом вместо sync) и перезапустите API. "
+                                f"Публичный референс: {pub}/api/studio/public-model-image?… (без логина — 200 и картинка)."
                             )
                         log.warning(
                             "WaveSpeed generation failed (owner_id=%s actor=%s): %s",
