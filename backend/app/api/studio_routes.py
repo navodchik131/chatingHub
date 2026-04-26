@@ -139,7 +139,12 @@ async def public_studio_model_image(
     except ValueError:
         raise HTTPException(status_code=404, detail="Не найдено") from None
     if not abs_path.is_file():
-        raise HTTPException(status_code=404, detail="Не найдено")
+        # Файл пропал (например контейнер без volume) — убираем «сироту» из БД, иначе UI и WaveSpeed держат мёртвые ссылки
+        await session.delete(img)
+        await session.commit()
+        raise HTTPException(
+            status_code=404, detail="Файл изображения отсутствует на сервере"
+        ) from None
     mime = mimetypes.guess_type(abs_path.name)[0] or "application/octet-stream"
     return FileResponse(abs_path, media_type=mime)
 

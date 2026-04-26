@@ -30,6 +30,10 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    volumes:
+      # Иначе после пересборки контейнера фото моделей пропадают, а строки в Postgres остаются → 404 на /public-model-image
+      - chating_app_data:/app/backend/data
 
 volumes:
   chating_pg:
+  chating_app_data:
