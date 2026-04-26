@@ -30,6 +30,19 @@ def _apply_wavespeed_extra_body(body: dict[str, Any]) -> None:
         log.warning("WAVESPEED_EXTRA_JSON: невалидный JSON, пропускаем")
 
 
+def _is_wavespeed_task_json_url(u: str) -> bool:
+    """
+    URL опроса задачи (JSON), не CDN-картинка — в <img> даёт net::ERR_BLOCKED_BY_ORB.
+    Не путать с data.urls.get в ответе WaveSpeed.
+    """
+    s = (u or "").strip().lower()
+    if "wavespeed" in s and "/api/v3/predictions/" in s:
+        return True
+    if "/predictions/" in s and s.rstrip("/").endswith("/result"):
+        return True
+    return False
+
+
 def _wavespeed_envelope_error(resp_json: dict[str, Any]) -> str | None:
     """
     WaveSpeed отдаёт обёртку {code, message, data}. HTTP может быть 200, а code в JSON — ошибка.
@@ -65,6 +78,8 @@ def _first_output_url(outputs: Any) -> str | None:
     if isinstance(outputs, str):
         s = outputs.strip()
         if s.startswith("http://") or s.startswith("https://"):
+            if _is_wavespeed_task_json_url(s):
+                return None
             return s
         if s.startswith("["):
             try:
@@ -76,44 +91,55 @@ def _first_output_url(outputs: Any) -> str | None:
         for k in ("url", "uri", "image", "output", "src", "result"):
             v = outputs.get(k)
             if isinstance(v, str) and v.strip().startswith("http"):
-                return v.strip()
+                s = v.strip()
+                if not _is_wavespeed_task_json_url(s):
+                    return s
         return None
     if not isinstance(outputs, list) or not outputs:
         return None
     first = outputs[0]
     if isinstance(first, str) and first.strip():
-        return first.strip()
+        s = first.strip()
+        if _is_wavespeed_task_json_url(s):
+            return None
+        return s
     if isinstance(first, dict):
         for k in ("url", "uri", "image", "output", "src"):
             v = first.get(k)
             if isinstance(v, str) and v.strip():
                 v = v.strip()
-                if v.startswith("http"):
+                if v.startswith("http") and not _is_wavespeed_task_json_url(v):
                     return v
     return None
 
 
 def _image_url_from_prediction(d: dict[str, Any]) -> str | None:
-    """Достаёт ссылку на сгенерированное изображение из объекта prediction (разные варианты API)."""
-    for key in ("outputs", "output", "result", "image_url", "url"):
+    """
+    URL готового изображения (CDN). Не data.urls.get — это JSON /predictions/.../result (ORB в <img>).
+    """
+    for key in ("outputs", "output", "image_url"):
         if key in d:
             u = _first_output_url(d.get(key))
-            if u:
+            if u and not _is_wavespeed_task_json_url(u):
                 return u
             v = d.get(key)
             if isinstance(v, str) and v.strip().startswith("http"):
-                return v.strip()
+                s = v.strip()
+                if not _is_wavespeed_task_json_url(s):
+                    return s
+    for key in ("result", "url"):
+        if key not in d:
+            continue
+        v = d.get(key)
+        if isinstance(v, str) and v.strip().startswith("http"):
+            s = v.strip()
+            if not _is_wavespeed_task_json_url(s):
+                return s
     imgs = d.get("images")
     if isinstance(imgs, list) and imgs:
         u = _first_output_url(imgs)
-        if u:
+        if u and not _is_wavespeed_task_json_url(u):
             return u
-    urls = d.get("urls")
-    if isinstance(urls, dict):
-        for k in ("get", "result", "output", "image", "download"):
-            x = urls.get(k)
-            if isinstance(x, str) and x.strip().startswith("http"):
-                return x.strip()
     return None
 
 
