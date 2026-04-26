@@ -1,0 +1,51 @@
+# Nginx + Docker (chatingHub на 127.0.0.1:8080)
+#
+# 1) Замените chating.example.com на ваш домен (дважды: server_name и пути certbot).
+# 2) certbot --nginx -d chating.example.com
+# 3) Скопируйте в /etc/nginx/sites-available/chatinghub и сделайте symlink в sites-enabled.
+
+upstream chatinghub_docker {
+    server 127.0.0.1:8080;
+    keepalive 32;
+}
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name chating.example.com;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    client_max_body_size 25m;
+    server_name chating.example.com;
+
+    ssl_certificate     /etc/letsencrypt/live/chating.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/chating.example.com/privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+
+    location /api/ws {
+        proxy_pass http://chatinghub_docker;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 86400s;
+    }
+
+    location / {
+        proxy_pass http://chatinghub_docker;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 300s;
+    }
+}
