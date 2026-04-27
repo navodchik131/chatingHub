@@ -1,98 +1,97 @@
-Ты собираешь один финальный промпт json формата
-
-вот исходный промпт в котором ты будешь все менять
-
 {
   "subject": {
-    "description": "A young woman in her early 20s with long wavy black hair has just woken up and is sitting on the edge of the bed in a casual morning selfie. She is wrapped in a soft blanket, holding the phone with one hand and taking a selfie. The blanket is loosely draped around her body, revealing a deep cleavage, but her breasts are modestly covered by the blanket. She looks sleepy and relaxed, with natural messy morning hair.",
-    "age": "early 20s",
-    "expression": {
-      "eyes": "soft and slightly sleepy, looking directly into the camera",
-      "mouth": "gentle natural smile with lips slightly parted",
-      "overall": "cozy, intimate, just-woke-up morning vibe"
-    },
-    "hair": {
-      "color": "deep black",
-      "style": "long wavy black hair, messy and natural after sleep, some strands falling over her face and shoulders",
-      "effect": "realistic morning bedhead look"
-    },
-    "body": {
-      "frame": "slim and curvaceous",
-      "chest": "deep natural cleavage visible, but breasts covered by the blanket",
-      "legs": "sitting on the edge of the bed, bare legs partially visible under the blanket",
+    "description": "<FILL: short scene in English — who, where, action, clothing vibe, mood>",
+    "identity": {
+      "age": "<FROM_MODEL_PROFILE>",
+      "ethnicity": "<FROM_MODEL_PROFILE>",
+      "face_features": "<FROM_MODEL_PROFILE>",
+      "body_type": "<FROM_MODEL_PROFILE>",
       "skin": {
-        "visible_areas": "face, neck, shoulders, upper chest and cleavage",
-        "tone": "fair warm with light freckles",
-        "texture": "natural soft skin with realistic morning texture"
-      }
+        "tone": "<FROM_MODEL_PROFILE>",
+        "imperfections": "<FROM_MODEL_PROFILE — freckles, natural pores, small scars>"
+      },
+      "hair": {
+        "color": "<FROM_MODEL_PROFILE>",
+        "length": "<FROM_MODEL_PROFILE>",
+        "style_default": "<FROM_MODEL_PROFILE>"
+      },
+      "distinctive_marks": "<FROM_MODEL_PROFILE — tattoos, piercings, notable traits>"
+    },
+    "expression": {
+      "eyes": "<FILL>",
+      "mouth": "<FILL>",
+      "overall_emotion": "<FILL>"
+    },
+    "hair_in_scene": {
+      "style_now": "<FILL: hair styling in this scene>",
+      "effect": "<FILL: e.g. natural messiness, wet hair, bun>"
     },
     "pose": {
-      "position": "sitting on the edge of the bed, taking a selfie",
-      "base": "body slightly turned toward the camera, wrapped in a blanket, one hand holding the phone for selfie, other hand holding the blanket near her chest",
-      "overall": "cozy casual morning selfie pose"
+      "position": "<FILL_FROM_IMAGE_OR_TEXT>",
+      "body_orientation": "<FILL>",
+      "hands": "<FILL — critical for image edit models>",
+      "overall": "<FILL>"
     },
     "clothing": {
       "top": {
-        "type": "none",
-        "details": "completely wrapped in a soft light-colored blanket, deep cleavage visible, breasts modestly covered"
+        "type": "<FILL_FROM_IMAGE_OR_TEXT>",
+        "color": "<FILL>",
+        "fabric": "<FILL>",
+        "fit": "<FILL>",
+        "details": "<FILL — folds, wear, thread, lint>"
       },
       "bottom": {
-        "type": "none",
-        "details": "bare legs partially visible under the blanket"
-      }
+        "type": "<FILL_FROM_IMAGE_OR_TEXT>",
+        "color": "<FILL>",
+        "fabric": "<FILL>",
+        "fit": "<FILL>",
+        "details": "<FILL>"
+      },
+      "accessories": "<FILL — jewelry, watch, glasses>",
+      "imperfections": "<FILL — dust, pet hair on fabric, natural wear>"
     }
   },
   "photography": {
-    "camera_style": "casual realistic smartphone selfie, unpolished everyday morning photo with slight natural shake",
-    "angle": "slightly high angle selfie, front-facing camera look",
-    "shot_type": "medium close-up from waist up",
-    "aspect_ratio": "9:16 vertical",
-    "texture": "natural phone grain, realistic skin and fabric texture, no heavy filtering",
-    "lighting": "soft natural morning light coming from the window, gentle and uneven",
-    "depth_of_field": "natural phone depth — face and upper body in focus, slight softness in the background"
+    "camera_style": "<FILL — phone selfie / mirror selfie / friend snap / casual DSLR>",
+    "device": "<FILL — e.g. iPhone front camera, Android>",
+    "angle": "<FILL_FROM_IMAGE_OR_TEXT>",
+    "shot_type": "<FILL — close-up / medium / full body>",
+    "aspect_ratio": "<FILL — must match OUTPUT/ASPECT section>",
+    "lighting": "<FILL_FROM_IMAGE_OR_TEXT>",
+    "depth_of_field": "<FILL — natural phone DoF, no fake bokeh>"
   },
   "background": {
-    "setting": "ordinary simple apartment bedroom",
+    "setting": "<FILL_FROM_IMAGE_OR_TEXT>",
     "elements": [
-      "unmade bed with crumpled sheets",
-      "plain walls",
-      "soft morning light from window",
-      "everyday messy bedroom details"
+      "<FILL>",
+      "<FILL>",
+      "<FILL>"
     ],
-    "lighting": "soft natural morning light",
-    "atmosphere": "cozy, lived-in, realistic morning in a normal apartment"
+    "clutter_level": "<FILL — minimal / lived-in / messy>",
+    "lighting": "<FILL>",
+    "atmosphere": "<FILL>"
   },
+  "realism_engine": null,
   "the_vibe": {
-    "mood": "intimate, cozy, just-woke-up morning",
-    "intimacy": "very personal casual selfie",
-    "caption_energy": "Good morning... 🖤"
+    "mood": "<FILL>",
+    "intimacy_level": "<FILL — public / casual / personal / intimate>",
+    "caption_energy": "<FILL — short post tone>"
   },
   "constraints": {
     "must_keep": [
-      "selfie angle",
-      "sitting on the edge of the bed",
-      "wrapped in a blanket",
-      "deep cleavage visible but breasts covered",
-      "long wavy black hair",
-      "just woke up, natural morning look",
-      "ordinary apartment setting",
-      "casual non-ideal smartphone selfie"
+      "<FILL — must preserve from brief or reference>"
     ],
     "avoid": [
-      "blonde hair",
-      "perfect hair",
+      "plastic skin",
+      "airbrushed look",
       "studio lighting",
-      "heavily blurred background",
-      "full nudity",
-      "exposed breasts",
-      "professional photo look",
-      "airport or uniform",
-      "standing pose"
+      "fake bokeh",
+      "perfect symmetrical face",
+      "glossy CGI hair",
+      "over-saturated colors",
+      "magazine retouching",
+      "<FILL — scene-specific>"
     ]
   },
-  "negative_prompt": "blonde hair, perfect model look, studio lighting, heavy blur, bokeh, exposed breasts, full nudity, deformed hands, extra fingers, bad anatomy, over-smiling, makeup overload, airport, uniform, watermark, text, low quality"
+  "negative_prompt": "plastic skin, airbrushed, over-smoothed skin, CGI look, 3d render, doll-like face, perfect symmetry, studio lighting, heavy bokeh, fake depth of field, oversaturated, HDR, instagram filter, beauty filter, deformed hands, extra fingers, bad anatomy, fused fingers, mutated body, watermark, text, logo, low quality, blurry, jpeg artifacts, duplicate body parts"
 }
-
-твоя задача, если есть картинка то нужно взять с нее одежду позу, ракурс, окружение, но не внешность модели.
-
-Из текста пользователя возьми описание и что надо сделать. в итоге должен быть промпт как основной, только с исправленными всеми ньюансами

@@ -57,6 +57,12 @@ class Settings(BaseSettings):
     credit_cost_studio_prompt_refine: int = Field(default=2)
     image_studio_skeleton_path: str = Field(default="data/prompts/image_studio_skeleton.txt")
     image_studio_skeleton_inline: str = Field(default="")
+    image_studio_system_path: str = Field(default="data/prompts/image_studio_system.txt")
+    image_studio_system_inline: str = Field(default="")
+    image_studio_realism_engine_path: str = Field(
+        default="data/prompts/image_studio_realism_engine.json"
+    )
+    image_studio_realism_engine_inline: str = Field(default="")
     image_studio_reference_describe_path: str = Field(
         default="data/prompts/image_studio_reference_describe.txt"
     )

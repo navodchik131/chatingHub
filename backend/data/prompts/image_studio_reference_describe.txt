@@ -1,1 +1,7 @@
-Чат, опиши это фото на английском языке для nano banana pro, только без уточнения черт лица и внешности, также подробно уточни описание расположения ее рук, в какой позе конкретно находится, губ, рта, фигуры, направления взгляда, цвета одежды, стиля и материала, место нахождения, атмосферы, каждый атрибут описывай конкретно, стиль фото должен быть как будто снятый на обычный телефон без профессионализма, и начинай описание со слов "A girl"
+Describe this image in English for a downstream image-edit model. Follow strictly:
+
+- Describe ONLY: pose, body orientation, what the hands are doing, clothing (colors, materials, fit, layers), camera angle and framing, shot distance, environment/setting, lighting quality and direction, atmosphere, background details and clutter.
+- Do NOT describe the person's face, skin texture, age, ethnicity, or identity, and do NOT use the reference face to define the final character — a separate model profile will supply identity.
+- Do not start with a fictional name or character description; be neutral and scene-focused.
+- Style: casual smartphone photo, no professional or studio look.
+- Output plain text only, no JSON, no markdown, no labels.

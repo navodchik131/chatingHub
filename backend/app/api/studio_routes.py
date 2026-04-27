@@ -57,7 +57,8 @@ from app.services.studio_image_token import (
 from app.services.studio_openai import (
     MAX_IMAGE_BYTES,
     describe_reference_image_openai,
-    load_image_studio_skeleton,
+    load_image_studio_system,
+    prepare_studio_prompt_skeleton,
     refine_prompt_via_openai,
 )
 from app.services.wavespeed_client import seedream_v45_edit_image_url
@@ -470,12 +471,19 @@ async def api_studio_refine_prompt(
             detail="OpenAI не настроен: задайте OPENAI_API_KEY в backend/.env",
         )
 
-    skeleton = load_image_studio_skeleton()
+    skeleton = prepare_studio_prompt_skeleton()
+    system_instr = load_image_studio_system()
     if not skeleton:
         raise HTTPException(
             status_code=503,
             detail="Шаблон промпта пуст: заполните backend/data/prompts/image_studio_skeleton.txt "
             "или IMAGE_STUDIO_SKELETON_INLINE",
+        )
+    if not system_instr:
+        raise HTTPException(
+            status_code=503,
+            detail="Системный промпт студии пуст: заполните backend/data/prompts/image_studio_system.txt "
+            "или IMAGE_STUDIO_SYSTEM_INLINE",
         )
 
     desc = (description or "").strip()
@@ -531,6 +539,7 @@ async def api_studio_refine_prompt(
                 image_media_type=image_mime,
             )
         refined = await refine_prompt_via_openai(
+            system_instruction=system_instr,
             skeleton=skeleton,
             user_text=desc,
             reference_scene_description=reference_scene,

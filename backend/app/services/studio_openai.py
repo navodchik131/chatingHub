@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import base64
+import json
 import logging
+import re
 
 import httpx
 
 from app.config import BACKEND_DIR, settings
-from app.services.studio_aspect import aspect_instruction_for_prompt
+from app.services.studio_aspect import aspect_user_block_english
 
 log = logging.getLogger(__name__)
 
@@ -29,6 +31,78 @@ def load_image_studio_skeleton() -> str:
     if path.is_file():
         return path.read_text(encoding="utf-8").strip()
     return (settings.image_studio_skeleton_inline or "").strip()
+
+
+def load_image_studio_system() -> str:
+    path = (BACKEND_DIR / settings.image_studio_system_path).resolve()
+    if path.is_file():
+        return path.read_text(encoding="utf-8").strip()
+    return (settings.image_studio_system_inline or "").strip()
+
+
+def load_canonical_realism_engine() -> dict | None:
+    if (settings.image_studio_realism_engine_inline or "").strip():
+        try:
+            data = json.loads(settings.image_studio_realism_engine_inline)
+        except json.JSONDecodeError:
+            return None
+    else:
+        path = (BACKEND_DIR / settings.image_studio_realism_engine_path).resolve()
+        if not path.is_file():
+            return None
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            return None
+    if isinstance(data, dict) and "realism_engine" in data and isinstance(
+        data["realism_engine"], dict
+    ):
+        return data["realism_engine"]
+    return data if isinstance(data, dict) else None
+
+
+def prepare_studio_prompt_skeleton() -> str:
+    """Скелет с подставленным из файла realism_engine; при ошибке разбора — сырой текст."""
+    raw = load_image_studio_skeleton()
+    if not raw.strip():
+        return ""
+    re_obj = load_canonical_realism_engine()
+    if re_obj is None:
+        return raw
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as e:
+        log.warning("studio skeleton: invalid JSON, using raw: %s", e)
+        return raw
+    if not isinstance(data, dict):
+        return raw
+    data["realism_engine"] = re_obj
+    return json.dumps(data, ensure_ascii=False, indent=2)
+
+
+def _strip_code_fences(text: str) -> str:
+    t = (text or "").strip()
+    if t.startswith("```"):
+        t = re.sub(r"^```[a-zA-Z0-9]*\s*", "", t)
+        t = re.sub(r"\s*```\s*$", "", t, flags=re.DOTALL)
+    return t.strip()
+
+
+def apply_canonical_realism_to_refined_output(text: str) -> str:
+    """После LLM: зафиксировать realism_engine из канонического JSON."""
+    re_obj = load_canonical_realism_engine()
+    if re_obj is None:
+        return text
+    raw = _strip_code_fences(text)
+    try:
+        data = json.loads(raw)
+    except (json.JSONDecodeError, TypeError) as e:
+        log.warning("refined output: not valid JSON, skip realism merge: %s", e)
+        return text
+    if not isinstance(data, dict):
+        return text
+    data["realism_engine"] = re_obj
+    return json.dumps(data, ensure_ascii=False, indent=2)
 
 
 def load_reference_describe_prompt() -> str:
@@ -157,36 +231,7 @@ async def describe_reference_image_openai(
     )
 
 
-def _build_second_stage_user_message(
-    *,
-    user_text: str,
-    reference_scene_description: str | None,
-    model_profile_text: str | None,
-    output_aspect_instruction: str | None,
-) -> str:
-    blocks: list[str] = []
-    if output_aspect_instruction and output_aspect_instruction.strip():
-        blocks.append(output_aspect_instruction.strip())
-    if model_profile_text and model_profile_text.strip():
-        blocks.append(
-            "Профиль выбранной модели (используй для внешности, возраста, волос, кожи и т.д. в JSON):\n"
-            + model_profile_text.strip()
-        )
-    if reference_scene_description and reference_scene_description.strip():
-        blocks.append(
-            "Описание с референс-фото (поза, руки, одежда, окружение, ракурс, атмосфера — "
-            "не подменяй профиль модели чужим лицом с фото):\n"
-            + reference_scene_description.strip()
-        )
-    ut = (user_text or "").strip()
-    if ut:
-        blocks.append("Пожелания пользователя:\n" + ut)
-    if not blocks:
-        return "Собери финальный JSON строго по шаблону из системного сообщения."
-    return "\n\n".join(blocks)
-
-
-async def refine_prompt_via_openai(
+def _build_refiner_user_message(
     *,
     skeleton: str,
     user_text: str,
@@ -194,30 +239,56 @@ async def refine_prompt_via_openai(
     model_profile_text: str | None,
     output_aspect_key: str,
 ) -> str:
-    """Шаг 2: только текст — собрать итоговый JSON по скелету."""
+    blocks: list[str] = []
+    blocks.append("## SKELETON (JSON template: fill <FILL…>, map <FROM_MODEL_PROFILE> from MODEL_PROFILE)")
+    blocks.append(skeleton.strip())
+    blocks.append("## MODEL_PROFILE (identity — use for <FROM_MODEL_PROFILE>; if JSON, copy literally)")
+    if model_profile_text and model_profile_text.strip():
+        blocks.append(model_profile_text.strip())
+    else:
+        blocks.append(
+            "(no model selected — use neutral, minimal identity only where required, or keep placeholders specific only to USER_TEXT)"
+        )
+    if reference_scene_description and reference_scene_description.strip():
+        blocks.append(
+            "## REFERENCE_IMAGE (pose, clothing, framing, environment, lighting only — do NOT use face/identity from image)\n"
+            + reference_scene_description.strip()
+        )
+    else:
+        blocks.append("## REFERENCE_IMAGE\n(none — no input reference image)")
+    u = (user_text or "").strip()
+    blocks.append("## USER_TEXT (primary scene and intent)\n" + (u if u else "(no additional text)"))
+    blocks.append(aspect_user_block_english(output_aspect_key))
+    return "\n\n".join(blocks)
+
+
+async def refine_prompt_via_openai(
+    *,
+    system_instruction: str,
+    skeleton: str,
+    user_text: str,
+    reference_scene_description: str | None,
+    model_profile_text: str | None,
+    output_aspect_key: str,
+) -> str:
+    """Шаг 2: одна сессия чата — system = инструкция, user = шаблон + данные; ответ: JSON-строка."""
+    if not (system_instruction or "").strip():
+        raise RuntimeError("image studio: empty system instruction")
     model = settings.openai_studio_model
-
-    system_content = (
-        "Ты собираешь финальный промпт в виде одного JSON-объекта строго по правилам и примеру ниже.\n"
-        "Верни только JSON, без markdown и без пояснений до или после.\n\n"
-        "--- Шаблон и правила ---\n"
-        f"{skeleton}\n"
-        "--- Конец шаблона ---"
-    )
-
-    user_message = _build_second_stage_user_message(
+    user_message = _build_refiner_user_message(
+        skeleton=skeleton,
         user_text=user_text,
         reference_scene_description=reference_scene_description,
         model_profile_text=model_profile_text,
-        output_aspect_instruction=aspect_instruction_for_prompt(output_aspect_key),
+        output_aspect_key=output_aspect_key,
     )
-
-    return await _chat_completion_text(
+    raw = await _chat_completion_text(
         model=model,
         messages=[
-            {"role": "system", "content": system_content},
+            {"role": "system", "content": system_instruction.strip()},
             {"role": "user", "content": user_message},
         ],
         max_tokens=8192,
         temperature=0.55,
     )
+    return apply_canonical_realism_to_refined_output(raw)

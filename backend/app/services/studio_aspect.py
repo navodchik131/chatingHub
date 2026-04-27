@@ -54,6 +54,23 @@ def aspect_instruction_for_prompt(aspect_key: str) -> str:
     )
 
 
+def aspect_user_block_english(aspect_key: str) -> str:
+    """Секция OUTPUT/ASPECT для LLM-рефайнера (шаблон JSON на английском)."""
+    k = normalize_aspect_key(aspect_key)
+    w, h = ASPECT_PRESETS[k]
+    if h > w:
+        orient = "portrait/vertical (typical 9:16 story/reel)"
+    elif w > h:
+        orient = "landscape/horizontal"
+    else:
+        orient = "square"
+    return (
+        "## OUTPUT / ASPECT\n"
+        f"Target aspect ratio: {k} (pixel size about {w}×{h}). Framing: {orient}. "
+        f"Set photography.aspect_ratio, shot_type, camera_style, angle, and related fields to match this output."
+    )
+
+
 def aspect_presets_public() -> list[dict[str, str]]:
     """Для GET /api/studio/output-aspects — одна точка правды для UI."""
     labels = {

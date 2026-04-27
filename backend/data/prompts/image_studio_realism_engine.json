@@ -1,0 +1,10 @@
+{
+  "_comment": "CANONICAL — server overwrites model output for this block if present on disk",
+  "skin_realism": "visible pores, natural skin texture, slight uneven skin tone, tiny blemishes, fine peach fuzz, no airbrushing, no plastic skin, no over-smoothing",
+  "hair_realism": "individual stray hairs, flyaways, natural strand separation, slight frizz, realistic hair shine (not glossy CGI)",
+  "fabric_realism": "visible fabric weave, natural wrinkles, lint, occasional pet hair or dust on clothing, realistic fabric drape",
+  "environment_realism": "minor everyday clutter, small dust particles in light beams, slight smudges on surfaces, realistic shadow imperfections, lived-in feel",
+  "photo_realism": "natural smartphone sensor noise, mild ISO grain, slight motion shake, imperfect focus, real white balance shifts, no professional retouching, no studio polish",
+  "color_grading": "natural unedited colors, slight warmth or coolness depending on light source, no Instagram filter, no HDR oversaturation",
+  "imperfection_level": "subtle but present — should feel like a real photo taken on a phone, not a render"
+}
