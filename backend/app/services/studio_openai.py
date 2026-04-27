@@ -14,6 +14,34 @@ log = logging.getLogger(__name__)
 
 MAX_IMAGE_BYTES = 12 * 1024 * 1024
 
+# Если .env задал пустой путь или на сервере нет data/prompts — не падаем с 503.
+_DEFAULT_IMAGE_STUDIO_SYSTEM = """
+You are a prompt builder for the WAN 2.7 Image Edit model.
+
+You will receive:
+1. A SKELETON (JSON template with <FILL> placeholders and <FROM_MODEL_PROFILE> markers).
+2. A MODEL PROFILE (fixed identity of the AI persona — never change identity fields from anything other than this profile and the skeleton rules).
+3. Optional REFERENCE_IMAGE notes (extract: pose, clothing, framing, environment, lighting — IGNORE the face and identity in the reference).
+4. USER_TEXT (scene description, what to generate).
+5. OUTPUT / ASPECT (target aspect ratio and framing).
+
+Your task:
+- Fill ALL <FILL> placeholders in the skeleton with concrete English text suitable for image generation.
+- Insert MODEL PROFILE values into all <FROM_MODEL_PROFILE> fields exactly as given (or map prose profile into those fields consistently).
+- If REFERENCE_IMAGE notes are provided: use them for pose, clothing, environment, framing, and lighting. NEVER copy face or identity from the reference.
+- Use USER_TEXT as the primary source for scene, mood, and action.
+- Keep the "realism_engine" object EXACTLY as in the skeleton — same keys and string values. Do not paraphrase or shorten it.
+- Add scene-specific items to "constraints.avoid" if needed, but always keep the default listed items.
+- Output ONLY valid JSON matching the skeleton structure. No explanations, no markdown, no code fences.
+
+Goal: Generate a hyper-realistic, lived-in, imperfect photo prompt. The result should feel like a real phone photo — not a polished render. Embrace skin texture, stray hairs, fabric imperfections, environmental clutter, and natural lighting flaws.
+""".strip()
+
+
+def _relative_prompt_path(val: str, default_rel: str) -> str:
+    v = (val or "").strip()
+    return v if v else default_rel
+
 
 def _openai_friendly_error(message: str, status_code: int) -> RuntimeError:
     m = (message or "").strip()
@@ -27,17 +55,34 @@ def _openai_friendly_error(message: str, status_code: int) -> RuntimeError:
 
 
 def load_image_studio_skeleton() -> str:
-    path = (BACKEND_DIR / settings.image_studio_skeleton_path).resolve()
+    rel = _relative_prompt_path(
+        settings.image_studio_skeleton_path,
+        "data/prompts/image_studio_skeleton.txt",
+    )
+    path = (BACKEND_DIR / rel).resolve()
     if path.is_file():
         return path.read_text(encoding="utf-8").strip()
     return (settings.image_studio_skeleton_inline or "").strip()
 
 
 def load_image_studio_system() -> str:
-    path = (BACKEND_DIR / settings.image_studio_system_path).resolve()
+    rel = _relative_prompt_path(
+        settings.image_studio_system_path,
+        "data/prompts/image_studio_system.txt",
+    )
+    path = (BACKEND_DIR / rel).resolve()
     if path.is_file():
-        return path.read_text(encoding="utf-8").strip()
-    return (settings.image_studio_system_inline or "").strip()
+        t = path.read_text(encoding="utf-8").strip()
+        if t:
+            return t
+    inline = (settings.image_studio_system_inline or "").strip()
+    if inline:
+        return inline
+    log.warning(
+        "image_studio_system: file missing or empty (%s), using built-in default",
+        path,
+    )
+    return _DEFAULT_IMAGE_STUDIO_SYSTEM
 
 
 def load_canonical_realism_engine() -> dict | None:
@@ -47,7 +92,11 @@ def load_canonical_realism_engine() -> dict | None:
         except json.JSONDecodeError:
             return None
     else:
-        path = (BACKEND_DIR / settings.image_studio_realism_engine_path).resolve()
+        rel = _relative_prompt_path(
+            settings.image_studio_realism_engine_path,
+            "data/prompts/image_studio_realism_engine.json",
+        )
+        path = (BACKEND_DIR / rel).resolve()
         if not path.is_file():
             return None
         try:
@@ -106,7 +155,11 @@ def apply_canonical_realism_to_refined_output(text: str) -> str:
 
 
 def load_reference_describe_prompt() -> str:
-    path = (BACKEND_DIR / settings.image_studio_reference_describe_path).resolve()
+    rel = _relative_prompt_path(
+        settings.image_studio_reference_describe_path,
+        "data/prompts/image_studio_reference_describe.txt",
+    )
+    path = (BACKEND_DIR / rel).resolve()
     if path.is_file():
         return path.read_text(encoding="utf-8").strip()
     return (settings.image_studio_reference_describe_inline or "").strip()
