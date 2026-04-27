@@ -19,22 +19,13 @@ _DEFAULT_IMAGE_STUDIO_SYSTEM = """
 You are a prompt builder for the WAN 2.7 Image Edit model.
 
 You will receive:
-1. A SKELETON (JSON template with <FILL> placeholders and <FROM_MODEL_PROFILE> markers).
-2. A MODEL PROFILE (fixed identity of the AI persona — never change identity fields from anything other than this profile and the skeleton rules).
-3. Optional REFERENCE_IMAGE notes (extract: pose, clothing, framing, environment, lighting — IGNORE the face and identity in the reference).
-4. USER_TEXT (scene description, what to generate).
-5. OUTPUT / ASPECT (target aspect ratio and framing).
+1. A SKELETON (JSON template with <FILL> and <FROM_MODEL_PROFILE>).
+2. Optional REFERENCE_IMAGE — when not "(none)", it is the source of truth for **scene layout** (pose, clothing in scene, hands, camera, background, lighting).
+3. A MODEL PROFILE — **identity** only (face, skin, hair, body type as character); not a replacement for the reference scene.
+4. USER_TEXT, 5. OUTPUT/ASPECT.
 
-Your task:
-- Fill ALL <FILL> placeholders in the skeleton with concrete English text suitable for image generation.
-- Insert MODEL PROFILE values into all <FROM_MODEL_PROFILE> fields exactly as given (or map prose profile into those fields consistently).
-- If REFERENCE_IMAGE notes are provided: use them for pose, clothing, environment, framing, and lighting. NEVER copy face or identity from the reference.
-- Use USER_TEXT as the primary source for scene, mood, and action.
-- Keep the "realism_engine" object EXACTLY as in the skeleton — same keys and string values. Do not paraphrase or shorten it.
-- Add scene-specific items to "constraints.avoid" if needed, but always keep the default listed items.
-- Output ONLY valid JSON matching the skeleton structure. No explanations, no markdown, no code fences.
-
-Goal: Generate a hyper-realistic, lived-in, imperfect photo prompt. The result should feel like a real phone photo — not a polished render. Embrace skin texture, stray hairs, fabric imperfections, environmental clutter, and natural lighting flaws.
+If REFERENCE_IMAGE has content: fill pose, clothing, hair_in_scene, photography, background from the reference, not from profile defaults. MODEL_PROFILE fills <FROM_MODEL_PROFILE> identity; do not override the reference with profile outfit/jewelry/posture. No reference face/identity from the image — use profile for identity.
+Keep realism_engine exactly as in the skeleton. Output only valid JSON, no markdown.
 """.strip()
 
 
@@ -292,25 +283,33 @@ def _build_refiner_user_message(
     model_profile_text: str | None,
     output_aspect_key: str,
 ) -> str:
+    has_ref = bool((reference_scene_description or "").strip())
     blocks: list[str] = []
-    blocks.append("## SKELETON (JSON template: fill <FILL…>, map <FROM_MODEL_PROFILE> from MODEL_PROFILE)")
+    blocks.append("## SKELETON (JSON template: fill <FILL…>, <FROM_MODEL_PROFILE> from model profile, <FILL_FROM_IMAGE_OR_TEXT> from reference when present)")
     blocks.append(skeleton.strip())
-    blocks.append("## MODEL_PROFILE (identity — use for <FROM_MODEL_PROFILE>; if JSON, copy literally)")
+
+    # Референс — сразу после скелета, чтобы сцена не утонула в длинном JSON профиля.
+    if has_ref:
+        blocks.append(
+            "## REFERENCE_IMAGE (HIGHEST PRIORITY for this scene: pose, hands, clothes ON PHOTO, hair as styled in photo, camera angle, framing, room, light — do NOT use face/identity; identity comes from MODEL_PROFILE below)\n"
+            + (reference_scene_description or "").strip()
+        )
+    else:
+        blocks.append("## REFERENCE_IMAGE\n(none — no input reference image)")
+
+    blocks.append(
+        "## MODEL_PROFILE (identity: face, skin, hair color, body type, marks — for <FROM_MODEL_PROFILE> only. "
+        "If REFERENCE_IMAGE above exists: do NOT copy profile default_jewelry / default outfit / posture / scene from profile over the reference.)"
+    )
     if model_profile_text and model_profile_text.strip():
         blocks.append(model_profile_text.strip())
     else:
         blocks.append(
-            "(no model selected — use neutral, minimal identity only where required, or keep placeholders specific only to USER_TEXT)"
+            "(no model selected — use neutral, minimal identity only where required, or from USER_TEXT only)"
         )
-    if reference_scene_description and reference_scene_description.strip():
-        blocks.append(
-            "## REFERENCE_IMAGE (pose, clothing, framing, environment, lighting only — do NOT use face/identity from image)\n"
-            + reference_scene_description.strip()
-        )
-    else:
-        blocks.append("## REFERENCE_IMAGE\n(none — no input reference image)")
+
     u = (user_text or "").strip()
-    blocks.append("## USER_TEXT (primary scene and intent)\n" + (u if u else "(no additional text)"))
+    blocks.append("## USER_TEXT (mood, tweaks; does not override reference layout unless clearly contradictory)\n" + (u if u else "(no additional text)"))
     blocks.append(aspect_user_block_english(output_aspect_key))
     return "\n\n".join(blocks)
 
