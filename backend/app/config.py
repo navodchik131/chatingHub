@@ -65,6 +65,8 @@ class Settings(BaseSettings):
     wavespeed_api_base: str = Field(default="https://api.wavespeed.ai")
     # Seedream: true = дождаться результата в ответе POST (реже баги polling). false = async + poll.
     wavespeed_seedream_sync: bool = Field(default=True)
+    # True = не передавать size (как пустой размер в Playground; иначе шлём WxH из кадра студии).
+    wavespeed_seedream_omit_size: bool = Field(default=False)
     # Опционально: JSON-объект, полями дополняется тело POST к WaveSpeed (для полей из DevTools Playground).
     wavespeed_extra_json: str = Field(default="")
 

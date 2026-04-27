@@ -467,12 +467,17 @@ async def api_studio_refine_prompt(
                         )
                     if _truthy_wavespeed_flag(wavespeed_single_reference):
                         image_urls = image_urls[:1]
+                    size_for_ws: str | None
+                    if settings.wavespeed_seedream_omit_size:
+                        size_for_ws = None
+                    else:
+                        size_for_ws = wavespeed_size_string(aspect_key)
                     try:
                         generated_image_url = await seedream_v45_edit_image_url(
                             api_key=ws_key,
                             image_urls=image_urls,
                             prompt=refined,
-                            size=wavespeed_size_string(aspect_key),
+                            size=size_for_ws,
                         )
                     except RuntimeError as e:
                         wavespeed_message = str(e)
@@ -484,7 +489,9 @@ async def api_studio_refine_prompt(
                                 "(см. status.wavespeed.ai) или слишком тяжёлый/нестандартный запрос. "
                                 "Повторите позже. Если сбой стабилен — в backend/.env поставьте "
                                 "WAVESPEED_SEEDREAM_SYNC=false (режим с опросом вместо sync) и перезапустите API. "
-                                f"Публичный референс: {pub}/api/studio/public-model-image?… (без логина — 200 и картинка)."
+                                f"Публичный референс: {pub}/api/studio/public-model-image?… (без логина — 200 и картинка). "
+                                "Если в Playground тот же JSON срабатывает, а в интеграции нет — "
+                                "попробуйте WAVESPEED_SEEDREAM_OMIT_SIZE=true (как пустой size на сайте)."
                             )
                         log.warning(
                             "WaveSpeed generation failed (owner_id=%s actor=%s): %s",
