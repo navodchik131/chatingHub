@@ -26,6 +26,8 @@ class ConversationOut(BaseModel):
     external_topic_id: str
     user_display_name: str | None
     user_lang: str | None
+    """Если задан — ответы переводим в этот язык; иначе по user_lang (детекция с последних входящих)."""
+    outbound_lang: str | None = None
     updated_at: datetime
     has_avatar: bool = False
 
@@ -37,6 +39,22 @@ class ConversationWithPreview(ConversationOut):
 
 class ReplyIn(BaseModel):
     text: str
+
+
+class ConversationPatchIn(BaseModel):
+    """Частичное обновление диалога. Пустая строка в outbound_lang сбрасывает принудительный язык."""
+
+    outbound_lang: str | None = None
+
+    @field_validator("outbound_lang", mode="before")
+    @classmethod
+    def _strip_outbound_lang(cls, v: object) -> str | None:
+        if v is None:
+            return None
+        if not isinstance(v, str):
+            return None
+        s = v.strip()
+        return s if s else None
 
 
 class RegisterIn(BaseModel):

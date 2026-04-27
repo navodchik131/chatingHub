@@ -221,6 +221,8 @@ class Conversation(Base):
     external_topic_id: Mapped[str] = mapped_column(String(64), default="0")
     user_display_name: Mapped[str | None] = mapped_column(String(512), nullable=True)
     user_lang: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    """Принудительный целевой язык исходящих (код ISO). NULL = взять из user_lang (последние входящие)."""
+    outbound_lang: Mapped[str | None] = mapped_column(String(16), nullable=True)
     # file_id варианта фото профиля (Telegram), только для platform=telegram
     telegram_photo_file_id: Mapped[str | None] = mapped_column(String(200), nullable=True)
     last_read_message_id: Mapped[int | None] = mapped_column(nullable=True)

@@ -72,6 +72,20 @@ def _migrate_user_workspace_columns(sync_conn) -> None:
     )
 
 
+def _migrate_conversation_outbound_lang(sync_conn) -> None:
+    from sqlalchemy import inspect
+
+    insp = inspect(sync_conn)
+    if not insp.has_table("conversations"):
+        return
+    cols = {c["name"] for c in insp.get_columns("conversations")}
+    if "outbound_lang" in cols:
+        return
+    sync_conn.execute(
+        text("ALTER TABLE conversations ADD COLUMN outbound_lang VARCHAR(16)")
+    )
+
+
 def _migrate_telegram_webhook_registered_column(sync_conn) -> None:
     from sqlalchemy import inspect
 
@@ -101,6 +115,7 @@ async def init_db() -> None:
         if settings.database_url.startswith("sqlite"):
             await conn.run_sync(_migrate_sqlite_last_read)
         await conn.run_sync(_migrate_conversation_telegram_photo_file_id)
+        await conn.run_sync(_migrate_conversation_outbound_lang)
         await conn.run_sync(_migrate_user_workspace_columns)
         await conn.run_sync(_migrate_telegram_webhook_registered_column)
 

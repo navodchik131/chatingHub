@@ -6,49 +6,49 @@
   --control-radius: 12px;
   --control-radius-sm: 10px;
 
-  --bg: #f4f6fb;
-  --bg-elevated: #ffffff;
-  --bg-subtle: #e8ecf4;
-  --bg-input: #f8f9fd;
-  --bg-mesh: radial-gradient(ellipse 100% 90% at 0% -10%, rgba(79, 70, 229, 0.09), transparent 55%),
-    radial-gradient(ellipse 80% 60% at 100% 0%, rgba(14, 165, 233, 0.07), transparent 50%),
-    radial-gradient(ellipse 70% 50% at 50% 110%, rgba(99, 102, 241, 0.05), transparent 55%);
+  --bg: #09090b;
+  --bg-elevated: #141416;
+  --bg-subtle: #1c1c1f;
+  --bg-input: #18181b;
+  --bg-mesh: radial-gradient(ellipse 100% 80% at 0% -20%, rgba(34, 197, 94, 0.12), transparent 50%),
+    radial-gradient(ellipse 70% 50% at 100% 0%, rgba(34, 197, 94, 0.06), transparent 45%),
+    radial-gradient(ellipse 60% 40% at 50% 100%, rgba(34, 197, 94, 0.04), transparent 55%);
 
-  --border: rgba(15, 23, 42, 0.07);
-  --border-strong: rgba(15, 23, 42, 0.11);
-  --border-hover: rgba(79, 70, 229, 0.22);
+  --border: rgba(255, 255, 255, 0.06);
+  --border-strong: rgba(255, 255, 255, 0.1);
+  --border-hover: rgba(34, 197, 94, 0.35);
 
-  --text: #0f172a;
-  --text-secondary: #475569;
-  --muted: #94a3b8;
+  --text: #fafafa;
+  --text-secondary: #a1a1aa;
+  --muted: #71717a;
 
-  --accent: #4f46e5;
-  --accent-hover: #4338ca;
-  --accent-soft: rgba(79, 70, 229, 0.1);
-  --accent-ring: rgba(79, 70, 229, 0.4);
-  --accent-faint: rgba(79, 70, 229, 0.06);
+  --accent: #22c55e;
+  --accent-hover: #16a34a;
+  --accent-soft: rgba(34, 197, 94, 0.12);
+  --accent-ring: rgba(34, 197, 94, 0.45);
+  --accent-faint: rgba(34, 197, 94, 0.06);
 
-  --in-bg: linear-gradient(160deg, #f1f5f9 0%, #eef2ff 100%);
-  --in-border: rgba(79, 70, 229, 0.12);
-  --out-bg: linear-gradient(160deg, #ecfdf5 0%, #d1fae5 100%);
-  --out-border: rgba(5, 150, 105, 0.18);
+  --in-bg: linear-gradient(165deg, #1a1a1d 0%, #161618 100%);
+  --in-border: rgba(34, 197, 94, 0.14);
+  --out-bg: linear-gradient(165deg, #13251a 0%, #0f1f16 100%);
+  --out-border: rgba(34, 197, 94, 0.28);
 
-  --success: #059669;
-  --warn: #d97706;
-  --danger-bg: #fef2f2;
-  --danger-border: rgba(220, 38, 38, 0.18);
-  --danger-text: #b91c1c;
-  --info-bg: #eef2ff;
-  --info-border: rgba(79, 70, 229, 0.16);
-  --info-text: #4338ca;
+  --success: #22c55e;
+  --warn: #fbbf24;
+  --danger-bg: rgba(127, 29, 29, 0.25);
+  --danger-border: rgba(248, 113, 113, 0.35);
+  --danger-text: #fecaca;
+  --info-bg: rgba(34, 197, 94, 0.1);
+  --info-border: rgba(34, 197, 94, 0.25);
+  --info-text: #86efac;
 
   --radius-lg: 24px;
   --radius-md: 16px;
 
-  --shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.04);
-  --shadow-sm: 0 2px 8px rgba(15, 23, 42, 0.05), 0 1px 2px rgba(15, 23, 42, 0.04);
-  --shadow-md: 0 12px 40px rgba(15, 23, 42, 0.08), 0 4px 12px rgba(15, 23, 42, 0.04);
-  --shadow-float: 0 24px 64px -16px rgba(15, 23, 42, 0.14);
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow-sm: 0 2px 12px rgba(0, 0, 0, 0.35);
+  --shadow-md: 0 12px 48px rgba(0, 0, 0, 0.45);
+  --shadow-float: 0 24px 64px rgba(0, 0, 0, 0.55);
 
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
 }
@@ -58,7 +58,7 @@
 }
 
 html {
-  color-scheme: light;
+  color-scheme: dark;
 }
 
 body {
@@ -67,6 +67,7 @@ body {
   background: var(--bg);
   color: var(--text);
   min-height: 100vh;
+  min-height: 100dvh;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   letter-spacing: -0.015em;
@@ -187,8 +188,8 @@ select:focus {
   margin-top: 0.15rem;
   border-radius: 14px;
   flex-shrink: 0;
-  background: linear-gradient(145deg, var(--accent) 0%, #6366f1 45%, #0ea5e9 100%);
-  box-shadow: 0 4px 14px rgba(79, 70, 229, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  background: linear-gradient(145deg, #16a34a 0%, var(--accent) 50%, #4ade80 100%);
+  box-shadow: 0 4px 20px rgba(34, 197, 94, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
 
 .top h1 {
@@ -641,8 +642,8 @@ a.studio-download {
 }
 
 .conv.has-unread {
-  border-color: rgba(79, 70, 229, 0.14);
-  background: rgba(79, 70, 229, 0.04);
+  border-color: rgba(34, 197, 94, 0.22);
+  background: rgba(34, 197, 94, 0.06);
 }
 
 .conv-main {
@@ -693,7 +694,7 @@ a.studio-download {
   font-size: 0.6875rem;
   font-weight: 700;
   line-height: 1.2;
-  color: var(--bg-elevated);
+  color: #0a0f0c;
   background: var(--accent);
   border-radius: 999px;
   text-align: center;
@@ -775,12 +776,23 @@ a.studio-download {
 
 .thread-head {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 0.875rem;
   padding: 1.125rem 1.25rem;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
   background: var(--bg-elevated);
+  flex-wrap: wrap;
+}
+
+.thread-head-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem 1.25rem;
 }
 
 .thread-avatar {
@@ -824,6 +836,50 @@ a.studio-download {
   color: var(--text-secondary);
 }
 
+.outbound-lang-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  flex-shrink: 0;
+}
+
+.outbound-lang-label {
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.outbound-lang-select {
+  min-height: 2.5rem;
+  padding: 0 0.75rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  max-width: min(100%, 220px);
+  cursor: pointer;
+  background: var(--bg-input) !important;
+  border-color: var(--border-strong) !important;
+  color: var(--text) !important;
+}
+
+.outbound-lang-select:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+@media (max-width: 520px) {
+  .outbound-lang-select {
+    max-width: none;
+    width: 100%;
+  }
+
+  .thread-head-main {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
 .thread-body {
   display: flex;
   flex-direction: column;
@@ -847,7 +903,7 @@ a.studio-download {
   background: linear-gradient(
     90deg,
     var(--bg-subtle) 0%,
-    rgba(79, 70, 229, 0.07) 50%,
+    rgba(34, 197, 94, 0.12) 50%,
     var(--bg-subtle) 100%
   );
   background-size: 200% 100%;
@@ -883,7 +939,7 @@ a.studio-download {
 }
 
 .messages-scroll::-webkit-scrollbar-thumb {
-  background: rgba(15, 23, 42, 0.12);
+  background: rgba(255, 255, 255, 0.12);
   border-radius: 6px;
 }
 
@@ -1078,9 +1134,10 @@ a.studio-download {
   font-size: 0.875rem;
   letter-spacing: -0.01em;
   cursor: pointer;
-  background: linear-gradient(180deg, #6366f1 0%, var(--accent) 100%);
-  color: #ffffff;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06), 0 4px 16px rgba(79, 70, 229, 0.28);
+  touch-action: manipulation;
+  background: linear-gradient(180deg, #4ade80 0%, var(--accent) 100%);
+  color: #0a0f0c;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2), 0 4px 20px rgba(34, 197, 94, 0.35);
   transition:
     background 0.2s var(--ease-out),
     transform 0.15s var(--ease-out),
@@ -1088,8 +1145,9 @@ a.studio-download {
 }
 
 .send-btn:hover:not(:disabled) {
-  background: linear-gradient(180deg, #4f46e5 0%, var(--accent-hover) 100%);
-  box-shadow: 0 2px 4px rgba(15, 23, 42, 0.08), 0 8px 24px rgba(79, 70, 229, 0.32);
+  background: linear-gradient(180deg, var(--accent) 0%, var(--accent-hover) 100%);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.25), 0 8px 28px rgba(34, 197, 94, 0.4);
+  color: #fff;
 }
 
 .send-btn:active:not(:disabled) {
@@ -1098,7 +1156,7 @@ a.studio-download {
 
 .send-btn:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 3px var(--accent-soft), 0 4px 16px rgba(79, 70, 229, 0.28);
+  box-shadow: 0 0 0 3px var(--accent-soft), 0 4px 20px rgba(34, 197, 94, 0.35);
 }
 
 .send-btn:disabled {
@@ -1119,7 +1177,7 @@ a.studio-download {
   margin: 0 auto;
   padding: 1px;
   border-radius: calc(var(--radius-lg) + 2px);
-  background: linear-gradient(135deg, rgba(79, 70, 229, 0.35), rgba(14, 165, 233, 0.2), rgba(99, 102, 241, 0.12));
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.45), rgba(22, 163, 74, 0.2), rgba(34, 197, 94, 0.08));
   box-shadow: var(--shadow-float);
 }
 
@@ -1235,6 +1293,7 @@ a.studio-download {
   font-size: 0.8125rem;
   letter-spacing: -0.01em;
   cursor: pointer;
+  touch-action: manipulation;
   transition:
     background 0.18s var(--ease-out),
     border-color 0.18s var(--ease-out),

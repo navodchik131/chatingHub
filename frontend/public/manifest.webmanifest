@@ -4,8 +4,11 @@
   "description": "Инбокс Telegram / Fanvue с переводом",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#f7f8fa",
-  "theme_color": "#f7f8fa",
+  "background_color": "#09090b",
+  "theme_color": "#09090b",
+  "display_override": ["standalone", "browser"],
+  "categories": ["business", "productivity"],
+  "lang": "ru",
   "icons": [
     {
       "src": "/favicon.svg",

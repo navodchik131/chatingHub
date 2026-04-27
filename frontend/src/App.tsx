@@ -29,11 +29,33 @@ interface Conversation {
   external_topic_id: string
   user_display_name: string | null
   user_lang: string | null
+  /** Принудительный язык исходящих (ISO); null/undefined = авто по user_lang */
+  outbound_lang?: string | null
   updated_at: string
   last_message_preview: string | null
   unread_count?: number
   has_avatar?: boolean
 }
+
+/** Языки для перевода исходящих (совпадают с типичными целями DeepL/Google). */
+const OUTBOUND_LANG_OPTIONS: { value: string; label: string }[] = [
+  { value: '', label: 'Авто (по переписке)' },
+  { value: 'en', label: 'English' },
+  { value: 'de', label: 'Deutsch' },
+  { value: 'fr', label: 'Français' },
+  { value: 'es', label: 'Español' },
+  { value: 'it', label: 'Italiano' },
+  { value: 'pt', label: 'Português' },
+  { value: 'ru', label: 'Русский' },
+  { value: 'uk', label: 'Українська' },
+  { value: 'pl', label: 'Polski' },
+  { value: 'tr', label: 'Türkçe' },
+  { value: 'nl', label: 'Nederlands' },
+  { value: 'sv', label: 'Svenska' },
+  { value: 'ja', label: '日本語' },
+  { value: 'ko', label: '한국어' },
+  { value: 'zh', label: '中文' },
+]
 
 interface ChatMessage {
   id: number
@@ -186,6 +208,7 @@ export default function App() {
   const [health, setHealth] = useState<HealthInfo | null>(null)
   const [emojiOpen, setEmojiOpen] = useState(false)
   const [showJumpDown, setShowJumpDown] = useState(false)
+  const [outboundLangBusy, setOutboundLangBusy] = useState(false)
 
   const wsRef = useRef<WebSocket | null>(null)
   const selectedIdRef = useRef<number | null>(null)
@@ -689,6 +712,30 @@ export default function App() {
     })
   }, [])
 
+  const saveOutboundLang = async (convId: number, raw: string) => {
+    const v = raw === '' ? null : raw
+    setError(null)
+    setOutboundLangBusy(true)
+    try {
+      const r = await apiFetch(`/api/conversations/${convId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ outbound_lang: v }),
+      })
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}))
+        setError(formatApiErrorDetail(err) || r.statusText)
+        return
+      }
+      const updated = (await r.json()) as Conversation
+      setConversations((prev) => prev.map((c) => (c.id === convId ? { ...c, ...updated } : c)))
+    } catch {
+      setError('Не удалось сохранить язык ответа')
+    } finally {
+      setOutboundLangBusy(false)
+    }
+  }
+
   const sendReply = async () => {
     if (selectedId == null || !draft.trim()) return
     const convId = selectedId
@@ -1102,7 +1149,7 @@ export default function App() {
           <div>
             <h1>Chating Hub</h1>
             <p className="sub">
-              Входящие с переводом на русский · ответ по-русски уйдёт на языке собеседника
+              Входящие на русский · исходящий язык: авто или вручную в шапке диалога
             </p>
           </div>
         </div>
@@ -2006,9 +2053,16 @@ export default function App() {
                       ) : null}
                     </span>
                     <span className="name">{c.user_display_name ?? 'Без имени'}</span>
-                    {c.user_lang && (
-                      <span className="lang" title="Язык">
-                        {c.user_lang}
+                    {(c.outbound_lang || c.user_lang) && (
+                      <span
+                        className="lang"
+                        title={
+                          c.outbound_lang
+                            ? `Ответ: ${c.outbound_lang} (принудительно)`
+                            : `Язык переписки: ${c.user_lang ?? '—'}`
+                        }
+                      >
+                        {c.outbound_lang ? `${c.outbound_lang}*` : c.user_lang}
                       </span>
                     )}
                     {c.last_message_preview && (
@@ -2047,11 +2101,34 @@ export default function App() {
                   </button>
                 ) : null}
                 <ThreadAvatar conv={selected} />
-                <div className="thread-head-text">
-                  <h3>{selected.user_display_name ?? 'Диалог'}</h3>
-                  <span className="meta">
-                    {platformLabel(selected.platform)} · topic {selected.external_topic_id}
-                  </span>
+                <div className="thread-head-main">
+                  <div className="thread-head-text">
+                    <h3>{selected.user_display_name ?? 'Диалог'}</h3>
+                    <span className="meta">
+                      {platformLabel(selected.platform)} · topic {selected.external_topic_id}
+                    </span>
+                  </div>
+                  <div
+                    className="outbound-lang-field"
+                    title="На какой язык переводить ваши ответы. «Авто» — по последним входящим (поле user_lang)."
+                  >
+                    <label className="outbound-lang-label" htmlFor="outbound-lang-select">
+                      Язык ответа
+                    </label>
+                    <select
+                      id="outbound-lang-select"
+                      className="outbound-lang-select"
+                      value={selected.outbound_lang ?? ''}
+                      disabled={outboundLangBusy}
+                      onChange={(e) => void saveOutboundLang(selected.id, e.target.value)}
+                    >
+                      {OUTBOUND_LANG_OPTIONS.map((o) => (
+                        <option key={o.value || 'auto'} value={o.value}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
               </div>
 
@@ -2143,7 +2220,7 @@ export default function App() {
                       {emojiOpen && (
                         <div className="emoji-popover">
                           <EmojiPicker
-                            theme={Theme.LIGHT}
+                            theme={Theme.DARK}
                             onEmojiClick={onEmojiPick}
                             width={320}
                             height={380}
@@ -2155,7 +2232,8 @@ export default function App() {
                     <textarea
                       ref={textareaRef}
                       rows={3}
-                      placeholder="Ответ по-русски…"
+                      placeholder="Сообщение на русском — уйдёт перевод на язык из «Язык ответа»"
+                      title="Пишите на русском; в Telegram/Fanvue уйдёт перевод по выбранному языку"
                       value={draft}
                       onSelect={(e) => {
                         const t = e.currentTarget

@@ -30,7 +30,13 @@ from app.db.repo import (
     unread_inbound_count,
 )
 from app.db.session import SessionLocal, get_session
-from app.schemas import ConversationOut, ConversationWithPreview, MessageOut, ReplyIn
+from app.schemas import (
+    ConversationOut,
+    ConversationPatchIn,
+    ConversationWithPreview,
+    MessageOut,
+    ReplyIn,
+)
 from app.services.crypto_secret import decrypt_secret
 from app.services.realtime import hub
 from app.services.translation import translate_from_russian
@@ -171,6 +177,27 @@ async def api_messages(
     return [MessageOut.model_validate(m) for m in rows]
 
 
+@router.patch("/conversations/{conv_id}", response_model=ConversationOut)
+async def api_patch_conversation(
+    conv_id: int,
+    body: ConversationPatchIn,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> ConversationOut:
+    """Обновление настроек диалога (язык исходящих и т.д.)."""
+    assert_permission(user, PERM_CHAT)
+    oid = workspace_owner_id(user)
+    conv = await get_conversation(session, conv_id, oid)
+    if not conv:
+        raise HTTPException(status_code=404, detail="conversation not found")
+
+    if "outbound_lang" in body.model_fields_set:
+        conv.outbound_lang = body.outbound_lang
+    await session.commit()
+    await session.refresh(conv)
+    return ConversationOut.model_validate(conv)
+
+
 @router.post("/conversations/{conv_id}/reply", response_model=MessageOut)
 async def api_reply(
     conv_id: int,
@@ -188,7 +215,8 @@ async def api_reply(
     if not conv:
         raise HTTPException(status_code=404, detail="conversation not found")
 
-    target_lang = conv.user_lang or "en"
+    forced = (conv.outbound_lang or "").strip().lower()
+    target_lang = forced if forced else (conv.user_lang or "en").strip().lower() or "en"
     outgoing = await translate_from_russian(text_ru, target_lang)
     if not (outgoing or "").strip():
         outgoing = text_ru
