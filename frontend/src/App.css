@@ -359,6 +359,36 @@ select:focus {
   max-width: 640px;
 }
 
+.studio-grid--simple {
+  max-width: min(100%, 440px);
+}
+
+.studio-file-name {
+  display: block;
+  margin-top: 0.35rem;
+  font-size: 0.8125rem;
+  color: var(--muted);
+  text-transform: none;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+.studio-credit-hint {
+  font-size: 0.8125rem;
+  color: var(--muted);
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.studio-credit-hint.warn {
+  color: var(--warn);
+}
+
+.studio-status-msg {
+  grid-column: 1 / -1;
+}
+
 .studio-label {
   display: flex;
   flex-direction: column;

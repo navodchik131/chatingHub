@@ -284,8 +284,6 @@ export default function App() {
   const [appSection, setAppSection] = useState<'chat' | 'studio'>('chat')
   const [studioDesc, setStudioDesc] = useState('')
   const [studioFile, setStudioFile] = useState<File | null>(null)
-  const [studioResult, setStudioResult] = useState('')
-  const [studioSceneFromRef, setStudioSceneFromRef] = useState('')
   const [studioBusy, setStudioBusy] = useState(false)
   const [studioModels, setStudioModels] = useState<UserStudioModel[]>([])
   const [studioSelectedModelId, setStudioSelectedModelId] = useState<number | null>(null)
@@ -297,10 +295,8 @@ export default function App() {
     'unknown' | 'loading' | 'on' | 'off' | 'denied' | 'unsupported' | 'no_vapid'
   >('unknown')
   const [pushBusy, setPushBusy] = useState(false)
-  const [generateWavespeed, setGenerateWavespeed] = useState(true)
   const [studioGenImageUrl, setStudioGenImageUrl] = useState<string | null>(null)
   const [studioWavespeedMsg, setStudioWavespeedMsg] = useState<string | null>(null)
-  const [studioWsSingleRef, setStudioWsSingleRef] = useState(true)
   const [studioAspectPresets, setStudioAspectPresets] = useState<StudioAspectPreset[]>([])
   const [studioOutputAspect, setStudioOutputAspect] = useState('9:16')
 
@@ -799,7 +795,6 @@ export default function App() {
       return
     }
     setStudioBusy(true)
-    setStudioSceneFromRef('')
     setStudioGenImageUrl(null)
     setStudioWavespeedMsg(null)
     try {
@@ -808,8 +803,8 @@ export default function App() {
       if (studioSelectedModelId != null) fd.append('model_id', String(studioSelectedModelId))
       if (studioFile) fd.append('image', studioFile)
       fd.append('output_aspect', studioOutputAspect)
-      fd.append('generate_wavespeed', generateWavespeed ? '1' : '0')
-      fd.append('wavespeed_single_reference', studioWsSingleRef ? '1' : '0')
+      fd.append('generate_wavespeed', '1')
+      fd.append('wavespeed_single_reference', '1')
       const r = await apiFetch('/api/studio/refine-prompt', { method: 'POST', body: fd })
       if (!r.ok) {
         const j = await r.json().catch(() => ({}))
@@ -822,8 +817,6 @@ export default function App() {
         generated_image_url?: string | null
         wavespeed_message?: string | null
       }
-      setStudioResult(data.refined_prompt)
-      setStudioSceneFromRef(data.reference_scene_description?.trim() ?? '')
       setStudioGenImageUrl(data.generated_image_url?.trim() || null)
       setStudioWavespeedMsg(data.wavespeed_message?.trim() || null)
       void refreshMe()
@@ -1209,7 +1202,7 @@ export default function App() {
               className={appSection === 'studio' ? 'section-tab active' : 'section-tab'}
               onClick={() => setAppSection('studio')}
             >
-              Генерация картинок
+              Картинки
             </button>
           ) : null}
         </nav>
@@ -1801,7 +1794,7 @@ export default function App() {
         </div>
       )}
 
-      {health && (
+      {health && appSection !== 'studio' && (
         <div className="health-strip" title={health.database_file}>
           Режим: {health.mode ?? '—'} · всего в БД: {health.conversations_count ?? 0} диалогов,{' '}
           {health.messages_count ?? 0} сообщений
@@ -1837,24 +1830,13 @@ export default function App() {
 
       {hasAnyMainSection && appSection === 'studio' && canStudioAny && (
         <section className="studio-panel" aria-labelledby="studio-heading">
-          <h2 id="studio-heading">Генерация картинок — промпт</h2>
+          <h2 id="studio-heading">Новая картинка</h2>
           {!canStudioGenerate ? (
-            <div className="banner info">
-              По правам аккаунта недоступна сборка промпта и запуск WaveSpeed. Вы можете просматривать
-              интерфейс; при необходимости попросите владельца выдать право «Генерация».
-            </div>
+            <div className="banner info">Генерация недоступна по правам. Попросите владельца аккаунта.</div>
           ) : null}
-          <p className="muted studio-lead">
-            Шаблон JSON — <code className="mono">backend/data/prompts/image_studio_skeleton.txt</code>, текст
-            первого шага (описание референса) —{' '}
-            <code className="mono">image_studio_reference_describe.txt</code>. При загрузке картинки сначала
-            уходит запрос с этим текстом, ответ добавляется ко второму запросу вместе с вашим текстом и
-            профилем выбранной модели из кабинета. Кредиты списываются один раз за сборку. Формат кадра
-            влияет на JSON и на параметр <code className="mono">size</code> в WaveSpeed.
-          </p>
-          <div className="studio-grid">
+          <div className="studio-grid studio-grid--simple">
             <label className="studio-label">
-              Формат итогового изображения
+              Формат
               <select
                 value={studioOutputAspect}
                 onChange={(e) => setStudioOutputAspect(e.target.value)}
@@ -1866,12 +1848,12 @@ export default function App() {
                     </option>
                   ))
                 ) : (
-                  <option value="9:16">9:16 — вертикаль (1080×1920)</option>
+                  <option value="9:16">9:16 (1080×1920)</option>
                 )}
               </select>
             </label>
             <label className="studio-label">
-              Модель из кабинета (опционально)
+              Модель
               <select
                 value={studioSelectedModelId ?? ''}
                 onChange={(e) => {
@@ -1879,7 +1861,7 @@ export default function App() {
                   setStudioSelectedModelId(v === '' ? null : Number(v))
                 }}
               >
-                <option value="">— не выбрана —</option>
+                <option value="">Без модели</option>
                 {studioModels.map((m) => (
                   <option key={m.id} value={m.id}>
                     {m.name}
@@ -1888,7 +1870,7 @@ export default function App() {
               </select>
             </label>
             <label className="studio-label">
-              Референс сцены / позы (изображение)
+              Референс (по желанию)
               <input
                 type="file"
                 accept="image/jpeg,image/png,image/webp,image/gif"
@@ -1897,59 +1879,26 @@ export default function App() {
                   setStudioFile(f)
                 }}
               />
-              {studioFile ? (
-                <span className="muted" style={{ fontSize: '0.85rem' }}>
-                  {studioFile.name} — сначала описание фото, затем сборка JSON.
-                </span>
-              ) : (
-                <span className="muted" style={{ fontSize: '0.85rem' }}>
-                  При загрузке: шаг 1 — описание позы и сцены (EN), шаг 2 — финальный JSON.
-                </span>
-              )}
+              {studioFile ? <span className="studio-file-name">{studioFile.name}</span> : null}
             </label>
             <label className="studio-label">
-              Что должно получиться
+              Описание
               <textarea
                 rows={5}
-                placeholder="Например: девушка делает разминку в спортзале, вид сбоку, мягкий свет из окон…"
+                placeholder="Что показать на снимке: сцена, свет, настроение…"
                 value={studioDesc}
                 onChange={(e) => setStudioDesc(e.target.value)}
               />
-            </label>
-            <label className="studio-label studio-check">
-              <input
-                type="checkbox"
-                checked={studioWsSingleRef}
-                onChange={(e) => setStudioWsSingleRef(e.target.checked)}
-              />
-              <span>
-                Только первое фото модели в WaveSpeed (на сайте часто один референс; несколько
-                снимков иногда усиливают фильтр).
-              </span>
-            </label>
-            <label className="studio-label studio-check">
-              <input
-                type="checkbox"
-                checked={generateWavespeed}
-                onChange={(e) => setGenerateWavespeed(e.target.checked)}
-              />
-              <span>
-                Затем сгенерировать картинку в WaveSpeed (
-                <a
-                  href="https://wavespeed.ai/models/alibaba/wan-2.7/image-edit"
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  WAN 2.7 Image Edit
-                </a>
-                , путь `WAVESPEED_SEEDREAM_EDIT_PATH` на сервере): в запрос уйдут финальный промпт и фото выбранной модели. Нужны ключ WaveSpeed, модель с
-                фото и HTTPS <code className="mono">PUBLIC_APP_URL</code>.
-              </span>
             </label>
             <div className="studio-actions">
               <button
                 type="button"
                 className="send-btn"
+                title={
+                  !health?.openai_studio_configured
+                    ? 'Студия не настроена на сервере'
+                    : undefined
+                }
                 disabled={
                   studioBusy ||
                   !canStudioGenerate ||
@@ -1958,56 +1907,33 @@ export default function App() {
                 }
                 onClick={() => void refineStudioPrompt()}
               >
-                {studioBusy ? 'Запрос…' : 'Собрать промпт (OpenAI)'}
+                {studioBusy ? 'Генерация…' : 'Сгенерировать'}
               </button>
-              <span className="muted" style={{ fontSize: '0.85rem' }}>
-                Стоимость: {health?.studio_prompt_credit_cost ?? '—'} кред.
-                {!health?.openai_studio_configured ? ' — задайте OPENAI_API_KEY в backend/.env' : null}
-              </span>
+              {canStudioGenerate && health?.openai_studio_configured ? (
+                <span className="studio-credit-hint">
+                  {health.studio_prompt_credit_cost ?? '—'} кр.
+                </span>
+              ) : !health?.openai_studio_configured && canStudioGenerate ? (
+                <span className="studio-credit-hint warn">Нет доступа к студии</span>
+              ) : null}
             </div>
-            {studioSceneFromRef ? (
-              <label className="studio-label">
-                Описание с референса (шаг 1, EN)
-                <textarea
-                  className="studio-output"
-                  readOnly
-                  rows={6}
-                  value={studioSceneFromRef}
-                />
-              </label>
-            ) : null}
-            <label className="studio-label">
-              Готовый промпт (JSON)
-              <textarea
-                className="studio-output"
-                readOnly
-                rows={12}
-                placeholder="Результат появится здесь"
-                value={studioResult}
-              />
-            </label>
             {studioWavespeedMsg && !studioGenImageUrl ? (
-              <div className="banner info">{studioWavespeedMsg}</div>
-            ) : null}
-            {studioWavespeedMsg && studioGenImageUrl ? (
-              <p className="muted" style={{ fontSize: '0.85rem' }}>
-                {studioWavespeedMsg}
-              </p>
+              <div className="banner info studio-status-msg">{studioWavespeedMsg}</div>
             ) : null}
             {studioGenImageUrl ? (
               <div className="studio-generated">
-                <h3 className="studio-generated-title">Результат WaveSpeed</h3>
+                <h3 className="studio-generated-title">Результат</h3>
                 <div className="studio-generated-frame">
-                  <img src={studioGenImageUrl} alt="Сгенерировано Seedream" className="studio-gen-img" />
+                  <img src={studioGenImageUrl} alt="Сгенерировано" className="studio-gen-img" />
                 </div>
                 <a
                   className="send-btn studio-download"
                   href={studioGenImageUrl}
                   target="_blank"
                   rel="noreferrer"
-                  download="seedream-result.png"
+                  download="image.png"
                 >
-                  Скачать изображение
+                  Скачать
                 </a>
               </div>
             ) : null}
