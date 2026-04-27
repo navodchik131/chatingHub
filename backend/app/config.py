@@ -41,6 +41,8 @@ class Settings(BaseSettings):
     fernet_key: str = Field(default="")
 
     public_app_url: str = Field(default="http://127.0.0.1:8080")
+    # Email владельцев (через запятую), которым разрешён /api/admin без is_platform_admin в БД
+    admin_emails: str = Field(default="")
 
     signup_bonus_credits: int = Field(default=50)
     credit_cost_inbound_translation: int = Field(default=1)

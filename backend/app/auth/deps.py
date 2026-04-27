@@ -37,3 +37,13 @@ async def get_current_user(
     if not user:
         raise HTTPException(status_code=401, detail="user not found")
     return user
+
+
+async def get_platform_admin(
+    user: User = Depends(get_current_user),
+) -> User:
+    from app.services.admin_access import user_is_platform_admin
+
+    if not user_is_platform_admin(user):
+        raise HTTPException(status_code=403, detail="admin only")
+    return user

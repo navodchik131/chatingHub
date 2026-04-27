@@ -80,6 +80,7 @@ class UserMeOut(BaseModel):
     subscription_status: str
     credits_balance: int
     is_workspace_owner: bool = True
+    is_platform_admin: bool = False
     workspace_owner_id: int
     member_login: str | None = None
     permissions_mask: int = 0
@@ -224,3 +225,57 @@ class PushUnsubscribeIn(BaseModel):
         if len(s) < 8:
             raise ValueError("invalid endpoint")
         return s
+
+
+# --- Admin ---
+
+
+class AdminStatsOut(BaseModel):
+    total_users: int
+    workspace_owners: int
+    workspace_members: int
+    total_credits_balance: int
+    studio_generations_total: int
+    usage_by_kind: dict[str, int]
+
+
+class AdminUserRow(BaseModel):
+    id: int
+    email: str
+    created_at: datetime
+    is_active: bool
+    is_platform_admin: bool
+    parent_user_id: int | None = None
+    parent_email: str | None = None
+    member_login: str | None = None
+    subscription_status: str
+    credits_balance: int
+    """Баланс счёта владельца пространства (для участника — тот же, что у владельца)."""
+
+
+class AdminUserPatchIn(BaseModel):
+    is_active: bool | None = None
+    is_platform_admin: bool | None = None
+
+
+class AdminCreditsIn(BaseModel):
+    delta: int
+    note: str | None = Field(default=None, max_length=2000)
+
+
+class AdminCreditsOut(BaseModel):
+    new_balance: int
+    billing_user_id: int
+
+
+class AdminSubscriptionPatchIn(BaseModel):
+    status: str = Field(
+        ...,
+        description="none|incomplete|trialing|active|past_due|canceled|unpaid",
+    )
+    plan_tier: str | None = Field(default=None, max_length=64)
+    current_period_end: datetime | None = None
+    clear_stripe_ids: bool = Field(
+        default=False,
+        description="Очистить stripe_customer_id и stripe_subscription_id (ручная подписка)",
+    )

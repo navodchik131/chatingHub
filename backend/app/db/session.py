@@ -108,6 +108,27 @@ def _migrate_telegram_webhook_registered_column(sync_conn) -> None:
             )
 
 
+def _migrate_user_is_platform_admin(sync_conn) -> None:
+    from sqlalchemy import inspect, text
+
+    insp = inspect(sync_conn)
+    if not insp.has_table("users"):
+        return
+    cols = {c["name"] for c in insp.get_columns("users")}
+    if "is_platform_admin" in cols:
+        return
+    if sync_conn.dialect.name == "sqlite":
+        sync_conn.execute(
+            text("ALTER TABLE users ADD COLUMN is_platform_admin BOOLEAN NOT NULL DEFAULT 0")
+        )
+    else:
+        sync_conn.execute(
+            text(
+                "ALTER TABLE users ADD COLUMN is_platform_admin BOOLEAN NOT NULL DEFAULT false"
+            )
+        )
+
+
 async def init_db() -> None:
     """Создаёт таблицы. Каталог для SQLite создаётся в Settings.sqlite_absolute_path."""
     async with engine.begin() as conn:
@@ -118,6 +139,7 @@ async def init_db() -> None:
         await conn.run_sync(_migrate_conversation_outbound_lang)
         await conn.run_sync(_migrate_user_workspace_columns)
         await conn.run_sync(_migrate_telegram_webhook_registered_column)
+        await conn.run_sync(_migrate_user_is_platform_admin)
 
 
 async def get_session() -> AsyncGenerator[AsyncSession, None]:

@@ -11,6 +11,7 @@ from app.config import settings
 from app.db.models import CreditAccount, Subscription, SubscriptionStatus, User
 from app.db.session import get_session
 from app.schemas import LoginIn, RegisterIn, TokenOut, UserMeOut
+from app.services.admin_access import user_is_platform_admin
 from app.services.workspace import resolve_billing_user, workspace_owner_id
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -86,6 +87,7 @@ async def me(
         subscription_status=sub.status.value if sub else SubscriptionStatus.none.value,
         credits_balance=cr.balance if cr else 0,
         is_workspace_owner=user.parent_user_id is None,
+        is_platform_admin=user_is_platform_admin(user),
         workspace_owner_id=oid,
         member_login=user.member_login,
         permissions_mask=user.permissions_mask,

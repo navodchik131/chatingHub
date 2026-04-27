@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
+from app.api.admin_routes import router as admin_router
 from app.api.billing_routes import router as billing_router
 from app.api.chat_routes import router as chat_router
 from app.api.integrations_routes import router as integrations_router
@@ -22,3 +23,4 @@ router.include_router(webhooks_router)
 router.include_router(integrations_router)
 router.include_router(billing_router)
 router.include_router(studio_router)
+router.include_router(admin_router)

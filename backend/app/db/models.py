@@ -47,6 +47,9 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(320), unique=True, index=True)
     hashed_password: Mapped[str] = mapped_column(String(255))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    is_platform_admin: Mapped[bool] = mapped_column(
+        Boolean, default=False
+    )  # вместе с ADMIN_EMAILS в .env — доступ к /api/admin
     """Владелец рабочего пространства; у основного аккаунта NULL."""
     parent_user_id: Mapped[int | None] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"),

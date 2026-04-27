@@ -182,10 +182,33 @@ interface UserMe {
   subscription_status: string
   credits_balance: number
   is_workspace_owner: boolean
+  is_platform_admin?: boolean
   workspace_owner_id: number
   member_login: string | null
   permissions_mask: number
   owner_email: string
+}
+
+interface AdminStats {
+  total_users: number
+  workspace_owners: number
+  workspace_members: number
+  total_credits_balance: number
+  studio_generations_total: number
+  usage_by_kind: Record<string, number>
+}
+
+interface AdminUserRow {
+  id: number
+  email: string
+  created_at: string
+  is_active: boolean
+  is_platform_admin: boolean
+  parent_user_id: number | null
+  parent_email: string | null
+  member_login: string | null
+  subscription_status: string
+  credits_balance: number
 }
 
 interface WorkspaceMemberRow {
@@ -220,7 +243,17 @@ interface UserStudioModel {
   images?: StudioModelImage[]
 }
 
-type AccountCabinetTab = 'integrations' | 'models' | 'team'
+type AccountCabinetTab = 'integrations' | 'models' | 'team' | 'admin'
+
+const SUBSCRIPTION_STATUS_OPTIONS = [
+  'none',
+  'incomplete',
+  'trialing',
+  'active',
+  'past_due',
+  'canceled',
+  'unpaid',
+] as const
 
 interface StudioAspectPreset {
   key: string
@@ -302,6 +335,8 @@ export default function App() {
     }
   }, [me])
 
+  const canPlatformAdmin = Boolean(me?.is_platform_admin)
+
   const [accountOpen, setAccountOpen] = useState(false)
   const [accountTab, setAccountTab] = useState<AccountCabinetTab>('integrations')
   const [workspaceMembers, setWorkspaceMembers] = useState<WorkspaceMemberRow[]>([])
@@ -331,6 +366,11 @@ export default function App() {
   const [newModelProfile, setNewModelProfile] = useState('')
   const [newModelProfileGenBusy, setNewModelProfileGenBusy] = useState(false)
   const [newModelFiles, setNewModelFiles] = useState<File[]>([])
+  const [adminStats, setAdminStats] = useState<AdminStats | null>(null)
+  const [adminUsers, setAdminUsers] = useState<AdminUserRow[]>([])
+  const [adminUserSearch, setAdminUserSearch] = useState('')
+  const [adminDataBusy, setAdminDataBusy] = useState(false)
+  const [adminCreditInput, setAdminCreditInput] = useState<Record<number, string>>({})
   const [wsApiKey, setWsApiKey] = useState('')
   const [webPushState, setWebPushState] = useState<
     'unknown' | 'loading' | 'on' | 'off' | 'denied' | 'unsupported' | 'no_vapid'
@@ -426,6 +466,25 @@ export default function App() {
     if (r.ok) setStudioGenerations((await r.json()) as StudioArchiveItem[])
   }, [])
 
+  const loadAdminStats = useCallback(async () => {
+    const r = await apiFetch('/api/admin/stats')
+    if (r.ok) setAdminStats((await r.json()) as AdminStats)
+  }, [])
+
+  const fetchAdminUsers = useCallback(async (search: string) => {
+    const q = new URLSearchParams()
+    q.set('limit', '150')
+    if (search.trim()) q.set('q', search.trim())
+    const r = await apiFetch(`/api/admin/users?${q}`)
+    if (r.ok) setAdminUsers((await r.json()) as AdminUserRow[])
+  }, [])
+
+  useEffect(() => {
+    if (!accountOpen || accountTab !== 'admin' || !canPlatformAdmin) return
+    setAdminDataBusy(true)
+    void Promise.all([loadAdminStats(), fetchAdminUsers('')]).finally(() => setAdminDataBusy(false))
+  }, [accountOpen, accountTab, canPlatformAdmin, loadAdminStats, fetchAdminUsers])
+
   useEffect(() => {
     setModelDrafts(
       Object.fromEntries(
@@ -436,9 +495,10 @@ export default function App() {
 
   useEffect(() => {
     if (!me || !accountOpen) return
+    if (accountTab === 'admin' && !canPlatformAdmin) setAccountTab('integrations')
     if (accountTab === 'models' && !canStudioModels) setAccountTab('integrations')
     if (accountTab === 'team' && !isOwner) setAccountTab('integrations')
-  }, [me, accountOpen, accountTab, canStudioModels, isOwner])
+  }, [me, accountOpen, accountTab, canPlatformAdmin, canStudioModels, isOwner])
 
   useEffect(() => {
     if (!me) return
@@ -1024,6 +1084,91 @@ export default function App() {
     void loadStudioModels()
   }
 
+  const adminApplyCredits = async (userId: number) => {
+    setError(null)
+    const raw = adminCreditInput[userId] ?? ''
+    const delta = parseInt(raw, 10)
+    if (Number.isNaN(delta) || delta === 0) {
+      setError('Укажите целое число кредитов (не 0) для начисления или списания.')
+      return
+    }
+    setAdminDataBusy(true)
+    try {
+      const r = await apiFetch(`/api/admin/users/${userId}/credits`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ delta, note: 'admin panel' }),
+      })
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        setError(formatApiErrorDetail(j) || r.statusText)
+        return
+      }
+      setAdminCreditInput((prev) => {
+        const n = { ...prev }
+        delete n[userId]
+        return n
+      })
+      void refreshMe()
+      void loadAdminStats()
+      void fetchAdminUsers(adminUserSearch)
+    } finally {
+      setAdminDataBusy(false)
+    }
+  }
+
+  const adminSetSubscription = async (userId: number, status: string) => {
+    setError(null)
+    setAdminDataBusy(true)
+    try {
+      const r = await apiFetch(`/api/admin/users/${userId}/subscription`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status, clear_stripe_ids: true }),
+      })
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        setError(formatApiErrorDetail(j) || r.statusText)
+        return
+      }
+      void fetchAdminUsers(adminUserSearch)
+      void refreshMe()
+    } finally {
+      setAdminDataBusy(false)
+    }
+  }
+
+  const adminSetUserActive = async (userId: number, isActive: boolean) => {
+    setError(null)
+    const r = await apiFetch(`/api/admin/users/${userId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ is_active: isActive }),
+    })
+    if (!r.ok) {
+      const j = await r.json().catch(() => ({}))
+      setError(formatApiErrorDetail(j) || r.statusText)
+      return
+    }
+    void fetchAdminUsers(adminUserSearch)
+  }
+
+  const adminSetPlatformAdmin = async (userId: number, v: boolean) => {
+    setError(null)
+    const r = await apiFetch(`/api/admin/users/${userId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ is_platform_admin: v }),
+    })
+    if (!r.ok) {
+      const j = await r.json().catch(() => ({}))
+      setError(formatApiErrorDetail(j) || r.statusText)
+      return
+    }
+    void fetchAdminUsers(adminUserSearch)
+    void refreshMe()
+  }
+
   const patchStudioModel = async (id: number) => {
     const d = modelDrafts[id]
     if (!d) return
@@ -1436,6 +1581,17 @@ export default function App() {
                 onClick={() => setAccountTab('team')}
               >
                 Команда
+              </button>
+            ) : null}
+            {canPlatformAdmin ? (
+              <button
+                type="button"
+                role="tab"
+                aria-selected={accountTab === 'admin'}
+                className={accountTab === 'admin' ? 'account-cabinet-tab active' : 'account-cabinet-tab'}
+                onClick={() => setAccountTab('admin')}
+              >
+                Админ
               </button>
             ) : null}
           </div>
@@ -1977,6 +2133,179 @@ export default function App() {
                   })}
                 </ul>
               )}
+            </div>
+          )}
+
+          {accountTab === 'admin' && canPlatformAdmin && (
+            <div className="account-cabinet-pane admin-cabinet-pane" role="tabpanel">
+              <p className="cabinet-lead muted">
+                Платформа: пользователи, кредиты, подписки, события usage. Первый доступ:{' '}
+                <span className="mono">ADMIN_EMAILS</span> в backend/.env или флаг «Админ» у владельца в
+                таблице.
+              </p>
+              {adminDataBusy && !adminStats ? <p className="muted">Загрузка…</p> : null}
+              {adminStats ? (
+                <div className="admin-stat-grid">
+                  <div className="admin-stat-card">
+                    <div className="admin-stat-label">Пользователей</div>
+                    <div className="admin-stat-value">{adminStats.total_users}</div>
+                    <div className="admin-stat-hint">
+                      владельцев: {adminStats.workspace_owners} · в команде: {adminStats.workspace_members}
+                    </div>
+                  </div>
+                  <div className="admin-stat-card">
+                    <div className="admin-stat-label">Кредитов (сумма балансов)</div>
+                    <div className="admin-stat-value">{adminStats.total_credits_balance}</div>
+                  </div>
+                  <div className="admin-stat-card">
+                    <div className="admin-stat-label">Архив генераций студии</div>
+                    <div className="admin-stat-value">{adminStats.studio_generations_total}</div>
+                  </div>
+                </div>
+              ) : null}
+              {adminStats && Object.keys(adminStats.usage_by_kind).length > 0 ? (
+                <div className="admin-usage-block">
+                  <h4 className="account-sub">Usage по типам (события)</h4>
+                  <ul className="admin-usage-list">
+                    {Object.entries(adminStats.usage_by_kind)
+                      .sort((a, b) => a[0].localeCompare(b[0]))
+                      .map(([k, c]) => (
+                        <li key={k}>
+                          <span className="mono">{k || '—'}</span> — {c}
+                        </li>
+                      ))}
+                  </ul>
+                </div>
+              ) : null}
+
+              <h4 className="account-sub">Пользователи</h4>
+              <div className="admin-user-toolbar">
+                <input
+                  type="search"
+                  placeholder="Поиск по email"
+                  value={adminUserSearch}
+                  onChange={(e) => setAdminUserSearch(e.target.value)}
+                  className="admin-user-search"
+                />
+                <button
+                  type="button"
+                  className="ghost-btn"
+                  disabled={adminDataBusy}
+                  onClick={() => void fetchAdminUsers(adminUserSearch)}
+                >
+                  Найти
+                </button>
+                <button
+                  type="button"
+                  className="ghost-btn"
+                  disabled={adminDataBusy}
+                  onClick={() => {
+                    setAdminUserSearch('')
+                    void fetchAdminUsers('')
+                  }}
+                >
+                  Сброс
+                </button>
+              </div>
+
+              <div className="admin-user-table-wrap">
+                <table className="admin-user-table">
+                  <thead>
+                    <tr>
+                      <th>ID</th>
+                      <th>Email / роль</th>
+                      <th>Подписка</th>
+                      <th>Кр. счёта</th>
+                      <th>Активен</th>
+                      <th>Админ</th>
+                      <th>Кредиты ±</th>
+                      <th>Статус подписки</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {adminUsers.map((u) => {
+                      const isOwnerRow = u.parent_user_id == null
+                      return (
+                        <tr key={u.id}>
+                          <td className="mono">{u.id}</td>
+                          <td>
+                            <div>{u.email}</div>
+                            {!isOwnerRow ? (
+                              <div className="muted small">
+                                участник: {u.member_login ?? '—'} · владелец:{' '}
+                                {u.parent_email ?? String(u.parent_user_id)}
+                              </div>
+                            ) : (
+                              <div className="muted small">владелец</div>
+                            )}
+                          </td>
+                          <td className="mono small">{u.subscription_status}</td>
+                          <td>{u.credits_balance}</td>
+                          <td>
+                            <input
+                              type="checkbox"
+                              checked={u.is_active}
+                              onChange={(e) => void adminSetUserActive(u.id, e.target.checked)}
+                            />
+                          </td>
+                          <td>
+                            {isOwnerRow ? (
+                              <input
+                                type="checkbox"
+                                checked={u.is_platform_admin}
+                                onChange={(e) => void adminSetPlatformAdmin(u.id, e.target.checked)}
+                              />
+                            ) : (
+                              <span className="muted">—</span>
+                            )}
+                          </td>
+                          <td>
+                            <div className="admin-credit-row">
+                              <input
+                                type="text"
+                                inputMode="numeric"
+                                className="admin-credit-inp"
+                                placeholder="+/-"
+                                value={adminCreditInput[u.id] ?? ''}
+                                onChange={(e) =>
+                                  setAdminCreditInput((prev) => ({ ...prev, [u.id]: e.target.value }))
+                                }
+                              />
+                              <button
+                                type="button"
+                                className="ghost-btn small"
+                                disabled={adminDataBusy}
+                                onClick={() => void adminApplyCredits(u.id)}
+                              >
+                                OK
+                              </button>
+                            </div>
+                          </td>
+                          <td>
+                            <select
+                              value={u.subscription_status}
+                              onChange={(e) => {
+                                const v = e.target.value
+                                if (v !== u.subscription_status) void adminSetSubscription(u.id, v)
+                              }}
+                              className="admin-sub-select"
+                            >
+                              {SUBSCRIPTION_STATUS_OPTIONS.map((s) => (
+                                <option key={s} value={s}>
+                                  {s}
+                                </option>
+                              ))}
+                            </select>
+                            <p className="muted small admin-sub-hint">
+                              У владельца; для участника — та же, что у его владельца.
+                            </p>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </div>

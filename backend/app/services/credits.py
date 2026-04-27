@@ -73,3 +73,35 @@ async def record_usage(
             kind,
             credits,
         )
+
+
+async def admin_adjust_credits(
+    session: AsyncSession,
+    *,
+    billing_user_id: int,
+    delta: int,
+    admin_user_id: int,
+    note: str | None,
+) -> int:
+    """Ручное изменение баланса владельца пространства. delta может быть отрицательным."""
+    if delta == 0:
+        raise ValueError("delta must be non-zero")
+    acc = await session.get(CreditAccount, billing_user_id)
+    if acc is None:
+        acc = CreditAccount(user_id=billing_user_id, balance=0)
+        session.add(acc)
+        await session.flush()
+    new_bal = acc.balance + delta
+    if new_bal < 0:
+        raise ValueError("balance would be negative")
+    acc.balance = new_bal
+    meta = {"by_admin": admin_user_id, "note": (note or "")[:2000]}
+    ev = UsageEvent(
+        user_id=billing_user_id,
+        kind="admin_credit_adjustment",
+        credits_delta=delta,
+        meta=json.dumps(meta, ensure_ascii=False),
+    )
+    session.add(ev)
+    await session.flush()
+    return acc.balance
