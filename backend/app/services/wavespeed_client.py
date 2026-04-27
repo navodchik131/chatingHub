@@ -17,8 +17,13 @@ def _wavespeed_base() -> str:
 
 
 def _seedream_edit_post_path() -> str:
-    p = (settings.wavespeed_seedream_edit_path or "").strip() or "/api/v3/bytedance/seedream-v5.0-lite/edit"
+    p = (settings.wavespeed_seedream_edit_path or "").strip() or "/api/v3/alibaba/wan-2.7/image-edit"
     return p if p.startswith("/") else f"/{p}"
+
+
+def _is_wan_27_image_edit_path(post_path: str) -> bool:
+    s = (post_path or "").lower()
+    return "wan" in s and "image-edit" in s
 
 
 def _apply_wavespeed_extra_body(body: dict[str, Any]) -> None:
@@ -184,7 +189,7 @@ async def seedream_v45_edit_image_url(
     max_polls: int = 90,
 ) -> str:
     """
-    Seedream Edit через WaveSpeed (v5.0 Lite по умолчанию, путь в WAVESPEED_SEEDREAM_EDIT_PATH).
+    Image edit через WaveSpeed: путь `WAVESPEED_SEEDREAM_EDIT_PATH` (WAN 2.7 / Seedream v5 / v4.5 / …).
     """
     if not image_urls:
         raise RuntimeError("no image URLs")
@@ -198,21 +203,34 @@ async def seedream_v45_edit_image_url(
         "Authorization": f"Bearer {api_key.strip()}",
         "Content-Type": "application/json",
     }
-    body: dict[str, Any] = {
-        "images": image_urls[:10],
-        "prompt": prompt.strip(),
-        "enable_sync_mode": bool(settings.wavespeed_seedream_sync),
-        "enable_base64_output": False,
-    }
-    if size and size.strip():
-        body["size"] = size.strip()
-    fmt = (settings.wavespeed_seedream_output_format or "").strip().lower()
-    if fmt in ("jpeg", "jpg", "png"):
-        body["output_format"] = "jpeg" if fmt in ("jpeg", "jpg") else "png"
+    is_wan = _is_wan_27_image_edit_path(post_path)
+    if is_wan:
+        # https://wavespeed.ai/docs/docs-api/alibaba/alibaba-wan-2.7-image-edit
+        n_img = 9
+        body = {
+            "images": image_urls[:n_img],
+            "prompt": prompt.strip(),
+            "seed": int(settings.wavespeed_wan_image_edit_seed),
+        }
+        if size and size.strip():
+            body["size"] = size.strip()
+    else:
+        body = {
+            "images": image_urls[:10],
+            "prompt": prompt.strip(),
+            "enable_sync_mode": bool(settings.wavespeed_seedream_sync),
+            "enable_base64_output": False,
+        }
+        if size and size.strip():
+            body["size"] = size.strip()
+        fmt = (settings.wavespeed_seedream_output_format or "").strip().lower()
+        if fmt in ("jpeg", "jpg", "png"):
+            body["output_format"] = "jpeg" if fmt in ("jpeg", "jpg") else "png"
 
     _apply_wavespeed_extra_body(body)
     log.debug(
-        "wavespeed submit path=%s images=%s prompt_len=%s keys=%s",
+        "wavespeed submit wan=%s path=%s images=%s prompt_len=%s keys=%s",
+        is_wan,
         post_path,
         len(body.get("images") or []),
         len(str(body.get("prompt") or "")),

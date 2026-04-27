@@ -63,13 +63,15 @@ class Settings(BaseSettings):
     image_studio_reference_describe_inline: str = Field(default="")
 
     wavespeed_api_base: str = Field(default="https://api.wavespeed.ai")
-    # POST-путь Seedream Edit: v5.0 Lite по умолчанию; старый v4.5 — см. .env.example
+    # POST image-edit: WAN 2.7 по умолчанию; Seedream v5/v4.5 — см. .env.example
     wavespeed_seedream_edit_path: str = Field(
-        default="/api/v3/bytedance/seedream-v5.0-lite/edit",
+        default="/api/v3/alibaba/wan-2.7/image-edit",
     )
-    # Для API v5 (jpeg | png); пусто — как у WaveSpeed по умолчанию
+    # Для API Seedream v5 (jpeg | png); для WAN не используется; пусто — по умолчанию API
     wavespeed_seedream_output_format: str = Field(default="")
-    # Seedream: true = дождаться результата в ответе POST (реже баги polling). false = async + poll.
+    # Только для WAN 2.7 Image Edit (-1 = случайный)
+    wavespeed_wan_image_edit_seed: int = Field(default=-1)
+    # Только для Seedream: true = дождаться результата в ответе POST. Для WAN поле в тело не попадает.
     wavespeed_seedream_sync: bool = Field(default=True)
     # True = не передавать size (как пустой размер в Playground; иначе шлём WxH из кадра студии).
     wavespeed_seedream_omit_size: bool = Field(default=False)
