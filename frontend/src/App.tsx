@@ -643,20 +643,37 @@ export default function App() {
     return () => document.removeEventListener('mousedown', onDoc)
   }, [])
 
+  /** Мгновенный скролл вниз; несколько попыток — после открытия чата высота ленты на мобильных/PWA дорисовывается с задержкой. */
+  const scrollToBottomInstant = useCallback(() => {
+    const el = messagesContainerRef.current
+    if (!el) return
+    const apply = () => {
+      const top = Math.max(0, el.scrollHeight - el.clientHeight)
+      el.scrollTop = top
+    }
+    apply()
+    requestAnimationFrame(apply)
+    requestAnimationFrame(() => {
+      requestAnimationFrame(apply)
+    })
+    window.setTimeout(apply, 0)
+    window.setTimeout(apply, 50)
+    window.setTimeout(apply, 120)
+    window.setTimeout(apply, 280)
+    window.setTimeout(apply, 450)
+  }, [])
+
   const scrollToBottom = useCallback((smooth: boolean) => {
     const el = messagesContainerRef.current
     if (!el) return
-    const top = el.scrollHeight - el.clientHeight
+    const top = Math.max(0, el.scrollHeight - el.clientHeight)
     if (smooth) {
       el.scrollTo({ top, behavior: 'smooth' })
     } else {
-      el.scrollTop = top
-      requestAnimationFrame(() => {
-        el.scrollTop = el.scrollHeight - el.clientHeight
-      })
+      scrollToBottomInstant()
     }
     setShowJumpDown(false)
-  }, [])
+  }, [scrollToBottomInstant])
 
   const displayMessages = useMemo(() => {
     const byId = new Map<number, ChatMessage>()
@@ -687,10 +704,10 @@ export default function App() {
       return
     }
 
-    // Первая загрузка истории — сразу вниз без анимации
+    // Первая загрузка истории — вниз без анимации (несколько проходов из-за отложенной вёрстки)
     if (prev === 0 && len > 0) {
       prevMsgLenRef.current = len
-      requestAnimationFrame(() => scrollToBottom(false))
+      scrollToBottomInstant()
       return
     }
 
@@ -705,7 +722,35 @@ export default function App() {
     }
 
     prevMsgLenRef.current = len
-  }, [displayMessages, loading, selectedId, scrollToBottom])
+  }, [displayMessages, loading, selectedId, scrollToBottom, scrollToBottomInstant])
+
+  /** Показать «К последним», если лента не у низа (в т.ч. после открытия). */
+  useEffect(() => {
+    const el = messagesContainerRef.current
+    if (!el || loading || selectedId == null) return
+    const threshold = 80
+    const sync = () => {
+      const dist = el.scrollHeight - el.scrollTop - el.clientHeight
+      setShowJumpDown(dist > threshold)
+    }
+    el.addEventListener('scroll', sync, { passive: true })
+    sync()
+    return () => el.removeEventListener('scroll', sync)
+  }, [selectedId, loading, displayMessages.length])
+
+  /** Догоняем низ после смены диалога / окончания загрузки (без displayMessages в deps — иначе при каждом новом пузыре сбивали бы скролл). */
+  useEffect(() => {
+    if (loading || selectedId == null) return
+    const t = window.setTimeout(() => {
+      const el = messagesContainerRef.current
+      if (!el) return
+      const dist = el.scrollHeight - el.scrollTop - el.clientHeight
+      if (dist > 100) {
+        scrollToBottomInstant()
+      }
+    }, 500)
+    return () => window.clearTimeout(t)
+  }, [selectedId, loading, scrollToBottomInstant])
 
   const onEmojiPick = useCallback((data: EmojiClickData) => {
     const emoji = data.emoji
@@ -2190,7 +2235,7 @@ export default function App() {
                     className="jump-down"
                     onClick={() => scrollToBottom(true)}
                   >
-                    Новые сообщения ↓
+                    К последним ↓
                   </button>
                 )}
 

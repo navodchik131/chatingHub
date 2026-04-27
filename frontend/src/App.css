@@ -1001,23 +1001,24 @@ a.studio-download {
   bottom: 120px;
   left: 50%;
   transform: translateX(-50%);
-  z-index: 3;
-  padding: 0.5rem 1.125rem;
+  z-index: 20;
+  padding: 0.55rem 1.2rem;
   font-size: 0.8125rem;
   font-family: var(--font);
   font-weight: 600;
-  color: var(--text);
-  background: var(--bg-elevated);
-  border: 1px solid var(--border);
+  color: #0a0f0c;
+  background: linear-gradient(180deg, #4ade80 0%, var(--accent) 100%);
+  border: 1px solid rgba(34, 197, 94, 0.5);
   border-radius: 999px;
   cursor: pointer;
   box-shadow: var(--shadow-md);
   animation: fadeSlide 0.3s var(--ease-out);
+  touch-action: manipulation;
 }
 
 .jump-down:hover {
-  border-color: var(--accent-ring);
-  background: var(--bg-subtle);
+  border-color: var(--accent-hover);
+  filter: brightness(1.06);
 }
 
 .bubble {
