@@ -338,6 +338,9 @@ select:focus {
   border: 1px solid var(--border);
   background: linear-gradient(180deg, var(--bg-elevated) 0%, color-mix(in srgb, var(--bg-elevated) 96%, var(--accent-faint)) 100%);
   box-shadow: var(--shadow-sm);
+  max-width: 100%;
+  overflow-x: hidden;
+  box-sizing: border-box;
 }
 
 .studio-panel h2 {
@@ -361,6 +364,21 @@ select:focus {
 
 .studio-grid--simple {
   max-width: min(100%, 440px);
+  width: 100%;
+}
+
+.studio-grid--simple .studio-label {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.studio-grid--simple .studio-label select,
+.studio-grid--simple .studio-label textarea,
+.studio-grid--simple .studio-label input[type='file'] {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .studio-file-name {
@@ -1118,11 +1136,144 @@ a.studio-download {
   line-height: 1;
 }
 
+.thread-mobile-dock {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 200;
+  padding-top: env(safe-area-inset-top, 0px);
+  background: color-mix(in srgb, var(--bg-elevated) 94%, transparent);
+  backdrop-filter: blur(14px) saturate(1.1);
+  -webkit-backdrop-filter: blur(14px) saturate(1.1);
+  border-bottom: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+}
+
+.thread-mobile-dock-inner {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.65rem 0.5rem max(0.65rem, env(safe-area-inset-left, 0px));
+  min-height: 2.75rem;
+}
+
+.thread-mobile-dock-back {
+  flex-shrink: 0;
+  width: 2.75rem;
+  height: 2.75rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--control-radius);
+  border: 1px solid var(--border);
+  background: var(--bg-subtle);
+  color: var(--text);
+  font-size: 1.5rem;
+  line-height: 1;
+  font-weight: 600;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition:
+    background 0.18s var(--ease-out),
+    border-color 0.18s var(--ease-out);
+}
+
+.thread-mobile-dock-back:hover {
+  border-color: var(--border-hover);
+  background: var(--bg-input);
+}
+
+.thread-mobile-dock-back:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.thread-mobile-dock-scroll {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0.45rem;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  padding: 2px 0;
+  padding-right: env(safe-area-inset-right, 0px);
+  touch-action: pan-x;
+}
+
+.chat-strip-item {
+  flex: 0 0 auto;
+  width: 2.5rem;
+  height: 2.5rem;
+  padding: 0;
+  margin: 0;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  background: transparent;
+  position: relative;
+  touch-action: manipulation;
+}
+
+.chat-strip-item.is-active {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.chat-strip-item-inner {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 11px;
+  overflow: hidden;
+  background: var(--accent-soft);
+  border: 1px solid var(--border);
+}
+
+.chat-strip-item-inner img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.chat-strip-letter {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.chat-strip-unread {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--bg-elevated);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.2);
+}
+
+.chat-strip-item.is-active .chat-strip-unread {
+  border-color: var(--bg-elevated);
+}
+
 .emoji-popover {
   position: absolute;
   bottom: calc(100% + 8px);
   left: 0;
-  z-index: 20;
+  z-index: 260;
   border-radius: var(--radius-md);
   overflow: hidden;
   box-shadow: var(--shadow-md);
@@ -1770,6 +1921,14 @@ a.studio-download {
   .app.mobile-chat-open {
     padding-top: max(0.5rem, env(safe-area-inset-top, 0px));
     padding-bottom: max(0.5rem, env(safe-area-inset-bottom, 0px));
+  }
+
+  .app.with-thread-dock {
+    padding-top: calc(3.35rem + env(safe-area-inset-top, 0px));
+  }
+
+  .app.with-thread-dock .section-nav {
+    display: none;
   }
 
   .app.mobile-chat-open .top,

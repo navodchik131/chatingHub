@@ -128,6 +128,36 @@ function ThreadAvatar({ conv }: { conv: Conversation }) {
   )
 }
 
+/** Миниатюра в горизонтальной ленте чатов (PWA / мобильный). */
+function ChatStripItem({
+  conv,
+  active,
+  onSelect,
+}: {
+  conv: Conversation
+  active: boolean
+  onSelect: () => void
+}) {
+  const url = useConversationAvatarBlob(conv.id, Boolean(conv.has_avatar))
+  const letter = (conv.user_display_name ?? '?').slice(0, 1).toUpperCase()
+  const unread = conv.unread_count ?? 0
+  return (
+    <button
+      type="button"
+      className={`chat-strip-item ${active ? 'is-active' : ''}`}
+      onClick={onSelect}
+      title={conv.user_display_name ?? 'Диалог'}
+      aria-label={conv.user_display_name ?? 'Диалог'}
+      aria-current={active ? 'true' : undefined}
+    >
+      <span className="chat-strip-item-inner">
+        {url ? <img src={url} alt="" /> : <span className="chat-strip-letter">{letter}</span>}
+        {unread > 0 ? <span className="chat-strip-unread" aria-label="Непрочитанные" /> : null}
+      </span>
+    </button>
+  )
+}
+
 interface HealthInfo {
   ok: boolean
   mode?: string
@@ -1121,6 +1151,10 @@ export default function App() {
 
   const selected = conversations.find((c) => c.id === selectedId)
 
+  const showThreadDock = Boolean(
+    isMobileLayout && selectedId != null && appSection === 'chat' && canChat,
+  )
+
   const layoutClass = [
     'layout',
     isMobileLayout ? 'mobile' : '',
@@ -1129,13 +1163,45 @@ export default function App() {
     .filter(Boolean)
     .join(' ')
 
-  const appClass = ['app', isMobileLayout && selectedId != null ? 'mobile-chat-open' : '']
+  const appClass = [
+    'app',
+    isMobileLayout && selectedId != null ? 'mobile-chat-open' : '',
+    showThreadDock ? 'with-thread-dock' : '',
+  ]
     .filter(Boolean)
     .join(' ')
 
   return (
     <div className={appClass}>
       <div className="app-bg" aria-hidden />
+      {showThreadDock ? (
+        <header className="thread-mobile-dock">
+          <div className="thread-mobile-dock-inner">
+            <button
+              type="button"
+              className="thread-mobile-dock-back"
+              onClick={() => setSelectedId(null)}
+              aria-label="Назад к списку диалогов"
+            >
+              <span aria-hidden>‹</span>
+            </button>
+            <div
+              className="thread-mobile-dock-scroll"
+              role="tablist"
+              aria-label="Другие диалоги"
+            >
+              {conversations.map((c) => (
+                <ChatStripItem
+                  key={c.id}
+                  conv={c}
+                  active={c.id === selectedId}
+                  onSelect={() => setSelectedId(c.id)}
+                />
+              ))}
+            </div>
+          </div>
+        </header>
+      ) : null}
       <header className="top">
         <div className="top-brand">
           <span className="logo-mark" aria-hidden />
@@ -2014,7 +2080,7 @@ export default function App() {
           {selected && (
             <>
               <div className="thread-head">
-                {isMobileLayout ? (
+                {isMobileLayout && !showThreadDock ? (
                   <button
                     type="button"
                     className="back-btn"
