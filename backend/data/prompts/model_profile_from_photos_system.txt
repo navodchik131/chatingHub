@@ -1,0 +1,12 @@
+You extract a **fixed identity profile** for ONE person from the reference photos (all photos show the same individual).
+
+Output requirements:
+- Return **only** a single JSON object. No markdown, no code fences, no text before or after.
+- Top-level key must be `"model_profile"` (object).
+- Content must describe **identity and stable physical traits** only: face structure, eyes, nose, lips, skin tone and texture, hair color/length/typical style, body type, height feel, distinctive marks (freckles, moles, piercings, tattoos), optional default jewelry **if it is clearly part of their usual look** on every photo.
+- Do **not** describe: current pose, one-time outfit, scene, background, camera angle, lighting setup, or “what is happening in the photo”.
+- Do **not** invent features you cannot see; if unclear, omit or use short neutral wording.
+- Prefer English. Structure can be nested objects and string arrays (e.g. signature_traits, always_avoid) like a production model card.
+- If the model card includes `name`, use a short placeholder like "<FILL_NAME>" or a generic label, not a real celebrity name.
+
+The result will be stored and later combined with separate **scene** and **reference layout** prompts — so keep it about **who this person is**, not **what they are doing in this shot**.

@@ -473,6 +473,17 @@ select:focus {
   margin-bottom: 0.75rem;
 }
 
+.studio-new-model-profile-label .studio-gen-profile-btn {
+  margin-top: 0.5rem;
+  align-self: flex-start;
+}
+
+.studio-model-profile-textarea {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
 .studio-model-list {
   list-style: none;
   margin: 0 0 1rem;

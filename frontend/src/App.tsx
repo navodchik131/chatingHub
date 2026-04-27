@@ -329,6 +329,7 @@ export default function App() {
   const [studioSelectedModelId, setStudioSelectedModelId] = useState<number | null>(null)
   const [newModelName, setNewModelName] = useState('')
   const [newModelProfile, setNewModelProfile] = useState('')
+  const [newModelProfileGenBusy, setNewModelProfileGenBusy] = useState(false)
   const [newModelFiles, setNewModelFiles] = useState<File[]>([])
   const [wsApiKey, setWsApiKey] = useState('')
   const [webPushState, setWebPushState] = useState<
@@ -954,6 +955,38 @@ export default function App() {
     }
     setWsApiKey('')
     setInteg((await r.json()) as IntegrationStatus)
+  }
+
+  const generateModelProfileFromPhotos = async () => {
+    setError(null)
+    if (newModelFiles.length === 0) {
+      setError('Сначала выберите фото модели (до 5 файлов).')
+      return
+    }
+    setNewModelProfileGenBusy(true)
+    try {
+      const fd = new FormData()
+      for (const f of newModelFiles) fd.append('images', f)
+      const r = await apiFetch('/api/studio/models/generate-profile', { method: 'POST', body: fd })
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        setError(formatApiErrorDetail(j) || r.statusText)
+        return
+      }
+      const data = (await r.json()) as { profile_text: string }
+      setNewModelProfile(data.profile_text)
+      void refreshMe()
+    } catch (e) {
+      setError(
+        e instanceof TypeError && e.message === 'Failed to fetch'
+          ? 'Сеть: не удалось связаться с сервером.'
+          : e instanceof Error
+            ? e.message
+            : 'Ошибка запроса',
+      )
+    } finally {
+      setNewModelProfileGenBusy(false)
+    }
   }
 
   const createStudioModel = async () => {
@@ -1664,16 +1697,7 @@ export default function App() {
                   />
                 </label>
                 <label>
-                  Описание внешности
-                  <textarea
-                    rows={3}
-                    value={newModelProfile}
-                    onChange={(e) => setNewModelProfile(e.target.value)}
-                    placeholder="Волосы, возраст, типаж, кожа…"
-                  />
-                </label>
-                <label>
-                  Фото (до 5)
+                  Фото модели (до 5)
                   <input
                     type="file"
                     accept="image/jpeg,image/png,image/webp,image/gif"
@@ -1688,6 +1712,25 @@ export default function App() {
                       Выбрано файлов: {newModelFiles.length}
                     </span>
                   ) : null}
+                </label>
+                <label className="studio-new-model-profile-label">
+                  Описание внешности (JSON, можно вставить вручную)
+                  <textarea
+                    rows={6}
+                    value={newModelProfile}
+                    onChange={(e) => setNewModelProfile(e.target.value)}
+                    placeholder='{"model_profile": { … }} — или нажмите кнопку ниже'
+                    className="studio-model-profile-textarea"
+                  />
+                  <button
+                    type="button"
+                    className="ghost-btn studio-gen-profile-btn"
+                    disabled={newModelProfileGenBusy || newModelFiles.length === 0}
+                    title={newModelFiles.length === 0 ? 'Сначала выберите фото' : undefined}
+                    onClick={() => void generateModelProfileFromPhotos()}
+                  >
+                    {newModelProfileGenBusy ? 'Генерация…' : 'Сгенерировать из фото'}
+                  </button>
                 </label>
                 <button type="button" className="send-btn" onClick={() => void createStudioModel()}>
                   Создать модель

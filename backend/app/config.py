@@ -67,6 +67,11 @@ class Settings(BaseSettings):
         default="data/prompts/image_studio_reference_describe.txt"
     )
     image_studio_reference_describe_inline: str = Field(default="")
+    image_studio_model_profile_gen_system_path: str = Field(
+        default="data/prompts/model_profile_from_photos_system.txt",
+    )
+    image_studio_model_profile_gen_system_inline: str = Field(default="")
+    credit_cost_studio_model_profile_generate: int = Field(default=1)
 
     wavespeed_api_base: str = Field(default="https://api.wavespeed.ai")
     # POST image-edit: WAN 2.7 по умолчанию; Seedream v5/v4.5 — см. .env.example

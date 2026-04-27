@@ -156,6 +156,12 @@ class UserStudioModelPatchIn(BaseModel):
     profile_text: str | None = None
 
 
+class StudioModelProfileGenerateOut(BaseModel):
+    """JSON-текст для поля описания модели (внешность / model_profile)."""
+
+    profile_text: str
+
+
 class TelegramIntegrationIn(BaseModel):
     """Токен BotFather, формат `числа:строка` (обычно ~45+ символов)."""
 

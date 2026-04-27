@@ -344,3 +344,78 @@ async def refine_prompt_via_openai(
         temperature=0.55,
     )
     return apply_canonical_realism_to_refined_output(raw)
+
+
+_DEFAULT_MODEL_PROFILE_GEN_SYSTEM = (
+    'Return only JSON: {"model_profile": { ... }} describing identity from photos '
+    "(face, hair, skin, body, marks) — not pose, outfit, or scene. English, nested fields."
+)
+
+
+def load_model_profile_gen_system() -> str:
+    rel = _relative_prompt_path(
+        settings.image_studio_model_profile_gen_system_path,
+        "data/prompts/model_profile_from_photos_system.txt",
+    )
+    path = (BACKEND_DIR / rel).resolve()
+    if path.is_file():
+        t = path.read_text(encoding="utf-8").strip()
+        if t:
+            return t
+    inline = (settings.image_studio_model_profile_gen_system_inline or "").strip()
+    if inline:
+        return inline
+    log.warning("model_profile_gen: system file missing, using built-in default")
+    return _DEFAULT_MODEL_PROFILE_GEN_SYSTEM
+
+
+def _normalize_model_profile_json_output(raw_text: str) -> str:
+    t = _strip_code_fences(raw_text)
+    try:
+        data = json.loads(t)
+    except json.JSONDecodeError as e:
+        raise RuntimeError(f"Модель вернула не JSON: {e}") from e
+    if not isinstance(data, dict):
+        raise RuntimeError("Ответ должен быть JSON-объектом")
+    if "model_profile" not in data:
+        data = {"model_profile": data}
+    return json.dumps(data, ensure_ascii=False, indent=2)
+
+
+async def generate_model_profile_json_from_images(
+    *, image_items: list[tuple[bytes, str | None]]
+) -> str:
+    """Один vision-запрос: несколько фото одного человека → JSON model_profile."""
+    if not image_items:
+        raise RuntimeError("Нет изображений")
+    system = load_model_profile_gen_system()
+    if not system.strip():
+        raise RuntimeError("Пустой системный промпт генерации профиля")
+    user_content: list[dict] = [
+        {
+            "type": "text",
+            "text": (
+                "These reference photos show one person. Output the JSON as instructed. "
+                f"Number of images: {len(image_items)}."
+            ),
+        }
+    ]
+    for raw, mime in image_items:
+        m = (mime or "image/jpeg").split(";")[0].strip()
+        if m not in ("image/jpeg", "image/png", "image/gif", "image/webp"):
+            m = "image/jpeg"
+        b64 = base64.standard_b64encode(raw).decode("ascii")
+        user_content.append(
+            {"type": "image_url", "image_url": {"url": f"data:{m};base64,{b64}"}}
+        )
+    model = (settings.openai_studio_model_vision or "").strip() or settings.openai_studio_model
+    raw_text = await _chat_completion_text(
+        model=model,
+        messages=[
+            {"role": "system", "content": system},
+            {"role": "user", "content": user_content},
+        ],
+        max_tokens=8192,
+        temperature=0.35,
+    )
+    return _normalize_model_profile_json_output(raw_text)

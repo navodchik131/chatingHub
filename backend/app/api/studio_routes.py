@@ -26,6 +26,7 @@ from app.db.session import get_session
 from app.schemas import (
     StudioGenerationOut,
     StudioModelImageOut,
+    StudioModelProfileGenerateOut,
     StudioRefinePromptOut,
     UserStudioModelOut,
     UserStudioModelPatchIn,
@@ -57,6 +58,7 @@ from app.services.studio_image_token import (
 from app.services.studio_openai import (
     MAX_IMAGE_BYTES,
     describe_reference_image_openai,
+    generate_model_profile_json_from_images,
     load_image_studio_system,
     prepare_studio_prompt_skeleton,
     refine_prompt_via_openai,
@@ -271,6 +273,64 @@ async def api_list_studio_models(
     )
     rows = (await session.execute(stmt)).scalars().all()
     return [_studio_model_to_out(oid, m) for m in rows]
+
+
+@router.post("/studio/models/generate-profile", response_model=StudioModelProfileGenerateOut)
+async def api_generate_model_profile(
+    images: list[UploadFile] = File(...),
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> StudioModelProfileGenerateOut:
+    """Собрать JSON model_profile по референс-фотографиям (внешность, не поза/сцена)."""
+    assert_permission(user, PERM_STUDIO_MODELS)
+    if not (settings.openai_api_key or "").strip():
+        raise HTTPException(
+            status_code=503,
+            detail="OpenAI не настроен: задайте OPENAI_API_KEY в backend/.env",
+        )
+    uploads = list(images or [])
+    if not uploads:
+        raise HTTPException(
+            status_code=400,
+            detail="Загрузите хотя бы одно фото",
+        )
+    if len(uploads) > MAX_MODEL_IMAGES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Не больше {MAX_MODEL_IMAGES} изображений",
+        )
+    image_items: list[tuple[bytes, str | None]] = []
+    for up in uploads:
+        raw = await up.read()
+        if not raw:
+            continue
+        if len(raw) > MAX_IMAGE_BYTES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Файл «{up.filename or '?'}» слишком большой (макс. {MAX_IMAGE_BYTES // (1024 * 1024)} МБ)",
+            )
+        image_items.append((raw, up.content_type))
+    if not image_items:
+        raise HTTPException(
+            status_code=400,
+            detail="Пустые файлы",
+        )
+    cost = settings.credit_cost_studio_model_profile_generate
+    billing = await ensure_can_consume_credits(session, user, cost)
+    try:
+        text = await generate_model_profile_json_from_images(image_items=image_items)
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
+    await record_usage(
+        session,
+        user,
+        billing,
+        "studio_model_profile_generate",
+        cost,
+        {"image_count": len(image_items)},
+    )
+    await session.commit()
+    return StudioModelProfileGenerateOut(profile_text=text)
 
 
 @router.post("/studio/models", response_model=UserStudioModelOut)
