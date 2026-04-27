@@ -26,6 +26,14 @@ def _is_wan_27_image_edit_path(post_path: str) -> bool:
     return "wan" in s and "image-edit" in s
 
 
+def _format_size_for_wavespeed_path(post_path: str, size: str) -> str:
+    """WAN 2.7: `width*height`; Seedream — `widthxheight` (см. доки)."""
+    s = size.strip()
+    if _is_wan_27_image_edit_path(post_path) and "x" in s.lower() and "*" not in s:
+        return s.replace("x", "*").replace("X", "*")
+    return s
+
+
 def _apply_wavespeed_extra_body(body: dict[str, Any]) -> None:
     raw = (settings.wavespeed_extra_json or "").strip()
     if not raw:
@@ -213,7 +221,7 @@ async def seedream_v45_edit_image_url(
             "seed": int(settings.wavespeed_wan_image_edit_seed),
         }
         if size and size.strip():
-            body["size"] = size.strip()
+            body["size"] = _format_size_for_wavespeed_path(post_path, size)
     else:
         body = {
             "images": image_urls[:10],
@@ -222,7 +230,7 @@ async def seedream_v45_edit_image_url(
             "enable_base64_output": False,
         }
         if size and size.strip():
-            body["size"] = size.strip()
+            body["size"] = _format_size_for_wavespeed_path(post_path, size)
         fmt = (settings.wavespeed_seedream_output_format or "").strip().lower()
         if fmt in ("jpeg", "jpg", "png"):
             body["output_format"] = "jpeg" if fmt in ("jpeg", "jpg") else "png"
