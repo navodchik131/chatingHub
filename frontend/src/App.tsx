@@ -1889,13 +1889,13 @@ export default function App() {
               <span>
                 Затем сгенерировать картинку в WaveSpeed (
                 <a
-                  href="https://wavespeed.ai/models/bytedance/seedream-v4.5/edit"
+                  href="https://wavespeed.ai/models/bytedance/seedream-v5.0-lite/edit"
                   target="_blank"
                   rel="noreferrer"
                 >
-                  Seedream 4.5 Edit
+                  Seedream 5.0 Lite Edit
                 </a>
-                ): в запрос уйдут финальный промпт и фото выбранной модели. Нужны ключ WaveSpeed, модель с
+                , путь API настраивается на сервере): в запрос уйдут финальный промпт и фото выбранной модели. Нужны ключ WaveSpeed, модель с
                 фото и HTTPS <code className="mono">PUBLIC_APP_URL</code>.
               </span>
             </label>

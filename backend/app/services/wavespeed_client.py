@@ -11,11 +11,14 @@ from app.config import settings
 
 log = logging.getLogger(__name__)
 
-SEEDREAM_V45_EDIT_PATH = "/api/v3/bytedance/seedream-v4.5/edit"
-
 
 def _wavespeed_base() -> str:
     return (settings.wavespeed_api_base or "https://api.wavespeed.ai").rstrip("/")
+
+
+def _seedream_edit_post_path() -> str:
+    p = (settings.wavespeed_seedream_edit_path or "").strip() or "/api/v3/bytedance/seedream-v5.0-lite/edit"
+    return p if p.startswith("/") else f"/{p}"
 
 
 def _apply_wavespeed_extra_body(body: dict[str, Any]) -> None:
@@ -181,8 +184,7 @@ async def seedream_v45_edit_image_url(
     max_polls: int = 90,
 ) -> str:
     """
-    Отправка задачи Seedream v4.5 Edit (sync при возможности, иначе polling).
-    Возвращает URL первого выходного изображения.
+    Seedream Edit через WaveSpeed (v5.0 Lite по умолчанию, путь в WAVESPEED_SEEDREAM_EDIT_PATH).
     """
     if not image_urls:
         raise RuntimeError("no image URLs")
@@ -190,7 +192,8 @@ async def seedream_v45_edit_image_url(
         raise RuntimeError("empty prompt")
 
     base = _wavespeed_base()
-    url = f"{base}{SEEDREAM_V45_EDIT_PATH}"
+    post_path = _seedream_edit_post_path()
+    url = f"{base}{post_path}"
     headers = {
         "Authorization": f"Bearer {api_key.strip()}",
         "Content-Type": "application/json",
@@ -203,10 +206,14 @@ async def seedream_v45_edit_image_url(
     }
     if size and size.strip():
         body["size"] = size.strip()
+    fmt = (settings.wavespeed_seedream_output_format or "").strip().lower()
+    if fmt in ("jpeg", "jpg", "png"):
+        body["output_format"] = "jpeg" if fmt in ("jpeg", "jpg") else "png"
 
     _apply_wavespeed_extra_body(body)
     log.debug(
-        "wavespeed submit: images=%s prompt_len=%s keys=%s",
+        "wavespeed submit path=%s images=%s prompt_len=%s keys=%s",
+        post_path,
         len(body.get("images") or []),
         len(str(body.get("prompt") or "")),
         list(body.keys()),
