@@ -19,6 +19,38 @@ def create_model_image_access_token(*, user_id: int, image_id: int, minutes: int
     return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
 
 
+def create_generation_image_access_token(
+    *, user_id: int, generation_id: int, days: int = 30
+) -> str:
+    """JWT для <img src> и публичной выдачи архивной картинки (без Bearer)."""
+    expire = datetime.now(timezone.utc) + timedelta(days=days)
+    payload = {
+        "typ": "studio_gen_img",
+        "uid": user_id,
+        "gid": generation_id,
+        "exp": expire,
+    }
+    return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
+
+
+def decode_generation_image_access_token(token: str) -> tuple[int, int]:
+    try:
+        data = jwt.decode(
+            token,
+            settings.jwt_secret,
+            algorithms=[settings.jwt_algorithm],
+        )
+    except JWTError as e:
+        raise ValueError("invalid token") from e
+    if data.get("typ") != "studio_gen_img":
+        raise ValueError("wrong token type")
+    uid = data.get("uid")
+    gid = data.get("gid")
+    if uid is None or gid is None:
+        raise ValueError("missing claims")
+    return int(uid), int(gid)
+
+
 def decode_model_image_access_token(token: str) -> tuple[int, int]:
     try:
         data = jwt.decode(

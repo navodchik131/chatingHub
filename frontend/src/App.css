@@ -564,6 +564,80 @@ a.studio-download {
   text-align: center;
 }
 
+.studio-archive-section {
+  margin-top: 1.25rem;
+}
+
+.studio-archive-lead {
+  margin: 0 0 1rem;
+  font-size: 0.9rem;
+}
+
+.studio-archive-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+  gap: 0.75rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.studio-archive-item {
+  position: relative;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: var(--bg-subtle);
+}
+
+.studio-archive-thumb-btn {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  line-height: 0;
+}
+
+.studio-archive-thumb {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  vertical-align: middle;
+}
+
+.studio-archive-del {
+  position: absolute;
+  top: 0.25rem;
+  right: 0.25rem;
+  width: 1.75rem;
+  height: 1.75rem;
+  border: none;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--bg) 88%, black);
+  color: var(--text);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.85;
+}
+
+.studio-archive-del:hover {
+  opacity: 1;
+}
+
+.studio-archive-meta {
+  display: block;
+  padding: 0.35rem 0.45rem 0.45rem;
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .ok {
   color: var(--success);
   font-weight: 500;

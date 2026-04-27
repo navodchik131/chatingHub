@@ -228,6 +228,16 @@ interface StudioAspectPreset {
   size: string
 }
 
+interface StudioArchiveItem {
+  id: number
+  created_at: string
+  output_aspect: string | null
+  studio_model_id: number | null
+  model_name: string | null
+  prompt_excerpt: string | null
+  image_url: string
+}
+
 export default function App() {
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [selectedId, setSelectedId] = useState<number | null>(null)
@@ -329,6 +339,7 @@ export default function App() {
   const [studioWavespeedMsg, setStudioWavespeedMsg] = useState<string | null>(null)
   const [studioAspectPresets, setStudioAspectPresets] = useState<StudioAspectPreset[]>([])
   const [studioOutputAspect, setStudioOutputAspect] = useState('9:16')
+  const [studioGenerations, setStudioGenerations] = useState<StudioArchiveItem[]>([])
 
   useEffect(() => {
     selectedIdRef.current = selectedId
@@ -409,6 +420,11 @@ export default function App() {
     if (r.ok) setStudioModels((await r.json()) as UserStudioModel[])
   }, [])
 
+  const loadStudioGenerations = useCallback(async () => {
+    const r = await apiFetch('/api/studio/generations')
+    if (r.ok) setStudioGenerations((await r.json()) as StudioArchiveItem[])
+  }, [])
+
   useEffect(() => {
     setModelDrafts(
       Object.fromEntries(
@@ -464,6 +480,11 @@ export default function App() {
         /* ignore */
       })
   }, [authed, appSection])
+
+  useEffect(() => {
+    if (!authed || appSection !== 'studio' || !canStudioGenerate) return
+    void loadStudioGenerations()
+  }, [authed, appSection, canStudioGenerate, loadStudioGenerations])
 
   const loadHealth = useCallback(async () => {
     const r = await fetch('/api/health')
@@ -863,6 +884,18 @@ export default function App() {
     }
   }
 
+  const deleteStudioGeneration = async (id: number, imageUrl: string) => {
+    setError(null)
+    const r = await apiFetch(`/api/studio/generations/${id}`, { method: 'DELETE' })
+    if (!r.ok) {
+      const j = await r.json().catch(() => ({}))
+      setError(formatApiErrorDetail(j) || r.statusText)
+      return
+    }
+    setStudioGenImageUrl((prev) => (prev === imageUrl ? null : prev))
+    void loadStudioGenerations()
+  }
+
   const refineStudioPrompt = async () => {
     setError(null)
     if (!studioDesc.trim() && !studioFile && studioSelectedModelId == null) {
@@ -895,6 +928,7 @@ export default function App() {
       setStudioGenImageUrl(data.generated_image_url?.trim() || null)
       setStudioWavespeedMsg(data.wavespeed_message?.trim() || null)
       void refreshMe()
+      void loadStudioGenerations()
     } catch (e) {
       setError(e instanceof TypeError && e.message === 'Failed to fetch' ? 'Сеть: не удалось связаться с сервером (проверьте, что бэкенд запущен и порт / proxy).' : (e instanceof Error ? e.message : 'Неизвестная ошибка запроса'))
     } finally {
@@ -1940,6 +1974,7 @@ export default function App() {
       )}
 
       {hasAnyMainSection && appSection === 'studio' && canStudioAny && (
+        <>
         <section className="studio-panel" aria-labelledby="studio-heading">
           <h2 id="studio-heading">Новая картинка</h2>
           {!canStudioGenerate ? (
@@ -2050,6 +2085,47 @@ export default function App() {
             ) : null}
           </div>
         </section>
+        {canStudioGenerate ? (
+          <section className="studio-panel studio-archive-section" aria-labelledby="studio-archive-heading">
+            <h2 id="studio-archive-heading">Сохранённые</h2>
+            <p className="muted studio-archive-lead">
+              Картинки с WaveSpeed сохраняются на сервере — их можно открыть позже.
+            </p>
+            {studioGenerations.length === 0 ? (
+              <p className="muted empty-hint">Пока нет сохранённых генераций.</p>
+            ) : (
+              <ul className="studio-archive-grid">
+                {studioGenerations.map((g) => (
+                  <li key={g.id} className="studio-archive-item">
+                    <button
+                      type="button"
+                      className="studio-archive-thumb-btn"
+                      title={g.prompt_excerpt?.trim() || 'Открыть в «Результат»'}
+                      onClick={() => setStudioGenImageUrl(g.image_url)}
+                    >
+                      <img src={g.image_url} alt="" className="studio-archive-thumb" loading="lazy" />
+                    </button>
+                    <button
+                      type="button"
+                      className="studio-archive-del"
+                      aria-label="Удалить из архива"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        void deleteStudioGeneration(g.id, g.image_url)
+                      }}
+                    >
+                      ×
+                    </button>
+                    <span className="studio-archive-meta" title={g.created_at}>
+                      {g.model_name ?? '—'}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        ) : null}
+        </>
       )}
 
       {hasAnyMainSection && appSection === 'chat' && canChat && (

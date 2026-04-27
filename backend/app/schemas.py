@@ -106,10 +106,25 @@ class WorkspaceMemberOut(BaseModel):
 
 
 class StudioRefinePromptOut(BaseModel):
+    """Результат refine: текст, URL картинки; generation_id — запись в архиве на диске, если успели сохранить."""
+
     refined_prompt: str
     reference_scene_description: str | None = None
     generated_image_url: str | None = None
     wavespeed_message: str | None = None
+    generation_id: int | None = None
+
+
+class StudioGenerationOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    created_at: datetime
+    output_aspect: str | None = None
+    studio_model_id: int | None = None
+    model_name: str | None = None
+    prompt_excerpt: str | None = None
+    image_url: str
 
 
 class WavespeedIntegrationIn(BaseModel):

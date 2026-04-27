@@ -7,7 +7,7 @@ import uuid
 from pathlib import Path
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,6 +16,7 @@ from sqlalchemy.orm import selectinload
 from app.auth.deps import get_current_user
 from app.config import BACKEND_DIR, settings
 from app.db.models import (
+    StudioGeneration,
     User,
     UserStudioModel,
     UserStudioModelImage,
@@ -23,6 +24,7 @@ from app.db.models import (
 )
 from app.db.session import get_session
 from app.schemas import (
+    StudioGenerationOut,
     StudioModelImageOut,
     StudioRefinePromptOut,
     UserStudioModelOut,
@@ -42,8 +44,14 @@ from app.services.studio_aspect import (
     normalize_aspect_key,
     wavespeed_size_string,
 )
+from app.services.studio_generation_storage import (
+    download_and_create_generation,
+    safe_delete_generation_file,
+)
 from app.services.studio_image_token import (
+    create_generation_image_access_token,
     create_model_image_access_token,
+    decode_generation_image_access_token,
     decode_model_image_access_token,
 )
 from app.services.studio_openai import (
@@ -59,6 +67,17 @@ log = logging.getLogger(__name__)
 router = APIRouter(tags=["studio"])
 
 MAX_MODEL_IMAGES = 5
+
+
+def _public_app_base(request: Request | None) -> str:
+    p = (settings.public_app_url or "").strip().rstrip("/")
+    if p:
+        return p
+    if request is not None:
+        return str(request.base_url).rstrip("/")
+    return ""
+
+
 _ALLOWED_SUFFIX = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
 
 
@@ -147,6 +166,92 @@ async def public_studio_model_image(
         ) from None
     mime = mimetypes.guess_type(abs_path.name)[0] or "application/octet-stream"
     return FileResponse(abs_path, media_type=mime)
+
+
+@router.get("/studio/public-generation-image")
+async def public_studio_generation_image(
+    t: str,
+    session: AsyncSession = Depends(get_session),
+) -> FileResponse:
+    """Публичная выдача архивной картинки студии по JWT (для <img src>)."""
+    try:
+        uid, gid = decode_generation_image_access_token(t)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Недействительная ссылка") from None
+    row = await session.get(StudioGeneration, gid)
+    if not row or row.user_id != uid:
+        raise HTTPException(status_code=404, detail="Не найдено") from None
+    abs_path = (BACKEND_DIR / row.relative_path).resolve()
+    try:
+        abs_path.relative_to(BACKEND_DIR.resolve())
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Не найдено") from None
+    if not abs_path.is_file():
+        await session.delete(row)
+        await session.commit()
+        raise HTTPException(status_code=404, detail="Файл отсутствует на сервере") from None
+    mime = row.content_type or mimetypes.guess_type(abs_path.name)[0] or "image/png"
+    return FileResponse(abs_path, media_type=mime)
+
+
+@router.get("/studio/generations", response_model=list[StudioGenerationOut])
+async def api_list_studio_generations(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> list[StudioGenerationOut]:
+    assert_permission(user, PERM_STUDIO_GENERATE)
+    oid = workspace_owner_id(user)
+    stmt = (
+        select(StudioGeneration)
+        .where(StudioGeneration.user_id == oid)
+        .order_by(StudioGeneration.created_at.desc())
+        .limit(80)
+    )
+    rows = (await session.execute(stmt)).scalars().all()
+    base = _public_app_base(request)
+    if not base:
+        return []
+    model_ids = {r.studio_model_id for r in rows if r.studio_model_id}
+    name_by_id: dict[int, str] = {}
+    if model_ids:
+        qm = await session.execute(select(UserStudioModel).where(UserStudioModel.id.in_(model_ids)))
+        for m in qm.scalars().all():
+            name_by_id[m.id] = m.name
+    out: list[StudioGenerationOut] = []
+    for r in rows:
+        tok = create_generation_image_access_token(user_id=oid, generation_id=r.id)
+        url = f"{base}/api/studio/public-generation-image?t={quote(tok, safe='')}"
+        out.append(
+            StudioGenerationOut(
+                id=r.id,
+                created_at=r.created_at,
+                output_aspect=r.output_aspect,
+                studio_model_id=r.studio_model_id,
+                model_name=name_by_id.get(r.studio_model_id) if r.studio_model_id else None,
+                prompt_excerpt=r.prompt_excerpt,
+                image_url=url,
+            )
+        )
+    return out
+
+
+@router.delete("/studio/generations/{gen_id}")
+async def api_delete_studio_generation(
+    gen_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> dict:
+    assert_permission(user, PERM_STUDIO_GENERATE)
+    oid = workspace_owner_id(user)
+    row = await session.get(StudioGeneration, gen_id)
+    if not row or row.user_id != oid:
+        raise HTTPException(status_code=404, detail="Не найдено")
+    rel = row.relative_path
+    await session.delete(row)
+    await session.commit()
+    safe_delete_generation_file(rel)
+    return {"ok": True}
 
 
 @router.get("/studio/models", response_model=list[UserStudioModelOut])
@@ -349,6 +454,7 @@ async def api_delete_studio_model(
 
 @router.post("/studio/refine-prompt", response_model=StudioRefinePromptOut)
 async def api_studio_refine_prompt(
+    request: Request,
     description: str = Form(""),
     model_id: str | None = Form(None),
     image: UploadFile | None = File(None),
@@ -500,6 +606,25 @@ async def api_studio_refine_prompt(
                             wavespeed_message,
                         )
 
+    generation_id: int | None = None
+    if generated_image_url:
+        gen = await download_and_create_generation(
+            session,
+            owner_id=oid,
+            source_url=generated_image_url,
+            refined_prompt=refined,
+            output_aspect=aspect_key,
+            studio_model_id=mid,
+        )
+        if gen is not None:
+            generation_id = gen.id
+            arch_base = _public_app_base(request)
+            if arch_base:
+                gtok = create_generation_image_access_token(user_id=oid, generation_id=gen.id)
+                generated_image_url = (
+                    f"{arch_base}/api/studio/public-generation-image?t={quote(gtok, safe='')}"
+                )
+
     await record_usage(
         session,
         user,
@@ -511,6 +636,7 @@ async def api_studio_refine_prompt(
             "studio_model_id": mid,
             "two_step": bool(image_bytes),
             "wavespeed": bool(generated_image_url),
+            "generation_id": generation_id,
         },
     )
     await session.commit()
@@ -520,4 +646,5 @@ async def api_studio_refine_prompt(
         reference_scene_description=reference_scene,
         generated_image_url=generated_image_url,
         wavespeed_message=wavespeed_message,
+        generation_id=generation_id,
     )

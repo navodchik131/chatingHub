@@ -91,6 +91,11 @@ class User(Base):
     studio_models: Mapped[list[UserStudioModel]] = relationship(
         "UserStudioModel", back_populates="owner", cascade="all, delete-orphan"
     )
+    studio_generations: Mapped[list["StudioGeneration"]] = relationship(
+        "StudioGeneration",
+        back_populates="owner",
+        cascade="all, delete-orphan",
+    )
     wavespeed_connection: Mapped[WavespeedConnection | None] = relationship(
         "WavespeedConnection", back_populates="user", uselist=False
     )
@@ -319,6 +324,30 @@ class UserStudioModelImage(Base):
     studio_model: Mapped[UserStudioModel] = relationship(
         "UserStudioModel", back_populates="images"
     )
+
+
+class StudioGeneration(Base):
+    """Архив результатов студии (картинка на диске; URL WaveSpeed может протухнуть)."""
+
+    __tablename__ = "studio_generations"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    relative_path: Mapped[str] = mapped_column(String(512))
+    content_type: Mapped[str] = mapped_column(String(64), default="image/png")
+    output_aspect: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    studio_model_id: Mapped[int | None] = mapped_column(
+        ForeignKey("user_studio_models.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    prompt_excerpt: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+    owner: Mapped[User] = relationship("User", back_populates="studio_generations")
 
 
 class Message(Base):
