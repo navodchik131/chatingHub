@@ -54,7 +54,9 @@ def aspect_instruction_for_prompt(aspect_key: str) -> str:
     )
 
 
-def aspect_user_block_english(aspect_key: str) -> str:
+def aspect_user_block_english(
+    aspect_key: str, *, preserve_reference_framing: bool = False
+) -> str:
     """Секция OUTPUT/ASPECT для LLM-рефайнера (шаблон JSON на английском)."""
     k = normalize_aspect_key(aspect_key)
     w, h = ASPECT_PRESETS[k]
@@ -64,10 +66,27 @@ def aspect_user_block_english(aspect_key: str) -> str:
         orient = "landscape/horizontal"
     else:
         orient = "square"
-    return (
+    head = (
         "## OUTPUT / ASPECT\n"
-        f"Target aspect ratio: {k} (pixel size about {w}×{h}). Framing: {orient}. "
-        f"Set photography.aspect_ratio, shot_type, camera_style, angle, and related fields to match this output."
+        f"Target aspect ratio: {k} (pixel size about {w}×{h}). Output canvas: {orient}. "
+        f"Set photography.aspect_ratio to match this target."
+    )
+    if preserve_reference_framing:
+        return head + (
+            "\n\n**REFERENCE_IMAGE is present:** The aspect ratio is only the **output canvas**. "
+            "You MUST preserve the reference photo's **camera geometry**: implied distance to the subject, camera height "
+            "relative to the subject (above eyes / at eyes / chest / low, etc.), horizontal view (straight-on, 3/4, profile), "
+            "vertical angle (high / level / low), any dutch tilt, lens/perspective (wide selfie stretch vs normal phone), "
+            "and **framing** — what is included vs cropped at frame edges and how large the subject is in the frame. "
+            "Do **not** change a close-up into a full-body shot (or the opposite) to fill the canvas; keep the same shot scale. "
+            "If the canvas aspect differs from the reference, adjust background margins or minor crop, not the camera relationship. "
+            "Fill photography.framing_crop, camera_distance, camera_height_vs_subject, angle, view_direction, lens_perspective, "
+            "and shot_type consistently from REFERENCE_IMAGE. MODEL PROFILE supplies identity only."
+        )
+    return (
+        head
+        + " Set photography.shot_type, camera_style, angle, framing_crop, and related fields "
+        + f"to match this {orient} output."
     )
 
 

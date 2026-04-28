@@ -54,8 +54,13 @@
   "photography": {
     "camera_style": "<FILL — phone selfie / mirror selfie / friend snap / casual DSLR>",
     "device": "<FILL — e.g. iPhone front camera, Android>",
-    "angle": "<FILL_FROM_IMAGE_OR_TEXT>",
-    "shot_type": "<FILL — close-up / medium / full body>",
+    "framing_crop": "<FILL_FROM_IMAGE_OR_TEXT — what is in frame vs cut off at each edge; headroom; subject scale in frame>",
+    "camera_distance": "<FILL_FROM_IMAGE_OR_TEXT — arm-length, portrait distance, across room, etc.>",
+    "camera_height_vs_subject": "<FILL_FROM_IMAGE_OR_TEXT — above eyes / at eyes / chest / low angle, etc.>",
+    "angle": "<FILL_FROM_IMAGE_OR_TEXT — combine horizontal bearing + vertical elevation + dutch tilt if any>",
+    "view_direction": "<FILL_FROM_IMAGE_OR_TEXT — straight-on / 3:4 left|right / profile>",
+    "lens_perspective": "<FILL_FROM_IMAGE_OR_TEXT — wide selfie stretch / normal phone / slight tele compression>",
+    "shot_type": "<FILL — close-up / medium / full body; must agree with framing_crop and distance>",
     "aspect_ratio": "<FILL — must match OUTPUT/ASPECT section>",
     "lighting": "<FILL_FROM_IMAGE_OR_TEXT>",
     "depth_of_field": "<FILL — natural phone DoF, no fake bokeh>"

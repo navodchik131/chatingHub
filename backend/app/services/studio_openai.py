@@ -20,11 +20,11 @@ You are a prompt builder for the WAN 2.7 Image Edit model.
 
 You will receive:
 1. A SKELETON (JSON template with <FILL> and <FROM_MODEL_PROFILE>).
-2. Optional REFERENCE_IMAGE — when not "(none)", it is the source of truth for **scene layout** (pose, clothing in scene, hands, camera, background, lighting).
+2. Optional REFERENCE_IMAGE — when not "(none)", it is the source of truth for **scene layout and camera geometry** (pose, clothing in scene, hands, framing/crop, camera distance and height, angle, lens feel, background, lighting).
 3. A MODEL PROFILE — **identity** only (face, skin, hair, body type as character); not a replacement for the reference scene.
 4. USER_TEXT, 5. OUTPUT/ASPECT.
 
-If REFERENCE_IMAGE has content: fill pose, clothing, hair_in_scene, photography, background from the reference, not from profile defaults. MODEL_PROFILE fills <FROM_MODEL_PROFILE> identity; do not override the reference with profile outfit/jewelry/posture. No reference face/identity from the image — use profile for identity.
+If REFERENCE_IMAGE has content: fill pose, clothing, hair_in_scene, photography (framing_crop, distance, height vs subject, view_direction, lens_perspective, angle, shot_type), background from the reference, not from profile defaults. MODEL_PROFILE fills <FROM_MODEL_PROFILE> identity; do not override the reference with profile outfit/jewelry/posture. No reference face/identity from the image — use profile for identity.
 Keep realism_engine exactly as in the skeleton. Output only valid JSON, no markdown.
 """.strip()
 
@@ -291,7 +291,7 @@ def _build_refiner_user_message(
     # Референс — сразу после скелета, чтобы сцена не утонула в длинном JSON профиля.
     if has_ref:
         blocks.append(
-            "## REFERENCE_IMAGE (HIGHEST PRIORITY for this scene: pose, hands, clothes ON PHOTO, hair as styled in photo, camera angle, framing, room, light — do NOT use face/identity; identity comes from MODEL_PROFILE below)\n"
+            "## REFERENCE_IMAGE (HIGHEST PRIORITY for this scene: pose, hands, clothes ON PHOTO, hair as styled in photo, **framing/crop, camera distance, camera height vs subject, angle, view direction, lens/perspective**, room, light — do NOT use face/identity; identity comes from MODEL_PROFILE below)\n"
             + (reference_scene_description or "").strip()
         )
     else:
@@ -310,7 +310,11 @@ def _build_refiner_user_message(
 
     u = (user_text or "").strip()
     blocks.append("## USER_TEXT (mood, tweaks; does not override reference layout unless clearly contradictory)\n" + (u if u else "(no additional text)"))
-    blocks.append(aspect_user_block_english(output_aspect_key))
+    blocks.append(
+        aspect_user_block_english(
+            output_aspect_key, preserve_reference_framing=has_ref
+        )
+    )
     return "\n\n".join(blocks)
 
 
