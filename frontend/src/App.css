@@ -1167,10 +1167,18 @@ a.studio-download {
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
+  overflow-anchor: none;
   display: flex;
   flex-direction: column;
   gap: 0.875rem;
   padding: 1.125rem 1.25rem;
+}
+
+.messages-older-loading {
+  flex-shrink: 0;
+  text-align: center;
+  padding: 0.35rem 0;
+  font-size: 0.78rem;
 }
 
 .messages-scroll::-webkit-scrollbar {

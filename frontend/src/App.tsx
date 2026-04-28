@@ -67,6 +67,9 @@ interface ChatMessage {
   pending?: boolean
 }
 
+/** Размер страницы GET /conversations/:id/messages (синхронно с бэкендом default limit). */
+const CHAT_MESSAGES_PAGE = 40
+
 function platformLabel(p: Platform): string {
   if (p === 'telegram') return 'Telegram'
   return 'Fanvue'
@@ -277,6 +280,8 @@ export default function App() {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [draft, setDraft] = useState('')
   const [loading, setLoading] = useState(false)
+  const [loadingOlder, setLoadingOlder] = useState(false)
+  const [hasMoreOlder, setHasMoreOlder] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [health, setHealth] = useState<HealthInfo | null>(null)
   const [emojiOpen, setEmojiOpen] = useState(false)
@@ -292,6 +297,10 @@ export default function App() {
   const lastTextareaSelRef = useRef({ start: 0, end: 0 })
   const emojiWrapRef = useRef<HTMLDivElement | null>(null)
   const prevMsgLenRef = useRef(0)
+  const skipNextAutoScrollRef = useRef(false)
+  const loadingOlderRef = useRef(false)
+  const hasMoreOlderRef = useRef(false)
+  const oldestMsgIdRef = useRef<number | null>(null)
 
   const [isMobileLayout, setIsMobileLayout] = useState(false)
   const [authReady, setAuthReady] = useState(false)
@@ -385,6 +394,14 @@ export default function App() {
   useEffect(() => {
     selectedIdRef.current = selectedId
   }, [selectedId])
+
+  useEffect(() => {
+    hasMoreOlderRef.current = hasMoreOlder
+  }, [hasMoreOlder])
+
+  useEffect(() => {
+    loadingOlderRef.current = loadingOlder
+  }, [loadingOlder])
 
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 720px)')
@@ -561,12 +578,74 @@ export default function App() {
     setConversations(data)
   }, [])
 
-  const loadMessages = useCallback(async (id: number) => {
-    const r = await apiFetch(`/api/conversations/${id}/messages`)
+  const fetchMessagesPage = useCallback(async (id: number, before?: number) => {
+    const p = new URLSearchParams()
+    p.set('limit', String(CHAT_MESSAGES_PAGE))
+    if (before != null) p.set('before', String(before))
+    const r = await apiFetch(`/api/conversations/${id}/messages?${p}`)
     if (!r.ok) throw new Error('Не удалось загрузить сообщения')
-    const data: ChatMessage[] = await r.json()
-    setMessages(data)
+    return (await r.json()) as ChatMessage[]
   }, [])
+
+  const loadMessages = useCallback(
+    async (id: number) => {
+      const data = await fetchMessagesPage(id)
+      setMessages(data)
+      setHasMoreOlder(data.length >= CHAT_MESSAGES_PAGE)
+    },
+    [fetchMessagesPage],
+  )
+
+  const loadOlderMessages = useCallback(async () => {
+    const sid = selectedIdRef.current
+    if (sid == null || loadingOlderRef.current || !hasMoreOlderRef.current) return
+    const beforeId = oldestMsgIdRef.current
+    if (beforeId == null) return
+    loadingOlderRef.current = true
+    setLoadingOlder(true)
+    const el = messagesContainerRef.current
+    const prevH = el?.scrollHeight ?? 0
+    const prevT = el?.scrollTop ?? 0
+    try {
+      const chunk = await fetchMessagesPage(sid, beforeId)
+      if (chunk.length === 0) {
+        setHasMoreOlder(false)
+        return
+      }
+      if (chunk.length < CHAT_MESSAGES_PAGE) setHasMoreOlder(false)
+      skipNextAutoScrollRef.current = true
+      setMessages((prev) => {
+        const seen = new Set<number>()
+        const merged: ChatMessage[] = []
+        for (const m of chunk) {
+          const mid = Number(m.id)
+          if (!Number.isFinite(mid) || seen.has(mid)) continue
+          seen.add(mid)
+          merged.push(m)
+        }
+        for (const m of prev) {
+          const mid = Number(m.id)
+          if (!Number.isFinite(mid) || seen.has(mid)) continue
+          seen.add(mid)
+          merged.push(m)
+        }
+        return merged.sort(
+          (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+        )
+      })
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          const el2 = messagesContainerRef.current
+          if (el2) el2.scrollTop = prevT + (el2.scrollHeight - prevH)
+        })
+      })
+    } catch (e) {
+      setError(String(e))
+    } finally {
+      loadingOlderRef.current = false
+      setLoadingOlder(false)
+    }
+  }, [fetchMessagesPage])
 
   useEffect(() => {
     loadHealth().catch(() => {
@@ -614,9 +693,11 @@ export default function App() {
   useEffect(() => {
     if (selectedId == null) {
       setMessages([])
+      setHasMoreOlder(false)
       return
     }
     setMessages([])
+    setHasMoreOlder(false)
     let cancelled = false
     setLoading(true)
     setError(null)
@@ -770,6 +851,11 @@ export default function App() {
     )
   }, [messages])
 
+  useEffect(() => {
+    if (displayMessages.length === 0) oldestMsgIdRef.current = null
+    else oldestMsgIdRef.current = Number(displayMessages[0].id)
+  }, [displayMessages])
+
   useLayoutEffect(() => {
     const container = messagesContainerRef.current
     if (!container || selectedId == null) return
@@ -783,6 +869,12 @@ export default function App() {
 
     if (len === 0) {
       prevMsgLenRef.current = 0
+      return
+    }
+
+    if (skipNextAutoScrollRef.current) {
+      skipNextAutoScrollRef.current = false
+      prevMsgLenRef.current = len
       return
     }
 
@@ -806,7 +898,7 @@ export default function App() {
     prevMsgLenRef.current = len
   }, [displayMessages, loading, selectedId, scrollToBottom, scrollToBottomInstant])
 
-  /** Показать «К последним», если лента не у низа (в т.ч. после открытия). */
+  /** Показать «К последним», если лента не у низа; у верхней границы — подгрузка истории. */
   useEffect(() => {
     const el = messagesContainerRef.current
     if (!el || loading || selectedId == null) return
@@ -814,11 +906,19 @@ export default function App() {
     const sync = () => {
       const dist = el.scrollHeight - el.scrollTop - el.clientHeight
       setShowJumpDown(dist > threshold)
+      if (
+        el.scrollTop < 120 &&
+        hasMoreOlderRef.current &&
+        !loadingOlderRef.current &&
+        !loading
+      ) {
+        void loadOlderMessages()
+      }
     }
     el.addEventListener('scroll', sync, { passive: true })
     sync()
     return () => el.removeEventListener('scroll', sync)
-  }, [selectedId, loading, displayMessages.length])
+  }, [selectedId, loading, displayMessages.length, loadOlderMessages])
 
   /** Догоняем низ после смены диалога / окончания загрузки (без displayMessages в deps — иначе при каждом новом пузыре сбивали бы скролл). */
   useEffect(() => {
@@ -2631,6 +2731,11 @@ export default function App() {
                     aria-live="polite"
                     aria-relevant="additions"
                   >
+                    {loadingOlder ? (
+                      <div className="messages-older-loading" role="status">
+                        <span className="muted">Загрузка истории…</span>
+                      </div>
+                    ) : null}
                     {displayMessages.map((m) => (
                       <article
                         key={m.id}

@@ -154,11 +154,26 @@ async def count_rows_for_user(session: AsyncSession, user_id: int) -> tuple[int,
 
 
 async def list_messages(
-    session: AsyncSession, conv_id: int, user_id: int
+    session: AsyncSession,
+    conv_id: int,
+    user_id: int,
+    *,
+    limit: int | None = None,
+    before_id: int | None = None,
 ) -> list[Message]:
+    """Сообщения по возрастанию id. При limit — последняя страница (или страница старше before_id)."""
     conv = await get_conversation(session, conv_id, user_id)
     if not conv:
         return []
+    if limit is not None:
+        stmt = select(Message).where(Message.conversation_id == conv_id)
+        if before_id is not None:
+            stmt = stmt.where(Message.id < int(before_id))
+        stmt = stmt.order_by(Message.id.desc()).limit(int(limit))
+        r = await session.execute(stmt)
+        rows = list(r.scalars().all())
+        rows.reverse()
+        return rows
     stmt = (
         select(Message)
         .where(Message.conversation_id == conv_id)

@@ -165,6 +165,11 @@ async def api_conversation_avatar(
 @router.get("/conversations/{conv_id}/messages", response_model=list[MessageOut])
 async def api_messages(
     conv_id: int,
+    limit: int = Query(40, ge=1, le=200),
+    before: int | None = Query(
+        None,
+        description="Подгрузка истории: сообщения с id строго меньше этого значения",
+    ),
     session: AsyncSession = Depends(get_session),
     user: User = Depends(get_current_user),
 ) -> list[MessageOut]:
@@ -173,7 +178,9 @@ async def api_messages(
     conv = await get_conversation(session, conv_id, oid)
     if not conv:
         raise HTTPException(status_code=404, detail="conversation not found")
-    rows = await list_messages(session, conv_id, oid)
+    rows = await list_messages(
+        session, conv_id, oid, limit=limit, before_id=before
+    )
     return [MessageOut.model_validate(m) for m in rows]
 
 
