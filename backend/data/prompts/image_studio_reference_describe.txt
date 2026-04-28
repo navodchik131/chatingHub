@@ -2,8 +2,8 @@ Describe this image in English for a downstream image-edit model. The goal is to
 
 Structure your answer with these exact section labels (one line with the label, then one or more lines of detail):
 
-POSE: (body position, weight distribution, lean, what legs/arms do; be specific about hands and fingers)
-CLOTHING: (exact garments visible — colors, cut, fabric, layers; not "she wears something nice")
+POSE: (articulation only — how limbs and torso are arranged, weight shift, lean, hand/finger poses; **do not** use body-type words such as slim, curvy, athletic, petite, plus-size, broad, narrow waist, etc. — silhouette vocabulary comes from MODEL_PROFILE elsewhere)
+CLOTHING: (list **only** garments/accessories **visible in the image** — colors, cut, fabric, layers. If there is **no** clothing (nude, topless with no top visible, bottomless in frame, towel only if clearly not covering, etc.), say explicitly e.g. "no clothing visible; subject nude" or "topless, no shirt/bra". Do not invent off-frame outfits; do not describe clothes from other shoots.)
 HAIR_IN_SCENE: (how hair is styled **in this shot** — up/down, messy, wet, etc. — do not state natural hair color as identity)
 FRAMING: (what is included vs cropped at **each edge** of the frame — top/left/right/bottom; headroom; whether chin, forehead, hair tips, elbows, hips, knees, feet are visible; roughly how large the subject is in the frame, e.g. "face and shoulders only", "waist-up ~70% of frame height", "full body small in frame")
 CAMERA_DISTANCE: (how far the camera feels from the subject — e.g. arm-length selfie, half-arm extension, ~1–2 m portrait distance, across the room; note mirror distance if mirror selfie)
@@ -15,6 +15,7 @@ LIGHT: (direction, hard/soft, time of day feel)
 
 Rules:
 - Do NOT describe the person's face, skin, age, ethnicity, or recognizable identity. Say "the subject" if needed.
+- Do NOT describe **body silhouette, body type, proportions, muscularity, size, height impression, or skin color/tone/tan/complexion** — those are defined by MODEL_PROFILE, not this photo. Do not say "pale", "dark skin", "slim waist", "wide hips", etc.
 - Do NOT invent jewelry or clothes not visible; only what is in the image.
 - **FRAMING and CAMERA_*** sections are mandatory: even a guess is better than skipping; they are what makes the remake match the reference shot.
 - Style: casual phone snapshot, not studio.

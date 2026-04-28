@@ -15,11 +15,13 @@ log = logging.getLogger(__name__)
 MAX_IMAGE_BYTES = 12 * 1024 * 1024
 
 _WAVESPEED_USER_POSE_REF_FIRST_PREFIX = (
-    "[REFERENCE_IMAGE_ORDER] The first image in this request is the user's uploaded reference photo. "
-    "Take from it the scene: pose (including hands), camera angle, camera height and distance to the subject, "
-    "framing and crop, lens perspective, clothing and hair as visible in that photo, background and lighting. "
-    "The following image(s) are identity-only references for face/body appearance — do not copy their pose or "
-    "camera from those; apply that identity into the first image's shot.\n\n"
+    "[REFERENCE_IMAGE_ORDER] The first image is the user's uploaded pose/scene reference. "
+    "Take from it: pose articulation (hands, limbs), camera angle/height/distance, framing, lens feel, hair styling as in that shot, "
+    "background and lighting. Garments and body coverage must match only this first image — do not dress the subject from the "
+    "other images. If the first image shows no clothing or partial nudity, keep the same coverage (nude/topless/etc.). "
+    "Body silhouette, proportions, muscle, and skin color must match the identity reference images (the model), "
+    "not the first image's person — do not copy physique or complexion from the pose reference. "
+    "Following image(s): identity (face, body, skin) only — no pose, camera, or outfit from them.\n\n"
 )
 
 
@@ -37,11 +39,11 @@ You are a prompt builder for the WAN 2.7 Image Edit model.
 
 You will receive:
 1. A SKELETON (JSON template with <FILL> and <FROM_MODEL_PROFILE>).
-2. Optional REFERENCE_IMAGE — when not "(none)", it is the source of truth for **scene layout and camera geometry** (pose, clothing in scene, hands, framing/crop, camera distance and height, angle, lens feel, background, lighting).
+2. Optional REFERENCE_IMAGE — when not "(none)", it is the source of truth for **scene layout, camera geometry, and clothing/coverage** (pose, hands, framing/crop, camera distance and height, angle, lens feel, background, lighting).
 3. A MODEL PROFILE — **identity** only (face, skin, hair, body type as character); not a replacement for the reference scene.
 4. USER_TEXT, 5. OUTPUT/ASPECT.
 
-If REFERENCE_IMAGE has content: fill pose, clothing, hair_in_scene, photography (framing_crop, distance, height vs subject, view_direction, lens_perspective, angle, shot_type), background from the reference, not from profile defaults. MODEL_PROFILE fills <FROM_MODEL_PROFILE> identity; do not override the reference with profile outfit/jewelry/posture. No reference face/identity from the image — use profile for identity.
+If REFERENCE_IMAGE has content: fill pose, clothing (only what the reference photo shows; if none — nude/uncovered), hair_in_scene, photography, background from the reference, not from profile defaults. Never take clothing from MODEL_PROFILE. **Always take face, body_type, skin tone, and hair identity colors from MODEL_PROFILE** — never mimic the reference person's physique or skin. MODEL_PROFILE fills <FROM_MODEL_PROFILE>; no reference face or body copy.
 Keep realism_engine exactly as in the skeleton. Output only valid JSON, no markdown.
 """.strip()
 
@@ -308,7 +310,7 @@ def _build_refiner_user_message(
     # Референс — сразу после скелета, чтобы сцена не утонула в длинном JSON профиля.
     if has_ref:
         blocks.append(
-            "## REFERENCE_IMAGE (HIGHEST PRIORITY for this scene: pose, hands, clothes ON PHOTO, hair as styled in photo, **framing/crop, camera distance, camera height vs subject, angle, view direction, lens/perspective**, room, light — do NOT use face/identity; identity comes from MODEL_PROFILE below)\n"
+            "## REFERENCE_IMAGE (scene/pose ref only: pose/hands, clothing/coverage on this photo, hair **styling in shot**, camera/framing/light/room — **not** body type, skin tone, or face; those = MODEL_PROFILE)\n"
             + (reference_scene_description or "").strip()
         )
     else:
@@ -316,7 +318,9 @@ def _build_refiner_user_message(
 
     blocks.append(
         "## MODEL_PROFILE (identity: face, skin, hair color, body type, marks — for <FROM_MODEL_PROFILE> only. "
-        "If REFERENCE_IMAGE above exists: do NOT copy profile default_jewelry / default outfit / posture / scene from profile over the reference.)"
+        "If REFERENCE_IMAGE exists: **never** use profile for clothing or accessories — only the reference photo + USER_TEXT. "
+        "**Always** use profile for `subject.identity` (face, skin tone, body_type, hair color, marks). "
+        "Do not copy default outfit/jewelry/posture/scene from profile over the reference layout.)"
     )
     if model_profile_text and model_profile_text.strip():
         blocks.append(model_profile_text.strip())

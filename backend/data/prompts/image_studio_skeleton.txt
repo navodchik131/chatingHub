@@ -5,9 +5,9 @@
       "age": "<FROM_MODEL_PROFILE>",
       "ethnicity": "<FROM_MODEL_PROFILE>",
       "face_features": "<FROM_MODEL_PROFILE>",
-      "body_type": "<FROM_MODEL_PROFILE>",
+      "body_type": "<FROM_MODEL_PROFILE ONLY — never from user pose reference; figure/silhouette from saved model>",
       "skin": {
-        "tone": "<FROM_MODEL_PROFILE>",
+        "tone": "<FROM_MODEL_PROFILE ONLY — never from pose reference person; complexion from saved model>",
         "imperfections": "<FROM_MODEL_PROFILE — freckles, natural pores, small scars>"
       },
       "hair": {
@@ -34,20 +34,20 @@
     },
     "clothing": {
       "top": {
-        "type": "<FILL_FROM_IMAGE_OR_TEXT>",
+        "type": "<FILL_FROM_USER_REFERENCE_ONLY — no wardrobe from model profile; if ref has no top, state none/nude/topless>",
         "color": "<FILL>",
         "fabric": "<FILL>",
         "fit": "<FILL>",
         "details": "<FILL — folds, wear, thread, lint>"
       },
       "bottom": {
-        "type": "<FILL_FROM_IMAGE_OR_TEXT>",
+        "type": "<FILL_FROM_USER_REFERENCE_ONLY — if ref has no bottom garment, state none/nude>",
         "color": "<FILL>",
         "fabric": "<FILL>",
         "fit": "<FILL>",
         "details": "<FILL>"
       },
-      "accessories": "<FILL — jewelry, watch, glasses>",
+      "accessories": "<FILL_FROM_USER_REFERENCE_ONLY — jewelry etc. only if visible on ref; else none>",
       "imperfections": "<FILL — dust, pet hair on fabric, natural wear>"
     }
   },
