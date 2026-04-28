@@ -14,6 +14,23 @@ log = logging.getLogger(__name__)
 
 MAX_IMAGE_BYTES = 12 * 1024 * 1024
 
+_WAVESPEED_USER_POSE_REF_FIRST_PREFIX = (
+    "[REFERENCE_IMAGE_ORDER] The first image in this request is the user's uploaded reference photo. "
+    "Take from it the scene: pose (including hands), camera angle, camera height and distance to the subject, "
+    "framing and crop, lens perspective, clothing and hair as visible in that photo, background and lighting. "
+    "The following image(s) are identity-only references for face/body appearance — do not copy their pose or "
+    "camera from those; apply that identity into the first image's shot.\n\n"
+)
+
+
+def wavespeed_prompt_with_user_pose_reference_first(refined_prompt: str) -> str:
+    """Префикс к финальному промпту WaveSpeed, когда первый URL — загруженный пользователем референс."""
+    p = (refined_prompt or "").strip()
+    if not p:
+        return _WAVESPEED_USER_POSE_REF_FIRST_PREFIX.strip()
+    return _WAVESPEED_USER_POSE_REF_FIRST_PREFIX + p
+
+
 # Если .env задал пустой путь или на сервере нет data/prompts — не падаем с 503.
 _DEFAULT_IMAGE_STUDIO_SYSTEM = """
 You are a prompt builder for the WAN 2.7 Image Edit model.

@@ -52,8 +52,10 @@ from app.services.studio_generation_storage import (
 from app.services.studio_image_token import (
     create_generation_image_access_token,
     create_model_image_access_token,
+    create_pose_reference_access_token,
     decode_generation_image_access_token,
     decode_model_image_access_token,
+    decode_pose_reference_access_token,
 )
 from app.services.studio_openai import (
     MAX_IMAGE_BYTES,
@@ -62,6 +64,11 @@ from app.services.studio_openai import (
     load_image_studio_system,
     prepare_studio_prompt_skeleton,
     refine_prompt_via_openai,
+    wavespeed_prompt_with_user_pose_reference_first,
+)
+from app.services.studio_pose_reference import (
+    resolve_pose_reference_file,
+    save_pose_reference_bytes,
 )
 from app.services.wavespeed_client import seedream_v45_edit_image_url
 
@@ -169,6 +176,20 @@ async def public_studio_model_image(
         ) from None
     mime = mimetypes.guess_type(abs_path.name)[0] or "application/octet-stream"
     return FileResponse(abs_path, media_type=mime)
+
+
+@router.get("/studio/public-pose-reference")
+async def public_studio_pose_reference(t: str) -> FileResponse:
+    """Разовый референс позы/кадра из multipart — публичный URL для WaveSpeed (JWT)."""
+    try:
+        uid, fid = decode_pose_reference_access_token(t)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Недействительная ссылка") from None
+    path = resolve_pose_reference_file(uid, fid)
+    if path is None or not path.is_file():
+        raise HTTPException(status_code=404, detail="Не найдено") from None
+    mime = mimetypes.guess_type(path.name)[0] or "image/jpeg"
+    return FileResponse(path, media_type=mime)
 
 
 @router.get("/studio/public-generation-image")
@@ -635,25 +656,61 @@ async def api_studio_refine_prompt(
                     wavespeed_message = "Не удалось расшифровать ключ WaveSpeed — сохраните ключ снова."
                 if ws_key:
                     image_urls: list[str] = []
-                    for im in imgs[:10]:
-                        tok = create_model_image_access_token(user_id=oid, image_id=im.id)
-                        image_urls.append(
-                            f"{pub}/api/studio/public-model-image?t={quote(tok, safe='')}"
-                        )
-                    if _truthy_wavespeed_flag(wavespeed_single_reference):
-                        image_urls = image_urls[:1]
+                    user_pose_ref_prepended = False
+                    if image_bytes:
+                        try:
+                            fid = save_pose_reference_bytes(
+                                owner_id=oid,
+                                raw=image_bytes,
+                                content_type=image_mime,
+                            )
+                            ptok = create_pose_reference_access_token(
+                                user_id=oid, file_id=fid
+                            )
+                            image_urls.append(
+                                f"{pub}/api/studio/public-pose-reference?t={quote(ptok, safe='')}"
+                            )
+                            user_pose_ref_prepended = True
+                        except Exception as e:
+                            log.warning(
+                                "studio: не удалось сохранить референс для WaveSpeed: %s",
+                                e,
+                            )
+                            wavespeed_message = (
+                                "Не удалось подготовить загруженный референс для WaveSpeed. "
+                                "Повторите или уберите файл."
+                            )
+                    if not wavespeed_message:
+                        for im in imgs[:10]:
+                            tok = create_model_image_access_token(
+                                user_id=oid, image_id=im.id
+                            )
+                            image_urls.append(
+                                f"{pub}/api/studio/public-model-image?t={quote(tok, safe='')}"
+                            )
+                        if _truthy_wavespeed_flag(wavespeed_single_reference):
+                            if user_pose_ref_prepended and len(image_urls) >= 2:
+                                image_urls = image_urls[:2]
+                            else:
+                                image_urls = image_urls[:1]
+                    wavespeed_prompt = (
+                        wavespeed_prompt_with_user_pose_reference_first(refined)
+                        if user_pose_ref_prepended
+                        else refined
+                    )
                     size_for_ws: str | None
                     if settings.wavespeed_seedream_omit_size:
                         size_for_ws = None
                     else:
                         size_for_ws = wavespeed_size_string(aspect_key)
                     try:
-                        generated_image_url = await seedream_v45_edit_image_url(
-                            api_key=ws_key,
-                            image_urls=image_urls,
-                            prompt=refined,
-                            size=size_for_ws,
-                        )
+                        if not wavespeed_message:
+                            generated_image_url = await seedream_v45_edit_image_url(
+                                api_key=ws_key,
+                                image_urls=image_urls,
+                                prompt=wavespeed_prompt,
+                                size=size_for_ws,
+                            )
                     except RuntimeError as e:
                         wavespeed_message = str(e)
                         low = wavespeed_message.lower()
