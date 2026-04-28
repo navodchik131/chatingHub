@@ -690,6 +690,16 @@ a.studio-download {
   font-size: 0.9rem;
 }
 
+.studio-archive-more-wrap {
+  margin-top: 1rem;
+  display: flex;
+  justify-content: center;
+}
+
+.studio-archive-more-btn {
+  min-width: 10rem;
+}
+
 .studio-archive-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));

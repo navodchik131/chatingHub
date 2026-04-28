@@ -274,6 +274,14 @@ interface StudioArchiveItem {
   image_url: string
 }
 
+interface StudioGenerationsPage {
+  items: StudioArchiveItem[]
+  has_more: boolean
+}
+
+/** Должен совпадать с default limit у GET /api/studio/generations */
+const STUDIO_ARCHIVE_PAGE = 10
+
 export default function App() {
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [selectedId, setSelectedId] = useState<number | null>(null)
@@ -390,6 +398,15 @@ export default function App() {
   const [studioAspectPresets, setStudioAspectPresets] = useState<StudioAspectPreset[]>([])
   const [studioOutputAspect, setStudioOutputAspect] = useState('9:16')
   const [studioGenerations, setStudioGenerations] = useState<StudioArchiveItem[]>([])
+  const [studioGenHasMore, setStudioGenHasMore] = useState(false)
+  const [studioGenLoadingMore, setStudioGenLoadingMore] = useState(false)
+  const [studioArchiveInitialLoading, setStudioArchiveInitialLoading] = useState(false)
+
+  const studioGenerationsRef = useRef<StudioArchiveItem[]>([])
+
+  useEffect(() => {
+    studioGenerationsRef.current = studioGenerations
+  }, [studioGenerations])
 
   useEffect(() => {
     selectedIdRef.current = selectedId
@@ -478,10 +495,40 @@ export default function App() {
     if (r.ok) setStudioModels((await r.json()) as UserStudioModel[])
   }, [])
 
-  const loadStudioGenerations = useCallback(async () => {
-    const r = await apiFetch('/api/studio/generations')
-    if (r.ok) setStudioGenerations((await r.json()) as StudioArchiveItem[])
+  const fetchStudioArchivePage = useCallback(async (skip: number) => {
+    const p = new URLSearchParams()
+    p.set('limit', String(STUDIO_ARCHIVE_PAGE))
+    p.set('skip', String(skip))
+    const r = await apiFetch(`/api/studio/generations?${p}`)
+    if (!r.ok) throw new Error('Не удалось загрузить архив студии')
+    return (await r.json()) as StudioGenerationsPage
   }, [])
+
+  const loadStudioGenerationsReset = useCallback(async () => {
+    const page = await fetchStudioArchivePage(0)
+    setStudioGenerations(page.items)
+    setStudioGenHasMore(page.has_more)
+  }, [fetchStudioArchivePage])
+
+  const loadMoreStudioGenerations = useCallback(async () => {
+    if (studioGenLoadingMore || !studioGenHasMore) return
+    setStudioGenLoadingMore(true)
+    setError(null)
+    try {
+      const skip = studioGenerationsRef.current.length
+      const page = await fetchStudioArchivePage(skip)
+      setStudioGenerations((prev) => {
+        const seen = new Set(prev.map((x) => x.id))
+        const add = page.items.filter((x) => !seen.has(x.id))
+        return [...prev, ...add]
+      })
+      setStudioGenHasMore(page.has_more)
+    } catch (e) {
+      setError(String(e))
+    } finally {
+      setStudioGenLoadingMore(false)
+    }
+  }, [fetchStudioArchivePage, studioGenLoadingMore, studioGenHasMore])
 
   const loadAdminStats = useCallback(async () => {
     const r = await apiFetch('/api/admin/stats')
@@ -561,8 +608,12 @@ export default function App() {
 
   useEffect(() => {
     if (!authed || appSection !== 'studio' || !canStudioGenerate) return
-    void loadStudioGenerations()
-  }, [authed, appSection, canStudioGenerate, loadStudioGenerations])
+    setStudioArchiveInitialLoading(true)
+    setError(null)
+    void loadStudioGenerationsReset()
+      .catch((e) => setError(String(e)))
+      .finally(() => setStudioArchiveInitialLoading(false))
+  }, [authed, appSection, canStudioGenerate, loadStudioGenerationsReset])
 
   const loadHealth = useCallback(async () => {
     const r = await fetch('/api/health')
@@ -1054,7 +1105,7 @@ export default function App() {
       return
     }
     setStudioGenImageUrl((prev) => (prev === imageUrl ? null : prev))
-    void loadStudioGenerations()
+    void loadStudioGenerationsReset()
   }
 
   const refineStudioPrompt = async () => {
@@ -1089,7 +1140,7 @@ export default function App() {
       setStudioGenImageUrl(data.generated_image_url?.trim() || null)
       setStudioWavespeedMsg(data.wavespeed_message?.trim() || null)
       void refreshMe()
-      void loadStudioGenerations()
+      void loadStudioGenerationsReset()
     } catch (e) {
       setError(e instanceof TypeError && e.message === 'Failed to fetch' ? 'Сеть: не удалось связаться с сервером (проверьте, что бэкенд запущен и порт / proxy).' : (e instanceof Error ? e.message : 'Неизвестная ошибка запроса'))
     } finally {
@@ -2563,37 +2614,53 @@ export default function App() {
             <p className="muted studio-archive-lead">
               Картинки с WaveSpeed сохраняются на сервере — их можно открыть позже.
             </p>
-            {studioGenerations.length === 0 ? (
+            {studioArchiveInitialLoading ? (
+              <p className="muted">Загрузка архива…</p>
+            ) : studioGenerations.length === 0 ? (
               <p className="muted empty-hint">Пока нет сохранённых генераций.</p>
             ) : (
-              <ul className="studio-archive-grid">
-                {studioGenerations.map((g) => (
-                  <li key={g.id} className="studio-archive-item">
+              <>
+                <ul className="studio-archive-grid">
+                  {studioGenerations.map((g) => (
+                    <li key={g.id} className="studio-archive-item">
+                      <button
+                        type="button"
+                        className="studio-archive-thumb-btn"
+                        title={g.prompt_excerpt?.trim() || 'Открыть в «Результат»'}
+                        onClick={() => setStudioGenImageUrl(g.image_url)}
+                      >
+                        <img src={g.image_url} alt="" className="studio-archive-thumb" loading="lazy" />
+                      </button>
+                      <button
+                        type="button"
+                        className="studio-archive-del"
+                        aria-label="Удалить из архива"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          void deleteStudioGeneration(g.id, g.image_url)
+                        }}
+                      >
+                        ×
+                      </button>
+                      <span className="studio-archive-meta" title={g.created_at}>
+                        {g.model_name ?? '—'}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                {studioGenHasMore ? (
+                  <div className="studio-archive-more-wrap">
                     <button
                       type="button"
-                      className="studio-archive-thumb-btn"
-                      title={g.prompt_excerpt?.trim() || 'Открыть в «Результат»'}
-                      onClick={() => setStudioGenImageUrl(g.image_url)}
+                      className="send-btn studio-archive-more-btn"
+                      disabled={studioGenLoadingMore}
+                      onClick={() => void loadMoreStudioGenerations()}
                     >
-                      <img src={g.image_url} alt="" className="studio-archive-thumb" loading="lazy" />
+                      {studioGenLoadingMore ? 'Загрузка…' : `Ещё ${STUDIO_ARCHIVE_PAGE}`}
                     </button>
-                    <button
-                      type="button"
-                      className="studio-archive-del"
-                      aria-label="Удалить из архива"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        void deleteStudioGeneration(g.id, g.image_url)
-                      }}
-                    >
-                      ×
-                    </button>
-                    <span className="studio-archive-meta" title={g.created_at}>
-                      {g.model_name ?? '—'}
-                    </span>
-                  </li>
-                ))}
-              </ul>
+                  </div>
+                ) : null}
+              </>
             )}
           </section>
         ) : null}

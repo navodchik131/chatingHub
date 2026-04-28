@@ -128,6 +128,11 @@ class StudioGenerationOut(BaseModel):
     image_url: str
 
 
+class StudioGenerationsPageOut(BaseModel):
+    items: list[StudioGenerationOut]
+    has_more: bool
+
+
 class WavespeedIntegrationIn(BaseModel):
     api_key: str = Field(min_length=8, max_length=512)
 

@@ -7,7 +7,7 @@ import uuid
 from pathlib import Path
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -25,6 +25,7 @@ from app.db.models import (
 from app.db.session import get_session
 from app.schemas import (
     StudioGenerationOut,
+    StudioGenerationsPageOut,
     StudioModelImageOut,
     StudioModelProfileGenerateOut,
     StudioRefinePromptOut,
@@ -218,35 +219,41 @@ async def public_studio_generation_image(
     return FileResponse(abs_path, media_type=mime)
 
 
-@router.get("/studio/generations", response_model=list[StudioGenerationOut])
+@router.get("/studio/generations", response_model=StudioGenerationsPageOut)
 async def api_list_studio_generations(
     request: Request,
+    limit: int = Query(10, ge=1, le=50),
+    skip: int = Query(0, ge=0, le=50_000),
     session: AsyncSession = Depends(get_session),
     user: User = Depends(get_current_user),
-) -> list[StudioGenerationOut]:
+) -> StudioGenerationsPageOut:
     assert_permission(user, PERM_STUDIO_GENERATE)
     oid = workspace_owner_id(user)
+    take = int(limit) + 1
     stmt = (
         select(StudioGeneration)
         .where(StudioGeneration.user_id == oid)
-        .order_by(StudioGeneration.created_at.desc())
-        .limit(80)
+        .order_by(StudioGeneration.created_at.desc(), StudioGeneration.id.desc())
+        .offset(int(skip))
+        .limit(take)
     )
-    rows = (await session.execute(stmt)).scalars().all()
+    rows = list((await session.execute(stmt)).scalars().all())
+    has_more = len(rows) > limit
+    rows = rows[:limit]
     base = _public_app_base(request)
     if not base:
-        return []
+        return StudioGenerationsPageOut(items=[], has_more=False)
     model_ids = {r.studio_model_id for r in rows if r.studio_model_id}
     name_by_id: dict[int, str] = {}
     if model_ids:
         qm = await session.execute(select(UserStudioModel).where(UserStudioModel.id.in_(model_ids)))
         for m in qm.scalars().all():
             name_by_id[m.id] = m.name
-    out: list[StudioGenerationOut] = []
+    out_items: list[StudioGenerationOut] = []
     for r in rows:
         tok = create_generation_image_access_token(user_id=oid, generation_id=r.id)
         url = f"{base}/api/studio/public-generation-image?t={quote(tok, safe='')}"
-        out.append(
+        out_items.append(
             StudioGenerationOut(
                 id=r.id,
                 created_at=r.created_at,
@@ -257,7 +264,7 @@ async def api_list_studio_generations(
                 image_url=url,
             )
         )
-    return out
+    return StudioGenerationsPageOut(items=out_items, has_more=has_more)
 
 
 @router.delete("/studio/generations/{gen_id}")
