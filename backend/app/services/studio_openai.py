@@ -73,6 +73,51 @@ def finalize_wavespeed_studio_prompt(
     return out
 
 
+_NANO_BANANA_IDENTITY_LOCK_PREFIX = (
+    "[MULTI_IMAGE_EDIT — same person] The first input image(s) are reference photos of ONE real person. "
+    "The output MUST preserve her face, facial structure, eyes, nose, mouth, skin tone, hairline and hair, "
+    "and body identity exactly as in these references — do not invent a different person or a generic model face. "
+    "The block below is a structured scene brief (JSON); identity always wins over any vague text.\n\n"
+)
+
+_NANO_BANANA_POSE_LAST_NOTE = (
+    "\n\n[LAST_INPUT_IMAGE] The last input image is for pose, framing, outfit/coverage and scene/light only. "
+    "Ignore any face on that last image — the subject must match only the earlier identity reference image(s)."
+)
+
+
+def finalize_nano_banana_studio_prompt(
+    refined_prompt: str,
+    *,
+    studio_mode: str,
+    user_photo_edit_first: bool,
+    user_pose_reference_is_last: bool,
+) -> str:
+    """
+    Nano Banana Pro: порядок URL другой, чем у WAN (сначала лицо модели, поза пользователя — в конце).
+    user_photo_edit_first: «Доработать фото» — первое фото = база для правок (порядок не меняли).
+    user_pose_reference_is_last: после reorder загруженный референс позы — последний кадр в списке.
+    """
+    mode = (studio_mode or "model").strip().lower()
+    p = (refined_prompt or "").strip()
+
+    if user_photo_edit_first and mode == "photo_edit":
+        out = (
+            _WAVESPEED_PHOTO_EDIT_USER_FIRST_PREFIX.strip()
+            if not p
+            else _WAVESPEED_PHOTO_EDIT_USER_FIRST_PREFIX + p
+        )
+    else:
+        head = _NANO_BANANA_IDENTITY_LOCK_PREFIX
+        out = head.strip() if not p else head + p
+        if user_pose_reference_is_last:
+            out = out.rstrip() + _NANO_BANANA_POSE_LAST_NOTE
+
+    if mode == "no_face":
+        out = (out or "").rstrip() + _WAVESPEED_NO_FACE_SUFFIX
+    return out
+
+
 # Если .env задал пустой путь или на сервере нет data/prompts — не падаем с 503.
 _DEFAULT_IMAGE_STUDIO_SYSTEM = """
 You are a prompt builder for the WAN 2.7 Image Edit model.

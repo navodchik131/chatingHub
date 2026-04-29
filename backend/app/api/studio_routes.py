@@ -63,6 +63,7 @@ from app.services.studio_image_token import (
 from app.services.studio_openai import (
     MAX_IMAGE_BYTES,
     describe_reference_image_openai,
+    finalize_nano_banana_studio_prompt,
     finalize_wavespeed_studio_prompt,
     generate_model_profile_json_from_images,
     load_image_studio_system,
@@ -141,6 +142,24 @@ def _normalize_studio_wave_profile(raw: str | None) -> str:
     """regular = Nano Banana Pro (обычные фото); nsfw = WAN/Seedream из .env."""
     p = (raw or "nsfw").strip().lower()
     return "regular" if p == "regular" else "nsfw"
+
+
+def _nano_banana_reorder_image_urls(
+    image_urls: list[str],
+    *,
+    studio_mode: str,
+    user_pose_ref_prepended: bool,
+) -> list[str]:
+    """
+    WAN ожидает: [поза пользователя, …фото модели]. Nano Banana стабильнее держит лицо, если
+    сначала идут кадры личности, загруженный референс позы — последним.
+    «Доработать фото»: первый URL = редактируемое фото — не трогаем порядок.
+    """
+    if not image_urls or studio_mode == "photo_edit":
+        return image_urls
+    if user_pose_ref_prepended and len(image_urls) >= 2:
+        return image_urls[1:] + [image_urls[0]]
+    return image_urls
 
 
 def _model_dir(user_id: int, model_id: int) -> Path:
@@ -904,17 +923,40 @@ async def api_studio_refine_prompt(
                                 )
 
                         if not wavespeed_message and image_urls:
-                            if _truthy_wavespeed_flag(wavespeed_single_reference):
+                            if wave_profile_n == "nsfw" and _truthy_wavespeed_flag(
+                                wavespeed_single_reference
+                            ):
                                 if user_pose_ref_prepended and len(image_urls) >= 2:
                                     image_urls = image_urls[:2]
                                 else:
                                     image_urls = image_urls[:1]
 
-                            wavespeed_prompt = finalize_wavespeed_studio_prompt(
-                                refined,
-                                studio_mode=mode_n,
-                                user_image_first=user_pose_ref_prepended,
-                            )
+                            pose_is_last_after_reorder = False
+                            if wave_profile_n == "regular":
+                                pose_is_last_after_reorder = bool(
+                                    user_pose_ref_prepended
+                                    and mode_n != "photo_edit"
+                                    and len(image_urls) >= 2
+                                )
+                                image_urls = _nano_banana_reorder_image_urls(
+                                    image_urls,
+                                    studio_mode=mode_n,
+                                    user_pose_ref_prepended=user_pose_ref_prepended,
+                                )
+                                wavespeed_prompt = finalize_nano_banana_studio_prompt(
+                                    refined,
+                                    studio_mode=mode_n,
+                                    user_photo_edit_first=bool(
+                                        user_pose_ref_prepended and mode_n == "photo_edit"
+                                    ),
+                                    user_pose_reference_is_last=pose_is_last_after_reorder,
+                                )
+                            else:
+                                wavespeed_prompt = finalize_wavespeed_studio_prompt(
+                                    refined,
+                                    studio_mode=mode_n,
+                                    user_image_first=user_pose_ref_prepended,
+                                )
                             size_for_ws: str | None
                             if settings.wavespeed_seedream_omit_size:
                                 size_for_ws = None
