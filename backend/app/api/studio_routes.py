@@ -61,11 +61,11 @@ from app.services.studio_image_token import (
 from app.services.studio_openai import (
     MAX_IMAGE_BYTES,
     describe_reference_image_openai,
+    finalize_wavespeed_studio_prompt,
     generate_model_profile_json_from_images,
     load_image_studio_system,
     prepare_studio_prompt_skeleton,
     refine_prompt_via_openai,
-    wavespeed_prompt_with_user_pose_reference_first,
 )
 from app.services.studio_pose_reference import (
     resolve_pose_reference_file,
@@ -111,6 +111,18 @@ def _truthy_wavespeed_flag(raw: str | None) -> bool:
     if raw is None:
         return True
     return str(raw).strip().lower() not in ("0", "false", "no", "off", "")
+
+
+_ALLOWED_STUDIO_MODES = frozenset({"model", "photo_edit", "no_face"})
+
+
+def _normalize_studio_mode(raw: str | None) -> str:
+    m = (raw or "model").strip().lower().replace("-", "_")
+    if m in ("edit", "refine", "enhance"):
+        return "photo_edit"
+    if m in _ALLOWED_STUDIO_MODES:
+        return m
+    return "model"
 
 
 def _model_dir(user_id: int, model_id: int) -> Path:
@@ -548,6 +560,7 @@ async def api_studio_refine_prompt(
     model_id: str | None = Form(None),
     image: UploadFile | None = File(None),
     output_aspect: str = Form("9:16"),
+    studio_mode: str = Form("model"),
     generate_wavespeed: str | None = Form(None),
     wavespeed_single_reference: str | None = Form(None),
     session: AsyncSession = Depends(get_session),
@@ -610,6 +623,18 @@ async def api_studio_refine_prompt(
             raise HTTPException(status_code=404, detail="Модель не найдена")
         model_profile_text = (sm_loaded.profile_text or "").strip() or None
 
+    mode_n = _normalize_studio_mode(studio_mode)
+    if mode_n == "photo_edit" and not image_bytes:
+        raise HTTPException(
+            status_code=400,
+            detail="В режиме «Доработать фото» загрузите изображение.",
+        )
+    if mode_n == "no_face" and mid is None and not image_bytes:
+        raise HTTPException(
+            status_code=400,
+            detail="В режиме «Без лица» выберите сохранённую модель или загрузите референс.",
+        )
+
     if not desc and not image_bytes and not model_profile_text:
         raise HTTPException(
             status_code=400,
@@ -633,21 +658,23 @@ async def api_studio_refine_prompt(
             reference_scene_description=reference_scene,
             model_profile_text=model_profile_text,
             output_aspect_key=aspect_key,
+            studio_mode=mode_n,
         )
     except RuntimeError as e:
         raise HTTPException(status_code=502, detail=str(e)) from e
 
     generated_image_url: str | None = None
     wavespeed_message: str | None = None
-    if _truthy_wavespeed_flag(generate_wavespeed) and mid is not None and sm_loaded is not None:
+    if _truthy_wavespeed_flag(generate_wavespeed):
         ws_row = await session.scalar(
             select(WavespeedConnection).where(WavespeedConnection.user_id == oid)
         )
-        imgs = sorted(sm_loaded.images, key=lambda x: x.id)
+        imgs_model: list[UserStudioModelImage] = []
+        if sm_loaded is not None:
+            imgs_model = sorted(sm_loaded.images, key=lambda x: x.id)
+
         if not ws_row or not (ws_row.api_key_encrypted or "").strip():
             wavespeed_message = "Сохраните API-ключ WaveSpeed в кабинете (интеграции)."
-        elif not imgs:
-            wavespeed_message = "У выбранной модели нет загруженных фото — добавьте снимки к модели."
         else:
             pub = (settings.public_app_url or "").strip().rstrip("/")
             if not pub.lower().startswith("https://"):
@@ -656,88 +683,128 @@ async def api_studio_refine_prompt(
                     "PUBLIC_APP_URL=https://… (например ngrok на порт бэкенда) и перезапустите сервер."
                 )
             else:
-                try:
-                    ws_key = decrypt_secret(ws_row.api_key_encrypted)
-                except ValueError:
-                    ws_key = ""
-                    wavespeed_message = "Не удалось расшифровать ключ WaveSpeed — сохраните ключ снова."
-                if ws_key:
-                    image_urls: list[str] = []
-                    user_pose_ref_prepended = False
-                    if image_bytes:
-                        try:
-                            fid = save_pose_reference_bytes(
-                                owner_id=oid,
-                                raw=image_bytes,
-                                content_type=image_mime,
-                            )
-                            ptok = create_pose_reference_access_token(
-                                user_id=oid, file_id=fid
-                            )
-                            image_urls.append(
-                                f"{pub}/api/studio/public-pose-reference?t={quote(ptok, safe='')}"
-                            )
-                            user_pose_ref_prepended = True
-                        except Exception as e:
-                            log.warning(
-                                "studio: не удалось сохранить референс для WaveSpeed: %s",
-                                e,
-                            )
-                            wavespeed_message = (
-                                "Не удалось подготовить загруженный референс для WaveSpeed. "
-                                "Повторите или уберите файл."
-                            )
-                    if not wavespeed_message:
-                        for im in imgs[:10]:
-                            tok = create_model_image_access_token(
-                                user_id=oid, image_id=im.id
-                            )
-                            image_urls.append(
-                                f"{pub}/api/studio/public-model-image?t={quote(tok, safe='')}"
-                            )
-                        if _truthy_wavespeed_flag(wavespeed_single_reference):
-                            if user_pose_ref_prepended and len(image_urls) >= 2:
-                                image_urls = image_urls[:2]
-                            else:
-                                image_urls = image_urls[:1]
-                    wavespeed_prompt = (
-                        wavespeed_prompt_with_user_pose_reference_first(refined)
-                        if user_pose_ref_prepended
-                        else refined
-                    )
-                    size_for_ws: str | None
-                    if settings.wavespeed_seedream_omit_size:
-                        size_for_ws = None
-                    else:
-                        size_for_ws = wavespeed_size_string(aspect_key)
-                    try:
-                        if not wavespeed_message:
-                            generated_image_url = await seedream_v45_edit_image_url(
-                                api_key=ws_key,
-                                image_urls=image_urls,
-                                prompt=wavespeed_prompt,
-                                size=size_for_ws,
-                            )
-                    except RuntimeError as e:
-                        wavespeed_message = str(e)
-                        low = wavespeed_message.lower()
-                        if "something went wrong" in low or "try again" in low:
-                            wavespeed_message = (
-                                f"{wavespeed_message} "
-                                "Часто это: баланс/лимит на wavespeed.ai, кратковременный сбой API "
-                                "(см. status.wavespeed.ai) или слишком тяжёлый/нестандартный запрос. "
-                                "Повторите позже. Если сбой стабилен — в backend/.env поставьте "
-                                "WAVESPEED_SEEDREAM_SYNC=false (режим с опросом вместо sync) и перезапустите API. "
-                                f"Публичный референс: {pub}/api/studio/public-model-image?… (без логина — 200 и картинка). "
-                                "Если в Playground тот же JSON срабатывает, а в интеграции нет — "
-                                "попробуйте WAVESPEED_SEEDREAM_OMIT_SIZE=true (как пустой size на сайте)."
-                            )
-                        log.warning(
-                            "WaveSpeed generation failed (owner_id=%s actor=%s): %s",
-                            oid,
-                            user.id,
-                            wavespeed_message,
+                if mode_n == "model":
+                    if mid is None or sm_loaded is None:
+                        wavespeed_message = (
+                            "В нормальном режиме «Модель» выберите сохранённую модель с фотографиями."
                         )
+                    elif not imgs_model:
+                        wavespeed_message = (
+                            "У выбранной модели нет загруженных фото — добавьте снимки к модели."
+                        )
+                elif mode_n == "photo_edit":
+                    if not image_bytes:
+                        wavespeed_message = "Для доработки фото загрузите изображение."
+                elif mode_n == "no_face":
+                    if not image_bytes and (
+                        mid is None or sm_loaded is None or not imgs_model
+                    ):
+                        wavespeed_message = (
+                            "В режиме «Без лица» выберите модель с фото или загрузите референс."
+                        )
+
+                if not wavespeed_message:
+                    try:
+                        ws_key = decrypt_secret(ws_row.api_key_encrypted)
+                    except ValueError:
+                        ws_key = ""
+                        wavespeed_message = (
+                            "Не удалось расшифровать ключ WaveSpeed — сохраните ключ снова."
+                        )
+                    if ws_key and not wavespeed_message:
+                        image_urls: list[str] = []
+                        user_pose_ref_prepended = False
+                        if image_bytes:
+                            try:
+                                fid = save_pose_reference_bytes(
+                                    owner_id=oid,
+                                    raw=image_bytes,
+                                    content_type=image_mime,
+                                )
+                                ptok = create_pose_reference_access_token(
+                                    user_id=oid, file_id=fid
+                                )
+                                image_urls.append(
+                                    f"{pub}/api/studio/public-pose-reference?t={quote(ptok, safe='')}"
+                                )
+                                user_pose_ref_prepended = True
+                            except Exception as e:
+                                log.warning(
+                                    "studio: не удалось сохранить референс для WaveSpeed: %s",
+                                    e,
+                                )
+                                wavespeed_message = (
+                                    "Не удалось подготовить загруженный референс для WaveSpeed. "
+                                    "Повторите или уберите файл."
+                                )
+
+                        if not wavespeed_message:
+                            attach_model_urls = False
+                            if mode_n == "model":
+                                attach_model_urls = bool(imgs_model)
+                            elif mode_n == "no_face":
+                                attach_model_urls = bool(sm_loaded and imgs_model)
+                            elif mode_n == "photo_edit":
+                                attach_model_urls = bool(sm_loaded and imgs_model)
+
+                            if attach_model_urls:
+                                for im in imgs_model[:10]:
+                                    tok = create_model_image_access_token(
+                                        user_id=oid, image_id=im.id
+                                    )
+                                    image_urls.append(
+                                        f"{pub}/api/studio/public-model-image?t={quote(tok, safe='')}"
+                                    )
+
+                            if not image_urls:
+                                wavespeed_message = (
+                                    "Нет изображений для WaveSpeed — проверьте режим, модель и файлы."
+                                )
+
+                        if not wavespeed_message and image_urls:
+                            if _truthy_wavespeed_flag(wavespeed_single_reference):
+                                if user_pose_ref_prepended and len(image_urls) >= 2:
+                                    image_urls = image_urls[:2]
+                                else:
+                                    image_urls = image_urls[:1]
+
+                            wavespeed_prompt = finalize_wavespeed_studio_prompt(
+                                refined,
+                                studio_mode=mode_n,
+                                user_image_first=user_pose_ref_prepended,
+                            )
+                            size_for_ws: str | None
+                            if settings.wavespeed_seedream_omit_size:
+                                size_for_ws = None
+                            else:
+                                size_for_ws = wavespeed_size_string(aspect_key)
+                            try:
+                                generated_image_url = await seedream_v45_edit_image_url(
+                                    api_key=ws_key,
+                                    image_urls=image_urls,
+                                    prompt=wavespeed_prompt,
+                                    size=size_for_ws,
+                                )
+                            except RuntimeError as e:
+                                wavespeed_message = str(e)
+                                low = wavespeed_message.lower()
+                                if "something went wrong" in low or "try again" in low:
+                                    wavespeed_message = (
+                                        f"{wavespeed_message} "
+                                        "Часто это: баланс/лимит на wavespeed.ai, кратковременный сбой API "
+                                        "(см. status.wavespeed.ai) или слишком тяжёлый/нестандартный запрос. "
+                                        "Повторите позже. Если сбой стабилен — в backend/.env поставьте "
+                                        "WAVESPEED_SEEDREAM_SYNC=false (режим с опросом вместо sync) и перезапустите API. "
+                                        f"Публичный референс: {pub}/api/studio/public-model-image?… (без логина — 200 и картинка). "
+                                        "Если в Playground тот же JSON срабатывает, а в интеграции нет — "
+                                        "попробуйте WAVESPEED_SEEDREAM_OMIT_SIZE=true (как пустой size на сайте)."
+                                    )
+                                log.warning(
+                                    "WaveSpeed generation failed (owner_id=%s actor=%s): %s",
+                                    oid,
+                                    user.id,
+                                    wavespeed_message,
+                                )
 
     generation_id: int | None = None
     if generated_image_url:
@@ -770,6 +837,7 @@ async def api_studio_refine_prompt(
             "two_step": bool(image_bytes),
             "wavespeed": bool(generated_image_url),
             "generation_id": generation_id,
+            "studio_mode": mode_n,
         },
     )
     await session.commit()

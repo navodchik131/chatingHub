@@ -33,6 +33,46 @@ def wavespeed_prompt_with_user_pose_reference_first(refined_prompt: str) -> str:
     return _WAVESPEED_USER_POSE_REF_FIRST_PREFIX + p
 
 
+_WAVESPEED_PHOTO_EDIT_USER_FIRST_PREFIX = (
+    "[EDIT_BASE] The first image is the user's photograph to edit. "
+    "Apply the JSON scene/instruction as modifications to this image (lighting, background, wardrobe, pose tweaks, cleanup) while keeping "
+    "the same person as the base unless the instruction explicitly asks to change identity. "
+    "If further images follow, they are optional model references — use only for skin/body/hair cues when the edit calls for them; "
+    "do not replace the first image's face with another face unless requested.\n\n"
+)
+
+_WAVESPEED_NO_FACE_SUFFIX = (
+    "\n\n[FRAMING] Do not show the subject's face or head unless the scene explicitly requires it. "
+    "Prefer crops on legs, feet, lower body, hands, or torso without head. "
+    "Do not add, restore, or reconstruct a face."
+)
+
+
+def finalize_wavespeed_studio_prompt(
+    refined_prompt: str,
+    *,
+    studio_mode: str,
+    user_image_first: bool,
+) -> str:
+    """Сборка финального текстового промпта для WaveSpeed в зависимости от режима студии."""
+    mode = (studio_mode or "model").strip().lower()
+    p = (refined_prompt or "").strip()
+    if user_image_first:
+        if mode == "photo_edit":
+            out = (
+                _WAVESPEED_PHOTO_EDIT_USER_FIRST_PREFIX.strip()
+                if not p
+                else _WAVESPEED_PHOTO_EDIT_USER_FIRST_PREFIX + p
+            )
+        else:
+            out = wavespeed_prompt_with_user_pose_reference_first(p)
+    else:
+        out = p
+    if mode == "no_face":
+        out = (out or "").rstrip() + _WAVESPEED_NO_FACE_SUFFIX
+    return out
+
+
 # Если .env задал пустой путь или на сервере нет data/prompts — не падаем с 503.
 _DEFAULT_IMAGE_STUDIO_SYSTEM = """
 You are a prompt builder for the WAN 2.7 Image Edit model.
@@ -294,6 +334,26 @@ async def describe_reference_image_openai(
     )
 
 
+def _studio_mode_refiner_block(studio_mode: str) -> str:
+    m = (studio_mode or "model").strip().lower()
+    if m == "photo_edit":
+        return (
+            "## STUDIO_MODE: PHOTO_EDIT\n"
+            "Treat the REFERENCE_IMAGE (when present) as the primary photograph to edit. "
+            "Fill the skeleton so the result reflects USER_TEXT changes applied to that photo. "
+            "MODEL_PROFILE (if any) refines visible identity cues only when the edit requires them — "
+            "do not replace the uploaded person's face with the model's unless USER_TEXT asks.\n"
+        )
+    if m == "no_face":
+        return (
+            "## STUDIO_MODE: NO_FACE_FRAMING\n"
+            "Final image must NOT show the subject's face or head unless USER_TEXT explicitly requires a face. "
+            "Prefer legs/feet/hands/lower-body/torso-below-shoulders framing consistent with references. "
+            "In subject.identity, omit or minimize facial detail; never invent or restore a face.\n"
+        )
+    return ""
+
+
 def _build_refiner_user_message(
     *,
     skeleton: str,
@@ -301,6 +361,7 @@ def _build_refiner_user_message(
     reference_scene_description: str | None,
     model_profile_text: str | None,
     output_aspect_key: str,
+    studio_mode: str = "model",
 ) -> str:
     has_ref = bool((reference_scene_description or "").strip())
     blocks: list[str] = []
@@ -329,6 +390,10 @@ def _build_refiner_user_message(
             "(no model selected — use neutral, minimal identity only where required, or from USER_TEXT only)"
         )
 
+    mode_extra = _studio_mode_refiner_block(studio_mode)
+    if mode_extra:
+        blocks.append(mode_extra.strip())
+
     u = (user_text or "").strip()
     blocks.append("## USER_TEXT (mood, tweaks; does not override reference layout unless clearly contradictory)\n" + (u if u else "(no additional text)"))
     blocks.append(
@@ -347,6 +412,7 @@ async def refine_prompt_via_openai(
     reference_scene_description: str | None,
     model_profile_text: str | None,
     output_aspect_key: str,
+    studio_mode: str = "model",
 ) -> str:
     """Шаг 2: одна сессия чата — system = инструкция, user = шаблон + данные; ответ: JSON-строка."""
     if not (system_instruction or "").strip():
@@ -358,6 +424,7 @@ async def refine_prompt_via_openai(
         reference_scene_description=reference_scene_description,
         model_profile_text=model_profile_text,
         output_aspect_key=output_aspect_key,
+        studio_mode=studio_mode,
     )
     raw = await _chat_completion_text(
         model=model,

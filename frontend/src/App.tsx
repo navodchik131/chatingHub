@@ -282,6 +282,8 @@ interface StudioGenerationsPage {
 /** Должен совпадать с default limit у GET /api/studio/generations */
 const STUDIO_ARCHIVE_PAGE = 10
 
+type StudioJobMode = 'model' | 'photo_edit' | 'no_face'
+
 export default function App() {
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [selectedId, setSelectedId] = useState<number | null>(null)
@@ -376,6 +378,7 @@ export default function App() {
   const [appSection, setAppSection] = useState<'chat' | 'studio'>('chat')
   const [studioDesc, setStudioDesc] = useState('')
   const [studioFile, setStudioFile] = useState<File | null>(null)
+  const [studioMode, setStudioMode] = useState<StudioJobMode>('model')
   const [studioBusy, setStudioBusy] = useState(false)
   const [studioModels, setStudioModels] = useState<UserStudioModel[]>([])
   const [studioSelectedModelId, setStudioSelectedModelId] = useState<number | null>(null)
@@ -1114,6 +1117,14 @@ export default function App() {
       setError('Добавьте описание, референс и/или выберите сохранённую модель.')
       return
     }
+    if (studioMode === 'photo_edit' && !studioFile) {
+      setError('В режиме «Доработать фото» загрузите изображение.')
+      return
+    }
+    if (studioMode === 'no_face' && studioSelectedModelId == null && !studioFile) {
+      setError('В режиме «Без лица» выберите модель или загрузите референс.')
+      return
+    }
     setStudioBusy(true)
     setStudioGenImageUrl(null)
     setStudioWavespeedMsg(null)
@@ -1123,6 +1134,7 @@ export default function App() {
       if (studioSelectedModelId != null) fd.append('model_id', String(studioSelectedModelId))
       if (studioFile) fd.append('image', studioFile)
       fd.append('output_aspect', studioOutputAspect)
+      fd.append('studio_mode', studioMode)
       fd.append('generate_wavespeed', '1')
       fd.append('wavespeed_single_reference', '1')
       const r = await apiFetch('/api/studio/refine-prompt', { method: 'POST', body: fd })
@@ -2504,6 +2516,34 @@ export default function App() {
             <div className="banner info">Генерация недоступна по правам. Попросите владельца аккаунта.</div>
           ) : null}
           <div className="studio-grid studio-grid--simple">
+            <div className="studio-mode-row" role="group" aria-label="Режим студии">
+              <span className="studio-mode-label">Режим</span>
+              <div className="studio-mode-segment">
+                {(
+                  [
+                    { id: 'model' as const, label: 'Модель' },
+                    { id: 'photo_edit' as const, label: 'Доработать фото' },
+                    { id: 'no_face' as const, label: 'Без лица' },
+                  ] as const
+                ).map(({ id, label }) => (
+                  <button
+                    key={id}
+                    type="button"
+                    className={`studio-mode-btn${studioMode === id ? ' is-active' : ''}`}
+                    onClick={() => setStudioMode(id)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <p className="studio-mode-hint">
+              {studioMode === 'model'
+                ? 'Как раньше: выбранная модель, опционально референс позы и описание.'
+                : studioMode === 'photo_edit'
+                  ? 'Обязательно загрузите фото; промпт описывает правки. Модель по желанию (подсказка по телу/коже).'
+                  : 'Кадр без лица/головы; нужна модель с фото или свой референс.'}
+            </p>
             <label className="studio-label">
               Формат
               <select
@@ -2539,7 +2579,7 @@ export default function App() {
               </select>
             </label>
             <label className="studio-label">
-              Референс (по желанию)
+              {studioMode === 'photo_edit' ? 'Фото для доработки' : 'Референс (по желанию)'}
               <input
                 type="file"
                 accept="image/jpeg,image/png,image/webp,image/gif"
@@ -2554,7 +2594,11 @@ export default function App() {
               Описание
               <textarea
                 rows={5}
-                placeholder="Что показать на снимке: сцена, свет, настроение…"
+                placeholder={
+                  studioMode === 'photo_edit'
+                    ? 'Что изменить: свет, фон, детали…'
+                    : 'Что показать на снимке: сцена, свет, настроение…'
+                }
                 value={studioDesc}
                 onChange={(e) => setStudioDesc(e.target.value)}
               />
@@ -2572,6 +2616,8 @@ export default function App() {
                   studioBusy ||
                   !canStudioGenerate ||
                   (!studioDesc.trim() && !studioFile && studioSelectedModelId == null) ||
+                  (studioMode === 'photo_edit' && !studioFile) ||
+                  (studioMode === 'no_face' && studioSelectedModelId == null && !studioFile) ||
                   !health?.openai_studio_configured
                 }
                 onClick={() => void refineStudioPrompt()}
