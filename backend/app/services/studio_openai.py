@@ -19,9 +19,11 @@ _WAVESPEED_USER_POSE_REF_FIRST_PREFIX = (
     "Take from it: pose articulation (hands, limbs), camera angle/height/distance, framing, lens feel, hair styling as in that shot, "
     "background and lighting. Garments and body coverage must match only this first image — do not dress the subject from the "
     "other images. If the first image shows no clothing or partial nudity, keep the same coverage (nude/topless/etc.). "
-    "Body silhouette, proportions, muscle, and skin color must match the identity reference images (the model), "
-    "not the first image's person — do not copy physique or complexion from the pose reference. "
-    "Following image(s): identity (face, body, skin) only — no pose, camera, or outfit from them.\n\n"
+    "**Do not do a face-swap:** synthesize **one cohesive person** in this scene. Silhouette, proportions, and **all visible skin** "
+    "(face, neck, chest, arms, torso, legs) must match the identity reference images (following URLs) continuously — same tone, "
+    "same texture grain, lighting falling the same way on face and body; not a sharp face on a mismatched body. "
+    "Following image(s): the saved model only for **who** this person is (face + body identity); "
+    "**never** copy pose, camera, framing, or outfit from those images — those come only from the first image.\n\n"
 )
 
 
@@ -36,9 +38,9 @@ def wavespeed_prompt_with_user_pose_reference_first(refined_prompt: str) -> str:
 _WAVESPEED_PHOTO_EDIT_USER_FIRST_PREFIX = (
     "[EDIT_BASE] The first image is the user's photograph to edit. "
     "Apply the JSON scene/instruction as modifications to this image (lighting, background, wardrobe, pose tweaks, cleanup) while keeping "
-    "the same person as the base unless the instruction explicitly asks to change identity. "
-    "If further images follow, they are optional model references — use only for skin/body/hair cues when the edit calls for them; "
-    "do not replace the first image's face with another face unless requested.\n\n"
+    "the same person as the base **throughout** — continuous skin, lighting, and anatomy; avoid a pasted-on face look. "
+    "If further images follow, they are optional model references — use for **full-body** identity (skin, face, proportions) when the edit "
+    "needs them; do not replace the first image's person with a composite head.\n\n"
 )
 
 _WAVESPEED_NO_FACE_SUFFIX = (
@@ -128,7 +130,7 @@ You will receive:
 3. A MODEL PROFILE — **identity** only (face, skin, hair, body type as character); not a replacement for the reference scene.
 4. USER_TEXT, 5. OUTPUT/ASPECT.
 
-If REFERENCE_IMAGE has content: fill pose, clothing (only what the reference photo shows; if none — nude/uncovered), hair_in_scene, photography, background from the reference, not from profile defaults. Never take clothing from MODEL_PROFILE. **Always take face, body_type, skin tone, and hair identity colors from MODEL_PROFILE** — never mimic the reference person's physique or skin. MODEL_PROFILE fills <FROM_MODEL_PROFILE>; no reference face or body copy.
+If REFERENCE_IMAGE has content: fill pose, clothing (only what the reference photo shows; if none — nude/uncovered), hair_in_scene, photography, background from the reference, not from profile defaults. Never take clothing from MODEL_PROFILE. **Always take face, body_type, skin tone, and hair identity colors from MODEL_PROFILE** — never mimic the reference person's physique or skin. **Synthesize one coherent person**: same lighting and skin texture on face and body; do not produce a head-swap. MODEL_PROFILE fills <FROM_MODEL_PROFILE>; no reference face or body copy.
 Keep realism_engine exactly as in the skeleton. Output only valid JSON, no markdown.
 """.strip()
 
@@ -416,7 +418,8 @@ def _build_refiner_user_message(
     # Референс — сразу после скелета, чтобы сцена не утонула в длинном JSON профиля.
     if has_ref:
         blocks.append(
-            "## REFERENCE_IMAGE (scene/pose ref only: pose/hands, clothing/coverage on this photo, hair **styling in shot**, camera/framing/light/room — **not** body type, skin tone, or face; those = MODEL_PROFILE)\n"
+            "## REFERENCE_IMAGE (scene/pose ref only: pose/hands, clothing/coverage on this photo, hair **styling in shot**, camera/framing/light/room — **not** body type, skin tone, or face; those = MODEL_PROFILE). "
+            "**Render as one person:** fill JSON so the edit model **re-synthesizes the full body** of MODEL_PROFILE in this pose and room — not face-only over the reference sitter's body.\n"
             + (reference_scene_description or "").strip()
         )
     else:
@@ -425,8 +428,8 @@ def _build_refiner_user_message(
     blocks.append(
         "## MODEL_PROFILE (identity: face, skin, hair color, body type, marks — for <FROM_MODEL_PROFILE> only. "
         "If REFERENCE_IMAGE exists: **never** use profile for clothing or accessories — only the reference photo + USER_TEXT. "
-        "**Always** use profile for `subject.identity` (face, skin tone, body_type, hair color, marks). "
-        "Do not copy default outfit/jewelry/posture/scene from profile over the reference layout.)"
+        "**Always** use profile for `subject.identity` (face, skin tone, body_type, hair color, marks) **for every visible body part** — "
+        "one continuous person. Do not copy default outfit/jewelry/posture/scene from profile over the reference layout.)"
     )
     if model_profile_text and model_profile_text.strip():
         blocks.append(model_profile_text.strip())

@@ -24,3 +24,7 @@ Task steps:
 - Output ONLY valid JSON. No markdown, no code fences, no explanation.
 
 Goal: A hyper-realistic phone-photo prompt. When a reference is provided, the **composition, camera geometry, and clothing/coverage must follow the reference**; **face, body shape, proportions, and skin color/tone must follow the model profile**, not the reference person — and **not** the model's wardrobe unless the reference shows the same.
+
+**Whole-body coherence (critical — not a face swap):** The final image must read as **one real person** in the scene. `subject.identity` (face, skin tone, texture, body_type) applies to **every visible body part** — neck, décolleté, shoulders, arms, torso, legs — with **continuous skin** and **one lighting model** (`photography.lighting`, `background.lighting`). Do **not** describe or imply a pipeline where the face comes from MODEL_PROFILE but limbs/torso skin "come from the reference person". If REFERENCE_IMAGE exists, it supplies **only** pose, framing, garments, room, and light **direction/quality** — never the reference sitter's complexion or body line. Match **highlights and shadows** on face and body to the same key light and fill described in JSON. Add to `constraints.avoid` anything like composite look, mismatched face/body sharpness, or inconsistent skin grain between face and torso.
+
+**Render intent:** Phrase `subject.description` and `must_keep` so the edit model **re-synthesizes the full subject** in the reference pose and environment using MODEL_PROFILE identity end-to-end — **not** "replace head only".

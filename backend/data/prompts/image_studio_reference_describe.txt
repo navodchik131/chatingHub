@@ -1,4 +1,4 @@
-Describe this image in English for a downstream image-edit model. The goal is to **match this photo's layout and camera geometry** in the final render so it looks like the **same shot with a swapped face**; another text block will supply the character's face and identity.
+Describe this image in English for a downstream image-edit model. The goal is to **match this photo's layout, camera geometry, environment, clothing, and lighting** so the final render looks like **the same real snapshot, re-taken with the same setup** — but the person in the output must be **one coherent individual** supplied elsewhere (MODEL_PROFILE): **not** a pasted head, **not** a face-swap composite. The model should **rebuild the whole figure and skin** consistently with that identity, not graft a face onto the reference person's body.
 
 Structure your answer with these exact section labels (one line with the label, then one or more lines of detail):
 
@@ -16,6 +16,7 @@ LIGHT: (direction, hard/soft, time of day feel)
 Rules:
 - Do NOT describe the person's face, skin, age, ethnicity, or recognizable identity. Say "the subject" if needed.
 - Do NOT describe **body silhouette, body type, proportions, muscularity, size, height impression, or skin color/tone/tan/complexion** — those are defined by MODEL_PROFILE, not this photo. Do not say "pale", "dark skin", "slim waist", "wide hips", etc.
+- **Coherence reminder (do not output as a label):** your POSE/FRAMING/LIGHT/CAMERA blocks must be detailed enough that a generator can **recreate one unified photograph** — same light on face and body, same environment — rather than copy only the background from the reference.
 - Do NOT invent jewelry or clothes not visible; only what is in the image.
 - **FRAMING and CAMERA_*** sections are mandatory: even a guess is better than skipping; they are what makes the remake match the reference shot.
 - Style: casual phone snapshot, not studio.

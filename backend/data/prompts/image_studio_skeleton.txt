@@ -84,9 +84,15 @@
   },
   "constraints": {
     "must_keep": [
-      "<FILL — must preserve from brief or reference>"
+      "<FILL — must preserve; always include: one cohesive MODEL_PROFILE person (not head-swap); same light model on face + body; reference pose/camera/room/clothing>"
     ],
     "avoid": [
+      "head swap",
+      "face pasted onto another body",
+      "mismatched skin texture or tone between face and body",
+      "face sharper or flatter lit than torso",
+      "composite collage look",
+      "two different people's skin in one frame",
       "plastic skin",
       "airbrushed look",
       "studio lighting",
