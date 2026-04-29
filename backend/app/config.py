@@ -76,9 +76,9 @@ class Settings(BaseSettings):
     credit_cost_studio_model_profile_generate: int = Field(default=1)
 
     wavespeed_api_base: str = Field(default="https://api.wavespeed.ai")
-    # POST image-edit: WAN 2.7 Image Edit Pro по умолчанию; обычный WAN / Seedream — см. .env.example
+    # POST image-edit: WAN 2.7 по умолчанию; Pro / Seedream — см. .env.example
     wavespeed_seedream_edit_path: str = Field(
-        default="/api/v3/alibaba/wan-2.7/image-edit-pro",
+        default="/api/v3/alibaba/wan-2.7/image-edit",
     )
     # Для API Seedream v5 (jpeg | png); для WAN не используется; пусто — по умолчанию API
     wavespeed_seedream_output_format: str = Field(default="")

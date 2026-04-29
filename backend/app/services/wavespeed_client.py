@@ -17,7 +17,7 @@ def _wavespeed_base() -> str:
 
 
 def _seedream_edit_post_path() -> str:
-    p = (settings.wavespeed_seedream_edit_path or "").strip() or "/api/v3/alibaba/wan-2.7/image-edit-pro"
+    p = (settings.wavespeed_seedream_edit_path or "").strip() or "/api/v3/alibaba/wan-2.7/image-edit"
     return p if p.startswith("/") else f"/{p}"
 
 
