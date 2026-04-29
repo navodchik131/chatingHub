@@ -76,9 +76,9 @@ class Settings(BaseSettings):
     credit_cost_studio_model_profile_generate: int = Field(default=1)
 
     wavespeed_api_base: str = Field(default="https://api.wavespeed.ai")
-    # POST image-edit: WAN 2.7 по умолчанию; Seedream v5/v4.5 — см. .env.example
+    # POST image-edit: WAN 2.7 Image Edit Pro по умолчанию; обычный WAN / Seedream — см. .env.example
     wavespeed_seedream_edit_path: str = Field(
-        default="/api/v3/alibaba/wan-2.7/image-edit",
+        default="/api/v3/alibaba/wan-2.7/image-edit-pro",
     )
     # Для API Seedream v5 (jpeg | png); для WAN не используется; пусто — по умолчанию API
     wavespeed_seedream_output_format: str = Field(default="")
@@ -90,6 +90,12 @@ class Settings(BaseSettings):
     wavespeed_seedream_omit_size: bool = Field(default=False)
     # Опционально: JSON-объект, полями дополняется тело POST к WaveSpeed (для полей из DevTools Playground).
     wavespeed_extra_json: str = Field(default="")
+    # Image Upscaler (док: wavespeed.ai/docs/docs-api/image-upscaler)
+    wavespeed_image_upscaler_path: str = Field(
+        default="/api/v3/wavespeed-ai/image-upscaler",
+    )
+    wavespeed_upscale_sync: bool = Field(default=True)
+    credit_cost_studio_upscale: int = Field(default=1)
 
     stripe_secret_key: str = Field(default="")
     stripe_webhook_secret: str = Field(default="")

@@ -7,7 +7,7 @@ import uuid
 from pathlib import Path
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
+from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -29,6 +29,8 @@ from app.schemas import (
     StudioModelImageOut,
     StudioModelProfileGenerateOut,
     StudioRefinePromptOut,
+    StudioUpscaleGenerationIn,
+    StudioUpscaleGenerationOut,
     UserStudioModelOut,
     UserStudioModelPatchIn,
 )
@@ -71,7 +73,7 @@ from app.services.studio_pose_reference import (
     resolve_pose_reference_file,
     save_pose_reference_bytes,
 )
-from app.services.wavespeed_client import seedream_v45_edit_image_url
+from app.services.wavespeed_client import seedream_v45_edit_image_url, wavespeed_image_upscale_url
 
 log = logging.getLogger(__name__)
 
@@ -295,6 +297,126 @@ async def api_delete_studio_generation(
     await session.commit()
     safe_delete_generation_file(rel)
     return {"ok": True}
+
+
+@router.post(
+    "/studio/generations/{gen_id}/upscale",
+    response_model=StudioUpscaleGenerationOut,
+)
+async def api_upscale_studio_generation(
+    gen_id: int,
+    request: Request,
+    payload: StudioUpscaleGenerationIn | None = Body(default=None),
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> StudioUpscaleGenerationOut:
+    assert_permission(user, PERM_STUDIO_GENERATE)
+    oid = workspace_owner_id(user)
+    row = await session.get(StudioGeneration, gen_id)
+    if not row or row.user_id != oid:
+        raise HTTPException(status_code=404, detail="Не найдено")
+
+    pub = (settings.public_app_url or "").strip().rstrip("/")
+    if not pub.lower().startswith("https://"):
+        raise HTTPException(
+            status_code=503,
+            detail="Для апскейла WaveSpeed нужен публичный HTTPS (PUBLIC_APP_URL=https://…).",
+        )
+
+    tr = "4k"
+    if payload and payload.target_resolution:
+        tr = payload.target_resolution
+
+    ws_row = await session.scalar(
+        select(WavespeedConnection).where(WavespeedConnection.user_id == oid)
+    )
+    if not ws_row or not (ws_row.api_key_encrypted or "").strip():
+        return StudioUpscaleGenerationOut(
+            generated_image_url=None,
+            generation_id=None,
+            message="Сохраните API-ключ WaveSpeed в кабинете (интеграции).",
+            target_resolution=tr,
+        )
+
+    cost = settings.credit_cost_studio_upscale
+    billing = await ensure_can_consume_credits(session, user, cost)
+    msg: str | None = None
+    out_url: str | None = None
+    new_id: int | None = None
+    try:
+        ws_key = decrypt_secret(ws_row.api_key_encrypted)
+    except ValueError:
+        ws_key = ""
+        msg = "Не удалось расшифровать ключ WaveSpeed — сохраните ключ снова."
+
+    if ws_key and not msg:
+        tok = create_generation_image_access_token(user_id=oid, generation_id=gen_id)
+        image_pub_url = f"{pub}/api/studio/public-generation-image?t={quote(tok, safe='')}"
+        try:
+            raw_up = await wavespeed_image_upscale_url(
+                api_key=ws_key,
+                image_url=image_pub_url,
+                target_resolution=tr,
+                output_format="png",
+            )
+        except RuntimeError as e:
+            msg = str(e)
+            raw_up = None
+
+        if raw_up and not msg:
+            excerpt = (row.prompt_excerpt or "").strip()
+            up_note = f"[upscale {tr}] {excerpt}"[:2000] if excerpt else f"[upscale {tr}]"
+            gen = await download_and_create_generation(
+                session,
+                owner_id=oid,
+                source_url=raw_up,
+                refined_prompt=up_note,
+                output_aspect=row.output_aspect,
+                studio_model_id=row.studio_model_id,
+            )
+            if gen is None:
+                msg = "Не удалось сохранить результат апскейла — повторите позже."
+            else:
+                new_id = gen.id
+                arch_base = _public_app_base(request)
+                if arch_base:
+                    gtok = create_generation_image_access_token(
+                        user_id=oid, generation_id=gen.id
+                    )
+                    out_url = (
+                        f"{arch_base}/api/studio/public-generation-image?t={quote(gtok, safe='')}"
+                    )
+                else:
+                    out_url = raw_up
+
+    if out_url and new_id is not None:
+        await record_usage(
+            session,
+            user,
+            billing,
+            "studio_image_upscale",
+            cost,
+            {
+                "source_generation_id": gen_id,
+                "target_resolution": tr,
+                "generation_id": new_id,
+            },
+        )
+        await session.commit()
+        return StudioUpscaleGenerationOut(
+            generated_image_url=out_url,
+            generation_id=new_id,
+            message=None,
+            target_resolution=tr,
+        )
+
+    await session.rollback()
+    return StudioUpscaleGenerationOut(
+        generated_image_url=None,
+        generation_id=None,
+        message=msg or "Апскейл не выполнен.",
+        target_resolution=tr,
+    )
 
 
 @router.get("/studio/models", response_model=list[UserStudioModelOut])

@@ -176,6 +176,7 @@ interface HealthInfo {
   stripe_configured?: boolean
   openai_studio_configured?: boolean
   studio_prompt_credit_cost?: number
+  studio_upscale_credit_cost?: number
   web_push_configured?: boolean
 }
 
@@ -397,6 +398,9 @@ export default function App() {
   >('unknown')
   const [pushBusy, setPushBusy] = useState(false)
   const [studioGenImageUrl, setStudioGenImageUrl] = useState<string | null>(null)
+  const [studioGenGenerationId, setStudioGenGenerationId] = useState<number | null>(null)
+  const [studioUpscaleTarget, setStudioUpscaleTarget] = useState<'2k' | '4k' | '8k'>('4k')
+  const [studioUpscaleBusy, setStudioUpscaleBusy] = useState(false)
   const [studioWavespeedMsg, setStudioWavespeedMsg] = useState<string | null>(null)
   const [studioAspectPresets, setStudioAspectPresets] = useState<StudioAspectPreset[]>([])
   const [studioOutputAspect, setStudioOutputAspect] = useState('9:16')
@@ -1108,6 +1112,7 @@ export default function App() {
       return
     }
     setStudioGenImageUrl((prev) => (prev === imageUrl ? null : prev))
+    setStudioGenGenerationId((prev) => (prev === id ? null : prev))
     void loadStudioGenerationsReset()
   }
 
@@ -1127,6 +1132,7 @@ export default function App() {
     }
     setStudioBusy(true)
     setStudioGenImageUrl(null)
+    setStudioGenGenerationId(null)
     setStudioWavespeedMsg(null)
     try {
       const fd = new FormData()
@@ -1148,8 +1154,12 @@ export default function App() {
         reference_scene_description?: string | null
         generated_image_url?: string | null
         wavespeed_message?: string | null
+        generation_id?: number | null
       }
       setStudioGenImageUrl(data.generated_image_url?.trim() || null)
+      setStudioGenGenerationId(
+        typeof data.generation_id === 'number' ? data.generation_id : null,
+      )
       setStudioWavespeedMsg(data.wavespeed_message?.trim() || null)
       void refreshMe()
       void loadStudioGenerationsReset()
@@ -1157,6 +1167,54 @@ export default function App() {
       setError(e instanceof TypeError && e.message === 'Failed to fetch' ? 'Сеть: не удалось связаться с сервером (проверьте, что бэкенд запущен и порт / proxy).' : (e instanceof Error ? e.message : 'Неизвестная ошибка запроса'))
     } finally {
       setStudioBusy(false)
+    }
+  }
+
+  const upscaleStudioGeneration = async () => {
+    if (studioGenGenerationId == null) {
+      setError('Откройте картинку из блока «Сохранённые» или сгенерируйте заново — нужна запись архива.')
+      return
+    }
+    setError(null)
+    setStudioWavespeedMsg(null)
+    setStudioUpscaleBusy(true)
+    try {
+      const r = await apiFetch(`/api/studio/generations/${studioGenGenerationId}/upscale`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target_resolution: studioUpscaleTarget }),
+      })
+      const data = (await r.json().catch(() => ({}))) as {
+        generated_image_url?: string | null
+        generation_id?: number | null
+        message?: string | null
+        target_resolution?: string
+      }
+      if (!r.ok) {
+        setError(formatApiErrorDetail(data) || r.statusText)
+        return
+      }
+      const url = data.generated_image_url?.trim()
+      if (url) {
+        setStudioGenImageUrl(url)
+        if (typeof data.generation_id === 'number') {
+          setStudioGenGenerationId(data.generation_id)
+        }
+      } else {
+        setStudioWavespeedMsg(data.message?.trim() || 'Апскейл не выполнен.')
+      }
+      void refreshMe()
+      void loadStudioGenerationsReset()
+    } catch (e) {
+      setError(
+        e instanceof TypeError && e.message === 'Failed to fetch'
+          ? 'Сеть: не удалось связаться с сервером.'
+          : e instanceof Error
+            ? e.message
+            : 'Ошибка запроса',
+      )
+    } finally {
+      setStudioUpscaleBusy(false)
     }
   }
 
@@ -2641,6 +2699,47 @@ export default function App() {
                 <div className="studio-generated-frame">
                   <img src={studioGenImageUrl} alt="Сгенерировано" className="studio-gen-img" />
                 </div>
+                <div className="studio-upscale-row">
+                  <label className="studio-upscale-control">
+                    <span className="studio-upscale-control-label">Апскейл</span>
+                    <select
+                      value={studioUpscaleTarget}
+                      onChange={(e) =>
+                        setStudioUpscaleTarget(e.target.value as '2k' | '4k' | '8k')
+                      }
+                      disabled={studioUpscaleBusy}
+                    >
+                      <option value="2k">2K</option>
+                      <option value="4k">4K</option>
+                      <option value="8k">8K</option>
+                    </select>
+                  </label>
+                  <button
+                    type="button"
+                    className="ghost-btn studio-upscale-btn"
+                    disabled={
+                      studioUpscaleBusy ||
+                      !canStudioGenerate ||
+                      studioGenGenerationId == null ||
+                      !integ?.wavespeed_configured
+                    }
+                    title={
+                      !integ?.wavespeed_configured
+                        ? 'Сохраните ключ WaveSpeed в кабинете'
+                        : studioGenGenerationId == null
+                          ? 'Выберите снимок из «Сохранённые» или сгенерируйте снова'
+                          : undefined
+                    }
+                    onClick={() => void upscaleStudioGeneration()}
+                  >
+                    {studioUpscaleBusy ? 'Апскейл…' : 'Апскейл'}
+                  </button>
+                  {canStudioGenerate && health?.studio_upscale_credit_cost != null ? (
+                    <span className="studio-credit-hint">
+                      {health.studio_upscale_credit_cost} кр.
+                    </span>
+                  ) : null}
+                </div>
                 <a
                   className="send-btn studio-download"
                   href={studioGenImageUrl}
@@ -2673,7 +2772,10 @@ export default function App() {
                         type="button"
                         className="studio-archive-thumb-btn"
                         title={g.prompt_excerpt?.trim() || 'Открыть в «Результат»'}
-                        onClick={() => setStudioGenImageUrl(g.image_url)}
+                        onClick={() => {
+                          setStudioGenGenerationId(g.id)
+                          setStudioGenImageUrl(g.image_url)
+                        }}
                       >
                         <img src={g.image_url} alt="" className="studio-archive-thumb" loading="lazy" />
                       </button>

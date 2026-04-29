@@ -743,6 +743,37 @@ a.studio-download {
   text-align: center;
 }
 
+.studio-upscale-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.65rem 1rem;
+  margin-top: 0.85rem;
+}
+
+.studio-upscale-control {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.studio-upscale-control-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.studio-upscale-control select {
+  min-width: 5.5rem;
+}
+
+.studio-upscale-btn {
+  margin-top: 1.15rem;
+}
+
 .studio-archive-section {
   margin-top: 1.25rem;
 }

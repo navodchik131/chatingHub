@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
@@ -114,6 +115,21 @@ class StudioRefinePromptOut(BaseModel):
     generated_image_url: str | None = None
     wavespeed_message: str | None = None
     generation_id: int | None = None
+
+
+class StudioUpscaleGenerationIn(BaseModel):
+    """Опционально: целевое разрешение апскейла WaveSpeed Image Upscaler."""
+
+    target_resolution: Literal["2k", "4k", "8k"] | None = None
+
+
+class StudioUpscaleGenerationOut(BaseModel):
+    """Новая запись архива после апскейла; исходный gen_id в ответе не дублируем — клиент знает из URL."""
+
+    generated_image_url: str | None = None
+    generation_id: int | None = None
+    message: str | None = None
+    target_resolution: str
 
 
 class StudioGenerationOut(BaseModel):

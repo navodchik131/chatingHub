@@ -17,7 +17,7 @@ def _wavespeed_base() -> str:
 
 
 def _seedream_edit_post_path() -> str:
-    p = (settings.wavespeed_seedream_edit_path or "").strip() or "/api/v3/alibaba/wan-2.7/image-edit"
+    p = (settings.wavespeed_seedream_edit_path or "").strip() or "/api/v3/alibaba/wan-2.7/image-edit-pro"
     return p if p.startswith("/") else f"/{p}"
 
 
@@ -186,73 +186,33 @@ def _unwrap_data(resp_json: dict[str, Any]) -> dict[str, Any]:
     )
 
 
-async def seedream_v45_edit_image_url(
+async def _wavespeed_post_json_and_resolve_image_url(
     *,
     api_key: str,
-    image_urls: list[str],
-    prompt: str,
-    size: str | None = None,
+    full_post_url: str,
+    body: dict[str, Any],
     timeout_submit: float = 300.0,
     poll_interval: float = 2.0,
     max_polls: int = 90,
 ) -> str:
-    """
-    Image edit через WaveSpeed: путь `WAVESPEED_SEEDREAM_EDIT_PATH` (WAN 2.7 / Seedream v5 / v4.5 / …).
-    """
-    if not image_urls:
-        raise RuntimeError("no image URLs")
-    if not (prompt or "").strip():
-        raise RuntimeError("empty prompt")
-
-    base = _wavespeed_base()
-    post_path = _seedream_edit_post_path()
-    url = f"{base}{post_path}"
+    """Общий POST + разбор ответа / опрос prediction до появления URL картинки."""
     headers = {
         "Authorization": f"Bearer {api_key.strip()}",
         "Content-Type": "application/json",
     }
-    is_wan = _is_wan_27_image_edit_path(post_path)
-    if is_wan:
-        # https://wavespeed.ai/docs/docs-api/alibaba/alibaba-wan-2.7-image-edit
-        n_img = 9
-        body = {
-            "images": image_urls[:n_img],
-            "prompt": prompt.strip(),
-            "seed": int(settings.wavespeed_wan_image_edit_seed),
-        }
-        if size and size.strip():
-            body["size"] = _format_size_for_wavespeed_path(post_path, size)
-    else:
-        body = {
-            "images": image_urls[:10],
-            "prompt": prompt.strip(),
-            "enable_sync_mode": bool(settings.wavespeed_seedream_sync),
-            "enable_base64_output": False,
-        }
-        if size and size.strip():
-            body["size"] = _format_size_for_wavespeed_path(post_path, size)
-        fmt = (settings.wavespeed_seedream_output_format or "").strip().lower()
-        if fmt in ("jpeg", "jpg", "png"):
-            body["output_format"] = "jpeg" if fmt in ("jpeg", "jpg") else "png"
-
-    _apply_wavespeed_extra_body(body)
-    log.debug(
-        "wavespeed submit wan=%s path=%s images=%s prompt_len=%s keys=%s",
-        is_wan,
-        post_path,
-        len(body.get("images") or []),
-        len(str(body.get("prompt") or "")),
-        list(body.keys()),
-    )
-
+    base = _wavespeed_base()
     async with httpx.AsyncClient(timeout=timeout_submit) as client:
         r = None
         for attempt in range(3):
-            r = await client.post(url, headers=headers, json=body)
+            r = await client.post(full_post_url, headers=headers, json=body)
             if r.status_code < 500:
                 break
-            last_err = (r.text or "")[:500]
-            log.warning("wavespeed submit %s (attempt %s), retry: %s", r.status_code, attempt + 1, last_err)
+            log.warning(
+                "wavespeed submit %s (attempt %s), retry: %s",
+                r.status_code,
+                attempt + 1,
+                (r.text or "")[:500],
+            )
             await asyncio.sleep(2.0 * (attempt + 1))
         if r is None:
             raise RuntimeError("WaveSpeed: пустой ответ")
@@ -349,3 +309,115 @@ async def seedream_v45_edit_image_url(
                 return u
 
     raise RuntimeError("WaveSpeed: timeout waiting for result")
+
+
+async def seedream_v45_edit_image_url(
+    *,
+    api_key: str,
+    image_urls: list[str],
+    prompt: str,
+    size: str | None = None,
+    timeout_submit: float = 300.0,
+    poll_interval: float = 2.0,
+    max_polls: int = 90,
+) -> str:
+    """
+    Image edit через WaveSpeed: путь `WAVESPEED_SEEDREAM_EDIT_PATH` (WAN 2.7 / Seedream v5 / v4.5 / …).
+    """
+    if not image_urls:
+        raise RuntimeError("no image URLs")
+    if not (prompt or "").strip():
+        raise RuntimeError("empty prompt")
+
+    base = _wavespeed_base()
+    post_path = _seedream_edit_post_path()
+    url = f"{base}{post_path}"
+    is_wan = _is_wan_27_image_edit_path(post_path)
+    if is_wan:
+        # https://wavespeed.ai/docs/docs-api/alibaba/alibaba-wan-2.7-image-edit
+        n_img = 9
+        body = {
+            "images": image_urls[:n_img],
+            "prompt": prompt.strip(),
+            "seed": int(settings.wavespeed_wan_image_edit_seed),
+        }
+        if size and size.strip():
+            body["size"] = _format_size_for_wavespeed_path(post_path, size)
+    else:
+        body = {
+            "images": image_urls[:10],
+            "prompt": prompt.strip(),
+            "enable_sync_mode": bool(settings.wavespeed_seedream_sync),
+            "enable_base64_output": False,
+        }
+        if size and size.strip():
+            body["size"] = _format_size_for_wavespeed_path(post_path, size)
+        fmt = (settings.wavespeed_seedream_output_format or "").strip().lower()
+        if fmt in ("jpeg", "jpg", "png"):
+            body["output_format"] = "jpeg" if fmt in ("jpeg", "jpg") else "png"
+
+    _apply_wavespeed_extra_body(body)
+    log.debug(
+        "wavespeed submit wan=%s path=%s images=%s prompt_len=%s keys=%s",
+        is_wan,
+        post_path,
+        len(body.get("images") or []),
+        len(str(body.get("prompt") or "")),
+        list(body.keys()),
+    )
+
+    return await _wavespeed_post_json_and_resolve_image_url(
+        api_key=api_key,
+        full_post_url=url,
+        body=body,
+        timeout_submit=timeout_submit,
+        poll_interval=poll_interval,
+        max_polls=max_polls,
+    )
+
+
+def _wavespeed_upscaler_post_path() -> str:
+    p = (settings.wavespeed_image_upscaler_path or "").strip() or "/api/v3/wavespeed-ai/image-upscaler"
+    return p if p.startswith("/") else f"/{p}"
+
+
+async def wavespeed_image_upscale_url(
+    *,
+    api_key: str,
+    image_url: str,
+    target_resolution: str = "4k",
+    output_format: str = "png",
+    timeout_submit: float = 300.0,
+    poll_interval: float = 2.0,
+    max_polls: int = 90,
+) -> str:
+    """Image Upscaler WaveSpeed: публичный HTTPS URL входного изображения."""
+    u = (image_url or "").strip()
+    if not u:
+        raise RuntimeError("empty image URL")
+    tres = (target_resolution or "4k").strip().lower()
+    if tres not in ("2k", "4k", "8k"):
+        raise RuntimeError("target_resolution must be 2k, 4k or 8k")
+    fmt = (output_format or "png").strip().lower()
+    if fmt == "jpg":
+        fmt = "jpeg"
+    if fmt not in ("jpeg", "png", "webp"):
+        fmt = "png"
+    body: dict[str, Any] = {
+        "image": u,
+        "target_resolution": tres,
+        "output_format": fmt,
+        "enable_base64_output": False,
+        "enable_sync_mode": bool(settings.wavespeed_upscale_sync),
+    }
+    path = _wavespeed_upscaler_post_path()
+    full_url = f"{_wavespeed_base()}{path}"
+    log.debug("wavespeed upscale post=%s target=%s fmt=%s", path, tres, fmt)
+    return await _wavespeed_post_json_and_resolve_image_url(
+        api_key=api_key,
+        full_post_url=full_url,
+        body=body,
+        timeout_submit=timeout_submit,
+        poll_interval=poll_interval,
+        max_polls=max_polls,
+    )

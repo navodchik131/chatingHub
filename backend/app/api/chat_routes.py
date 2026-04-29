@@ -79,6 +79,7 @@ async def api_health(session: AsyncSession = Depends(get_session)) -> dict:
         "stripe_configured": bool((settings.stripe_secret_key or "").strip()),
         "openai_studio_configured": bool((settings.openai_api_key or "").strip()),
         "studio_prompt_credit_cost": settings.credit_cost_studio_prompt_refine,
+        "studio_upscale_credit_cost": settings.credit_cost_studio_upscale,
         "web_push_configured": settings.web_push_configured,
     }
 
