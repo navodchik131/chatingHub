@@ -1271,6 +1271,8 @@ a.studio-download {
   overflow-y: auto;
   overflow-x: hidden;
   overflow-anchor: none;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
   display: flex;
   flex-direction: column;
   gap: 0.875rem;
@@ -1303,7 +1305,7 @@ a.studio-download {
   bottom: 120px;
   left: 50%;
   transform: translateX(-50%);
-  z-index: 20;
+  z-index: 60;
   padding: 0.55rem 1.2rem;
   font-size: 0.8125rem;
   font-family: var(--font);
@@ -2222,6 +2224,12 @@ a.studio-download {
   }
 
   .app.mobile-chat-open {
+    display: flex;
+    flex-direction: column;
+    min-height: 100dvh;
+    max-height: 100dvh;
+    overflow: hidden;
+    box-sizing: border-box;
     padding-top: max(0.5rem, env(safe-area-inset-top, 0px));
     padding-bottom: max(0.5rem, env(safe-area-inset-bottom, 0px));
   }
@@ -2259,9 +2267,9 @@ a.studio-download {
   .layout.mobile.mobile-chat-open {
     margin-top: 0;
     flex: 1;
-    min-height: calc(
-      100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 0.9rem
-    );
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
   }
 
   .layout.mobile:not(.thread-focus) .thread {
@@ -2287,9 +2295,9 @@ a.studio-download {
   }
 
   .layout.mobile.mobile-chat-open .thread {
-    min-height: calc(
-      100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 0.5rem
-    );
+    flex: 1;
+    min-height: 0;
+    max-height: 100%;
   }
 
   .composer-inner textarea {

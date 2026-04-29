@@ -950,22 +950,37 @@ export default function App() {
         container.scrollHeight - container.scrollTop - container.clientHeight
       if (dist < 96) {
         requestAnimationFrame(() => scrollToBottom(true))
-      } else {
-        setShowJumpDown(true)
       }
     }
 
     prevMsgLenRef.current = len
   }, [displayMessages, loading, selectedId, scrollToBottom, scrollToBottomInstant])
 
-  /** Показать «К последним», если лента не у низа; у верхней границы — подгрузка истории. */
+  /** «К последним»: по видимости хвоста ленты (надёжнее метрик scrollTop в PWA / iOS). */
+  useEffect(() => {
+    const root = messagesContainerRef.current
+    if (!root || loading || selectedId == null) return
+    const end = root.querySelector('.messages-end')
+    if (!(end instanceof HTMLElement)) {
+      setShowJumpDown(false)
+      return
+    }
+    const io = new IntersectionObserver(
+      (entries) => {
+        const hit = entries[0]?.isIntersecting ?? true
+        setShowJumpDown(!hit)
+      },
+      { root, rootMargin: '0px 0px 64px 0px', threshold: 0.02 },
+    )
+    io.observe(end)
+    return () => io.disconnect()
+  }, [selectedId, loading, displayMessages.length])
+
+  /** У верхней границы — подгрузка истории. */
   useEffect(() => {
     const el = messagesContainerRef.current
     if (!el || loading || selectedId == null) return
-    const threshold = 80
     const sync = () => {
-      const dist = el.scrollHeight - el.scrollTop - el.clientHeight
-      setShowJumpDown(dist > threshold)
       if (
         el.scrollTop < 120 &&
         hasMoreOlderRef.current &&
@@ -978,7 +993,7 @@ export default function App() {
     el.addEventListener('scroll', sync, { passive: true })
     sync()
     return () => el.removeEventListener('scroll', sync)
-  }, [selectedId, loading, displayMessages.length, loadOlderMessages])
+  }, [selectedId, loading, loadOlderMessages])
 
   /** Догоняем низ после смены диалога / окончания загрузки (без displayMessages в deps — иначе при каждом новом пузыре сбивали бы скролл). */
   useEffect(() => {
@@ -1646,7 +1661,9 @@ export default function App() {
 
   const appClass = [
     'app',
-    isMobileLayout && selectedId != null ? 'mobile-chat-open' : '',
+    isMobileLayout && selectedId != null && appSection === 'chat' && canChat
+      ? 'mobile-chat-open'
+      : '',
     showThreadDock ? 'with-thread-dock' : '',
   ]
     .filter(Boolean)
@@ -2962,25 +2979,26 @@ export default function App() {
               </div>
 
               <div className="thread-body">
-                {loading ? (
-                  <div className="messages-loading">
-                    <span className="skeleton-line" />
-                    <span className="skeleton-line short" />
-                  </div>
-                ) : (
-                  <div
-                    className="messages-scroll"
-                    ref={messagesContainerRef}
-                    role="log"
-                    aria-live="polite"
-                    aria-relevant="additions"
-                  >
-                    {loadingOlder ? (
-                      <div className="messages-older-loading" role="status">
-                        <span className="muted">Загрузка истории…</span>
-                      </div>
-                    ) : null}
-                    {displayMessages.map((m) => (
+                <div
+                  className="messages-scroll"
+                  ref={messagesContainerRef}
+                  role="log"
+                  aria-live="polite"
+                  aria-relevant="additions"
+                >
+                  {loading ? (
+                    <div className="messages-loading">
+                      <span className="skeleton-line" />
+                      <span className="skeleton-line short" />
+                    </div>
+                  ) : (
+                    <>
+                      {loadingOlder ? (
+                        <div className="messages-older-loading" role="status">
+                          <span className="muted">Загрузка истории…</span>
+                        </div>
+                      ) : null}
+                      {displayMessages.map((m) => (
                       <article
                         key={m.id}
                         className={
@@ -3022,9 +3040,10 @@ export default function App() {
                         </time>
                       </article>
                     ))}
-                    <div className="messages-end" aria-hidden />
-                  </div>
-                )}
+                      <div className="messages-end" aria-hidden />
+                    </>
+                  )}
+                </div>
 
                 {showJumpDown && !loading && (
                   <button
