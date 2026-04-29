@@ -177,6 +177,7 @@ interface HealthInfo {
   openai_studio_configured?: boolean
   studio_prompt_credit_cost?: number
   studio_upscale_credit_cost?: number
+  studio_wan_edit_tier_switch?: boolean
   web_push_configured?: boolean
 }
 
@@ -380,6 +381,7 @@ export default function App() {
   const [studioDesc, setStudioDesc] = useState('')
   const [studioFile, setStudioFile] = useState<File | null>(null)
   const [studioMode, setStudioMode] = useState<StudioJobMode>('model')
+  const [studioWanEditTier, setStudioWanEditTier] = useState<'standard' | 'pro'>('standard')
   const [studioBusy, setStudioBusy] = useState(false)
   const [studioModels, setStudioModels] = useState<UserStudioModel[]>([])
   const [studioSelectedModelId, setStudioSelectedModelId] = useState<number | null>(null)
@@ -1141,6 +1143,7 @@ export default function App() {
       if (studioFile) fd.append('image', studioFile)
       fd.append('output_aspect', studioOutputAspect)
       fd.append('studio_mode', studioMode)
+      fd.append('wan_edit_tier', studioWanEditTier)
       fd.append('generate_wavespeed', '1')
       fd.append('wavespeed_single_reference', '1')
       const r = await apiFetch('/api/studio/refine-prompt', { method: 'POST', body: fd })
@@ -2602,6 +2605,32 @@ export default function App() {
                   ? 'Обязательно загрузите фото; промпт описывает правки. Модель по желанию (подсказка по телу/коже).'
                   : 'Кадр без лица/головы; нужна модель с фото или свой референс.'}
             </p>
+            {health?.studio_wan_edit_tier_switch ? (
+              <>
+                <div className="studio-mode-row" role="group" aria-label="Редактор WaveSpeed WAN 2.7">
+                  <span className="studio-mode-label">WAN 2.7</span>
+                  <div className="studio-mode-segment">
+                    <button
+                      type="button"
+                      className={`studio-mode-btn${studioWanEditTier === 'standard' ? ' is-active' : ''}`}
+                      onClick={() => setStudioWanEditTier('standard')}
+                    >
+                      Обычный
+                    </button>
+                    <button
+                      type="button"
+                      className={`studio-mode-btn${studioWanEditTier === 'pro' ? ' is-active' : ''}`}
+                      onClick={() => setStudioWanEditTier('pro')}
+                    >
+                      Pro
+                    </button>
+                  </div>
+                </div>
+                <p className="studio-mode-hint">
+                  Версия Pro на стороне WaveSpeed обычно дороже обычной WAN 2.7.
+                </p>
+              </>
+            ) : null}
             <label className="studio-label">
               Формат
               <select

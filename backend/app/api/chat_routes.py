@@ -40,6 +40,7 @@ from app.schemas import (
 from app.services.crypto_secret import decrypt_secret
 from app.services.realtime import hub
 from app.services.translation import translate_from_russian
+from app.services.wavespeed_client import studio_wan_edit_tier_switch_available
 from app.services.workspace import PERM_CHAT, assert_permission, workspace_owner_id
 
 log = logging.getLogger(__name__)
@@ -80,6 +81,7 @@ async def api_health(session: AsyncSession = Depends(get_session)) -> dict:
         "openai_studio_configured": bool((settings.openai_api_key or "").strip()),
         "studio_prompt_credit_cost": settings.credit_cost_studio_prompt_refine,
         "studio_upscale_credit_cost": settings.credit_cost_studio_upscale,
+        "studio_wan_edit_tier_switch": studio_wan_edit_tier_switch_available(),
         "web_push_configured": settings.web_push_configured,
     }
 

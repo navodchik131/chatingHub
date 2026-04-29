@@ -73,7 +73,10 @@ from app.services.studio_pose_reference import (
     resolve_pose_reference_file,
     save_pose_reference_bytes,
 )
-from app.services.wavespeed_client import seedream_v45_edit_image_url, wavespeed_image_upscale_url
+from app.services.wavespeed_client import (
+    seedream_v45_edit_image_url,
+    wavespeed_image_upscale_url,
+)
 
 log = logging.getLogger(__name__)
 
@@ -125,6 +128,12 @@ def _normalize_studio_mode(raw: str | None) -> str:
     if m in _ALLOWED_STUDIO_MODES:
         return m
     return "model"
+
+
+def _normalize_wan_edit_tier(raw: str | None) -> str:
+    """standard | pro для FormData UI; прочее → standard."""
+    t = (raw or "standard").strip().lower()
+    return "pro" if t == "pro" else "standard"
 
 
 def _model_dir(user_id: int, model_id: int) -> Path:
@@ -683,6 +692,7 @@ async def api_studio_refine_prompt(
     image: UploadFile | None = File(None),
     output_aspect: str = Form("9:16"),
     studio_mode: str = Form("model"),
+    wan_edit_tier: str = Form("standard"),
     generate_wavespeed: str | None = Form(None),
     wavespeed_single_reference: str | None = Form(None),
     session: AsyncSession = Depends(get_session),
@@ -718,6 +728,7 @@ async def api_studio_refine_prompt(
 
     assert_permission(user, PERM_STUDIO_GENERATE)
     oid = workspace_owner_id(user)
+    wan_tier_n = _normalize_wan_edit_tier(wan_edit_tier)
 
     image_bytes: bytes | None = None
     image_mime: str | None = None
@@ -906,6 +917,7 @@ async def api_studio_refine_prompt(
                                     image_urls=image_urls,
                                     prompt=wavespeed_prompt,
                                     size=size_for_ws,
+                                    wan_edit_tier=wan_tier_n,
                                 )
                             except RuntimeError as e:
                                 wavespeed_message = str(e)
@@ -960,6 +972,7 @@ async def api_studio_refine_prompt(
             "wavespeed": bool(generated_image_url),
             "generation_id": generation_id,
             "studio_mode": mode_n,
+            "wan_edit_tier": wan_tier_n,
         },
     )
     await session.commit()

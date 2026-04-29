@@ -21,6 +21,29 @@ def _seedream_edit_post_path() -> str:
     return p if p.startswith("/") else f"/{p}"
 
 
+# Фиксированные пути WAN 2.7 (переключение в UI при WAVESPEED_SEEDREAM_EDIT_PATH = WAN).
+WAN_27_IMAGE_EDIT_STANDARD_PATH = "/api/v3/alibaba/wan-2.7/image-edit"
+WAN_27_IMAGE_EDIT_PRO_PATH = "/api/v3/alibaba/wan-2.7/image-edit-pro"
+
+
+def resolve_studio_image_edit_post_path(*, wan_edit_tier: str | None) -> str:
+    """
+    Если в настройках указан WAN 2.7 image-edit — подменяем путь по запросу UI (standard | pro).
+    Для Seedream и любых не-WAN путей возвращаем путь из .env без изменений.
+    """
+    cfg = (settings.wavespeed_seedream_edit_path or "").strip() or WAN_27_IMAGE_EDIT_STANDARD_PATH
+    configured = cfg if cfg.startswith("/") else f"/{cfg}"
+    if not _is_wan_27_image_edit_path(configured):
+        return configured
+    t = (wan_edit_tier or "standard").strip().lower()
+    if t == "pro":
+        return WAN_27_IMAGE_EDIT_PRO_PATH
+    return WAN_27_IMAGE_EDIT_STANDARD_PATH
+
+
+def studio_wan_edit_tier_switch_available() -> bool:
+    """True — в студии можно переключать обычный WAN / Pro (endpoint в .env относится к WAN 2.7)."""
+    return _is_wan_27_image_edit_path(_seedream_edit_post_path())
 def _is_wan_27_image_edit_path(post_path: str) -> bool:
     s = (post_path or "").lower()
     return "wan" in s and "image-edit" in s
@@ -317,12 +340,14 @@ async def seedream_v45_edit_image_url(
     image_urls: list[str],
     prompt: str,
     size: str | None = None,
+    wan_edit_tier: str | None = None,
     timeout_submit: float = 300.0,
     poll_interval: float = 2.0,
     max_polls: int = 90,
 ) -> str:
     """
-    Image edit через WaveSpeed: путь `WAVESPEED_SEEDREAM_EDIT_PATH` (WAN 2.7 / Seedream v5 / v4.5 / …).
+    Image edit через WaveSpeed: путь из `resolve_studio_image_edit_post_path`
+    (WAN 2.7 standard/pro по UI или Seedream / кастом из .env).
     """
     if not image_urls:
         raise RuntimeError("no image URLs")
@@ -330,7 +355,7 @@ async def seedream_v45_edit_image_url(
         raise RuntimeError("empty prompt")
 
     base = _wavespeed_base()
-    post_path = _seedream_edit_post_path()
+    post_path = resolve_studio_image_edit_post_path(wan_edit_tier=wan_edit_tier)
     url = f"{base}{post_path}"
     is_wan = _is_wan_27_image_edit_path(post_path)
     if is_wan:
