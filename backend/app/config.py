@@ -96,6 +96,13 @@ class Settings(BaseSettings):
     )
     wavespeed_upscale_sync: bool = Field(default=True)
     credit_cost_studio_upscale: int = Field(default=1)
+    # Google Nano Banana Pro Edit — режим «Обычные фотографии» в студии (wavespeed.ai/docs/.../google-nano-banana-pro-edit)
+    wavespeed_nano_banana_pro_edit_path: str = Field(
+        default="/api/v3/google/nano-banana-pro/edit",
+    )
+    wavespeed_nano_banana_pro_resolution: str = Field(default="2k")
+    wavespeed_nano_banana_pro_sync: bool = Field(default=True)
+    wavespeed_nano_banana_pro_output_format: str = Field(default="png")
 
     stripe_secret_key: str = Field(default="")
     stripe_webhook_secret: str = Field(default="")

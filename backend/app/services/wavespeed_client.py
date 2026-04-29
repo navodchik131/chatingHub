@@ -446,3 +446,62 @@ async def wavespeed_image_upscale_url(
         poll_interval=poll_interval,
         max_polls=max_polls,
     )
+
+
+def _nano_banana_pro_edit_post_path() -> str:
+    p = (settings.wavespeed_nano_banana_pro_edit_path or "").strip() or "/api/v3/google/nano-banana-pro/edit"
+    return p if p.startswith("/") else f"/{p}"
+
+
+async def nano_banana_pro_edit_image_url(
+    *,
+    api_key: str,
+    image_urls: list[str],
+    prompt: str,
+    aspect_ratio: str,
+    timeout_submit: float = 300.0,
+    poll_interval: float = 2.0,
+    max_polls: int = 90,
+) -> str:
+    """
+    Google Nano Banana Pro Edit: images + prompt + aspect_ratio + resolution.
+    Док: /docs/docs-api/google/google-nano-banana-pro-edit
+    """
+    if not image_urls:
+        raise RuntimeError("no image URLs")
+    if not (prompt or "").strip():
+        raise RuntimeError("empty prompt")
+    res = (settings.wavespeed_nano_banana_pro_resolution or "2k").strip().lower()
+    if res not in ("1k", "2k", "4k"):
+        res = "2k"
+    fmt = (settings.wavespeed_nano_banana_pro_output_format or "png").strip().lower()
+    if fmt == "jpg":
+        fmt = "jpeg"
+    if fmt not in ("png", "jpeg"):
+        fmt = "png"
+    path = _nano_banana_pro_edit_post_path()
+    url = f"{_wavespeed_base()}{path}"
+    body: dict[str, Any] = {
+        "images": image_urls[:14],
+        "prompt": prompt.strip(),
+        "aspect_ratio": aspect_ratio.strip(),
+        "resolution": res,
+        "output_format": fmt,
+        "enable_sync_mode": bool(settings.wavespeed_nano_banana_pro_sync),
+        "enable_base64_output": False,
+    }
+    log.debug(
+        "wavespeed nano-banana-pro path=%s images=%s aspect=%s res=%s",
+        path,
+        len(body.get("images") or []),
+        aspect_ratio,
+        res,
+    )
+    return await _wavespeed_post_json_and_resolve_image_url(
+        api_key=api_key,
+        full_post_url=url,
+        body=body,
+        timeout_submit=timeout_submit,
+        poll_interval=poll_interval,
+        max_polls=max_polls,
+    )

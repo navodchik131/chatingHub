@@ -382,6 +382,7 @@ export default function App() {
   const [studioFile, setStudioFile] = useState<File | null>(null)
   const [studioMode, setStudioMode] = useState<StudioJobMode>('model')
   const [studioWanEditTier, setStudioWanEditTier] = useState<'standard' | 'pro'>('standard')
+  const [studioWaveProfile, setStudioWaveProfile] = useState<'regular' | 'nsfw'>('nsfw')
   const [studioBusy, setStudioBusy] = useState(false)
   const [studioModels, setStudioModels] = useState<UserStudioModel[]>([])
   const [studioSelectedModelId, setStudioSelectedModelId] = useState<number | null>(null)
@@ -1159,6 +1160,7 @@ export default function App() {
       fd.append('output_aspect', studioOutputAspect)
       fd.append('studio_mode', studioMode)
       fd.append('wan_edit_tier', studioWanEditTier)
+      fd.append('studio_wave_profile', studioWaveProfile)
       fd.append('generate_wavespeed', '1')
       fd.append('wavespeed_single_reference', '1')
       const r = await apiFetch('/api/studio/refine-prompt', { method: 'POST', body: fd })
@@ -2622,7 +2624,31 @@ export default function App() {
                   ? 'Обязательно загрузите фото; промпт описывает правки. Модель по желанию (подсказка по телу/коже).'
                   : 'Кадр без лица/головы; нужна модель с фото или свой референс.'}
             </p>
-            {health?.studio_wan_edit_tier_switch ? (
+            <div className="studio-mode-row" role="group" aria-label="Тип генерации WaveSpeed">
+              <span className="studio-mode-label">Тип</span>
+              <div className="studio-mode-segment">
+                <button
+                  type="button"
+                  className={`studio-mode-btn${studioWaveProfile === 'regular' ? ' is-active' : ''}`}
+                  onClick={() => setStudioWaveProfile('regular')}
+                >
+                  Обычные фотографии
+                </button>
+                <button
+                  type="button"
+                  className={`studio-mode-btn${studioWaveProfile === 'nsfw' ? ' is-active' : ''}`}
+                  onClick={() => setStudioWaveProfile('nsfw')}
+                >
+                  NSFW
+                </button>
+              </div>
+            </div>
+            <p className="studio-mode-hint">
+              {studioWaveProfile === 'regular'
+                ? 'Google Nano Banana Pro: выше качество для обычных снимков; действуют ограничения безопасности Google.'
+                : 'Редактор из настроек сервера (WAN 2.7 / Seedream и т.д. — см. WAVESPEED_SEEDREAM_EDIT_PATH).'}
+            </p>
+            {health?.studio_wan_edit_tier_switch && studioWaveProfile === 'nsfw' ? (
               <>
                 <div className="studio-mode-row" role="group" aria-label="Редактор WaveSpeed WAN 2.7">
                   <span className="studio-mode-label">WAN 2.7</span>

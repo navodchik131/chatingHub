@@ -74,6 +74,7 @@ from app.services.studio_pose_reference import (
     save_pose_reference_bytes,
 )
 from app.services.wavespeed_client import (
+    nano_banana_pro_edit_image_url,
     seedream_v45_edit_image_url,
     wavespeed_image_upscale_url,
 )
@@ -134,6 +135,12 @@ def _normalize_wan_edit_tier(raw: str | None) -> str:
     """standard | pro для FormData UI; прочее → standard."""
     t = (raw or "standard").strip().lower()
     return "pro" if t == "pro" else "standard"
+
+
+def _normalize_studio_wave_profile(raw: str | None) -> str:
+    """regular = Nano Banana Pro (обычные фото); nsfw = WAN/Seedream из .env."""
+    p = (raw or "nsfw").strip().lower()
+    return "regular" if p == "regular" else "nsfw"
 
 
 def _model_dir(user_id: int, model_id: int) -> Path:
@@ -693,6 +700,7 @@ async def api_studio_refine_prompt(
     output_aspect: str = Form("9:16"),
     studio_mode: str = Form("model"),
     wan_edit_tier: str = Form("standard"),
+    studio_wave_profile: str = Form("nsfw"),
     generate_wavespeed: str | None = Form(None),
     wavespeed_single_reference: str | None = Form(None),
     session: AsyncSession = Depends(get_session),
@@ -729,6 +737,7 @@ async def api_studio_refine_prompt(
     assert_permission(user, PERM_STUDIO_GENERATE)
     oid = workspace_owner_id(user)
     wan_tier_n = _normalize_wan_edit_tier(wan_edit_tier)
+    wave_profile_n = _normalize_studio_wave_profile(studio_wave_profile)
 
     image_bytes: bytes | None = None
     image_mime: str | None = None
@@ -912,27 +921,56 @@ async def api_studio_refine_prompt(
                             else:
                                 size_for_ws = wavespeed_size_string(aspect_key)
                             try:
-                                generated_image_url = await seedream_v45_edit_image_url(
-                                    api_key=ws_key,
-                                    image_urls=image_urls,
-                                    prompt=wavespeed_prompt,
-                                    size=size_for_ws,
-                                    wan_edit_tier=wan_tier_n,
-                                )
+                                if wave_profile_n == "regular":
+                                    generated_image_url = await nano_banana_pro_edit_image_url(
+                                        api_key=ws_key,
+                                        image_urls=image_urls,
+                                        prompt=wavespeed_prompt,
+                                        aspect_ratio=aspect_key,
+                                    )
+                                else:
+                                    generated_image_url = await seedream_v45_edit_image_url(
+                                        api_key=ws_key,
+                                        image_urls=image_urls,
+                                        prompt=wavespeed_prompt,
+                                        size=size_for_ws,
+                                        wan_edit_tier=wan_tier_n,
+                                    )
                             except RuntimeError as e:
                                 wavespeed_message = str(e)
                                 low = wavespeed_message.lower()
-                                if "something went wrong" in low or "try again" in low:
+                                if wave_profile_n == "regular" and (
+                                    "safety" in low
+                                    or "guideline" in low
+                                    or "nsfw" in low
+                                    or "policy" in low
+                                ):
                                     wavespeed_message = (
+                                        f"{wavespeed_message} "
+                                        "Для режима «Обычные фотографии» действуют ограничения Google; "
+                                        "для контента без этих лимитов переключите тип генерации на «NSFW» "
+                                        "(редактор из настроек сервера)."
+                                    )
+                                if "something went wrong" in low or "try again" in low:
+                                    common = (
                                         f"{wavespeed_message} "
                                         "Часто это: баланс/лимит на wavespeed.ai, кратковременный сбой API "
                                         "(см. status.wavespeed.ai) или слишком тяжёлый/нестандартный запрос. "
-                                        "Повторите позже. Если сбой стабилен — в backend/.env поставьте "
-                                        "WAVESPEED_SEEDREAM_SYNC=false (режим с опросом вместо sync) и перезапустите API. "
-                                        f"Публичный референс: {pub}/api/studio/public-model-image?… (без логина — 200 и картинка). "
-                                        "Если в Playground тот же JSON срабатывает, а в интеграции нет — "
-                                        "попробуйте WAVESPEED_SEEDREAM_OMIT_SIZE=true (как пустой size на сайте)."
+                                        "Повторите позже. "
                                     )
+                                    if wave_profile_n == "regular":
+                                        wavespeed_message = common + (
+                                            "При таймаутах Nano Banana Pro попробуйте "
+                                            "WAVESPEED_NANO_BANANA_PRO_SYNC=false в backend/.env."
+                                        )
+                                    else:
+                                        wavespeed_message = common + (
+                                            "Если сбой стабилен — в backend/.env поставьте "
+                                            "WAVESPEED_SEEDREAM_SYNC=false (режим с опросом вместо sync) и перезапустите API. "
+                                            f"Публичный референс: {pub}/api/studio/public-model-image?… (без логина — 200 и картинка). "
+                                            "Если в Playground тот же JSON срабатывает, а в интеграции нет — "
+                                            "попробуйте WAVESPEED_SEEDREAM_OMIT_SIZE=true (как пустой size на сайте)."
+                                        )
                                 log.warning(
                                     "WaveSpeed generation failed (owner_id=%s actor=%s): %s",
                                     oid,
@@ -973,6 +1011,7 @@ async def api_studio_refine_prompt(
             "generation_id": generation_id,
             "studio_mode": mode_n,
             "wan_edit_tier": wan_tier_n,
+            "studio_wave_profile": wave_profile_n,
         },
     )
     await session.commit()
