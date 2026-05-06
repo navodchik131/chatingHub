@@ -1,137 +1,133 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
-
 from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.deps import get_current_user
 from app.config import settings
-from app.db.models import Subscription, SubscriptionStatus, User
+from app.db.models import User
 from app.db.session import get_session
-from app.services.workspace import is_workspace_owner
+from app.schemas import (
+    BillingPlanItemOut,
+    BillingPlansOut,
+    YookassaPaymentCreateIn,
+    YookassaPaymentOut,
+)
+from app.services.workspace import is_workspace_owner, workspace_owner_id
+from app.services.yookassa_apply import apply_yookassa_payment_succeeded
+from app.services.yookassa_client import create_payment, parse_notification_body
 
 log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/billing", tags=["billing"])
 
-try:
-    import stripe
-except ImportError:  # pragma: no cover
-    stripe = None
+
+def _rub_amount_str(amount_rub: int) -> str:
+    return f"{max(0, int(amount_rub))}.00"
 
 
-@router.post("/checkout")
-async def create_checkout(
+@router.get("/plans", response_model=BillingPlansOut)
+async def billing_plans() -> BillingPlansOut:
+    return BillingPlansOut(
+        items=[
+            BillingPlanItemOut(
+                product="sub_managed_month",
+                title="Подписка Managed — ключи платформы, кредиты на студию",
+                price_rub=settings.billing_price_managed_month_rub,
+            ),
+            BillingPlanItemOut(
+                product="sub_byok_month",
+                title="Подписка BYOK — свои LLM и WaveSpeed, кредиты на студию не списываются",
+                price_rub=settings.billing_price_byok_month_rub,
+            ),
+            BillingPlanItemOut(
+                product="credits_pack",
+                title=f"Пакет кредитов ({settings.billing_credit_pack_credits} шт.)",
+                price_rub=settings.billing_credit_pack_price_rub,
+            ),
+        ]
+    )
+
+
+@router.post("/yookassa/payment", response_model=YookassaPaymentOut)
+async def yookassa_start_payment(
+    body: YookassaPaymentCreateIn,
     session: AsyncSession = Depends(get_session),
     user: User = Depends(get_current_user),
-) -> dict:
+) -> YookassaPaymentOut:
     if not is_workspace_owner(user):
         raise HTTPException(
             status_code=403,
-            detail="Оформление подписки доступно только владельцу аккаунта",
+            detail="Оплата доступна только владельцу аккаунта",
         )
-    if stripe is None or not settings.stripe_secret_key.strip():
-        raise HTTPException(status_code=503, detail="Stripe не настроен на сервере")
-    if not settings.stripe_price_subscription.strip():
-        raise HTTPException(status_code=503, detail="Не задан STRIPE_PRICE_SUBSCRIPTION")
+    if not settings.yookassa_configured:
+        raise HTTPException(status_code=503, detail="ЮKassa не настроена на сервере")
 
-    stripe.api_key = settings.stripe_secret_key
-
-    sub = user.subscription
-    if sub is None:
-        sub = Subscription(user_id=user.id, status=SubscriptionStatus.none)
-        session.add(sub)
-        await session.flush()
-        user.subscription = sub
-
-    customer_id = (sub.stripe_customer_id or "").strip()
-    if not customer_id:
-        cust = stripe.Customer.create(
-            email=user.email,
-            metadata={"user_id": str(user.id)},
-        )
-        sub.stripe_customer_id = cust.id
-        await session.commit()
-        customer_id = cust.id
+    if body.product == "sub_managed_month":
+        price = settings.billing_price_managed_month_rub
+        desc = "Подписка Chating Hub (Managed), 30 дн."
+    elif body.product == "sub_byok_month":
+        price = settings.billing_price_byok_month_rub
+        desc = "Подписка Chating Hub (BYOK), 30 дн."
+    else:
+        price = settings.billing_credit_pack_price_rub
+        desc = f"Пакет кредитов ({settings.billing_credit_pack_credits})"
 
     base = settings.public_app_url.rstrip("/")
-    success = f"{base}{settings.billing_success_path}"
-    cancel = f"{base}{settings.billing_cancel_path}"
+    return_url = f"{base}{settings.billing_success_path}"
 
-    sess = stripe.checkout.Session.create(
-        mode="subscription",
-        customer=customer_id,
-        line_items=[{"price": settings.stripe_price_subscription, "quantity": 1}],
-        success_url=success,
-        cancel_url=cancel,
-        metadata={"user_id": str(user.id)},
-    )
-    if not sess.url:
-        raise HTTPException(status_code=500, detail="Stripe не вернул URL")
-    return {"url": sess.url}
+    billing_uid = workspace_owner_id(user)
+    meta = {"user_id": str(billing_uid), "product": body.product}
+
+    try:
+        pay = await create_payment(
+            amount_value=_rub_amount_str(price),
+            description=desc[:210],
+            return_url=return_url,
+            metadata=meta,
+        )
+    except RuntimeError as e:
+        log.warning("yookassa create_payment: %s", e)
+        raise HTTPException(status_code=502, detail="Не удалось создать платёж в ЮKassa") from e
+
+    pid = str(pay.get("id") or "").strip()
+    conf = pay.get("confirmation") if isinstance(pay.get("confirmation"), dict) else {}
+    url = str(conf.get("confirmation_url") or "").strip()
+    if not pid or not url:
+        raise HTTPException(status_code=502, detail="ЮKassa вернула неполный ответ")
+    return YookassaPaymentOut(payment_id=pid, confirmation_url=url)
 
 
-@router.post("/stripe-webhook")
-async def stripe_webhook(
+@router.post("/yookassa/webhook")
+async def yookassa_webhook(
     request: Request,
     session: AsyncSession = Depends(get_session),
 ) -> dict:
-    if stripe is None:
-        raise HTTPException(status_code=503, detail="Stripe SDK не установлен")
-    if not settings.stripe_webhook_secret.strip():
-        raise HTTPException(status_code=503, detail="Stripe webhook не настроен")
+    wh_secret = (settings.yookassa_webhook_secret or "").strip()
+    if wh_secret:
+        got = (request.query_params.get("secret") or "").strip() or (
+            request.headers.get("X-YooKassa-Webhook-Secret") or ""
+        ).strip()
+        if got != wh_secret:
+            raise HTTPException(status_code=403, detail="webhook secret")
 
-    payload = await request.body()
-    sig = request.headers.get("stripe-signature") or ""
-    try:
-        event = stripe.Webhook.construct_event(
-            payload, sig, settings.stripe_webhook_secret
-        )
-    except Exception as e:
-        log.warning("stripe webhook verify failed: %s", e)
-        raise HTTPException(status_code=400, detail="invalid signature") from e
+    raw = await request.body()
+    data = parse_notification_body(raw)
+    if not data:
+        raise HTTPException(status_code=400, detail="invalid json")
 
-    et = event.get("type")
-    data = event.get("data", {}).get("object", {})
+    event = (data.get("event") or "").strip()
+    if event != "payment.succeeded":
+        return {"ok": True, "ignored": event or "unknown"}
 
-    if et == "checkout.session.completed":
-        meta = data.get("metadata") or {}
-        uid_s = meta.get("user_id") or data.get("client_reference_id")
-        if not uid_s:
-            return {"ok": True, "skipped": "no user"}
-        user_id = int(uid_s)
-        sub_id = data.get("subscription")
-        stmt = select(Subscription).where(Subscription.user_id == user_id)
-        r = await session.execute(stmt)
-        sub = r.scalar_one_or_none()
-        if sub:
-            sub.stripe_subscription_id = str(sub_id) if sub_id else sub.stripe_subscription_id
-            sub.status = SubscriptionStatus.active
-            sub.plan_tier = "standard"
-            sub.current_period_end = datetime.now(timezone.utc)
-            await session.commit()
+    obj = data.get("object")
+    if not isinstance(obj, dict):
+        raise HTTPException(status_code=400, detail="invalid object")
 
-    elif et in ("customer.subscription.updated", "customer.subscription.deleted"):
-        sub_obj = data
-        st = sub_obj.get("status")
-        stripe_sub_id = sub_obj.get("id")
-        stmt = select(Subscription).where(
-            Subscription.stripe_subscription_id == stripe_sub_id
-        )
-        r = await session.execute(stmt)
-        sub = r.scalar_one_or_none()
-        if sub and isinstance(st, str):
-            mapping = {
-                "active": SubscriptionStatus.active,
-                "trialing": SubscriptionStatus.trialing,
-                "past_due": SubscriptionStatus.past_due,
-                "canceled": SubscriptionStatus.canceled,
-                "unpaid": SubscriptionStatus.unpaid,
-            }
-            sub.status = mapping.get(st, SubscriptionStatus.none)
-            await session.commit()
+    if (obj.get("status") or "").strip() != "succeeded":
+        return {"ok": True, "skipped": obj.get("status")}
 
-    return {"ok": True}
+    result = await apply_yookassa_payment_succeeded(session, payment_object=obj)
+    log.info("yookassa webhook: %s", result)
+    return result

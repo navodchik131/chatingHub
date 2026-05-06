@@ -8,8 +8,8 @@
 |-----------|------------|
 | **API (FastAPI)** | Auth, бизнес-логика, вебхуки внешних платформ, WebSocket уведомлений |
 | **PostgreSQL** | Пользователи, подписки, кредиты, диалоги, зашифрованные секреты интеграций |
-| **Фронтенд (React SPA)** | Личный кабинет, чат, настройки интеграций, оплата (редирект в Stripe Checkout) |
-| **Stripe** | Оформление подписки, вебхук статуса, при необходимости — пополнение кредитов |
+| **Фронтенд (React SPA)** | Личный кабинет, чат, настройки интеграций, оплата через ЮKassa |
+| **ЮKassa** | Оформление подписки Managed/BYOK и пакетов кредитов; вебхук `payment.succeeded` |
 | **Telegram Bot API** | Входящие/исходящие сообщения Direct messages канала (режим **webhook** в проде) |
 | **Fanvue API** | Входящие вебхуки + исходящие сообщения от имени создателя |
 
@@ -34,11 +34,12 @@
 
 ## 4. Подписка и кредиты
 
-### Подписка (Stripe)
+### Подписка и оплата (ЮKassa)
 
-- Модель `subscriptions`: `stripe_customer_id`, `stripe_subscription_id`, `status`, `plan_tier`, `current_period_end`.
-- `POST /api/billing/checkout` — создаёт **Checkout Session** (режим subscription), `success_url` / `cancel_url` с фронта.
-- `POST /api/billing/webhook` — проверка подписи Stripe, обновление статуса подписки.
+- Модель `subscriptions`: `billing_plan` (managed | byok), `status`, `plan_tier`, `current_period_end`.
+- `GET /api/billing/plans` — цены для UI.
+- `POST /api/billing/yookassa/payment` — создание платежа, редирект на оплату.
+- `POST /api/billing/yookassa/webhook` — уведомление об успешной оплате, начисление подписки/кредитов.
 
 ### Кредиты
 
@@ -47,7 +48,7 @@
 - Списание (MVP): за перевод входящего и за перевод исходящего ответа (конфиг `CREDIT_COST_INBOUND_TRANSLATION`, `CREDIT_COST_OUTBOUND_TRANSLATION`).
 - **Политика доступа (MVP):** активная подписка (`active` / `trialing`) **или** положительный баланс кредитов — иначе `402` на операциях, требующих перевод/отправку.
 
-Планы расширения: пакеты кредитов через Stripe Payment Links / Checkout `mode=payment`, роли, команды (организации).
+Планы расширения: дополнительные продукты в ЮKassa, роли, команды (организации).
 
 ## 5. Telegram (продакшен)
 
@@ -75,7 +76,7 @@
 
 - `JWT_SECRET`, `FERNET_KEY` — длинные случайные значения, не коммитить.
 - Секреты платформ только в зашифрованном виде (Fernet + ключ из env).
-- Stripe webhook — проверка подписи.
+- ЮKassa webhook — при необходимости секрет в query/заголовке.
 - Fanvue webhook — проверка подписи ключом пользователя.
 - Rate limiting и CAPTCHA на `/auth/*` — рекомендуется на краю (nginx / Cloudflare) в проде.
 

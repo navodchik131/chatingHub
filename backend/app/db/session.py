@@ -129,6 +129,34 @@ def _migrate_user_is_platform_admin(sync_conn) -> None:
         )
 
 
+def _migrate_studio_generation_refined_prompt(sync_conn) -> None:
+    from sqlalchemy import inspect
+
+    insp = inspect(sync_conn)
+    if not insp.has_table("studio_generations"):
+        return
+    cols = {c["name"] for c in insp.get_columns("studio_generations")}
+    if "refined_prompt" in cols:
+        return
+    sync_conn.execute(text("ALTER TABLE studio_generations ADD COLUMN refined_prompt TEXT"))
+
+
+def _migrate_subscription_billing_plan(sync_conn) -> None:
+    from sqlalchemy import inspect
+
+    insp = inspect(sync_conn)
+    if not insp.has_table("subscriptions"):
+        return
+    cols = {c["name"] for c in insp.get_columns("subscriptions")}
+    if "billing_plan" in cols:
+        return
+    sync_conn.execute(
+        text(
+            "ALTER TABLE subscriptions ADD COLUMN billing_plan VARCHAR(16) NOT NULL DEFAULT 'managed'"
+        )
+    )
+
+
 async def init_db() -> None:
     """Создаёт таблицы. Каталог для SQLite создаётся в Settings.sqlite_absolute_path."""
     async with engine.begin() as conn:
@@ -140,6 +168,8 @@ async def init_db() -> None:
         await conn.run_sync(_migrate_user_workspace_columns)
         await conn.run_sync(_migrate_telegram_webhook_registered_column)
         await conn.run_sync(_migrate_user_is_platform_admin)
+        await conn.run_sync(_migrate_studio_generation_refined_prompt)
+        await conn.run_sync(_migrate_subscription_billing_plan)
 
 
 async def get_session() -> AsyncGenerator[AsyncSession, None]:

@@ -8,7 +8,6 @@ from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import CreditAccount, UsageEvent, User
-from app.services.entitlements import subscription_covers_usage
 from app.services.workspace import resolve_billing_user
 
 log = logging.getLogger(__name__)
@@ -17,17 +16,15 @@ log = logging.getLogger(__name__)
 async def ensure_can_consume_credits(
     session: AsyncSession, actor: User, cost: int
 ) -> User:
-    """Проверяет лимит по биллингу владельца; возвращает billing user."""
+    """Проверяет баланс кредитов владельца (при cost>0). Подписка сама по себе кредиты не заменяет."""
     if cost <= 0:
         return await resolve_billing_user(session, actor)
     billing = await resolve_billing_user(session, actor)
-    if subscription_covers_usage(billing.subscription):
-        return billing
     bal = billing.credit_account.balance if billing.credit_account else 0
     if bal < cost:
         raise HTTPException(
             status_code=402,
-            detail="Нужна активная подписка или больше кредитов. Пополните баланс или оформите подписку.",
+            detail="Недостаточно кредитов. Пополните баланс (тариф «всё включено») или перейдите на BYOK со своими ключами.",
         )
     return billing
 
@@ -40,13 +37,12 @@ async def record_usage(
     credits: int,
     meta: dict[str, Any] | None = None,
 ) -> None:
-    """Списывает кредиты с владельца; в usage_events — владелец, в meta может быть actor."""
-    covered = subscription_covers_usage(billing.subscription)
-    delta = 0 if covered else -abs(credits)
+    """Списывает кредиты с владельца, если credits>0."""
+    delta = 0 if credits <= 0 else -abs(credits)
     meta_full = dict(meta or {})
     if actor.id != billing.id:
         meta_full["actor_user_id"] = actor.id
-    if not covered and credits > 0:
+    if credits > 0:
         acc = await session.get(CreditAccount, billing.id)
         if acc is None:
             acc = CreditAccount(user_id=billing.id, balance=0)
@@ -65,7 +61,7 @@ async def record_usage(
     )
     session.add(ev)
     await session.flush()
-    if not covered and credits > 0:
+    if credits > 0:
         log.debug(
             "credits spent billing=%s actor=%s kind=%s amount=%s",
             billing.id,

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.deps import get_current_user
@@ -12,6 +12,7 @@ from app.db.models import CreditAccount, Subscription, SubscriptionStatus, User
 from app.db.session import get_session
 from app.schemas import LoginIn, RegisterIn, TokenOut, UserMeOut
 from app.services.admin_access import user_is_platform_admin
+from app.services.billing_plan import normalize_billing_plan
 from app.services.workspace import resolve_billing_user, workspace_owner_id
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -81,15 +82,24 @@ async def me(
     oid = workspace_owner_id(user)
     owner_row = await session.get(User, oid)
     owner_email = owner_row.email if owner_row else user.email
+    billing_plan = normalize_billing_plan(sub.billing_plan if sub else None)
+    period_end = sub.current_period_end if sub else None
+    op_stmt = select(func.count()).select_from(User).where(User.parent_user_id == billing.id)
+    operators_count = int((await session.scalar(op_stmt)) or 0)
     return UserMeOut(
         id=user.id,
         email=user.email,
         subscription_status=sub.status.value if sub else SubscriptionStatus.none.value,
         credits_balance=cr.balance if cr else 0,
+        billing_plan=billing_plan,
+        subscription_period_end=period_end,
+        operators_count=operators_count,
         is_workspace_owner=user.parent_user_id is None,
         is_platform_admin=user_is_platform_admin(user),
         workspace_owner_id=oid,
         member_login=user.member_login,
         permissions_mask=user.permissions_mask,
         owner_email=owner_email,
+        billing_require_active_subscription=settings.billing_require_active_subscription,
+        online_payment_available=settings.yookassa_configured,
     )

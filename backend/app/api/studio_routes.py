@@ -17,6 +17,7 @@ from app.auth.deps import get_current_user
 from app.config import BACKEND_DIR, settings
 from app.db.models import (
     StudioGeneration,
+    Subscription,
     User,
     UserStudioModel,
     UserStudioModelImage,
@@ -24,6 +25,9 @@ from app.db.models import (
 )
 from app.db.session import get_session
 from app.schemas import (
+    StudioCarouselIn,
+    StudioCarouselItemOut,
+    StudioCarouselOut,
     StudioGenerationOut,
     StudioGenerationsPageOut,
     StudioModelImageOut,
@@ -35,6 +39,14 @@ from app.schemas import (
     UserStudioModelPatchIn,
 )
 from app.services.credits import ensure_can_consume_credits, record_usage
+from app.services.entitlements import subscription_active
+from app.services.admin_access import user_is_platform_admin
+from app.services.studio_keys import (
+    apply_studio_credit_cost,
+    load_owner_studio_billing,
+    studio_llm_credentials,
+    studio_wavespeed_api_key,
+)
 from app.services.workspace import (
     PERM_STUDIO_GENERATE,
     PERM_STUDIO_MODELS,
@@ -70,6 +82,7 @@ from app.services.studio_openai import (
     prepare_studio_prompt_skeleton,
     refine_prompt_via_openai,
 )
+from app.services.studio_carousel import build_carousel_wave_prompt
 from app.services.studio_pose_reference import (
     resolve_pose_reference_file,
     save_pose_reference_bytes,
@@ -85,6 +98,21 @@ log = logging.getLogger(__name__)
 router = APIRouter(tags=["studio"])
 
 MAX_MODEL_IMAGES = 5
+
+
+def _require_studio_subscription(user: User, owner_subscription: Subscription | None) -> None:
+    if not settings.billing_require_active_subscription:
+        return
+    if user_is_platform_admin(user):
+        return
+    if subscription_active(owner_subscription):
+        return
+    raise HTTPException(
+        status_code=402,
+        detail=(
+            "Оформите подписку: личный кабинет → «Тариф и баланс», выберите Managed или BYOK и оплатите."
+        ),
+    )
 
 
 def _public_app_base(request: Request | None) -> str:
@@ -118,6 +146,21 @@ def _truthy_wavespeed_flag(raw: str | None) -> bool:
     if raw is None:
         return True
     return str(raw).strip().lower() not in ("0", "false", "no", "off", "")
+
+
+def _effective_generate_wavespeed(generate_wavespeed: str | None) -> bool:
+    """Отключение WaveSpeed (только JSON-промпт) разрешено лишь при STUDIO_ALLOW_PROMPT_ONLY."""
+    want = _truthy_wavespeed_flag(generate_wavespeed)
+    if not want and not settings.studio_allow_prompt_only:
+        return True
+    return want
+
+
+def _truthy_lock_model_hairstyle(raw: str | None) -> bool:
+    """True — причёска с профиля модели (MODEL_LOCK); False — с загруженного референса (POSE_REFERENCE)."""
+    if raw is None:
+        return True
+    return str(raw).strip().lower() not in ("0", "false", "no", "off")
 
 
 _ALLOWED_STUDIO_MODES = frozenset({"model", "photo_edit", "no_face"})
@@ -362,27 +405,24 @@ async def api_upscale_studio_generation(
     if payload and payload.target_resolution:
         tr = payload.target_resolution
 
-    ws_row = await session.scalar(
-        select(WavespeedConnection).where(WavespeedConnection.user_id == oid)
-    )
-    if not ws_row or not (ws_row.api_key_encrypted or "").strip():
+    sub_b, _, ws_row, plan = await load_owner_studio_billing(session, oid)
+    _require_studio_subscription(user, sub_b)
+    ws_key: str = ""
+    try:
+        ws_key = studio_wavespeed_api_key(plan=plan, ws_row=ws_row)
+    except HTTPException as e:
         return StudioUpscaleGenerationOut(
             generated_image_url=None,
             generation_id=None,
-            message="Сохраните API-ключ WaveSpeed в кабинете (интеграции).",
+            message=str(e.detail),
             target_resolution=tr,
         )
 
-    cost = settings.credit_cost_studio_upscale
+    cost = apply_studio_credit_cost(plan, settings.credit_cost_studio_upscale)
     billing = await ensure_can_consume_credits(session, user, cost)
     msg: str | None = None
     out_url: str | None = None
     new_id: int | None = None
-    try:
-        ws_key = decrypt_secret(ws_row.api_key_encrypted)
-    except ValueError:
-        ws_key = ""
-        msg = "Не удалось расшифровать ключ WaveSpeed — сохраните ключ снова."
 
     if ws_key and not msg:
         tok = create_generation_image_access_token(user_id=oid, generation_id=gen_id)
@@ -454,6 +494,152 @@ async def api_upscale_studio_generation(
     )
 
 
+@router.post("/studio/generations/{gen_id}/carousel", response_model=StudioCarouselOut)
+async def api_studio_carousel(
+    gen_id: int,
+    request: Request,
+    payload: StudioCarouselIn,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> StudioCarouselOut:
+    """Несколько вариантов кадра (ракурс/поза) от той же мастер-генерации — тот же промпт + шаблоны в data/prompts."""
+    assert_permission(user, PERM_STUDIO_GENERATE)
+    oid = workspace_owner_id(user)
+    row = await session.get(StudioGeneration, gen_id)
+    if not row or row.user_id != oid:
+        raise HTTPException(status_code=404, detail="Не найдено")
+
+    master_text = (row.refined_prompt or row.prompt_excerpt or "").strip()
+    if len(master_text) < 80:
+        raise HTTPException(
+            status_code=400,
+            detail="Для карусели нужен сохранённый полный промпт. Сгенерируйте снимок заново в студии.",
+        )
+
+    pub = (settings.public_app_url or "").strip().rstrip("/")
+    if not pub.lower().startswith("https://"):
+        raise HTTPException(
+            status_code=503,
+            detail="WaveSpeed скачивает мастер-кадр по HTTPS. Укажите PUBLIC_APP_URL=https://…",
+        )
+
+    sub_b, _, ws_row, plan = await load_owner_studio_billing(session, oid)
+    _require_studio_subscription(user, sub_b)
+    try:
+        ws_key = studio_wavespeed_api_key(plan=plan, ws_row=ws_row)
+    except HTTPException as e:
+        return StudioCarouselOut(message=str(e.detail))
+
+    wave_profile_n = _normalize_studio_wave_profile(payload.studio_wave_profile)
+    wan_tier_n = _normalize_wan_edit_tier(payload.wan_edit_tier)
+    try:
+        aspect_key = normalize_aspect_key(row.output_aspect or "9:16")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    count = int(payload.count)
+    cost_one = apply_studio_credit_cost(plan, settings.credit_cost_studio_carousel_shot)
+    tok = create_generation_image_access_token(user_id=oid, generation_id=gen_id)
+    master_url = f"{pub}/api/studio/public-generation-image?t={quote(tok, safe='')}"
+
+    items: list[StudioCarouselItemOut] = []
+    last_msg: str | None = None
+    arch_base = _public_app_base(request)
+
+    for shot_i in range(count):
+        billing = await ensure_can_consume_credits(session, user, cost_one)
+        carousel_body = build_carousel_wave_prompt(
+            master_refined_json=master_text,
+            shot_index=shot_i,
+        )
+        if wave_profile_n == "regular":
+            wavespeed_prompt = finalize_nano_banana_studio_prompt(
+                carousel_body,
+                studio_mode="photo_edit",
+                user_photo_edit_first=True,
+                user_pose_reference_is_last=False,
+            )
+        else:
+            wavespeed_prompt = finalize_wavespeed_studio_prompt(
+                carousel_body,
+                studio_mode="photo_edit",
+                user_image_first=True,
+            )
+
+        if settings.wavespeed_seedream_omit_size:
+            size_for_ws: str | None = None
+        else:
+            size_for_ws = wavespeed_size_string(aspect_key)
+
+        try:
+            if wave_profile_n == "regular":
+                raw_url = await nano_banana_pro_edit_image_url(
+                    api_key=ws_key,
+                    image_urls=[master_url],
+                    prompt=wavespeed_prompt,
+                    aspect_ratio=aspect_key,
+                )
+            else:
+                raw_url = await seedream_v45_edit_image_url(
+                    api_key=ws_key,
+                    image_urls=[master_url],
+                    prompt=wavespeed_prompt,
+                    size=size_for_ws,
+                    wan_edit_tier=wan_tier_n,
+                )
+        except RuntimeError as e:
+            last_msg = str(e)
+            log.warning(
+                "studio carousel shot failed owner=%s gen=%s shot=%s: %s",
+                oid,
+                gen_id,
+                shot_i,
+                last_msg,
+            )
+            break
+
+        excerpt = f"[carousel {shot_i + 1}/{count} from gen {gen_id}]"
+        gen = await download_and_create_generation(
+            session,
+            owner_id=oid,
+            source_url=raw_url,
+            refined_prompt=excerpt,
+            output_aspect=aspect_key,
+            studio_model_id=row.studio_model_id,
+            refined_prompt_full=wavespeed_prompt,
+        )
+        if gen is None:
+            last_msg = "Не удалось сохранить кадр карусели — повторите позже."
+            break
+
+        await record_usage(
+            session,
+            user,
+            billing,
+            "studio_carousel_shot",
+            cost_one,
+            {
+                "source_generation_id": gen_id,
+                "shot_index": shot_i,
+                "generation_id": gen.id,
+                "studio_wave_profile": wave_profile_n,
+                "wan_edit_tier": wan_tier_n,
+            },
+        )
+        await session.commit()
+
+        if arch_base:
+            gtok = create_generation_image_access_token(
+                user_id=oid, generation_id=gen.id
+            )
+            out_u = f"{arch_base}/api/studio/public-generation-image?t={quote(gtok, safe='')}"
+        else:
+            out_u = raw_url
+        items.append(StudioCarouselItemOut(generation_id=gen.id, image_url=out_u))
+
+    return StudioCarouselOut(items=items, message=last_msg)
+
+
 @router.get("/studio/models", response_model=list[UserStudioModelOut])
 async def api_list_studio_models(
     session: AsyncSession = Depends(get_session),
@@ -480,11 +666,10 @@ async def api_generate_model_profile(
 ) -> StudioModelProfileGenerateOut:
     """Собрать JSON model_profile по референс-фотографиям (внешность, не поза/сцена)."""
     assert_permission(user, PERM_STUDIO_MODELS)
-    if not (settings.openai_api_key or "").strip():
-        raise HTTPException(
-            status_code=503,
-            detail="OpenAI не настроен: задайте OPENAI_API_KEY в backend/.env",
-        )
+    oid = workspace_owner_id(user)
+    sub_b, llm_row, _ws_row, plan = await load_owner_studio_billing(session, oid)
+    _require_studio_subscription(user, sub_b)
+    llm_creds = studio_llm_credentials(plan=plan, llm_row=llm_row)
     uploads = list(images or [])
     if not uploads:
         raise HTTPException(
@@ -512,10 +697,12 @@ async def api_generate_model_profile(
             status_code=400,
             detail="Пустые файлы",
         )
-    cost = settings.credit_cost_studio_model_profile_generate
+    cost = apply_studio_credit_cost(plan, settings.credit_cost_studio_model_profile_generate)
     billing = await ensure_can_consume_credits(session, user, cost)
     try:
-        text = await generate_model_profile_json_from_images(image_items=image_items)
+        text = await generate_model_profile_json_from_images(
+            image_items=image_items, credentials=llm_creds
+        )
     except RuntimeError as e:
         raise HTTPException(status_code=502, detail=str(e)) from e
     await record_usage(
@@ -540,6 +727,8 @@ async def api_create_studio_model(
 ) -> UserStudioModelOut:
     assert_permission(user, PERM_STUDIO_MODELS)
     oid = workspace_owner_id(user)
+    sub_b, _, _, _ = await load_owner_studio_billing(session, oid)
+    _require_studio_subscription(user, sub_b)
     uploads = images or []
     if len(uploads) > MAX_MODEL_IMAGES:
         raise HTTPException(
@@ -597,6 +786,8 @@ async def api_patch_studio_model(
 ) -> UserStudioModelOut:
     assert_permission(user, PERM_STUDIO_MODELS)
     oid = workspace_owner_id(user)
+    sub_b, _, _, _ = await load_owner_studio_billing(session, oid)
+    _require_studio_subscription(user, sub_b)
     m = await _load_studio_model_owned(session, oid, model_id)
     if not m:
         raise HTTPException(status_code=404, detail="Модель не найдена")
@@ -622,6 +813,8 @@ async def api_add_studio_model_images(
 ) -> UserStudioModelOut:
     assert_permission(user, PERM_STUDIO_MODELS)
     oid = workspace_owner_id(user)
+    sub_b, _, _, _ = await load_owner_studio_billing(session, oid)
+    _require_studio_subscription(user, sub_b)
     m = await _load_studio_model_owned(session, oid, model_id)
     if not m:
         raise HTTPException(status_code=404, detail="Модель не найдена")
@@ -673,6 +866,8 @@ async def api_delete_studio_model_image(
 ) -> dict:
     assert_permission(user, PERM_STUDIO_MODELS)
     oid = workspace_owner_id(user)
+    sub_b, _, _, _ = await load_owner_studio_billing(session, oid)
+    _require_studio_subscription(user, sub_b)
     m = await session.get(UserStudioModel, model_id)
     if not m or m.user_id != oid:
         raise HTTPException(status_code=404, detail="Модель не найдена")
@@ -699,6 +894,8 @@ async def api_delete_studio_model(
 ) -> dict:
     assert_permission(user, PERM_STUDIO_MODELS)
     oid = workspace_owner_id(user)
+    sub_b, _, _, _ = await load_owner_studio_billing(session, oid)
+    _require_studio_subscription(user, sub_b)
     m = await session.get(UserStudioModel, model_id)
     if not m or m.user_id != oid:
         raise HTTPException(status_code=404, detail="Модель не найдена")
@@ -722,15 +919,10 @@ async def api_studio_refine_prompt(
     studio_wave_profile: str = Form("nsfw"),
     generate_wavespeed: str | None = Form(None),
     wavespeed_single_reference: str | None = Form(None),
+    lock_model_hairstyle: str | None = Form("1"),
     session: AsyncSession = Depends(get_session),
     user: User = Depends(get_current_user),
 ) -> StudioRefinePromptOut:
-    if not (settings.openai_api_key or "").strip():
-        raise HTTPException(
-            status_code=503,
-            detail="OpenAI не настроен: задайте OPENAI_API_KEY в backend/.env",
-        )
-
     skeleton = prepare_studio_prompt_skeleton()
     system_instr = load_image_studio_system()
     if not skeleton:
@@ -755,8 +947,12 @@ async def api_studio_refine_prompt(
 
     assert_permission(user, PERM_STUDIO_GENERATE)
     oid = workspace_owner_id(user)
+    sub_b, llm_row, ws_row, plan = await load_owner_studio_billing(session, oid)
+    _require_studio_subscription(user, sub_b)
+    llm_creds = studio_llm_credentials(plan=plan, llm_row=llm_row)
     wan_tier_n = _normalize_wan_edit_tier(wan_edit_tier)
     wave_profile_n = _normalize_studio_wave_profile(studio_wave_profile)
+    do_wavespeed = _effective_generate_wavespeed(generate_wavespeed)
 
     image_bytes: bytes | None = None
     image_mime: str | None = None
@@ -802,8 +998,11 @@ async def api_studio_refine_prompt(
             detail="Добавьте описание, референс и/или выберите сохранённую модель",
         )
 
-    cost = settings.credit_cost_studio_prompt_refine
+    cost = apply_studio_credit_cost(plan, settings.credit_cost_studio_prompt_refine)
     billing = await ensure_can_consume_credits(session, user, cost)
+
+    lock_hair_req = _truthy_lock_model_hairstyle(lock_model_hairstyle)
+    effective_lock_hairstyle = bool(lock_hair_req) if image_bytes else True
 
     reference_scene: str | None = None
     try:
@@ -811,6 +1010,8 @@ async def api_studio_refine_prompt(
             reference_scene = await describe_reference_image_openai(
                 image_bytes=image_bytes,
                 image_media_type=image_mime,
+                hairstyle_from_pose_reference=not effective_lock_hairstyle,
+                credentials=llm_creds,
             )
         refined = await refine_prompt_via_openai(
             system_instruction=system_instr,
@@ -820,23 +1021,26 @@ async def api_studio_refine_prompt(
             model_profile_text=model_profile_text,
             output_aspect_key=aspect_key,
             studio_mode=mode_n,
+            lock_model_hairstyle=effective_lock_hairstyle,
+            credentials=llm_creds,
         )
     except RuntimeError as e:
         raise HTTPException(status_code=502, detail=str(e)) from e
 
     generated_image_url: str | None = None
     wavespeed_message: str | None = None
-    if _truthy_wavespeed_flag(generate_wavespeed):
-        ws_row = await session.scalar(
-            select(WavespeedConnection).where(WavespeedConnection.user_id == oid)
-        )
+    if do_wavespeed:
         imgs_model: list[UserStudioModelImage] = []
         if sm_loaded is not None:
             imgs_model = sorted(sm_loaded.images, key=lambda x: x.id)
 
-        if not ws_row or not (ws_row.api_key_encrypted or "").strip():
-            wavespeed_message = "Сохраните API-ключ WaveSpeed в кабинете (интеграции)."
-        else:
+        ws_key = ""
+        try:
+            ws_key = studio_wavespeed_api_key(plan=plan, ws_row=ws_row)
+        except HTTPException as e:
+            wavespeed_message = str(e.detail)
+
+        if not wavespeed_message:
             pub = (settings.public_app_url or "").strip().rstrip("/")
             if not pub.lower().startswith("https://"):
                 wavespeed_message = (
@@ -864,15 +1068,7 @@ async def api_studio_refine_prompt(
                             "В режиме «Без лица» выберите модель с фото или загрузите референс."
                         )
 
-                if not wavespeed_message:
-                    try:
-                        ws_key = decrypt_secret(ws_row.api_key_encrypted)
-                    except ValueError:
-                        ws_key = ""
-                        wavespeed_message = (
-                            "Не удалось расшифровать ключ WaveSpeed — сохраните ключ снова."
-                        )
-                    if ws_key and not wavespeed_message:
+                if not wavespeed_message and ws_key:
                         image_urls: list[str] = []
                         user_pose_ref_prepended = False
                         if image_bytes:
@@ -950,12 +1146,14 @@ async def api_studio_refine_prompt(
                                         user_pose_ref_prepended and mode_n == "photo_edit"
                                     ),
                                     user_pose_reference_is_last=pose_is_last_after_reorder,
+                                    lock_model_hairstyle=effective_lock_hairstyle,
                                 )
                             else:
                                 wavespeed_prompt = finalize_wavespeed_studio_prompt(
                                     refined,
                                     studio_mode=mode_n,
                                     user_image_first=user_pose_ref_prepended,
+                                    lock_model_hairstyle=effective_lock_hairstyle,
                                 )
                             size_for_ws: str | None
                             if settings.wavespeed_seedream_omit_size:
@@ -1029,6 +1227,7 @@ async def api_studio_refine_prompt(
             refined_prompt=refined,
             output_aspect=aspect_key,
             studio_model_id=mid,
+            refined_prompt_full=refined,
         )
         if gen is not None:
             generation_id = gen.id
@@ -1054,6 +1253,8 @@ async def api_studio_refine_prompt(
             "studio_mode": mode_n,
             "wan_edit_tier": wan_tier_n,
             "studio_wave_profile": wave_profile_n,
+            "lock_model_hairstyle": effective_lock_hairstyle,
+            "lock_model_hairstyle_requested": lock_hair_req,
         },
     )
     await session.commit()

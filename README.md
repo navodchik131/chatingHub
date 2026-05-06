@@ -7,7 +7,7 @@
 - **Backend:** Python, FastAPI, aiogram 3, SQLAlchemy async, PostgreSQL (прод) / SQLite (локально)  
 - **Frontend:** React, TypeScript, Vite  
 - **Перевод:** DeepL (если задан `DEEPL_API_KEY`), иначе публичный LibreTranslate  
-- **SaaS:** регистрация, JWT, кредиты и подписка (Stripe), интеграции Telegram/Fanvue на пользователя, шифрование секретов (Fernet)
+- **SaaS:** регистрация, JWT, кредиты и подписка (ЮKassa), интеграции Telegram/Fanvue на пользователя, шифрование секретов (Fernet)
 
 Подробная архитектура: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
@@ -38,7 +38,7 @@ pip install -r requirements.txt
 copy .env.example .env
 ```
 
-В `.env` для **SaaS** укажите `JWT_SECRET`, `FERNET_KEY`, при необходимости `DATABASE_URL` (PostgreSQL) и ключи Stripe — см. `backend/.env.example`. Интеграции Telegram/Fanvue задаются в UI после регистрации.
+В `.env` для **SaaS** укажите `JWT_SECRET`, `FERNET_KEY`, при необходимости `DATABASE_URL` (PostgreSQL) и настройки ЮKassa — см. `backend/.env.example`. Интеграции Telegram/Fanvue задаются в UI после регистрации.
 
 Для **legacy** long polling одного бота: `BOT_TOKEN` и `LEGACY_USER_ID` (id пользователя в БД после регистрации). Опционально: `DEEPL_API_KEY`.
 

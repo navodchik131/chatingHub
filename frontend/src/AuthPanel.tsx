@@ -2,7 +2,11 @@ import { useState } from 'react'
 import { apiFetch, setToken } from './api'
 import { formatApiErrorDetail } from './apiErrors'
 
-export function AuthPanel({ onSuccess }: { onSuccess: () => void }) {
+export function AuthPanel({
+  onSuccess,
+}: {
+  onSuccess: (fromRegister?: boolean) => void | Promise<void>
+}) {
   const [tab, setTab] = useState<'login' | 'register'>('login')
   const [email, setEmail] = useState('')
   const [memberLogin, setMemberLogin] = useState('')
@@ -29,7 +33,7 @@ export function AuthPanel({ onSuccess }: { onSuccess: () => void }) {
       }
       const data = (await r.json()) as { access_token: string }
       setToken(data.access_token)
-      onSuccess()
+      onSuccess(tab === 'register')
     } finally {
       setBusy(false)
     }
@@ -38,7 +42,7 @@ export function AuthPanel({ onSuccess }: { onSuccess: () => void }) {
   return (
     <div className="auth-card">
       <div className="auth-card-inner">
-        <h2 className="auth-title">Вход в Chating Hub</h2>
+        <h2 className="auth-title">Вход в ModelMate</h2>
         <p className="auth-sub">Мультитенантный кабинет: диалоги, интеграции, подписка</p>
         <div className="auth-tabs" role="tablist" aria-label="Режим входа">
           <button

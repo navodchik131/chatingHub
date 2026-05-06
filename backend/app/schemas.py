@@ -80,12 +80,21 @@ class UserMeOut(BaseModel):
     email: str
     subscription_status: str
     credits_balance: int
+    """План биллинга владельца пространства: managed | byok."""
+    billing_plan: str = "managed"
+    """Дата окончания оплаченного периода подписки (UTC), если есть."""
+    subscription_period_end: datetime | None = None
+    """Число подключённых операторов (участников), не считая владельца."""
+    operators_count: int = 0
     is_workspace_owner: bool = True
     is_platform_admin: bool = False
     workspace_owner_id: int
     member_login: str | None = None
     permissions_mask: int = 0
     owner_email: str
+    billing_require_active_subscription: bool = True
+    """Можно оформить или продлить подписку онлайн (на сервере настроена оплата)."""
+    online_payment_available: bool = False
 
 
 class WorkspaceMemberCreateIn(BaseModel):
@@ -105,6 +114,20 @@ class WorkspaceMemberOut(BaseModel):
     member_login: str
     permissions_mask: int
     is_active: bool
+
+
+class CreditHistoryItemOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    created_at: datetime
+    kind: str
+    credits_delta: int
+
+
+class CreditHistoryPageOut(BaseModel):
+    items: list[CreditHistoryItemOut]
+    has_more: bool
 
 
 class StudioRefinePromptOut(BaseModel):
@@ -130,6 +153,24 @@ class StudioUpscaleGenerationOut(BaseModel):
     generation_id: int | None = None
     message: str | None = None
     target_resolution: str
+
+
+class StudioCarouselIn(BaseModel):
+    """Несколько кадров той же сцены / той же модели по мастер-генерации (для карусели в соцсетях)."""
+
+    count: int = Field(default=4, ge=1, le=5)
+    studio_wave_profile: Literal["regular", "nsfw"] = "nsfw"
+    wan_edit_tier: Literal["standard", "pro"] = "standard"
+
+
+class StudioCarouselItemOut(BaseModel):
+    generation_id: int
+    image_url: str
+
+
+class StudioCarouselOut(BaseModel):
+    items: list[StudioCarouselItemOut] = Field(default_factory=list)
+    message: str | None = None
 
 
 class StudioGenerationOut(BaseModel):
@@ -158,6 +199,32 @@ class WavespeedIntegrationIn(BaseModel):
         if v is None:
             return ""
         return str(v).strip()
+
+
+class LlmIntegrationIn(BaseModel):
+    """OpenAI-совместимый API для студии (тариф BYOK)."""
+
+    api_key: str = Field(min_length=8, max_length=512)
+    base_url: str | None = Field(
+        default=None,
+        max_length=512,
+        description="База до /v1, например https://api.openai.com/v1 или прокси",
+    )
+
+    @field_validator("api_key", mode="before")
+    @classmethod
+    def strip_llm_key(cls, v: object) -> str:
+        if v is None:
+            return ""
+        return str(v).strip()
+
+    @field_validator("base_url", mode="before")
+    @classmethod
+    def strip_base_url(cls, v: object) -> str | None:
+        if v is None:
+            return None
+        s = str(v).strip()
+        return s if s else None
 
 
 class StudioModelImageOut(BaseModel):
@@ -214,6 +281,30 @@ class IntegrationStatusOut(BaseModel):
     telegram_webhook_registered: bool = False
     integration_hint: str | None = None
     wavespeed_configured: bool = False
+    llm_configured: bool = False
+
+
+# --- Billing (YooKassa) ---
+
+
+class BillingPlanItemOut(BaseModel):
+    product: str
+    title: str
+    price_rub: int
+    currency: str = "RUB"
+
+
+class BillingPlansOut(BaseModel):
+    items: list[BillingPlanItemOut]
+
+
+class YookassaPaymentCreateIn(BaseModel):
+    product: Literal["sub_byok_month", "sub_managed_month", "credits_pack"]
+
+
+class YookassaPaymentOut(BaseModel):
+    payment_id: str
+    confirmation_url: str
 
 
 class PushSubscribeIn(BaseModel):
@@ -270,6 +361,10 @@ class AdminUserRow(BaseModel):
     parent_email: str | None = None
     member_login: str | None = None
     subscription_status: str
+    """План биллинга владельца пространства (managed | byok)."""
+    billing_plan: str = "managed"
+    """Дата окончания оплаченного периода подписки владельца (UTC), если задана."""
+    subscription_period_end: datetime | None = None
     credits_balance: int
     """Баланс счёта владельца пространства (для участника — тот же, что у владельца)."""
 
@@ -290,13 +385,23 @@ class AdminCreditsOut(BaseModel):
 
 
 class AdminSubscriptionPatchIn(BaseModel):
-    status: str = Field(
-        ...,
+    status: str | None = Field(
+        default=None,
         description="none|incomplete|trialing|active|past_due|canceled|unpaid",
     )
     plan_tier: str | None = Field(default=None, max_length=64)
     current_period_end: datetime | None = None
-    clear_stripe_ids: bool = Field(
-        default=False,
-        description="Очистить stripe_customer_id и stripe_subscription_id (ручная подписка)",
+    billing_plan: str | None = Field(
+        default=None,
+        description="managed | byok; биллинг всегда у владельца пространства",
     )
+
+    @field_validator("billing_plan", mode="before")
+    @classmethod
+    def _norm_billing_plan(cls, v: object) -> str | None:
+        if v is None:
+            return None
+        s = str(v).strip().lower()
+        if s not in ("managed", "byok"):
+            raise ValueError("billing_plan must be managed or byok")
+        return s

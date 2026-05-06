@@ -8,9 +8,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.deps import get_current_user
 from app.auth.passwords import hash_password
-from app.db.models import User
+from app.db.models import UsageEvent, User
 from app.db.session import get_session
-from app.schemas import WorkspaceMemberCreateIn, WorkspaceMemberOut, WorkspaceMemberPatchIn
+from app.schemas import (
+    CreditHistoryItemOut,
+    CreditHistoryPageOut,
+    WorkspaceMemberCreateIn,
+    WorkspaceMemberOut,
+    WorkspaceMemberPatchIn,
+)
 from app.services.workspace import (
     DEFAULT_MEMBER_PERMISSIONS,
     is_workspace_owner,
@@ -19,6 +25,30 @@ from app.services.workspace import (
 )
 
 router = APIRouter(prefix="/workspace", tags=["workspace"])
+
+
+@router.get("/credit-history", response_model=CreditHistoryPageOut)
+async def credit_history(
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+    limit: int = 40,
+    skip: int = 0,
+) -> CreditHistoryPageOut:
+    _require_workspace_owner(user)
+    lim = min(100, max(1, limit))
+    off = max(0, skip)
+    stmt = (
+        select(UsageEvent)
+        .where(UsageEvent.user_id == user.id)
+        .order_by(UsageEvent.id.desc())
+        .offset(off)
+        .limit(lim + 1)
+    )
+    rows = (await session.execute(stmt)).scalars().all()
+    has_more = len(rows) > lim
+    rows = rows[:lim]
+    items = [CreditHistoryItemOut.model_validate(r) for r in rows]
+    return CreditHistoryPageOut(items=items, has_more=has_more)
 
 
 def _require_workspace_owner(user: User) -> None:

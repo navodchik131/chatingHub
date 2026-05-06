@@ -15,7 +15,7 @@ export const MEMBER_PERMISSION_LABELS: { bit: number; label: string }[] = [
   { bit: PERM_STUDIO_GENERATE, label: 'Генерация промпта и картинок (студия)' },
   { bit: PERM_STUDIO_MODELS, label: 'Модели студии (создание, фото, правки)' },
   { bit: PERM_INTEGRATIONS, label: 'Ключи Telegram, Fanvue, WaveSpeed' },
-  { bit: PERM_BILLING, label: 'Оплата и биллинг (Stripe)' },
+  { bit: PERM_BILLING, label: 'Оплата и биллинг' },
 ]
 
 export function togglePermission(mask: number, bit: number, on: boolean): number {

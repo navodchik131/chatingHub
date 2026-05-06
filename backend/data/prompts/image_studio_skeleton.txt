@@ -15,7 +15,7 @@
         "length": "<FROM_MODEL_PROFILE>",
         "style_default": "<FROM_MODEL_PROFILE>"
       },
-      "distinctive_marks": "<FROM_MODEL_PROFILE — tattoos, piercings, notable traits>"
+      "distinctive_marks": "<FROM_MODEL_PROFILE — one prose string only: tattoos, scars, piercings; do not use nested JSON objects>"
     },
     "expression": {
       "eyes": "<FILL>",
@@ -23,8 +23,8 @@
       "overall_emotion": "<FILL>"
     },
     "hair_in_scene": {
-      "style_now": "<FILL: hair styling in this scene>",
-      "effect": "<FILL: e.g. natural messiness, wet hair, bun>"
+      "style_now": "<FILL per ## HAIRSTYLE_MODE in user message: MODEL_LOCK = same as subject.identity.hair / profile; POSE_REFERENCE = hairstyle from pose reference / REFERENCE_IMAGE>",
+      "effect": "<FILL: movement/light/flyaways consistent with style_now>"
     },
     "pose": {
       "position": "<FILL_FROM_IMAGE_OR_TEXT>",
@@ -48,12 +48,12 @@
         "details": "<FILL>"
       },
       "accessories": "<FILL_FROM_USER_REFERENCE_ONLY — jewelry etc. only if visible on ref; else none>",
-      "imperfections": "<FILL — dust, pet hair on fabric, natural wear>"
+      "imperfections": "<FILL — subtle dust/fibers/wear; must agree with realism_engine.fabric_realism (no \"perfectly sterile\" if realism mentions lint)>"
     }
   },
   "photography": {
-    "camera_style": "<FILL — phone selfie / mirror selfie / friend snap / casual DSLR>",
-    "device": "<FILL — e.g. iPhone front camera, Android>",
+    "camera_style": "<FILL — prefer order: third-party / friend shot | rear phone camera at distance | tripod+timer | mirror selfie | arm-length front selfie — must match REFERENCE CAPTURE_TYPE and hands/distance>",
+    "device": "<FILL — front camera only if genuine selfie/mirror; else iPhone/Android main/rear lens or \"unknown smartphone main lens\">",
     "framing_crop": "<FILL_FROM_IMAGE_OR_TEXT — what is in frame vs cut off at each edge; headroom; subject scale in frame>",
     "camera_distance": "<FILL_FROM_IMAGE_OR_TEXT — arm-length, portrait distance, across room, etc.>",
     "camera_height_vs_subject": "<FILL_FROM_IMAGE_OR_TEXT — above eyes / at eyes / chest / low angle, etc.>",
@@ -73,18 +73,18 @@
       "<FILL>"
     ],
     "clutter_level": "<FILL — minimal / lived-in / messy>",
-    "lighting": "<FILL>",
+    "lighting": "<FILL — only if adds detail beyond photography.lighting; else keep minimal or match room accent>",
     "atmosphere": "<FILL>"
   },
   "realism_engine": null,
   "the_vibe": {
     "mood": "<FILL>",
     "intimacy_level": "<FILL — public / casual / personal / intimate>",
-    "caption_energy": "<FILL — short post tone>"
+    "caption_energy": "<FILL — mood word(s) only, no quotes, no caption text for the image>"
   },
   "constraints": {
     "must_keep": [
-      "<FILL — must preserve; always include: one cohesive MODEL_PROFILE person (not head-swap); same light model on face + body; reference pose/camera/room/clothing>"
+      "<FILL — plain English: one real person, same skin and light on face and body; pose/camera/room/clothes follow reference when reference exists; no pasted-on face>"
     ],
     "avoid": [
       "head swap",
@@ -104,5 +104,5 @@
       "<FILL — scene-specific>"
     ]
   },
-  "negative_prompt": "plastic skin, airbrushed, over-smoothed skin, CGI look, 3d render, doll-like face, perfect symmetry, studio lighting, heavy bokeh, fake depth of field, oversaturated, HDR, instagram filter, beauty filter, deformed hands, extra fingers, bad anatomy, fused fingers, mutated body, watermark, text, logo, low quality, blurry, jpeg artifacts, duplicate body parts"
+  "negative_prompt": "deformed hands, extra fingers, fused fingers, bad anatomy, duplicate limbs, watermark, text, logo, low quality, blurry, jpeg artifacts, plastic skin, airbrushed, CGI, 3d render, heavy fake bokeh"
 }

@@ -69,11 +69,17 @@ class Settings(BaseSettings):
         default="data/prompts/image_studio_reference_describe.txt"
     )
     image_studio_reference_describe_inline: str = Field(default="")
+    image_studio_reference_describe_match_pose_hair_path: str = Field(
+        default="data/prompts/image_studio_reference_describe_match_pose_hair.txt"
+    )
     image_studio_model_profile_gen_system_path: str = Field(
         default="data/prompts/model_profile_from_photos_system.txt",
     )
     image_studio_model_profile_gen_system_inline: str = Field(default="")
     credit_cost_studio_model_profile_generate: int = Field(default=1)
+    # Локальная отладка: клиент может передать generate_wavespeed=0 и получить только refined_prompt без WaveSpeed
+    studio_allow_prompt_only: bool = Field(default=False)
+    credit_cost_studio_carousel_shot: int = Field(default=2)
 
     wavespeed_api_base: str = Field(default="https://api.wavespeed.ai")
     # POST image-edit: WAN 2.7 по умолчанию; Pro / Seedream — см. .env.example
@@ -105,11 +111,32 @@ class Settings(BaseSettings):
     wavespeed_nano_banana_pro_sync: bool = Field(default=True)
     wavespeed_nano_banana_pro_output_format: str = Field(default="png")
 
-    stripe_secret_key: str = Field(default="")
-    stripe_webhook_secret: str = Field(default="")
-    stripe_price_subscription: str = Field(default="")
     billing_success_path: str = "/?billing=success"
-    billing_cancel_path: str = "/?billing=cancel"
+
+    # --- YooKassa (платежи в RUB) — shop_id и secret из личного кабинета ---
+    yookassa_shop_id: str = Field(default="")
+    yookassa_secret_key: str = Field(default="")
+    yookassa_webhook_secret: str = Field(
+        default="",
+        description="Опционально: проверка входящих уведомлений ЮKassa",
+    )
+
+    # Ключ WaveSpeed платформы для тарифа managed (если пусто — fallback на ключ пользователя из интеграций)
+    wavespeed_platform_api_key: str = Field(default="")
+
+    # Требовать активную подписку для студии (и не истёкший оплаченный период, если задан)
+    billing_require_active_subscription: bool = Field(default=True)
+
+    # Цены в рублях (целые); в ЮKassa передаём как "499.00"
+    billing_price_byok_month_rub: int = Field(default=499)
+    billing_price_managed_month_rub: int = Field(default=1290)
+    billing_credit_pack_credits: int = Field(default=100)
+    billing_credit_pack_price_rub: int = Field(default=990)
+    billing_subscription_period_days: int = Field(default=30)
+
+    @property
+    def yookassa_configured(self) -> bool:
+        return bool((self.yookassa_shop_id or "").strip() and (self.yookassa_secret_key or "").strip())
 
     # --- Legacy single-bot polling (локальная отладка) ---
     legacy_bot_token: str = Field(

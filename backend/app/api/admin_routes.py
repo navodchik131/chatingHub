@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,6 +25,7 @@ from app.schemas import (
     AdminUserPatchIn,
     AdminUserRow,
 )
+from app.services.billing_plan import normalize_billing_plan
 from app.services.credits import admin_adjust_credits
 from app.services.workspace import workspace_owner_id
 
@@ -87,14 +90,14 @@ async def admin_list_users(
     rows = (await session.execute(stmt)).scalars().all()
 
     owner_bal: dict[int, int] = {}
-    owner_sub_status: dict[int, str] = {}
+    owner_sub: dict[int, tuple[str, str, datetime | None]] = {}
     out: list[AdminUserRow] = []
     for u in rows:
         oid = workspace_owner_id(u)
         if oid not in owner_bal:
             acc = await session.get(CreditAccount, oid)
             owner_bal[oid] = acc.balance if acc else 0
-        if oid not in owner_sub_status:
+        if oid not in owner_sub:
             ow_stmt = (
                 select(User)
                 .where(User.id == oid)
@@ -102,9 +105,11 @@ async def admin_list_users(
             )
             ow = (await session.execute(ow_stmt)).scalar_one_or_none()
             s = ow.subscription if ow else None
-            owner_sub_status[oid] = (
-                s.status.value if s else SubscriptionStatus.none.value
-            )
+            st = s.status.value if s else SubscriptionStatus.none.value
+            bp = (s.billing_plan if s else None) or "managed"
+            pend = s.current_period_end if s else None
+            owner_sub[oid] = (st, bp, pend)
+        st, bp, pend = owner_sub[oid]
         out.append(
             AdminUserRow(
                 id=u.id,
@@ -115,7 +120,9 @@ async def admin_list_users(
                 parent_user_id=u.parent_user_id,
                 parent_email=u.parent.email if u.parent else None,
                 member_login=u.member_login,
-                subscription_status=owner_sub_status[oid],
+                subscription_status=st,
+                billing_plan=bp,
+                subscription_period_end=pend,
                 credits_balance=owner_bal[oid],
             )
         )
@@ -163,6 +170,8 @@ async def admin_patch_user(
         subscription_status=sub.status.value
         if sub
         else SubscriptionStatus.none.value,
+        billing_plan=(sub.billing_plan if sub else None) or "managed",
+        subscription_period_end=sub.current_period_end if sub else None,
         credits_balance=bal,
     )
 
@@ -209,19 +218,22 @@ async def admin_user_subscription(
         sub = Subscription(user_id=billing_id, status=SubscriptionStatus.none)
         session.add(sub)
         await session.flush()
-    try:
-        sub.status = SubscriptionStatus(body.status)
-    except ValueError as e:
-        raise HTTPException(
-            status_code=400,
-            detail="Недопустимый status (none|incomplete|trialing|active|past_due|canceled|unpaid)",
-        ) from e
-    if body.plan_tier is not None:
+    patch = body.model_dump(exclude_unset=True)
+    if not patch:
+        raise HTTPException(status_code=400, detail="Нет полей для обновления")
+    if "status" in patch:
+        try:
+            sub.status = SubscriptionStatus(patch["status"])
+        except ValueError as e:
+            raise HTTPException(
+                status_code=400,
+                detail="Недопустимый status (none|incomplete|trialing|active|past_due|canceled|unpaid)",
+            ) from e
+    if "plan_tier" in patch:
         sub.plan_tier = (body.plan_tier or "")[:64] or None
-    if body.current_period_end is not None:
+    if "current_period_end" in patch:
         sub.current_period_end = body.current_period_end
-    if body.clear_stripe_ids:
-        sub.stripe_customer_id = None
-        sub.stripe_subscription_id = None
+    if "billing_plan" in patch:
+        sub.billing_plan = normalize_billing_plan(body.billing_plan)
     await session.commit()
     return {"ok": True}

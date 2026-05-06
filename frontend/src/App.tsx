@@ -173,11 +173,18 @@ interface HealthInfo {
   telegram_bot_username?: string | null
   telegram_api_error?: string | null
   telegram_proxy_configured?: boolean
-  stripe_configured?: boolean
+  yookassa_configured?: boolean
+  billing_require_active_subscription?: boolean
+  billing_price_managed_month_rub?: number
+  billing_price_byok_month_rub?: number
+  billing_credit_pack_price_rub?: number
+  billing_credit_pack_credits?: number
   openai_studio_configured?: boolean
   studio_prompt_credit_cost?: number
   studio_upscale_credit_cost?: number
   studio_wan_edit_tier_switch?: boolean
+  studio_allow_prompt_only?: boolean
+  studio_carousel_credit_cost?: number
   web_push_configured?: boolean
 }
 
@@ -185,6 +192,10 @@ interface UserMe {
   id: number
   email: string
   subscription_status: string
+  /** managed | byok */
+  billing_plan?: string
+  subscription_period_end?: string | null
+  operators_count?: number
   credits_balance: number
   is_workspace_owner: boolean
   is_platform_admin?: boolean
@@ -192,6 +203,8 @@ interface UserMe {
   member_login: string | null
   permissions_mask: number
   owner_email: string
+  billing_require_active_subscription?: boolean
+  online_payment_available?: boolean
 }
 
 interface AdminStats {
@@ -213,6 +226,8 @@ interface AdminUserRow {
   parent_email: string | null
   member_login: string | null
   subscription_status: string
+  billing_plan: string
+  subscription_period_end: string | null
   credits_balance: number
 }
 
@@ -233,6 +248,14 @@ interface IntegrationStatus {
   telegram_webhook_registered?: boolean
   integration_hint?: string | null
   wavespeed_configured?: boolean
+  llm_configured?: boolean
+}
+
+interface BillingPlanRow {
+  product: 'sub_byok_month' | 'sub_managed_month' | 'credits_pack'
+  title: string
+  price_rub: number
+  currency?: string
 }
 
 interface StudioModelImage {
@@ -248,7 +271,7 @@ interface UserStudioModel {
   images?: StudioModelImage[]
 }
 
-type AccountCabinetTab = 'integrations' | 'models' | 'team' | 'admin'
+type AccountCabinetTab = 'overview' | 'billing' | 'integrations' | 'models' | 'team' | 'admin'
 
 const SUBSCRIPTION_STATUS_OPTIONS = [
   'none',
@@ -259,6 +282,86 @@ const SUBSCRIPTION_STATUS_OPTIONS = [
   'canceled',
   'unpaid',
 ] as const
+
+const ADMIN_BILLING_PLAN_OPTIONS = ['managed', 'byok'] as const
+
+function userBillingPlanLabel(plan: string | undefined): string {
+  const p = (plan || 'managed').toLowerCase()
+  return p === 'byok' ? 'BYOK · свои ключи' : 'Managed · платформа'
+}
+
+function userBillingPlanLong(plan: string | undefined): string {
+  const p = (plan || 'managed').toLowerCase()
+  return p === 'byok'
+    ? 'BYOK — свои LLM и WaveSpeed, кредиты на студию не списываются'
+    : 'Managed — ключи платформы, кредиты на студию списываются'
+}
+
+const SUBSCRIPTION_STATUS_LABELS: Record<string, string> = {
+  none: 'Нет подписки',
+  incomplete: 'Оформление',
+  trialing: 'Пробный период',
+  active: 'Активна',
+  past_due: 'Просрочен платёж',
+  canceled: 'Отменена',
+  unpaid: 'Не оплачена',
+}
+
+const CREDIT_KIND_LABELS: Record<string, string> = {
+  studio_prompt_refine: 'Студия: генерация',
+  studio_image_upscale: 'Студия: апскейл',
+  studio_carousel_shot: 'Студия: карусель',
+  studio_model_profile_generate: 'Студия: профиль модели',
+  yookassa_credits_pack: 'Пополнение баланса',
+  admin_credit_adjustment: 'Изменение баланса',
+}
+
+function subscriptionStatusLabel(status: string | undefined): string {
+  if (!status) return '—'
+  return SUBSCRIPTION_STATUS_LABELS[status] ?? status
+}
+
+/** Соответствует серверной subscription_active: active/trialing и период не истёк. */
+function subscriptionCoversStudioAccess(me: UserMe): boolean {
+  const st = (me.subscription_status || '').toLowerCase()
+  if (st !== 'active' && st !== 'trialing') return false
+  if (me.subscription_period_end) {
+    const end = new Date(me.subscription_period_end).getTime()
+    if (!Number.isNaN(end) && end < Date.now()) return false
+  }
+  return true
+}
+
+function creditKindLabel(kind: string): string {
+  return CREDIT_KIND_LABELS[kind] ?? kind
+}
+
+function formatDateTimeRu(iso: string | undefined | null): string {
+  if (!iso) return '—'
+  try {
+    return new Date(iso).toLocaleString('ru-RU', { dateStyle: 'medium', timeStyle: 'short' })
+  } catch {
+    return String(iso)
+  }
+}
+
+/** Значение для input[type=datetime-local] из ISO UTC. */
+function isoToDatetimeLocalValue(iso: string | null | undefined): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+/** ISO UTC для API из локального datetime-local (или null если пусто / ошибка). */
+function datetimeLocalInputToIsoUtc(local: string): string | null {
+  const t = local.trim()
+  if (!t) return null
+  const d = new Date(t)
+  if (Number.isNaN(d.getTime())) return null
+  return d.toISOString()
+}
 
 interface StudioAspectPreset {
   key: string
@@ -356,10 +459,19 @@ export default function App() {
     }
   }, [me])
 
+  const studioPaywalled = useMemo(() => {
+    if (!me) return false
+    if (me.is_platform_admin) return false
+    const gate =
+      me.billing_require_active_subscription ?? health?.billing_require_active_subscription ?? true
+    if (!gate) return false
+    return !subscriptionCoversStudioAccess(me)
+  }, [me, health])
+
   const canPlatformAdmin = Boolean(me?.is_platform_admin)
 
   const [accountOpen, setAccountOpen] = useState(false)
-  const [accountTab, setAccountTab] = useState<AccountCabinetTab>('integrations')
+  const [accountTab, setAccountTab] = useState<AccountCabinetTab>('overview')
   const [workspaceMembers, setWorkspaceMembers] = useState<WorkspaceMemberRow[]>([])
   const [teamBusy, setTeamBusy] = useState(false)
   const [newTeamLogin, setNewTeamLogin] = useState('')
@@ -380,6 +492,8 @@ export default function App() {
   const [appSection, setAppSection] = useState<'chat' | 'studio'>('chat')
   const [studioDesc, setStudioDesc] = useState('')
   const [studioFile, setStudioFile] = useState<File | null>(null)
+  /** true = MODEL_LOCK (причёска с профиля); false = POSE_REFERENCE (с загруженного кадра). Только если есть studioFile. */
+  const [studioLockModelHairstyle, setStudioLockModelHairstyle] = useState(true)
   const [studioMode, setStudioMode] = useState<StudioJobMode>('model')
   const [studioWanEditTier, setStudioWanEditTier] = useState<'standard' | 'pro'>('standard')
   const [studioWaveProfile, setStudioWaveProfile] = useState<'regular' | 'nsfw'>('nsfw')
@@ -396,6 +510,15 @@ export default function App() {
   const [adminDataBusy, setAdminDataBusy] = useState(false)
   const [adminCreditInput, setAdminCreditInput] = useState<Record<number, string>>({})
   const [wsApiKey, setWsApiKey] = useState('')
+  const [llmApiKey, setLlmApiKey] = useState('')
+  const [llmBaseUrl, setLlmBaseUrl] = useState('')
+  const [billingPlanRows, setBillingPlanRows] = useState<BillingPlanRow[]>([])
+  const [yookassaPayBusy, setYookassaPayBusy] = useState<string | null>(null)
+  const [creditHistoryItems, setCreditHistoryItems] = useState<
+    { id: number; created_at: string; kind: string; credits_delta: number }[]
+  >([])
+  const [creditHistoryHasMore, setCreditHistoryHasMore] = useState(false)
+  const [creditHistoryBusy, setCreditHistoryBusy] = useState(false)
   const [webPushState, setWebPushState] = useState<
     'unknown' | 'loading' | 'on' | 'off' | 'denied' | 'unsupported' | 'no_vapid'
   >('unknown')
@@ -404,13 +527,21 @@ export default function App() {
   const [studioGenGenerationId, setStudioGenGenerationId] = useState<number | null>(null)
   const [studioUpscaleTarget, setStudioUpscaleTarget] = useState<'2k' | '4k' | '8k'>('4k')
   const [studioUpscaleBusy, setStudioUpscaleBusy] = useState(false)
+  const [studioCarouselBusy, setStudioCarouselBusy] = useState(false)
   const [studioWavespeedMsg, setStudioWavespeedMsg] = useState<string | null>(null)
+  /** Только в dev + health.studio_allow_prompt_only: без запроса к WaveSpeed */
+  const [studioDevPromptOnly, setStudioDevPromptOnly] = useState(false)
+  const [studioRefinedPromptPreview, setStudioRefinedPromptPreview] = useState<string | null>(null)
   const [studioAspectPresets, setStudioAspectPresets] = useState<StudioAspectPreset[]>([])
   const [studioOutputAspect, setStudioOutputAspect] = useState('9:16')
   const [studioGenerations, setStudioGenerations] = useState<StudioArchiveItem[]>([])
   const [studioGenHasMore, setStudioGenHasMore] = useState(false)
   const [studioGenLoadingMore, setStudioGenLoadingMore] = useState(false)
   const [studioArchiveInitialLoading, setStudioArchiveInitialLoading] = useState(false)
+
+  useEffect(() => {
+    if (!studioFile) setStudioLockModelHairstyle(true)
+  }, [studioFile])
 
   const studioGenerationsRef = useRef<StudioArchiveItem[]>([])
 
@@ -472,6 +603,14 @@ export default function App() {
   const refreshIntegrations = useCallback(async () => {
     const r = await apiFetch('/api/integrations')
     if (r.ok) setInteg((await r.json()) as IntegrationStatus)
+  }, [])
+
+  const refreshBillingPlans = useCallback(async () => {
+    const r = await apiFetch('/api/billing/plans')
+    if (r.ok) {
+      const data = (await r.json()) as { items: BillingPlanRow[] }
+      setBillingPlanRows(Array.isArray(data.items) ? data.items : [])
+    }
   }, [])
 
   const enableWebPush = useCallback(async () => {
@@ -569,9 +708,10 @@ export default function App() {
 
   useEffect(() => {
     if (!me || !accountOpen) return
-    if (accountTab === 'admin' && !canPlatformAdmin) setAccountTab('integrations')
-    if (accountTab === 'models' && !canStudioModels) setAccountTab('integrations')
-    if (accountTab === 'team' && !isOwner) setAccountTab('integrations')
+    if (accountTab === 'admin' && !canPlatformAdmin) setAccountTab('overview')
+    if (accountTab === 'models' && !canStudioModels) setAccountTab('overview')
+    if (accountTab === 'team' && !isOwner) setAccountTab('overview')
+    if (accountTab === 'billing' && !isOwner) setAccountTab('overview')
   }, [me, accountOpen, accountTab, canPlatformAdmin, canStudioModels, isOwner])
 
   useEffect(() => {
@@ -583,6 +723,35 @@ export default function App() {
   useEffect(() => {
     if (authed && accountOpen) void refreshIntegrations()
   }, [authed, accountOpen, refreshIntegrations])
+
+  useEffect(() => {
+    if (!authed || !accountOpen || accountTab !== 'billing') return
+    void refreshBillingPlans()
+  }, [authed, accountOpen, accountTab, refreshBillingPlans])
+
+  useEffect(() => {
+    if (!authed || !accountOpen || accountTab !== 'billing' || !isOwner) return
+    let cancelled = false
+    setCreditHistoryBusy(true)
+    void apiFetch('/api/workspace/credit-history?limit=40&skip=0')
+      .then(async (r) => {
+        if (!r.ok || cancelled) return
+        const d = (await r.json()) as {
+          items: { id: number; created_at: string; kind: string; credits_delta: number }[]
+          has_more: boolean
+        }
+        if (!cancelled) {
+          setCreditHistoryItems(Array.isArray(d.items) ? d.items : [])
+          setCreditHistoryHasMore(Boolean(d.has_more))
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setCreditHistoryBusy(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [authed, accountOpen, accountTab, isOwner])
 
   useEffect(() => {
     if (!authed) return
@@ -1152,7 +1321,12 @@ export default function App() {
     setStudioGenImageUrl(null)
     setStudioGenGenerationId(null)
     setStudioWavespeedMsg(null)
+    setStudioRefinedPromptPreview(null)
     try {
+      const promptOnlyActive =
+        import.meta.env.DEV &&
+        Boolean(health?.studio_allow_prompt_only) &&
+        studioDevPromptOnly
       const fd = new FormData()
       fd.append('description', studioDesc.trim())
       if (studioSelectedModelId != null) fd.append('model_id', String(studioSelectedModelId))
@@ -1161,8 +1335,9 @@ export default function App() {
       fd.append('studio_mode', studioMode)
       fd.append('wan_edit_tier', studioWanEditTier)
       fd.append('studio_wave_profile', studioWaveProfile)
-      fd.append('generate_wavespeed', '1')
+      fd.append('generate_wavespeed', promptOnlyActive ? '0' : '1')
       fd.append('wavespeed_single_reference', '1')
+      fd.append('lock_model_hairstyle', studioLockModelHairstyle ? '1' : '0')
       const r = await apiFetch('/api/studio/refine-prompt', { method: 'POST', body: fd })
       if (!r.ok) {
         const j = await r.json().catch(() => ({}))
@@ -1181,6 +1356,7 @@ export default function App() {
         typeof data.generation_id === 'number' ? data.generation_id : null,
       )
       setStudioWavespeedMsg(data.wavespeed_message?.trim() || null)
+      setStudioRefinedPromptPreview((data.refined_prompt ?? '').trim() || null)
       void refreshMe()
       void loadStudioGenerationsReset()
     } catch (e) {
@@ -1238,6 +1414,58 @@ export default function App() {
     }
   }
 
+  const runStudioCarousel = async (count: number) => {
+    if (studioGenGenerationId == null) {
+      setError('Сначала сгенерируйте или откройте снимок в «Результат», чтобы был сохранённый кадр.')
+      return
+    }
+    setError(null)
+    setStudioWavespeedMsg(null)
+    setStudioCarouselBusy(true)
+    try {
+      const r = await apiFetch(`/api/studio/generations/${studioGenGenerationId}/carousel`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          count,
+          studio_wave_profile: studioWaveProfile,
+          wan_edit_tier: studioWanEditTier,
+        }),
+      })
+      const data = (await r.json().catch(() => ({}))) as {
+        items?: { generation_id: number; image_url: string }[]
+        message?: string | null
+      }
+      if (!r.ok) {
+        setError(formatApiErrorDetail(data) || r.statusText)
+        return
+      }
+      const items = data.items ?? []
+      const note = (data.message ?? '').trim()
+      if (items.length > 0 && note) {
+        setStudioWavespeedMsg(`Сохранено кадров: ${items.length}. ${note}`)
+      } else if (items.length > 0) {
+        setStudioWavespeedMsg(
+          `Карусель: добавлено ${items.length} кадров — откройте «Сохранённые». Учитываются текущие «Тип» и WAN.`,
+        )
+      } else if (note) {
+        setStudioWavespeedMsg(note)
+      }
+      void refreshMe()
+      void loadStudioGenerationsReset()
+    } catch (e) {
+      setError(
+        e instanceof TypeError && e.message === 'Failed to fetch'
+          ? 'Сеть: не удалось связаться с сервером.'
+          : e instanceof Error
+            ? e.message
+            : 'Ошибка запроса',
+      )
+    } finally {
+      setStudioCarouselBusy(false)
+    }
+  }
+
   const saveWavespeed = async () => {
     setError(null)
     const k = wsApiKey.trim()
@@ -1255,6 +1483,28 @@ export default function App() {
       return
     }
     setWsApiKey('')
+    setInteg((await r.json()) as IntegrationStatus)
+  }
+
+  const saveLlm = async () => {
+    setError(null)
+    const k = llmApiKey.trim()
+    if (k.length < 8) {
+      setError('Вставьте API-ключ LLM (OpenAI-совместимый, для тарифа BYOK).')
+      return
+    }
+    const bu = llmBaseUrl.trim()
+    const r = await apiFetch('/api/integrations/llm', {
+      method: 'PUT',
+      body: JSON.stringify({ api_key: k, base_url: bu || null }),
+    })
+    if (!r.ok) {
+      const j = await r.json().catch(() => ({}))
+      setError(formatApiErrorDetail(j) || r.statusText)
+      return
+    }
+    setLlmApiKey('')
+    setLlmBaseUrl('')
     setInteg((await r.json()) as IntegrationStatus)
   }
 
@@ -1358,14 +1608,21 @@ export default function App() {
     }
   }
 
-  const adminSetSubscription = async (userId: number, status: string) => {
+  const adminPatchSubscription = async (
+    userId: number,
+    patch: { status?: string; billing_plan?: string; current_period_end?: string | null },
+  ) => {
     setError(null)
     setAdminDataBusy(true)
     try {
+      const body: Record<string, string | null> = {}
+      if (patch.status !== undefined) body.status = patch.status
+      if (patch.billing_plan !== undefined) body.billing_plan = patch.billing_plan
+      if (patch.current_period_end !== undefined) body.current_period_end = patch.current_period_end
       const r = await apiFetch(`/api/admin/users/${userId}/subscription`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status, clear_stripe_ids: true }),
+        body: JSON.stringify(body),
       })
       if (!r.ok) {
         const j = await r.json().catch(() => ({}))
@@ -1598,16 +1855,24 @@ export default function App() {
     void refreshWorkspaceMembers()
   }
 
-  const startCheckout = async () => {
+  const startYookassaPayment = async (product: BillingPlanRow['product']) => {
     setError(null)
-    const r = await apiFetch('/api/billing/checkout', { method: 'POST' })
-    if (!r.ok) {
-      const j = await r.json().catch(() => ({}))
-      setError(formatApiErrorDetail(j) || r.statusText)
-      return
+    setYookassaPayBusy(product)
+    try {
+      const r = await apiFetch('/api/billing/yookassa/payment', {
+        method: 'POST',
+        body: JSON.stringify({ product }),
+      })
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        setError(formatApiErrorDetail(j) || r.statusText)
+        return
+      }
+      const data = (await r.json()) as { confirmation_url: string }
+      window.location.href = data.confirmation_url
+    } finally {
+      setYookassaPayBusy(null)
     }
-    const data = (await r.json()) as { url: string }
-    window.location.href = data.url
   }
 
   if (!authReady) {
@@ -1627,19 +1892,25 @@ export default function App() {
         <div className="app-bg" aria-hidden />
         <header className="top top-auth">
           <div className="top-brand">
-            <span className="logo-mark" aria-hidden />
+            <img src="/brand-icon.svg" alt="" className="brand-mark" width={40} height={40} aria-hidden />
             <div>
-              <h1>Chating Hub</h1>
-              <p className="sub">SaaS-кабинет: регистрация и подключение своих ботов</p>
+              <h1>ModelMate</h1>
+              <p className="sub">
+                Студия ведения AI-моделей: регистрация, чат с переводом и подключение каналов
+              </p>
             </div>
           </div>
         </header>
         <main className="auth-page">
           <AuthPanel
-            onSuccess={async () => {
+            onSuccess={async (fromRegister?: boolean) => {
               const r = await apiFetch('/api/auth/me')
               if (r.ok) setMe((await r.json()) as UserMe)
               setAuthed(true)
+              if (fromRegister) {
+                setAccountTab('overview')
+                setAccountOpen(true)
+              }
             }}
           />
         </main>
@@ -1704,11 +1975,11 @@ export default function App() {
       ) : null}
       <header className="top">
         <div className="top-brand">
-          <span className="logo-mark" aria-hidden />
+          <img src="/brand-icon.svg" alt="" className="brand-mark" width={40} height={40} aria-hidden />
           <div>
-            <h1>Chating Hub</h1>
+            <h1>ModelMate</h1>
             <p className="sub">
-              Входящие на русский · исходящий язык: авто или вручную в шапке диалога
+              Студия ведения AI-моделей — диалоги, интеграции и генерация изображений
             </p>
           </div>
         </div>
@@ -1726,12 +1997,13 @@ export default function App() {
                 {me.is_workspace_owner ? me.email : `${me.owner_email} · ${me.member_login ?? '—'}`}
               </span>
               <span className="user-pill-meta">
-                {me.credits_balance} кр. · {me.subscription_status}
+                {me.credits_balance} кр. · {userBillingPlanLabel(me.billing_plan)} ·{' '}
+                {subscriptionStatusLabel(me.subscription_status)}
               </span>
             </div>
           ) : null}
           <button type="button" className="ghost-btn" onClick={() => setAccountOpen((o) => !o)}>
-            Кабинет
+            Личный кабинет
           </button>
           <button
             type="button"
@@ -1789,7 +2061,7 @@ export default function App() {
       {accountOpen && (
         <div className="account-panel">
           <div className="account-panel-header">
-            <h3>Кабинет</h3>
+            <h3>Личный кабинет</h3>
             <button type="button" className="ghost-btn account-panel-close" onClick={() => setAccountOpen(false)}>
               Закрыть
             </button>
@@ -1798,11 +2070,31 @@ export default function App() {
             <button
               type="button"
               role="tab"
+              aria-selected={accountTab === 'overview'}
+              className={accountTab === 'overview' ? 'account-cabinet-tab active' : 'account-cabinet-tab'}
+              onClick={() => setAccountTab('overview')}
+            >
+              Обзор
+            </button>
+            {isOwner ? (
+              <button
+                type="button"
+                role="tab"
+                aria-selected={accountTab === 'billing'}
+                className={accountTab === 'billing' ? 'account-cabinet-tab active' : 'account-cabinet-tab'}
+                onClick={() => setAccountTab('billing')}
+              >
+                Тариф и баланс
+              </button>
+            ) : null}
+            <button
+              type="button"
+              role="tab"
               aria-selected={accountTab === 'integrations'}
               className={accountTab === 'integrations' ? 'account-cabinet-tab active' : 'account-cabinet-tab'}
               onClick={() => setAccountTab('integrations')}
             >
-              Ключи и статусы
+              Подключения
             </button>
             {canStudioModels ? (
               <button
@@ -1812,7 +2104,7 @@ export default function App() {
                 className={accountTab === 'models' ? 'account-cabinet-tab active' : 'account-cabinet-tab'}
                 onClick={() => setAccountTab('models')}
               >
-                Модели студии
+                Модели
               </button>
             ) : null}
             {isOwner ? (
@@ -1839,247 +2131,396 @@ export default function App() {
             ) : null}
           </div>
 
-          {accountTab === 'integrations' && (
+          {accountTab === 'overview' && (
+            <div className="account-cabinet-pane cabinet-overview" role="tabpanel">
+              <p className="cabinet-lead muted">
+                Сводка по аккаунту. Тариф, оплата и история кредитов — в разделе «Тариф и баланс» (владелец).
+              </p>
+              <div className="cabinet-dashboard-grid">
+                <div className="cabinet-dash-card">
+                  <div className="cabinet-dash-label">Баланс кредитов</div>
+                  <div className="cabinet-dash-value">{me?.credits_balance ?? '—'}</div>
+                  <p className="cabinet-dash-hint muted">Общий для пространства</p>
+                </div>
+                <div className="cabinet-dash-card">
+                  <div className="cabinet-dash-label">Тариф</div>
+                  <div className="cabinet-dash-value">{userBillingPlanLabel(me?.billing_plan)}</div>
+                  <p className="cabinet-dash-hint muted">{userBillingPlanLong(me?.billing_plan)}</p>
+                </div>
+                <div className="cabinet-dash-card">
+                  <div className="cabinet-dash-label">Операторов</div>
+                  <div className="cabinet-dash-value">{me?.operators_count ?? 0}</div>
+                  <p className="cabinet-dash-hint muted">Сотрудники без учёта владельца</p>
+                </div>
+                <div className="cabinet-dash-card">
+                  <div className="cabinet-dash-label">Подписка</div>
+                  <div className="cabinet-dash-value">{subscriptionStatusLabel(me?.subscription_status)}</div>
+                  <p className="cabinet-dash-hint muted">
+                    {me?.subscription_period_end
+                      ? `До ${formatDateTimeRu(me.subscription_period_end)}`
+                      : 'Оформите тариф при необходимости'}
+                  </p>
+                </div>
+              </div>
+              {me?.billing_require_active_subscription ? (
+                <div className="banner info" style={{ marginTop: '1rem' }}>
+                  Для студии нужна активная подписка. Сейчас:{' '}
+                  <strong>{subscriptionStatusLabel(me?.subscription_status)}</strong>.
+                </div>
+              ) : null}
+              <div className="cabinet-overview-actions">
+                {isOwner ? (
+                  <button type="button" className="ghost-btn" onClick={() => setAccountTab('billing')}>
+                    Тариф и баланс
+                  </button>
+                ) : null}
+                <button type="button" className="ghost-btn" onClick={() => setAccountTab('integrations')}>
+                  Подключения
+                </button>
+                {isOwner ? (
+                  <button type="button" className="ghost-btn" onClick={() => setAccountTab('team')}>
+                    Команда
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          )}
+
+          {accountTab === 'billing' && isOwner && (
             <div className="account-cabinet-pane" role="tabpanel">
               <p className="cabinet-lead muted">
-                Статусы интеграций и поля для обновления ключей. Telegram: токен BotFather и HTTPS{' '}
-                <span className="mono">{health?.mode === 'saas' ? 'PUBLIC_APP_URL' : 'ваш URL'}</span> для
-                webhook.
+                <strong>Здесь выбираете тариф</strong> (Managed или BYOK) <strong>и оплачиваете</strong> подписку или
+                пакет кредитов. Без активной подписки генерация в студии недоступна (если на сервере включена
+                проверка).
+              </p>
+              <p className="cabinet-lead muted">
+                <strong>Managed</strong> — студия списывает кредиты. <strong>BYOK</strong> — ваши ключи к AI и
+                WaveSpeed, кредиты на студию не списываются.
+              </p>
+              <div className="cabinet-module cabinet-module--highlight">
+                <div className="cabinet-module-head">
+                  <span className="cabinet-module-title">Текущее состояние</span>
+                  <span
+                    className={`cabinet-module-badge ${me?.subscription_status === 'active' ? 'is-ok' : 'is-warn'}`}
+                  >
+                    {subscriptionStatusLabel(me?.subscription_status)}
+                  </span>
+                </div>
+                <p className="cabinet-module-body">{userBillingPlanLong(me?.billing_plan)}</p>
+                <p className="muted cabinet-module-meta">
+                  {me?.subscription_period_end
+                    ? `Период до ${formatDateTimeRu(me.subscription_period_end)}`
+                    : 'Дата окончания появится после оплаты'}
+                  {' · '}Баланс: <strong>{me?.credits_balance ?? 0}</strong> кр.
+                </p>
+              </div>
+              <h4 className="account-sub">Тариф и пополнение</h4>
+              {me?.online_payment_available ? (
+                <>
+                  <p className="muted" style={{ marginBottom: '0.75rem' }}>
+                    Оплата банковской картой. После успешной оплаты вернитесь в кабинет.
+                  </p>
+                  <div className="cabinet-yookassa-rows">
+                    {billingPlanRows.map((row) => (
+                      <div key={row.product} className="cabinet-yookassa-row">
+                        <div>
+                          <div className="cabinet-offer-title">{row.title}</div>
+                          <div className="cabinet-offer-price">
+                            {row.price_rub}{' '}
+                            {row.currency === 'RUB' || !row.currency ? '₽' : row.currency}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          className="send-btn"
+                          disabled={yookassaPayBusy !== null}
+                          onClick={() => void startYookassaPayment(row.product)}
+                        >
+                          {yookassaPayBusy === row.product ? '…' : 'Оплатить'}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <p className="muted">Онлайн-оплата не подключена. Обратитесь к администратору сервиса.</p>
+              )}
+              <h4 className="account-sub">История операций</h4>
+              {creditHistoryBusy ? (
+                <p className="muted">Загрузка…</p>
+              ) : creditHistoryItems.length === 0 ? (
+                <p className="muted">Записей пока нет.</p>
+              ) : (
+                <div className="cabinet-table-wrap">
+                  <table className="cabinet-table">
+                    <thead>
+                      <tr>
+                        <th>Дата</th>
+                        <th>Операция</th>
+                        <th>Кредиты</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {creditHistoryItems.map((row) => (
+                        <tr key={row.id}>
+                          <td className="mono small">{formatDateTimeRu(row.created_at)}</td>
+                          <td>{creditKindLabel(row.kind)}</td>
+                          <td
+                            className={`mono ${row.credits_delta >= 0 ? 'cabinet-credit-plus' : 'cabinet-credit-minus'}`}
+                          >
+                            {row.credits_delta > 0 ? `+${row.credits_delta}` : row.credits_delta}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              {creditHistoryHasMore ? (
+                <p className="muted small">Показаны последние операции.</p>
+              ) : null}
+            </div>
+          )}
+
+          {accountTab === 'integrations' && (
+            <div className="account-cabinet-pane cabinet-connections" role="tabpanel">
+              <p className="cabinet-lead muted">
+                Подключите каналы и API. Поля редактирования зависят от прав: при необходимости попросите владельца
+                выдать доступ к интеграциям.
               </p>
 
-              <div className="cabinet-status-grid">
-                <div
-                  className={`cabinet-status-card ${integ?.telegram_configured ? 'is-ok' : 'is-warn'}`}
-                >
-                  <div className="cabinet-status-title">Telegram</div>
-                  <div className="cabinet-status-badge">
-                    {integ?.telegram_configured ? 'Подключён' : 'Не настроен'}
-                  </div>
-                  {integ?.telegram_configured ? (
-                    <p className="cabinet-status-detail cabinet-status-row">
-                      <span className="mono">@{integ.telegram_bot_username ?? '—'}</span>
-                      {integ.telegram_webhook_registered ? (
-                        <span className="cabinet-status-pill ok">Webhook OK</span>
-                      ) : (
-                        <span className="cabinet-status-pill warn">Webhook не подтверждён</span>
-                      )}
-                    </p>
-                  ) : (
-                    <p className="cabinet-status-detail muted">Сохраните токен бота ниже.</p>
-                  )}
-                  {integ?.telegram_webhook_url ? (
-                    <p className="mono cabinet-status-url">{integ.telegram_webhook_url}</p>
-                  ) : null}
+              <section className="cabinet-module">
+                <div className="cabinet-module-head">
+                  <h4 className="cabinet-module-title">Telegram</h4>
+                  <span
+                    className={`cabinet-module-badge ${integ?.telegram_configured ? 'is-ok' : 'is-warn'}`}
+                  >
+                    {integ?.telegram_configured ? 'Подключено' : 'Не подключено'}
+                  </span>
                 </div>
-
-                <div className={`cabinet-status-card ${integ?.fanvue_configured ? 'is-ok' : 'is-warn'}`}>
-                  <div className="cabinet-status-title">Fanvue</div>
-                  <div className="cabinet-status-badge">
-                    {integ?.fanvue_configured ? 'Подключён' : 'Не настроен'}
-                  </div>
-                  {integ?.fanvue_creator_uuid ? (
-                    <p className="cabinet-status-detail mono">Creator: {integ.fanvue_creator_uuid}</p>
-                  ) : (
-                    <p className="cabinet-status-detail muted">Нужны token, UUID и signing secret.</p>
-                  )}
-                  {integ?.fanvue_webhook_url ? (
-                    <p className="mono cabinet-status-url">{integ.fanvue_webhook_url}</p>
-                  ) : null}
-                </div>
-
-                <div
-                  className={`cabinet-status-card ${integ?.wavespeed_configured ? 'is-ok' : 'is-warn'}`}
-                >
-                  <div className="cabinet-status-title">WaveSpeed</div>
-                  <div className="cabinet-status-badge">
-                    {integ?.wavespeed_configured ? 'Ключ сохранён' : 'Ключ не задан'}
-                  </div>
-                  <p className="cabinet-status-detail muted">
-                    Seedream 4.5 Edit · нужен HTTPS <code className="mono">PUBLIC_APP_URL</code> для референсов.
+                <p className="muted cabinet-module-body">
+                  Токен от BotFather. Сайт должен работать по <strong>HTTPS</strong> — иначе Telegram не примет
+                  webhook (для локальной отладки используйте туннель).
+                </p>
+                {integ?.telegram_configured ? (
+                  <p className="small mono">
+                    @{integ.telegram_bot_username ?? '—'}
+                    {integ.telegram_webhook_registered ? ' · webhook активен' : ' · webhook не подтверждён'}
                   </p>
+                ) : null}
+                <div className="cabinet-module-form">
+                  <label>
+                    Токен бота
+                    <input
+                      type="password"
+                      autoComplete="off"
+                      value={tgToken}
+                      onChange={(e) => setTgToken(e.target.value)}
+                      placeholder="Вставьте токен"
+                      disabled={!canIntegrations}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    className="send-btn"
+                    disabled={!canIntegrations}
+                    onClick={() => void saveTelegram()}
+                  >
+                    Сохранить
+                  </button>
                 </div>
+              </section>
 
-                <div
-                  className={`cabinet-status-card ${health?.stripe_configured ? 'is-ok' : 'is-warn'}`}
-                >
-                  <div className="cabinet-status-title">Оплата (Stripe)</div>
-                  <div className="cabinet-status-badge">
-                    {health?.stripe_configured ? 'Готов к checkout' : 'Не настроен на сервере'}
-                  </div>
-                  <p className="cabinet-status-detail muted">
-                    Подписка оформляется через Stripe Checkout (кнопка ниже).
-                  </p>
+              <section className="cabinet-module">
+                <div className="cabinet-module-head">
+                  <h4 className="cabinet-module-title">Fanvue</h4>
+                  <span className={`cabinet-module-badge ${integ?.fanvue_configured ? 'is-ok' : 'is-warn'}`}>
+                    {integ?.fanvue_configured ? 'Подключено' : 'Не подключено'}
+                  </span>
                 </div>
-
-                <div
-                  className={`cabinet-status-card ${health?.openai_studio_configured ? 'is-ok' : 'is-warn'}`}
-                >
-                  <div className="cabinet-status-title">Студия промпта</div>
-                  <div className="cabinet-status-badge">
-                    {health?.openai_studio_configured ? 'OpenAI OK' : 'Нет OPENAI_API_KEY'}
-                  </div>
-                  {health?.openai_studio_configured ? (
-                    <p className="cabinet-status-detail muted">
-                      Сборка JSON: {health.studio_prompt_credit_cost ?? '—'} кр.
-                    </p>
-                  ) : null}
+                <p className="muted cabinet-module-body">API и вебхуки платформы Fanvue.</p>
+                <div className="cabinet-module-form cabinet-module-form--grid">
+                  <label>
+                    Access token
+                    <input
+                      type="password"
+                      value={fvToken}
+                      onChange={(e) => setFvToken(e.target.value)}
+                      disabled={!canIntegrations}
+                    />
+                  </label>
+                  <label>
+                    Creator UUID
+                    <input value={fvCreator} onChange={(e) => setFvCreator(e.target.value)} disabled={!canIntegrations} />
+                  </label>
+                  <label className="cabinet-field-span2">
+                    Webhook signing secret
+                    <input
+                      type="password"
+                      value={fvSecret}
+                      onChange={(e) => setFvSecret(e.target.value)}
+                      disabled={!canIntegrations}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    className="send-btn"
+                    disabled={!canIntegrations}
+                    onClick={() => void saveFanvue()}
+                  >
+                    Сохранить
+                  </button>
                 </div>
+              </section>
 
-                <div
-                  className={`cabinet-status-card ${
-                    webPushState === 'on' ? 'is-ok' : 'is-warn'
-                  }`}
-                >
-                  <div className="cabinet-status-title">Уведомления (телефон / браузер)</div>
-                  <div className="cabinet-status-badge">
+              <section className="cabinet-module">
+                <div className="cabinet-module-head">
+                  <h4 className="cabinet-module-title">WaveSpeed</h4>
+                  <span className={`cabinet-module-badge ${integ?.wavespeed_configured ? 'is-ok' : 'is-warn'}`}>
+                    {integ?.wavespeed_configured ? 'Ключ сохранён' : 'Нет ключа'}
+                  </span>
+                </div>
+                <p className="muted cabinet-module-body">
+                  Генерация изображений в студии. Для тарифа BYOK ключ обязателен.
+                </p>
+                <div className="cabinet-module-form">
+                  <label>
+                    API-ключ
+                    <input
+                      type="password"
+                      autoComplete="off"
+                      value={wsApiKey}
+                      onChange={(e) => setWsApiKey(e.target.value)}
+                      disabled={!canIntegrations}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    className="send-btn"
+                    disabled={!canIntegrations}
+                    onClick={() => void saveWavespeed()}
+                  >
+                    Сохранить
+                  </button>
+                </div>
+              </section>
+
+              <section className="cabinet-module">
+                <div className="cabinet-module-head">
+                  <h4 className="cabinet-module-title">Текстовая модель (BYOK)</h4>
+                  <span className={`cabinet-module-badge ${integ?.llm_configured ? 'is-ok' : 'is-warn'}`}>
+                    {integ?.llm_configured ? 'Есть ключ' : 'Не настроено'}
+                  </span>
+                </div>
+                <p className="muted cabinet-module-body">
+                  OpenAI-совместимый API только для тарифа <strong>BYOK</strong>. На Managed текст обрабатывается на
+                  сервисе.
+                </p>
+                <div className="cabinet-module-form cabinet-module-form--grid">
+                  <label>
+                    API-ключ
+                    <input
+                      type="password"
+                      autoComplete="off"
+                      value={llmApiKey}
+                      onChange={(e) => setLlmApiKey(e.target.value)}
+                      disabled={!canIntegrations}
+                    />
+                  </label>
+                  <label>
+                    Базовый URL (по желанию)
+                    <input
+                      type="text"
+                      autoComplete="off"
+                      value={llmBaseUrl}
+                      onChange={(e) => setLlmBaseUrl(e.target.value)}
+                      placeholder="https://api.openai.com/v1"
+                      disabled={!canIntegrations}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    className="send-btn"
+                    disabled={!canIntegrations}
+                    onClick={() => void saveLlm()}
+                  >
+                    Сохранить
+                  </button>
+                </div>
+              </section>
+
+              <section className="cabinet-module">
+                <div className="cabinet-module-head">
+                  <h4 className="cabinet-module-title">Уведомления</h4>
+                  <span className={`cabinet-module-badge ${webPushState === 'on' ? 'is-ok' : 'is-warn'}`}>
                     {webPushState === 'loading' || webPushState === 'unknown'
                       ? '…'
                       : webPushState === 'on'
-                        ? 'Включены'
-                        : webPushState === 'denied'
-                          ? 'Запрещены в браузере'
-                          : webPushState === 'unsupported'
-                            ? 'Не поддерживается'
-                            : webPushState === 'no_vapid'
-                              ? 'Нет ключей на сервере'
-                              : 'Выключены'}
-                  </div>
-                  <p className="cabinet-status-detail muted">
-                    Web Push при новом входящем сообщении. На сервере: <code className="mono">VAPID_*</code>, в проде —
-                    HTTPS.
-                  </p>
-                  {webPushState === 'denied' ? (
-                    <p className="cabinet-status-detail muted">
-                      Разрешите уведомления для этого сайта в настройках браузера.
-                    </p>
-                  ) : null}
-                  {canChat && health?.web_push_configured && webPushEnvironmentOk() ? (
-                    <p className="cabinet-status-detail cabinet-status-row">
-                      {webPushState === 'on' ? (
-                        <button
-                          type="button"
-                          className="ghost-btn"
-                          disabled={pushBusy}
-                          onClick={() => void disableWebPush()}
-                        >
-                          Отключить push
-                        </button>
-                      ) : webPushState === 'off' ? (
-                        <button
-                          type="button"
-                          className="ghost-btn"
-                          disabled={pushBusy}
-                          onClick={() => void enableWebPush()}
-                        >
-                          Включить уведомления
-                        </button>
-                      ) : null}
-                    </p>
-                  ) : null}
+                        ? 'Вкл.'
+                        : 'Выкл.'}
+                  </span>
                 </div>
-              </div>
+                <p className="muted cabinet-module-body">Браузерные уведомления о новых сообщениях в чате.</p>
+                {webPushState === 'denied' ? (
+                  <p className="muted small">Разрешите уведомления для сайта в настройках браузера.</p>
+                ) : null}
+                {canChat && health?.web_push_configured && webPushEnvironmentOk() ? (
+                  <div className="cabinet-module-form">
+                    {webPushState === 'on' ? (
+                      <button
+                        type="button"
+                        className="ghost-btn"
+                        disabled={pushBusy}
+                        onClick={() => void disableWebPush()}
+                      >
+                        Отключить
+                      </button>
+                    ) : webPushState === 'off' ? (
+                      <button
+                        type="button"
+                        className="send-btn"
+                        disabled={pushBusy}
+                        onClick={() => void enableWebPush()}
+                      >
+                        Включить уведомления
+                      </button>
+                    ) : null}
+                  </div>
+                ) : !health?.web_push_configured ? (
+                  <p className="muted small">На сервере не включены push-уведомления.</p>
+                ) : null}
+              </section>
 
               {integ?.integration_hint ? (
                 <div className="banner info cabinet-hint-banner">{integ.integration_hint}</div>
               ) : null}
-
               {!canIntegrations ? (
-                <p className="cabinet-lead muted">
-                  Изменение ключей недоступно по правам. Статусы выше — только для просмотра.
+                <p className="muted" style={{ marginTop: '1rem' }}>
+                  Редактирование подключений недоступно по правам аккаунта.
                 </p>
               ) : null}
-              <h4 className="account-sub">Обновить ключи</h4>
-              <div className="account-grid cabinet-keys-form">
-                <label>
-                  WaveSpeed API key
-                  <input
-                    type="password"
-                    autoComplete="off"
-                    value={wsApiKey}
-                    onChange={(e) => setWsApiKey(e.target.value)}
-                    placeholder="Ключ из личного кабинета WaveSpeed"
-                    disabled={!canIntegrations}
-                  />
-                </label>
-                <button
-                  type="button"
-                  className="ghost-btn"
-                  disabled={!canIntegrations}
-                  onClick={() => void saveWavespeed()}
-                >
-                  Сохранить WaveSpeed
-                </button>
-                <label>
-                  Telegram bot token
-                  <input
-                    type="password"
-                    autoComplete="off"
-                    value={tgToken}
-                    onChange={(e) => setTgToken(e.target.value)}
-                    placeholder="123456:ABC…"
-                    disabled={!canIntegrations}
-                  />
-                </label>
-                <button
-                  type="button"
-                  className="ghost-btn"
-                  disabled={!canIntegrations}
-                  onClick={() => void saveTelegram()}
-                >
-                  Сохранить Telegram
-                </button>
-                <label>
-                  Fanvue access token
-                  <input
-                    type="password"
-                    value={fvToken}
-                    onChange={(e) => setFvToken(e.target.value)}
-                    placeholder="Bearer / access token"
-                    disabled={!canIntegrations}
-                  />
-                </label>
-                <label>
-                  Fanvue creator UUID
-                  <input
-                    value={fvCreator}
-                    onChange={(e) => setFvCreator(e.target.value)}
-                    placeholder="UUID создателя"
-                    disabled={!canIntegrations}
-                  />
-                </label>
-                <label>
-                  Fanvue webhook signing secret
-                  <input
-                    type="password"
-                    value={fvSecret}
-                    onChange={(e) => setFvSecret(e.target.value)}
-                    placeholder="Секрет подписи вебхука"
-                    disabled={!canIntegrations}
-                  />
-                </label>
-                <button
-                  type="button"
-                  className="ghost-btn"
-                  disabled={!canIntegrations}
-                  onClick={() => void saveFanvue()}
-                >
-                  Сохранить Fanvue
-                </button>
-                {isOwner ? (
-                  <button type="button" className="send-btn cabinet-checkout-btn" onClick={() => void startCheckout()}>
-                    Оформить подписку (Stripe)
-                  </button>
-                ) : (
-                  <p className="muted" style={{ gridColumn: '1 / -1' }}>
-                    Оформление подписки доступно только владельцу аккаунта.
-                  </p>
-                )}
-              </div>
             </div>
           )}
 
           {accountTab === 'models' && canStudioModels && (
             <div className="account-cabinet-pane" role="tabpanel">
+              {studioPaywalled ? (
+                <div className="banner info" style={{ marginBottom: '1rem' }}>
+                  Редактирование моделей недоступно без активной подписки владельца.{' '}
+                  {isOwner ? (
+                    <button
+                      type="button"
+                      className="ghost-btn"
+                      style={{ marginLeft: '0.5rem' }}
+                      onClick={() => setAccountTab('billing')}
+                    >
+                      Тариф и баланс
+                    </button>
+                  ) : (
+                    <> Попросите владельца оформить тариф в кабинете.</>
+                  )}
+                </div>
+              ) : null}
               <p className="cabinet-lead muted">
                 Модели подставляются в промпт на вкладке «Генерация картинок». До 5 фото на модель. Можно
                 править название, описание, добавлять и удалять снимки.
@@ -2093,6 +2534,7 @@ export default function App() {
                     value={newModelName}
                     onChange={(e) => setNewModelName(e.target.value)}
                     placeholder="Например: Анна — чёрные волосы"
+                    disabled={studioPaywalled}
                   />
                 </label>
                 <label>
@@ -2101,6 +2543,7 @@ export default function App() {
                     type="file"
                     accept="image/jpeg,image/png,image/webp,image/gif"
                     multiple
+                    disabled={studioPaywalled}
                     onChange={(e) => {
                       const list = e.target.files ? Array.from(e.target.files) : []
                       setNewModelFiles(list.slice(0, 5))
@@ -2120,18 +2563,24 @@ export default function App() {
                     onChange={(e) => setNewModelProfile(e.target.value)}
                     placeholder='{"model_profile": { … }} — или нажмите кнопку ниже'
                     className="studio-model-profile-textarea"
+                    disabled={studioPaywalled}
                   />
                   <button
                     type="button"
                     className="ghost-btn studio-gen-profile-btn"
-                    disabled={newModelProfileGenBusy || newModelFiles.length === 0}
+                    disabled={studioPaywalled || newModelProfileGenBusy || newModelFiles.length === 0}
                     title={newModelFiles.length === 0 ? 'Сначала выберите фото' : undefined}
                     onClick={() => void generateModelProfileFromPhotos()}
                   >
                     {newModelProfileGenBusy ? 'Генерация…' : 'Сгенерировать из фото'}
                   </button>
                 </label>
-                <button type="button" className="send-btn" onClick={() => void createStudioModel()}>
+                <button
+                  type="button"
+                  className="send-btn"
+                  disabled={studioPaywalled}
+                  onClick={() => void createStudioModel()}
+                >
                   Создать модель
                 </button>
               </div>
@@ -2151,7 +2600,7 @@ export default function App() {
                           <button
                             type="button"
                             className="ghost-btn danger-text model-card-delete"
-                            disabled={busy}
+                            disabled={busy || studioPaywalled}
                             onClick={() => {
                               if (window.confirm('Удалить модель и все её фото?')) void deleteStudioModel(m.id)
                             }}
@@ -2170,7 +2619,7 @@ export default function App() {
                                   type="button"
                                   className="model-thumb-remove"
                                   title="Удалить фото"
-                                  disabled={busy}
+                                  disabled={busy || studioPaywalled}
                                   onClick={() => void deleteStudioModelImage(m.id, im.id)}
                                 >
                                   ×
@@ -2183,7 +2632,7 @@ export default function App() {
                           Название
                           <input
                             value={draft.name}
-                            disabled={busy}
+                            disabled={busy || studioPaywalled}
                             onChange={(e) =>
                               setModelDrafts((prev) => ({
                                 ...prev,
@@ -2203,7 +2652,7 @@ export default function App() {
                           <textarea
                             rows={4}
                             value={draft.profile_text}
-                            disabled={busy}
+                            disabled={busy || studioPaywalled}
                             onChange={(e) =>
                               setModelDrafts((prev) => ({
                                 ...prev,
@@ -2225,7 +2674,7 @@ export default function App() {
                               accept="image/jpeg,image/png,image/webp,image/gif"
                               multiple
                               className="sr-only-input"
-                              disabled={busy || m.image_count >= 5}
+                              disabled={busy || studioPaywalled || m.image_count >= 5}
                               onChange={(e) => {
                                 void appendStudioModelImages(m.id, e.target.files)
                                 e.target.value = ''
@@ -2236,7 +2685,7 @@ export default function App() {
                           <button
                             type="button"
                             className="send-btn"
-                            disabled={busy || !draft.name.trim()}
+                            disabled={busy || studioPaywalled || !draft.name.trim()}
                             onClick={() => void patchStudioModel(m.id)}
                           >
                             {busy ? 'Сохранение…' : 'Сохранить изменения'}
@@ -2382,9 +2831,10 @@ export default function App() {
           {accountTab === 'admin' && canPlatformAdmin && (
             <div className="account-cabinet-pane admin-cabinet-pane" role="tabpanel">
               <p className="cabinet-lead muted">
-                Платформа: пользователи, кредиты, подписки, события usage. Первый доступ:{' '}
-                <span className="mono">ADMIN_EMAILS</span> в backend/.env или флаг «Админ» у владельца в
-                таблице.
+                Платформа: пользователи, кредиты, подписка (статус, тариф Managed/BYOK, дата окончания
+                периода), события usage. Счёт и подписка всегда у <strong>владельца</strong> пространства;
+                у участников отображаются те же значения. Первый доступ: <span className="mono">ADMIN_EMAILS</span>{' '}
+                в backend/.env или флаг «Админ» у владельца в таблице.
               </p>
               {adminDataBusy && !adminStats ? <p className="muted">Загрузка…</p> : null}
               {adminStats ? (
@@ -2457,12 +2907,13 @@ export default function App() {
                     <tr>
                       <th>ID</th>
                       <th>Email / роль</th>
-                      <th>Подписка</th>
+                      <th>Статус</th>
+                      <th>Тариф</th>
+                      <th>Действует до</th>
                       <th>Кр. счёта</th>
                       <th>Активен</th>
                       <th>Админ</th>
                       <th>Кредиты ±</th>
-                      <th>Статус подписки</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -2482,7 +2933,85 @@ export default function App() {
                               <div className="muted small">владелец</div>
                             )}
                           </td>
-                          <td className="mono small">{u.subscription_status}</td>
+                          <td>
+                            <select
+                              value={u.subscription_status}
+                              onChange={(e) => {
+                                const v = e.target.value
+                                if (v !== u.subscription_status) void adminPatchSubscription(u.id, { status: v })
+                              }}
+                              className="admin-sub-select"
+                              disabled={adminDataBusy}
+                            >
+                              {SUBSCRIPTION_STATUS_OPTIONS.map((s) => (
+                                <option key={s} value={s}>
+                                  {SUBSCRIPTION_STATUS_LABELS[s] ?? s}
+                                </option>
+                              ))}
+                            </select>
+                          </td>
+                          <td>
+                            <select
+                              value={(u.billing_plan || 'managed').toLowerCase()}
+                              onChange={(e) => {
+                                const v = e.target.value
+                                if (v !== (u.billing_plan || 'managed').toLowerCase()) {
+                                  void adminPatchSubscription(u.id, { billing_plan: v })
+                                }
+                              }}
+                              className="admin-sub-select"
+                              disabled={adminDataBusy}
+                              title="План владельца пространства; у участников — как у владельца"
+                            >
+                              {ADMIN_BILLING_PLAN_OPTIONS.map((p) => (
+                                <option key={p} value={p}>
+                                  {userBillingPlanLabel(p)}
+                                </option>
+                              ))}
+                            </select>
+                          </td>
+                          <td className="admin-period-cell">
+                            <div className="mono small" title={u.subscription_period_end ?? undefined}>
+                              {formatDateTimeRu(u.subscription_period_end)}
+                            </div>
+                            <div className="admin-period-edit">
+                              <input
+                                type="datetime-local"
+                                className="admin-period-inp"
+                                defaultValue={isoToDatetimeLocalValue(u.subscription_period_end)}
+                                key={`pe-${u.id}-${u.subscription_period_end ?? 'none'}`}
+                                id={`admin-period-${u.id}`}
+                                disabled={adminDataBusy}
+                              />
+                              <button
+                                type="button"
+                                className="ghost-btn small"
+                                disabled={adminDataBusy}
+                                onClick={() => {
+                                  const el = document.getElementById(
+                                    `admin-period-${u.id}`,
+                                  ) as HTMLInputElement | null
+                                  const raw = el?.value ?? ''
+                                  void adminPatchSubscription(u.id, {
+                                    current_period_end: raw
+                                      ? datetimeLocalInputToIsoUtc(raw)
+                                      : null,
+                                  })
+                                }}
+                              >
+                                ОК
+                              </button>
+                              <button
+                                type="button"
+                                className="ghost-btn small"
+                                disabled={adminDataBusy}
+                                onClick={() => void adminPatchSubscription(u.id, { current_period_end: null })}
+                              >
+                                Сброс
+                              </button>
+                            </div>
+                            <p className="muted small admin-sub-hint">Дата окончания периода подписки (UTC).</p>
+                          </td>
                           <td>{u.credits_balance}</td>
                           <td>
                             <input
@@ -2524,25 +3053,6 @@ export default function App() {
                               </button>
                             </div>
                           </td>
-                          <td>
-                            <select
-                              value={u.subscription_status}
-                              onChange={(e) => {
-                                const v = e.target.value
-                                if (v !== u.subscription_status) void adminSetSubscription(u.id, v)
-                              }}
-                              className="admin-sub-select"
-                            >
-                              {SUBSCRIPTION_STATUS_OPTIONS.map((s) => (
-                                <option key={s} value={s}>
-                                  {s}
-                                </option>
-                              ))}
-                            </select>
-                            <p className="muted small admin-sub-hint">
-                              У владельца; для участника — та же, что у его владельца.
-                            </p>
-                          </td>
                         </tr>
                       )
                     })}
@@ -2573,17 +3083,14 @@ export default function App() {
           ) : (
             <span className="muted"> · интеграции через личный кабинет (webhook)</span>
           )}
-          {health.stripe_configured ? <span className="ok"> · Stripe</span> : (
-            <span className="warn"> · Stripe не настроен</span>
-          )}
           {health.telegram_proxy_configured ? <span className="ok"> · прокси TG</span> : null}
           {health.openai_studio_configured ? (
             <span className="ok">
               {' '}
-              · студия промпта OpenAI ({health.studio_prompt_credit_cost ?? '—'} кр.)
+              · студия: промпт ({health.studio_prompt_credit_cost ?? '—'} кр.)
             </span>
           ) : (
-            <span className="warn"> · студия: нет OPENAI_API_KEY</span>
+            <span className="warn"> · студия: текстовая модель на сервере недоступна</span>
           )}
         </div>
       )}
@@ -2592,10 +3099,47 @@ export default function App() {
         <>
         <section className="studio-panel" aria-labelledby="studio-heading">
           <h2 id="studio-heading">Новая картинка</h2>
-          {!canStudioGenerate ? (
-            <div className="banner info">Генерация недоступна по правам. Попросите владельца аккаунта.</div>
-          ) : null}
-          <div className="studio-grid studio-grid--simple">
+          {studioPaywalled ? (
+            <div className="studio-paywall cabinet-module cabinet-module--highlight" role="status">
+              <p className="cabinet-module-body" style={{ marginBottom: '0.75rem' }}>
+                Чтобы генерировать картинки, сначала оформите тариф: активная подписка Managed или BYOK.
+              </p>
+              <p className="muted small" style={{ marginBottom: '1rem' }}>
+                {isOwner ? (
+                  <>
+                    Откройте личный кабинет → вкладка <strong>«Тариф и баланс»</strong>, выберите план и нажмите
+                    «Оплатить».
+                  </>
+                ) : (
+                  <>
+                    Оформить подписку может владелец аккаунта ({me?.owner_email ?? 'email владельца'}) в кабинете →
+                    «Тариф и баланс».
+                  </>
+                )}
+              </p>
+              {isOwner ? (
+                <button
+                  type="button"
+                  className="send-btn"
+                  onClick={() => {
+                    setAccountOpen(true)
+                    setAccountTab('billing')
+                  }}
+                >
+                  Перейти к тарифу и оплате
+                </button>
+              ) : (
+                <button type="button" className="ghost-btn" onClick={() => setAccountOpen(true)}>
+                  Открыть кабинет
+                </button>
+              )}
+            </div>
+          ) : (
+            <>
+              {!canStudioGenerate ? (
+                <div className="banner info">Генерация недоступна по правам. Попросите владельца аккаунта.</div>
+              ) : null}
+              <div className="studio-grid studio-grid--simple">
             <div className="studio-mode-row" role="group" aria-label="Режим студии">
               <span className="studio-mode-label">Режим</span>
               <div className="studio-mode-segment">
@@ -2648,6 +3192,40 @@ export default function App() {
                 ? 'Google Nano Banana Pro: выше качество для обычных снимков; действуют ограничения безопасности Google.'
                 : 'Редактор из настроек сервера (WAN 2.7 / Seedream и т.д. — см. WAVESPEED_SEEDREAM_EDIT_PATH).'}
             </p>
+            {import.meta.env.DEV && health?.studio_allow_prompt_only ? (
+              <>
+                <div className="studio-mode-row" role="group" aria-label="Режим вывода студии (отладка)">
+                  <span className="studio-mode-label">Вывод</span>
+                  <div className="studio-mode-segment">
+                    <button
+                      type="button"
+                      className={`studio-mode-btn${!studioDevPromptOnly ? ' is-active' : ''}`}
+                      onClick={() => {
+                        setStudioDevPromptOnly(false)
+                        setStudioRefinedPromptPreview(null)
+                      }}
+                    >
+                      Картинка
+                    </button>
+                    <button
+                      type="button"
+                      className={`studio-mode-btn${studioDevPromptOnly ? ' is-active' : ''}`}
+                      onClick={() => {
+                        setStudioDevPromptOnly(true)
+                        setStudioRefinedPromptPreview(null)
+                      }}
+                    >
+                      Только промпт
+                    </button>
+                  </div>
+                </div>
+                <p className="studio-mode-hint">
+                  Только dev-сборка Vite +{' '}
+                  <span className="mono">STUDIO_ALLOW_PROMPT_ONLY=true</span> на сервере: WaveSpeed не
+                  вызывается, внизу показывается итоговый JSON-промпт.
+                </p>
+              </>
+            ) : null}
             {health?.studio_wan_edit_tier_switch && studioWaveProfile === 'nsfw' ? (
               <>
                 <div className="studio-mode-row" role="group" aria-label="Редактор WaveSpeed WAN 2.7">
@@ -2720,6 +3298,21 @@ export default function App() {
               />
               {studioFile ? <span className="studio-file-name">{studioFile.name}</span> : null}
             </label>
+            <label
+              className="studio-label studio-check"
+              style={!studioFile ? { opacity: 0.55 } : undefined}
+            >
+              <input
+                type="checkbox"
+                checked={studioLockModelHairstyle}
+                disabled={!studioFile}
+                onChange={(e) => setStudioLockModelHairstyle(e.target.checked)}
+              />
+              <span>
+                Причёска как у модели. Снимите галочку, чтобы взять укладку с загруженного фото (лицо,
+                фигура и цвет волос по-прежнему из профиля модели).
+              </span>
+            </label>
             <label className="studio-label">
               Описание
               <textarea
@@ -2752,7 +3345,13 @@ export default function App() {
                 }
                 onClick={() => void refineStudioPrompt()}
               >
-                {studioBusy ? 'Генерация…' : 'Сгенерировать'}
+                {studioBusy
+                  ? 'Генерация…'
+                  : import.meta.env.DEV &&
+                      health?.studio_allow_prompt_only &&
+                      studioDevPromptOnly
+                    ? 'Собрать промпт'
+                    : 'Сгенерировать'}
               </button>
               {canStudioGenerate && health?.openai_studio_configured ? (
                 <span className="studio-credit-hint">
@@ -2762,7 +3361,22 @@ export default function App() {
                 <span className="studio-credit-hint warn">Нет доступа к студии</span>
               ) : null}
             </div>
-            {studioWavespeedMsg && !studioGenImageUrl ? (
+            {import.meta.env.DEV &&
+            health?.studio_allow_prompt_only &&
+            studioDevPromptOnly &&
+            studioRefinedPromptPreview ? (
+              <label className="studio-label">
+                Итоговый промпт (WaveSpeed не вызывался)
+                <textarea
+                  className="mono"
+                  rows={16}
+                  readOnly
+                  spellCheck={false}
+                  value={studioRefinedPromptPreview}
+                />
+              </label>
+            ) : null}
+            {studioWavespeedMsg ? (
               <div className="banner info studio-status-msg">{studioWavespeedMsg}</div>
             ) : null}
             {studioGenImageUrl ? (
@@ -2812,6 +3426,47 @@ export default function App() {
                     </span>
                   ) : null}
                 </div>
+                <div className="studio-upscale-row studio-carousel-row">
+                  <button
+                    type="button"
+                    className="ghost-btn studio-carousel-btn"
+                    disabled={
+                      studioCarouselBusy ||
+                      studioUpscaleBusy ||
+                      !canStudioGenerate ||
+                      studioGenGenerationId == null ||
+                      !integ?.wavespeed_configured
+                    }
+                    title={
+                      !integ?.wavespeed_configured
+                        ? 'Сохраните ключ WaveSpeed в кабинете'
+                        : 'Тот же мастер-промпт + другие ракурсы (см. data/prompts/image_studio_carousel_*)'
+                    }
+                    onClick={() => void runStudioCarousel(3)}
+                  >
+                    {studioCarouselBusy ? 'Карусель…' : 'Карусель ×3'}
+                  </button>
+                  <button
+                    type="button"
+                    className="ghost-btn studio-carousel-btn"
+                    disabled={
+                      studioCarouselBusy ||
+                      studioUpscaleBusy ||
+                      !canStudioGenerate ||
+                      studioGenGenerationId == null ||
+                      !integ?.wavespeed_configured
+                    }
+                    title="Четыре кадра для ленты — окружение и образ как на этом снимке"
+                    onClick={() => void runStudioCarousel(4)}
+                  >
+                    {studioCarouselBusy ? 'Карусель…' : 'Карусель ×4'}
+                  </button>
+                  {canStudioGenerate && health?.studio_carousel_credit_cost != null ? (
+                    <span className="studio-credit-hint">
+                      {health.studio_carousel_credit_cost} кр./кадр
+                    </span>
+                  ) : null}
+                </div>
                 <a
                   className="send-btn studio-download"
                   href={studioGenImageUrl}
@@ -2824,6 +3479,8 @@ export default function App() {
               </div>
             ) : null}
           </div>
+            </>
+          )}
         </section>
         {canStudioGenerate ? (
           <section className="studio-panel studio-archive-section" aria-labelledby="studio-archive-heading">

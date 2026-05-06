@@ -70,8 +70,6 @@ def synthetic_member_email(parent_id: int, login: str) -> str:
 async def resolve_billing_user(session: AsyncSession, user: User) -> User:
     """Пользователь, у которого списываются кредиты и подписка (владелец пространства)."""
     oid = workspace_owner_id(user)
-    if oid == user.id:
-        return user
     stmt = (
         select(User)
         .where(User.id == oid, User.is_active.is_(True))

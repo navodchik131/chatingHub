@@ -102,6 +102,9 @@ class User(Base):
     wavespeed_connection: Mapped[WavespeedConnection | None] = relationship(
         "WavespeedConnection", back_populates="user", uselist=False
     )
+    llm_connection: Mapped["LlmConnection | None"] = relationship(
+        "LlmConnection", back_populates="user", uselist=False
+    )
     push_subscriptions: Mapped[list["PushSubscription"]] = relationship(
         "PushSubscription",
         back_populates="user",
@@ -116,9 +119,9 @@ class Subscription(Base):
     user_id: Mapped[int] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), unique=True, index=True
     )
-    stripe_customer_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
-    stripe_subscription_id: Mapped[str | None] = mapped_column(
-        String(128), nullable=True
+    # managed = платформенные ключи + кредиты; byok = свои LLM + WaveSpeed, кредиты на студию не списываются
+    billing_plan: Mapped[str] = mapped_column(
+        String(16), default="managed", nullable=False
     )
     status: Mapped[SubscriptionStatus] = mapped_column(
         Enum(SubscriptionStatus, native_enum=False, length=32),
@@ -163,6 +166,17 @@ class UsageEvent(Base):
     kind: Mapped[str] = mapped_column(String(64), index=True)
     credits_delta: Mapped[int] = mapped_column(Integer)
     meta: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+
+class YookassaProcessedPayment(Base):
+    """Идемпотентность вебхуков: один payment_id — одна выдача."""
+
+    __tablename__ = "yookassa_processed_payments"
+
+    payment_id: Mapped[str] = mapped_column(String(64), primary_key=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
@@ -267,6 +281,23 @@ class WavespeedConnection(Base):
     user: Mapped[User] = relationship("User", back_populates="wavespeed_connection")
 
 
+class LlmConnection(Base):
+    """OpenAI-совместимый API (OpenAI, Grok/xAI и др.) для студии при тарифе BYOK."""
+
+    __tablename__ = "llm_connections"
+
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    api_key_encrypted: Mapped[str] = mapped_column(Text)
+    base_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+    user: Mapped[User] = relationship("User", back_populates="llm_connection")
+
+
 class PushSubscription(Base):
     """Подписка Web Push (браузер) для владельца пространства (тот же user_id, что и WS hub)."""
 
@@ -345,6 +376,7 @@ class StudioGeneration(Base):
         index=True,
     )
     prompt_excerpt: Mapped[str | None] = mapped_column(Text, nullable=True)
+    refined_prompt: Mapped[str | None] = mapped_column(Text, nullable=True)
     source_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)

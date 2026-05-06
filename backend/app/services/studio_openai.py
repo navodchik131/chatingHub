@@ -4,6 +4,7 @@ import base64
 import json
 import logging
 import re
+from dataclasses import dataclass
 
 import httpx
 
@@ -14,25 +15,46 @@ log = logging.getLogger(__name__)
 
 MAX_IMAGE_BYTES = 12 * 1024 * 1024
 
-_WAVESPEED_USER_POSE_REF_FIRST_PREFIX = (
-    "[REFERENCE_IMAGE_ORDER] The first image is the user's uploaded pose/scene reference. "
-    "Take from it: pose articulation (hands, limbs), camera angle/height/distance, framing, lens feel, hair styling as in that shot, "
-    "background and lighting. Garments and body coverage must match only this first image — do not dress the subject from the "
-    "other images. If the first image shows no clothing or partial nudity, keep the same coverage (nude/topless/etc.). "
-    "**Do not do a face-swap:** synthesize **one cohesive person** in this scene. Silhouette, proportions, and **all visible skin** "
-    "(face, neck, chest, arms, torso, legs) must match the identity reference images (following URLs) continuously — same tone, "
-    "same texture grain, lighting falling the same way on face and body; not a sharp face on a mismatched body. "
-    "Following image(s): the saved model only for **who** this person is (face + body identity); "
-    "**never** copy pose, camera, framing, or outfit from those images — those come only from the first image.\n\n"
-)
+
+@dataclass(frozen=True)
+class StudioOpenAiCredentials:
+    api_key: str
+    base_url: str
+    organization: str = ""
 
 
-def wavespeed_prompt_with_user_pose_reference_first(refined_prompt: str) -> str:
+def _wavespeed_pose_ref_prefix(*, lock_model_hairstyle: bool) -> str:
+    hair_clause = (
+        "**Hairstyle (braids, loose, bun, etc.) follows the JSON brief / model identity — not this image.** "
+        if lock_model_hairstyle
+        else "hair styling as in that shot, "
+    )
+    return (
+        "[REFERENCE_IMAGE_ORDER] The first image is the user's uploaded pose/scene reference. "
+        "Take from it: pose articulation (hands, limbs), camera angle/height/distance, framing, lens feel, "
+        f"{hair_clause}"
+        "background and lighting. "
+        "Garments and body coverage must match only this first image — do not dress the subject from the "
+        "other images. If the first image shows no clothing or partial nudity, keep the same coverage (nude/topless/etc.). "
+        "**Do not do a face-swap:** synthesize **one cohesive person** in this scene. Silhouette, proportions, and **all visible skin** "
+        "(face, neck, chest, arms, torso, legs) must match the identity reference images (following URLs) continuously — same tone, "
+        "same texture grain, lighting falling the same way on face and body; not a sharp face on a mismatched body. "
+        "Following image(s): the saved model only for **who** this person is (face + body identity); "
+        "**never** copy pose, camera, framing, or outfit from those images — those come only from the first image.\n\n"
+    )
+
+
+def wavespeed_prompt_with_user_pose_reference_first(
+    refined_prompt: str,
+    *,
+    lock_model_hairstyle: bool = True,
+) -> str:
     """Префикс к финальному промпту WaveSpeed, когда первый URL — загруженный пользователем референс."""
+    prefix = _wavespeed_pose_ref_prefix(lock_model_hairstyle=lock_model_hairstyle)
     p = (refined_prompt or "").strip()
     if not p:
-        return _WAVESPEED_USER_POSE_REF_FIRST_PREFIX.strip()
-    return _WAVESPEED_USER_POSE_REF_FIRST_PREFIX + p
+        return prefix.strip()
+    return prefix + p
 
 
 _WAVESPEED_PHOTO_EDIT_USER_FIRST_PREFIX = (
@@ -55,6 +77,7 @@ def finalize_wavespeed_studio_prompt(
     *,
     studio_mode: str,
     user_image_first: bool,
+    lock_model_hairstyle: bool = True,
 ) -> str:
     """Сборка финального текстового промпта для WaveSpeed в зависимости от режима студии."""
     mode = (studio_mode or "model").strip().lower()
@@ -67,7 +90,9 @@ def finalize_wavespeed_studio_prompt(
                 else _WAVESPEED_PHOTO_EDIT_USER_FIRST_PREFIX + p
             )
         else:
-            out = wavespeed_prompt_with_user_pose_reference_first(p)
+            out = wavespeed_prompt_with_user_pose_reference_first(
+                p, lock_model_hairstyle=lock_model_hairstyle
+            )
     else:
         out = p
     if mode == "no_face":
@@ -76,16 +101,28 @@ def finalize_wavespeed_studio_prompt(
 
 
 _NANO_BANANA_IDENTITY_LOCK_PREFIX = (
-    "[MULTI_IMAGE_EDIT — same person] The first input image(s) are reference photos of ONE real person. "
-    "The output MUST preserve her face, facial structure, eyes, nose, mouth, skin tone, hairline and hair, "
-    "and body identity exactly as in these references — do not invent a different person or a generic model face. "
+    "[MULTI_IMAGE_EDIT — same person] The first input image(s) are reference photos of ONE real person "
+    "for **identity only**: face, facial structure, eyes, nose, mouth, skin tone, hairline, hair, and body "
+    "proportions/shape. Do **not** use those images as the source of **pose, camera angle, focal length, "
+    "framing/crop, background layout, outfit, or scene lighting** — the JSON brief (and the **last** input "
+    "image when present) define composition and wardrobe. "
+    "The output MUST preserve identity from these references — do not invent a different person or a generic model face. "
     "The block below is a structured scene brief (JSON); identity always wins over any vague text.\n\n"
 )
 
-_NANO_BANANA_POSE_LAST_NOTE = (
-    "\n\n[LAST_INPUT_IMAGE] The last input image is for pose, framing, outfit/coverage and scene/light only. "
-    "Ignore any face on that last image — the subject must match only the earlier identity reference image(s)."
-)
+def _nano_banana_pose_last_suffix(*, lock_model_hairstyle: bool) -> str:
+    hair = (
+        "**Hairstyle must follow the JSON brief (model identity), not the hair layout on this last image.** "
+        if lock_model_hairstyle
+        else "**Hairstyle may match the last (pose) image when the JSON says POSE_REFERENCE.** "
+    )
+    return (
+        "\n\n[LAST_INPUT_IMAGE] The **last** input image is the **only** source for **pose, framing, camera geometry, "
+        "outfit/body coverage, background, and environmental lighting** in this edit. "
+        + hair
+        + "Ignore any face or skin on that last image — the subject must match only the earlier identity reference image(s). "
+        "Do not blend the pose or shot type from the identity images above."
+    )
 
 
 def finalize_nano_banana_studio_prompt(
@@ -94,6 +131,7 @@ def finalize_nano_banana_studio_prompt(
     studio_mode: str,
     user_photo_edit_first: bool,
     user_pose_reference_is_last: bool,
+    lock_model_hairstyle: bool = True,
 ) -> str:
     """
     Nano Banana Pro: порядок URL другой, чем у WAN (сначала лицо модели, поза пользователя — в конце).
@@ -113,7 +151,9 @@ def finalize_nano_banana_studio_prompt(
         head = _NANO_BANANA_IDENTITY_LOCK_PREFIX
         out = head.strip() if not p else head + p
         if user_pose_reference_is_last:
-            out = out.rstrip() + _NANO_BANANA_POSE_LAST_NOTE
+            out = out.rstrip() + _nano_banana_pose_last_suffix(
+                lock_model_hairstyle=lock_model_hairstyle
+            )
 
     if mode == "no_face":
         out = (out or "").rstrip() + _WAVESPEED_NO_FACE_SUFFIX
@@ -130,8 +170,8 @@ You will receive:
 3. A MODEL PROFILE — **identity** only (face, skin, hair, body type as character); not a replacement for the reference scene.
 4. USER_TEXT, 5. OUTPUT/ASPECT.
 
-If REFERENCE_IMAGE has content: fill pose, clothing (only what the reference photo shows; if none — nude/uncovered), hair_in_scene, photography, background from the reference, not from profile defaults. Never take clothing from MODEL_PROFILE. **Always take face, body_type, skin tone, and hair identity colors from MODEL_PROFILE** — never mimic the reference person's physique or skin. **Synthesize one coherent person**: same lighting and skin texture on face and body; do not produce a head-swap. MODEL_PROFILE fills <FROM_MODEL_PROFILE>; no reference face or body copy.
-Keep realism_engine exactly as in the skeleton. Output only valid JSON, no markdown.
+If REFERENCE_IMAGE has content: fill pose, clothing (only what the reference photo shows; if none — nude/uncovered), photography, background from the reference, not from profile defaults. The user message has `## HAIRSTYLE_MODE`: **MODEL_LOCK** = `hair_in_scene` from MODEL_PROFILE; **POSE_REFERENCE** = `hair_in_scene` from the reference. Never take clothing from MODEL_PROFILE. **Always take face, body_type, skin tone; hair color + identity baseline from MODEL_PROFILE** — never mimic the reference person's skin. **Synthesize one coherent person**. MODEL_PROFILE fills <FROM_MODEL_PROFILE>; no reference face or body copy.
+**Consistency:** camera_style + camera_distance + framing + shot_type + hands must be physically possible (no front-camera "selfie" at 1–2 m full body without mirror/tripod/friend). clothing.imperfections must not contradict realism_engine fabric_realism. Keep realism_engine exactly as in the skeleton. Output only valid JSON, no markdown.
 """.strip()
 
 
@@ -182,6 +222,11 @@ def load_image_studio_system() -> str:
     return _DEFAULT_IMAGE_STUDIO_SYSTEM
 
 
+def _realism_engine_dict_for_prompt(raw: dict) -> dict:
+    """Убрать служебные ключи (_comment и т.д.), чтобы JSON для модели не зашумлять."""
+    return {k: v for k, v in raw.items() if isinstance(k, str) and not k.startswith("_")}
+
+
 def load_canonical_realism_engine() -> dict | None:
     if (settings.image_studio_realism_engine_inline or "").strip():
         try:
@@ -200,11 +245,16 @@ def load_canonical_realism_engine() -> dict | None:
             data = json.loads(path.read_text(encoding="utf-8"))
         except json.JSONDecodeError:
             return None
+    inner: dict | None = None
     if isinstance(data, dict) and "realism_engine" in data and isinstance(
         data["realism_engine"], dict
     ):
-        return data["realism_engine"]
-    return data if isinstance(data, dict) else None
+        inner = data["realism_engine"]
+    elif isinstance(data, dict):
+        inner = data
+    if inner is None:
+        return None
+    return _realism_engine_dict_for_prompt(inner)
 
 
 def prepare_studio_prompt_skeleton() -> str:
@@ -251,14 +301,28 @@ def apply_canonical_realism_to_refined_output(text: str) -> str:
     return json.dumps(data, ensure_ascii=False, indent=2)
 
 
-def load_reference_describe_prompt() -> str:
-    rel = _relative_prompt_path(
-        settings.image_studio_reference_describe_path,
-        "data/prompts/image_studio_reference_describe.txt",
-    )
+def load_reference_describe_prompt(*, hairstyle_from_pose_reference: bool = False) -> str:
+    if hairstyle_from_pose_reference:
+        rel = _relative_prompt_path(
+            settings.image_studio_reference_describe_match_pose_hair_path,
+            "data/prompts/image_studio_reference_describe_match_pose_hair.txt",
+        )
+    else:
+        rel = _relative_prompt_path(
+            settings.image_studio_reference_describe_path,
+            "data/prompts/image_studio_reference_describe.txt",
+        )
     path = (BACKEND_DIR / rel).resolve()
     if path.is_file():
-        return path.read_text(encoding="utf-8").strip()
+        t = path.read_text(encoding="utf-8").strip()
+        if t:
+            return t
+    if hairstyle_from_pose_reference:
+        log.warning(
+            "reference describe (pose hair): file missing or empty (%s), using standard describe prompt",
+            path,
+        )
+        return load_reference_describe_prompt(hairstyle_from_pose_reference=False)
     return (settings.image_studio_reference_describe_inline or "").strip()
 
 
@@ -268,14 +332,26 @@ async def _chat_completion_text(
     messages: list[dict],
     max_tokens: int = 4096,
     temperature: float = 0.65,
+    credentials: StudioOpenAiCredentials | None = None,
 ) -> str:
-    key = (settings.openai_api_key or "").strip()
-    if not key:
-        raise RuntimeError("openai not configured")
+    cred = credentials
+    if cred is None:
+        key = (settings.openai_api_key or "").strip()
+        if not key:
+            raise RuntimeError("openai not configured")
+        base = (settings.openai_base_url or "").strip().rstrip("/")
+        if not base:
+            base = "https://api.openai.com/v1"
+        org = (settings.openai_organization or "").strip()
+    else:
+        key = cred.api_key.strip()
+        if not key:
+            raise RuntimeError("openai not configured")
+        base = cred.base_url.strip().rstrip("/")
+        if not base:
+            base = "https://api.openai.com/v1"
+        org = (cred.organization or "").strip()
 
-    base = (settings.openai_base_url or "").strip().rstrip("/")
-    if not base:
-        base = "https://api.openai.com/v1"
     url = f"{base}/chat/completions"
 
     payload = {
@@ -288,7 +364,6 @@ async def _chat_completion_text(
         "Authorization": f"Bearer {key}",
         "Content-Type": "application/json",
     }
-    org = (settings.openai_organization or "").strip()
     if org:
         req_headers["OpenAI-Organization"] = org
 
@@ -342,9 +417,13 @@ async def describe_reference_image_openai(
     *,
     image_bytes: bytes,
     image_media_type: str | None,
+    hairstyle_from_pose_reference: bool = False,
+    credentials: StudioOpenAiCredentials | None = None,
 ) -> str:
     """Шаг 1: только визуальное описание референса (поза, одежда, сцена), без финального JSON."""
-    instruction = load_reference_describe_prompt()
+    instruction = load_reference_describe_prompt(
+        hairstyle_from_pose_reference=hairstyle_from_pose_reference,
+    )
     if not instruction:
         raise RuntimeError(
             "Текст запроса для описания референса пуст — задайте файл "
@@ -378,6 +457,7 @@ async def describe_reference_image_openai(
         ],
         max_tokens=2048,
         temperature=0.4,
+        credentials=credentials,
     )
 
 
@@ -409,28 +489,51 @@ def _build_refiner_user_message(
     model_profile_text: str | None,
     output_aspect_key: str,
     studio_mode: str = "model",
+    lock_model_hairstyle: bool = True,
 ) -> str:
     has_ref = bool((reference_scene_description or "").strip())
-    blocks: list[str] = []
-    blocks.append("## SKELETON (JSON template: fill <FILL…>, <FROM_MODEL_PROFILE> from model profile, <FILL_FROM_IMAGE_OR_TEXT> from reference when present)")
-    blocks.append(skeleton.strip())
+    mode_line = "MODEL_LOCK" if lock_model_hairstyle else "POSE_REFERENCE"
+    blocks: list[str] = [
+        "## HAIRSTYLE_MODE\n" + mode_line,
+        "## SKELETON (JSON template: fill <FILL…>, <FROM_MODEL_PROFILE> from model profile, <FILL_FROM_IMAGE_OR_TEXT> from reference when present)",
+        skeleton.strip(),
+    ]
 
     # Референс — сразу после скелета, чтобы сцена не утонула в длинном JSON профиля.
     if has_ref:
+        if lock_model_hairstyle:
+            ref_intro = (
+                "## REFERENCE_IMAGE (scene/pose ref only: pose/hands, clothing/coverage on this photo, camera/framing/light/room — "
+                "**not** hairstyle; **not** body type, skin tone, or face; those = MODEL_PROFILE). "
+            )
+        else:
+            ref_intro = (
+                "## REFERENCE_IMAGE (scene/pose ref: pose/hands, clothing/coverage, **hair styling in this shot**, "
+                "camera/framing/light/room — **not** body type, skin tone, or face; those = MODEL_PROFILE). "
+            )
         blocks.append(
-            "## REFERENCE_IMAGE (scene/pose ref only: pose/hands, clothing/coverage on this photo, hair **styling in shot**, camera/framing/light/room — **not** body type, skin tone, or face; those = MODEL_PROFILE). "
-            "**Render as one person:** fill JSON so the edit model **re-synthesizes the full body** of MODEL_PROFILE in this pose and room — not face-only over the reference sitter's body.\n"
+            ref_intro
+            + "**Render as one person:** fill JSON so the edit model **re-synthesizes the full body** of MODEL_PROFILE in this pose and room — not face-only over the reference sitter's body.\n"
             + (reference_scene_description or "").strip()
         )
     else:
         blocks.append("## REFERENCE_IMAGE\n(none — no input reference image)")
 
-    blocks.append(
-        "## MODEL_PROFILE (identity: face, skin, hair color, body type, marks — for <FROM_MODEL_PROFILE> only. "
-        "If REFERENCE_IMAGE exists: **never** use profile for clothing or accessories — only the reference photo + USER_TEXT. "
-        "**Always** use profile for `subject.identity` (face, skin tone, body_type, hair color, marks) **for every visible body part** — "
-        "one continuous person. Do not copy default outfit/jewelry/posture/scene from profile over the reference layout.)"
-    )
+    if lock_model_hairstyle:
+        blocks.append(
+            "## MODEL_PROFILE (identity: face, skin, hair color **and hairstyle**, body type, marks — for <FROM_MODEL_PROFILE> and **`hair_in_scene`**. "
+            "If REFERENCE_IMAGE exists: **never** use profile for clothing or accessories — only the reference photo + USER_TEXT. "
+            "**Always** use profile for `subject.identity` (face, skin tone, body_type, hair color, hair style, marks) and for **`hair_in_scene`** "
+            "**for every visible body part** — one continuous person. Do not copy default outfit/jewelry/posture/scene from profile over the reference layout "
+            "**except hairstyle**, which always follows the profile unless USER_TEXT explicitly changes it.)"
+        )
+    else:
+        blocks.append(
+            "## MODEL_PROFILE (identity: face, skin, hair color, body type, marks — for `subject.identity` / <FROM_MODEL_PROFILE>. "
+            "If REFERENCE_IMAGE exists: **never** use profile for clothing or accessories — only the reference photo + USER_TEXT. "
+            "**Always** use profile for `subject.identity` (face, skin tone, body_type, hair color traits, marks) — **not** from the reference sitter's face or body. "
+            "**`hair_in_scene`** follows REFERENCE_IMAGE when HAIRSTYLE_MODE is POSE_REFERENCE; do not force the profile's default hairstyle if it conflicts with REFERENCE_IMAGE.)"
+        )
     if model_profile_text and model_profile_text.strip():
         blocks.append(model_profile_text.strip())
     else:
@@ -461,6 +564,8 @@ async def refine_prompt_via_openai(
     model_profile_text: str | None,
     output_aspect_key: str,
     studio_mode: str = "model",
+    lock_model_hairstyle: bool = True,
+    credentials: StudioOpenAiCredentials | None = None,
 ) -> str:
     """Шаг 2: одна сессия чата — system = инструкция, user = шаблон + данные; ответ: JSON-строка."""
     if not (system_instruction or "").strip():
@@ -473,6 +578,7 @@ async def refine_prompt_via_openai(
         model_profile_text=model_profile_text,
         output_aspect_key=output_aspect_key,
         studio_mode=studio_mode,
+        lock_model_hairstyle=lock_model_hairstyle,
     )
     raw = await _chat_completion_text(
         model=model,
@@ -482,6 +588,7 @@ async def refine_prompt_via_openai(
         ],
         max_tokens=8192,
         temperature=0.55,
+        credentials=credentials,
     )
     return apply_canonical_realism_to_refined_output(raw)
 
@@ -523,7 +630,7 @@ def _normalize_model_profile_json_output(raw_text: str) -> str:
 
 
 async def generate_model_profile_json_from_images(
-    *, image_items: list[tuple[bytes, str | None]]
+    *, image_items: list[tuple[bytes, str | None]], credentials: StudioOpenAiCredentials | None = None
 ) -> str:
     """Один vision-запрос: несколько фото одного человека → JSON model_profile."""
     if not image_items:
@@ -557,5 +664,6 @@ async def generate_model_profile_json_from_images(
         ],
         max_tokens=8192,
         temperature=0.35,
+        credentials=credentials,
     )
     return _normalize_model_profile_json_output(raw_text)

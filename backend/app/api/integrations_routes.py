@@ -11,11 +11,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.deps import get_current_user
 from app.config import settings
-from app.db.models import FanvueConnection, TelegramConnection, User, WavespeedConnection
+from app.db.models import FanvueConnection, LlmConnection, TelegramConnection, User, WavespeedConnection
 from app.db.session import get_session
 from app.schemas import (
     FanvueIntegrationIn,
     IntegrationStatusOut,
+    LlmIntegrationIn,
     TelegramIntegrationIn,
     WavespeedIntegrationIn,
 )
@@ -42,6 +43,9 @@ async def _integration_status(session: AsyncSession, user: User) -> IntegrationS
     )
     ws = await session.scalar(
         select(WavespeedConnection).where(WavespeedConnection.user_id == oid)
+    )
+    llm = await session.scalar(
+        select(LlmConnection).where(LlmConnection.user_id == oid)
     )
     base = settings.public_app_url.rstrip("/")
     https = base.lower().startswith("https://")
@@ -75,6 +79,7 @@ async def _integration_status(session: AsyncSession, user: User) -> IntegrationS
         telegram_webhook_registered=reg,
         integration_hint=hint,
         wavespeed_configured=bool(ws and (ws.api_key_encrypted or "").strip()),
+        llm_configured=bool(llm and (llm.api_key_encrypted or "").strip()),
     )
 
 
@@ -215,5 +220,35 @@ async def put_wavespeed(
         row.api_key_encrypted = enc
     else:
         session.add(WavespeedConnection(user_id=oid, api_key_encrypted=enc))
+    await session.commit()
+    return await _integration_status(session, user)
+
+
+@router.put("/llm", response_model=IntegrationStatusOut)
+async def put_llm(
+    body: LlmIntegrationIn,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> IntegrationStatusOut:
+    assert_permission(user, PERM_INTEGRATIONS)
+    oid = workspace_owner_id(user)
+    raw = body.api_key.strip()
+    if not raw:
+        raise HTTPException(status_code=400, detail="empty api key")
+    try:
+        enc = encrypt_secret(raw)
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+
+    base_url = body.base_url
+    if base_url:
+        base_url = base_url.rstrip("/")
+
+    row = await session.scalar(select(LlmConnection).where(LlmConnection.user_id == oid))
+    if row:
+        row.api_key_encrypted = enc
+        row.base_url = base_url
+    else:
+        session.add(LlmConnection(user_id=oid, api_key_encrypted=enc, base_url=base_url))
     await session.commit()
     return await _integration_status(session, user)

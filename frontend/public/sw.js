@@ -14,7 +14,7 @@ self.addEventListener('push', (event) => {
     self.registration.showNotification(data.title || fallback.title, {
       body: data.body || '',
       data: { url: data.url || '/' },
-      icon: new URL('favicon.svg', self.location).href,
+      icon: new URL('brand-icon.svg', self.location).href,
       tag: 'chating-msg',
     }),
   )

@@ -182,14 +182,13 @@ select:focus {
   min-width: 0;
 }
 
-.logo-mark {
+.brand-mark {
   width: 2.5rem;
   height: 2.5rem;
-  margin-top: 0.15rem;
-  border-radius: 14px;
+  margin-top: 0.1rem;
   flex-shrink: 0;
-  background: linear-gradient(145deg, #16a34a 0%, var(--accent) 50%, #4ade80 100%);
-  box-shadow: 0 4px 20px rgba(34, 197, 94, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  object-fit: contain;
+  display: block;
 }
 
 .top h1 {
@@ -652,6 +651,23 @@ select:focus {
   max-width: 12rem;
 }
 
+.admin-period-cell {
+  min-width: 10.5rem;
+}
+
+.admin-period-edit {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+  margin-top: 0.35rem;
+}
+
+.admin-period-inp {
+  font-size: 0.75rem;
+  min-width: 9.25rem;
+}
+
 .studio-model-list {
   list-style: none;
   margin: 0 0 1rem;
@@ -749,6 +765,18 @@ a.studio-download {
   align-items: flex-end;
   gap: 0.65rem 1rem;
   margin-top: 0.85rem;
+}
+
+.studio-carousel-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  margin-top: 0.65rem;
+}
+
+.studio-carousel-btn {
+  font-size: 0.8125rem;
 }
 
 .studio-upscale-control {
@@ -1969,6 +1997,194 @@ a.studio-download {
 
 .cabinet-hint-banner {
   margin-bottom: 1.25rem;
+}
+
+.cabinet-yookassa-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.cabinet-yookassa-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  padding: 0.45rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.cabinet-yookassa-row:last-child {
+  border-bottom: none;
+}
+
+.cabinet-dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-top: 0.75rem;
+}
+
+.cabinet-dash-card {
+  padding: 1rem 1.1rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+}
+
+.cabinet-dash-label {
+  font-size: 0.75rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.cabinet-dash-value {
+  font-size: 1.65rem;
+  font-weight: 700;
+  margin: 0.35rem 0;
+  line-height: 1.15;
+}
+
+.cabinet-dash-hint {
+  margin: 0;
+  font-size: 0.8125rem;
+}
+
+.cabinet-overview-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 1.25rem;
+}
+
+.cabinet-module {
+  margin-top: 1.25rem;
+  padding: 1.15rem 1.25rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+}
+
+.cabinet-module--highlight {
+  border-color: rgba(94, 144, 255, 0.55);
+  background: linear-gradient(145deg, rgba(94, 144, 255, 0.09), transparent 55%);
+}
+
+.cabinet-module-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.65rem;
+}
+
+.cabinet-module-title {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+.cabinet-module-badge {
+  font-size: 0.6875rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.cabinet-module-badge.is-ok {
+  background: rgba(34, 197, 94, 0.15);
+  color: #22c55e;
+}
+
+.cabinet-module-badge.is-warn {
+  background: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
+}
+
+.cabinet-module-body {
+  margin: 0 0 0.5rem;
+  font-size: 0.875rem;
+}
+
+.cabinet-module-meta {
+  margin: 0;
+  font-size: 0.8125rem;
+}
+
+.cabinet-module-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: flex-end;
+  margin-top: 0.75rem;
+}
+
+.cabinet-module-form label {
+  flex: 1 1 200px;
+  min-width: 180px;
+}
+
+.cabinet-module-form--grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 0.75rem;
+  align-items: end;
+}
+
+.cabinet-field-span2 {
+  grid-column: span 2;
+}
+
+@media (max-width: 600px) {
+  .cabinet-field-span2 {
+    grid-column: span 1;
+  }
+}
+
+.cabinet-offer-title {
+  font-weight: 600;
+}
+
+.cabinet-offer-price {
+  font-size: 0.875rem;
+  color: var(--muted);
+}
+
+.cabinet-table-wrap {
+  overflow-x: auto;
+  margin-top: 0.5rem;
+}
+
+.cabinet-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.cabinet-table th,
+.cabinet-table td {
+  text-align: left;
+  padding: 0.5rem 0.65rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.cabinet-table th {
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.cabinet-credit-plus {
+  color: #22c55e;
+}
+
+.cabinet-credit-minus {
+  color: #f87171;
 }
 
 .cabinet-keys-form {
