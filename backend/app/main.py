@@ -3,13 +3,16 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import stat
 from contextlib import asynccontextmanager
 
+import anyio.to_thread
 from aiogram import Bot
 from aiogram.client.session.aiohttp import AiohttpSession
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api.routes import router as api_router
 from app.config import settings
@@ -27,6 +30,30 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 log = logging.getLogger(__name__)
+
+
+class SPAStaticFiles(StaticFiles):
+    """
+    Starlette StaticFiles(html=True) не подставляет index.html для путей вроде /workspace
+    (только для каталогов и 404.html). Для React Router при обновлении страницы нужен fallback.
+    """
+
+    async def get_response(self, path: str, scope):  # type: ignore[override]
+        try:
+            return await super().get_response(path, scope)
+        except StarletteHTTPException as exc:
+            if (
+                exc.status_code != 404
+                or not self.html
+                or scope["method"] not in ("GET", "HEAD")
+            ):
+                raise
+            full_path, stat_result = await anyio.to_thread.run_sync(
+                self.lookup_path, "index.html"
+            )
+            if stat_result is not None and stat.S_ISREG(stat_result.st_mode):
+                return self.file_response(full_path, stat_result, scope)
+            raise
 
 
 def _create_legacy_telegram_bot() -> Bot:
@@ -91,4 +118,8 @@ _frontend_dist = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "..", "frontend", "dist")
 )
 if os.path.isdir(_frontend_dist):
-    app.mount("/", StaticFiles(directory=_frontend_dist, html=True), name="spa")
+    app.mount(
+        "/",
+        SPAStaticFiles(directory=_frontend_dist, html=True),
+        name="spa",
+    )

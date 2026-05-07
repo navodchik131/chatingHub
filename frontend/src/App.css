@@ -752,7 +752,7 @@ select:focus {
   vertical-align: middle;
 }
 
-a.studio-download {
+.studio-download {
   display: inline-block;
   margin-top: 0.75rem;
   text-decoration: none;

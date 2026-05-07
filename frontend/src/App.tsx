@@ -530,6 +530,8 @@ export default function App() {
   const [studioUpscaleTarget, setStudioUpscaleTarget] = useState<'2k' | '4k' | '8k'>('4k')
   const [studioUpscaleBusy, setStudioUpscaleBusy] = useState(false)
   const [studioCarouselBusy, setStudioCarouselBusy] = useState(false)
+  /** iOS PWA: прямой href на картинку уводит в Quick Look без «Назад» — качаем через fetch / Share. */
+  const [studioDownloadBusy, setStudioDownloadBusy] = useState(false)
   const [studioWavespeedMsg, setStudioWavespeedMsg] = useState<string | null>(null)
   /** Только в dev + health.studio_allow_prompt_only: без запроса к WaveSpeed */
   const [studioDevPromptOnly, setStudioDevPromptOnly] = useState(false)
@@ -1311,6 +1313,52 @@ export default function App() {
     setStudioGenImageUrl((prev) => (prev === imageUrl ? null : prev))
     setStudioGenGenerationId((prev) => (prev === id ? null : prev))
     void loadStudioGenerationsReset()
+  }
+
+  const downloadStudioResultImage = async () => {
+    const url = studioGenImageUrl
+    if (!url) return
+    setStudioDownloadBusy(true)
+    setError(null)
+    try {
+      const res = await fetch(url)
+      if (!res.ok) {
+        setError('Не удалось загрузить изображение.')
+        return
+      }
+      const blob = await res.blob()
+      const filename = 'image.png'
+      const file = new File([blob], filename, { type: blob.type || 'image/png' })
+
+      if (typeof navigator.share === 'function' && typeof navigator.canShare === 'function') {
+        try {
+          if (navigator.canShare({ files: [file] })) {
+            await navigator.share({ files: [file], title: 'Изображение' })
+            return
+          }
+        } catch (err: unknown) {
+          if (err instanceof Error && err.name === 'AbortError') return
+        }
+      }
+
+      const objectUrl = URL.createObjectURL(blob)
+      try {
+        const a = document.createElement('a')
+        a.href = objectUrl
+        a.download = filename
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+      } finally {
+        window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000)
+      }
+    } catch {
+      setError(
+        'Не удалось скачать. На iPhone откройте меню «Поделиться» или удерживайте превью выше → «Сохранить в Фото».',
+      )
+    } finally {
+      setStudioDownloadBusy(false)
+    }
   }
 
   const refineStudioPrompt = async () => {
@@ -3509,15 +3557,15 @@ export default function App() {
                     </span>
                   ) : null}
                 </div>
-                <a
+                <button
+                  type="button"
                   className="send-btn studio-download"
-                  href={studioGenImageUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  download="image.png"
+                  disabled={studioDownloadBusy}
+                  title="На iPhone откроется меню «Поделиться» — сохраните в Фото без выхода из приложения"
+                  onClick={() => void downloadStudioResultImage()}
                 >
-                  Скачать
-                </a>
+                  {studioDownloadBusy ? 'Сохранение…' : 'Скачать'}
+                </button>
               </div>
             ) : null}
           </div>
