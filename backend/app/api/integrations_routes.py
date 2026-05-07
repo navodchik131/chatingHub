@@ -54,16 +54,14 @@ async def _integration_status(session: AsyncSession, user: User) -> IntegrationS
     if tg and tg.is_active and not reg:
         if not https:
             hint = (
-                "Telegram принимает webhook только по HTTPS. На http://localhost "
-                "входящие не придут — используйте ngrok/Cloudflare Tunnel, выставьте "
-                "PUBLIC_APP_URL=https://… и снова нажмите «Сохранить Telegram». "
-                "Ответы из интерфейса с сохранённым токеном работают. "
-                "Либо локально: BOT_TOKEN + LEGACY_USER_ID в .env для polling."
+                "Входящие из Telegram работают только если сайт доступен по защищённому адресу (HTTPS). "
+                "Обратитесь к администратору с правильным публичным адресом приложения и при необходимости "
+                "сохраните подключение снова. Отправка сообщений из этого раздела с сохранённым токеном может работать и без входящего канала."
             )
         else:
             hint = (
-                "Токен сохранён, но webhook у Telegram не подтверждён — сохраните "
-                "интеграцию снова после проверки PUBLIC_APP_URL."
+                "Токен сохранён, но входящие из Telegram ещё не подтверждены. Сохраните настройки Telegram ещё раз "
+                "после проверки адреса сайта у администратора."
             )
     return IntegrationStatusOut(
         telegram_configured=bool(tg and tg.is_active),

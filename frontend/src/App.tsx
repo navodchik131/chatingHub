@@ -175,7 +175,6 @@ interface HealthInfo {
   telegram_proxy_configured?: boolean
   yookassa_configured?: boolean
   billing_require_active_subscription?: boolean
-  billing_starter_managed_active?: boolean
   billing_price_managed_month_rub?: number
   billing_price_byok_month_rub?: number
   billing_credit_pack_price_rub?: number
@@ -539,6 +538,14 @@ export default function App() {
   const [studioGenHasMore, setStudioGenHasMore] = useState(false)
   const [studioGenLoadingMore, setStudioGenLoadingMore] = useState(false)
   const [studioArchiveInitialLoading, setStudioArchiveInitialLoading] = useState(false)
+
+  const studioPromptOnlyDev = useMemo(
+    () =>
+      import.meta.env.DEV &&
+      Boolean(health?.studio_allow_prompt_only) &&
+      studioDevPromptOnly,
+    [health?.studio_allow_prompt_only, studioDevPromptOnly],
+  )
 
   useEffect(() => {
     if (!studioFile) setStudioLockModelHairstyle(true)
@@ -2052,11 +2059,7 @@ export default function App() {
       )}
 
       {health?.legacy_telegram_polling && health.telegram_api_reachable === false && (
-        <div className="banner error">
-          Нет связи с Telegram API (legacy polling). Включите VPN или задайте{' '}
-          <code>TELEGRAM_PROXY</code> в <code>backend/.env</code>. Детали:{' '}
-          {health.telegram_api_error ?? '—'}
-        </div>
+        <div className="banner error">Нет связи с Telegram. Обратитесь к администратору сервиса.</div>
       )}
 
       {accountOpen && (
@@ -2137,15 +2140,6 @@ export default function App() {
               <p className="cabinet-lead muted">
                 Сводка по аккаунту. Тариф, оплата и история кредитов — в разделе «Тариф и баланс» (владелец).
               </p>
-              {health?.billing_starter_managed_active ? (
-                <div className="banner info" style={{ marginBottom: '1rem' }}>
-                  Онлайн-оплата ещё не подключена: владельцам автоматически выдаётся стартовый тариф{' '}
-                  <strong>Managed</strong> (активная подписка) — студия использует ключи LLM и WaveSpeed с сервера.
-                  При регистрации на счёт начисляются бонусные кредиты (см. <span className="mono">SIGNUP_BONUS_CREDITS</span>
-                  ). LLM задаётся в <span className="mono">OPENAI_*</span> (подходит OpenAI-совместимый API, в том числе Grok
-                  через свой <span className="mono">OPENAI_BASE_URL</span>). После настройки ЮKassa этот режим отключается сам.
-                </div>
-              ) : null}
               <div className="cabinet-dashboard-grid">
                 <div className="cabinet-dash-card">
                   <div className="cabinet-dash-label">Баланс кредитов</div>
@@ -2200,8 +2194,7 @@ export default function App() {
             <div className="account-cabinet-pane" role="tabpanel">
               <p className="cabinet-lead muted">
                 <strong>Здесь выбираете тариф</strong> (Managed или BYOK) <strong>и оплачиваете</strong> подписку или
-                пакет кредитов. Без активной подписки генерация в студии недоступна (если на сервере включена
-                проверка).
+                пакет кредитов. При неактивной подписке студия может быть недоступна.
               </p>
               <p className="cabinet-lead muted">
                 <strong>Managed</strong> — студия списывает кредиты. <strong>BYOK</strong> — ваши ключи к AI и
@@ -2844,8 +2837,7 @@ export default function App() {
               <p className="cabinet-lead muted">
                 Платформа: пользователи, кредиты, подписка (статус, тариф Managed/BYOK, дата окончания
                 периода), события usage. Счёт и подписка всегда у <strong>владельца</strong> пространства;
-                у участников отображаются те же значения. Первый доступ: <span className="mono">ADMIN_EMAILS</span>{' '}
-                в backend/.env или флаг «Админ» у владельца в таблице.
+                у участников отображаются те же значения. Доступ к этой вкладке выдаёт владелец платформы.
               </p>
               {adminDataBusy && !adminStats ? <p className="muted">Загрузка…</p> : null}
               {adminStats ? (
@@ -3075,7 +3067,7 @@ export default function App() {
         </div>
       )}
 
-      {health && appSection !== 'studio' && (
+      {import.meta.env.DEV && health && appSection !== 'studio' && (
         <div className="health-strip" title={health.database_file}>
           Режим: {health.mode ?? '—'} · всего в БД: {health.conversations_count ?? 0} диалогов,{' '}
           {health.messages_count ?? 0} сообщений
@@ -3201,7 +3193,7 @@ export default function App() {
             <p className="studio-mode-hint">
               {studioWaveProfile === 'regular'
                 ? 'Google Nano Banana Pro: выше качество для обычных снимков; действуют ограничения безопасности Google.'
-                : 'Редактор из настроек сервера (WAN 2.7 / Seedream и т.д. — см. WAVESPEED_SEEDREAM_EDIT_PATH).'}
+                : 'Редактор изображений по правилам этой кнопки (настраивается на стороне сервиса).'}
             </p>
             {import.meta.env.DEV && health?.studio_allow_prompt_only ? (
               <>
@@ -3344,7 +3336,9 @@ export default function App() {
                 title={
                   !health?.openai_studio_configured
                     ? 'Студия не настроена на сервере'
-                    : undefined
+                    : !studioPromptOnlyDev && !integ?.wavespeed_configured
+                      ? 'Сохраните ключ WaveSpeed в разделе «Подключения»'
+                      : undefined
                 }
                 disabled={
                   studioBusy ||
@@ -3352,22 +3346,25 @@ export default function App() {
                   (!studioDesc.trim() && !studioFile && studioSelectedModelId == null) ||
                   (studioMode === 'photo_edit' && !studioFile) ||
                   (studioMode === 'no_face' && studioSelectedModelId == null && !studioFile) ||
-                  !health?.openai_studio_configured
+                  !health?.openai_studio_configured ||
+                  (!studioPromptOnlyDev && !integ?.wavespeed_configured)
                 }
                 onClick={() => void refineStudioPrompt()}
               >
                 {studioBusy
                   ? 'Генерация…'
-                  : import.meta.env.DEV &&
-                      health?.studio_allow_prompt_only &&
-                      studioDevPromptOnly
+                  : studioPromptOnlyDev
                     ? 'Собрать промпт'
                     : 'Сгенерировать'}
               </button>
               {canStudioGenerate && health?.openai_studio_configured ? (
-                <span className="studio-credit-hint">
-                  {health.studio_prompt_credit_cost ?? '—'} кр.
-                </span>
+                studioPromptOnlyDev || integ?.wavespeed_configured ? (
+                  <span className="studio-credit-hint">
+                    {health.studio_prompt_credit_cost ?? '—'} кр.
+                  </span>
+                ) : (
+                  <span className="studio-credit-hint warn">Нужен ключ WaveSpeed в кабинете</span>
+                )
               ) : !health?.openai_studio_configured && canStudioGenerate ? (
                 <span className="studio-credit-hint warn">Нет доступа к студии</span>
               ) : null}
@@ -3451,7 +3448,7 @@ export default function App() {
                     title={
                       !integ?.wavespeed_configured
                         ? 'Сохраните ключ WaveSpeed в кабинете'
-                        : 'Тот же мастер-промпт + другие ракурсы (см. data/prompts/image_studio_carousel_*)'
+                        : 'Тот же сценарий и образ, другие ракурсы'
                     }
                     onClick={() => void runStudioCarousel(3)}
                   >
