@@ -174,6 +174,81 @@ def _migrate_subscription_billing_plan(sync_conn) -> None:
     )
 
 
+def _migrate_user_studio_model_export_camera(sync_conn) -> None:
+    from sqlalchemy import inspect, text
+
+    insp = inspect(sync_conn)
+    if not insp.has_table("user_studio_models"):
+        return
+    cols = {c["name"] for c in insp.get_columns("user_studio_models")}
+    dialect = sync_conn.dialect.name
+    if "camera_preset_id" not in cols:
+        sync_conn.execute(
+            text("ALTER TABLE user_studio_models ADD COLUMN camera_preset_id VARCHAR(64)")
+        )
+    if "export_lat" not in cols:
+        if dialect == "sqlite":
+            sync_conn.execute(text("ALTER TABLE user_studio_models ADD COLUMN export_lat REAL"))
+        else:
+            sync_conn.execute(
+                text("ALTER TABLE user_studio_models ADD COLUMN export_lat DOUBLE PRECISION")
+            )
+    if "export_lon" not in cols:
+        if dialect == "sqlite":
+            sync_conn.execute(text("ALTER TABLE user_studio_models ADD COLUMN export_lon REAL"))
+        else:
+            sync_conn.execute(
+                text("ALTER TABLE user_studio_models ADD COLUMN export_lon DOUBLE PRECISION")
+            )
+    if "export_selfie" not in cols:
+        if dialect == "sqlite":
+            sync_conn.execute(
+                text(
+                    "ALTER TABLE user_studio_models "
+                    "ADD COLUMN export_selfie BOOLEAN NOT NULL DEFAULT 0"
+                )
+            )
+        else:
+            sync_conn.execute(
+                text(
+                    "ALTER TABLE user_studio_models "
+                    "ADD COLUMN export_selfie BOOLEAN NOT NULL DEFAULT false"
+                )
+            )
+
+
+def _migrate_studio_model_image_export_selfie(sync_conn) -> None:
+    from sqlalchemy import inspect, text
+
+    insp = inspect(sync_conn)
+    if not insp.has_table("user_studio_model_images"):
+        return
+    cols = {c["name"] for c in insp.get_columns("user_studio_model_images")}
+    dialect = sync_conn.dialect.name
+    if "export_selfie" in cols:
+        return
+    if dialect == "sqlite":
+        sync_conn.execute(
+            text(
+                "ALTER TABLE user_studio_model_images "
+                "ADD COLUMN export_selfie BOOLEAN NOT NULL DEFAULT 0"
+            )
+        )
+    else:
+        sync_conn.execute(
+            text(
+                "ALTER TABLE user_studio_model_images "
+                "ADD COLUMN export_selfie BOOLEAN NOT NULL DEFAULT false"
+            )
+        )
+    sync_conn.execute(
+        text(
+            "UPDATE user_studio_model_images SET export_selfie = 1 "
+            "WHERE lower(image_kind) = 'face'"
+        )
+    )
+
+
 async def init_db() -> None:
     """Создаёт таблицы. Каталог для SQLite создаётся в Settings.sqlite_absolute_path."""
     async with engine.begin() as conn:
@@ -187,6 +262,8 @@ async def init_db() -> None:
         await conn.run_sync(_migrate_user_is_platform_admin)
         await conn.run_sync(_migrate_studio_generation_refined_prompt)
         await conn.run_sync(_migrate_studio_model_image_kind)
+        await conn.run_sync(_migrate_user_studio_model_export_camera)
+        await conn.run_sync(_migrate_studio_model_image_export_selfie)
         await conn.run_sync(_migrate_subscription_billing_plan)
 
 

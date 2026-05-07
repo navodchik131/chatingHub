@@ -7,6 +7,7 @@ from sqlalchemy import (
     Boolean,
     DateTime,
     Enum,
+    Float,
     ForeignKey,
     Integer,
     String,
@@ -329,6 +330,10 @@ class UserStudioModel(Base):
     )
     name: Mapped[str] = mapped_column(String(128))
     profile_text: Mapped[str] = mapped_column(Text, default="")
+    """Пресет «экспорт как с телефона» — id из /api/studio/camera-presets; пусто = без постобработки."""
+    camera_preset_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    export_lat: Mapped[float | None] = mapped_column(Float, nullable=True)
+    export_lon: Mapped[float | None] = mapped_column(Float, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
@@ -353,6 +358,8 @@ class UserStudioModelImage(Base):
     original_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     """face | body | genitals | other — роль снимка для image-edit и LLM (порядок в API)."""
     image_kind: Mapped[str] = mapped_column(String(24), default="other", nullable=False)
+    """Подставлять ли в EXIF метаданные передней (селфи) камеры для этого кадра (участвует в выборе при экспорте)."""
+    export_selfie: Mapped[bool] = mapped_column(default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

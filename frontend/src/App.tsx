@@ -276,6 +276,7 @@ interface StudioModelImage {
   id: number
   url: string
   kind: string
+  export_selfie?: boolean
 }
 
 type StudioModelImageKind = 'face' | 'body' | 'genitals' | 'other'
@@ -283,6 +284,7 @@ type StudioModelImageKind = 'face' | 'body' | 'genitals' | 'other'
 interface NewModelPhotoRow {
   file: File
   kind: StudioModelImageKind
+  export_selfie: boolean
 }
 
 const STUDIO_MODEL_IMAGE_KIND_OPTIONS: { value: StudioModelImageKind; label: string }[] = [
@@ -303,6 +305,34 @@ interface UserStudioModel {
   profile_text: string
   image_count: number
   images?: StudioModelImage[]
+  camera_preset_id?: string | null
+  export_lat?: number | null
+  export_lon?: number | null
+}
+
+type StudioModelCabinetDraft = {
+  name: string
+  profile_text: string
+  camera_preset_id: string
+  export_lat: string
+  export_lon: string
+}
+
+function defaultStudioModelCabinetDraft(m: UserStudioModel): StudioModelCabinetDraft {
+  return {
+    name: m.name,
+    profile_text: m.profile_text,
+    camera_preset_id: (m.camera_preset_id ?? '').trim(),
+    export_lat:
+      m.export_lat != null && !Number.isNaN(Number(m.export_lat)) ? String(m.export_lat) : '',
+    export_lon:
+      m.export_lon != null && !Number.isNaN(Number(m.export_lon)) ? String(m.export_lon) : '',
+  }
+}
+
+interface StudioCameraPreset {
+  id: string
+  label: string
 }
 
 type AccountCabinetTab = 'overview' | 'billing' | 'integrations' | 'models' | 'team' | 'admin'
@@ -515,9 +545,8 @@ export default function App() {
   const [memberEditPassword, setMemberEditPassword] = useState<Record<number, string>>({})
   const [memberMaskEdits, setMemberMaskEdits] = useState<Record<number, number>>({})
   const [integ, setInteg] = useState<IntegrationStatus | null>(null)
-  const [modelDrafts, setModelDrafts] = useState<Record<number, { name: string; profile_text: string }>>(
-    {},
-  )
+  const [modelDrafts, setModelDrafts] = useState<Record<number, StudioModelCabinetDraft>>({})
+  const [studioCameraPresets, setStudioCameraPresets] = useState<StudioCameraPreset[]>([])
   const [modelSavingId, setModelSavingId] = useState<number | null>(null)
   const [tgToken, setTgToken] = useState('')
   const [fvToken, setFvToken] = useState('')
@@ -539,6 +568,9 @@ export default function App() {
   const [newModelProfile, setNewModelProfile] = useState('')
   const [newModelProfileGenBusy, setNewModelProfileGenBusy] = useState(false)
   const [newModelPhotos, setNewModelPhotos] = useState<NewModelPhotoRow[]>([])
+  const [newModelCameraPresetId, setNewModelCameraPresetId] = useState('')
+  const [newModelExportLat, setNewModelExportLat] = useState('')
+  const [newModelExportLon, setNewModelExportLon] = useState('')
   /** Черновик файлов для «Добавить фото» на карточке модели (до загрузки на сервер). */
   const [appendModelPhotosById, setAppendModelPhotosById] = useState<
     Record<number, NewModelPhotoRow[]>
@@ -700,6 +732,11 @@ export default function App() {
     if (r.ok) setStudioModels((await r.json()) as UserStudioModel[])
   }, [])
 
+  const loadStudioCameraPresets = useCallback(async () => {
+    const r = await apiFetch('/api/studio/camera-presets')
+    if (r.ok) setStudioCameraPresets((await r.json()) as StudioCameraPreset[])
+  }, [])
+
   const fetchStudioArchivePage = useCallback(async (skip: number) => {
     const p = new URLSearchParams()
     p.set('limit', String(STUDIO_ARCHIVE_PAGE))
@@ -756,9 +793,7 @@ export default function App() {
 
   useEffect(() => {
     setModelDrafts(
-      Object.fromEntries(
-        studioModels.map((m) => [m.id, { name: m.name, profile_text: m.profile_text }]),
-      ) as Record<number, { name: string; profile_text: string }>,
+      Object.fromEntries(studioModels.map((m) => [m.id, defaultStudioModelCabinetDraft(m)])),
     )
   }, [studioModels])
 
@@ -814,8 +849,20 @@ export default function App() {
     const needModels =
       (appSection === 'studio' && canStudioAny) ||
       (accountOpen && accountTab === 'models' && canStudioModels)
-    if (needModels) void loadStudioModels()
-  }, [authed, accountOpen, accountTab, appSection, canStudioAny, canStudioModels, loadStudioModels])
+    if (needModels) {
+      void loadStudioModels()
+      void loadStudioCameraPresets()
+    }
+  }, [
+    authed,
+    accountOpen,
+    accountTab,
+    appSection,
+    canStudioAny,
+    canStudioModels,
+    loadStudioModels,
+    loadStudioCameraPresets,
+  ])
 
   useEffect(() => {
     if (authed && accountOpen && accountTab === 'team' && isOwner) void refreshWorkspaceMembers()
@@ -1649,6 +1696,12 @@ export default function App() {
       setError('Укажите название модели.')
       return
     }
+    const lt = newModelExportLat.trim()
+    const ln = newModelExportLon.trim()
+    if ((lt && !ln) || (!lt && ln)) {
+      setError('Укажите и широту, и долготу для ГЕО, или оставьте оба поля пустыми.')
+      return
+    }
     const fd = new FormData()
     fd.append('name', name)
     fd.append('profile_text', newModelProfile.trim())
@@ -1657,6 +1710,13 @@ export default function App() {
       'image_kinds',
       JSON.stringify(newModelPhotos.map((r) => r.kind)),
     )
+    fd.append(
+      'image_export_selfies',
+      JSON.stringify(newModelPhotos.map((r) => r.export_selfie)),
+    )
+    fd.append('camera_preset_id', newModelCameraPresetId.trim())
+    fd.append('export_lat', lt)
+    fd.append('export_lon', ln)
     const r = await apiFetch('/api/studio/models', { method: 'POST', body: fd })
     if (!r.ok) {
       const j = await r.json().catch(() => ({}))
@@ -1666,6 +1726,9 @@ export default function App() {
     setNewModelName('')
     setNewModelProfile('')
     setNewModelPhotos([])
+    setNewModelCameraPresetId('')
+    setNewModelExportLat('')
+    setNewModelExportLon('')
     void loadStudioModels()
   }
 
@@ -1782,12 +1845,34 @@ export default function App() {
     const d = modelDrafts[id]
     if (!d) return
     setError(null)
+    const lt = d.export_lat.trim()
+    const ln = d.export_lon.trim()
+    if ((lt && !ln) || (!lt && ln)) {
+      setError('Укажите и широту, и долготу для ГЕО, или оставьте оба поля пустыми.')
+      return
+    }
+    let export_lat: number | null = null
+    let export_lon: number | null = null
+    if (lt && ln) {
+      export_lat = parseFloat(lt.replace(',', '.'))
+      export_lon = parseFloat(ln.replace(',', '.'))
+      if (Number.isNaN(export_lat) || Number.isNaN(export_lon)) {
+        setError('Широта и долгота должны быть числами (например 55.7558 и 37.6173).')
+        return
+      }
+    }
     setModelSavingId(id)
     try {
       const r = await apiFetch(`/api/studio/models/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: d.name.trim(), profile_text: d.profile_text }),
+        body: JSON.stringify({
+          name: d.name.trim(),
+          profile_text: d.profile_text,
+          camera_preset_id: d.camera_preset_id.trim() || null,
+          export_lat,
+          export_lon,
+        }),
       })
       if (!r.ok) {
         const j = await r.json().catch(() => ({}))
@@ -1811,6 +1896,10 @@ export default function App() {
         'image_kinds',
         JSON.stringify(rows.map((r) => r.kind)),
       )
+      fd.append(
+        'image_export_selfies',
+        JSON.stringify(rows.map((r) => r.export_selfie)),
+      )
       const r = await apiFetch(`/api/studio/models/${id}/images`, { method: 'POST', body: fd })
       if (!r.ok) {
         const j = await r.json().catch(() => ({}))
@@ -1828,10 +1917,10 @@ export default function App() {
     }
   }
 
-  const patchStudioModelImageKind = async (
+  const patchStudioModelImage = async (
     modelId: number,
     imageId: number,
-    kind: StudioModelImageKind,
+    patch: { kind?: StudioModelImageKind; export_selfie?: boolean },
   ) => {
     setError(null)
     setModelSavingId(modelId)
@@ -1839,7 +1928,7 @@ export default function App() {
       const r = await apiFetch(`/api/studio/models/${modelId}/images/${imageId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ kind }),
+        body: JSON.stringify(patch),
       })
       if (!r.ok) {
         const j = await r.json().catch(() => ({}))
@@ -2805,26 +2894,23 @@ export default function App() {
                     onChange={(e) => {
                       const list = e.target.files ? Array.from(e.target.files) : []
                       setNewModelPhotos(
-                        list.slice(0, 5).map((file) => ({ file, kind: 'other' })),
+                        list.slice(0, 5).map((file, i) => ({
+                          file,
+                          kind: (i === 0 ? 'face' : 'other') as StudioModelImageKind,
+                          export_selfie: i === 0,
+                        })),
                       )
                     }}
                   />
                   {newModelPhotos.length > 0 ? (
-                    <ul className="studio-new-model-photo-kinds" style={{ marginTop: '0.5rem' }}>
+                    <ul className="studio-new-model-photo-kinds">
                       {newModelPhotos.map((row, idx) => (
-                        <li
-                          key={`${row.file.name}-${idx}`}
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '0.5rem',
-                            marginTop: '0.35rem',
-                          }}
-                        >
-                          <span className="muted small" style={{ flex: '1', minWidth: 0 }}>
+                        <li key={`${row.file.name}-${idx}`} className="studio-model-photo-kind-row">
+                          <span className="muted small studio-model-photo-filename">
                             {row.file.name}
                           </span>
                           <select
+                            className="studio-model-kind-select"
                             value={row.kind}
                             disabled={studioPaywalled}
                             onChange={(e) => {
@@ -2840,6 +2926,20 @@ export default function App() {
                               </option>
                             ))}
                           </select>
+                          <label className="studio-label studio-check studio-model-selfie-inline">
+                            <input
+                              type="checkbox"
+                              checked={row.export_selfie}
+                              disabled={studioPaywalled}
+                              onChange={(e) => {
+                                const v = e.target.checked
+                                setNewModelPhotos((prev) =>
+                                  prev.map((p, i) => (i === idx ? { ...p, export_selfie: v } : p)),
+                                )
+                              }}
+                            />
+                            <span>Селфи (EXIF)</span>
+                          </label>
                         </li>
                       ))}
                     </ul>
@@ -2865,6 +2965,51 @@ export default function App() {
                     {newModelProfileGenBusy ? 'Генерация…' : 'Сгенерировать из фото'}
                   </button>
                 </label>
+                <div className="studio-model-export-block account-grid" style={{ gridColumn: '1 / -1' }}>
+                  <h4 className="account-sub" style={{ margin: 0 }}>
+                    Экспорт «как с телефона»
+                  </h4>
+                  <p className="muted small" style={{ margin: 0 }}>
+                    На сохранённый снимок студии: лёгкий шум, JPEG и EXIF по пресету. Пустой пресет — без
+                    этой обработки. Тип камеры (селфи / основная) задаётся отдельно для каждого фото модели
+                    ниже; в файл попадает настройка кадра «лицо», иначе — первого по порядку.
+                  </p>
+                  <label>
+                    Пресет камеры
+                    <select
+                      value={newModelCameraPresetId}
+                      disabled={studioPaywalled}
+                      onChange={(e) => setNewModelCameraPresetId(e.target.value)}
+                    >
+                      <option value="">— не применять —</option>
+                      {studioCameraPresets.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    Широта (ГЕО)
+                    <input
+                      value={newModelExportLat}
+                      onChange={(e) => setNewModelExportLat(e.target.value)}
+                      placeholder="55.7558"
+                      inputMode="decimal"
+                      disabled={studioPaywalled}
+                    />
+                  </label>
+                  <label>
+                    Долгота (ГЕО)
+                    <input
+                      value={newModelExportLon}
+                      onChange={(e) => setNewModelExportLon(e.target.value)}
+                      placeholder="37.6173"
+                      inputMode="decimal"
+                      disabled={studioPaywalled}
+                    />
+                  </label>
+                </div>
                 <button
                   type="button"
                   className="send-btn"
@@ -2880,7 +3025,7 @@ export default function App() {
               ) : (
                 <div className="model-card-grid">
                   {studioModels.map((m) => {
-                    const draft = modelDrafts[m.id] ?? { name: m.name, profile_text: m.profile_text }
+                    const draft = modelDrafts[m.id] ?? defaultStudioModelCabinetDraft(m)
                     const busy = modelSavingId === m.id
                     const imgs = m.images ?? []
                     const pendingAppend = appendModelPhotosById[m.id] ?? []
@@ -2919,13 +3064,13 @@ export default function App() {
                                   </button>
                                 </div>
                                 <select
-                                  className="model-thumb-kind-select"
+                                  className="studio-model-kind-select"
                                   aria-label="Тип референса"
                                   value={normalizeStudioImageKind(im.kind)}
                                   disabled={busy || studioPaywalled}
                                   onChange={(e) => {
                                     const v = e.target.value as StudioModelImageKind
-                                    void patchStudioModelImageKind(m.id, im.id, v)
+                                    void patchStudioModelImage(m.id, im.id, { kind: v })
                                   }}
                                 >
                                   {STUDIO_MODEL_IMAGE_KIND_OPTIONS.map((o) => (
@@ -2934,6 +3079,19 @@ export default function App() {
                                     </option>
                                   ))}
                                 </select>
+                                <label className="studio-label studio-check model-thumb-selfie-check">
+                                  <input
+                                    type="checkbox"
+                                    checked={!!im.export_selfie}
+                                    disabled={busy || studioPaywalled}
+                                    onChange={(e) =>
+                                      void patchStudioModelImage(m.id, im.id, {
+                                        export_selfie: e.target.checked,
+                                      })
+                                    }
+                                  />
+                                  <span>Селфи EXIF</span>
+                                </label>
                               </div>
                             ))
                           )}
@@ -2947,17 +3105,13 @@ export default function App() {
                               {pendingAppend.map((row, idx) => (
                                 <li
                                   key={`${row.file.name}-${idx}`}
-                                  style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '0.5rem',
-                                    marginTop: '0.35rem',
-                                  }}
+                                  className="studio-model-photo-kind-row"
                                 >
-                                  <span className="muted small" style={{ flex: '1', minWidth: 0 }}>
+                                  <span className="muted small studio-model-photo-filename">
                                     {row.file.name}
                                   </span>
                                   <select
+                                    className="studio-model-kind-select"
                                     value={row.kind}
                                     disabled={busy || studioPaywalled}
                                     onChange={(e) => {
@@ -2977,6 +3131,24 @@ export default function App() {
                                       </option>
                                     ))}
                                   </select>
+                                  <label className="studio-label studio-check studio-model-selfie-inline">
+                                    <input
+                                      type="checkbox"
+                                      checked={row.export_selfie}
+                                      disabled={busy || studioPaywalled}
+                                      onChange={(e) => {
+                                        const v = e.target.checked
+                                        setAppendModelPhotosById((prev) => {
+                                          const cur = prev[m.id] ?? []
+                                          const nextRows = cur.map((p, i) =>
+                                            i === idx ? { ...p, export_selfie: v } : p,
+                                          )
+                                          return { ...prev, [m.id]: nextRows }
+                                        })
+                                      }}
+                                    />
+                                    <span>Селфи (EXIF)</span>
+                                  </label>
                                   <button
                                     type="button"
                                     className="ghost-btn danger-text"
@@ -3033,10 +3205,7 @@ export default function App() {
                               setModelDrafts((prev) => ({
                                 ...prev,
                                 [m.id]: {
-                                  ...(prev[m.id] ?? {
-                                    name: m.name,
-                                    profile_text: m.profile_text,
-                                  }),
+                                  ...(prev[m.id] ?? defaultStudioModelCabinetDraft(m)),
                                   name: e.target.value,
                                 },
                               }))
@@ -3053,16 +3222,81 @@ export default function App() {
                               setModelDrafts((prev) => ({
                                 ...prev,
                                 [m.id]: {
-                                  ...(prev[m.id] ?? {
-                                    name: m.name,
-                                    profile_text: m.profile_text,
-                                  }),
+                                  ...(prev[m.id] ?? defaultStudioModelCabinetDraft(m)),
                                   profile_text: e.target.value,
                                 },
                               }))
                             }
                           />
                         </label>
+                        <div className="studio-model-export-block account-grid" style={{ gridColumn: '1 / -1' }}>
+                          <h4 className="account-sub" style={{ margin: 0 }}>
+                            Экспорт «как с телефона»
+                          </h4>
+                          <p className="muted small" style={{ margin: 0 }}>
+                            Дата/время в EXIF — момент сохранения кадра. ГЕО — опционально (оба поля). Селфи
+                            / основная камера в EXIF — у каждого фото в блоке референсов выше.
+                          </p>
+                          <label>
+                            Пресет камеры
+                            <select
+                              value={draft.camera_preset_id}
+                              disabled={busy || studioPaywalled}
+                              onChange={(e) =>
+                                setModelDrafts((prev) => ({
+                                  ...prev,
+                                  [m.id]: {
+                                    ...(prev[m.id] ?? defaultStudioModelCabinetDraft(m)),
+                                    camera_preset_id: e.target.value,
+                                  },
+                                }))
+                              }
+                            >
+                              <option value="">— не применять —</option>
+                              {studioCameraPresets.map((p) => (
+                                <option key={p.id} value={p.id}>
+                                  {p.label}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <label>
+                            Широта
+                            <input
+                              value={draft.export_lat}
+                              disabled={busy || studioPaywalled}
+                              placeholder="55.7558"
+                              inputMode="decimal"
+                              onChange={(e) =>
+                                setModelDrafts((prev) => ({
+                                  ...prev,
+                                  [m.id]: {
+                                    ...(prev[m.id] ?? defaultStudioModelCabinetDraft(m)),
+                                    export_lat: e.target.value,
+                                  },
+                                }))
+                              }
+                            />
+                          </label>
+                          <label>
+                            Долгота
+                            <input
+                              value={draft.export_lon}
+                              disabled={busy || studioPaywalled}
+                              placeholder="37.6173"
+                              inputMode="decimal"
+                              onChange={(e) =>
+                                setModelDrafts((prev) => ({
+                                  ...prev,
+                                  [m.id]: {
+                                    ...(prev[m.id] ?? defaultStudioModelCabinetDraft(m)),
+                                    export_lon: e.target.value,
+                                  },
+                                }))
+                              }
+                            />
+                          </label>
+                        </div>
                         <div className="model-card-actions">
                           <label className="model-card-add-files">
                             <input
@@ -3076,14 +3310,21 @@ export default function App() {
                                 const slots = Math.max(0, 5 - m.image_count - pendingAppend.length)
                                 const slice = list.slice(0, slots)
                                 if (slice.length > 0) {
+                                  const priorCount = m.image_count + pendingAppend.length
                                   setAppendModelPhotosById((prev) => ({
                                     ...prev,
                                     [m.id]: [
                                       ...(prev[m.id] ?? []),
-                                      ...slice.map((file) => ({
-                                        file,
-                                        kind: 'other' as StudioModelImageKind,
-                                      })),
+                                      ...slice.map((file, j) => {
+                                        const isFirstEver = priorCount + j === 0
+                                        return {
+                                          file,
+                                          kind: (isFirstEver
+                                            ? 'face'
+                                            : 'other') as StudioModelImageKind,
+                                          export_selfie: isFirstEver,
+                                        }
+                                      }),
                                     ],
                                   }))
                                 }

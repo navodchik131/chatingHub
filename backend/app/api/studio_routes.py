@@ -25,6 +25,7 @@ from app.db.models import (
 )
 from app.db.session import get_session
 from app.schemas import (
+    StudioCameraPresetOut,
     StudioCarouselIn,
     StudioCarouselItemOut,
     StudioCarouselOut,
@@ -83,9 +84,11 @@ from app.services.studio_openai import (
     prepare_studio_prompt_skeleton,
     refine_prompt_via_openai,
 )
+from app.services.studio_camera_presets import get_camera_preset_by_id, list_camera_presets
 from app.services.studio_carousel import build_carousel_wave_prompt
 from app.services.studio_model_images import (
     model_reference_photos_block,
+    parse_image_export_selfies_json,
     parse_image_kinds_json,
     sort_model_images_for_studio,
     assert_studio_image_kind,
@@ -105,6 +108,45 @@ log = logging.getLogger(__name__)
 router = APIRouter(tags=["studio"])
 
 MAX_MODEL_IMAGES = 5
+
+
+def _coerce_camera_preset_id(raw: str | None) -> str | None:
+    if raw is None:
+        return None
+    s = str(raw).strip()
+    if not s:
+        return None
+    if get_camera_preset_by_id(s) is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Неизвестный пресет камеры для экспорта. Выберите значение из списка.",
+        )
+    return s
+
+
+def _parse_optional_lat_lon_form(lat_s: str | None, lon_s: str | None) -> tuple[float | None, float | None]:
+    def one(label: str, v: str | None) -> float | None:
+        if v is None or not str(v).strip():
+            return None
+        try:
+            return float(str(v).strip().replace(",", "."))
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail=f"{label} должна быть числом (например 55.7558).",
+            ) from None
+
+    lat_e = one("Широта", lat_s)
+    lon_e = one("Долгота", lon_s)
+    if (lat_e is None) ^ (lon_e is None):
+        raise HTTPException(
+            status_code=400,
+            detail="Укажите и широту, и долготу для ГЕО, или оставьте оба поля пустыми.",
+        )
+    if lat_e is not None and lon_e is not None:
+        if not (-90 <= lat_e <= 90 and -180 <= lon_e <= 180):
+            raise HTTPException(status_code=400, detail="Координаты вне допустимого диапазона.")
+    return lat_e, lon_e
 
 
 def _require_studio_subscription(user: User, owner_subscription: Subscription | None) -> None:
@@ -129,6 +171,13 @@ def _public_app_base(request: Request | None) -> str:
     if request is not None:
         return str(request.base_url).rstrip("/")
     return ""
+
+
+@router.get("/studio/camera-presets", response_model=list[StudioCameraPresetOut])
+async def api_list_camera_presets(user: User = Depends(get_current_user)) -> list[StudioCameraPresetOut]:
+    if not has_any_studio_access(user):
+        raise HTTPException(status_code=403, detail="Нет доступа к студии")
+    return [StudioCameraPresetOut(id=x["id"], label=x["label"]) for x in list_camera_presets()]
 
 
 _ALLOWED_SUFFIX = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
@@ -271,6 +320,7 @@ def _studio_model_to_out(user_id: int, m: UserStudioModel) -> UserStudioModelOut
             url="/api/studio/public-model-image?t="
             + quote(create_model_image_access_token(user_id=user_id, image_id=im.id), safe=""),
             kind=(im.image_kind or "other").strip().lower(),
+            export_selfie=bool(im.export_selfie),
         )
         for im in ordered
     ]
@@ -280,6 +330,9 @@ def _studio_model_to_out(user_id: int, m: UserStudioModel) -> UserStudioModelOut
         profile_text=m.profile_text or "",
         image_count=len(ordered),
         images=images,
+        camera_preset_id=(m.camera_preset_id or "").strip() or None,
+        export_lat=m.export_lat,
+        export_lon=m.export_lon,
     )
 
 
@@ -778,6 +831,10 @@ async def api_create_studio_model(
     profile_text: str = Form(""),
     images: list[UploadFile] | None = File(None),
     image_kinds: str | None = Form(None),
+    image_export_selfies: str | None = Form(None),
+    camera_preset_id: str | None = Form(None),
+    export_lat: str | None = Form(None),
+    export_lon: str | None = Form(None),
     session: AsyncSession = Depends(get_session),
     user: User = Depends(get_current_user),
 ) -> UserStudioModelOut:
@@ -787,16 +844,23 @@ async def api_create_studio_model(
     _require_studio_subscription(user, sub_b)
     uploads = images or []
     kinds_list = parse_image_kinds_json(image_kinds, len(uploads))
+    selfies_list = parse_image_export_selfies_json(image_export_selfies, len(uploads), kinds_list)
     if len(uploads) > MAX_MODEL_IMAGES:
         raise HTTPException(
             status_code=400,
             detail=f"Не больше {MAX_MODEL_IMAGES} изображений на модель",
         )
 
+    lat, lon = _parse_optional_lat_lon_form(export_lat, export_lon)
+    preset_norm = _coerce_camera_preset_id(camera_preset_id)
+
     m = UserStudioModel(
         user_id=oid,
         name=name.strip(),
         profile_text=(profile_text or "").strip(),
+        camera_preset_id=preset_norm,
+        export_lat=lat,
+        export_lon=lon,
     )
     session.add(m)
     await session.flush()
@@ -820,12 +884,14 @@ async def api_create_studio_model(
         rel = f"data/studio_user_models/{oid}/{m.id}/{fn}"
         (d / fn).write_bytes(raw)
         kind = kinds_list[i] if i < len(kinds_list) else "other"
+        selfie_b = selfies_list[i] if i < len(selfies_list) else (kind == "face")
         session.add(
             UserStudioModelImage(
                 studio_model_id=m.id,
                 relative_path=rel,
                 original_name=(up.filename or "")[:255] or None,
                 image_kind=kind,
+                export_selfie=selfie_b,
             )
         )
 
@@ -857,6 +923,30 @@ async def api_patch_studio_model(
         m.name = str(data["name"]).strip()
     if "profile_text" in data:
         m.profile_text = (data["profile_text"] or "").strip()
+    if "camera_preset_id" in data:
+        raw_c = data["camera_preset_id"]
+        if raw_c is None or (isinstance(raw_c, str) and not str(raw_c).strip()):
+            m.camera_preset_id = None
+        else:
+            m.camera_preset_id = _coerce_camera_preset_id(str(raw_c))
+    if "export_lat" in data or "export_lon" in data:
+        new_lat = data["export_lat"] if "export_lat" in data else m.export_lat
+        new_lon = data["export_lon"] if "export_lon" in data else m.export_lon
+        if new_lat is None and new_lon is None:
+            m.export_lat = None
+            m.export_lon = None
+        elif new_lat is not None and new_lon is not None:
+            if not (-90 <= new_lat <= 90 and -180 <= new_lon <= 180):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Координаты вне допустимого диапазона.",
+                )
+            m.export_lat, m.export_lon = new_lat, new_lon
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail="Передайте export_lat и export_lon вместе или сбросьте оба (null).",
+            )
     await session.commit()
     m2 = await _load_studio_model_owned(session, oid, model_id)
     assert m2 is not None
@@ -868,6 +958,7 @@ async def api_add_studio_model_images(
     model_id: int,
     images: list[UploadFile] | None = File(None),
     image_kinds: str | None = Form(None),
+    image_export_selfies: str | None = Form(None),
     session: AsyncSession = Depends(get_session),
     user: User = Depends(get_current_user),
 ) -> UserStudioModelOut:
@@ -880,6 +971,7 @@ async def api_add_studio_model_images(
         raise HTTPException(status_code=404, detail="Модель не найдена")
     uploads = [u for u in (images or []) if u is not None]
     kinds_list = parse_image_kinds_json(image_kinds, len(uploads))
+    selfies_list = parse_image_export_selfies_json(image_export_selfies, len(uploads), kinds_list)
     current_n = len(m.images)
     if not uploads:
         return _studio_model_to_out(oid, m)
@@ -906,12 +998,14 @@ async def api_add_studio_model_images(
         rel = f"data/studio_user_models/{oid}/{m.id}/{fn}"
         (d / fn).write_bytes(raw)
         kind = kinds_list[i] if i < len(kinds_list) else "other"
+        selfie_b = selfies_list[i] if i < len(selfies_list) else (kind == "face")
         session.add(
             UserStudioModelImage(
                 studio_model_id=m.id,
                 relative_path=rel,
                 original_name=(up.filename or "")[:255] or None,
                 image_kind=kind,
+                export_selfie=selfie_b,
             )
         )
     await session.commit()
@@ -938,7 +1032,13 @@ async def api_patch_studio_model_image(
     img = await session.get(UserStudioModelImage, image_id)
     if not img or img.studio_model_id != model_id:
         raise HTTPException(status_code=404, detail="Изображение не найдено")
-    img.image_kind = assert_studio_image_kind(body.kind)
+    data = body.model_dump(exclude_unset=True)
+    if not data:
+        raise HTTPException(status_code=400, detail="Передайте kind и/или export_selfie")
+    if "kind" in data:
+        img.image_kind = assert_studio_image_kind(data["kind"])
+    if "export_selfie" in data:
+        img.export_selfie = bool(data["export_selfie"])
     await session.commit()
     m2 = await _load_studio_model_owned(session, oid, model_id)
     assert m2 is not None

@@ -231,10 +231,17 @@ class StudioModelImageOut(BaseModel):
     id: int
     url: str
     kind: str = "other"
+    export_selfie: bool = False
 
 
 class StudioModelImagePatchIn(BaseModel):
-    kind: str = Field(..., min_length=1, max_length=24)
+    kind: str | None = Field(default=None, min_length=1, max_length=24)
+    export_selfie: bool | None = None
+
+
+class StudioCameraPresetOut(BaseModel):
+    id: str
+    label: str
 
 
 class UserStudioModelOut(BaseModel):
@@ -243,11 +250,17 @@ class UserStudioModelOut(BaseModel):
     profile_text: str
     image_count: int = 0
     images: list[StudioModelImageOut] = Field(default_factory=list)
+    camera_preset_id: str | None = None
+    export_lat: float | None = None
+    export_lon: float | None = None
 
 
 class UserStudioModelPatchIn(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=128)
     profile_text: str | None = None
+    camera_preset_id: str | None = Field(default=None, max_length=64)
+    export_lat: float | None = None
+    export_lon: float | None = None
 
 
 class StudioModelProfileGenerateOut(BaseModel):

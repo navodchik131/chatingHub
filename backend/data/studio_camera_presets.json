@@ -1,0 +1,114 @@
+{
+  "presets": [
+    {
+      "id": "iphone_15_pro",
+      "label": "Apple iPhone 15 Pro",
+      "make": "Apple",
+      "model": "iPhone 15 Pro",
+      "lens_selfie": "iPhone 15 Pro front camera 3.99mm f/1.9",
+      "lens_main": "iPhone 15 Pro back triple camera 6.765mm f/1.78",
+      "focal_35_selfie": 23,
+      "focal_35_main": 24,
+      "grain_sigma": 3.8
+    },
+    {
+      "id": "iphone_14",
+      "label": "Apple iPhone 14",
+      "make": "Apple",
+      "model": "iPhone 14",
+      "lens_selfie": "iPhone 14 front camera 3.99mm f/1.9",
+      "lens_main": "iPhone 14 back dual wide camera 5.7mm f/1.5",
+      "focal_35_selfie": 23,
+      "focal_35_main": 26,
+      "grain_sigma": 3.6
+    },
+    {
+      "id": "samsung_s24_ultra",
+      "label": "Samsung Galaxy S24 Ultra",
+      "make": "samsung",
+      "model": "SM-S928B",
+      "lens_selfie": "Samsung Galaxy S24 Ultra Selfie Camera",
+      "lens_main": "Samsung Galaxy S24 Ultra Main Rear Camera",
+      "focal_35_selfie": 25,
+      "focal_35_main": 24,
+      "grain_sigma": 3.5
+    },
+    {
+      "id": "pixel_8_pro",
+      "label": "Google Pixel 8 Pro",
+      "make": "Google",
+      "model": "Pixel 8 Pro",
+      "lens_selfie": "Pixel 8 Pro front camera 2.74mm f/2.2",
+      "lens_main": "Pixel 8 Pro rear camera 6.81mm f/1.68",
+      "focal_35_selfie": 20,
+      "focal_35_main": 24,
+      "grain_sigma": 3.4
+    },
+    {
+      "id": "xiaomi_14",
+      "label": "Xiaomi 14",
+      "make": "Xiaomi",
+      "model": "23043RP34G",
+      "lens_selfie": "Xiaomi 14 Front Camera",
+      "lens_main": "Xiaomi 14 Main Camera",
+      "focal_35_selfie": 24,
+      "focal_35_main": 23,
+      "grain_sigma": 3.7
+    },
+    {
+      "id": "oneplus_12",
+      "label": "OnePlus 12",
+      "make": "OnePlus",
+      "model": "CPH2573",
+      "lens_selfie": "OnePlus 12 Front Camera",
+      "lens_main": "OnePlus 12 Main Camera",
+      "focal_35_selfie": 22,
+      "focal_35_main": 23,
+      "grain_sigma": 3.6
+    },
+    {
+      "id": "nothing_phone_2",
+      "label": "Nothing Phone (2)",
+      "make": "Nothing",
+      "model": "A065",
+      "lens_selfie": "Nothing Phone 2 Front Camera",
+      "lens_main": "Nothing Phone 2 Main Camera",
+      "focal_35_selfie": 21,
+      "focal_35_main": 24,
+      "grain_sigma": 3.9
+    },
+    {
+      "id": "honor_magic6_pro",
+      "label": "HONOR Magic6 Pro",
+      "make": "HONOR",
+      "model": "BVL-AN16",
+      "lens_selfie": "HONOR Magic6 Pro Front Camera",
+      "lens_main": "HONOR Magic6 Pro Rear Main",
+      "focal_35_selfie": 23,
+      "focal_35_main": 24,
+      "grain_sigma": 3.5
+    },
+    {
+      "id": "redmi_note_13_pro",
+      "label": "Redmi Note 13 Pro",
+      "make": "Redmi",
+      "model": "2312DRA50G",
+      "lens_selfie": "Redmi Note 13 Pro Front Camera",
+      "lens_main": "Redmi Note 13 Pro Main Camera",
+      "focal_35_selfie": 21,
+      "focal_35_main": 24,
+      "grain_sigma": 4.0
+    },
+    {
+      "id": "huawei_p60_pro",
+      "label": "HUAWEI P60 Pro",
+      "make": "HUAWEI",
+      "model": "MNA-LX9",
+      "lens_selfie": "HUAWEI P60 Pro Front Camera",
+      "lens_main": "HUAWEI P60 Pro Ultra Lighting Camera",
+      "focal_35_selfie": 23,
+      "focal_35_main": 24,
+      "grain_sigma": 3.5
+    }
+  ]
+}

@@ -4,10 +4,13 @@ import logging
 import uuid
 
 import httpx
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.config import BACKEND_DIR
-from app.db.models import StudioGeneration
+from app.db.models import StudioGeneration, UserStudioModel
+from app.services.studio_model_images import export_selfie_flag_for_phone_exif
 
 log = logging.getLogger(__name__)
 
@@ -51,6 +54,32 @@ async def download_and_create_generation(
         ext, media = ".gif", "image/gif"
     else:
         ext, media = ".png", "image/png"
+
+    model_row: UserStudioModel | None = None
+    if studio_model_id is not None:
+        stmt = (
+            select(UserStudioModel)
+            .where(UserStudioModel.id == studio_model_id)
+            .options(selectinload(UserStudioModel.images))
+        )
+        model_row = (await session.execute(stmt)).scalar_one_or_none()
+    if model_row is not None and (model_row.camera_preset_id or "").strip():
+        from app.services.studio_camera_presets import get_camera_preset_by_id
+        from app.services.studio_phone_export import apply_phone_export_to_jpeg
+
+        preset = get_camera_preset_by_id(model_row.camera_preset_id.strip())
+        if preset:
+            selfie_for_exif = export_selfie_flag_for_phone_exif(list(model_row.images))
+            export_bytes = apply_phone_export_to_jpeg(
+                data,
+                preset=preset,
+                selfie=selfie_for_exif,
+                export_lat=model_row.export_lat,
+                export_lon=model_row.export_lon,
+            )
+            if export_bytes is not None:
+                data = export_bytes
+                ext, media = ".jpg", "image/jpeg"
 
     rel = f"data/studio_generations/{owner_id}/{uuid.uuid4().hex}{ext}"
     path = (BACKEND_DIR / rel).resolve()

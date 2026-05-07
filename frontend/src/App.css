@@ -2243,7 +2243,7 @@ select:focus {
   flex-wrap: wrap;
   gap: 0.5rem;
   min-height: 2.5rem;
-  align-items: center;
+  align-items: flex-start;
 }
 
 .model-card-no-photos {
@@ -2253,8 +2253,10 @@ select:focus {
 .model-thumb-wrap {
   display: flex;
   flex-direction: column;
-  gap: 0.28rem;
-  width: 100px;
+  gap: 0.4rem;
+  width: 13.5rem;
+  min-width: 12.5rem;
+  max-width: 100%;
   flex-shrink: 0;
 }
 
@@ -2275,15 +2277,70 @@ select:focus {
   display: block;
 }
 
-.model-thumb-kind-select {
+.studio-model-kind-select {
+  display: block;
   width: 100%;
-  max-width: 100%;
-  font-size: 0.65rem;
-  padding: 0.15rem 0.2rem;
-  border-radius: 6px;
-  border: 1px solid var(--border);
-  background: var(--surface);
+  box-sizing: border-box;
+  min-width: 0;
+  font-size: 0.8125rem;
+  line-height: 1.35;
+  padding: 0.45rem 2.1rem 0.45rem 0.55rem;
+  border-radius: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.55);
+  background-color: var(--bg-elevated);
   color: var(--text);
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.45rem center;
+  background-size: 0.875rem;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.studio-model-kind-select:hover:not(:disabled) {
+  border-color: rgba(148, 163, 184, 0.9);
+}
+
+.studio-model-kind-select:focus {
+  outline: none;
+  border-color: rgba(96, 165, 250, 0.8);
+  box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.2);
+}
+
+.studio-model-kind-select:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.studio-new-model-photo-kinds {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  width: 100%;
+  max-width: 36rem;
+}
+
+.studio-model-photo-kind-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.65rem;
+}
+
+.studio-model-photo-filename {
+  flex: 1 1 9rem;
+  min-width: 0;
+  word-break: break-word;
+}
+
+.studio-model-photo-kind-row .studio-model-kind-select {
+  flex: 1 1 13.5rem;
+  min-width: min(100%, 13.5rem);
+  max-width: 100%;
 }
 
 .model-card-append-draft {
@@ -2651,4 +2708,36 @@ select:focus {
 .bubble-pending-meta {
   font-style: italic;
   color: var(--muted);
+}
+
+.studio-model-export-block {
+  padding: 0.65rem 0.75rem;
+  border-radius: 10px;
+  border: 1px dashed var(--border);
+  background: var(--bg-subtle);
+  gap: 0.55rem;
+}
+
+.studio-model-export-block .account-sub {
+  font-size: 0.8rem;
+}
+
+.studio-model-selfie-inline {
+  flex: 1 1 100%;
+  margin: 0;
+  gap: 0.4rem;
+}
+
+.studio-model-selfie-inline span {
+  font-size: 0.78rem;
+}
+
+.model-thumb-selfie-check {
+  margin: 0;
+  gap: 0.3rem;
+}
+
+.model-thumb-selfie-check span {
+  font-size: 0.72rem;
+  line-height: 1.25;
 }
