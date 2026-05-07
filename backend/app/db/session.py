@@ -241,12 +241,20 @@ def _migrate_studio_model_image_export_selfie(sync_conn) -> None:
                 "ADD COLUMN export_selfie BOOLEAN NOT NULL DEFAULT false"
             )
         )
-    sync_conn.execute(
-        text(
-            "UPDATE user_studio_model_images SET export_selfie = 1 "
-            "WHERE lower(image_kind) = 'face'"
+    if dialect == "sqlite":
+        sync_conn.execute(
+            text(
+                "UPDATE user_studio_model_images SET export_selfie = 1 "
+                "WHERE lower(image_kind) = 'face'"
+            )
         )
-    )
+    else:
+        sync_conn.execute(
+            text(
+                "UPDATE user_studio_model_images SET export_selfie = true "
+                "WHERE lower(image_kind) = 'face'"
+            )
+        )
 
 
 async def init_db() -> None:
