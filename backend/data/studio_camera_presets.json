@@ -1,6 +1,17 @@
 {
   "presets": [
     {
+      "id": "iphone_16_pro",
+      "label": "Apple iPhone 16 Pro",
+      "make": "Apple",
+      "model": "iPhone 16 Pro",
+      "lens_selfie": "iPhone 16 Pro front camera 4.23mm f/1.9",
+      "lens_main": "iPhone 16 Pro back triple camera 6.765mm f/1.78",
+      "focal_35_selfie": 23,
+      "focal_35_main": 24,
+      "grain_sigma": 3.8
+    },
+    {
       "id": "iphone_15_pro",
       "label": "Apple iPhone 15 Pro",
       "make": "Apple",
@@ -32,6 +43,28 @@
       "focal_35_selfie": 25,
       "focal_35_main": 24,
       "grain_sigma": 3.5
+    },
+    {
+      "id": "samsung_a55",
+      "label": "Samsung Galaxy A55",
+      "make": "samsung",
+      "model": "SM-A556B",
+      "lens_selfie": "Samsung Galaxy A55 Front Camera",
+      "lens_main": "Samsung Galaxy A55 Wide Camera",
+      "focal_35_selfie": 24,
+      "focal_35_main": 25,
+      "grain_sigma": 3.9
+    },
+    {
+      "id": "pixel_9_pro",
+      "label": "Google Pixel 9 Pro",
+      "make": "Google",
+      "model": "Pixel 9 Pro",
+      "lens_selfie": "Pixel 9 Pro front camera 3.59mm f/2.2",
+      "lens_main": "Pixel 9 Pro rear wide 6.9mm f/1.68",
+      "focal_35_selfie": 21,
+      "focal_35_main": 24,
+      "grain_sigma": 3.4
     },
     {
       "id": "pixel_8_pro",
@@ -109,6 +142,17 @@
       "focal_35_selfie": 23,
       "focal_35_main": 24,
       "grain_sigma": 3.5
+    },
+    {
+      "id": "motorola_edge_50_pro",
+      "label": "Motorola Edge 50 Pro",
+      "make": "motorola",
+      "model": "XT2403-1",
+      "lens_selfie": "Motorola Edge 50 Pro Front Camera",
+      "lens_main": "Motorola Edge 50 Pro Main Camera",
+      "focal_35_selfie": 22,
+      "focal_35_main": 24,
+      "grain_sigma": 3.7
     }
   ]
 }
