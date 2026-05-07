@@ -7,7 +7,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.db.models import LlmConnection, Subscription, WavespeedConnection
 from app.services.billing_plan import (
-    BILLING_PLAN_BYOK,
     assert_byok_llm,
     assert_byok_wavespeed,
     normalize_billing_plan,
@@ -53,20 +52,6 @@ def studio_llm_credentials(*, plan: str, llm_row: LlmConnection | None) -> Studi
 
 
 def studio_wavespeed_api_key(*, plan: str, ws_row: WavespeedConnection | None) -> str:
-    if platform_covers_studio_api_costs(plan):
-        plat = (settings.wavespeed_platform_api_key or "").strip()
-        if plat:
-            return plat
-        if ws_row and (ws_row.api_key_encrypted or "").strip():
-            try:
-                return decrypt_secret(ws_row.api_key_encrypted)
-            except ValueError:
-                pass
-        raise HTTPException(
-            status_code=503,
-            detail="Для тарифа «всё включено» задайте WAVESPEED_PLATFORM_API_KEY на сервере "
-            "или сохраните WaveSpeed в интеграциях (временный fallback).",
-        )
     assert_byok_wavespeed(plan, ws_row)
     try:
         return decrypt_secret(ws_row.api_key_encrypted)  # type: ignore[union-attr]

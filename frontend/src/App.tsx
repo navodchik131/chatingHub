@@ -175,6 +175,7 @@ interface HealthInfo {
   telegram_proxy_configured?: boolean
   yookassa_configured?: boolean
   billing_require_active_subscription?: boolean
+  billing_starter_managed_active?: boolean
   billing_price_managed_month_rub?: number
   billing_price_byok_month_rub?: number
   billing_credit_pack_price_rub?: number
@@ -294,7 +295,7 @@ function userBillingPlanLong(plan: string | undefined): string {
   const p = (plan || 'managed').toLowerCase()
   return p === 'byok'
     ? 'BYOK — свои LLM и WaveSpeed, кредиты на студию не списываются'
-    : 'Managed — ключи платформы, кредиты на студию списываются'
+    : 'Managed — LLM платформы и ваш ключ WaveSpeed; кредиты на студию списываются'
 }
 
 const SUBSCRIPTION_STATUS_LABELS: Record<string, string> = {
@@ -2136,6 +2137,15 @@ export default function App() {
               <p className="cabinet-lead muted">
                 Сводка по аккаунту. Тариф, оплата и история кредитов — в разделе «Тариф и баланс» (владелец).
               </p>
+              {health?.billing_starter_managed_active ? (
+                <div className="banner info" style={{ marginBottom: '1rem' }}>
+                  Онлайн-оплата ещё не подключена: владельцам автоматически выдаётся стартовый тариф{' '}
+                  <strong>Managed</strong> (активная подписка) — студия использует ключи LLM и WaveSpeed с сервера.
+                  При регистрации на счёт начисляются бонусные кредиты (см. <span className="mono">SIGNUP_BONUS_CREDITS</span>
+                  ). LLM задаётся в <span className="mono">OPENAI_*</span> (подходит OpenAI-совместимый API, в том числе Grok
+                  через свой <span className="mono">OPENAI_BASE_URL</span>). После настройки ЮKassa этот режим отключается сам.
+                </div>
+              ) : null}
               <div className="cabinet-dashboard-grid">
                 <div className="cabinet-dash-card">
                   <div className="cabinet-dash-label">Баланс кредитов</div>
@@ -2381,7 +2391,8 @@ export default function App() {
                   </span>
                 </div>
                 <p className="muted cabinet-module-body">
-                  Генерация изображений в студии. Для тарифа BYOK ключ обязателен.
+                  Генерация и апскейл в студии через WaveSpeed возможны только с вашим ключом из этого поля
+                  (любой тариф). Без сохранённого ключа запросы к WaveSpeed не выполняются.
                 </p>
                 <div className="cabinet-module-form">
                   <label>
@@ -3456,7 +3467,11 @@ export default function App() {
                       studioGenGenerationId == null ||
                       !integ?.wavespeed_configured
                     }
-                    title="Четыре кадра для ленты — окружение и образ как на этом снимке"
+                    title={
+                      !integ?.wavespeed_configured
+                        ? 'Сохраните ключ WaveSpeed в кабинете'
+                        : 'Четыре кадра для ленты — окружение и образ как на этом снимке'
+                    }
                     onClick={() => void runStudioCarousel(4)}
                   >
                     {studioCarouselBusy ? 'Карусель…' : 'Карусель ×4'}

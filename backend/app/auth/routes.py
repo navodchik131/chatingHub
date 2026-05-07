@@ -13,6 +13,7 @@ from app.db.session import get_session
 from app.schemas import LoginIn, RegisterIn, TokenOut, UserMeOut
 from app.services.admin_access import user_is_platform_admin
 from app.services.billing_plan import normalize_billing_plan
+from app.services.starter_plan import ensure_starter_managed_subscription, starter_managed_effective
 from app.services.workspace import resolve_billing_user, workspace_owner_id
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -31,7 +32,12 @@ async def register(body: RegisterIn, session: AsyncSession = Depends(get_session
     )
     session.add(user)
     await session.flush()
-    session.add(Subscription(user_id=user.id, status=SubscriptionStatus.none))
+    reg_status = (
+        SubscriptionStatus.active
+        if starter_managed_effective()
+        else SubscriptionStatus.none
+    )
+    session.add(Subscription(user_id=user.id, status=reg_status))
     session.add(
         CreditAccount(user_id=user.id, balance=max(0, settings.signup_bonus_credits))
     )
@@ -76,10 +82,12 @@ async def me(
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> UserMeOut:
+    oid = workspace_owner_id(user)
+    if await ensure_starter_managed_subscription(session, oid):
+        await session.commit()
     billing = await resolve_billing_user(session, user)
     sub = billing.subscription
     cr = billing.credit_account
-    oid = workspace_owner_id(user)
     owner_row = await session.get(User, oid)
     owner_email = owner_row.email if owner_row else user.email
     billing_plan = normalize_billing_plan(sub.billing_plan if sub else None)

@@ -39,6 +39,7 @@ from app.schemas import (
 )
 from app.services.crypto_secret import decrypt_secret
 from app.services.realtime import hub
+from app.services.starter_plan import starter_managed_effective
 from app.services.translation import translate_from_russian
 from app.services.wavespeed_client import studio_wan_edit_tier_switch_available
 from app.services.workspace import PERM_CHAT, assert_permission, workspace_owner_id
@@ -79,6 +80,7 @@ async def api_health(session: AsyncSession = Depends(get_session)) -> dict:
         "telegram_proxy_configured": bool((settings.telegram_proxy or "").strip()),
         "yookassa_configured": settings.yookassa_configured,
         "billing_require_active_subscription": settings.billing_require_active_subscription,
+        "billing_starter_managed_active": starter_managed_effective(),
         "billing_price_managed_month_rub": settings.billing_price_managed_month_rub,
         "billing_price_byok_month_rub": settings.billing_price_byok_month_rub,
         "billing_credit_pack_price_rub": settings.billing_credit_pack_price_rub,

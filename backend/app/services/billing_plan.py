@@ -23,8 +23,7 @@ def byok_keys_ready_for_llm(*, plan: str, llm: LlmConnection | None) -> bool:
 
 
 def byok_keys_ready_for_wavespeed(*, plan: str, ws: WavespeedConnection | None) -> bool:
-    if platform_covers_studio_api_costs(plan):
-        return True
+    _ = plan
     return bool(ws and (ws.api_key_encrypted or "").strip())
 
 
@@ -43,10 +42,8 @@ def assert_byok_llm(plan: str, llm: LlmConnection | None) -> None:
 def assert_byok_wavespeed(plan: str, ws: WavespeedConnection | None) -> None:
     from fastapi import HTTPException
 
-    if platform_covers_studio_api_costs(plan):
-        return
     if not byok_keys_ready_for_wavespeed(plan=plan, ws=ws):
         raise HTTPException(
             status_code=400,
-            detail="Тариф BYOK: сохраните ключ WaveSpeed в интеграциях.",
+            detail="Сохраните API-ключ WaveSpeed в разделе «Интеграции».",
         )

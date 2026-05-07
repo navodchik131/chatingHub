@@ -119,7 +119,7 @@ class Subscription(Base):
     user_id: Mapped[int] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), unique=True, index=True
     )
-    # managed = платформенные ключи + кредиты; byok = свои LLM + WaveSpeed, кредиты на студию не списываются
+    # managed = платформенный LLM + кредиты, WaveSpeed — ключ из интеграций; byok = свои LLM и WaveSpeed, кредиты на студию не списываются
     billing_plan: Mapped[str] = mapped_column(
         String(16), default="managed", nullable=False
     )

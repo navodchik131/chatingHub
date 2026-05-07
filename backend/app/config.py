@@ -121,11 +121,18 @@ class Settings(BaseSettings):
         description="Опционально: проверка входящих уведомлений ЮKassa",
     )
 
-    # Ключ WaveSpeed платформы для тарифа managed (если пусто — fallback на ключ пользователя из интеграций)
-    wavespeed_platform_api_key: str = Field(default="")
+    # Зарезервировано; студия WaveSpeed всегда использует ключ из кабинета пользователя (интеграции).
+    wavespeed_platform_api_key: str = Field(
+        default="",
+        description="Не используется для студии. Ключ WaveSpeed только из интеграций владельца.",
+    )
 
     # Требовать активную подписку для студии (и не истёкший оплаченный период, если задан)
     billing_require_active_subscription: bool = Field(default=True)
+    # Пока ЮKassa не настроена (shop_id + secret пусты): автоматически выдавать владельцам
+    # активную подписку Managed (платформенный OPENAI_* из .env).
+    # После подключения оплаты режим сам отключается (см. starter_plan.starter_managed_effective).
+    billing_auto_starter_managed_without_payment: bool = Field(default=True)
 
     # Цены в рублях (целые); в ЮKassa передаём как "499.00"
     billing_price_byok_month_rub: int = Field(default=499)
