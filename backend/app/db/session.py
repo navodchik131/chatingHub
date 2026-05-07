@@ -141,6 +141,23 @@ def _migrate_studio_generation_refined_prompt(sync_conn) -> None:
     sync_conn.execute(text("ALTER TABLE studio_generations ADD COLUMN refined_prompt TEXT"))
 
 
+def _migrate_studio_model_image_kind(sync_conn) -> None:
+    from sqlalchemy import inspect
+
+    insp = inspect(sync_conn)
+    if not insp.has_table("user_studio_model_images"):
+        return
+    cols = {c["name"] for c in insp.get_columns("user_studio_model_images")}
+    if "image_kind" in cols:
+        return
+    sync_conn.execute(
+        text(
+            "ALTER TABLE user_studio_model_images "
+            "ADD COLUMN image_kind VARCHAR(24) NOT NULL DEFAULT 'other'"
+        )
+    )
+
+
 def _migrate_subscription_billing_plan(sync_conn) -> None:
     from sqlalchemy import inspect
 
@@ -169,6 +186,7 @@ async def init_db() -> None:
         await conn.run_sync(_migrate_telegram_webhook_registered_column)
         await conn.run_sync(_migrate_user_is_platform_admin)
         await conn.run_sync(_migrate_studio_generation_refined_prompt)
+        await conn.run_sync(_migrate_studio_model_image_kind)
         await conn.run_sync(_migrate_subscription_billing_plan)
 
 

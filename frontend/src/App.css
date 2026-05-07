@@ -2251,13 +2251,20 @@ select:focus {
 }
 
 .model-thumb-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.28rem;
+  width: 100px;
+  flex-shrink: 0;
+}
+
+.model-thumb-frame {
   position: relative;
-  width: 72px;
+  width: 100%;
   height: 72px;
   border-radius: 12px;
   overflow: hidden;
   border: 1px solid var(--border);
-  flex-shrink: 0;
   background: var(--bg-subtle);
 }
 
@@ -2266,6 +2273,37 @@ select:focus {
   height: 100%;
   object-fit: cover;
   display: block;
+}
+
+.model-thumb-kind-select {
+  width: 100%;
+  max-width: 100%;
+  font-size: 0.65rem;
+  padding: 0.15rem 0.2rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.model-card-append-draft {
+  margin: 0.65rem 0 0;
+  padding: 0.6rem 0.65rem;
+  border-radius: 10px;
+  border: 1px dashed var(--border);
+  background: var(--bg-subtle);
+}
+
+.model-card-append-hint {
+  margin: 0 0 0.35rem;
+  font-size: 0.78rem;
+}
+
+.model-card-append-draft-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.65rem;
 }
 
 .model-thumb-remove {

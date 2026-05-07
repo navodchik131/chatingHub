@@ -487,6 +487,7 @@ def _build_refiner_user_message(
     user_text: str,
     reference_scene_description: str | None,
     model_profile_text: str | None,
+    model_reference_photos: str | None = None,
     output_aspect_key: str,
     studio_mode: str = "model",
     lock_model_hairstyle: bool = True,
@@ -534,6 +535,8 @@ def _build_refiner_user_message(
             "**Always** use profile for `subject.identity` (face, skin tone, body_type, hair color traits, marks) — **not** from the reference sitter's face or body. "
             "**`hair_in_scene`** follows REFERENCE_IMAGE when HAIRSTYLE_MODE is POSE_REFERENCE; do not force the profile's default hairstyle if it conflicts with REFERENCE_IMAGE.)"
         )
+    if model_reference_photos and str(model_reference_photos).strip():
+        blocks.append(str(model_reference_photos).strip())
     if model_profile_text and model_profile_text.strip():
         blocks.append(model_profile_text.strip())
     else:
@@ -562,6 +565,7 @@ async def refine_prompt_via_openai(
     user_text: str,
     reference_scene_description: str | None,
     model_profile_text: str | None,
+    model_reference_photos: str | None = None,
     output_aspect_key: str,
     studio_mode: str = "model",
     lock_model_hairstyle: bool = True,
@@ -576,6 +580,7 @@ async def refine_prompt_via_openai(
         user_text=user_text,
         reference_scene_description=reference_scene_description,
         model_profile_text=model_profile_text,
+        model_reference_photos=model_reference_photos,
         output_aspect_key=output_aspect_key,
         studio_mode=studio_mode,
         lock_model_hairstyle=lock_model_hairstyle,

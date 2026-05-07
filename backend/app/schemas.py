@@ -230,6 +230,11 @@ class LlmIntegrationIn(BaseModel):
 class StudioModelImageOut(BaseModel):
     id: int
     url: str
+    kind: str = "other"
+
+
+class StudioModelImagePatchIn(BaseModel):
+    kind: str = Field(..., min_length=1, max_length=24)
 
 
 class UserStudioModelOut(BaseModel):

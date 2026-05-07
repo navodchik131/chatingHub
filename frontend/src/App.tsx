@@ -275,6 +275,26 @@ function creditsPurchaseTotalRub(qty: number, p: BillingCreditsPricing): number 
 interface StudioModelImage {
   id: number
   url: string
+  kind: string
+}
+
+type StudioModelImageKind = 'face' | 'body' | 'genitals' | 'other'
+
+interface NewModelPhotoRow {
+  file: File
+  kind: StudioModelImageKind
+}
+
+const STUDIO_MODEL_IMAGE_KIND_OPTIONS: { value: StudioModelImageKind; label: string }[] = [
+  { value: 'face', label: 'Лицо / идентичность' },
+  { value: 'body', label: 'Тело целиком' },
+  { value: 'genitals', label: 'Интимная зона (реф.)' },
+  { value: 'other', label: 'Общий референс' },
+]
+
+function normalizeStudioImageKind(raw: string | undefined): StudioModelImageKind {
+  if (raw === 'face' || raw === 'body' || raw === 'genitals' || raw === 'other') return raw
+  return 'other'
 }
 
 interface UserStudioModel {
@@ -518,7 +538,11 @@ export default function App() {
   const [newModelName, setNewModelName] = useState('')
   const [newModelProfile, setNewModelProfile] = useState('')
   const [newModelProfileGenBusy, setNewModelProfileGenBusy] = useState(false)
-  const [newModelFiles, setNewModelFiles] = useState<File[]>([])
+  const [newModelPhotos, setNewModelPhotos] = useState<NewModelPhotoRow[]>([])
+  /** Черновик файлов для «Добавить фото» на карточке модели (до загрузки на сервер). */
+  const [appendModelPhotosById, setAppendModelPhotosById] = useState<
+    Record<number, NewModelPhotoRow[]>
+  >({})
   const [adminStats, setAdminStats] = useState<AdminStats | null>(null)
   const [adminUsers, setAdminUsers] = useState<AdminUserRow[]>([])
   const [adminUserSearch, setAdminUserSearch] = useState('')
@@ -1588,14 +1612,14 @@ export default function App() {
 
   const generateModelProfileFromPhotos = async () => {
     setError(null)
-    if (newModelFiles.length === 0) {
+    if (newModelPhotos.length === 0) {
       setError('Сначала выберите фото модели (до 5 файлов).')
       return
     }
     setNewModelProfileGenBusy(true)
     try {
       const fd = new FormData()
-      for (const f of newModelFiles) fd.append('images', f)
+      for (const row of newModelPhotos) fd.append('images', row.file)
       const r = await apiFetch('/api/studio/models/generate-profile', { method: 'POST', body: fd })
       if (!r.ok) {
         const j = await r.json().catch(() => ({}))
@@ -1628,7 +1652,11 @@ export default function App() {
     const fd = new FormData()
     fd.append('name', name)
     fd.append('profile_text', newModelProfile.trim())
-    for (const f of newModelFiles) fd.append('images', f)
+    for (const row of newModelPhotos) fd.append('images', row.file)
+    fd.append(
+      'image_kinds',
+      JSON.stringify(newModelPhotos.map((r) => r.kind)),
+    )
     const r = await apiFetch('/api/studio/models', { method: 'POST', body: fd })
     if (!r.ok) {
       const j = await r.json().catch(() => ({}))
@@ -1637,7 +1665,7 @@ export default function App() {
     }
     setNewModelName('')
     setNewModelProfile('')
-    setNewModelFiles([])
+    setNewModelPhotos([])
     void loadStudioModels()
   }
 
@@ -1650,6 +1678,11 @@ export default function App() {
       return
     }
     if (studioSelectedModelId === id) setStudioSelectedModelId(null)
+    setAppendModelPhotosById((prev) => {
+      const next = { ...prev }
+      delete next[id]
+      return next
+    })
     void loadStudioModels()
   }
 
@@ -1767,14 +1800,47 @@ export default function App() {
     }
   }
 
-  const appendStudioModelImages = async (id: number, files: FileList | null) => {
-    if (!files?.length) return
+  const uploadAppendStudioModelImages = async (id: number, rows: NewModelPhotoRow[]) => {
+    if (!rows.length) return
     setError(null)
     setModelSavingId(id)
     try {
       const fd = new FormData()
-      for (const f of Array.from(files)) fd.append('images', f)
+      for (const row of rows) fd.append('images', row.file)
+      fd.append(
+        'image_kinds',
+        JSON.stringify(rows.map((r) => r.kind)),
+      )
       const r = await apiFetch(`/api/studio/models/${id}/images`, { method: 'POST', body: fd })
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        setError(formatApiErrorDetail(j) || r.statusText)
+        return
+      }
+      setAppendModelPhotosById((prev) => {
+        const next = { ...prev }
+        delete next[id]
+        return next
+      })
+      void loadStudioModels()
+    } finally {
+      setModelSavingId(null)
+    }
+  }
+
+  const patchStudioModelImageKind = async (
+    modelId: number,
+    imageId: number,
+    kind: StudioModelImageKind,
+  ) => {
+    setError(null)
+    setModelSavingId(modelId)
+    try {
+      const r = await apiFetch(`/api/studio/models/${modelId}/images/${imageId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kind }),
+      })
       if (!r.ok) {
         const j = await r.json().catch(() => ({}))
         setError(formatApiErrorDetail(j) || r.statusText)
@@ -2713,8 +2779,9 @@ export default function App() {
                 </div>
               ) : null}
               <p className="cabinet-lead muted">
-                Модели подставляются в промпт на вкладке «Генерация картинок». До 5 фото на модель. Можно
-                править название, описание, добавлять и удалять снимки.
+                Модели подставляются в промпт на вкладке «Генерация картинок». До 5 фото на модель. Для
+                каждого снимка укажите тип: лицо, тело, интимный референс или общий — от этого зависит
+                порядок в запросе к image-edit и текст для LLM.
               </p>
 
               <h4 className="account-sub">Новая модель</h4>
@@ -2737,13 +2804,45 @@ export default function App() {
                     disabled={studioPaywalled}
                     onChange={(e) => {
                       const list = e.target.files ? Array.from(e.target.files) : []
-                      setNewModelFiles(list.slice(0, 5))
+                      setNewModelPhotos(
+                        list.slice(0, 5).map((file) => ({ file, kind: 'other' })),
+                      )
                     }}
                   />
-                  {newModelFiles.length > 0 ? (
-                    <span className="muted" style={{ fontSize: '0.85rem' }}>
-                      Выбрано файлов: {newModelFiles.length}
-                    </span>
+                  {newModelPhotos.length > 0 ? (
+                    <ul className="studio-new-model-photo-kinds" style={{ marginTop: '0.5rem' }}>
+                      {newModelPhotos.map((row, idx) => (
+                        <li
+                          key={`${row.file.name}-${idx}`}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.5rem',
+                            marginTop: '0.35rem',
+                          }}
+                        >
+                          <span className="muted small" style={{ flex: '1', minWidth: 0 }}>
+                            {row.file.name}
+                          </span>
+                          <select
+                            value={row.kind}
+                            disabled={studioPaywalled}
+                            onChange={(e) => {
+                              const v = e.target.value as StudioModelImageKind
+                              setNewModelPhotos((prev) =>
+                                prev.map((p, i) => (i === idx ? { ...p, kind: v } : p)),
+                              )
+                            }}
+                          >
+                            {STUDIO_MODEL_IMAGE_KIND_OPTIONS.map((o) => (
+                              <option key={o.value} value={o.value}>
+                                {o.label}
+                              </option>
+                            ))}
+                          </select>
+                        </li>
+                      ))}
+                    </ul>
                   ) : null}
                 </label>
                 <label className="studio-new-model-profile-label">
@@ -2759,8 +2858,8 @@ export default function App() {
                   <button
                     type="button"
                     className="ghost-btn studio-gen-profile-btn"
-                    disabled={studioPaywalled || newModelProfileGenBusy || newModelFiles.length === 0}
-                    title={newModelFiles.length === 0 ? 'Сначала выберите фото' : undefined}
+                    disabled={studioPaywalled || newModelProfileGenBusy || newModelPhotos.length === 0}
+                    title={newModelPhotos.length === 0 ? 'Сначала выберите фото' : undefined}
                     onClick={() => void generateModelProfileFromPhotos()}
                   >
                     {newModelProfileGenBusy ? 'Генерация…' : 'Сгенерировать из фото'}
@@ -2784,6 +2883,8 @@ export default function App() {
                     const draft = modelDrafts[m.id] ?? { name: m.name, profile_text: m.profile_text }
                     const busy = modelSavingId === m.id
                     const imgs = m.images ?? []
+                    const pendingAppend = appendModelPhotosById[m.id] ?? []
+                    const modelPhotoSlotsFull = m.image_count + pendingAppend.length >= 5
                     return (
                       <article key={m.id} className="model-card">
                         <div className="model-card-head">
@@ -2805,20 +2906,124 @@ export default function App() {
                           ) : (
                             imgs.map((im) => (
                               <div key={im.id} className="model-thumb-wrap">
-                                <img src={im.url} alt="" className="model-thumb" loading="lazy" />
-                                <button
-                                  type="button"
-                                  className="model-thumb-remove"
-                                  title="Удалить фото"
+                                <div className="model-thumb-frame">
+                                  <img src={im.url} alt="" className="model-thumb" loading="lazy" />
+                                  <button
+                                    type="button"
+                                    className="model-thumb-remove"
+                                    title="Удалить фото"
+                                    disabled={busy || studioPaywalled}
+                                    onClick={() => void deleteStudioModelImage(m.id, im.id)}
+                                  >
+                                    ×
+                                  </button>
+                                </div>
+                                <select
+                                  className="model-thumb-kind-select"
+                                  aria-label="Тип референса"
+                                  value={normalizeStudioImageKind(im.kind)}
                                   disabled={busy || studioPaywalled}
-                                  onClick={() => void deleteStudioModelImage(m.id, im.id)}
+                                  onChange={(e) => {
+                                    const v = e.target.value as StudioModelImageKind
+                                    void patchStudioModelImageKind(m.id, im.id, v)
+                                  }}
                                 >
-                                  ×
-                                </button>
+                                  {STUDIO_MODEL_IMAGE_KIND_OPTIONS.map((o) => (
+                                    <option key={o.value} value={o.value}>
+                                      {o.label}
+                                    </option>
+                                  ))}
+                                </select>
                               </div>
                             ))
                           )}
                         </div>
+                        {pendingAppend.length > 0 ? (
+                          <div className="model-card-append-draft">
+                            <p className="muted small model-card-append-hint">
+                              К загрузке: укажите тип кадра для каждого файла.
+                            </p>
+                            <ul className="studio-new-model-photo-kinds">
+                              {pendingAppend.map((row, idx) => (
+                                <li
+                                  key={`${row.file.name}-${idx}`}
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '0.5rem',
+                                    marginTop: '0.35rem',
+                                  }}
+                                >
+                                  <span className="muted small" style={{ flex: '1', minWidth: 0 }}>
+                                    {row.file.name}
+                                  </span>
+                                  <select
+                                    value={row.kind}
+                                    disabled={busy || studioPaywalled}
+                                    onChange={(e) => {
+                                      const v = e.target.value as StudioModelImageKind
+                                      setAppendModelPhotosById((prev) => {
+                                        const cur = prev[m.id] ?? []
+                                        const nextRows = cur.map((p, i) =>
+                                          i === idx ? { ...p, kind: v } : p,
+                                        )
+                                        return { ...prev, [m.id]: nextRows }
+                                      })
+                                    }}
+                                  >
+                                    {STUDIO_MODEL_IMAGE_KIND_OPTIONS.map((o) => (
+                                      <option key={o.value} value={o.value}>
+                                        {o.label}
+                                      </option>
+                                    ))}
+                                  </select>
+                                  <button
+                                    type="button"
+                                    className="ghost-btn danger-text"
+                                    disabled={busy || studioPaywalled}
+                                    title="Убрать из списка"
+                                    onClick={() =>
+                                      setAppendModelPhotosById((prev) => {
+                                        const cur = prev[m.id] ?? []
+                                        const nextRows = cur.filter((_, i) => i !== idx)
+                                        const next = { ...prev }
+                                        if (nextRows.length) next[m.id] = nextRows
+                                        else delete next[m.id]
+                                        return next
+                                      })
+                                    }
+                                  >
+                                    ×
+                                  </button>
+                                </li>
+                              ))}
+                            </ul>
+                            <div className="model-card-append-draft-actions">
+                              <button
+                                type="button"
+                                className="ghost-btn"
+                                disabled={busy || studioPaywalled}
+                                onClick={() =>
+                                  setAppendModelPhotosById((prev) => {
+                                    const next = { ...prev }
+                                    delete next[m.id]
+                                    return next
+                                  })
+                                }
+                              >
+                                Отменить
+                              </button>
+                              <button
+                                type="button"
+                                className="send-btn"
+                                disabled={busy || studioPaywalled}
+                                onClick={() => void uploadAppendStudioModelImages(m.id, pendingAppend)}
+                              >
+                                Загрузить ({pendingAppend.length})
+                              </button>
+                            </div>
+                          </div>
+                        ) : null}
                         <label className="model-card-field">
                           Название
                           <input
@@ -2865,9 +3070,23 @@ export default function App() {
                               accept="image/jpeg,image/png,image/webp,image/gif"
                               multiple
                               className="sr-only-input"
-                              disabled={busy || studioPaywalled || m.image_count >= 5}
+                              disabled={busy || studioPaywalled || modelPhotoSlotsFull}
                               onChange={(e) => {
-                                void appendStudioModelImages(m.id, e.target.files)
+                                const list = e.target.files ? Array.from(e.target.files) : []
+                                const slots = Math.max(0, 5 - m.image_count - pendingAppend.length)
+                                const slice = list.slice(0, slots)
+                                if (slice.length > 0) {
+                                  setAppendModelPhotosById((prev) => ({
+                                    ...prev,
+                                    [m.id]: [
+                                      ...(prev[m.id] ?? []),
+                                      ...slice.map((file) => ({
+                                        file,
+                                        kind: 'other' as StudioModelImageKind,
+                                      })),
+                                    ],
+                                  }))
+                                }
                                 e.target.value = ''
                               }}
                             />

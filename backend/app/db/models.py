@@ -351,6 +351,8 @@ class UserStudioModelImage(Base):
     )
     relative_path: Mapped[str] = mapped_column(String(512))
     original_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    """face | body | genitals | other — роль снимка для image-edit и LLM (порядок в API)."""
+    image_kind: Mapped[str] = mapped_column(String(24), default="other", nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

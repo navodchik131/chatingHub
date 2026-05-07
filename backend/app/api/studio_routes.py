@@ -31,6 +31,7 @@ from app.schemas import (
     StudioGenerationOut,
     StudioGenerationsPageOut,
     StudioModelImageOut,
+    StudioModelImagePatchIn,
     StudioModelProfileGenerateOut,
     StudioRefinePromptOut,
     StudioUpscaleGenerationIn,
@@ -83,6 +84,12 @@ from app.services.studio_openai import (
     refine_prompt_via_openai,
 )
 from app.services.studio_carousel import build_carousel_wave_prompt
+from app.services.studio_model_images import (
+    model_reference_photos_block,
+    parse_image_kinds_json,
+    sort_model_images_for_studio,
+    assert_studio_image_kind,
+)
 from app.services.studio_pose_reference import (
     resolve_pose_reference_file,
     save_pose_reference_bytes,
@@ -257,12 +264,13 @@ def _model_dir(user_id: int, model_id: int) -> Path:
 
 
 def _studio_model_to_out(user_id: int, m: UserStudioModel) -> UserStudioModelOut:
-    ordered = sorted(m.images, key=lambda x: x.id)
+    ordered = sort_model_images_for_studio(list(m.images))
     images = [
         StudioModelImageOut(
             id=im.id,
             url="/api/studio/public-model-image?t="
             + quote(create_model_image_access_token(user_id=user_id, image_id=im.id), safe=""),
+            kind=(im.image_kind or "other").strip().lower(),
         )
         for im in ordered
     ]
@@ -769,6 +777,7 @@ async def api_create_studio_model(
     name: str = Form(..., min_length=1, max_length=128),
     profile_text: str = Form(""),
     images: list[UploadFile] | None = File(None),
+    image_kinds: str | None = Form(None),
     session: AsyncSession = Depends(get_session),
     user: User = Depends(get_current_user),
 ) -> UserStudioModelOut:
@@ -777,6 +786,7 @@ async def api_create_studio_model(
     sub_b, _, _, _ = await load_owner_studio_billing(session, oid)
     _require_studio_subscription(user, sub_b)
     uploads = images or []
+    kinds_list = parse_image_kinds_json(image_kinds, len(uploads))
     if len(uploads) > MAX_MODEL_IMAGES:
         raise HTTPException(
             status_code=400,
@@ -794,7 +804,7 @@ async def api_create_studio_model(
     d = _model_dir(oid, m.id)
     d.mkdir(parents=True, exist_ok=True)
 
-    for up in uploads:
+    for i, up in enumerate(uploads):
         raw = await up.read()
         if not raw:
             continue
@@ -809,11 +819,13 @@ async def api_create_studio_model(
         fn = f"{uuid.uuid4().hex}{suf}"
         rel = f"data/studio_user_models/{oid}/{m.id}/{fn}"
         (d / fn).write_bytes(raw)
+        kind = kinds_list[i] if i < len(kinds_list) else "other"
         session.add(
             UserStudioModelImage(
                 studio_model_id=m.id,
                 relative_path=rel,
                 original_name=(up.filename or "")[:255] or None,
+                image_kind=kind,
             )
         )
 
@@ -855,6 +867,7 @@ async def api_patch_studio_model(
 async def api_add_studio_model_images(
     model_id: int,
     images: list[UploadFile] | None = File(None),
+    image_kinds: str | None = Form(None),
     session: AsyncSession = Depends(get_session),
     user: User = Depends(get_current_user),
 ) -> UserStudioModelOut:
@@ -866,6 +879,7 @@ async def api_add_studio_model_images(
     if not m:
         raise HTTPException(status_code=404, detail="Модель не найдена")
     uploads = [u for u in (images or []) if u is not None]
+    kinds_list = parse_image_kinds_json(image_kinds, len(uploads))
     current_n = len(m.images)
     if not uploads:
         return _studio_model_to_out(oid, m)
@@ -876,7 +890,7 @@ async def api_add_studio_model_images(
         )
     d = _model_dir(oid, m.id)
     d.mkdir(parents=True, exist_ok=True)
-    for up in uploads:
+    for i, up in enumerate(uploads):
         raw = await up.read()
         if not raw:
             continue
@@ -891,13 +905,40 @@ async def api_add_studio_model_images(
         fn = f"{uuid.uuid4().hex}{suf}"
         rel = f"data/studio_user_models/{oid}/{m.id}/{fn}"
         (d / fn).write_bytes(raw)
+        kind = kinds_list[i] if i < len(kinds_list) else "other"
         session.add(
             UserStudioModelImage(
                 studio_model_id=m.id,
                 relative_path=rel,
                 original_name=(up.filename or "")[:255] or None,
+                image_kind=kind,
             )
         )
+    await session.commit()
+    m2 = await _load_studio_model_owned(session, oid, model_id)
+    assert m2 is not None
+    return _studio_model_to_out(oid, m2)
+
+
+@router.patch("/studio/models/{model_id}/images/{image_id}", response_model=UserStudioModelOut)
+async def api_patch_studio_model_image(
+    model_id: int,
+    image_id: int,
+    body: StudioModelImagePatchIn,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> UserStudioModelOut:
+    assert_permission(user, PERM_STUDIO_MODELS)
+    oid = workspace_owner_id(user)
+    sub_b, _, _, _ = await load_owner_studio_billing(session, oid)
+    _require_studio_subscription(user, sub_b)
+    m = await session.get(UserStudioModel, model_id)
+    if not m or m.user_id != oid:
+        raise HTTPException(status_code=404, detail="Модель не найдена")
+    img = await session.get(UserStudioModelImage, image_id)
+    if not img or img.studio_model_id != model_id:
+        raise HTTPException(status_code=404, detail="Изображение не найдено")
+    img.image_kind = assert_studio_image_kind(body.kind)
     await session.commit()
     m2 = await _load_studio_model_owned(session, oid, model_id)
     assert m2 is not None
@@ -943,13 +984,30 @@ async def api_delete_studio_model(
     oid = workspace_owner_id(user)
     sub_b, _, _, _ = await load_owner_studio_billing(session, oid)
     _require_studio_subscription(user, sub_b)
-    m = await session.get(UserStudioModel, model_id)
-    if not m or m.user_id != oid:
+    result = await session.execute(
+        select(UserStudioModel)
+        .where(UserStudioModel.id == model_id, UserStudioModel.user_id == oid)
+        .options(selectinload(UserStudioModel.images))
+    )
+    m = result.scalar_one_or_none()
+    if not m:
         raise HTTPException(status_code=404, detail="Модель не найдена")
-    d = _model_dir(oid, model_id)
+    backend_root = BACKEND_DIR.resolve()
+    paths_to_unlink: list[Path] = []
+    for img in list(m.images):
+        abs_path = (BACKEND_DIR / img.relative_path).resolve()
+        try:
+            abs_path.relative_to(backend_root)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Некорректный путь файла") from None
+        paths_to_unlink.append(abs_path)
+        await session.delete(img)
     await session.delete(m)
     await session.commit()
-    if d.is_dir() and str(d).startswith(str(BACKEND_DIR.resolve())):
+    d = _model_dir(oid, model_id)
+    for p in paths_to_unlink:
+        p.unlink(missing_ok=True)
+    if d.is_dir() and str(d).startswith(str(backend_root)):
         shutil.rmtree(d, ignore_errors=True)
     return {"ok": True}
 
@@ -1047,7 +1105,7 @@ async def api_studio_refine_prompt(
 
     imgs_model: list[UserStudioModelImage] = []
     if sm_loaded is not None:
-        imgs_model = sorted(sm_loaded.images, key=lambda x: x.id)
+        imgs_model = sort_model_images_for_studio(list(sm_loaded.images))
 
     ws_key = _studio_refine_wavespeed_preflight(
         do_wavespeed=do_wavespeed,
@@ -1075,12 +1133,16 @@ async def api_studio_refine_prompt(
                 hairstyle_from_pose_reference=not effective_lock_hairstyle,
                 credentials=llm_creds,
             )
+        ref_photo_block = (
+            model_reference_photos_block(imgs_model) if imgs_model else None
+        )
         refined = await refine_prompt_via_openai(
             system_instruction=system_instr,
             skeleton=skeleton,
             user_text=desc,
             reference_scene_description=reference_scene,
             model_profile_text=model_profile_text,
+            model_reference_photos=ref_photo_block,
             output_aspect_key=aspect_key,
             studio_mode=mode_n,
             lock_model_hairstyle=effective_lock_hairstyle,
