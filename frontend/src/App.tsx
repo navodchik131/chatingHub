@@ -1,5 +1,6 @@
 import EmojiPicker, { type EmojiClickData, Theme } from 'emoji-picker-react'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import { apiFetch, getToken, setToken } from './api'
 import {
   getPushSubscriptionState,
@@ -390,6 +391,7 @@ const STUDIO_ARCHIVE_PAGE = 10
 type StudioJobMode = 'model' | 'photo_edit' | 'no_face'
 
 export default function App() {
+  const navigate = useNavigate()
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [messages, setMessages] = useState<ChatMessage[]>([])
@@ -1909,6 +1911,30 @@ export default function App() {
             </div>
           </div>
         </header>
+        <nav
+          aria-label="Справочные страницы"
+          style={{
+            display: 'flex',
+            justifyContent: 'center',
+            gap: '0.5rem',
+            flexWrap: 'wrap',
+            margin: '-0.35rem 0 0.5rem',
+            fontSize: '0.8125rem',
+          }}
+        >
+          <Link to="/" className="ghost-btn" style={{ padding: '0.35rem 0.75rem', fontSize: 'inherit' }}>
+            Главная сайта
+          </Link>
+          <Link to="/pricing" className="ghost-btn" style={{ padding: '0.35rem 0.75rem', fontSize: 'inherit' }}>
+            Тарифы
+          </Link>
+          <Link to="/faq" className="ghost-btn" style={{ padding: '0.35rem 0.75rem', fontSize: 'inherit' }}>
+            FAQ
+          </Link>
+          <Link to="/login" className="ghost-btn" style={{ padding: '0.35rem 0.75rem', fontSize: 'inherit' }}>
+            Отдельная страница входа
+          </Link>
+        </nav>
         <main className="auth-page">
           <AuthPanel
             onSuccess={async (fromRegister?: boolean) => {
@@ -2013,6 +2039,9 @@ export default function App() {
           <button type="button" className="ghost-btn" onClick={() => setAccountOpen((o) => !o)}>
             Личный кабинет
           </button>
+          <Link to="/" className="ghost-btn">
+            О сервисе
+          </Link>
           <button
             type="button"
             className="ghost-btn"
@@ -2022,6 +2051,7 @@ export default function App() {
               setMe(null)
               setConversations([])
               setSelectedId(null)
+              navigate('/', { replace: true })
             }}
           >
             Выйти
