@@ -9,10 +9,16 @@ from app.config import settings
 from app.db.models import User
 from app.db.session import get_session
 from app.schemas import (
+    BillingCreditsPricingOut,
     BillingPlanItemOut,
     BillingPlansOut,
     YookassaPaymentCreateIn,
     YookassaPaymentOut,
+)
+from app.services.billing_credits import (
+    assert_credits_quantity_allowed,
+    credits_amount_yookassa_value,
+    credits_total_rub,
 )
 from app.services.workspace import is_workspace_owner, workspace_owner_id
 from app.services.yookassa_apply import apply_yookassa_payment_succeeded
@@ -43,8 +49,14 @@ async def billing_plans() -> BillingPlansOut:
             ),
             BillingPlanItemOut(
                 product="credits_pack",
-                title=f"Пакет кредитов ({settings.billing_credit_pack_credits} шт.)",
-                price_rub=settings.billing_credit_pack_price_rub,
+                title="Кредиты студии — любое количество от 50 шт.",
+                price_rub=int(credits_total_rub(settings.billing_credits_min_purchase)),
+                credits_pricing=BillingCreditsPricingOut(
+                    min_quantity=settings.billing_credits_min_purchase,
+                    bulk_from=settings.billing_credits_bulk_from,
+                    unit_price_rub=float(settings.billing_credits_unit_price_rub),
+                    bulk_unit_price_rub=float(settings.billing_credits_bulk_unit_price_rub),
+                ),
             ),
         ]
     )
@@ -71,18 +83,26 @@ async def yookassa_start_payment(
         price = settings.billing_price_byok_month_rub
         desc = "Подписка Chating Hub (BYOK), 30 дн."
     else:
-        price = settings.billing_credit_pack_price_rub
-        desc = f"Пакет кредитов ({settings.billing_credit_pack_credits})"
+        q = body.credits_quantity
+        assert q is not None
+        try:
+            assert_credits_quantity_allowed(q)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        amount_value = credits_amount_yookassa_value(q)
+        desc = f"Кредиты студии ({q} шт.)"
 
     base = settings.public_app_url.rstrip("/")
     return_url = f"{base}{settings.billing_success_path}"
 
     billing_uid = workspace_owner_id(user)
-    meta = {"user_id": str(billing_uid), "product": body.product}
+    meta: dict[str, str] = {"user_id": str(billing_uid), "product": body.product}
+    if body.product == "credits_pack":
+        meta["credits_quantity"] = str(body.credits_quantity)
 
     try:
         pay = await create_payment(
-            amount_value=_rub_amount_str(price),
+            amount_value=amount_value if body.product == "credits_pack" else _rub_amount_str(price),
             description=desc[:210],
             return_url=return_url,
             metadata=meta,

@@ -252,11 +252,24 @@ interface IntegrationStatus {
   llm_configured?: boolean
 }
 
+interface BillingCreditsPricing {
+  min_quantity: number
+  bulk_from: number
+  unit_price_rub: number
+  bulk_unit_price_rub: number
+}
+
 interface BillingPlanRow {
   product: 'sub_byok_month' | 'sub_managed_month' | 'credits_pack'
   title: string
   price_rub: number
   currency?: string
+  credits_pricing?: BillingCreditsPricing | null
+}
+
+function creditsPurchaseTotalRub(qty: number, p: BillingCreditsPricing): number {
+  const unit = qty >= p.bulk_from ? p.bulk_unit_price_rub : p.unit_price_rub
+  return Math.round(qty * unit * 100) / 100
 }
 
 interface StudioModelImage {
@@ -515,6 +528,7 @@ export default function App() {
   const [llmApiKey, setLlmApiKey] = useState('')
   const [llmBaseUrl, setLlmBaseUrl] = useState('')
   const [billingPlanRows, setBillingPlanRows] = useState<BillingPlanRow[]>([])
+  const [creditsPurchaseQty, setCreditsPurchaseQty] = useState(50)
   const [yookassaPayBusy, setYookassaPayBusy] = useState<string | null>(null)
   const [creditHistoryItems, setCreditHistoryItems] = useState<
     { id: number; created_at: string; kind: string; credits_delta: number }[]
@@ -624,6 +638,12 @@ export default function App() {
       setBillingPlanRows(Array.isArray(data.items) ? data.items : [])
     }
   }, [])
+
+  useEffect(() => {
+    const p = billingPlanRows.find((r) => r.product === 'credits_pack')?.credits_pricing
+    if (!p) return
+    setCreditsPurchaseQty((prev) => (prev < p.min_quantity ? p.min_quantity : prev))
+  }, [billingPlanRows])
 
   const enableWebPush = useCallback(async () => {
     setPushBusy(true)
@@ -1913,13 +1933,20 @@ export default function App() {
     void refreshWorkspaceMembers()
   }
 
-  const startYookassaPayment = async (product: BillingPlanRow['product']) => {
+  const startYookassaPayment = async (
+    product: BillingPlanRow['product'],
+    creditsQuantity?: number,
+  ) => {
     setError(null)
     setYookassaPayBusy(product)
     try {
+      const body =
+        product === 'credits_pack'
+          ? { product, credits_quantity: creditsQuantity }
+          : { product }
       const r = await apiFetch('/api/billing/yookassa/payment', {
         method: 'POST',
-        body: JSON.stringify({ product }),
+        body: JSON.stringify(body),
       })
       if (!r.ok) {
         const j = await r.json().catch(() => ({}))
@@ -1978,6 +2005,12 @@ export default function App() {
           </Link>
           <Link to="/faq" className="ghost-btn" style={{ padding: '0.35rem 0.75rem', fontSize: 'inherit' }}>
             FAQ
+          </Link>
+          <Link to="/privacy" className="ghost-btn" style={{ padding: '0.35rem 0.75rem', fontSize: 'inherit' }}>
+            Конфиденциальность
+          </Link>
+          <Link to="/terms" className="ghost-btn" style={{ padding: '0.35rem 0.75rem', fontSize: 'inherit' }}>
+            Соглашение
           </Link>
           <Link to="/login" className="ghost-btn" style={{ padding: '0.35rem 0.75rem', fontSize: 'inherit' }}>
             Отдельная страница входа
@@ -2302,25 +2335,101 @@ export default function App() {
                     Оплата банковской картой. После успешной оплаты вернитесь в кабинет.
                   </p>
                   <div className="cabinet-yookassa-rows">
-                    {billingPlanRows.map((row) => (
-                      <div key={row.product} className="cabinet-yookassa-row">
-                        <div>
-                          <div className="cabinet-offer-title">{row.title}</div>
-                          <div className="cabinet-offer-price">
-                            {row.price_rub}{' '}
-                            {row.currency === 'RUB' || !row.currency ? '₽' : row.currency}
+                    {billingPlanRows.map((row) => {
+                      if (row.product === 'credits_pack' && row.credits_pricing) {
+                        const p = row.credits_pricing
+                        const q = Math.floor(creditsPurchaseQty)
+                        const valid =
+                          Number.isFinite(q) && Number.isInteger(q) && q >= p.min_quantity
+                        const totalRub = valid ? creditsPurchaseTotalRub(q, p) : null
+                        return (
+                          <div key={row.product} className="cabinet-yookassa-row">
+                            <div>
+                              <div className="cabinet-offer-title">{row.title}</div>
+                              <p className="muted small" style={{ margin: '0.35rem 0 0.25rem' }}>
+                                От {p.min_quantity} шт. —{' '}
+                                {p.unit_price_rub.toLocaleString('ru-RU', {
+                                  minimumFractionDigits: 0,
+                                  maximumFractionDigits: 2,
+                                })}{' '}
+                                ₽/кредит; от {p.bulk_from} шт. —{' '}
+                                {p.bulk_unit_price_rub.toLocaleString('ru-RU', {
+                                  minimumFractionDigits: 0,
+                                  maximumFractionDigits: 2,
+                                })}{' '}
+                                ₽/кредит.
+                              </p>
+                              <label
+                                className="muted small"
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  flexWrap: 'wrap',
+                                  gap: '0.5rem',
+                                  marginTop: '0.35rem',
+                                }}
+                              >
+                                Количество кредитов:
+                                <input
+                                  type="number"
+                                  min={p.min_quantity}
+                                  step={1}
+                                  value={creditsPurchaseQty}
+                                  style={{
+                                    width: '6.5rem',
+                                    padding: '0.35rem 0.5rem',
+                                    borderRadius: 8,
+                                    border: '1px solid var(--border, rgba(255,255,255,0.18))',
+                                    background: 'var(--bg-subtle, rgba(255,255,255,0.06))',
+                                    color: 'inherit',
+                                  }}
+                                  onChange={(e) => {
+                                    const v = e.target.valueAsNumber
+                                    if (Number.isNaN(v)) setCreditsPurchaseQty(p.min_quantity)
+                                    else setCreditsPurchaseQty(Math.floor(v))
+                                  }}
+                                />
+                              </label>
+                              <div className="cabinet-offer-price" style={{ marginTop: '0.35rem' }}>
+                                {totalRub != null
+                                  ? `${totalRub.toLocaleString('ru-RU', {
+                                      minimumFractionDigits: 0,
+                                      maximumFractionDigits: 2,
+                                    })} ₽`
+                                  : '—'}
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              className="send-btn"
+                              disabled={yookassaPayBusy !== null || !valid}
+                              onClick={() => void startYookassaPayment('credits_pack', q)}
+                            >
+                              {yookassaPayBusy === row.product ? '…' : 'Оплатить'}
+                            </button>
                           </div>
+                        )
+                      }
+                      return (
+                        <div key={row.product} className="cabinet-yookassa-row">
+                          <div>
+                            <div className="cabinet-offer-title">{row.title}</div>
+                            <div className="cabinet-offer-price">
+                              {row.price_rub}{' '}
+                              {row.currency === 'RUB' || !row.currency ? '₽' : row.currency}
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            className="send-btn"
+                            disabled={yookassaPayBusy !== null}
+                            onClick={() => void startYookassaPayment(row.product)}
+                          >
+                            {yookassaPayBusy === row.product ? '…' : 'Оплатить'}
+                          </button>
                         </div>
-                        <button
-                          type="button"
-                          className="send-btn"
-                          disabled={yookassaPayBusy !== null}
-                          onClick={() => void startYookassaPayment(row.product)}
-                        >
-                          {yookassaPayBusy === row.product ? '…' : 'Оплатить'}
-                        </button>
-                      </div>
-                    ))}
+                      )
+                    })}
                   </div>
                 </>
               ) : (

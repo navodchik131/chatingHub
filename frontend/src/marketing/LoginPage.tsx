@@ -28,6 +28,26 @@ export function LoginPage() {
       <div className="mkt-login-wrap">
         <AuthPanel onSuccess={() => navigate('/workspace', { replace: true })} />
       </div>
+      <p
+        className="muted small"
+        style={{
+          margin: '0.5rem auto 0',
+          maxWidth: 480,
+          textAlign: 'center',
+          fontSize: '0.8125rem',
+          lineHeight: 1.55,
+        }}
+      >
+        Продолжая, вы соглашаетесь с{' '}
+        <Link to="/terms" className="mkt-link-arrow" style={{ display: 'inline' }}>
+          пользовательским соглашением
+        </Link>{' '}
+        и{' '}
+        <Link to="/privacy" className="mkt-link-arrow" style={{ display: 'inline' }}>
+          политикой конфиденциальности
+        </Link>
+        .
+      </p>
     </>
   )
 }

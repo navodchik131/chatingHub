@@ -1,3 +1,4 @@
+from decimal import Decimal
 from pathlib import Path
 
 from pydantic import AliasChoices, Field, field_validator
@@ -139,6 +140,12 @@ class Settings(BaseSettings):
     billing_price_managed_month_rub: int = Field(default=1290)
     billing_credit_pack_credits: int = Field(default=100)
     billing_credit_pack_price_rub: int = Field(default=990)
+    # Покупка кредитов: произвольное количество (старый фиксированный пакет — только для совместимости вебхуков)
+    billing_credits_min_purchase: int = Field(default=50)
+    billing_credits_bulk_from: int = Field(default=200)
+    billing_credits_unit_price_rub: Decimal = Field(default=Decimal("3"))
+    billing_credits_bulk_unit_price_rub: Decimal = Field(default=Decimal("2.70"))
+    billing_credits_max_purchase: int = Field(default=500_000)
     billing_subscription_period_days: int = Field(default=30)
 
     @property

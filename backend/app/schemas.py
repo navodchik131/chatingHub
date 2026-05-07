@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
 from app.db.models import MessageDirection, Platform
 
@@ -287,11 +287,19 @@ class IntegrationStatusOut(BaseModel):
 # --- Billing (YooKassa) ---
 
 
+class BillingCreditsPricingOut(BaseModel):
+    min_quantity: int
+    bulk_from: int
+    unit_price_rub: float
+    bulk_unit_price_rub: float
+
+
 class BillingPlanItemOut(BaseModel):
     product: str
     title: str
     price_rub: int
     currency: str = "RUB"
+    credits_pricing: BillingCreditsPricingOut | None = None
 
 
 class BillingPlansOut(BaseModel):
@@ -300,6 +308,16 @@ class BillingPlansOut(BaseModel):
 
 class YookassaPaymentCreateIn(BaseModel):
     product: Literal["sub_byok_month", "sub_managed_month", "credits_pack"]
+    credits_quantity: int | None = None
+
+    @model_validator(mode="after")
+    def credits_pack_needs_quantity(self) -> YookassaPaymentCreateIn:
+        if self.product == "credits_pack":
+            if self.credits_quantity is None:
+                raise ValueError("Для покупки кредитов укажите credits_quantity")
+        elif self.credits_quantity is not None:
+            raise ValueError("Поле credits_quantity только для product=credits_pack")
+        return self
 
 
 class YookassaPaymentOut(BaseModel):

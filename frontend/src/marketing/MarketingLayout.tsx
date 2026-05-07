@@ -61,6 +61,8 @@ export function MarketingLayout() {
           <div className="mkt-footer-links">
             <NavLink to="/pricing">Тарифы</NavLink>
             <NavLink to="/faq">FAQ и запуск</NavLink>
+            <NavLink to="/privacy">Конфиденциальность</NavLink>
+            <NavLink to="/terms">Соглашение</NavLink>
             <NavLink to="/login">{hasToken ? 'Кабинет' : 'Вход'}</NavLink>
           </div>
         </div>

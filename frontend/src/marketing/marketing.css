@@ -603,3 +603,55 @@
   justify-content: center;
   padding: 1rem 0 3rem;
 }
+
+/* Юридические страницы (privacy / terms) */
+.mkt-legal {
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.mkt-legal-meta {
+  font-size: 0.8125rem;
+  color: var(--muted);
+  margin: 0 0 1.5rem;
+  line-height: 1.5;
+}
+
+.mkt-legal-block h2 {
+  margin: 0 0 0.65rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+.mkt-legal-block + .mkt-legal-block {
+  margin-top: 1.75rem;
+}
+
+.mkt-legal-block p {
+  margin: 0 0 0.65rem;
+  font-size: 0.9rem;
+  line-height: 1.65;
+  color: var(--text-secondary);
+}
+
+.mkt-legal-block p:last-child {
+  margin-bottom: 0;
+}
+
+.mkt-legal-block ul {
+  margin: 0 0 0.35rem;
+  padding-left: 1.15rem;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.mkt-legal-block li {
+  margin-bottom: 0.5rem;
+}
+
+.mkt-legal-block li:last-child {
+  margin-bottom: 0;
+}

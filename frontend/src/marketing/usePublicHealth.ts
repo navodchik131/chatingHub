@@ -8,6 +8,10 @@ export interface PublicHealthPricing {
   billing_price_byok_month_rub?: number
   billing_credit_pack_price_rub?: number
   billing_credit_pack_credits?: number
+  billing_credits_min_purchase?: number
+  billing_credits_bulk_from?: number
+  billing_credits_unit_price_rub?: number
+  billing_credits_bulk_unit_price_rub?: number
   studio_prompt_credit_cost?: number
   studio_upscale_credit_cost?: number
   studio_carousel_credit_cost?: number

@@ -5,6 +5,8 @@ import { LandingPage } from './marketing/LandingPage'
 import { LoginPage } from './marketing/LoginPage'
 import { MarketingLayout } from './marketing/MarketingLayout'
 import { PricingPage } from './marketing/PricingPage'
+import { PrivacyPage } from './marketing/PrivacyPage'
+import { TermsPage } from './marketing/TermsPage'
 
 export default function Root() {
   return (
@@ -14,6 +16,8 @@ export default function Root() {
           <Route index element={<LandingPage />} />
           <Route path="pricing" element={<PricingPage />} />
           <Route path="faq" element={<FaqPage />} />
+          <Route path="privacy" element={<PrivacyPage />} />
+          <Route path="terms" element={<TermsPage />} />
           <Route path="login" element={<LoginPage />} />
         </Route>
         <Route path="/workspace/*" element={<App />} />

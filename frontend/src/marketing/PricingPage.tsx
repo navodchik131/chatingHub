@@ -3,15 +3,19 @@ import { formatRub, usePublicHealth } from './usePublicHealth'
 
 const FALLBACK_MANAGED = 1290
 const FALLBACK_BYOK = 499
-const FALLBACK_PACK_PRICE = 990
-const FALLBACK_PACK_CREDITS = 100
+const FALLBACK_CREDITS_MIN = 50
+const FALLBACK_CREDITS_BULK_FROM = 200
+const FALLBACK_UNIT = 3
+const FALLBACK_BULK_UNIT = 2.7
 
 export function PricingPage() {
   const health = usePublicHealth()
   const managed = health?.billing_price_managed_month_rub ?? FALLBACK_MANAGED
   const byok = health?.billing_price_byok_month_rub ?? FALLBACK_BYOK
-  const packPrice = health?.billing_credit_pack_price_rub ?? FALLBACK_PACK_PRICE
-  const packCredits = health?.billing_credit_pack_credits ?? FALLBACK_PACK_CREDITS
+  const creditsMin = health?.billing_credits_min_purchase ?? FALLBACK_CREDITS_MIN
+  const creditsBulkFrom = health?.billing_credits_bulk_from ?? FALLBACK_CREDITS_BULK_FROM
+  const creditsUnit = health?.billing_credits_unit_price_rub ?? FALLBACK_UNIT
+  const creditsBulkUnit = health?.billing_credits_bulk_unit_price_rub ?? FALLBACK_BULK_UNIT
   const promptCost = health?.studio_prompt_credit_cost
   const upscaleCost = health?.studio_upscale_credit_cost
   const carouselCost = health?.studio_carousel_credit_cost
@@ -85,22 +89,33 @@ export function PricingPage() {
 
       <section className="mkt-section" aria-labelledby="credits-heading">
         <div className="mkt-section-head">
-          <h2 id="credits-heading">Пакеты кредитов (Managed)</h2>
+          <h2 id="credits-heading">Покупка кредитов (Managed)</h2>
           <p>
-            На тарифе Managed студийные действия переводятся в кредиты. Пакет можно купить отдельно — сумма и объём на
-            сервере могут отличаться от примера ниже.
+            На тарифе Managed студийные действия переводятся в кредиты. Пополнить баланс можно на любую сумму: от{' '}
+            {creditsMin.toLocaleString('ru-RU')} кредитов и выше — в кабинете вы вводите количество, сумма считается по
+            правилам ниже.
           </p>
         </div>
         <article className="mkt-price-card" style={{ maxWidth: 420 }}>
-          <h3>Пополнение баланса</h3>
-          <div className="amount">{formatRub(packPrice)}</div>
-          <div className="period">
-            ≈ {packCredits.toLocaleString('ru-RU')} кредитов — значение из конфигурации биллинга
-          </div>
-          <ul>
-            <li>Покупка в том же разделе оплаты, что и подписка</li>
-            <li>Списание по фактическим действиям в студии</li>
+          <h3>Правила цены</h3>
+          <ul style={{ margin: 0, paddingLeft: '1.15rem' }}>
+            <li>
+              <strong>Базовая ставка:</strong>{' '}
+              {creditsUnit.toLocaleString('ru-RU', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} ₽ за один
+              кредит.
+            </li>
+            <li>
+              <strong>От {creditsBulkFrom.toLocaleString('ru-RU')} кредитов:</strong>{' '}
+              {creditsBulkUnit.toLocaleString('ru-RU', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} ₽ за
+              кредит.
+            </li>
+            <li>
+              <strong>Минимальная покупка:</strong> {creditsMin.toLocaleString('ru-RU')} кредитов.
+            </li>
           </ul>
+          <p className="period" style={{ marginTop: '1rem' }}>
+            Оформление — в разделе оплаты в кабинете (ЮKassa).
+          </p>
         </article>
       </section>
 

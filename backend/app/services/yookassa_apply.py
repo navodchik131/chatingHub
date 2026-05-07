@@ -5,10 +5,17 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from decimal import Decimal, ROUND_HALF_UP
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.services.billing_credits import (
+    assert_credits_quantity_allowed,
+    credits_total_rub,
+    legacy_pack_total_rub,
+)
 from app.db.models import (
     CreditAccount,
     Subscription,
@@ -93,7 +100,40 @@ async def apply_yookassa_payment_succeeded(
         return {"ok": True, "payment_id": pid, "granted": "sub_managed"}
 
     if product == "credits_pack":
-        n = max(1, settings.billing_credit_pack_credits)
+        q_raw = (meta.get("credits_quantity") or "").strip()
+        if q_raw:
+            try:
+                n = int(q_raw)
+            except ValueError:
+                log.warning("yookassa: bad credits_quantity for payment %s", pid)
+                await session.commit()
+                return {"ok": False, "error": "credits_quantity"}
+            try:
+                assert_credits_quantity_allowed(n)
+            except ValueError as e:
+                log.warning("yookassa: credits quantity invalid payment %s: %s", pid, e)
+                await session.commit()
+                return {"ok": False, "error": "credits_quantity_range"}
+            expected = credits_total_rub(n)
+        else:
+            n = max(1, int(settings.billing_credit_pack_credits))
+            expected = legacy_pack_total_rub()
+
+        amount_raw = payment_object.get("amount")
+        paid = Decimal("0")
+        if isinstance(amount_raw, dict):
+            paid = Decimal(str(amount_raw.get("value") or "0")).quantize(Decimal("0.01"), ROUND_HALF_UP)
+        if paid != expected:
+            log.error(
+                "yookassa: amount mismatch payment %s paid=%s expected=%s credits=%s",
+                pid,
+                paid,
+                expected,
+                n,
+            )
+            await session.commit()
+            return {"ok": False, "error": "amount_mismatch", "payment_id": pid}
+
         acc = await session.get(CreditAccount, billing_uid)
         if acc is None:
             acc = CreditAccount(user_id=billing_uid, balance=0)
@@ -106,7 +146,10 @@ async def apply_yookassa_payment_succeeded(
             user_id=billing_uid,
             kind="yookassa_credits_pack",
             credits_delta=n,
-            meta=json.dumps({"payment_id": pid, "product": product}, ensure_ascii=False),
+            meta=json.dumps(
+                {"payment_id": pid, "product": product, "credits_quantity": n},
+                ensure_ascii=False,
+            ),
         )
         session.add(ev)
         await session.commit()
