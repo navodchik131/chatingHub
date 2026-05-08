@@ -138,7 +138,11 @@ class Settings(BaseSettings):
 
     # Цены в рублях (целые); в ЮKassa передаём как "499.00"
     billing_price_byok_month_rub: int = Field(default=499)
-    billing_price_managed_month_rub: int = Field(default=1290)
+    billing_price_managed_month_rub: int = Field(default=1299)
+    billing_managed_subscription_bonus_credits: int = Field(
+        default=250,
+        description="Кредиты на баланс при успешной оплате подписки Managed (каждый платёж sub_managed_month).",
+    )
     billing_credit_pack_credits: int = Field(default=100)
     billing_credit_pack_price_rub: int = Field(default=990)
     # Покупка кредитов: произвольное количество (старый фиксированный пакет — только для совместимости вебхуков)

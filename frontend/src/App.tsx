@@ -404,6 +404,7 @@ const CREDIT_KIND_LABELS: Record<string, string> = {
   studio_carousel_shot: 'Студия: карусель',
   studio_model_profile_generate: 'Студия: профиль модели',
   yookassa_credits_pack: 'Пополнение баланса',
+  yookassa_managed_subscription_bonus: 'Подписка Managed: бонус кредитов',
   admin_credit_adjustment: 'Изменение баланса',
 }
 

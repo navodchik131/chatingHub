@@ -20,6 +20,7 @@ from app.db.models import (
     CreditAccount,
     Subscription,
     SubscriptionStatus,
+    UsageEvent,
     User,
     YookassaProcessedPayment,
 )
@@ -102,8 +103,32 @@ async def apply_yookassa_payment_succeeded(
         sub.billing_plan = BILLING_PLAN_MANAGED
         sub.status = SubscriptionStatus.active
         sub.current_period_end = _period_end()
+        bonus = max(0, int(settings.billing_managed_subscription_bonus_credits))
+        if bonus > 0:
+            acc = await session.get(CreditAccount, billing_uid)
+            if acc is None:
+                acc = CreditAccount(user_id=billing_uid, balance=0)
+                session.add(acc)
+                await session.flush()
+            acc.balance += bonus
+            session.add(
+                UsageEvent(
+                    user_id=billing_uid,
+                    kind="yookassa_managed_subscription_bonus",
+                    credits_delta=bonus,
+                    meta=json.dumps(
+                        {"payment_id": pid, "product": product},
+                        ensure_ascii=False,
+                    ),
+                )
+            )
         await session.commit()
-        return {"ok": True, "payment_id": pid, "granted": "sub_managed"}
+        return {
+            "ok": True,
+            "payment_id": pid,
+            "granted": "sub_managed",
+            "credits_bonus": bonus,
+        }
 
     if product == "credits_pack":
         q_raw = (meta.get("credits_quantity") or "").strip()
@@ -157,8 +182,6 @@ async def apply_yookassa_payment_succeeded(
             return {"ok": False, "error": "subscription_required", "payment_id": pid}
 
         acc.balance += n
-        from app.db.models import UsageEvent
-
         ev = UsageEvent(
             user_id=billing_uid,
             kind="yookassa_credits_pack",

@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { formatRub, usePublicHealth } from './usePublicHealth'
 
-const DEFAULT_MANAGED = 1290
+const DEFAULT_MANAGED = 1299
 const DEFAULT_BYOK = 499
 
 function CheckItem({ children }: { children: ReactNode }) {

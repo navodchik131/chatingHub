@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
 import { formatRub, usePublicHealth } from './usePublicHealth'
 
-const FALLBACK_MANAGED = 1290
+const FALLBACK_MANAGED = 1299
 const FALLBACK_BYOK = 499
 const FALLBACK_CREDITS_MIN = 50
 const FALLBACK_CREDITS_BULK_FROM = 200
