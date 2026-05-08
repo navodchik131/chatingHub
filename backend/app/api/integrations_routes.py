@@ -11,7 +11,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.deps import get_current_user
 from app.config import settings
-from app.db.models import FanvueConnection, LlmConnection, TelegramConnection, User, WavespeedConnection
+from app.db.models import (
+    FanvueConnection,
+    LlmConnection,
+    Subscription,
+    TelegramConnection,
+    User,
+    WavespeedConnection,
+)
 from app.db.session import get_session
 from app.schemas import (
     FanvueIntegrationIn,
@@ -20,7 +27,14 @@ from app.schemas import (
     TelegramIntegrationIn,
     WavespeedIntegrationIn,
 )
-from app.services.crypto_secret import encrypt_secret
+from app.services.billing_plan import (
+    normalize_billing_plan,
+    platform_covers_studio_api_costs,
+)
+from app.services.entitlements import (
+    subscription_is_onboarding_trial,
+    subscription_is_paid_active,
+)
 from app.services.workspace import PERM_INTEGRATIONS, assert_permission, workspace_owner_id
 
 log = logging.getLogger(__name__)
@@ -44,9 +58,24 @@ async def _integration_status(session: AsyncSession, user: User) -> IntegrationS
     ws = await session.scalar(
         select(WavespeedConnection).where(WavespeedConnection.user_id == oid)
     )
-    llm = await session.scalar(
-        select(LlmConnection).where(LlmConnection.user_id == oid)
+    sub = await session.scalar(
+        select(Subscription).where(Subscription.user_id == oid)
     )
+    plan = normalize_billing_plan(sub.billing_plan if sub else None)
+    managed = platform_covers_studio_api_costs(plan)
+    platform_ws_ok = bool((settings.wavespeed_platform_api_key or "").strip())
+    user_ws_ok = bool(ws and (ws.api_key_encrypted or "").strip())
+    paid_managed = managed and subscription_is_paid_active(sub)
+    trialing_managed = managed and subscription_is_onboarding_trial(sub)
+    wavespeed_managed_by_platform = paid_managed and platform_ws_ok
+    if trialing_managed:
+        wavespeed_configured = user_ws_ok
+    elif paid_managed:
+        wavespeed_configured = platform_ws_ok
+    else:
+        wavespeed_configured = user_ws_ok
+    platform_llm_ok = bool((settings.openai_api_key or "").strip())
+    llm_configured = platform_llm_ok
     base = settings.public_app_url.rstrip("/")
     https = base.lower().startswith("https://")
     reg = _telegram_webhook_registered(tg)
@@ -76,7 +105,8 @@ async def _integration_status(session: AsyncSession, user: User) -> IntegrationS
         ),
         telegram_webhook_registered=reg,
         integration_hint=hint,
-        wavespeed_configured=bool(ws and (ws.api_key_encrypted or "").strip()),
+        wavespeed_configured=wavespeed_configured,
+        wavespeed_managed_by_platform=wavespeed_managed_by_platform,
         llm_configured=bool(llm and (llm.api_key_encrypted or "").strip()),
     )
 

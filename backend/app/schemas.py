@@ -299,6 +299,7 @@ class IntegrationStatusOut(BaseModel):
     telegram_webhook_registered: bool = False
     integration_hint: str | None = None
     wavespeed_configured: bool = False
+    wavespeed_managed_by_platform: bool = False
     llm_configured: bool = False
 
 

@@ -267,6 +267,7 @@ interface IntegrationStatus {
   telegram_webhook_registered?: boolean
   integration_hint?: string | null
   wavespeed_configured?: boolean
+  wavespeed_managed_by_platform?: boolean
   llm_configured?: boolean
 }
 
@@ -375,8 +376,16 @@ function userBillingPlanLabel(plan: string | undefined): string {
 function userBillingPlanLong(plan: string | undefined): string {
   const p = (plan || 'managed').toLowerCase()
   return p === 'byok'
-    ? 'BYOK — свои LLM и WaveSpeed, кредиты на студию не списываются'
-    : 'Managed — LLM платформы и ваш ключ WaveSpeed; кредиты на студию списываются'
+    ? 'BYOK — свой WaveSpeed для картинок; текст студии на сервере; кредиты на студию не списываются'
+    : 'Managed — текст студии на сервере; картинки: свой WaveSpeed до оплаты, после оплаты ключ платформы; кредиты списываются'
+}
+
+function canPurchaseStudioCreditPack(me: UserMe | undefined): boolean {
+  if (!me?.online_payment_available) return false
+  const st = (me.subscription_status || '').toLowerCase()
+  if (st !== 'active') return false
+  const p = (me.billing_plan || 'managed').toLowerCase()
+  return p === 'managed'
 }
 
 const SUBSCRIPTION_STATUS_LABELS: Record<string, string> = {
@@ -2498,7 +2507,13 @@ export default function App() {
                   </p>
                 </div>
               </div>
-              {me?.billing_require_active_subscription ? (
+              {me?.billing_require_active_subscription && me.subscription_status === 'trialing' ? (
+                <div className="banner info" style={{ marginTop: '1rem' }}>
+                  <strong>Пробный доступ:</strong> студия доступна, пока есть бонусные кредиты. Подключите свой ключ
+                  WaveSpeed в разделе «Подключения». После нулевого баланса оформите подписку Managed или BYOK — иначе
+                  студия заблокируется.
+                </div>
+              ) : me?.billing_require_active_subscription && !subscriptionCoversStudioAccess(me) ? (
                 <div className="banner info" style={{ marginTop: '1rem' }}>
                   Для студии нужна активная подписка. Сейчас:{' '}
                   <strong>{subscriptionStatusLabel(me?.subscription_status)}</strong>.
@@ -2525,12 +2540,13 @@ export default function App() {
           {accountTab === 'billing' && isOwner && (
             <div className="account-cabinet-pane" role="tabpanel">
               <p className="cabinet-lead muted">
-                <strong>Здесь выбираете тариф</strong> (Managed или BYOK) <strong>и оплачиваете</strong> подписку или
-                пакет кредитов. При неактивной подписке студия может быть недоступна.
+                <strong>Здесь выбираете тариф</strong> (Managed или BYOK) <strong>и оплачиваете</strong> подписку. Пакет
+                кредитов — только после оплаченного Managed.
               </p>
               <p className="cabinet-lead muted">
-                <strong>Managed</strong> — студия списывает кредиты. <strong>BYOK</strong> — ваши ключи к AI и
-                WaveSpeed, кредиты на студию не списываются.
+                <strong>Managed</strong> — кредиты на студию; картинки до оплаты через ваш WaveSpeed, после оплаты через
+                ключ платформы. <strong>BYOK</strong> — всегда ваш WaveSpeed; кредиты на студию не списываются. Текст и
+                vision студии всегда обрабатываются на сервере.
               </p>
               <div className="cabinet-module cabinet-module--highlight">
                 <div className="cabinet-module-head">
@@ -2558,6 +2574,23 @@ export default function App() {
                   <div className="cabinet-yookassa-rows">
                     {billingPlanRows.map((row) => {
                       if (row.product === 'credits_pack' && row.credits_pricing) {
+                        const packOk = canPurchaseStudioCreditPack(me)
+                        if (!packOk) {
+                          return (
+                            <div key={row.product} className="cabinet-yookassa-row">
+                              <div>
+                                <div className="cabinet-offer-title">{row.title}</div>
+                                <p className="muted small" style={{ margin: '0.35rem 0 0' }}>
+                                  Покупка кредитов открывается после оплаты подписки Managed (статус «Активна», не пробный
+                                  период).
+                                </p>
+                              </div>
+                              <button type="button" className="send-btn" disabled>
+                                Недоступно
+                              </button>
+                            </div>
+                          )
+                        }
                         const p = row.credits_pricing
                         const q = Math.floor(creditsPurchaseQty)
                         const valid =
@@ -2788,12 +2821,21 @@ export default function App() {
                 <div className="cabinet-module-head">
                   <h4 className="cabinet-module-title">WaveSpeed</h4>
                   <span className={`cabinet-module-badge ${integ?.wavespeed_configured ? 'is-ok' : 'is-warn'}`}>
-                    {integ?.wavespeed_configured ? 'Ключ сохранён' : 'Нет ключа'}
+                    {integ?.wavespeed_managed_by_platform
+                      ? 'Ключ платформы (Managed)'
+                      : integ?.wavespeed_configured
+                        ? 'Ключ сохранён'
+                        : 'Нет ключа'}
                   </span>
                 </div>
                 <p className="muted cabinet-module-body">
-                  Генерация и апскейл в студии через WaveSpeed возможны только с вашим ключом из этого поля
-                  (любой тариф). Без сохранённого ключа запросы к WaveSpeed не выполняются.
+                  <strong>Пробный Managed:</strong> сохраните свой API-ключ — студия ходит в WaveSpeed только с ним, пока не
+                  оформлена оплата.
+                  <br />
+                  <strong>Оплаченный Managed:</strong> картинки через ключ платформы (<code>WAVESPEED_PLATFORM_API_KEY</code>
+                  ). Поле ниже не обязательно.
+                  <br />
+                  <strong>Тариф BYOK:</strong> всегда ваш ключ — без него генерация недоступна.
                 </p>
                 <div className="cabinet-module-form">
                   <label>
@@ -2819,14 +2861,14 @@ export default function App() {
 
               <section className="cabinet-module">
                 <div className="cabinet-module-head">
-                  <h4 className="cabinet-module-title">Текстовая модель (BYOK)</h4>
+                  <h4 className="cabinet-module-title">Текстовая модель (студия)</h4>
                   <span className={`cabinet-module-badge ${integ?.llm_configured ? 'is-ok' : 'is-warn'}`}>
-                    {integ?.llm_configured ? 'Есть ключ' : 'Не настроено'}
+                    {integ?.llm_configured ? 'Ключ на сервере' : 'Сервер не настроен'}
                   </span>
                 </div>
                 <p className="muted cabinet-module-body">
-                  OpenAI-совместимый API только для тарифа <strong>BYOK</strong>. На Managed текст обрабатывается на
-                  сервисе.
+                  Промпты и vision в студии всегда идут через AI-ключ, заданный администратором на сервере (
+                  <code>OPENAI_API_KEY</code> / совместимая база). Поля ниже не используются студией и оставлены на будущее.
                 </p>
                 <div className="cabinet-module-form cabinet-module-form--grid">
                   <label>

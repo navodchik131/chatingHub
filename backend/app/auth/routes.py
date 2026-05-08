@@ -32,11 +32,12 @@ async def register(body: RegisterIn, session: AsyncSession = Depends(get_session
     )
     session.add(user)
     await session.flush()
-    reg_status = (
-        SubscriptionStatus.active
-        if starter_managed_effective()
-        else SubscriptionStatus.none
-    )
+    if starter_managed_effective():
+        reg_status = SubscriptionStatus.active
+    elif settings.yookassa_configured:
+        reg_status = SubscriptionStatus.trialing
+    else:
+        reg_status = SubscriptionStatus.none
     session.add(Subscription(user_id=user.id, status=reg_status))
     session.add(
         CreditAccount(user_id=user.id, balance=max(0, settings.signup_bonus_credits))

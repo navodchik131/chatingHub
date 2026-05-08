@@ -23,7 +23,13 @@ from app.db.models import (
     User,
     YookassaProcessedPayment,
 )
-from app.services.billing_plan import BILLING_PLAN_BYOK, BILLING_PLAN_MANAGED
+from app.services.billing_plan import (
+    BILLING_PLAN_BYOK,
+    BILLING_PLAN_MANAGED,
+    normalize_billing_plan,
+    platform_covers_studio_api_costs,
+)
+from app.services.entitlements import subscription_is_paid_active
 
 log = logging.getLogger(__name__)
 
@@ -139,6 +145,17 @@ async def apply_yookassa_payment_succeeded(
             acc = CreditAccount(user_id=billing_uid, balance=0)
             session.add(acc)
             await session.flush()
+
+        plan_norm = normalize_billing_plan(sub.billing_plan)
+        if not subscription_is_paid_active(sub) or not platform_covers_studio_api_costs(plan_norm):
+            log.warning(
+                "yookassa: credits_pack rejected — no paid Managed subscription user=%s payment=%s",
+                billing_uid,
+                pid,
+            )
+            await session.rollback()
+            return {"ok": False, "error": "subscription_required", "payment_id": pid}
+
         acc.balance += n
         from app.db.models import UsageEvent
 

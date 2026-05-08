@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import logging
 from fastapi import APIRouter, Depends, HTTPException, Request
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.deps import get_current_user
 from app.config import settings
-from app.db.models import User
+from app.db.models import Subscription, User
 from app.db.session import get_session
 from app.schemas import (
     BillingCreditsPricingOut,
@@ -20,6 +21,8 @@ from app.services.billing_credits import (
     credits_amount_yookassa_value,
     credits_total_rub,
 )
+from app.services.entitlements import subscription_is_paid_active
+from app.services.billing_plan import normalize_billing_plan, platform_covers_studio_api_costs
 from app.services.workspace import is_workspace_owner, workspace_owner_id
 from app.services.yookassa_apply import apply_yookassa_payment_succeeded
 from app.services.yookassa_client import create_payment, parse_notification_body
@@ -44,7 +47,7 @@ async def billing_plans() -> BillingPlansOut:
             ),
             BillingPlanItemOut(
                 product="sub_byok_month",
-                title="Подписка BYOK — свои LLM и WaveSpeed, кредиты на студию не списываются",
+                title="Подписка BYOK — свой WaveSpeed для картинок; LLM студии на сервере; кредиты не списываются",
                 price_rub=settings.billing_price_byok_month_rub,
             ),
             BillingPlanItemOut(
@@ -76,13 +79,24 @@ async def yookassa_start_payment(
     if not settings.yookassa_configured:
         raise HTTPException(status_code=503, detail="ЮKassa не настроена на сервере")
 
+    billing_uid = workspace_owner_id(user)
+
     if body.product == "sub_managed_month":
         price = settings.billing_price_managed_month_rub
         desc = "Подписка Chating Hub (Managed), 30 дн."
     elif body.product == "sub_byok_month":
         price = settings.billing_price_byok_month_rub
         desc = "Подписка Chating Hub (BYOK), 30 дн."
-    else:
+    elif body.product == "credits_pack":
+        sub_row = await session.scalar(
+            select(Subscription).where(Subscription.user_id == billing_uid)
+        )
+        plan = normalize_billing_plan(sub_row.billing_plan if sub_row else None)
+        if not subscription_is_paid_active(sub_row) or not platform_covers_studio_api_costs(plan):
+            raise HTTPException(
+                status_code=402,
+                detail="Покупка кредитов доступна после оплаты подписки Managed.",
+            )
         q = body.credits_quantity
         assert q is not None
         try:
@@ -91,11 +105,12 @@ async def yookassa_start_payment(
             raise HTTPException(status_code=400, detail=str(e)) from e
         amount_value = credits_amount_yookassa_value(q)
         desc = f"Кредиты студии ({q} шт.)"
+    else:
+        raise HTTPException(status_code=400, detail="Неизвестный продукт")
 
     base = settings.public_app_url.rstrip("/")
     return_url = f"{base}{settings.billing_success_path}"
 
-    billing_uid = workspace_owner_id(user)
     meta: dict[str, str] = {"user_id": str(billing_uid), "product": body.product}
     if body.product == "credits_pack":
         meta["credits_quantity"] = str(body.credits_quantity)

@@ -18,6 +18,7 @@ from app.config import BACKEND_DIR, settings
 from app.db.models import (
     StudioGeneration,
     Subscription,
+    SubscriptionStatus,
     User,
     UserStudioModel,
     UserStudioModelImage,
@@ -150,19 +151,31 @@ def _parse_optional_lat_lon_form(lat_s: str | None, lon_s: str | None) -> tuple[
     return lat_e, lon_e
 
 
-def _require_studio_subscription(user: User, owner_subscription: Subscription | None) -> None:
+def _require_studio_subscription(
+    user: User,
+    owner_subscription: Subscription | None,
+    *,
+    credits_balance: int = 0,
+) -> None:
     if not settings.billing_require_active_subscription:
         return
     if user_is_platform_admin(user):
         return
-    if subscription_active(owner_subscription):
-        return
-    raise HTTPException(
-        status_code=402,
-        detail=(
-            "Оформите подписку: личный кабинет → «Тариф и баланс», выберите Managed или BYOK и оплатите."
-        ),
-    )
+    if not subscription_active(owner_subscription):
+        raise HTTPException(
+            status_code=402,
+            detail=(
+                "Оформите подписку: личный кабинет → «Тариф и баланс», выберите Managed или BYOK и оплатите."
+            ),
+        )
+    if owner_subscription and owner_subscription.status == SubscriptionStatus.trialing:
+        if credits_balance <= 0:
+            raise HTTPException(
+                status_code=402,
+                detail=(
+                    "Бонусные кредиты закончились. Оформите подписку Managed или BYOK в разделе «Тариф и баланс»."
+                ),
+            )
 
 
 def _public_app_base(request: Request | None) -> str:
@@ -198,6 +211,7 @@ def _studio_refine_wavespeed_preflight(
     do_wavespeed: bool,
     plan: str,
     ws_row: WavespeedConnection | None,
+    owner_subscription: Subscription | None,
     mode_n: str,
     mid: int | None,
     sm_loaded: UserStudioModel | None,
@@ -208,7 +222,9 @@ def _studio_refine_wavespeed_preflight(
     """Перед списанием кредитов: ключ WaveSpeed и условия вызова API (иначе HTTPException)."""
     if not do_wavespeed:
         return ""
-    ws_key = studio_wavespeed_api_key(plan=plan, ws_row=ws_row)
+    ws_key = studio_wavespeed_api_key(
+        plan=plan, ws_row=ws_row, owner_subscription=owner_subscription
+    )
     pub = (settings.public_app_url or "").strip().rstrip("/")
     if not pub.lower().startswith("https://"):
         raise HTTPException(
@@ -527,11 +543,13 @@ async def api_upscale_studio_generation(
     if payload and payload.target_resolution:
         tr = payload.target_resolution
 
-    sub_b, _, ws_row, plan = await load_owner_studio_billing(session, oid)
-    _require_studio_subscription(user, sub_b)
+    sub_b, _, ws_row, plan, _credits = await load_owner_studio_billing(session, oid)
+    _require_studio_subscription(user, sub_b, credits_balance=_credits)
     ws_key: str = ""
     try:
-        ws_key = studio_wavespeed_api_key(plan=plan, ws_row=ws_row)
+        ws_key = studio_wavespeed_api_key(
+            plan=plan, ws_row=ws_row, owner_subscription=sub_b
+        )
     except HTTPException as e:
         return StudioUpscaleGenerationOut(
             generated_image_url=None,
@@ -645,10 +663,12 @@ async def api_studio_carousel(
             detail="WaveSpeed скачивает мастер-кадр по HTTPS. Укажите PUBLIC_APP_URL=https://…",
         )
 
-    sub_b, _, ws_row, plan = await load_owner_studio_billing(session, oid)
-    _require_studio_subscription(user, sub_b)
+    sub_b, _, ws_row, plan, _credits = await load_owner_studio_billing(session, oid)
+    _require_studio_subscription(user, sub_b, credits_balance=_credits)
     try:
-        ws_key = studio_wavespeed_api_key(plan=plan, ws_row=ws_row)
+        ws_key = studio_wavespeed_api_key(
+            plan=plan, ws_row=ws_row, owner_subscription=sub_b
+        )
     except HTTPException as e:
         return StudioCarouselOut(message=str(e.detail))
 
@@ -789,8 +809,10 @@ async def api_generate_model_profile(
     """Собрать JSON model_profile по референс-фотографиям (внешность, не поза/сцена)."""
     assert_permission(user, PERM_STUDIO_MODELS)
     oid = workspace_owner_id(user)
-    sub_b, llm_row, _ws_row, plan = await load_owner_studio_billing(session, oid)
-    _require_studio_subscription(user, sub_b)
+    sub_b, llm_row, _ws_row, plan, _credits = await load_owner_studio_billing(
+        session, oid
+    )
+    _require_studio_subscription(user, sub_b, credits_balance=_credits)
     llm_creds = studio_llm_credentials(plan=plan, llm_row=llm_row)
     uploads = list(images or [])
     if not uploads:
@@ -854,8 +876,8 @@ async def api_create_studio_model(
 ) -> UserStudioModelOut:
     assert_permission(user, PERM_STUDIO_MODELS)
     oid = workspace_owner_id(user)
-    sub_b, _, _, _ = await load_owner_studio_billing(session, oid)
-    _require_studio_subscription(user, sub_b)
+    sub_b, _, _, _, _credits = await load_owner_studio_billing(session, oid)
+    _require_studio_subscription(user, sub_b, credits_balance=_credits)
     uploads = images or []
     kinds_list = parse_image_kinds_json(image_kinds, len(uploads))
     selfies_list = parse_image_export_selfies_json(image_export_selfies, len(uploads), kinds_list)
@@ -925,8 +947,8 @@ async def api_patch_studio_model(
 ) -> UserStudioModelOut:
     assert_permission(user, PERM_STUDIO_MODELS)
     oid = workspace_owner_id(user)
-    sub_b, _, _, _ = await load_owner_studio_billing(session, oid)
-    _require_studio_subscription(user, sub_b)
+    sub_b, _, _, _, _credits = await load_owner_studio_billing(session, oid)
+    _require_studio_subscription(user, sub_b, credits_balance=_credits)
     m = await _load_studio_model_owned(session, oid, model_id)
     if not m:
         raise HTTPException(status_code=404, detail="Модель не найдена")
@@ -978,8 +1000,8 @@ async def api_add_studio_model_images(
 ) -> UserStudioModelOut:
     assert_permission(user, PERM_STUDIO_MODELS)
     oid = workspace_owner_id(user)
-    sub_b, _, _, _ = await load_owner_studio_billing(session, oid)
-    _require_studio_subscription(user, sub_b)
+    sub_b, _, _, _, _credits = await load_owner_studio_billing(session, oid)
+    _require_studio_subscription(user, sub_b, credits_balance=_credits)
     m = await _load_studio_model_owned(session, oid, model_id)
     if not m:
         raise HTTPException(status_code=404, detail="Модель не найдена")
@@ -1038,8 +1060,8 @@ async def api_patch_studio_model_image(
 ) -> UserStudioModelOut:
     assert_permission(user, PERM_STUDIO_MODELS)
     oid = workspace_owner_id(user)
-    sub_b, _, _, _ = await load_owner_studio_billing(session, oid)
-    _require_studio_subscription(user, sub_b)
+    sub_b, _, _, _, _credits = await load_owner_studio_billing(session, oid)
+    _require_studio_subscription(user, sub_b, credits_balance=_credits)
     m = await session.get(UserStudioModel, model_id)
     if not m or m.user_id != oid:
         raise HTTPException(status_code=404, detail="Модель не найдена")
@@ -1068,8 +1090,8 @@ async def api_delete_studio_model_image(
 ) -> dict:
     assert_permission(user, PERM_STUDIO_MODELS)
     oid = workspace_owner_id(user)
-    sub_b, _, _, _ = await load_owner_studio_billing(session, oid)
-    _require_studio_subscription(user, sub_b)
+    sub_b, _, _, _, _credits = await load_owner_studio_billing(session, oid)
+    _require_studio_subscription(user, sub_b, credits_balance=_credits)
     m = await session.get(UserStudioModel, model_id)
     if not m or m.user_id != oid:
         raise HTTPException(status_code=404, detail="Модель не найдена")
@@ -1096,8 +1118,8 @@ async def api_delete_studio_model(
 ) -> dict:
     assert_permission(user, PERM_STUDIO_MODELS)
     oid = workspace_owner_id(user)
-    sub_b, _, _, _ = await load_owner_studio_billing(session, oid)
-    _require_studio_subscription(user, sub_b)
+    sub_b, _, _, _, _credits = await load_owner_studio_billing(session, oid)
+    _require_studio_subscription(user, sub_b, credits_balance=_credits)
     result = await session.execute(
         select(UserStudioModel)
         .where(UserStudioModel.id == model_id, UserStudioModel.user_id == oid)
@@ -1166,8 +1188,10 @@ async def api_studio_refine_prompt(
 
     assert_permission(user, PERM_STUDIO_GENERATE)
     oid = workspace_owner_id(user)
-    sub_b, llm_row, ws_row, plan = await load_owner_studio_billing(session, oid)
-    _require_studio_subscription(user, sub_b)
+    sub_b, llm_row, ws_row, plan, _credits = await load_owner_studio_billing(
+        session, oid
+    )
+    _require_studio_subscription(user, sub_b, credits_balance=_credits)
     llm_creds = studio_llm_credentials(plan=plan, llm_row=llm_row)
     wan_tier_n = _normalize_wan_edit_tier(wan_edit_tier)
     wave_profile_n = _normalize_studio_wave_profile(studio_wave_profile)
@@ -1226,6 +1250,7 @@ async def api_studio_refine_prompt(
         do_wavespeed=do_wavespeed,
         plan=plan,
         ws_row=ws_row,
+        owner_subscription=sub_b,
         mode_n=mode_n,
         mid=mid,
         sm_loaded=sm_loaded,

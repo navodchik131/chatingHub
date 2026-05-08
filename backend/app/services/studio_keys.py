@@ -5,53 +5,75 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.db.models import LlmConnection, Subscription, WavespeedConnection
+from app.db.models import CreditAccount, LlmConnection, Subscription, SubscriptionStatus, WavespeedConnection
 from app.services.billing_plan import (
-    assert_byok_llm,
     assert_byok_wavespeed,
     normalize_billing_plan,
     platform_covers_studio_api_costs,
 )
 from app.services.crypto_secret import decrypt_secret
+from app.services.entitlements import subscription_is_paid_active
 from app.services.studio_openai import StudioOpenAiCredentials
 
 
 async def load_owner_studio_billing(
     session: AsyncSession, owner_id: int
-) -> tuple[Subscription | None, LlmConnection | None, WavespeedConnection | None, str]:
+) -> tuple[Subscription | None, LlmConnection | None, WavespeedConnection | None, str, int]:
     sub = await session.scalar(select(Subscription).where(Subscription.user_id == owner_id))
     llm = await session.scalar(select(LlmConnection).where(LlmConnection.user_id == owner_id))
     ws = await session.scalar(
         select(WavespeedConnection).where(WavespeedConnection.user_id == owner_id)
     )
+    cr = await session.scalar(select(CreditAccount).where(CreditAccount.user_id == owner_id))
     plan = normalize_billing_plan(sub.billing_plan if sub else None)
-    return sub, llm, ws, plan
+    bal = int(cr.balance) if cr is not None else 0
+    return sub, llm, ws, plan, bal
 
 
-def studio_llm_credentials(*, plan: str, llm_row: LlmConnection | None) -> StudioOpenAiCredentials:
-    if platform_covers_studio_api_costs(plan):
-        key = (settings.openai_api_key or "").strip()
+def studio_llm_credentials(*, plan: str | None = None, llm_row: LlmConnection | None = None) -> StudioOpenAiCredentials:
+    """Студия всегда использует LLM с сервера (OPENAI_* / xAI и т.д.); ключи из кабинета не применяются."""
+    _ = plan, llm_row
+    key = (settings.openai_api_key or "").strip()
+    if not key:
+        raise HTTPException(
+            status_code=503,
+            detail="На сервере не задан OPENAI_API_KEY для студии (текст и vision).",
+        )
+    base = (settings.openai_base_url or "").strip().rstrip("/") or "https://api.openai.com/v1"
+    org = (settings.openai_organization or "").strip()
+    return StudioOpenAiCredentials(api_key=key, base_url=base, organization=org)
+
+
+def studio_wavespeed_api_key(
+    *,
+    plan: str,
+    ws_row: WavespeedConnection | None,
+    owner_subscription: Subscription | None,
+) -> str:
+    """
+    WaveSpeed: период onboarding (trialing) — только ключ владельца из интеграций.
+    Оплаченный Managed — платформенный ключ из .env.
+    Оплаченный BYOK — ключ владельца.
+    """
+    st = owner_subscription.status if owner_subscription else None
+    if st == SubscriptionStatus.trialing:
+        assert_byok_wavespeed(plan, ws_row)
+        try:
+            return decrypt_secret(ws_row.api_key_encrypted)  # type: ignore[union-attr]
+        except ValueError as e:
+            raise HTTPException(
+                status_code=400, detail="Не удалось расшифровать ключ WaveSpeed"
+            ) from e
+
+    if platform_covers_studio_api_costs(plan) and subscription_is_paid_active(owner_subscription):
+        key = (settings.wavespeed_platform_api_key or "").strip()
         if not key:
             raise HTTPException(
                 status_code=503,
-                detail="На сервере не задан OPENAI_API_KEY для тарифа «всё включено».",
+                detail="На сервере не задан WAVESPEED_PLATFORM_API_KEY для тарифа Managed (студия WaveSpeed).",
             )
-        base = (settings.openai_base_url or "").strip().rstrip("/") or "https://api.openai.com/v1"
-        org = (settings.openai_organization or "").strip()
-        return StudioOpenAiCredentials(api_key=key, base_url=base, organization=org)
-    assert_byok_llm(plan, llm_row)
-    try:
-        key = decrypt_secret(llm_row.api_key_encrypted)  # type: ignore[union-attr]
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail="Не удалось расшифровать ключ LLM") from e
-    raw_base = (llm_row.base_url or "").strip() if llm_row else ""  # type: ignore[union-attr]
-    base = raw_base.rstrip("/") if raw_base else (settings.openai_base_url or "").strip().rstrip("/")
-    if not base:
-        base = "https://api.openai.com/v1"
-    return StudioOpenAiCredentials(api_key=key, base_url=base, organization="")
+        return key
 
-
-def studio_wavespeed_api_key(*, plan: str, ws_row: WavespeedConnection | None) -> str:
     assert_byok_wavespeed(plan, ws_row)
     try:
         return decrypt_secret(ws_row.api_key_encrypted)  # type: ignore[union-attr]
@@ -62,7 +84,7 @@ def studio_wavespeed_api_key(*, plan: str, ws_row: WavespeedConnection | None) -
 
 
 def studio_charges_credits(plan: str) -> bool:
-    """True — операции студии расходуют кредиты (тариф managed)."""
+    """True — операции студии расходуют кредиты (тариф managed, в т.ч. onboarding до оплаты)."""
     return platform_covers_studio_api_costs(plan)
 
 
