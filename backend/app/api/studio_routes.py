@@ -87,11 +87,12 @@ from app.services.studio_openai import (
 from app.services.studio_camera_presets import get_camera_preset_by_id, list_camera_presets
 from app.services.studio_carousel import build_carousel_wave_prompt
 from app.services.studio_model_images import (
+    assert_studio_image_kind,
+    model_images_for_wavespeed_profile,
     model_reference_photos_block,
     parse_image_export_selfies_json,
     parse_image_kinds_json,
     sort_model_images_for_studio,
-    assert_studio_image_kind,
 )
 from app.services.studio_pose_reference import (
     resolve_pose_reference_file,
@@ -202,6 +203,7 @@ def _studio_refine_wavespeed_preflight(
     sm_loaded: UserStudioModel | None,
     imgs_model: list[UserStudioModelImage],
     image_bytes: bytes | None,
+    wave_profile: str,
 ) -> str:
     """Перед списанием кредитов: ключ WaveSpeed и условия вызова API (иначе HTTPException)."""
     if not do_wavespeed:
@@ -213,6 +215,18 @@ def _studio_refine_wavespeed_preflight(
             status_code=400,
             detail="Генерация изображения недоступна: у сервиса не настроен публичный HTTPS-адрес. Обратитесь к администратору.",
         )
+    wp = _normalize_studio_wave_profile(wave_profile)
+    if wp == "regular" and imgs_model:
+        imgs_ok = model_images_for_wavespeed_profile(imgs_model, wp)
+        if not imgs_ok and mode_n in ("model", "no_face"):
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "В режиме «Обычные фотографии» нельзя использовать только снимки с типом «интимная анатомия» — "
+                    "они не отправляются в этот API (ограничения провайдера). Добавьте фото лица или тела к модели "
+                    "или переключите тип генерации на «NSFW (WAN / Seedream)»."
+                ),
+            )
     if mode_n == "model":
         if mid is None or sm_loaded is None:
             raise HTTPException(
@@ -1206,6 +1220,7 @@ async def api_studio_refine_prompt(
     imgs_model: list[UserStudioModelImage] = []
     if sm_loaded is not None:
         imgs_model = sort_model_images_for_studio(list(sm_loaded.images))
+    imgs_for_ws = model_images_for_wavespeed_profile(imgs_model, wave_profile_n)
 
     ws_key = _studio_refine_wavespeed_preflight(
         do_wavespeed=do_wavespeed,
@@ -1216,6 +1231,7 @@ async def api_studio_refine_prompt(
         sm_loaded=sm_loaded,
         imgs_model=imgs_model,
         image_bytes=image_bytes,
+        wave_profile=wave_profile_n,
     )
 
     cost = apply_studio_credit_cost(plan, settings.credit_cost_studio_prompt_refine)
@@ -1234,7 +1250,7 @@ async def api_studio_refine_prompt(
                 credentials=llm_creds,
             )
         ref_photo_block = (
-            model_reference_photos_block(imgs_model) if imgs_model else None
+            model_reference_photos_block(imgs_for_ws) if imgs_for_ws else None
         )
         refined = await refine_prompt_via_openai(
             system_instruction=system_instr,
@@ -1291,7 +1307,7 @@ async def api_studio_refine_prompt(
                 attach_model_urls = bool(sm_loaded and imgs_model)
 
             if attach_model_urls:
-                for im in imgs_model[:10]:
+                for im in imgs_for_ws[:10]:
                     tok = create_model_image_access_token(
                         user_id=oid, image_id=im.id
                     )

@@ -69,6 +69,20 @@ def sort_model_images_for_studio(imgs: list[UserStudioModelImage]) -> list[UserS
     return sorted(imgs, key=key)
 
 
+def model_images_for_wavespeed_profile(
+    imgs_sorted: list[UserStudioModelImage],
+    wave_profile: str,
+) -> list[UserStudioModelImage]:
+    """
+    Режим regular (Nano Banana Pro / Google): интимные референсы не передаём в API — иначе часто
+    блокировки, таймауты и ошибки политики; NSFW-ветка (WAN) оставляет все кадры.
+    """
+    p = (wave_profile or "nsfw").strip().lower()
+    if p != "regular":
+        return imgs_sorted
+    return [im for im in imgs_sorted if (im.image_kind or "other").lower() != "genitals"]
+
+
 def parse_image_export_selfies_json(
     form_value: str | None, n_files: int, kinds_list: list[str]
 ) -> list[bool]:
