@@ -72,6 +72,23 @@ interface ChatMessage {
 /** Размер страницы GET /conversations/:id/messages (синхронно с бэкендом default limit). */
 const CHAT_MESSAGES_PAGE = 40
 
+/**
+ * Web Share API с передачей File на десктопе (Chrome/Edge) даёт системное окно «Поделиться»
+ * вместо нормального скачивания. Оставляем share для установленной PWA и типичных тач-сценариев.
+ */
+function shouldUseWebShareForImageFile(): boolean {
+  if (typeof window === 'undefined') return false
+  try {
+    const nav = window.navigator as Navigator & { standalone?: boolean }
+    if (window.matchMedia('(display-mode: standalone)').matches) return true
+    if (nav.standalone === true) return true
+    if (window.matchMedia('(pointer: coarse)').matches) return true
+    return false
+  } catch {
+    return false
+  }
+}
+
 function platformLabel(p: Platform): string {
   if (p === 'telegram') return 'Telegram'
   return 'Fanvue'
@@ -1437,7 +1454,11 @@ export default function App() {
       const filename = 'image.png'
       const file = new File([blob], filename, { type: blob.type || 'image/png' })
 
-      if (typeof navigator.share === 'function' && typeof navigator.canShare === 'function') {
+      if (
+        shouldUseWebShareForImageFile() &&
+        typeof navigator.share === 'function' &&
+        typeof navigator.canShare === 'function'
+      ) {
         try {
           if (navigator.canShare({ files: [file] })) {
             await navigator.share({ files: [file], title: 'Изображение' })
