@@ -138,6 +138,66 @@ select:focus {
   flex-direction: column;
 }
 
+/* Результат возврата с ЮKassa (?billing=success|cancel|fail) — маркетинг и кабинет */
+.billing-return-banner {
+  position: relative;
+  z-index: 2;
+  margin-bottom: 1rem;
+  padding: 0.85rem 1rem;
+  border-radius: var(--control-radius);
+  border: 1px solid var(--border-strong);
+  background: var(--bg-elevated);
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.billing-return-banner--success {
+  border-color: rgba(34, 197, 94, 0.35);
+  background: rgba(34, 197, 94, 0.08);
+}
+
+.billing-return-banner--warn {
+  border-color: rgba(251, 191, 36, 0.4);
+  background: rgba(251, 191, 36, 0.06);
+}
+
+.billing-return-banner--error {
+  border-color: var(--danger-border);
+  background: var(--danger-bg);
+}
+
+.billing-return-banner__text {
+  min-width: 0;
+}
+
+.billing-return-banner__title {
+  margin: 0 0 0.35rem;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.billing-return-banner--error .billing-return-banner__title {
+  color: var(--danger-text);
+}
+
+.billing-return-banner__body {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+
+.billing-return-banner__actions {
+  flex-shrink: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
 .app-bg {
   position: fixed;
   inset: 0;

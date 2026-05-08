@@ -1,6 +1,7 @@
 import { useEffect, useReducer } from 'react'
-import { NavLink, Outlet } from 'react-router-dom'
+import { NavLink, Outlet, useSearchParams } from 'react-router-dom'
 import { getToken } from '../api'
+import { billingReturnCopy } from '../billingReturnCopy'
 import '../App.css'
 import './marketing.css'
 
@@ -16,6 +17,15 @@ export function MarketingLayout() {
   }, [])
 
   const hasToken = Boolean(getToken())
+  const [searchParams, setSearchParams] = useSearchParams()
+  const billingParam = searchParams.get('billing')
+  const billingCopy = billingReturnCopy(billingParam)
+
+  const dismissBillingBanner = () => {
+    const next = new URLSearchParams(searchParams)
+    next.delete('billing')
+    setSearchParams(next, { replace: true })
+  }
 
   return (
     <div className="mkt-root">
@@ -53,6 +63,32 @@ export function MarketingLayout() {
         </nav>
       </header>
       <main id="main-content" className="mkt-main">
+        {billingCopy ? (
+          <div
+            className={`billing-return-banner billing-return-banner--${billingCopy.variant}`}
+            role="status"
+            style={{ marginBottom: '1.25rem' }}
+          >
+            <div className="billing-return-banner__text">
+              <h2 className="billing-return-banner__title">{billingCopy.title}</h2>
+              <p className="billing-return-banner__body">{billingCopy.body}</p>
+            </div>
+            <div className="billing-return-banner__actions">
+              {hasToken ? (
+                <NavLink to="/workspace" className="mkt-nav-cta" style={{ padding: '0.45rem 0.85rem', fontSize: '0.8125rem' }}>
+                  В кабинет
+                </NavLink>
+              ) : (
+                <NavLink to="/login" className="mkt-nav-cta" style={{ padding: '0.45rem 0.85rem', fontSize: '0.8125rem' }}>
+                  Войти
+                </NavLink>
+              )}
+              <button type="button" className="ghost-btn" onClick={dismissBillingBanner}>
+                Закрыть
+              </button>
+            </div>
+          </div>
+        ) : null}
         <Outlet />
       </main>
       <footer className="mkt-footer">

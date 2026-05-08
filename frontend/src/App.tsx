@@ -1,6 +1,6 @@
 import EmojiPicker, { type EmojiClickData, Theme } from 'emoji-picker-react'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { apiFetch, getToken, setToken } from './api'
 import {
   getPushSubscriptionState,
@@ -8,6 +8,7 @@ import {
   unsubscribeWebPush,
   webPushEnvironmentOk,
 } from './webPush'
+import { billingReturnCopy } from './billingReturnCopy'
 import { formatApiErrorDetail } from './apiErrors'
 import { AuthPanel } from './AuthPanel'
 import './App.css'
@@ -455,6 +456,21 @@ type StudioJobMode = 'model' | 'photo_edit' | 'no_face'
 
 export default function App() {
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const billingBannerCopy = useMemo(
+    () => billingReturnCopy(searchParams.get('billing')),
+    [searchParams],
+  )
+  const clearBillingQuery = useCallback(() => {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev)
+        next.delete('billing')
+        return next
+      },
+      { replace: true },
+    )
+  }, [setSearchParams])
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [messages, setMessages] = useState<ChatMessage[]>([])
@@ -2215,6 +2231,35 @@ export default function App() {
   return (
     <div className={appClass}>
       <div className="app-bg" aria-hidden />
+      {billingBannerCopy ? (
+        <div
+          className={`billing-return-banner billing-return-banner--${billingBannerCopy.variant}`}
+          role="status"
+        >
+          <div className="billing-return-banner__text">
+            <h2 className="billing-return-banner__title">{billingBannerCopy.title}</h2>
+            <p className="billing-return-banner__body">{billingBannerCopy.body}</p>
+          </div>
+          <div className="billing-return-banner__actions">
+            {isOwner ? (
+              <button
+                type="button"
+                className="send-btn"
+                onClick={() => {
+                  setAccountTab('billing')
+                  setAccountOpen(true)
+                  clearBillingQuery()
+                }}
+              >
+                Тариф и пополнение
+              </button>
+            ) : null}
+            <button type="button" className="ghost-btn" onClick={clearBillingQuery}>
+              Закрыть
+            </button>
+          </div>
+        </div>
+      ) : null}
       {showThreadDock ? (
         <header className="thread-mobile-dock">
           <div className="thread-mobile-dock-inner">
