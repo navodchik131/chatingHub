@@ -31,10 +31,8 @@ from app.services.billing_plan import (
     normalize_billing_plan,
     platform_covers_studio_api_costs,
 )
-from app.services.entitlements import (
-    subscription_is_onboarding_trial,
-    subscription_is_paid_active,
-)
+from app.services.entitlements import subscription_is_onboarding_trial
+from app.services.studio_keys import wavespeed_cabinet_flags
 from app.services.workspace import PERM_INTEGRATIONS, assert_permission, workspace_owner_id
 
 log = logging.getLogger(__name__)
@@ -63,35 +61,36 @@ async def _integration_status(session: AsyncSession, user: User) -> IntegrationS
     )
     plan = normalize_billing_plan(sub.billing_plan if sub else None)
     managed = platform_covers_studio_api_costs(plan)
-    platform_ws_ok = bool((settings.wavespeed_platform_api_key or "").strip())
-    user_ws_ok = bool(ws and (ws.api_key_encrypted or "").strip())
-    paid_managed = managed and subscription_is_paid_active(sub)
     trialing_managed = managed and subscription_is_onboarding_trial(sub)
-    wavespeed_managed_by_platform = paid_managed and platform_ws_ok
-    if trialing_managed:
-        wavespeed_configured = user_ws_ok
-    elif paid_managed:
-        wavespeed_configured = platform_ws_ok
-    else:
-        wavespeed_configured = user_ws_ok
+    wavespeed_configured, wavespeed_managed_by_platform = wavespeed_cabinet_flags(
+        plan=plan, ws_row=ws, sub=sub
+    )
     platform_llm_ok = bool((settings.openai_api_key or "").strip())
     llm_configured = platform_llm_ok
     base = settings.public_app_url.rstrip("/")
     https = base.lower().startswith("https://")
     reg = _telegram_webhook_registered(tg)
     hint: str | None = None
+    hint_parts: list[str] = []
+    if trialing_managed and not wavespeed_configured:
+        hint_parts.append(
+            "Пробный период Managed: сохраните свой API-ключ WaveSpeed в поле ниже. "
+            "После успешной оплаты подписки Managed студия использует ключ платформы с сервера (если он задан администратором)."
+        )
     if tg and tg.is_active and not reg:
         if not https:
-            hint = (
+            hint_parts.append(
                 "Входящие из Telegram работают только если сайт доступен по защищённому адресу (HTTPS). "
                 "Обратитесь к администратору с правильным публичным адресом приложения и при необходимости "
                 "сохраните подключение снова. Отправка сообщений из этого раздела с сохранённым токеном может работать и без входящего канала."
             )
         else:
-            hint = (
+            hint_parts.append(
                 "Токен сохранён, но входящие из Telegram ещё не подтверждены. Сохраните настройки Telegram ещё раз "
                 "после проверки адреса сайта у администратора."
             )
+    if hint_parts:
+        hint = "\n\n".join(hint_parts)
     return IntegrationStatusOut(
         telegram_configured=bool(tg and tg.is_active),
         telegram_bot_username=tg.bot_username if tg else None,
@@ -107,7 +106,7 @@ async def _integration_status(session: AsyncSession, user: User) -> IntegrationS
         integration_hint=hint,
         wavespeed_configured=wavespeed_configured,
         wavespeed_managed_by_platform=wavespeed_managed_by_platform,
-        llm_configured=bool(llm and (llm.api_key_encrypted or "").strip()),
+        llm_configured=llm_configured,
     )
 
 

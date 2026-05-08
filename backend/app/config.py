@@ -129,6 +129,17 @@ class Settings(BaseSettings):
         description="API-ключ WaveSpeed из .env для подписчиков Managed (студия). BYOK — ключ владельца в БД.",
     )
 
+    @field_validator(
+        "wavespeed_platform_api_key",
+        "openai_api_key",
+        "yookassa_shop_id",
+        "yookassa_secret_key",
+        mode="after",
+    )
+    @classmethod
+    def _strip_optional_secrets(cls, v: str) -> str:
+        return (v or "").strip()
+
     # Требовать активную подписку для студии (и не истёкший оплаченный период, если задан)
     billing_require_active_subscription: bool = Field(default=True)
     # Пока ЮKassa не настроена (shop_id + secret пусты): автоматически выдавать владельцам

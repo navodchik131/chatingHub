@@ -92,3 +92,24 @@ def apply_studio_credit_cost(plan: str, base_cost: int) -> int:
     if studio_charges_credits(plan):
         return max(0, base_cost)
     return 0
+
+
+def wavespeed_cabinet_flags(
+    *,
+    plan: str,
+    ws_row: WavespeedConnection | None,
+    sub: Subscription | None,
+) -> tuple[bool, bool]:
+    """
+    (wavespeed_configured, wavespeed_managed_by_platform) — как в студии: пробный managed — только ключ из кабинета;
+    оплаченный managed — WAVESPEED_PLATFORM_API_KEY; BYOK — ключ из кабинета.
+    """
+    platform_ws_ok = bool((settings.wavespeed_platform_api_key or "").strip())
+    user_ws_ok = bool(ws_row and (ws_row.api_key_encrypted or "").strip())
+    managed = platform_covers_studio_api_costs(plan)
+    st = sub.status if sub else None
+    if st == SubscriptionStatus.trialing:
+        return user_ws_ok, False
+    if managed and subscription_is_paid_active(sub):
+        return platform_ws_ok, platform_ws_ok
+    return user_ws_ok, False

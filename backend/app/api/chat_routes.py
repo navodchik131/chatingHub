@@ -88,6 +88,7 @@ async def api_health(session: AsyncSession = Depends(get_session)) -> dict:
         "billing_credits_unit_price_rub": float(settings.billing_credits_unit_price_rub),
         "billing_credits_bulk_unit_price_rub": float(settings.billing_credits_bulk_unit_price_rub),
         "openai_studio_configured": bool((settings.openai_api_key or "").strip()),
+        "wavespeed_platform_configured": bool((settings.wavespeed_platform_api_key or "").strip()),
         "studio_prompt_credit_cost": settings.credit_cost_studio_prompt_refine,
         "studio_upscale_credit_cost": settings.credit_cost_studio_upscale,
         "studio_wan_edit_tier_switch": studio_wan_edit_tier_switch_available(),
