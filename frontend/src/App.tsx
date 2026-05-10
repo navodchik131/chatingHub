@@ -1,5 +1,13 @@
 import EmojiPicker, { type EmojiClickData, Theme } from 'emoji-picker-react'
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { apiFetch, getToken, setToken } from './api'
 import {
@@ -204,7 +212,31 @@ interface HealthInfo {
   studio_wan_edit_tier_switch?: boolean
   studio_allow_prompt_only?: boolean
   studio_carousel_credit_cost?: number
+  /** 0 или отсутствует = без автоудаления (см. бэкенд). */
+  studio_generations_retention_days?: number
+  studio_generations_retention_interval_hours?: number
   web_push_configured?: boolean
+}
+
+function studioArchiveRetentionLead(health: HealthInfo | null): ReactNode {
+  const days = health?.studio_generations_retention_days
+  if (typeof days === 'number' && days > 0) {
+    const n100 = days % 100
+    const n10 = days % 10
+    const word =
+      n10 === 1 && n100 !== 11
+        ? 'день'
+        : n10 >= 2 && n10 <= 4 && (n100 < 10 || n100 >= 20)
+          ? 'дня'
+          : 'дней'
+    return (
+      <>
+        Картинки с WaveSpeed хранятся на сервере примерно <strong>{days}</strong> {word}, затем
+        удаляются автоматически. Сохраните важное на устройство заранее.
+      </>
+    )
+  }
+  return <>Картинки с WaveSpeed сохраняются на сервере — их можно открыть позже.</>
 }
 
 interface UserMe {
@@ -4253,9 +4285,7 @@ export default function App() {
         {canStudioGenerate ? (
           <section className="studio-panel studio-archive-section" aria-labelledby="studio-archive-heading">
             <h2 id="studio-archive-heading">Сохранённые</h2>
-            <p className="muted studio-archive-lead">
-              Картинки с WaveSpeed сохраняются на сервере — их можно открыть позже.
-            </p>
+            <p className="muted studio-archive-lead">{studioArchiveRetentionLead(health)}</p>
             {studioArchiveInitialLoading ? (
               <p className="muted">Загрузка архива…</p>
             ) : studioGenerations.length === 0 ? (

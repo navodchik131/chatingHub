@@ -94,6 +94,8 @@ async def api_health(session: AsyncSession = Depends(get_session)) -> dict:
         "studio_wan_edit_tier_switch": studio_wan_edit_tier_switch_available(),
         "studio_allow_prompt_only": settings.studio_allow_prompt_only,
         "studio_carousel_credit_cost": settings.credit_cost_studio_carousel_shot,
+        "studio_generations_retention_days": settings.studio_generations_retention_days,
+        "studio_generations_retention_interval_hours": settings.studio_generations_retention_interval_hours,
         "web_push_configured": settings.web_push_configured,
     }
 

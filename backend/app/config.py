@@ -81,6 +81,9 @@ class Settings(BaseSettings):
     # Локальная отладка: клиент может передать generate_wavespeed=0 и получить только refined_prompt без WaveSpeed
     studio_allow_prompt_only: bool = Field(default=False)
     credit_cost_studio_carousel_shot: int = Field(default=2)
+    # Архив студии (файлы + БД): автоудаление записей старше N дней; 0 = отключено
+    studio_generations_retention_days: int = Field(default=4, ge=0)
+    studio_generations_retention_interval_hours: int = Field(default=24, ge=1)
 
     wavespeed_api_base: str = Field(default="https://api.wavespeed.ai")
     # POST image-edit: WAN 2.7 по умолчанию; Pro / Seedream — см. .env.example

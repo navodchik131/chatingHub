@@ -24,6 +24,7 @@ from app.connectors.telegram.state import (
     set_telegram_api_ok,
 )
 from app.db.session import init_db
+from app.services.studio_generations_retention import purge_studio_generations_expired
 
 logging.basicConfig(
     level=logging.INFO,
@@ -66,12 +67,24 @@ def _create_legacy_telegram_bot() -> Bot:
     return Bot(token=token)
 
 
+async def _studio_generations_retention_loop() -> None:
+    """Первый прогон с задержкой, чтобы не конкурировать со стартом."""
+    await asyncio.sleep(120)
+    while True:
+        try:
+            await purge_studio_generations_expired()
+        except Exception:
+            log.exception("Studio generations retention purge failed")
+        await asyncio.sleep(max(3600, settings.studio_generations_retention_interval_hours * 3600))
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
     log.info("Database URL: %s", settings.database_url)
     bot: Bot | None = None
     polling_task: asyncio.Task[None] | None = None
+    retention_task: asyncio.Task[None] | None = None
     legacy_tok = settings.legacy_bot_token.strip()
     legacy_uid = settings.legacy_user_id
     if legacy_tok and legacy_uid > 0:
@@ -92,11 +105,24 @@ async def lifespan(app: FastAPI):
         log.info(
             "Telegram legacy polling выключен. Используйте интеграции + webhook (PUBLIC_APP_URL)."
         )
+    if settings.studio_generations_retention_days > 0:
+        retention_task = asyncio.create_task(_studio_generations_retention_loop())
+        log.info(
+            "Studio generations retention enabled: %s day(s), every %s h",
+            settings.studio_generations_retention_days,
+            settings.studio_generations_retention_interval_hours,
+        )
     yield
     if polling_task:
         polling_task.cancel()
         try:
             await polling_task
+        except asyncio.CancelledError:
+            pass
+    if retention_task:
+        retention_task.cancel()
+        try:
+            await retention_task
         except asyncio.CancelledError:
             pass
     if bot:
