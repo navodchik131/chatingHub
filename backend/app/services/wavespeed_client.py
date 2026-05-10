@@ -646,6 +646,63 @@ async def _wavespeed_post_json_and_resolve_video_url(
     raise RuntimeError("WaveSpeed: timeout waiting for video")
 
 
+def _wan_22_animate_post_path() -> str:
+    p = (settings.wavespeed_wan_22_animate_path or "").strip()
+    p = p or "/api/v3/wavespeed-ai/wan-2.2/animate"
+    return p if p.startswith("/") else f"/{p}"
+
+
+async def wan_22_animate_video_url(
+    *,
+    api_key: str,
+    image_url: str,
+    video_url: str,
+    prompt: str | None = None,
+    mode: str | None = None,
+    resolution: str | None = None,
+    seed: int | None = None,
+    timeout_submit: float = 600.0,
+    poll_interval: float = 3.0,
+    max_polls: int = 120,
+) -> str:
+    """
+    WAN 2.2 Animate: image + driving video → video. Режим replace/animate.
+    Док: https://wavespeed.ai/docs/docs-api/wavespeed-ai/wan-2.2-animate
+    """
+    img = (image_url or "").strip()
+    vid = (video_url or "").strip()
+    if not img or not vid:
+        raise RuntimeError("image and video URLs required")
+    m = (mode or settings.wavespeed_wan_22_animate_mode or "replace").strip().lower()
+    if m not in ("animate", "replace"):
+        raise RuntimeError('WAN 2.2 Animate: mode must be "animate" or "replace"')
+    res = (resolution or settings.wavespeed_wan_22_animate_resolution or "720p").strip()
+    if res not in ("480p", "720p"):
+        res = "720p"
+    path = _wan_22_animate_post_path()
+    url = f"{_wavespeed_base()}{path}"
+    body: dict[str, Any] = {
+        "image": img,
+        "video": vid,
+        "mode": m,
+        "resolution": res,
+        "seed": int(seed if seed is not None else settings.wavespeed_wan_22_animate_seed),
+    }
+    ptxt = (prompt or "").strip()
+    if ptxt:
+        body["prompt"] = ptxt
+    _apply_wavespeed_extra_body(body)
+    log.debug("wavespeed wan 2.2 animate path=%s mode=%s resolution=%s", path, m, res)
+    return await _wavespeed_post_json_and_resolve_video_url(
+        api_key=api_key,
+        full_post_url=url,
+        body=body,
+        timeout_submit=timeout_submit,
+        poll_interval=poll_interval,
+        max_polls=max_polls,
+    )
+
+
 def _studio_video_edit_post_path() -> str:
     p = (settings.wavespeed_studio_video_edit_path or "").strip()
     p = p or "/api/v3/bytedance/seedance-2.0-fast/video-edit-turbo"

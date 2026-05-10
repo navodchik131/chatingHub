@@ -153,7 +153,7 @@ class StudioMotionFirstFrameOut(BaseModel):
 
 
 class StudioMotionVideoOut(BaseModel):
-    """Шаг 2: референс-видео + кадр модели → ByteDance Seedance Fast Video-Edit Turbo."""
+    """Шаг 2: референс-видео + кадр модели → WAN 2.2 Animate (replace / animate)."""
 
     video_url: str | None = None
     message: str | None = None

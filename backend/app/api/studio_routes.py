@@ -64,7 +64,6 @@ from app.services.workspace import (
 from app.services.crypto_secret import decrypt_secret
 from app.services.studio_aspect import (
     aspect_presets_public,
-    aspect_ratio_for_seedance_video_edit,
     normalize_aspect_key,
     wavespeed_size_string,
 )
@@ -115,8 +114,8 @@ from app.services.studio_motion_video import (
 )
 from app.services.wavespeed_client import (
     nano_banana_pro_edit_image_url,
-    seedance_studio_video_edit_video_url,
     seedream_v45_edit_image_url,
+    wan_22_animate_video_url,
     wavespeed_image_upscale_url,
 )
 
@@ -290,33 +289,27 @@ async def api_output_aspects() -> dict:
     return {"aspects": aspect_presets_public()}
 
 
-def _build_seedance_video_edit_prompt(
+def _build_wan_22_animate_prompt(
     *,
     motion_summary: str | None,
     user_extra: str | None,
     negative: str | None,
-) -> str:
-    """Текст для Seedance video-edit: описание движения + пожелания + смена персонажа на reference image."""
-    chunks: list[str] = []
+) -> str | None:
+    """Короткий текст для WAN 2.2 Animate (поле prompt опционально)."""
+    parts: list[str] = []
     ms = (motion_summary or "").strip()
     if ms:
-        chunks.append(
-            "Preserve the motion, rhythm, camera movement, and choreography of the input video. "
-            "What happens in the clip: " + ms
+        parts.append(
+            "Match performance rhythm and expressions from the driving video. Scene/action: " + ms
         )
     ux = (user_extra or "").strip()
     if ux:
-        chunks.append(ux)
-    chunks.append(
-        "Replace the main visible person with the identity from the reference image "
-        "(face, body, skin, hair). Keep scene layout and lighting coherence with the source unless "
-        "contradicted above."
-    )
-    out = " ".join(c for c in chunks if c).strip()
+        parts.append(ux)
     neg = (negative or "").strip()
     if neg:
-        out = (out + " Avoid: " + neg).strip()
-    return out
+        parts.append("Avoid: " + neg)
+    out = " ".join(parts).strip()
+    return out or None
 
 
 def _truthy_wavespeed_flag(raw: str | None) -> bool:
@@ -1899,25 +1892,25 @@ async def api_studio_motion_render_video(
     vid_tok = create_motion_video_access_token(user_id=oid, file_id=mv_id)
     video_pub = f"{pub}/api/studio/public-motion-video?t={quote(vid_tok, safe='')}"
 
-    keep_snd = _truthy_wavespeed_flag(keep_original_sound)
+    _ = _truthy_wavespeed_flag(keep_original_sound)  # WAN 2.2 Animate: поля звука в API нет; чекбокс сохранён в UI
+
     msg: str | None = None
     video_url: str | None = None
     user_extra = (prompt or "").strip()
-    seedance_prompt = _build_seedance_video_edit_prompt(
+    wan_prompt = _build_wan_22_animate_prompt(
         motion_summary=row.motion_video_prompt_auto,
         user_extra=user_extra,
         negative=negative_prompt,
     )
-    aspect_seed = aspect_ratio_for_seedance_video_edit(row.output_aspect)
     try:
-        video_url = await seedance_studio_video_edit_video_url(
+        video_url = await wan_22_animate_video_url(
             api_key=ws_key,
+            image_url=image_pub,
             video_url=video_pub,
-            reference_image_url=image_pub,
-            prompt=seedance_prompt,
-            aspect_ratio=aspect_seed,
-            resolution=settings.wavespeed_studio_video_edit_resolution,
-            keep_original_sound=keep_snd,
+            prompt=wan_prompt,
+            mode=settings.wavespeed_wan_22_animate_mode,
+            resolution=settings.wavespeed_wan_22_animate_resolution,
+            seed=settings.wavespeed_wan_22_animate_seed,
         )
     except RuntimeError as e:
         msg = str(e)
@@ -1932,7 +1925,8 @@ async def api_studio_motion_render_video(
             "generation_id": gid,
             "motion_video_file_id": mv_id,
             "character_orientation": orient,
-            "video_edit": settings.wavespeed_studio_video_edit_path,
+            "wan_22_animate": settings.wavespeed_wan_22_animate_path,
+            "wan_22_animate_mode": settings.wavespeed_wan_22_animate_mode,
             "ok": bool(video_url),
         },
     )

@@ -106,13 +106,22 @@ class Settings(BaseSettings):
     )
     wavespeed_upscale_sync: bool = Field(default=True)
     credit_cost_studio_upscale: int = Field(default=1)
-    # Kling Motion Control — устарело для студии «видео»; см. WAVESPEED_STUDIO_VIDEO_EDIT_PATH
+    # Kling Motion Control (не используется шагом рендера «видео»; только .env для совместимости)
     wavespeed_kling_motion_control_path: str = Field(
         default="/api/v3/kwaivgi/kling-v3.0-pro/motion-control",
     )
     wavespeed_kling_motion_sync: bool = Field(default=True)
     credit_cost_studio_motion_control: int = Field(default=10, ge=0)
-    # Студия «видео»: ByteDance Seedance Fast Video-Edit Turbo (референс-видео + картинка + промпт)
+    # Студия «видео»: WAN 2.2 Animate (replace / animate) — см. WAVESPEED_WAN_22_ANIMATE_*
+    wavespeed_wan_22_animate_path: str = Field(
+        default="/api/v3/wavespeed-ai/wan-2.2/animate",
+    )
+    # replace | animate (док: replace = подмена исполнителя в видео, то же движение/камера)
+    wavespeed_wan_22_animate_mode: str = Field(default="replace")
+    # 480p | 720p
+    wavespeed_wan_22_animate_resolution: str = Field(default="720p")
+    wavespeed_wan_22_animate_seed: int = Field(default=-1)
+    # Опционально: ByteDance Seedance Fast Video-Edit (не используется шагом рендера по умолчанию)
     wavespeed_studio_video_edit_path: str = Field(
         default="/api/v3/bytedance/seedance-2.0-fast/video-edit-turbo",
     )
