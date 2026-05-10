@@ -2551,7 +2551,7 @@ export default function App() {
               className={appSection === 'studio' ? 'section-tab active' : 'section-tab'}
               onClick={() => setAppSection('studio')}
             >
-              Студия
+              Картинки
             </button>
           ) : null}
           {canStudioAny ? (
@@ -4485,8 +4485,8 @@ export default function App() {
           <section className="studio-panel" aria-labelledby="studio-motion-heading">
             <h2 id="studio-motion-heading">Видео по референсу</h2>
             <p className="muted small" style={{ marginBottom: '1rem' }}>
-              Картинки и архив — вкладка «Студия». Здесь: референс-видео → первый кадр по модели → Kling motion
-              control.
+              Статичные картинки и архив — во вкладке «Картинки». Здесь: референс-видео → первый кадр по модели →
+              Kling motion control.
             </p>
             <label className="studio-label">
               Формат кадра
@@ -4522,7 +4522,7 @@ export default function App() {
                 ))}
               </select>
             </label>
-            <div className="studio-mode-row" role="group" aria-label="Тип генерации (как в студии)">
+            <div className="studio-mode-row" role="group" aria-label="Тип генерации (как на вкладке «Картинки»)">
               <span className="studio-mode-label">Тип</span>
               <div className="studio-mode-segment">
                 <button
@@ -4563,7 +4563,7 @@ export default function App() {
               </div>
             ) : null}
             <p className="muted studio-mode-hint" style={{ marginBottom: '1rem' }}>
-              Первый кадр — Nano Banana или редактор из вкладки «Студия» (те же тип и модель). Затем —{' '}
+              Первый кадр — Nano Banana или редактор из вкладки «Картинки» (те же тип и модель). Затем —{' '}
               <a
                 href="https://wavespeed.ai/models/kwaivgi/kling-v3.0-pro/motion-control"
                 target="_blank"
