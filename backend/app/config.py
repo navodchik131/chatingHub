@@ -106,12 +106,18 @@ class Settings(BaseSettings):
     )
     wavespeed_upscale_sync: bool = Field(default=True)
     credit_cost_studio_upscale: int = Field(default=1)
-    # Kling Motion Control: перенос движения с референс-видео на утверждённый кадр модели
+    # Kling Motion Control — устарело для студии «видео»; см. WAVESPEED_STUDIO_VIDEO_EDIT_PATH
     wavespeed_kling_motion_control_path: str = Field(
         default="/api/v3/kwaivgi/kling-v3.0-pro/motion-control",
     )
     wavespeed_kling_motion_sync: bool = Field(default=True)
     credit_cost_studio_motion_control: int = Field(default=10, ge=0)
+    # Студия «видео»: ByteDance Seedance Fast Video-Edit Turbo (референс-видео + картинка + промпт)
+    wavespeed_studio_video_edit_path: str = Field(
+        default="/api/v3/bytedance/seedance-2.0-fast/video-edit-turbo",
+    )
+    # 720p | 1080p (см. доки turbo)
+    wavespeed_studio_video_edit_resolution: str = Field(default="720p")
     # Максимальный размер загружаемого driving video (MP4/WebM/MOV) для студии «видео по референсу»
     studio_motion_max_upload_mb: int = Field(default=64, ge=1, le=200)
     # Имя или абсолютный путь к ffmpeg (в официальном Docker-образе — /usr/bin/ffmpeg)

@@ -577,7 +577,7 @@ async def _wavespeed_post_json_and_resolve_video_url(
             log.warning("wavespeed video submit %s: %s", r.status_code, (r.text or "")[:1200])
             raise RuntimeError(
                 f"WaveSpeed: {detail or f'HTTP {r.status_code}'}. "
-                "Проверьте баланс и параметры motion control."
+                "Проверьте баланс и параметры запроса к WaveSpeed."
             )
         try:
             resp = r.json()
@@ -644,6 +644,63 @@ async def _wavespeed_post_json_and_resolve_video_url(
             if u:
                 return u
     raise RuntimeError("WaveSpeed: timeout waiting for video")
+
+
+def _studio_video_edit_post_path() -> str:
+    p = (settings.wavespeed_studio_video_edit_path or "").strip()
+    p = p or "/api/v3/bytedance/seedance-2.0-fast/video-edit-turbo"
+    return p if p.startswith("/") else f"/{p}"
+
+
+async def seedance_studio_video_edit_video_url(
+    *,
+    api_key: str,
+    video_url: str,
+    reference_image_url: str,
+    prompt: str,
+    aspect_ratio: str | None = None,
+    resolution: str | None = None,
+    keep_original_sound: bool = True,
+    timeout_submit: float = 600.0,
+    poll_interval: float = 3.0,
+    max_polls: int = 120,
+) -> str:
+    """
+    ByteDance Seedance (Fast) Video-Edit Turbo: входное видео + промпт + опционально reference_images.
+    Док: https://wavespeed.ai/docs/docs-api/bytedance/bytedance-seedance-2.0-video-edit-turbo
+    """
+    vid = (video_url or "").strip()
+    img = (reference_image_url or "").strip()
+    ptxt = (prompt or "").strip()
+    if not vid or not img:
+        raise RuntimeError("video and reference image URLs required")
+    if not ptxt:
+        raise RuntimeError("prompt required for video edit")
+    path = _studio_video_edit_post_path()
+    url = f"{_wavespeed_base()}{path}"
+    res = (resolution or settings.wavespeed_studio_video_edit_resolution or "720p").strip()
+    body: dict[str, Any] = {
+        "prompt": ptxt,
+        "video": vid,
+        "reference_images": [img],
+        "resolution": res,
+        "enable_web_search": False,
+        # false = сохранить звуковую дорожку входного видео; true = сгенерировать новое аудио
+        "generate_audio": not bool(keep_original_sound),
+    }
+    ar = (aspect_ratio or "").strip()
+    if ar:
+        body["aspect_ratio"] = ar
+    _apply_wavespeed_extra_body(body)
+    log.debug("wavespeed studio video edit path=%s resolution=%s", path, res)
+    return await _wavespeed_post_json_and_resolve_video_url(
+        api_key=api_key,
+        full_post_url=url,
+        body=body,
+        timeout_submit=timeout_submit,
+        poll_interval=poll_interval,
+        max_polls=max_polls,
+    )
 
 
 def _kling_motion_control_post_path() -> str:

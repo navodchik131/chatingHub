@@ -153,7 +153,7 @@ class StudioMotionFirstFrameOut(BaseModel):
 
 
 class StudioMotionVideoOut(BaseModel):
-    """Шаг 2: утверждённый кадр + тот же driving video → Kling motion control."""
+    """Шаг 2: референс-видео + кадр модели → ByteDance Seedance Fast Video-Edit Turbo."""
 
     video_url: str | None = None
     message: str | None = None

@@ -64,6 +64,7 @@ from app.services.workspace import (
 from app.services.crypto_secret import decrypt_secret
 from app.services.studio_aspect import (
     aspect_presets_public,
+    aspect_ratio_for_seedance_video_edit,
     normalize_aspect_key,
     wavespeed_size_string,
 )
@@ -113,8 +114,8 @@ from app.services.studio_motion_video import (
     save_motion_video_bytes,
 )
 from app.services.wavespeed_client import (
-    kling_motion_control_video_url,
     nano_banana_pro_edit_image_url,
+    seedance_studio_video_edit_video_url,
     seedream_v45_edit_image_url,
     wavespeed_image_upscale_url,
 )
@@ -287,6 +288,35 @@ def _studio_refine_wavespeed_preflight(
 async def api_output_aspects() -> dict:
     """Список пресетов соотношения сторон для студии (UI и WaveSpeed size)."""
     return {"aspects": aspect_presets_public()}
+
+
+def _build_seedance_video_edit_prompt(
+    *,
+    motion_summary: str | None,
+    user_extra: str | None,
+    negative: str | None,
+) -> str:
+    """Текст для Seedance video-edit: описание движения + пожелания + смена персонажа на reference image."""
+    chunks: list[str] = []
+    ms = (motion_summary or "").strip()
+    if ms:
+        chunks.append(
+            "Preserve the motion, rhythm, camera movement, and choreography of the input video. "
+            "What happens in the clip: " + ms
+        )
+    ux = (user_extra or "").strip()
+    if ux:
+        chunks.append(ux)
+    chunks.append(
+        "Replace the main visible person with the identity from the reference image "
+        "(face, body, skin, hair). Keep scene layout and lighting coherence with the source unless "
+        "contradicted above."
+    )
+    out = " ".join(c for c in chunks if c).strip()
+    neg = (negative or "").strip()
+    if neg:
+        out = (out + " Avoid: " + neg).strip()
+    return out
 
 
 def _truthy_wavespeed_flag(raw: str | None) -> bool:
@@ -1772,6 +1802,7 @@ async def api_studio_motion_first_frame(
             output_aspect=aspect_key,
             studio_model_id=mid,
             refined_prompt_full=refined,
+            motion_video_prompt_auto=motion_video_prompt_auto,
         )
         if gen is not None:
             generation_id = gen.id
@@ -1871,17 +1902,21 @@ async def api_studio_motion_render_video(
     keep_snd = _truthy_wavespeed_flag(keep_original_sound)
     msg: str | None = None
     video_url: str | None = None
-    prompt_txt = (prompt or "").strip()
-    if not prompt_txt:
-        prompt_txt = (row.refined_prompt or row.prompt_excerpt or "").strip()
+    user_extra = (prompt or "").strip()
+    seedance_prompt = _build_seedance_video_edit_prompt(
+        motion_summary=row.motion_video_prompt_auto,
+        user_extra=user_extra,
+        negative=negative_prompt,
+    )
+    aspect_seed = aspect_ratio_for_seedance_video_edit(row.output_aspect)
     try:
-        video_url = await kling_motion_control_video_url(
+        video_url = await seedance_studio_video_edit_video_url(
             api_key=ws_key,
-            image_url=image_pub,
             video_url=video_pub,
-            character_orientation=orient,
-            prompt=prompt_txt,
-            negative_prompt=negative_prompt.strip(),
+            reference_image_url=image_pub,
+            prompt=seedance_prompt,
+            aspect_ratio=aspect_seed,
+            resolution=settings.wavespeed_studio_video_edit_resolution,
             keep_original_sound=keep_snd,
         )
     except RuntimeError as e:
@@ -1897,6 +1932,7 @@ async def api_studio_motion_render_video(
             "generation_id": gid,
             "motion_video_file_id": mv_id,
             "character_orientation": orient,
+            "video_edit": settings.wavespeed_studio_video_edit_path,
             "ok": bool(video_url),
         },
     )

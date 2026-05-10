@@ -386,6 +386,8 @@ class StudioGeneration(Base):
     )
     prompt_excerpt: Mapped[str | None] = mapped_column(Text, nullable=True)
     refined_prompt: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Краткое описание референс-видео (vision) для шага Seedance video-edit после перезагрузки клиента
+    motion_video_prompt_auto: Mapped[str | None] = mapped_column(Text, nullable=True)
     source_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)

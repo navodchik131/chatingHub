@@ -115,3 +115,21 @@ def aspect_presets_public() -> list[dict[str, str]]:
         w, h = ASPECT_PRESETS[key]
         out.append({"key": key, "label": labels.get(key, key), "size": f"{w}x{h}"})
     return out
+
+
+# Соотношения, поддерживаемые Seedance Video-Edit API (4:5 в пресетах студии — не в списке)
+_SEEDANCE_VIDEO_EDIT_ASPECTS = frozenset({"16:9", "9:16", "4:3", "3:4", "1:1", "21:9"})
+
+
+def aspect_ratio_for_seedance_video_edit(output_aspect_key: str | None) -> str | None:
+    """Возвращает aspect_ratio для WaveSpeed или None — тогда API подстраивается под входное видео."""
+    if output_aspect_key is None or not str(output_aspect_key).strip():
+        return None
+    raw = str(output_aspect_key).strip()
+    if raw in _SEEDANCE_VIDEO_EDIT_ASPECTS:
+        return raw
+    try:
+        k = normalize_aspect_key(raw)
+    except ValueError:
+        return None
+    return k if k in _SEEDANCE_VIDEO_EDIT_ASPECTS else None

@@ -28,6 +28,7 @@ async def download_and_create_generation(
     output_aspect: str | None,
     studio_model_id: int | None,
     refined_prompt_full: str | None = None,
+    motion_video_prompt_auto: str | None = None,
 ) -> StudioGeneration | None:
     """Скачивает картинку с WaveSpeed/CDN и сохраняет в data/studio_generations/…"""
     url = (source_url or "").strip()
@@ -106,6 +107,7 @@ async def download_and_create_generation(
         studio_model_id=studio_model_id,
         prompt_excerpt=excerpt,
         refined_prompt=full_store,
+        motion_video_prompt_auto=(motion_video_prompt_auto or "").strip() or None,
         source_url=(url[:2000] if url else None),
     )
     session.add(row)

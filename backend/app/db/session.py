@@ -141,6 +141,20 @@ def _migrate_studio_generation_refined_prompt(sync_conn) -> None:
     sync_conn.execute(text("ALTER TABLE studio_generations ADD COLUMN refined_prompt TEXT"))
 
 
+def _migrate_studio_generation_motion_video_prompt(sync_conn) -> None:
+    from sqlalchemy import inspect
+
+    insp = inspect(sync_conn)
+    if not insp.has_table("studio_generations"):
+        return
+    cols = {c["name"] for c in insp.get_columns("studio_generations")}
+    if "motion_video_prompt_auto" in cols:
+        return
+    sync_conn.execute(
+        text("ALTER TABLE studio_generations ADD COLUMN motion_video_prompt_auto TEXT")
+    )
+
+
 def _migrate_studio_model_image_kind(sync_conn) -> None:
     from sqlalchemy import inspect
 
@@ -269,6 +283,7 @@ async def init_db() -> None:
         await conn.run_sync(_migrate_telegram_webhook_registered_column)
         await conn.run_sync(_migrate_user_is_platform_admin)
         await conn.run_sync(_migrate_studio_generation_refined_prompt)
+        await conn.run_sync(_migrate_studio_generation_motion_video_prompt)
         await conn.run_sync(_migrate_studio_model_image_kind)
         await conn.run_sync(_migrate_user_studio_model_export_camera)
         await conn.run_sync(_migrate_studio_model_image_export_selfie)
