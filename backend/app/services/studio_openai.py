@@ -461,6 +461,50 @@ async def describe_reference_image_openai(
     )
 
 
+async def describe_motion_video_frames_openai(
+    *,
+    frames_jpeg: list[bytes],
+    credentials: StudioOpenAiCredentials | None = None,
+) -> str:
+    """
+    Несколько кадров из driving video → краткий English-текст для брифа первого кадра / motion control.
+    Использует ту же vision-модель, что и describe_reference_image_openai.
+    """
+    if not frames_jpeg:
+        raise RuntimeError("no video frames for vision")
+    model = (settings.openai_studio_model_vision or "").strip() or settings.openai_studio_model
+    instruction = (
+        "These frames are sampled in order from a short reference video. The video will drive body motion "
+        "onto a still image of a different person (identity comes from separate reference photos, not from this video). "
+        "In 3-6 short sentences of English, describe: overall movement style, how pose evolves, camera/framing, "
+        "visible clothing/coverage, environment and lighting. "
+        "Do not name real celebrities. No markdown, no bullet list, plain text only."
+    )
+    system = (
+        "You follow instructions precisely. Output only the requested English description, "
+        "no preamble, no markdown."
+    )
+    user_content: list[dict] = [{"type": "text", "text": instruction}]
+    for raw in frames_jpeg[:6]:
+        b64 = base64.standard_b64encode(raw).decode("ascii")
+        user_content.append(
+            {
+                "type": "image_url",
+                "image_url": {"url": f"data:image/jpeg;base64,{b64}"},
+            }
+        )
+    return await _chat_completion_text(
+        model=model,
+        messages=[
+            {"role": "system", "content": system},
+            {"role": "user", "content": user_content},
+        ],
+        max_tokens=1024,
+        temperature=0.35,
+        credentials=credentials,
+    )
+
+
 def _studio_mode_refiner_block(studio_mode: str) -> str:
     m = (studio_mode or "model").strip().lower()
     if m == "photo_edit":

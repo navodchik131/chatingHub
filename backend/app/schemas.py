@@ -140,6 +140,25 @@ class StudioRefinePromptOut(BaseModel):
     generation_id: int | None = None
 
 
+class StudioMotionFirstFrameOut(BaseModel):
+    """Шаг 1: driving video + модель → первый кадр (Nano Banana / WAN) и file_id видео для шага 2."""
+
+    refined_prompt: str
+    reference_scene_description: str | None = None
+    motion_video_prompt_auto: str | None = None
+    generated_image_url: str | None = None
+    wavespeed_message: str | None = None
+    generation_id: int | None = None
+    motion_video_file_id: str
+
+
+class StudioMotionVideoOut(BaseModel):
+    """Шаг 2: утверждённый кадр + тот же driving video → Kling motion control."""
+
+    video_url: str | None = None
+    message: str | None = None
+
+
 class StudioUpscaleGenerationIn(BaseModel):
     """Опционально: целевое разрешение апскейла WaveSpeed Image Upscaler."""
 

@@ -18,6 +18,7 @@ backend/data/*.db
 backend/data/*.db-*
 backend/data/studio_user_models/
 backend/data/studio_pose_refs/
+backend/data/studio_motion_videos/
 
 # Node / фронт
 frontend/node_modules/

@@ -215,6 +215,7 @@ interface HealthInfo {
   /** 0 или отсутствует = без автоудаления (см. бэкенд). */
   studio_generations_retention_days?: number
   studio_generations_retention_interval_hours?: number
+  studio_motion_control_credit_cost?: number
   web_push_configured?: boolean
 }
 
@@ -687,6 +688,22 @@ export default function App() {
   const [studioGenHasMore, setStudioGenHasMore] = useState(false)
   const [studioGenLoadingMore, setStudioGenLoadingMore] = useState(false)
   const [studioArchiveInitialLoading, setStudioArchiveInitialLoading] = useState(false)
+
+  const [motionVideoFile, setMotionVideoFile] = useState<File | null>(null)
+  const [motionDesc, setMotionDesc] = useState('')
+  const [motionAutoPrompt, setMotionAutoPrompt] = useState(true)
+  const [motionLockHairstyle, setMotionLockHairstyle] = useState(true)
+  const [motionOrientation, setMotionOrientation] = useState<'image' | 'video'>('video')
+  const [motionVideoNegPrompt, setMotionVideoNegPrompt] = useState('')
+  const [motionKeepSound, setMotionKeepSound] = useState(true)
+  const [motionBusyFrame, setMotionBusyFrame] = useState(false)
+  const [motionBusyVideo, setMotionBusyVideo] = useState(false)
+  const [motionVideoFileId, setMotionVideoFileId] = useState<string | null>(null)
+  const [motionPreviewUrl, setMotionPreviewUrl] = useState<string | null>(null)
+  const [motionPreviewGenId, setMotionPreviewGenId] = useState<number | null>(null)
+  const [motionResultVideoUrl, setMotionResultVideoUrl] = useState<string | null>(null)
+  const [motionMsg, setMotionMsg] = useState<string | null>(null)
+  const [motionAutoTextPreview, setMotionAutoTextPreview] = useState<string | null>(null)
 
   const studioPromptOnlyDev = useMemo(
     () =>
@@ -1591,6 +1608,117 @@ export default function App() {
       setError(e instanceof TypeError && e.message === 'Failed to fetch' ? 'Сеть: не удалось связаться с сервером (проверьте, что бэкенд запущен и порт / proxy).' : (e instanceof Error ? e.message : 'Неизвестная ошибка запроса'))
     } finally {
       setStudioBusy(false)
+    }
+  }
+
+  const runMotionFirstFrame = async () => {
+    setError(null)
+    if (!motionVideoFile) {
+      setError('Загрузите референс-видео (движение).')
+      return
+    }
+    if (studioSelectedModelId == null) {
+      setError('Выберите модель с фотографиями.')
+      return
+    }
+    if (!motionAutoPrompt && !motionDesc.trim()) {
+      setError('Введите описание или включите авто-промпт по видео.')
+      return
+    }
+    setMotionBusyFrame(true)
+    setMotionMsg(null)
+    setMotionResultVideoUrl(null)
+    setMotionAutoTextPreview(null)
+    setMotionPreviewUrl(null)
+    setMotionPreviewGenId(null)
+    setMotionVideoFileId(null)
+    try {
+      const fd = new FormData()
+      fd.append('video', motionVideoFile)
+      fd.append('model_id', String(studioSelectedModelId))
+      fd.append('description', motionDesc.trim())
+      fd.append('output_aspect', studioOutputAspect)
+      fd.append('wan_edit_tier', studioWanEditTier)
+      fd.append('studio_wave_profile', studioWaveProfile)
+      fd.append('auto_motion_prompt', motionAutoPrompt ? '1' : '0')
+      fd.append('lock_model_hairstyle', motionLockHairstyle ? '1' : '0')
+      const r = await apiFetch('/api/studio/motion/first-frame', { method: 'POST', body: fd })
+      const data = (await r.json().catch(() => ({}))) as {
+        refined_prompt?: string
+        motion_video_prompt_auto?: string | null
+        generated_image_url?: string | null
+        wavespeed_message?: string | null
+        generation_id?: number | null
+        motion_video_file_id?: string
+        detail?: unknown
+      }
+      if (!r.ok) {
+        setError(formatApiErrorDetail(data) || r.statusText)
+        return
+      }
+      setMotionVideoFileId(data.motion_video_file_id ?? null)
+      setMotionPreviewUrl(data.generated_image_url?.trim() || null)
+      setMotionPreviewGenId(typeof data.generation_id === 'number' ? data.generation_id : null)
+      setMotionMsg(data.wavespeed_message?.trim() || null)
+      setMotionAutoTextPreview(
+        typeof data.motion_video_prompt_auto === 'string'
+          ? data.motion_video_prompt_auto.trim() || null
+          : null,
+      )
+      void refreshMe()
+      void loadStudioGenerationsReset()
+    } catch (e) {
+      setError(
+        e instanceof TypeError && e.message === 'Failed to fetch'
+          ? 'Сеть: не удалось связаться с сервером.'
+          : e instanceof Error
+            ? e.message
+            : 'Ошибка запроса',
+      )
+    } finally {
+      setMotionBusyFrame(false)
+    }
+  }
+
+  const runMotionRenderVideo = async () => {
+    setError(null)
+    if (motionPreviewGenId == null || !motionVideoFileId) {
+      setError('Сначала сгенерируйте и утвердите кадр (шаг 1).')
+      return
+    }
+    setMotionBusyVideo(true)
+    setMotionResultVideoUrl(null)
+    try {
+      const fd = new FormData()
+      fd.append('generation_id', String(motionPreviewGenId))
+      fd.append('motion_video_file_id', motionVideoFileId)
+      fd.append('character_orientation', motionOrientation)
+      fd.append('prompt', motionDesc.trim())
+      fd.append('negative_prompt', motionVideoNegPrompt.trim())
+      fd.append('keep_original_sound', motionKeepSound ? '1' : '0')
+      const r = await apiFetch('/api/studio/motion/render-video', { method: 'POST', body: fd })
+      const data = (await r.json().catch(() => ({}))) as {
+        video_url?: string | null
+        message?: string | null
+        detail?: unknown
+      }
+      if (!r.ok) {
+        setError(formatApiErrorDetail(data) || r.statusText)
+        return
+      }
+      setMotionResultVideoUrl(data.video_url?.trim() || null)
+      setMotionMsg(data.message?.trim() || null)
+      void refreshMe()
+    } catch (e) {
+      setError(
+        e instanceof TypeError && e.message === 'Failed to fetch'
+          ? 'Сеть: не удалось связаться с сервером.'
+          : e instanceof Error
+            ? e.message
+            : 'Ошибка запроса',
+      )
+    } finally {
+      setMotionBusyVideo(false)
     }
   }
 
@@ -4282,6 +4410,176 @@ export default function App() {
             </>
           )}
         </section>
+        {canStudioGenerate && !studioPaywalled ? (
+          <section className="studio-panel" aria-labelledby="studio-motion-heading">
+            <h2 id="studio-motion-heading">Видео по референсу</h2>
+            <p className="muted studio-mode-hint" style={{ marginBottom: '1rem' }}>
+              Референс-видео задаёт движение; первый кадр строится по вашей модели (Nano Banana / редактор, как в
+              блоке выше). После проверки кадра запускается Kling Motion Control (
+              <a
+                href="https://wavespeed.ai/models/kwaivgi/kling-v3.0-pro/motion-control"
+                target="_blank"
+                rel="noreferrer"
+              >
+                документация WaveSpeed
+              </a>
+              ). На сервере должны быть <span className="mono">ffmpeg</span> и{' '}
+              <span className="mono">PUBLIC_APP_URL</span> по HTTPS.
+            </p>
+            <div className="studio-grid studio-grid--simple">
+              <label className="studio-label">
+                Референс-видео (движение)
+                <input
+                  type="file"
+                  accept="video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0] ?? null
+                    setMotionVideoFile(f)
+                    setMotionVideoFileId(null)
+                    setMotionPreviewUrl(null)
+                    setMotionPreviewGenId(null)
+                    setMotionResultVideoUrl(null)
+                  }}
+                />
+                {motionVideoFile ? <span className="studio-file-name">{motionVideoFile.name}</span> : null}
+              </label>
+              <p className="muted small">
+                Ориентация персонажа: «как на кадре» — до ~10 с ролика; «как на видео» — до ~30 с (см. правила
+                модели на стороне WaveSpeed).
+              </p>
+              <div className="studio-mode-row" role="group" aria-label="Ориентация motion control">
+                <span className="studio-mode-label">Ось</span>
+                <div className="studio-mode-segment">
+                  <button
+                    type="button"
+                    className={`studio-mode-btn${motionOrientation === 'image' ? ' is-active' : ''}`}
+                    onClick={() => setMotionOrientation('image')}
+                  >
+                    Как кадр (до ~10 c)
+                  </button>
+                  <button
+                    type="button"
+                    className={`studio-mode-btn${motionOrientation === 'video' ? ' is-active' : ''}`}
+                    onClick={() => setMotionOrientation('video')}
+                  >
+                    Как видео (до ~30 c)
+                  </button>
+                </div>
+              </div>
+              <label className="studio-label studio-check">
+                <input
+                  type="checkbox"
+                  checked={motionAutoPrompt}
+                  onChange={(e) => setMotionAutoPrompt(e.target.checked)}
+                />
+                <span>
+                  Авто-промпт по видео (vision-модель с сервера: несколько кадров → краткое описание движения).
+                </span>
+              </label>
+              <label className="studio-label studio-check">
+                <input
+                  type="checkbox"
+                  checked={motionLockHairstyle}
+                  onChange={(e) => setMotionLockHairstyle(e.target.checked)}
+                />
+                <span>Причёска с профиля модели (как в студии для референса-позы).</span>
+              </label>
+              <label className="studio-label">
+                Описание первого кадра (по желанию)
+                <textarea
+                  rows={3}
+                  placeholder="Свет, одежда, настроение — дополняет авто-описание и профиль модели"
+                  value={motionDesc}
+                  onChange={(e) => setMotionDesc(e.target.value)}
+                />
+              </label>
+              <label className="studio-label">
+                Негативный промпт для видео (опционально)
+                <textarea
+                  rows={2}
+                  placeholder="Чего избегать в выводе motion control"
+                  value={motionVideoNegPrompt}
+                  onChange={(e) => setMotionVideoNegPrompt(e.target.value)}
+                />
+              </label>
+              <label className="studio-label studio-check">
+                <input
+                  type="checkbox"
+                  checked={motionKeepSound}
+                  onChange={(e) => setMotionKeepSound(e.target.checked)}
+                />
+                <span>Сохранить звук из референс-видео (если поддерживает API).</span>
+              </label>
+              <div className="studio-actions">
+                <button
+                  type="button"
+                  className="send-btn"
+                  disabled={
+                    motionBusyFrame ||
+                    !health?.openai_studio_configured ||
+                    !integ?.wavespeed_configured ||
+                    studioSelectedModelId == null ||
+                    !motionVideoFile
+                  }
+                  onClick={() => void runMotionFirstFrame()}
+                >
+                  {motionBusyFrame ? 'Шаг 1…' : 'Сгенерировать кадр'}
+                </button>
+                {health?.studio_prompt_credit_cost != null ? (
+                  <span className="studio-credit-hint">{health.studio_prompt_credit_cost} кр.</span>
+                ) : null}
+              </div>
+              {motionAutoTextPreview ? (
+                <label className="studio-label">
+                  Авто-описание по видео (кратко)
+                  <textarea className="mono" rows={4} readOnly spellCheck={false} value={motionAutoTextPreview} />
+                </label>
+              ) : null}
+              {motionPreviewUrl ? (
+                <div className="studio-generated">
+                  <h3 className="studio-generated-title">Кадр для утверждения</h3>
+                  <div className="studio-generated-frame">
+                    <img src={motionPreviewUrl} alt="" className="studio-gen-img" />
+                  </div>
+                  <div className="studio-actions" style={{ marginTop: '0.75rem' }}>
+                    <button
+                      type="button"
+                      className="send-btn"
+                      disabled={
+                        motionBusyVideo ||
+                        !integ?.wavespeed_configured ||
+                        motionPreviewGenId == null ||
+                        !motionVideoFileId
+                      }
+                      onClick={() => void runMotionRenderVideo()}
+                    >
+                      {motionBusyVideo ? 'Видео…' : 'Создать видео'}
+                    </button>
+                    {health?.studio_motion_control_credit_cost != null ? (
+                      <span className="studio-credit-hint">{health.studio_motion_control_credit_cost} кр.</span>
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
+              {motionResultVideoUrl ? (
+                <div className="studio-generated">
+                  <h3 className="studio-generated-title">Результат (видео)</h3>
+                  <video
+                    src={motionResultVideoUrl}
+                    controls
+                    playsInline
+                    className="studio-gen-img"
+                    style={{ width: '100%', maxHeight: '520px' }}
+                  />
+                  <p className="muted small">
+                    Ссылка выдана провайдером; при необходимости сохраните файл локально.
+                  </p>
+                </div>
+              ) : null}
+              {motionMsg ? <div className="banner info studio-status-msg">{motionMsg}</div> : null}
+            </div>
+          </section>
+        ) : null}
         {canStudioGenerate ? (
           <section className="studio-panel studio-archive-section" aria-labelledby="studio-archive-heading">
             <h2 id="studio-archive-heading">Сохранённые</h2>

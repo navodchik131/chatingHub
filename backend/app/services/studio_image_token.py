@@ -83,6 +83,38 @@ def decode_pose_reference_access_token(token: str) -> tuple[int, str]:
     return int(uid), str(fid)
 
 
+def create_motion_video_access_token(
+    *, user_id: int, file_id: str, minutes: int = 90
+) -> str:
+    """JWT для driving video: WaveSpeed качает по публичному HTTPS."""
+    expire = datetime.now(timezone.utc) + timedelta(minutes=minutes)
+    payload = {
+        "typ": "studio_motion_vid",
+        "uid": user_id,
+        "fid": str(file_id)[:80],
+        "exp": expire,
+    }
+    return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
+
+
+def decode_motion_video_access_token(token: str) -> tuple[int, str]:
+    try:
+        data = jwt.decode(
+            token,
+            settings.jwt_secret,
+            algorithms=[settings.jwt_algorithm],
+        )
+    except JWTError as e:
+        raise ValueError("invalid token") from e
+    if data.get("typ") != "studio_motion_vid":
+        raise ValueError("wrong token type")
+    uid = data.get("uid")
+    fid = data.get("fid")
+    if uid is None or fid is None:
+        raise ValueError("missing claims")
+    return int(uid), str(fid)
+
+
 def decode_model_image_access_token(token: str) -> tuple[int, int]:
     try:
         data = jwt.decode(

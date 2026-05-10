@@ -106,6 +106,14 @@ class Settings(BaseSettings):
     )
     wavespeed_upscale_sync: bool = Field(default=True)
     credit_cost_studio_upscale: int = Field(default=1)
+    # Kling Motion Control: перенос движения с референс-видео на утверждённый кадр модели
+    wavespeed_kling_motion_control_path: str = Field(
+        default="/api/v3/kwaivgi/kling-v3.0-pro/motion-control",
+    )
+    wavespeed_kling_motion_sync: bool = Field(default=True)
+    credit_cost_studio_motion_control: int = Field(default=10, ge=0)
+    # Максимальный размер загружаемого driving video (MP4/WebM/MOV) для студии «видео по референсу»
+    studio_motion_max_upload_mb: int = Field(default=64, ge=1, le=200)
     # Режим «Обычные фотографии»: та же учётка WaveSpeed, что и WAN — см. модель
     # https://wavespeed.ai/models/google/nano-banana-pro/edit и API /api/v3/google/nano-banana-pro/edit
     wavespeed_nano_banana_pro_edit_path: str = Field(

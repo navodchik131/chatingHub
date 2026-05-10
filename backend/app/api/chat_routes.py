@@ -96,6 +96,7 @@ async def api_health(session: AsyncSession = Depends(get_session)) -> dict:
         "studio_carousel_credit_cost": settings.credit_cost_studio_carousel_shot,
         "studio_generations_retention_days": settings.studio_generations_retention_days,
         "studio_generations_retention_interval_hours": settings.studio_generations_retention_interval_hours,
+        "studio_motion_control_credit_cost": settings.credit_cost_studio_motion_control,
         "web_push_configured": settings.web_push_configured,
     }
 

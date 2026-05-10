@@ -505,3 +505,202 @@ async def nano_banana_pro_edit_image_url(
         poll_interval=poll_interval,
         max_polls=max_polls,
     )
+
+
+def _looks_like_video_asset_url(u: str) -> bool:
+    s = (u or "").strip().lower().split("?")[0]
+    return s.endswith((".mp4", ".webm", ".mov", ".m4v"))
+
+
+def _video_url_from_prediction(d: dict[str, Any]) -> str | None:
+    for key in ("outputs", "output", "video_url"):
+        v = d.get(key)
+        if v is None:
+            continue
+        u = _first_output_url(v)
+        if u and u.startswith("http") and not _is_wavespeed_task_json_url(u):
+            if _looks_like_video_asset_url(u):
+                return u
+            low = u.lower()
+            if ".mp4" in low or "/video" in low or ".webm" in low:
+                return u
+    u2 = _first_output_url(d.get("outputs"))
+    if u2 and u2.startswith("http") and not _is_wavespeed_task_json_url(u2):
+        low = u2.lower()
+        if ".mp4" in low or ".webm" in low or "/video" in low:
+            return u2
+    return None
+
+
+async def _wavespeed_post_json_and_resolve_video_url(
+    *,
+    api_key: str,
+    full_post_url: str,
+    body: dict[str, Any],
+    timeout_submit: float = 600.0,
+    poll_interval: float = 3.0,
+    max_polls: int = 120,
+) -> str:
+    headers = {
+        "Authorization": f"Bearer {api_key.strip()}",
+        "Content-Type": "application/json",
+    }
+    base = _wavespeed_base()
+    async with httpx.AsyncClient(timeout=timeout_submit) as client:
+        r = None
+        for attempt in range(3):
+            r = await client.post(full_post_url, headers=headers, json=body)
+            if r.status_code < 500:
+                break
+            log.warning(
+                "wavespeed video submit %s (attempt %s), retry: %s",
+                r.status_code,
+                attempt + 1,
+                (r.text or "")[:500],
+            )
+            await asyncio.sleep(2.0 * (attempt + 1))
+        if r is None:
+            raise RuntimeError("WaveSpeed: пустой ответ")
+        if r.status_code >= 400:
+            detail = (r.text or "")[:2000]
+            try:
+                ej = r.json()
+                if isinstance(ej, dict):
+                    detail = str(
+                        ej.get("message")
+                        or (ej.get("data") or {}).get("error")
+                        or ej.get("error")
+                        or detail
+                    )
+            except Exception:
+                pass
+            log.warning("wavespeed video submit %s: %s", r.status_code, (r.text or "")[:1200])
+            raise RuntimeError(
+                f"WaveSpeed: {detail or f'HTTP {r.status_code}'}. "
+                "Проверьте баланс и параметры motion control."
+            )
+        try:
+            resp = r.json()
+        except Exception as e:
+            log.warning("wavespeed video submit: не JSON %s", (r.text or "")[:800])
+            raise RuntimeError("WaveSpeed: невалидный JSON в ответе") from e
+        if not isinstance(resp, dict):
+            raise RuntimeError("WaveSpeed: неожиданный формат ответа")
+        env_err = _wavespeed_envelope_error(resp)
+        if env_err:
+            log.warning("wavespeed video submit envelope: %s", env_err)
+            raise RuntimeError(f"WaveSpeed: {env_err}")
+        d = _unwrap_data(resp)
+        u0 = _video_url_from_prediction(d)
+        if u0:
+            return u0
+        task_id = _task_id_from_prediction(d)
+        status = (d.get("status") or "").lower()
+        if status == "failed":
+            raise RuntimeError(str(d.get("error") or "WaveSpeed task failed"))
+        if status == "completed":
+            raise RuntimeError(
+                str(
+                    d.get("error")
+                    or "WaveSpeed: статус completed, но нет ссылки на видео"
+                )
+            )
+        if not task_id:
+            raise RuntimeError(
+                str(d.get("error") or "WaveSpeed: нет task id и outputs для видео")
+            )
+        result_url = f"{base}/api/v3/predictions/{task_id}/result"
+        for _ in range(max_polls):
+            await asyncio.sleep(poll_interval)
+            pr = await client.get(result_url, headers={"Authorization": headers["Authorization"]})
+            if pr.status_code >= 400:
+                log.warning("wavespeed video poll %s: %s", pr.status_code, (pr.text or "")[:800])
+                continue
+            try:
+                raw_poll = pr.json()
+            except Exception:
+                continue
+            if not isinstance(raw_poll, dict):
+                continue
+            penv = _wavespeed_envelope_error(raw_poll)
+            if penv:
+                log.warning("wavespeed video poll envelope: %s", penv)
+                raise RuntimeError(f"WaveSpeed: {penv}")
+            pd = _unwrap_data(raw_poll)
+            st = (pd.get("status") or "").lower()
+            if st == "failed":
+                raise RuntimeError(str(pd.get("error") or "WaveSpeed task failed"))
+            if st == "completed":
+                u = _video_url_from_prediction(pd)
+                if u:
+                    return u
+                raise RuntimeError(
+                    str(
+                        pd.get("error")
+                        or "WaveSpeed: задача completed, но нет URL видео"
+                    )
+                )
+            u = _video_url_from_prediction(pd)
+            if u:
+                return u
+    raise RuntimeError("WaveSpeed: timeout waiting for video")
+
+
+def _kling_motion_control_post_path() -> str:
+    p = (settings.wavespeed_kling_motion_control_path or "").strip()
+    p = p or "/api/v3/kwaivgi/kling-v3.0-pro/motion-control"
+    return p if p.startswith("/") else f"/{p}"
+
+
+async def kling_motion_control_video_url(
+    *,
+    api_key: str,
+    image_url: str,
+    video_url: str,
+    character_orientation: str,
+    prompt: str = "",
+    negative_prompt: str = "",
+    keep_original_sound: bool = True,
+    timeout_submit: float = 600.0,
+    poll_interval: float = 3.0,
+    max_polls: int = 120,
+) -> str:
+    """Kling V3 Pro Motion Control: character image + driving video → output video URL."""
+    img = (image_url or "").strip()
+    vid = (video_url or "").strip()
+    if not img or not vid:
+        raise RuntimeError("image and video URLs required")
+    orient = (character_orientation or "video").strip().lower()
+    if orient not in ("image", "video"):
+        raise RuntimeError("character_orientation must be image or video")
+    path = _kling_motion_control_post_path()
+    url = f"{_wavespeed_base()}{path}"
+    body: dict[str, Any] = {
+        "image": img,
+        "video": vid,
+        "character_orientation": orient,
+        "keep_original_sound": bool(keep_original_sound),
+        "enable_sync_mode": bool(settings.wavespeed_kling_motion_sync),
+        "enable_base64_output": False,
+    }
+    ptxt = (prompt or "").strip()
+    if ptxt:
+        body["prompt"] = ptxt
+    ntxt = (negative_prompt or "").strip()
+    if ntxt:
+        body["negative_prompt"] = ntxt
+    _apply_wavespeed_extra_body(body)
+    log.debug(
+        "wavespeed kling motion path=%s orient=%s sync=%s",
+        path,
+        orient,
+        settings.wavespeed_kling_motion_sync,
+    )
+    return await _wavespeed_post_json_and_resolve_video_url(
+        api_key=api_key,
+        full_post_url=url,
+        body=body,
+        timeout_submit=timeout_submit,
+        poll_interval=poll_interval,
+        max_polls=        max_polls,
+    )
