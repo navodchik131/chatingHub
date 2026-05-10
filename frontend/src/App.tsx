@@ -1615,15 +1615,15 @@ export default function App() {
   const runMotionFirstFrame = async () => {
     setError(null)
     if (!motionVideoFile) {
-      setError('Загрузите референс-видео (движение).')
+      setError('Загрузите видео.')
       return
     }
     if (studioSelectedModelId == null) {
-      setError('Выберите модель с фотографиями.')
+      setError('Выберите модель.')
       return
     }
     if (!motionAutoPrompt && !motionDesc.trim()) {
-      setError('Введите описание или включите авто-промпт по видео.')
+      setError('Добавьте описание или включите «Уточнить движение по ролику».')
       return
     }
     setMotionBusyFrame(true)
@@ -1639,8 +1639,8 @@ export default function App() {
       fd.append('model_id', String(studioSelectedModelId))
       fd.append('description', motionDesc.trim())
       fd.append('output_aspect', studioOutputAspect)
-      fd.append('wan_edit_tier', studioWanEditTier)
-      fd.append('studio_wave_profile', studioWaveProfile)
+      fd.append('wan_edit_tier', 'standard')
+      fd.append('studio_wave_profile', 'regular')
       fd.append('auto_motion_prompt', motionAutoPrompt ? '1' : '0')
       fd.append('lock_model_hairstyle', motionLockHairstyle ? '1' : '0')
       const r = await apiFetch('/api/studio/motion/first-frame', { method: 'POST', body: fd })
@@ -1684,7 +1684,7 @@ export default function App() {
   const runMotionRenderVideo = async () => {
     setError(null)
     if (motionPreviewGenId == null || !motionVideoFileId) {
-      setError('Сначала сгенерируйте и утвердите кадр (шаг 1).')
+      setError('Сначала создайте кадр.')
       return
     }
     setMotionBusyVideo(true)
@@ -4482,158 +4482,97 @@ export default function App() {
 
       {hasAnyMainSection && appSection === 'studio_video' && canStudioAny && (
         <>
-          <section className="studio-panel" aria-labelledby="studio-motion-heading">
-            <h2 id="studio-motion-heading">Видео по референсу</h2>
-            <p className="muted small" style={{ marginBottom: '1rem' }}>
-              Статичные картинки и архив — во вкладке «Картинки». Здесь: референс-видео → первый кадр по модели →
-              Kling motion control.
-            </p>
-            <label className="studio-label">
-              Формат кадра
-              <select
-                value={studioOutputAspect}
-                onChange={(e) => setStudioOutputAspect(e.target.value)}
-              >
-                {studioAspectPresets.length > 0 ? (
-                  studioAspectPresets.map((p) => (
-                    <option key={p.key} value={p.key}>
-                      {p.label} ({p.size} px)
-                    </option>
-                  ))
-                ) : (
-                  <option value="9:16">9:16 (1080×1920)</option>
-                )}
-              </select>
-            </label>
-            <label className="studio-label">
-              Модель
-              <select
-                value={studioSelectedModelId ?? ''}
-                onChange={(e) => {
-                  const v = e.target.value
-                  setStudioSelectedModelId(v === '' ? null : Number(v))
-                }}
-              >
-                <option value="">— выберите модель —</option>
-                {studioModels.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <div className="studio-mode-row" role="group" aria-label="Тип генерации (как на вкладке «Картинки»)">
-              <span className="studio-mode-label">Тип</span>
-              <div className="studio-mode-segment">
-                <button
-                  type="button"
-                  className={`studio-mode-btn${studioWaveProfile === 'regular' ? ' is-active' : ''}`}
-                  onClick={() => setStudioWaveProfile('regular')}
-                >
-                  Обычные фотографии
-                </button>
-                <button
-                  type="button"
-                  className={`studio-mode-btn${studioWaveProfile === 'nsfw' ? ' is-active' : ''}`}
-                  onClick={() => setStudioWaveProfile('nsfw')}
-                >
-                  NSFW
-                </button>
-              </div>
-            </div>
-            {health?.studio_wan_edit_tier_switch && studioWaveProfile === 'nsfw' ? (
-              <div className="studio-mode-row" role="group" aria-label="WAN 2.7 для первого кадра">
-                <span className="studio-mode-label">WAN 2.7</span>
-                <div className="studio-mode-segment">
-                  <button
-                    type="button"
-                    className={`studio-mode-btn${studioWanEditTier === 'standard' ? ' is-active' : ''}`}
-                    onClick={() => setStudioWanEditTier('standard')}
-                  >
-                    Обычный
-                  </button>
-                  <button
-                    type="button"
-                    className={`studio-mode-btn${studioWanEditTier === 'pro' ? ' is-active' : ''}`}
-                    onClick={() => setStudioWanEditTier('pro')}
-                  >
-                    Pro
-                  </button>
-                </div>
-              </div>
-            ) : null}
-            <p className="muted studio-mode-hint" style={{ marginBottom: '1rem' }}>
-              Первый кадр — Nano Banana или редактор из вкладки «Картинки» (те же тип и модель). Затем —{' '}
-              <a
-                href="https://wavespeed.ai/models/kwaivgi/kling-v3.0-pro/motion-control"
-                target="_blank"
-                rel="noreferrer"
-              >
-                Kling Motion Control
-              </a>
-              . На сервере: <span className="mono">ffmpeg</span> в контейнере и{' '}
-              <span className="mono">PUBLIC_APP_URL</span> по HTTPS.
-            </p>
+          <section className="studio-panel studio-video-page" aria-labelledby="studio-motion-heading">
+            <h2 id="studio-motion-heading">Видео</h2>
             {!canStudioGenerate ? (
               <div className="banner info" role="status">
-                Генерация недоступна по правам. Попросите владельца выдать право «Студия: генерация» или откройте
-                аккаунт владельца.
+                Нет прав на генерацию. Обратитесь к владельцу аккаунта.
               </div>
             ) : studioPaywalled ? (
               <div className="banner info" role="status">
-                Видео по референсу доступны с активной подпиской и балансом. Оформите тариф в кабинете → «Тариф и
-                баланс».
+                Оформите подписку в кабинете → «Тариф и баланс».
               </div>
             ) : (
-              <div className="studio-grid studio-grid--simple">
-                <label className="studio-label">
-                  Референс-видео (движение)
-                  <input
-                    type="file"
-                    accept="video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov"
-                    onChange={(e) => {
-                      const f = e.target.files?.[0] ?? null
-                      setMotionVideoFile(f)
-                      setMotionVideoFileId(null)
-                      setMotionPreviewUrl(null)
-                      setMotionPreviewGenId(null)
-                      setMotionResultVideoUrl(null)
-                    }}
-                  />
-                  {motionVideoFile ? <span className="studio-file-name">{motionVideoFile.name}</span> : null}
-                </label>
-                <p className="muted small">
-                  Ориентация персонажа: «как на кадре» — до ~10 с ролика; «как на видео» — до ~30 с (правила
-                  провайдера).
-                </p>
-                <div className="studio-mode-row" role="group" aria-label="Ориентация motion control">
-                  <span className="studio-mode-label">Ось</span>
-                  <div className="studio-mode-segment">
-                    <button
-                      type="button"
-                      className={`studio-mode-btn${motionOrientation === 'image' ? ' is-active' : ''}`}
-                      onClick={() => setMotionOrientation('image')}
+              <>
+                <div className="studio-video-top">
+                  <label className="studio-label">
+                    Формат
+                    <select
+                      value={studioOutputAspect}
+                      onChange={(e) => setStudioOutputAspect(e.target.value)}
                     >
-                      Как кадр (до ~10 c)
-                    </button>
-                    <button
-                      type="button"
-                      className={`studio-mode-btn${motionOrientation === 'video' ? ' is-active' : ''}`}
-                      onClick={() => setMotionOrientation('video')}
+                      {studioAspectPresets.length > 0 ? (
+                        studioAspectPresets.map((p) => (
+                          <option key={p.key} value={p.key}>
+                            {p.label} ({p.size} px)
+                          </option>
+                        ))
+                      ) : (
+                        <option value="9:16">9:16 (1080×1920)</option>
+                      )}
+                    </select>
+                  </label>
+                  <label className="studio-label">
+                    Модель
+                    <select
+                      value={studioSelectedModelId ?? ''}
+                      onChange={(e) => {
+                        const v = e.target.value
+                        setStudioSelectedModelId(v === '' ? null : Number(v))
+                      }}
                     >
-                      Как видео (до ~30 c)
-                    </button>
-                  </div>
+                      <option value="">Выберите модель</option>
+                      {studioModels.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
                 </div>
+                <div className="studio-grid studio-grid--simple studio-video-panel">
+                  <label className="studio-label">
+                    Видео
+                    <input
+                      type="file"
+                      accept="video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0] ?? null
+                        setMotionVideoFile(f)
+                        setMotionVideoFileId(null)
+                        setMotionPreviewUrl(null)
+                        setMotionPreviewGenId(null)
+                        setMotionResultVideoUrl(null)
+                      }}
+                    />
+                    {motionVideoFile ? <span className="studio-file-name">{motionVideoFile.name}</span> : null}
+                  </label>
+                  <div className="studio-mode-row" role="group" aria-label="Персонаж">
+                    <span className="studio-mode-label">Персонаж</span>
+                    <div className="studio-mode-segment">
+                      <button
+                        type="button"
+                        className={`studio-mode-btn${motionOrientation === 'image' ? ' is-active' : ''}`}
+                        onClick={() => setMotionOrientation('image')}
+                      >
+                        Как на фото
+                      </button>
+                      <button
+                        type="button"
+                        className={`studio-mode-btn${motionOrientation === 'video' ? ' is-active' : ''}`}
+                        onClick={() => setMotionOrientation('video')}
+                      >
+                        Как в ролике
+                      </button>
+                    </div>
+                  </div>
                 <label className="studio-label studio-check">
                   <input
                     type="checkbox"
                     checked={motionAutoPrompt}
                     onChange={(e) => setMotionAutoPrompt(e.target.checked)}
                   />
-                  <span>
-                    Авто-промпт по видео (vision-модель: несколько кадров → описание движения).
-                  </span>
+                  <span>Уточнить движение по ролику</span>
                 </label>
                 <label className="studio-label studio-check">
                   <input
@@ -4641,22 +4580,22 @@ export default function App() {
                     checked={motionLockHairstyle}
                     onChange={(e) => setMotionLockHairstyle(e.target.checked)}
                   />
-                  <span>Причёска с профиля модели.</span>
+                  <span>Причёска как у модели</span>
                 </label>
                 <label className="studio-label">
-                  Описание первого кадра (по желанию)
+                  Пожелания к кадру
                   <textarea
                     rows={3}
-                    placeholder="Свет, одежда, настроение"
+                    placeholder="По желанию"
                     value={motionDesc}
                     onChange={(e) => setMotionDesc(e.target.value)}
                   />
                 </label>
                 <label className="studio-label">
-                  Негативный промпт для видео (опционально)
+                  Чего избегать
                   <textarea
                     rows={2}
-                    placeholder="Чего избегать в выводе"
+                    placeholder="По желанию"
                     value={motionVideoNegPrompt}
                     onChange={(e) => setMotionVideoNegPrompt(e.target.value)}
                   />
@@ -4667,9 +4606,9 @@ export default function App() {
                     checked={motionKeepSound}
                     onChange={(e) => setMotionKeepSound(e.target.checked)}
                   />
-                  <span>Сохранить звук из референс-видео (если поддерживает API).</span>
+                  <span>Оставить звук из видео</span>
                 </label>
-                <div className="studio-actions">
+                <div className="studio-actions studio-actions--spaced">
                   <button
                     type="button"
                     className="send-btn"
@@ -4682,25 +4621,25 @@ export default function App() {
                     }
                     onClick={() => void runMotionFirstFrame()}
                   >
-                    {motionBusyFrame ? 'Шаг 1…' : 'Сгенерировать кадр'}
+                    {motionBusyFrame ? 'Готовим кадр…' : 'Создать кадр'}
                   </button>
                   {health?.studio_prompt_credit_cost != null ? (
                     <span className="studio-credit-hint">{health.studio_prompt_credit_cost} кр.</span>
                   ) : null}
                 </div>
                 {motionAutoTextPreview ? (
-                  <label className="studio-label">
-                    Авто-описание по видео
-                    <textarea className="mono" rows={4} readOnly spellCheck={false} value={motionAutoTextPreview} />
-                  </label>
+                  <div className="studio-video-auto-block">
+                    <span className="studio-video-auto-label">Подсказка по ролику</span>
+                    <div className="studio-motion-auto-preview">{motionAutoTextPreview}</div>
+                  </div>
                 ) : null}
                 {motionPreviewUrl ? (
-                  <div className="studio-generated">
-                    <h3 className="studio-generated-title">Кадр для утверждения</h3>
+                  <div className="studio-generated studio-video-result">
+                    <h3 className="studio-generated-title">Кадр</h3>
                     <div className="studio-generated-frame">
                       <img src={motionPreviewUrl} alt="" className="studio-gen-img" />
                     </div>
-                    <div className="studio-actions" style={{ marginTop: '0.75rem' }}>
+                    <div className="studio-actions studio-actions--spaced">
                       <button
                         type="button"
                         className="send-btn"
@@ -4712,31 +4651,30 @@ export default function App() {
                         }
                         onClick={() => void runMotionRenderVideo()}
                       >
-                        {motionBusyVideo ? 'Видео…' : 'Создать видео'}
+                        {motionBusyVideo ? 'Готовим видео…' : 'Сделать видео'}
                       </button>
                       {health?.studio_motion_control_credit_cost != null ? (
-                        <span className="studio-credit-hint">{health.studio_motion_control_credit_cost} кр.</span>
+                        <span className="studio-credit-hint">
+                          {health.studio_motion_control_credit_cost} кр.
+                        </span>
                       ) : null}
                     </div>
                   </div>
                 ) : null}
                 {motionResultVideoUrl ? (
-                  <div className="studio-generated">
-                    <h3 className="studio-generated-title">Результат (видео)</h3>
+                  <div className="studio-generated studio-video-result">
+                    <h3 className="studio-generated-title">Готово</h3>
                     <video
                       src={motionResultVideoUrl}
                       controls
                       playsInline
-                      className="studio-gen-img"
-                      style={{ width: '100%', maxHeight: '520px' }}
+                      className="studio-gen-img studio-video-player"
                     />
-                    <p className="muted small">
-                      Ссылка выдана провайдером; при необходимости сохраните файл локально.
-                    </p>
                   </div>
                 ) : null}
                 {motionMsg ? <div className="banner info studio-status-msg">{motionMsg}</div> : null}
               </div>
+              </>
             )}
           </section>
         </>

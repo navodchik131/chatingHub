@@ -19,6 +19,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    restart: unless-stopped
     ports:
       - "8080:8080"
     # Секреты — из backend/.env (секреты не в образе, см. .dockerignore)
@@ -30,6 +31,12 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
     volumes:
       # Иначе после пересборки контейнера фото моделей пропадают, а строки в Postgres остаются → 404 на /public-model-image
       - chating_app_data:/app/backend/data
