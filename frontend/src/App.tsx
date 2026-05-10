@@ -2550,7 +2550,7 @@ export default function App() {
               className={appSection === 'studio' ? 'section-tab active' : 'section-tab'}
               onClick={() => setAppSection('studio')}
             >
-              Картинки
+              Студия
             </button>
           ) : null}
         </nav>
@@ -4018,6 +4018,12 @@ export default function App() {
         <>
         <section className="studio-panel" aria-labelledby="studio-heading">
           <h2 id="studio-heading">Новая картинка</h2>
+          {canStudioAny ? (
+            <p className="muted small" style={{ marginTop: '-0.25rem', marginBottom: '1rem' }}>
+              Ниже на этой же странице:{' '}
+              <a href="#studio-motion-heading">видео по референсу (motion control)</a>.
+            </p>
+          ) : null}
           {studioPaywalled ? (
             <div className="studio-paywall cabinet-module cabinet-module--highlight" role="status">
               <p className="cabinet-module-body" style={{ marginBottom: '0.75rem' }}>
@@ -4410,8 +4416,7 @@ export default function App() {
             </>
           )}
         </section>
-        {canStudioGenerate && !studioPaywalled ? (
-          <section className="studio-panel" aria-labelledby="studio-motion-heading">
+        <section className="studio-panel" aria-labelledby="studio-motion-heading">
             <h2 id="studio-motion-heading">Видео по референсу</h2>
             <p className="muted studio-mode-hint" style={{ marginBottom: '1rem' }}>
               Референс-видео задаёт движение; первый кадр строится по вашей модели (Nano Banana / редактор, как в
@@ -4426,6 +4431,17 @@ export default function App() {
               ). На сервере должны быть <span className="mono">ffmpeg</span> и{' '}
               <span className="mono">PUBLIC_APP_URL</span> по HTTPS.
             </p>
+            {!canStudioGenerate ? (
+              <div className="banner info" role="status">
+                Генерация недоступна по правам. Попросите владельца выдать право «Студия: генерация» или откройте
+                аккаунт владельца.
+              </div>
+            ) : studioPaywalled ? (
+              <div className="banner info" role="status">
+                Видео по референсу доступны с активной подпиской и балансом, как и остальная студия. Оформите тариф
+                в кабинете → «Тариф и баланс».
+              </div>
+            ) : (
             <div className="studio-grid studio-grid--simple">
               <label className="studio-label">
                 Референс-видео (движение)
@@ -4578,8 +4594,8 @@ export default function App() {
               ) : null}
               {motionMsg ? <div className="banner info studio-status-msg">{motionMsg}</div> : null}
             </div>
-          </section>
-        ) : null}
+            )}
+        </section>
         {canStudioGenerate ? (
           <section className="studio-panel studio-archive-section" aria-labelledby="studio-archive-heading">
             <h2 id="studio-archive-heading">Сохранённые</h2>
