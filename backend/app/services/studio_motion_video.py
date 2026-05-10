@@ -8,7 +8,7 @@ import tempfile
 import uuid
 from pathlib import Path
 
-from app.config import BACKEND_DIR
+from app.config import BACKEND_DIR, settings
 
 MOTION_VIDEO_ROOT = (BACKEND_DIR / "data" / "studio_motion_videos").resolve()
 
@@ -16,12 +16,17 @@ _VIDEO_SUFFIX = {".mp4", ".webm", ".mov", ".m4v"}
 
 
 def _ffmpeg_bin() -> str:
-    exe = shutil.which("ffmpeg")
-    if not exe:
-        raise RuntimeError(
-            "На сервере не найден ffmpeg (PATH). Установите ffmpeg для извлечения кадров из видео."
-        )
-    return exe
+    raw = (settings.ffmpeg_binary or "").strip() or "ffmpeg"
+    p = Path(raw)
+    if p.is_file():
+        return str(p.resolve())
+    exe = shutil.which(raw)
+    if exe:
+        return exe
+    raise RuntimeError(
+        f"Не найден ffmpeg («{raw}»). Установите пакет ffmpeg в контейнере/на сервере или задайте FFMPEG_BINARY "
+        "(например /usr/bin/ffmpeg) в backend/.env. В Docker: пересоберите образ с Dockerfile, где ставится ffmpeg."
+    )
 
 
 def _ext_for_filename(name: str | None) -> str:

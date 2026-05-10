@@ -114,6 +114,8 @@ class Settings(BaseSettings):
     credit_cost_studio_motion_control: int = Field(default=10, ge=0)
     # Максимальный размер загружаемого driving video (MP4/WebM/MOV) для студии «видео по референсу»
     studio_motion_max_upload_mb: int = Field(default=64, ge=1, le=200)
+    # Имя или абсолютный путь к ffmpeg (в официальном Docker-образе — /usr/bin/ffmpeg)
+    ffmpeg_binary: str = Field(default="ffmpeg")
     # Режим «Обычные фотографии»: та же учётка WaveSpeed, что и WAN — см. модель
     # https://wavespeed.ai/models/google/nano-banana-pro/edit и API /api/v3/google/nano-banana-pro/edit
     wavespeed_nano_banana_pro_edit_path: str = Field(

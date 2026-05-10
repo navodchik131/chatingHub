@@ -629,7 +629,7 @@ export default function App() {
   const [fvCreator, setFvCreator] = useState('')
   const [fvSecret, setFvSecret] = useState('')
 
-  const [appSection, setAppSection] = useState<'chat' | 'studio'>('chat')
+  const [appSection, setAppSection] = useState<'chat' | 'studio' | 'studio_video'>('chat')
   const [studioDesc, setStudioDesc] = useState('')
   const [studioFile, setStudioFile] = useState<File | null>(null)
   /** true = MODEL_LOCK (причёска с профиля); false = POSE_REFERENCE (с загруженного кадра). Только если есть studioFile. */
@@ -900,7 +900,8 @@ export default function App() {
   useEffect(() => {
     if (!me) return
     if (appSection === 'chat' && !canChat && canStudioAny) setAppSection('studio')
-    if (appSection === 'studio' && !canStudioAny && canChat) setAppSection('chat')
+    if ((appSection === 'studio' || appSection === 'studio_video') && !canStudioAny && canChat)
+      setAppSection('chat')
   }, [me?.id, appSection, canChat, canStudioAny])
 
   useEffect(() => {
@@ -939,7 +940,7 @@ export default function App() {
   useEffect(() => {
     if (!authed) return
     const needModels =
-      (appSection === 'studio' && canStudioAny) ||
+      ((appSection === 'studio' || appSection === 'studio_video') && canStudioAny) ||
       (accountOpen && accountTab === 'models' && canStudioModels)
     if (needModels) {
       void loadStudioModels()
@@ -965,11 +966,11 @@ export default function App() {
   }, [workspaceMembers])
 
   useEffect(() => {
-    if (authed && appSection === 'studio') void refreshIntegrations()
+    if (authed && (appSection === 'studio' || appSection === 'studio_video')) void refreshIntegrations()
   }, [authed, appSection, refreshIntegrations])
 
   useEffect(() => {
-    if (!authed || appSection !== 'studio') return
+    if (!authed || (appSection !== 'studio' && appSection !== 'studio_video')) return
     fetch('/api/studio/output-aspects')
       .then((r) => r.json())
       .then((d: { aspects?: StudioAspectPreset[] }) => {
@@ -2553,6 +2554,15 @@ export default function App() {
               Студия
             </button>
           ) : null}
+          {canStudioAny ? (
+            <button
+              type="button"
+              className={appSection === 'studio_video' ? 'section-tab active' : 'section-tab'}
+              onClick={() => setAppSection('studio_video')}
+            >
+              Видео
+            </button>
+          ) : null}
         </nav>
       ) : (
         <div className="banner info" style={{ margin: '0 1rem' }}>
@@ -3983,7 +3993,7 @@ export default function App() {
         </div>
       )}
 
-      {import.meta.env.DEV && health && appSection !== 'studio' && (
+      {import.meta.env.DEV && health && appSection !== 'studio' && appSection !== 'studio_video' && (
         <div className="health-strip" title={health.database_file}>
           Режим: {health.mode ?? '—'} · всего в БД: {health.conversations_count ?? 0} диалогов,{' '}
           {health.messages_count ?? 0} сообщений
@@ -4018,12 +4028,6 @@ export default function App() {
         <>
         <section className="studio-panel" aria-labelledby="studio-heading">
           <h2 id="studio-heading">Новая картинка</h2>
-          {canStudioAny ? (
-            <p className="muted small" style={{ marginTop: '-0.25rem', marginBottom: '1rem' }}>
-              Ниже на этой же странице:{' '}
-              <a href="#studio-motion-heading">видео по референсу (motion control)</a>.
-            </p>
-          ) : null}
           {studioPaywalled ? (
             <div className="studio-paywall cabinet-module cabinet-module--highlight" role="status">
               <p className="cabinet-module-body" style={{ marginBottom: '0.75rem' }}>
@@ -4416,186 +4420,6 @@ export default function App() {
             </>
           )}
         </section>
-        <section className="studio-panel" aria-labelledby="studio-motion-heading">
-            <h2 id="studio-motion-heading">Видео по референсу</h2>
-            <p className="muted studio-mode-hint" style={{ marginBottom: '1rem' }}>
-              Референс-видео задаёт движение; первый кадр строится по вашей модели (Nano Banana / редактор, как в
-              блоке выше). После проверки кадра запускается Kling Motion Control (
-              <a
-                href="https://wavespeed.ai/models/kwaivgi/kling-v3.0-pro/motion-control"
-                target="_blank"
-                rel="noreferrer"
-              >
-                документация WaveSpeed
-              </a>
-              ). На сервере должны быть <span className="mono">ffmpeg</span> и{' '}
-              <span className="mono">PUBLIC_APP_URL</span> по HTTPS.
-            </p>
-            {!canStudioGenerate ? (
-              <div className="banner info" role="status">
-                Генерация недоступна по правам. Попросите владельца выдать право «Студия: генерация» или откройте
-                аккаунт владельца.
-              </div>
-            ) : studioPaywalled ? (
-              <div className="banner info" role="status">
-                Видео по референсу доступны с активной подпиской и балансом, как и остальная студия. Оформите тариф
-                в кабинете → «Тариф и баланс».
-              </div>
-            ) : (
-            <div className="studio-grid studio-grid--simple">
-              <label className="studio-label">
-                Референс-видео (движение)
-                <input
-                  type="file"
-                  accept="video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov"
-                  onChange={(e) => {
-                    const f = e.target.files?.[0] ?? null
-                    setMotionVideoFile(f)
-                    setMotionVideoFileId(null)
-                    setMotionPreviewUrl(null)
-                    setMotionPreviewGenId(null)
-                    setMotionResultVideoUrl(null)
-                  }}
-                />
-                {motionVideoFile ? <span className="studio-file-name">{motionVideoFile.name}</span> : null}
-              </label>
-              <p className="muted small">
-                Ориентация персонажа: «как на кадре» — до ~10 с ролика; «как на видео» — до ~30 с (см. правила
-                модели на стороне WaveSpeed).
-              </p>
-              <div className="studio-mode-row" role="group" aria-label="Ориентация motion control">
-                <span className="studio-mode-label">Ось</span>
-                <div className="studio-mode-segment">
-                  <button
-                    type="button"
-                    className={`studio-mode-btn${motionOrientation === 'image' ? ' is-active' : ''}`}
-                    onClick={() => setMotionOrientation('image')}
-                  >
-                    Как кадр (до ~10 c)
-                  </button>
-                  <button
-                    type="button"
-                    className={`studio-mode-btn${motionOrientation === 'video' ? ' is-active' : ''}`}
-                    onClick={() => setMotionOrientation('video')}
-                  >
-                    Как видео (до ~30 c)
-                  </button>
-                </div>
-              </div>
-              <label className="studio-label studio-check">
-                <input
-                  type="checkbox"
-                  checked={motionAutoPrompt}
-                  onChange={(e) => setMotionAutoPrompt(e.target.checked)}
-                />
-                <span>
-                  Авто-промпт по видео (vision-модель с сервера: несколько кадров → краткое описание движения).
-                </span>
-              </label>
-              <label className="studio-label studio-check">
-                <input
-                  type="checkbox"
-                  checked={motionLockHairstyle}
-                  onChange={(e) => setMotionLockHairstyle(e.target.checked)}
-                />
-                <span>Причёска с профиля модели (как в студии для референса-позы).</span>
-              </label>
-              <label className="studio-label">
-                Описание первого кадра (по желанию)
-                <textarea
-                  rows={3}
-                  placeholder="Свет, одежда, настроение — дополняет авто-описание и профиль модели"
-                  value={motionDesc}
-                  onChange={(e) => setMotionDesc(e.target.value)}
-                />
-              </label>
-              <label className="studio-label">
-                Негативный промпт для видео (опционально)
-                <textarea
-                  rows={2}
-                  placeholder="Чего избегать в выводе motion control"
-                  value={motionVideoNegPrompt}
-                  onChange={(e) => setMotionVideoNegPrompt(e.target.value)}
-                />
-              </label>
-              <label className="studio-label studio-check">
-                <input
-                  type="checkbox"
-                  checked={motionKeepSound}
-                  onChange={(e) => setMotionKeepSound(e.target.checked)}
-                />
-                <span>Сохранить звук из референс-видео (если поддерживает API).</span>
-              </label>
-              <div className="studio-actions">
-                <button
-                  type="button"
-                  className="send-btn"
-                  disabled={
-                    motionBusyFrame ||
-                    !health?.openai_studio_configured ||
-                    !integ?.wavespeed_configured ||
-                    studioSelectedModelId == null ||
-                    !motionVideoFile
-                  }
-                  onClick={() => void runMotionFirstFrame()}
-                >
-                  {motionBusyFrame ? 'Шаг 1…' : 'Сгенерировать кадр'}
-                </button>
-                {health?.studio_prompt_credit_cost != null ? (
-                  <span className="studio-credit-hint">{health.studio_prompt_credit_cost} кр.</span>
-                ) : null}
-              </div>
-              {motionAutoTextPreview ? (
-                <label className="studio-label">
-                  Авто-описание по видео (кратко)
-                  <textarea className="mono" rows={4} readOnly spellCheck={false} value={motionAutoTextPreview} />
-                </label>
-              ) : null}
-              {motionPreviewUrl ? (
-                <div className="studio-generated">
-                  <h3 className="studio-generated-title">Кадр для утверждения</h3>
-                  <div className="studio-generated-frame">
-                    <img src={motionPreviewUrl} alt="" className="studio-gen-img" />
-                  </div>
-                  <div className="studio-actions" style={{ marginTop: '0.75rem' }}>
-                    <button
-                      type="button"
-                      className="send-btn"
-                      disabled={
-                        motionBusyVideo ||
-                        !integ?.wavespeed_configured ||
-                        motionPreviewGenId == null ||
-                        !motionVideoFileId
-                      }
-                      onClick={() => void runMotionRenderVideo()}
-                    >
-                      {motionBusyVideo ? 'Видео…' : 'Создать видео'}
-                    </button>
-                    {health?.studio_motion_control_credit_cost != null ? (
-                      <span className="studio-credit-hint">{health.studio_motion_control_credit_cost} кр.</span>
-                    ) : null}
-                  </div>
-                </div>
-              ) : null}
-              {motionResultVideoUrl ? (
-                <div className="studio-generated">
-                  <h3 className="studio-generated-title">Результат (видео)</h3>
-                  <video
-                    src={motionResultVideoUrl}
-                    controls
-                    playsInline
-                    className="studio-gen-img"
-                    style={{ width: '100%', maxHeight: '520px' }}
-                  />
-                  <p className="muted small">
-                    Ссылка выдана провайдером; при необходимости сохраните файл локально.
-                  </p>
-                </div>
-              ) : null}
-              {motionMsg ? <div className="banner info studio-status-msg">{motionMsg}</div> : null}
-            </div>
-            )}
-        </section>
         {canStudioGenerate ? (
           <section className="studio-panel studio-archive-section" aria-labelledby="studio-archive-heading">
             <h2 id="studio-archive-heading">Сохранённые</h2>
@@ -4653,6 +4477,268 @@ export default function App() {
             )}
           </section>
         ) : null}
+        </>
+      )}
+
+      {hasAnyMainSection && appSection === 'studio_video' && canStudioAny && (
+        <>
+          <section className="studio-panel" aria-labelledby="studio-motion-heading">
+            <h2 id="studio-motion-heading">Видео по референсу</h2>
+            <p className="muted small" style={{ marginBottom: '1rem' }}>
+              Картинки и архив — вкладка «Студия». Здесь: референс-видео → первый кадр по модели → Kling motion
+              control.
+            </p>
+            <label className="studio-label">
+              Формат кадра
+              <select
+                value={studioOutputAspect}
+                onChange={(e) => setStudioOutputAspect(e.target.value)}
+              >
+                {studioAspectPresets.length > 0 ? (
+                  studioAspectPresets.map((p) => (
+                    <option key={p.key} value={p.key}>
+                      {p.label} ({p.size} px)
+                    </option>
+                  ))
+                ) : (
+                  <option value="9:16">9:16 (1080×1920)</option>
+                )}
+              </select>
+            </label>
+            <label className="studio-label">
+              Модель
+              <select
+                value={studioSelectedModelId ?? ''}
+                onChange={(e) => {
+                  const v = e.target.value
+                  setStudioSelectedModelId(v === '' ? null : Number(v))
+                }}
+              >
+                <option value="">— выберите модель —</option>
+                {studioModels.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="studio-mode-row" role="group" aria-label="Тип генерации (как в студии)">
+              <span className="studio-mode-label">Тип</span>
+              <div className="studio-mode-segment">
+                <button
+                  type="button"
+                  className={`studio-mode-btn${studioWaveProfile === 'regular' ? ' is-active' : ''}`}
+                  onClick={() => setStudioWaveProfile('regular')}
+                >
+                  Обычные фотографии
+                </button>
+                <button
+                  type="button"
+                  className={`studio-mode-btn${studioWaveProfile === 'nsfw' ? ' is-active' : ''}`}
+                  onClick={() => setStudioWaveProfile('nsfw')}
+                >
+                  NSFW
+                </button>
+              </div>
+            </div>
+            {health?.studio_wan_edit_tier_switch && studioWaveProfile === 'nsfw' ? (
+              <div className="studio-mode-row" role="group" aria-label="WAN 2.7 для первого кадра">
+                <span className="studio-mode-label">WAN 2.7</span>
+                <div className="studio-mode-segment">
+                  <button
+                    type="button"
+                    className={`studio-mode-btn${studioWanEditTier === 'standard' ? ' is-active' : ''}`}
+                    onClick={() => setStudioWanEditTier('standard')}
+                  >
+                    Обычный
+                  </button>
+                  <button
+                    type="button"
+                    className={`studio-mode-btn${studioWanEditTier === 'pro' ? ' is-active' : ''}`}
+                    onClick={() => setStudioWanEditTier('pro')}
+                  >
+                    Pro
+                  </button>
+                </div>
+              </div>
+            ) : null}
+            <p className="muted studio-mode-hint" style={{ marginBottom: '1rem' }}>
+              Первый кадр — Nano Banana или редактор из вкладки «Студия» (те же тип и модель). Затем —{' '}
+              <a
+                href="https://wavespeed.ai/models/kwaivgi/kling-v3.0-pro/motion-control"
+                target="_blank"
+                rel="noreferrer"
+              >
+                Kling Motion Control
+              </a>
+              . На сервере: <span className="mono">ffmpeg</span> в контейнере и{' '}
+              <span className="mono">PUBLIC_APP_URL</span> по HTTPS.
+            </p>
+            {!canStudioGenerate ? (
+              <div className="banner info" role="status">
+                Генерация недоступна по правам. Попросите владельца выдать право «Студия: генерация» или откройте
+                аккаунт владельца.
+              </div>
+            ) : studioPaywalled ? (
+              <div className="banner info" role="status">
+                Видео по референсу доступны с активной подпиской и балансом. Оформите тариф в кабинете → «Тариф и
+                баланс».
+              </div>
+            ) : (
+              <div className="studio-grid studio-grid--simple">
+                <label className="studio-label">
+                  Референс-видео (движение)
+                  <input
+                    type="file"
+                    accept="video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0] ?? null
+                      setMotionVideoFile(f)
+                      setMotionVideoFileId(null)
+                      setMotionPreviewUrl(null)
+                      setMotionPreviewGenId(null)
+                      setMotionResultVideoUrl(null)
+                    }}
+                  />
+                  {motionVideoFile ? <span className="studio-file-name">{motionVideoFile.name}</span> : null}
+                </label>
+                <p className="muted small">
+                  Ориентация персонажа: «как на кадре» — до ~10 с ролика; «как на видео» — до ~30 с (правила
+                  провайдера).
+                </p>
+                <div className="studio-mode-row" role="group" aria-label="Ориентация motion control">
+                  <span className="studio-mode-label">Ось</span>
+                  <div className="studio-mode-segment">
+                    <button
+                      type="button"
+                      className={`studio-mode-btn${motionOrientation === 'image' ? ' is-active' : ''}`}
+                      onClick={() => setMotionOrientation('image')}
+                    >
+                      Как кадр (до ~10 c)
+                    </button>
+                    <button
+                      type="button"
+                      className={`studio-mode-btn${motionOrientation === 'video' ? ' is-active' : ''}`}
+                      onClick={() => setMotionOrientation('video')}
+                    >
+                      Как видео (до ~30 c)
+                    </button>
+                  </div>
+                </div>
+                <label className="studio-label studio-check">
+                  <input
+                    type="checkbox"
+                    checked={motionAutoPrompt}
+                    onChange={(e) => setMotionAutoPrompt(e.target.checked)}
+                  />
+                  <span>
+                    Авто-промпт по видео (vision-модель: несколько кадров → описание движения).
+                  </span>
+                </label>
+                <label className="studio-label studio-check">
+                  <input
+                    type="checkbox"
+                    checked={motionLockHairstyle}
+                    onChange={(e) => setMotionLockHairstyle(e.target.checked)}
+                  />
+                  <span>Причёска с профиля модели.</span>
+                </label>
+                <label className="studio-label">
+                  Описание первого кадра (по желанию)
+                  <textarea
+                    rows={3}
+                    placeholder="Свет, одежда, настроение"
+                    value={motionDesc}
+                    onChange={(e) => setMotionDesc(e.target.value)}
+                  />
+                </label>
+                <label className="studio-label">
+                  Негативный промпт для видео (опционально)
+                  <textarea
+                    rows={2}
+                    placeholder="Чего избегать в выводе"
+                    value={motionVideoNegPrompt}
+                    onChange={(e) => setMotionVideoNegPrompt(e.target.value)}
+                  />
+                </label>
+                <label className="studio-label studio-check">
+                  <input
+                    type="checkbox"
+                    checked={motionKeepSound}
+                    onChange={(e) => setMotionKeepSound(e.target.checked)}
+                  />
+                  <span>Сохранить звук из референс-видео (если поддерживает API).</span>
+                </label>
+                <div className="studio-actions">
+                  <button
+                    type="button"
+                    className="send-btn"
+                    disabled={
+                      motionBusyFrame ||
+                      !health?.openai_studio_configured ||
+                      !integ?.wavespeed_configured ||
+                      studioSelectedModelId == null ||
+                      !motionVideoFile
+                    }
+                    onClick={() => void runMotionFirstFrame()}
+                  >
+                    {motionBusyFrame ? 'Шаг 1…' : 'Сгенерировать кадр'}
+                  </button>
+                  {health?.studio_prompt_credit_cost != null ? (
+                    <span className="studio-credit-hint">{health.studio_prompt_credit_cost} кр.</span>
+                  ) : null}
+                </div>
+                {motionAutoTextPreview ? (
+                  <label className="studio-label">
+                    Авто-описание по видео
+                    <textarea className="mono" rows={4} readOnly spellCheck={false} value={motionAutoTextPreview} />
+                  </label>
+                ) : null}
+                {motionPreviewUrl ? (
+                  <div className="studio-generated">
+                    <h3 className="studio-generated-title">Кадр для утверждения</h3>
+                    <div className="studio-generated-frame">
+                      <img src={motionPreviewUrl} alt="" className="studio-gen-img" />
+                    </div>
+                    <div className="studio-actions" style={{ marginTop: '0.75rem' }}>
+                      <button
+                        type="button"
+                        className="send-btn"
+                        disabled={
+                          motionBusyVideo ||
+                          !integ?.wavespeed_configured ||
+                          motionPreviewGenId == null ||
+                          !motionVideoFileId
+                        }
+                        onClick={() => void runMotionRenderVideo()}
+                      >
+                        {motionBusyVideo ? 'Видео…' : 'Создать видео'}
+                      </button>
+                      {health?.studio_motion_control_credit_cost != null ? (
+                        <span className="studio-credit-hint">{health.studio_motion_control_credit_cost} кр.</span>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : null}
+                {motionResultVideoUrl ? (
+                  <div className="studio-generated">
+                    <h3 className="studio-generated-title">Результат (видео)</h3>
+                    <video
+                      src={motionResultVideoUrl}
+                      controls
+                      playsInline
+                      className="studio-gen-img"
+                      style={{ width: '100%', maxHeight: '520px' }}
+                    />
+                    <p className="muted small">
+                      Ссылка выдана провайдером; при необходимости сохраните файл локально.
+                    </p>
+                  </div>
+                ) : null}
+                {motionMsg ? <div className="banner info studio-status-msg">{motionMsg}</div> : null}
+              </div>
+            )}
+          </section>
         </>
       )}
 
