@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import logging
 import uuid
+from functools import partial
 
+import anyio
 import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -70,12 +72,15 @@ async def download_and_create_generation(
         preset = get_camera_preset_by_id(model_row.camera_preset_id.strip())
         if preset:
             selfie_for_exif = export_selfie_flag_for_phone_exif(list(model_row.images))
-            export_bytes = apply_phone_export_to_jpeg(
-                data,
-                preset=preset,
-                selfie=selfie_for_exif,
-                export_lat=model_row.export_lat,
-                export_lon=model_row.export_lon,
+            export_bytes = await anyio.to_thread.run_sync(
+                partial(
+                    apply_phone_export_to_jpeg,
+                    data,
+                    preset=preset,
+                    selfie=selfie_for_exif,
+                    export_lat=model_row.export_lat,
+                    export_lon=model_row.export_lon,
+                ),
             )
             if export_bytes is not None:
                 data = export_bytes
