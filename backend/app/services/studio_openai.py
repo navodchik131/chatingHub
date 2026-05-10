@@ -326,6 +326,64 @@ def load_reference_describe_prompt(*, hairstyle_from_pose_reference: bool = Fals
     return (settings.image_studio_reference_describe_inline or "").strip()
 
 
+def load_motion_first_frame_scene_describe_prompt() -> str:
+    if (settings.motion_first_frame_scene_describe_inline or "").strip():
+        return (settings.motion_first_frame_scene_describe_inline or "").strip()
+    rel = _relative_prompt_path(
+        settings.motion_first_frame_scene_describe_path,
+        "data/prompts/motion_first_frame_scene_describe.txt",
+    )
+    path = (BACKEND_DIR / rel).resolve()
+    if path.is_file():
+        t = path.read_text(encoding="utf-8").strip()
+        if t:
+            return t
+    return ""
+
+
+async def describe_motion_video_first_frame_scene_openai(
+    *,
+    image_bytes: bytes,
+    image_media_type: str | None = None,
+    credentials: StudioOpenAiCredentials | None = None,
+) -> str:
+    """
+    Первый кадр референс-видео: детальная сцена (поза, свет, одежда, камера, фон),
+    без идентичности; надписи/оверлеи игнорируются.
+    """
+    instruction = load_motion_first_frame_scene_describe_prompt()
+    if not instruction:
+        raise RuntimeError(
+            "Промпт для описания первого кадра видео пуст — задайте "
+            "data/prompts/motion_first_frame_scene_describe.txt или "
+            "MOTION_FIRST_FRAME_SCENE_DESCRIBE_INLINE"
+        )
+    model = (settings.openai_studio_model_vision or "").strip() or settings.openai_studio_model
+    b64 = base64.standard_b64encode(image_bytes).decode("ascii")
+    mime = (image_media_type or "image/jpeg").split(";")[0].strip()
+    if mime not in ("image/jpeg", "image/png", "image/gif", "image/webp"):
+        mime = "image/jpeg"
+    system = (
+        "You follow instructions precisely. Output only the requested English description "
+        "with the labeled sections specified in the user message. "
+        "No preamble, no markdown headings, no outer JSON."
+    )
+    user_content: list[dict] = [
+        {"type": "text", "text": instruction},
+        {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}"}},
+    ]
+    return await _chat_completion_text(
+        model=model,
+        messages=[
+            {"role": "system", "content": system},
+            {"role": "user", "content": user_content},
+        ],
+        max_tokens=4096,
+        temperature=0.25,
+        credentials=credentials,
+    )
+
+
 async def _chat_completion_text(
     *,
     model: str,

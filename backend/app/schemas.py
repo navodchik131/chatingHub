@@ -141,7 +141,7 @@ class StudioRefinePromptOut(BaseModel):
 
 
 class StudioMotionFirstFrameOut(BaseModel):
-    """Шаг 1: driving video + модель → первый кадр (Nano Banana / WAN) и file_id видео для шага 2."""
+    """Шаг 1: первый кадр видео детально разбирается (без личности/оверлеев); опционально — сводка движения по клипу."""
 
     refined_prompt: str
     reference_scene_description: str | None = None

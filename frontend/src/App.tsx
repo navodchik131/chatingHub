@@ -1622,10 +1622,6 @@ export default function App() {
       setError('Выберите модель.')
       return
     }
-    if (!motionAutoPrompt && !motionDesc.trim()) {
-      setError('Добавьте описание или включите «Уточнить движение по ролику».')
-      return
-    }
     setMotionBusyFrame(true)
     setMotionMsg(null)
     setMotionResultVideoUrl(null)
@@ -1646,6 +1642,7 @@ export default function App() {
       const r = await apiFetch('/api/studio/motion/first-frame', { method: 'POST', body: fd })
       const data = (await r.json().catch(() => ({}))) as {
         refined_prompt?: string
+        reference_scene_description?: string | null
         motion_video_prompt_auto?: string | null
         generated_image_url?: string | null
         wavespeed_message?: string | null
@@ -1661,11 +1658,17 @@ export default function App() {
       setMotionPreviewUrl(data.generated_image_url?.trim() || null)
       setMotionPreviewGenId(typeof data.generation_id === 'number' ? data.generation_id : null)
       setMotionMsg(data.wavespeed_message?.trim() || null)
-      setMotionAutoTextPreview(
-        typeof data.motion_video_prompt_auto === 'string'
-          ? data.motion_video_prompt_auto.trim() || null
-          : null,
-      )
+      {
+        const scene = (data.reference_scene_description ?? '').trim()
+        const motion = (data.motion_video_prompt_auto ?? '').trim()
+        const parts: string[] = []
+        if (scene)
+          parts.push(
+            'Первый кадр (сцена для вашей модели, без внешности из видео):\n' + scene,
+          )
+        if (motion) parts.push('Движение по ролику (доп. кадры):\n' + motion)
+        setMotionAutoTextPreview(parts.length > 0 ? parts.join('\n\n—\n\n') : null)
+      }
       void refreshMe()
       void loadStudioGenerationsReset()
     } catch (e) {
@@ -4629,7 +4632,7 @@ export default function App() {
                 </div>
                 {motionAutoTextPreview ? (
                   <div className="studio-video-auto-block">
-                    <span className="studio-video-auto-label">Подсказка по ролику</span>
+                    <span className="studio-video-auto-label">Авто-разбор кадра и ролика</span>
                     <div className="studio-motion-auto-preview">{motionAutoTextPreview}</div>
                   </div>
                 ) : null}

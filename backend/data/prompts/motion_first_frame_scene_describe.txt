@@ -1,0 +1,40 @@
+This image is the **first frame** of a reference video. We will recreate this shot with **a different person** (identity, face, body, skin, hair come only from separate MODEL reference photos — not from this frame).
+
+Your task: describe everything needed to rebuild the same photograph — composition, moment, environment, lighting, camera, pose, and clothing — but strip identity of whoever appears here.
+
+OVERLAYS_AND_TEXT (mandatory rules):
+- If there are **subtitles, captions, logos, watermarks, stickers, channel bugs, timecode, UI overlays, or any text graphics**, **ignore them completely**. Do **not** quote, transcribe, or describe their wording.
+- Describe the underlying scene **as if those overlays did not exist** — only the real world / studio / background behind them.
+- If the entire frame is borderline unreadable due to graphics, still describe visible **environment, pose, clothing silhouette, and light** that are physically present.
+
+SECTION_FORMAT:
+Use the following section labels (exactly one line per label, then detail). Be specific and long enough that an image model could match the shot.
+
+SHOOTING_CONTEXT: One or two sentences — what kind of moment (e.g. static pose start of a dance move, walking into frame, speaking to camera, gym set, mirror check-in) — **without** naming who the person is.
+
+POSE: Full articulation — weight on which leg, torso lean, arm/hand/finger positions, head direction (e.g. looking toward camera left, chin down), interaction with props (hand on rail, holding nothing). **No** body-type adjectives (slim, curvy, athletic, petite, etc.).
+
+CLOTHING: Everything **worn or held as garment** visible in frame — items, colors, cut, fit, layers, footwear if visible, accessories that are clearly wardrobe (belt, hat). If nudity or partial nudity, state coverage factually (e.g. swimsuit, towel, no shirt). Do **not** infer off-frame garments.
+
+FRAMING: Crop at **top / left / right / bottom** — what body parts enter or leave frame; subject scale vs frame (e.g. knee-up, full body small in frame).
+
+CAMERA_DISTANCE: Subjective distance feel (arm-length, ~2 m portrait, wide room shot).
+
+CAMERA_HEIGHT: Relative to subject (above eye line, chest height, low angle from floor, etc.).
+
+CAMERA_ANGLE: Straight-on / three-quarter / profile; vertical angle (slight high / low). Dutch tilt if visible.
+
+LENS_AND_PERSPECTIVE: Phone selfie wide stretch, normal perspective, tele look, strong foreground arm, etc.
+
+SETTING: Location type and visible props, furniture, architecture, outdoor elements.
+
+LIGHT: Key direction, hardness, color temperature feel, practicals, window light, harsh noon, golden hour mood.
+
+ACTION_BEAT: What is **happening** in this single frame (one frozen instant of motion or stillness) — again **no** identity.
+
+HARD_BANS (must not appear in your output):
+- **No** face description: no age, ethnicity, gender presentation, beauty, expression read as "who they are", eye color, makeup detail, beard, distinctive facial traits.
+- **No** skin, hair, or body **identity**: no skin tone/complexion/tan, no hair length/style/color/texture (only FRAMING may note vague "hair mass" at top edge if it affects crop).
+- **No** celebrity or real-person names.
+- **No** markdown, no JSON, no bullet lists — labeled sections with prose only.
+- **No** quoting **any** on-screen text (treat overlays as nonexistent).

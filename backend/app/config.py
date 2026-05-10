@@ -73,6 +73,10 @@ class Settings(BaseSettings):
     image_studio_reference_describe_match_pose_hair_path: str = Field(
         default="data/prompts/image_studio_reference_describe_match_pose_hair.txt"
     )
+    motion_first_frame_scene_describe_path: str = Field(
+        default="data/prompts/motion_first_frame_scene_describe.txt",
+    )
+    motion_first_frame_scene_describe_inline: str = Field(default="")
     image_studio_model_profile_gen_system_path: str = Field(
         default="data/prompts/model_profile_from_photos_system.txt",
     )

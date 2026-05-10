@@ -83,6 +83,7 @@ from app.services.studio_image_token import (
 )
 from app.services.studio_openai import (
     MAX_IMAGE_BYTES,
+    describe_motion_video_first_frame_scene_openai,
     describe_motion_video_frames_openai,
     describe_reference_image_openai,
     finalize_nano_banana_studio_prompt,
@@ -1628,47 +1629,68 @@ async def api_studio_motion_first_frame(
     lock_hair_req = _truthy_lock_model_hairstyle(lock_model_hairstyle)
     effective_lock_hairstyle = bool(lock_hair_req)
 
-    motion_video_prompt_auto: str | None = None
+    motion_clip_summary: str | None = None
     if _truthy_wavespeed_flag(auto_motion_prompt):
         try:
             frames = await anyio.to_thread.run_sync(
                 lambda vp=video_path: extract_video_sample_frames_jpeg(vp, max_frames=4)
             )
-            motion_video_prompt_auto = await describe_motion_video_frames_openai(
+            motion_clip_summary = await describe_motion_video_frames_openai(
                 frames_jpeg=frames,
                 credentials=llm_creds,
             )
         except Exception as e:
-            log.warning("motion auto prompt failed: %s", e)
+            log.warning("motion clip summary failed: %s", e)
             raise HTTPException(
                 status_code=502,
-                detail="Не удалось разобрать видео через vision-модель. Отключите авто-промпт или проверьте OPENAI_API_KEY / OPENAI_STUDIO_MODEL_VISION.",
+                detail="Не удалось описать движение по ролику. Отключите «Уточнить движение по ролику» или проверьте OPENAI_STUDIO_MODEL_VISION.",
             ) from e
+
+    try:
+        reference_scene = await describe_motion_video_first_frame_scene_openai(
+            image_bytes=first_frame,
+            image_media_type="image/jpeg",
+            credentials=llm_creds,
+        )
+    except RuntimeError as e:
+        log.warning("motion first-frame scene describe failed, fallback to standard reference describe: %s", e)
+        try:
+            reference_scene = await describe_reference_image_openai(
+                image_bytes=first_frame,
+                image_media_type="image/jpeg",
+                hairstyle_from_pose_reference=not effective_lock_hairstyle,
+                credentials=llm_creds,
+            )
+        except RuntimeError as e2:
+            raise HTTPException(
+                status_code=502,
+                detail=f"Не удалось описать первый кадр: {e2}",
+            ) from e2
+    reference_scene = (reference_scene or "").strip()
+    if not reference_scene:
+        raise HTTPException(
+            status_code=502,
+            detail="Пустое описание первого кадра. Проверьте vision-модель и файл motion_first_frame_scene_describe.txt.",
+        )
 
     model_profile_text = (sm_loaded.profile_text or "").strip() or None
     desc_base = (description or "").strip()
-    if motion_video_prompt_auto:
-        extra = (
-            "## Motion reference (English summary from reference video frames)\n"
-            + motion_video_prompt_auto.strip()
+    user_extra_blocks: list[str] = []
+    if motion_clip_summary and motion_clip_summary.strip():
+        user_extra_blocks.append(
+            "## Motion over reference clip (sampled frames, English)\n"
+            + motion_clip_summary.strip()
         )
-        user_text_for_refine = "\n\n".join(x for x in (desc_base, extra) if x).strip()
-    else:
-        user_text_for_refine = desc_base
+    extra_joined = "\n\n".join(user_extra_blocks) if user_extra_blocks else ""
+    user_text_for_refine = "\n\n".join(x for x in (desc_base, extra_joined) if x).strip()
 
     if not user_text_for_refine and not model_profile_text:
         raise HTTPException(
             status_code=400,
-            detail="Добавьте описание, включите авто-промпт по видео или заполните текстовый профиль модели.",
+            detail="Добавьте пожелания в описание или заполните текстовый профиль модели.",
         )
 
     try:
-        reference_scene = await describe_reference_image_openai(
-            image_bytes=first_frame,
-            image_media_type="image/jpeg",
-            hairstyle_from_pose_reference=not effective_lock_hairstyle,
-            credentials=llm_creds,
-        )
         imgs_for_ws = model_images_for_wavespeed_profile(imgs_model, wave_profile_n)
         ref_photo_block = model_reference_photos_block(imgs_for_ws)
         refined = await refine_prompt_via_openai(
@@ -1785,6 +1807,12 @@ async def api_studio_motion_first_frame(
         except RuntimeError as e:
             wavespeed_message = str(e)
 
+    motion_auto_for_db = reference_scene.strip()
+    if motion_clip_summary and motion_clip_summary.strip():
+        motion_auto_for_db += (
+            "\n\n[Clip motion — sampled frames]\n" + motion_clip_summary.strip()
+        )
+
     generation_id: int | None = None
     if generated_image_url:
         gen = await download_and_create_generation(
@@ -1795,7 +1823,7 @@ async def api_studio_motion_first_frame(
             output_aspect=aspect_key,
             studio_model_id=mid,
             refined_prompt_full=refined,
-            motion_video_prompt_auto=motion_video_prompt_auto,
+            motion_video_prompt_auto=motion_auto_for_db,
         )
         if gen is not None:
             generation_id = gen.id
@@ -1816,7 +1844,7 @@ async def api_studio_motion_first_frame(
             "motion_video_file_id": motion_video_file_id,
             "studio_model_id": mid,
             "generation_id": generation_id,
-            "auto_motion_prompt": bool(motion_video_prompt_auto),
+            "auto_motion_prompt": bool(motion_clip_summary and motion_clip_summary.strip()),
             "studio_wave_profile": wave_profile_n,
         },
     )
@@ -1825,7 +1853,7 @@ async def api_studio_motion_first_frame(
     return StudioMotionFirstFrameOut(
         refined_prompt=refined,
         reference_scene_description=reference_scene,
-        motion_video_prompt_auto=motion_video_prompt_auto,
+        motion_video_prompt_auto=(motion_clip_summary or "").strip() or None,
         generated_image_url=generated_image_url,
         wavespeed_message=wavespeed_message,
         generation_id=generation_id,
