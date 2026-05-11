@@ -110,7 +110,7 @@ class Settings(BaseSettings):
     )
     wavespeed_upscale_sync: bool = Field(default=True)
     credit_cost_studio_upscale: int = Field(default=1)
-    # Студия «видео» /render-video: kling | wan (по умолчанию Kling v3 Pro Motion Control)
+    # Студия «видео» /render-video: kling | wan | seedance_i2v
     studio_motion_video_provider: str = Field(default="kling")
     # Kling Motion Control — см. WAVESPEED_KLING_MOTION_*
     wavespeed_kling_motion_control_path: str = Field(
@@ -127,6 +127,14 @@ class Settings(BaseSettings):
     # 480p | 720p
     wavespeed_wan_22_animate_resolution: str = Field(default="720p")
     wavespeed_wan_22_animate_seed: int = Field(default=-1)
+    # Студия «видео»: ByteDance Seedance 2.0 Image-to-Video (prompt + стартовый кадр; движение задаётся текстом)
+    # https://wavespeed.ai/models/bytedance/seedance-2.0/image-to-video
+    wavespeed_seedance_20_i2v_path: str = Field(
+        default="/api/v3/bytedance/seedance-2.0/image-to-video",
+    )
+    wavespeed_seedance_20_i2v_resolution: str = Field(default="720p")
+    wavespeed_seedance_20_i2v_duration: int = Field(default=5, ge=4, le=15)
+    wavespeed_seedance_20_i2v_web_search: bool = Field(default=False)
     # Опционально: ByteDance Seedance Fast Video-Edit (не используется шагом рендера по умолчанию)
     wavespeed_studio_video_edit_path: str = Field(
         default="/api/v3/bytedance/seedance-2.0-fast/video-edit-turbo",
@@ -237,8 +245,18 @@ class Settings(BaseSettings):
     @field_validator("studio_motion_video_provider", mode="after")
     @classmethod
     def _normalize_motion_video_provider(cls, v: str) -> str:
-        s = (v or "kling").strip().lower()
-        return "wan" if s == "wan" else "kling"
+        s = (v or "kling").strip().lower().replace("-", "_")
+        if s == "wan":
+            return "wan"
+        if s in ("seedance_i2v", "seedance", "i2v", "seedance20_i2v"):
+            return "seedance_i2v"
+        return "kling"
+
+    @field_validator("wavespeed_seedance_20_i2v_resolution", mode="after")
+    @classmethod
+    def _seedance_i2v_resolution(cls, v: str) -> str:
+        s = (v or "720p").strip().lower()
+        return s if s in ("480p", "720p", "1080p") else "720p"
 
     @property
     def cors_origins_list(self) -> list[str]:

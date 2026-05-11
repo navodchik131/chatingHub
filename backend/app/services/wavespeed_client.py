@@ -703,6 +703,71 @@ async def wan_22_animate_video_url(
     )
 
 
+def _seedance_20_i2v_post_path() -> str:
+    p = (settings.wavespeed_seedance_20_i2v_path or "").strip()
+    p = p or "/api/v3/bytedance/seedance-2.0/image-to-video"
+    return p if p.startswith("/") else f"/{p}"
+
+
+async def seedance_20_image_to_video_url(
+    *,
+    api_key: str,
+    image_url: str,
+    prompt: str,
+    aspect_ratio: str | None = None,
+    resolution: str | None = None,
+    duration: int | None = None,
+    generate_audio: bool = True,
+    timeout_submit: float = 600.0,
+    poll_interval: float = 3.0,
+    max_polls: int = 120,
+) -> str:
+    """
+    ByteDance Seedance 2.0 Image-to-Video: стартовый кадр + prompt → видео.
+    Док: https://wavespeed.ai/docs/docs-api/bytedance/bytedance-seedance-2.0-image-to-video
+    """
+    img = (image_url or "").strip()
+    if not img:
+        raise RuntimeError("image URL required")
+    if not (prompt or "").strip():
+        raise RuntimeError("prompt required for image-to-video")
+    res = (resolution or settings.wavespeed_seedance_20_i2v_resolution or "720p").strip().lower()
+    if res not in ("480p", "720p", "1080p"):
+        res = "720p"
+    dur = int(duration if duration is not None else settings.wavespeed_seedance_20_i2v_duration)
+    dur = max(4, min(15, dur))
+    path = _seedance_20_i2v_post_path()
+    url = f"{_wavespeed_base()}{path}"
+    body: dict[str, Any] = {
+        "prompt": prompt.strip(),
+        "image": img,
+        "resolution": res,
+        "duration": dur,
+        "enable_web_search": bool(settings.wavespeed_seedance_20_i2v_web_search),
+        "generate_audio": bool(generate_audio),
+    }
+    ar = (aspect_ratio or "").strip()
+    if ar:
+        body["aspect_ratio"] = ar
+    _apply_wavespeed_extra_body(body)
+    log.debug(
+        "wavespeed seedance 2.0 i2v path=%s res=%s dur=%s aspect=%s audio=%s",
+        path,
+        res,
+        dur,
+        ar or "(auto)",
+        generate_audio,
+    )
+    return await _wavespeed_post_json_and_resolve_video_url(
+        api_key=api_key,
+        full_post_url=url,
+        body=body,
+        timeout_submit=timeout_submit,
+        poll_interval=poll_interval,
+        max_polls=max_polls,
+    )
+
+
 def _studio_video_edit_post_path() -> str:
     p = (settings.wavespeed_studio_video_edit_path or "").strip()
     p = p or "/api/v3/bytedance/seedance-2.0-fast/video-edit-turbo"

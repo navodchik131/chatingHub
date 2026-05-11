@@ -133,3 +133,8 @@ def aspect_ratio_for_seedance_video_edit(output_aspect_key: str | None) -> str |
     except ValueError:
         return None
     return k if k in _SEEDANCE_VIDEO_EDIT_ASPECTS else None
+
+
+def aspect_ratio_for_seedance_i2v(output_aspect_key: str | None) -> str | None:
+    """Те же допустимые строки, что у Seedance Image-to-Video (4:5 — пропуск, API адаптирует под кадр)."""
+    return aspect_ratio_for_seedance_video_edit(output_aspect_key)

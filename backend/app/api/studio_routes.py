@@ -64,6 +64,7 @@ from app.services.workspace import (
 from app.services.crypto_secret import decrypt_secret
 from app.services.studio_aspect import (
     aspect_presets_public,
+    aspect_ratio_for_seedance_i2v,
     normalize_aspect_key,
     wavespeed_size_string,
 )
@@ -116,6 +117,7 @@ from app.services.studio_motion_video import (
 from app.services.wavespeed_client import (
     kling_motion_control_video_url,
     nano_banana_pro_edit_image_url,
+    seedance_20_image_to_video_url,
     seedream_v45_edit_image_url,
     wan_22_animate_video_url,
     wavespeed_image_upscale_url,
@@ -1949,6 +1951,27 @@ async def api_studio_motion_render_video(
                 resolution=settings.wavespeed_wan_22_animate_resolution,
                 seed=settings.wavespeed_wan_22_animate_seed,
             )
+        elif provider == "seedance_i2v":
+            seed_txt = (motion_prompt or "").strip()
+            if neg:
+                seed_txt = (
+                    f"{seed_txt}\nAvoid: {neg}" if seed_txt else f"Avoid: {neg}"
+                )
+            if not seed_txt.strip():
+                seed_txt = (
+                    "Natural cinematic motion; preserve the subject from the reference image; "
+                    "smooth camera work; expressive performance."
+                )
+            ar_i2v = aspect_ratio_for_seedance_i2v(row.output_aspect)
+            video_url = await seedance_20_image_to_video_url(
+                api_key=ws_key,
+                image_url=image_pub,
+                prompt=seed_txt,
+                aspect_ratio=ar_i2v,
+                resolution=settings.wavespeed_seedance_20_i2v_resolution,
+                duration=settings.wavespeed_seedance_20_i2v_duration,
+                generate_audio=keep_snd,
+            )
         else:
             video_url = await kling_motion_control_video_url(
                 api_key=ws_key,
@@ -1976,6 +1999,9 @@ async def api_studio_motion_render_video(
             "kling_motion_path": settings.wavespeed_kling_motion_control_path,
             "wan_22_animate": settings.wavespeed_wan_22_animate_path,
             "wan_22_animate_mode": settings.wavespeed_wan_22_animate_mode,
+            "seedance_20_i2v_path": settings.wavespeed_seedance_20_i2v_path,
+            "seedance_20_i2v_resolution": settings.wavespeed_seedance_20_i2v_resolution,
+            "seedance_20_i2v_duration": settings.wavespeed_seedance_20_i2v_duration,
             "ok": bool(video_url),
         },
     )
