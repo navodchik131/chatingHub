@@ -114,6 +114,7 @@ from app.services.studio_motion_video import (
     save_motion_video_bytes,
 )
 from app.services.wavespeed_client import (
+    kling_motion_control_video_url,
     nano_banana_pro_edit_image_url,
     seedream_v45_edit_image_url,
     wan_22_animate_video_url,
@@ -296,7 +297,7 @@ def _build_wan_22_animate_prompt(
     user_extra: str | None,
     negative: str | None,
 ) -> str | None:
-    """Короткий текст для WAN 2.2 Animate (поле prompt опционально)."""
+    """Короткий текст для WAN 2.2 Animate или общий motion-prompt для Kling (negative отдельным полем API)."""
     parts: list[str] = []
     ms = (motion_summary or "").strip()
     if ms:
@@ -1920,26 +1921,44 @@ async def api_studio_motion_render_video(
     vid_tok = create_motion_video_access_token(user_id=oid, file_id=mv_id)
     video_pub = f"{pub}/api/studio/public-motion-video?t={quote(vid_tok, safe='')}"
 
-    _ = _truthy_wavespeed_flag(keep_original_sound)  # WAN 2.2 Animate: поля звука в API нет; чекбокс сохранён в UI
+    keep_snd = _truthy_wavespeed_flag(keep_original_sound)
 
     msg: str | None = None
     video_url: str | None = None
     user_extra = (prompt or "").strip()
-    wan_prompt = _build_wan_22_animate_prompt(
+    motion_prompt = _build_wan_22_animate_prompt(
         motion_summary=row.motion_video_prompt_auto,
         user_extra=user_extra,
-        negative=negative_prompt,
+        negative=None,
     )
+    neg = (negative_prompt or "").strip()
+    provider = settings.studio_motion_video_provider
     try:
-        video_url = await wan_22_animate_video_url(
-            api_key=ws_key,
-            image_url=image_pub,
-            video_url=video_pub,
-            prompt=wan_prompt,
-            mode=settings.wavespeed_wan_22_animate_mode,
-            resolution=settings.wavespeed_wan_22_animate_resolution,
-            seed=settings.wavespeed_wan_22_animate_seed,
-        )
+        if provider == "wan":
+            wan_prompt = _build_wan_22_animate_prompt(
+                motion_summary=row.motion_video_prompt_auto,
+                user_extra=user_extra,
+                negative=negative_prompt,
+            )
+            video_url = await wan_22_animate_video_url(
+                api_key=ws_key,
+                image_url=image_pub,
+                video_url=video_pub,
+                prompt=wan_prompt,
+                mode=settings.wavespeed_wan_22_animate_mode,
+                resolution=settings.wavespeed_wan_22_animate_resolution,
+                seed=settings.wavespeed_wan_22_animate_seed,
+            )
+        else:
+            video_url = await kling_motion_control_video_url(
+                api_key=ws_key,
+                image_url=image_pub,
+                video_url=video_pub,
+                character_orientation=orient,
+                prompt=(motion_prompt or ""),
+                negative_prompt=neg,
+                keep_original_sound=keep_snd,
+            )
     except RuntimeError as e:
         msg = str(e)
 
@@ -1953,6 +1972,8 @@ async def api_studio_motion_render_video(
             "generation_id": gid,
             "motion_video_file_id": mv_id,
             "character_orientation": orient,
+            "motion_video_provider": provider,
+            "kling_motion_path": settings.wavespeed_kling_motion_control_path,
             "wan_22_animate": settings.wavespeed_wan_22_animate_path,
             "wan_22_animate_mode": settings.wavespeed_wan_22_animate_mode,
             "ok": bool(video_url),

@@ -110,13 +110,15 @@ class Settings(BaseSettings):
     )
     wavespeed_upscale_sync: bool = Field(default=True)
     credit_cost_studio_upscale: int = Field(default=1)
-    # Kling Motion Control (не используется шагом рендера «видео»; только .env для совместимости)
+    # Студия «видео» /render-video: kling | wan (по умолчанию Kling v3 Pro Motion Control)
+    studio_motion_video_provider: str = Field(default="kling")
+    # Kling Motion Control — см. WAVESPEED_KLING_MOTION_*
     wavespeed_kling_motion_control_path: str = Field(
         default="/api/v3/kwaivgi/kling-v3.0-pro/motion-control",
     )
     wavespeed_kling_motion_sync: bool = Field(default=True)
     credit_cost_studio_motion_control: int = Field(default=10, ge=0)
-    # Студия «видео»: WAN 2.2 Animate (replace / animate) — см. WAVESPEED_WAN_22_ANIMATE_*
+    # Альтернатива: WAN 2.2 Animate (replace / animate) — STUDIO_MOTION_VIDEO_PROVIDER=wan
     wavespeed_wan_22_animate_path: str = Field(
         default="/api/v3/wavespeed-ai/wan-2.2/animate",
     )
@@ -231,6 +233,12 @@ class Settings(BaseSettings):
         default="",
         description="Контакт для VAPID claims, напр. mailto:ops@example.com",
     )
+
+    @field_validator("studio_motion_video_provider", mode="after")
+    @classmethod
+    def _normalize_motion_video_provider(cls, v: str) -> str:
+        s = (v or "kling").strip().lower()
+        return "wan" if s == "wan" else "kling"
 
     @property
     def cors_origins_list(self) -> list[str]:

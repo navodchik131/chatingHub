@@ -816,5 +816,5 @@ async def kling_motion_control_video_url(
         body=body,
         timeout_submit=timeout_submit,
         poll_interval=poll_interval,
-        max_polls=        max_polls,
+        max_polls=max_polls,
     )
