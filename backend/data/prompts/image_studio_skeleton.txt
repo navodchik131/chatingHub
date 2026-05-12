@@ -1,6 +1,6 @@
 {
   "subject": {
-    "description": "<FILL: short scene in English — who, where, action, clothing vibe, mood>",
+    "description": "<FILL: short scene in English — who, where, action, clothing vibe; open with mundane candid realism (ordinary life / caught moment) unless USER contradicts — never default to influencer/catalog energy>",
     "identity": {
       "age": "<FROM_MODEL_PROFILE>",
       "ethnicity": "<FROM_MODEL_PROFILE>",
@@ -63,7 +63,8 @@
     "shot_type": "<FILL — close-up / medium / full body; must agree with framing_crop and distance>",
     "aspect_ratio": "<FILL — must match OUTPUT/ASPECT section>",
     "lighting": "<FILL_FROM_IMAGE_OR_TEXT>",
-    "depth_of_field": "<FILL — natural phone DoF, no fake bokeh>"
+    "depth_of_field": "<FILL — natural phone DoF, no fake bokeh>",
+    "snapshot_authenticity": "<FILL — one phrase: mundane real-life believability (camera roll feel); anti-influencer / anti-stock / anti-studio; align realism_engine.photo_realism and capture_authenticity>"
   },
   "background": {
     "setting": "<FILL_FROM_IMAGE_OR_TEXT>",
@@ -78,13 +79,16 @@
   },
   "realism_engine": null,
   "the_vibe": {
-    "mood": "<FILL>",
+    "mood": "<FILL — favor authentic everyday tones over glamour unless USER overrides>",
     "intimacy_level": "<FILL — public / casual / personal / intimate>",
-    "caption_energy": "<FILL — mood word(s) only, no quotes, no caption text for the image>"
+    "caption_energy": "<FILL — mood word(s) only, no quotes, no caption text for the image>",
+    "life_in_frame": "<FILL — one short cue: plausible lived moment (crowd chatter energy, stray objects, incidental background) scaled to scene type — not empty studio void>"
   },
   "constraints": {
     "must_keep": [
-      "<FILL — plain English: one real person, same skin and light on face and body; pose/camera/room/clothes follow reference when reference exists; no pasted-on face>"
+      "<FILL — plain English: one real person, same skin and light on face and body; pose/camera/room/clothes follow reference when reference exists; no pasted-on face>",
+      "<FILL — believable mundane photograph aligned with realism_engine — identity facial proportions from MODEL_PROFILE intact; ordinary snapshot / citizen camera energy unless USER specifies glamour>",
+      "<FILL — visible skin texture on face matches body grain; plausible phone/camera imperfections per realism_engine.photo_realism>"
     ],
     "avoid": [
       "head swap",
@@ -101,8 +105,14 @@
       "glossy CGI hair",
       "over-saturated colors",
       "magazine retouching",
+      "facial beauty-filter / Facetune / TikTok face reshape morphology",
+      "influencer or fashion campaign polish",
+      "stock-photo symmetry and sterile clarity",
+      "enlarged eyes or slimmed jaw compared to MODEL_PROFILE proportions",
+      "generic AI glamour model unrelated to identity refs",
+      "studio three-point glamour lighting setups unless scene truly is a studio shoot",
       "<FILL — scene-specific>"
     ]
   },
-  "negative_prompt": "deformed hands, extra fingers, fused fingers, bad anatomy, duplicate limbs, watermark, text, logo, low quality, blurry, jpeg artifacts, plastic skin, airbrushed, CGI, 3d render, heavy fake bokeh"
+  "negative_prompt": "deformed hands, extra fingers, fused fingers, bad anatomy, duplicate limbs, watermark, text, logo, unreadable muddy mess, uncanny symmetry, Facetune, beauty-filter face, influencer glamour, plastic skin, airbrushed, CGI, 3d render, heavy fake bokeh, stock photo, catalog lighting, TikTok reshaped eyes or jaw"
 }

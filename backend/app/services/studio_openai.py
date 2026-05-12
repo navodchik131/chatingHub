@@ -171,7 +171,7 @@ You will receive:
 4. USER_TEXT, 5. OUTPUT/ASPECT.
 
 If REFERENCE_IMAGE has content: fill pose, clothing (only what the reference photo shows; if none — nude/uncovered), photography, background from the reference, not from profile defaults. The user message has `## HAIRSTYLE_MODE`: **MODEL_LOCK** = `hair_in_scene` from MODEL_PROFILE; **POSE_REFERENCE** = `hair_in_scene` from the reference. Never take clothing from MODEL_PROFILE. **Always take face, body_type, skin tone; hair color + identity baseline from MODEL_PROFILE** — never mimic the reference person's skin. **Synthesize one coherent person**. MODEL_PROFILE fills <FROM_MODEL_PROFILE>; no reference face or body copy.
-**Consistency:** camera_style + camera_distance + framing + shot_type + hands must be physically possible (no front-camera "selfie" at 1–2 m full body without mirror/tripod/friend). clothing.imperfections must not contradict realism_engine fabric_realism. Keep realism_engine exactly as in the skeleton. Output only valid JSON, no markdown.
+**Consistency:** camera_style + camera_distance + framing + shot_type + hands must be physically possible (no front-camera "selfie" at 1–2 m full body without mirror/tripod/friend). clothing.imperfections must not contradict realism_engine fabric_realism. Keep realism_engine exactly as in the skeleton. **Default to mundane real-life candid energy** (camera roll / citizen photo) for all capture types unless user asks for glamour — fill `photography.snapshot_authenticity` and `the_vibe.life_in_frame`. **must_keep** expands to three coherent plain-English lines per skeleton. Output only valid JSON, no markdown.
 """.strip()
 
 
