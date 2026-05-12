@@ -648,6 +648,72 @@ select:focus {
   background: #000;
 }
 
+.studio-video-actions-split {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.studio-motion-history {
+  grid-column: 1 / -1;
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.studio-motion-history-title {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  margin: 0 0 0.65rem;
+  letter-spacing: -0.02em;
+}
+
+.studio-motion-history-grid {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 0.65rem;
+}
+
+.studio-motion-history-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.studio-motion-history-thumb-wrap {
+  position: relative;
+  border-radius: var(--control-radius-sm);
+  border: 1px solid var(--border);
+  overflow: hidden;
+  background: #000;
+  aspect-ratio: 9 / 16;
+}
+
+.studio-motion-history-thumb-wrap video,
+.studio-motion-history-thumb-wrap img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.studio-motion-history-meta {
+  font-size: 0.6875rem;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.studio-motion-history-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
 .account-sub {
   margin: 1.25rem 0 0.5rem;
   font-size: 0.9375rem;

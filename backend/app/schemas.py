@@ -159,6 +159,23 @@ class StudioMotionVideoOut(BaseModel):
     message: str | None = None
 
 
+class StudioMotionDrivingVideoUploadOut(BaseModel):
+    motion_video_file_id: str
+
+
+class StudioMotionRenderOut(BaseModel):
+    id: int
+    created_at: datetime
+    studio_generation_id: int
+    video_url: str
+    frame_image_url: str
+
+
+class StudioMotionRendersPageOut(BaseModel):
+    items: list[StudioMotionRenderOut]
+    has_more: bool
+
+
 class StudioUpscaleGenerationIn(BaseModel):
     """Опционально: целевое разрешение апскейла WaveSpeed Image Upscaler."""
 

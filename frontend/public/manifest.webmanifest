@@ -2,7 +2,7 @@
   "name": "ModelMate",
   "short_name": "ModelMate",
   "description": "Студия ведения AI-моделей: чат с переводом, интеграции и генерация изображений",
-  "start_url": "/",
+  "start_url": "/workspace/",
   "display": "standalone",
   "background_color": "#121b26",
   "theme_color": "#121b26",

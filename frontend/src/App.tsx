@@ -84,7 +84,7 @@ const CHAT_MESSAGES_PAGE = 40
  * Web Share API с передачей File на десктопе (Chrome/Edge) даёт системное окно «Поделиться»
  * вместо нормального скачивания. Оставляем share для установленной PWA и типичных тач-сценариев.
  */
-function shouldUseWebShareForImageFile(): boolean {
+function preferNativeShareOnMobile(): boolean {
   if (typeof window === 'undefined') return false
   try {
     const nav = window.navigator as Navigator & { standalone?: boolean }
@@ -511,6 +511,19 @@ interface StudioGenerationsPage {
   has_more: boolean
 }
 
+interface StudioMotionRenderItem {
+  id: number
+  created_at: string
+  studio_generation_id: number
+  video_url: string
+  frame_image_url: string
+}
+
+interface StudioMotionRendersPage {
+  items: StudioMotionRenderItem[]
+  has_more: boolean
+}
+
 /** Должен совпадать с default limit у GET /api/studio/generations */
 const STUDIO_ARCHIVE_PAGE = 10
 
@@ -708,6 +721,10 @@ export default function App() {
   const [motionResultVideoUrl, setMotionResultVideoUrl] = useState<string | null>(null)
   const [motionMsg, setMotionMsg] = useState<string | null>(null)
   const [motionAutoTextPreview, setMotionAutoTextPreview] = useState<string | null>(null)
+  const [motionRenders, setMotionRenders] = useState<StudioMotionRenderItem[]>([])
+  const [motionDrivingUploadBusy, setMotionDrivingUploadBusy] = useState(false)
+  const [motionUseStillFinal, setMotionUseStillFinal] = useState(false)
+  const [motionVideoDownloadBusy, setMotionVideoDownloadBusy] = useState(false)
 
   const studioPromptOnlyDev = useMemo(
     () =>
@@ -868,11 +885,54 @@ export default function App() {
     }
   }, [fetchStudioArchivePage, studioGenLoadingMore, studioGenHasMore])
 
+  const refreshMotionRenders = useCallback(async () => {
+    const r = await apiFetch('/api/studio/motion/renders?limit=40&skip=0')
+    if (!r.ok) return
+    const data = (await r.json()) as StudioMotionRendersPage
+    setMotionRenders(Array.isArray(data.items) ? data.items : [])
+  }, [])
+
+  const uploadMotionDrivingVideo = useCallback(async (file: File) => {
+    setMotionDrivingUploadBusy(true)
+    setMotionMsg(null)
+    setError(null)
+    try {
+      const fd = new FormData()
+      fd.append('video', file)
+      const r = await apiFetch('/api/studio/motion/upload-driving-video', {
+        method: 'POST',
+        body: fd,
+        timeoutMs: 120_000,
+      })
+      const data = (await r.json().catch(() => ({}))) as {
+        motion_video_file_id?: string
+        detail?: unknown
+      }
+      if (!r.ok) {
+        setError(formatApiErrorDetail(data) || r.statusText)
+        setMotionVideoFileId(null)
+        return
+      }
+      const id = typeof data.motion_video_file_id === 'string' ? data.motion_video_file_id.trim() : ''
+      setMotionVideoFileId(id || null)
+    } catch (e) {
+      setMotionVideoFileId(null)
+      setError(
+        e instanceof TypeError && e.message === 'Failed to fetch'
+          ? 'Сеть: не удалось загрузить видео на сервер.'
+          : e instanceof Error
+            ? e.message
+            : 'Ошибка загрузки видео',
+      )
+    } finally {
+      setMotionDrivingUploadBusy(false)
+    }
+  }, [])
+
   const loadAdminStats = useCallback(async () => {
     const r = await apiFetch('/api/admin/stats')
     if (r.ok) setAdminStats((await r.json()) as AdminStats)
   }, [])
-
   const fetchAdminUsers = useCallback(async (search: string) => {
     const q = new URLSearchParams()
     q.set('limit', '150')
@@ -998,6 +1058,21 @@ export default function App() {
       .catch((e) => setError(String(e)))
       .finally(() => setStudioArchiveInitialLoading(false))
   }, [authed, appSection, canStudioGenerate, loadStudioGenerationsReset])
+
+  useEffect(() => {
+    if (!authed || appSection !== 'studio_video') return
+    void refreshMotionRenders()
+  }, [authed, appSection, refreshMotionRenders])
+
+  useEffect(() => {
+    if (appSection !== 'studio_video') return
+    if (motionFrameArchiveId == null) return
+    const g = studioGenerations.find((x) => x.id === motionFrameArchiveId)
+    if (g) {
+      setMotionPreviewUrl(g.image_url)
+      setMotionPreviewGenId(g.id)
+    }
+  }, [appSection, motionFrameArchiveId, studioGenerations])
 
   const loadHealth = useCallback(async () => {
     const r = await fetch('/api/health')
@@ -1524,7 +1599,7 @@ export default function App() {
       const file = new File([blob], filename, { type: blob.type || 'image/png' })
 
       if (
-        shouldUseWebShareForImageFile() &&
+        preferNativeShareOnMobile() &&
         typeof navigator.share === 'function' &&
         typeof navigator.canShare === 'function'
       ) {
@@ -1555,6 +1630,72 @@ export default function App() {
       )
     } finally {
       setStudioDownloadBusy(false)
+    }
+  }
+
+  const downloadMotionResultVideo = async (urlRaw: string | null | undefined) => {
+    const url = urlRaw?.trim()
+    if (!url) return
+    setMotionVideoDownloadBusy(true)
+    setError(null)
+    try {
+      const tryShareUrl = async (): Promise<boolean> => {
+        if (!preferNativeShareOnMobile() || typeof navigator.share !== 'function') return false
+        try {
+          await navigator.share({ title: 'Видео ModelMate', url })
+          return true
+        } catch (err: unknown) {
+          if (err instanceof Error && err.name === 'AbortError') return true
+          return false
+        }
+      }
+
+      let blob: Blob | null = null
+      try {
+        const res = await fetch(url)
+        if (res.ok) blob = await res.blob()
+      } catch {
+        blob = null
+      }
+
+      if (blob) {
+        const name = `modelmate-motion-${Date.now()}.mp4`
+        const file = new File([blob], name, { type: blob.type || 'video/mp4' })
+        if (
+          preferNativeShareOnMobile() &&
+          typeof navigator.share === 'function' &&
+          typeof navigator.canShare === 'function' &&
+          navigator.canShare({ files: [file] })
+        ) {
+          try {
+            await navigator.share({ files: [file], title: 'Видео ModelMate' })
+            return
+          } catch (err: unknown) {
+            if (err instanceof Error && err.name === 'AbortError') return
+          }
+        }
+        const objectUrl = URL.createObjectURL(blob)
+        try {
+          const a = document.createElement('a')
+          a.href = objectUrl
+          a.download = name
+          document.body.appendChild(a)
+          a.click()
+          document.body.removeChild(a)
+        } finally {
+          window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000)
+        }
+        return
+      }
+
+      if (await tryShareUrl()) return
+      window.open(url, '_blank', 'noopener,noreferrer')
+    } catch {
+      setError(
+        'Не удалось сохранить ролик. На iPhone: кнопка «Поделиться» или меню⋯ на плеере → «Сохранить видео».',
+      )
+    } finally {
+      setMotionVideoDownloadBusy(false)
     }
   }
 
@@ -1643,9 +1784,6 @@ export default function App() {
     setMotionMsg(null)
     setMotionResultVideoUrl(null)
     setMotionAutoTextPreview(null)
-    setMotionPreviewUrl(null)
-    setMotionPreviewGenId(null)
-    setMotionVideoFileId(null)
     try {
       const fd = new FormData()
       if (motionFrameArchiveId != null) {
@@ -1664,6 +1802,7 @@ export default function App() {
       fd.append('studio_wave_profile', 'regular')
       fd.append('auto_motion_prompt', motionAutoPrompt ? '1' : '0')
       fd.append('lock_model_hairstyle', motionLockHairstyle ? '1' : '0')
+      fd.append('use_still_as_final', motionUseStillFinal && motionFirstFrameFile ? '1' : '0')
       const r = await apiFetch('/api/studio/motion/first-frame', {
         method: 'POST',
         body: fd,
@@ -1683,7 +1822,11 @@ export default function App() {
         setError(formatApiErrorDetail(data) || r.statusText)
         return
       }
-      setMotionVideoFileId(data.motion_video_file_id ?? null)
+      setMotionVideoFileId((prev) => {
+        const fromApi =
+          typeof data.motion_video_file_id === 'string' ? data.motion_video_file_id.trim() : ''
+        return fromApi || prev || null
+      })
       setMotionPreviewUrl(data.generated_image_url?.trim() || null)
       setMotionPreviewGenId(typeof data.generation_id === 'number' ? data.generation_id : null)
       setMotionMsg(data.wavespeed_message?.trim() || null)
@@ -1717,11 +1860,15 @@ export default function App() {
     setError(null)
     const prov = (health?.studio_motion_video_provider ?? 'kling').toLowerCase()
     const needDrivingFile = prov === 'kling' || prov === 'wan'
-    if (motionPreviewGenId == null || (needDrivingFile && !motionVideoFileId)) {
+    if (motionPreviewGenId == null) {
       setError(
-        needDrivingFile
-          ? 'Сначала создайте кадр (с референс-видео для переноса движения).'
-          : 'Сначала выполните шаг «Создать кадр».',
+        'Выберите снимок в архиве (превью подставится само) или нажмите «Создать кадр», чтобы сохранить кадр и промпт для видео.',
+      )
+      return
+    }
+    if (needDrivingFile && !motionVideoFileId) {
+      setError(
+        `Для провайдера «${prov}» нужен референс-видео: выберите файл и дождитесь сообщения об успешной загрузке (или выполните «Создать кадр» с тем же файлом).`,
       )
       return
     }
@@ -1756,6 +1903,7 @@ export default function App() {
       setMotionResultVideoUrl(data.video_url?.trim() || null)
       setMotionMsg(data.message?.trim() || null)
       void refreshMe()
+      void refreshMotionRenders()
     } catch (e) {
       setError(
         e instanceof TypeError && e.message === 'Failed to fetch'
@@ -4609,9 +4757,12 @@ export default function App() {
                   </label>
                 </div>
                 <p className="muted studio-video-lead" style={{ marginTop: '0.5rem' }}>
-                  Кадр: из архива «Картинки», файл картинки или первый кадр ролика. Для авто-описания движения и
-                  для Kling / WAN нужен референс-ролик. Режим Seedance I2V на сервере может обойтись без файла
-                  ролика на шаге «Сделать видео». Текущий провайдер:{' '}
+                  Кадр: из архива «Картинки», файл или первый кадр ролика. Если выбран снимок из архива или готовое
+                  фото загружается без повторной генерации — можно сразу «Сделать видео» (для промпта всё же нажмите
+                  «Создать кадр», если кадр впервые). Для{' '}
+                  <strong>Kling / WAN</strong> выберите референс-ролик: файл сохранится на сервер отдельно, шаг «Создать
+                  кадр» не обязателен, когда кадр уже выбран. Режим <strong>Seedance I2V</strong> может обойтись без
+                  файла ролика. Текущий провайдер:{' '}
                   <strong>{(health?.studio_motion_video_provider ?? 'kling').toLowerCase()}</strong>.
                 </p>
                 <div className="studio-grid studio-grid--simple studio-video-panel">
@@ -4647,6 +4798,7 @@ export default function App() {
                       onChange={(e) => {
                         const f = e.target.files?.[0] ?? null
                         setMotionFirstFrameFile(f)
+                        setMotionUseStillFinal(false)
                         if (f) setMotionFrameArchiveId(null)
                         setMotionVideoFileId(null)
                         setMotionPreviewUrl(null)
@@ -4659,10 +4811,11 @@ export default function App() {
                     ) : null}
                   </label>
                 <label className="studio-label">
-                  Референс-видео
+                  Референс-видео (Kling / WAN — обязателен; загрузка без шага «кадр»)
                     <input
                       type="file"
                       accept="video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov"
+                      disabled={motionDrivingUploadBusy}
                       onChange={(e) => {
                         const f = e.target.files?.[0] ?? null
                         setMotionVideoFile(f)
@@ -4670,9 +4823,16 @@ export default function App() {
                         setMotionPreviewUrl(null)
                         setMotionPreviewGenId(null)
                         setMotionResultVideoUrl(null)
+                        if (f) void uploadMotionDrivingVideo(f)
                       }}
                     />
                     {motionVideoFile ? <span className="studio-file-name">{motionVideoFile.name}</span> : null}
+                    {motionDrivingUploadBusy ? (
+                      <span className="muted studio-file-name"> Загрузка на сервер…</span>
+                    ) : null}
+                    {motionVideoFile && !motionDrivingUploadBusy && !motionVideoFileId ? (
+                      <span className="muted studio-file-name"> Ожидание загрузки…</span>
+                    ) : null}
                   </label>
                   <div className="studio-mode-row" role="group" aria-label="Персонаж">
                     <span className="studio-mode-label">Персонаж</span>
@@ -4709,6 +4869,19 @@ export default function App() {
                   />
                   <span>Причёска как у модели</span>
                 </label>
+                {motionFirstFrameFile ? (
+                  <label className="studio-label studio-check">
+                    <input
+                      type="checkbox"
+                      checked={motionUseStillFinal}
+                      onChange={(e) => setMotionUseStillFinal(e.target.checked)}
+                    />
+                    <span>
+                      Не генерировать картинку заново — использовать загруженный файл как финальный кадр (без второго
+                      прохода студии)
+                    </span>
+                  </label>
+                ) : null}
                 <label className="studio-label">
                   Пожелания к кадру
                   <textarea
@@ -4766,28 +4939,42 @@ export default function App() {
                     <div className="studio-generated-frame">
                       <img src={motionPreviewUrl} alt="" className="studio-gen-img" />
                     </div>
-                    <div className="studio-actions studio-actions--spaced">
-                      <button
-                        type="button"
-                        className="send-btn"
-                        disabled={
-                          motionBusyVideo ||
-                          !integ?.wavespeed_configured ||
-                          motionPreviewGenId == null ||
-                          (((health?.studio_motion_video_provider ?? 'kling').toLowerCase() === 'kling' ||
-                            (health?.studio_motion_video_provider ?? '').toLowerCase() === 'wan') &&
-                            !motionVideoFileId)
-                        }
-                        onClick={() => void runMotionRenderVideo()}
-                      >
-                        {motionBusyVideo ? 'Готовим видео…' : 'Сделать видео'}
-                      </button>
-                      {health?.studio_motion_control_credit_cost != null ? (
-                        <span className="studio-credit-hint">
-                          {health.studio_motion_control_credit_cost} кр.
-                        </span>
-                      ) : null}
-                    </div>
+                <div className="studio-video-actions-split">
+                  <div className="studio-actions studio-actions--spaced">
+                    <button
+                      type="button"
+                      className="send-btn"
+                      disabled={
+                        motionBusyVideo ||
+                        !integ?.wavespeed_configured ||
+                        motionPreviewGenId == null ||
+                        (((health?.studio_motion_video_provider ?? 'kling').toLowerCase() === 'kling' ||
+                          (health?.studio_motion_video_provider ?? '').toLowerCase() === 'wan') &&
+                          !motionVideoFileId)
+                      }
+                      onClick={() => void runMotionRenderVideo()}
+                    >
+                      {motionBusyVideo ? 'Готовим видео…' : 'Сделать видео'}
+                    </button>
+                    {health?.studio_motion_control_credit_cost != null ? (
+                      <span className="studio-credit-hint">
+                        {health.studio_motion_control_credit_cost} кр.
+                      </span>
+                    ) : null}
+                  </div>
+                  <button
+                    type="button"
+                    className="ghost-btn studio-motion-open-tab"
+                    title="Открыть ссылку в новой вкладке (Safari / Chrome)"
+                    disabled={motionBusyVideo}
+                    onClick={() => {
+                      if (motionPreviewGenId == null || !motionPreviewUrl) return
+                      window.open(motionPreviewUrl, '_blank', 'noopener,noreferrer')
+                    }}
+                  >
+                    Кадр в новой вкладке
+                  </button>
+                </div>
                   </div>
                 ) : null}
                 {motionResultVideoUrl ? (
@@ -4799,6 +4986,73 @@ export default function App() {
                       playsInline
                       className="studio-gen-img studio-video-player"
                     />
+                    <div className="studio-actions studio-actions--spaced">
+                      <button
+                        type="button"
+                        className="send-btn studio-download"
+                        disabled={motionVideoDownloadBusy}
+                        title="На iPhone: меню «Поделиться» — сохраните в Файлы или Фото"
+                        onClick={() => void downloadMotionResultVideo(motionResultVideoUrl)}
+                      >
+                        {motionVideoDownloadBusy ? 'Сохранение…' : 'Сохранить / поделиться'}
+                      </button>
+                      <button
+                        type="button"
+                        className="ghost-btn"
+                        disabled={motionVideoDownloadBusy}
+                        onClick={() => {
+                          window.open(motionResultVideoUrl, '_blank', 'noopener,noreferrer')
+                        }}
+                      >
+                        Открыть в новой вкладке
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+                {motionRenders.length > 0 ? (
+                  <div className="studio-motion-history">
+                    <h3 className="studio-motion-history-title">Последние видео</h3>
+                    <ul className="studio-motion-history-grid">
+                      {motionRenders.map((item) => (
+                        <li key={item.id} className="studio-motion-history-item">
+                          <div className="studio-motion-history-thumb-wrap" aria-hidden>
+                            <video
+                              src={item.video_url}
+                              poster={item.frame_image_url}
+                              muted
+                              playsInline
+                              preload="metadata"
+                            />
+                          </div>
+                          <span className="studio-motion-history-meta">
+                            #{item.id} · кадр #{item.studio_generation_id}
+                            <br />
+                            <span title={item.created_at}>
+                              {new Date(item.created_at).toLocaleString()}
+                            </span>
+                          </span>
+                          <div className="studio-motion-history-actions">
+                            <button
+                              type="button"
+                              className="ghost-btn"
+                              disabled={motionVideoDownloadBusy}
+                              onClick={() => void downloadMotionResultVideo(item.video_url)}
+                            >
+                              Сохранить
+                            </button>
+                            <button
+                              type="button"
+                              className="ghost-btn"
+                              onClick={() =>
+                                window.open(item.video_url, '_blank', 'noopener,noreferrer')
+                              }
+                            >
+                              Открыть
+                            </button>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
                   </div>
                 ) : null}
                 {motionMsg ? <div className="banner info studio-status-msg">{motionMsg}</div> : null}

@@ -100,6 +100,11 @@ class User(Base):
         back_populates="owner",
         cascade="all, delete-orphan",
     )
+    studio_motion_renders: Mapped[list["StudioMotionRender"]] = relationship(
+        "StudioMotionRender",
+        back_populates="owner",
+        cascade="all, delete-orphan",
+    )
     wavespeed_connection: Mapped[WavespeedConnection | None] = relationship(
         "WavespeedConnection", back_populates="user", uselist=False
     )
@@ -394,6 +399,32 @@ class StudioGeneration(Base):
     )
 
     owner: Mapped[User] = relationship("User", back_populates="studio_generations")
+    motion_renders: Mapped[list["StudioMotionRender"]] = relationship(
+        "StudioMotionRender", back_populates="studio_generation"
+    )
+
+
+class StudioMotionRender(Base):
+    """История финальных видео по шагу «Сделать видео» (URL у провайдера; для списка в кабинете)."""
+
+    __tablename__ = "studio_motion_renders"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    studio_generation_id: Mapped[int] = mapped_column(
+        ForeignKey("studio_generations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    video_url: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+    owner: Mapped[User] = relationship("User", back_populates="studio_motion_renders")
+    studio_generation: Mapped["StudioGeneration"] = relationship(
+        "StudioGeneration", back_populates="motion_renders"
+    )
 
 
 class Message(Base):

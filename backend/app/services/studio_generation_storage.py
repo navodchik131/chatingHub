@@ -19,6 +19,94 @@ log = logging.getLogger(__name__)
 MAX_ARCHIVE_BYTES = 25 * 1024 * 1024
 
 
+async def persist_studio_generation_from_uploaded_bytes(
+    session: AsyncSession,
+    *,
+    owner_id: int,
+    data: bytes,
+    content_type: str,
+    output_aspect: str | None,
+    studio_model_id: int | None,
+    refined_prompt: str | None,
+    motion_video_prompt_auto: str | None,
+) -> StudioGeneration | None:
+    """Сохраняет уже готовый кадр (upload) в архив студии без WaveSpeed."""
+    if not data:
+        return None
+    if len(data) > MAX_ARCHIVE_BYTES:
+        log.warning("studio archive (upload): file too large (%s bytes)", len(data))
+        return None
+
+    ct = (content_type or "").split(";")[0].strip().lower()
+    if ct in ("image/jpeg", "image/jpg"):
+        ext, media = ".jpg", "image/jpeg"
+    elif ct == "image/png":
+        ext, media = ".png", "image/png"
+    elif ct == "image/webp":
+        ext, media = ".webp", "image/webp"
+    elif ct == "image/gif":
+        ext, media = ".gif", "image/gif"
+    else:
+        ext, media = ".jpg", "image/jpeg"
+
+    model_row: UserStudioModel | None = None
+    if studio_model_id is not None:
+        stmt = (
+            select(UserStudioModel)
+            .where(UserStudioModel.id == studio_model_id)
+            .options(selectinload(UserStudioModel.images))
+        )
+        model_row = (await session.execute(stmt)).scalar_one_or_none()
+    out_data = data
+    if model_row is not None and (model_row.camera_preset_id or "").strip():
+        from app.services.studio_camera_presets import get_camera_preset_by_id
+        from app.services.studio_phone_export import apply_phone_export_to_jpeg
+
+        preset = get_camera_preset_by_id(model_row.camera_preset_id.strip())
+        if preset:
+            selfie_for_exif = export_selfie_flag_for_phone_exif(list(model_row.images))
+            export_bytes = await anyio.to_thread.run_sync(
+                partial(
+                    apply_phone_export_to_jpeg,
+                    out_data,
+                    preset=preset,
+                    selfie=selfie_for_exif,
+                    export_lat=model_row.export_lat,
+                    export_lon=model_row.export_lon,
+                ),
+            )
+            if export_bytes is not None:
+                out_data = export_bytes
+                ext, media = ".jpg", "image/jpeg"
+
+    rel = f"data/studio_generations/{owner_id}/{uuid.uuid4().hex}{ext}"
+    path = (BACKEND_DIR / rel).resolve()
+    try:
+        path.relative_to(BACKEND_DIR.resolve())
+    except ValueError:
+        log.warning("studio archive (upload): bad path")
+        return None
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(out_data)
+
+    rp = (refined_prompt or "").strip()
+    excerpt = (rp[:2000] if rp else None) or None
+    row = StudioGeneration(
+        user_id=owner_id,
+        relative_path=rel.replace("\\", "/"),
+        content_type=media,
+        output_aspect=output_aspect,
+        studio_model_id=studio_model_id,
+        prompt_excerpt=excerpt,
+        refined_prompt=rp or None,
+        motion_video_prompt_auto=(motion_video_prompt_auto or "").strip() or None,
+        source_url=None,
+    )
+    session.add(row)
+    await session.flush()
+    return row
+
+
 async def download_and_create_generation(
     session: AsyncSession,
     *,

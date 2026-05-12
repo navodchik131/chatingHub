@@ -19,6 +19,7 @@ from app.auth.deps import get_current_user
 from app.config import BACKEND_DIR, settings
 from app.db.models import (
     StudioGeneration,
+    StudioMotionRender,
     Subscription,
     SubscriptionStatus,
     User,
@@ -37,7 +38,10 @@ from app.schemas import (
     StudioModelImageOut,
     StudioModelImagePatchIn,
     StudioModelProfileGenerateOut,
+    StudioMotionDrivingVideoUploadOut,
     StudioMotionFirstFrameOut,
+    StudioMotionRenderOut,
+    StudioMotionRendersPageOut,
     StudioMotionVideoOut,
     StudioRefinePromptOut,
     StudioUpscaleGenerationIn,
@@ -70,6 +74,7 @@ from app.services.studio_aspect import (
 )
 from app.services.studio_generation_storage import (
     download_and_create_generation,
+    persist_studio_generation_from_uploaded_bytes,
     safe_delete_generation_file,
 )
 from app.services.studio_image_token import (
@@ -502,6 +507,77 @@ async def public_studio_motion_video(t: str) -> FileResponse:
         raise HTTPException(status_code=404, detail="Не найдено") from None
     mime = mimetypes.guess_type(path.name)[0] or "video/mp4"
     return FileResponse(path, media_type=mime)
+
+
+@router.post(
+    "/studio/motion/upload-driving-video",
+    response_model=StudioMotionDrivingVideoUploadOut,
+)
+async def api_studio_motion_upload_driving_video(
+    video: UploadFile | None = File(None),
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> StudioMotionDrivingVideoUploadOut:
+    """Сохраняет референс-видео на диск без шага «Создать кадр» — для прямого «Сделать видео» с архивным кадром."""
+    assert_permission(user, PERM_STUDIO_GENERATE)
+    oid = workspace_owner_id(user)
+    sub_b, _llm, _ws, _plan, _credits = await load_owner_studio_billing(session, oid)
+    _require_studio_subscription(user, sub_b, credits_balance=_credits)
+    max_v = max(1, int(settings.studio_motion_max_upload_mb)) * 1024 * 1024
+    if video is None or not (video.filename or "").strip():
+        raise HTTPException(status_code=400, detail="Выберите файл видео (MP4/WebM/MOV).")
+    raw_video = await video.read()
+    if len(raw_video) > max_v:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Видео слишком большое (макс. {settings.studio_motion_max_upload_mb} МБ).",
+        )
+    if not raw_video:
+        raise HTTPException(status_code=400, detail="Пустой файл видео.")
+    fid = save_motion_video_bytes(owner_id=oid, raw=raw_video, filename=video.filename)
+    return StudioMotionDrivingVideoUploadOut(motion_video_file_id=fid)
+
+
+@router.get("/studio/motion/renders", response_model=StudioMotionRendersPageOut)
+async def api_list_motion_renders(
+    request: Request,
+    limit: int = Query(20, ge=1, le=50),
+    skip: int = Query(0, ge=0, le=50_000),
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> StudioMotionRendersPageOut:
+    assert_permission(user, PERM_STUDIO_GENERATE)
+    oid = workspace_owner_id(user)
+    take = int(limit) + 1
+    stmt = (
+        select(StudioMotionRender)
+        .where(StudioMotionRender.user_id == oid)
+        .order_by(StudioMotionRender.created_at.desc(), StudioMotionRender.id.desc())
+        .offset(int(skip))
+        .limit(take)
+    )
+    rows = list((await session.execute(stmt)).scalars().all())
+    has_more = len(rows) > limit
+    rows = rows[:limit]
+    base = _public_app_base(request)
+    if not base:
+        return StudioMotionRendersPageOut(items=[], has_more=False)
+    out_items: list[StudioMotionRenderOut] = []
+    for r in rows:
+        tok = create_generation_image_access_token(user_id=oid, generation_id=r.studio_generation_id)
+        img = f"{base}/api/studio/public-generation-image?t={quote(tok, safe='')}"
+        url = (r.video_url or "").strip()
+        if url:
+            out_items.append(
+                StudioMotionRenderOut(
+                    id=r.id,
+                    created_at=r.created_at,
+                    studio_generation_id=r.studio_generation_id,
+                    video_url=url,
+                    frame_image_url=img,
+                )
+            )
+    return StudioMotionRendersPageOut(items=out_items, has_more=has_more)
 
 
 @router.get("/studio/generations", response_model=StudioGenerationsPageOut)
@@ -1589,6 +1665,7 @@ async def api_studio_motion_first_frame(
     studio_wave_profile: str = Form("regular"),
     auto_motion_prompt: str = Form("1"),
     lock_model_hairstyle: str = Form("1"),
+    use_still_as_final: str = Form("0"),
     session: AsyncSession = Depends(get_session),
     user: User = Depends(get_current_user),
 ) -> StudioMotionFirstFrameOut:
@@ -1628,6 +1705,8 @@ async def api_studio_motion_first_frame(
     video_path: Path | None = None
     max_v = max(1, int(settings.studio_motion_max_upload_mb)) * 1024 * 1024
 
+    explicit_still_file_upload = False
+
     if existing_gid is not None:
         gen_arch_row, first_frame, first_frame_media = await _load_owned_generation_still_for_motion(
             session, owner_id=oid, generation_id=existing_gid
@@ -1648,6 +1727,7 @@ async def api_studio_motion_first_frame(
             first_frame_media = (
                 mimetypes.guess_type(first_frame_image.filename or "")[0] or "image/jpeg"
             )
+        explicit_still_file_upload = True
     elif video is not None and (video.filename or "").strip():
         raw_video = await video.read()
         if len(raw_video) > max_v:
@@ -1697,6 +1777,10 @@ async def api_studio_motion_first_frame(
                 owner_id=oid, raw=raw_v2, filename=video.filename
             )
             video_path = resolve_motion_video_file(oid, motion_video_file_id)
+
+    persist_uploaded_final = explicit_still_file_upload and _truthy_wavespeed_flag(
+        use_still_as_final
+    )
 
     eff_mid: int | None = (
         gen_arch_row.studio_model_id if gen_arch_row is not None else None
@@ -1810,9 +1894,9 @@ async def api_studio_motion_first_frame(
         )
 
     mode_n = "model"
-    skip_image_generation = gen_arch_row is not None
+    skip_ws = gen_arch_row is not None or persist_uploaded_final
     ws_key = _studio_refine_wavespeed_preflight(
-        do_wavespeed=not skip_image_generation,
+        do_wavespeed=not skip_ws,
         plan=plan,
         ws_row=ws_row,
         owner_subscription=sub_b,
@@ -1834,24 +1918,48 @@ async def api_studio_motion_first_frame(
     wavespeed_message: str | None = None
     generation_id: int | None = None
 
-    if skip_image_generation:
-        assert gen_arch_row is not None
+    if skip_ws:
         base = (arch_base or "").strip().rstrip("/")
         if not base.lower().startswith("https://"):
             raise HTTPException(
                 status_code=400,
                 detail="Нужен публичный HTTPS (PUBLIC_APP_URL) для ссылок на кадр и WaveSpeed.",
             )
-        gtok = create_generation_image_access_token(
-            user_id=oid, generation_id=gen_arch_row.id
-        )
-        generated_image_url = (
-            f"{base}/api/studio/public-generation-image?t={quote(gtok, safe='')}"
-        )
-        generation_id = gen_arch_row.id
-        gen_arch_row.motion_video_prompt_auto = motion_auto_for_db
-        gen_arch_row.refined_prompt = refined
-        session.add(gen_arch_row)
+        if gen_arch_row is not None:
+            gtok = create_generation_image_access_token(
+                user_id=oid, generation_id=gen_arch_row.id
+            )
+            generated_image_url = (
+                f"{base}/api/studio/public-generation-image?t={quote(gtok, safe='')}"
+            )
+            generation_id = gen_arch_row.id
+            gen_arch_row.motion_video_prompt_auto = motion_auto_for_db
+            gen_arch_row.refined_prompt = refined
+            session.add(gen_arch_row)
+        else:
+            assert persist_uploaded_final
+            gen_row = await persist_studio_generation_from_uploaded_bytes(
+                session,
+                owner_id=oid,
+                data=first_frame,
+                content_type=first_frame_media,
+                output_aspect=aspect_key,
+                studio_model_id=eff_mid,
+                refined_prompt=refined,
+                motion_video_prompt_auto=motion_auto_for_db,
+            )
+            if gen_row is None:
+                raise HTTPException(
+                    status_code=500,
+                    detail="Не удалось сохранить загруженный кадр в архив.",
+                )
+            generation_id = gen_row.id
+            gtok_new = create_generation_image_access_token(
+                user_id=oid, generation_id=gen_row.id
+            )
+            generated_image_url = (
+                f"{base}/api/studio/public-generation-image?t={quote(gtok_new, safe='')}"
+            )
     else:
         if not pub.lower().startswith("https://"):
             raise HTTPException(
@@ -2116,6 +2224,17 @@ async def api_studio_motion_render_video(
             )
     except RuntimeError as e:
         msg = str(e)
+
+    if video_url:
+        vu = (video_url or "").strip()
+        if vu:
+            session.add(
+                StudioMotionRender(
+                    user_id=oid,
+                    studio_generation_id=gid,
+                    video_url=vu,
+                )
+            )
 
     await record_usage(
         session,
