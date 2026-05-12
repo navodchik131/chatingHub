@@ -1,9 +1,23 @@
-# Сборка фронтенда
+# Сборка фронтенда (Alpine — меньше образ, но npm тянет пакеты с сети: на слабом канале шаг может
+# идти 5–15+ мин без новых строк в логе; сборка с --progress=plain покажет прогресс).
 FROM node:22-alpine AS frontend-build
 WORKDIR /app/frontend
+
+# Меньше «тишины» и лишних запросов при установке.
+# На VPS с 1–2 ГБ RAM параллельный npm часто упирается в OOM → процесс режут (часто exit 146).
+# Ограничиваем сокеты/параллелизм; при желании на хосте добавьте 1–2 ГБ swap.
+ENV npm_config_fund=false \
+    npm_config_audit=false \
+    npm_config_update_notifier=false \
+    npm_config_fetch_retries=5 \
+    npm_config_fetch_retry_mintimeout=20000 \
+    npm_config_fetch_retry_maxtimeout=120000 \
+    npm_config_maxsockets=2
+
 COPY frontend/package.json frontend/package-lock.json ./
-# npm ci требует полного соответствия lock под все платформы; в CI/Docker — надёжнее install
-RUN npm install
+# ci быстрее и детерминированнее install; при рассинхроне lock откатится на install
+RUN npm ci --no-audit --no-fund || npm install --no-audit --no-fund
+
 COPY frontend/ ./
 RUN npm run build
 
@@ -13,6 +27,8 @@ WORKDIR /app/backend
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
+ENV DEBIAN_FRONTEND=noninteractive
+ENV DEBCONF_NONINTERACTIVE_SEEN=true
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
