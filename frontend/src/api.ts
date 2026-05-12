@@ -11,13 +11,28 @@ export function setToken(token: string | null): void {
 
 export async function apiFetch(
   path: string,
-  init: RequestInit = {},
+  init: RequestInit & { timeoutMs?: number } = {},
 ): Promise<Response> {
-  const headers = new Headers(init.headers)
+  const { timeoutMs, ...restInit } = init
+  const headers = new Headers(restInit.headers)
   const t = getToken()
   if (t) headers.set('Authorization', `Bearer ${t}`)
-  if (!headers.has('Content-Type') && init.body && typeof init.body === 'string') {
+  if (!headers.has('Content-Type') && restInit.body && typeof restInit.body === 'string') {
     headers.set('Content-Type', 'application/json')
   }
-  return fetch(path, { ...init, headers })
+  let ctl: AbortController | undefined
+  let to: ReturnType<typeof setTimeout> | undefined
+  if (typeof timeoutMs === 'number' && timeoutMs > 0 && !restInit.signal) {
+    ctl = new AbortController()
+    to = setTimeout(() => ctl!.abort(), timeoutMs)
+  }
+  try {
+    return await fetch(path, {
+      ...restInit,
+      headers,
+      signal: ctl?.signal ?? restInit.signal,
+    })
+  } finally {
+    if (to) clearTimeout(to)
+  }
 }

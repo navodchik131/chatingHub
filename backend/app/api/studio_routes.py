@@ -1550,15 +1550,43 @@ async def api_studio_refine_prompt(
     )
 
 
+async def _load_owned_generation_still_for_motion(
+    session: AsyncSession,
+    *,
+    owner_id: int,
+    generation_id: int,
+) -> tuple[StudioGeneration, bytes, str]:
+    row = await session.get(StudioGeneration, generation_id)
+    if not row or row.user_id != owner_id:
+        raise HTTPException(status_code=404, detail="Генерация не найдена")
+    abs_path = (BACKEND_DIR / row.relative_path).resolve()
+    try:
+        abs_path.relative_to(BACKEND_DIR.resolve())
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Не найдено") from None
+    if not abs_path.is_file():
+        raise HTTPException(
+            status_code=404,
+            detail="Файл изображения отсутствует на сервере",
+        )
+    data = await anyio.to_thread.run_sync(abs_path.read_bytes)
+    ct = (row.content_type or "").strip() or mimetypes.guess_type(abs_path.name)[0] or "image/png"
+    if not ct.startswith("image/"):
+        ct = "image/png"
+    return row, data, ct
+
+
 @router.post("/studio/motion/first-frame", response_model=StudioMotionFirstFrameOut)
 async def api_studio_motion_first_frame(
     request: Request,
-    video: UploadFile = File(...),
-    model_id: str = Form(...),
+    video: UploadFile | None = File(None),
+    first_frame_image: UploadFile | None = File(None),
+    existing_generation_id: str = Form(""),
+    model_id: str = Form(""),
     description: str = Form(""),
     output_aspect: str = Form("9:16"),
     wan_edit_tier: str = Form("standard"),
-    studio_wave_profile: str = Form("nsfw"),
+    studio_wave_profile: str = Form("regular"),
     auto_motion_prompt: str = Form("1"),
     lock_model_hairstyle: str = Form("1"),
     session: AsyncSession = Depends(get_session),
@@ -1572,10 +1600,6 @@ async def api_studio_motion_first_frame(
             detail="Шаблон промпта студии не настроен (skeleton / system).",
         )
 
-    mid = _parse_optional_model_id(model_id)
-    if mid is None:
-        raise HTTPException(status_code=400, detail="Выберите сохранённую модель.")
-
     try:
         aspect_key = normalize_aspect_key(output_aspect)
     except ValueError as e:
@@ -1586,45 +1610,108 @@ async def api_studio_motion_first_frame(
     sub_b, llm_row, ws_row, plan, _credits = await load_owner_studio_billing(session, oid)
     _require_studio_subscription(user, sub_b, credits_balance=_credits)
 
-    if not (video.filename or "").strip():
-        raise HTTPException(status_code=400, detail="Загрузите видео (MP4, WebM или MOV).")
-    raw_video = await video.read()
-    max_b = max(1, int(settings.studio_motion_max_upload_mb)) * 1024 * 1024
-    if len(raw_video) > max_b:
+    raw_ex = (existing_generation_id or "").strip()
+    existing_gid: int | None = None
+    if raw_ex:
+        try:
+            existing_gid = int(raw_ex)
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail="Некорректный номер генерации из архива.",
+            ) from None
+
+    gen_arch_row: StudioGeneration | None = None
+    first_frame: bytes = b""
+    first_frame_media = "image/jpeg"
+    motion_video_file_id: str | None = None
+    video_path: Path | None = None
+    max_v = max(1, int(settings.studio_motion_max_upload_mb)) * 1024 * 1024
+
+    if existing_gid is not None:
+        gen_arch_row, first_frame, first_frame_media = await _load_owned_generation_still_for_motion(
+            session, owner_id=oid, generation_id=existing_gid
+        )
+    elif first_frame_image is not None and (first_frame_image.filename or "").strip():
+        first_frame = await first_frame_image.read()
+        if len(first_frame) > MAX_IMAGE_BYTES:
+            raise HTTPException(
+                status_code=400,
+                detail="Файл первого кадра слишком большой (макс. 12 МБ).",
+            )
+        if not first_frame:
+            raise HTTPException(status_code=400, detail="Пустой файл первого кадра.")
+        ct = (first_frame_image.content_type or "").strip().lower()
+        if ct and ct.startswith("image/"):
+            first_frame_media = ct.split(";")[0].strip()
+        else:
+            first_frame_media = (
+                mimetypes.guess_type(first_frame_image.filename or "")[0] or "image/jpeg"
+            )
+    elif video is not None and (video.filename or "").strip():
+        raw_video = await video.read()
+        if len(raw_video) > max_v:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Видео слишком большое (макс. {settings.studio_motion_max_upload_mb} МБ).",
+            )
+        if not raw_video:
+            raise HTTPException(status_code=400, detail="Пустой файл видео.")
+        motion_video_file_id = save_motion_video_bytes(
+            owner_id=oid, raw=raw_video, filename=video.filename
+        )
+        video_path = resolve_motion_video_file(oid, motion_video_file_id)
+        if video_path is None:
+            raise HTTPException(status_code=500, detail="Не удалось сохранить видео.")
+        try:
+            first_frame = await anyio.to_thread.run_sync(
+                lambda vp=video_path: extract_first_frame_jpeg(vp)
+            )
+        except Exception as e:
+            log.warning("motion first frame ffmpeg: %s", e)
+            raise HTTPException(
+                status_code=400,
+                detail="Не удалось прочитать видео. Нужен MP4/WebM/MOV и ffmpeg на сервере.",
+            ) from e
+        if len(first_frame) < 64:
+            raise HTTPException(status_code=400, detail="Не удалось извлечь кадр из видео.")
+        first_frame_media = "image/jpeg"
+    else:
         raise HTTPException(
             status_code=400,
-            detail=f"Видео слишком большое (макс. {settings.studio_motion_max_upload_mb} МБ).",
+            detail="Загрузите референс-видео, файл первого кадра или выберите снимок из архива.",
         )
-    if not raw_video:
-        raise HTTPException(status_code=400, detail="Пустой файл видео.")
 
-    sm_loaded = await _load_studio_model_owned(session, oid, mid)
+    from_archive_or_still_upload = gen_arch_row is not None or (
+        first_frame_image is not None and (first_frame_image.filename or "").strip()
+    )
+    if from_archive_or_still_upload and video is not None and (video.filename or "").strip():
+        raw_v2 = await video.read()
+        if len(raw_v2) > max_v:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Видео слишком большое (макс. {settings.studio_motion_max_upload_mb} МБ).",
+            )
+        if raw_v2:
+            motion_video_file_id = save_motion_video_bytes(
+                owner_id=oid, raw=raw_v2, filename=video.filename
+            )
+            video_path = resolve_motion_video_file(oid, motion_video_file_id)
+
+    eff_mid: int | None = (
+        gen_arch_row.studio_model_id if gen_arch_row is not None else None
+    )
+    if eff_mid is None:
+        eff_mid = _parse_optional_model_id(model_id)
+    if eff_mid is None:
+        raise HTTPException(status_code=400, detail="Выберите сохранённую модель.")
+
+    sm_loaded = await _load_studio_model_owned(session, oid, eff_mid)
     if not sm_loaded:
         raise HTTPException(status_code=404, detail="Модель не найдена")
     imgs_model = sort_model_images_for_studio(list(sm_loaded.images))
     if not imgs_model:
         raise HTTPException(status_code=400, detail="У модели нет фотографий.")
-
-    motion_video_file_id = save_motion_video_bytes(
-        owner_id=oid, raw=raw_video, filename=video.filename
-    )
-    video_path = resolve_motion_video_file(oid, motion_video_file_id)
-    if video_path is None:
-        raise HTTPException(status_code=500, detail="Не удалось сохранить видео.")
-
-    try:
-        first_frame = await anyio.to_thread.run_sync(
-            lambda vp=video_path: extract_first_frame_jpeg(vp)
-        )
-    except Exception as e:
-        log.warning("motion first frame ffmpeg: %s", e)
-        raise HTTPException(
-            status_code=400,
-            detail="Не удалось прочитать видео. Нужен формат MP4/WebM/MOV и утилита ffmpeg на сервере.",
-        ) from e
-
-    if len(first_frame) < 64:
-        raise HTTPException(status_code=400, detail="Не удалось извлечь кадр из видео.")
 
     llm_creds = studio_llm_credentials(plan=plan, llm_row=llm_row)
     wan_tier_n = _normalize_wan_edit_tier(wan_edit_tier)
@@ -1634,6 +1721,11 @@ async def api_studio_motion_first_frame(
 
     motion_clip_summary: str | None = None
     if _truthy_wavespeed_flag(auto_motion_prompt):
+        if video_path is None:
+            raise HTTPException(
+                status_code=400,
+                detail="Для авто-описания движения по ролику загрузите референс-видео.",
+            )
         try:
             frames = await anyio.to_thread.run_sync(
                 lambda vp=video_path: extract_video_sample_frames_jpeg(vp, max_frames=4)
@@ -1652,7 +1744,7 @@ async def api_studio_motion_first_frame(
     try:
         reference_scene = await describe_motion_video_first_frame_scene_openai(
             image_bytes=first_frame,
-            image_media_type="image/jpeg",
+            image_media_type=first_frame_media,
             credentials=llm_creds,
         )
     except RuntimeError as e:
@@ -1660,7 +1752,7 @@ async def api_studio_motion_first_frame(
         try:
             reference_scene = await describe_reference_image_openai(
                 image_bytes=first_frame,
-                image_media_type="image/jpeg",
+                image_media_type=first_frame_media,
                 hairstyle_from_pose_reference=not effective_lock_hairstyle,
                 credentials=llm_creds,
             )
@@ -1711,14 +1803,21 @@ async def api_studio_motion_first_frame(
     except RuntimeError as e:
         raise HTTPException(status_code=502, detail=str(e)) from e
 
+    motion_auto_for_db = reference_scene.strip()
+    if motion_clip_summary and motion_clip_summary.strip():
+        motion_auto_for_db += (
+            "\n\n[Clip motion — sampled frames]\n" + motion_clip_summary.strip()
+        )
+
     mode_n = "model"
+    skip_image_generation = gen_arch_row is not None
     ws_key = _studio_refine_wavespeed_preflight(
-        do_wavespeed=True,
+        do_wavespeed=not skip_image_generation,
         plan=plan,
         ws_row=ws_row,
         owner_subscription=sub_b,
         mode_n=mode_n,
-        mid=mid,
+        mid=eff_mid,
         sm_loaded=sm_loaded,
         imgs_model=imgs_model,
         image_bytes=first_frame,
@@ -1728,114 +1827,134 @@ async def api_studio_motion_first_frame(
     cost = apply_studio_credit_cost(plan, settings.credit_cost_studio_prompt_refine)
     billing = await ensure_can_consume_credits(session, user, cost)
 
+    arch_base = _public_app_base(request)
     pub = (settings.public_app_url or "").strip().rstrip("/")
-    if not pub.lower().startswith("https://"):
-        raise HTTPException(
-            status_code=400,
-            detail="Генерация недоступна: у сервиса не настроен публичный HTTPS-адрес (PUBLIC_APP_URL).",
-        )
 
     generated_image_url: str | None = None
     wavespeed_message: str | None = None
-    image_urls: list[str] = []
-    user_pose_ref_prepended = False
-    try:
-        fid_pose = save_pose_reference_bytes(
-            owner_id=oid,
-            raw=first_frame,
-            content_type="image/jpeg",
+    generation_id: int | None = None
+
+    if skip_image_generation:
+        assert gen_arch_row is not None
+        base = (arch_base or "").strip().rstrip("/")
+        if not base.lower().startswith("https://"):
+            raise HTTPException(
+                status_code=400,
+                detail="Нужен публичный HTTPS (PUBLIC_APP_URL) для ссылок на кадр и WaveSpeed.",
+            )
+        gtok = create_generation_image_access_token(
+            user_id=oid, generation_id=gen_arch_row.id
         )
-        ptok = create_pose_reference_access_token(user_id=oid, file_id=fid_pose)
-        image_urls.append(
-            f"{pub}/api/studio/public-pose-reference?t={quote(ptok, safe='')}"
+        generated_image_url = (
+            f"{base}/api/studio/public-generation-image?t={quote(gtok, safe='')}"
         )
-        user_pose_ref_prepended = True
-    except Exception as e:
-        log.warning("motion: pose ref save failed: %s", e)
-        wavespeed_message = "Не удалось подготовить кадр из видео для WaveSpeed."
-
-    if not wavespeed_message:
-        for im in imgs_for_ws[:10]:
-            tok = create_model_image_access_token(user_id=oid, image_id=im.id)
-            image_urls.append(
-                f"{pub}/api/studio/public-model-image?t={quote(tok, safe='')}"
+        generation_id = gen_arch_row.id
+        gen_arch_row.motion_video_prompt_auto = motion_auto_for_db
+        gen_arch_row.refined_prompt = refined
+        session.add(gen_arch_row)
+    else:
+        if not pub.lower().startswith("https://"):
+            raise HTTPException(
+                status_code=400,
+                detail="Генерация недоступна: у сервиса не настроен публичный HTTPS-адрес (PUBLIC_APP_URL).",
             )
 
-    if not image_urls:
-        wavespeed_message = "Нет изображений для WaveSpeed."
-
-    if not wavespeed_message:
-        pose_is_last_after_reorder = False
-        if wave_profile_n == "regular":
-            pose_is_last_after_reorder = bool(user_pose_ref_prepended and len(image_urls) >= 2)
-            image_urls = _nano_banana_reorder_image_urls(
-                image_urls,
-                studio_mode=mode_n,
-                user_pose_ref_prepended=user_pose_ref_prepended,
-            )
-            wavespeed_prompt = finalize_nano_banana_studio_prompt(
-                refined,
-                studio_mode=mode_n,
-                user_photo_edit_first=False,
-                user_pose_reference_is_last=pose_is_last_after_reorder,
-                lock_model_hairstyle=effective_lock_hairstyle,
-            )
-        else:
-            wavespeed_prompt = finalize_wavespeed_studio_prompt(
-                refined,
-                studio_mode=mode_n,
-                user_image_first=user_pose_ref_prepended,
-                lock_model_hairstyle=effective_lock_hairstyle,
-            )
-        if settings.wavespeed_seedream_omit_size:
-            size_for_ws: str | None = None
-        else:
-            size_for_ws = wavespeed_size_string(aspect_key)
+        image_urls: list[str] = []
+        user_pose_ref_prepended = False
+        pose_ct = first_frame_media if first_frame_media.startswith("image/") else "image/jpeg"
         try:
+            fid_pose = save_pose_reference_bytes(
+                owner_id=oid,
+                raw=first_frame,
+                content_type=pose_ct,
+            )
+            ptok = create_pose_reference_access_token(user_id=oid, file_id=fid_pose)
+            image_urls.append(
+                f"{pub}/api/studio/public-pose-reference?t={quote(ptok, safe='')}"
+            )
+            user_pose_ref_prepended = True
+        except Exception as e:
+            log.warning("motion: pose ref save failed: %s", e)
+            wavespeed_message = "Не удалось подготовить кадр для WaveSpeed."
+
+        if not wavespeed_message:
+            for im in imgs_for_ws[:10]:
+                tok = create_model_image_access_token(user_id=oid, image_id=im.id)
+                image_urls.append(
+                    f"{pub}/api/studio/public-model-image?t={quote(tok, safe='')}"
+                )
+
+        if not image_urls:
+            wavespeed_message = "Нет изображений для WaveSpeed."
+
+        if not wavespeed_message:
+            pose_is_last_after_reorder = False
             if wave_profile_n == "regular":
-                generated_image_url = await nano_banana_pro_edit_image_url(
-                    api_key=ws_key,
-                    image_urls=image_urls,
-                    prompt=wavespeed_prompt,
-                    aspect_ratio=aspect_key,
+                pose_is_last_after_reorder = bool(
+                    user_pose_ref_prepended and len(image_urls) >= 2
+                )
+                image_urls = _nano_banana_reorder_image_urls(
+                    image_urls,
+                    studio_mode=mode_n,
+                    user_pose_ref_prepended=user_pose_ref_prepended,
+                )
+                wavespeed_prompt = finalize_nano_banana_studio_prompt(
+                    refined,
+                    studio_mode=mode_n,
+                    user_photo_edit_first=False,
+                    user_pose_reference_is_last=pose_is_last_after_reorder,
+                    lock_model_hairstyle=effective_lock_hairstyle,
                 )
             else:
-                generated_image_url = await seedream_v45_edit_image_url(
-                    api_key=ws_key,
-                    image_urls=image_urls,
-                    prompt=wavespeed_prompt,
-                    size=size_for_ws,
-                    wan_edit_tier=wan_tier_n,
+                wavespeed_prompt = finalize_wavespeed_studio_prompt(
+                    refined,
+                    studio_mode=mode_n,
+                    user_image_first=user_pose_ref_prepended,
+                    lock_model_hairstyle=effective_lock_hairstyle,
                 )
-        except RuntimeError as e:
-            wavespeed_message = str(e)
+            if settings.wavespeed_seedream_omit_size:
+                size_for_ws: str | None = None
+            else:
+                size_for_ws = wavespeed_size_string(aspect_key)
+            try:
+                if wave_profile_n == "regular":
+                    generated_image_url = await nano_banana_pro_edit_image_url(
+                        api_key=ws_key,
+                        image_urls=image_urls,
+                        prompt=wavespeed_prompt,
+                        aspect_ratio=aspect_key,
+                    )
+                else:
+                    generated_image_url = await seedream_v45_edit_image_url(
+                        api_key=ws_key,
+                        image_urls=image_urls,
+                        prompt=wavespeed_prompt,
+                        size=size_for_ws,
+                        wan_edit_tier=wan_tier_n,
+                    )
+            except RuntimeError as e:
+                wavespeed_message = str(e)
 
-    motion_auto_for_db = reference_scene.strip()
-    if motion_clip_summary and motion_clip_summary.strip():
-        motion_auto_for_db += (
-            "\n\n[Clip motion — sampled frames]\n" + motion_clip_summary.strip()
-        )
-
-    generation_id: int | None = None
-    if generated_image_url:
-        gen = await download_and_create_generation(
-            session,
-            owner_id=oid,
-            source_url=generated_image_url,
-            refined_prompt=refined,
-            output_aspect=aspect_key,
-            studio_model_id=mid,
-            refined_prompt_full=refined,
-            motion_video_prompt_auto=motion_auto_for_db,
-        )
-        if gen is not None:
-            generation_id = gen.id
-            arch_base = _public_app_base(request)
-            if arch_base:
-                gtok = create_generation_image_access_token(user_id=oid, generation_id=gen.id)
-                generated_image_url = (
-                    f"{arch_base}/api/studio/public-generation-image?t={quote(gtok, safe='')}"
-                )
+        if generated_image_url:
+            gen = await download_and_create_generation(
+                session,
+                owner_id=oid,
+                source_url=generated_image_url,
+                refined_prompt=refined,
+                output_aspect=aspect_key,
+                studio_model_id=eff_mid,
+                refined_prompt_full=refined,
+                motion_video_prompt_auto=motion_auto_for_db,
+            )
+            if gen is not None:
+                generation_id = gen.id
+                if arch_base:
+                    gtok2 = create_generation_image_access_token(
+                        user_id=oid, generation_id=gen.id
+                    )
+                    generated_image_url = (
+                        f"{arch_base}/api/studio/public-generation-image?t={quote(gtok2, safe='')}"
+                    )
 
     await record_usage(
         session,
@@ -1845,7 +1964,7 @@ async def api_studio_motion_first_frame(
         cost,
         {
             "motion_video_file_id": motion_video_file_id,
-            "studio_model_id": mid,
+            "studio_model_id": eff_mid,
             "generation_id": generation_id,
             "auto_motion_prompt": bool(motion_clip_summary and motion_clip_summary.strip()),
             "studio_wave_profile": wave_profile_n,
@@ -1868,7 +1987,7 @@ async def api_studio_motion_first_frame(
 async def api_studio_motion_render_video(
     request: Request,
     generation_id: str = Form(...),
-    motion_video_file_id: str = Form(...),
+    motion_video_file_id: str = Form(""),
     character_orientation: str = Form("video"),
     prompt: str = Form(""),
     negative_prompt: str = Form(""),
@@ -1888,8 +2007,13 @@ async def api_studio_motion_render_video(
         raise HTTPException(status_code=400, detail="Некорректный generation_id")
 
     mv_id = str(motion_video_file_id).strip()
-    if not mv_id:
-        raise HTTPException(status_code=400, detail="Укажите motion_video_file_id.")
+    provider = settings.studio_motion_video_provider
+    needs_motion_file = provider in ("kling", "wan")
+    if needs_motion_file and not mv_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Для Kling / WAN загрузите референс-видео на шаге кадра (нужен motion_video_file_id).",
+        )
 
     orient = (character_orientation or "video").strip().lower()
     if orient not in ("image", "video"):
@@ -1899,12 +2023,14 @@ async def api_studio_motion_render_video(
     if not row or row.user_id != oid:
         raise HTTPException(status_code=404, detail="Генерация не найдена")
 
-    vpath = resolve_motion_video_file(oid, mv_id)
-    if vpath is None or not vpath.is_file():
-        raise HTTPException(
-            status_code=404,
-            detail="Исходное видео не найдено. Снова выполните шаг «Сгенерировать кадр».",
-        )
+    vpath = None
+    if mv_id:
+        vpath = resolve_motion_video_file(oid, mv_id)
+        if needs_motion_file and (vpath is None or not vpath.is_file()):
+            raise HTTPException(
+                status_code=404,
+                detail="Исходное видео не найдено. Снова выполните шаг «Сгенерировать кадр».",
+            )
 
     pub = (settings.public_app_url or "").strip().rstrip("/")
     if not pub.lower().startswith("https://"):
@@ -1920,8 +2046,10 @@ async def api_studio_motion_render_video(
 
     img_tok = create_generation_image_access_token(user_id=oid, generation_id=gid, days=30)
     image_pub = f"{pub}/api/studio/public-generation-image?t={quote(img_tok, safe='')}"
-    vid_tok = create_motion_video_access_token(user_id=oid, file_id=mv_id)
-    video_pub = f"{pub}/api/studio/public-motion-video?t={quote(vid_tok, safe='')}"
+    video_pub = ""
+    if mv_id and vpath is not None and vpath.is_file():
+        vid_tok = create_motion_video_access_token(user_id=oid, file_id=mv_id)
+        video_pub = f"{pub}/api/studio/public-motion-video?t={quote(vid_tok, safe='')}"
 
     keep_snd = _truthy_wavespeed_flag(keep_original_sound)
 
@@ -1934,9 +2062,11 @@ async def api_studio_motion_render_video(
         negative=None,
     )
     neg = (negative_prompt or "").strip()
-    provider = settings.studio_motion_video_provider
+    provider_n = settings.studio_motion_video_provider
     try:
-        if provider == "wan":
+        if provider_n == "wan":
+            if not video_pub.strip():
+                raise RuntimeError("Нужен файл референс-видео (шаг «Создать кадр» с загрузкой ролика).")
             wan_prompt = _build_wan_22_animate_prompt(
                 motion_summary=row.motion_video_prompt_auto,
                 user_extra=user_extra,
@@ -1951,7 +2081,7 @@ async def api_studio_motion_render_video(
                 resolution=settings.wavespeed_wan_22_animate_resolution,
                 seed=settings.wavespeed_wan_22_animate_seed,
             )
-        elif provider == "seedance_i2v":
+        elif provider_n == "seedance_i2v":
             seed_txt = (motion_prompt or "").strip()
             if neg:
                 seed_txt = (
@@ -1973,6 +2103,8 @@ async def api_studio_motion_render_video(
                 generate_audio=keep_snd,
             )
         else:
+            if not video_pub.strip():
+                raise RuntimeError("Нужен файл референс-видео (шаг «Создать кадр» с загрузкой ролика).")
             video_url = await kling_motion_control_video_url(
                 api_key=ws_key,
                 image_url=image_pub,
@@ -1995,7 +2127,7 @@ async def api_studio_motion_render_video(
             "generation_id": gid,
             "motion_video_file_id": mv_id,
             "character_orientation": orient,
-            "motion_video_provider": provider,
+            "motion_video_provider": provider_n,
             "kling_motion_path": settings.wavespeed_kling_motion_control_path,
             "wan_22_animate": settings.wavespeed_wan_22_animate_path,
             "wan_22_animate_mode": settings.wavespeed_wan_22_animate_mode,

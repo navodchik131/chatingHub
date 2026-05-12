@@ -216,6 +216,8 @@ interface HealthInfo {
   studio_generations_retention_days?: number
   studio_generations_retention_interval_hours?: number
   studio_motion_control_credit_cost?: number
+  /** kling | wan | seedance_i2v — влияет, нужен ли файл ролика на шаге «Сделать видео». */
+  studio_motion_video_provider?: string
   web_push_configured?: boolean
 }
 
@@ -689,6 +691,8 @@ export default function App() {
   const [studioGenLoadingMore, setStudioGenLoadingMore] = useState(false)
   const [studioArchiveInitialLoading, setStudioArchiveInitialLoading] = useState(false)
 
+  const [motionFrameArchiveId, setMotionFrameArchiveId] = useState<number | null>(null)
+  const [motionFirstFrameFile, setMotionFirstFrameFile] = useState<File | null>(null)
   const [motionVideoFile, setMotionVideoFile] = useState<File | null>(null)
   const [motionDesc, setMotionDesc] = useState('')
   const [motionAutoPrompt, setMotionAutoPrompt] = useState(true)
@@ -982,7 +986,12 @@ export default function App() {
   }, [authed, appSection])
 
   useEffect(() => {
-    if (!authed || appSection !== 'studio' || !canStudioGenerate) return
+    if (
+      !authed ||
+      (appSection !== 'studio' && appSection !== 'studio_video') ||
+      !canStudioGenerate
+    )
+      return
     setStudioArchiveInitialLoading(true)
     setError(null)
     void loadStudioGenerationsReset()
@@ -1614,8 +1623,16 @@ export default function App() {
 
   const runMotionFirstFrame = async () => {
     setError(null)
-    if (!motionVideoFile) {
-      setError('Загрузите видео.')
+    const hasStill =
+      motionFrameArchiveId != null || motionFirstFrameFile != null || motionVideoFile != null
+    if (!hasStill) {
+      setError('Загрузите референс-видео, файл первого кадра или выберите снимок из архива.')
+      return
+    }
+    if (motionAutoPrompt && !motionVideoFile) {
+      setError(
+        'Для авто-описания движения по ролику загрузите референс-видео (или отключите опцию).',
+      )
       return
     }
     if (studioSelectedModelId == null) {
@@ -1631,7 +1648,15 @@ export default function App() {
     setMotionVideoFileId(null)
     try {
       const fd = new FormData()
-      fd.append('video', motionVideoFile)
+      if (motionFrameArchiveId != null) {
+        fd.append('existing_generation_id', String(motionFrameArchiveId))
+      }
+      if (motionFirstFrameFile) {
+        fd.append('first_frame_image', motionFirstFrameFile)
+      }
+      if (motionVideoFile) {
+        fd.append('video', motionVideoFile)
+      }
       fd.append('model_id', String(studioSelectedModelId))
       fd.append('description', motionDesc.trim())
       fd.append('output_aspect', studioOutputAspect)
@@ -1639,7 +1664,11 @@ export default function App() {
       fd.append('studio_wave_profile', 'regular')
       fd.append('auto_motion_prompt', motionAutoPrompt ? '1' : '0')
       fd.append('lock_model_hairstyle', motionLockHairstyle ? '1' : '0')
-      const r = await apiFetch('/api/studio/motion/first-frame', { method: 'POST', body: fd })
+      const r = await apiFetch('/api/studio/motion/first-frame', {
+        method: 'POST',
+        body: fd,
+        timeoutMs: 600_000,
+      })
       const data = (await r.json().catch(() => ({}))) as {
         refined_prompt?: string
         reference_scene_description?: string | null
@@ -1686,8 +1715,14 @@ export default function App() {
 
   const runMotionRenderVideo = async () => {
     setError(null)
-    if (motionPreviewGenId == null || !motionVideoFileId) {
-      setError('Сначала создайте кадр.')
+    const prov = (health?.studio_motion_video_provider ?? 'kling').toLowerCase()
+    const needDrivingFile = prov === 'kling' || prov === 'wan'
+    if (motionPreviewGenId == null || (needDrivingFile && !motionVideoFileId)) {
+      setError(
+        needDrivingFile
+          ? 'Сначала создайте кадр (с референс-видео для переноса движения).'
+          : 'Сначала выполните шаг «Создать кадр».',
+      )
       return
     }
     setMotionBusyVideo(true)
@@ -1695,12 +1730,20 @@ export default function App() {
     try {
       const fd = new FormData()
       fd.append('generation_id', String(motionPreviewGenId))
-      fd.append('motion_video_file_id', motionVideoFileId)
+      if (motionVideoFileId) {
+        fd.append('motion_video_file_id', motionVideoFileId)
+      } else {
+        fd.append('motion_video_file_id', '')
+      }
       fd.append('character_orientation', motionOrientation)
       fd.append('prompt', motionDesc.trim())
       fd.append('negative_prompt', motionVideoNegPrompt.trim())
       fd.append('keep_original_sound', motionKeepSound ? '1' : '0')
-      const r = await apiFetch('/api/studio/motion/render-video', { method: 'POST', body: fd })
+      const r = await apiFetch('/api/studio/motion/render-video', {
+        method: 'POST',
+        body: fd,
+        timeoutMs: 600_000,
+      })
       const data = (await r.json().catch(() => ({}))) as {
         video_url?: string | null
         message?: string | null
@@ -4408,6 +4451,24 @@ export default function App() {
                     </span>
                   ) : null}
                 </div>
+                <div className="studio-upscale-row">
+                  <button
+                    type="button"
+                    className="ghost-btn studio-video-from-img-btn"
+                    disabled={studioGenGenerationId == null || !canStudioGenerate}
+                    title="Открыть вкладку «Видео» с этим кадром"
+                    onClick={() => {
+                      if (studioGenGenerationId == null) return
+                      const g = studioGenerations.find((x) => x.id === studioGenGenerationId)
+                      setMotionFrameArchiveId(studioGenGenerationId)
+                      if (g?.studio_model_id != null) setStudioSelectedModelId(g.studio_model_id)
+                      setMotionFirstFrameFile(null)
+                      setAppSection('studio_video')
+                    }}
+                  >
+                    Видео из этого кадра
+                  </button>
+                </div>
                 <button
                   type="button"
                   className="send-btn studio-download"
@@ -4446,6 +4507,20 @@ export default function App() {
                         }}
                       >
                         <img src={g.image_url} alt="" className="studio-archive-thumb" loading="lazy" />
+                      </button>
+                      <button
+                        type="button"
+                        className="studio-archive-video"
+                        title="Видео из этого снимка"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setMotionFrameArchiveId(g.id)
+                          if (g.studio_model_id != null) setStudioSelectedModelId(g.studio_model_id)
+                          setMotionFirstFrameFile(null)
+                          setAppSection('studio_video')
+                        }}
+                      >
+                        Видео
                       </button>
                       <button
                         type="button"
@@ -4533,9 +4608,58 @@ export default function App() {
                     </select>
                   </label>
                 </div>
+                <p className="muted studio-video-lead" style={{ marginTop: '0.5rem' }}>
+                  Кадр: из архива «Картинки», файл картинки или первый кадр ролика. Для авто-описания движения и
+                  для Kling / WAN нужен референс-ролик. Режим Seedance I2V на сервере может обойтись без файла
+                  ролика на шаге «Сделать видео». Текущий провайдер:{' '}
+                  <strong>{(health?.studio_motion_video_provider ?? 'kling').toLowerCase()}</strong>.
+                </p>
                 <div className="studio-grid studio-grid--simple studio-video-panel">
                   <label className="studio-label">
-                    Видео
+                    Снимок из архива (вкладка «Картинки»)
+                    <select
+                      value={motionFrameArchiveId ?? ''}
+                      onChange={(e) => {
+                        const v = e.target.value
+                        const id = v === '' ? null : Number(v)
+                        setMotionFrameArchiveId(id != null && Number.isFinite(id) ? id : null)
+                        if (id != null && Number.isFinite(id)) {
+                          const g = studioGenerations.find((x) => x.id === id)
+                          if (g?.studio_model_id != null) setStudioSelectedModelId(g.studio_model_id)
+                          setMotionFirstFrameFile(null)
+                        }
+                      }}
+                    >
+                      <option value="">— не использовать —</option>
+                      {studioGenerations.map((g) => (
+                        <option key={g.id} value={g.id}>
+                          #{g.id} {g.model_name ? `· ${g.model_name}` : ''}{' '}
+                          {g.prompt_excerpt ? `· ${g.prompt_excerpt.slice(0, 36)}` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="studio-label">
+                    Файл первого кадра (если не из архива)
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0] ?? null
+                        setMotionFirstFrameFile(f)
+                        if (f) setMotionFrameArchiveId(null)
+                        setMotionVideoFileId(null)
+                        setMotionPreviewUrl(null)
+                        setMotionPreviewGenId(null)
+                        setMotionResultVideoUrl(null)
+                      }}
+                    />
+                    {motionFirstFrameFile ? (
+                      <span className="studio-file-name">{motionFirstFrameFile.name}</span>
+                    ) : null}
+                  </label>
+                <label className="studio-label">
+                  Референс-видео
                     <input
                       type="file"
                       accept="video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov"
@@ -4620,7 +4744,7 @@ export default function App() {
                       !health?.openai_studio_configured ||
                       !integ?.wavespeed_configured ||
                       studioSelectedModelId == null ||
-                      !motionVideoFile
+                      (!motionVideoFile && motionFrameArchiveId == null && !motionFirstFrameFile)
                     }
                     onClick={() => void runMotionFirstFrame()}
                   >
@@ -4650,7 +4774,9 @@ export default function App() {
                           motionBusyVideo ||
                           !integ?.wavespeed_configured ||
                           motionPreviewGenId == null ||
-                          !motionVideoFileId
+                          (((health?.studio_motion_video_provider ?? 'kling').toLowerCase() === 'kling' ||
+                            (health?.studio_motion_video_provider ?? '').toLowerCase() === 'wan') &&
+                            !motionVideoFileId)
                         }
                         onClick={() => void runMotionRenderVideo()}
                       >

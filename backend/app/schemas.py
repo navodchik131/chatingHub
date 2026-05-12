@@ -149,7 +149,7 @@ class StudioMotionFirstFrameOut(BaseModel):
     generated_image_url: str | None = None
     wavespeed_message: str | None = None
     generation_id: int | None = None
-    motion_video_file_id: str
+    motion_video_file_id: str | None = None
 
 
 class StudioMotionVideoOut(BaseModel):
