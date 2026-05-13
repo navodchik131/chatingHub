@@ -2142,6 +2142,7 @@ async def api_studio_motion_render_video(
     prompt: str = Form(""),
     negative_prompt: str = Form(""),
     keep_original_sound: str = Form("1"),
+    duration_seconds: str = Form(""),
     session: AsyncSession = Depends(get_session),
     user: User = Depends(get_current_user),
 ) -> StudioMotionVideoOut:
@@ -2203,6 +2204,25 @@ async def api_studio_motion_render_video(
 
     keep_snd = _truthy_wavespeed_flag(keep_original_sound)
 
+    seedance_duration_request: int | None = None
+    if provider == "seedance_i2v":
+        ds_raw = (duration_seconds or "").strip()
+        if ds_raw:
+            try:
+                seedance_duration_request = int(ds_raw)
+            except ValueError:
+                raise HTTPException(
+                    status_code=400,
+                    detail="duration_seconds: укажите целое число секунд.",
+                ) from None
+            if seedance_duration_request < 4 or seedance_duration_request > 15:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Длительность Seedance I2V: от 4 до 15 секунд.",
+                )
+
+    seedance_duration_effective = settings.wavespeed_seedance_20_i2v_duration
+
     msg: str | None = None
     video_url: str | None = None
     user_extra = (prompt or "").strip()
@@ -2243,13 +2263,19 @@ async def api_studio_motion_render_video(
                     "smooth camera work; expressive performance."
                 )
             ar_i2v = aspect_ratio_for_seedance_i2v(row.output_aspect)
+            seedance_duration_effective = (
+                seedance_duration_request
+                if seedance_duration_request is not None
+                else settings.wavespeed_seedance_20_i2v_duration
+            )
+            seedance_duration_effective = max(4, min(15, int(seedance_duration_effective)))
             video_url = await seedance_20_image_to_video_url(
                 api_key=ws_key,
                 image_url=image_pub,
                 prompt=seed_txt,
                 aspect_ratio=ar_i2v,
                 resolution=settings.wavespeed_seedance_20_i2v_resolution,
-                duration=settings.wavespeed_seedance_20_i2v_duration,
+                duration=seedance_duration_effective,
                 generate_audio=keep_snd,
             )
         else:
@@ -2294,7 +2320,8 @@ async def api_studio_motion_render_video(
             "wan_22_animate_mode": settings.wavespeed_wan_22_animate_mode,
             "seedance_20_i2v_path": settings.wavespeed_seedance_20_i2v_path,
             "seedance_20_i2v_resolution": settings.wavespeed_seedance_20_i2v_resolution,
-            "seedance_20_i2v_duration": settings.wavespeed_seedance_20_i2v_duration,
+            "seedance_20_i2v_duration": seedance_duration_effective,
+            "seedance_20_i2v_duration_requested": seedance_duration_request,
             "ok": bool(video_url),
         },
     )

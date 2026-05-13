@@ -98,6 +98,9 @@ async def api_health(session: AsyncSession = Depends(get_session)) -> dict:
         "studio_generations_retention_interval_hours": settings.studio_generations_retention_interval_hours,
         "studio_motion_control_credit_cost": settings.credit_cost_studio_motion_control,
         "studio_motion_video_provider": settings.studio_motion_video_provider,
+        "studio_seedance_i2v_duration_default": settings.wavespeed_seedance_20_i2v_duration,
+        "studio_seedance_i2v_duration_min": 4,
+        "studio_seedance_i2v_duration_max": 15,
         "web_push_configured": settings.web_push_configured,
     }
 

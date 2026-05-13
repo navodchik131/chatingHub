@@ -218,6 +218,10 @@ interface HealthInfo {
   studio_motion_control_credit_cost?: number
   /** kling | wan | seedance_i2v — влияет, нужен ли файл ролика на шаге «Сделать видео». */
   studio_motion_video_provider?: string
+  /** Дефолт длительности I2V (сек.), с бэкенда; для UI выбора. */
+  studio_seedance_i2v_duration_default?: number
+  studio_seedance_i2v_duration_min?: number
+  studio_seedance_i2v_duration_max?: number
   web_push_configured?: boolean
 }
 
@@ -715,6 +719,9 @@ export default function App() {
   const [motionOrientation, setMotionOrientation] = useState<'image' | 'video'>('video')
   const [motionVideoNegPrompt, setMotionVideoNegPrompt] = useState('')
   const [motionKeepSound, setMotionKeepSound] = useState(true)
+  /** Только для провайдера Seedance I2V (сек., диапазон с health). */
+  const [motionSeedanceDuration, setMotionSeedanceDuration] = useState(5)
+  const motionSeedanceDurationInitRef = useRef(false)
   const [motionBusyFrame, setMotionBusyFrame] = useState(false)
   const [motionBusyVideo, setMotionBusyVideo] = useState(false)
   const [motionVideoFileId, setMotionVideoFileId] = useState<string | null>(null)
@@ -737,6 +744,29 @@ export default function App() {
       studioDevPromptOnly,
     [health?.studio_allow_prompt_only, studioDevPromptOnly],
   )
+
+  const motionVideoProvider = (health?.studio_motion_video_provider ?? 'kling').toLowerCase()
+  const seedanceDurationMin = health?.studio_seedance_i2v_duration_min ?? 4
+  const seedanceDurationMax = health?.studio_seedance_i2v_duration_max ?? 15
+
+  useEffect(() => {
+    if (motionSeedanceDurationInitRef.current || !health) return
+    const d = health.studio_seedance_i2v_duration_default
+    const mn = health.studio_seedance_i2v_duration_min ?? 4
+    const mx = health.studio_seedance_i2v_duration_max ?? 15
+    if (typeof d === 'number' && Number.isFinite(d)) {
+      setMotionSeedanceDuration(Math.max(mn, Math.min(mx, Math.round(d))))
+    } else {
+      setMotionSeedanceDuration(Math.max(mn, Math.min(mx, 5)))
+    }
+    motionSeedanceDurationInitRef.current = true
+  }, [health])
+
+  useEffect(() => {
+    setMotionSeedanceDuration((prev) =>
+      Math.max(seedanceDurationMin, Math.min(seedanceDurationMax, prev)),
+    )
+  }, [seedanceDurationMin, seedanceDurationMax])
 
   useEffect(() => {
     if (!studioFile) setStudioLockModelHairstyle(true)
@@ -1931,6 +1961,9 @@ export default function App() {
       fd.append('prompt', motionDesc.trim())
       fd.append('negative_prompt', motionVideoNegPrompt.trim())
       fd.append('keep_original_sound', motionKeepSound ? '1' : '0')
+      if (prov === 'seedance_i2v') {
+        fd.append('duration_seconds', String(motionSeedanceDuration))
+      }
       const r = await apiFetch('/api/studio/motion/render-video', {
         method: 'POST',
         body: fd,
@@ -5034,6 +5067,24 @@ export default function App() {
                       кадра или ролика.
                     </p>
                   )}
+                  {motionVideoProvider === 'seedance_i2v' ? (
+                    <label className="studio-label" style={{ marginTop: '0.5rem', display: 'block' }}>
+                      Длительность ролика (сек.)
+                      <select
+                        value={String(motionSeedanceDuration)}
+                        onChange={(e) => setMotionSeedanceDuration(Number(e.target.value))}
+                      >
+                        {Array.from(
+                          { length: Math.max(0, seedanceDurationMax - seedanceDurationMin + 1) },
+                          (_, i) => seedanceDurationMin + i,
+                        ).map((sec) => (
+                          <option key={sec} value={String(sec)}>
+                            {sec} с
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : null}
                   <div className="studio-video-actions-split">
                     <div className="studio-actions studio-actions--spaced">
                       <button
