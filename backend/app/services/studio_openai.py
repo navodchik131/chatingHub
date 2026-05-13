@@ -686,6 +686,7 @@ def _build_refiner_user_message(
 ) -> str:
     has_ref = bool((reference_scene_description or "").strip())
     photo_edit_mode = (studio_mode or "").strip().lower() == "photo_edit"
+    no_face_mode = (studio_mode or "").strip().lower() == "no_face"
     mode_line = "MODEL_LOCK" if lock_model_hairstyle else "POSE_REFERENCE"
     blocks: list[str] = [
         "## HAIRSTYLE_MODE\n" + mode_line,
