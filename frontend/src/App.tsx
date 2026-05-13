@@ -725,6 +725,8 @@ export default function App() {
   const [motionDrivingUploadBusy, setMotionDrivingUploadBusy] = useState(false)
   const [motionUseStillFinal, setMotionUseStillFinal] = useState(false)
   const [motionVideoDownloadBusy, setMotionVideoDownloadBusy] = useState(false)
+  /** Локальный превью загруженного кадра (пока нет записи архива на сервере). */
+  const [motionStillBlobUrl, setMotionStillBlobUrl] = useState<string | null>(null)
 
   const studioPromptOnlyDev = useMemo(
     () =>
@@ -1073,6 +1075,24 @@ export default function App() {
       setMotionPreviewGenId(g.id)
     }
   }, [appSection, motionFrameArchiveId, studioGenerations])
+
+  useEffect(() => {
+    if (!motionFirstFrameFile) {
+      setMotionStillBlobUrl(null)
+      return
+    }
+    const objUrl = URL.createObjectURL(motionFirstFrameFile)
+    setMotionStillBlobUrl(objUrl)
+    return () => {
+      URL.revokeObjectURL(objUrl)
+    }
+  }, [motionFirstFrameFile])
+
+  const studioMotionStillDisplayUrl = useMemo(() => {
+    const u = motionPreviewUrl?.trim()
+    if (u) return u
+    return motionStillBlobUrl
+  }, [motionPreviewUrl, motionStillBlobUrl])
 
   const loadHealth = useCallback(async () => {
     const r = await fetch('/api/health')
@@ -4933,50 +4953,79 @@ export default function App() {
                     <div className="studio-motion-auto-preview">{motionAutoTextPreview}</div>
                   </div>
                 ) : null}
-                {motionPreviewUrl ? (
-                  <div className="studio-generated studio-video-result">
-                    <h3 className="studio-generated-title">Кадр</h3>
+                <div className="studio-generated studio-video-result">
+                  <h3 className="studio-generated-title">Кадр для видео</h3>
+                  {studioMotionStillDisplayUrl ? (
                     <div className="studio-generated-frame">
-                      <img src={motionPreviewUrl} alt="" className="studio-gen-img" />
+                      <img src={studioMotionStillDisplayUrl} alt="" className="studio-gen-img" />
                     </div>
-                <div className="studio-video-actions-split">
-                  <div className="studio-actions studio-actions--spaced">
+                  ) : motionPreviewGenId != null ? (
+                    <p className="muted" style={{ margin: '0.25rem 0 0.5rem' }}>
+                      Запись в архиве: <strong>#{motionPreviewGenId}</strong>. Если превью не видно —
+                      вернитесь на вкладку «Картинки» или нажмите «Создать кадр» ещё раз.
+                    </p>
+                  ) : motionFirstFrameFile ? (
+                    <p className="muted" style={{ margin: '0.25rem 0 0.5rem' }}>
+                      Файл кадра загружен. Нажмите «Создать кадр», чтобы сохранить его в архив и получить
+                      id&nbsp;кадра — без этого «Сделать видео» недоступно.
+                    </p>
+                  ) : (
+                    <p className="muted" style={{ margin: '0.25rem 0 0.5rem' }}>
+                      Выберите снимок из архива (появится превью) или выполните «Создать кадр» после загрузки
+                      кадра или ролика.
+                    </p>
+                  )}
+                  <div className="studio-video-actions-split">
+                    <div className="studio-actions studio-actions--spaced">
+                      <button
+                        type="button"
+                        className="send-btn"
+                        disabled={
+                          motionBusyVideo ||
+                          !integ?.wavespeed_configured ||
+                          motionPreviewGenId == null ||
+                          (((health?.studio_motion_video_provider ?? 'kling').toLowerCase() === 'kling' ||
+                            (health?.studio_motion_video_provider ?? '').toLowerCase() === 'wan') &&
+                            !motionVideoFileId?.trim())
+                        }
+                        title={
+                          motionPreviewGenId == null
+                            ? 'Сначала выберите архив или успешно нажмите «Создать кадр»'
+                            : (health?.studio_motion_video_provider ?? 'kling').toLowerCase() === 'kling' ||
+                                (health?.studio_motion_video_provider ?? '').toLowerCase() === 'wan'
+                              ? !motionVideoFileId?.trim()
+                                ? 'Для Kling / WAN нужен файл референс-видео (выберите и дождитесь загрузки)'
+                                : undefined
+                              : undefined
+                        }
+                        onClick={() => void runMotionRenderVideo()}
+                      >
+                        {motionBusyVideo ? 'Готовим видео…' : 'Сделать видео'}
+                      </button>
+                      {health?.studio_motion_control_credit_cost != null ? (
+                        <span className="studio-credit-hint">
+                          {health.studio_motion_control_credit_cost} кр.
+                        </span>
+                      ) : null}
+                    </div>
                     <button
                       type="button"
-                      className="send-btn"
-                      disabled={
-                        motionBusyVideo ||
-                        !integ?.wavespeed_configured ||
-                        motionPreviewGenId == null ||
-                        (((health?.studio_motion_video_provider ?? 'kling').toLowerCase() === 'kling' ||
-                          (health?.studio_motion_video_provider ?? '').toLowerCase() === 'wan') &&
-                          !motionVideoFileId)
+                      className="ghost-btn studio-motion-open-tab"
+                      title={
+                        studioMotionStillDisplayUrl
+                          ? 'Открыть превью в новой вкладке'
+                          : 'Появится после превью с сервера или загрузки кадра'
                       }
-                      onClick={() => void runMotionRenderVideo()}
+                      disabled={motionBusyVideo || !studioMotionStillDisplayUrl}
+                      onClick={() => {
+                        if (!studioMotionStillDisplayUrl) return
+                        window.open(studioMotionStillDisplayUrl, '_blank', 'noopener,noreferrer')
+                      }}
                     >
-                      {motionBusyVideo ? 'Готовим видео…' : 'Сделать видео'}
+                      Кадр в новой вкладке
                     </button>
-                    {health?.studio_motion_control_credit_cost != null ? (
-                      <span className="studio-credit-hint">
-                        {health.studio_motion_control_credit_cost} кр.
-                      </span>
-                    ) : null}
                   </div>
-                  <button
-                    type="button"
-                    className="ghost-btn studio-motion-open-tab"
-                    title="Открыть ссылку в новой вкладке (Safari / Chrome)"
-                    disabled={motionBusyVideo}
-                    onClick={() => {
-                      if (motionPreviewGenId == null || !motionPreviewUrl) return
-                      window.open(motionPreviewUrl, '_blank', 'noopener,noreferrer')
-                    }}
-                  >
-                    Кадр в новой вкладке
-                  </button>
                 </div>
-                  </div>
-                ) : null}
                 {motionResultVideoUrl ? (
                   <div className="studio-generated studio-video-result">
                     <h3 className="studio-generated-title">Готово</h3>
