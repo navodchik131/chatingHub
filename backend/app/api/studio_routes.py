@@ -1285,6 +1285,7 @@ async def api_studio_refine_prompt(
     description: str = Form(""),
     model_id: str | None = Form(None),
     image: UploadFile | None = File(None),
+    existing_generation_id: str = Form(""),
     output_aspect: str = Form("9:16"),
     studio_mode: str = Form("model"),
     wan_edit_tier: str = Form("standard"),
@@ -1317,6 +1318,10 @@ async def api_studio_refine_prompt(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 
+    mode_n = _normalize_studio_mode(studio_mode)
+    if mode_n == "photo_edit":
+        mid = None
+
     assert_permission(user, PERM_STUDIO_GENERATE)
     oid = workspace_owner_id(user)
     sub_b, llm_row, ws_row, plan, _credits = await load_owner_studio_billing(
@@ -1341,6 +1346,37 @@ async def api_studio_refine_prompt(
             raise HTTPException(status_code=400, detail="Пустой файл изображения")
         image_mime = image.content_type
 
+    existing_gen_from_archive: int | None = None
+    if mode_n == "photo_edit":
+        raw_arch = (existing_generation_id or "").strip()
+        if raw_arch:
+            try:
+                existing_gen_from_archive = int(raw_arch)
+            except ValueError:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Некорректный номер генерации из архива.",
+                ) from None
+
+    if (
+        mode_n == "photo_edit"
+        and image_bytes
+        and existing_gen_from_archive is not None
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Для доработки выберите либо файл с устройства, либо снимок из архива — не оба.",
+        )
+
+    if mode_n == "photo_edit" and existing_gen_from_archive is not None:
+        _garch, arch_bytes, arch_mime = await _load_owned_generation_still_for_motion(
+            session,
+            owner_id=oid,
+            generation_id=existing_gen_from_archive,
+        )
+        image_bytes = arch_bytes
+        image_mime = arch_mime
+
     sm_loaded: UserStudioModel | None = None
     model_profile_text: str | None = None
     if mid is not None:
@@ -1354,11 +1390,15 @@ async def api_studio_refine_prompt(
             raise HTTPException(status_code=404, detail="Модель не найдена")
         model_profile_text = (sm_loaded.profile_text or "").strip() or None
 
-    mode_n = _normalize_studio_mode(studio_mode)
     if mode_n == "photo_edit" and not image_bytes:
         raise HTTPException(
             status_code=400,
-            detail="В режиме «Доработать фото» загрузите изображение.",
+            detail="В режиме «Доработать фото» загрузите файл или выберите снимок из архива вкладки «Картинки».",
+        )
+    if mode_n == "photo_edit" and not desc.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="Опишите, что нужно изменить или исправить на фото.",
         )
     if mode_n == "no_face" and mid is None and not image_bytes:
         raise HTTPException(
@@ -1407,14 +1447,16 @@ async def api_studio_refine_prompt(
                 credentials=llm_creds,
             )
         ref_photo_block = (
-            model_reference_photos_block(imgs_for_ws) if imgs_for_ws else None
+            None
+            if mode_n == "photo_edit"
+            else (model_reference_photos_block(imgs_for_ws) if imgs_for_ws else None)
         )
         refined = await refine_prompt_via_openai(
             system_instruction=system_instr,
             skeleton=skeleton,
             user_text=desc,
             reference_scene_description=reference_scene,
-            model_profile_text=model_profile_text,
+            model_profile_text=None if mode_n == "photo_edit" else model_profile_text,
             model_reference_photos=ref_photo_block,
             output_aspect_key=aspect_key,
             studio_mode=mode_n,
@@ -1459,8 +1501,6 @@ async def api_studio_refine_prompt(
             if mode_n == "model":
                 attach_model_urls = bool(imgs_model)
             elif mode_n == "no_face":
-                attach_model_urls = bool(sm_loaded and imgs_model)
-            elif mode_n == "photo_edit":
                 attach_model_urls = bool(sm_loaded and imgs_model)
 
             if attach_model_urls:
@@ -1578,6 +1618,7 @@ async def api_studio_refine_prompt(
                 )
 
     generation_id: int | None = None
+    gen_mid = None if mode_n == "photo_edit" else mid
     if generated_image_url:
         gen = await download_and_create_generation(
             session,
@@ -1585,7 +1626,7 @@ async def api_studio_refine_prompt(
             source_url=generated_image_url,
             refined_prompt=refined,
             output_aspect=aspect_key,
-            studio_model_id=mid,
+            studio_model_id=gen_mid,
             refined_prompt_full=refined,
         )
         if gen is not None:

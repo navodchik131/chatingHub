@@ -647,6 +647,8 @@ export default function App() {
   const [appSection, setAppSection] = useState<'chat' | 'studio' | 'studio_video'>('chat')
   const [studioDesc, setStudioDesc] = useState('')
   const [studioFile, setStudioFile] = useState<File | null>(null)
+  /** Снимок из архива как база для режима «Доработать фото» (альтернатива файлу). */
+  const [studioPhotoEditArchiveId, setStudioPhotoEditArchiveId] = useState<number | null>(null)
   /** true = MODEL_LOCK (причёска с профиля); false = POSE_REFERENCE (с загруженного кадра). Только если есть studioFile. */
   const [studioLockModelHairstyle, setStudioLockModelHairstyle] = useState(true)
   const [studioMode, setStudioMode] = useState<StudioJobMode>('model')
@@ -739,6 +741,15 @@ export default function App() {
   useEffect(() => {
     if (!studioFile) setStudioLockModelHairstyle(true)
   }, [studioFile])
+
+  useEffect(() => {
+    if (studioMode !== 'photo_edit') {
+      setStudioPhotoEditArchiveId(null)
+    }
+    if (studioMode === 'photo_edit') {
+      setStudioSelectedModelId(null)
+    }
+  }, [studioMode])
 
   const studioGenerationsRef = useRef<StudioArchiveItem[]>([])
 
@@ -1721,12 +1732,17 @@ export default function App() {
 
   const refineStudioPrompt = async () => {
     setError(null)
-    if (!studioDesc.trim() && !studioFile && studioSelectedModelId == null) {
+    if (studioMode === 'photo_edit') {
+      if (!studioFile && studioPhotoEditArchiveId == null) {
+        setError('В режиме «Доработать фото» загрузите изображение или выберите снимок из архива «Картинки».')
+        return
+      }
+      if (!studioDesc.trim()) {
+        setError('Опишите, что изменить или исправить на фото.')
+        return
+      }
+    } else if (!studioDesc.trim() && !studioFile && studioSelectedModelId == null) {
       setError('Добавьте описание, референс и/или выберите сохранённую модель.')
-      return
-    }
-    if (studioMode === 'photo_edit' && !studioFile) {
-      setError('В режиме «Доработать фото» загрузите изображение.')
       return
     }
     if (studioMode === 'no_face' && studioSelectedModelId == null && !studioFile) {
@@ -1745,8 +1761,17 @@ export default function App() {
         studioDevPromptOnly
       const fd = new FormData()
       fd.append('description', studioDesc.trim())
-      if (studioSelectedModelId != null) fd.append('model_id', String(studioSelectedModelId))
+      if (studioMode !== 'photo_edit' && studioSelectedModelId != null) {
+        fd.append('model_id', String(studioSelectedModelId))
+      }
       if (studioFile) fd.append('image', studioFile)
+      if (
+        studioMode === 'photo_edit' &&
+        studioPhotoEditArchiveId != null &&
+        !studioFile
+      ) {
+        fd.append('existing_generation_id', String(studioPhotoEditArchiveId))
+      }
       fd.append('output_aspect', studioOutputAspect)
       fd.append('studio_mode', studioMode)
       fd.append('wan_edit_tier', studioWanEditTier)
@@ -4308,7 +4333,7 @@ export default function App() {
               {studioMode === 'model'
                 ? 'Как раньше: выбранная модель, опционально референс позы и описание.'
                 : studioMode === 'photo_edit'
-                  ? 'Обязательно загрузите фото; промпт описывает правки. Модель по желанию (подсказка по телу/коже).'
+                  ? 'Загрузите кадр или выберите его из архива «Картинки», опишите правки (цвет фона, одежда…). Модель студии в этом режиме не используется — правится только ваш снимок.'
                   : 'Кадр без лица/головы; нужна модель с фото или свой референс.'}
             </p>
             <div className="studio-mode-row" role="group" aria-label="Тип генерации WaveSpeed">
@@ -4420,6 +4445,7 @@ export default function App() {
                   const v = e.target.value
                   setStudioSelectedModelId(v === '' ? null : Number(v))
                 }}
+                disabled={studioMode === 'photo_edit'}
               >
                 <option value="">Без модели</option>
                 {studioModels.map((m) => (
@@ -4428,19 +4454,48 @@ export default function App() {
                   </option>
                 ))}
               </select>
+              {studioMode === 'photo_edit' ? (
+                <span className="muted studio-file-name">
+                  Не нужна для доработки — не отправляется в редактор.
+                </span>
+              ) : null}
             </label>
+            {studioMode === 'photo_edit' ? (
+              <label className="studio-label">
+                Снимок из архива «Картинки» (вместо файла)
+                <select
+                  value={studioPhotoEditArchiveId ?? ''}
+                  onChange={(e) => {
+                    const v = e.target.value
+                    const id = v === '' ? null : Number(v)
+                    setStudioPhotoEditArchiveId(id != null && Number.isFinite(id) ? id : null)
+                    if (id != null && Number.isFinite(id)) setStudioFile(null)
+                  }}
+                >
+                  <option value="">— не использовать —</option>
+                  {studioGenerations.map((g) => (
+                    <option key={g.id} value={g.id}>
+                      #{g.id} {g.model_name ? `· ${g.model_name}` : ''}{' '}
+                      {g.prompt_excerpt ? `· ${g.prompt_excerpt.slice(0, 36)}` : ''}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
             <label className="studio-label">
-              {studioMode === 'photo_edit' ? 'Фото для доработки' : 'Референс (по желанию)'}
+              {studioMode === 'photo_edit' ? 'Файл с устройства (если не из архива)' : 'Референс (по желанию)'}
               <input
                 type="file"
                 accept="image/jpeg,image/png,image/webp,image/gif"
                 onChange={(e) => {
                   const f = e.target.files?.[0] ?? null
                   setStudioFile(f)
+                  if (f) setStudioPhotoEditArchiveId(null)
                 }}
               />
               {studioFile ? <span className="studio-file-name">{studioFile.name}</span> : null}
             </label>
+            {studioMode !== 'photo_edit' ? (
             <label
               className="studio-label studio-check"
               style={!studioFile ? { opacity: 0.55 } : undefined}
@@ -4456,13 +4511,14 @@ export default function App() {
                 фигура и цвет волос по-прежнему из профиля модели).
               </span>
             </label>
+            ) : null}
             <label className="studio-label">
               Описание
               <textarea
                 rows={5}
                 placeholder={
                   studioMode === 'photo_edit'
-                    ? 'Что изменить: свет, фон, детали…'
+                    ? 'Что изменить: цвет фона, другая футболка, убрать объект, исправить свет, слегка сменить ракурс…'
                     : 'Что показать на снимке: сцена, свет, настроение…'
                 }
                 value={studioDesc}
@@ -4484,7 +4540,10 @@ export default function App() {
                   studioBusy ||
                   !canStudioGenerate ||
                   (!studioDesc.trim() && !studioFile && studioSelectedModelId == null) ||
-                  (studioMode === 'photo_edit' && !studioFile) ||
+                  (studioMode === 'photo_edit' &&
+                    !studioFile &&
+                    studioPhotoEditArchiveId == null) ||
+                  (studioMode === 'photo_edit' && !studioDesc.trim()) ||
                   (studioMode === 'no_face' && studioSelectedModelId == null && !studioFile) ||
                   !health?.openai_studio_configured ||
                   (!studioPromptOnlyDev && !integ?.wavespeed_configured)

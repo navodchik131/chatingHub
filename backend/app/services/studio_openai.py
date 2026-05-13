@@ -81,11 +81,12 @@ def wavespeed_prompt_with_user_pose_reference_first(
 
 
 _WAVESPEED_PHOTO_EDIT_USER_FIRST_PREFIX = (
-    "[EDIT_BASE] The first image is the user's photograph to edit. "
-    "Apply the JSON scene/instruction as modifications to this image (lighting, background, wardrobe, pose tweaks, cleanup) while keeping "
-    "the same person as the base **throughout** — continuous skin, lighting, and anatomy; avoid a pasted-on face look. "
-    "If further images follow, they are optional model references — use for **full-body** identity (skin, face, proportions) when the edit "
-    "needs them; do not replace the first image's person with a composite head.\n\n"
+    "[EDIT_BASE — single image only] Exactly **one** input image: the user's **existing photograph**. "
+    "**No** supplementary identity-reference photos are supplied — synthesize edits from **this bitmap alone**. "
+    "Apply **only** the scene changes described by the structured JSON brief and USER edits (colors, garments, backdrop, "
+    "minor lighting, clean-up, removals, small pose tweaks **if explicitly requested**) while keeping the **same person** "
+    "— continuous skin grain, plausible anatomy — **avoid** swapping in a different face or body donor. "
+    "Do **not** zoom/reframe drastically unless USER_TEXT asks; preserve shot scale when unspecified.\n\n"
 )
 
 _WAVESPEED_NO_FACE_SUFFIX = (
@@ -651,11 +652,13 @@ def _studio_mode_refiner_block(studio_mode: str) -> str:
     m = (studio_mode or "model").strip().lower()
     if m == "photo_edit":
         return (
-            "## STUDIO_MODE: PHOTO_EDIT\n"
-            "Treat the REFERENCE_IMAGE (when present) as the primary photograph to edit. "
-            "Fill the skeleton so the result reflects USER_TEXT changes applied to that photo. "
-            "MODEL_PROFILE (if any) refines visible identity cues only when the edit requires them — "
-            "do not replace the uploaded person's face with the model's unless USER_TEXT asks.\n"
+            "## STUDIO_MODE: PHOTO_EDIT (correct / retouch uploaded frame)\n"
+            "**No saved MODEL_PROFILE** is attached — identity and scene baseline come **only** from REFERENCE_IMAGE (the uploaded/generated still). "
+            "Fill JSON so the downstream editor implements **exactly USER_TEXT deltas**— clothes, hues, backdrop, glare, blemish/skin fixes, "
+            "object removals, **without** swapping the person for a catalog model or reshaping unspecified anatomy. "
+            "Keep **camera geometry and crop** consistent with REFERENCE_IMAGE **unless USER_TEXT explicitly** asks to change framing, lens, angle, distance, rotation, or tilt. "
+            "**Do not** invent an alternate hairstyle, outfit, jewelry, tattoos, landmarks, facial structure, ethnicity, gender expression, "
+            "**or proportions** unless USER_TEXT directs that change.\n"
         )
     if m == "no_face":
         return (
@@ -682,44 +685,72 @@ def _build_refiner_user_message(
     lock_model_hairstyle: bool = True,
 ) -> str:
     has_ref = bool((reference_scene_description or "").strip())
-    no_face_mode = (studio_mode or "").strip().lower() == "no_face"
+    photo_edit_mode = (studio_mode or "").strip().lower() == "photo_edit"
     mode_line = "MODEL_LOCK" if lock_model_hairstyle else "POSE_REFERENCE"
     blocks: list[str] = [
         "## HAIRSTYLE_MODE\n" + mode_line,
-        "## SKELETON (JSON template: fill <FILL…>, <FROM_MODEL_PROFILE> from model profile, <FILL_FROM_IMAGE_OR_TEXT> from reference when present)",
+        "## SKELETON (JSON template: fill <FILL> placeholders and <FROM_MODEL_PROFILE> markers)",
         skeleton.strip(),
     ]
 
     # Референс — сразу после скелета, чтобы сцена не утонула в длинном JSON профиля.
     if has_ref:
-        if lock_model_hairstyle:
+        if photo_edit_mode:
+            blocks.append(
+                "## REFERENCE_IMAGE (**input photograph — edit this frame only**)\n"
+                "**Baseline:** whoever, whatever, and whichever camera setup the description below reflects — this is the bitmap the API will load. "
+                "**Task:** fold **USER_TEXT** in as *targeted* deltas (wardrobe, palette, backdrop, clean-up, illumination, small geometry **if asked**). "
+                "**Do not** reshuffle identity, body line, or framing for «profile defaults».\n\n"
+                + (reference_scene_description or "").strip()
+            )
+        elif lock_model_hairstyle:
             ref_intro = (
                 "## REFERENCE_IMAGE (scene/pose ref only: pose/hands, clothing/coverage on this photo, camera/framing/light/room — "
                 "**not** hairstyle; **not** body type, skin tone, or face; those = MODEL_PROFILE). "
+            )
+            if no_face_mode:
+                coherence = (
+                    "**Crop-locked redo:** JSON must match REFERENCE_IMAGE **framing edges and subject scale** — never zoom out to add a head if the reference omits it. "
+                    "MODEL_PROFILE gives **skin/body continuity for visible limbs and torso slices only** — not a mandate to render a face or full portrait.\n"
+                )
+            else:
+                coherence = (
+                    "**Render as one person:** fill JSON so the edit model **re-synthesizes the full body** of MODEL_PROFILE in this pose and room — not face-only over the reference sitter's body.\n"
+                )
+            blocks.append(
+                ref_intro
+                + coherence
+                + (reference_scene_description or "").strip()
             )
         else:
             ref_intro = (
                 "## REFERENCE_IMAGE (scene/pose ref: pose/hands, clothing/coverage, **hair styling in this shot**, "
                 "camera/framing/light/room — **not** body type, skin tone, or face; those = MODEL_PROFILE). "
             )
-        if no_face_mode:
-            coherence = (
-                "**Crop-locked redo:** JSON must match REFERENCE_IMAGE **framing edges and subject scale** — never zoom out to add a head if the reference omits it. "
-                "MODEL_PROFILE gives **skin/body continuity for visible limbs and torso slices only** — not a mandate to render a face or full portrait.\n"
+            if no_face_mode:
+                coherence = (
+                    "**Crop-locked redo:** JSON must match REFERENCE_IMAGE **framing edges and subject scale** — never zoom out to add a head if the reference omits it. "
+                    "MODEL_PROFILE gives **skin/body continuity for visible limbs and torso slices only** — not a mandate to render a face or full portrait.\n"
+                )
+            else:
+                coherence = (
+                    "**Render as one person:** fill JSON so the edit model **re-synthesizes the full body** of MODEL_PROFILE in this pose and room — not face-only over the reference sitter's body.\n"
+                )
+            blocks.append(
+                ref_intro
+                + coherence
+                + (reference_scene_description or "").strip()
             )
-        else:
-            coherence = (
-                "**Render as one person:** fill JSON so the edit model **re-synthesizes the full body** of MODEL_PROFILE in this pose and room — not face-only over the reference sitter's body.\n"
-            )
-        blocks.append(
-            ref_intro
-            + coherence
-            + (reference_scene_description or "").strip()
-        )
     else:
         blocks.append("## REFERENCE_IMAGE\n(none — no input reference image)")
 
-    if lock_model_hairstyle:
+    if photo_edit_mode:
+        blocks.append(
+            "## MODEL_PROFILE\n"
+            "(none — **PHOTO_EDIT**). There is **no** stored profile JSON. Populate **all** fields marked `<FROM_MODEL_PROFILE>` by **paraphrasing the subject already shown in REFERENCE_IMAGE**, "
+            "then apply **only** the mutations described in USER_TEXT. Do **not** swap in traits from an imagined «studio model» or blank template defaults that contradict the photograph.\n"
+        )
+    elif lock_model_hairstyle:
         mp = (
             "## MODEL_PROFILE (identity: face, skin, hair color **and hairstyle**, body type, marks — for <FROM_MODEL_PROFILE> and **`hair_in_scene`**. "
             "If REFERENCE_IMAGE exists: **never** use profile for clothing or accessories — only the reference photo + USER_TEXT. "
@@ -747,12 +778,13 @@ def _build_refiner_user_message(
         blocks.append(mp)
     if model_reference_photos and str(model_reference_photos).strip():
         blocks.append(str(model_reference_photos).strip())
-    if model_profile_text and model_profile_text.strip():
-        blocks.append(model_profile_text.strip())
-    else:
-        blocks.append(
-            "(no model selected — use neutral, minimal identity only where required, or from USER_TEXT only)"
-        )
+    if not photo_edit_mode:
+        if model_profile_text and model_profile_text.strip():
+            blocks.append(model_profile_text.strip())
+        else:
+            blocks.append(
+                "(no model selected — use neutral, minimal identity only where required, or from USER_TEXT only)"
+            )
 
     mode_extra = _studio_mode_refiner_block(studio_mode)
     if mode_extra:
