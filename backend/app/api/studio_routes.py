@@ -1403,6 +1403,7 @@ async def api_studio_refine_prompt(
                 image_bytes=image_bytes,
                 image_media_type=image_mime,
                 hairstyle_from_pose_reference=not effective_lock_hairstyle,
+                no_face_framing=(mode_n == "no_face"),
                 credentials=llm_creds,
             )
         ref_photo_block = (

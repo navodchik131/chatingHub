@@ -44,13 +44,36 @@ def _wavespeed_pose_ref_prefix(*, lock_model_hairstyle: bool) -> str:
     )
 
 
+def _wavespeed_pose_ref_prefix_no_face(*, lock_model_hairstyle: bool) -> str:
+    hair_clause = (
+        "**Hairstyle follows the JSON brief / model — not this crop image** (often hair is out of frame). "
+        if lock_model_hairstyle
+        else "hair styling as in that shot when hair is visible in frame, "
+    )
+    return (
+        "[REFERENCE_IMAGE_ORDER — NO_FACE / CROP_LOCKED] The **first** image is the user's uploaded **framing** reference (pose slice, "
+        "legs/feet/hands/torso crop, etc.). **Match its edges and scale:** do **not** zoom out, reframe wider, or **add a head/face** "
+        "if this image omits them — model reference photos must **not** be used to paste or reconstruct a face into empty headroom. "
+        "Take from the first image only: **visible** limb articulation, camera angle/height/distance, **exact crop**, lens feel, "
+        f"{hair_clause}"
+        "background and lighting. Garments/coverage only from the first image. "
+        "**Later** image(s): **body identity for visible skin only** — continuous skin tone/texture on legs, feet, arms, hands, "
+        "visible torso slices **as one person**; **not** a face-swap and **not** inventing facial features where the crop has none. "
+        "**Never** copy pose, framing, or outfit from model references.\n\n"
+    )
+
+
 def wavespeed_prompt_with_user_pose_reference_first(
     refined_prompt: str,
     *,
     lock_model_hairstyle: bool = True,
+    no_face_framing: bool = False,
 ) -> str:
     """Префикс к финальному промпту WaveSpeed, когда первый URL — загруженный пользователем референс."""
-    prefix = _wavespeed_pose_ref_prefix(lock_model_hairstyle=lock_model_hairstyle)
+    if no_face_framing:
+        prefix = _wavespeed_pose_ref_prefix_no_face(lock_model_hairstyle=lock_model_hairstyle)
+    else:
+        prefix = _wavespeed_pose_ref_prefix(lock_model_hairstyle=lock_model_hairstyle)
     p = (refined_prompt or "").strip()
     if not p:
         return prefix.strip()
@@ -66,9 +89,10 @@ _WAVESPEED_PHOTO_EDIT_USER_FIRST_PREFIX = (
 )
 
 _WAVESPEED_NO_FACE_SUFFIX = (
-    "\n\n[FRAMING] Do not show the subject's face or head unless the scene explicitly requires it. "
+    "\n\n[FRAMING] Do not show the subject's face or head unless the reference crop / JSON brief clearly includes them. "
     "Prefer crops on legs, feet, lower body, hands, or torso without head. "
-    "Do not add, restore, or reconstruct a face."
+    "Do **not** widen the shot, zoom out, or add headroom to introduce a face. "
+    "Do not add, restore, reconstruct, or composite a face from model reference images into a headless crop."
 )
 
 
@@ -91,7 +115,9 @@ def finalize_wavespeed_studio_prompt(
             )
         else:
             out = wavespeed_prompt_with_user_pose_reference_first(
-                p, lock_model_hairstyle=lock_model_hairstyle
+                p,
+                lock_model_hairstyle=lock_model_hairstyle,
+                no_face_framing=(mode == "no_face"),
             )
     else:
         out = p
@@ -110,6 +136,18 @@ _NANO_BANANA_IDENTITY_LOCK_PREFIX = (
     "The block below is a structured scene brief (JSON); identity always wins over any vague text.\n\n"
 )
 
+_NANO_BANANA_NO_FACE_IDENTITY_PREFIX = (
+    "[MULTI_IMAGE_EDIT — body identity, crop-locked] Earlier input image(s) are reference photos of ONE person for "
+    "**visible-body identity** on the final canvas: skin tone, texture, limb proportions, hands/feet shape — "
+    "applied **only where human body appears in the output**. "
+    "Do **not** use them for pose, camera, **framing edges**, outfit, or scene light — the JSON brief plus the **last** "
+    "input image (when present) define those. "
+    "**If the last image crops out the head/face, the output must stay headless** — do **not** zoom out, add headroom, "
+    "or synthesize a face/head from these identity references to «complete» the figure. "
+    "This is **not** face-swap: do not paste the model's face into regions where the pose image shows **no face**. "
+    "The block below is structured JSON; **framing from the last image** overrides any urge to show a portrait face.\n\n"
+)
+
 def _nano_banana_pose_last_suffix(*, lock_model_hairstyle: bool) -> str:
     hair = (
         "**Hairstyle must follow the JSON brief (model identity), not the hair layout on this last image.** "
@@ -122,6 +160,22 @@ def _nano_banana_pose_last_suffix(*, lock_model_hairstyle: bool) -> str:
         + hair
         + "Ignore any face or skin on that last image — the subject must match only the earlier identity reference image(s). "
         "Do not blend the pose or shot type from the identity images above."
+    )
+
+
+def _nano_banana_pose_last_suffix_no_face(*, lock_model_hairstyle: bool) -> str:
+    hair = (
+        "**Hairstyle:** follow MODEL / JSON — reference crop often has **no visible hair**. "
+        if lock_model_hairstyle
+        else "**Hairstyle** only if hair appears in this last crop; else omit. "
+    )
+    return (
+        "\n\n[LAST_INPUT_IMAGE — NO_FACE] The **last** image locks **crop boundaries**, **scale**, pose of **visible** body, "
+        "garments/coverage, background, and light. "
+        + hair
+        + "**Never** transplant a face from earlier identity URLs into zones where this last image shows **no face** "
+        "(e.g. legs-only, feet macro). Match **MODEL_PROFILE skin/body continuity** only on **pixels that correspond to visible body** "
+        "in this crop. Do not widen framing to include a head."
     )
 
 
@@ -148,11 +202,19 @@ def finalize_nano_banana_studio_prompt(
             else _WAVESPEED_PHOTO_EDIT_USER_FIRST_PREFIX + p
         )
     else:
-        head = _NANO_BANANA_IDENTITY_LOCK_PREFIX
+        head = (
+            _NANO_BANANA_NO_FACE_IDENTITY_PREFIX
+            if mode == "no_face"
+            else _NANO_BANANA_IDENTITY_LOCK_PREFIX
+        )
         out = head.strip() if not p else head + p
         if user_pose_reference_is_last:
-            out = out.rstrip() + _nano_banana_pose_last_suffix(
-                lock_model_hairstyle=lock_model_hairstyle
+            out = out.rstrip() + (
+                _nano_banana_pose_last_suffix_no_face(
+                    lock_model_hairstyle=lock_model_hairstyle
+                )
+                if mode == "no_face"
+                else _nano_banana_pose_last_suffix(lock_model_hairstyle=lock_model_hairstyle)
             )
 
     if mode == "no_face":
@@ -301,7 +363,25 @@ def apply_canonical_realism_to_refined_output(text: str) -> str:
     return json.dumps(data, ensure_ascii=False, indent=2)
 
 
-def load_reference_describe_prompt(*, hairstyle_from_pose_reference: bool = False) -> str:
+def load_reference_describe_prompt(
+    *,
+    hairstyle_from_pose_reference: bool = False,
+    no_face_framing: bool = False,
+) -> str:
+    if no_face_framing:
+        rel = _relative_prompt_path(
+            settings.image_studio_reference_describe_no_face_path,
+            "data/prompts/image_studio_reference_describe_no_face.txt",
+        )
+        path = (BACKEND_DIR / rel).resolve()
+        if path.is_file():
+            t = path.read_text(encoding="utf-8").strip()
+            if t:
+                return t
+        log.warning(
+            "reference describe (no_face): file missing or empty (%s), using standard describe prompt",
+            path,
+        )
     if hairstyle_from_pose_reference:
         rel = _relative_prompt_path(
             settings.image_studio_reference_describe_match_pose_hair_path,
@@ -322,7 +402,9 @@ def load_reference_describe_prompt(*, hairstyle_from_pose_reference: bool = Fals
             "reference describe (pose hair): file missing or empty (%s), using standard describe prompt",
             path,
         )
-        return load_reference_describe_prompt(hairstyle_from_pose_reference=False)
+        return load_reference_describe_prompt(
+            hairstyle_from_pose_reference=False, no_face_framing=no_face_framing
+        )
     return (settings.image_studio_reference_describe_inline or "").strip()
 
 
@@ -476,11 +558,13 @@ async def describe_reference_image_openai(
     image_bytes: bytes,
     image_media_type: str | None,
     hairstyle_from_pose_reference: bool = False,
+    no_face_framing: bool = False,
     credentials: StudioOpenAiCredentials | None = None,
 ) -> str:
     """Шаг 1: только визуальное описание референса (поза, одежда, сцена), без финального JSON."""
     instruction = load_reference_describe_prompt(
         hairstyle_from_pose_reference=hairstyle_from_pose_reference,
+        no_face_framing=no_face_framing,
     )
     if not instruction:
         raise RuntimeError(
@@ -576,9 +660,12 @@ def _studio_mode_refiner_block(studio_mode: str) -> str:
     if m == "no_face":
         return (
             "## STUDIO_MODE: NO_FACE_FRAMING\n"
-            "Final image must NOT show the subject's face or head unless USER_TEXT explicitly requires a face. "
-            "Prefer legs/feet/hands/lower-body/torso-below-shoulders framing consistent with references. "
-            "In subject.identity, omit or minimize facial detail; never invent or restore a face.\n"
+            "Final image must NOT show the subject's face or full head unless REFERENCE_IMAGE text explicitly states they are "
+            "in-frame (chin through crown visible). If FRAMING says head/face cropped out → keep them cropped out.\n"
+            "Match **REFERENCE_IMAGE framing edges and subject scale** — do **not** zoom out or add vertical headroom to «fit» identity photos.\n"
+            "Prefer legs/feet/hands/lower-body/torso-below-neck crops when the reference is a partial-body shot.\n"
+            "`subject.identity.face_features`: **minimal or absent** when face is off-frame — do not invent eyes/nose/mouth for readability.\n"
+            "Skin continuity: MODEL_PROFILE tones/texture for **visible anatomy only**.\n"
         )
     return ""
 
@@ -595,6 +682,7 @@ def _build_refiner_user_message(
     lock_model_hairstyle: bool = True,
 ) -> str:
     has_ref = bool((reference_scene_description or "").strip())
+    no_face_mode = (studio_mode or "").strip().lower() == "no_face"
     mode_line = "MODEL_LOCK" if lock_model_hairstyle else "POSE_REFERENCE"
     blocks: list[str] = [
         "## HAIRSTYLE_MODE\n" + mode_line,
@@ -614,29 +702,49 @@ def _build_refiner_user_message(
                 "## REFERENCE_IMAGE (scene/pose ref: pose/hands, clothing/coverage, **hair styling in this shot**, "
                 "camera/framing/light/room — **not** body type, skin tone, or face; those = MODEL_PROFILE). "
             )
+        if no_face_mode:
+            coherence = (
+                "**Crop-locked redo:** JSON must match REFERENCE_IMAGE **framing edges and subject scale** — never zoom out to add a head if the reference omits it. "
+                "MODEL_PROFILE gives **skin/body continuity for visible limbs and torso slices only** — not a mandate to render a face or full portrait.\n"
+            )
+        else:
+            coherence = (
+                "**Render as one person:** fill JSON so the edit model **re-synthesizes the full body** of MODEL_PROFILE in this pose and room — not face-only over the reference sitter's body.\n"
+            )
         blocks.append(
             ref_intro
-            + "**Render as one person:** fill JSON so the edit model **re-synthesizes the full body** of MODEL_PROFILE in this pose and room — not face-only over the reference sitter's body.\n"
+            + coherence
             + (reference_scene_description or "").strip()
         )
     else:
         blocks.append("## REFERENCE_IMAGE\n(none — no input reference image)")
 
     if lock_model_hairstyle:
-        blocks.append(
+        mp = (
             "## MODEL_PROFILE (identity: face, skin, hair color **and hairstyle**, body type, marks — for <FROM_MODEL_PROFILE> and **`hair_in_scene`**. "
             "If REFERENCE_IMAGE exists: **never** use profile for clothing or accessories — only the reference photo + USER_TEXT. "
             "**Always** use profile for `subject.identity` (face, skin tone, body_type, hair color, hair style, marks) and for **`hair_in_scene`** "
             "**for every visible body part** — one continuous person. Do not copy default outfit/jewelry/posture/scene from profile over the reference layout "
             "**except hairstyle**, which always follows the profile unless USER_TEXT explicitly changes it.)"
         )
+        if no_face_mode:
+            mp += (
+                " **When STUDIO_MODE is NO_FACE_FRAMING:** if the reference crop has **no head/face**, keep `face_features` minimal or absent — "
+                "identity still anchors **visible skin** (legs, feet, hands, partial torso); do not invent facial detail for «completeness»."
+            )
+        blocks.append(mp)
     else:
-        blocks.append(
+        mp = (
             "## MODEL_PROFILE (identity: face, skin, hair color, body type, marks — for `subject.identity` / <FROM_MODEL_PROFILE>. "
             "If REFERENCE_IMAGE exists: **never** use profile for clothing or accessories — only the reference photo + USER_TEXT. "
             "**Always** use profile for `subject.identity` (face, skin tone, body_type, hair color traits, marks) — **not** from the reference sitter's face or body. "
             "**`hair_in_scene`** follows REFERENCE_IMAGE when HAIRSTYLE_MODE is POSE_REFERENCE; do not force the profile's default hairstyle if it conflicts with REFERENCE_IMAGE.)"
         )
+        if no_face_mode:
+            mp += (
+                " **When STUDIO_MODE is NO_FACE_FRAMING:** omit rich `face_features` if face is off-frame; **hair_in_scene** only when hair appears in the reference crop."
+            )
+        blocks.append(mp)
     if model_reference_photos and str(model_reference_photos).strip():
         blocks.append(str(model_reference_photos).strip())
     if model_profile_text and model_profile_text.strip():

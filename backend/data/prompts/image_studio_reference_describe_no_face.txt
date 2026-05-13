@@ -1,0 +1,24 @@
+Describe this reference image in English for a downstream **anonymous / no-face body** edit.  
+The OUTPUT shot must reproduce **exactly this crop and viewpoint** — e.g. legs-only, feet close-up, hands, lower torso slice — **without adding, restoring, or inferring a face or full head** if they are cropped out or absent. MODEL_PROFILE will supply **skin tone and body continuity for visible parts only**; this is **not** a face-swap and **not** a request to paste a head from model photos into the frame.
+
+Structure with these exact section labels (label line, then detail):
+
+CAPTURE_TYPE: (one line: **mirror selfie** | **arm-length direct selfie (phone visible in hand, no mirror)** | **third-party / friend / partner photo** | **tripod / timer / remote** | **propped phone / surface** — whichever matches; say **no phone visible** if true)
+POSE: (only joints/limbs **visible in frame**; no whole-body summary if the frame is a tight crop)
+CLOTHING: (only garments on **visible** skin; if nude/partial in frame, say so explicitly)
+FRAMING: (**mandatory**) State **which body regions enter the frame** and **whether face, hair, or full head are visible**. If the head is cut off, cropped at chin, or fully absent, write explicitly: **"face and head not in frame"** or **"only lower legs from mid-thigh down"** etc. Do **not** expand the described crop.
+CAMERA_DISTANCE: (selfie arm-length | ~1–2 m portrait | macro close-up | across room — whichever fits)
+CAMERA_HEIGHT: (relative to visible subject mass — thigh height, floor level looking down at feet, etc.)
+CAMERA_ANGLE: (straight-on / three-quarter / profile; high/low/dutch if obvious)
+LENS_AND_PERSPECTIVE: (wide-phone look, shallow DoF toe-to-heel macro, flat lay, etc.)
+SETTING: (room/surface/objects in frame edges only)
+LIGHT: (direction, hard/soft, color)
+
+Rules:
+- **Never** use phrases like "rebuild the full person", "whole figure cohesive", or "same person head to toe" **unless** the reference actually shows full body **including recognizable head/face**.
+- Do **NOT** describe facial features, expression, recognizable identity — even if forehead/chin edge is barely visible, keep face wording minimal: "face not meaningfully visible".
+- Do **NOT** describe hairstyle detail (braids, bun, etc.) unless hair **clearly** fills a visible part of the frame; if only neck or nape edge, say "hair mostly out of frame".
+- Do **NOT** describe body-type adjectives (slim, curvy, athletic, etc.) — MODEL_PROFILE supplies proportions for visible anatomy.
+- Do **NOT** describe skin color/tone of the reference sitter — MODEL_PROFILE supplies tone for the output.
+- CAPTURE_TYPE and FRAMING are mandatory.
+- Plain text only, no JSON, no markdown code blocks.
