@@ -140,6 +140,21 @@ class StudioRefinePromptOut(BaseModel):
     generation_id: int | None = None
 
 
+class StudioImportArchiveImageIn(BaseModel):
+    """Повторная загрузка в архив по временному HTTPS URL (например с CDN после сбоя скачивания на сервер)."""
+
+    source_url: str = Field(..., max_length=2048)
+    refined_prompt: str | None = Field(default=None, max_length=65536)
+    output_aspect: str | None = Field(default=None, max_length=48)
+    studio_model_id: int | None = Field(default=None, ge=1)
+
+
+class StudioImportArchiveImageOut(BaseModel):
+    generated_image_url: str | None = None
+    generation_id: int | None = None
+    message: str | None = None
+
+
 class StudioMotionFirstFrameOut(BaseModel):
     """Шаг 1: первый кадр видео детально разбирается (без личности/оверлеев); опционально — сводка движения по клипу."""
 
@@ -157,6 +172,7 @@ class StudioMotionVideoOut(BaseModel):
 
     video_url: str | None = None
     message: str | None = None
+    motion_video_prompt_auto: str | None = None
 
 
 class StudioMotionDrivingVideoUploadOut(BaseModel):

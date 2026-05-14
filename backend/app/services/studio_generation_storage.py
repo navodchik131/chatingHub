@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 import uuid
 from functools import partial
@@ -10,13 +11,26 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.config import BACKEND_DIR
+from app.config import BACKEND_DIR, settings
 from app.db.models import StudioGeneration, UserStudioModel
 from app.services.studio_model_images import export_selfie_flag_for_phone_exif
 
 log = logging.getLogger(__name__)
 
 MAX_ARCHIVE_BYTES = 25 * 1024 * 1024
+
+USER_HINT_ARCHIVE_DOWNLOAD_FAILED = (
+    "Не удалось скачать файл результата на наш сервер (часто таймаут или нестабильная сеть до CDN). "
+    "Временная ссылка провайдера ниже действует ограниченное время — нажмите «Сохранить в архив» в интерфейсе, "
+    "чтобы повторить загрузку без повторной генерации."
+)
+
+
+def user_message_when_archive_download_failed(previous: str | None) -> str:
+    prev = (previous or "").strip()
+    if prev:
+        return f"{prev}\n\n{USER_HINT_ARCHIVE_DOWNLOAD_FAILED}"
+    return USER_HINT_ARCHIVE_DOWNLOAD_FAILED
 
 
 async def persist_studio_generation_from_uploaded_bytes(
@@ -122,14 +136,41 @@ async def download_and_create_generation(
     url = (source_url or "").strip()
     if not url:
         return None
-    try:
-        async with httpx.AsyncClient(timeout=120.0, follow_redirects=True) as client:
-            r = await client.get(url)
-            r.raise_for_status()
-            data = r.content
-    except Exception as e:
-        log.warning("studio archive download failed: %s", e)
+
+    attempts = max(1, int(settings.studio_archive_download_attempts))
+    timeout = float(settings.studio_archive_download_timeout_seconds)
+    data = b""
+    r: httpx.Response | None = None
+    last_err: Exception | None = None
+    wait_s = 0.0
+
+    for attempt in range(attempts):
+        if wait_s > 0:
+            await asyncio.sleep(wait_s)
+        try:
+            async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+                r = await client.get(url)
+                r.raise_for_status()
+                data = r.content
+                break
+        except Exception as e:
+            last_err = e
+            log.warning(
+                "studio archive download attempt %s/%s failed (%s): %s",
+                attempt + 1,
+                attempts,
+                url[:240],
+                e,
+            )
+            wait_s = min(60.0, 3.0 * (2**attempt))
+
+    else:
+        log.warning(
+            "studio archive download exhausted after %s attempts: %s", attempts, last_err
+        )
         return None
+
+    assert r is not None
     if len(data) > MAX_ARCHIVE_BYTES:
         log.warning("studio archive: file too large (%s bytes)", len(data))
         return None

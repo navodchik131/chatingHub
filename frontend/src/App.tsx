@@ -700,6 +700,11 @@ export default function App() {
   /** iOS PWA: прямой href на картинку уводит в Quick Look без «Назад» — качаем через fetch / Share. */
   const [studioDownloadBusy, setStudioDownloadBusy] = useState(false)
   const [studioWavespeedMsg, setStudioWavespeedMsg] = useState<string | null>(null)
+  /** Временная ссылка CDN, если архив после генерации сохранить не удалось — кнопка «Сохранить в архив». */
+  const [studioPendingExternalImageUrl, setStudioPendingExternalImageUrl] = useState<string | null>(
+    null,
+  )
+  const [studioImportArchiveBusy, setStudioImportArchiveBusy] = useState(false)
   /** Только в dev + health.studio_allow_prompt_only: без запроса к WaveSpeed */
   const [studioDevPromptOnly, setStudioDevPromptOnly] = useState(false)
   const [studioRefinedPromptPreview, setStudioRefinedPromptPreview] = useState<string | null>(null)
@@ -736,6 +741,10 @@ export default function App() {
   const [motionVideoDownloadBusy, setMotionVideoDownloadBusy] = useState(false)
   /** Локальный превью загруженного кадра (пока нет записи архива на сервере). */
   const [motionStillBlobUrl, setMotionStillBlobUrl] = useState<string | null>(null)
+  /** CDN-URL кадра, если сервер не сохранил файл (можно «Сохранить в архив» без повторной генерации). */
+  const [motionPendingExternalStillUrl, setMotionPendingExternalStillUrl] = useState<string | null>(
+    null,
+  )
 
   const studioPromptOnlyDev = useMemo(
     () =>
@@ -1123,6 +1132,7 @@ export default function App() {
     if (g) {
       setMotionPreviewUrl(g.image_url)
       setMotionPreviewGenId(g.id)
+      setMotionPendingExternalStillUrl(null)
     }
   }, [appSection, motionFrameArchiveId, studioGenerations])
 
@@ -1703,6 +1713,80 @@ export default function App() {
     }
   }
 
+  /** Повторно скачивает картинку с CDN провайдера в архив студии (если при генерации файл не сохранился). */
+  const retryImportStudioImageToArchive = async (scope: 'studio_photo' | 'motion_still') => {
+    const pendingRaw =
+      scope === 'studio_photo' ? studioPendingExternalImageUrl : motionPendingExternalStillUrl
+    const u = pendingRaw?.trim()
+    if (!u?.startsWith('https://')) return
+    setStudioImportArchiveBusy(true)
+    setError(null)
+    try {
+      const rp =
+        scope === 'studio_photo'
+          ? (studioRefinedPromptPreview ?? '').trim()
+          : (motionDesc ?? '').trim()
+      const r = await apiFetch('/api/studio/import-archive-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          source_url: u,
+          refined_prompt: rp || (scope === 'studio_photo' ? '[import фото]' : '[import кадр для видео]'),
+          output_aspect: studioOutputAspect,
+          studio_model_id: studioSelectedModelId ?? undefined,
+        }),
+        timeoutMs: 300_000,
+      })
+      const data = (await r.json().catch(() => ({}))) as {
+        generated_image_url?: string | null
+        generation_id?: number | null
+        message?: string | null
+        detail?: unknown
+      }
+      if (!r.ok) {
+        setError(formatApiErrorDetail(data) || r.statusText)
+        if (data.message?.trim()) setStudioWavespeedMsg(data.message.trim())
+        return
+      }
+      const nu = data.generated_image_url?.trim()
+      if (typeof data.generation_id === 'number') {
+        if (scope === 'studio_photo') {
+          if (nu) setStudioGenImageUrl(nu)
+          setStudioGenGenerationId(data.generation_id)
+          setStudioPendingExternalImageUrl(null)
+          setStudioWavespeedMsg(null)
+        } else {
+          if (nu) setMotionPreviewUrl(nu)
+          setMotionPreviewGenId(data.generation_id)
+          setMotionPendingExternalStillUrl(null)
+          setMotionMsg(null)
+        }
+        void refreshMe()
+        void loadStudioGenerationsReset()
+      } else {
+        const m = data.message?.trim()
+        if (scope === 'studio_photo') {
+          if (nu) setStudioGenImageUrl(nu)
+          if (m) setStudioWavespeedMsg(m)
+        } else if (m) {
+          setMotionMsg(m)
+        }
+      }
+    } catch (e) {
+      const msg =
+        e instanceof TypeError && e.message === 'Failed to fetch'
+          ? 'Сеть: не удалось связаться с сервером.'
+          : e instanceof DOMException && e.name === 'AbortError'
+            ? 'Прервано по таймауту — попробуйте ещё раз.'
+            : e instanceof Error
+              ? e.message
+              : 'Ошибка запроса'
+      setError(msg)
+    } finally {
+      setStudioImportArchiveBusy(false)
+    }
+  }
+
   const downloadMotionResultVideo = async (urlRaw: string | null | undefined) => {
     const url = urlRaw?.trim()
     if (!url) return
@@ -1792,6 +1876,7 @@ export default function App() {
     setStudioGenImageUrl(null)
     setStudioGenGenerationId(null)
     setStudioWavespeedMsg(null)
+    setStudioPendingExternalImageUrl(null)
     setStudioRefinedPromptPreview(null)
     try {
       const promptOnlyActive =
@@ -1818,7 +1903,11 @@ export default function App() {
       fd.append('generate_wavespeed', promptOnlyActive ? '0' : '1')
       fd.append('wavespeed_single_reference', '1')
       fd.append('lock_model_hairstyle', studioLockModelHairstyle ? '1' : '0')
-      const r = await apiFetch('/api/studio/refine-prompt', { method: 'POST', body: fd })
+      const r = await apiFetch('/api/studio/refine-prompt', {
+        method: 'POST',
+        body: fd,
+        timeoutMs: 960_000,
+      })
       if (!r.ok) {
         const j = await r.json().catch(() => ({}))
         setError(formatApiErrorDetail(j) || r.statusText)
@@ -1831,16 +1920,32 @@ export default function App() {
         wavespeed_message?: string | null
         generation_id?: number | null
       }
-      setStudioGenImageUrl(data.generated_image_url?.trim() || null)
-      setStudioGenGenerationId(
-        typeof data.generation_id === 'number' ? data.generation_id : null,
+      const gid = typeof data.generation_id === 'number' ? data.generation_id : null
+      const gurl = data.generated_image_url?.trim() || null
+      setStudioGenImageUrl(gurl)
+      setStudioGenGenerationId(gid)
+      setStudioPendingExternalImageUrl(
+        gid != null ||
+          !gurl ||
+          !gurl.startsWith('https://') ||
+          gurl.includes('/api/studio/public-generation-image')
+          ? null
+          : gurl,
       )
       setStudioWavespeedMsg(data.wavespeed_message?.trim() || null)
       setStudioRefinedPromptPreview((data.refined_prompt ?? '').trim() || null)
       void refreshMe()
       void loadStudioGenerationsReset()
     } catch (e) {
-      setError(e instanceof TypeError && e.message === 'Failed to fetch' ? 'Сеть: не удалось связаться с сервером (проверьте, что бэкенд запущен и порт / proxy).' : (e instanceof Error ? e.message : 'Неизвестная ошибка запроса'))
+      setError(
+        e instanceof DOMException && e.name === 'AbortError'
+          ? 'Запрос отменён по таймауту (прокси или браузер). Подождите и повторите — на стороне провайдера генерация уже могла завершиться.'
+          : e instanceof TypeError && e.message === 'Failed to fetch'
+            ? 'Сеть: не удалось связаться с сервером (проверьте, что бэкенд запущен и порт / proxy).'
+            : e instanceof Error
+              ? e.message
+              : 'Неизвестная ошибка запроса',
+      )
     } finally {
       setStudioBusy(false)
     }
@@ -1863,8 +1968,18 @@ export default function App() {
         typeof data.motion_video_file_id === 'string' ? data.motion_video_file_id.trim() : ''
       return fromApi || prev || null
     })
-    setMotionPreviewUrl(data.generated_image_url?.trim() || null)
-    setMotionPreviewGenId(typeof data.generation_id === 'number' ? data.generation_id : null)
+    const gUrl = data.generated_image_url?.trim() || null
+    const gId = typeof data.generation_id === 'number' ? data.generation_id : null
+    setMotionPreviewUrl(gUrl)
+    setMotionPreviewGenId(gId)
+    setMotionPendingExternalStillUrl(
+      gId != null ||
+        !gUrl ||
+        !gUrl.startsWith('https://') ||
+        gUrl.includes('/api/studio/public-generation-image')
+        ? null
+        : gUrl,
+    )
     setMotionMsg(data.wavespeed_message?.trim() || null)
     {
       const scene = (data.reference_scene_description ?? '').trim()
@@ -1931,6 +2046,7 @@ export default function App() {
     setMotionMsg(null)
     setMotionResultVideoUrl(null)
     setMotionAutoTextPreview(null)
+    setMotionPendingExternalStillUrl(null)
     try {
       const res = await callMotionFirstFrameApi(
         !!(motionUseStillFinal && motionFirstFrameFile),
@@ -2022,6 +2138,7 @@ export default function App() {
       fd.append('prompt', motionDesc.trim())
       fd.append('negative_prompt', motionVideoNegPrompt.trim())
       fd.append('keep_original_sound', motionKeepSound ? '1' : '0')
+      fd.append('auto_motion_prompt', motionAutoPrompt ? '1' : '0')
       if (prov === 'seedance_i2v') {
         fd.append('duration_seconds', String(motionSeedanceDuration))
       }
@@ -2033,6 +2150,7 @@ export default function App() {
       const data = (await r.json().catch(() => ({}))) as {
         video_url?: string | null
         message?: string | null
+        motion_video_prompt_auto?: string | null
         detail?: unknown
       }
       if (!r.ok) {
@@ -2040,6 +2158,11 @@ export default function App() {
         return
       }
       setMotionResultVideoUrl(data.video_url?.trim() || null)
+      const mva = data.motion_video_prompt_auto?.trim()
+      if (mva)
+        setMotionAutoTextPreview(
+          `Текст, ушедший в motion (можно использовать при следующих рендерах):\n${mva}`,
+        )
       setMotionMsg(data.message?.trim() || null)
       void refreshMe()
       void refreshMotionRenders()
@@ -2069,6 +2192,7 @@ export default function App() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ target_resolution: studioUpscaleTarget }),
+        timeoutMs: 600_000,
       })
       const data = (await r.json().catch(() => ({}))) as {
         generated_image_url?: string | null
@@ -2081,23 +2205,38 @@ export default function App() {
         return
       }
       const url = data.generated_image_url?.trim()
+      const gid =
+        typeof data.generation_id === 'number' && Number.isFinite(data.generation_id)
+          ? data.generation_id
+          : null
       if (url) {
         setStudioGenImageUrl(url)
-        if (typeof data.generation_id === 'number') {
-          setStudioGenGenerationId(data.generation_id)
+        if (gid != null) {
+          setStudioGenGenerationId(gid)
+          setStudioPendingExternalImageUrl(null)
+        } else if (
+          url.startsWith('https://') &&
+          !url.includes('/api/studio/public-generation-image')
+        ) {
+          setStudioPendingExternalImageUrl(url)
+        } else {
+          setStudioPendingExternalImageUrl(null)
         }
       } else {
+        setStudioPendingExternalImageUrl(null)
         setStudioWavespeedMsg(data.message?.trim() || 'Апскейл не выполнен.')
       }
       void refreshMe()
       void loadStudioGenerationsReset()
     } catch (e) {
       setError(
-        e instanceof TypeError && e.message === 'Failed to fetch'
-          ? 'Сеть: не удалось связаться с сервером.'
-          : e instanceof Error
-            ? e.message
-            : 'Ошибка запроса',
+        e instanceof DOMException && e.name === 'AbortError'
+          ? 'Запрос апскейла прерван по таймауту. Если картинка появилась у провайдера, попробуйте «Сохранить в архив» по CDN-ссылке из сообщения или повторите позже.'
+          : e instanceof TypeError && e.message === 'Failed to fetch'
+            ? 'Сеть: не удалось связаться с сервером.'
+            : e instanceof Error
+              ? e.message
+              : 'Ошибка запроса',
       )
     } finally {
       setStudioUpscaleBusy(false)
@@ -4680,6 +4819,22 @@ export default function App() {
             {studioWavespeedMsg ? (
               <div className="banner info studio-status-msg">{studioWavespeedMsg}</div>
             ) : null}
+            {studioPendingExternalImageUrl ? (
+              <div className="studio-pending-archive studio-upscale-row" style={{ marginTop: '0.5rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                <p className="muted" style={{ margin: 0, flex: '1 1 12rem' }}>
+                  Картинка доступна по ссылке провайдера, но не попала в «Сохранённые». Можно догрузить без повторной
+                  генерации (без списания кредитов).
+                </p>
+                <button
+                  type="button"
+                  className="ghost-btn"
+                  disabled={studioImportArchiveBusy || !canStudioGenerate}
+                  onClick={() => void retryImportStudioImageToArchive('studio_photo')}
+                >
+                  {studioImportArchiveBusy ? 'Сохраняем в архив…' : 'Сохранить в архив'}
+                </button>
+              </div>
+            ) : null}
             {studioGenImageUrl ? (
               <div className="studio-generated">
                 <h3 className="studio-generated-title">Результат</h3>
@@ -4825,6 +4980,7 @@ export default function App() {
                         onClick={() => {
                           setStudioGenGenerationId(g.id)
                           setStudioGenImageUrl(g.image_url)
+                          setStudioPendingExternalImageUrl(null)
                         }}
                       >
                         <img src={g.image_url} alt="" className="studio-archive-thumb" loading="lazy" />
@@ -4946,6 +5102,7 @@ export default function App() {
                       onChange={(e) => {
                         const v = e.target.value
                         const id = v === '' ? null : Number(v)
+                        setMotionPendingExternalStillUrl(null)
                         setMotionFrameArchiveId(id != null && Number.isFinite(id) ? id : null)
                         if (id != null && Number.isFinite(id)) {
                           const g = studioGenerations.find((x) => x.id === id)
@@ -4977,6 +5134,7 @@ export default function App() {
                         setMotionPreviewUrl(null)
                         setMotionPreviewGenId(null)
                         setMotionResultVideoUrl(null)
+                        setMotionPendingExternalStillUrl(null)
                       }}
                     />
                     {motionFirstFrameFile ? (
@@ -5107,9 +5265,29 @@ export default function App() {
                 <div className="studio-generated studio-video-result">
                   <h3 className="studio-generated-title">Кадр для видео</h3>
                   {studioMotionStillDisplayUrl ? (
-                    <div className="studio-generated-frame">
-                      <img src={studioMotionStillDisplayUrl} alt="" className="studio-gen-img" />
-                    </div>
+                    <>
+                      <div className="studio-generated-frame">
+                        <img src={studioMotionStillDisplayUrl} alt="" className="studio-gen-img" />
+                      </div>
+                      {motionPendingExternalStillUrl ? (
+                        <div
+                          className="studio-pending-archive studio-upscale-row"
+                          style={{ marginTop: '0.35rem', flexWrap: 'wrap', gap: '0.5rem' }}
+                        >
+                          <p className="muted" style={{ margin: 0, flex: '1 1 12rem' }}>
+                            Кадр есть у провайдера, но не в «Сохранённые». Догрузите в архив без повторной генерации.
+                          </p>
+                          <button
+                            type="button"
+                            className="ghost-btn"
+                            disabled={studioImportArchiveBusy || !canStudioGenerate}
+                            onClick={() => void retryImportStudioImageToArchive('motion_still')}
+                          >
+                            {studioImportArchiveBusy ? 'Сохраняем…' : 'Сохранить кадр в архив'}
+                          </button>
+                        </div>
+                      ) : null}
+                    </>
                   ) : motionStableGenIdForVideo != null ? (
                     <p className="muted" style={{ margin: '0.25rem 0 0.5rem' }}>
                       Запись в архиве: <strong>#{motionStableGenIdForVideo}</strong>. Если превью не видно —

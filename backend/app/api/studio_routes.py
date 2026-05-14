@@ -35,6 +35,8 @@ from app.schemas import (
     StudioCarouselOut,
     StudioGenerationOut,
     StudioGenerationsPageOut,
+    StudioImportArchiveImageIn,
+    StudioImportArchiveImageOut,
     StudioModelImageOut,
     StudioModelImagePatchIn,
     StudioModelProfileGenerateOut,
@@ -76,6 +78,7 @@ from app.services.studio_generation_storage import (
     download_and_create_generation,
     persist_studio_generation_from_uploaded_bytes,
     safe_delete_generation_file,
+    user_message_when_archive_download_failed,
 )
 from app.services.studio_image_token import (
     create_generation_image_access_token,
@@ -319,6 +322,26 @@ def _build_wan_22_animate_prompt(
         parts.append("Avoid: " + neg)
     out = " ".join(parts).strip()
     return out or None
+
+
+# Тот же маркер, что в api_studio_motion_first_frame (слияние с БД).
+_CLIP_MOTION_MARKER = "[Clip motion — sampled frames]"
+
+
+def _merge_clip_motion_into_studio_generation_prompt(
+    existing: str | None,
+    clip_summary: str,
+) -> str:
+    clip_summary = (clip_summary or "").strip()
+    base = (existing or "").strip()
+    if not clip_summary:
+        return base
+    block = f"{_CLIP_MOTION_MARKER}\n{clip_summary}"
+    if not base:
+        return block
+    if _CLIP_MOTION_MARKER in base:
+        return base
+    return f"{base}\n\n{block}"
 
 
 def _truthy_wavespeed_flag(raw: str | None) -> bool:
@@ -721,7 +744,10 @@ async def api_upscale_studio_generation(
                 studio_model_id=row.studio_model_id,
             )
             if gen is None:
-                msg = "Не удалось сохранить результат апскейла — повторите позже."
+                msg = user_message_when_archive_download_failed(
+                    "Апскейл на стороне провайдера выполнен, но файл не сохранился на сервере."
+                )
+                out_url = raw_up
             else:
                 new_id = gen.id
                 arch_base = _public_app_base(request)
@@ -758,9 +784,11 @@ async def api_upscale_studio_generation(
 
     await session.rollback()
     return StudioUpscaleGenerationOut(
-        generated_image_url=None,
-        generation_id=None,
-        message=msg or "Апскейл не выполнен.",
+        generated_image_url=out_url,
+        generation_id=new_id,
+        message=msg.strip()
+        if msg
+        else (None if out_url else "Апскейл не выполнен."),
         target_resolution=tr,
     )
 
@@ -1279,6 +1307,69 @@ async def api_delete_studio_model(
     return {"ok": True}
 
 
+@router.post("/studio/import-archive-image", response_model=StudioImportArchiveImageOut)
+async def api_import_studio_archive_image(
+    request: Request,
+    payload: StudioImportArchiveImageIn,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> StudioImportArchiveImageOut:
+    """Повторно скачивает изображение по временному HTTPS URL провайдера и создаёт запись архива (без списания кредитов)."""
+    assert_permission(user, PERM_STUDIO_GENERATE)
+    oid = workspace_owner_id(user)
+    raw_u = (payload.source_url or "").strip()
+    if not raw_u.startswith("https://"):
+        raise HTTPException(
+            status_code=400,
+            detail="Нужна ссылка вида https://… (временный URL результата у провайдера).",
+        )
+    arch_base = _public_app_base(request)
+    pub = (arch_base or "").strip().rstrip("/")
+    if not pub.lower().startswith("https://"):
+        raise HTTPException(
+            status_code=503,
+            detail="Нужен публичный HTTPS (PUBLIC_APP_URL) для ссылок на архив.",
+        )
+
+    aspect_key: str | None = None
+    oa = (payload.output_aspect or "").strip()
+    if oa:
+        try:
+            aspect_key = normalize_aspect_key(oa)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
+    rp = ((payload.refined_prompt or "").strip() or "[import from CDN URL]")[:65536]
+
+    gen = await download_and_create_generation(
+        session,
+        owner_id=oid,
+        source_url=raw_u,
+        refined_prompt=rp,
+        output_aspect=aspect_key,
+        studio_model_id=payload.studio_model_id,
+        refined_prompt_full=rp,
+    )
+    await session.commit()
+
+    if gen is None:
+        return StudioImportArchiveImageOut(
+            generated_image_url=raw_u,
+            generation_id=None,
+            message=user_message_when_archive_download_failed(
+                "Повторная загрузка в архив пока не удалась."
+            ),
+        )
+
+    gtok = create_generation_image_access_token(user_id=oid, generation_id=gen.id)
+    out_u = f"{pub}/api/studio/public-generation-image?t={quote(gtok, safe='')}"
+    return StudioImportArchiveImageOut(
+        generated_image_url=out_u,
+        generation_id=gen.id,
+        message=None,
+    )
+
+
 @router.post("/studio/refine-prompt", response_model=StudioRefinePromptOut)
 async def api_studio_refine_prompt(
     request: Request,
@@ -1637,6 +1728,8 @@ async def api_studio_refine_prompt(
                 generated_image_url = (
                     f"{arch_base}/api/studio/public-generation-image?t={quote(gtok, safe='')}"
                 )
+        else:
+            wavespeed_message = user_message_when_archive_download_failed(wavespeed_message)
 
     await record_usage(
         session,
@@ -2105,6 +2198,8 @@ async def api_studio_motion_first_frame(
                     generated_image_url = (
                         f"{arch_base}/api/studio/public-generation-image?t={quote(gtok2, safe='')}"
                     )
+            else:
+                wavespeed_message = user_message_when_archive_download_failed(wavespeed_message)
 
     await record_usage(
         session,
@@ -2143,6 +2238,7 @@ async def api_studio_motion_render_video(
     negative_prompt: str = Form(""),
     keep_original_sound: str = Form("1"),
     duration_seconds: str = Form(""),
+    auto_motion_prompt: str = Form("1"),
     session: AsyncSession = Depends(get_session),
     user: User = Depends(get_current_user),
 ) -> StudioMotionVideoOut:
@@ -2195,6 +2291,37 @@ async def api_studio_motion_render_video(
     cost = apply_studio_credit_cost(plan, settings.credit_cost_studio_motion_control)
     billing = await ensure_can_consume_credits(session, user, cost)
 
+    effective_motion_summary: str | None = row.motion_video_prompt_auto
+    want_auto_clip = (
+        _truthy_wavespeed_flag(auto_motion_prompt)
+        and bool(mv_id)
+        and vpath is not None
+        and vpath.is_file()
+        and _CLIP_MOTION_MARKER not in (row.motion_video_prompt_auto or "")
+    )
+    if want_auto_clip:
+        try:
+            llm_cr = studio_llm_credentials(plan=plan, llm_row=None)
+            frames = await anyio.to_thread.run_sync(
+                lambda vp=vpath: extract_video_sample_frames_jpeg(vp, max_frames=4)
+            )
+            clip_summary_txt = await describe_motion_video_frames_openai(
+                frames_jpeg=frames,
+                credentials=llm_cr,
+            )
+            merged_txt = (
+                _merge_clip_motion_into_studio_generation_prompt(
+                    row.motion_video_prompt_auto,
+                    clip_summary_txt or "",
+                ).strip()
+            )
+            if merged_txt:
+                row.motion_video_prompt_auto = merged_txt
+                effective_motion_summary = merged_txt
+                session.add(row)
+        except Exception as e:
+            log.warning("render-video: auto clip motion describe failed: %s", e)
+
     img_tok = create_generation_image_access_token(user_id=oid, generation_id=gid, days=30)
     image_pub = f"{pub}/api/studio/public-generation-image?t={quote(img_tok, safe='')}"
     video_pub = ""
@@ -2227,7 +2354,7 @@ async def api_studio_motion_render_video(
     video_url: str | None = None
     user_extra = (prompt or "").strip()
     motion_prompt = _build_wan_22_animate_prompt(
-        motion_summary=row.motion_video_prompt_auto,
+        motion_summary=effective_motion_summary,
         user_extra=user_extra,
         negative=None,
     )
@@ -2238,7 +2365,7 @@ async def api_studio_motion_render_video(
             if not video_pub.strip():
                 raise RuntimeError("Нужен файл референс-видео (шаг «Создать кадр» с загрузкой ролика).")
             wan_prompt = _build_wan_22_animate_prompt(
-                motion_summary=row.motion_video_prompt_auto,
+                motion_summary=effective_motion_summary,
                 user_extra=user_extra,
                 negative=negative_prompt,
             )
@@ -2327,4 +2454,8 @@ async def api_studio_motion_render_video(
     )
     await session.commit()
 
-    return StudioMotionVideoOut(video_url=video_url, message=msg)
+    return StudioMotionVideoOut(
+        video_url=video_url,
+        message=msg,
+        motion_video_prompt_auto=(effective_motion_summary or "").strip() or None,
+    )

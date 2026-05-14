@@ -216,7 +216,7 @@ async def _wavespeed_post_json_and_resolve_image_url(
     body: dict[str, Any],
     timeout_submit: float = 300.0,
     poll_interval: float = 2.0,
-    max_polls: int = 90,
+    max_polls: int = 120,
 ) -> str:
     """Общий POST + разбор ответа / опрос prediction до появления URL картинки."""
     headers = {
@@ -343,7 +343,7 @@ async def seedream_v45_edit_image_url(
     wan_edit_tier: str | None = None,
     timeout_submit: float = 300.0,
     poll_interval: float = 2.0,
-    max_polls: int = 90,
+    max_polls: int = 120,
 ) -> str:
     """
     Image edit через WaveSpeed: путь из `resolve_studio_image_edit_post_path`
@@ -414,7 +414,7 @@ async def wavespeed_image_upscale_url(
     output_format: str = "png",
     timeout_submit: float = 300.0,
     poll_interval: float = 2.0,
-    max_polls: int = 90,
+    max_polls: int = 120,
 ) -> str:
     """Image Upscaler WaveSpeed: публичный HTTPS URL входного изображения."""
     u = (image_url or "").strip()
@@ -461,7 +461,7 @@ async def nano_banana_pro_edit_image_url(
     aspect_ratio: str,
     timeout_submit: float = 300.0,
     poll_interval: float = 2.0,
-    max_polls: int = 90,
+    max_polls: int = 120,
 ) -> str:
     """
     Google Nano Banana Pro Edit: images + prompt + aspect_ratio + resolution.
@@ -537,9 +537,9 @@ async def _wavespeed_post_json_and_resolve_video_url(
     api_key: str,
     full_post_url: str,
     body: dict[str, Any],
-    timeout_submit: float = 600.0,
+    timeout_submit: float = 900.0,
     poll_interval: float = 3.0,
-    max_polls: int = 120,
+    max_polls: int = 180,
 ) -> str:
     headers = {
         "Authorization": f"Bearer {api_key.strip()}",
@@ -661,9 +661,9 @@ async def wan_22_animate_video_url(
     mode: str | None = None,
     resolution: str | None = None,
     seed: int | None = None,
-    timeout_submit: float = 600.0,
+    timeout_submit: float = 900.0,
     poll_interval: float = 3.0,
-    max_polls: int = 120,
+    max_polls: int = 180,
 ) -> str:
     """
     WAN 2.2 Animate: image + driving video → video. Режим replace/animate.
@@ -718,9 +718,9 @@ async def seedance_20_image_to_video_url(
     resolution: str | None = None,
     duration: int | None = None,
     generate_audio: bool = True,
-    timeout_submit: float = 600.0,
+    timeout_submit: float = 900.0,
     poll_interval: float = 3.0,
-    max_polls: int = 120,
+    max_polls: int = 180,
 ) -> str:
     """
     ByteDance Seedance 2.0 Image-to-Video: стартовый кадр + prompt → видео.
@@ -783,9 +783,9 @@ async def seedance_studio_video_edit_video_url(
     aspect_ratio: str | None = None,
     resolution: str | None = None,
     keep_original_sound: bool = True,
-    timeout_submit: float = 600.0,
+    timeout_submit: float = 900.0,
     poll_interval: float = 3.0,
-    max_polls: int = 120,
+    max_polls: int = 180,
 ) -> str:
     """
     ByteDance Seedance (Fast) Video-Edit Turbo: входное видео + промпт + опционально reference_images.
@@ -840,9 +840,9 @@ async def kling_motion_control_video_url(
     prompt: str = "",
     negative_prompt: str = "",
     keep_original_sound: bool = True,
-    timeout_submit: float = 600.0,
+    timeout_submit: float = 900.0,
     poll_interval: float = 3.0,
-    max_polls: int = 120,
+    max_polls: int = 180,
 ) -> str:
     """Kling V3 Pro Motion Control: character image + driving video → output video URL."""
     img = (image_url or "").strip()

@@ -91,6 +91,9 @@ class Settings(BaseSettings):
     # Архив студии (файлы + БД): автоудаление записей старше N дней; 0 = отключено
     studio_generations_retention_days: int = Field(default=4, ge=0)
     studio_generations_retention_interval_hours: int = Field(default=24, ge=1)
+    # Скачивание готового кадра с CDN провайдера в архив студии (повторы при обрыве/таймауте).
+    studio_archive_download_attempts: int = Field(default=6, ge=1, le=15)
+    studio_archive_download_timeout_seconds: float = Field(default=300.0, ge=30.0, le=600.0)
 
     wavespeed_api_base: str = Field(default="https://api.wavespeed.ai")
     # POST image-edit: WAN 2.7 по умолчанию; Pro / Seedream — см. .env.example
