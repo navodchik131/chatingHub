@@ -749,6 +749,15 @@ export default function App() {
   const seedanceDurationMin = health?.studio_seedance_i2v_duration_min ?? 4
   const seedanceDurationMax = health?.studio_seedance_i2v_duration_max ?? 15
 
+  const motionStableGenIdForVideo = motionFrameArchiveId ?? motionPreviewGenId
+
+  /** Есть картинка для видео: запись архива / после кадра или загруженный файл (без записи до рендера). */
+  const motionMayRenderVideoStill =
+    motionStableGenIdForVideo != null ||
+    (motionFirstFrameFile != null && motionFrameArchiveId == null)
+  const motionNeedDrivingVideoFile =
+    motionVideoProvider === 'kling' || motionVideoProvider === 'wan'
+
   useEffect(() => {
     if (motionSeedanceDurationInitRef.current || !health) return
     const d = health.studio_seedance_i2v_duration_default
@@ -1837,6 +1846,69 @@ export default function App() {
     }
   }
 
+  type MotionFirstFrameApiData = {
+    refined_prompt?: string
+    reference_scene_description?: string | null
+    motion_video_prompt_auto?: string | null
+    generated_image_url?: string | null
+    wavespeed_message?: string | null
+    generation_id?: number | null
+    motion_video_file_id?: string
+    detail?: unknown
+  }
+
+  const applyMotionFirstFrameResponse = (data: MotionFirstFrameApiData) => {
+    setMotionVideoFileId((prev) => {
+      const fromApi =
+        typeof data.motion_video_file_id === 'string' ? data.motion_video_file_id.trim() : ''
+      return fromApi || prev || null
+    })
+    setMotionPreviewUrl(data.generated_image_url?.trim() || null)
+    setMotionPreviewGenId(typeof data.generation_id === 'number' ? data.generation_id : null)
+    setMotionMsg(data.wavespeed_message?.trim() || null)
+    {
+      const scene = (data.reference_scene_description ?? '').trim()
+      const motion = (data.motion_video_prompt_auto ?? '').trim()
+      const parts: string[] = []
+      if (scene)
+        parts.push(
+          'Первый кадр (сцена для вашей модели, без внешности из видео):\n' + scene,
+        )
+      if (motion) parts.push('Движение по ролику (доп. кадры):\n' + motion)
+      setMotionAutoTextPreview(parts.length > 0 ? parts.join('\n\n—\n\n') : null)
+    }
+  }
+
+  const callMotionFirstFrameApi = async (
+    useStillFinalEffective: boolean,
+  ): Promise<{ ok: true; data: MotionFirstFrameApiData } | { ok: false; data: MotionFirstFrameApiData }> => {
+    const fd = new FormData()
+    if (motionFrameArchiveId != null) {
+      fd.append('existing_generation_id', String(motionFrameArchiveId))
+    }
+    if (motionFirstFrameFile) {
+      fd.append('first_frame_image', motionFirstFrameFile)
+    }
+    if (motionVideoFile) {
+      fd.append('video', motionVideoFile)
+    }
+    fd.append('model_id', String(studioSelectedModelId ?? ''))
+    fd.append('description', motionDesc.trim())
+    fd.append('output_aspect', studioOutputAspect)
+    fd.append('wan_edit_tier', 'standard')
+    fd.append('studio_wave_profile', 'regular')
+    fd.append('auto_motion_prompt', motionAutoPrompt ? '1' : '0')
+    fd.append('lock_model_hairstyle', motionLockHairstyle ? '1' : '0')
+    fd.append('use_still_as_final', useStillFinalEffective && motionFirstFrameFile ? '1' : '0')
+    const r = await apiFetch('/api/studio/motion/first-frame', {
+      method: 'POST',
+      body: fd,
+      timeoutMs: 600_000,
+    })
+    const data = (await r.json().catch(() => ({}))) as MotionFirstFrameApiData
+    return r.ok ? { ok: true, data } : { ok: false, data }
+  }
+
   const runMotionFirstFrame = async () => {
     setError(null)
     const hasStill =
@@ -1860,62 +1932,14 @@ export default function App() {
     setMotionResultVideoUrl(null)
     setMotionAutoTextPreview(null)
     try {
-      const fd = new FormData()
-      if (motionFrameArchiveId != null) {
-        fd.append('existing_generation_id', String(motionFrameArchiveId))
-      }
-      if (motionFirstFrameFile) {
-        fd.append('first_frame_image', motionFirstFrameFile)
-      }
-      if (motionVideoFile) {
-        fd.append('video', motionVideoFile)
-      }
-      fd.append('model_id', String(studioSelectedModelId))
-      fd.append('description', motionDesc.trim())
-      fd.append('output_aspect', studioOutputAspect)
-      fd.append('wan_edit_tier', 'standard')
-      fd.append('studio_wave_profile', 'regular')
-      fd.append('auto_motion_prompt', motionAutoPrompt ? '1' : '0')
-      fd.append('lock_model_hairstyle', motionLockHairstyle ? '1' : '0')
-      fd.append('use_still_as_final', motionUseStillFinal && motionFirstFrameFile ? '1' : '0')
-      const r = await apiFetch('/api/studio/motion/first-frame', {
-        method: 'POST',
-        body: fd,
-        timeoutMs: 600_000,
-      })
-      const data = (await r.json().catch(() => ({}))) as {
-        refined_prompt?: string
-        reference_scene_description?: string | null
-        motion_video_prompt_auto?: string | null
-        generated_image_url?: string | null
-        wavespeed_message?: string | null
-        generation_id?: number | null
-        motion_video_file_id?: string
-        detail?: unknown
-      }
-      if (!r.ok) {
-        setError(formatApiErrorDetail(data) || r.statusText)
+      const res = await callMotionFirstFrameApi(
+        !!(motionUseStillFinal && motionFirstFrameFile),
+      )
+      if (!res.ok) {
+        setError(formatApiErrorDetail(res.data) || 'Ошибка запроса')
         return
       }
-      setMotionVideoFileId((prev) => {
-        const fromApi =
-          typeof data.motion_video_file_id === 'string' ? data.motion_video_file_id.trim() : ''
-        return fromApi || prev || null
-      })
-      setMotionPreviewUrl(data.generated_image_url?.trim() || null)
-      setMotionPreviewGenId(typeof data.generation_id === 'number' ? data.generation_id : null)
-      setMotionMsg(data.wavespeed_message?.trim() || null)
-      {
-        const scene = (data.reference_scene_description ?? '').trim()
-        const motion = (data.motion_video_prompt_auto ?? '').trim()
-        const parts: string[] = []
-        if (scene)
-          parts.push(
-            'Первый кадр (сцена для вашей модели, без внешности из видео):\n' + scene,
-          )
-        if (motion) parts.push('Движение по ролику (доп. кадры):\n' + motion)
-        setMotionAutoTextPreview(parts.length > 0 ? parts.join('\n\n—\n\n') : null)
-      }
+      applyMotionFirstFrameResponse(res.data)
       void refreshMe()
       void loadStudioGenerationsReset()
     } catch (e) {
@@ -1935,23 +1959,60 @@ export default function App() {
     setError(null)
     const prov = (health?.studio_motion_video_provider ?? 'kling').toLowerCase()
     const needDrivingFile = prov === 'kling' || prov === 'wan'
-    if (motionPreviewGenId == null) {
-      setError(
-        'Выберите снимок в архиве (превью подставится само) или нажмите «Создать кадр», чтобы сохранить кадр и промпт для видео.',
-      )
+
+    if (studioSelectedModelId == null) {
+      setError('Выберите модель.')
       return
     }
-    if (needDrivingFile && !motionVideoFileId) {
+    if (needDrivingFile && !motionVideoFileId?.trim()) {
       setError(
         `Для провайдера «${prov}» нужен референс-видео: выберите файл и дождитесь сообщения об успешной загрузке (или выполните «Создать кадр» с тем же файлом).`,
       )
       return
     }
+
+    let genId: number | null = motionFrameArchiveId ?? motionPreviewGenId
+    const needsAutoStillFromUpload =
+      genId == null &&
+      motionFirstFrameFile != null &&
+      motionFrameArchiveId == null
+
+    if (needsAutoStillFromUpload) {
+      if (motionAutoPrompt && !motionVideoFile) {
+        setError(
+          'Для авто-описания движения по ролику загрузите референс-видео (или отключите опцию) — либо нажмите «Создать кадр».',
+        )
+        return
+      }
+    } else if (genId == null) {
+      setError(
+        'Выберите снимок в архиве или загрузите файл кадра с компьютера — либо нажмите «Создать кадр».',
+      )
+      return
+    }
+
     setMotionBusyVideo(true)
     setMotionResultVideoUrl(null)
     try {
+      if (needsAutoStillFromUpload) {
+        const res = await callMotionFirstFrameApi(true)
+        if (!res.ok) {
+          setError(formatApiErrorDetail(res.data) || 'Не удалось сохранить кадр для видео.')
+          return
+        }
+        applyMotionFirstFrameResponse(res.data)
+        genId = typeof res.data.generation_id === 'number' ? res.data.generation_id : null
+        void refreshMe()
+        void loadStudioGenerationsReset()
+      }
+
+      if (genId == null) {
+        setError('Не удалось определить запись кадра для видео. Повторите «Создать кадр» или выберите архив.')
+        return
+      }
+
       const fd = new FormData()
-      fd.append('generation_id', String(motionPreviewGenId))
+      fd.append('generation_id', String(genId))
       if (motionVideoFileId) {
         fd.append('motion_video_file_id', motionVideoFileId)
       } else {
@@ -4869,13 +4930,13 @@ export default function App() {
                   </label>
                 </div>
                 <p className="muted studio-video-lead" style={{ marginTop: '0.5rem' }}>
-                  Кадр: из архива «Картинки», файл или первый кадр ролика. Если выбран снимок из архива или готовое
-                  фото загружается без повторной генерации — можно сразу «Сделать видео» (для промпта всё же нажмите
-                  «Создать кадр», если кадр впервые). Для{' '}
-                  <strong>Kling / WAN</strong> выберите референс-ролик: файл сохранится на сервер отдельно, шаг «Создать
-                  кадр» не обязателен, когда кадр уже выбран. Режим <strong>Seedance I2V</strong> может обойтись без
-                  файла ролика. Текущий провайдер:{' '}
-                  <strong>{(health?.studio_motion_video_provider ?? 'kling').toLowerCase()}</strong>.
+                  Нужны модель и картинка кадра: снимок из архива «Картинки» или файл с компьютера. Референс-ролик не
+                  заменяет кадр. «Создать кадр» — если нужно пересобрать картинку через студию или разобрать движение
+                  по ролику; иначе при «Сделать видео» достаточно архива или файла (загрузка с ПК сохранится в архив как
+                  кадр перед видео, со списанием как у подготовки кадра). Для{' '}
+                  <strong>Kling / WAN</strong> отдельно выберите референс-видео (после выбора оно сохранится на
+                  сервер). <strong>Seedance I2V</strong> может обойтись без ролика. Провайдер:{' '}
+                  <strong>{motionVideoProvider}</strong>.
                 </p>
                 <div className="studio-grid studio-grid--simple studio-video-panel">
                   <label className="studio-label">
@@ -4932,8 +4993,6 @@ export default function App() {
                         const f = e.target.files?.[0] ?? null
                         setMotionVideoFile(f)
                         setMotionVideoFileId(null)
-                        setMotionPreviewUrl(null)
-                        setMotionPreviewGenId(null)
                         setMotionResultVideoUrl(null)
                         if (f) void uploadMotionDrivingVideo(f)
                       }}
@@ -5051,20 +5110,21 @@ export default function App() {
                     <div className="studio-generated-frame">
                       <img src={studioMotionStillDisplayUrl} alt="" className="studio-gen-img" />
                     </div>
-                  ) : motionPreviewGenId != null ? (
+                  ) : motionStableGenIdForVideo != null ? (
                     <p className="muted" style={{ margin: '0.25rem 0 0.5rem' }}>
-                      Запись в архиве: <strong>#{motionPreviewGenId}</strong>. Если превью не видно —
+                      Запись в архиве: <strong>#{motionStableGenIdForVideo}</strong>. Если превью не видно —
                       вернитесь на вкладку «Картинки» или нажмите «Создать кадр» ещё раз.
                     </p>
                   ) : motionFirstFrameFile ? (
                     <p className="muted" style={{ margin: '0.25rem 0 0.5rem' }}>
-                      Файл кадра загружен. Нажмите «Создать кадр», чтобы сохранить его в архив и получить
-                      id&nbsp;кадра — без этого «Сделать видео» недоступно.
+                      Файл кадра выбран. Можно сразу «Сделать видео»: перед рендером он сохранится в архив (как кадр
+                      без второй генерации, со списанием кредитов за подготовку), либо нажмите «Создать кадр» — если
+                      нужен отдельный шаг или авторазбор по ролику.
                     </p>
                   ) : (
                     <p className="muted" style={{ margin: '0.25rem 0 0.5rem' }}>
-                      Выберите снимок из архива (появится превью) или выполните «Создать кадр» после загрузки
-                      кадра или ролика.
+                      Выберите снимок из архива (появится превью) или загрузите файл кадра — либо выполните «Создать
+                      кадр» после ролика/фото.
                     </p>
                   )}
                   {motionVideoProvider === 'seedance_i2v' ? (
@@ -5093,20 +5153,18 @@ export default function App() {
                         disabled={
                           motionBusyVideo ||
                           !integ?.wavespeed_configured ||
-                          motionPreviewGenId == null ||
-                          (((health?.studio_motion_video_provider ?? 'kling').toLowerCase() === 'kling' ||
-                            (health?.studio_motion_video_provider ?? '').toLowerCase() === 'wan') &&
-                            !motionVideoFileId?.trim())
+                          studioSelectedModelId == null ||
+                          !motionMayRenderVideoStill ||
+                          (motionNeedDrivingVideoFile && !motionVideoFileId?.trim())
                         }
                         title={
-                          motionPreviewGenId == null
-                            ? 'Сначала выберите архив или успешно нажмите «Создать кадр»'
-                            : (health?.studio_motion_video_provider ?? 'kling').toLowerCase() === 'kling' ||
-                                (health?.studio_motion_video_provider ?? '').toLowerCase() === 'wan'
-                              ? !motionVideoFileId?.trim()
-                                ? 'Для Kling / WAN нужен файл референс-видео (выберите и дождитесь загрузки)'
+                          studioSelectedModelId == null
+                            ? 'Выберите модель'
+                            : !motionMayRenderVideoStill
+                              ? 'Нужна картинка кадра: архив или файл с компьютера'
+                              : motionNeedDrivingVideoFile && !motionVideoFileId?.trim()
+                                ? 'Для Kling / WAN выберите референс-видео и дождитесь загрузки на сервер'
                                 : undefined
-                              : undefined
                         }
                         onClick={() => void runMotionRenderVideo()}
                       >
