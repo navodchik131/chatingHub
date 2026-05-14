@@ -28,12 +28,24 @@ def grok_motion_studio_credentials() -> StudioOpenAiCredentials:
         raise RuntimeError(
             "Задайте GROK_API_KEY в .env (или временно OPENAI_API_KEY) для Grok motion timeline."
         )
-    base = (settings.grok_base_url or "").strip().rstrip("/") or "https://api.x.ai/v1"
+    base = (settings.grok_base_url or "").strip().rstrip("/")
+    if not base:
+        base = (settings.openai_base_url or "").strip().rstrip("/")
+    if not base:
+        base = "https://api.x.ai/v1"
     return StudioOpenAiCredentials(api_key=key, base_url=base, organization="")
 
 
 def _grok_motion_model() -> str:
-    return (settings.grok_motion_model or "").strip() or "grok-2-vision-1212"
+    for raw in (
+        settings.grok_motion_model,
+        settings.openai_studio_model_vision,
+        settings.openai_studio_model,
+    ):
+        m = (raw or "").strip()
+        if m:
+            return m
+    return "grok-2-vision-1212"
 
 
 async def grok_step1_timeline_from_video(
