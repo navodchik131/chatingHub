@@ -57,6 +57,19 @@ class Settings(BaseSettings):
     openai_organization: str = Field(default="")
     openai_studio_model: str = Field(default="gpt-4o-mini")
     openai_studio_model_vision: str = Field(default="gpt-4o")
+    # Двухшаговый Grok (xAI): таймлайн по кадрам референс-видео → единый промпт под вашу модель + первый кадр
+    studio_grok_motion_timeline_enabled: bool = Field(
+        default=False,
+        validation_alias=AliasChoices(
+            "STUDIO_GROK_MOTION_TIMELINE_ENABLED",
+            "STUDIO_GROK_MOTION_TIMELINE",
+        ),
+    )
+    grok_api_key: str = Field(default="")
+    grok_base_url: str = Field(default="https://api.x.ai/v1")
+    grok_motion_model: str = Field(default="grok-2-vision-1212")
+    grok_motion_max_seconds: int = Field(default=30, ge=4, le=120)
+    grok_motion_max_frame_width: int = Field(default=768, ge=320, le=1280)
     credit_cost_studio_prompt_refine: int = Field(default=2)
     image_studio_skeleton_path: str = Field(default="data/prompts/image_studio_skeleton.txt")
     image_studio_skeleton_inline: str = Field(default="")
@@ -180,6 +193,7 @@ class Settings(BaseSettings):
     @field_validator(
         "wavespeed_platform_api_key",
         "openai_api_key",
+        "grok_api_key",
         "yookassa_shop_id",
         "yookassa_secret_key",
         mode="after",

@@ -474,6 +474,7 @@ async def _chat_completion_text(
     max_tokens: int = 4096,
     temperature: float = 0.65,
     credentials: StudioOpenAiCredentials | None = None,
+    timeout_seconds: float = 120.0,
 ) -> str:
     cred = credentials
     if cred is None:
@@ -508,7 +509,8 @@ async def _chat_completion_text(
     if org:
         req_headers["OpenAI-Organization"] = org
 
-    async with httpx.AsyncClient(timeout=120.0) as client:
+    to = max(30.0, float(timeout_seconds))
+    async with httpx.AsyncClient(timeout=to) as client:
         r = await client.post(url, headers=req_headers, json=payload)
         req_id = (r.headers.get("x-request-id") or r.headers.get("openai-request-id") or "").strip()
 
@@ -552,6 +554,26 @@ async def _chat_completion_text(
     if not text:
         raise RuntimeError("OpenAI returned empty content")
     return text
+
+
+async def chat_completion_openai_compatible_text(
+    *,
+    model: str,
+    messages: list[dict],
+    max_tokens: int = 4096,
+    temperature: float = 0.65,
+    credentials: StudioOpenAiCredentials | None = None,
+    timeout_seconds: float = 120.0,
+) -> str:
+    """POST /v1/chat/completions (OpenAI-совместимо, в т.ч. xAI Grok)."""
+    return await _chat_completion_text(
+        model=model,
+        messages=messages,
+        max_tokens=max_tokens,
+        temperature=temperature,
+        credentials=credentials,
+        timeout_seconds=timeout_seconds,
+    )
 
 
 async def describe_reference_image_openai(

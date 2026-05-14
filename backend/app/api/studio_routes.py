@@ -116,6 +116,10 @@ from app.services.studio_pose_reference import (
     resolve_pose_reference_file,
     save_pose_reference_bytes,
 )
+from app.services.studio_grok_motion import (
+    grok_motion_studio_credentials,
+    grok_two_step_motion_prompt_for_studio,
+)
 from app.services.studio_motion_video import (
     extract_first_frame_jpeg,
     extract_video_sample_frames_jpeg,
@@ -326,6 +330,7 @@ def _build_wan_22_animate_prompt(
 
 # Тот же маркер, что в api_studio_motion_first_frame (слияние с БД).
 _CLIP_MOTION_MARKER = "[Clip motion — sampled frames]"
+_GROK_MOTION_MARKER = "[Grok motion timeline]"
 
 
 def _merge_clip_motion_into_studio_generation_prompt(
@@ -339,7 +344,7 @@ def _merge_clip_motion_into_studio_generation_prompt(
     block = f"{_CLIP_MOTION_MARKER}\n{clip_summary}"
     if not base:
         return block
-    if _CLIP_MOTION_MARKER in base:
+    if _CLIP_MOTION_MARKER in base or _GROK_MOTION_MARKER in base:
         return base
     return f"{base}\n\n{block}"
 
@@ -1938,28 +1943,6 @@ async def api_studio_motion_first_frame(
     lock_hair_req = _truthy_lock_model_hairstyle(lock_model_hairstyle)
     effective_lock_hairstyle = bool(lock_hair_req)
 
-    motion_clip_summary: str | None = None
-    if _truthy_wavespeed_flag(auto_motion_prompt):
-        if video_path is None:
-            raise HTTPException(
-                status_code=400,
-                detail="Для авто-описания движения по ролику загрузите референс-видео.",
-            )
-        try:
-            frames = await anyio.to_thread.run_sync(
-                lambda vp=video_path: extract_video_sample_frames_jpeg(vp, max_frames=4)
-            )
-            motion_clip_summary = await describe_motion_video_frames_openai(
-                frames_jpeg=frames,
-                credentials=llm_creds,
-            )
-        except Exception as e:
-            log.warning("motion clip summary failed: %s", e)
-            raise HTTPException(
-                status_code=502,
-                detail="Не удалось описать движение по ролику. Отключите «Уточнить движение по ролику» или проверьте OPENAI_STUDIO_MODEL_VISION.",
-            ) from e
-
     try:
         reference_scene = await describe_motion_video_first_frame_scene_openai(
             image_bytes=first_frame,
@@ -1988,13 +1971,55 @@ async def api_studio_motion_first_frame(
         )
 
     model_profile_text = (sm_loaded.profile_text or "").strip() or None
+
+    motion_clip_summary: str | None = None
+    if _truthy_wavespeed_flag(auto_motion_prompt):
+        if video_path is None:
+            raise HTTPException(
+                status_code=400,
+                detail="Для авто-описания движения по ролику загрузите референс-видео.",
+            )
+        try:
+            if settings.studio_grok_motion_timeline_enabled:
+                g_creds = grok_motion_studio_credentials()
+                motion_clip_summary = await grok_two_step_motion_prompt_for_studio(
+                    video_path=video_path,
+                    model_profile_text=model_profile_text or "",
+                    first_frame_jpeg=first_frame,
+                    first_frame_media=first_frame_media,
+                    credentials=g_creds,
+                )
+            else:
+                frames = await anyio.to_thread.run_sync(
+                    lambda vp=video_path: extract_video_sample_frames_jpeg(vp, max_frames=4)
+                )
+                motion_clip_summary = await describe_motion_video_frames_openai(
+                    frames_jpeg=frames,
+                    credentials=llm_creds,
+                )
+        except HTTPException:
+            raise
+        except Exception as e:
+            log.warning("motion clip summary failed: %s", e)
+            hint = (
+                "Проверьте GROK_API_KEY, GROK_BASE_URL, GROK_MOTION_MODEL и лимиты xAI."
+                if settings.studio_grok_motion_timeline_enabled
+                else "Отключите «Уточнить движение по ролику» или проверьте OPENAI_STUDIO_MODEL_VISION."
+            )
+            raise HTTPException(
+                status_code=502,
+                detail=f"Не удалось описать движение по ролику ({e}). {hint}",
+            ) from e
+
     desc_base = (description or "").strip()
     user_extra_blocks: list[str] = []
     if motion_clip_summary and motion_clip_summary.strip():
-        user_extra_blocks.append(
-            "## Motion over reference clip (sampled frames, English)\n"
-            + motion_clip_summary.strip()
+        block_title = (
+            "## Motion timeline — Grok per-second + target model (English)\n"
+            if settings.studio_grok_motion_timeline_enabled
+            else "## Motion over reference clip (sampled frames, English)\n"
         )
+        user_extra_blocks.append(block_title + motion_clip_summary.strip())
     extra_joined = "\n\n".join(user_extra_blocks) if user_extra_blocks else ""
     user_text_for_refine = "\n\n".join(x for x in (desc_base, extra_joined) if x).strip()
 
@@ -2024,9 +2049,8 @@ async def api_studio_motion_first_frame(
 
     motion_auto_for_db = reference_scene.strip()
     if motion_clip_summary and motion_clip_summary.strip():
-        motion_auto_for_db += (
-            "\n\n[Clip motion — sampled frames]\n" + motion_clip_summary.strip()
-        )
+        marker = _GROK_MOTION_MARKER if settings.studio_grok_motion_timeline_enabled else _CLIP_MOTION_MARKER
+        motion_auto_for_db += "\n\n" + marker + "\n" + motion_clip_summary.strip()
 
     mode_n = "model"
     skip_ws = gen_arch_row is not None or persist_uploaded_final
@@ -2298,6 +2322,9 @@ async def api_studio_motion_render_video(
         and vpath is not None
         and vpath.is_file()
         and _CLIP_MOTION_MARKER not in (row.motion_video_prompt_auto or "")
+        and _GROK_MOTION_MARKER not in (row.motion_video_prompt_auto or "")
+        # При Grok-таймлайне на сервере блок из БД уже полный; добор коротким OpenAI на рендере не делаем.
+        and not settings.studio_grok_motion_timeline_enabled
     )
     if want_auto_clip:
         try:

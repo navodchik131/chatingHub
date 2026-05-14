@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { apiFetch, setToken } from './api'
-import { formatApiErrorDetail } from './apiErrors'
+import { formatHttpApiError } from './apiErrors'
 
 export function AuthPanel({
   onSuccess,
@@ -28,7 +28,7 @@ export function AuthPanel({
       })
       if (!r.ok) {
         const j = await r.json().catch(() => ({}))
-        setErr(formatApiErrorDetail(j) || r.statusText)
+        setErr(formatHttpApiError(r, j))
         return
       }
       const data = (await r.json()) as { access_token: string }

@@ -29,6 +29,91 @@ def _ffmpeg_bin() -> str:
     )
 
 
+def _ffprobe_bin() -> str:
+    """Рядом с ffmpeg (официальный биндинг Windows/Linux) или ffprobe из PATH."""
+    ffmpeg_path = Path(_ffmpeg_bin())
+    sibling = ffmpeg_path.parent / (
+        "ffprobe.exe" if ffmpeg_path.name.lower().endswith(".exe") else "ffprobe"
+    )
+    if sibling.is_file():
+        return str(sibling.resolve())
+    wh = shutil.which("ffprobe")
+    if wh:
+        return wh
+    raise RuntimeError(
+        "Не найден ffprobe рядом с ffmpeg. Установите полный набор ffmpeg (обычно включает ffprobe) или добавьте ffprobe в PATH."
+    )
+
+
+def probe_video_duration_seconds(video_path: Path) -> float | None:
+    """Длительность ролика в секундах; None если ffprobe не смог."""
+    try:
+        r = subprocess.run(
+            [
+                _ffprobe_bin(),
+                "-v",
+                "error",
+                "-show_entries",
+                "format=duration",
+                "-of",
+                "default=noprint_wrappers=1:nokey=1",
+                str(video_path),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        return float(str(r.stdout).strip())
+    except Exception:
+        return None
+
+
+def extract_video_timeline_frames_jpeg(
+    video_path: Path,
+    *,
+    max_seconds: int = 30,
+    max_width: int = 768,
+) -> tuple[list[bytes], float]:
+    """
+    До ``max_seconds`` кадров с частотой 1 Гц (метка времени ~= индекс секунды от начала ролика).
+    Второй элемент — нижняя оценка длительности (по метаданным или числу кадров).
+    """
+    cap = max(1, min(120, max_seconds))
+    dur = probe_video_duration_seconds(video_path)
+    frames_target = cap
+    if dur is not None and dur > 0:
+        frames_target = min(cap, max(1, int(dur) + 1))
+    with tempfile.TemporaryDirectory() as td:
+        tdir = Path(td)
+        pattern = str(tdir / "sec%03d.jpg")
+        # scale: ужимаем по ширине для лимитов vision API
+        vf = f"fps=1,scale=min({max_width}\\,iw):-2"
+        subprocess.run(
+            [
+                _ffmpeg_bin(),
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-y",
+                "-i",
+                str(video_path),
+                "-vf",
+                vf,
+                "-frames:v",
+                str(frames_target),
+                pattern,
+            ],
+            check=True,
+            timeout=300,
+            capture_output=True,
+        )
+        paths = sorted(tdir.glob("sec*.jpg"))
+        out_frames = [p.read_bytes() for p in paths if p.is_file()]
+    span_sec = dur if dur is not None and dur > 0 else float(len(out_frames))
+    return out_frames, float(min(span_sec, float(len(out_frames)) or span_sec))
+
+
 def _ext_for_filename(name: str | None) -> str:
     if not name:
         return ".mp4"

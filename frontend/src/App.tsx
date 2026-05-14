@@ -17,7 +17,7 @@ import {
   webPushEnvironmentOk,
 } from './webPush'
 import { billingReturnCopy } from './billingReturnCopy'
-import { formatApiErrorDetail } from './apiErrors'
+import { formatClientFetchError, formatHttpApiError } from './apiErrors'
 import { AuthPanel } from './AuthPanel'
 import './App.css'
 import {
@@ -218,6 +218,10 @@ interface HealthInfo {
   studio_motion_control_credit_cost?: number
   /** kling | wan | seedance_i2v — влияет, нужен ли файл ролика на шаге «Сделать видео». */
   studio_motion_video_provider?: string
+  /** Сервер: двухшаговый Grok (таймлайн по кадрам → подмена внешности под модель). */
+  studio_grok_motion_timeline_enabled?: boolean
+  /** Есть GROK_API_KEY или запасной OPENAI_API_KEY под Grok base URL. */
+  studio_grok_motion_configured?: boolean
   /** Дефолт длительности I2V (сек.), с бэкенда; для UI выбора. */
   studio_seedance_i2v_duration_default?: number
   studio_seedance_i2v_duration_min?: number
@@ -970,7 +974,7 @@ export default function App() {
         detail?: unknown
       }
       if (!r.ok) {
-        setError(formatApiErrorDetail(data) || r.statusText)
+        setError(formatHttpApiError(r, data))
         setMotionVideoFileId(null)
         return
       }
@@ -1582,7 +1586,7 @@ export default function App() {
       })
       if (!r.ok) {
         const err = await r.json().catch(() => ({}))
-        setError(formatApiErrorDetail(err) || r.statusText)
+        setError(formatHttpApiError(r, err))
         return
       }
       const updated = (await r.json()) as Conversation
@@ -1620,7 +1624,7 @@ export default function App() {
       })
       if (!r.ok) {
         const err = await r.json().catch(() => ({}))
-        setError(formatApiErrorDetail(err) || r.statusText)
+        setError(formatHttpApiError(r, err))
         setMessages((prev) => {
           if (selectedIdRef.current !== convId) return prev
           return prev.filter((m) => m.id !== tempId)
@@ -1655,7 +1659,7 @@ export default function App() {
     const r = await apiFetch(`/api/studio/generations/${id}`, { method: 'DELETE' })
     if (!r.ok) {
       const j = await r.json().catch(() => ({}))
-      setError(formatApiErrorDetail(j) || r.statusText)
+      setError(formatHttpApiError(r, j))
       return
     }
     setStudioGenImageUrl((prev) => (prev === imageUrl ? null : prev))
@@ -1744,7 +1748,7 @@ export default function App() {
         detail?: unknown
       }
       if (!r.ok) {
-        setError(formatApiErrorDetail(data) || r.statusText)
+        setError(formatHttpApiError(r, data))
         if (data.message?.trim()) setStudioWavespeedMsg(data.message.trim())
         return
       }
@@ -1773,15 +1777,7 @@ export default function App() {
         }
       }
     } catch (e) {
-      const msg =
-        e instanceof TypeError && e.message === 'Failed to fetch'
-          ? 'Сеть: не удалось связаться с сервером.'
-          : e instanceof DOMException && e.name === 'AbortError'
-            ? 'Прервано по таймауту — попробуйте ещё раз.'
-            : e instanceof Error
-              ? e.message
-              : 'Ошибка запроса'
-      setError(msg)
+      setError(formatClientFetchError(e, true))
     } finally {
       setStudioImportArchiveBusy(false)
     }
@@ -1910,7 +1906,7 @@ export default function App() {
       })
       if (!r.ok) {
         const j = await r.json().catch(() => ({}))
-        setError(formatApiErrorDetail(j) || r.statusText)
+        setError(formatHttpApiError(r, j))
         return
       }
       const data = (await r.json()) as {
@@ -1939,12 +1935,8 @@ export default function App() {
     } catch (e) {
       setError(
         e instanceof DOMException && e.name === 'AbortError'
-          ? 'Запрос отменён по таймауту (прокси или браузер). Подождите и повторите — на стороне провайдера генерация уже могла завершиться.'
-          : e instanceof TypeError && e.message === 'Failed to fetch'
-            ? 'Сеть: не удалось связаться с сервером (проверьте, что бэкенд запущен и порт / proxy).'
-            : e instanceof Error
-              ? e.message
-              : 'Неизвестная ошибка запроса',
+          ? 'Запрос отменён по таймауту (прокси или браузер). Подождите и повторите — на стороне провайдера генерация уже могла завершиться. Проверьте «Сохранённые» после обновления страницы.'
+          : formatClientFetchError(e, true),
       )
     } finally {
       setStudioBusy(false)
@@ -1996,7 +1988,10 @@ export default function App() {
 
   const callMotionFirstFrameApi = async (
     useStillFinalEffective: boolean,
-  ): Promise<{ ok: true; data: MotionFirstFrameApiData } | { ok: false; data: MotionFirstFrameApiData }> => {
+  ): Promise<
+    | { ok: true; data: MotionFirstFrameApiData }
+    | { ok: false; data: MotionFirstFrameApiData; response: Response }
+  > => {
     const fd = new FormData()
     if (motionFrameArchiveId != null) {
       fd.append('existing_generation_id', String(motionFrameArchiveId))
@@ -2018,10 +2013,11 @@ export default function App() {
     const r = await apiFetch('/api/studio/motion/first-frame', {
       method: 'POST',
       body: fd,
-      timeoutMs: 600_000,
+      timeoutMs: 900_000,
     })
     const data = (await r.json().catch(() => ({}))) as MotionFirstFrameApiData
-    return r.ok ? { ok: true, data } : { ok: false, data }
+    if (r.ok) return { ok: true as const, data }
+    return { ok: false as const, data, response: r }
   }
 
   const runMotionFirstFrame = async () => {
@@ -2052,20 +2048,14 @@ export default function App() {
         !!(motionUseStillFinal && motionFirstFrameFile),
       )
       if (!res.ok) {
-        setError(formatApiErrorDetail(res.data) || 'Ошибка запроса')
+        setError(formatHttpApiError(res.response, res.data))
         return
       }
       applyMotionFirstFrameResponse(res.data)
       void refreshMe()
       void loadStudioGenerationsReset()
     } catch (e) {
-      setError(
-        e instanceof TypeError && e.message === 'Failed to fetch'
-          ? 'Сеть: не удалось связаться с сервером.'
-          : e instanceof Error
-            ? e.message
-            : 'Ошибка запроса',
-      )
+      setError(formatClientFetchError(e, true))
     } finally {
       setMotionBusyFrame(false)
     }
@@ -2113,7 +2103,7 @@ export default function App() {
       if (needsAutoStillFromUpload) {
         const res = await callMotionFirstFrameApi(true)
         if (!res.ok) {
-          setError(formatApiErrorDetail(res.data) || 'Не удалось сохранить кадр для видео.')
+          setError(formatHttpApiError(res.response, res.data))
           return
         }
         applyMotionFirstFrameResponse(res.data)
@@ -2145,7 +2135,7 @@ export default function App() {
       const r = await apiFetch('/api/studio/motion/render-video', {
         method: 'POST',
         body: fd,
-        timeoutMs: 600_000,
+        timeoutMs: 900_000,
       })
       const data = (await r.json().catch(() => ({}))) as {
         video_url?: string | null
@@ -2154,7 +2144,7 @@ export default function App() {
         detail?: unknown
       }
       if (!r.ok) {
-        setError(formatApiErrorDetail(data) || r.statusText)
+        setError(formatHttpApiError(r, data))
         return
       }
       setMotionResultVideoUrl(data.video_url?.trim() || null)
@@ -2167,13 +2157,8 @@ export default function App() {
       void refreshMe()
       void refreshMotionRenders()
     } catch (e) {
-      setError(
-        e instanceof TypeError && e.message === 'Failed to fetch'
-          ? 'Сеть: не удалось связаться с сервером.'
-          : e instanceof Error
-            ? e.message
-            : 'Ошибка запроса',
-      )
+      setError(formatClientFetchError(e, true))
+      void refreshMotionRenders()
     } finally {
       setMotionBusyVideo(false)
     }
@@ -2201,7 +2186,7 @@ export default function App() {
         target_resolution?: string
       }
       if (!r.ok) {
-        setError(formatApiErrorDetail(data) || r.statusText)
+        setError(formatHttpApiError(r, data))
         return
       }
       const url = data.generated_image_url?.trim()
@@ -2229,15 +2214,7 @@ export default function App() {
       void refreshMe()
       void loadStudioGenerationsReset()
     } catch (e) {
-      setError(
-        e instanceof DOMException && e.name === 'AbortError'
-          ? 'Запрос апскейла прерван по таймауту. Если картинка появилась у провайдера, попробуйте «Сохранить в архив» по CDN-ссылке из сообщения или повторите позже.'
-          : e instanceof TypeError && e.message === 'Failed to fetch'
-            ? 'Сеть: не удалось связаться с сервером.'
-            : e instanceof Error
-              ? e.message
-              : 'Ошибка запроса',
-      )
+      setError(formatClientFetchError(e, true))
     } finally {
       setStudioUpscaleBusy(false)
     }
@@ -2266,7 +2243,7 @@ export default function App() {
         message?: string | null
       }
       if (!r.ok) {
-        setError(formatApiErrorDetail(data) || r.statusText)
+        setError(formatHttpApiError(r, data))
         return
       }
       const items = data.items ?? []
@@ -2283,13 +2260,7 @@ export default function App() {
       void refreshMe()
       void loadStudioGenerationsReset()
     } catch (e) {
-      setError(
-        e instanceof TypeError && e.message === 'Failed to fetch'
-          ? 'Сеть: не удалось связаться с сервером.'
-          : e instanceof Error
-            ? e.message
-            : 'Ошибка запроса',
-      )
+      setError(formatClientFetchError(e, true))
     } finally {
       setStudioCarouselBusy(false)
     }
@@ -2308,7 +2279,7 @@ export default function App() {
     })
     if (!r.ok) {
       const j = await r.json().catch(() => ({}))
-      setError(formatApiErrorDetail(j) || r.statusText)
+      setError(formatHttpApiError(r, j))
       return
     }
     setWsApiKey('')
@@ -2329,7 +2300,7 @@ export default function App() {
     })
     if (!r.ok) {
       const j = await r.json().catch(() => ({}))
-      setError(formatApiErrorDetail(j) || r.statusText)
+      setError(formatHttpApiError(r, j))
       return
     }
     setLlmApiKey('')
@@ -2350,20 +2321,14 @@ export default function App() {
       const r = await apiFetch('/api/studio/models/generate-profile', { method: 'POST', body: fd })
       if (!r.ok) {
         const j = await r.json().catch(() => ({}))
-        setError(formatApiErrorDetail(j) || r.statusText)
+        setError(formatHttpApiError(r, j))
         return
       }
       const data = (await r.json()) as { profile_text: string }
       setNewModelProfile(data.profile_text)
       void refreshMe()
     } catch (e) {
-      setError(
-        e instanceof TypeError && e.message === 'Failed to fetch'
-          ? 'Сеть: не удалось связаться с сервером.'
-          : e instanceof Error
-            ? e.message
-            : 'Ошибка запроса',
-      )
+      setError(formatClientFetchError(e, true))
     } finally {
       setNewModelProfileGenBusy(false)
     }
@@ -2400,7 +2365,7 @@ export default function App() {
     const r = await apiFetch('/api/studio/models', { method: 'POST', body: fd })
     if (!r.ok) {
       const j = await r.json().catch(() => ({}))
-      setError(formatApiErrorDetail(j) || r.statusText)
+      setError(formatHttpApiError(r, j))
       return
     }
     setNewModelName('')
@@ -2417,7 +2382,7 @@ export default function App() {
     const r = await apiFetch(`/api/studio/models/${id}`, { method: 'DELETE' })
     if (!r.ok) {
       const j = await r.json().catch(() => ({}))
-      setError(formatApiErrorDetail(j) || r.statusText)
+      setError(formatHttpApiError(r, j))
       return
     }
     if (studioSelectedModelId === id) setStudioSelectedModelId(null)
@@ -2446,7 +2411,7 @@ export default function App() {
       })
       if (!r.ok) {
         const j = await r.json().catch(() => ({}))
-        setError(formatApiErrorDetail(j) || r.statusText)
+        setError(formatHttpApiError(r, j))
         return
       }
       setAdminCreditInput((prev) => {
@@ -2480,7 +2445,7 @@ export default function App() {
       })
       if (!r.ok) {
         const j = await r.json().catch(() => ({}))
-        setError(formatApiErrorDetail(j) || r.statusText)
+        setError(formatHttpApiError(r, j))
         return
       }
       void fetchAdminUsers(adminUserSearch)
@@ -2499,7 +2464,7 @@ export default function App() {
     })
     if (!r.ok) {
       const j = await r.json().catch(() => ({}))
-      setError(formatApiErrorDetail(j) || r.statusText)
+      setError(formatHttpApiError(r, j))
       return
     }
     void fetchAdminUsers(adminUserSearch)
@@ -2514,7 +2479,7 @@ export default function App() {
     })
     if (!r.ok) {
       const j = await r.json().catch(() => ({}))
-      setError(formatApiErrorDetail(j) || r.statusText)
+      setError(formatHttpApiError(r, j))
       return
     }
     void fetchAdminUsers(adminUserSearch)
@@ -2556,7 +2521,7 @@ export default function App() {
       })
       if (!r.ok) {
         const j = await r.json().catch(() => ({}))
-        setError(formatApiErrorDetail(j) || r.statusText)
+        setError(formatHttpApiError(r, j))
         return
       }
       void loadStudioModels()
@@ -2583,7 +2548,7 @@ export default function App() {
       const r = await apiFetch(`/api/studio/models/${id}/images`, { method: 'POST', body: fd })
       if (!r.ok) {
         const j = await r.json().catch(() => ({}))
-        setError(formatApiErrorDetail(j) || r.statusText)
+        setError(formatHttpApiError(r, j))
         return
       }
       setAppendModelPhotosById((prev) => {
@@ -2612,7 +2577,7 @@ export default function App() {
       })
       if (!r.ok) {
         const j = await r.json().catch(() => ({}))
-        setError(formatApiErrorDetail(j) || r.statusText)
+        setError(formatHttpApiError(r, j))
         return
       }
       void loadStudioModels()
@@ -2628,7 +2593,7 @@ export default function App() {
     })
     if (!r.ok) {
       const j = await r.json().catch(() => ({}))
-      setError(formatApiErrorDetail(j) || r.statusText)
+      setError(formatHttpApiError(r, j))
       return
     }
     void loadStudioModels()
@@ -2647,7 +2612,7 @@ export default function App() {
     })
     if (!r.ok) {
       const j = await r.json().catch(() => ({}))
-      setError(formatApiErrorDetail(j) || r.statusText)
+      setError(formatHttpApiError(r, j))
       return
     }
     setTgToken('')
@@ -2667,7 +2632,7 @@ export default function App() {
     })
     if (!r.ok) {
       const j = await r.json().catch(() => ({}))
-      setError(formatApiErrorDetail(j) || r.statusText)
+      setError(formatHttpApiError(r, j))
       return
     }
     setFvToken('')
@@ -2700,7 +2665,7 @@ export default function App() {
       })
       if (!r.ok) {
         const j = await r.json().catch(() => ({}))
-        setError(formatApiErrorDetail(j) || r.statusText)
+        setError(formatHttpApiError(r, j))
         return
       }
       setNewTeamLogin('')
@@ -2731,7 +2696,7 @@ export default function App() {
       })
       if (!r.ok) {
         const j = await r.json().catch(() => ({}))
-        setError(formatApiErrorDetail(j) || r.statusText)
+        setError(formatHttpApiError(r, j))
         return
       }
       setMemberEditPassword((p) => ({ ...p, [row.id]: '' }))
@@ -2750,7 +2715,7 @@ export default function App() {
     })
     if (!r.ok) {
       const j = await r.json().catch(() => ({}))
-      setError(formatApiErrorDetail(j) || r.statusText)
+      setError(formatHttpApiError(r, j))
       return
     }
     void refreshWorkspaceMembers()
@@ -2762,7 +2727,7 @@ export default function App() {
     const r = await apiFetch(`/api/workspace/members/${id}`, { method: 'DELETE' })
     if (!r.ok) {
       const j = await r.json().catch(() => ({}))
-      setError(formatApiErrorDetail(j) || r.statusText)
+      setError(formatHttpApiError(r, j))
       return
     }
     void refreshWorkspaceMembers()
@@ -2785,7 +2750,7 @@ export default function App() {
       })
       if (!r.ok) {
         const j = await r.json().catch(() => ({}))
-        setError(formatApiErrorDetail(j) || r.statusText)
+        setError(formatHttpApiError(r, j))
         return
       }
       const data = (await r.json()) as { confirmation_url: string }
@@ -5190,6 +5155,15 @@ export default function App() {
                   />
                   <span>Уточнить движение по ролику</span>
                 </label>
+                {health?.studio_grok_motion_timeline_enabled ? (
+                  <p className="muted" style={{ margin: '0 0 0.5rem', fontSize: '0.85rem', lineHeight: 1.35 }}>
+                    На сервере включён режим Grok: по ролику собирается промпт по секундам, затем подставляется внешность
+                    вашей модели и первый кадр. Нужны GROK_API_KEY и vision-модель (см.{' '}
+                    <code>GROK_MOTION_MODEL</code> в .env){health?.studio_grok_motion_configured === false
+                      ? '; ключ не настроен.'
+                      : '.'}
+                  </p>
+                ) : null}
                 <label className="studio-label studio-check">
                   <input
                     type="checkbox"
