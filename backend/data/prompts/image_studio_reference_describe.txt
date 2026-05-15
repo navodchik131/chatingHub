@@ -11,14 +11,16 @@ CAMERA_HEIGHT: (camera height **relative to the subject** — above eye line / a
 CAMERA_ANGLE: (horizontal: straight-on / three-quarter left or right / profile left or right; vertical: slight high angle / level / slight low angle; **dutch tilt** if the horizon or verticals are visibly skewed, say approximately how much)
 LENS_AND_PERSPECTIVE: (wide selfie distortion or stretched near arm / normal phone main-lens look / slightly compressed background; mention if foreshortening or strong perspective is obvious)
 SETTING: (room/place, objects, bed/furniture, clutter)
-LIGHT: (direction, hard/soft, time of day feel)
+LIGHT: (direction, hard/soft, color temperature of **light sources** — not the person's skin hue; indoor/outdoor time-of-day feel)
+HEAD_GEOMETRY: (**pose geometry only** — neck forward/back vs upright, ear-to-shoulder **head tilt**, **yaw** toward lens: profile vs three-quarter vs near-frontal, **chin pitch** up/neutral/down relative to torso. If gaze is discernible vs camera axis — past camera left/right, downward at device, toward lens — state it mechanically. **No** attractiveness/ethnicity/age/skin/facial-feature labels; «the subject» only.)
+LIGHT_ON_FORM: (**how scene light wraps the volumes in frame**) Key vs fill ratio; rim/hair/backlight if any; where **highlight cores** fall on planes you can see (shoulders, upper chest, limbs, cheeks/jaw if face visible) vs **core shadows** (under chin, nasal side away from key, torso pocket shadows). Goal: downstream can reproduce **identical shading pattern** on MODEL_PROFILE skin — same direction and hardness, **not** copying reference sitter complexion.)
 
 Rules:
 - Do **not** describe **hairstyle** (braids, loose, ponytail, bun, wet hair, etc.). Hairstyle is **not** taken from this photo. Only FRAMING may mention vague hair extent at frame edges if needed for crop (see FRAMING).
 - Do NOT describe the person's face, skin, age, ethnicity, or recognizable identity. Say "the subject" if needed.
 - **CAPTURE_TYPE is mandatory** — wrong labels break downstream prompts (e.g. calling a third-party shot a "selfie").
 - Do NOT describe **body silhouette, body type, proportions, muscularity, size, height impression, or skin color/tone/tan/complexion** — those are defined by MODEL_PROFILE, not this photo. Do not say "pale", "dark skin", "slim waist", "wide hips", etc.
-- **Coherence reminder (do not output as a label):** your POSE/FRAMING/LIGHT/CAMERA blocks must be detailed enough that a generator can **recreate one unified photograph** — same light on face and body, same environment — rather than copy only the background from the reference.
+- **Coherence reminder (do not output as a label):** POSE, FRAMING, CAMERA_*, HEAD_GEOMETRY, LIGHT, and LIGHT_ON_FORM together must be detailed enough to **recreate one unified photograph** — same **pose geometry**, same **light falloff on every visible body part**, same environment — not a face pasted onto the reference body's lighting.
 - Do NOT invent jewelry or clothes not visible; only what is in the image.
 - **FRAMING and CAMERA_*** sections are mandatory: even a guess is better than skipping; they are what makes the remake match the reference shot.
 - Style: casual phone snapshot, not studio.

@@ -62,7 +62,7 @@
     "lens_perspective": "<FILL_FROM_IMAGE_OR_TEXT — wide selfie stretch / normal phone / slight tele compression>",
     "shot_type": "<FILL — close-up / medium / full body; must agree with framing_crop and distance>",
     "aspect_ratio": "<FILL — must match OUTPUT/ASPECT section>",
-    "lighting": "<FILL_FROM_IMAGE_OR_TEXT>",
+    "lighting": "<FILL_FROM_IMAGE_OR_TEXT — key + fill + direction; describe how the SAME light wraps face, neck, and visible body (one continuous falloff; no sharper face lit than torso unless ref truly has that)>",
     "depth_of_field": "<FILL — natural phone DoF, no fake bokeh>",
     "snapshot_authenticity": "<FILL — one phrase: mundane real-life believability (camera roll feel); anti-influencer / anti-stock / anti-studio; align realism_engine.photo_realism and capture_authenticity>"
   },
@@ -86,15 +86,17 @@
   },
   "constraints": {
     "must_keep": [
-      "<FILL — plain English: one real person, same skin and light on face and body; pose/camera/room/clothes follow reference when reference exists; no pasted-on face>",
+      "<FILL — plain English: one real person; pose/camera/head orientation and gaze lock to REFERENCE when ref exists — identity from MODEL_PROFILE; same WB and shadow pattern on face and torso (reference light only, donor skin hue never copied)>",
       "<FILL — believable mundane photograph aligned with realism_engine — identity facial proportions from MODEL_PROFILE intact; ordinary snapshot / citizen camera energy unless USER specifies glamour>",
       "<FILL — visible skin texture on face matches body grain; plausible phone/camera imperfections per realism_engine.photo_realism>"
     ],
     "avoid": [
       "head swap",
       "face pasted onto another body",
+      "different white balance or color cast on face vs torso or limbs",
       "mismatched skin texture or tone between face and body",
       "face sharper or flatter lit than torso",
+      "reference sitter skin texture or tan pattern on model identity",
       "composite collage look",
       "two different people's skin in one frame",
       "plastic skin",

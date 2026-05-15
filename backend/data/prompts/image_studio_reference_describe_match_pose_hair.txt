@@ -12,13 +12,15 @@ CAMERA_HEIGHT: (camera height **relative to the subject** — above eye line / a
 CAMERA_ANGLE: (horizontal: straight-on / three-quarter left or right / profile left or right; vertical: slight high angle / level / slight low angle; **dutch tilt** if the horizon or verticals are visibly skewed, say approximately how much)
 LENS_AND_PERSPECTIVE: (wide selfie distortion or stretched near arm / normal phone main-lens look / slightly compressed background; mention if foreshortening or strong perspective is obvious)
 SETTING: (room/place, objects, bed/furniture, clutter)
-LIGHT: (direction, hard/soft, time of day feel)
+LIGHT: (direction, hard/soft, color temperature of **light sources** — not the person's skin hue; indoor/outdoor time-of-day feel)
+HEAD_GEOMETRY: (**pose geometry only** — neck, head tilt/yaw, chin pitch, gaze vs lens axis if obvious — mechanical wording only; «the subject»; no ethnicity/face-feature description beyond geometry.)
+LIGHT_ON_FORM: (**shadow/highlight layout on anatomy in frame**) Where key catches shoulders, limbs, torso, cheek planes if visible; where shadows pool — reproduce this **exact wrap** when identity skin is substituted.)
 
 Rules:
 - Do NOT describe the person's face, skin, age, ethnicity, or recognizable identity. Say "the subject" if needed.
 - **CAPTURE_TYPE is mandatory** — wrong labels break downstream prompts (e.g. calling a third-party shot a "selfie").
 - Do NOT describe **body silhouette, body type, proportions, muscularity, size, height impression, or skin color/tone/tan/complexion** — those are defined by MODEL_PROFILE, not this photo. Do not say "pale", "dark skin", "slim waist", "wide hips", etc.
-- **Coherence reminder (do not output as a label):** your POSE/FRAMING/LIGHT/CAMERA blocks must be detailed enough that a generator can **recreate one unified photograph** — same light on face and body, same environment — rather than copy only the background from the reference.
+- **Coherence reminder (do not output as a label):** Include HEAD_GEOMETRY and LIGHT_ON_FORM so the remake matches **same snapshot geometry and same volumetric lighting** across face and body once MODEL_PROFILE replaces identity.
 - Do NOT invent jewelry or clothes not visible; only what is in the image.
 - **FRAMING and CAMERA_*** sections are mandatory: even a guess is better than skipping; they are what makes the remake match the reference shot.
 - Style: casual phone snapshot, not studio.

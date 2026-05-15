@@ -31,16 +31,18 @@ def _wavespeed_pose_ref_prefix(*, lock_model_hairstyle: bool) -> str:
     )
     return (
         "[REFERENCE_IMAGE_ORDER] The first image is the user's uploaded pose/scene reference. "
-        "Take from it: pose articulation (hands, limbs), camera angle/height/distance, framing, lens feel, "
+        "Take from it: **full spatial geometry** — pose articulation (hands, limbs, torso), **head tilt/yaw/chin pitch and gaze vs lens when visible**, "
+        "camera angle/height/distance, framing, lens feel, **and the shading pattern how light wraps the figure** (same highlight/shadow layout on neck, shoulders, "
+        "torso and face when both appear — scene light only), "
         f"{hair_clause}"
-        "background and lighting. "
+        "background and environmental lighting quality. "
         "Garments and body coverage must match only this first image — do not dress the subject from the "
         "other images. If the first image shows no clothing or partial nudity, keep the same coverage (nude/topless/etc.). "
         "**Do not do a face-swap:** synthesize **one cohesive person** in this scene. Silhouette, proportions, and **all visible skin** "
-        "(face, neck, chest, arms, torso, legs) must match the identity reference images (following URLs) continuously — same tone, "
-        "same texture grain, lighting falling the same way on face and body; not a sharp face on a mismatched body. "
+        "(face, neck, chest, arms, torso, legs) must match the identity reference images (following URLs) continuously — same MODEL tone, "
+        "same grain, **same light falloff** on face and body (reference **direction**, not donor complexion). "
         "Following image(s): the saved model only for **who** this person is (face + body identity); "
-        "**never** copy pose, camera, framing, or outfit from those images — those come only from the first image.\n\n"
+        "**never** copy pose, camera, framing, shading layout, or outfit from those images — those come only from the first image.\n\n"
     )
 
 
@@ -54,12 +56,12 @@ def _wavespeed_pose_ref_prefix_no_face(*, lock_model_hairstyle: bool) -> str:
         "[REFERENCE_IMAGE_ORDER — NO_FACE / CROP_LOCKED] The **first** image is the user's uploaded **framing** reference (pose slice, "
         "legs/feet/hands/torso crop, etc.). **Match its edges and scale:** do **not** zoom out, reframe wider, or **add a head/face** "
         "if this image omits them — model reference photos must **not** be used to paste or reconstruct a face into empty headroom. "
-        "Take from the first image only: **visible** limb articulation, camera angle/height/distance, **exact crop**, lens feel, "
+        "Take from the first image only: **visible** limb articulation **and joint angles**, camera angle/height/distance, **exact crop**, lens feel, **light wrap on visible volumes**, "
         f"{hair_clause}"
-        "background and lighting. Garments/coverage only from the first image. "
+        "background and lighting quality. Garments/coverage only from the first image. "
         "**Later** image(s): **body identity for visible skin only** — continuous skin tone/texture on legs, feet, arms, hands, "
         "visible torso slices **as one person**; **not** a face-swap and **not** inventing facial features where the crop has none. "
-        "**Never** copy pose, framing, or outfit from model references.\n\n"
+        "**Never** copy pose, framing, shading, or outfit from model references.\n\n"
     )
 
 
@@ -156,11 +158,11 @@ def _nano_banana_pose_last_suffix(*, lock_model_hairstyle: bool) -> str:
         else "**Hairstyle may match the last (pose) image when the JSON says POSE_REFERENCE.** "
     )
     return (
-        "\n\n[LAST_INPUT_IMAGE] The **last** input image is the **only** source for **pose, framing, camera geometry, "
-        "outfit/body coverage, background, and environmental lighting** in this edit. "
+        "\n\n[LAST_INPUT_IMAGE] The **last** input image is the **only** source for **pose geometry, framing, camera geometry, "
+        "outfit/body coverage, background, and environmental lighting** in this edit — **including head tilt/yaw and gaze vs lens** when the face is in frame. "
         + hair
-        + "Ignore any face or skin on that last image — the subject must match only the earlier identity reference image(s). "
-        "Do not blend the pose or shot type from the identity images above."
+        + "Ignore **identity** (face shape, donor skin) on that last image — the subject must match only the earlier identity reference image(s). "
+        "Do not blend the pose, shot type, or **light-on-body pattern** from the identity images above; **one continuous light model** on MODEL identity skin."
     )
 
 
@@ -171,8 +173,8 @@ def _nano_banana_pose_last_suffix_no_face(*, lock_model_hairstyle: bool) -> str:
         else "**Hairstyle** only if hair appears in this last crop; else omit. "
     )
     return (
-        "\n\n[LAST_INPUT_IMAGE — NO_FACE] The **last** image locks **crop boundaries**, **scale**, pose of **visible** body, "
-        "garments/coverage, background, and light. "
+        "\n\n[LAST_INPUT_IMAGE — NO_FACE] The **last** image locks **crop boundaries**, **scale**, **joint geometry** of **visible** body, "
+        "garments/coverage, background, and **how light falls on visible limbs/torso**. "
         + hair
         + "**Never** transplant a face from earlier identity URLs into zones where this last image shows **no face** "
         "(e.g. legs-only, feet macro). Match **MODEL_PROFILE skin/body continuity** only on **pixels that correspond to visible body** "
@@ -229,11 +231,11 @@ You are a prompt builder for the WAN 2.7 Image Edit model.
 
 You will receive:
 1. A SKELETON (JSON template with <FILL> and <FROM_MODEL_PROFILE>).
-2. Optional REFERENCE_IMAGE — when not "(none)", it is the source of truth for **scene layout, camera geometry, and clothing/coverage** (pose, hands, framing/crop, camera distance and height, angle, lens feel, background, lighting).
-3. A MODEL PROFILE — **identity** only (face, skin, hair, body type as character); not a replacement for the reference scene.
+2. Optional REFERENCE_IMAGE — when not "(none)", it is the source of truth for **scene layout, camera geometry, clothing/coverage**, and **pose geometry** (head tilt/yaw/gaze/limbs) plus **how light wraps the figure** (topology of highlights/shadows), not donor identity.
+3. A MODEL PROFILE — **identity** only (face, skin, hair, body type); not a replacement for the reference scene or pose.
 4. USER_TEXT, 5. OUTPUT/ASPECT.
 
-If REFERENCE_IMAGE has content: fill pose, clothing (only what the reference photo shows; if none — nude/uncovered), photography, background from the reference, not from profile defaults. The user message has `## HAIRSTYLE_MODE`: **MODEL_LOCK** = `hair_in_scene` from MODEL_PROFILE; **POSE_REFERENCE** = `hair_in_scene` from the reference. Never take clothing from MODEL_PROFILE. **Always take face, body_type, skin tone; hair color + identity baseline from MODEL_PROFILE** — never mimic the reference person's skin. **Synthesize one coherent person**. MODEL_PROFILE fills <FROM_MODEL_PROFILE>; no reference face or body copy.
+If REFERENCE_IMAGE has content: fill pose, clothing (only what the reference photo shows; if none — nude/uncovered), photography, background, and **lighting consistency across face and visible body** from the reference, not from profile defaults. **GEOMETRY_LOCK:** do not rotate toward the camera for readability — match reference head/body orientation unless USER_TEXT overrides. The user message has `## HAIRSTYLE_MODE`: **MODEL_LOCK** = `hair_in_scene` from MODEL_PROFILE; **POSE_REFERENCE** = `hair_in_scene` from the reference. Never take clothing from MODEL_PROFILE. **Always take face, body_type, skin tone; hair color + identity baseline from MODEL_PROFILE** — never mimic the reference person's skin. **Synthesize one coherent person**: same light falloff on MODEL identity from neck through limbs. MODEL_PROFILE fills <FROM_MODEL_PROFILE>; no reference face or body copy.
 **Consistency:** camera_style + camera_distance + framing + shot_type + hands must be physically possible (no front-camera "selfie" at 1–2 m full body without mirror/tripod/friend). clothing.imperfections must not contradict realism_engine fabric_realism. Keep realism_engine exactly as in the skeleton. **Default to mundane real-life candid energy** (camera roll / citizen photo) for all capture types unless user asks for glamour — fill `photography.snapshot_authenticity` and `the_vibe.life_in_frame`. **must_keep** expands to three coherent plain-English lines per skeleton. Output only valid JSON, no markdown.
 """.strip()
 
@@ -710,6 +712,22 @@ def _build_refiner_user_message(
     photo_edit_mode = (studio_mode or "").strip().lower() == "photo_edit"
     no_face_mode = (studio_mode or "").strip().lower() == "no_face"
     mode_line = "MODEL_LOCK" if lock_model_hairstyle else "POSE_REFERENCE"
+    ref_geometry_lock = ""
+    if has_ref and not photo_edit_mode:
+        if no_face_mode:
+            ref_geometry_lock = (
+                "**GEOMETRY_LOCK:** Match REFERENCE_IMAGE **joint articulation, lean, and torso twist** in `subject.pose`; "
+                "keep **`photography`** consistent with CAMERA_DISTANCE / CAMERA_HEIGHT / CAMERA_ANGLE / FRAMING (`framing_crop`, distances, heights, angles). "
+                "Do **not** infer head rotation or gaze if face/head are off-frame unless the text describes a tiny visible chin/forehead slice — then only that slice's mechanical orientation. "
+                "Do **not** widen framing. MODEL_PROFILE fills **skin/body identity** on visible pixels; **spatial pose** stays on the reference.\n"
+            )
+        else:
+            ref_geometry_lock = (
+                "**GEOMETRY_LOCK:** Use REFERENCE_IMAGE sections **HEAD_GEOMETRY**, **POSE**, and **LIGHT_ON_FORM** (or equivalents) verbatim in spirit — "
+                "fill `subject.pose`, aligned `photography.view_direction` / `angle` / framing, and `photography.lighting` so **head tilt/yaw**, **gaze vs lens**, and **limb angles** mirror the pose photo; "
+                "mirror **highlight/shadow topology** onto MODEL_PROFILE identity skin (direction + hardness, **not** donor complexion). "
+                "**Do not** frontalize toward the lens for readability. MODEL_PROFILE defines **appearance** (`subject.identity`); **snapshot geometry + light topology** follows the reference.\n"
+            )
     blocks: list[str] = [
         "## HAIRSTYLE_MODE\n" + mode_line,
         "## SKELETON (JSON template: fill <FILL> placeholders and <FROM_MODEL_PROFILE> markers)",
@@ -743,6 +761,7 @@ def _build_refiner_user_message(
             blocks.append(
                 ref_intro
                 + coherence
+                + ref_geometry_lock
                 + (reference_scene_description or "").strip()
             )
         else:
@@ -762,6 +781,7 @@ def _build_refiner_user_message(
             blocks.append(
                 ref_intro
                 + coherence
+                + ref_geometry_lock
                 + (reference_scene_description or "").strip()
             )
     else:

@@ -12,7 +12,9 @@ CAMERA_HEIGHT: (relative to visible subject mass — thigh height, floor level l
 CAMERA_ANGLE: (straight-on / three-quarter / profile; high/low/dutch if obvious)
 LENS_AND_PERSPECTIVE: (wide-phone look, shallow DoF toe-to-heel macro, flat lay, etc.)
 SETTING: (room/surface/objects in frame edges only)
-LIGHT: (direction, hard/soft, color)
+LIGHT: (direction, hard/soft, color temperature of **sources** — not donor skin hue)
+HEAD_GEOMETRY: (If face/head are **absent from crop**, write **head not in frame — omit geometry**. If forehead, chin slice, crown edge, or nape visibly enters crop, describe **only** that slice's **tilt/yaw/chin pitch** vs camera — mechanically, no facial identity words.)
+LIGHT_ON_VISIBLE_BODY: (how key/fill/rim fall on **visible** skin/clothing volumes only — shoulders, torso slice, thighs, calves, arms, feet, hands — **same pattern** MODEL_PROFILE identity must receive; direction + shadow pockets)
 
 Rules:
 - **Never** use phrases like "rebuild the full person", "whole figure cohesive", or "same person head to toe" **unless** the reference actually shows full body **including recognizable head/face**.
