@@ -743,6 +743,10 @@ export default function App() {
   const [motionDrivingUploadBusy, setMotionDrivingUploadBusy] = useState(false)
   const [motionUseStillFinal, setMotionUseStillFinal] = useState(false)
   const [motionVideoDownloadBusy, setMotionVideoDownloadBusy] = useState(false)
+  /** Первый кадр видео: regular = Nano Banana; nsfw = WAN 2.7 как тип «NSFW» на вкладке картинок. */
+  const [motionFirstFrameWaveProfile, setMotionFirstFrameWaveProfile] = useState<'regular' | 'nsfw'>(
+    'regular',
+  )
   /** Локальный превью загруженного кадра (пока нет записи архива на сервере). */
   const [motionStillBlobUrl, setMotionStillBlobUrl] = useState<string | null>(null)
   /** CDN-URL кадра, если сервер не сохранил файл (можно «Сохранить в архив» без повторной генерации). */
@@ -2005,8 +2009,11 @@ export default function App() {
     fd.append('model_id', String(studioSelectedModelId ?? ''))
     fd.append('description', motionDesc.trim())
     fd.append('output_aspect', studioOutputAspect)
-    fd.append('wan_edit_tier', 'standard')
-    fd.append('studio_wave_profile', 'regular')
+    fd.append(
+      'wan_edit_tier',
+      motionFirstFrameWaveProfile === 'nsfw' ? studioWanEditTier : 'standard',
+    )
+    fd.append('studio_wave_profile', motionFirstFrameWaveProfile)
     fd.append('auto_motion_prompt', motionAutoPrompt ? '1' : '0')
     fd.append('lock_model_hairstyle', motionLockHairstyle ? '1' : '0')
     fd.append('use_still_as_final', useStillFinalEffective && motionFirstFrameFile ? '1' : '0')
@@ -5059,6 +5066,56 @@ export default function App() {
                   сервер). <strong>Seedance I2V</strong> может обойтись без ролика. Провайдер:{' '}
                   <strong>{motionVideoProvider}</strong>.
                 </p>
+                <div className="studio-mode-row" role="group" aria-label="Генерация первого кадра видео">
+                  <span className="studio-mode-label">Кадр</span>
+                  <div className="studio-mode-segment">
+                    <button
+                      type="button"
+                      className={`studio-mode-btn${motionFirstFrameWaveProfile === 'regular' ? ' is-active' : ''}`}
+                      onClick={() => setMotionFirstFrameWaveProfile('regular')}
+                    >
+                      Обычные фото
+                    </button>
+                    <button
+                      type="button"
+                      className={`studio-mode-btn${motionFirstFrameWaveProfile === 'nsfw' ? ' is-active' : ''}`}
+                      onClick={() => setMotionFirstFrameWaveProfile('nsfw')}
+                    >
+                      NSFW (WAN 2.7)
+                    </button>
+                  </div>
+                </div>
+                <p className="studio-mode-hint">
+                  {motionFirstFrameWaveProfile === 'regular'
+                    ? 'Nano Banana Pro — как «Обычные фотографии» на вкладке картинок; строгие лимиты контента.'
+                    : 'Тот же редактор WAN 2.7 / Seedream, что у типа «NSFW» на вкладке картинок — для купальников и т.п.'}
+                </p>
+                {health?.studio_wan_edit_tier_switch && motionFirstFrameWaveProfile === 'nsfw' ? (
+                  <>
+                    <div className="studio-mode-row" role="group" aria-label="WAN 2.7 для кадра видео">
+                      <span className="studio-mode-label">WAN 2.7</span>
+                      <div className="studio-mode-segment">
+                        <button
+                          type="button"
+                          className={`studio-mode-btn${studioWanEditTier === 'standard' ? ' is-active' : ''}`}
+                          onClick={() => setStudioWanEditTier('standard')}
+                        >
+                          Обычный
+                        </button>
+                        <button
+                          type="button"
+                          className={`studio-mode-btn${studioWanEditTier === 'pro' ? ' is-active' : ''}`}
+                          onClick={() => setStudioWanEditTier('pro')}
+                        >
+                          Pro
+                        </button>
+                      </div>
+                    </div>
+                    <p className="studio-mode-hint">
+                      Для первого кадра этого ролика используется та же связка WAN (standard/pro), что на вкладке «Картинки».
+                    </p>
+                  </>
+                ) : null}
                 <div className="studio-grid studio-grid--simple studio-video-panel">
                   <label className="studio-label">
                     Снимок из архива (вкладка «Картинки»)
