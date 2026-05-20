@@ -1,16 +1,25 @@
 """
-Двухшаговый Grok (OpenAI-compatible /v1): таймлайн по секундам по кадрам референс-видео,
-затем подмена описания людей на профиль сохранённой модели и согласование с первым кадром целевого ролика.
+Двухшаговый Grok (OpenAI-compatible /v1): описание референс-движения из видео
+(полный файл через xAI Files + /v1/responses, либо fallback — сэмплы 1 Hz jpeg),
+затем подстановка сохранённой модели под первый кадр целевого ролика.
 """
 
 from __future__ import annotations
 
 import base64
+import json
 import logging
 from pathlib import Path
+from urllib.parse import urlparse
+
+import httpx
 
 from app.config import settings
-from app.services.studio_motion_video import extract_video_timeline_frames_jpeg
+from app.services.studio_motion_video import (
+    extract_video_timeline_frames_jpeg,
+    probe_video_duration_seconds,
+    transcode_motion_video_mp4_under_size,
+)
 from app.services.studio_openai import StudioOpenAiCredentials, chat_completion_openai_compatible_text
 
 log = logging.getLogger(__name__)
@@ -36,7 +45,7 @@ def grok_motion_studio_credentials() -> StudioOpenAiCredentials:
     return StudioOpenAiCredentials(api_key=key, base_url=base, organization="")
 
 
-def _grok_motion_model() -> str:
+def _grok_fps_stills_model() -> str:
     for raw in (
         settings.grok_motion_model,
         settings.openai_studio_model_vision,
@@ -48,29 +57,204 @@ def _grok_motion_model() -> str:
     return "grok-2-vision-1212"
 
 
-async def grok_step1_timeline_from_video(
-    *,
-    video_path: Path,
-    credentials: StudioOpenAiCredentials,
-) -> str:
-    frames, _span = extract_video_timeline_frames_jpeg(
-        video_path,
-        max_seconds=settings.grok_motion_max_seconds,
-        max_width=settings.grok_motion_max_frame_width,
-    )
-    if not frames:
-        raise RuntimeError("Не удалось извлечь кадры для Grok (ffmpeg).")
+def _grok_full_video_responses_model() -> str:
+    m = (settings.grok_motion_full_video_model or "").strip()
+    return m if m else "grok-4"
 
-    model = _grok_motion_model()
-    intro = (
-        f"You are given {len(frames)} still images in chronological order. "
+
+def _api_root_from_v1(base_url: str) -> str:
+    return base_url.strip().rstrip("/")
+
+
+def _base_url_hosts_xai_api(base_url: str) -> bool:
+    raw = (base_url or "").strip()
+    if not raw:
+        return False
+    if not raw.startswith("http"):
+        raw = "https://" + raw.lstrip("/")
+    parsed = urlparse(raw)
+    host = (parsed.hostname or "").lower()
+    return host.endswith(".x.ai") or host == "x.ai"
+
+
+async def _xai_upload_mp4_for_responses(
+    *,
+    credentials: StudioOpenAiCredentials,
+    mp4_path: Path,
+    timeout_seconds: float,
+) -> str:
+    root = _api_root_from_v1(credentials.base_url)
+    url = f"{root}/files"
+    headers = {"Authorization": f"Bearer {credentials.api_key.strip()}"}
+    data = {"purpose": "assistants"}
+    file_bytes = mp4_path.read_bytes()
+    fname = mp4_path.name or "motion_ref.mp4"
+    files = {"file": (fname, file_bytes, "video/mp4")}
+    to = max(120.0, float(timeout_seconds))
+    async with httpx.AsyncClient(timeout=to) as client:
+        r = await client.post(url, headers=headers, data=data, files=files)
+
+    body = r.text[:2000]
+    if r.status_code >= 400:
+        raise RuntimeError(f"xAI Files upload HTTP {r.status_code}: {body}")
+
+    try:
+        payload = r.json()
+    except json.JSONDecodeError as e:
+        raise RuntimeError(f"xAI Files upload invalid JSON: {body}") from e
+
+    fid = ""
+    if isinstance(payload, dict):
+        fid = str(payload.get("id") or "").strip()
+    if not fid:
+        raise RuntimeError(f"xAI Files upload: missing file id: {payload!r}")
+
+    log.info("grok motion uploaded video file_id=%s size=%s", fid[:24], len(file_bytes))
+    return fid
+
+
+async def _xai_delete_file_maybe(
+    *,
+    credentials: StudioOpenAiCredentials,
+    file_id: str,
+    timeout_seconds: float,
+) -> None:
+    fid = (file_id or "").strip()
+    if not fid:
+        return
+    root = _api_root_from_v1(credentials.base_url)
+    url = f"{root}/files/{fid}"
+    headers = {"Authorization": f"Bearer {credentials.api_key.strip()}"}
+    try:
+        async with httpx.AsyncClient(timeout=min(120.0, float(timeout_seconds))) as client:
+            r = await client.delete(url, headers=headers)
+        if r.status_code >= 400:
+            log.warning("xAI Files delete HTTP %s: %s", r.status_code, (r.text or "")[:500])
+    except Exception as e:
+        log.warning("xAI Files delete failed: %s", e)
+
+
+def _extract_output_text_from_xai_responses(payload: dict) -> str:
+    """Сбор текста из тела успешного ответа POST /v1/responses."""
+    chunks: list[str] = []
+
+    items = payload.get("output")
+    if isinstance(items, list):
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            content = item.get("content")
+            if isinstance(content, str):
+                s = content.strip()
+                if s:
+                    chunks.append(s)
+                continue
+            if not isinstance(content, list):
+                continue
+            for part in content:
+                if isinstance(part, str):
+                    s = part.strip()
+                    if s:
+                        chunks.append(s)
+                    continue
+                if not isinstance(part, dict):
+                    continue
+                t = part.get("text")
+                if isinstance(t, str):
+                    tt = t.strip()
+                    if tt:
+                        chunks.append(tt)
+
+    if chunks:
+        return "\n\n".join(chunks).strip()
+
+    for key in ("error",):
+        block = payload.get(key)
+        if isinstance(block, dict):
+            msg = block.get("message")
+            if isinstance(msg, str) and msg.strip():
+                raise RuntimeError(f"xAI Responses error payload: {msg.strip()}")
+
+    text = ""
+    choices = payload.get("choices")
+    if isinstance(choices, list) and choices:
+        ch0 = choices[0]
+        if isinstance(ch0, dict):
+            msg = ch0.get("message")
+            if isinstance(msg, dict):
+                c = msg.get("content")
+                if isinstance(c, str):
+                    text = c.strip()
+    if text:
+        return text
+
+    raise RuntimeError(f"xAI Responses: unsupported response shape keys={list(payload.keys())[:12]}")
+
+
+async def _xai_responses_video_timeline_text(
+    *,
+    credentials: StudioOpenAiCredentials,
+    instruction_text: str,
+    file_id: str,
+    model: str,
+    timeout_seconds: float,
+    max_completion_tokens: int = 8192,
+) -> str:
+    root = _api_root_from_v1(credentials.base_url)
+    url = f"{root}/responses"
+    headers = {
+        "Authorization": f"Bearer {credentials.api_key.strip()}",
+        "Content-Type": "application/json",
+    }
+    fid = file_id.strip()
+    body = {
+        "model": model,
+        "input": [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "input_text", "text": instruction_text.strip()},
+                    {"type": "input_file", "file_id": fid},
+                ],
+            }
+        ],
+        "temperature": 0.25,
+    }
+    if max_completion_tokens and max_completion_tokens > 0:
+        body["max_output_tokens"] = max_completion_tokens
+
+    to = max(180.0, float(timeout_seconds))
+    async with httpx.AsyncClient(timeout=to) as client:
+        r = await client.post(url, headers=headers, json=body)
+
+    raw_snip = (r.text or "")[:2500]
+    if r.status_code >= 400:
+        raise RuntimeError(f"xAI Responses HTTP {r.status_code}: {raw_snip}")
+
+    try:
+        payload = r.json()
+    except json.JSONDecodeError as e:
+        raise RuntimeError(f"xAI Responses invalid JSON: {raw_snip}") from e
+
+    text = _extract_output_text_from_xai_responses(payload)
+    text = text.strip()
+    if len(text) < 80:
+        raise RuntimeError("Grok (video) вернул слишком короткое описание таймлайна.")
+    log.info("grok motion full-video chars=%s", len(text))
+    return text
+
+
+def _timeline_instruction_fps_stills_intro(n_frames: int) -> str:
+    return (
+        f"You are given {n_frames} still images in chronological order. "
         "They are 1 Hz samples from the start of a short reference video — image i ≈ second i from t=0.\n"
         "Write ONE continuous English video-generation brief that can drive image-to-video.\n"
         "Structure:\n"
         "- For each second t from 0 through N-1 (N = number of images), output a line starting with "
         "the exact token `[t s]` then a rich description: full-body pose, limb angles, weight shifts, "
-        "head angle and gaze, facial expression, hair motion, clothing folds, hands, micro-movements, "
-        "camera position/move (pan/tilt/dolly/track), lens feel, background parallax, lighting direction and quality.\n"
+        "head angle and gaze, facial expression micro-changes (brow/jaw/lips timing), hair motion, "
+        "clothing folds, hands, micro-movements, camera position/move (pan/tilt/dolly/track), lens feel, "
+        "background parallax, lighting direction and quality.\n"
         "- Then one paragraph prefixed `[Global motion]` summarizing rhythm, energy, transitions between seconds, "
         "and any repeating beats.\n"
         "Rules: describe only what is visible; do not invent story beats; do not name real celebrities; "
@@ -78,6 +262,49 @@ async def grok_step1_timeline_from_video(
         "but preserve motion and timing faithfully.\n"
         "Plain text only (no Markdown tables)."
     )
+
+
+def _timeline_instruction_full_video_intro(*, capped_seconds: int, approximate_duration: float | None) -> str:
+    dur_note = ""
+    if approximate_duration is not None and approximate_duration > 0:
+        dur_note = (
+            f"Approximate full source duration ~{approximate_duration:.1f}s — you see only the clipped segment "
+            "that follows.\n\n"
+        )
+    last_second = max(0, capped_seconds - 1)
+    return (
+        "The ATTACHED VIDEO FILE is your only temporal reference.\n"
+        "Watch continuous motion — not inferred from sparse stills.\n"
+        f"The clip analyzed is capped at roughly the first **{capped_seconds} seconds**.\n\n"
+        f"{dur_note}"
+        "Write ONE continuous English brief for image-to-video / motion-transfer.\n"
+        "Structure (plain text):\n"
+        f"- For each integer second t from **0** through **{last_second}** (one `[t s]` line per second that you can "
+        "confidently sample from playback), emit one line beginning with **`[t s]`** describing for that beat: "
+        "full-body pose, torso twist and weight shifts, articulate arms/hands/fingers where visible, gait or step cues, "
+        "head yaw/tilt and gaze versus camera lens, facial micro-movement (**brows, lids, cheeks, lips, jaw** — timings and magnitudes neutrally, no identity guesses), "
+        "hair inertia, garment folds reacting to motion.\n"
+        "- Camera: pan/tilt/dolly/track, stabilization feel, handheld micro-shake vs tripod, framing shifts, focal length cues, background parallax.\n"
+        "- Lighting: dominant key/fill directions and how highlights travel with moving surfaces.\n"
+        "- Dialogue / lip flap: IF speech or lip syncing is visibly present, annotate **sub-word level** pacing (do NOT transcribe full dialogue unless audible & clear); otherwise omit.\n"
+        "- Closing paragraph **`[Global motion]`**: overall rhythm, energy arc, entrances/exits from frame, repeated gestures, climax micro-beats.\n"
+        "Rules:\n"
+        "- Describe ONLY what occurs in-video; avoid invented plot beats.\n"
+        "- Neutral performer wording (appearance will later be swapped for MODEL_PROFILE).\n"
+        "- No markdown tables; no fenced code blocks.\n"
+    )
+
+
+async def grok_step1_timeline_from_fps_jpegs(
+    *,
+    frames: list[bytes],
+    credentials: StudioOpenAiCredentials,
+) -> str:
+    if not frames:
+        raise RuntimeError("Нет jpeg-кадров для Grok (ffmpeg).")
+
+    model = _grok_fps_stills_model()
+    intro = _timeline_instruction_fps_stills_intro(len(frames))
 
     content: list[dict] = [{"type": "text", "text": intro}]
     for i, raw in enumerate(frames):
@@ -104,8 +331,80 @@ async def grok_step1_timeline_from_video(
     text = (out or "").strip()
     if len(text) < 80:
         raise RuntimeError("Grok вернул слишком короткое описание таймлайна.")
-    log.info("grok motion step1 chars=%s frames=%s", len(text), len(frames))
+    log.info("grok motion step1 (fps jpeg) chars=%s frames=%s", len(text), len(frames))
     return text
+
+
+async def grok_step1_timeline_from_video_native_mp4(
+    *,
+    video_path: Path,
+    credentials: StudioOpenAiCredentials,
+) -> str:
+    cap = settings.grok_motion_max_seconds
+    tmp_mp4: Path | None = None
+    file_id_remote: str | None = None
+    try:
+        tmp_mp4 = transcode_motion_video_mp4_under_size(
+            video_path,
+            max_duration_sec=cap,
+            target_max_bytes=int(settings.grok_motion_xai_upload_max_bytes),
+        )
+        file_id_remote = await _xai_upload_mp4_for_responses(
+            credentials=credentials,
+            mp4_path=tmp_mp4,
+            timeout_seconds=settings.studio_archive_download_timeout_seconds + 120.0,
+        )
+        approx_dur = probe_video_duration_seconds(video_path)
+        intro = _timeline_instruction_full_video_intro(
+            capped_seconds=max(1, min(120, int(cap))),
+            approximate_duration=float(approx_dur) if approx_dur else None,
+        )
+        model = _grok_full_video_responses_model()
+
+        text = await _xai_responses_video_timeline_text(
+            credentials=credentials,
+            instruction_text=intro,
+            file_id=file_id_remote,
+            model=model,
+            timeout_seconds=settings.grok_motion_full_video_timeout_seconds,
+            max_completion_tokens=8192,
+        )
+        return text
+    finally:
+        if tmp_mp4 is not None:
+            tmp_mp4.unlink(missing_ok=True)
+        if file_id_remote:
+            await _xai_delete_file_maybe(
+                credentials=credentials,
+                file_id=file_id_remote,
+                timeout_seconds=min(120.0, settings.studio_archive_download_timeout_seconds),
+            )
+
+
+async def grok_step1_timeline_from_video(
+    *,
+    video_path: Path,
+    credentials: StudioOpenAiCredentials,
+) -> str:
+    use_native = settings.grok_motion_send_full_video and _base_url_hosts_xai_api(
+        credentials.base_url
+    )
+    if use_native:
+        try:
+            return await grok_step1_timeline_from_video_native_mp4(
+                video_path=video_path, credentials=credentials
+            )
+        except Exception as e:
+            log.warning("grok motion full-video timeline failed (%s); fallback=%s", e, settings.grok_motion_native_video_fallback_frames)
+            if not settings.grok_motion_native_video_fallback_frames:
+                raise
+
+    frames, _span = extract_video_timeline_frames_jpeg(
+        video_path,
+        max_seconds=settings.grok_motion_max_seconds,
+        max_width=settings.grok_motion_max_frame_width,
+    )
+    return await grok_step1_timeline_from_fps_jpegs(frames=frames, credentials=credentials)
 
 
 async def grok_step2_rewrite_for_target_model(
@@ -116,7 +415,7 @@ async def grok_step2_rewrite_for_target_model(
     first_frame_media: str,
     credentials: StudioOpenAiCredentials,
 ) -> str:
-    model = _grok_motion_model()
+    model = _grok_fps_stills_model()
     mime = (first_frame_media or "image/jpeg").split(";")[0].strip()
     if mime not in ("image/jpeg", "image/png", "image/gif", "image/webp"):
         mime = "image/jpeg"
@@ -148,6 +447,7 @@ async def grok_step2_rewrite_for_target_model(
         "or durations — choreography and environment stay from the timeline.\n"
         "4) If the timeline is silent about a detail the profile requires (e.g. hair length), harmonize subtly "
         "without changing the poses.\n"
+        "5) Maintain detailed facial-micro-expression timing from the timeline; only swap wording to match the locked persona visually.\n"
         "Output: a single plain English brief (same `[t s]` + `[Global motion]` skeleton), ready to paste "
         "into an image-to-video model together with the first-frame image.\n"
     )
@@ -186,10 +486,7 @@ async def grok_two_step_motion_prompt_for_studio(
     first_frame_media: str,
     credentials: StudioOpenAiCredentials,
 ) -> str:
-    timeline = await grok_step1_timeline_from_video(
-        video_path=video_path,
-        credentials=credentials,
-    )
+    timeline = await grok_step1_timeline_from_video(video_path=video_path, credentials=credentials)
     return await grok_step2_rewrite_for_target_model(
         timeline_english=timeline,
         model_profile_text=model_profile_text,

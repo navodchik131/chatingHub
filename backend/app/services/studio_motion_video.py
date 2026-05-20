@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+import os
 import shutil
 import subprocess
 import tempfile
@@ -13,6 +15,7 @@ from app.config import BACKEND_DIR, settings
 MOTION_VIDEO_ROOT = (BACKEND_DIR / "data" / "studio_motion_videos").resolve()
 
 _VIDEO_SUFFIX = {".mp4", ".webm", ".mov", ".m4v"}
+log_motion = logging.getLogger(__name__)
 
 
 def _ffmpeg_bin() -> str:
@@ -213,3 +216,93 @@ def extract_video_sample_frames_jpeg(video_path: Path, *, max_frames: int = 4) -
         )
         paths = sorted(tdir.glob("f*.jpg"))
         return [p.read_bytes() for p in paths if p.is_file()]
+
+
+def transcode_motion_video_mp4_under_size(
+    source: Path,
+    *,
+    max_duration_sec: int,
+    target_max_bytes: int,
+    filename_hint: str = "motion_clip.mp4",
+) -> Path:
+    """
+    Готовит короткий H.264+AAC MP4 для загрузки в xAI Files (обычный лимит ~48–50 MiB).
+
+    Прогрессивное уменьшение ширины/CRF пока файл не впишется в лимит.
+    Вызывающий код обязан удалить возвращённый путь после использования.
+    """
+    cap = max(1, min(120, int(max_duration_sec)))
+    max_w_candidates = [960, 848, 720, 544, 480]
+    crf_candidates = [24, 26, 28, 30, 32, 34]
+    last_err_stderr: bytes = b""
+    _ = filename_hint
+
+    for max_w in max_w_candidates:
+        for crf in crf_candidates:
+            fd, tmp_path_str = tempfile.mkstemp(prefix="grok_motion_", suffix=".mp4")
+            os.close(fd)
+            out_path = Path(tmp_path_str)
+            try:
+                r = subprocess.run(
+                    [
+                        _ffmpeg_bin(),
+                        "-hide_banner",
+                        "-loglevel",
+                        "error",
+                        "-y",
+                        "-i",
+                        str(source),
+                        "-t",
+                        str(cap),
+                        "-vf",
+                        f"scale=min({max_w}\\,iw):-2",
+                        "-movflags",
+                        "+faststart",
+                        "-c:v",
+                        "libx264",
+                        "-preset",
+                        "veryfast",
+                        "-crf",
+                        str(crf),
+                        "-pix_fmt",
+                        "yuv420p",
+                        "-c:a",
+                        "aac",
+                        "-b:a",
+                        "96k",
+                        "-ac",
+                        "1",
+                        str(out_path),
+                    ],
+                    check=False,
+                    timeout=600,
+                    capture_output=True,
+                )
+                if r.returncode != 0:
+                    last_err_stderr = (r.stderr or b"")[-900:]
+                    out_path.unlink(missing_ok=True)
+                    continue
+                sz = out_path.stat().st_size
+                if sz <= target_max_bytes:
+                    log_motion.info(
+                        "motion transcode for Grok upload: %.2f MiB (w≤%s crf=%s cap=%ss)",
+                        sz / (1024 * 1024),
+                        max_w,
+                        crf,
+                        cap,
+                    )
+                    return out_path
+                out_path.unlink(missing_ok=True)
+            except BaseException:
+                out_path.unlink(missing_ok=True)
+                raise
+
+    stderr_hint = (
+        last_err_stderr.decode(errors="replace")[:512] if last_err_stderr else "(нет stderr)"
+    )
+    raise RuntimeError(
+        "Не удалось уместить сжатый клип видео в лимит xAI Files или ffmpeg вернул ошибку. "
+        f"Лимит {target_max_bytes} байт, дли́тельность не более {cap} с. Последнее stderr ffmpeg: {stderr_hint}"
+    )
+
+

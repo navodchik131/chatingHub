@@ -57,7 +57,7 @@ class Settings(BaseSettings):
     openai_organization: str = Field(default="")
     openai_studio_model: str = Field(default="gpt-4o-mini")
     openai_studio_model_vision: str = Field(default="gpt-4o")
-    # Двухшаговый Grok (xAI): таймлайн по кадрам референс-видео → единый промпт под вашу модель + первый кадр
+    # Двухшаговый Grok (xAI): описание референс-движения → единый промпт под вашу модель + первый кадр
     studio_grok_motion_timeline_enabled: bool = Field(
         default=False,
         validation_alias=AliasChoices(
@@ -71,6 +71,30 @@ class Settings(BaseSettings):
     grok_motion_model: str = Field(default="")
     grok_motion_max_seconds: int = Field(default=30, ge=4, le=120)
     grok_motion_max_frame_width: int = Field(default=768, ge=320, le=1280)
+    grok_motion_send_full_video: bool = Field(
+        default=True,
+        validation_alias=AliasChoices(
+            "GROK_MOTION_SEND_FULL_VIDEO",
+            "STUDIO_GROK_MOTION_SEND_FULL_VIDEO",
+        ),
+    )
+    grok_motion_native_video_fallback_frames: bool = Field(
+        default=True,
+        validation_alias=AliasChoices(
+            "GROK_MOTION_NATIVE_VIDEO_FALLBACK_FRAMES",
+            "GROK_MOTION_VIDEO_FALLBACK_FRAMES",
+        ),
+    )
+    grok_motion_full_video_model: str = Field(
+        default="grok-4",
+        validation_alias=AliasChoices("GROK_MOTION_FULL_VIDEO_MODEL"),
+    )
+    grok_motion_xai_upload_max_bytes: int = Field(
+        default=45 * 1024 * 1024,
+        ge=5 * 1024 * 1024,
+        le=50 * 1024 * 1024 - 4096,
+    )
+    grok_motion_full_video_timeout_seconds: float = Field(default=900.0, ge=60.0, le=2700.0)
     credit_cost_studio_prompt_refine: int = Field(default=2)
     image_studio_skeleton_path: str = Field(default="data/prompts/image_studio_skeleton.txt")
     image_studio_skeleton_inline: str = Field(default="")

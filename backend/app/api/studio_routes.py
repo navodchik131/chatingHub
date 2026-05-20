@@ -2002,8 +2002,9 @@ async def api_studio_motion_first_frame(
         except Exception as e:
             log.warning("motion clip summary failed: %s", e)
             hint = (
-                "Проверьте ключ xAI (GROK_API_KEY или OPENAI_API_KEY), GROK_BASE_URL / OPENAI_BASE_URL, модель "
-                "(GROK_MOTION_MODEL или OPENAI_STUDIO_MODEL_VISION — id из консоли xAI) и лимиты."
+                "Проверьте ключ xAI (GROK_API_KEY или OPENAI_API_KEY), GROK_BASE_URL (https://api.x.ai/v1), "
+                "модели GROK_MOTION_FULL_VIDEO_MODEL (/responses по видео) и "
+                "GROK_MOTION_MODEL или OPENAI_STUDIO_MODEL_VISION (резерв по кадрам + шаг 2), ffmpeg, размер клипа или задайте GROK_MOTION_SEND_FULL_VIDEO=false."
                 if settings.studio_grok_motion_timeline_enabled
                 else "Отключите «Уточнить движение по ролику» или проверьте OPENAI_STUDIO_MODEL_VISION."
             )

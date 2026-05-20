@@ -12,7 +12,9 @@ Use the following section labels (exactly one line per label, then detail). Be s
 
 SHOOTING_CONTEXT: One or two sentences — what kind of moment (e.g. static pose start of a dance move, walking into frame, speaking to camera, gym set, mirror check-in) — **without** naming who the person is.
 
-POSE: Full articulation — weight on which leg, torso lean, arm/hand/finger positions, head direction (e.g. looking toward camera left, chin down), interaction with props (hand on rail, holding nothing). **No** body-type adjectives (slim, curvy, athletic, petite, etc.).
+CAPTURE_TYPE: (one line — same intent as studio image refs: **mirror selfie** | **arm-length direct selfie (phone visible in hand, no mirror)** | **third-party / friend / partner photo** | **tripod / timer / remote** | **propped phone / surface**; say explicitly **no mirror**, **no phone visible in subject's hands**, or **phone visible** if obvious)
+
+POSE: Full articulation — weight on which leg, torso lean, arm/hand/finger positions, torso twist; **minimal** vague head wording here if you duplicate HEAD_GEOMETRY (that section owns mechanical head angles). Interaction with props. **No** body-type adjectives (slim, curvy, athletic, petite, etc.).
 
 CLOTHING: Everything **worn or held as garment** visible in frame — items, colors, cut, fit, layers, footwear if visible, accessories that are clearly wardrobe (belt, hat). If nudity or partial nudity, state coverage factually (e.g. swimsuit, towel, no shirt). Do **not** infer off-frame garments.
 
@@ -28,7 +30,11 @@ LENS_AND_PERSPECTIVE: Phone selfie wide stretch, normal perspective, tele look, 
 
 SETTING: Location type and visible props, furniture, architecture, outdoor elements.
 
-LIGHT: Key direction, hardness, color temperature feel, practicals, window light, harsh noon, golden hour mood.
+LIGHT: Key direction, hardness, color temperature **of sources** — not anyone's skin hue; practicals, window light, harsh noon, golden hour mood.
+
+HEAD_GEOMETRY: (**mechanical only — no identity**) neck forward/back vs upright; ear-to-shoulder **head tilt**; **yaw** toward lens (profile / three-quarter / near-frontal); **chin pitch**; if gaze vs camera axis is clear — past camera left/right, down at device, toward lens, etc. **No** age, ethnicity, beauty, expression-as-identity, eye color, makeup.
+
+LIGHT_ON_FORM: (**how scene light wraps visible volumes**) key vs fill; rim/backlight if any; where **highlights** hit planes you see (shoulders, chest, limbs, cheek/jaw if any face area visible) vs **core shadows** (under chin, torso pockets, limb undersides). Describe **pattern** for one coherent relight on MODEL identity — **not** copying on-screen skin tint.
 
 ACTION_BEAT: What is **happening** in this single frame (one frozen instant of motion or stillness) — again **no** identity.
 
