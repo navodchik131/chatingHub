@@ -570,6 +570,65 @@ select:focus {
   min-height: 5.5rem;
 }
 
+.studio-mask-painter-controls {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  padding: 0.85rem;
+  border-radius: var(--control-radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+}
+
+.studio-mask-painter-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.65rem;
+}
+
+.studio-mask-brush-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.studio-mask-painter-frame {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+  vertical-align: top;
+  line-height: 0;
+}
+
+.studio-mask-painter-img {
+  display: block;
+  max-width: min(560px, 100%);
+  height: auto;
+}
+
+.studio-mask-painter-hint {
+  margin: 0;
+  font-size: 0.8125rem;
+}
+
+.studio-mask-painter-canvas {
+  position: absolute;
+  left: 0;
+  top: 0;
+  touch-action: none;
+}
+
+.studio-inpaint-mask-painter.is-enabled .studio-mask-painter-canvas {
+  cursor: crosshair;
+}
+
 .studio-output {
   background: var(--bg-subtle);
   color: var(--text);

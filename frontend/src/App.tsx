@@ -20,6 +20,7 @@ import { billingReturnCopy } from './billingReturnCopy'
 import { formatClientFetchError, formatHttpApiError } from './apiErrors'
 import { AuthPanel } from './AuthPanel'
 import './App.css'
+import { StudioInpaintMaskPainter, type StudioInpaintMaskPainterRef } from './StudioInpaintMaskPainter'
 import {
   DEFAULT_MEMBER_PERMISSIONS,
   MEMBER_PERMISSION_LABELS,
@@ -656,8 +657,13 @@ export default function App() {
   const [appSection, setAppSection] = useState<'chat' | 'studio' | 'studio_video'>('chat')
   const [studioDesc, setStudioDesc] = useState('')
   const [studioFile, setStudioFile] = useState<File | null>(null)
-  /** Маска Z-Image Inpaint: белое = область правки, чёрное = без изменений (совпадает по размеру с референсом). */
+  /** Маска Z-Image Inpaint: файл (если без кисти). */
   const [studioInpaintMaskFile, setStudioInpaintMaskFile] = useState<File | null>(null)
+  /** Режим маски: рисуем белым по превью референса. */
+  const [studioPaintInpaintMask, setStudioPaintInpaintMask] = useState(false)
+  const [studioMaskBrushPreset, setStudioMaskBrushPreset] = useState<'s' | 'm' | 'l'>('m')
+  const [studioReferenceObjectUrl, setStudioReferenceObjectUrl] = useState<string | null>(null)
+  const studioMaskPainterRef = useRef<StudioInpaintMaskPainterRef | null>(null)
   /** Снимок из архива как база для режима «Доработать фото» (альтернатива файлу). */
   const [studioPhotoEditArchiveId, setStudioPhotoEditArchiveId] = useState<number | null>(null)
   /** true = MODEL_LOCK (причёска с профиля); false = POSE_REFERENCE (с загруженного кадра). Только если есть studioFile. */
@@ -802,11 +808,48 @@ export default function App() {
   }, [studioFile])
 
   useEffect(() => {
+    if (!studioFile) {
+      setStudioReferenceObjectUrl((prev) => {
+        if (prev) URL.revokeObjectURL(prev)
+        return null
+      })
+      return
+    }
+    const url = URL.createObjectURL(studioFile)
+    setStudioReferenceObjectUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev)
+      return url
+    })
+  }, [studioFile])
+
+  /** Превью референса для маски: локальный файл или снимок из архива («Доработать фото»). */
+  const studioInpaintBaseImageSrc =
+    studioReferenceObjectUrl ??
+    (studioMode === 'photo_edit' && studioPhotoEditArchiveId != null
+      ? studioGenerations.find((g) => g.id === studioPhotoEditArchiveId)?.image_url ?? null
+      : null)
+
+  useEffect(() => {
     const hasBaseImage =
       studioFile != null ||
       (studioMode === 'photo_edit' && studioPhotoEditArchiveId != null)
-    if (!hasBaseImage) setStudioInpaintMaskFile(null)
+    if (!hasBaseImage) {
+      setStudioInpaintMaskFile(null)
+      setStudioPaintInpaintMask(false)
+    }
   }, [studioFile, studioMode, studioPhotoEditArchiveId])
+
+  useEffect(() => {
+    if (!studioInpaintBaseImageSrc) setStudioPaintInpaintMask(false)
+  }, [studioInpaintBaseImageSrc])
+
+  useEffect(() => {
+    if (studioPaintInpaintMask) setStudioInpaintMaskFile(null)
+  }, [studioPaintInpaintMask])
+
+  useEffect(() => {
+    if (studioInpaintMaskFile) setStudioPaintInpaintMask(false)
+  }, [studioInpaintMaskFile])
 
   useEffect(() => {
     if (studioMode !== 'photo_edit') {
@@ -1885,11 +1928,24 @@ export default function App() {
     const hasStudioBaseImage =
       studioFile != null ||
       (studioMode === 'photo_edit' && studioPhotoEditArchiveId != null)
-    if (studioInpaintMaskFile && !hasStudioBaseImage) {
+    const wantsInpaint = studioPaintInpaintMask || studioInpaintMaskFile != null
+    if (wantsInpaint && !hasStudioBaseImage) {
       setError(
         'Для маски загрузите изображение или выберите снимок из архива (режим «Доработать фото»).',
       )
       return
+    }
+    let inpaintAttach: File | null = null
+    if (studioPaintInpaintMask) {
+      inpaintAttach = (await studioMaskPainterRef.current?.getMaskFile()) ?? null
+      if (!inpaintAttach) {
+        setError(
+          'Включено «нарисовать маску»: закрасьте кистью область замены или снимите галочку.',
+        )
+        return
+      }
+    } else if (studioInpaintMaskFile) {
+      inpaintAttach = studioInpaintMaskFile
     }
     setStudioBusy(true)
     setStudioGenImageUrl(null)
@@ -1908,7 +1964,7 @@ export default function App() {
         fd.append('model_id', String(studioSelectedModelId))
       }
       if (studioFile) fd.append('image', studioFile)
-      if (studioInpaintMaskFile) fd.append('inpaint_mask', studioInpaintMaskFile)
+      if (inpaintAttach) fd.append('inpaint_mask', inpaintAttach)
       if (
         studioMode === 'photo_edit' &&
         studioPhotoEditArchiveId != null &&
@@ -4721,38 +4777,84 @@ export default function App() {
               {studioFile ? <span className="studio-file-name">{studioFile.name}</span> : null}
             </label>
             <label
+              className="studio-label studio-check"
+              style={!studioInpaintBaseImageSrc ? { opacity: 0.55 } : undefined}
+            >
+              <input
+                type="checkbox"
+                checked={studioPaintInpaintMask}
+                disabled={!studioInpaintBaseImageSrc}
+                onChange={(e) => {
+                  const on = e.target.checked
+                  setStudioPaintInpaintMask(on)
+                }}
+              />
+              <span>
+                Нарисовать маску кистью поверх превью (inpaint только в закрашенной области; Z‑Image Turbo, не полный WAN/Nano
+                edit).
+              </span>
+            </label>
+            {studioPaintInpaintMask && studioInpaintBaseImageSrc ? (
+              <div className="studio-mask-painter-controls">
+                <div className="studio-mask-painter-row">
+                  <label className="studio-mask-brush-label">
+                    Кисть
+                    <select
+                      value={studioMaskBrushPreset}
+                      onChange={(e) =>
+                        setStudioMaskBrushPreset(e.target.value as 's' | 'm' | 'l')
+                      }
+                    >
+                      <option value="s">Тонкая</option>
+                      <option value="m">Средняя</option>
+                      <option value="l">Толщина</option>
+                    </select>
+                  </label>
+                  <button
+                    type="button"
+                    className="ghost-btn"
+                    onClick={() => studioMaskPainterRef.current?.clearMask()}
+                  >
+                    Очистить маску
+                  </button>
+                </div>
+                <StudioInpaintMaskPainter
+                  ref={studioMaskPainterRef}
+                  imageSrc={studioInpaintBaseImageSrc}
+                  enabled={studioPaintInpaintMask}
+                  brushSize={studioMaskBrushPreset}
+                />
+              </div>
+            ) : null}
+            <label
               className="studio-label"
               style={
-                !studioFile &&
-                !(studioMode === 'photo_edit' && studioPhotoEditArchiveId != null)
+                !studioInpaintBaseImageSrc || studioPaintInpaintMask
                   ? { opacity: 0.55 }
                   : undefined
               }
             >
-              Маска inpaint (по желанию)
+              Или файл маски (PNG/JPEG/WebP того же размера, белое — что менять){' '}
+              <span className="muted studio-file-name">— без кисти</span>
               <input
                 type="file"
                 accept="image/png,image/jpeg,image/webp"
-                disabled={
-                  !studioFile &&
-                  !(studioMode === 'photo_edit' && studioPhotoEditArchiveId != null)
-                }
+                disabled={!studioInpaintBaseImageSrc || studioPaintInpaintMask}
                 onChange={(e) => {
                   const f = e.target.files?.[0] ?? null
                   setStudioInpaintMaskFile(f)
                 }}
               />
-              {studioInpaintMaskFile ? (
+              {!studioPaintInpaintMask && studioInpaintMaskFile ? (
                 <span className="studio-file-name">{studioInpaintMaskFile.name}</span>
-              ) : (
+              ) : !studioPaintInpaintMask ? (
                 <span
                   className="muted"
                   style={{ display: 'block', marginTop: '0.35rem', fontSize: '0.85rem' }}
                 >
-                  Совпадает по размеру с референсом: белое — область правки, чёрное — без изменений. Вызов
-                  Z-Image Inpaint (область), а не полнокадровый WAN/Nano edit.
+                  Альтернатива кисти: полностью подготовленная маска во внешнем редакторе.
                 </span>
-              )}
+              ) : null}
             </label>
             {studioMode !== 'photo_edit' ? (
             <label
@@ -4818,7 +4920,7 @@ export default function App() {
               {canStudioGenerate && health?.openai_studio_configured ? (
                 studioPromptOnlyDev || integ?.wavespeed_configured ? (
                   <span className="studio-credit-hint">
-                    {(studioInpaintMaskFile
+                    {(studioInpaintMaskFile != null || studioPaintInpaintMask
                       ? health.studio_inpaint_credit_cost
                       : health.studio_prompt_credit_cost) ?? '—'}{' '}
                     кр.
