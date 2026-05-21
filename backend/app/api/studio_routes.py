@@ -307,6 +307,22 @@ def _studio_refine_wavespeed_preflight(
                 status_code=400,
                 detail="У выбранной модели нет загруженных фото — добавьте снимки к модели.",
             )
+    elif mode_n == "face_swap":
+        if mid is None or sm_loaded is None:
+            raise HTTPException(
+                status_code=400,
+                detail='В режиме «Face swap» выберите модель‑эталон для подмены внешности.',
+            )
+        if not imgs_model:
+            raise HTTPException(
+                status_code=400,
+                detail="У выбранной модели нет загруженных фото.",
+            )
+        if not image_bytes:
+            raise HTTPException(
+                status_code=400,
+                detail='В режиме «Face swap» загрузите исходную фотографию со сценой.',
+            )
     elif mode_n == "photo_edit":
         if not image_bytes:
             raise HTTPException(
@@ -403,7 +419,7 @@ def _truthy_lock_model_hairstyle(raw: str | None) -> bool:
     return str(raw).strip().lower() not in ("0", "false", "no", "off")
 
 
-_ALLOWED_STUDIO_MODES = frozenset({"model", "photo_edit", "no_face"})
+_ALLOWED_STUDIO_MODES = frozenset({"model", "photo_edit", "no_face", "face_swap"})
 
 
 def _normalize_studio_mode(raw: str | None) -> str:
@@ -1597,6 +1613,16 @@ async def api_studio_refine_prompt(
             status_code=400,
             detail="В режиме «Без лица» выберите сохранённую модель или загрузите референс.",
         )
+    if mode_n == "face_swap" and not image_bytes:
+        raise HTTPException(
+            status_code=400,
+            detail='Режим «Face swap»: загрузите фото‑исходник (сцена + человек для замены).',
+        )
+    if mode_n == "face_swap" and mid is None:
+        raise HTTPException(
+            status_code=400,
+            detail='Режим «Face swap»: выберите сохранённую модель студии.',
+        )
 
     if not desc and not image_bytes and not model_profile_text:
         raise HTTPException(
@@ -1615,6 +1641,20 @@ async def api_studio_refine_prompt(
     if sm_loaded is not None:
         imgs_model = sort_model_images_for_studio(list(sm_loaded.images))
     imgs_for_ws = model_images_for_wavespeed_profile(imgs_model, wave_profile_n)
+
+    if (
+        mode_n == "face_swap"
+        and imgs_model
+        and not imgs_for_ws
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "В режиме «Face swap» для «Обычных фото» нужны хотя бы подходящие для API снимки модели "
+                "(не только тип «интимная анатомия»). Добавьте портрет/тело к модели "
+                "или переключите тип генерации на «NSFW (WAN / Seedream)»."
+            ),
+        )
 
     photo_edit_regional_identity_requested = bool(
         mode_n == "photo_edit"
@@ -1732,6 +1772,8 @@ async def api_studio_refine_prompt(
 
                     attach_mask_mr = False
                     if mode_n == "model":
+                        attach_mask_mr = bool(imgs_model)
+                    elif mode_n == "face_swap":
                         attach_mask_mr = bool(imgs_model)
                     elif mode_n == "no_face":
                         attach_mask_mr = bool(sm_loaded and imgs_model)
@@ -1991,6 +2033,8 @@ async def api_studio_refine_prompt(
             if not wavespeed_message:
                 attach_model_urls = False
                 if mode_n == "model":
+                    attach_model_urls = bool(imgs_model)
+                elif mode_n == "face_swap":
                     attach_model_urls = bool(imgs_model)
                 elif mode_n == "no_face":
                     attach_model_urls = bool(sm_loaded and imgs_model)

@@ -65,6 +65,34 @@ def _wavespeed_pose_ref_prefix_no_face(*, lock_model_hairstyle: bool) -> str:
     )
 
 
+def wavespeed_prompt_with_face_swap_first(
+    refined_prompt: str,
+    *,
+    lock_model_hairstyle: bool = True,
+) -> str:
+    """WAN: первое фото — сцена/донор; следующие URL — студийная модель (целевая личность)."""
+    hair_clause = (
+        "**Hairstyle** (cut/color/texture) берётся из JSON-брифа и thumbnails модели — не как у незнакомого человека на Image 1. "
+        if lock_model_hairstyle
+        else "Причёска может оставаться ближе к исходному кадру, если это явно нужно пользователю; "
+    )
+    prefix = (
+        "[FACE_SWAP — WAN] **Image 1** is the **SOURCE snapshot** (scene + incidental sitter framing). "
+        "Following URL(s): **studio portraits of OUR target MODEL** — **WHO only**. "
+        "**Replace** recognizable face and every visible epidermis region of the Image‑1 performer with MODEL identity continuously — "
+        "same underlying undertone and highlight texture **as one person** chin→neck→upper chest/decollete→arms/legs in **this** lighting. "
+        "**Harmonize** white balance and subsurface dispersion so cheeks / shoulders / torso **do not** read like mismatched halves. "
+        "Preserve strictly from Image 1: **camera geometry** (FoV crop, viewpoint, body/head yaw, gaze vs lens), limb articulation, garment seams, shadows on fabric/plastic — "
+        "**not** micro-skin pigmentation from the incidental sitter — MODEL thumbnails supply complexion/identity. "
+        f"{hair_clause}"
+        "**No** residual stranger facial microtexture; thumbnails win for likeness; Image 1 defines room + illumination topology.\n\n"
+    )
+    p = (refined_prompt or "").strip()
+    if not p:
+        return prefix.strip()
+    return prefix + p
+
+
 def wavespeed_prompt_with_user_pose_reference_first(
     refined_prompt: str,
     *,
@@ -116,6 +144,11 @@ def finalize_wavespeed_studio_prompt(
                 if not p
                 else _WAVESPEED_PHOTO_EDIT_USER_FIRST_PREFIX + p
             )
+        elif mode == "face_swap":
+            out = wavespeed_prompt_with_face_swap_first(
+                p,
+                lock_model_hairstyle=lock_model_hairstyle,
+            )
         else:
             out = wavespeed_prompt_with_user_pose_reference_first(
                 p,
@@ -150,6 +183,17 @@ _NANO_BANANA_NO_FACE_IDENTITY_PREFIX = (
     "This is **not** face-swap: do not paste the model's face into regions where the pose image shows **no face**. "
     "The block below is structured JSON; **framing from the last image** overrides any urge to show a portrait face.\n\n"
 )
+
+_NANO_BANANA_FACE_SWAP_IDENTITY_PREFIX = (
+    "[MULTI_IMAGE_EDIT — intentional FACE SWAP] Earlier input image(s): **studio portraits of ONE saved MODEL — identity WHO only** "
+    "(face anatomy, hairline/palette, plausible limb proportion bias, skin micro-texture family). "
+    "**LAST** input image: **RGB scene photograph** you must **replace** the incidental sitter with MODEL **while keeping** LAST's "
+    "**camera geometry**, **framing**, **scene lighting topology** (direction/hard highlights wrap), limbs articulation, garment/coverage. "
+    "**Do not** synthesize blended «half-stranger» composites — epidermis on face/neck/visible torso/arms must read as MODEL color science illuminated by LAST ambience; "
+    "match white balance/skin undertone gradients head→body so cheeks / sternum / forearms remain **chromatically cohesive**. "
+    "Structured JSON + USER_TEXT below constrain mood; thumbnails win likeness over vague wording.\n\n"
+)
+
 
 def _nano_banana_pose_last_suffix(*, lock_model_hairstyle: bool) -> str:
     hair = (
@@ -206,7 +250,9 @@ def finalize_nano_banana_studio_prompt(
         )
     else:
         head = (
-            _NANO_BANANA_NO_FACE_IDENTITY_PREFIX
+            _NANO_BANANA_FACE_SWAP_IDENTITY_PREFIX
+            if mode == "face_swap"
+            else _NANO_BANANA_NO_FACE_IDENTITY_PREFIX
             if mode == "no_face"
             else _NANO_BANANA_IDENTITY_LOCK_PREFIX
         )
@@ -840,6 +886,13 @@ def _studio_mode_refiner_block(studio_mode: str) -> str:
             "`subject.identity.face_features`: **minimal or absent** when face is off-frame — do not invent eyes/nose/mouth for readability.\n"
             "Skin continuity: MODEL_PROFILE tones/texture for **visible anatomy only**.\n"
         )
+    if m == "face_swap":
+        return (
+            "## STUDIO_MODE: FACE_SWAP (identity takeover into existing scene bitmap)\n"
+            "REFERENCE_IMAGE describes **only** framing/camera/light/room garments on the SOURCE photo whose human must be **removed** aesthetically — MODEL_PROFILE replaces `subject.identity` "
+            "**throughout**. User wants **chromatic cohesion**: skin graded believably head→neck→torso/limbs **as one complexion family** baked under scene white balance "
+            "**without** zebra striping mismatches. Respect GOAL_POSE/lighting verbatim from REFERENCE_* lines; forbid inventing incompatible lighting pivots solely to brighten face readability.\n"
+        )
     return ""
 
 
@@ -857,10 +910,17 @@ def _build_refiner_user_message(
     has_ref = bool((reference_scene_description or "").strip())
     photo_edit_mode = (studio_mode or "").strip().lower() == "photo_edit"
     no_face_mode = (studio_mode or "").strip().lower() == "no_face"
+    face_swap_mode = (studio_mode or "").strip().lower() == "face_swap"
     mode_line = "MODEL_LOCK" if lock_model_hairstyle else "POSE_REFERENCE"
     ref_geometry_lock = ""
     if has_ref and not photo_edit_mode:
-        if no_face_mode:
+        if face_swap_mode:
+            ref_geometry_lock = (
+                "**FACE_SWAP_GEOMETRY_LIGHT:** Preserve **crop/FoV, camera axis, viewpoint, limbs articulation, garment seams, scene-light direction + hardness topology** precisely as described in REFERENCE_IMAGE. "
+                "When filling `photography`, match white balance/color temperature ambience from the room **so MODEL identity skin** graded across visible skin reads **chromatically cohesive** under that light — "
+                "no «two donors» tonal split between cheeks vs chest vs arms.\n"
+            )
+        elif no_face_mode:
             ref_geometry_lock = (
                 "**GEOMETRY_LOCK:** Match REFERENCE_IMAGE **joint articulation, lean, and torso twist** in `subject.pose`; "
                 "keep **`photography`** consistent with CAMERA_DISTANCE / CAMERA_HEIGHT / CAMERA_ANGLE / FRAMING (`framing_crop`, distances, heights, angles). "
@@ -888,6 +948,13 @@ def _build_refiner_user_message(
                 "**Baseline:** whoever, whatever, and whichever camera setup the description below reflects — this is the bitmap the API will load. "
                 "**Task:** fold **USER_TEXT** in as *targeted* deltas (wardrobe, palette, backdrop, clean-up, illumination, small geometry **if asked**). "
                 "**Do not** reshuffle identity, body line, or framing for «profile defaults».\n\n"
+                + (reference_scene_description or "").strip()
+            )
+        elif face_swap_mode:
+            blocks.append(
+                "## REFERENCE_IMAGE (SOURCE bitmap — incidental sitter likeness **discarded**, MODEL_PROFILE defines `subject.identity`)\n"
+                "**Harvest** framing, optics, gestures, textiles/coverage, background primitives, illumination recipe from paragraphs below.\n\n"
+                + ref_geometry_lock
                 + (reference_scene_description or "").strip()
             )
         elif lock_model_hairstyle:

@@ -539,7 +539,7 @@ interface StudioMotionRendersPage {
 /** Должен совпадать с default limit у GET /api/studio/generations */
 const STUDIO_ARCHIVE_PAGE = 10
 
-type StudioJobMode = 'model' | 'photo_edit' | 'no_face'
+type StudioJobMode = 'model' | 'photo_edit' | 'no_face' | 'face_swap'
 
 export default function App() {
   const navigate = useNavigate()
@@ -1919,9 +1919,24 @@ export default function App() {
         setError('Опишите, что изменить или исправить на фото.')
         return
       }
-    } else if (!studioDesc.trim() && !studioFile && studioSelectedModelId == null) {
+    } else if (
+      studioMode !== 'face_swap' &&
+      !studioDesc.trim() &&
+      !studioFile &&
+      studioSelectedModelId == null
+    ) {
       setError('Добавьте описание, референс и/или выберите сохранённую модель.')
       return
+    }
+    if (studioMode === 'face_swap') {
+      if (studioSelectedModelId == null) {
+        setError('В режиме Face swap выберите модель студии (эталон внешности).')
+        return
+      }
+      if (!studioFile) {
+        setError('Загрузите исходное фото (сцена + человека, которого заменить на вашу модель).')
+        return
+      }
     }
     if (studioMode === 'no_face' && studioSelectedModelId == null && !studioFile) {
       setError('В режиме «Без лица» выберите модель или загрузите референс.')
@@ -4597,6 +4612,7 @@ export default function App() {
                 {(
                   [
                     { id: 'model' as const, label: 'Модель' },
+                    { id: 'face_swap' as const, label: 'Face swap' },
                     { id: 'photo_edit' as const, label: 'Доработать фото' },
                     { id: 'no_face' as const, label: 'Без лица' },
                   ] as const
@@ -4615,7 +4631,9 @@ export default function App() {
             <p className="studio-mode-hint">
               {studioMode === 'model'
                 ? 'Как раньше: выбранная модель, опционально референс позы и описание.'
-                : studioMode === 'photo_edit'
+                : studioMode === 'face_swap'
+                  ? 'Исходное фото со сценой и «чужим» человеком + сохранённая модель студии → подмена внешности (лицо/тело) с подгонкой тона под свет сцены. Тип ниже «Обычные» = Nano Banana Pro, «NSFW» = WAN 2.7.'
+                  : studioMode === 'photo_edit'
                   ? 'Загрузите кадр или возьмите его из архива «Картинки», опишите правки. Если затираете область маской и нужна именно сохранённая модель — выберите её ниже (портреты уходят вторым входом на редактор вместе с кропом).'
                   : 'Кадр без лица/головы; нужна модель с фото или свой референс.'}
             </p>
@@ -4736,7 +4754,12 @@ export default function App() {
                   </option>
                 ))}
               </select>
-              {studioMode === 'photo_edit' ? (
+              {studioMode === 'face_swap' ? (
+                <span className="muted studio-file-name">
+                  Обязательно: сохранённые фото модели уходят в редактор как эталон лица/тела; исходник — ваше загружаемое
+                  изображение.
+                </span>
+              ) : studioMode === 'photo_edit' ? (
                 <span className="muted studio-file-name">
                   Для обычных правок по всему кадру можно оставить «Без модели». Для замены области по маской выберите
                   модель — на сервер уйдут её фото как эталон внешности.
@@ -4766,7 +4789,11 @@ export default function App() {
               </label>
             ) : null}
             <label className="studio-label">
-              {studioMode === 'photo_edit' ? 'Файл с устройства (если не из архива)' : 'Референс (по желанию)'}
+              {studioMode === 'photo_edit'
+                ? 'Файл с устройства (если не из архива)'
+                : studioMode === 'face_swap'
+                  ? 'Исходное фото (обязательно)'
+                  : 'Референс (по желанию)'}
               <input
                 type="file"
                 accept="image/jpeg,image/png,image/webp,image/gif"
@@ -4885,7 +4912,9 @@ export default function App() {
                 placeholder={
                   studioMode === 'photo_edit'
                     ? 'Что изменить: цвет фона, другая футболка, убрать объект, исправить свет, слегка сменить ракурс…'
-                    : 'Что показать на снимке: сцена, свет, настроение…'
+                    : studioMode === 'face_swap'
+                      ? 'По желанию: акцент (например «мягкий свет на лице», «сохранить естественность кожи»). Можно оставить пустым.'
+                      : 'Что показать на снимке: сцена, свет, настроение…'
                 }
                 value={studioDesc}
                 onChange={(e) => setStudioDesc(e.target.value)}
@@ -4906,6 +4935,8 @@ export default function App() {
                   studioBusy ||
                   !canStudioGenerate ||
                   (!studioDesc.trim() && !studioFile && studioSelectedModelId == null) ||
+                  (studioMode === 'face_swap' &&
+                    (studioSelectedModelId == null || studioFile == null)) ||
                   (studioMode === 'photo_edit' &&
                     !studioFile &&
                     studioPhotoEditArchiveId == null) ||
