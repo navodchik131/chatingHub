@@ -53,6 +53,80 @@ def _mask_luma_same_size(rgb_size: tuple[int, int], mask_bytes: bytes) -> Image.
     return m_l
 
 
+def studio_mask_png_bytes_aligned_to_reference(
+    reference_image_bytes: bytes,
+    inpaint_mask_bytes: bytes,
+) -> bytes:
+    """
+    Маска в тех же WxH что и RGB-кадр (PNG L): при расхождении — NEAREST.
+
+    WAN/Nano ожидают выровненную геометрию второго входа; иначе бывают невнятные отказы.
+    """
+    ref = _open_rgb_transpose(reference_image_bytes)
+    m_img = Image.open(BytesIO(inpaint_mask_bytes))
+    m_img = ImageOps.exif_transpose(m_img)
+    if m_img.mode in ("RGBA", "P"):
+        m_img = m_img.convert("RGBA")
+        r, g, b, a = m_img.split()
+        np_r = np.array(r, dtype=np.uint16)
+        np_g = np.array(g, dtype=np.uint16)
+        np_b = np.array(b, dtype=np.uint16)
+        np_a = np.array(a, dtype=np.uint16)
+        lum = np.maximum(np.maximum(np_r, np_g), np.maximum(np_b, np_a)).astype(np.uint8)
+        m_gray = Image.fromarray(lum, mode="L")
+    else:
+        m_gray = m_img.convert("L")
+    target = ref.size
+    if m_gray.size != target:
+        log.warning(
+            "studio inpaint mask %s resized to reference %s before WaveSpeed",
+            m_gray.size,
+            target,
+        )
+        m_gray = m_gray.resize(target, resample=Image.Resampling.NEAREST)
+    buf = BytesIO()
+    m_gray.save(buf, format="PNG", optimize=True)
+    return buf.getvalue()
+
+
+def composite_fullframe_edit_preserving_unmasked(
+    original_image_bytes: bytes,
+    edited_image_bytes: bytes,
+    mask_png_bytes_aligned: bytes,
+    *,
+    feather_radius: float = 10.0,
+) -> bytes:
+    """
+    Выход редактора (полный кадр) смешивается с оригиналом: вклад редактирования ↑ там,
+    где маска белая (после необязательного Gaussian blur по краю). Вне маски — исходные RGB.
+    """
+    orig = _open_rgb_transpose(original_image_bytes)
+    edi = _open_rgb_transpose(edited_image_bytes)
+    if edi.size != orig.size:
+        edi = edi.resize(orig.size, resample=Image.Resampling.LANCZOS)
+
+    mask_im = Image.open(BytesIO(mask_png_bytes_aligned))
+    if mask_im.mode not in ("L", "1"):
+        mask_im = mask_im.convert("L")
+    if mask_im.size != orig.size:
+        mask_im = mask_im.resize(orig.size, resample=Image.Resampling.NEAREST)
+
+    alpha_l = mask_im
+    if feather_radius > 0.05:
+        alpha_l = alpha_l.filter(ImageFilter.GaussianBlur(radius=float(feather_radius)))
+
+    o_arr = np.asarray(orig, dtype=np.float32)
+    e_arr = np.asarray(edi, dtype=np.float32)
+    a = (np.asarray(alpha_l, dtype=np.float32) / 255.0)[..., np.newaxis]
+    a = np.clip(a, 0.0, 1.0)
+    blended = e_arr * a + o_arr * (1.0 - a)
+    out_u8 = np.clip(np.rint(blended), 0, 255).astype(np.uint8)
+    out_im = Image.fromarray(out_u8, mode="RGB")
+    out_buf = BytesIO()
+    out_im.save(out_buf, format="PNG", optimize=True)
+    return out_buf.getvalue()
+
+
 def _bbox_white_fast(grey: np.ndarray, threshold: int) -> tuple[int, int, int, int] | None:
     ys, xs = np.where(grey >= threshold)
     if xs.size == 0:

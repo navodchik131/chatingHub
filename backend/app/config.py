@@ -205,8 +205,8 @@ class Settings(BaseSettings):
     # True = не передавать size (размер остаётся как у входного изображения).
     wavespeed_z_image_inpaint_omit_size: bool = Field(default=True)
     credit_cost_studio_inpaint: int = Field(default=2)
-    # Маска студии: кроп вокруг выделения → WAN/Nano (как без маски) → гармонизация края и склейка.
-    # False = только Z-Image Turbo Inpaint (полный кадр + mask_image того API).
+    # Маска студии в Nano/WAN: см. studio_routes + STUDIO_MASKED_FULLFRAME_*.
+    # False = только Z-Image Turbo Inpaint (полное поле mask_image этого API).
     studio_regional_masked_edit: bool = Field(default=True)
     studio_regional_masked_edit_pad_ratio: float = Field(default=0.14, ge=0.03, le=0.42)
     studio_regional_masked_min_crop_side_px: int = Field(default=384, ge=128, le=4096)
@@ -215,6 +215,17 @@ class Settings(BaseSettings):
         default=0.16, ge=0.04, le=0.45
     )
     studio_regional_masked_mask_threshold: int = Field(default=100, ge=16, le=240)
+    studio_masked_fullframe_preserve_unmasked: bool = Field(
+        default=True,
+        description="После Nano/WAN с маской как вторым URL смешать ответ провайдера с исходником "
+        "(пиксели вне смягчённой маски = как в загруженном фото).",
+    )
+    studio_masked_fullframe_blend_feather_radius: float = Field(
+        default=10.0,
+        ge=0.0,
+        le=64.0,
+        description="Радиус GaussianBlur маски альфы перед смешением (меньше = жёстче шов).",
+    )
 
     billing_success_path: str = "/?billing=success"
 

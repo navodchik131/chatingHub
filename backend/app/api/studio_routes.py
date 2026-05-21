@@ -4,6 +4,7 @@ import logging
 import mimetypes
 import shutil
 import uuid
+from functools import partial
 from pathlib import Path
 from urllib.parse import quote
 
@@ -1689,6 +1690,21 @@ async def api_studio_refine_prompt(
         if mask_bytes:
             assert image_bytes is not None
             try:
+                from app.services.studio_masked_regional_edit import (
+                    composite_fullframe_edit_preserving_unmasked,
+                    studio_mask_png_bytes_aligned_to_reference,
+                )
+
+                try:
+                    mask_bytes_upload = studio_mask_png_bytes_aligned_to_reference(
+                        image_bytes, mask_bytes
+                    )
+                    mask_upload_mime = "image/png"
+                except Exception as e_align:
+                    log.warning("studio inpaint mask align skipped: %s", e_align)
+                    mask_bytes_upload = mask_bytes
+                    mask_upload_mime = mask_mime or "image/png"
+
                 if settings.studio_regional_masked_edit:
                     fid_base = save_pose_reference_bytes(
                         owner_id=oid,
@@ -1704,8 +1720,8 @@ async def api_studio_refine_prompt(
 
                     fid_mask_wm = save_pose_reference_bytes(
                         owner_id=oid,
-                        raw=mask_bytes,
-                        content_type=(mask_mime or "image/png"),
+                        raw=mask_bytes_upload,
+                        content_type=mask_upload_mime,
                     )
                     mtk = create_pose_reference_access_token(
                         user_id=oid, file_id=fid_mask_wm
@@ -1782,6 +1798,40 @@ async def api_studio_refine_prompt(
                             size=size_for_wm,
                             wan_edit_tier=wan_tier_n,
                         )
+
+                    if (
+                        generated_image_url
+                        and settings.studio_masked_fullframe_preserve_unmasked
+                    ):
+                        ed_blend, dl_blend_err = await _download_image_bytes_best_effort(
+                            generated_image_url
+                        )
+                        if ed_blend:
+                            try:
+                                blend_fn = partial(
+                                    composite_fullframe_edit_preserving_unmasked,
+                                    feather_radius=float(
+                                        settings.studio_masked_fullframe_blend_feather_radius
+                                    ),
+                                )
+                                regional_composed_png = await anyio.to_thread.run_sync(
+                                    blend_fn,
+                                    image_bytes,
+                                    ed_blend,
+                                    mask_bytes_upload,
+                                )
+                                generated_image_url = None
+                            except Exception as e_blend:
+                                log.warning(
+                                    "studio mask fullframe preserve-unmasked blend failed, keeping CDN URL: %s",
+                                    e_blend,
+                                    exc_info=True,
+                                )
+                        elif dl_blend_err:
+                            log.warning(
+                                "studio mask fullframe blend skipped (download failed): %s",
+                                dl_blend_err,
+                            )
                 else:
                     fid_img = save_pose_reference_bytes(
                         owner_id=oid,
@@ -1794,8 +1844,8 @@ async def api_studio_refine_prompt(
                     src_url = f"{pub}/api/studio/public-pose-reference?t={quote(ptok, safe='')}"
                     fid_mask = save_pose_reference_bytes(
                         owner_id=oid,
-                        raw=mask_bytes,
-                        content_type=mask_mime,
+                        raw=mask_bytes_upload,
+                        content_type=mask_upload_mime,
                     )
                     mtok = create_pose_reference_access_token(
                         user_id=oid, file_id=fid_mask
@@ -1872,14 +1922,35 @@ async def api_studio_refine_prompt(
                         user.id,
                         wavespeed_message,
                     )
+            except httpx.RequestError as e:
+                log.warning(
+                    "WaveSpeed HTTP client failure (masked studio owner_id=%s): %s",
+                    oid,
+                    e,
+                    exc_info=True,
+                )
+                wavespeed_message = (
+                    f"Не удалось связаться с WaveSpeed из-за сети или таймаута ({type(e).__name__}). "
+                    "Проверьте выход сервера в интернет (и прокси, если есть) и повторите позже; "
+                    "детали см. в логах backend."
+                )
             except Exception as e:
                 if settings.studio_regional_masked_edit and mask_bytes:
-                    log.warning(
-                        "studio masked fullframe nano/wan compose: ошибка пайплайна: %s", e
+                    log.exception(
+                        "studio masked fullframe pipeline failed (owner_id=%s)",
+                        oid,
                     )
+                    raw = str(e).strip().replace("\n", " ")
+                    slim = raw[:220] + ("…" if len(raw) > 220 else "") if raw else ""
                     wavespeed_message = (
-                        "Редактирование с маской через Nano/WAN (полный кадр + маска отдельным URL) не удалось. "
-                        "Проверьте маску и размер файла или повторите позже."
+                        "Редактирование с маской (полный кадр + второй вход — маска для Nano/WAN) не удалось. "
+                        + (
+                            f"Техника: {type(e).__name__}: {slim}. "
+                            if slim
+                            else ""
+                        )
+                        + "Частые причины: маска не совпадает по размеру с фото, слишком большой файл, "
+                        "или сбой на стороне API. Если сообщение повторится — см. трассировку в логе сервера."
                     )
                 elif mask_bytes:
                     log.warning(
@@ -2104,7 +2175,15 @@ async def api_studio_refine_prompt(
             "inpaint_mask": bool(mask_bytes),
             "regional_masked_compose_ready": regional_composed_png is not None,
             "masked_edit_engine": (
-                ("z_image_inpaint" if not settings.studio_regional_masked_edit else "nano_wan_multimage_mask_pair")
+                (
+                    "z_image_inpaint"
+                    if not settings.studio_regional_masked_edit
+                    else (
+                        "nano_wan_multimage_mask_pair_blend"
+                        if regional_composed_png is not None
+                        else "nano_wan_multimage_mask_pair"
+                    )
+                )
                 if mask_bytes
                 else None
             ),
