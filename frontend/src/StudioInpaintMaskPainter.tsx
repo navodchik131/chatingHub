@@ -187,6 +187,7 @@ export const StudioInpaintMaskPainter = forwardRef<StudioInpaintMaskPainterRef, 
       )
     }, [brushPreset])
 
+    useEffect(() => {
       if (!enabled || !imageSrc) return
       const wrap = wrapRef.current
       if (!wrap || typeof ResizeObserver === 'undefined') return
