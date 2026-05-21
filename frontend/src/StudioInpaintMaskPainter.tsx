@@ -271,5 +271,5 @@ export const StudioInpaintMaskPainter = forwardRef<StudioInpaintMaskPainterRef, 
         </div>
       </div>
     )
-  },
+  }
 )
