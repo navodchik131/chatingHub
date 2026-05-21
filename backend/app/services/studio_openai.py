@@ -297,6 +297,24 @@ _FULLFRAME_PHOTOREAL_APPEND = (
 )
 
 
+_FULLFRAME_FACE_SWAP_COLLAGE_TAIL = (
+    "[FACE_SWAP_COLLAGE_TAIL] Inside **high-luminance (white)** mask stencil only: photoreal MODEL identity skin anatomy as briefed. "
+    "**Black-mask pixels MUST stay bitwise locked** to RGB canvas — including pasted **illustrations, meme figures, collage cutouts**, "
+    "or any deliberate non-photo layer; never «clean up» the frame by erasing cartoon/2D overlays because they violate photoreal uniformity. "
+    "Do NOT global-style-match the scene to remove collaged artwork outside white."
+)
+
+
+def _masked_wave_trailer_suffix(*, studio_mode: str) -> str:
+    """
+    По умолчанию толкаем к фотореализму — но это ломает намерения face swap с коллажем (рисунки в чёрной маске).
+    Для face_swap оставляем явное правило сохранять нерелалистичные вставки вне белой области.
+    """
+    if (studio_mode or "").strip().lower() == "face_swap":
+        return "\n\n" + _FULLFRAME_FACE_SWAP_COLLAGE_TAIL
+    return "\n\n" + _FULLFRAME_PHOTOREAL_APPEND
+
+
 def finalize_masked_fullframe_wan_prompt(
     refined_prompt: str,
     *,
@@ -315,7 +333,7 @@ def finalize_masked_fullframe_wan_prompt(
             else _WAN_MASK_FULLFRAME_PHOTO_EDIT_NO_ID
         )
         merged = out + p if p else out.rstrip()
-        return merged.rstrip() + "\n\n" + _FULLFRAME_PHOTOREAL_APPEND
+        return merged.rstrip() + _masked_wave_trailer_suffix(studio_mode=studio_mode)
     if mode == "no_face":
         hair = (
             "**Hairstyle** follows MODEL/JSON thumbnails when hair is unseen on Image 1 — not invented from stray pixels.\n\n"
@@ -337,16 +355,15 @@ def finalize_masked_fullframe_wan_prompt(
         return (
             merged.rstrip()
             + _WAVESPEED_NO_FACE_SUFFIX
-            + "\n\n"
-            + _FULLFRAME_PHOTOREAL_APPEND
+            + _masked_wave_trailer_suffix(studio_mode=studio_mode)
         )
-    # studio_mode == model
+    # studio_mode == model (и face_swap: тот же tail — для face свой суффикс внутри _masked_wave_trailer_suffix).
     if attach_identity_refs:
         out += _WAN_MASK_FULLFRAME_IDENTITY_TAIL
     else:
         out += "**No MODEL identity URLs after Images 1–2** — edits must stay faithful to recognizable subject on Image 1 when JSON dictates.\n\n"
     merged = out + (p if p else "")
-    return merged.rstrip() + "\n\n" + _FULLFRAME_PHOTOREAL_APPEND
+    return merged.rstrip() + _masked_wave_trailer_suffix(studio_mode=studio_mode)
 
 
 _NANO_FULLFRAME_PHOTO_EDIT = (
@@ -386,7 +403,7 @@ def finalize_masked_fullframe_nano_prompt(
     """
     mode = (studio_mode or "model").strip().lower()
     p = (refined_prompt or "").strip()
-    trailer = ("\n\n" + _FULLFRAME_PHOTOREAL_APPEND).rstrip()
+    trailer = _masked_wave_trailer_suffix(studio_mode=studio_mode)
 
     if mode == "photo_edit":
         extra = ""
