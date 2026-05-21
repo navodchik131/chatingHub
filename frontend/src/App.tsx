@@ -1962,7 +1962,7 @@ export default function App() {
         studioDevPromptOnly
       const fd = new FormData()
       fd.append('description', studioDesc.trim())
-      if (studioMode !== 'photo_edit' && studioSelectedModelId != null) {
+      if (studioSelectedModelId != null) {
         fd.append('model_id', String(studioSelectedModelId))
       }
       if (studioFile) fd.append('image', studioFile)
@@ -4616,7 +4616,7 @@ export default function App() {
               {studioMode === 'model'
                 ? 'Как раньше: выбранная модель, опционально референс позы и описание.'
                 : studioMode === 'photo_edit'
-                  ? 'Загрузите кадр или выберите его из архива «Картинки», опишите правки (цвет фона, одежда…). Модель студии в этом режиме не используется — правится только ваш снимок.'
+                  ? 'Загрузите кадр или возьмите его из архива «Картинки», опишите правки. Если затираете область маской и нужна именно сохранённая модель — выберите её ниже (портреты уходят вторым входом на редактор вместе с кропом).'
                   : 'Кадр без лица/головы; нужна модель с фото или свой референс.'}
             </p>
             <div className="studio-mode-row" role="group" aria-label="Тип генерации WaveSpeed">
@@ -4728,7 +4728,6 @@ export default function App() {
                   const v = e.target.value
                   setStudioSelectedModelId(v === '' ? null : Number(v))
                 }}
-                disabled={studioMode === 'photo_edit'}
               >
                 <option value="">Без модели</option>
                 {studioModels.map((m) => (
@@ -4739,7 +4738,8 @@ export default function App() {
               </select>
               {studioMode === 'photo_edit' ? (
                 <span className="muted studio-file-name">
-                  Не нужна для доработки — не отправляется в редактор.
+                  Для обычных правок по всему кадру можно оставить «Без модели». Для замены области по маской выберите
+                  модель — на сервер уйдут её фото как эталон внешности.
                 </span>
               ) : null}
             </label>

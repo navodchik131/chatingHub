@@ -1439,15 +1439,19 @@ async def api_studio_refine_prompt(
         )
 
     desc = (description or "").strip()
-    mid = _parse_optional_model_id(model_id)
+    parsed_mid = _parse_optional_model_id(model_id)
     try:
         aspect_key = normalize_aspect_key(output_aspect)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 
     mode_n = _normalize_studio_mode(studio_mode)
+    raw_model_id_photo_edit: int | None = None
     if mode_n == "photo_edit":
+        raw_model_id_photo_edit = parsed_mid
         mid = None
+    else:
+        mid = parsed_mid
 
     assert_permission(user, PERM_STUDIO_GENERATE)
     oid = workspace_owner_id(user)
@@ -1485,6 +1489,14 @@ async def api_studio_refine_prompt(
         if not mask_bytes:
             raise HTTPException(status_code=400, detail="Пустой файл маски")
         mask_mime = inpaint_mask.content_type
+
+    if (
+        mode_n == "photo_edit"
+        and mask_bytes
+        and settings.studio_regional_masked_edit
+        and raw_model_id_photo_edit is not None
+    ):
+        mid = raw_model_id_photo_edit
 
     existing_gen_from_archive: int | None = None
     if mode_n == "photo_edit":
@@ -1564,6 +1576,14 @@ async def api_studio_refine_prompt(
         imgs_model = sort_model_images_for_studio(list(sm_loaded.images))
     imgs_for_ws = model_images_for_wavespeed_profile(imgs_model, wave_profile_n)
 
+    photo_edit_regional_identity_requested = bool(
+        mode_n == "photo_edit"
+        and bool(mask_bytes)
+        and settings.studio_regional_masked_edit
+        and raw_model_id_photo_edit is not None
+        and bool(imgs_for_ws)
+    )
+
     ws_key = _studio_refine_wavespeed_preflight(
         do_wavespeed=do_wavespeed,
         plan=plan,
@@ -1600,7 +1620,7 @@ async def api_studio_refine_prompt(
             )
         ref_photo_block = (
             None
-            if mode_n == "photo_edit"
+            if mode_n == "photo_edit" and not photo_edit_regional_identity_requested
             else (model_reference_photos_block(imgs_for_ws) if imgs_for_ws else None)
         )
         refined = await refine_prompt_via_openai(
@@ -1608,7 +1628,11 @@ async def api_studio_refine_prompt(
             skeleton=skeleton,
             user_text=desc,
             reference_scene_description=reference_scene,
-            model_profile_text=None if mode_n == "photo_edit" else model_profile_text,
+            model_profile_text=(
+                None
+                if mode_n == "photo_edit" and not photo_edit_regional_identity_requested
+                else model_profile_text
+            ),
             model_reference_photos=ref_photo_block,
             output_aspect_key=aspect_key,
             studio_mode=mode_n,
@@ -1651,18 +1675,71 @@ async def api_studio_refine_prompt(
                         user_id=oid, file_id=fid_crop
                     )
                     crop_url = f"{pub}/api/studio/public-pose-reference?t={quote(ctok, safe='')}"
+
+                    if mode_n == "model":
+                        attach_regional_mr = bool(imgs_model)
+                    elif mode_n == "no_face":
+                        attach_regional_mr = bool(sm_loaded and imgs_model)
+                    elif photo_edit_regional_identity_requested:
+                        attach_regional_mr = True
+                    else:
+                        attach_regional_mr = False
+
+                    regional_image_urls: list[str] = [crop_url]
+                    if attach_regional_mr:
+                        for im in imgs_for_ws:
+                            if len(regional_image_urls) >= 9:
+                                break
+                            tok = create_model_image_access_token(
+                                user_id=oid, image_id=im.id
+                            )
+                            regional_image_urls.append(
+                                f"{pub}/api/studio/public-model-image?t={quote(tok, safe='')}"
+                            )
+
+                    if wave_profile_n == "nsfw" and _truthy_wavespeed_flag(
+                        wavespeed_single_reference
+                    ):
+                        mr_pose_prepended = True
+                        if mr_pose_prepended and len(regional_image_urls) >= 2:
+                            regional_image_urls = regional_image_urls[:2]
+                        else:
+                            regional_image_urls = regional_image_urls[:1]
+
+                    nano_regional_urls = regional_image_urls
+                    pose_last_regional = False
+                    if wave_profile_n == "regular":
+                        nano_regional_urls = _nano_banana_reorder_image_urls(
+                            regional_image_urls,
+                            studio_mode=mode_n,
+                            user_pose_ref_prepended=True,
+                        )
+                        pose_last_regional = bool(len(nano_regional_urls) >= 2)
+
                     addon = REGIONAL_WS_PROMPT_ADDON_EN.strip()
+                    photoreal_anchor = (
+                        "Maintain photoreal output (natural skin, photography-like); "
+                        "do NOT shift to anime, illustration or a different unrelated face "
+                        "unless that is explicitly asked in the user's request."
+                        + (
+                            " Match the recognizable identity from the labeled reference portraits."
+                            if attach_regional_mr
+                            else ""
+                        )
+                    )
                     if wave_profile_n == "regular":
                         ws_regional_prompt = (
                             finalize_nano_banana_studio_prompt(
                                 refined,
                                 studio_mode=mode_n,
                                 user_photo_edit_first=bool(mode_n == "photo_edit"),
-                                user_pose_reference_is_last=False,
+                                user_pose_reference_is_last=pose_last_regional,
                                 lock_model_hairstyle=effective_lock_hairstyle,
                             )
                             + " "
                             + addon
+                            + " "
+                            + photoreal_anchor
                         )
                     else:
                         ws_regional_prompt = (
@@ -1674,6 +1751,8 @@ async def api_studio_refine_prompt(
                             )
                             + " "
                             + addon
+                            + " "
+                            + photoreal_anchor
                         )
                     if settings.wavespeed_seedream_omit_size:
                         size_for_regional: str | None = None
@@ -1682,14 +1761,14 @@ async def api_studio_refine_prompt(
                     if wave_profile_n == "regular":
                         ws_crop_out = await nano_banana_pro_edit_image_url(
                             api_key=ws_key,
-                            image_urls=[crop_url],
+                            image_urls=nano_regional_urls,
                             prompt=ws_regional_prompt,
                             aspect_ratio=aspect_key,
                         )
                     else:
                         ws_crop_out = await seedream_v45_edit_image_url(
                             api_key=ws_key,
-                            image_urls=[crop_url],
+                            image_urls=regional_image_urls,
                             prompt=ws_regional_prompt,
                             size=size_for_regional,
                             wan_edit_tier=wan_tier_n,
@@ -1971,7 +2050,7 @@ async def api_studio_refine_prompt(
                     )
 
     generation_id: int | None = None
-    gen_mid = None if mode_n == "photo_edit" else mid
+    gen_mid = mid
     if regional_composed_png is not None:
         gen_lc = await persist_studio_generation_from_uploaded_bytes(
             session,
