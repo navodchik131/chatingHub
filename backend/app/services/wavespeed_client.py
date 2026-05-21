@@ -44,6 +44,8 @@ def resolve_studio_image_edit_post_path(*, wan_edit_tier: str | None) -> str:
 def studio_wan_edit_tier_switch_available() -> bool:
     """True — в студии можно переключать обычный WAN / Pro (endpoint в .env относится к WAN 2.7)."""
     return _is_wan_27_image_edit_path(_seedream_edit_post_path())
+
+
 def _is_wan_27_image_edit_path(post_path: str) -> bool:
     s = (post_path or "").lower()
     return "wan" in s and "image-edit" in s
@@ -53,6 +55,14 @@ def _format_size_for_wavespeed_path(post_path: str, size: str) -> str:
     """WAN 2.7: `width*height`; Seedream — `widthxheight` (см. доки)."""
     s = size.strip()
     if _is_wan_27_image_edit_path(post_path) and "x" in s.lower() and "*" not in s:
+        return s.replace("x", "*").replace("X", "*")
+    return s
+
+
+def _format_size_z_image_inpaint(size: str) -> str:
+    """Z-Image Inpaint: в доке размер — `width*height`."""
+    s = size.strip()
+    if "x" in s.lower() and "*" not in s:
         return s.replace("x", "*").replace("X", "*")
     return s
 
@@ -438,6 +448,62 @@ async def wavespeed_image_upscale_url(
     path = _wavespeed_upscaler_post_path()
     full_url = f"{_wavespeed_base()}{path}"
     log.debug("wavespeed upscale post=%s target=%s fmt=%s", path, tres, fmt)
+    return await _wavespeed_post_json_and_resolve_image_url(
+        api_key=api_key,
+        full_post_url=full_url,
+        body=body,
+        timeout_submit=timeout_submit,
+        poll_interval=poll_interval,
+        max_polls=max_polls,
+    )
+
+
+def _z_image_inpaint_post_path() -> str:
+    p = (settings.wavespeed_z_image_inpaint_path or "").strip() or "/api/v3/wavespeed-ai/z-image/turbo-inpaint"
+    return p if p.startswith("/") else f"/{p}"
+
+
+async def z_image_turbo_inpaint_image_url(
+    *,
+    api_key: str,
+    image_url: str,
+    mask_image_url: str,
+    prompt: str,
+    size: str | None = None,
+    timeout_submit: float = 300.0,
+    poll_interval: float = 2.0,
+    max_polls: int = 120,
+) -> str:
+    """
+    Z-Image Turbo Inpaint: публичные HTTPS URL изображения и маски (одинаковый размер).
+    Док: wavespeed.ai — z-image/turbo-inpaint.
+    """
+    iu = (image_url or "").strip()
+    mu = (mask_image_url or "").strip()
+    if not iu or not mu:
+        raise RuntimeError("empty image or mask URL")
+    if not (prompt or "").strip():
+        raise RuntimeError("empty prompt")
+
+    path = _z_image_inpaint_post_path()
+    full_url = f"{_wavespeed_base()}{path}"
+    body: dict[str, Any] = {
+        "image": iu,
+        "mask_image": mu,
+        "prompt": prompt.strip(),
+    }
+    if (
+        not settings.wavespeed_z_image_inpaint_omit_size
+        and size
+        and size.strip()
+    ):
+        body["size"] = _format_size_z_image_inpaint(size)
+    _apply_wavespeed_extra_body(body)
+    log.debug(
+        "wavespeed z-image inpaint path=%s size_omitted=%s",
+        path,
+        settings.wavespeed_z_image_inpaint_omit_size,
+    )
     return await _wavespeed_post_json_and_resolve_image_url(
         api_key=api_key,
         full_post_url=full_url,

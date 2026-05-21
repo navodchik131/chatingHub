@@ -91,6 +91,7 @@ async def api_health(session: AsyncSession = Depends(get_session)) -> dict:
         "openai_studio_configured": bool((settings.openai_api_key or "").strip()),
         "wavespeed_platform_configured": bool((settings.wavespeed_platform_api_key or "").strip()),
         "studio_prompt_credit_cost": settings.credit_cost_studio_prompt_refine,
+        "studio_inpaint_credit_cost": settings.credit_cost_studio_inpaint,
         "studio_upscale_credit_cost": settings.credit_cost_studio_upscale,
         "studio_wan_edit_tier_switch": studio_wan_edit_tier_switch_available(),
         "studio_allow_prompt_only": settings.studio_allow_prompt_only,

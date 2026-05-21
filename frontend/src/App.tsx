@@ -208,6 +208,7 @@ interface HealthInfo {
   billing_credit_pack_credits?: number
   openai_studio_configured?: boolean
   studio_prompt_credit_cost?: number
+  studio_inpaint_credit_cost?: number
   studio_upscale_credit_cost?: number
   studio_wan_edit_tier_switch?: boolean
   studio_allow_prompt_only?: boolean
@@ -655,6 +656,8 @@ export default function App() {
   const [appSection, setAppSection] = useState<'chat' | 'studio' | 'studio_video'>('chat')
   const [studioDesc, setStudioDesc] = useState('')
   const [studioFile, setStudioFile] = useState<File | null>(null)
+  /** Маска Z-Image Inpaint: белое = область правки, чёрное = без изменений (совпадает по размеру с референсом). */
+  const [studioInpaintMaskFile, setStudioInpaintMaskFile] = useState<File | null>(null)
   /** Снимок из архива как база для режима «Доработать фото» (альтернатива файлу). */
   const [studioPhotoEditArchiveId, setStudioPhotoEditArchiveId] = useState<number | null>(null)
   /** true = MODEL_LOCK (причёска с профиля); false = POSE_REFERENCE (с загруженного кадра). Только если есть studioFile. */
@@ -797,6 +800,13 @@ export default function App() {
   useEffect(() => {
     if (!studioFile) setStudioLockModelHairstyle(true)
   }, [studioFile])
+
+  useEffect(() => {
+    const hasBaseImage =
+      studioFile != null ||
+      (studioMode === 'photo_edit' && studioPhotoEditArchiveId != null)
+    if (!hasBaseImage) setStudioInpaintMaskFile(null)
+  }, [studioFile, studioMode, studioPhotoEditArchiveId])
 
   useEffect(() => {
     if (studioMode !== 'photo_edit') {
@@ -1872,6 +1882,15 @@ export default function App() {
       setError('В режиме «Без лица» выберите модель или загрузите референс.')
       return
     }
+    const hasStudioBaseImage =
+      studioFile != null ||
+      (studioMode === 'photo_edit' && studioPhotoEditArchiveId != null)
+    if (studioInpaintMaskFile && !hasStudioBaseImage) {
+      setError(
+        'Для маски загрузите изображение или выберите снимок из архива (режим «Доработать фото»).',
+      )
+      return
+    }
     setStudioBusy(true)
     setStudioGenImageUrl(null)
     setStudioGenGenerationId(null)
@@ -1889,6 +1908,7 @@ export default function App() {
         fd.append('model_id', String(studioSelectedModelId))
       }
       if (studioFile) fd.append('image', studioFile)
+      if (studioInpaintMaskFile) fd.append('inpaint_mask', studioInpaintMaskFile)
       if (
         studioMode === 'photo_edit' &&
         studioPhotoEditArchiveId != null &&
@@ -4700,6 +4720,40 @@ export default function App() {
               />
               {studioFile ? <span className="studio-file-name">{studioFile.name}</span> : null}
             </label>
+            <label
+              className="studio-label"
+              style={
+                !studioFile &&
+                !(studioMode === 'photo_edit' && studioPhotoEditArchiveId != null)
+                  ? { opacity: 0.55 }
+                  : undefined
+              }
+            >
+              Маска inpaint (по желанию)
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                disabled={
+                  !studioFile &&
+                  !(studioMode === 'photo_edit' && studioPhotoEditArchiveId != null)
+                }
+                onChange={(e) => {
+                  const f = e.target.files?.[0] ?? null
+                  setStudioInpaintMaskFile(f)
+                }}
+              />
+              {studioInpaintMaskFile ? (
+                <span className="studio-file-name">{studioInpaintMaskFile.name}</span>
+              ) : (
+                <span
+                  className="muted"
+                  style={{ display: 'block', marginTop: '0.35rem', fontSize: '0.85rem' }}
+                >
+                  Совпадает по размеру с референсом: белое — область правки, чёрное — без изменений. Вызов
+                  Z-Image Inpaint (область), а не полнокадровый WAN/Nano edit.
+                </span>
+              )}
+            </label>
             {studioMode !== 'photo_edit' ? (
             <label
               className="studio-label studio-check"
@@ -4764,7 +4818,10 @@ export default function App() {
               {canStudioGenerate && health?.openai_studio_configured ? (
                 studioPromptOnlyDev || integ?.wavespeed_configured ? (
                   <span className="studio-credit-hint">
-                    {health.studio_prompt_credit_cost ?? '—'} кр.
+                    {(studioInpaintMaskFile
+                      ? health.studio_inpaint_credit_cost
+                      : health.studio_prompt_credit_cost) ?? '—'}{' '}
+                    кр.
                   </span>
                 ) : (
                   <span className="studio-credit-hint warn">Нужен ключ WaveSpeed в кабинете</span>

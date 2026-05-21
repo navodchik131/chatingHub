@@ -133,6 +133,7 @@ from app.services.wavespeed_client import (
     seedream_v45_edit_image_url,
     wan_22_animate_video_url,
     wavespeed_image_upscale_url,
+    z_image_turbo_inpaint_image_url,
 )
 
 log = logging.getLogger(__name__)
@@ -297,6 +298,16 @@ def _studio_refine_wavespeed_preflight(
                 detail="В режиме «Без лица» выберите модель с фото или загрузите референс.",
             )
     return ws_key
+
+
+def _z_image_inpaint_studio_prompt(*, refined: str, user_description: str) -> str:
+    """Текст для Z-Image Inpaint: указание по маске + суть правки."""
+    d = (user_description or "").strip()
+    core = d if len(d) >= 8 else (refined or "").strip()[:12000]
+    return (
+        "Edit only the white region of the inpaint mask; keep black regions unchanged. "
+        + core
+    )
 
 
 @router.get("/studio/output-aspects")
@@ -1389,6 +1400,7 @@ async def api_studio_refine_prompt(
     generate_wavespeed: str | None = Form(None),
     wavespeed_single_reference: str | None = Form(None),
     lock_model_hairstyle: str | None = Form("1"),
+    inpaint_mask: UploadFile | None = File(None),
     session: AsyncSession = Depends(get_session),
     user: User = Depends(get_current_user),
 ) -> StudioRefinePromptOut:
@@ -1441,6 +1453,19 @@ async def api_studio_refine_prompt(
         if not image_bytes:
             raise HTTPException(status_code=400, detail="Пустой файл изображения")
         image_mime = image.content_type
+
+    mask_bytes: bytes | None = None
+    mask_mime: str | None = None
+    if inpaint_mask is not None and (inpaint_mask.filename or "").strip():
+        mask_bytes = await inpaint_mask.read()
+        if len(mask_bytes) > MAX_IMAGE_BYTES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Маска слишком большая (макс. {MAX_IMAGE_BYTES // (1024 * 1024)} МБ)",
+            )
+        if not mask_bytes:
+            raise HTTPException(status_code=400, detail="Пустой файл маски")
+        mask_mime = inpaint_mask.content_type
 
     existing_gen_from_archive: int | None = None
     if mode_n == "photo_edit":
@@ -1508,6 +1533,13 @@ async def api_studio_refine_prompt(
             detail="Добавьте описание, референс и/или выберите сохранённую модель",
         )
 
+    if mask_bytes and not image_bytes:
+        raise HTTPException(
+            status_code=400,
+            detail="Маска задаёт область на изображении — загрузите файл референса или в режиме "
+            "«Доработать фото» выберите снимок из архива вкладки «Картинки».",
+        )
+
     imgs_model: list[UserStudioModelImage] = []
     if sm_loaded is not None:
         imgs_model = sort_model_images_for_studio(list(sm_loaded.images))
@@ -1526,7 +1558,12 @@ async def api_studio_refine_prompt(
         wave_profile=wave_profile_n,
     )
 
-    cost = apply_studio_credit_cost(plan, settings.credit_cost_studio_prompt_refine)
+    base_studio_credit = (
+        settings.credit_cost_studio_inpaint
+        if mask_bytes
+        else settings.credit_cost_studio_prompt_refine
+    )
+    cost = apply_studio_credit_cost(plan, base_studio_credit)
     billing = await ensure_can_consume_credits(session, user, cost)
 
     lock_hair_req = _truthy_lock_model_hairstyle(lock_model_hairstyle)
@@ -1566,152 +1603,213 @@ async def api_studio_refine_prompt(
     wavespeed_message: str | None = None
     if do_wavespeed:
         pub = (settings.public_app_url or "").strip().rstrip("/")
-        image_urls: list[str] = []
-        user_pose_ref_prepended = False
-        if image_bytes:
+        if mask_bytes:
+            assert image_bytes is not None
             try:
-                fid = save_pose_reference_bytes(
+                fid_img = save_pose_reference_bytes(
                     owner_id=oid,
                     raw=image_bytes,
                     content_type=image_mime,
                 )
                 ptok = create_pose_reference_access_token(
-                    user_id=oid, file_id=fid
+                    user_id=oid, file_id=fid_img
                 )
-                image_urls.append(
-                    f"{pub}/api/studio/public-pose-reference?t={quote(ptok, safe='')}"
+                src_url = f"{pub}/api/studio/public-pose-reference?t={quote(ptok, safe='')}"
+                fid_mask = save_pose_reference_bytes(
+                    owner_id=oid,
+                    raw=mask_bytes,
+                    content_type=mask_mime,
                 )
-                user_pose_ref_prepended = True
-            except Exception as e:
-                log.warning(
-                    "studio: не удалось сохранить референс для WaveSpeed: %s",
-                    e,
+                mtok = create_pose_reference_access_token(
+                    user_id=oid, file_id=fid_mask
                 )
-                wavespeed_message = (
-                    "Не удалось подготовить загруженный референс для WaveSpeed. "
-                    "Повторите или уберите файл."
+                mask_url = f"{pub}/api/studio/public-pose-reference?t={quote(mtok, safe='')}"
+                inpaint_prompt = _z_image_inpaint_studio_prompt(
+                    refined=refined, user_description=desc
                 )
-
-        if not wavespeed_message:
-            attach_model_urls = False
-            if mode_n == "model":
-                attach_model_urls = bool(imgs_model)
-            elif mode_n == "no_face":
-                attach_model_urls = bool(sm_loaded and imgs_model)
-
-            if attach_model_urls:
-                for im in imgs_for_ws[:10]:
-                    tok = create_model_image_access_token(
-                        user_id=oid, image_id=im.id
-                    )
-                    image_urls.append(
-                        f"{pub}/api/studio/public-model-image?t={quote(tok, safe='')}"
-                    )
-
-            if not image_urls:
-                wavespeed_message = (
-                    "Нет изображений для WaveSpeed — проверьте режим, модель и файлы."
+                size_inpaint: str | None = (
+                    None
+                    if settings.wavespeed_z_image_inpaint_omit_size
+                    else wavespeed_size_string(aspect_key)
                 )
-
-        if not wavespeed_message and image_urls:
-            if wave_profile_n == "nsfw" and _truthy_wavespeed_flag(
-                wavespeed_single_reference
-            ):
-                if user_pose_ref_prepended and len(image_urls) >= 2:
-                    image_urls = image_urls[:2]
-                else:
-                    image_urls = image_urls[:1]
-
-            pose_is_last_after_reorder = False
-            if wave_profile_n == "regular":
-                pose_is_last_after_reorder = bool(
-                    user_pose_ref_prepended
-                    and mode_n != "photo_edit"
-                    and len(image_urls) >= 2
+                generated_image_url = await z_image_turbo_inpaint_image_url(
+                    api_key=ws_key,
+                    image_url=src_url,
+                    mask_image_url=mask_url,
+                    prompt=inpaint_prompt,
+                    size=size_inpaint,
                 )
-                image_urls = _nano_banana_reorder_image_urls(
-                    image_urls,
-                    studio_mode=mode_n,
-                    user_pose_ref_prepended=user_pose_ref_prepended,
-                )
-                wavespeed_prompt = finalize_nano_banana_studio_prompt(
-                    refined,
-                    studio_mode=mode_n,
-                    user_photo_edit_first=bool(
-                        user_pose_ref_prepended and mode_n == "photo_edit"
-                    ),
-                    user_pose_reference_is_last=pose_is_last_after_reorder,
-                    lock_model_hairstyle=effective_lock_hairstyle,
-                )
-            else:
-                wavespeed_prompt = finalize_wavespeed_studio_prompt(
-                    refined,
-                    studio_mode=mode_n,
-                    user_image_first=user_pose_ref_prepended,
-                    lock_model_hairstyle=effective_lock_hairstyle,
-                )
-            size_for_ws: str | None
-            if settings.wavespeed_seedream_omit_size:
-                size_for_ws = None
-            else:
-                size_for_ws = wavespeed_size_string(aspect_key)
-            try:
-                if wave_profile_n == "regular":
-                    generated_image_url = await nano_banana_pro_edit_image_url(
-                        api_key=ws_key,
-                        image_urls=image_urls,
-                        prompt=wavespeed_prompt,
-                        aspect_ratio=aspect_key,
-                    )
-                else:
-                    generated_image_url = await seedream_v45_edit_image_url(
-                        api_key=ws_key,
-                        image_urls=image_urls,
-                        prompt=wavespeed_prompt,
-                        size=size_for_ws,
-                        wan_edit_tier=wan_tier_n,
-                    )
             except RuntimeError as e:
                 wavespeed_message = str(e)
                 low = wavespeed_message.lower()
-                if wave_profile_n == "regular" and (
-                    "safety" in low
-                    or "guideline" in low
-                    or "nsfw" in low
-                    or "policy" in low
-                ):
+                if "something went wrong" in low or "try again" in low:
                     wavespeed_message = (
                         f"{wavespeed_message} "
-                        "Для режима «Обычные фотографии» действуют ограничения Google; "
-                        "для контента без этих лимитов переключите тип генерации на «NSFW» "
-                        "(редактор из настроек сервера)."
+                        "Проверьте баланс wavespeed.ai, что маска того же размера что и изображение "
+                        "(белое = зона правки, чёрное = без изменений) и публичный HTTPS PUBLIC_APP_URL."
                     )
-                if "something went wrong" in low or "try again" in low:
-                    common = (
-                        f"{wavespeed_message} "
-                        "Часто это: баланс/лимит на wavespeed.ai, кратковременный сбой API "
-                        "(см. status.wavespeed.ai) или слишком тяжёлый/нестандартный запрос. "
-                        "Повторите позже. "
-                    )
-                    if wave_profile_n == "regular":
-                        wavespeed_message = common + (
-                            "При таймаутах Nano Banana Pro попробуйте "
-                            "WAVESPEED_NANO_BANANA_PRO_SYNC=false в backend/.env."
-                        )
-                    else:
-                        wavespeed_message = common + (
-                            "Если сбой стабилен — в backend/.env поставьте "
-                            "WAVESPEED_SEEDREAM_SYNC=false (режим с опросом вместо sync) и перезапустите API. "
-                            f"Публичный референс: {pub}/api/studio/public-model-image?… (без логина — 200 и картинка). "
-                            "Если в Playground тот же JSON срабатывает, а в интеграции нет — "
-                            "попробуйте WAVESPEED_SEEDREAM_OMIT_SIZE=true (как пустой size на сайте)."
-                        )
                 log.warning(
-                    "WaveSpeed generation failed (owner_id=%s actor=%s): %s",
+                    "WaveSpeed Z-Image inpaint failed (owner_id=%s actor=%s): %s",
                     oid,
                     user.id,
                     wavespeed_message,
                 )
+            except Exception as e:
+                log.warning(
+                    "studio inpaint: не удалось сохранить файлы или вызвать API: %s",
+                    e,
+                )
+                wavespeed_message = (
+                    "Не удалось подготовить inpaint (референс или маска). "
+                    "Повторите или уберите маску."
+                )
+        else:
+            image_urls: list[str] = []
+            user_pose_ref_prepended = False
+            if image_bytes:
+                try:
+                    fid = save_pose_reference_bytes(
+                        owner_id=oid,
+                        raw=image_bytes,
+                        content_type=image_mime,
+                    )
+                    ptok = create_pose_reference_access_token(
+                        user_id=oid, file_id=fid
+                    )
+                    image_urls.append(
+                        f"{pub}/api/studio/public-pose-reference?t={quote(ptok, safe='')}"
+                    )
+                    user_pose_ref_prepended = True
+                except Exception as e:
+                    log.warning(
+                        "studio: не удалось сохранить референс для WaveSpeed: %s",
+                        e,
+                    )
+                    wavespeed_message = (
+                        "Не удалось подготовить загруженный референс для WaveSpeed. "
+                        "Повторите или уберите файл."
+                    )
+
+            if not wavespeed_message:
+                attach_model_urls = False
+                if mode_n == "model":
+                    attach_model_urls = bool(imgs_model)
+                elif mode_n == "no_face":
+                    attach_model_urls = bool(sm_loaded and imgs_model)
+
+                if attach_model_urls:
+                    for im in imgs_for_ws[:10]:
+                        tok = create_model_image_access_token(
+                            user_id=oid, image_id=im.id
+                        )
+                        image_urls.append(
+                            f"{pub}/api/studio/public-model-image?t={quote(tok, safe='')}"
+                        )
+
+                if not image_urls:
+                    wavespeed_message = (
+                        "Нет изображений для WaveSpeed — проверьте режим, модель и файлы."
+                    )
+
+            if not wavespeed_message and image_urls:
+                if wave_profile_n == "nsfw" and _truthy_wavespeed_flag(
+                    wavespeed_single_reference
+                ):
+                    if user_pose_ref_prepended and len(image_urls) >= 2:
+                        image_urls = image_urls[:2]
+                    else:
+                        image_urls = image_urls[:1]
+
+                pose_is_last_after_reorder = False
+                if wave_profile_n == "regular":
+                    pose_is_last_after_reorder = bool(
+                        user_pose_ref_prepended
+                        and mode_n != "photo_edit"
+                        and len(image_urls) >= 2
+                    )
+                    image_urls = _nano_banana_reorder_image_urls(
+                        image_urls,
+                        studio_mode=mode_n,
+                        user_pose_ref_prepended=user_pose_ref_prepended,
+                    )
+                    wavespeed_prompt = finalize_nano_banana_studio_prompt(
+                        refined,
+                        studio_mode=mode_n,
+                        user_photo_edit_first=bool(
+                            user_pose_ref_prepended and mode_n == "photo_edit"
+                        ),
+                        user_pose_reference_is_last=pose_is_last_after_reorder,
+                        lock_model_hairstyle=effective_lock_hairstyle,
+                    )
+                else:
+                    wavespeed_prompt = finalize_wavespeed_studio_prompt(
+                        refined,
+                        studio_mode=mode_n,
+                        user_image_first=user_pose_ref_prepended,
+                        lock_model_hairstyle=effective_lock_hairstyle,
+                    )
+                size_for_ws: str | None
+                if settings.wavespeed_seedream_omit_size:
+                    size_for_ws = None
+                else:
+                    size_for_ws = wavespeed_size_string(aspect_key)
+                try:
+                    if wave_profile_n == "regular":
+                        generated_image_url = await nano_banana_pro_edit_image_url(
+                            api_key=ws_key,
+                            image_urls=image_urls,
+                            prompt=wavespeed_prompt,
+                            aspect_ratio=aspect_key,
+                        )
+                    else:
+                        generated_image_url = await seedream_v45_edit_image_url(
+                            api_key=ws_key,
+                            image_urls=image_urls,
+                            prompt=wavespeed_prompt,
+                            size=size_for_ws,
+                            wan_edit_tier=wan_tier_n,
+                        )
+                except RuntimeError as e:
+                    wavespeed_message = str(e)
+                    low = wavespeed_message.lower()
+                    if wave_profile_n == "regular" and (
+                        "safety" in low
+                        or "guideline" in low
+                        or "nsfw" in low
+                        or "policy" in low
+                    ):
+                        wavespeed_message = (
+                            f"{wavespeed_message} "
+                            "Для режима «Обычные фотографии» действуют ограничения Google; "
+                            "для контента без этих лимитов переключите тип генерации на «NSFW» "
+                            "(редактор из настроек сервера)."
+                        )
+                    if "something went wrong" in low or "try again" in low:
+                        common = (
+                            f"{wavespeed_message} "
+                            "Часто это: баланс/лимит на wavespeed.ai, кратковременный сбой API "
+                            "(см. status.wavespeed.ai) или слишком тяжёлый/нестандартный запрос. "
+                            "Повторите позже. "
+                        )
+                        if wave_profile_n == "regular":
+                            wavespeed_message = common + (
+                                "При таймаутах Nano Banana Pro попробуйте "
+                                "WAVESPEED_NANO_BANANA_PRO_SYNC=false в backend/.env."
+                            )
+                        else:
+                            wavespeed_message = common + (
+                                "Если сбой стабилен — в backend/.env поставьте "
+                                "WAVESPEED_SEEDREAM_SYNC=false (режим с опросом вместо sync) и перезапустите API. "
+                                f"Публичный референс: {pub}/api/studio/public-model-image?… (без логина — 200 и картинка). "
+                                "Если в Playground тот же JSON срабатывает, а в интеграции нет — "
+                                "попробуйте WAVESPEED_SEEDREAM_OMIT_SIZE=true (как пустой size на сайте)."
+                            )
+                    log.warning(
+                        "WaveSpeed generation failed (owner_id=%s actor=%s): %s",
+                        oid,
+                        user.id,
+                        wavespeed_message,
+                    )
 
     generation_id: int | None = None
     gen_mid = None if mode_n == "photo_edit" else mid
@@ -1753,6 +1851,7 @@ async def api_studio_refine_prompt(
             "studio_wave_profile": wave_profile_n,
             "lock_model_hairstyle": effective_lock_hairstyle,
             "lock_model_hairstyle_requested": lock_hair_req,
+            "inpaint_mask": bool(mask_bytes),
         },
     )
     await session.commit()

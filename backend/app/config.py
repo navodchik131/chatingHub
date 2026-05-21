@@ -197,6 +197,14 @@ class Settings(BaseSettings):
     wavespeed_nano_banana_pro_resolution: str = Field(default="2k")
     wavespeed_nano_banana_pro_sync: bool = Field(default=True)
     wavespeed_nano_banana_pro_output_format: str = Field(default="png")
+    # Z-Image Turbo Inpaint (маска: белое — редактировать, чёрное — сохранить)
+    # https://wavespeed.ai/docs/docs-api/wavespeed-ai/z-image-turbo-inpaint
+    wavespeed_z_image_inpaint_path: str = Field(
+        default="/api/v3/wavespeed-ai/z-image/turbo-inpaint",
+    )
+    # True = не передавать size (размер остаётся как у входного изображения).
+    wavespeed_z_image_inpaint_omit_size: bool = Field(default=True)
+    credit_cost_studio_inpaint: int = Field(default=2)
 
     billing_success_path: str = "/?billing=success"
 
