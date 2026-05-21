@@ -96,6 +96,8 @@ from app.services.studio_openai import (
     describe_motion_video_first_frame_scene_openai,
     describe_motion_video_frames_openai,
     describe_reference_image_openai,
+    finalize_masked_fullframe_nano_prompt,
+    finalize_masked_fullframe_wan_prompt,
     finalize_nano_banana_studio_prompt,
     finalize_wavespeed_studio_prompt,
     generate_model_profile_json_from_images,
@@ -440,6 +442,43 @@ def _nano_banana_reorder_image_urls(
     if user_pose_ref_prepended and len(image_urls) >= 2:
         return image_urls[1:] + [image_urls[0]]
     return image_urls
+
+
+def _masked_full_frame_wan_image_urls(
+    base_url: str,
+    mask_url: str,
+    identity_urls: list[str],
+    *,
+    wave_profile_n: str,
+    wavespeed_single_reference: str | None,
+) -> list[str]:
+    wan_cap = 9
+    urls = [base_url, mask_url] + identity_urls
+    urls = urls[:wan_cap]
+    if wave_profile_n == "nsfw" and _truthy_wavespeed_flag(wavespeed_single_reference):
+        if len(urls) <= 2:
+            return urls
+        return [base_url, mask_url, urls[2]]
+    return urls
+
+
+def _masked_full_frame_nano_image_urls_from_wan_list(
+    wan_ordered: list[str],
+    *,
+    studio_mode: str,
+    nano_cap: int = 14,
+) -> list[str]:
+    if len(wan_ordered) < 2:
+        return wan_ordered[:nano_cap]
+    if studio_mode == "photo_edit":
+        return wan_ordered[:nano_cap]
+    base_u, mask_u, *identity_rest = (
+        wan_ordered[0],
+        wan_ordered[1],
+        wan_ordered[2:],
+    )
+    nano_list = [*identity_rest, base_u, mask_u]
+    return nano_list[:nano_cap]
 
 
 def _model_dir(user_id: int, model_id: int) -> Path:
@@ -1651,147 +1690,97 @@ async def api_studio_refine_prompt(
             assert image_bytes is not None
             try:
                 if settings.studio_regional_masked_edit:
-                    from app.services.studio_masked_regional_edit import (
-                        REGIONAL_WS_PROMPT_ADDON_EN,
-                        compose_regional_masked_png,
-                        regional_masked_crop_to_png_workspace,
-                    )
-
-                    crop_png_bytes, reg_ws = await anyio.to_thread.run_sync(
-                        regional_masked_crop_to_png_workspace,
-                        image_bytes,
-                        mask_bytes,
-                        pad_ratio=settings.studio_regional_masked_edit_pad_ratio,
-                        min_crop_side_px=settings.studio_regional_masked_min_crop_side_px,
-                        feather_radius=settings.studio_regional_masked_feather_radius,
-                        mask_threshold=settings.studio_regional_masked_mask_threshold,
-                    )
-                    fid_crop = save_pose_reference_bytes(
+                    fid_base = save_pose_reference_bytes(
                         owner_id=oid,
-                        raw=crop_png_bytes,
-                        content_type="image/png",
+                        raw=image_bytes,
+                        content_type=(image_mime or "image/jpeg"),
                     )
-                    ctok = create_pose_reference_access_token(
-                        user_id=oid, file_id=fid_crop
+                    btok = create_pose_reference_access_token(
+                        user_id=oid, file_id=fid_base
                     )
-                    crop_url = f"{pub}/api/studio/public-pose-reference?t={quote(ctok, safe='')}"
+                    base_url_wm = (
+                        f"{pub}/api/studio/public-pose-reference?t={quote(btok, safe='')}"
+                    )
 
+                    fid_mask_wm = save_pose_reference_bytes(
+                        owner_id=oid,
+                        raw=mask_bytes,
+                        content_type=(mask_mime or "image/png"),
+                    )
+                    mtk = create_pose_reference_access_token(
+                        user_id=oid, file_id=fid_mask_wm
+                    )
+                    mask_url_wm = (
+                        f"{pub}/api/studio/public-pose-reference?t={quote(mtk, safe='')}"
+                    )
+
+                    attach_mask_mr = False
                     if mode_n == "model":
-                        attach_regional_mr = bool(imgs_model)
+                        attach_mask_mr = bool(imgs_model)
                     elif mode_n == "no_face":
-                        attach_regional_mr = bool(sm_loaded and imgs_model)
+                        attach_mask_mr = bool(sm_loaded and imgs_model)
                     elif photo_edit_regional_identity_requested:
-                        attach_regional_mr = True
-                    else:
-                        attach_regional_mr = False
+                        attach_mask_mr = True
 
-                    regional_image_urls: list[str] = [crop_url]
-                    if attach_regional_mr:
-                        for im in imgs_for_ws:
-                            if len(regional_image_urls) >= 9:
+                    identity_urls_wm: list[str] = []
+                    if attach_mask_mr:
+                        for im_wm in imgs_for_ws:
+                            if len(identity_urls_wm) >= 7:
                                 break
-                            tok = create_model_image_access_token(
-                                user_id=oid, image_id=im.id
+                            tk_wm = create_model_image_access_token(
+                                user_id=oid, image_id=im_wm.id
                             )
-                            regional_image_urls.append(
-                                f"{pub}/api/studio/public-model-image?t={quote(tok, safe='')}"
+                            identity_urls_wm.append(
+                                f"{pub}/api/studio/public-model-image?t={quote(tk_wm, safe='')}"
                             )
 
-                    if wave_profile_n == "nsfw" and _truthy_wavespeed_flag(
-                        wavespeed_single_reference
-                    ):
-                        mr_pose_prepended = True
-                        if mr_pose_prepended and len(regional_image_urls) >= 2:
-                            regional_image_urls = regional_image_urls[:2]
-                        else:
-                            regional_image_urls = regional_image_urls[:1]
-
-                    nano_regional_urls = regional_image_urls
-                    pose_last_regional = False
-                    if wave_profile_n == "regular":
-                        nano_regional_urls = _nano_banana_reorder_image_urls(
-                            regional_image_urls,
-                            studio_mode=mode_n,
-                            user_pose_ref_prepended=True,
-                        )
-                        pose_last_regional = bool(len(nano_regional_urls) >= 2)
-
-                    addon = REGIONAL_WS_PROMPT_ADDON_EN.strip()
-                    photoreal_anchor = (
-                        "Maintain photoreal output (natural skin, photography-like); "
-                        "do NOT shift to anime, illustration or a different unrelated face "
-                        "unless that is explicitly asked in the user's request."
-                        + (
-                            " Match the recognizable identity from the labeled reference portraits."
-                            if attach_regional_mr
-                            else ""
-                        )
+                    wan_image_urls_wm = _masked_full_frame_wan_image_urls(
+                        base_url_wm,
+                        mask_url_wm,
+                        identity_urls_wm,
+                        wave_profile_n=wave_profile_n,
+                        wavespeed_single_reference=wavespeed_single_reference,
                     )
+
+                    nano_image_urls_wm = _masked_full_frame_nano_image_urls_from_wan_list(
+                        wan_image_urls_wm,
+                        studio_mode=mode_n,
+                    )
+
                     if wave_profile_n == "regular":
-                        ws_regional_prompt = (
-                            finalize_nano_banana_studio_prompt(
-                                refined,
-                                studio_mode=mode_n,
-                                user_photo_edit_first=bool(mode_n == "photo_edit"),
-                                user_pose_reference_is_last=pose_last_regional,
-                                lock_model_hairstyle=effective_lock_hairstyle,
-                            )
-                            + " "
-                            + addon
-                            + " "
-                            + photoreal_anchor
+                        ws_mask_prompt = finalize_masked_fullframe_nano_prompt(
+                            refined,
+                            studio_mode=mode_n,
+                            lock_model_hairstyle=effective_lock_hairstyle,
+                            attach_identity_refs=attach_mask_mr,
                         )
                     else:
-                        ws_regional_prompt = (
-                            finalize_wavespeed_studio_prompt(
-                                refined,
-                                studio_mode=mode_n,
-                                user_image_first=True,
-                                lock_model_hairstyle=effective_lock_hairstyle,
-                            )
-                            + " "
-                            + addon
-                            + " "
-                            + photoreal_anchor
+                        ws_mask_prompt = finalize_masked_fullframe_wan_prompt(
+                            refined,
+                            studio_mode=mode_n,
+                            lock_model_hairstyle=effective_lock_hairstyle,
+                            attach_identity_refs=attach_mask_mr,
                         )
+
                     if settings.wavespeed_seedream_omit_size:
-                        size_for_regional: str | None = None
+                        size_for_wm: str | None = None
                     else:
-                        size_for_regional = wavespeed_size_string(aspect_key)
+                        size_for_wm = wavespeed_size_string(aspect_key)
+
                     if wave_profile_n == "regular":
-                        ws_crop_out = await nano_banana_pro_edit_image_url(
+                        generated_image_url = await nano_banana_pro_edit_image_url(
                             api_key=ws_key,
-                            image_urls=nano_regional_urls,
-                            prompt=ws_regional_prompt,
+                            image_urls=nano_image_urls_wm,
+                            prompt=ws_mask_prompt,
                             aspect_ratio=aspect_key,
                         )
                     else:
-                        ws_crop_out = await seedream_v45_edit_image_url(
+                        generated_image_url = await seedream_v45_edit_image_url(
                             api_key=ws_key,
-                            image_urls=regional_image_urls,
-                            prompt=ws_regional_prompt,
-                            size=size_for_regional,
+                            image_urls=wan_image_urls_wm,
+                            prompt=ws_mask_prompt,
+                            size=size_for_wm,
                             wan_edit_tier=wan_tier_n,
-                        )
-                    edited_crop_bytes, dl_err = await _download_image_bytes_best_effort(
-                        ws_crop_out
-                    )
-                    if edited_crop_bytes is None:
-                        wavespeed_message = (
-                            "Не удалось забрать картинку кропа с WaveSpeed "
-                            + (dl_err or "неизвестная ошибка загрузки")
-                        )
-                        log.warning(
-                            "Regional masked edit: crop download empty (owner_id=%s): %s",
-                            oid,
-                            wavespeed_message,
-                        )
-                    else:
-                        regional_composed_png = await anyio.to_thread.run_sync(
-                            compose_regional_masked_png,
-                            reg_ws,
-                            edited_crop_bytes,
-                            harmonize_ring_thresh=settings.studio_regional_masked_harmonize_ring_thresh,
                         )
                 else:
                     fid_img = save_pose_reference_bytes(
@@ -1878,7 +1867,7 @@ async def api_studio_refine_prompt(
                                 "проверьте WAVESPEED_SEEDREAM_OMIT_SIZE."
                             )
                     log.warning(
-                        "WaveSpeed regional-masked crop failed (owner_id=%s actor=%s): %s",
+                        "WaveSpeed full-frame mask edit failed (owner_id=%s actor=%s): %s",
                         oid,
                         user.id,
                         wavespeed_message,
@@ -1886,10 +1875,10 @@ async def api_studio_refine_prompt(
             except Exception as e:
                 if settings.studio_regional_masked_edit and mask_bytes:
                     log.warning(
-                        "studio regional masked compose: ошибка пайплайна: %s", e
+                        "studio masked fullframe nano/wan compose: ошибка пайплайна: %s", e
                     )
                     wavespeed_message = (
-                        "Региональное редактирование по маске не удалось. "
+                        "Редактирование с маской через Nano/WAN (полный кадр + маска отдельным URL) не удалось. "
                         "Проверьте маску и размер файла или повторите позже."
                     )
                 elif mask_bytes:
@@ -2115,7 +2104,7 @@ async def api_studio_refine_prompt(
             "inpaint_mask": bool(mask_bytes),
             "regional_masked_compose_ready": regional_composed_png is not None,
             "masked_edit_engine": (
-                ("z_image_inpaint" if not settings.studio_regional_masked_edit else "regional_crop_wave")
+                ("z_image_inpaint" if not settings.studio_regional_masked_edit else "nano_wan_multimage_mask_pair")
                 if mask_bytes
                 else None
             ),

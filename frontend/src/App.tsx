@@ -659,7 +659,7 @@ export default function App() {
   const [appSection, setAppSection] = useState<'chat' | 'studio' | 'studio_video'>('chat')
   const [studioDesc, setStudioDesc] = useState('')
   const [studioFile, setStudioFile] = useState<File | null>(null)
-  /** PNG-маска для регионального редактирования (или Z-Inpaint если STUDIO_REGIONAL_MASKED_EDIT=false). */
+  /** Маска (белое = зона замены): Multi-URL в Nano/WAN при STUDIO_REGIONAL_MASKED_EDIT=true или Z-Inpaint если false. */
   const [studioInpaintMaskFile, setStudioInpaintMaskFile] = useState<File | null>(null)
   /** Режим маски: рисуем белым по превью референса. */
   const [studioPaintInpaintMask, setStudioPaintInpaintMask] = useState(false)
@@ -4792,10 +4792,11 @@ export default function App() {
                 }}
               />
               <span>
-                Нарисовать маску кистью: белым отметить зону замены. Сервер обрезает кадр и шлёт в тот же редактор,
-                что и без маски (Nano Banana или WAN&nbsp;2.7), затем мягко вшивает результат с подгонкой тона по
-                краям. Чтобы использовать вместо этого Z‑Image Turbo Inpaint, на бэкенде задайте{' '}
-                <code className="mono">STUDIO_REGIONAL_MASKED_EDIT=false</code>.
+                Нарисовать маску кистью: белым отметить зону замены. Если на сервере{' '}
+                <code className="mono">STUDIO_REGIONAL_MASKED_EDIT=true</code>, то в Nano Banana или WAN&nbsp;2.7
+                уходит <strong>полный кадр</strong> и <strong>маска тем же размером</strong> отдельными
+                входами‑картинками (далее при необходимости — фото модели), промпт задаёт ограничения по области.
+                Если выключите флаг на бэкенде, для маски включается Z‑Image Turbo Inpaint с явным полем маски.
               </span>
             </label>
             {studioPaintInpaintMask && studioInpaintBaseImageSrc ? (

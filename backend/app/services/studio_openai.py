@@ -225,6 +225,152 @@ def finalize_nano_banana_studio_prompt(
     return out
 
 
+_FULLFRAME_MASK_PAIR_EN = (
+    "[INPUT_PAIR — BINARY MASK, NOT EXTRA PHOTOS] **Image numbering is 1-based in request order.** "
+    "**Image 1**: the full-resolution **RGB photograph** to edit — keep framing, palette, shadows, textures, lens/DOF globally unless USER_TEXT overrides. "
+    "**Image 2**: a **mask image registered 1:1** with Image 1 (same width×height). "
+    "**High luminance / white** = pixels where you **may repaint** according to this JSON brief and USER edits. "
+    "**Black / near-black** = **locked pixels** — do **not** change content, anatomy, shading, warp, hallucinate overlays, anime-ify, or background swap outside white; micro-blending is allowed **only along the boundary** so seams stay invisible.\n\n"
+)
+
+_WAN_MASK_FULLFRAME_IDENTITY_TAIL = (
+    "**From Image 3 onward** (when present): portrait references of ONE saved-studio model "
+    "**for WHO only** — face shape, facial features, consistent skin grain/tone continuity, hairline/hair palette, plausible body proportions/shape matching that person. "
+    "**Do not** steal pose, camera lens/angle, cropping, wardrobe/coverage composition, silhouette edges, shadows layout, backdrop, lighting direction, nor skin micro-pattern **from those portraits**. "
+    "Scene/lighting/framing/obvious garment coverage semantics come **only** from Images 1–2; identity references constrain **recipient** anatomy when changing or replacing humans **inside approved white-mask regions**. "
+)
+
+_WAN_MASK_FULLFRAME_PHOTO_EDIT_NO_ID = (
+    "There are **no** separate identity uploads after Images 1–2 — obey the JSON brief and USER_TEXT strictly; preserve the same recognizable person/outfit/environment **outside locked black** zones.\n\n"
+)
+
+_FULLFRAME_PHOTOREAL_APPEND = (
+    "Maintain photographic realism (natural skin, sensor-like textures); "
+    "**do NOT** anime-ify, illustrative stylize, or swap in an unrelated person's face globally "
+    "**unless USER_TEXT explicitly requests** that style/subject pivot."
+)
+
+
+def finalize_masked_fullframe_wan_prompt(
+    refined_prompt: str,
+    *,
+    studio_mode: str,
+    lock_model_hairstyle: bool,
+    attach_identity_refs: bool,
+) -> str:
+    """WAN / WAN 2.x order: Image1=canvas, Image2=mask aligned, then identity refs."""
+    mode = (studio_mode or "model").strip().lower()
+    p = (refined_prompt or "").strip()
+    out = _FULLFRAME_MASK_PAIR_EN
+    if mode == "photo_edit":
+        out += (
+            _WAN_MASK_FULLFRAME_IDENTITY_TAIL
+            if attach_identity_refs
+            else _WAN_MASK_FULLFRAME_PHOTO_EDIT_NO_ID
+        )
+        merged = out + p if p else out.rstrip()
+        return merged.rstrip() + "\n\n" + _FULLFRAME_PHOTOREAL_APPEND
+    if mode == "no_face":
+        hair = (
+            "**Hairstyle** follows MODEL/JSON thumbnails when hair is unseen on Image 1 — not invented from stray pixels.\n\n"
+            if lock_model_hairstyle
+            else "**Hairstyle** may follow visible hair on Image 1 when JSON allows POSE-like cues.\n\n"
+        )
+        if attach_identity_refs:
+            out += (
+                "**Image 1** defines framing/crop/framing-lock for NO_FACE uploads — **never** widen the canvas to introduce a cranium/head/face omitted from RGB.\n\n"
+                + hair
+                + _WAN_MASK_FULLFRAME_IDENTITY_TAIL
+            )
+        else:
+            out += (
+                "**Image 1** headless/legs/feet framing by design — **Image 2** is mask only; hallucinate anatomical completions **strictly inside white** where pixels exist.\n\n"
+                + hair
+            )
+        merged = out + (p if p else "")
+        return (
+            merged.rstrip()
+            + _WAVESPEED_NO_FACE_SUFFIX
+            + "\n\n"
+            + _FULLFRAME_PHOTOREAL_APPEND
+        )
+    # studio_mode == model
+    if attach_identity_refs:
+        out += _WAN_MASK_FULLFRAME_IDENTITY_TAIL
+    else:
+        out += "**No MODEL identity URLs after Images 1–2** — edits must stay faithful to recognizable subject on Image 1 when JSON dictates.\n\n"
+    merged = out + (p if p else "")
+    return merged.rstrip() + "\n\n" + _FULLFRAME_PHOTOREAL_APPEND
+
+
+_NANO_FULLFRAME_PHOTO_EDIT = (
+    _FULLFRAME_MASK_PAIR_EN
+    + "**Only Images 1–2 anchor the spatial edit** unless more URLs explicitly exist for identity afterward. "
+    + "Honor JSON + USER edits; **never** refactor or restyle blacks; keep **outside-mask** pixels bitwise-stable.\n\n"
+)
+
+_NANO_FULLFRAME_MULTI_IDENTITY = (
+    "[MULTI_IMAGE — MODEL + BINARY MASK] **Leading images**: studio portrait thumbnails of ONE person — **WHO only**: "
+    "face geometry, plausible skin realism, characteristic hair silhouette/tone continuity, torso/limb proportion bias. "
+    "**Do NOT** copy pose yaw, cropping window, garments/coverage silhouette, backlight topology, backdrop texture, focal length cues, shadow painting, nor studio lighting setups from thumbnails — derive those solely from Images **N−1** and **N−2** semantics below.\n\n"
+    "**Penultimate image (RGB)**: authoritative **composition canvas**: lensing, cropping, viewpoint, posing, textiles/coverage touching skin, ambience, occlusion order, global illumination cues.\n\n"
+    "**LAST image**: **spatial mask PNG** (**NOT photographic content**);\n "
+    "**white = permissible generation zones** aligning with USER/JSON intents; "
+    "**black = frozen pixels**. "
+    "**Ignore** pictorial depiction on LAST — treat luminance purely as stencil weights.\n\n"
+)
+
+_NANO_FULLFRAME_TAIL_NO_FACE_ATTACH = (
+    "**NO_FACE guard:** NEVER rebuild a frontal portrait or skull where **Penultimate RGB** withheld them; thumbnails must not force head apparition into blacks. Body identity obeys thumbnails **only inside white** on visible epidermis.\n\n"
+)
+
+
+def finalize_masked_fullframe_nano_prompt(
+    refined_prompt: str,
+    *,
+    studio_mode: str,
+    lock_model_hairstyle: bool,
+    attach_identity_refs: bool,
+) -> str:
+    """
+    Nano order when identity refs attach (model/no_face path):
+      [...identity thumbnails..., PENULTIMATE=RGB canvas, LAST=aligned mask].
+
+    Nano order when identity absent or photo_edit: [canvas, mask, optional trailing refs unchanged].
+    """
+    mode = (studio_mode or "model").strip().lower()
+    p = (refined_prompt or "").strip()
+    trailer = ("\n\n" + _FULLFRAME_PHOTOREAL_APPEND).rstrip()
+
+    if mode == "photo_edit":
+        extra = ""
+        if attach_identity_refs:
+            extra = (
+                "\n\n**Images 3+** (when present): MODEL portrait references — constrain face/skin/hair continuity "
+                "**primarily inside high-luminance mask zones** without violating black-locked periphery.\n\n"
+            )
+        merged = (_NANO_FULLFRAME_PHOTO_EDIT.strip() + extra + (p if p else "")).rstrip()
+        return merged + trailer
+
+    if attach_identity_refs and mode != "photo_edit":
+        hair = (
+            "**Hairstyle obeys JSON/MODEL thumbnails — not improvised from penultimate stray flyaways**\n\n"
+            if lock_model_hairstyle
+            else "**Hairstyle** may loosely match penultimate curls when USER JSON flags POSE_REFERENCE.\n\n"
+        )
+        no_face_patch = (
+            _NANO_FULLFRAME_TAIL_NO_FACE_ATTACH if mode == "no_face" else ""
+        )
+        head = _NANO_FULLFRAME_MULTI_IDENTITY + hair + no_face_patch
+        merged = (head + p) if p else head.rstrip()
+        return merged.rstrip() + trailer
+
+    pf = (_FULLFRAME_MASK_PAIR_EN.strip() + "\n\n").rstrip()
+    note = "**No MODEL identity thumbnails** after the mask URL — hallucination budget constrained to white stencil interior.\n\n"
+    merged = (pf + note + (p if p else "")).rstrip()
+    return merged + trailer
+
+
 # Если .env задал пустой путь или на сервере нет data/prompts — не падаем с 503.
 _DEFAULT_IMAGE_STUDIO_SYSTEM = """
 You are a prompt builder for the WAN 2.7 Image Edit model.
