@@ -8,6 +8,7 @@ from pathlib import Path
 from urllib.parse import quote
 
 import anyio
+import httpx
 
 from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse
@@ -136,11 +137,29 @@ from app.services.wavespeed_client import (
     z_image_turbo_inpaint_image_url,
 )
 
-log = logging.getLogger(__name__)
-
 router = APIRouter(tags=["studio"])
 
+log = logging.getLogger(__name__)
+
 MAX_MODEL_IMAGES = 5
+
+
+async def _download_image_bytes_best_effort(url: str) -> tuple[bytes | None, str | None]:
+    u = (url or "").strip()
+    if not u:
+        return None, "Пустая ссылка на изображение"
+    timeout = float(settings.studio_archive_download_timeout_seconds)
+    try:
+        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+            resp = await client.get(u)
+            resp.raise_for_status()
+            content = resp.content
+    except Exception as e:
+        log.warning("studio: download bytes failed (%s): %s", u[:260], e)
+        return None, str(e)
+    if not content:
+        return None, "Пустой ответ провайдера"
+    return content, None
 
 
 def _coerce_camera_preset_id(raw: str | None) -> str | None:
@@ -1601,68 +1620,208 @@ async def api_studio_refine_prompt(
 
     generated_image_url: str | None = None
     wavespeed_message: str | None = None
+    regional_composed_png: bytes | None = None
     if do_wavespeed:
         pub = (settings.public_app_url or "").strip().rstrip("/")
         if mask_bytes:
             assert image_bytes is not None
             try:
-                fid_img = save_pose_reference_bytes(
-                    owner_id=oid,
-                    raw=image_bytes,
-                    content_type=image_mime,
-                )
-                ptok = create_pose_reference_access_token(
-                    user_id=oid, file_id=fid_img
-                )
-                src_url = f"{pub}/api/studio/public-pose-reference?t={quote(ptok, safe='')}"
-                fid_mask = save_pose_reference_bytes(
-                    owner_id=oid,
-                    raw=mask_bytes,
-                    content_type=mask_mime,
-                )
-                mtok = create_pose_reference_access_token(
-                    user_id=oid, file_id=fid_mask
-                )
-                mask_url = f"{pub}/api/studio/public-pose-reference?t={quote(mtok, safe='')}"
-                inpaint_prompt = _z_image_inpaint_studio_prompt(
-                    refined=refined, user_description=desc
-                )
-                size_inpaint: str | None = (
-                    None
-                    if settings.wavespeed_z_image_inpaint_omit_size
-                    else wavespeed_size_string(aspect_key)
-                )
-                generated_image_url = await z_image_turbo_inpaint_image_url(
-                    api_key=ws_key,
-                    image_url=src_url,
-                    mask_image_url=mask_url,
-                    prompt=inpaint_prompt,
-                    size=size_inpaint,
-                )
+                if settings.studio_regional_masked_edit:
+                    from app.services.studio_masked_regional_edit import (
+                        REGIONAL_WS_PROMPT_ADDON_EN,
+                        compose_regional_masked_png,
+                        regional_masked_crop_to_png_workspace,
+                    )
+
+                    crop_png_bytes, reg_ws = await anyio.to_thread.run_sync(
+                        regional_masked_crop_to_png_workspace,
+                        image_bytes,
+                        mask_bytes,
+                        pad_ratio=settings.studio_regional_masked_edit_pad_ratio,
+                        min_crop_side_px=settings.studio_regional_masked_min_crop_side_px,
+                        feather_radius=settings.studio_regional_masked_feather_radius,
+                        mask_threshold=settings.studio_regional_masked_mask_threshold,
+                    )
+                    fid_crop = save_pose_reference_bytes(
+                        owner_id=oid,
+                        raw=crop_png_bytes,
+                        content_type="image/png",
+                    )
+                    ctok = create_pose_reference_access_token(
+                        user_id=oid, file_id=fid_crop
+                    )
+                    crop_url = f"{pub}/api/studio/public-pose-reference?t={quote(ctok, safe='')}"
+                    addon = REGIONAL_WS_PROMPT_ADDON_EN.strip()
+                    if wave_profile_n == "regular":
+                        ws_regional_prompt = (
+                            finalize_nano_banana_studio_prompt(
+                                refined,
+                                studio_mode=mode_n,
+                                user_photo_edit_first=bool(mode_n == "photo_edit"),
+                                user_pose_reference_is_last=False,
+                                lock_model_hairstyle=effective_lock_hairstyle,
+                            )
+                            + " "
+                            + addon
+                        )
+                    else:
+                        ws_regional_prompt = (
+                            finalize_wavespeed_studio_prompt(
+                                refined,
+                                studio_mode=mode_n,
+                                user_image_first=True,
+                                lock_model_hairstyle=effective_lock_hairstyle,
+                            )
+                            + " "
+                            + addon
+                        )
+                    if settings.wavespeed_seedream_omit_size:
+                        size_for_regional: str | None = None
+                    else:
+                        size_for_regional = wavespeed_size_string(aspect_key)
+                    if wave_profile_n == "regular":
+                        ws_crop_out = await nano_banana_pro_edit_image_url(
+                            api_key=ws_key,
+                            image_urls=[crop_url],
+                            prompt=ws_regional_prompt,
+                            aspect_ratio=aspect_key,
+                        )
+                    else:
+                        ws_crop_out = await seedream_v45_edit_image_url(
+                            api_key=ws_key,
+                            image_urls=[crop_url],
+                            prompt=ws_regional_prompt,
+                            size=size_for_regional,
+                            wan_edit_tier=wan_tier_n,
+                        )
+                    edited_crop_bytes, dl_err = await _download_image_bytes_best_effort(
+                        ws_crop_out
+                    )
+                    if edited_crop_bytes is None:
+                        wavespeed_message = (
+                            "Не удалось забрать картинку кропа с WaveSpeed "
+                            + (dl_err or "неизвестная ошибка загрузки")
+                        )
+                        log.warning(
+                            "Regional masked edit: crop download empty (owner_id=%s): %s",
+                            oid,
+                            wavespeed_message,
+                        )
+                    else:
+                        regional_composed_png = await anyio.to_thread.run_sync(
+                            compose_regional_masked_png,
+                            reg_ws,
+                            edited_crop_bytes,
+                            harmonize_ring_thresh=settings.studio_regional_masked_harmonize_ring_thresh,
+                        )
+                else:
+                    fid_img = save_pose_reference_bytes(
+                        owner_id=oid,
+                        raw=image_bytes,
+                        content_type=image_mime,
+                    )
+                    ptok = create_pose_reference_access_token(
+                        user_id=oid, file_id=fid_img
+                    )
+                    src_url = f"{pub}/api/studio/public-pose-reference?t={quote(ptok, safe='')}"
+                    fid_mask = save_pose_reference_bytes(
+                        owner_id=oid,
+                        raw=mask_bytes,
+                        content_type=mask_mime,
+                    )
+                    mtok = create_pose_reference_access_token(
+                        user_id=oid, file_id=fid_mask
+                    )
+                    mask_url = (
+                        f"{pub}/api/studio/public-pose-reference?t={quote(mtok, safe='')}"
+                    )
+                    inpaint_prompt = _z_image_inpaint_studio_prompt(
+                        refined=refined, user_description=desc
+                    )
+                    size_inpaint: str | None = (
+                        None
+                        if settings.wavespeed_z_image_inpaint_omit_size
+                        else wavespeed_size_string(aspect_key)
+                    )
+                    generated_image_url = await z_image_turbo_inpaint_image_url(
+                        api_key=ws_key,
+                        image_url=src_url,
+                        mask_image_url=mask_url,
+                        prompt=inpaint_prompt,
+                        size=size_inpaint,
+                    )
             except RuntimeError as e:
                 wavespeed_message = str(e)
                 low = wavespeed_message.lower()
-                if "something went wrong" in low or "try again" in low:
-                    wavespeed_message = (
-                        f"{wavespeed_message} "
-                        "Проверьте баланс wavespeed.ai, что маска того же размера что и изображение "
-                        "(белое = зона правки, чёрное = без изменений) и публичный HTTPS PUBLIC_APP_URL."
+                used_z = not settings.studio_regional_masked_edit
+                if used_z:
+                    if "something went wrong" in low or "try again" in low:
+                        wavespeed_message = (
+                            f"{wavespeed_message} "
+                            "Проверьте баланс wavespeed.ai, что маска того же размера что и изображение "
+                            "(белое = зона правки, чёрное = без изменений) и публичный HTTPS PUBLIC_APP_URL."
+                        )
+                    log.warning(
+                        "WaveSpeed Z-Image inpaint failed (owner_id=%s actor=%s): %s",
+                        oid,
+                        user.id,
+                        wavespeed_message,
                     )
-                log.warning(
-                    "WaveSpeed Z-Image inpaint failed (owner_id=%s actor=%s): %s",
-                    oid,
-                    user.id,
-                    wavespeed_message,
-                )
+                else:
+                    if wave_profile_n == "regular" and (
+                        "safety" in low
+                        or "guideline" in low
+                        or "nsfw" in low
+                        or "policy" in low
+                    ):
+                        wavespeed_message = (
+                            f"{wavespeed_message} "
+                            "Для режима «Обычные фотографии» действуют ограничения Google; "
+                            "для контента без этих лимитов переключите тип генерации на «NSFW» "
+                            "(редактор из настроек сервера)."
+                        )
+                    if "something went wrong" in low or "try again" in low:
+                        common = (
+                            f"{wavespeed_message} "
+                            "Часто это: баланс/лимит на wavespeed.ai, кратковременный сбой API "
+                            "(см. status.wavespeed.ai) или слишком тяжёлый запрос. "
+                            "Повторите позже. "
+                        )
+                        if wave_profile_n == "regular":
+                            wavespeed_message = common + (
+                                "При таймаутах Nano Banana Pro попробуйте "
+                                "WAVESPEED_NANO_BANANA_PRO_SYNC=false в backend/.env."
+                            )
+                        else:
+                            wavespeed_message = common + (
+                                "Если сбой стабилен — в backend/.env поставьте "
+                                "WAVESPEED_SEEDREAM_SYNC=false (режим с опросом вместо sync); "
+                                "проверьте WAVESPEED_SEEDREAM_OMIT_SIZE."
+                            )
+                    log.warning(
+                        "WaveSpeed regional-masked crop failed (owner_id=%s actor=%s): %s",
+                        oid,
+                        user.id,
+                        wavespeed_message,
+                    )
             except Exception as e:
-                log.warning(
-                    "studio inpaint: не удалось сохранить файлы или вызвать API: %s",
-                    e,
-                )
-                wavespeed_message = (
-                    "Не удалось подготовить inpaint (референс или маска). "
-                    "Повторите или уберите маску."
-                )
+                if settings.studio_regional_masked_edit and mask_bytes:
+                    log.warning(
+                        "studio regional masked compose: ошибка пайплайна: %s", e
+                    )
+                    wavespeed_message = (
+                        "Региональное редактирование по маске не удалось. "
+                        "Проверьте маску и размер файла или повторите позже."
+                    )
+                elif mask_bytes:
+                    log.warning(
+                        "studio inpaint: не удалось сохранить файлы или вызвать API: %s",
+                        e,
+                    )
+                    wavespeed_message = (
+                        "Не удалось подготовить inpaint (референс или маска). "
+                        "Повторите или уберите маску."
+                    )
         else:
             image_urls: list[str] = []
             user_pose_ref_prepended = False
@@ -1813,7 +1972,30 @@ async def api_studio_refine_prompt(
 
     generation_id: int | None = None
     gen_mid = None if mode_n == "photo_edit" else mid
-    if generated_image_url:
+    if regional_composed_png is not None:
+        gen_lc = await persist_studio_generation_from_uploaded_bytes(
+            session,
+            owner_id=oid,
+            data=regional_composed_png,
+            content_type="image/png",
+            output_aspect=aspect_key,
+            studio_model_id=gen_mid,
+            refined_prompt=refined,
+            motion_video_prompt_auto=None,
+        )
+        if gen_lc is not None:
+            generation_id = gen_lc.id
+            arch_base = _public_app_base(request)
+            if arch_base:
+                gtok = create_generation_image_access_token(
+                    user_id=oid, generation_id=gen_lc.id
+                )
+                generated_image_url = (
+                    f"{arch_base}/api/studio/public-generation-image?t={quote(gtok, safe='')}"
+                )
+        else:
+            wavespeed_message = user_message_when_archive_download_failed(wavespeed_message)
+    elif generated_image_url:
         gen = await download_and_create_generation(
             session,
             owner_id=oid,
@@ -1852,6 +2034,12 @@ async def api_studio_refine_prompt(
             "lock_model_hairstyle": effective_lock_hairstyle,
             "lock_model_hairstyle_requested": lock_hair_req,
             "inpaint_mask": bool(mask_bytes),
+            "regional_masked_compose_ready": regional_composed_png is not None,
+            "masked_edit_engine": (
+                ("z_image_inpaint" if not settings.studio_regional_masked_edit else "regional_crop_wave")
+                if mask_bytes
+                else None
+            ),
         },
     )
     await session.commit()

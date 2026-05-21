@@ -213,6 +213,8 @@ interface HealthInfo {
   studio_upscale_credit_cost?: number
   studio_wan_edit_tier_switch?: boolean
   studio_allow_prompt_only?: boolean
+  /** true: маска студии → кроп + WAN/Nano + серверная склейка; false на сервере = Z-Image inpaint */
+  studio_regional_masked_edit?: boolean
   studio_carousel_credit_cost?: number
   /** 0 или отсутствует = без автоудаления (см. бэкенд). */
   studio_generations_retention_days?: number
@@ -657,7 +659,7 @@ export default function App() {
   const [appSection, setAppSection] = useState<'chat' | 'studio' | 'studio_video'>('chat')
   const [studioDesc, setStudioDesc] = useState('')
   const [studioFile, setStudioFile] = useState<File | null>(null)
-  /** Маска Z-Image Inpaint: файл (если без кисти). */
+  /** PNG-маска для регионального редактирования (или Z-Inpaint если STUDIO_REGIONAL_MASKED_EDIT=false). */
   const [studioInpaintMaskFile, setStudioInpaintMaskFile] = useState<File | null>(null)
   /** Режим маски: рисуем белым по превью референса. */
   const [studioPaintInpaintMask, setStudioPaintInpaintMask] = useState(false)
@@ -4790,8 +4792,10 @@ export default function App() {
                 }}
               />
               <span>
-                Нарисовать маску кистью поверх превью (inpaint только в закрашенной области; Z‑Image Turbo, не полный WAN/Nano
-                edit).
+                Нарисовать маску кистью: белым отметить зону замены. Сервер обрезает кадр и шлёт в тот же редактор,
+                что и без маски (Nano Banana или WAN&nbsp;2.7), затем мягко вшивает результат с подгонкой тона по
+                краям. Чтобы использовать вместо этого Z‑Image Turbo Inpaint, на бэкенде задайте{' '}
+                <code className="mono">STUDIO_REGIONAL_MASKED_EDIT=false</code>.
               </span>
             </label>
             {studioPaintInpaintMask && studioInpaintBaseImageSrc ? (
