@@ -618,11 +618,15 @@ select:focus {
   font-size: 0.8125rem;
 }
 
+/* Маска в буфере — чёрный фон и белые штрихи (для экспорта PNG это ок).
+ * Поверх картины непрозрачный чёрный скрывал референс; screen смешивает так,
+ * что #000 показывает пиксели фото ниже, #fff — высвечивает зону inpaint. */
 .studio-mask-painter-canvas {
   position: absolute;
   left: 0;
   top: 0;
   touch-action: none;
+  mix-blend-mode: screen;
 }
 
 .studio-inpaint-mask-painter.is-enabled .studio-mask-painter-canvas {
