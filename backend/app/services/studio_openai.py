@@ -279,6 +279,17 @@ _FULLFRAME_MASK_PAIR_EN = (
     "**Black / near-black** = **locked pixels** — do **not** change content, anatomy, shading, warp, hallucinate overlays, anime-ify, or background swap outside white; micro-blending is allowed **only along the boundary** so seams stay invisible.\n\n"
 )
 
+_WAN_MASK_FULLFRAME_FACE_SWAP_CORE = (
+    "[FACE_SWAP — WAN MASK EDIT] Goal: replace **recipient human epidermis** with the saved **MODEL identity** "
+    "**only inside high-luminance (white) stencil pixels**. This is a **localized** identity takeover, **not** a global scene redraw.\n\n"
+    "**Preserve Image 1 outside white:** pasted **illustrations, meme/cartoon cutouts, stickers, typography**, "
+    "**collage overlays**, or **another character** whose silhouette lives in **black/near-black mask** regions "
+    "must remain **bitmap-stable** (no removal, restyle-to-photo, or background harmonization justified by matching MODEL). "
+    "Do **not** run implicit global denoise/color-unify passes that bleach or repaint locked blacks.\n\n"
+    "**Inside white:** MODEL-consistent face + continuous visible skin (per JSON/USER); **grade micro-texture and undertone head-neck-visible torso/arms** "
+    "so epidermis reads as **one person** under Image 1's existing **light direction/topology**, without importing studio backlight or pose cues from thumbnails.\n\n"
+)
+
 _WAN_MASK_FULLFRAME_IDENTITY_TAIL = (
     "**From Image 3 onward** (when present): portrait references of ONE saved-studio model "
     "**for WHO only** — face shape, facial features, consistent skin grain/tone continuity, hairline/hair palette, plausible body proportions/shape matching that person. "
@@ -357,7 +368,24 @@ def finalize_masked_fullframe_wan_prompt(
             + _WAVESPEED_NO_FACE_SUFFIX
             + _masked_wave_trailer_suffix(studio_mode=studio_mode)
         )
-    # studio_mode == model (и face_swap: тот же tail — для face свой суффикс внутри _masked_wave_trailer_suffix).
+    if mode == "face_swap":
+        hair_fs = (
+            "**Hairstyle** (cut/color/silhouette) follows MODEL portraits + JSON when the relevant head/skin is masked — "
+            "**not** invented from stray Image 1 strands outside the USER's swap intent.\n\n"
+            if lock_model_hairstyle
+            else "**Hairstyle** may follow visible Image 1 hair when JSON/USER explicitly favors POSE-like continuity.\n\n"
+        )
+        out += hair_fs + _WAN_MASK_FULLFRAME_FACE_SWAP_CORE.strip() + "\n\n"
+        if attach_identity_refs:
+            out += _WAN_MASK_FULLFRAME_IDENTITY_TAIL + "\n\n"
+        else:
+            out += (
+                "**No MODEL identity URLs after Images 1–2** — repaint only inside white per JSON/USER while keeping "
+                "**all black-locked pixels** identical to Image 1 (including overlays and collage).\n\n"
+            )
+        merged = out + (p if p else "")
+        return merged.rstrip() + _masked_wave_trailer_suffix(studio_mode=studio_mode)
+    # studio_mode == model
     if attach_identity_refs:
         out += _WAN_MASK_FULLFRAME_IDENTITY_TAIL
     else:
