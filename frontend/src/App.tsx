@@ -2164,7 +2164,7 @@ export default function App() {
       return {
         ok: false as const,
         data: { detail: msg } as MotionFirstFrameApiData,
-        response: new Response(null, { status: 500, statusText: msg }),
+        response: new Response(null, { status: 500, statusText: 'Error' }),
       }
     }
   }
