@@ -1,0 +1,1111 @@
+<!DOCTYPE html>
+<html lang="ru" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ModelMate — операционная система для AI-моделей</title>
+<meta name="description" content="Один кабинет для генерации контента, переписки с аудиторией и работы команды. AI-модели без хаоса из 7 вкладок.">
+
+<!-- Lucide Icons -->
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+
+<!-- Fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+<style>
+/* ============ RESET & BASE ============ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  background: #0a0a0f;
+  color: #e8e8ed;
+  line-height: 1.6;
+  overflow-x: hidden;
+}
+
+/* ============ VARIABLES ============ */
+:root {
+  --bg-dark: #0a0a0f;
+  --bg-dark-2: #12121a;
+  --bg-light: #ffffff;
+  --bg-light-2: #f7f7fb;
+  --text-dark: #e8e8ed;
+  --text-dark-muted: #9999a8;
+  --text-light: #1a1a2e;
+  --text-light-muted: #5a5a6e;
+  --accent: #7c5cff;
+  --accent-2: #ff6b9d;
+  --accent-glow: rgba(124, 92, 255, 0.4);
+  --border-dark: rgba(255, 255, 255, 0.08);
+  --border-light: rgba(0, 0, 0, 0.08);
+  --radius: 16px;
+  --radius-sm: 10px;
+  --max-w: 1200px;
+}
+
+/* ============ TYPO ============ */
+h1, h2, h3, h4 { font-weight: 700; letter-spacing: -0.02em; line-height: 1.2; }
+h1 { font-size: clamp(2.2rem, 5vw, 4rem); font-weight: 800; }
+h2 { font-size: clamp(1.8rem, 3.5vw, 2.8rem); }
+h3 { font-size: 1.3rem; }
+
+/* ============ LAYOUT ============ */
+.container { max-width: var(--max-w); margin: 0 auto; padding: 0 24px; }
+section { padding: 100px 0; position: relative; }
+.section-light { background: var(--bg-light); color: var(--text-light); }
+.section-light .muted { color: var(--text-light-muted); }
+.muted { color: var(--text-dark-muted); }
+
+/* ============ BUTTONS ============ */
+.btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 14px 28px; border-radius: 12px;
+  font-weight: 600; font-size: 15px;
+  text-decoration: none; cursor: pointer; border: none;
+  transition: all 0.2s ease;
+}
+.btn-primary {
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  color: white;
+  box-shadow: 0 8px 30px var(--accent-glow);
+}
+.btn-primary:hover { transform: translateY(-2px); box-shadow: 0 12px 40px var(--accent-glow); }
+.btn-secondary {
+  background: rgba(255,255,255,0.06);
+  color: var(--text-dark);
+  border: 1px solid var(--border-dark);
+  backdrop-filter: blur(10px);
+}
+.btn-secondary:hover { background: rgba(255,255,255,0.1); }
+.section-light .btn-secondary {
+  background: rgba(0,0,0,0.04); color: var(--text-light); border-color: var(--border-light);
+}
+
+/* ============ NAV ============ */
+nav {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
+  padding: 16px 0;
+  background: rgba(10, 10, 15, 0.7);
+  backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--border-dark);
+}
+.nav-inner { display: flex; justify-content: space-between; align-items: center; }
+.logo { font-weight: 800; font-size: 20px; letter-spacing: -0.03em; display: flex; align-items: center; gap: 8px; }
+.logo-mark {
+  width: 28px; height: 28px; border-radius: 8px;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  display: flex; align-items: center; justify-content: center;
+  color: white; font-weight: 800; font-size: 14px;
+}
+.nav-links { display: flex; gap: 32px; align-items: center; }
+.nav-links a { color: var(--text-dark-muted); text-decoration: none; font-size: 14px; font-weight: 500; }
+.nav-links a:hover { color: var(--text-dark); }
+.lang-switch {
+  display: flex; background: rgba(255,255,255,0.06); border-radius: 8px; padding: 4px;
+  font-size: 13px;
+}
+.lang-switch button {
+  background: transparent; color: var(--text-dark-muted);
+  border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer;
+  font-weight: 600;
+}
+.lang-switch button.active { background: rgba(255,255,255,0.1); color: var(--text-dark); }
+@media (max-width: 768px) { .nav-links a:not(.btn) { display: none; } }
+
+/* ============ HERO ============ */
+.hero {
+  padding-top: 180px; padding-bottom: 120px;
+  position: relative; overflow: hidden;
+}
+.hero::before {
+  content: ''; position: absolute; top: -200px; left: 50%; transform: translateX(-50%);
+  width: 800px; height: 800px;
+  background: radial-gradient(circle, var(--accent-glow) 0%, transparent 60%);
+  filter: blur(80px); z-index: 0;
+}
+.hero-content { position: relative; z-index: 1; text-align: center; max-width: 800px; margin: 0 auto; }
+.hero-badge {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 8px 16px; border-radius: 100px;
+  background: rgba(124, 92, 255, 0.1);
+  border: 1px solid rgba(124, 92, 255, 0.3);
+  color: #b9a8ff; font-size: 13px; font-weight: 500;
+  margin-bottom: 24px;
+}
+.hero h1 { margin-bottom: 24px; }
+.hero h1 .accent {
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+}
+.hero-subtitle { font-size: 1.2rem; color: var(--text-dark-muted); margin-bottom: 40px; max-width: 600px; margin-left: auto; margin-right: auto; }
+.hero-cta { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; margin-bottom: 60px; }
+.hero-bullets { display: flex; gap: 32px; justify-content: center; flex-wrap: wrap; color: var(--text-dark-muted); font-size: 14px; }
+.hero-bullets span { display: flex; align-items: center; gap: 8px; }
+.hero-bullets svg { color: var(--accent); width: 16px; height: 16px; }
+
+/* ============ HERO MOCKUP ============ */
+.hero-mockup {
+  margin-top: 80px; position: relative;
+  border-radius: var(--radius);
+  background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.01));
+  border: 1px solid var(--border-dark);
+  padding: 12px;
+  box-shadow: 0 40px 100px rgba(0,0,0,0.5);
+}
+.hero-mockup-img {
+  width: 100%; aspect-ratio: 16/9;
+  background: linear-gradient(135deg, #1a1a2e, #2a1a3e);
+  border-radius: var(--radius-sm);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text-dark-muted); font-size: 14px;
+  border: 1px dashed var(--border-dark);
+}
+
+/* ============ PROBLEM SECTION ============ */
+.problem-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px; margin-top: 60px;
+}
+.problem-card {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--border-dark);
+  border-radius: var(--radius);
+  padding: 24px;
+  display: flex; align-items: center; gap: 16px;
+}
+.problem-card-icon {
+  width: 44px; height: 44px; border-radius: 10px;
+  background: rgba(255, 100, 100, 0.1); color: #ff8888;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.problem-summary {
+  text-align: center; margin-top: 60px; font-size: 1.2rem;
+  padding: 32px;
+  background: linear-gradient(135deg, rgba(124, 92, 255, 0.1), rgba(255, 107, 157, 0.1));
+  border-radius: var(--radius);
+  border: 1px solid rgba(124, 92, 255, 0.2);
+}
+
+/* ============ SOLUTION SECTION ============ */
+.solution-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 24px; margin-top: 60px;
+}
+.solution-card {
+  background: white; border-radius: var(--radius); padding: 32px;
+  border: 1px solid var(--border-light);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+.solution-card:hover { transform: translateY(-4px); box-shadow: 0 20px 60px rgba(0,0,0,0.1); }
+.solution-icon {
+  width: 56px; height: 56px; border-radius: 14px;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  color: white;
+  display: flex; align-items: center; justify-content: center;
+  margin-bottom: 20px;
+}
+.solution-card h3 { margin-bottom: 12px; color: var(--text-light); }
+.solution-card p { color: var(--text-light-muted); font-size: 15px; }
+
+/* ============ HOW IT WORKS ============ */
+.steps { margin-top: 60px; position: relative; }
+.step {
+  display: grid; grid-template-columns: 80px 1fr;
+  gap: 32px; align-items: start;
+  padding: 32px 0;
+  border-bottom: 1px solid var(--border-dark);
+}
+.step:last-child { border-bottom: none; }
+.step-num {
+  font-size: 3rem; font-weight: 800;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+  line-height: 1;
+}
+.step-content h3 { font-size: 1.5rem; margin-bottom: 8px; }
+.step-content p { color: var(--text-dark-muted); font-size: 16px; }
+
+/* ============ COMPARISON ============ */
+.comparison {
+  margin-top: 60px;
+  background: white; border-radius: var(--radius); overflow: hidden;
+  border: 1px solid var(--border-light);
+}
+.comparison-table { width: 100%; border-collapse: collapse; }
+.comparison-table th, .comparison-table td {
+  padding: 20px 24px; text-align: left;
+  border-bottom: 1px solid var(--border-light);
+  font-size: 15px;
+}
+.comparison-table th {
+  background: var(--bg-light-2);
+  font-weight: 700; color: var(--text-light);
+}
+.comparison-table th.highlight {
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  color: white;
+}
+.comparison-table td { color: var(--text-light-muted); }
+.comparison-table .check { color: #22c55e; font-weight: 700; }
+.comparison-table .cross { color: #ef4444; font-weight: 700; }
+.comparison-table tr:last-child td { border-bottom: none; }
+
+/* ============ PRICING ============ */
+.pricing-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 24px; margin-top: 60px;
+}
+.price-card {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--border-dark);
+  border-radius: var(--radius);
+  padding: 32px;
+  display: flex; flex-direction: column;
+}
+.price-card.featured {
+  background: linear-gradient(180deg, rgba(124, 92, 255, 0.1), rgba(255, 107, 157, 0.05));
+  border: 1px solid rgba(124, 92, 255, 0.5);
+  position: relative;
+}
+.featured-badge {
+  position: absolute; top: -12px; left: 50%; transform: translateX(-50%);
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  color: white; font-size: 12px; font-weight: 700;
+  padding: 6px 16px; border-radius: 100px;
+}
+.price-tier { font-size: 14px; font-weight: 600; color: var(--accent); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 12px; }
+.price-amount { font-size: 2.5rem; font-weight: 800; margin-bottom: 4px; }
+.price-amount span { font-size: 1rem; font-weight: 500; color: var(--text-dark-muted); }
+.price-desc { color: var(--text-dark-muted); font-size: 14px; margin-bottom: 24px; }
+.price-features { list-style: none; flex: 1; margin-bottom: 24px; }
+.price-features li { display: flex; align-items: start; gap: 10px; padding: 8px 0; font-size: 14px; color: var(--text-dark-muted); }
+.price-features svg { color: var(--accent); width: 16px; height: 16px; margin-top: 4px; flex-shrink: 0; }
+
+/* ============ TESTIMONIALS ============ */
+.testimonials-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 24px; margin-top: 60px;
+}
+.testimonial {
+  background: white; border-radius: var(--radius); padding: 32px;
+  border: 1px solid var(--border-light);
+}
+.testimonial-quote {
+  font-size: 16px; color: var(--text-light); margin-bottom: 24px; line-height: 1.7;
+}
+.testimonial-author { display: flex; align-items: center; gap: 12px; }
+.testimonial-avatar {
+  width: 44px; height: 44px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  display: flex; align-items: center; justify-content: center;
+  color: white; font-weight: 700;
+}
+.testimonial-name { font-weight: 600; color: var(--text-light); font-size: 14px; }
+.testimonial-role { color: var(--text-light-muted); font-size: 13px; }
+.testimonial-placeholder-note {
+  margin-top: 40px; text-align: center; color: var(--text-light-muted); font-size: 14px; font-style: italic;
+}
+
+/* ============ FAQ ============ */
+.faq-list { margin-top: 60px; max-width: 800px; margin-left: auto; margin-right: auto; }
+.faq-item {
+  border-bottom: 1px solid var(--border-dark);
+}
+.faq-q {
+  padding: 24px 0; cursor: pointer;
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 17px; font-weight: 600;
+}
+.faq-q::after {
+  content: '+'; font-size: 24px; font-weight: 300;
+  transition: transform 0.2s ease;
+}
+.faq-item.open .faq-q::after { transform: rotate(45deg); }
+.faq-a {
+  max-height: 0; overflow: hidden;
+  color: var(--text-dark-muted); font-size: 15px;
+  transition: max-height 0.3s ease, padding 0.3s ease;
+}
+.faq-item.open .faq-a { max-height: 400px; padding-bottom: 24px; }
+
+/* ============ BLOG ============ */
+.blog-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 24px; margin-top: 60px;
+}
+.blog-card {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--border-dark);
+  border-radius: var(--radius);
+  overflow: hidden;
+  transition: transform 0.2s ease;
+}
+.blog-card:hover { transform: translateY(-4px); }
+.blog-img {
+  aspect-ratio: 16/9;
+  background: linear-gradient(135deg, #2a1a3e, #1a1a2e);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text-dark-muted); font-size: 12px;
+  border-bottom: 1px solid var(--border-dark);
+}
+.blog-content { padding: 24px; }
+.blog-tag {
+  display: inline-block; padding: 4px 10px; border-radius: 6px;
+  background: rgba(124, 92, 255, 0.1); color: #b9a8ff;
+  font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;
+  margin-bottom: 12px;
+}
+.blog-card h3 { font-size: 1.1rem; margin-bottom: 8px; }
+.blog-card p { font-size: 14px; color: var(--text-dark-muted); }
+
+/* ============ CTA BANNER ============ */
+.cta-banner {
+  text-align: center;
+  padding: 80px 40px;
+  background: linear-gradient(135deg, rgba(124, 92, 255, 0.15), rgba(255, 107, 157, 0.15));
+  border: 1px solid rgba(124, 92, 255, 0.3);
+  border-radius: var(--radius);
+}
+.cta-banner h2 { margin-bottom: 16px; }
+.cta-banner p { color: var(--text-dark-muted); margin-bottom: 32px; }
+
+/* ============ FOOTER ============ */
+footer {
+  padding: 60px 0 40px;
+  border-top: 1px solid var(--border-dark);
+}
+.footer-grid {
+  display: grid; grid-template-columns: 2fr 1fr 1fr 1fr;
+  gap: 40px; margin-bottom: 40px;
+}
+@media (max-width: 768px) { .footer-grid { grid-template-columns: 1fr 1fr; } }
+.footer-col h4 { font-size: 14px; margin-bottom: 16px; color: var(--text-dark); }
+.footer-col a {
+  display: block; color: var(--text-dark-muted);
+  text-decoration: none; font-size: 14px; padding: 6px 0;
+}
+.footer-col a:hover { color: var(--text-dark); }
+.footer-bottom {
+  padding-top: 24px; border-top: 1px solid var(--border-dark);
+  display: flex; justify-content: space-between; align-items: center;
+  color: var(--text-dark-muted); font-size: 13px; flex-wrap: wrap; gap: 16px;
+}
+
+/* ============ SECTION HEADER ============ */
+.section-header { text-align: center; max-width: 720px; margin: 0 auto; }
+.section-tag {
+  display: inline-block; padding: 6px 14px; border-radius: 100px;
+  background: rgba(124, 92, 255, 0.1); border: 1px solid rgba(124, 92, 255, 0.3);
+  color: #b9a8ff; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em;
+  margin-bottom: 20px;
+}
+.section-header h2 { margin-bottom: 20px; }
+.section-header p { color: var(--text-dark-muted); font-size: 17px; }
+.section-light .section-tag { background: rgba(124, 92, 255, 0.1); }
+.section-light .section-header p { color: var(--text-light-muted); }
+
+/* ============ RESPONSIVE ============ */
+@media (max-width: 640px) {
+  section { padding: 70px 0; }
+  .hero { padding-top: 140px; padding-bottom: 80px; }
+  .step { grid-template-columns: 1fr; gap: 12px; }
+  .step-num { font-size: 2rem; }
+}
+
+/* ============ LANG ============ */
+[lang-en] { display: none; }
+html[data-lang="en"] [lang-ru] { display: none; }
+html[data-lang="en"] [lang-en] { display: initial; }
+html[data-lang="en"] [lang-en].block { display: block; }
+html[data-lang="en"] [lang-en].flex { display: flex; }
+html[data-lang="en"] [lang-en].grid { display: grid; }
+</style>
+</head>
+<body>
+
+<!-- ============ NAV ============ -->
+<nav>
+    <div class="container nav-inner">
+      <a href="#" class="logo" style="text-decoration:none; color:inherit;">
+        <span class="logo-mark">M</span>
+        <span>ModelMate</span>
+      </a>
+      <div class="nav-links">
+        <a href="#problem" lang-ru>Проблема</a><a href="#problem" lang-en>Problem</a>
+        <a href="#solution" lang-ru>Решение</a><a href="#solution" lang-en>Solution</a>
+        <a href="#pricing" lang-ru>Тарифы</a><a href="#pricing" lang-en>Pricing</a>
+        <a href="#faq">FAQ</a>
+        <div class="lang-switch">
+          <button onclick="setLang('ru')" id="lang-ru-btn" class="active">RU</button>
+          <button onclick="setLang('en')" id="lang-en-btn">EN</button>
+        </div>
+        <a href="#pricing" class="btn btn-primary" style="padding: 10px 20px; font-size: 14px;">
+          <span lang-ru>Начать</span><span lang-en>Get started</span>
+        </a>
+      </div>
+    </div>
+  </nav>
+  
+  <!-- ============ HERO ============ -->
+  <section class="hero">
+    <div class="container hero-content">
+      <div class="hero-badge">
+        <span style="width:6px;height:6px;border-radius:50%;background:#22c55e;display:inline-block;"></span>
+        <span lang-ru>Работает в продакшене · обновления каждую неделю</span>
+        <span lang-en>Live in production · weekly updates</span>
+      </div>
+  
+      <h1>
+        <span lang-ru>Операционная система<br>для <span class="accent">AI-моделей</span></span>
+        <span lang-en>The operating system<br>for <span class="accent">AI personas</span></span>
+      </h1>
+  
+      <p class="hero-subtitle">
+        <span lang-ru>Один кабинет вместо 7 вкладок. Генерация, переписка, команда, аналитика — всё в одном месте. Чтобы вы зарабатывали, а не переключались между сервисами.</span>
+        <span lang-en>One dashboard instead of seven tabs. Content generation, fan messaging, team workflow, analytics — all in one place. So you earn, not multitask.</span>
+      </p>
+  
+      <div class="hero-cta">
+        <a href="#pricing" class="btn btn-primary">
+          <span lang-ru>Попробовать</span><span lang-en>Try ModelMate</span>
+          <i data-lucide="arrow-right" style="width:18px;height:18px;"></i>
+        </a>
+        <a href="#how" class="btn btn-secondary">
+          <i data-lucide="play" style="width:16px;height:16px;"></i>
+          <span lang-ru>Как это работает</span><span lang-en>How it works</span>
+        </a>
+      </div>
+  
+      <div class="hero-bullets">
+        <span><i data-lucide="check"></i><span lang-ru>Без установки</span><span lang-en>No install</span></span>
+        <span><i data-lucide="check"></i><span lang-ru>RU и EN интерфейс</span><span lang-en>RU & EN UI</span></span>
+        <span><i data-lucide="check"></i><span lang-ru>Командные роли</span><span lang-en>Team roles</span></span>
+      </div>
+  
+      <div class="hero-mockup">
+        <div class="hero-mockup-img">
+          <span lang-ru>📸 Сюда положи скриншот главного экрана кабинета (1600×900)</span>
+          <span lang-en>📸 Place dashboard screenshot here (1600×900)</span>
+        </div>
+      </div>
+    </div>
+  </section>
+  
+  <!-- ============ PROBLEM ============ -->
+  <section id="problem">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-tag" lang-ru>Проблема</span><span class="section-tag" lang-en>The problem</span>
+        <h2>
+          <span lang-ru>Если вы ведёте AI-модель — вы знаете эту боль</span>
+          <span lang-en>If you run an AI persona — you know this pain</span>
+        </h2>
+        <p>
+          <span lang-ru>Контент в одном сервисе, переписка в другом, перевод в третьем, оплата в четвёртом. Команда теряется, клиенты ждут, деньги утекают.</span>
+          <span lang-en>Content in one app, chats in another, translation in a third, billing in a fourth. Your team gets lost, fans wait, money leaks.</span>
+        </p>
+      </div>
+  
+      <div class="problem-grid">
+        <div class="problem-card">
+          <div class="problem-card-icon"><i data-lucide="layers"></i></div>
+          <div>
+            <strong lang-ru>7+ открытых вкладок</strong><strong lang-en>7+ open tabs</strong><br>
+            <span class="muted" lang-ru>Midjourney, Kling, DeepL, Notion, Fanvue, Telegram…</span>
+            <span class="muted" lang-en>Midjourney, Kling, DeepL, Notion, Fanvue, Telegram…</span>
+          </div>
+        </div>
+        <div class="problem-card">
+          <div class="problem-card-icon"><i data-lucide="clock"></i></div>
+          <div>
+            <strong lang-ru>Часы на рутину</strong><strong lang-en>Hours on routine</strong><br>
+            <span class="muted" lang-ru>Вместо общения с аудиторией — копипаста между сервисами.</span>
+            <span class="muted" lang-en>Instead of talking to fans — copy-pasting between apps.</span>
+          </div>
+        </div>
+        <div class="problem-card">
+          <div class="problem-card-icon"><i data-lucide="users"></i></div>
+          <div>
+            <strong lang-ru>Команда без процессов</strong><strong lang-en>Team without process</strong><br>
+            <span class="muted" lang-ru>Чаттеры пишут вразнобой, нет общего контекста по фану.</span>
+            <span class="muted" lang-en>Chatters work blindly, no shared context per fan.</span>
+          </div>
+        </div>
+        <div class="problem-card">
+          <div class="problem-card-icon"><i data-lucide="languages"></i></div>
+          <div>
+            <strong lang-ru>Языковой барьер</strong><strong lang-en>Language barrier</strong><br>
+            <span class="muted" lang-ru>Половина аудитории — англоязычная, чаттеры — нет.</span>
+            <span class="muted" lang-en>Half of fans speak English, your chatters don't.</span>
+          </div>
+        </div>
+        <div class="problem-card">
+          <div class="problem-card-icon"><i data-lucide="image"></i></div>
+          <div>
+            <strong lang-ru>Контент медленный и дорогой</strong><strong lang-en>Content slow & costly</strong><br>
+            <span class="muted" lang-ru>ComfyUI требует месяцев обучения и мощного железа.</span>
+            <span class="muted" lang-en>ComfyUI needs months of training and serious GPU.</span>
+          </div>
+        </div>
+        <div class="problem-card">
+          <div class="problem-card-icon"><i data-lucide="bar-chart-3"></i></div>
+          <div>
+            <strong lang-ru>Ноль аналитики</strong><strong lang-en>Zero analytics</strong><br>
+            <span class="muted" lang-ru>Кто из фанатов даёт выручку — вы не знаете.</span>
+            <span class="muted" lang-en>You don't know which fans actually pay.</span>
+          </div>
+        </div>
+      </div>
+  
+      <div class="problem-summary">
+        <strong lang-ru>Итог: вы тратите 4–6 часов в день на то, что должно занимать 30 минут.</strong>
+        <strong lang-en>Bottom line: you spend 4–6 hours a day on what should take 30 minutes.</strong>
+      </div>
+    </div>
+  </section>
+  
+  <!-- ============ SOLUTION ============ -->
+  <section id="solution" class="section-light">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-tag" lang-ru>Решение</span><span class="section-tag" lang-en>The solution</span>
+        <h2>
+          <span lang-ru>Всё, что нужно AI-модели — в одном кабинете</span>
+          <span lang-en>Everything an AI persona needs — in one place</span>
+        </h2>
+        <p>
+          <span lang-ru>ModelMate объединяет генерацию контента, общение с аудиторией, командную работу и аналитику в одном инструменте.</span>
+          <span lang-en>ModelMate combines content generation, fan messaging, team workflow and analytics in a single tool.</span>
+        </p>
+      </div>
+  
+      <div class="solution-grid">
+        <div class="solution-card">
+          <div class="solution-icon"><i data-lucide="sparkles"></i></div>
+          <h3 lang-ru>Студия контента</h3><h3 lang-en>Content studio</h3>
+          <p lang-ru>Топовые модели генерации фото и видео — Nano, WAN, Seedance — собраны в одном интерфейсе. Без ComfyUI, без 4090, без выходных, проведённых за туториалами.</p>
+          <p lang-en>Top image and video models — Nano, WAN, Seedance — under one interface. No ComfyUI, no 4090 needed, no weekends lost on tutorials.</p>
+        </div>
+        <div class="solution-card">
+          <div class="solution-icon"><i data-lucide="message-square"></i></div>
+          <h3 lang-ru>Умный инбокс</h3><h3 lang-en>Smart inbox</h3>
+          <p lang-ru>Все диалоги Fanvue в одном окне с автоматическим переводом, контекстом по каждому фану и подсказками от AI-композитора на Grok.</p>
+          <p lang-en>All Fanvue chats in one window with auto-translation, per-fan context and AI composer suggestions powered by Grok.</p>
+        </div>
+        <div class="solution-card">
+          <div class="solution-icon"><i data-lucide="users"></i></div>
+          <h3 lang-ru>Командные роли</h3><h3 lang-en>Team roles</h3>
+          <p lang-ru>Менеджеры, чаттеры, креаторы — каждый видит своё. Распределение чатов, передача смен, история действий. Студия работает как команда, а не как чат в Telegram.</p>
+          <p lang-en>Managers, chatters, creators — each sees their own scope. Chat assignment, shift handover, action log. Your studio runs like a team, not a Telegram chat.</p>
+        </div>
+        <div class="solution-card">
+          <div class="solution-icon"><i data-lucide="trending-up"></i></div>
+          <h3 lang-ru>Аналитика выручки</h3><h3 lang-en>Revenue analytics</h3>
+          <p lang-ru>Видно, какие фаны приносят деньги, какие чаттеры закрывают сделки, какой контент работает. Решения на цифрах, а не на ощущениях.</p>
+          <p lang-en>See which fans pay, which chatters close deals, which content sells. Make decisions on numbers, not vibes.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+  
+  <!-- ============ HOW IT WORKS ============ -->
+  <section id="how">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-tag" lang-ru>Как работает</span><span class="section-tag" lang-en>How it works</span>
+        <h2>
+          <span lang-ru>От регистрации до первой выручки — 4 шага</span>
+          <span lang-en>From signup to first revenue — 4 steps</span>
+        </h2>
+      </div>
+  
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">01</div>
+          <div class="step-content">
+            <h3 lang-ru>Создаёте профиль модели</h3><h3 lang-en>Create your persona</h3>
+            <p lang-ru>Загружаете описание модели, стиль общения, табу, базовые сценарии. ModelMate запоминает её характер и держит его во всех диалогах.</p>
+            <p lang-en>Upload persona description, tone of voice, taboos, key scenarios. ModelMate keeps her character consistent across all chats.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">02</div>
+          <div class="step-content">
+            <h3 lang-ru>Подключаете Fanvue</h3><h3 lang-en>Connect Fanvue</h3>
+            <p lang-ru>Все диалоги, новые подписчики и платежи синхронизируются в кабинет автоматически. Перевод включается одним кликом.</p>
+            <p lang-en>All chats, new subs and payments sync into the dashboard automatically. Translation toggles on with one click.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">03</div>
+          <div class="step-content">
+            <h3 lang-ru>Генерируете контент</h3><h3 lang-en>Generate content</h3>
+            <p lang-ru>В студии выбираете модель генерации, описываете идею — получаете фото или видео за минуты. Всё, что нужно, без выхода из кабинета.</p>
+            <p lang-en>In the studio, pick a generation model, describe the idea — get photo or video in minutes. No app switching.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">04</div>
+          <div class="step-content">
+            <h3 lang-ru>Подключаете команду</h3><h3 lang-en>Add your team</h3>
+            <p lang-ru>Приглашаете чаттеров, выдаёте роли, видите аналитику по каждому. Чем больше команда — тем больше выручка, не хаос.</p>
+            <p lang-en>Invite chatters, assign roles, track each one's metrics. Bigger team — more revenue, not more chaos.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+  
+  <!-- ============ COMPARISON ============ -->
+  <section class="section-light">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-tag" lang-ru>Сравнение</span><span class="section-tag" lang-en>Comparison</span>
+        <h2>
+          <span lang-ru>ModelMate vs «зоопарк из сервисов»</span>
+          <span lang-en>ModelMate vs the usual SaaS zoo</span>
+        </h2>
+      </div>
+  
+      <div class="comparison">
+        <table class="comparison-table">
+          <thead>
+            <tr>
+              <th><span lang-ru>Что нужно</span><span lang-en>What you need</span></th>
+              <th><span lang-ru>Разные сервисы</span><span lang-en>Separate tools</span></th>
+              <th class="highlight">ModelMate</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span lang-ru>Генерация фото и видео</span><span lang-en>Photo & video generation</span></td>
+              <td>Midjourney + Kling + Runway · $80+/mo</td>
+              <td class="check">✓ <span lang-ru>Встроено</span><span lang-en>Built-in</span></td>
+            </tr>
+            <tr>
+              <td><span lang-ru>Инбокс Fanvue + перевод</span><span lang-en>Fanvue inbox + translation</span></td>
+              <td>Fanvue + DeepL Pro · $20/mo</td>
+              <td class="check">✓ <span lang-ru>Встроено</span><span lang-en>Built-in</span></td>
+            </tr>
+            <tr>
+              <td><span lang-ru>AI-подсказки в чатах</span><span lang-en>AI chat suggestions</span></td>
+              <td>ChatGPT Plus · $20/mo</td>
+              <td class="check">✓ <span lang-ru>Встроено (Grok)</span><span lang-en>Built-in (Grok)</span></td>
+            </tr>
+            <tr>
+              <td><span lang-ru>Команда и роли</span><span lang-en>Team & roles</span></td>
+              <td>Notion + Slack · $25/mo</td>
+              <td class="check">✓ <span lang-ru>Встроено</span><span lang-en>Built-in</span></td>
+            </tr>
+            <tr>
+              <td><span lang-ru>Аналитика выручки</span><span lang-en>Revenue analytics</span></td>
+              <td class="cross">✗ <span lang-ru>Нет</span><span lang-en>None</span></td>
+              <td class="check">✓ <span lang-ru>Встроено</span><span lang-en>Built-in</span></td>
+            </tr>
+            <tr>
+              <td><strong lang-ru>Итого в месяц</strong><strong lang-en>Total per month</strong></td>
+              <td><strong>$145+</strong></td>
+              <td><strong style="color:var(--accent);"><span lang-ru>от 2 990 ₽</span><span lang-en>from $35</span></strong></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+  
+  <!-- ============ PRICING ============ -->
+  <section id="pricing">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-tag" lang-ru>Тарифы</span><span class="section-tag" lang-en>Pricing</span>
+        <h2>
+          <span lang-ru>Один тариф заменяет 5 подписок</span>
+          <span lang-en>One plan replaces 5 subscriptions</span>
+        </h2>
+        <p>
+          <span lang-ru>Все тарифы включают полный функционал. Различаются объёмом генераций и количеством мест в команде.</span>
+          <span lang-en>All plans include the full feature set. They differ in generation quota and team seats.</span>
+        </p>
+      </div>
+  
+      <div class="pricing-grid">
+        <div class="price-card">
+          <div class="price-tier">Solo</div>
+          <div class="price-amount">2 990 ₽<span lang-ru>/мес</span><span lang-en>/mo</span></div>
+          <p class="price-desc" lang-ru>Для соло-креатора с одной моделью</p>
+          <p class="price-desc" lang-en>For a solo creator with one persona</p>
+          <ul class="price-features">
+            <li><i data-lucide="check"></i><span lang-ru>1 профиль модели</span><span lang-en>1 persona</span></li>
+            <li><i data-lucide="check"></i><span lang-ru>300 генераций / мес</span><span lang-en>300 generations / mo</span></li>
+            <li><i data-lucide="check"></i><span lang-ru>Инбокс + перевод</span><span lang-en>Inbox + translation</span></li>
+            <li><i data-lucide="check"></i><span lang-ru>AI-подсказки</span><span lang-en>AI suggestions</span></li>
+            <li><i data-lucide="check"></i><span lang-ru>1 место в команде</span><span lang-en>1 team seat</span></li>
+          </ul>
+          <a href="#" class="btn btn-secondary" style="justify-content:center;">
+            <span lang-ru>Начать</span><span lang-en>Get started</span>
+          </a>
+        </div>
+  
+        <div class="price-card featured">
+          <div class="featured-badge" lang-ru>Популярный</div>
+          <div class="featured-badge" lang-en>Most popular</div>
+          <div class="price-tier">Studio</div>
+          <div class="price-amount">7 900 ₽<span lang-ru>/мес</span><span lang-en>/mo</span></div>
+          <p class="price-desc" lang-ru>Для небольшой студии и активного креатора</p>
+          <p class="price-desc" lang-en>For a small studio or active creator</p>
+          <ul class="price-features">
+            <li><i data-lucide="check"></i><span lang-ru>До 3 моделей</span><span lang-en>Up to 3 personas</span></li>
+            <li><i data-lucide="check"></i><span lang-ru>1 500 генераций / мес</span><span lang-en>1,500 generations / mo</span></li>
+            <li><i data-lucide="check"></i><span lang-ru>Всё из Solo</span><span lang-en>Everything in Solo</span></li>
+            <li><i data-lucide="check"></i><span lang-ru>5 мест в команде</span><span lang-en>5 team seats</span></li>
+            <li><i data-lucide="check"></i><span lang-ru>Аналитика выручки</span><span lang-en>Revenue analytics</span></li>
+            <li><i data-lucide="check"></i><span lang-ru>Приоритетная очередь</span><span lang-en>Priority queue</span></li>
+          </ul>
+          <a href="#" class="btn btn-primary" style="justify-content:center;">
+            <span lang-ru>Выбрать Studio</span><span lang-en>Choose Studio</span>
+          </a>
+        </div>
+  
+        <div class="price-card">
+          <div class="price-tier">Agency</div>
+          <div class="price-amount">19 900 ₽<span lang-ru>/мес</span><span lang-en>/mo</span></div>
+          <p class="price-desc" lang-ru>Для агентств с несколькими моделями</p>
+          <p class="price-desc" lang-en>For agencies running multiple personas</p>
+          <ul class="price-features">
+            <li><i data-lucide="check"></i><span lang-ru>До 10 моделей</span><span lang-en>Up to 10 personas</span></li>
+            <li><i data-lucide="check"></i><span lang-ru>5 000 генераций / мес</span><span lang-en>5,000 generations / mo</span></li>
+            <li><i data-lucide="check"></i><span lang-ru>Всё из Studio</span><span lang-en>Everything in Studio</span></li>
+            <li><i data-lucide="check"></i><span lang-ru>20 мест в команде</span><span lang-en>20 team seats</span></li>
+            <li><i data-lucide="check"></i><span lang-ru>Менеджер аккаунта</span><span lang-en>Account manager</span></li>
+            <li><i data-lucide="check"></i><span lang-ru>API доступ</span><span lang-en>API access</span></li>
+          </ul>
+          <a href="#" class="btn btn-secondary" style="justify-content:center;">
+            <span lang-ru>Связаться</span><span lang-en>Contact us</span>
+          </a>
+        </div>
+      </div>
+    </div>
+  </section>
+<!-- ============ TESTIMONIALS ============ -->
+<section class="section-light">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-tag" lang-ru>Отзывы</span><span class="section-tag" lang-en>Testimonials</span>
+        <h2>
+          <span lang-ru>Что говорят те, кто уже работает в ModelMate</span>
+          <span lang-en>What our users say</span>
+        </h2>
+        <p>
+          <span lang-ru>Реальные креаторы и студии, которые перешли с зоопарка сервисов на один инструмент.</span>
+          <span lang-en>Real creators and studios who switched from a tool zoo to a single dashboard.</span>
+        </p>
+      </div>
+  
+      <div class="testimonials-grid">
+        <div class="testimonial">
+          <p class="testimonial-quote">
+            <span lang-ru>«[Заглушка для реального отзыва клиента №1. Замени, когда получишь согласие. Пример: «Раньше тратили 5 часов в день на переключение между сервисами. Сейчас — час, и команда работает спокойно».]»</span>
+            <span lang-en>«[Placeholder for real client testimonial #1. Replace once you have permission. Example: "We used to spend 5 hours a day juggling apps. Now it's one hour and the team is calm."]»</span>
+          </p>
+          <div class="testimonial-author">
+            <div class="testimonial-avatar">?</div>
+            <div>
+              <div class="testimonial-name" lang-ru>Имя клиента</div>
+              <div class="testimonial-name" lang-en>Client name</div>
+              <div class="testimonial-role" lang-ru>Роль · студия</div>
+              <div class="testimonial-role" lang-en>Role · studio</div>
+            </div>
+          </div>
+        </div>
+  
+        <div class="testimonial">
+          <p class="testimonial-quote">
+            <span lang-ru>«[Заглушка для реального отзыва клиента №2.]»</span>
+            <span lang-en>«[Placeholder for real client testimonial #2.]»</span>
+          </p>
+          <div class="testimonial-author">
+            <div class="testimonial-avatar">?</div>
+            <div>
+              <div class="testimonial-name" lang-ru>Имя клиента</div>
+              <div class="testimonial-name" lang-en>Client name</div>
+              <div class="testimonial-role" lang-ru>Роль · студия</div>
+              <div class="testimonial-role" lang-en>Role · studio</div>
+            </div>
+          </div>
+        </div>
+  
+        <div class="testimonial">
+          <p class="testimonial-quote">
+            <span lang-ru>«[Заглушка для реального отзыва клиента №3.]»</span>
+            <span lang-en>«[Placeholder for real client testimonial #3.]»</span>
+          </p>
+          <div class="testimonial-author">
+            <div class="testimonial-avatar">?</div>
+            <div>
+              <div class="testimonial-name" lang-ru>Имя клиента</div>
+              <div class="testimonial-name" lang-en>Client name</div>
+              <div class="testimonial-role" lang-ru>Роль · студия</div>
+              <div class="testimonial-role" lang-en>Role · studio</div>
+            </div>
+          </div>
+        </div>
+      </div>
+  
+      <p class="testimonial-placeholder-note">
+        <span lang-ru>⚠️ Здесь будут реальные отзывы клиентов с их согласием. Не используем фейковые — это плохо влияет на доверие и легко палится.</span>
+        <span lang-en>⚠️ Real client testimonials with permission will go here. We don't use fake ones — they erode trust and get spotted easily.</span>
+      </p>
+    </div>
+  </section>
+  
+  <!-- ============ FAQ ============ -->
+  <section id="faq">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-tag">FAQ</span>
+        <h2>
+          <span lang-ru>Частые вопросы</span>
+          <span lang-en>Frequently asked questions</span>
+        </h2>
+      </div>
+  
+      <div class="faq-list">
+        <div class="faq-item">
+          <div class="faq-q">
+            <span lang-ru>Чем ModelMate отличается от ComfyUI или Stable Diffusion?</span>
+            <span lang-en>How is ModelMate different from ComfyUI or Stable Diffusion?</span>
+          </div>
+          <div class="faq-a">
+            <span lang-ru>ComfyUI — мощный инструмент для энтузиастов с RTX 4090 и месяцами свободного времени на настройку. ModelMate — рабочий инструмент для тех, кто зарабатывает: открыл кабинет, описал идею, получил результат за минуты. Плюс инбокс, команда и аналитика, которых в ComfyUI нет в принципе.</span>
+            <span lang-en>ComfyUI is a powerful tool for hobbyists with an RTX 4090 and months to spend on configuration. ModelMate is a working tool for people who earn from this: open the dashboard, describe the idea, get the result in minutes. Plus inbox, team, and analytics — none of which exist in ComfyUI.</span>
+          </div>
+        </div>
+  
+        <div class="faq-item">
+          <div class="faq-q">
+            <span lang-ru>Что если сгенерированный контент не подошёл с первого раза?</span>
+            <span lang-en>What if a generation doesn't match my idea on the first try?</span>
+          </div>
+          <div class="faq-a">
+            <span lang-ru>AI-генерация — итеративный процесс. Любая платформа (Midjourney, DALL-E, Sora) работает так же: 3–5 итераций до финального результата. Мы делаем эти итерации быстрыми и предсказуемыми, чтобы вы тратили минуты, а не часы.</span>
+            <span lang-en>AI generation is iterative by nature. Every major platform (Midjourney, DALL-E, Sora) works the same way: 3–5 iterations to the final result. We make those iterations fast and predictable, so you spend minutes, not hours.</span>
+          </div>
+        </div>
+  
+        <div class="faq-item">
+          <div class="faq-q">
+            <span lang-ru>А если сервис падает?</span>
+            <span lang-en>What if the service goes down?</span>
+          </div>
+          <div class="faq-a">
+            <span lang-ru>Падения случаются у всех SaaS — это норма индустрии. У нас есть status-страница, инциденты фиксируются и чинятся в часовых рамках. SLA — 99% uptime в платных тарифах.</span>
+            <span lang-en>Outages happen with any SaaS — that's industry norm. We run a public status page, incidents are tracked and fixed within hours. Paid plans come with a 99% uptime SLA.</span>
+          </div>
+        </div>
+  
+        <div class="faq-item">
+          <div class="faq-q">
+            <span lang-ru>Как происходит оплата?</span>
+            <span lang-en>How does billing work?</span>
+          </div>
+          <div class="faq-a">
+            <span lang-ru>Оплата — помесячно или с годовой скидкой. Поддерживаем карты РФ и зарубежные. Деталь по способам оплаты под вашу страну — пишите в саппорт.</span>
+            <span lang-en>Monthly or annual billing with a discount. We support RU and international cards. For country-specific options reach out to support.</span>
+          </div>
+        </div>
+  
+        <div class="faq-item">
+          <div class="faq-q">
+            <span lang-ru>Можно ли отменить подписку?</span>
+            <span lang-en>Can I cancel anytime?</span>
+          </div>
+          <div class="faq-a">
+            <span lang-ru>Да, в один клик из личного кабинета. Доступ остаётся до конца оплаченного периода.</span>
+            <span lang-en>Yes, one click from your dashboard. Access stays active until the end of the paid period.</span>
+          </div>
+        </div>
+  
+        <div class="faq-item">
+          <div class="faq-q">
+            <span lang-ru>Что с моими данными и контентом?</span>
+            <span lang-en>What about my data and content?</span>
+          </div>
+          <div class="faq-a">
+            <span lang-ru>Всё, что вы создаёте, — ваше. Мы не используем ваш контент для обучения моделей. Аккаунт можно удалить в любой момент, данные стираются.</span>
+            <span lang-en>Everything you create is yours. We don't use your content to train models. You can delete your account anytime — your data is wiped.</span>
+          </div>
+        </div>
+  
+        <div class="faq-item">
+          <div class="faq-q">
+            <span lang-ru>Есть ли бесплатный пробный период?</span>
+            <span lang-en>Is there a free trial?</span>
+          </div>
+          <div class="faq-a">
+            <span lang-ru>Да, 7 дней с ограниченным количеством генераций. Карту вводить не обязательно.</span>
+            <span lang-en>Yes — 7 days with a limited generation quota. No card required.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+  
+  <!-- ============ BLOG ============ -->
+  <section class="section-light">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-tag" lang-ru>Блог</span><span class="section-tag" lang-en>Blog</span>
+        <h2>
+          <span lang-ru>Гайды для тех, кто работает с AI-моделями</span>
+          <span lang-en>Guides for those who run AI personas</span>
+        </h2>
+        <p>
+          <span lang-ru>Кейсы, разборы, рабочие тактики. Скоро здесь будут реальные статьи.</span>
+          <span lang-en>Cases, breakdowns, working tactics. Real articles coming soon.</span>
+        </p>
+      </div>
+  
+      <div class="blog-grid">
+        <div class="blog-card">
+          <div class="blog-img">
+            <span lang-ru>📸 Обложка статьи (1200×675)</span>
+            <span lang-en>📸 Article cover (1200×675)</span>
+          </div>
+          <div class="blog-content">
+            <span class="blog-tag" lang-ru>Гайд</span><span class="blog-tag" lang-en>Guide</span>
+            <h3 lang-ru>Как масштабировать AI-модель с 1 000 $ до 10 000 $ в месяц</h3>
+            <h3 lang-en>How to scale an AI persona from $1K to $10K per month</h3>
+            <p lang-ru>Структура команды, контент-план, метрики удержания. Без воды.</p>
+            <p lang-en>Team structure, content plan, retention metrics. No fluff.</p>
+          </div>
+        </div>
+  
+        <div class="blog-card">
+          <div class="blog-img">
+            <span lang-ru>📸 Обложка статьи</span>
+            <span lang-en>📸 Article cover</span>
+          </div>
+          <div class="blog-content">
+            <span class="blog-tag" lang-ru>Кейс</span><span class="blog-tag" lang-en>Case study</span>
+            <h3 lang-ru>Студия из 4 человек, 6 моделей, выручка ×3 за квартал</h3>
+            <h3 lang-en>A 4-person studio, 6 personas, 3× revenue in one quarter</h3>
+            <p lang-ru>Что они изменили в процессах и почему это сработало.</p>
+            <p lang-en>What they changed in their workflow and why it worked.</p>
+          </div>
+        </div>
+  
+        <div class="blog-card">
+          <div class="blog-img">
+            <span lang-ru>📸 Обложка статьи</span>
+            <span lang-en>📸 Article cover</span>
+          </div>
+          <div class="blog-content">
+            <span class="blog-tag" lang-ru>Тактика</span><span class="blog-tag" lang-en>Tactic</span>
+            <h3 lang-ru>5 ошибок чаттеров, которые убивают выручку</h3>
+            <h3 lang-en>5 chatter mistakes that kill revenue</h3>
+            <p lang-ru>Разбор реальных диалогов и что с ними не так.</p>
+            <p lang-en>Real chat breakdowns and what went wrong.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+  
+  <!-- ============ CTA BANNER ============ -->
+  <section>
+    <div class="container">
+      <div class="cta-banner">
+        <h2>
+          <span lang-ru>Готовы перестать жить в 7 вкладках?</span>
+          <span lang-en>Ready to stop living in 7 tabs?</span>
+        </h2>
+        <p>
+          <span lang-ru>7 дней бесплатно. Без карты. Можно отменить в любой момент.</span>
+          <span lang-en>7 days free. No card. Cancel anytime.</span>
+        </p>
+        <a href="#pricing" class="btn btn-primary">
+          <span lang-ru>Попробовать ModelMate</span><span lang-en>Try ModelMate</span>
+          <i data-lucide="arrow-right" style="width:18px;height:18px;"></i>
+        </a>
+      </div>
+    </div>
+  </section>
+  
+  <!-- ============ FOOTER ============ -->
+  <footer>
+    <div class="container">
+      <div class="footer-grid">
+        <div class="footer-col">
+          <div class="logo" style="margin-bottom:16px;">
+            <span class="logo-mark">M</span>
+            <span>ModelMate</span>
+          </div>
+          <p class="muted" style="font-size:14px; max-width:300px;">
+            <span lang-ru>Операционная система для AI-моделей. Один кабинет вместо семи вкладок.</span>
+            <span lang-en>The operating system for AI personas. One dashboard instead of seven tabs.</span>
+          </p>
+        </div>
+        <div class="footer-col">
+          <h4 lang-ru>Продукт</h4><h4 lang-en>Product</h4>
+          <a href="#solution" lang-ru>Возможности</a><a href="#solution" lang-en>Features</a>
+          <a href="#pricing" lang-ru>Тарифы</a><a href="#pricing" lang-en>Pricing</a>
+          <a href="#how" lang-ru>Как работает</a><a href="#how" lang-en>How it works</a>
+          <a href="#faq">FAQ</a>
+        </div>
+        <div class="footer-col">
+          <h4 lang-ru>Компания</h4><h4 lang-en>Company</h4>
+          <a href="#" lang-ru>О нас</a><a href="#" lang-en>About</a>
+          <a href="#" lang-ru>Блог</a><a href="#" lang-en>Blog</a>
+          <a href="#" lang-ru>Контакты</a><a href="#" lang-en>Contact</a>
+          <a href="https://status.model-mate.online" lang-ru>Статус сервиса</a>
+          <a href="https://status.model-mate.online" lang-en>Status</a>
+        </div>
+        <div class="footer-col">
+          <h4 lang-ru>Связаться</h4><h4 lang-en>Get in touch</h4>
+          <a href="mailto:hello@model-mate.online">hello@model-mate.online</a>
+          <a href="https://t.me/modelmate_support" target="_blank">Telegram</a>
+          <a href="#" lang-ru>Поддержка</a><a href="#" lang-en>Support</a>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <div>© 2025 ModelMate. <span lang-ru>Все права защищены.</span><span lang-en>All rights reserved.</span></div>
+        <div style="display:flex; gap:24px;">
+          <a href="#" style="color:inherit; text-decoration:none;" lang-ru>Политика конфиденциальности</a>
+          <a href="#" style="color:inherit; text-decoration:none;" lang-en>Privacy</a>
+          <a href="#" style="color:inherit; text-decoration:none;" lang-ru>Условия использования</a>
+          <a href="#" style="color:inherit; text-decoration:none;" lang-en>Terms</a>
+        </div>
+      </div>
+    </div>
+  </footer>
+  
+  <!-- ============ SCRIPTS ============ -->
+  <script>
+    // Инициализация иконок Lucide
+    lucide.createIcons();
+  
+    // Переключатель языка
+    function setLang(lang) {
+      document.documentElement.setAttribute('data-lang', lang);
+      document.documentElement.setAttribute('lang', lang);
+      document.getElementById('lang-ru-btn').classList.toggle('active', lang === 'ru');
+      document.getElementById('lang-en-btn').classList.toggle('active', lang === 'en');
+      localStorage.setItem('mm-lang', lang);
+    }
+    // Запоминаем выбранный язык
+    const savedLang = localStorage.getItem('mm-lang');
+    if (savedLang) setLang(savedLang);
+  
+    // FAQ аккордеон
+    document.querySelectorAll('.faq-q').forEach(q => {
+      q.addEventListener('click', () => {
+        q.parentElement.classList.toggle('open');
+      });
+    });
+  </script>
+  
+  </body>
+  </html>

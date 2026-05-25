@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
@@ -173,6 +173,24 @@ class StudioMotionVideoOut(BaseModel):
     video_url: str | None = None
     message: str | None = None
     motion_video_prompt_auto: str | None = None
+
+
+class StudioJobAcceptedOut(BaseModel):
+    job_id: int
+    status: str = "pending"
+    job_type: str
+    message: str = "Задача принята. Ожидайте результат — статус обновится автоматически."
+
+
+class StudioJobStatusOut(BaseModel):
+    job_id: int
+    job_type: str
+    status: str
+    error_message: str | None = None
+    result: dict[str, Any] | None = None
+    created_at: datetime
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
 
 
 class StudioMotionDrivingVideoUploadOut(BaseModel):

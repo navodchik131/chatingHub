@@ -1,18 +1,20 @@
 from __future__ import annotations
 
+import json
 import logging
 import mimetypes
 import shutil
 import uuid
 from functools import partial
 from pathlib import Path
+from typing import Any
 from urllib.parse import quote
 
 import anyio
 import httpx
 
 from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, Query, Request, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -21,6 +23,7 @@ from app.auth.deps import get_current_user
 from app.config import BACKEND_DIR, settings
 from app.db.models import (
     StudioGeneration,
+    StudioJob,
     StudioMotionRender,
     Subscription,
     SubscriptionStatus,
@@ -39,6 +42,8 @@ from app.schemas import (
     StudioGenerationsPageOut,
     StudioImportArchiveImageIn,
     StudioImportArchiveImageOut,
+    StudioJobAcceptedOut,
+    StudioJobStatusOut,
     StudioModelImageOut,
     StudioModelImagePatchIn,
     StudioModelProfileGenerateOut,
@@ -124,6 +129,7 @@ from app.services.studio_grok_motion import (
     grok_motion_studio_credentials,
     grok_two_step_motion_prompt_for_studio,
 )
+from app.services import studio_jobs
 from app.services.studio_motion_video import (
     extract_first_frame_jpeg,
     extract_video_sample_frames_jpeg,
@@ -238,6 +244,55 @@ def _public_app_base(request: Request | None) -> str:
     if request is not None:
         return str(request.base_url).rstrip("/")
     return ""
+
+
+def _studio_job_status_out(job: StudioJob) -> StudioJobStatusOut:
+    return StudioJobStatusOut(
+        job_id=job.id,
+        job_type=job.job_type,
+        status=job.status,
+        error_message=job.error_message,
+        result=studio_jobs.job_result_dict(job),
+        created_at=job.created_at,
+        started_at=job.started_at,
+        completed_at=job.completed_at,
+    )
+
+
+async def _accept_studio_job(
+    session: AsyncSession,
+    user: User,
+    *,
+    job_type: str,
+    params: dict[str, Any],
+) -> JSONResponse:
+    oid = workspace_owner_id(user)
+    job = await studio_jobs.create_studio_job(
+        session,
+        owner_id=oid,
+        actor_user_id=user.id,
+        job_type=job_type,
+        params=params,
+    )
+    studio_jobs.schedule_studio_job(job.id)
+    return JSONResponse(
+        status_code=202,
+        content=StudioJobAcceptedOut(job_id=job.id, job_type=job_type).model_dump(),
+    )
+
+
+@router.get("/studio/jobs/{job_id}", response_model=StudioJobStatusOut)
+async def api_get_studio_job(
+    job_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> StudioJobStatusOut:
+    assert_permission(user, PERM_STUDIO_GENERATE)
+    oid = workspace_owner_id(user)
+    job = await studio_jobs.get_owned_studio_job(session, job_id, oid)
+    if not job:
+        raise HTTPException(status_code=404, detail="Задача не найдена")
+    return _studio_job_status_out(job)
 
 
 @router.get("/studio/camera-presets", response_model=list[StudioCameraPresetOut])
@@ -763,6 +818,7 @@ async def api_delete_studio_generation(
 @router.post(
     "/studio/generations/{gen_id}/upscale",
     response_model=StudioUpscaleGenerationOut,
+    responses={202: {"model": StudioJobAcceptedOut}},
 )
 async def api_upscale_studio_generation(
     gen_id: int,
@@ -770,7 +826,8 @@ async def api_upscale_studio_generation(
     payload: StudioUpscaleGenerationIn | None = Body(default=None),
     session: AsyncSession = Depends(get_session),
     user: User = Depends(get_current_user),
-) -> StudioUpscaleGenerationOut:
+) -> StudioUpscaleGenerationOut | JSONResponse:
+    _ = request
     assert_permission(user, PERM_STUDIO_GENERATE)
     oid = workspace_owner_id(user)
     row = await session.get(StudioGeneration, gen_id)
@@ -790,6 +847,44 @@ async def api_upscale_studio_generation(
 
     sub_b, _, ws_row, plan, _credits = await load_owner_studio_billing(session, oid)
     _require_studio_subscription(user, sub_b, credits_balance=_credits)
+    try:
+        studio_wavespeed_api_key(plan=plan, ws_row=ws_row, owner_subscription=sub_b)
+    except HTTPException as e:
+        return StudioUpscaleGenerationOut(
+            generated_image_url=None,
+            generation_id=None,
+            message=str(e.detail),
+            target_resolution=tr,
+        )
+
+    return await _accept_studio_job(
+        session,
+        user,
+        job_type="upscale",
+        params={"gen_id": gen_id, "target_resolution": tr},
+    )
+
+
+async def _studio_job_execute_upscale(
+    session: AsyncSession,
+    job: StudioJob,
+    user: User,
+) -> dict[str, Any]:
+    params = studio_jobs.job_params(job)
+    gen_id = int(params["gen_id"])
+    tr = str(params.get("target_resolution") or "4k")
+    oid = workspace_owner_id(user)
+    row = await session.get(StudioGeneration, gen_id)
+    if not row or row.user_id != oid:
+        raise RuntimeError("Генерация не найдена")
+
+    pub = (settings.public_app_url or "").strip().rstrip("/")
+    if not pub.lower().startswith("https://"):
+        raise RuntimeError("Нужен PUBLIC_APP_URL=https://…")
+
+    sub_b, _, ws_row, plan, _credits = await load_owner_studio_billing(session, oid)
+    _require_studio_subscription(user, sub_b, credits_balance=_credits)
+
     ws_key: str = ""
     try:
         ws_key = studio_wavespeed_api_key(
@@ -801,7 +896,7 @@ async def api_upscale_studio_generation(
             generation_id=None,
             message=str(e.detail),
             target_resolution=tr,
-        )
+        ).model_dump()
 
     cost = apply_studio_credit_cost(plan, settings.credit_cost_studio_upscale)
     billing = await ensure_can_consume_credits(session, user, cost)
@@ -841,7 +936,7 @@ async def api_upscale_studio_generation(
                 out_url = raw_up
             else:
                 new_id = gen.id
-                arch_base = _public_app_base(request)
+                arch_base = _public_app_base(None)
                 if arch_base:
                     gtok = create_generation_image_access_token(
                         user_id=oid, generation_id=gen.id
@@ -871,7 +966,7 @@ async def api_upscale_studio_generation(
             generation_id=new_id,
             message=None,
             target_resolution=tr,
-        )
+        ).model_dump()
 
     await session.rollback()
     return StudioUpscaleGenerationOut(
@@ -881,18 +976,23 @@ async def api_upscale_studio_generation(
         if msg
         else (None if out_url else "Апскейл не выполнен."),
         target_resolution=tr,
-    )
+    ).model_dump()
 
 
-@router.post("/studio/generations/{gen_id}/carousel", response_model=StudioCarouselOut)
+@router.post(
+    "/studio/generations/{gen_id}/carousel",
+    response_model=StudioCarouselOut,
+    responses={202: {"model": StudioJobAcceptedOut}},
+)
 async def api_studio_carousel(
     gen_id: int,
     request: Request,
     payload: StudioCarouselIn,
     session: AsyncSession = Depends(get_session),
     user: User = Depends(get_current_user),
-) -> StudioCarouselOut:
+) -> StudioCarouselOut | JSONResponse:
     """Несколько вариантов кадра (ракурс/поза) от той же мастер-генерации — тот же промпт + шаблоны в data/prompts."""
+    _ = request
     assert_permission(user, PERM_STUDIO_GENERATE)
     oid = workspace_owner_id(user)
     row = await session.get(StudioGeneration, gen_id)
@@ -916,27 +1016,59 @@ async def api_studio_carousel(
     sub_b, _, ws_row, plan, _credits = await load_owner_studio_billing(session, oid)
     _require_studio_subscription(user, sub_b, credits_balance=_credits)
     try:
-        ws_key = studio_wavespeed_api_key(
-            plan=plan, ws_row=ws_row, owner_subscription=sub_b
-        )
+        studio_wavespeed_api_key(plan=plan, ws_row=ws_row, owner_subscription=sub_b)
     except HTTPException as e:
         return StudioCarouselOut(message=str(e.detail))
 
-    wave_profile_n = _normalize_studio_wave_profile(payload.studio_wave_profile)
-    wan_tier_n = _normalize_wan_edit_tier(payload.wan_edit_tier)
-    try:
-        aspect_key = normalize_aspect_key(row.output_aspect or "9:16")
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
+    return await _accept_studio_job(
+        session,
+        user,
+        job_type="carousel",
+        params={
+            "gen_id": gen_id,
+            "count": int(payload.count),
+            "studio_wave_profile": payload.studio_wave_profile,
+            "wan_edit_tier": payload.wan_edit_tier,
+        },
+    )
 
-    count = int(payload.count)
+
+async def _studio_job_execute_carousel(
+    session: AsyncSession,
+    job: StudioJob,
+    user: User,
+) -> dict[str, Any]:
+    params = studio_jobs.job_params(job)
+    gen_id = int(params["gen_id"])
+    count = int(params.get("count") or 4)
+    oid = workspace_owner_id(user)
+    row = await session.get(StudioGeneration, gen_id)
+    if not row or row.user_id != oid:
+        raise RuntimeError("Генерация не найдена")
+
+    master_text = (row.refined_prompt or row.prompt_excerpt or "").strip()
+    if len(master_text) < 80:
+        raise RuntimeError("Для карусели нужен сохранённый полный промпт.")
+
+    pub = (settings.public_app_url or "").strip().rstrip("/")
+    if not pub.lower().startswith("https://"):
+        raise RuntimeError("Нужен PUBLIC_APP_URL=https://…")
+
+    sub_b, _, ws_row, plan, _credits = await load_owner_studio_billing(session, oid)
+    _require_studio_subscription(user, sub_b, credits_balance=_credits)
+    ws_key = studio_wavespeed_api_key(plan=plan, ws_row=ws_row, owner_subscription=sub_b)
+
+    wave_profile_n = _normalize_studio_wave_profile(str(params.get("studio_wave_profile") or "nsfw"))
+    wan_tier_n = _normalize_wan_edit_tier(str(params.get("wan_edit_tier") or "standard"))
+    aspect_key = normalize_aspect_key(row.output_aspect or "9:16")
+
     cost_one = apply_studio_credit_cost(plan, settings.credit_cost_studio_carousel_shot)
     tok = create_generation_image_access_token(user_id=oid, generation_id=gen_id)
     master_url = f"{pub}/api/studio/public-generation-image?t={quote(tok, safe='')}"
 
     items: list[StudioCarouselItemOut] = []
     last_msg: str | None = None
-    arch_base = _public_app_base(request)
+    arch_base = _public_app_base(None)
 
     for shot_i in range(count):
         billing = await ensure_can_consume_credits(session, user, cost_one)
@@ -990,12 +1122,11 @@ async def api_studio_carousel(
             )
             break
 
-        excerpt = f"[carousel {shot_i + 1}/{count} from gen {gen_id}]"
         gen = await download_and_create_generation(
             session,
             owner_id=oid,
             source_url=raw_url,
-            refined_prompt=excerpt,
+            refined_prompt=f"[carousel {shot_i + 1}/{count} from gen {gen_id}]",
             output_aspect=aspect_key,
             studio_model_id=row.studio_model_id,
             refined_prompt_full=wavespeed_prompt,
@@ -1021,15 +1152,13 @@ async def api_studio_carousel(
         await session.commit()
 
         if arch_base:
-            gtok = create_generation_image_access_token(
-                user_id=oid, generation_id=gen.id
-            )
+            gtok = create_generation_image_access_token(user_id=oid, generation_id=gen.id)
             out_u = f"{arch_base}/api/studio/public-generation-image?t={quote(gtok, safe='')}"
         else:
             out_u = raw_url
         items.append(StudioCarouselItemOut(generation_id=gen.id, image_url=out_u))
 
-    return StudioCarouselOut(items=items, message=last_msg)
+    return StudioCarouselOut(items=items, message=last_msg).model_dump()
 
 
 @router.get("/studio/models", response_model=list[UserStudioModelOut])
@@ -1461,7 +1590,11 @@ async def api_import_studio_archive_image(
     )
 
 
-@router.post("/studio/refine-prompt", response_model=StudioRefinePromptOut)
+@router.post(
+    "/studio/refine-prompt",
+    response_model=StudioRefinePromptOut,
+    responses={202: {"model": StudioJobAcceptedOut}},
+)
 async def api_studio_refine_prompt(
     request: Request,
     description: str = Form(""),
@@ -1478,7 +1611,8 @@ async def api_studio_refine_prompt(
     inpaint_mask: UploadFile | None = File(None),
     session: AsyncSession = Depends(get_session),
     user: User = Depends(get_current_user),
-) -> StudioRefinePromptOut:
+) -> StudioRefinePromptOut | JSONResponse:
+    _ = request
     skeleton = prepare_studio_prompt_skeleton()
     system_instr = load_image_studio_system()
     if not skeleton:
@@ -1494,8 +1628,98 @@ async def api_studio_refine_prompt(
             "или IMAGE_STUDIO_SYSTEM_INLINE",
         )
 
+    assert_permission(user, PERM_STUDIO_GENERATE)
+    oid = workspace_owner_id(user)
+
+    image_bytes: bytes | None = None
+    if image is not None and (image.filename or "").strip():
+        image_bytes = await image.read()
+        if len(image_bytes) > MAX_IMAGE_BYTES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Референс слишком большой (макс. {MAX_IMAGE_BYTES // (1024 * 1024)} МБ)",
+            )
+        if not image_bytes:
+            raise HTTPException(status_code=400, detail="Пустой файл изображения")
+
+    mask_bytes: bytes | None = None
+    if inpaint_mask is not None and (inpaint_mask.filename or "").strip():
+        mask_bytes = await inpaint_mask.read()
+        if len(mask_bytes) > MAX_IMAGE_BYTES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Маска слишком большая (макс. {MAX_IMAGE_BYTES // (1024 * 1024)} МБ)",
+            )
+        if not mask_bytes:
+            raise HTTPException(status_code=400, detail="Пустой файл маски")
+
+    params: dict[str, Any] = {
+        "description": (description or "").strip(),
+        "model_id": model_id,
+        "existing_generation_id": (existing_generation_id or "").strip(),
+        "output_aspect": output_aspect,
+        "studio_mode": studio_mode,
+        "wan_edit_tier": wan_edit_tier,
+        "studio_wave_profile": studio_wave_profile,
+        "generate_wavespeed": generate_wavespeed,
+        "wavespeed_single_reference": wavespeed_single_reference,
+        "lock_model_hairstyle": lock_model_hairstyle,
+    }
+    job = await studio_jobs.create_studio_job(
+        session,
+        owner_id=oid,
+        actor_user_id=user.id,
+        job_type="refine_prompt",
+        params=params,
+    )
+    if image_bytes:
+        params["image_path"] = studio_jobs.save_studio_job_file(job.id, "image.bin", image_bytes)
+        params["image_mime"] = (image.content_type or "").strip() if image else ""
+    if mask_bytes:
+        params["mask_path"] = studio_jobs.save_studio_job_file(job.id, "mask.bin", mask_bytes)
+        params["mask_mime"] = (inpaint_mask.content_type or "").strip() if inpaint_mask else ""
+    if params != studio_jobs.job_params(job):
+        await studio_jobs.update_studio_job_params(session, job, params)
+
+    studio_jobs.schedule_studio_job(job.id)
+    return JSONResponse(
+        status_code=202,
+        content=StudioJobAcceptedOut(job_id=job.id, job_type="refine_prompt").model_dump(),
+    )
+
+
+async def _studio_job_execute_refine_prompt(
+    session: AsyncSession,
+    job: StudioJob,
+    user: User,
+) -> dict[str, Any]:
+    p = studio_jobs.job_params(job)
+    description = str(p.get("description") or "")
+    model_id = p.get("model_id")
+    existing_generation_id = str(p.get("existing_generation_id") or "")
+    output_aspect = str(p.get("output_aspect") or "9:16")
+    studio_mode = str(p.get("studio_mode") or "model")
+    wan_edit_tier = str(p.get("wan_edit_tier") or "standard")
+    studio_wave_profile = str(p.get("studio_wave_profile") or "nsfw")
+    generate_wavespeed = p.get("generate_wavespeed")
+    wavespeed_single_reference = p.get("wavespeed_single_reference")
+    lock_model_hairstyle = p.get("lock_model_hairstyle")
+
+    skeleton = prepare_studio_prompt_skeleton()
+    system_instr = load_image_studio_system()
+    if not skeleton:
+        raise RuntimeError(
+            "Шаблон промпта пуст: заполните backend/data/prompts/image_studio_skeleton.txt "
+            "или IMAGE_STUDIO_SKELETON_INLINE"
+        )
+    if not system_instr:
+        raise RuntimeError(
+            "Системный промпт студии пуст: заполните backend/data/prompts/image_studio_system.txt "
+            "или IMAGE_STUDIO_SYSTEM_INLINE"
+        )
+
     desc = (description or "").strip()
-    parsed_mid = _parse_optional_model_id(model_id)
+    parsed_mid = _parse_optional_model_id(model_id if model_id is not None else None)
     try:
         aspect_key = normalize_aspect_key(output_aspect)
     except ValueError as e:
@@ -1522,29 +1746,17 @@ async def api_studio_refine_prompt(
 
     image_bytes: bytes | None = None
     image_mime: str | None = None
-    if image is not None and (image.filename or "").strip():
-        image_bytes = await image.read()
-        if len(image_bytes) > MAX_IMAGE_BYTES:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Референс слишком большой (макс. {MAX_IMAGE_BYTES // (1024 * 1024)} МБ)",
-            )
-        if not image_bytes:
-            raise HTTPException(status_code=400, detail="Пустой файл изображения")
-        image_mime = image.content_type
+    if p.get("image_path"):
+        image_bytes = studio_jobs.load_studio_job_file(str(p["image_path"]))
+        raw_mime = str(p.get("image_mime") or "").strip()
+        image_mime = raw_mime or None
 
     mask_bytes: bytes | None = None
     mask_mime: str | None = None
-    if inpaint_mask is not None and (inpaint_mask.filename or "").strip():
-        mask_bytes = await inpaint_mask.read()
-        if len(mask_bytes) > MAX_IMAGE_BYTES:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Маска слишком большая (макс. {MAX_IMAGE_BYTES // (1024 * 1024)} МБ)",
-            )
-        if not mask_bytes:
-            raise HTTPException(status_code=400, detail="Пустой файл маски")
-        mask_mime = inpaint_mask.content_type
+    if p.get("mask_path"):
+        mask_bytes = studio_jobs.load_studio_job_file(str(p["mask_path"]))
+        raw_mm = str(p.get("mask_mime") or "").strip()
+        mask_mime = raw_mm or None
 
     if (
         mode_n == "photo_edit"
@@ -2168,7 +2380,7 @@ async def api_studio_refine_prompt(
         )
         if gen_lc is not None:
             generation_id = gen_lc.id
-            arch_base = _public_app_base(request)
+            arch_base = _public_app_base(None)
             if arch_base:
                 gtok = create_generation_image_access_token(
                     user_id=oid, generation_id=gen_lc.id
@@ -2190,7 +2402,7 @@ async def api_studio_refine_prompt(
         )
         if gen is not None:
             generation_id = gen.id
-            arch_base = _public_app_base(request)
+            arch_base = _public_app_base(None)
             if arch_base:
                 gtok = create_generation_image_access_token(user_id=oid, generation_id=gen.id)
                 generated_image_url = (
@@ -2241,7 +2453,7 @@ async def api_studio_refine_prompt(
         generated_image_url=generated_image_url,
         wavespeed_message=wavespeed_message,
         generation_id=generation_id,
-    )
+    ).model_dump()
 
 
 async def _load_owned_generation_still_for_motion(
@@ -2270,7 +2482,11 @@ async def _load_owned_generation_still_for_motion(
     return row, data, ct
 
 
-@router.post("/studio/motion/first-frame", response_model=StudioMotionFirstFrameOut)
+@router.post(
+    "/studio/motion/first-frame",
+    response_model=StudioMotionFirstFrameOut,
+    responses={202: {"model": StudioJobAcceptedOut}},
+)
 async def api_studio_motion_first_frame(
     request: Request,
     video: UploadFile | None = File(None),
@@ -2286,7 +2502,8 @@ async def api_studio_motion_first_frame(
     use_still_as_final: str = Form("0"),
     session: AsyncSession = Depends(get_session),
     user: User = Depends(get_current_user),
-) -> StudioMotionFirstFrameOut:
+) -> StudioMotionFirstFrameOut | JSONResponse:
+    _ = request
     skeleton = prepare_studio_prompt_skeleton()
     system_instr = load_image_studio_system()
     if not skeleton or not system_instr:
@@ -2295,26 +2512,121 @@ async def api_studio_motion_first_frame(
             detail="Шаблон промпта студии не настроен (skeleton / system).",
         )
 
+    assert_permission(user, PERM_STUDIO_GENERATE)
+    oid = workspace_owner_id(user)
+    max_v = max(1, int(settings.studio_motion_max_upload_mb)) * 1024 * 1024
+
+    video_bytes: bytes | None = None
+    video_filename: str | None = None
+    if video is not None and (video.filename or "").strip():
+        video_bytes = await video.read()
+        if len(video_bytes) > max_v:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Видео слишком большое (макс. {settings.studio_motion_max_upload_mb} МБ).",
+            )
+        if not video_bytes:
+            raise HTTPException(status_code=400, detail="Пустой файл видео.")
+        video_filename = video.filename or "video.mp4"
+
+    still_bytes: bytes | None = None
+    still_mime = "image/jpeg"
+    if first_frame_image is not None and (first_frame_image.filename or "").strip():
+        still_bytes = await first_frame_image.read()
+        if len(still_bytes) > MAX_IMAGE_BYTES:
+            raise HTTPException(
+                status_code=400,
+                detail="Файл первого кадра слишком большой (макс. 12 МБ).",
+            )
+        if not still_bytes:
+            raise HTTPException(status_code=400, detail="Пустой файл первого кадра.")
+        ct = (first_frame_image.content_type or "").strip().lower()
+        if ct and ct.startswith("image/"):
+            still_mime = ct.split(";")[0].strip()
+        else:
+            still_mime = (
+                mimetypes.guess_type(first_frame_image.filename or "")[0] or "image/jpeg"
+            )
+
+    if not (existing_generation_id or "").strip() and not video_bytes and not still_bytes:
+        raise HTTPException(
+            status_code=400,
+            detail="Загрузите референс-видео, файл первого кадра или выберите снимок из архива.",
+        )
+
+    params: dict[str, Any] = {
+        "existing_generation_id": (existing_generation_id or "").strip(),
+        "model_id": (model_id or "").strip(),
+        "description": (description or "").strip(),
+        "output_aspect": output_aspect,
+        "wan_edit_tier": wan_edit_tier,
+        "studio_wave_profile": studio_wave_profile,
+        "auto_motion_prompt": auto_motion_prompt,
+        "lock_model_hairstyle": lock_model_hairstyle,
+        "use_still_as_final": use_still_as_final,
+    }
+    job = await studio_jobs.create_studio_job(
+        session,
+        owner_id=oid,
+        actor_user_id=user.id,
+        job_type="motion_first_frame",
+        params=params,
+    )
+    if video_bytes:
+        params["video_path"] = studio_jobs.save_studio_job_file(job.id, "video.bin", video_bytes)
+        params["video_filename"] = video_filename or "video.mp4"
+    if still_bytes:
+        params["first_frame_path"] = studio_jobs.save_studio_job_file(
+            job.id, "first_frame.bin", still_bytes
+        )
+        params["first_frame_mime"] = still_mime
+    if params != studio_jobs.job_params(job):
+        await studio_jobs.update_studio_job_params(session, job, params)
+
+    studio_jobs.schedule_studio_job(job.id)
+    return JSONResponse(
+        status_code=202,
+        content=StudioJobAcceptedOut(job_id=job.id, job_type="motion_first_frame").model_dump(),
+    )
+
+
+async def _studio_job_execute_motion_first_frame(
+    session: AsyncSession,
+    job: StudioJob,
+    user: User,
+) -> dict[str, Any]:
+    p = studio_jobs.job_params(job)
+    existing_generation_id = str(p.get("existing_generation_id") or "")
+    model_id = str(p.get("model_id") or "")
+    description = str(p.get("description") or "")
+    output_aspect = str(p.get("output_aspect") or "9:16")
+    wan_edit_tier = str(p.get("wan_edit_tier") or "standard")
+    studio_wave_profile = str(p.get("studio_wave_profile") or "regular")
+    auto_motion_prompt = str(p.get("auto_motion_prompt") or "1")
+    lock_model_hairstyle = str(p.get("lock_model_hairstyle") or "1")
+    use_still_as_final = str(p.get("use_still_as_final") or "0")
+
+    skeleton = prepare_studio_prompt_skeleton()
+    system_instr = load_image_studio_system()
+    if not skeleton or not system_instr:
+        raise RuntimeError("Шаблон промпта студии не настроен (skeleton / system).")
+
     try:
         aspect_key = normalize_aspect_key(output_aspect)
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
+        raise RuntimeError(str(e)) from e
 
-    assert_permission(user, PERM_STUDIO_GENERATE)
     oid = workspace_owner_id(user)
     sub_b, llm_row, ws_row, plan, _credits = await load_owner_studio_billing(session, oid)
     _require_studio_subscription(user, sub_b, credits_balance=_credits)
 
-    raw_ex = (existing_generation_id or "").strip()
+    raw_ex = existing_generation_id.strip()
     existing_gid: int | None = None
     if raw_ex:
         try:
             existing_gid = int(raw_ex)
         except ValueError:
-            raise HTTPException(
-                status_code=400,
-                detail="Некорректный номер генерации из архива.",
-            ) from None
+            raise RuntimeError("Некорректный номер генерации из архива.") from None
 
     gen_arch_row: StudioGeneration | None = None
     first_frame: bytes = b""
@@ -2324,75 +2636,60 @@ async def api_studio_motion_first_frame(
     max_v = max(1, int(settings.studio_motion_max_upload_mb)) * 1024 * 1024
 
     explicit_still_file_upload = False
+    has_still_upload = bool(p.get("first_frame_path"))
+    has_video_upload = bool(p.get("video_path"))
 
     if existing_gid is not None:
         gen_arch_row, first_frame, first_frame_media = await _load_owned_generation_still_for_motion(
             session, owner_id=oid, generation_id=existing_gid
         )
-    elif first_frame_image is not None and (first_frame_image.filename or "").strip():
-        first_frame = await first_frame_image.read()
-        if len(first_frame) > MAX_IMAGE_BYTES:
-            raise HTTPException(
-                status_code=400,
-                detail="Файл первого кадра слишком большой (макс. 12 МБ).",
-            )
-        if not first_frame:
-            raise HTTPException(status_code=400, detail="Пустой файл первого кадра.")
-        ct = (first_frame_image.content_type or "").strip().lower()
-        if ct and ct.startswith("image/"):
-            first_frame_media = ct.split(";")[0].strip()
-        else:
-            first_frame_media = (
-                mimetypes.guess_type(first_frame_image.filename or "")[0] or "image/jpeg"
-            )
+    elif has_still_upload:
+        first_frame = studio_jobs.load_studio_job_file(str(p["first_frame_path"]))
+        first_frame_media = str(p.get("first_frame_mime") or "image/jpeg")
         explicit_still_file_upload = True
-    elif video is not None and (video.filename or "").strip():
-        raw_video = await video.read()
+    elif has_video_upload:
+        raw_video = studio_jobs.load_studio_job_file(str(p["video_path"]))
         if len(raw_video) > max_v:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Видео слишком большое (макс. {settings.studio_motion_max_upload_mb} МБ).",
+            raise RuntimeError(
+                f"Видео слишком большое (макс. {settings.studio_motion_max_upload_mb} МБ)."
             )
-        if not raw_video:
-            raise HTTPException(status_code=400, detail="Пустой файл видео.")
         motion_video_file_id = save_motion_video_bytes(
-            owner_id=oid, raw=raw_video, filename=video.filename
+            owner_id=oid,
+            raw=raw_video,
+            filename=str(p.get("video_filename") or "video.mp4"),
         )
         video_path = resolve_motion_video_file(oid, motion_video_file_id)
         if video_path is None:
-            raise HTTPException(status_code=500, detail="Не удалось сохранить видео.")
+            raise RuntimeError("Не удалось сохранить видео.")
         try:
             first_frame = await anyio.to_thread.run_sync(
                 lambda vp=video_path: extract_first_frame_jpeg(vp)
             )
         except Exception as e:
             log.warning("motion first frame ffmpeg: %s", e)
-            raise HTTPException(
-                status_code=400,
-                detail="Не удалось прочитать видео. Нужен MP4/WebM/MOV и ffmpeg на сервере.",
+            raise RuntimeError(
+                "Не удалось прочитать видео. Нужен MP4/WebM/MOV и ffmpeg на сервере."
             ) from e
         if len(first_frame) < 64:
-            raise HTTPException(status_code=400, detail="Не удалось извлечь кадр из видео.")
+            raise RuntimeError("Не удалось извлечь кадр из видео.")
         first_frame_media = "image/jpeg"
     else:
-        raise HTTPException(
-            status_code=400,
-            detail="Загрузите референс-видео, файл первого кадра или выберите снимок из архива.",
+        raise RuntimeError(
+            "Загрузите референс-видео, файл первого кадра или выберите снимок из архива."
         )
 
-    from_archive_or_still_upload = gen_arch_row is not None or (
-        first_frame_image is not None and (first_frame_image.filename or "").strip()
-    )
-    if from_archive_or_still_upload and video is not None and (video.filename or "").strip():
-        raw_v2 = await video.read()
+    from_archive_or_still_upload = gen_arch_row is not None or has_still_upload
+    if from_archive_or_still_upload and has_video_upload:
+        raw_v2 = studio_jobs.load_studio_job_file(str(p["video_path"]))
         if len(raw_v2) > max_v:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Видео слишком большое (макс. {settings.studio_motion_max_upload_mb} МБ).",
+            raise RuntimeError(
+                f"Видео слишком большое (макс. {settings.studio_motion_max_upload_mb} МБ)."
             )
         if raw_v2:
             motion_video_file_id = save_motion_video_bytes(
-                owner_id=oid, raw=raw_v2, filename=video.filename
+                owner_id=oid,
+                raw=raw_v2,
+                filename=str(p.get("video_filename") or "video.mp4"),
             )
             video_path = resolve_motion_video_file(oid, motion_video_file_id)
 
@@ -2550,7 +2847,7 @@ async def api_studio_motion_first_frame(
     cost = apply_studio_credit_cost(plan, settings.credit_cost_studio_prompt_refine)
     billing = await ensure_can_consume_credits(session, user, cost)
 
-    arch_base = _public_app_base(request)
+    arch_base = _public_app_base(None)
     pub = (settings.public_app_url or "").strip().rstrip("/")
 
     generated_image_url: str | None = None
@@ -2729,10 +3026,14 @@ async def api_studio_motion_first_frame(
         wavespeed_message=wavespeed_message,
         generation_id=generation_id,
         motion_video_file_id=motion_video_file_id,
-    )
+    ).model_dump()
 
 
-@router.post("/studio/motion/render-video", response_model=StudioMotionVideoOut)
+@router.post(
+    "/studio/motion/render-video",
+    response_model=StudioMotionVideoOut,
+    responses={202: {"model": StudioJobAcceptedOut}},
+)
 async def api_studio_motion_render_video(
     request: Request,
     generation_id: str = Form(...),
@@ -2745,7 +3046,7 @@ async def api_studio_motion_render_video(
     auto_motion_prompt: str = Form("1"),
     session: AsyncSession = Depends(get_session),
     user: User = Depends(get_current_user),
-) -> StudioMotionVideoOut:
+) -> StudioMotionVideoOut | JSONResponse:
     _ = request
     assert_permission(user, PERM_STUDIO_GENERATE)
     oid = workspace_owner_id(user)
@@ -2774,7 +3075,6 @@ async def api_studio_motion_render_video(
     if not row or row.user_id != oid:
         raise HTTPException(status_code=404, detail="Генерация не найдена")
 
-    vpath = None
     if mv_id:
         vpath = resolve_motion_video_file(oid, mv_id)
         if needs_motion_file and (vpath is None or not vpath.is_file()):
@@ -2790,6 +3090,75 @@ async def api_studio_motion_render_video(
             detail="Нужен публичный HTTPS (PUBLIC_APP_URL) для WaveSpeed.",
         )
 
+    try:
+        studio_wavespeed_api_key(plan=plan, ws_row=ws_row, owner_subscription=sub_b)
+    except HTTPException:
+        raise
+
+    if provider == "seedance_i2v":
+        ds_raw = (duration_seconds or "").strip()
+        if ds_raw:
+            try:
+                ds = int(ds_raw)
+            except ValueError:
+                raise HTTPException(
+                    status_code=400,
+                    detail="duration_seconds: укажите целое число секунд.",
+                ) from None
+            if ds < 4 or ds > 15:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Длительность Seedance I2V: от 4 до 15 секунд.",
+                )
+
+    return await _accept_studio_job(
+        session,
+        user,
+        job_type="motion_render_video",
+        params={
+            "generation_id": gid,
+            "motion_video_file_id": mv_id,
+            "character_orientation": orient,
+            "prompt": (prompt or "").strip(),
+            "negative_prompt": (negative_prompt or "").strip(),
+            "keep_original_sound": (keep_original_sound or "1").strip(),
+            "duration_seconds": (duration_seconds or "").strip(),
+            "auto_motion_prompt": (auto_motion_prompt or "1").strip(),
+        },
+    )
+
+
+async def _studio_job_execute_motion_render_video(
+    session: AsyncSession,
+    job: StudioJob,
+    user: User,
+) -> dict[str, Any]:
+    params = studio_jobs.job_params(job)
+    oid = workspace_owner_id(user)
+    gid = int(params["generation_id"])
+    mv_id = str(params.get("motion_video_file_id") or "").strip()
+    orient = str(params.get("character_orientation") or "video").strip().lower()
+    prompt = str(params.get("prompt") or "")
+    negative_prompt = str(params.get("negative_prompt") or "")
+    keep_original_sound = str(params.get("keep_original_sound") or "1")
+    duration_seconds = str(params.get("duration_seconds") or "")
+    auto_motion_prompt = str(params.get("auto_motion_prompt") or "1")
+
+    sub_b, _llm, ws_row, plan, _credits = await load_owner_studio_billing(session, oid)
+    _require_studio_subscription(user, sub_b, credits_balance=_credits)
+
+    row = await session.get(StudioGeneration, gid)
+    if not row or row.user_id != oid:
+        raise RuntimeError("Генерация не найдена")
+
+    vpath = None
+    if mv_id:
+        vpath = resolve_motion_video_file(oid, mv_id)
+
+    pub = (settings.public_app_url or "").strip().rstrip("/")
+    if not pub.lower().startswith("https://"):
+        raise RuntimeError("Нужен PUBLIC_APP_URL=https://…")
+
     ws_key = studio_wavespeed_api_key(plan=plan, ws_row=ws_row, owner_subscription=sub_b)
 
     cost = apply_studio_credit_cost(plan, settings.credit_cost_studio_motion_control)
@@ -2803,7 +3172,6 @@ async def api_studio_motion_render_video(
         and vpath.is_file()
         and _CLIP_MOTION_MARKER not in (row.motion_video_prompt_auto or "")
         and _GROK_MOTION_MARKER not in (row.motion_video_prompt_auto or "")
-        # При Grok-таймлайне на сервере блок из БД уже полный; добор коротким OpenAI на рендере не делаем.
         and not settings.studio_grok_motion_timeline_enabled
     )
     if want_auto_clip:
@@ -2838,34 +3206,24 @@ async def api_studio_motion_render_video(
 
     keep_snd = _truthy_wavespeed_flag(keep_original_sound)
 
+    provider = settings.studio_motion_video_provider
     seedance_duration_request: int | None = None
     if provider == "seedance_i2v":
-        ds_raw = (duration_seconds or "").strip()
+        ds_raw = duration_seconds.strip()
         if ds_raw:
-            try:
-                seedance_duration_request = int(ds_raw)
-            except ValueError:
-                raise HTTPException(
-                    status_code=400,
-                    detail="duration_seconds: укажите целое число секунд.",
-                ) from None
-            if seedance_duration_request < 4 or seedance_duration_request > 15:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Длительность Seedance I2V: от 4 до 15 секунд.",
-                )
+            seedance_duration_request = int(ds_raw)
 
     seedance_duration_effective = settings.wavespeed_seedance_20_i2v_duration
 
     msg: str | None = None
     video_url: str | None = None
-    user_extra = (prompt or "").strip()
+    user_extra = prompt.strip()
     motion_prompt = _build_wan_22_animate_prompt(
         motion_summary=effective_motion_summary,
         user_extra=user_extra,
         negative=None,
     )
-    neg = (negative_prompt or "").strip()
+    neg = negative_prompt.strip()
     provider_n = settings.studio_motion_video_provider
     try:
         if provider_n == "wan":
@@ -2888,9 +3246,7 @@ async def api_studio_motion_render_video(
         elif provider_n == "seedance_i2v":
             seed_txt = (motion_prompt or "").strip()
             if neg:
-                seed_txt = (
-                    f"{seed_txt}\nAvoid: {neg}" if seed_txt else f"Avoid: {neg}"
-                )
+                seed_txt = f"{seed_txt}\nAvoid: {neg}" if seed_txt else f"Avoid: {neg}"
             if not seed_txt.strip():
                 seed_txt = (
                     "Natural cinematic motion; preserve the subject from the reference image; "
@@ -2965,4 +3321,4 @@ async def api_studio_motion_render_video(
         video_url=video_url,
         message=msg,
         motion_video_prompt_auto=(effective_motion_summary or "").strip() or None,
-    )
+    ).model_dump()

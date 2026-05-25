@@ -288,6 +288,45 @@ async def init_db() -> None:
         await conn.run_sync(_migrate_user_studio_model_export_camera)
         await conn.run_sync(_migrate_studio_model_image_export_selfie)
         await conn.run_sync(_migrate_subscription_billing_plan)
+        await conn.run_sync(_migrate_studio_jobs_table)
+
+
+def _migrate_studio_jobs_table(sync_conn) -> None:
+    from sqlalchemy import inspect
+
+    insp = inspect(sync_conn)
+    if insp.has_table("studio_jobs"):
+        return
+    if sync_conn.dialect.name == "sqlite":
+        sync_conn.execute(
+            text(
+                """
+                CREATE TABLE studio_jobs (
+                    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    actor_user_id INTEGER NOT NULL,
+                    job_type VARCHAR(64) NOT NULL,
+                    status VARCHAR(16) NOT NULL DEFAULT 'pending',
+                    params_json TEXT NOT NULL DEFAULT '{}',
+                    result_json TEXT,
+                    error_message TEXT,
+                    created_at DATETIME NOT NULL,
+                    updated_at DATETIME NOT NULL,
+                    started_at DATETIME,
+                    completed_at DATETIME,
+                    FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE,
+                    FOREIGN KEY(actor_user_id) REFERENCES users (id) ON DELETE CASCADE
+                )
+                """
+            )
+        )
+        sync_conn.execute(text("CREATE INDEX ix_studio_jobs_user_id ON studio_jobs (user_id)"))
+        sync_conn.execute(text("CREATE INDEX ix_studio_jobs_job_type ON studio_jobs (job_type)"))
+        sync_conn.execute(text("CREATE INDEX ix_studio_jobs_status ON studio_jobs (status)"))
+    else:
+        from app.db.models import StudioJob
+
+        StudioJob.__table__.create(sync_conn, checkfirst=True)
 
 
 async def get_session() -> AsyncGenerator[AsyncSession, None]:

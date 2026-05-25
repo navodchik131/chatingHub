@@ -18,6 +18,7 @@ import {
 } from './webPush'
 import { billingReturnCopy } from './billingReturnCopy'
 import { formatClientFetchError, formatHttpApiError } from './apiErrors'
+import { postStudioJobAndWait } from './studioJobs'
 import { AuthPanel } from './AuthPanel'
 import './App.css'
 import { StudioInpaintMaskPainter, type StudioInpaintMaskPainterRef } from './StudioInpaintMaskPainter'
@@ -1383,8 +1384,17 @@ export default function App() {
       try {
         const payload = JSON.parse(ev.data as string) as {
           type: string
-          conversation_id: number
+          conversation_id?: number
           message?: ChatMessage
+          status?: string
+        }
+        if (payload.type === 'studio_job') {
+          if (payload.status === 'completed' || payload.status === 'failed') {
+            void refreshMotionRenders()
+            void loadStudioGenerationsReset()
+            void refreshMe()
+          }
+          return
         }
         if (payload.type === 'new_message') {
           void loadHealth()
@@ -1447,7 +1457,7 @@ export default function App() {
       ws?.close()
       wsRef.current = null
     }
-  }, [loadConversations, loadHealth, authed])
+  }, [loadConversations, loadHealth, authed, refreshMotionRenders, loadStudioGenerationsReset, refreshMe])
 
   useEffect(() => {
     const onDoc = (e: MouseEvent) => {
@@ -1996,23 +2006,16 @@ export default function App() {
       fd.append('generate_wavespeed', promptOnlyActive ? '0' : '1')
       fd.append('wavespeed_single_reference', '1')
       fd.append('lock_model_hairstyle', studioLockModelHairstyle ? '1' : '0')
-      const r = await apiFetch('/api/studio/refine-prompt', {
-        method: 'POST',
-        body: fd,
-        timeoutMs: 960_000,
-      })
-      if (!r.ok) {
-        const j = await r.json().catch(() => ({}))
-        setError(formatHttpApiError(r, j))
-        return
-      }
-      const data = (await r.json()) as {
+      const data = await postStudioJobAndWait<{
         refined_prompt: string
         reference_scene_description?: string | null
         generated_image_url?: string | null
         wavespeed_message?: string | null
         generation_id?: number | null
-      }
+      }>('/api/studio/refine-prompt', {
+        method: 'POST',
+        body: fd,
+      })
       const gid = typeof data.generation_id === 'number' ? data.generation_id : null
       const gurl = data.generated_image_url?.trim() || null
       setStudioGenImageUrl(gurl)
@@ -2030,11 +2033,7 @@ export default function App() {
       void refreshMe()
       void loadStudioGenerationsReset()
     } catch (e) {
-      setError(
-        e instanceof DOMException && e.name === 'AbortError'
-          ? 'Запрос отменён по таймауту (прокси или браузер). Подождите и повторите — на стороне провайдера генерация уже могла завершиться. Проверьте «Сохранённые» после обновления страницы.'
-          : formatClientFetchError(e, true),
-      )
+      setError(formatClientFetchError(e, true))
     } finally {
       setStudioBusy(false)
     }
@@ -2110,14 +2109,20 @@ export default function App() {
     fd.append('auto_motion_prompt', motionAutoPrompt ? '1' : '0')
     fd.append('lock_model_hairstyle', motionLockHairstyle ? '1' : '0')
     fd.append('use_still_as_final', useStillFinalEffective && motionFirstFrameFile ? '1' : '0')
-    const r = await apiFetch('/api/studio/motion/first-frame', {
-      method: 'POST',
-      body: fd,
-      timeoutMs: 900_000,
-    })
-    const data = (await r.json().catch(() => ({}))) as MotionFirstFrameApiData
-    if (r.ok) return { ok: true as const, data }
-    return { ok: false as const, data, response: r }
+    try {
+      const data = await postStudioJobAndWait<MotionFirstFrameApiData>(
+        '/api/studio/motion/first-frame',
+        { method: 'POST', body: fd },
+      )
+      return { ok: true as const, data }
+    } catch (e) {
+      const msg = formatClientFetchError(e, true)
+      return {
+        ok: false as const,
+        data: { detail: msg } as MotionFirstFrameApiData,
+        response: new Response(null, { status: 500, statusText: msg }),
+      }
+    }
   }
 
   const runMotionFirstFrame = async () => {
@@ -2232,21 +2237,14 @@ export default function App() {
       if (prov === 'seedance_i2v') {
         fd.append('duration_seconds', String(motionSeedanceDuration))
       }
-      const r = await apiFetch('/api/studio/motion/render-video', {
-        method: 'POST',
-        body: fd,
-        timeoutMs: 900_000,
-      })
-      const data = (await r.json().catch(() => ({}))) as {
+      const data = await postStudioJobAndWait<{
         video_url?: string | null
         message?: string | null
         motion_video_prompt_auto?: string | null
-        detail?: unknown
-      }
-      if (!r.ok) {
-        setError(formatHttpApiError(r, data))
-        return
-      }
+      }>('/api/studio/motion/render-video', {
+        method: 'POST',
+        body: fd,
+      })
       setMotionResultVideoUrl(data.video_url?.trim() || null)
       const mva = data.motion_video_prompt_auto?.trim()
       if (mva)
@@ -2273,22 +2271,16 @@ export default function App() {
     setStudioWavespeedMsg(null)
     setStudioUpscaleBusy(true)
     try {
-      const r = await apiFetch(`/api/studio/generations/${studioGenGenerationId}/upscale`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ target_resolution: studioUpscaleTarget }),
-        timeoutMs: 600_000,
-      })
-      const data = (await r.json().catch(() => ({}))) as {
+      const data = await postStudioJobAndWait<{
         generated_image_url?: string | null
         generation_id?: number | null
         message?: string | null
         target_resolution?: string
-      }
-      if (!r.ok) {
-        setError(formatHttpApiError(r, data))
-        return
-      }
+      }>(`/api/studio/generations/${studioGenGenerationId}/upscale`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target_resolution: studioUpscaleTarget }),
+      })
       const url = data.generated_image_url?.trim()
       const gid =
         typeof data.generation_id === 'number' && Number.isFinite(data.generation_id)
@@ -2329,7 +2321,10 @@ export default function App() {
     setStudioWavespeedMsg(null)
     setStudioCarouselBusy(true)
     try {
-      const r = await apiFetch(`/api/studio/generations/${studioGenGenerationId}/carousel`, {
+      const data = await postStudioJobAndWait<{
+        items?: { generation_id: number; image_url: string }[]
+        message?: string | null
+      }>(`/api/studio/generations/${studioGenGenerationId}/carousel`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -2338,14 +2333,6 @@ export default function App() {
           wan_edit_tier: studioWanEditTier,
         }),
       })
-      const data = (await r.json().catch(() => ({}))) as {
-        items?: { generation_id: number; image_url: string }[]
-        message?: string | null
-      }
-      if (!r.ok) {
-        setError(formatHttpApiError(r, data))
-        return
-      }
       const items = data.items ?? []
       const note = (data.message ?? '').trim()
       if (items.length > 0 && note) {
