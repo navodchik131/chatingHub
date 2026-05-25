@@ -1,0 +1,43 @@
+import json
+
+from app.services.studio_prompt_bundle import prepare_positive_prompt_json
+
+
+def test_compact_strips_scene_keeps_body():
+    sample = {
+        "subject": {
+            "description": (
+                "A 22-year-old attractive Caucasian woman with vibrant purple wavy hair, "
+                "standing on an outdoor villa balcony with her back facing the camera"
+            ),
+            "body": {
+                "frame": "curvy athletic hourglass figure",
+                "chest": "full, round natural C/D-cup bust",
+                "legs": "long toned legs",
+            },
+            "hair": {"color": "vibrant purple", "style": "wavy"},
+            "pose": {"position": "standing on balcony"},
+            "clothing": {"top": {"type": "beige halter"}},
+        },
+        "photography": {"aspect_ratio": "3:4"},
+        "background": {"setting": "villa balcony"},
+        "constraints": {
+            "must_keep": ["back view", "glass railing"],
+            "avoid": ["selfie", "bedroom", "deformed hands"],
+        },
+        "negative_prompt": "selfie, bedroom, deformed hands",
+    }
+    pos, neg = prepare_positive_prompt_json(
+        json.dumps(sample),
+        brief_mode="compact_pose_image",
+        model_profile_text=None,
+    )
+    data = json.loads(pos)
+    assert "identity_reference" in data
+    assert data["scene_from_reference_image"]["pose_and_composition"] == (
+        "from_pose_reference_input_image_only"
+    )
+    assert "C/D-cup" in data["identity_reference"]["body_proportions"]
+    assert "balcony" not in pos.lower()
+    assert "bedroom" not in neg.lower()
+    assert "deformed" in neg.lower()

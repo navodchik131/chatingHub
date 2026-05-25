@@ -3,7 +3,7 @@
     "subject": "<FROM_MODEL_PROFILE — one line: age vibe, ethnicity, overall look>",
     "face": "<FROM_MODEL_PROFILE — eyes, nose, lips, skin texture; no pose>",
     "hair": "<FROM_MODEL_PROFILE — color, length, default style>",
-    "body_proportions": "<FROM_MODEL_PROFILE body_type only — silhouette/proportions; no bra cup letters; no explicit genital detail>"
+    "body_proportions": "<FROM_MODEL_PROFILE body_type / bust / hips / legs — full silhouette; keep profile wording for NSFW WAN>"
   },
   "scene_from_reference_image": {
     "pose_and_composition": "from_pose_reference_input_image_only",

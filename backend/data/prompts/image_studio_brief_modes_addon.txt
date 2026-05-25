@@ -4,7 +4,7 @@
 The pose/scene reference will be sent as a **separate input image** to the image-edit API (WAN / Nano). Your JSON must **not** duplicate that scene in text.
 
 Rules:
-- Fill **only** `identity_reference` from MODEL_PROFILE (face, hair, body_proportions). Keep `body_proportions` concise (hourglass, athletic, curvy — **no** bra cup sizes A/B/C/D, no explicit genital anatomy).
+- Fill **only** `identity_reference` from MODEL_PROFILE (face, hair, **body_proportions** with full figure from profile). **Do not** describe pose, outfit, room, or camera in JSON — the server coerces scene fields to `from_pose_reference_input_image_only`.
 - Leave `scene_from_reference_image` values **exactly** as the template literals `from_pose_reference_input_image_only` — do **not** replace them with colors, garment names, room descriptions, or pose sentences.
 - `user_overrides`: USER_TEXT only.
 - Do **not** add `subject.pose`, `subject.clothing`, `background`, `photography` camera fields, `constraints.avoid`, or `negative_prompt` — the server strips negatives and appends them separately.
