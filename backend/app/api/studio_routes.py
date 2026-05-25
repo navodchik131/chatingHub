@@ -120,6 +120,7 @@ from app.services.studio_model_images import (
     assert_studio_image_kind,
     model_images_for_wavespeed_profile,
     model_reference_photos_block,
+    sort_model_images_for_wan_identity,
     parse_image_export_selfies_json,
     parse_image_kinds_json,
     sort_model_images_for_studio,
@@ -537,10 +538,7 @@ def _masked_full_frame_wan_image_urls(
     wan_cap = 9
     urls = [base_url, mask_url] + identity_urls
     urls = urls[:wan_cap]
-    if wave_profile_n == "nsfw" and _truthy_wavespeed_flag(wavespeed_single_reference):
-        if len(urls) <= 2:
-            return urls
-        return [base_url, mask_url, urls[2]]
+    # wavespeed_single_reference = один pose-кадр (base), не обрезка identity после маски
     return urls
 
 
@@ -2018,7 +2016,12 @@ async def _studio_job_execute_refine_prompt(
 
                     identity_urls_wm: list[str] = []
                     if attach_mask_mr:
-                        for im_wm in imgs_for_ws:
+                        imgs_wm_order = (
+                            sort_model_images_for_wan_identity(imgs_for_ws)
+                            if wave_profile_n == "nsfw"
+                            else imgs_for_ws
+                        )
+                        for im_wm in imgs_wm_order:
                             if len(identity_urls_wm) >= 7:
                                 break
                             tk_wm = create_model_image_access_token(
@@ -2284,7 +2287,12 @@ async def _studio_job_execute_refine_prompt(
                     attach_model_urls = bool(sm_loaded and imgs_model)
 
                 if attach_model_urls:
-                    for im in imgs_for_ws[:10]:
+                    imgs_ws_order = (
+                        sort_model_images_for_wan_identity(imgs_for_ws)
+                        if wave_profile_n == "nsfw"
+                        else imgs_for_ws
+                    )
+                    for im in imgs_ws_order[:10]:
                         tok = create_model_image_access_token(
                             user_id=oid, image_id=im.id
                         )
@@ -2307,10 +2315,11 @@ async def _studio_job_execute_refine_prompt(
                 if wave_profile_n == "nsfw" and _truthy_wavespeed_flag(
                     wavespeed_single_reference
                 ):
+                    # Раньше [:2] оставлял pose + только face — body-фото модели не доходили до WAN.
                     if user_pose_ref_prepended and len(image_urls) >= 2:
-                        image_urls = image_urls[:2]
+                        image_urls = [image_urls[0]] + image_urls[1:9]
                     else:
-                        image_urls = image_urls[:1]
+                        image_urls = image_urls[:9]
 
                 pose_is_last_after_reorder = False
                 if wave_profile_n == "regular":

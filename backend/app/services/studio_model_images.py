@@ -69,6 +69,19 @@ def sort_model_images_for_studio(imgs: list[UserStudioModelImage]) -> list[UserS
     return sorted(imgs, key=key)
 
 
+def sort_model_images_for_wan_identity(
+    imgs: list[UserStudioModelImage],
+) -> list[UserStudioModelImage]:
+    """WAN: image 1 = pose; сразу после — body-референсы, затем face (силуэт важнее лица)."""
+    _WAN_KIND_ORDER = {"body": 0, "face": 1, "genitals": 2, "other": 3}
+
+    def key(im: UserStudioModelImage) -> tuple[int, int]:
+        k = (im.image_kind or "other").lower()
+        return _WAN_KIND_ORDER.get(k, 3), im.id
+
+    return sorted(imgs, key=key)
+
+
 def model_images_for_wavespeed_profile(
     imgs_sorted: list[UserStudioModelImage],
     wave_profile: str,

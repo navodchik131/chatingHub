@@ -26,8 +26,8 @@ _CANONICAL_STUDIO_NEGATIVE = (
 _SCENE_FROM_REF_LITERAL = "from_pose_reference_input_image_only"
 
 _COMPACT_MUST_KEEP = [
-    "One real person; face, skin, hair, and body proportions from identity_reference / MODEL_PROFILE on all visible skin",
-    "Pose, outfit, framing, background, and scene lighting from pose reference input image only — adapt garment drape to model body, not donor silhouette",
+    "One real person; face, skin, hair, and body proportions from identity_reference and model reference photos (images 2+) on all visible skin",
+    "Pose, outfit, framing, background, and scene lighting from pose reference (image 1) only — bust/hips/waist/glute volume from MODEL, not donor",
     "Unified skin grain face-to-body; scene light direction on MODEL skin, not donor complexion",
 ]
 

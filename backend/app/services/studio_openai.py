@@ -128,9 +128,11 @@ _WAVESPEED_NO_FACE_SUFFIX = (
 
 
 _WAN_COMPACT_POSE_PREFIX = (
-    "[POSE_REF=image 1] Pose, framing, outfit, background, light: image 1 only. "
-    "[IDENTITY=next images + JSON identity_reference] Face, skin, body proportions: model only — "
-    "adapt garment fit to model body; do not copy donor silhouette.\n\n"
+    "[POSE_REF=image 1] Pose, camera, framing, outfit, background, and light direction: image 1 ONLY. "
+    "Do NOT copy donor body mass, hip width, bust volume, or limb thickness from image 1. "
+    "[IDENTITY=images 2+ and JSON body_proportions] Face, skin, and FULL BODY SILHOUETTE "
+    "(bust, waist, hips, glutes, legs) MUST match studio model reference photos — "
+    "garment drape adapts to MODEL frame; glute projection and hourglass from identity refs.\n\n"
 )
 
 _WAN_COMPACT_NO_FACE_PREFIX = (
