@@ -764,7 +764,6 @@ export default function App() {
   const [motionDesc, setMotionDesc] = useState('')
   const [motionAutoPrompt, setMotionAutoPrompt] = useState(true)
   const [motionLockHairstyle, setMotionLockHairstyle] = useState(true)
-  const [motionOrientation, setMotionOrientation] = useState<'image' | 'video'>('video')
   const [motionVideoNegPrompt, setMotionVideoNegPrompt] = useState('')
   const [motionKeepSound, setMotionKeepSound] = useState(true)
   /** Только для провайдера Seedance I2V (сек., диапазон с health). */
