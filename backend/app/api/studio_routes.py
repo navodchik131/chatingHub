@@ -108,8 +108,11 @@ from app.services.studio_openai import (
     finalize_wavespeed_studio_prompt,
     generate_model_profile_json_from_images,
     load_image_studio_system,
+    assemble_wavespeed_image_edit_prompt,
     prepare_studio_prompt_skeleton,
+    prepare_studio_prompt_skeleton_for_brief,
     refine_prompt_via_openai,
+    resolve_studio_prompt_brief_mode,
 )
 from app.services.studio_camera_presets import get_camera_preset_by_id, list_camera_presets
 from app.services.studio_carousel import build_carousel_wave_prompt
@@ -1715,13 +1718,7 @@ async def _studio_job_execute_refine_prompt(
     send_pose_reference_to_wavespeed = p.get("send_pose_reference_to_wavespeed")
     lock_model_hairstyle = p.get("lock_model_hairstyle")
 
-    skeleton = prepare_studio_prompt_skeleton()
     system_instr = load_image_studio_system()
-    if not skeleton:
-        raise RuntimeError(
-            "Шаблон промпта пуст: заполните backend/data/prompts/image_studio_skeleton.txt "
-            "или IMAGE_STUDIO_SKELETON_INLINE"
-        )
     if not system_instr:
         raise RuntimeError(
             "Системный промпт студии пуст: заполните backend/data/prompts/image_studio_system.txt "
@@ -1914,6 +1911,7 @@ async def _studio_job_execute_refine_prompt(
     )
 
     reference_scene: str | None = None
+    prompt_brief_mode = "full"
     try:
         if image_bytes:
             reference_scene = await describe_reference_image_openai(
@@ -1928,6 +1926,18 @@ async def _studio_job_execute_refine_prompt(
             if mode_n == "photo_edit" and not photo_edit_regional_identity_requested
             else (model_reference_photos_block(imgs_for_ws) if imgs_for_ws else None)
         )
+        prompt_brief_mode = resolve_studio_prompt_brief_mode(
+            studio_mode=mode_n,
+            has_reference_scene=bool(reference_scene),
+            has_uploaded_reference_bytes=bool(image_bytes),
+            send_pose_reference_to_wavespeed=send_pose_to_ws,
+        )
+        skeleton = prepare_studio_prompt_skeleton_for_brief(prompt_brief_mode)
+        if not skeleton:
+            raise RuntimeError(
+                "Шаблон промпта пуст: заполните backend/data/prompts/image_studio_skeleton.txt "
+                "или IMAGE_STUDIO_SKELETON_INLINE"
+            )
         refined = await refine_prompt_via_openai(
             system_instruction=system_instr,
             skeleton=skeleton,
@@ -1942,6 +1952,7 @@ async def _studio_job_execute_refine_prompt(
             output_aspect_key=aspect_key,
             studio_mode=mode_n,
             lock_model_hairstyle=effective_lock_hairstyle,
+            prompt_brief_mode=prompt_brief_mode,
             credentials=llm_creds,
         )
     except RuntimeError as e:
@@ -2313,22 +2324,16 @@ async def _studio_job_execute_refine_prompt(
                         studio_mode=mode_n,
                         user_pose_ref_prepended=user_pose_ref_prepended,
                     )
-                    wavespeed_prompt = finalize_nano_banana_studio_prompt(
-                        refined,
-                        studio_mode=mode_n,
-                        user_photo_edit_first=bool(
-                            user_pose_ref_prepended and mode_n == "photo_edit"
-                        ),
-                        user_pose_reference_is_last=pose_is_last_after_reorder,
-                        lock_model_hairstyle=effective_lock_hairstyle,
-                    )
-                else:
-                    wavespeed_prompt = finalize_wavespeed_studio_prompt(
-                        refined,
-                        studio_mode=mode_n,
-                        user_image_first=user_pose_ref_prepended,
-                        lock_model_hairstyle=effective_lock_hairstyle,
-                    )
+                wavespeed_prompt = assemble_wavespeed_image_edit_prompt(
+                    refined,
+                    studio_mode=mode_n,
+                    user_pose_in_api=user_pose_ref_prepended,
+                    user_pose_is_last=pose_is_last_after_reorder,
+                    lock_model_hairstyle=effective_lock_hairstyle,
+                    prompt_brief_mode=prompt_brief_mode,
+                    model_profile_text=model_profile_text,
+                    wave_profile=wave_profile_n,
+                )
                 size_for_ws: str | None
                 if settings.wavespeed_seedream_omit_size:
                     size_for_ws = None
@@ -2456,6 +2461,7 @@ async def _studio_job_execute_refine_prompt(
             "lock_model_hairstyle": effective_lock_hairstyle,
             "lock_model_hairstyle_requested": lock_hair_req,
             "send_pose_reference_to_wavespeed": send_pose_to_ws,
+            "prompt_brief_mode": prompt_brief_mode,
             "inpaint_mask": bool(mask_bytes),
             "regional_masked_compose_ready": regional_composed_png is not None,
             "masked_edit_engine": (
@@ -2837,9 +2843,18 @@ async def _studio_job_execute_motion_first_frame(
     try:
         imgs_for_ws = model_images_for_wavespeed_profile(imgs_model, wave_profile_n)
         ref_photo_block = model_reference_photos_block(imgs_for_ws)
+        motion_brief_mode = resolve_studio_prompt_brief_mode(
+            studio_mode="model",
+            has_reference_scene=bool(reference_scene),
+            has_uploaded_reference_bytes=True,
+            send_pose_reference_to_wavespeed=True,
+        )
+        motion_skeleton = prepare_studio_prompt_skeleton_for_brief(motion_brief_mode)
+        if not motion_skeleton:
+            raise RuntimeError("Шаблон промпта студии пуст (skeleton).")
         refined = await refine_prompt_via_openai(
             system_instruction=system_instr,
-            skeleton=skeleton,
+            skeleton=motion_skeleton,
             user_text=user_text_for_refine,
             reference_scene_description=reference_scene,
             model_profile_text=model_profile_text,
@@ -2847,6 +2862,7 @@ async def _studio_job_execute_motion_first_frame(
             output_aspect_key=aspect_key,
             studio_mode="model",
             lock_model_hairstyle=effective_lock_hairstyle,
+            prompt_brief_mode=motion_brief_mode,
             credentials=llm_creds,
         )
     except RuntimeError as e:
@@ -2970,20 +2986,16 @@ async def _studio_job_execute_motion_first_frame(
                     studio_mode=mode_n,
                     user_pose_ref_prepended=user_pose_ref_prepended,
                 )
-                wavespeed_prompt = finalize_nano_banana_studio_prompt(
-                    refined,
-                    studio_mode=mode_n,
-                    user_photo_edit_first=False,
-                    user_pose_reference_is_last=pose_is_last_after_reorder,
-                    lock_model_hairstyle=effective_lock_hairstyle,
-                )
-            else:
-                wavespeed_prompt = finalize_wavespeed_studio_prompt(
-                    refined,
-                    studio_mode=mode_n,
-                    user_image_first=user_pose_ref_prepended,
-                    lock_model_hairstyle=effective_lock_hairstyle,
-                )
+            wavespeed_prompt = assemble_wavespeed_image_edit_prompt(
+                refined,
+                studio_mode=mode_n,
+                user_pose_in_api=user_pose_ref_prepended,
+                user_pose_is_last=pose_is_last_after_reorder,
+                lock_model_hairstyle=effective_lock_hairstyle,
+                prompt_brief_mode=motion_brief_mode,
+                model_profile_text=model_profile_text,
+                wave_profile=wave_profile_n,
+            )
             if settings.wavespeed_seedream_omit_size:
                 size_for_ws: str | None = None
             else:

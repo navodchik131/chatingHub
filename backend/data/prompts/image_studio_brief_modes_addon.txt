@@ -1,0 +1,20 @@
+## PROMPT_BRIEF_MODE (read the user message block ## PROMPT_BRIEF_MODE)
+
+### COMPACT_WITH_POSE_IMAGE
+The pose/scene reference will be sent as a **separate input image** to the image-edit API (WAN / Nano). Your JSON must **not** duplicate that scene in text.
+
+Rules:
+- Fill **only** `identity_reference` from MODEL_PROFILE (face, hair, body_proportions). Keep `body_proportions` concise (hourglass, athletic, curvy — **no** bra cup sizes A/B/C/D, no explicit genital anatomy).
+- Leave `scene_from_reference_image` values **exactly** as the template literals `from_pose_reference_input_image_only` — do **not** replace them with colors, garment names, room descriptions, or pose sentences.
+- `user_overrides`: USER_TEXT only.
+- Do **not** add `subject.pose`, `subject.clothing`, `background`, `photography` camera fields, `constraints.avoid`, or `negative_prompt` — the server strips negatives and appends them separately.
+- `must_keep`: three short plain-English lines only.
+
+### TEXT_SCENE_NO_POSE_IMAGE
+The reference was analyzed by vision and appears in **REFERENCE_IMAGE** text, but **no** pose bitmap is sent to the image-edit API. The JSON **must** carry the full scene from REFERENCE_IMAGE + USER_TEXT.
+
+Rules:
+- Fill `identity_reference` from MODEL_PROFILE only (same body rules as above).
+- Expand scene in a single block `scene_brief` (you may add this key at top level): 4–8 sentences covering pose, hands, clothing/coverage, background, lighting, camera distance/angle — **from REFERENCE_IMAGE text**, not from profile defaults.
+- Do **not** contradict REFERENCE_IMAGE geometry with «readable» frontal face unless USER_TEXT asks.
+- No `constraints.avoid` or `negative_prompt` in output.

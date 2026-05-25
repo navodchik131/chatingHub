@@ -127,15 +127,47 @@ _WAVESPEED_NO_FACE_SUFFIX = (
 )
 
 
+_WAN_COMPACT_POSE_PREFIX = (
+    "[POSE_REF=image 1] Pose, framing, outfit, background, light: image 1 only. "
+    "[IDENTITY=next images + JSON identity_reference] Face, skin, body proportions: model only — "
+    "adapt garment fit to model body; do not copy donor silhouette.\n\n"
+)
+
+_WAN_COMPACT_NO_FACE_PREFIX = (
+    "[POSE_REF=image 1 — crop locked] Visible limbs, framing, outfit, light: image 1 only. "
+    "Identity skin on visible body from model refs + JSON; never add a face outside the crop.\n\n"
+)
+
+_NANO_COMPACT_IDENTITY_PREFIX = (
+    "[IDENTITY images first, POSE_REF last] JSON `identity_reference` = WHO (face, hair, body_proportions). "
+    "Last image = pose/outfit/scene/light only — ignore donor identity on last image.\n\n"
+)
+
+_NANO_TEXT_SCENE_PREFIX = (
+    "[IDENTITY images only — no pose bitmap] Scene composition comes **only** from JSON "
+    "(REFERENCE-derived scene fields / scene_brief). Preserve model identity on all visible skin.\n\n"
+)
+
+_NANO_COMPACT_POSE_LAST_SUFFIX = (
+    "\n\n[POSE_REF last] Pose, framing, wardrobe, background, lighting: last image only."
+)
+
+_NANO_COMPACT_NO_FACE_LAST_SUFFIX = (
+    "\n\n[POSE_REF last — crop locked] Match last image crop and visible-body geometry only."
+)
+
+
 def finalize_wavespeed_studio_prompt(
     refined_prompt: str,
     *,
     studio_mode: str,
     user_image_first: bool,
     lock_model_hairstyle: bool = True,
+    prompt_brief_mode: str = "full",
 ) -> str:
     """Сборка финального текстового промпта для WaveSpeed в зависимости от режима студии."""
     mode = (studio_mode or "model").strip().lower()
+    brief = (prompt_brief_mode or "full").strip().lower()
     p = (refined_prompt or "").strip()
     if user_image_first:
         if mode == "photo_edit":
@@ -149,15 +181,24 @@ def finalize_wavespeed_studio_prompt(
                 p,
                 lock_model_hairstyle=lock_model_hairstyle,
             )
+        elif brief == "compact_pose_image":
+            prefix = (
+                _WAN_COMPACT_NO_FACE_PREFIX
+                if mode == "no_face"
+                else _WAN_COMPACT_POSE_PREFIX
+            )
+            out = prefix.strip() if not p else prefix + p
         else:
             out = wavespeed_prompt_with_user_pose_reference_first(
                 p,
                 lock_model_hairstyle=lock_model_hairstyle,
                 no_face_framing=(mode == "no_face"),
             )
+    elif brief == "text_scene":
+        out = (_NANO_TEXT_SCENE_PREFIX.strip() if not p else _NANO_TEXT_SCENE_PREFIX + p)
     else:
         out = p
-    if mode == "no_face":
+    if mode == "no_face" and brief != "compact_pose_image":
         out = (out or "").rstrip() + _WAVESPEED_NO_FACE_SUFFIX
     return out
 
@@ -233,6 +274,7 @@ def finalize_nano_banana_studio_prompt(
     user_photo_edit_first: bool,
     user_pose_reference_is_last: bool,
     lock_model_hairstyle: bool = True,
+    prompt_brief_mode: str = "full",
 ) -> str:
     """
     Nano Banana Pro: порядок URL другой, чем у WAN (сначала лицо модели, поза пользователя — в конце).
@@ -240,6 +282,7 @@ def finalize_nano_banana_studio_prompt(
     user_pose_reference_is_last: после reorder загруженный референс позы — последний кадр в списке.
     """
     mode = (studio_mode or "model").strip().lower()
+    brief = (prompt_brief_mode or "full").strip().lower()
     p = (refined_prompt or "").strip()
 
     if user_photo_edit_first and mode == "photo_edit":
@@ -248,25 +291,41 @@ def finalize_nano_banana_studio_prompt(
             if not p
             else _WAVESPEED_PHOTO_EDIT_USER_FIRST_PREFIX + p
         )
+    elif brief == "text_scene":
+        out = _NANO_TEXT_SCENE_PREFIX.strip() if not p else _NANO_TEXT_SCENE_PREFIX + p
     else:
-        head = (
-            _NANO_BANANA_FACE_SWAP_IDENTITY_PREFIX
-            if mode == "face_swap"
-            else _NANO_BANANA_NO_FACE_IDENTITY_PREFIX
-            if mode == "no_face"
-            else _NANO_BANANA_IDENTITY_LOCK_PREFIX
-        )
+        if brief == "compact_pose_image" and mode not in ("face_swap", "photo_edit"):
+            head = (
+                _NANO_BANANA_NO_FACE_IDENTITY_PREFIX
+                if mode == "no_face"
+                else _NANO_COMPACT_IDENTITY_PREFIX
+            )
+        else:
+            head = (
+                _NANO_BANANA_FACE_SWAP_IDENTITY_PREFIX
+                if mode == "face_swap"
+                else _NANO_BANANA_NO_FACE_IDENTITY_PREFIX
+                if mode == "no_face"
+                else _NANO_BANANA_IDENTITY_LOCK_PREFIX
+            )
         out = head.strip() if not p else head + p
         if user_pose_reference_is_last:
-            out = out.rstrip() + (
-                _nano_banana_pose_last_suffix_no_face(
-                    lock_model_hairstyle=lock_model_hairstyle
+            if brief == "compact_pose_image":
+                out = out.rstrip() + (
+                    _NANO_COMPACT_NO_FACE_LAST_SUFFIX
+                    if mode == "no_face"
+                    else _NANO_COMPACT_POSE_LAST_SUFFIX
                 )
-                if mode == "no_face"
-                else _nano_banana_pose_last_suffix(lock_model_hairstyle=lock_model_hairstyle)
-            )
+            else:
+                out = out.rstrip() + (
+                    _nano_banana_pose_last_suffix_no_face(
+                        lock_model_hairstyle=lock_model_hairstyle
+                    )
+                    if mode == "no_face"
+                    else _nano_banana_pose_last_suffix(lock_model_hairstyle=lock_model_hairstyle)
+                )
 
-    if mode == "no_face":
+    if mode == "no_face" and brief != "compact_pose_image":
         out = (out or "").rstrip() + _WAVESPEED_NO_FACE_SUFFIX
     return out
 
@@ -502,6 +561,47 @@ def load_image_studio_skeleton() -> str:
     if path.is_file():
         return path.read_text(encoding="utf-8").strip()
     return (settings.image_studio_skeleton_inline or "").strip()
+
+
+def load_image_studio_skeleton_compact() -> str:
+    path = (BACKEND_DIR / "data/prompts/image_studio_skeleton_compact.txt").resolve()
+    if path.is_file():
+        return path.read_text(encoding="utf-8").strip()
+    return ""
+
+
+def load_image_studio_brief_modes_addon() -> str:
+    path = (BACKEND_DIR / "data/prompts/image_studio_brief_modes_addon.txt").resolve()
+    if path.is_file():
+        return path.read_text(encoding="utf-8").strip()
+    return ""
+
+
+def prepare_studio_prompt_skeleton_compact() -> str:
+    raw = load_image_studio_skeleton_compact()
+    if not raw.strip():
+        return prepare_studio_prompt_skeleton()
+    re_obj = load_canonical_realism_engine()
+    if re_obj is None:
+        return raw
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as e:
+        log.warning("studio compact skeleton: invalid JSON, using raw: %s", e)
+        return raw
+    if not isinstance(data, dict):
+        return raw
+    data["realism_engine"] = re_obj
+    return json.dumps(data, ensure_ascii=False, indent=2)
+
+
+def prepare_studio_prompt_skeleton_for_brief(brief_mode: str) -> str:
+    mode = (brief_mode or "full").strip().lower()
+    if mode == "compact_pose_image":
+        sk = prepare_studio_prompt_skeleton_compact()
+        if sk.strip():
+            return sk
+    return prepare_studio_prompt_skeleton()
 
 
 def load_image_studio_system() -> str:
@@ -951,14 +1051,16 @@ def _build_refiner_user_message(
     output_aspect_key: str,
     studio_mode: str = "model",
     lock_model_hairstyle: bool = True,
+    prompt_brief_mode: str = "full",
 ) -> str:
     has_ref = bool((reference_scene_description or "").strip())
     photo_edit_mode = (studio_mode or "").strip().lower() == "photo_edit"
     no_face_mode = (studio_mode or "").strip().lower() == "no_face"
     face_swap_mode = (studio_mode or "").strip().lower() == "face_swap"
+    brief = (prompt_brief_mode or "full").strip().lower()
     mode_line = "MODEL_LOCK" if lock_model_hairstyle else "POSE_REFERENCE"
     ref_geometry_lock = ""
-    if has_ref and not photo_edit_mode:
+    if has_ref and not photo_edit_mode and brief == "full":
         if face_swap_mode:
             ref_geometry_lock = (
                 "**FACE_SWAP_GEOMETRY_LIGHT:** Preserve **crop/FoV, camera axis, viewpoint, limbs articulation, garment seams, scene-light direction + hardness topology** precisely as described in REFERENCE_IMAGE. "
@@ -979,11 +1081,34 @@ def _build_refiner_user_message(
                 "mirror **highlight/shadow topology** onto MODEL_PROFILE identity skin (direction + hardness, **not** donor complexion). "
                 "**Do not** frontalize toward the lens for readability. MODEL_PROFILE defines **appearance** (`subject.identity`); **snapshot geometry + light topology** follows the reference.\n"
             )
-    blocks: list[str] = [
-        "## HAIRSTYLE_MODE\n" + mode_line,
-        "## SKELETON (JSON template: fill <FILL> placeholders and <FROM_MODEL_PROFILE> markers)",
-        skeleton.strip(),
-    ]
+    elif has_ref and not photo_edit_mode and brief == "compact_pose_image":
+        ref_geometry_lock = (
+            "**COMPACT_BRIEF:** Pose/outfit/room/light go to the **pose reference input image**, not into JSON text. "
+            "JSON carries **identity_reference** + `scene_from_reference_image` literals only. "
+            "MODEL_PROFILE supplies face, skin, **body_proportions** (preserve hourglass/curvy/athletic from profile — "
+            "adapt clothing drape to model body, not reference donor silhouette).\n"
+        )
+    elif has_ref and not photo_edit_mode and brief == "text_scene":
+        ref_geometry_lock = (
+            "**TEXT_SCENE_BRIEF:** No pose image in the API — copy pose, clothing, background, camera, lighting from "
+            "REFERENCE_IMAGE into the JSON scene fields (full skeleton) or top-level `scene_brief`. "
+            "MODEL_PROFILE for identity only; do not invent conflicting wardrobe from profile defaults.\n"
+        )
+    brief_mode_line = ""
+    if brief == "compact_pose_image":
+        brief_mode_line = "COMPACT_WITH_POSE_IMAGE"
+    elif brief == "text_scene":
+        brief_mode_line = "TEXT_SCENE_NO_POSE_IMAGE"
+    blocks: list[str] = []
+    if brief_mode_line:
+        blocks.append(f"## PROMPT_BRIEF_MODE\n{brief_mode_line}")
+    blocks.extend(
+        [
+            "## HAIRSTYLE_MODE\n" + mode_line,
+            "## SKELETON (JSON template: fill <FILL> placeholders and <FROM_MODEL_PROFILE> markers)",
+            skeleton.strip(),
+        ]
+    )
 
     # Референс — сразу после скелета, чтобы сцена не утонула в длинном JSON профиля.
     if has_ref:
@@ -1112,12 +1237,18 @@ async def refine_prompt_via_openai(
     output_aspect_key: str,
     studio_mode: str = "model",
     lock_model_hairstyle: bool = True,
+    prompt_brief_mode: str = "full",
     credentials: StudioOpenAiCredentials | None = None,
 ) -> str:
     """Шаг 2: одна сессия чата — system = инструкция, user = шаблон + данные; ответ: JSON-строка."""
     if not (system_instruction or "").strip():
         raise RuntimeError("image studio: empty system instruction")
     model = settings.openai_studio_model
+    sys_parts = [system_instruction.strip()]
+    addon = load_image_studio_brief_modes_addon()
+    if addon and (prompt_brief_mode or "full").strip().lower() != "full":
+        sys_parts.append(addon)
+    system_full = "\n\n".join(sys_parts)
     user_message = _build_refiner_user_message(
         skeleton=skeleton,
         user_text=user_text,
@@ -1127,11 +1258,12 @@ async def refine_prompt_via_openai(
         output_aspect_key=output_aspect_key,
         studio_mode=studio_mode,
         lock_model_hairstyle=lock_model_hairstyle,
+        prompt_brief_mode=prompt_brief_mode,
     )
     raw = await _chat_completion_text(
         model=model,
         messages=[
-            {"role": "system", "content": system_instruction.strip()},
+            {"role": "system", "content": system_full},
             {"role": "user", "content": user_message},
         ],
         max_tokens=8192,
@@ -1139,6 +1271,68 @@ async def refine_prompt_via_openai(
         credentials=credentials,
     )
     return apply_canonical_realism_to_refined_output(raw)
+
+
+def resolve_studio_prompt_brief_mode(
+    *,
+    studio_mode: str,
+    has_reference_scene: bool,
+    has_uploaded_reference_bytes: bool,
+    send_pose_reference_to_wavespeed: bool,
+) -> str:
+    """full | compact_pose_image | text_scene"""
+    if not has_uploaded_reference_bytes or not has_reference_scene:
+        return "full"
+    mode = (studio_mode or "model").strip().lower()
+    if mode not in ("model", "no_face"):
+        return "full"
+    if send_pose_reference_to_wavespeed:
+        return "compact_pose_image"
+    return "text_scene"
+
+
+def assemble_wavespeed_image_edit_prompt(
+    refined_raw: str,
+    *,
+    studio_mode: str,
+    user_pose_in_api: bool,
+    user_pose_is_last: bool,
+    lock_model_hairstyle: bool,
+    prompt_brief_mode: str,
+    model_profile_text: str | None,
+    wave_profile: str,
+) -> str:
+    """Позитивный JSON без avoid/neg + короткие префиксы + [NEGATIVE_PROMPT] снаружи."""
+    from app.services.studio_prompt_bundle import (
+        append_negative_to_wavespeed_prompt,
+        prepare_positive_prompt_json,
+    )
+
+    positive, negative = prepare_positive_prompt_json(
+        refined_raw,
+        brief_mode=prompt_brief_mode,
+        model_profile_text=model_profile_text,
+    )
+    mode = (studio_mode or "model").strip().lower()
+    brief = (prompt_brief_mode or "full").strip().lower()
+    if (wave_profile or "").strip().lower() == "regular":
+        prompt = finalize_nano_banana_studio_prompt(
+            positive,
+            studio_mode=mode,
+            user_photo_edit_first=bool(user_pose_in_api and mode == "photo_edit"),
+            user_pose_reference_is_last=user_pose_is_last,
+            lock_model_hairstyle=lock_model_hairstyle,
+            prompt_brief_mode=brief,
+        )
+    else:
+        prompt = finalize_wavespeed_studio_prompt(
+            positive,
+            studio_mode=mode,
+            user_image_first=user_pose_in_api,
+            lock_model_hairstyle=lock_model_hairstyle,
+            prompt_brief_mode=brief,
+        )
+    return append_negative_to_wavespeed_prompt(prompt, negative)
 
 
 _DEFAULT_MODEL_PROFILE_GEN_SYSTEM = (

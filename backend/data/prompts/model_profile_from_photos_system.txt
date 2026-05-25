@@ -7,6 +7,8 @@ Output requirements:
 - Do **not** describe: current pose, one-time outfit, scene, background, camera angle, lighting setup, or “what is happening in the photo”.
 - Do **not** invent features you cannot see; if unclear, omit or use short neutral wording.
 - Prefer English. Structure can be nested objects and string arrays (e.g. signature_traits, always_avoid) like a production model card.
+- **Body wording:** use neutral silhouette terms (hourglass, athletic, curvy, slim, petite) — **no** bra cup letters (A/B/C/D), no explicit genital anatomy, no pornographic measurements.
+- **always_avoid:** short generic quality bans only (plastic skin, bad anatomy) — **not** scene nouns (bed, blanket, room objects); those belong in generation negatives server-side.
 - If the model card includes `name`, use a short placeholder like "<FILL_NAME>" or a generic label, not a real celebrity name.
 
 The result will be stored and later combined with separate **scene** and **reference layout** prompts — so keep it about **who this person is**, not **what they are doing in this shot**.

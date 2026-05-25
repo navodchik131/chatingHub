@@ -1,0 +1,30 @@
+{
+  "identity_reference": {
+    "subject": "<FROM_MODEL_PROFILE — one line: age vibe, ethnicity, overall look>",
+    "face": "<FROM_MODEL_PROFILE — eyes, nose, lips, skin texture; no pose>",
+    "hair": "<FROM_MODEL_PROFILE — color, length, default style>",
+    "body_proportions": "<FROM_MODEL_PROFILE body_type only — silhouette/proportions; no bra cup letters; no explicit genital detail>"
+  },
+  "scene_from_reference_image": {
+    "pose_and_composition": "from_pose_reference_input_image_only",
+    "wardrobe_and_environment": "from_pose_reference_input_image_only",
+    "lighting_and_camera": "from_pose_reference_input_image_only"
+  },
+  "user_overrides": "<FILL — only explicit USER_TEXT tweaks; empty string if none>",
+  "photography_style": {
+    "snapshot_authenticity": "<FILL — one short phrase: mundane real phone photo>",
+    "aspect_ratio": "<FILL — match OUTPUT/ASPECT>"
+  },
+  "the_vibe": {
+    "mood": "<FILL — one or two words>",
+    "life_in_frame": "<FILL — one short lived-in cue>"
+  },
+  "realism_engine": null,
+  "constraints": {
+    "must_keep": [
+      "<FILL — one real person; identity from MODEL_PROFILE on all visible skin>",
+      "<FILL — pose/outfit/room/light from pose reference image only, not identity photos>",
+      "<FILL — unified skin grain face-to-body; reference light direction on MODEL skin>"
+    ]
+  }
+}

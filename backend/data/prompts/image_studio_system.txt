@@ -30,7 +30,7 @@ Task steps:
 - Fill **`hair_in_scene`:** **MODEL_LOCK** — from MODEL_PROFILE only (match `style_default` / `default_style.hair_style`). **POSE_REFERENCE** — from REFERENCE_IMAGE; **`subject.identity.hair`** still from MODEL_PROFILE.
 - If REFERENCE_IMAGE is present: NEVER replace the reference's pose/clothing/setting/**camera framing** with a generic re-description from the profile. **MODEL_LOCK exception:** hairstyle comes from MODEL_PROFILE, not the reference.
 - Keep the "realism_engine" object EXACTLY as in the skeleton — same keys and string values. Do not paraphrase or shorten it.
-- Add scene-specific items to "constraints.avoid" if needed; keep the default items.
+- Add scene-specific items to "constraints.avoid" only when **no** `## PROMPT_BRIEF_MODE` block is present in the user message. If PROMPT_BRIEF_MODE is **COMPACT_WITH_POSE_IMAGE** or **TEXT_SCENE_NO_POSE_IMAGE**, **omit** `constraints.avoid` and `negative_prompt` entirely (the server appends negatives separately).
 - Output ONLY valid JSON. No markdown, no code fences, no explanation.
 
 Goal: A hyper-realistic **candid / snapshot / ordinary lived photo** prompt for every approved scene (selfie **or** third-party **or** tripod **or** venue) — defaults anti-influencer and anti-catalog unless USER_TEXT demands polish. When a reference is provided, the **composition, camera geometry, and clothing/coverage must follow the reference**; **face, body shape, proportions, and skin color/tone** must follow the model profile, not the reference person. **Hairstyle** follows **HAIRSTYLE_MODE** (profile under MODEL_LOCK, pose reference under POSE_REFERENCE). **Not** the model's wardrobe unless the reference shows the same.
