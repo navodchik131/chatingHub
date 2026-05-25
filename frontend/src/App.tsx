@@ -106,6 +106,10 @@ function platformLabel(p: Platform): string {
   return 'Fanvue'
 }
 
+function studioIntegrationsHint(): string {
+  return 'Подключите генерацию в кабинете → «Подключения».'
+}
+
 /** Загрузка аватара с авторизацией (JWT не передать через обычный src у img). */
 function useConversationAvatarBlob(convId: number | null, hasAvatar: boolean) {
   const [url, setUrl] = useState<string | null>(null)
@@ -2359,7 +2363,7 @@ export default function App() {
         setStudioWavespeedMsg(`Сохранено кадров: ${items.length}. ${note}`)
       } else if (items.length > 0) {
         setStudioWavespeedMsg(
-          `Карусель: добавлено ${items.length} кадров — откройте «Сохранённые». Учитываются текущие «Тип» и WAN.`,
+          `Карусель: добавлено ${items.length} кадров — смотрите в «Сохранённые».`,
         )
       } else if (note) {
         setStudioWavespeedMsg(note)
@@ -4601,7 +4605,7 @@ export default function App() {
                 {(
                   [
                     { id: 'model' as const, label: 'Модель' },
-                    { id: 'face_swap' as const, label: 'Face swap' },
+                    { id: 'face_swap' as const, label: 'Подмена лица' },
                     { id: 'photo_edit' as const, label: 'Доработать фото' },
                     { id: 'no_face' as const, label: 'Без лица' },
                   ] as const
@@ -4619,22 +4623,22 @@ export default function App() {
             </div>
             <p className="studio-mode-hint">
               {studioMode === 'model'
-                ? 'Как раньше: выбранная модель, опционально референс позы и описание.'
+                ? 'Модель из кабинета, по желанию — референс позы и короткое описание сцены.'
                 : studioMode === 'face_swap'
-                  ? 'Исходное фото со сценой и «чужим» человеком + сохранённая модель студии → подмена внешности (лицо/тело) с подгонкой тона под свет сцены. Тип ниже «Обычные» = Nano Banana Pro, «NSFW» = WAN 2.7.'
+                  ? 'Ваше фото со сценой и сохранённая модель — лицо и фигура подставятся с учётом света кадра.'
                   : studioMode === 'photo_edit'
-                  ? 'Загрузите кадр или возьмите его из архива «Картинки», опишите правки. Если затираете область маской и нужна именно сохранённая модель — выберите её ниже (портреты уходят вторым входом на редактор вместе с кропом).'
-                  : 'Кадр без лица/головы; нужна модель с фото или свой референс.'}
+                  ? 'Загрузите снимок или выберите из «Сохранённые» и опишите, что изменить.'
+                  : 'Сцена без лица: укажите модель или свой референс.'}
             </p>
-            <div className="studio-mode-row" role="group" aria-label="Тип генерации WaveSpeed">
-              <span className="studio-mode-label">Тип</span>
+            <div className="studio-mode-row" role="group" aria-label="Тип снимка">
+              <span className="studio-mode-label">Стиль</span>
               <div className="studio-mode-segment">
                 <button
                   type="button"
                   className={`studio-mode-btn${studioWaveProfile === 'regular' ? ' is-active' : ''}`}
                   onClick={() => setStudioWaveProfile('regular')}
                 >
-                  Обычные фотографии
+                  Обычные
                 </button>
                 <button
                   type="button"
@@ -4647,8 +4651,8 @@ export default function App() {
             </div>
             <p className="studio-mode-hint">
               {studioWaveProfile === 'regular'
-                ? 'Google Nano Banana Pro: выше качество для обычных снимков; действуют ограничения безопасности Google.'
-                : 'Редактор изображений по правилам этой кнопки (настраивается на стороне сервиса).'}
+                ? 'Для повседневных и рекламных кадров.'
+                : 'Для откровенных сцен и купальников.'}
             </p>
             {import.meta.env.DEV && health?.studio_allow_prompt_only ? (
               <>
@@ -4686,15 +4690,15 @@ export default function App() {
             ) : null}
             {health?.studio_wan_edit_tier_switch && studioWaveProfile === 'nsfw' ? (
               <>
-                <div className="studio-mode-row" role="group" aria-label="Редактор WaveSpeed WAN 2.7">
-                  <span className="studio-mode-label">WAN 2.7</span>
+                <div className="studio-mode-row" role="group" aria-label="Детализация редактора">
+                  <span className="studio-mode-label">Качество</span>
                   <div className="studio-mode-segment">
                     <button
                       type="button"
                       className={`studio-mode-btn${studioWanEditTier === 'standard' ? ' is-active' : ''}`}
                       onClick={() => setStudioWanEditTier('standard')}
                     >
-                      Обычный
+                      Стандарт
                     </button>
                     <button
                       type="button"
@@ -4705,9 +4709,7 @@ export default function App() {
                     </button>
                   </div>
                 </div>
-                <p className="studio-mode-hint">
-                  Версия Pro на стороне WaveSpeed обычно дороже обычной WAN 2.7.
-                </p>
+                <p className="studio-mode-hint">Pro — выше детализация, обычно дороже по кредитам.</p>
               </>
             ) : null}
             <label className="studio-label">
@@ -4744,20 +4746,16 @@ export default function App() {
                 ))}
               </select>
               {studioMode === 'face_swap' ? (
-                <span className="muted studio-file-name">
-                  Обязательно: сохранённые фото модели уходят в редактор как эталон лица/тела; исходник — ваше загружаемое
-                  изображение.
-                </span>
+                <span className="muted studio-file-name">Нужны модель и ваше исходное фото.</span>
               ) : studioMode === 'photo_edit' ? (
                 <span className="muted studio-file-name">
-                  Для обычных правок по всему кадру можно оставить «Без модели». Для замены области по маской выберите
-                  модель — на сервер уйдут её фото как эталон внешности.
+                  Для правок по всему кадру модель не обязательна; для замены лица в маске — выберите модель.
                 </span>
               ) : null}
             </label>
             {studioMode === 'photo_edit' ? (
               <label className="studio-label">
-                Снимок из архива «Картинки» (вместо файла)
+                Из сохранённых кадров (вместо файла)
                 <select
                   value={studioPhotoEditArchiveId ?? ''}
                   onChange={(e) => {
@@ -4807,13 +4805,7 @@ export default function App() {
                   setStudioPaintInpaintMask(on)
                 }}
               />
-              <span>
-                Нарисовать маску кистью: белым отметить зону замены. Если на сервере{' '}
-                <code className="mono">STUDIO_REGIONAL_MASKED_EDIT=true</code>, то в Nano Banana или WAN&nbsp;2.7
-                уходит <strong>полный кадр</strong> и <strong>маска тем же размером</strong> отдельными
-                входами‑картинками (далее при необходимости — фото модели), промпт задаёт ограничения по области.
-                Если выключите флаг на бэкенде, для маски включается Z‑Image Turbo Inpaint с явным полем маски.
-              </span>
+              <span>Нарисовать маску кистью — белым отметьте, что нужно изменить на снимке.</span>
             </label>
             {studioPaintInpaintMask && studioInpaintBaseImageSrc ? (
               <div className="studio-mask-painter-controls">
@@ -4855,8 +4847,8 @@ export default function App() {
                   : undefined
               }
             >
-              Или файл маски (PNG/JPEG/WebP того же размера, белое — что менять){' '}
-              <span className="muted studio-file-name">— без кисти</span>
+              Файл маски (белое — что менять){' '}
+              <span className="muted studio-file-name">альтернатива кисти</span>
               <input
                 type="file"
                 accept="image/png,image/jpeg,image/webp"
@@ -4888,10 +4880,7 @@ export default function App() {
                 disabled={!studioFile}
                 onChange={(e) => setStudioLockModelHairstyle(e.target.checked)}
               />
-              <span>
-                Причёска как у модели. Снимите галочку, чтобы взять укладку с загруженного фото (лицо,
-                фигура и цвет волос по-прежнему из профиля модели).
-              </span>
+              <span>Причёска как у модели (снимите, чтобы взять укладку с загруженного фото).</span>
             </label>
             ) : null}
             <label className="studio-label">
@@ -4915,9 +4904,9 @@ export default function App() {
                 className="send-btn"
                 title={
                   !health?.openai_studio_configured
-                    ? 'Студия не настроена на сервере'
+                    ? 'Генерация временно недоступна'
                     : !studioPromptOnlyDev && !integ?.wavespeed_configured
-                      ? 'Сохраните ключ WaveSpeed в разделе «Подключения»'
+                      ? studioIntegrationsHint()
                       : undefined
                 }
                 disabled={
@@ -4951,7 +4940,7 @@ export default function App() {
                     кр.
                   </span>
                 ) : (
-                  <span className="studio-credit-hint warn">Нужен ключ WaveSpeed в кабинете</span>
+                  <span className="studio-credit-hint warn">{studioIntegrationsHint()}</span>
                 )
               ) : !health?.openai_studio_configured && canStudioGenerate ? (
                 <span className="studio-credit-hint warn">Нет доступа к студии</span>
@@ -4978,8 +4967,7 @@ export default function App() {
             {studioPendingExternalImageUrl ? (
               <div className="studio-pending-archive studio-upscale-row" style={{ marginTop: '0.5rem', flexWrap: 'wrap', gap: '0.5rem' }}>
                 <p className="muted" style={{ margin: 0, flex: '1 1 12rem' }}>
-                  Картинка доступна по ссылке провайдера, но не попала в «Сохранённые». Можно догрузить без повторной
-                  генерации (без списания кредитов).
+                  Картинка готова, но не попала в «Сохранённые». Можно сохранить в архив без повторной генерации.
                 </p>
                 <button
                   type="button"
@@ -5023,7 +5011,7 @@ export default function App() {
                     }
                     title={
                       !integ?.wavespeed_configured
-                        ? 'Сохраните ключ WaveSpeed в кабинете'
+                        ? studioIntegrationsHint()
                         : studioGenGenerationId == null
                           ? 'Выберите снимок из «Сохранённые» или сгенерируйте снова'
                           : undefined
@@ -5051,7 +5039,7 @@ export default function App() {
                     }
                     title={
                       !integ?.wavespeed_configured
-                        ? 'Сохраните ключ WaveSpeed в кабинете'
+                        ? studioIntegrationsHint()
                         : 'Тот же сценарий и образ, другие ракурсы'
                     }
                     onClick={() => void runStudioCarousel(3)}
@@ -5070,7 +5058,7 @@ export default function App() {
                     }
                     title={
                       !integ?.wavespeed_configured
-                        ? 'Сохраните ключ WaveSpeed в кабинете'
+                        ? studioIntegrationsHint()
                         : 'Четыре кадра для ленты — окружение и образ как на этом снимке'
                     }
                     onClick={() => void runStudioCarousel(4)}
@@ -5241,50 +5229,48 @@ export default function App() {
                     </select>
                   </label>
                 </div>
-                <p className="muted studio-video-lead" style={{ marginTop: '0.5rem' }}>
-                  Нужны модель и картинка кадра: снимок из архива «Картинки» или файл с компьютера. Референс-ролик не
-                  заменяет кадр. «Создать кадр» — если нужно пересобрать картинку через студию или разобрать движение
-                  по ролику; иначе при «Сделать видео» достаточно архива или файла (загрузка с ПК сохранится в архив как
-                  кадр перед видео, со списанием как у подготовки кадра). Для{' '}
-                  <strong>Kling / WAN</strong> отдельно выберите референс-видео (после выбора оно сохранится на
-                  сервер). <strong>Seedance I2V</strong> может обойтись без ролика. Провайдер:{' '}
-                  <strong>{motionVideoProvider}</strong>.
+                <p className="studio-lead studio-video-lead">
+                  Выберите модель и кадр из «Картинки» или загрузите фото.{' '}
+                  {motionNeedDrivingVideoFile
+                    ? 'Для анимации нужен короткий ролик-образец с движением.'
+                    : 'Ролик-образец не обязателен.'}{' '}
+                  «Создать кадр» — если нужно подготовить или уточнить снимок перед видео.
                 </p>
-                <div className="studio-mode-row" role="group" aria-label="Генерация первого кадра видео">
-                  <span className="studio-mode-label">Кадр</span>
+                <div className="studio-mode-row" role="group" aria-label="Стиль кадра">
+                  <span className="studio-mode-label">Стиль кадра</span>
                   <div className="studio-mode-segment">
                     <button
                       type="button"
                       className={`studio-mode-btn${motionFirstFrameWaveProfile === 'regular' ? ' is-active' : ''}`}
                       onClick={() => setMotionFirstFrameWaveProfile('regular')}
                     >
-                      Обычные фото
+                      Обычные
                     </button>
                     <button
                       type="button"
                       className={`studio-mode-btn${motionFirstFrameWaveProfile === 'nsfw' ? ' is-active' : ''}`}
                       onClick={() => setMotionFirstFrameWaveProfile('nsfw')}
                     >
-                      NSFW (WAN 2.7)
+                      NSFW
                     </button>
                   </div>
                 </div>
                 <p className="studio-mode-hint">
                   {motionFirstFrameWaveProfile === 'regular'
-                    ? 'Nano Banana Pro — как «Обычные фотографии» на вкладке картинок; строгие лимиты контента.'
-                    : 'Тот же редактор WAN 2.7 / Seedream, что у типа «NSFW» на вкладке картинок — для купальников и т.п.'}
+                    ? 'Как «Обычные» на вкладке картинок.'
+                    : 'Как «NSFW» на вкладке картинок.'}
                 </p>
                 {health?.studio_wan_edit_tier_switch && motionFirstFrameWaveProfile === 'nsfw' ? (
                   <>
-                    <div className="studio-mode-row" role="group" aria-label="WAN 2.7 для кадра видео">
-                      <span className="studio-mode-label">WAN 2.7</span>
+                    <div className="studio-mode-row" role="group" aria-label="Качество кадра">
+                      <span className="studio-mode-label">Качество</span>
                       <div className="studio-mode-segment">
                         <button
                           type="button"
                           className={`studio-mode-btn${studioWanEditTier === 'standard' ? ' is-active' : ''}`}
                           onClick={() => setStudioWanEditTier('standard')}
                         >
-                          Обычный
+                          Стандарт
                         </button>
                         <button
                           type="button"
@@ -5295,14 +5281,12 @@ export default function App() {
                         </button>
                       </div>
                     </div>
-                    <p className="studio-mode-hint">
-                      Для первого кадра этого ролика используется та же связка WAN (standard/pro), что на вкладке «Картинки».
-                    </p>
+                    <p className="studio-mode-hint">Те же настройки качества, что на вкладке «Картинки».</p>
                   </>
                 ) : null}
                 <div className="studio-grid studio-grid--simple studio-video-panel">
                   <label className="studio-label">
-                    Снимок из архива (вкладка «Картинки»)
+                    Из сохранённых кадров
                     <select
                       value={motionFrameArchiveId ?? ''}
                       onChange={(e) => {
@@ -5327,7 +5311,7 @@ export default function App() {
                     </select>
                   </label>
                   <label className="studio-label">
-                    Файл первого кадра (если не из архива)
+                    Загрузить кадр с компьютера
                     <input
                       type="file"
                       accept="image/*"
@@ -5348,7 +5332,9 @@ export default function App() {
                     ) : null}
                   </label>
                 <label className="studio-label">
-                  Референс-видео (Kling / WAN — обязателен; загрузка без шага «кадр»)
+                  {motionNeedDrivingVideoFile
+                    ? 'Ролик-образец (движение)'
+                    : 'Ролик-образец (необязательно)'}
                     <input
                       type="file"
                       accept="video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov"
@@ -5396,13 +5382,12 @@ export default function App() {
                   />
                   <span>Уточнить движение по ролику</span>
                 </label>
-                {health?.studio_grok_motion_timeline_enabled ? (
-                  <p className="muted" style={{ margin: '0 0 0.5rem', fontSize: '0.85rem', lineHeight: 1.35 }}>
-                    На сервере включён режим Grok: по ролику собирается промпт по секундам, затем подставляется внешность
-                    вашей модели и первый кадр. Нужны GROK_API_KEY и vision-модель (см.{' '}
-                    <code>GROK_MOTION_MODEL</code> в .env){health?.studio_grok_motion_configured === false
-                      ? '; ключ не настроен.'
-                      : '.'}
+                {motionAutoPrompt ? (
+                  <p className="studio-inline-hint">
+                    Сервис разберёт движение в ролике и подставит вашу модель в описание кадра.
+                    {health?.studio_grok_motion_configured === false
+                      ? ' Сейчас разбор по ролику недоступен — снимите галочку или обратитесь в поддержку.'
+                      : null}
                   </p>
                 ) : null}
                 <label className="studio-label studio-check">
@@ -5420,10 +5405,7 @@ export default function App() {
                       checked={motionUseStillFinal}
                       onChange={(e) => setMotionUseStillFinal(e.target.checked)}
                     />
-                    <span>
-                      Не генерировать картинку заново — использовать загруженный файл как финальный кадр (без второго
-                      прохода студии)
-                    </span>
+                    <span>Использовать загруженный файл как готовый кадр, без повторной генерации</span>
                   </label>
                 ) : null}
                 <label className="studio-label">
@@ -5490,7 +5472,7 @@ export default function App() {
                           style={{ marginTop: '0.35rem', flexWrap: 'wrap', gap: '0.5rem' }}
                         >
                           <p className="muted" style={{ margin: 0, flex: '1 1 12rem' }}>
-                            Кадр есть у провайдера, но не в «Сохранённые». Догрузите в архив без повторной генерации.
+                            Кадр готов, но не в «Сохранённые». Сохраните в архив без повторной генерации.
                           </p>
                           <button
                             type="button"
@@ -5509,10 +5491,8 @@ export default function App() {
                       вернитесь на вкладку «Картинки» или нажмите «Создать кадр» ещё раз.
                     </p>
                   ) : motionFirstFrameFile ? (
-                    <p className="muted" style={{ margin: '0.25rem 0 0.5rem' }}>
-                      Файл кадра выбран. Можно сразу «Сделать видео»: перед рендером он сохранится в архив (как кадр
-                      без второй генерации, со списанием кредитов за подготовку), либо нажмите «Создать кадр» — если
-                      нужен отдельный шаг или авторазбор по ролику.
+                    <p className="muted studio-inline-hint" style={{ margin: '0.25rem 0 0.5rem' }}>
+                      Файл выбран — можно сразу «Сделать видео» или сначала «Создать кадр» для подготовки.
                     </p>
                   ) : (
                     <p className="muted" style={{ margin: '0.25rem 0 0.5rem' }}>
@@ -5556,7 +5536,7 @@ export default function App() {
                             : !motionMayRenderVideoStill
                               ? 'Нужна картинка кадра: архив или файл с компьютера'
                               : motionNeedDrivingVideoFile && !motionVideoFileId?.trim()
-                                ? 'Для Kling / WAN выберите референс-видео и дождитесь загрузки на сервер'
+                                ? 'Загрузите ролик-образец и дождитесь окончания загрузки'
                                 : undefined
                         }
                         onClick={() => void runMotionRenderVideo()}
