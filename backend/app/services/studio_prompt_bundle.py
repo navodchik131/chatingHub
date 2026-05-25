@@ -151,7 +151,7 @@ def _keep_avoid_term(term: str) -> bool:
 
 
 def _filter_avoid_csv(raw: str) -> str:
-    kept = [_a for a in re.split(r"[,;\n]+", raw) if _keep_avoid_term(_a)]
+    kept = [a for a in re.split(r"[,;\n]+", raw) if _keep_avoid_term(a)]
     return ", ".join(kept)
 
 
