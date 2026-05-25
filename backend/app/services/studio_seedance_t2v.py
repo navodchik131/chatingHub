@@ -44,7 +44,6 @@ def sort_model_images_for_seedance_t2v(
     filtered.sort(
         key=lambda im: (
             _T2V_KIND_ORDER.get((im.image_kind or "other").lower(), 50),
-            im.sort_order,
             im.id,
         )
     )
