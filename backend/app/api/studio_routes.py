@@ -3318,24 +3318,40 @@ async def api_studio_motion_render_video(
             detail="С референс-видео нужен первый кадр: сначала выполните шаг 1 «Сгенерировать первый кадр».",
         )
 
-    return await _accept_studio_job(
-        session,
-        user,
-        job_type="motion_render_video",
-        params={
-            "model_id": mid,
-            "prompt": (prompt or "").strip(),
-            "output_aspect": aspect_key,
-            "motion_video_file_id": mv_id,
-            "first_frame_generation_id": ff_gid,
-            "motion_timeline": (motion_timeline or "").strip(),
-            "outfit_generation_id": outfit_gid,
-            "negative_prompt": (negative_prompt or "").strip(),
-            "generate_audio": (generate_audio or "1").strip(),
-            "duration_seconds": ds_raw,
-            "auto_motion_prompt": (auto_motion_prompt or "0").strip(),
-        },
-    )
+    timeline_raw = (motion_timeline or "").strip()
+    if len(timeline_raw) > 50000:
+        raise HTTPException(
+            status_code=400,
+            detail="motion_timeline слишком длинный — сократите или отключите Grok timeline на шаге 1.",
+        )
+
+    try:
+        return await _accept_studio_job(
+            session,
+            user,
+            job_type="motion_render_video",
+            params={
+                "model_id": mid,
+                "prompt": (prompt or "").strip(),
+                "output_aspect": aspect_key,
+                "motion_video_file_id": mv_id,
+                "first_frame_generation_id": ff_gid,
+                "motion_timeline": timeline_raw,
+                "outfit_generation_id": outfit_gid,
+                "negative_prompt": (negative_prompt or "").strip(),
+                "generate_audio": (generate_audio or "1").strip(),
+                "duration_seconds": ds_raw,
+                "auto_motion_prompt": (auto_motion_prompt or "0").strip(),
+            },
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.exception("motion render-video accept failed")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Не удалось создать задачу видео: {e}",
+        ) from e
 
 
 async def _studio_job_execute_motion_render_video(
@@ -3384,11 +3400,14 @@ async def _studio_job_execute_motion_render_video(
             "У модели нет фото для reference_images. Добавьте развёртку (turnaround) в кабинете модели."
         )
 
-    imgs_t2v = sort_model_images_for_seedance_t2v(list(sm.images))
-    if not imgs_t2v:
-        raise RuntimeError(
-            "У модели нет фото для reference_images. Добавьте развёртку (turnaround) в кабинете модели."
-        )
+    log.info(
+        "motion_render_video job=%s model=%s ff=%s mv=%s outfit=%s",
+        job.id,
+        mid,
+        first_frame_gid,
+        mv_id or None,
+        outfit_gid,
+    )
 
     n_start = 0
     n_outfit = 0
@@ -3426,9 +3445,13 @@ async def _studio_job_execute_motion_render_video(
         except (TypeError, ValueError):
             outfit_gen_id = None
     if outfit_gen_id is not None:
-        row_outfit = await session.get(StudioGeneration, outfit_gen_id)
-        if not row_outfit or row_outfit.user_id != oid:
-            raise RuntimeError("Снимок наряда (outfit) не найден")
+        if first_frame_gen_id is not None and outfit_gen_id == first_frame_gen_id:
+            outfit_gen_id = None
+            n_outfit = 0
+        else:
+            row_outfit = await session.get(StudioGeneration, outfit_gen_id)
+            if not row_outfit or row_outfit.user_id != oid:
+                raise RuntimeError("Снимок наряда (outfit) не найден")
 
     reserved = n_start + (1 if outfit_gen_id is not None else 0)
     max_model_slots = max(0, MAX_SEEDANCE_REFERENCE_IMAGES - reserved)
@@ -3535,38 +3558,45 @@ async def _studio_job_execute_motion_render_video(
     if video_url:
         vu = (video_url or "").strip()
         if vu:
-            session.add(
-                StudioMotionRender(
-                    user_id=oid,
-                    studio_model_id=mid,
-                    studio_generation_id=first_frame_gen_id or outfit_gen_id,
-                    video_url=vu,
+            try:
+                session.add(
+                    StudioMotionRender(
+                        user_id=oid,
+                        studio_model_id=mid,
+                        studio_generation_id=first_frame_gen_id or outfit_gen_id,
+                        video_url=vu,
+                    )
                 )
-            )
+            except Exception as e:
+                log.warning("motion_render history insert failed (video ok): %s", e)
 
-    await record_usage(
-        session,
-        user,
-        billing,
-        "studio_motion_control",
-        cost,
-        {
-            "studio_model_id": mid,
-            "first_frame_generation_id": first_frame_gen_id,
-            "outfit_generation_id": outfit_gen_id,
-            "motion_video_file_id": mv_id or None,
-            "motion_video_provider": "seedance_t2v",
-            "seedance_20_t2v_path": settings.wavespeed_seedance_20_t2v_path,
-            "seedance_20_t2v_resolution": settings.wavespeed_seedance_20_t2v_resolution,
-            "seedance_20_t2v_duration": ds_effective,
-            "reference_images": len(ref_images),
-            "reference_videos": len(ref_videos),
-            "seedance_t2v_prompt_source": prompt_source,
-            "seedance_t2v_prompt_chars": len(seed_prompt),
-            "ok": bool(video_url),
-        },
-    )
-    await session.commit()
+    try:
+        await record_usage(
+            session,
+            user,
+            billing,
+            "studio_motion_control",
+            cost,
+            {
+                "studio_model_id": mid,
+                "first_frame_generation_id": first_frame_gen_id,
+                "outfit_generation_id": outfit_gen_id,
+                "motion_video_file_id": mv_id or None,
+                "motion_video_provider": "seedance_t2v",
+                "seedance_20_t2v_path": settings.wavespeed_seedance_20_t2v_path,
+                "seedance_20_t2v_resolution": settings.wavespeed_seedance_20_t2v_resolution,
+                "seedance_20_t2v_duration": ds_effective,
+                "reference_images": len(ref_images),
+                "reference_videos": len(ref_videos),
+                "seedance_t2v_prompt_source": prompt_source,
+                "seedance_t2v_prompt_chars": len(seed_prompt),
+                "ok": bool(video_url),
+            },
+        )
+        await session.commit()
+    except Exception as e:
+        log.exception("motion_render_video commit failed job=%s", job.id)
+        raise RuntimeError(f"Не удалось сохранить результат видео: {e}") from e
 
     if not video_url and msg:
         raise RuntimeError(msg)
