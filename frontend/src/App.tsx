@@ -1831,6 +1831,10 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           source_url: u,
+          generation_id:
+            scope === 'studio_photo'
+              ? (studioGenGenerationId ?? undefined)
+              : (motionPreviewGenId ?? undefined),
           refined_prompt: rp || (scope === 'studio_photo' ? '[import фото]' : '[import кадр для видео]'),
           output_aspect: studioOutputAspect,
           studio_model_id: studioSelectedModelId ?? undefined,

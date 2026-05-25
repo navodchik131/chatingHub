@@ -144,6 +144,11 @@ class StudioImportArchiveImageIn(BaseModel):
     """Повторная загрузка в архив по временному HTTPS URL (например с CDN после сбоя скачивания на сервер)."""
 
     source_url: str = Field(..., max_length=2048)
+    generation_id: int | None = Field(
+        default=None,
+        ge=1,
+        description="Существующая запись provider_ready — догрузить файл без новой строки в БД",
+    )
     refined_prompt: str | None = Field(default=None, max_length=65536)
     output_aspect: str | None = Field(default=None, max_length=48)
     studio_model_id: int | None = Field(default=None, ge=1)

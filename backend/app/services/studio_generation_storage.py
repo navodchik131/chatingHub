@@ -3,7 +3,9 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
+from datetime import datetime, timedelta, timezone
 from functools import partial
+from typing import TYPE_CHECKING
 
 import anyio
 import httpx
@@ -13,7 +15,12 @@ from sqlalchemy.orm import selectinload
 
 from app.config import BACKEND_DIR, settings
 from app.db.models import StudioGeneration, UserStudioModel
+from app.db.session import SessionLocal
+from app.services.studio_generation_status import StudioGenerationStatus
 from app.services.studio_model_images import export_selfie_flag_for_phone_exif
+
+if TYPE_CHECKING:
+    pass
 
 log = logging.getLogger(__name__)
 
@@ -33,6 +40,343 @@ def user_message_when_archive_download_failed(previous: str | None) -> str:
     return USER_HINT_ARCHIVE_DOWNLOAD_FAILED
 
 
+def generation_has_archive_file(row: StudioGeneration) -> bool:
+    rel = (row.relative_path or "").strip()
+    if not rel:
+        return False
+    path = (BACKEND_DIR / rel).resolve()
+    try:
+        path.relative_to(BACKEND_DIR.resolve())
+    except ValueError:
+        return False
+    return path.is_file()
+
+
+async def begin_studio_generation_run(
+    session: AsyncSession,
+    *,
+    owner_id: int,
+    output_aspect: str | None,
+    studio_model_id: int | None,
+    studio_job_id: int | None = None,
+) -> StudioGeneration:
+    row = StudioGeneration(
+        user_id=owner_id,
+        status=StudioGenerationStatus.PROCESSING,
+        relative_path="",
+        content_type="image/png",
+        output_aspect=output_aspect,
+        studio_model_id=studio_model_id,
+        studio_job_id=studio_job_id,
+    )
+    session.add(row)
+    await session.flush()
+    return row
+
+
+async def mark_studio_generation_failed(
+    session: AsyncSession,
+    row: StudioGeneration,
+    *,
+    message: str | None,
+    step: str,
+) -> None:
+    row.status = StudioGenerationStatus.FAILED
+    row.error_message = ((message or "").strip()[:4000] or None)
+    row.error_step = (step or "").strip()[:32] or None
+    session.add(row)
+    await session.flush()
+
+
+async def mark_studio_generation_provider_ready(
+    session: AsyncSession,
+    row: StudioGeneration,
+    *,
+    source_url: str,
+    wavespeed_task_id: str | None = None,
+) -> None:
+    url = (source_url or "").strip()
+    row.source_url = url[:2000] if url else None
+    tid = (wavespeed_task_id or "").strip()
+    row.wavespeed_task_id = tid[:128] if tid else None
+    row.status = StudioGenerationStatus.PROVIDER_READY
+    row.error_message = None
+    row.error_step = None
+    session.add(row)
+    await session.flush()
+
+
+async def _download_bytes_from_url(url: str) -> tuple[bytes | None, str | None]:
+    """Скачивает по HTTPS; возвращает (bytes, content_type_header)."""
+    u = (url or "").strip()
+    if not u:
+        return None, None
+    attempts = max(1, int(settings.studio_archive_download_attempts))
+    timeout = float(settings.studio_archive_download_timeout_seconds)
+    wait_s = 0.0
+    last_err: Exception | None = None
+    r: httpx.Response | None = None
+    for attempt in range(attempts):
+        if wait_s > 0:
+            await asyncio.sleep(wait_s)
+        try:
+            async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+                r = await client.get(u)
+                r.raise_for_status()
+                data = r.content
+                ct = (r.headers.get("content-type") or "").split(";")[0].strip().lower()
+                return data, ct or None
+        except Exception as e:
+            last_err = e
+            log.warning(
+                "studio archive download attempt %s/%s failed (%s): %s",
+                attempt + 1,
+                attempts,
+                u[:240],
+                e,
+            )
+            wait_s = min(60.0, 3.0 * (2**attempt))
+    log.warning("studio archive download exhausted: %s", last_err)
+    return None, None
+
+
+def _ext_and_media_from_content_type(ct_header: str | None) -> tuple[str, str]:
+    ct = (ct_header or "").split(";")[0].strip().lower()
+    if "png" in ct:
+        return ".png", "image/png"
+    if "jpeg" in ct or "jpg" in ct:
+        return ".jpg", "image/jpeg"
+    if "webp" in ct:
+        return ".webp", "image/webp"
+    if "gif" in ct:
+        return ".gif", "image/gif"
+    return ".png", "image/png"
+
+
+async def _apply_phone_export_if_needed(
+    session: AsyncSession,
+    *,
+    studio_model_id: int | None,
+    data: bytes,
+    ext: str,
+    media: str,
+) -> tuple[bytes, str, str]:
+    if studio_model_id is None:
+        return data, ext, media
+    stmt = (
+        select(UserStudioModel)
+        .where(UserStudioModel.id == studio_model_id)
+        .options(selectinload(UserStudioModel.images))
+    )
+    model_row = (await session.execute(stmt)).scalar_one_or_none()
+    if model_row is None or not (model_row.camera_preset_id or "").strip():
+        return data, ext, media
+    from app.services.studio_camera_presets import get_camera_preset_by_id
+    from app.services.studio_phone_export import apply_phone_export_to_jpeg
+
+    preset = get_camera_preset_by_id(model_row.camera_preset_id.strip())
+    if not preset:
+        return data, ext, media
+    selfie_for_exif = export_selfie_flag_for_phone_exif(list(model_row.images))
+    export_bytes = await anyio.to_thread.run_sync(
+        partial(
+            apply_phone_export_to_jpeg,
+            data,
+            preset=preset,
+            selfie=selfie_for_exif,
+            export_lat=model_row.export_lat,
+            export_lon=model_row.export_lon,
+        ),
+    )
+    if export_bytes is not None:
+        return export_bytes, ".jpg", "image/jpeg"
+    return data, ext, media
+
+
+async def _write_generation_file(
+    session: AsyncSession,
+    row: StudioGeneration,
+    data: bytes,
+    *,
+    content_type_header: str | None,
+    studio_model_id: int | None,
+) -> bool:
+    if not data or len(data) > MAX_ARCHIVE_BYTES:
+        if data and len(data) > MAX_ARCHIVE_BYTES:
+            log.warning("studio archive: file too large (%s bytes)", len(data))
+        return False
+
+    ext, media = _ext_and_media_from_content_type(content_type_header)
+    data, ext, media = await _apply_phone_export_if_needed(
+        session,
+        studio_model_id=studio_model_id,
+        data=data,
+        ext=ext,
+        media=media,
+    )
+
+    rel = f"data/studio_generations/{row.user_id}/{uuid.uuid4().hex}{ext}"
+    path = (BACKEND_DIR / rel).resolve()
+    try:
+        path.relative_to(BACKEND_DIR.resolve())
+    except ValueError:
+        log.warning("studio archive: bad path")
+        return False
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(data)
+
+    row.relative_path = rel.replace("\\", "/")
+    row.content_type = media
+    row.status = StudioGenerationStatus.READY
+    row.error_message = None
+    row.error_step = None
+    session.add(row)
+    await session.flush()
+    return True
+
+
+async def archive_studio_generation_from_bytes(
+    session: AsyncSession,
+    row: StudioGeneration,
+    data: bytes,
+    *,
+    content_type: str | None = None,
+    studio_model_id: int | None = None,
+) -> bool:
+    row.status = StudioGenerationStatus.ARCHIVING
+    session.add(row)
+    await session.flush()
+    mid = studio_model_id if studio_model_id is not None else row.studio_model_id
+    ok = await _write_generation_file(
+        session,
+        row,
+        data,
+        content_type_header=content_type,
+        studio_model_id=mid,
+    )
+    if not ok and row.source_url:
+        row.status = StudioGenerationStatus.PROVIDER_READY
+        session.add(row)
+        await session.flush()
+    return ok
+
+
+async def archive_studio_generation_from_url(
+    session: AsyncSession,
+    row: StudioGeneration,
+    *,
+    source_url: str | None = None,
+    refined_prompt_full: str | None = None,
+) -> bool:
+    if generation_has_archive_file(row):
+        row.status = StudioGenerationStatus.READY
+        session.add(row)
+        await session.flush()
+        return True
+
+    url = (source_url or row.source_url or "").strip()
+    if not url:
+        return False
+
+    row.status = StudioGenerationStatus.ARCHIVING
+    session.add(row)
+    await session.flush()
+
+    data, ct = await _download_bytes_from_url(url)
+    if data is None:
+        row.status = StudioGenerationStatus.PROVIDER_READY
+        session.add(row)
+        await session.flush()
+        return False
+
+    if refined_prompt_full:
+        rp = refined_prompt_full.strip()
+        row.refined_prompt = rp or row.refined_prompt
+        row.prompt_excerpt = (rp[:2000] if rp else None) or row.prompt_excerpt
+
+    return await _write_generation_file(
+        session,
+        row,
+        data,
+        content_type_header=ct,
+        studio_model_id=row.studio_model_id,
+    )
+
+
+async def studio_finish_image_generation(
+    session: AsyncSession,
+    *,
+    gen_row: StudioGeneration | None,
+    owner_id: int,
+    studio_model_id: int | None,
+    output_aspect: str | None,
+    refined_prompt: str,
+    source_url: str | None = None,
+    wavespeed_task_id: str | None = None,
+    uploaded_bytes: bytes | None = None,
+    uploaded_content_type: str = "image/png",
+    motion_video_prompt_auto: str | None = None,
+) -> tuple[StudioGeneration | None, str | None]:
+    """
+    Завершает пайплайн: provider_ready + попытка архива, либо сразу ready из байтов.
+    Возвращает (запись, URL для превью — CDN или уже не нужен вызывающему).
+    """
+    rp = (refined_prompt or "").strip()
+    excerpt = (rp[:2000] if rp else None) or None
+    mva = (motion_video_prompt_auto or "").strip() or None
+
+    row = gen_row
+    if row is None and not uploaded_bytes and not (source_url or "").strip():
+        return None, None
+
+    if row is None:
+        row = await begin_studio_generation_run(
+            session,
+            owner_id=owner_id,
+            output_aspect=output_aspect,
+            studio_model_id=studio_model_id,
+        )
+
+    if rp:
+        row.refined_prompt = rp
+        row.prompt_excerpt = excerpt
+    if mva:
+        row.motion_video_prompt_auto = mva
+    if output_aspect:
+        row.output_aspect = output_aspect
+    if studio_model_id is not None:
+        row.studio_model_id = studio_model_id
+
+    preview_url = (source_url or "").strip() or None
+
+    if uploaded_bytes:
+        ok = await archive_studio_generation_from_bytes(
+            session,
+            row,
+            uploaded_bytes,
+            content_type=uploaded_content_type,
+            studio_model_id=studio_model_id,
+        )
+        if ok:
+            preview_url = None
+        return row, preview_url
+
+    url = (source_url or "").strip()
+    if url:
+        await mark_studio_generation_provider_ready(
+            session,
+            row,
+            source_url=url,
+            wavespeed_task_id=wavespeed_task_id,
+        )
+        if await archive_studio_generation_from_url(
+            session, row, source_url=url, refined_prompt_full=rp or None
+        ):
+            preview_url = None
+
+    return row, preview_url
+
+
 async def persist_studio_generation_from_uploaded_bytes(
     session: AsyncSession,
     *,
@@ -43,82 +387,35 @@ async def persist_studio_generation_from_uploaded_bytes(
     studio_model_id: int | None,
     refined_prompt: str | None,
     motion_video_prompt_auto: str | None,
+    studio_job_id: int | None = None,
+    existing_row: StudioGeneration | None = None,
 ) -> StudioGeneration | None:
     """Сохраняет уже готовый кадр (upload) в архив студии без WaveSpeed."""
     if not data:
         return None
-    if len(data) > MAX_ARCHIVE_BYTES:
-        log.warning("studio archive (upload): file too large (%s bytes)", len(data))
-        return None
-
-    ct = (content_type or "").split(";")[0].strip().lower()
-    if ct in ("image/jpeg", "image/jpg"):
-        ext, media = ".jpg", "image/jpeg"
-    elif ct == "image/png":
-        ext, media = ".png", "image/png"
-    elif ct == "image/webp":
-        ext, media = ".webp", "image/webp"
-    elif ct == "image/gif":
-        ext, media = ".gif", "image/gif"
-    else:
-        ext, media = ".jpg", "image/jpeg"
-
-    model_row: UserStudioModel | None = None
-    if studio_model_id is not None:
-        stmt = (
-            select(UserStudioModel)
-            .where(UserStudioModel.id == studio_model_id)
-            .options(selectinload(UserStudioModel.images))
-        )
-        model_row = (await session.execute(stmt)).scalar_one_or_none()
-    out_data = data
-    if model_row is not None and (model_row.camera_preset_id or "").strip():
-        from app.services.studio_camera_presets import get_camera_preset_by_id
-        from app.services.studio_phone_export import apply_phone_export_to_jpeg
-
-        preset = get_camera_preset_by_id(model_row.camera_preset_id.strip())
-        if preset:
-            selfie_for_exif = export_selfie_flag_for_phone_exif(list(model_row.images))
-            export_bytes = await anyio.to_thread.run_sync(
-                partial(
-                    apply_phone_export_to_jpeg,
-                    out_data,
-                    preset=preset,
-                    selfie=selfie_for_exif,
-                    export_lat=model_row.export_lat,
-                    export_lon=model_row.export_lon,
-                ),
-            )
-            if export_bytes is not None:
-                out_data = export_bytes
-                ext, media = ".jpg", "image/jpeg"
-
-    rel = f"data/studio_generations/{owner_id}/{uuid.uuid4().hex}{ext}"
-    path = (BACKEND_DIR / rel).resolve()
-    try:
-        path.relative_to(BACKEND_DIR.resolve())
-    except ValueError:
-        log.warning("studio archive (upload): bad path")
-        return None
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(out_data)
-
     rp = (refined_prompt or "").strip()
     excerpt = (rp[:2000] if rp else None) or None
-    row = StudioGeneration(
-        user_id=owner_id,
-        relative_path=rel.replace("\\", "/"),
-        content_type=media,
-        output_aspect=output_aspect,
+    row = existing_row
+    if row is None:
+        row = await begin_studio_generation_run(
+            session,
+            owner_id=owner_id,
+            output_aspect=output_aspect,
+            studio_model_id=studio_model_id,
+            studio_job_id=studio_job_id,
+        )
+    row.refined_prompt = rp or None
+    row.prompt_excerpt = excerpt
+    row.motion_video_prompt_auto = (motion_video_prompt_auto or "").strip() or None
+    if await archive_studio_generation_from_bytes(
+        session,
+        row,
+        data,
+        content_type=content_type,
         studio_model_id=studio_model_id,
-        prompt_excerpt=excerpt,
-        refined_prompt=rp or None,
-        motion_video_prompt_auto=(motion_video_prompt_auto or "").strip() or None,
-        source_url=None,
-    )
-    session.add(row)
-    await session.flush()
-    return row
+    ):
+        return row
+    return None
 
 
 async def download_and_create_generation(
@@ -131,117 +428,79 @@ async def download_and_create_generation(
     studio_model_id: int | None,
     refined_prompt_full: str | None = None,
     motion_video_prompt_auto: str | None = None,
+    existing_row: StudioGeneration | None = None,
 ) -> StudioGeneration | None:
     """Скачивает картинку с WaveSpeed/CDN и сохраняет в data/studio_generations/…"""
     url = (source_url or "").strip()
     if not url:
         return None
-
-    attempts = max(1, int(settings.studio_archive_download_attempts))
-    timeout = float(settings.studio_archive_download_timeout_seconds)
-    data = b""
-    r: httpx.Response | None = None
-    last_err: Exception | None = None
-    wait_s = 0.0
-
-    for attempt in range(attempts):
-        if wait_s > 0:
-            await asyncio.sleep(wait_s)
-        try:
-            async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
-                r = await client.get(url)
-                r.raise_for_status()
-                data = r.content
-                break
-        except Exception as e:
-            last_err = e
-            log.warning(
-                "studio archive download attempt %s/%s failed (%s): %s",
-                attempt + 1,
-                attempts,
-                url[:240],
-                e,
-            )
-            wait_s = min(60.0, 3.0 * (2**attempt))
-
-    else:
-        log.warning(
-            "studio archive download exhausted after %s attempts: %s", attempts, last_err
-        )
-        return None
-
-    assert r is not None
-    if len(data) > MAX_ARCHIVE_BYTES:
-        log.warning("studio archive: file too large (%s bytes)", len(data))
-        return None
-
-    ct_header = (r.headers.get("content-type") or "").split(";")[0].strip().lower()
-    if "png" in ct_header:
-        ext, media = ".png", "image/png"
-    elif "jpeg" in ct_header or "jpg" in ct_header:
-        ext, media = ".jpg", "image/jpeg"
-    elif "webp" in ct_header:
-        ext, media = ".webp", "image/webp"
-    elif "gif" in ct_header:
-        ext, media = ".gif", "image/gif"
-    else:
-        ext, media = ".png", "image/png"
-
-    model_row: UserStudioModel | None = None
-    if studio_model_id is not None:
-        stmt = (
-            select(UserStudioModel)
-            .where(UserStudioModel.id == studio_model_id)
-            .options(selectinload(UserStudioModel.images))
-        )
-        model_row = (await session.execute(stmt)).scalar_one_or_none()
-    if model_row is not None and (model_row.camera_preset_id or "").strip():
-        from app.services.studio_camera_presets import get_camera_preset_by_id
-        from app.services.studio_phone_export import apply_phone_export_to_jpeg
-
-        preset = get_camera_preset_by_id(model_row.camera_preset_id.strip())
-        if preset:
-            selfie_for_exif = export_selfie_flag_for_phone_exif(list(model_row.images))
-            export_bytes = await anyio.to_thread.run_sync(
-                partial(
-                    apply_phone_export_to_jpeg,
-                    data,
-                    preset=preset,
-                    selfie=selfie_for_exif,
-                    export_lat=model_row.export_lat,
-                    export_lon=model_row.export_lon,
-                ),
-            )
-            if export_bytes is not None:
-                data = export_bytes
-                ext, media = ".jpg", "image/jpeg"
-
-    rel = f"data/studio_generations/{owner_id}/{uuid.uuid4().hex}{ext}"
-    path = (BACKEND_DIR / rel).resolve()
-    try:
-        path.relative_to(BACKEND_DIR.resolve())
-    except ValueError:
-        log.warning("studio archive: bad path")
-        return None
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(data)
-
-    excerpt = ((refined_prompt or "").strip()[:2000]) or None
-    full_store = (refined_prompt_full or refined_prompt or "").strip() or None
-    row = StudioGeneration(
-        user_id=owner_id,
-        relative_path=rel.replace("\\", "/"),
-        content_type=media,
-        output_aspect=output_aspect,
+    rp = (refined_prompt_full or refined_prompt or "").strip()
+    row, _ = await studio_finish_image_generation(
+        session,
+        gen_row=existing_row,
+        owner_id=owner_id,
         studio_model_id=studio_model_id,
-        prompt_excerpt=excerpt,
-        refined_prompt=full_store,
-        motion_video_prompt_auto=(motion_video_prompt_auto or "").strip() or None,
-        source_url=(url[:2000] if url else None),
+        output_aspect=output_aspect,
+        refined_prompt=rp,
+        source_url=url,
+        motion_video_prompt_auto=motion_video_prompt_auto,
     )
-    session.add(row)
-    await session.flush()
-    return row
+    if row is None:
+        return None
+    if row.status == StudioGenerationStatus.READY and generation_has_archive_file(row):
+        return row
+    if row.status == StudioGenerationStatus.PROVIDER_READY:
+        return row
+    return None
+
+
+async def retry_pending_studio_archives() -> int:
+    """Догружает архив для provider_ready; помечает устаревшие processing как failed."""
+    batch = max(1, int(settings.studio_archive_retry_batch_size))
+    stale_h = max(1, int(settings.studio_generation_stale_processing_hours))
+    stale_cutoff = datetime.now(timezone.utc) - timedelta(hours=stale_h)
+    done = 0
+
+    async with SessionLocal() as session:
+        stale_stmt = (
+            select(StudioGeneration)
+            .where(StudioGeneration.status == StudioGenerationStatus.PROCESSING)
+            .where(StudioGeneration.created_at < stale_cutoff)
+            .limit(batch)
+        )
+        for row in (await session.execute(stale_stmt)).scalars().all():
+            await mark_studio_generation_failed(
+                session,
+                row,
+                message="Превышено время ожидания пайплайна генерации",
+                step="timeout",
+            )
+            done += 1
+        if done:
+            await session.commit()
+
+    async with SessionLocal() as session:
+        stmt = (
+            select(StudioGeneration)
+            .where(StudioGeneration.status == StudioGenerationStatus.PROVIDER_READY)
+            .where(StudioGeneration.source_url.isnot(None))
+            .order_by(StudioGeneration.created_at.asc())
+            .limit(batch)
+        )
+        rows = list((await session.execute(stmt)).scalars().all())
+        for row in rows:
+            if generation_has_archive_file(row):
+                row.status = StudioGenerationStatus.READY
+                session.add(row)
+                done += 1
+                continue
+            if await archive_studio_generation_from_url(session, row):
+                done += 1
+        await session.commit()
+
+    if done:
+        log.info("studio archive retry: processed %s row(s)", done)
+    return done
 
 
 def safe_delete_generation_file(relative_path: str) -> None:

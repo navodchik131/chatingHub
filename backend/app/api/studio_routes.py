@@ -81,10 +81,15 @@ from app.services.studio_aspect import (
     normalize_aspect_key,
     wavespeed_size_string,
 )
+from app.services.studio_generation_status import StudioGenerationStatus
 from app.services.studio_generation_storage import (
+    begin_studio_generation_run,
     download_and_create_generation,
+    generation_has_archive_file,
+    mark_studio_generation_failed,
     persist_studio_generation_from_uploaded_bytes,
     safe_delete_generation_file,
+    studio_finish_image_generation,
     user_message_when_archive_download_failed,
 )
 from app.services.studio_image_token import (
@@ -248,6 +253,11 @@ def _public_app_base(request: Request | None) -> str:
     if request is not None:
         return str(request.base_url).rstrip("/")
     return ""
+
+
+def _studio_archive_image_url(owner_id: int, generation_id: int, arch_base: str) -> str:
+    tok = create_generation_image_access_token(user_id=owner_id, generation_id=generation_id)
+    return f"{arch_base.rstrip('/')}/api/studio/public-generation-image?t={quote(tok, safe='')}"
 
 
 def _studio_job_status_out(job: StudioJob) -> StudioJobStatusOut:
@@ -665,8 +675,14 @@ async def public_studio_generation_image(
     except ValueError:
         raise HTTPException(status_code=404, detail="Не найдено") from None
     if not abs_path.is_file():
-        await session.delete(row)
-        await session.commit()
+        src = (row.source_url or "").strip()
+        if row.status == StudioGenerationStatus.PROVIDER_READY and src.startswith("https://"):
+            from fastapi.responses import RedirectResponse
+
+            return RedirectResponse(url=src, status_code=302)
+        if row.status == StudioGenerationStatus.READY:
+            await session.delete(row)
+            await session.commit()
         raise HTTPException(status_code=404, detail="Файл отсутствует на сервере") from None
     mime = row.content_type or mimetypes.guess_type(abs_path.name)[0] or "image/png"
     return FileResponse(abs_path, media_type=mime)
@@ -771,6 +787,8 @@ async def api_list_studio_generations(
     stmt = (
         select(StudioGeneration)
         .where(StudioGeneration.user_id == oid)
+        .where(StudioGeneration.status == StudioGenerationStatus.READY)
+        .where(StudioGeneration.relative_path != "")
         .order_by(StudioGeneration.created_at.desc(), StudioGeneration.id.desc())
         .offset(int(skip))
         .limit(take)
@@ -1105,20 +1123,22 @@ async def _studio_job_execute_carousel(
 
         try:
             if wave_profile_n == "regular":
-                raw_url = await nano_banana_pro_edit_image_url(
+                ws_car = await nano_banana_pro_edit_image_url(
                     api_key=ws_key,
                     image_urls=[master_url],
                     prompt=wavespeed_prompt,
                     aspect_ratio=aspect_key,
                 )
+                raw_url = ws_car.url
             else:
-                raw_url = await seedream_v45_edit_image_url(
+                ws_car = await seedream_v45_edit_image_url(
                     api_key=ws_key,
                     image_urls=[master_url],
                     prompt=wavespeed_prompt,
                     size=size_for_ws,
                     wan_edit_tier=wan_tier_n,
                 )
+                raw_url = ws_car.url
         except RuntimeError as e:
             last_msg = str(e)
             log.warning(
@@ -1569,28 +1589,48 @@ async def api_import_studio_archive_image(
 
     rp = ((payload.refined_prompt or "").strip() or "[import from CDN URL]")[:65536]
 
+    existing_row: StudioGeneration | None = None
+    if payload.generation_id is not None:
+        existing_row = await session.get(StudioGeneration, payload.generation_id)
+        if (
+            not existing_row
+            or existing_row.user_id != oid
+            or existing_row.status
+            not in (
+                StudioGenerationStatus.PROVIDER_READY,
+                StudioGenerationStatus.PROCESSING,
+                StudioGenerationStatus.ARCHIVING,
+            )
+        ):
+            raise HTTPException(status_code=404, detail="Запись генерации не найдена")
+        if not (existing_row.source_url or "").strip():
+            existing_row.source_url = raw_u[:2000]
+
     gen = await download_and_create_generation(
         session,
         owner_id=oid,
         source_url=raw_u,
         refined_prompt=rp,
         output_aspect=aspect_key,
-        studio_model_id=payload.studio_model_id,
+        studio_model_id=payload.studio_model_id or (
+            existing_row.studio_model_id if existing_row else None
+        ),
         refined_prompt_full=rp,
+        existing_row=existing_row,
     )
     await session.commit()
 
-    if gen is None:
+    if gen is None or not generation_has_archive_file(gen):
+        gid = existing_row.id if existing_row else None
         return StudioImportArchiveImageOut(
             generated_image_url=raw_u,
-            generation_id=None,
+            generation_id=gid,
             message=user_message_when_archive_download_failed(
                 "Повторная загрузка в архив пока не удалась."
             ),
         )
 
-    gtok = create_generation_image_access_token(user_id=oid, generation_id=gen.id)
-    out_u = f"{pub}/api/studio/public-generation-image?t={quote(gtok, safe='')}"
+    out_u = _studio_archive_image_url(oid, gen.id, pub)
     return StudioImportArchiveImageOut(
         generated_image_url=out_u,
         generation_id=gen.id,
@@ -1902,6 +1942,17 @@ async def _studio_job_execute_refine_prompt(
     cost = apply_studio_credit_cost(plan, base_studio_credit)
     billing = await ensure_can_consume_credits(session, user, cost)
 
+    gen_row: StudioGeneration | None = None
+    wavespeed_task_id: str | None = None
+    if do_wavespeed:
+        gen_row = await begin_studio_generation_run(
+            session,
+            owner_id=oid,
+            output_aspect=aspect_key,
+            studio_model_id=mid,
+            studio_job_id=job.id,
+        )
+
     lock_hair_req = _truthy_lock_model_hairstyle(lock_model_hairstyle)
     effective_lock_hairstyle = bool(lock_hair_req) if image_bytes else True
     send_pose_to_ws = _truthy_send_pose_reference_to_wavespeed(
@@ -1953,7 +2004,16 @@ async def _studio_job_execute_refine_prompt(
             prompt_brief_mode=prompt_brief_mode,
             credentials=llm_creds,
         )
+        if gen_row is not None:
+            gen_row.refined_prompt = refined
+            gen_row.prompt_excerpt = (refined[:2000] if refined else None) or None
+            session.add(gen_row)
+            await session.flush()
     except RuntimeError as e:
+        if gen_row is not None:
+            await mark_studio_generation_failed(
+                session, gen_row, message=str(e), step="llm"
+            )
         raise HTTPException(status_code=502, detail=str(e)) from e
 
     generated_image_url: str | None = None
@@ -2065,20 +2125,22 @@ async def _studio_job_execute_refine_prompt(
                         size_for_wm = wavespeed_size_string(aspect_key)
 
                     if wave_profile_n == "regular":
-                        generated_image_url = await nano_banana_pro_edit_image_url(
+                        ws_res = await nano_banana_pro_edit_image_url(
                             api_key=ws_key,
                             image_urls=nano_image_urls_wm,
                             prompt=ws_mask_prompt,
                             aspect_ratio=aspect_key,
                         )
                     else:
-                        generated_image_url = await seedream_v45_edit_image_url(
+                        ws_res = await seedream_v45_edit_image_url(
                             api_key=ws_key,
                             image_urls=wan_image_urls_wm,
                             prompt=ws_mask_prompt,
                             size=size_for_wm,
                             wan_edit_tier=wan_tier_n,
                         )
+                    generated_image_url = ws_res.url
+                    wavespeed_task_id = ws_res.task_id or wavespeed_task_id
 
                     if (
                         generated_image_url
@@ -2142,13 +2204,15 @@ async def _studio_job_execute_refine_prompt(
                         if settings.wavespeed_z_image_inpaint_omit_size
                         else wavespeed_size_string(aspect_key)
                     )
-                    generated_image_url = await z_image_turbo_inpaint_image_url(
+                    ws_res = await z_image_turbo_inpaint_image_url(
                         api_key=ws_key,
                         image_url=src_url,
                         mask_image_url=mask_url,
                         prompt=inpaint_prompt,
                         size=size_inpaint,
                     )
+                    generated_image_url = ws_res.url
+                    wavespeed_task_id = ws_res.task_id or wavespeed_task_id
             except RuntimeError as e:
                 wavespeed_message = str(e)
                 low = wavespeed_message.lower()
@@ -2350,20 +2414,22 @@ async def _studio_job_execute_refine_prompt(
                     size_for_ws = wavespeed_size_string(aspect_key)
                 try:
                     if wave_profile_n == "regular":
-                        generated_image_url = await nano_banana_pro_edit_image_url(
+                        ws_res = await nano_banana_pro_edit_image_url(
                             api_key=ws_key,
                             image_urls=image_urls,
                             prompt=wavespeed_prompt,
                             aspect_ratio=aspect_key,
                         )
                     else:
-                        generated_image_url = await seedream_v45_edit_image_url(
+                        ws_res = await seedream_v45_edit_image_url(
                             api_key=ws_key,
                             image_urls=image_urls,
                             prompt=wavespeed_prompt,
                             size=size_for_ws,
                             wan_edit_tier=wan_tier_n,
                         )
+                    generated_image_url = ws_res.url
+                    wavespeed_task_id = ws_res.task_id or wavespeed_task_id
                 except RuntimeError as e:
                     wavespeed_message = str(e)
                     low = wavespeed_message.lower()
@@ -2408,49 +2474,49 @@ async def _studio_job_execute_refine_prompt(
 
     generation_id: int | None = None
     gen_mid = mid
-    if regional_composed_png is not None:
-        gen_lc = await persist_studio_generation_from_uploaded_bytes(
+    if do_wavespeed or regional_composed_png or generated_image_url:
+        finished_row, cdn_preview = await studio_finish_image_generation(
             session,
+            gen_row=gen_row,
             owner_id=oid,
-            data=regional_composed_png,
-            content_type="image/png",
-            output_aspect=aspect_key,
             studio_model_id=gen_mid,
+            output_aspect=aspect_key,
             refined_prompt=refined,
-            motion_video_prompt_auto=None,
-        )
-        if gen_lc is not None:
-            generation_id = gen_lc.id
-            arch_base = _public_app_base(None)
-            if arch_base:
-                gtok = create_generation_image_access_token(
-                    user_id=oid, generation_id=gen_lc.id
-                )
-                generated_image_url = (
-                    f"{arch_base}/api/studio/public-generation-image?t={quote(gtok, safe='')}"
-                )
-        else:
-            wavespeed_message = user_message_when_archive_download_failed(wavespeed_message)
-    elif generated_image_url:
-        gen = await download_and_create_generation(
-            session,
-            owner_id=oid,
             source_url=generated_image_url,
-            refined_prompt=refined,
-            output_aspect=aspect_key,
-            studio_model_id=gen_mid,
-            refined_prompt_full=refined,
+            wavespeed_task_id=wavespeed_task_id,
+            uploaded_bytes=regional_composed_png,
+            uploaded_content_type="image/png",
         )
-        if gen is not None:
-            generation_id = gen.id
+        if finished_row is not None:
+            generation_id = finished_row.id
             arch_base = _public_app_base(None)
-            if arch_base:
-                gtok = create_generation_image_access_token(user_id=oid, generation_id=gen.id)
-                generated_image_url = (
-                    f"{arch_base}/api/studio/public-generation-image?t={quote(gtok, safe='')}"
+            if generation_has_archive_file(finished_row) and arch_base:
+                generated_image_url = _studio_archive_image_url(
+                    oid, finished_row.id, arch_base
                 )
-        else:
-            wavespeed_message = user_message_when_archive_download_failed(wavespeed_message)
+            elif cdn_preview:
+                generated_image_url = cdn_preview
+            elif finished_row.source_url:
+                generated_image_url = finished_row.source_url.strip()
+            if (
+                finished_row.status == StudioGenerationStatus.PROVIDER_READY
+                and not generation_has_archive_file(finished_row)
+            ):
+                wavespeed_message = user_message_when_archive_download_failed(
+                    wavespeed_message
+                )
+
+    if do_wavespeed and not (generated_image_url or "").strip():
+        if gen_row is not None:
+            await mark_studio_generation_failed(
+                session,
+                gen_row,
+                message=wavespeed_message or "WaveSpeed не вернул изображение",
+                step="wavespeed",
+            )
+        raise RuntimeError(
+            wavespeed_message or "WaveSpeed не вернул изображение"
+        )
 
     await record_usage(
         session,
@@ -2508,6 +2574,11 @@ async def _load_owned_generation_still_for_motion(
     row = await session.get(StudioGeneration, generation_id)
     if not row or row.user_id != owner_id:
         raise HTTPException(status_code=404, detail="Генерация не найдена")
+    if not generation_has_archive_file(row):
+        raise HTTPException(
+            status_code=404,
+            detail="Файл изображения ещё не сохранён на сервере. Нажмите «Сохранить в архив» или дождитесь фоновой загрузки.",
+        )
     abs_path = (BACKEND_DIR / row.relative_path).resolve()
     try:
         abs_path.relative_to(BACKEND_DIR.resolve())
@@ -2906,6 +2977,21 @@ async def _studio_job_execute_motion_first_frame(
     generated_image_url: str | None = None
     wavespeed_message: str | None = None
     generation_id: int | None = None
+    gen_row: StudioGeneration | None = None
+    wavespeed_task_id: str | None = None
+    if not skip_ws:
+        gen_row = await begin_studio_generation_run(
+            session,
+            owner_id=oid,
+            output_aspect=aspect_key,
+            studio_model_id=eff_mid,
+            studio_job_id=job.id,
+        )
+        gen_row.refined_prompt = refined
+        gen_row.prompt_excerpt = (refined[:2000] if refined else None) or None
+        gen_row.motion_video_prompt_auto = motion_auto_for_db
+        session.add(gen_row)
+        await session.flush()
 
     if skip_ws:
         base = (arch_base or "").strip().rstrip("/")
@@ -3011,45 +3097,66 @@ async def _studio_job_execute_motion_first_frame(
                 size_for_ws = wavespeed_size_string(aspect_key)
             try:
                 if wave_profile_n == "regular":
-                    generated_image_url = await nano_banana_pro_edit_image_url(
+                    ws_res = await nano_banana_pro_edit_image_url(
                         api_key=ws_key,
                         image_urls=image_urls,
                         prompt=wavespeed_prompt,
                         aspect_ratio=aspect_key,
                     )
                 else:
-                    generated_image_url = await seedream_v45_edit_image_url(
+                    ws_res = await seedream_v45_edit_image_url(
                         api_key=ws_key,
                         image_urls=image_urls,
                         prompt=wavespeed_prompt,
                         size=size_for_ws,
                         wan_edit_tier=wan_tier_n,
                     )
+                generated_image_url = ws_res.url
+                wavespeed_task_id = ws_res.task_id or wavespeed_task_id
             except RuntimeError as e:
                 wavespeed_message = str(e)
 
-        if generated_image_url:
-            gen = await download_and_create_generation(
+        if generated_image_url and gen_row is not None:
+            finished_row, cdn_preview = await studio_finish_image_generation(
                 session,
+                gen_row=gen_row,
                 owner_id=oid,
-                source_url=generated_image_url,
-                refined_prompt=refined,
-                output_aspect=aspect_key,
                 studio_model_id=eff_mid,
-                refined_prompt_full=refined,
+                output_aspect=aspect_key,
+                refined_prompt=refined,
+                source_url=generated_image_url,
+                wavespeed_task_id=wavespeed_task_id,
                 motion_video_prompt_auto=motion_auto_for_db,
             )
-            if gen is not None:
-                generation_id = gen.id
-                if arch_base:
-                    gtok2 = create_generation_image_access_token(
-                        user_id=oid, generation_id=gen.id
+            if finished_row is not None:
+                generation_id = finished_row.id
+                if generation_has_archive_file(finished_row) and arch_base:
+                    generated_image_url = _studio_archive_image_url(
+                        oid, finished_row.id, arch_base
                     )
-                    generated_image_url = (
-                        f"{arch_base}/api/studio/public-generation-image?t={quote(gtok2, safe='')}"
+                elif cdn_preview:
+                    generated_image_url = cdn_preview
+                elif finished_row.source_url:
+                    generated_image_url = finished_row.source_url.strip()
+                if (
+                    finished_row.status == StudioGenerationStatus.PROVIDER_READY
+                    and not generation_has_archive_file(finished_row)
+                ):
+                    wavespeed_message = user_message_when_archive_download_failed(
+                        wavespeed_message
                     )
-            else:
-                wavespeed_message = user_message_when_archive_download_failed(wavespeed_message)
+
+        if not skip_ws and not (generated_image_url or "").strip():
+            if gen_row is not None:
+                await mark_studio_generation_failed(
+                    session,
+                    gen_row,
+                    message=wavespeed_message or "WaveSpeed не вернул изображение",
+                    step="wavespeed",
+                )
+            raise RuntimeError(
+                wavespeed_message or "WaveSpeed не вернул изображение"
+            )
 
     await record_usage(
         session,

@@ -24,6 +24,7 @@ from app.connectors.telegram.state import (
     set_telegram_api_ok,
 )
 from app.db.session import init_db
+from app.services.studio_generation_storage import retry_pending_studio_archives
 from app.services.studio_generations_retention import purge_studio_generations_expired
 
 logging.basicConfig(
@@ -78,6 +79,17 @@ async def _studio_generations_retention_loop() -> None:
         await asyncio.sleep(max(3600, settings.studio_generations_retention_interval_hours * 3600))
 
 
+async def _studio_archive_retry_loop() -> None:
+    await asyncio.sleep(90)
+    interval = max(60, int(settings.studio_archive_retry_interval_seconds))
+    while True:
+        try:
+            await retry_pending_studio_archives()
+        except Exception:
+            log.exception("Studio archive retry loop failed")
+        await asyncio.sleep(interval)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
@@ -85,6 +97,7 @@ async def lifespan(app: FastAPI):
     bot: Bot | None = None
     polling_task: asyncio.Task[None] | None = None
     retention_task: asyncio.Task[None] | None = None
+    archive_retry_task: asyncio.Task[None] | None = None
     legacy_tok = settings.legacy_bot_token.strip()
     legacy_uid = settings.legacy_user_id
     if legacy_tok and legacy_uid > 0:
@@ -112,6 +125,11 @@ async def lifespan(app: FastAPI):
             settings.studio_generations_retention_days,
             settings.studio_generations_retention_interval_hours,
         )
+    archive_retry_task = asyncio.create_task(_studio_archive_retry_loop())
+    log.info(
+        "Studio archive retry loop: every %s s",
+        settings.studio_archive_retry_interval_seconds,
+    )
     yield
     if polling_task:
         polling_task.cancel()
@@ -123,6 +141,12 @@ async def lifespan(app: FastAPI):
         retention_task.cancel()
         try:
             await retention_task
+        except asyncio.CancelledError:
+            pass
+    if archive_retry_task:
+        archive_retry_task.cancel()
+        try:
+            await archive_retry_task
         except asyncio.CancelledError:
             pass
     if bot:

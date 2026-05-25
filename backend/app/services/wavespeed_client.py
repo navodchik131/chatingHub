@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from dataclasses import dataclass
 from typing import Any
 
 import httpx
@@ -219,6 +220,12 @@ def _unwrap_data(resp_json: dict[str, Any]) -> dict[str, Any]:
     )
 
 
+@dataclass(frozen=True, slots=True)
+class WaveSpeedImageResult:
+    url: str
+    task_id: str | None = None
+
+
 async def _wavespeed_post_json_and_resolve_image_url(
     *,
     api_key: str,
@@ -227,7 +234,7 @@ async def _wavespeed_post_json_and_resolve_image_url(
     timeout_submit: float = 300.0,
     poll_interval: float = 2.0,
     max_polls: int = 120,
-) -> str:
+) -> WaveSpeedImageResult:
     """Общий POST + разбор ответа / опрос prediction до появления URL картинки."""
     headers = {
         "Authorization": f"Bearer {api_key.strip()}",
@@ -283,10 +290,10 @@ async def _wavespeed_post_json_and_resolve_image_url(
             )
         d = _unwrap_data(resp)
         u0 = _image_url_from_prediction(d)
-        if u0:
-            return u0
-
         task_id = _task_id_from_prediction(d)
+        if u0:
+            return WaveSpeedImageResult(url=u0, task_id=task_id)
+
         status = (d.get("status") or "").lower()
         if status == "failed":
             raise RuntimeError(str(d.get("error") or "WaveSpeed task failed"))
@@ -330,7 +337,7 @@ async def _wavespeed_post_json_and_resolve_image_url(
             if st == "completed":
                 u = _image_url_from_prediction(pd)
                 if u:
-                    return u
+                    return WaveSpeedImageResult(url=u, task_id=task_id)
                 raise RuntimeError(
                     str(
                         pd.get("error")
@@ -339,7 +346,7 @@ async def _wavespeed_post_json_and_resolve_image_url(
                 )
             u = _image_url_from_prediction(pd)
             if u:
-                return u
+                return WaveSpeedImageResult(url=u, task_id=task_id)
 
     raise RuntimeError("WaveSpeed: timeout waiting for result")
 
@@ -354,7 +361,7 @@ async def seedream_v45_edit_image_url(
     timeout_submit: float = 300.0,
     poll_interval: float = 2.0,
     max_polls: int = 120,
-) -> str:
+) -> WaveSpeedImageResult:
     """
     Image edit через WaveSpeed: путь из `resolve_studio_image_edit_post_path`
     (WAN 2.7 standard/pro по UI или Seedream / кастом из .env).
@@ -448,7 +455,7 @@ async def wavespeed_image_upscale_url(
     path = _wavespeed_upscaler_post_path()
     full_url = f"{_wavespeed_base()}{path}"
     log.debug("wavespeed upscale post=%s target=%s fmt=%s", path, tres, fmt)
-    return await _wavespeed_post_json_and_resolve_image_url(
+    res = await _wavespeed_post_json_and_resolve_image_url(
         api_key=api_key,
         full_post_url=full_url,
         body=body,
@@ -456,6 +463,7 @@ async def wavespeed_image_upscale_url(
         poll_interval=poll_interval,
         max_polls=max_polls,
     )
+    return res.url
 
 
 def _z_image_inpaint_post_path() -> str:
@@ -473,7 +481,7 @@ async def z_image_turbo_inpaint_image_url(
     timeout_submit: float = 300.0,
     poll_interval: float = 2.0,
     max_polls: int = 120,
-) -> str:
+) -> WaveSpeedImageResult:
     """
     Z-Image Turbo Inpaint: публичные HTTPS URL изображения и маски (одинаковый размер).
     Док: wavespeed.ai — z-image/turbo-inpaint.
@@ -528,7 +536,7 @@ async def nano_banana_pro_edit_image_url(
     timeout_submit: float = 300.0,
     poll_interval: float = 2.0,
     max_polls: int = 120,
-) -> str:
+) -> WaveSpeedImageResult:
     """
     Google Nano Banana Pro Edit: images + prompt + aspect_ratio + resolution.
     Док: /docs/docs-api/google/google-nano-banana-pro-edit

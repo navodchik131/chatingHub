@@ -132,6 +132,10 @@ class Settings(BaseSettings):
     # Скачивание готового кадра с CDN провайдера в архив студии (повторы при обрыве/таймауте).
     studio_archive_download_attempts: int = Field(default=6, ge=1, le=15)
     studio_archive_download_timeout_seconds: float = Field(default=300.0, ge=30.0, le=600.0)
+    # Фоновый догруз архива для записей provider_ready без файла на диске
+    studio_archive_retry_interval_seconds: int = Field(default=300, ge=60, le=3600)
+    studio_archive_retry_batch_size: int = Field(default=20, ge=1, le=100)
+    studio_generation_stale_processing_hours: int = Field(default=2, ge=1, le=48)
 
     wavespeed_api_base: str = Field(default="https://api.wavespeed.ai")
     # POST image-edit: WAN 2.7 по умолчанию; Pro / Seedream — см. .env.example

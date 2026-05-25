@@ -381,11 +381,17 @@ class StudioGeneration(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
-    relative_path: Mapped[str] = mapped_column(String(512))
+    status: Mapped[str] = mapped_column(String(32), default="ready", index=True)
+    relative_path: Mapped[str] = mapped_column(String(512), default="")
     content_type: Mapped[str] = mapped_column(String(64), default="image/png")
     output_aspect: Mapped[str | None] = mapped_column(String(32), nullable=True)
     studio_model_id: Mapped[int | None] = mapped_column(
         ForeignKey("user_studio_models.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    studio_job_id: Mapped[int | None] = mapped_column(
+        ForeignKey("studio_jobs.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
     )
@@ -394,6 +400,9 @@ class StudioGeneration(Base):
     # Краткое описание референс-видео (vision) для шага Seedance video-edit после перезагрузки клиента
     motion_video_prompt_auto: Mapped[str | None] = mapped_column(Text, nullable=True)
     source_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    wavespeed_task_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    error_step: Mapped[str | None] = mapped_column(String(32), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

@@ -289,6 +289,50 @@ async def init_db() -> None:
         await conn.run_sync(_migrate_studio_model_image_export_selfie)
         await conn.run_sync(_migrate_subscription_billing_plan)
         await conn.run_sync(_migrate_studio_jobs_table)
+        await conn.run_sync(_migrate_studio_generation_pipeline_phase_a)
+
+
+def _migrate_studio_generation_pipeline_phase_a(sync_conn) -> None:
+    from sqlalchemy import inspect
+
+    insp = inspect(sync_conn)
+    if not insp.has_table("studio_generations"):
+        return
+    cols = {c["name"] for c in insp.get_columns("studio_generations")}
+    if "status" not in cols:
+        sync_conn.execute(
+            text(
+                "ALTER TABLE studio_generations "
+                "ADD COLUMN status VARCHAR(32) NOT NULL DEFAULT 'ready'"
+            )
+        )
+    if "studio_job_id" not in cols:
+        sync_conn.execute(
+            text("ALTER TABLE studio_generations ADD COLUMN studio_job_id INTEGER")
+        )
+    if "wavespeed_task_id" not in cols:
+        sync_conn.execute(
+            text("ALTER TABLE studio_generations ADD COLUMN wavespeed_task_id VARCHAR(128)")
+        )
+    if "error_message" not in cols:
+        sync_conn.execute(text("ALTER TABLE studio_generations ADD COLUMN error_message TEXT"))
+    if "error_step" not in cols:
+        sync_conn.execute(
+            text("ALTER TABLE studio_generations ADD COLUMN error_step VARCHAR(32)")
+        )
+    sync_conn.execute(
+        text(
+            "UPDATE studio_generations SET status = 'ready' "
+            "WHERE status IS NULL OR trim(status) = ''"
+        )
+    )
+    sync_conn.execute(
+        text(
+            "UPDATE studio_generations SET status = 'ready' "
+            "WHERE trim(COALESCE(relative_path, '')) != '' "
+            "AND status NOT IN ('ready', 'failed')"
+        )
+    )
 
 
 def _migrate_studio_jobs_table(sync_conn) -> None:
