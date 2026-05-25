@@ -150,7 +150,7 @@ router = APIRouter(tags=["studio"])
 
 log = logging.getLogger(__name__)
 
-MAX_MODEL_IMAGES = 5
+MAX_MODEL_IMAGES = 8
 
 
 async def _download_image_bytes_best_effort(url: str) -> tuple[bytes | None, str | None]:
@@ -469,6 +469,13 @@ def _effective_generate_wavespeed(generate_wavespeed: str | None) -> bool:
 
 def _truthy_lock_model_hairstyle(raw: str | None) -> bool:
     """True — причёска с профиля модели (MODEL_LOCK); False — с загруженного референса (POSE_REFERENCE)."""
+    if raw is None:
+        return True
+    return str(raw).strip().lower() not in ("0", "false", "no", "off")
+
+
+def _truthy_send_pose_reference_to_wavespeed(raw: str | None) -> bool:
+    """True — референс позы/сцены уходит в WaveSpeed (как сейчас); False — только LLM → промпт, в API только фото модели."""
     if raw is None:
         return True
     return str(raw).strip().lower() not in ("0", "false", "no", "off")
@@ -1607,6 +1614,7 @@ async def api_studio_refine_prompt(
     studio_wave_profile: str = Form("nsfw"),
     generate_wavespeed: str | None = Form(None),
     wavespeed_single_reference: str | None = Form(None),
+    send_pose_reference_to_wavespeed: str | None = Form("1"),
     lock_model_hairstyle: str | None = Form("1"),
     inpaint_mask: UploadFile | None = File(None),
     session: AsyncSession = Depends(get_session),
@@ -1663,6 +1671,7 @@ async def api_studio_refine_prompt(
         "studio_wave_profile": studio_wave_profile,
         "generate_wavespeed": generate_wavespeed,
         "wavespeed_single_reference": wavespeed_single_reference,
+        "send_pose_reference_to_wavespeed": send_pose_reference_to_wavespeed,
         "lock_model_hairstyle": lock_model_hairstyle,
     }
     job = await studio_jobs.create_studio_job(
@@ -1703,6 +1712,7 @@ async def _studio_job_execute_refine_prompt(
     studio_wave_profile = str(p.get("studio_wave_profile") or "nsfw")
     generate_wavespeed = p.get("generate_wavespeed")
     wavespeed_single_reference = p.get("wavespeed_single_reference")
+    send_pose_reference_to_wavespeed = p.get("send_pose_reference_to_wavespeed")
     lock_model_hairstyle = p.get("lock_model_hairstyle")
 
     skeleton = prepare_studio_prompt_skeleton()
@@ -1899,6 +1909,9 @@ async def _studio_job_execute_refine_prompt(
 
     lock_hair_req = _truthy_lock_model_hairstyle(lock_model_hairstyle)
     effective_lock_hairstyle = bool(lock_hair_req) if image_bytes else True
+    send_pose_to_ws = _truthy_send_pose_reference_to_wavespeed(
+        send_pose_reference_to_wavespeed
+    )
 
     reference_scene: str | None = None
     try:
@@ -2218,7 +2231,7 @@ async def _studio_job_execute_refine_prompt(
         else:
             image_urls: list[str] = []
             user_pose_ref_prepended = False
-            if image_bytes:
+            if image_bytes and send_pose_to_ws:
                 try:
                     fid = save_pose_reference_bytes(
                         owner_id=oid,
@@ -2241,6 +2254,14 @@ async def _studio_job_execute_refine_prompt(
                         "Не удалось подготовить загруженный референс для WaveSpeed. "
                         "Повторите или уберите файл."
                     )
+            elif image_bytes and not send_pose_to_ws and mode_n in (
+                "face_swap",
+                "photo_edit",
+            ):
+                wavespeed_message = (
+                    "В режимах «Подмена лица» и «Доработать фото» загруженный снимок "
+                    "обязательно уходит в WaveSpeed — отключить референс нельзя."
+                )
 
             if not wavespeed_message:
                 attach_model_urls = False
@@ -2261,9 +2282,15 @@ async def _studio_job_execute_refine_prompt(
                         )
 
                 if not image_urls:
-                    wavespeed_message = (
-                        "Нет изображений для WaveSpeed — проверьте режим, модель и файлы."
-                    )
+                    if image_bytes and not send_pose_to_ws:
+                        wavespeed_message = (
+                            "Референс в WaveSpeed отключён — нужна модель с фото в кабинете "
+                            "или включите «Отправить референс в генерацию»."
+                        )
+                    else:
+                        wavespeed_message = (
+                            "Нет изображений для WaveSpeed — проверьте режим, модель и файлы."
+                        )
 
             if not wavespeed_message and image_urls:
                 if wave_profile_n == "nsfw" and _truthy_wavespeed_flag(
@@ -2428,6 +2455,7 @@ async def _studio_job_execute_refine_prompt(
             "studio_wave_profile": wave_profile_n,
             "lock_model_hairstyle": effective_lock_hairstyle,
             "lock_model_hairstyle_requested": lock_hair_req,
+            "send_pose_reference_to_wavespeed": send_pose_to_ws,
             "inpaint_mask": bool(mask_bytes),
             "regional_masked_compose_ready": regional_composed_png is not None,
             "masked_edit_engine": (

@@ -360,6 +360,8 @@ interface NewModelPhotoRow {
   export_selfie: boolean
 }
 
+const STUDIO_MODEL_MAX_IMAGES = 8
+
 const STUDIO_MODEL_IMAGE_KIND_OPTIONS: { value: StudioModelImageKind; label: string }[] = [
   { value: 'face', label: 'Лицо / идентичность' },
   { value: 'body', label: 'Тело целиком' },
@@ -682,6 +684,7 @@ export default function App() {
   const [studioPhotoEditArchiveId, setStudioPhotoEditArchiveId] = useState<number | null>(null)
   /** true = MODEL_LOCK (причёска с профиля); false = POSE_REFERENCE (с загруженного кадра). Только если есть studioFile. */
   const [studioLockModelHairstyle, setStudioLockModelHairstyle] = useState(true)
+  const [studioSendPoseRefToWavespeed, setStudioSendPoseRefToWavespeed] = useState(true)
   const [studioMode, setStudioMode] = useState<StudioJobMode>('model')
   const [studioWanEditTier, setStudioWanEditTier] = useState<'standard' | 'pro'>('standard')
   const [studioWaveProfile, setStudioWaveProfile] = useState<'regular' | 'nsfw'>('nsfw')
@@ -2029,6 +2032,10 @@ export default function App() {
       fd.append('studio_wave_profile', studioWaveProfile)
       fd.append('generate_wavespeed', promptOnlyActive ? '0' : '1')
       fd.append('wavespeed_single_reference', '1')
+      fd.append(
+        'send_pose_reference_to_wavespeed',
+        studioSendPoseRefToWavespeed ? '1' : '0',
+      )
       fd.append('lock_model_hairstyle', studioLockModelHairstyle ? '1' : '0')
       const data = await postStudioJobAndWait<{
         refined_prompt: string
@@ -2422,7 +2429,7 @@ export default function App() {
   const generateModelProfileFromPhotos = async () => {
     setError(null)
     if (newModelPhotos.length === 0) {
-      setError('Сначала выберите фото модели (до 5 файлов).')
+      setError(`Сначала выберите фото модели (до ${STUDIO_MODEL_MAX_IMAGES} файлов).`)
       return
     }
     setNewModelProfileGenBusy(true)
@@ -3633,7 +3640,8 @@ export default function App() {
                 </div>
               ) : null}
               <p className="cabinet-lead muted">
-                Модели подставляются в промпт на вкладке «Генерация картинок». До 5 фото на модель. Для
+                Модели подставляются в промпт на вкладке «Генерация картинок». До {STUDIO_MODEL_MAX_IMAGES}{' '}
+                фото на модель. Для
                 каждого снимка укажите тип: лицо, тело, интимный референс или общий — от этого зависит
                 порядок в запросе к image-edit и текст для LLM.
               </p>
@@ -3650,7 +3658,7 @@ export default function App() {
                   />
                 </label>
                 <label>
-                  Фото модели (до 5)
+                  Фото модели (до {STUDIO_MODEL_MAX_IMAGES})
                   <input
                     type="file"
                     accept="image/jpeg,image/png,image/webp,image/gif"
@@ -3659,7 +3667,7 @@ export default function App() {
                     onChange={(e) => {
                       const list = e.target.files ? Array.from(e.target.files) : []
                       setNewModelPhotos(
-                        list.slice(0, 5).map((file, i) => ({
+                        list.slice(0, STUDIO_MODEL_MAX_IMAGES).map((file, i) => ({
                           file,
                           kind: (i === 0 ? 'face' : 'other') as StudioModelImageKind,
                           export_selfie: i === 0,
@@ -3794,7 +3802,8 @@ export default function App() {
                     const busy = modelSavingId === m.id
                     const imgs = m.images ?? []
                     const pendingAppend = appendModelPhotosById[m.id] ?? []
-                    const modelPhotoSlotsFull = m.image_count + pendingAppend.length >= 5
+                    const modelPhotoSlotsFull =
+                      m.image_count + pendingAppend.length >= STUDIO_MODEL_MAX_IMAGES
                     return (
                       <article key={m.id} className="model-card">
                         <div className="model-card-head">
@@ -4072,7 +4081,10 @@ export default function App() {
                               disabled={busy || studioPaywalled || modelPhotoSlotsFull}
                               onChange={(e) => {
                                 const list = e.target.files ? Array.from(e.target.files) : []
-                                const slots = Math.max(0, 5 - m.image_count - pendingAppend.length)
+                                const slots = Math.max(
+                                  0,
+                                  STUDIO_MODEL_MAX_IMAGES - m.image_count - pendingAppend.length,
+                                )
                                 const slice = list.slice(0, slots)
                                 if (slice.length > 0) {
                                   const priorCount = m.image_count + pendingAppend.length
@@ -4883,6 +4895,27 @@ export default function App() {
               <span>Причёска как у модели (снимите, чтобы взять укладку с загруженного фото).</span>
             </label>
             ) : null}
+            {studioMode === 'model' || studioMode === 'no_face' ? (
+              <label
+                className="studio-label studio-check"
+                style={!studioFile ? { opacity: 0.55 } : undefined}
+              >
+                <input
+                  type="checkbox"
+                  checked={studioSendPoseRefToWavespeed}
+                  disabled={
+                    !studioFile ||
+                    studioPaintInpaintMask ||
+                    studioInpaintMaskFile != null
+                  }
+                  onChange={(e) => setStudioSendPoseRefToWavespeed(e.target.checked)}
+                />
+                <span>
+                  Отправить референс в генерацию (снимите: сцена только в промпте от LLM, в
+                  WaveSpeed — только фото модели).
+                </span>
+              </label>
+            ) : null}
             <label className="studio-label">
               Описание
               <textarea
@@ -4920,6 +4953,10 @@ export default function App() {
                     studioPhotoEditArchiveId == null) ||
                   (studioMode === 'photo_edit' && !studioDesc.trim()) ||
                   (studioMode === 'no_face' && studioSelectedModelId == null && !studioFile) ||
+                  (studioFile != null &&
+                    !studioSendPoseRefToWavespeed &&
+                    studioSelectedModelId == null &&
+                    (studioMode === 'model' || studioMode === 'no_face')) ||
                   !health?.openai_studio_configured ||
                   (!studioPromptOnlyDev && !integ?.wavespeed_configured)
                 }
