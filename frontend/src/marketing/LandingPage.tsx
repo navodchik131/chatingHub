@@ -25,13 +25,13 @@ export function LandingPage() {
     <>
       <section className="mkt-hero" aria-labelledby="hero-title">
         <div>
-          <p className="mkt-hero-kicker">SaaS для команд создателей</p>
+          <p className="mkt-hero-kicker">Операционная система для AI-моделей</p>
           <h1 id="hero-title" className="mkt-h1">
-            Единый кабинет для диалогов, студии изображений и управления подпиской
+            Один кабинет для <span className="mkt-h1-accent">контента, диалогов</span> и команды
           </h1>
           <p className="mkt-lead">
-            ModelMate объединяет входящие из Telegram и Fanvue с переводом, ролями операторов и студией
-            генерации — с понятным биллингом через ЮKassa и выбором тарифа под ваш сценарий.
+            ModelMate объединяет генерацию изображений и видео, переписку в Telegram и Fanvue с переводом,
+            роли операторов и биллинг через ЮKassa — без хаоса из десятка вкладок.
           </p>
           <div className="mkt-hero-actions">
             <Link to="/login" className="mkt-nav-cta">

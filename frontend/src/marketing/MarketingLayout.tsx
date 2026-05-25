@@ -38,7 +38,7 @@ export function MarketingLayout() {
           <img src="/brand-icon.svg" alt="" width={36} height={36} />
           <span className="mkt-brand-text">
             <span className="mkt-brand-name">ModelMate</span>
-            <span className="mkt-brand-tag">Студия AI-моделей</span>
+            <span className="mkt-brand-tag">Creator OS</span>
           </span>
         </NavLink>
         <nav className="mkt-nav" aria-label="Разделы сайта">

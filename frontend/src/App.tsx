@@ -20,6 +20,8 @@ import { billingReturnCopy } from './billingReturnCopy'
 import { formatClientFetchError, formatHttpApiError } from './apiErrors'
 import { postStudioJobAndWait } from './studioJobs'
 import { AuthPanel } from './AuthPanel'
+import { AppShell, type WorkspaceSection } from './components/AppShell'
+import { WorkspaceOverview } from './components/WorkspaceOverview'
 import './App.css'
 import { StudioInpaintMaskPainter, type StudioInpaintMaskPainterRef } from './StudioInpaintMaskPainter'
 import {
@@ -628,6 +630,11 @@ export default function App() {
     }
   }, [me])
 
+  const unreadTotal = useMemo(
+    () => conversations.reduce((sum, c) => sum + (c.unread_count ?? 0), 0),
+    [conversations],
+  )
+
   const studioPaywalled = useMemo(() => {
     if (!me) return false
     if (me.is_platform_admin) return false
@@ -657,7 +664,7 @@ export default function App() {
   const [fvCreator, setFvCreator] = useState('')
   const [fvSecret, setFvSecret] = useState('')
 
-  const [appSection, setAppSection] = useState<'chat' | 'studio' | 'studio_video'>('chat')
+  const [appSection, setAppSection] = useState<WorkspaceSection>('overview')
   const [studioDesc, setStudioDesc] = useState('')
   const [studioFile, setStudioFile] = useState<File | null>(null)
   /** Маска (белое = зона замены): Multi-URL в Nano/WAN при STUDIO_REGIONAL_MASKED_EDIT=true или Z-Inpaint если false. */
@@ -1088,9 +1095,11 @@ export default function App() {
 
   useEffect(() => {
     if (!me) return
-    if (appSection === 'chat' && !canChat && canStudioAny) setAppSection('studio')
+    if (appSection === 'chat' && !canChat) setAppSection('overview')
     if ((appSection === 'studio' || appSection === 'studio_video') && !canStudioAny && canChat)
       setAppSection('chat')
+    if ((appSection === 'studio' || appSection === 'studio_video') && !canStudioAny && !canChat)
+      setAppSection('overview')
   }, [me?.id, appSection, canChat, canStudioAny])
 
   useEffect(() => {
@@ -1129,7 +1138,10 @@ export default function App() {
   useEffect(() => {
     if (!authed) return
     const needModels =
-      ((appSection === 'studio' || appSection === 'studio_video') && canStudioAny) ||
+      ((appSection === 'overview' ||
+        appSection === 'studio' ||
+        appSection === 'studio_video') &&
+        canStudioAny) ||
       (accountOpen && accountTab === 'models' && canStudioModels)
     if (needModels) {
       void loadStudioModels()
@@ -1155,11 +1167,19 @@ export default function App() {
   }, [workspaceMembers])
 
   useEffect(() => {
-    if (authed && (appSection === 'studio' || appSection === 'studio_video')) void refreshIntegrations()
+    if (
+      authed &&
+      (appSection === 'overview' || appSection === 'studio' || appSection === 'studio_video')
+    )
+      void refreshIntegrations()
   }, [authed, appSection, refreshIntegrations])
 
   useEffect(() => {
-    if (!authed || (appSection !== 'studio' && appSection !== 'studio_video')) return
+    if (
+      !authed ||
+      (appSection !== 'overview' && appSection !== 'studio' && appSection !== 'studio_video')
+    )
+      return
     fetch('/api/studio/output-aspects')
       .then((r) => r.json())
       .then((d: { aspects?: StudioAspectPreset[] }) => {
@@ -1173,7 +1193,7 @@ export default function App() {
   useEffect(() => {
     if (
       !authed ||
-      (appSection !== 'studio' && appSection !== 'studio_video') ||
+      (appSection !== 'overview' && appSection !== 'studio' && appSection !== 'studio_video') ||
       !canStudioGenerate
     )
       return
@@ -1185,7 +1205,7 @@ export default function App() {
   }, [authed, appSection, canStudioGenerate, loadStudioGenerationsReset])
 
   useEffect(() => {
-    if (!authed || appSection !== 'studio_video') return
+    if (!authed || (appSection !== 'overview' && appSection !== 'studio_video')) return
     void refreshMotionRenders()
   }, [authed, appSection, refreshMotionRenders])
 
@@ -2936,6 +2956,7 @@ export default function App() {
 
   const appClass = [
     'app',
+    hasAnyMainSection ? 'app--shell' : '',
     isMobileLayout && selectedId != null && appSection === 'chat' && canChat
       ? 'mobile-chat-open'
       : '',
@@ -2943,6 +2964,20 @@ export default function App() {
   ]
     .filter(Boolean)
     .join(' ')
+
+  const handleLogout = () => {
+    setToken(null)
+    setAuthed(false)
+    setMe(null)
+    setConversations([])
+    setSelectedId(null)
+    navigate('/', { replace: true })
+  }
+
+  const openWorkspaceChat = (convId?: number) => {
+    if (convId != null) setSelectedId(convId)
+    setAppSection('chat')
+  }
 
   return (
     <div className={appClass}>
@@ -2977,7 +3012,11 @@ export default function App() {
         </div>
       ) : null}
       {showThreadDock ? (
-        <header className="thread-mobile-dock">
+        <header
+          className={
+            hasAnyMainSection ? 'thread-mobile-dock thread-mobile-dock--shell' : 'thread-mobile-dock'
+          }
+        >
           <div className="thread-mobile-dock-inner">
             <button
               type="button"
@@ -3004,99 +3043,18 @@ export default function App() {
           </div>
         </header>
       ) : null}
-      <header className="top">
-        <div className="top-brand">
-          <img src="/brand-icon.svg" alt="" className="brand-mark" width={40} height={40} aria-hidden />
-          <div>
-            <h1>ModelMate</h1>
-            <p className="sub">
-              Студия ведения AI-моделей — диалоги, интеграции и генерация изображений
-            </p>
-          </div>
-        </div>
-        <div className="top-actions">
-          {me ? (
-            <div
-              className="user-pill"
-              title={
-                me.is_workspace_owner
-                  ? me.email
-                  : `${me.owner_email} · сотрудник «${me.member_login ?? '—'}»`
-              }
-            >
-              <span className="user-pill-email">
-                {me.is_workspace_owner ? me.email : `${me.owner_email} · ${me.member_login ?? '—'}`}
-              </span>
-              <span className="user-pill-meta">
-                {me.credits_balance} кр. · {userBillingPlanLabel(me.billing_plan)} ·{' '}
-                {subscriptionStatusLabel(me.subscription_status)}
-              </span>
-            </div>
-          ) : null}
-          <button type="button" className="ghost-btn" onClick={() => setAccountOpen((o) => !o)}>
-            Личный кабинет
-          </button>
-          <Link to="/" className="ghost-btn">
-            О сервисе
-          </Link>
-          <button
-            type="button"
-            className="ghost-btn"
-            onClick={() => {
-              setToken(null)
-              setAuthed(false)
-              setMe(null)
-              setConversations([])
-              setSelectedId(null)
-              navigate('/', { replace: true })
-            }}
-          >
-            Выйти
-          </button>
-        </div>
-      </header>
-
       {error && <div className="banner error">{error}</div>}
 
-      {hasAnyMainSection ? (
-        <nav className="section-nav" aria-label="Разделы приложения">
-          {canChat ? (
-            <button
-              type="button"
-              className={appSection === 'chat' ? 'section-tab active' : 'section-tab'}
-              onClick={() => setAppSection('chat')}
-            >
-              Диалоги
-            </button>
-          ) : null}
-          {canStudioAny ? (
-            <button
-              type="button"
-              className={appSection === 'studio' ? 'section-tab active' : 'section-tab'}
-              onClick={() => setAppSection('studio')}
-            >
-              Картинки
-            </button>
-          ) : null}
-          {canStudioAny ? (
-            <button
-              type="button"
-              className={appSection === 'studio_video' ? 'section-tab active' : 'section-tab'}
-              onClick={() => setAppSection('studio_video')}
-            >
-              Видео
-            </button>
-          ) : null}
-        </nav>
-      ) : (
-        <div className="banner info" style={{ margin: '0 1rem' }}>
-          Нет доступа к диалогам и студии по правам аккаунта. Откройте кабинет или обратитесь к владельцу.
+      {!hasAnyMainSection ? (
+        <div className="banner info" style={{ margin: '0 1rem', display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center' }}>
+          <span>
+            Нет доступа к диалогам и студии по правам аккаунта. Откройте кабинет или обратитесь к владельцу.
+          </span>
+          <button type="button" className="ghost-btn" onClick={() => setAccountOpen(true)}>
+            Личный кабинет
+          </button>
         </div>
-      )}
-
-      {health?.legacy_telegram_polling && health.telegram_api_reachable === false && (
-        <div className="banner error">Нет связи с Telegram. Обратитесь к администратору сервиса.</div>
-      )}
+      ) : null}
 
       {accountOpen && (
         <div className="account-panel">
@@ -4516,6 +4474,50 @@ export default function App() {
           )}
         </div>
       )}
+
+      {hasAnyMainSection ? (
+        <AppShell
+          appSection={appSection}
+          onSectionChange={setAppSection}
+          canChat={canChat}
+          canStudioAny={canStudioAny}
+          unreadTotal={unreadTotal}
+          creditsBalance={me?.credits_balance ?? null}
+          billingPlanLabel={userBillingPlanLabel(me?.billing_plan)}
+          userTitle={
+            me?.is_workspace_owner
+              ? me.email
+              : `${me?.owner_email ?? ''}${me?.member_login ? ` · ${me.member_login}` : ''}`
+          }
+          userMeta={`${me?.credits_balance ?? 0} кр. · ${userBillingPlanLabel(me?.billing_plan)}`}
+          onAccountOpen={() => setAccountOpen(true)}
+          onLogout={handleLogout}
+        >
+          {health?.legacy_telegram_polling && health.telegram_api_reachable === false && (
+            <div className="banner error">
+              Нет связи с Telegram. Обратитесь к администратору сервиса.
+            </div>
+          )}
+
+          {appSection === 'overview' && me ? (
+            <WorkspaceOverview
+              creditsBalance={me.credits_balance}
+              billingPlanLabel={userBillingPlanLabel(me.billing_plan)}
+              subscriptionLabel={subscriptionStatusLabel(me.subscription_status)}
+              unreadTotal={unreadTotal}
+              conversationsTotal={conversations.length}
+              generationsTotal={studioGenerations.length}
+              canChat={canChat}
+              canStudioAny={canStudioAny}
+              conversations={conversations}
+              generations={studioGenerations}
+              motionRenders={motionRenders}
+              onOpenChat={openWorkspaceChat}
+              onOpenStudio={() => setAppSection('studio')}
+              onOpenVideo={() => setAppSection('studio_video')}
+              onOpenAccount={() => setAccountOpen(true)}
+            />
+          ) : null}
 
       {import.meta.env.DEV && health && appSection !== 'studio' && appSection !== 'studio_video' && (
         <div className="health-strip" title={health.database_file}>
@@ -5939,6 +5941,8 @@ export default function App() {
         </main>
       </div>
       )}
+        </AppShell>
+      ) : null}
     </div>
   )
 }
