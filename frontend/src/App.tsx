@@ -776,6 +776,9 @@ export default function App() {
   const [motionPreviewGenId, setMotionPreviewGenId] = useState<number | null>(null)
   const [motionResultVideoUrl, setMotionResultVideoUrl] = useState<string | null>(null)
   const [motionMsg, setMotionMsg] = useState<string | null>(null)
+  /** Анализ шага 1 (vision/Grok) — не финальный Seedance-промпт. */
+  const [motionStep1Preview, setMotionStep1Preview] = useState<string | null>(null)
+  /** Финальный промпт T2V после шага 2 (с @Image на сервере). */
   const [motionAutoTextPreview, setMotionAutoTextPreview] = useState<string | null>(null)
   const [motionRenders, setMotionRenders] = useState<StudioMotionRenderItem[]>([])
   const [motionDrivingUploadBusy, setMotionDrivingUploadBusy] = useState(false)
@@ -1252,6 +1255,26 @@ export default function App() {
     if (u) return u
     return motionStillBlobUrl
   }, [motionPreviewUrl, motionStillBlobUrl])
+
+  const motionVideoBtnBlockReason = useMemo((): string | null => {
+    if (motionBusyVideo) return null
+    if (!integ?.wavespeed_configured) return 'Подключите WaveSpeed в кабинете → Интеграции.'
+    if (studioSelectedModelId == null) return 'Выберите модель вверху страницы.'
+    if (motionVideoFileId && motionPreviewGenId == null) {
+      return 'Сначала завершите шаг 1 — «Сгенерировать первый кадр» (нужен архив #…).'
+    }
+    if (!motionDesc.trim()) {
+      return 'Заполните «Сцена, движение, одежда» — хотя бы одной фразой. Метки @Image Grok добавит на сервере при отправке.'
+    }
+    return null
+  }, [
+    motionBusyVideo,
+    integ?.wavespeed_configured,
+    studioSelectedModelId,
+    motionVideoFileId,
+    motionPreviewGenId,
+    motionDesc,
+  ])
 
   const loadHealth = useCallback(async () => {
     const r = await fetch('/api/health')
@@ -2121,9 +2144,15 @@ export default function App() {
         parts.push(
           'Первый кадр (сцена для вашей модели, без внешности из видео):\n' + scene,
         )
-      if (motion) parts.push('Движение по ролику (доп. кадры):\n' + motion)
-      setMotionAutoTextPreview(parts.length > 0 ? parts.join('\n\n—\n\n') : null)
+      if (motion) parts.push('Движение по ролику (Grok timeline):\n' + motion)
+      setMotionStep1Preview(parts.length > 0 ? parts.join('\n\n—\n\n') : null)
     }
+    setMotionDesc((prev) => {
+      if (prev.trim()) return prev
+      const notes = motionFrameNotes.trim()
+      if (notes) return notes
+      return 'Движение как в реф-видео. Сохранить сцену, одежду и свет с первого кадра.'
+    })
   }
 
   const callMotionFirstFrameApi = async (
@@ -2191,6 +2220,7 @@ export default function App() {
     setMotionMsg(null)
     setMotionResultVideoUrl(null)
     setMotionAutoTextPreview(null)
+    setMotionStep1Preview(null)
     setMotionGrokTimeline(null)
     setMotionPendingExternalStillUrl(null)
     try {
@@ -5410,14 +5440,34 @@ export default function App() {
                       ) : null}
                     </div>
                   ) : null}
+                  {motionStep1Preview ? (
+                    <div className="studio-video-auto-block">
+                      <span className="studio-video-auto-label">Справка шага 1</span>
+                      <p className="muted studio-inline-hint" style={{ margin: '0 0 0.35rem' }}>
+                        Это описание сцены для генерации кадра, не финальный промпт видео. @Image1…
+                        Grok подставит на шаге 2.
+                      </p>
+                      <div className="studio-motion-auto-preview">{motionStep1Preview}</div>
+                    </div>
+                  ) : null}
                 </div>
 
                 <div className="studio-video-step">
                   <h3 className="studio-video-step-title">Шаг 2 — видео Seedance T2V</h3>
                   <p className="muted studio-inline-hint">
-                    @Image1 — ваш первый кадр; @Image2+ — развёртка модели; @Video1 — движение. Без
-                    реф-видео шаг 1 можно пропустить.
+                    @Image1 — ваш первый кадр (шаг 1); @Image2+ — развёртка модели; @Video1 — движение.
+                    Кратко опишите сцену ниже — Grok соберёт промпт с метками (до{' '}
+                    {health?.studio_seedance_t2v_prompt_max_chars ?? 3000} символов).
                   </p>
+                  {motionPreviewGenId != null ? (
+                    <p className="studio-video-ready-hint" role="status">
+                      Первый кадр готов: архив #{motionPreviewGenId}. Можно запускать видео.
+                    </p>
+                  ) : motionVideoFileId ? (
+                    <p className="muted studio-inline-hint">
+                      Загружено реф-видео — без шага 1 кнопка видео не активируется.
+                    </p>
+                  ) : null}
                   <div className="studio-grid studio-grid--simple studio-video-panel">
                     <label className="studio-label">
                       Наряд из архива (опционально, @Image после фото модели)
@@ -5440,10 +5490,10 @@ export default function App() {
                     </label>
                   </div>
                 <label className="studio-label">
-                  Сцена, движение, одежда
+                  Сцена и движение (ваш бриф для Grok)
                   <textarea
                     rows={5}
-                    placeholder="Простыми словами: что происходит после первого кадра, свет, камера. Grok добавит @Image/@Video"
+                    placeholder="Например: плавно поворачивается к камере, мягкий свет, лёгкое движение рук. Не пишите @Image — их добавит Grok."
                     value={motionDesc}
                     onChange={(e) => setMotionDesc(e.target.value)}
                   />
@@ -5483,7 +5533,7 @@ export default function App() {
                 </label>
                 {motionAutoTextPreview ? (
                   <div className="studio-video-auto-block">
-                    <span className="studio-video-auto-label">Промпт T2V</span>
+                    <span className="studio-video-auto-label">Отправленный промпт Seedance</span>
                     <div className="studio-motion-auto-preview">{motionAutoTextPreview}</div>
                   </div>
                 ) : null}
@@ -5491,22 +5541,8 @@ export default function App() {
                   <button
                     type="button"
                     className="send-btn"
-                    disabled={
-                      motionBusyVideo ||
-                      !integ?.wavespeed_configured ||
-                      studioSelectedModelId == null ||
-                      !motionDesc.trim() ||
-                      (!!motionVideoFileId && motionPreviewGenId == null)
-                    }
-                    title={
-                      studioSelectedModelId == null
-                        ? 'Выберите модель'
-                        : !motionDesc.trim()
-                          ? 'Опишите сцену'
-                          : motionVideoFileId && motionPreviewGenId == null
-                            ? 'Сначала шаг 1 — первый кадр'
-                            : undefined
-                    }
+                    disabled={motionBusyVideo || motionVideoBtnBlockReason != null}
+                    title={motionVideoBtnBlockReason ?? undefined}
                     onClick={() => void runMotionRenderVideo()}
                   >
                     {motionBusyVideo ? 'Готовим видео…' : 'Шаг 2: сделать видео'}
@@ -5517,6 +5553,11 @@ export default function App() {
                     </span>
                   ) : null}
                 </div>
+                {motionVideoBtnBlockReason ? (
+                  <p className="studio-video-block-hint" role="status">
+                    {motionVideoBtnBlockReason}
+                  </p>
+                ) : null}
                 {motionMsg ? (
                   <p className="muted studio-inline-hint" style={{ marginTop: '0.5rem' }}>
                     {motionMsg}

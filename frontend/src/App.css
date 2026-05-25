@@ -476,6 +476,21 @@ select:focus {
   max-width: 100%;
 }
 
+.studio-video-ready-hint {
+  margin: 0.35rem 0 0.75rem;
+  padding: 0.45rem 0.65rem;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--ok, #2d6a4f) 12%, transparent);
+  color: var(--text);
+  font-size: 0.9rem;
+}
+
+.studio-video-block-hint {
+  margin: 0.5rem 0 0;
+  color: var(--warn, #c27803);
+  font-size: 0.875rem;
+}
+
 .studio-grid--simple .studio-label {
   min-width: 0;
   max-width: 100%;
