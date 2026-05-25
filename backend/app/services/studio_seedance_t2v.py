@@ -86,6 +86,7 @@ def generation_still_public_url(
 def assemble_seedance_t2v_prompt(
     user_prompt: str,
     *,
+    n_start_frame: int = 0,
     n_model_images: int,
     n_outfit_images: int = 0,
     n_motion_videos: int = 0,
@@ -94,17 +95,28 @@ def assemble_seedance_t2v_prompt(
 ) -> str:
     """
     Собирает промпт с метками @ImageN / @VideoN (порядок = порядок в reference_* массивах).
+    При n_start_frame=1: @Image1 — opening still; @Image2+ — identity модели.
     """
     parts: list[str] = []
-    if n_model_images > 0:
-        tags = ", ".join(f"@Image{i}" for i in range(1, n_model_images + 1))
+    if n_start_frame > 0:
         parts.append(
-            f"Same person throughout — preserve face, body proportions, skin tone, and hair from {tags}. "
-            "Reference sheets may show neutral base clothing; dress the character as described below unless "
-            "an outfit reference image is specified."
+            "@Image1 is the approved opening still at t=0: starting pose, wardrobe, lighting, "
+            "camera framing, and environment. Do not treat @Image1 as the sole identity reference."
+        )
+    if n_model_images > 0:
+        start_idx = 1 + n_start_frame
+        end_idx = start_idx + n_model_images - 1
+        if n_model_images == 1:
+            tags = f"@Image{start_idx}"
+        else:
+            tags = f"@Image{start_idx}–@Image{end_idx}"
+        parts.append(
+            f"Same person throughout — face, body proportions, skin tone, and hair strictly from {tags}. "
+            "Reference sheets may show neutral base clothing; dress the character as in @Image1 or USER_BRIEF "
+            "unless an outfit reference image is specified."
         )
     if n_outfit_images > 0:
-        start = n_model_images + 1
+        start = 1 + n_start_frame + n_model_images
         for j in range(n_outfit_images):
             idx = start + j
             parts.append(f"Outfit and garment details: match @Image{idx}.")
@@ -138,6 +150,7 @@ def truncate_seedance_t2v_prompt(text: str, *, max_chars: int | None = None) -> 
 async def build_seedance_t2v_prompt(
     *,
     user_brief: str,
+    n_start_frame: int = 0,
     n_model_images: int,
     n_outfit_images: int = 0,
     n_motion_videos: int = 0,
@@ -160,6 +173,7 @@ async def build_seedance_t2v_prompt(
         try:
             p = await grok_expand_seedance_t2v_prompt(
                 user_brief=user_brief,
+                n_start_frame=n_start_frame,
                 n_model_images=n_model_images,
                 n_outfit_images=n_outfit_images,
                 n_motion_videos=n_motion_videos,
@@ -176,6 +190,7 @@ async def build_seedance_t2v_prompt(
 
     p = assemble_seedance_t2v_prompt(
         user_brief,
+        n_start_frame=n_start_frame,
         n_model_images=n_model_images,
         n_outfit_images=n_outfit_images,
         n_motion_videos=n_motion_videos,

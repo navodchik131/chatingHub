@@ -500,18 +500,32 @@ def grok_motion_api_configured() -> bool:
     return bool((settings.grok_api_key or "").strip() or (settings.openai_api_key or "").strip())
 
 
-def _seedance_image_tag_range(n_model: int, n_outfit: int) -> str:
+def _seedance_image_tag_range(
+    n_model: int,
+    n_outfit: int,
+    *,
+    n_start_frame: int = 0,
+) -> str:
     parts: list[str] = []
+    if n_start_frame > 0:
+        parts.append(
+            "@Image1 = approved opening still at t=0 (pose, wardrobe, lighting, framing, environment — "
+            "NOT the primary face/body identity source)"
+        )
     if n_model > 0:
+        start_idx = 1 + n_start_frame
+        end_idx = start_idx + n_model - 1
         if n_model == 1:
-            parts.append("@Image1 = character identity (face, body, hair from model reference sheet(s))")
+            parts.append(
+                f"@Image{start_idx} = character identity (face, body, hair from model reference sheet(s))"
+            )
         else:
             parts.append(
-                f"@Image1–@Image{n_model} = same character identity across model reference sheet(s); "
-                "use these tags wherever the scene mentions the model's look"
+                f"@Image{start_idx}–@Image{end_idx} = same character identity across model reference sheet(s); "
+                "use these tags for face, body, hair — never the original actor from @Video1"
             )
     if n_outfit > 0:
-        idx = n_model + 1
+        idx = 1 + n_start_frame + n_model
         parts.append(f"@Image{idx} = outfit / garment reference (match clothing when describing wardrobe)")
     return "; ".join(parts)
 
@@ -519,6 +533,7 @@ def _seedance_image_tag_range(n_model: int, n_outfit: int) -> str:
 async def grok_expand_seedance_t2v_prompt(
     *,
     user_brief: str,
+    n_start_frame: int = 0,
     n_model_images: int,
     n_outfit_images: int = 0,
     n_motion_videos: int = 0,
@@ -545,8 +560,14 @@ async def grok_expand_seedance_t2v_prompt(
     lim = max_chars if max_chars is not None else settings.studio_seedance_t2v_prompt_max_chars
 
     ref_lines: list[str] = []
-    if n_model_images > 0 or n_outfit_images > 0:
-        ref_lines.append(_seedance_image_tag_range(n_model_images, n_outfit_images))
+    if n_start_frame > 0 or n_model_images > 0 or n_outfit_images > 0:
+        ref_lines.append(
+            _seedance_image_tag_range(
+                n_model_images,
+                n_outfit_images,
+                n_start_frame=n_start_frame,
+            )
+        )
     if n_motion_videos > 0:
         ref_lines.append("@Video1 = motion / pacing / body dynamics reference (follow timing and gestures)")
     ref_block = "\n".join(ref_lines) if ref_lines else "No reference tags (text-only scene)."
@@ -574,9 +595,10 @@ async def grok_expand_seedance_t2v_prompt(
         "RULES:\n"
         "1) Output ONLY the final video prompt text — no preamble, no markdown fences.\n"
         f"2) Hard limit: entire output MUST be at most {lim} characters.\n"
-        "3) Use @Image1, @Image2, … exactly as assigned above wherever you describe identity, face, body, hair, or outfit.\n"
+        "3) Use @Image tags exactly as assigned above: @Image1 for opening still only; "
+        "identity tags for face/body/hair; outfit tag for wardrobe if present.\n"
         "4) If @Video1 exists, reference it for motion/choreography; do not describe the reference video's original actor identity.\n"
-        "5) Model reference sheets may show neutral base clothing — describe the wardrobe from USER_BRIEF or @Image outfit ref.\n"
+        "5) Wardrobe at t=0 comes from @Image1 and USER_BRIEF; identity from model reference @Image tags.\n"
         "6) Include camera, lighting, mood, and action with director-level detail; keep one continuous scene for the clip duration.\n"
         "7) Do not invent extra @Image or @Video tags beyond the ranges given.\n"
     )

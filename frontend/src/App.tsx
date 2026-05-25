@@ -756,6 +756,9 @@ export default function App() {
   const [studioArchiveInitialLoading, setStudioArchiveInitialLoading] = useState(false)
 
   const [motionFrameArchiveId, setMotionFrameArchiveId] = useState<number | null>(null)
+  const [motionOutfitArchiveId, setMotionOutfitArchiveId] = useState<number | null>(null)
+  const [motionFrameNotes, setMotionFrameNotes] = useState('')
+  const [motionGrokTimeline, setMotionGrokTimeline] = useState<string | null>(null)
   const [motionFirstFrameFile, setMotionFirstFrameFile] = useState<File | null>(null)
   const [motionVideoFile, setMotionVideoFile] = useState<File | null>(null)
   const [motionDesc, setMotionDesc] = useState('')
@@ -803,7 +806,6 @@ export default function App() {
   const seedanceDurationMax =
     health?.studio_seedance_t2v_duration_max ?? health?.studio_seedance_i2v_duration_max ?? 15
 
-  const motionOutfitArchiveId = motionFrameArchiveId
 
   useEffect(() => {
     if (motionSeedanceDurationInitRef.current || !health) return
@@ -1832,7 +1834,7 @@ export default function App() {
       const rp =
         scope === 'studio_photo'
           ? (studioRefinedPromptPreview ?? '').trim()
-          : (motionDesc ?? '').trim()
+          : (motionFrameNotes ?? '').trim()
       const r = await apiFetch('/api/studio/import-archive-image', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -2114,6 +2116,7 @@ export default function App() {
     {
       const scene = (data.reference_scene_description ?? '').trim()
       const motion = (data.motion_video_prompt_auto ?? '').trim()
+      setMotionGrokTimeline(motion || null)
       const parts: string[] = []
       if (scene)
         parts.push(
@@ -2141,7 +2144,7 @@ export default function App() {
       fd.append('video', motionVideoFile)
     }
     fd.append('model_id', String(studioSelectedModelId ?? ''))
-    fd.append('description', motionDesc.trim())
+    fd.append('description', motionFrameNotes.trim())
     fd.append('output_aspect', studioOutputAspect)
     fd.append(
       'wan_edit_tier',
@@ -2189,6 +2192,7 @@ export default function App() {
     setMotionMsg(null)
     setMotionResultVideoUrl(null)
     setMotionAutoTextPreview(null)
+    setMotionGrokTimeline(null)
     setMotionPendingExternalStillUrl(null)
     try {
       const res = await callMotionFirstFrameApi(
@@ -2218,8 +2222,8 @@ export default function App() {
       setError('Опишите сцену, движение и при необходимости одежду. Можно использовать @Image1 в тексте.')
       return
     }
-    if (motionAutoPrompt && motionVideoFile && !motionVideoFileId?.trim()) {
-      setError('Дождитесь загрузки референс-видео или отключите «Уточнить движение по ролику».')
+    if (motionVideoFileId && motionPreviewGenId == null) {
+      setError('Сначала выполните шаг 1 — сгенерируйте и проверьте первый кадр.')
       return
     }
 
@@ -2234,6 +2238,12 @@ export default function App() {
       fd.append('generate_audio', motionKeepSound ? '1' : '0')
       fd.append('duration_seconds', String(motionSeedanceDuration))
       fd.append('auto_motion_prompt', motionAutoPrompt ? '1' : '0')
+      if (motionPreviewGenId != null) {
+        fd.append('first_frame_generation_id', String(motionPreviewGenId))
+      }
+      if (motionGrokTimeline?.trim()) {
+        fd.append('motion_timeline', motionGrokTimeline.trim())
+      }
       if (motionVideoFileId) {
         fd.append('motion_video_file_id', motionVideoFileId)
       } else {
@@ -5241,72 +5251,200 @@ export default function App() {
                   </label>
                 </div>
                 <p className="studio-lead studio-video-lead">
-                  Seedance 2.0 Text-to-Video: кратко опишите сцену простым языком — Grok развернёт промпт
-                  с @Image1… и деталями (до {health?.studio_seedance_t2v_prompt_max_chars ?? 3000} символов).
-                  В кабинете модели загрузите развёртку (turnaround). Наряд — из «Сохранённые»; ролик — @Video1.
+                  Два шага: сначала первый кадр (@Image1 — поза, наряд, свет из реф-видео), затем
+                  Seedance T2V с развёрткой модели (@Image2…) и роликом (@Video1). Grok собирает промпт
+                  (до {health?.studio_seedance_t2v_prompt_max_chars ?? 3000} символов).
                   {health?.studio_grok_motion_configured === false ? (
-                    <> Без GROK_API_KEY используется упрощённый шаблон промпта.</>
+                    <> Без GROK_API_KEY — упрощённый шаблон.</>
                   ) : null}
                 </p>
-                <div className="studio-grid studio-grid--simple studio-video-panel">
-                  <label className="studio-label">
-                    Наряд из архива (опционально, @Image после фото модели)
-                    <select
-                      value={motionFrameArchiveId ?? ''}
-                      onChange={(e) => {
-                        const v = e.target.value
-                        const id = v === '' ? null : Number(v)
-                        setMotionFrameArchiveId(id != null && Number.isFinite(id) ? id : null)
-                        if (id != null && Number.isFinite(id)) {
-                          const g = studioGenerations.find((x) => x.id === id)
-                          if (g?.studio_model_id != null) setStudioSelectedModelId(g.studio_model_id)
+
+                <div className="studio-video-step">
+                  <h3 className="studio-video-step-title">Шаг 1 — первый кадр</h3>
+                  <p className="muted studio-inline-hint">
+                    Загрузите референс-видео (или свой кадр). Модель подставится в начало ролика — проверьте
+                    результат перед генерацией видео.
+                  </p>
+                  <div className="studio-grid studio-grid--simple studio-video-panel">
+                    <label className="studio-label">
+                      Референс-видео
+                      <input
+                        type="file"
+                        accept="video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov"
+                        disabled={motionDrivingUploadBusy}
+                        onChange={(e) => {
+                          const f = e.target.files?.[0] ?? null
+                          setMotionVideoFile(f)
+                          setMotionVideoFileId(null)
+                          setMotionPreviewGenId(null)
+                          setMotionPreviewUrl(null)
+                          setMotionGrokTimeline(null)
+                          setMotionResultVideoUrl(null)
+                          if (f) void uploadMotionDrivingVideo(f)
+                        }}
+                      />
+                      {motionVideoFile ? (
+                        <span className="studio-file-name">{motionVideoFile.name}</span>
+                      ) : null}
+                      {motionDrivingUploadBusy ? (
+                        <span className="muted studio-file-name"> Загрузка на сервер…</span>
+                      ) : null}
+                    </label>
+                    <label className="studio-label">
+                      Свой кадр (опционально, вместо первого кадра видео)
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
+                        onChange={(e) => {
+                          setMotionFirstFrameFile(e.target.files?.[0] ?? null)
+                          setMotionPreviewGenId(null)
+                          setMotionPreviewUrl(null)
+                        }}
+                      />
+                    </label>
+                    <label className="studio-label">
+                      Или кадр из архива (вход)
+                      <select
+                        value={motionFrameArchiveId ?? ''}
+                        onChange={(e) => {
+                          const v = e.target.value
+                          const id = v === '' ? null : Number(v)
+                          setMotionFrameArchiveId(id != null && Number.isFinite(id) ? id : null)
+                          if (id != null && Number.isFinite(id)) {
+                            const g = studioGenerations.find((x) => x.id === id)
+                            if (g?.studio_model_id != null) setStudioSelectedModelId(g.studio_model_id)
+                          }
+                        }}
+                      >
+                        <option value="">— не использовать —</option>
+                        {studioGenerations.map((g) => (
+                          <option key={g.id} value={g.id}>
+                            #{g.id} {g.model_name ? `· ${g.model_name}` : ''}{' '}
+                            {g.prompt_excerpt ? `· ${g.prompt_excerpt.slice(0, 36)}` : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="studio-label">
+                      Профиль генерации кадра
+                      <select
+                        value={motionFirstFrameWaveProfile}
+                        onChange={(e) =>
+                          setMotionFirstFrameWaveProfile(e.target.value as 'regular' | 'nsfw')
                         }
-                      }}
-                    >
-                      <option value="">— без референса наряда —</option>
-                      {studioGenerations.map((g) => (
-                        <option key={g.id} value={g.id}>
-                          #{g.id} {g.model_name ? `· ${g.model_name}` : ''}{' '}
-                          {g.prompt_excerpt ? `· ${g.prompt_excerpt.slice(0, 36)}` : ''}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                      >
+                        <option value="regular">Regular (Nano Banana)</option>
+                        <option value="nsfw">NSFW (WAN)</option>
+                      </select>
+                    </label>
+                    <label className="studio-label studio-check">
+                      <input
+                        type="checkbox"
+                        checked={motionAutoPrompt}
+                        onChange={(e) => setMotionAutoPrompt(e.target.checked)}
+                      />
+                      <span>Grok: timeline движения по ролику (для шага 2)</span>
+                    </label>
+                    <label className="studio-label studio-check">
+                      <input
+                        type="checkbox"
+                        checked={motionLockHairstyle}
+                        onChange={(e) => setMotionLockHairstyle(e.target.checked)}
+                      />
+                      <span>Фиксировать причёску модели</span>
+                    </label>
+                    <label className="studio-label studio-check">
+                      <input
+                        type="checkbox"
+                        checked={motionUseStillFinal}
+                        onChange={(e) => setMotionUseStillFinal(e.target.checked)}
+                      />
+                      <span>Использовать загруженный кадр как финал (без WaveSpeed)</span>
+                    </label>
+                  </div>
                   <label className="studio-label">
-                    Ролик-образец движения (опционально, @Video1)
-                    <input
-                      type="file"
-                      accept="video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov"
-                      disabled={motionDrivingUploadBusy}
-                      onChange={(e) => {
-                        const f = e.target.files?.[0] ?? null
-                        setMotionVideoFile(f)
-                        setMotionVideoFileId(null)
-                        setMotionResultVideoUrl(null)
-                        if (f) void uploadMotionDrivingVideo(f)
-                      }}
+                    Пожелания к первому кадру (опционально)
+                    <textarea
+                      rows={2}
+                      placeholder="Свет, фон, наряд — если нужно уточнить"
+                      value={motionFrameNotes}
+                      onChange={(e) => setMotionFrameNotes(e.target.value)}
                     />
-                    {motionVideoFile ? (
-                      <span className="studio-file-name">{motionVideoFile.name}</span>
-                    ) : null}
-                    {motionDrivingUploadBusy ? (
-                      <span className="muted studio-file-name"> Загрузка на сервер…</span>
-                    ) : null}
                   </label>
-                  <label className="studio-label studio-check">
-                    <input
-                      type="checkbox"
-                      checked={motionAutoPrompt}
-                      onChange={(e) => setMotionAutoPrompt(e.target.checked)}
-                    />
-                    <span>Уточнить движение по ролику (LLM → текст промпта)</span>
-                  </label>
+                  <div className="studio-actions studio-actions--spaced">
+                    <button
+                      type="button"
+                      className="send-btn"
+                      disabled={
+                        motionBusyFrame ||
+                        !integ?.wavespeed_configured ||
+                        studioSelectedModelId == null ||
+                        (!motionVideoFile &&
+                          !motionFirstFrameFile &&
+                          motionFrameArchiveId == null)
+                      }
+                      onClick={() => void runMotionFirstFrame()}
+                    >
+                      {motionBusyFrame ? 'Генерируем кадр…' : 'Сгенерировать первый кадр'}
+                    </button>
+                  </div>
+                  {studioMotionStillDisplayUrl ? (
+                    <div className="studio-generated studio-video-frame-preview">
+                      <h4 className="studio-generated-title">
+                        Первый кадр
+                        {motionPreviewGenId != null ? ` · архив #${motionPreviewGenId}` : ''}
+                      </h4>
+                      <img
+                        src={studioMotionStillDisplayUrl}
+                        alt="Первый кадр для видео"
+                        className="studio-gen-img"
+                      />
+                      {motionPendingExternalStillUrl ? (
+                        <button
+                          type="button"
+                          className="ghost-btn"
+                          disabled={studioImportArchiveBusy}
+                          onClick={() => void retryImportStudioImageToArchive('motion_still')}
+                        >
+                          Сохранить кадр в архив
+                        </button>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
+
+                <div className="studio-video-step">
+                  <h3 className="studio-video-step-title">Шаг 2 — видео Seedance T2V</h3>
+                  <p className="muted studio-inline-hint">
+                    @Image1 — ваш первый кадр; @Image2+ — развёртка модели; @Video1 — движение. Без
+                    реф-видео шаг 1 можно пропустить.
+                  </p>
+                  <div className="studio-grid studio-grid--simple studio-video-panel">
+                    <label className="studio-label">
+                      Наряд из архива (опционально, @Image после фото модели)
+                      <select
+                        value={motionOutfitArchiveId ?? ''}
+                        onChange={(e) => {
+                          const v = e.target.value
+                          const id = v === '' ? null : Number(v)
+                          setMotionOutfitArchiveId(id != null && Number.isFinite(id) ? id : null)
+                        }}
+                      >
+                        <option value="">— без референса наряда —</option>
+                        {studioGenerations.map((g) => (
+                          <option key={g.id} value={g.id}>
+                            #{g.id} {g.model_name ? `· ${g.model_name}` : ''}{' '}
+                            {g.prompt_excerpt ? `· ${g.prompt_excerpt.slice(0, 36)}` : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
                 <label className="studio-label">
                   Сцена, движение, одежда
                   <textarea
                     rows={5}
-                    placeholder="Простыми словами: что происходит, одежда, свет, камера. Grok добавит @Image1…"
+                    placeholder="Простыми словами: что происходит после первого кадра, свет, камера. Grok добавит @Image/@Video"
                     value={motionDesc}
                     onChange={(e) => setMotionDesc(e.target.value)}
                   />
@@ -5358,18 +5496,21 @@ export default function App() {
                       motionBusyVideo ||
                       !integ?.wavespeed_configured ||
                       studioSelectedModelId == null ||
-                      !motionDesc.trim()
+                      !motionDesc.trim() ||
+                      (!!motionVideoFileId && motionPreviewGenId == null)
                     }
                     title={
                       studioSelectedModelId == null
                         ? 'Выберите модель'
                         : !motionDesc.trim()
                           ? 'Опишите сцену'
-                          : undefined
+                          : motionVideoFileId && motionPreviewGenId == null
+                            ? 'Сначала шаг 1 — первый кадр'
+                            : undefined
                     }
                     onClick={() => void runMotionRenderVideo()}
                   >
-                    {motionBusyVideo ? 'Готовим видео…' : 'Сделать видео'}
+                    {motionBusyVideo ? 'Готовим видео…' : 'Шаг 2: сделать видео'}
                   </button>
                   {health?.studio_motion_control_credit_cost != null ? (
                     <span className="studio-credit-hint">
@@ -5414,6 +5555,7 @@ export default function App() {
                     </div>
                   </div>
                 ) : null}
+                </div>
                 {motionRenders.length > 0 ? (
                   <div className="studio-motion-history">
                     <h3 className="studio-motion-history-title">Последние видео</h3>

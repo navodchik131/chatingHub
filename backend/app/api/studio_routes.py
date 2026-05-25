@@ -3206,6 +3206,8 @@ async def api_studio_motion_render_video(
     prompt: str = Form(""),
     output_aspect: str = Form("9:16"),
     motion_video_file_id: str = Form(""),
+    first_frame_generation_id: str = Form(""),
+    motion_timeline: str = Form(""),
     outfit_generation_id: str = Form(""),
     negative_prompt: str = Form(""),
     generate_audio: str = Form("1"),
@@ -3291,6 +3293,31 @@ async def api_studio_motion_render_video(
         if vpath is None or not vpath.is_file():
             raise HTTPException(status_code=404, detail="Референс-видео не найдено.")
 
+    ff_gid: int | None = None
+    raw_ff = (first_frame_generation_id or "").strip()
+    if raw_ff:
+        try:
+            ff_gid = int(raw_ff)
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail="Некорректный first_frame_generation_id",
+            ) from None
+        ff_row = await session.get(StudioGeneration, ff_gid)
+        if not ff_row or ff_row.user_id != oid:
+            raise HTTPException(status_code=404, detail="Первый кадр (архив) не найден")
+        if not generation_has_archive_file(ff_row):
+            raise HTTPException(
+                status_code=400,
+                detail="Первый кадр ещё не сохранён на сервере. Дождитесь архива или сохраните кадр.",
+            )
+
+    if mv_id and ff_gid is None:
+        raise HTTPException(
+            status_code=400,
+            detail="С референс-видео нужен первый кадр: сначала выполните шаг 1 «Сгенерировать первый кадр».",
+        )
+
     return await _accept_studio_job(
         session,
         user,
@@ -3300,6 +3327,8 @@ async def api_studio_motion_render_video(
             "prompt": (prompt or "").strip(),
             "output_aspect": aspect_key,
             "motion_video_file_id": mv_id,
+            "first_frame_generation_id": ff_gid,
+            "motion_timeline": (motion_timeline or "").strip(),
             "outfit_generation_id": outfit_gid,
             "negative_prompt": (negative_prompt or "").strip(),
             "generate_audio": (generate_audio or "1").strip(),
@@ -3321,6 +3350,8 @@ async def _studio_job_execute_motion_render_video(
     output_aspect = str(params.get("output_aspect") or "9:16")
     mv_id = str(params.get("motion_video_file_id") or "").strip()
     outfit_gid = params.get("outfit_generation_id")
+    first_frame_gid = params.get("first_frame_generation_id")
+    motion_timeline = str(params.get("motion_timeline") or "").strip()
     negative_prompt = str(params.get("negative_prompt") or "")
     generate_audio = str(params.get("generate_audio") or "1")
     duration_seconds = str(params.get("duration_seconds") or "")
@@ -3353,15 +3384,42 @@ async def _studio_job_execute_motion_render_video(
             "У модели нет фото для reference_images. Добавьте развёртку (turnaround) в кабинете модели."
         )
 
-    ref_images = model_reference_public_urls(
-        owner_id=oid,
-        images=imgs_t2v,
-        public_app_base=pub,
-        token_factory=create_model_image_access_token,
-    )
-    n_model = len(ref_images)
+    imgs_t2v = sort_model_images_for_seedance_t2v(list(sm.images))
+    if not imgs_t2v:
+        raise RuntimeError(
+            "У модели нет фото для reference_images. Добавьте развёртку (turnaround) в кабинете модели."
+        )
+
+    n_start = 0
     n_outfit = 0
     outfit_gen_id: int | None = None
+    first_frame_gen_id: int | None = None
+    first_frame_bytes: bytes | None = None
+    first_frame_media = "image/jpeg"
+    ref_images: list[str] = []
+
+    if first_frame_gid is not None:
+        try:
+            first_frame_gen_id = int(first_frame_gid)
+        except (TypeError, ValueError):
+            first_frame_gen_id = None
+    if first_frame_gen_id is not None:
+        _ff_row, first_frame_bytes, first_frame_media = await _load_owned_generation_still_for_motion(
+            session,
+            owner_id=oid,
+            generation_id=first_frame_gen_id,
+        )
+        ff_url = generation_still_public_url(
+            owner_id=oid,
+            generation_id=first_frame_gen_id,
+            public_app_base=pub,
+            token_factory=create_generation_image_access_token,
+        )
+        if not ff_url:
+            raise RuntimeError("Не удалось подготовить URL первого кадра")
+        ref_images.append(ff_url)
+        n_start = 1
+
     if outfit_gid is not None:
         try:
             outfit_gen_id = int(outfit_gid)
@@ -3371,6 +3429,21 @@ async def _studio_job_execute_motion_render_video(
         row_outfit = await session.get(StudioGeneration, outfit_gen_id)
         if not row_outfit or row_outfit.user_id != oid:
             raise RuntimeError("Снимок наряда (outfit) не найден")
+
+    reserved = n_start + (1 if outfit_gen_id is not None else 0)
+    max_model_slots = max(0, MAX_SEEDANCE_REFERENCE_IMAGES - reserved)
+    model_imgs = imgs_t2v[:max_model_slots]
+    ref_images.extend(
+        model_reference_public_urls(
+            owner_id=oid,
+            images=model_imgs,
+            public_app_base=pub,
+            token_factory=create_model_image_access_token,
+        )
+    )
+    n_model = len(model_imgs)
+
+    if outfit_gen_id is not None:
         outfit_url = generation_still_public_url(
             owner_id=oid,
             generation_id=outfit_gen_id,
@@ -3384,11 +3457,9 @@ async def _studio_job_execute_motion_render_video(
 
     if len(ref_images) > MAX_SEEDANCE_REFERENCE_IMAGES:
         ref_images = ref_images[:MAX_SEEDANCE_REFERENCE_IMAGES]
-        if n_outfit:
-            n_model = max(0, len(ref_images) - n_outfit)
 
     ref_videos: list[str] = []
-    motion_summary: str | None = None
+    motion_summary: str | None = motion_timeline or None
     vpath = None
     if mv_id:
         vpath = resolve_motion_video_file(oid, mv_id)
@@ -3397,16 +3468,29 @@ async def _studio_job_execute_motion_render_video(
             ref_videos.append(
                 f"{pub}/api/studio/public-motion-video?t={quote(vid_tok, safe='')}"
             )
-            if _truthy_wavespeed_flag(auto_motion_prompt):
+            if _truthy_wavespeed_flag(auto_motion_prompt) and not motion_summary:
                 try:
-                    llm_cr = studio_llm_credentials(plan=plan, llm_row=llm_row)
-                    frames = await anyio.to_thread.run_sync(
-                        lambda vp=vpath: extract_video_sample_frames_jpeg(vp, max_frames=4)
-                    )
-                    motion_summary = await describe_motion_video_frames_openai(
-                        frames_jpeg=frames,
-                        credentials=llm_cr,
-                    )
+                    if (
+                        settings.studio_grok_motion_timeline_enabled
+                        and first_frame_bytes
+                        and len(first_frame_bytes) >= 64
+                    ):
+                        motion_summary = await grok_two_step_motion_prompt_for_studio(
+                            video_path=vpath,
+                            model_profile_text=(sm.profile_text or "").strip() or "",
+                            first_frame_jpeg=first_frame_bytes,
+                            first_frame_media=first_frame_media,
+                            credentials=grok_motion_studio_credentials(),
+                        )
+                    else:
+                        llm_cr = studio_llm_credentials(plan=plan, llm_row=llm_row)
+                        frames = await anyio.to_thread.run_sync(
+                            lambda vp=vpath: extract_video_sample_frames_jpeg(vp, max_frames=4)
+                        )
+                        motion_summary = await describe_motion_video_frames_openai(
+                            frames_jpeg=frames,
+                            credentials=llm_cr,
+                        )
                 except Exception as e:
                     log.warning("render-video t2v: auto motion describe failed: %s", e)
 
@@ -3418,6 +3502,7 @@ async def _studio_job_execute_motion_render_video(
 
     seed_prompt, prompt_source = await build_seedance_t2v_prompt(
         user_brief=prompt,
+        n_start_frame=n_start,
         n_model_images=n_model,
         n_outfit_images=n_outfit,
         n_motion_videos=len(ref_videos),
@@ -3454,7 +3539,7 @@ async def _studio_job_execute_motion_render_video(
                 StudioMotionRender(
                     user_id=oid,
                     studio_model_id=mid,
-                    studio_generation_id=outfit_gen_id,
+                    studio_generation_id=first_frame_gen_id or outfit_gen_id,
                     video_url=vu,
                 )
             )
@@ -3467,6 +3552,7 @@ async def _studio_job_execute_motion_render_video(
         cost,
         {
             "studio_model_id": mid,
+            "first_frame_generation_id": first_frame_gen_id,
             "outfit_generation_id": outfit_gen_id,
             "motion_video_file_id": mv_id or None,
             "motion_video_provider": "seedance_t2v",

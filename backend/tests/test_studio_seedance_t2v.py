@@ -7,6 +7,19 @@ def test_truncate_prompt():
     assert out.endswith("…")
 
 
+def test_assemble_with_start_frame():
+    p = assemble_seedance_t2v_prompt(
+        "She walks.",
+        n_start_frame=1,
+        n_model_images=1,
+        n_motion_videos=1,
+    )
+    assert "@Image1" in p
+    assert "@Image2" in p
+    assert "opening still" in p.lower() or "t=0" in p.lower()
+    assert "@Video1" in p
+
+
 def test_assemble_prompt_includes_image_tags():
     p = assemble_seedance_t2v_prompt(
         "She walks in the rain.",

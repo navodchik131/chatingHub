@@ -453,6 +453,29 @@ select:focus {
   max-width: 52ch;
 }
 
+.studio-video-step {
+  margin: 1.25rem 0 1.5rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
+}
+
+.studio-video-step-title {
+  margin: 0 0 0.5rem;
+  font-size: 1.05rem;
+}
+
+.studio-video-frame-preview {
+  margin-top: 1rem;
+}
+
+.studio-video-frame-preview .studio-gen-img {
+  max-height: min(52vh, 420px);
+  width: auto;
+  max-width: 100%;
+}
+
 .studio-grid--simple .studio-label {
   min-width: 0;
   max-width: 100%;
