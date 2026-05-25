@@ -290,6 +290,59 @@ async def init_db() -> None:
         await conn.run_sync(_migrate_subscription_billing_plan)
         await conn.run_sync(_migrate_studio_jobs_table)
         await conn.run_sync(_migrate_studio_generation_pipeline_phase_a)
+        await conn.run_sync(_migrate_studio_motion_render_model_link)
+
+
+def _migrate_studio_motion_render_model_link(sync_conn) -> None:
+    from sqlalchemy import inspect
+
+    insp = inspect(sync_conn)
+    if not insp.has_table("studio_motion_renders"):
+        return
+    cols = {c["name"] for c in insp.get_columns("studio_motion_renders")}
+    if "studio_model_id" in cols:
+        return
+    dialect = sync_conn.dialect.name
+    if dialect == "sqlite":
+        sync_conn.execute(
+            text(
+                """
+                CREATE TABLE studio_motion_renders_new (
+                    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    studio_generation_id INTEGER,
+                    studio_model_id INTEGER,
+                    video_url TEXT NOT NULL,
+                    created_at DATETIME,
+                    FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE,
+                    FOREIGN KEY(studio_generation_id) REFERENCES studio_generations (id) ON DELETE SET NULL,
+                    FOREIGN KEY(studio_model_id) REFERENCES user_studio_models (id) ON DELETE SET NULL
+                )
+                """
+            )
+        )
+        sync_conn.execute(
+            text(
+                """
+                INSERT INTO studio_motion_renders_new
+                    (id, user_id, studio_generation_id, video_url, created_at)
+                SELECT id, user_id, studio_generation_id, video_url, created_at
+                FROM studio_motion_renders
+                """
+            )
+        )
+        sync_conn.execute(text("DROP TABLE studio_motion_renders"))
+        sync_conn.execute(text("ALTER TABLE studio_motion_renders_new RENAME TO studio_motion_renders"))
+    else:
+        sync_conn.execute(
+            text("ALTER TABLE studio_motion_renders ADD COLUMN studio_model_id INTEGER")
+        )
+        sync_conn.execute(
+            text(
+                "ALTER TABLE studio_motion_renders "
+                "ALTER COLUMN studio_generation_id DROP NOT NULL"
+            )
+        )
 
 
 def _migrate_studio_generation_pipeline_phase_a(sync_conn) -> None:

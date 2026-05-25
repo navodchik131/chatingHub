@@ -777,6 +777,83 @@ async def wan_22_animate_video_url(
     )
 
 
+def _seedance_20_t2v_post_path() -> str:
+    p = (settings.wavespeed_seedance_20_t2v_path or "").strip()
+    p = p or "/api/v3/bytedance/seedance-2.0/text-to-video"
+    return p if p.startswith("/") else f"/{p}"
+
+
+async def seedance_20_text_to_video_url(
+    *,
+    api_key: str,
+    prompt: str,
+    reference_images: list[str] | None = None,
+    reference_videos: list[str] | None = None,
+    reference_audios: list[str] | None = None,
+    aspect_ratio: str | None = None,
+    resolution: str | None = None,
+    duration: int | None = None,
+    generate_audio: bool = True,
+    enable_web_search: bool | None = None,
+    timeout_submit: float = 900.0,
+    poll_interval: float = 3.0,
+    max_polls: int = 180,
+) -> str:
+    """
+    ByteDance Seedance 2.0 Text-to-Video: prompt + reference_images (@ImageN в тексте).
+    Док: https://wavespeed.ai/docs/docs-api/bytedance/bytedance-seedance-2.0-text-to-video
+    """
+    if not (prompt or "").strip():
+        raise RuntimeError("prompt required for text-to-video")
+    res = (resolution or settings.wavespeed_seedance_20_t2v_resolution or "720p").strip().lower()
+    if res not in ("480p", "720p", "1080p"):
+        res = "720p"
+    dur = int(duration if duration is not None else settings.wavespeed_seedance_20_t2v_duration)
+    dur = max(4, min(15, dur))
+    path = _seedance_20_t2v_post_path()
+    url = f"{_wavespeed_base()}{path}"
+    body: dict[str, Any] = {
+        "prompt": prompt.strip(),
+        "resolution": res,
+        "duration": dur,
+        "enable_web_search": bool(
+            enable_web_search
+            if enable_web_search is not None
+            else settings.wavespeed_seedance_20_t2v_web_search
+        ),
+        "generate_audio": bool(generate_audio),
+    }
+    ar = (aspect_ratio or "").strip()
+    if ar:
+        body["aspect_ratio"] = ar
+    imgs = [u.strip() for u in (reference_images or []) if (u or "").strip()]
+    if imgs:
+        body["reference_images"] = imgs[:9]
+    vids = [u.strip() for u in (reference_videos or []) if (u or "").strip()]
+    if vids:
+        body["reference_videos"] = vids[:3]
+    auds = [u.strip() for u in (reference_audios or []) if (u or "").strip()]
+    if auds:
+        body["reference_audios"] = auds[:3]
+    _apply_wavespeed_extra_body(body)
+    log.debug(
+        "wavespeed seedance 2.0 t2v path=%s res=%s dur=%s imgs=%s vids=%s",
+        path,
+        res,
+        dur,
+        len(body.get("reference_images") or []),
+        len(body.get("reference_videos") or []),
+    )
+    return await _wavespeed_post_json_and_resolve_video_url(
+        api_key=api_key,
+        full_post_url=url,
+        body=body,
+        timeout_submit=timeout_submit,
+        poll_interval=poll_interval,
+        max_polls=max_polls,
+    )
+
+
 def _seedance_20_i2v_post_path() -> str:
     p = (settings.wavespeed_seedance_20_i2v_path or "").strip()
     p = p or "/api/v3/bytedance/seedance-2.0/image-to-video"

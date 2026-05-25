@@ -145,12 +145,17 @@ from app.services.studio_motion_video import (
     resolve_motion_video_file,
     save_motion_video_bytes,
 )
+from app.services.studio_seedance_t2v import (
+    MAX_SEEDANCE_REFERENCE_IMAGES,
+    build_seedance_t2v_prompt,
+    generation_still_public_url,
+    model_reference_public_urls,
+    sort_model_images_for_seedance_t2v,
+)
 from app.services.wavespeed_client import (
-    kling_motion_control_video_url,
     nano_banana_pro_edit_image_url,
-    seedance_20_image_to_video_url,
+    seedance_20_text_to_video_url,
     seedream_v45_edit_image_url,
-    wan_22_animate_video_url,
     wavespeed_image_upscale_url,
     z_image_turbo_inpaint_image_url,
 )
@@ -757,8 +762,12 @@ async def api_list_motion_renders(
         return StudioMotionRendersPageOut(items=[], has_more=False)
     out_items: list[StudioMotionRenderOut] = []
     for r in rows:
-        tok = create_generation_image_access_token(user_id=oid, generation_id=r.studio_generation_id)
-        img = f"{base}/api/studio/public-generation-image?t={quote(tok, safe='')}"
+        img = ""
+        if r.studio_generation_id is not None:
+            tok = create_generation_image_access_token(
+                user_id=oid, generation_id=r.studio_generation_id
+            )
+            img = f"{base}/api/studio/public-generation-image?t={quote(tok, safe='')}"
         url = (r.video_url or "").strip()
         if url:
             out_items.append(
@@ -766,8 +775,9 @@ async def api_list_motion_renders(
                     id=r.id,
                     created_at=r.created_at,
                     studio_generation_id=r.studio_generation_id,
+                    studio_model_id=r.studio_model_id,
                     video_url=url,
-                    frame_image_url=img,
+                    frame_image_url=img or url,
                 )
             )
     return StudioMotionRendersPageOut(items=out_items, has_more=has_more)
@@ -3192,14 +3202,15 @@ async def _studio_job_execute_motion_first_frame(
 )
 async def api_studio_motion_render_video(
     request: Request,
-    generation_id: str = Form(...),
-    motion_video_file_id: str = Form(""),
-    character_orientation: str = Form("video"),
+    model_id: str = Form(...),
     prompt: str = Form(""),
+    output_aspect: str = Form("9:16"),
+    motion_video_file_id: str = Form(""),
+    outfit_generation_id: str = Form(""),
     negative_prompt: str = Form(""),
-    keep_original_sound: str = Form("1"),
+    generate_audio: str = Form("1"),
     duration_seconds: str = Form(""),
-    auto_motion_prompt: str = Form("1"),
+    auto_motion_prompt: str = Form("0"),
     session: AsyncSession = Depends(get_session),
     user: User = Depends(get_current_user),
 ) -> StudioMotionVideoOut | JSONResponse:
@@ -3210,34 +3221,17 @@ async def api_studio_motion_render_video(
     _require_studio_subscription(user, sub_b, credits_balance=_credits)
 
     try:
-        gid = int(str(generation_id).strip())
+        mid = int(str(model_id).strip())
     except ValueError:
-        raise HTTPException(status_code=400, detail="Некорректный generation_id")
+        raise HTTPException(status_code=400, detail="Некорректный model_id") from None
 
-    mv_id = str(motion_video_file_id).strip()
-    provider = settings.studio_motion_video_provider
-    needs_motion_file = provider in ("kling", "wan")
-    if needs_motion_file and not mv_id:
-        raise HTTPException(
-            status_code=400,
-            detail="Для Kling / WAN загрузите референс-видео на шаге кадра (нужен motion_video_file_id).",
-        )
+    if not (prompt or "").strip():
+        raise HTTPException(status_code=400, detail="Опишите сцену, движение и при необходимости одежду.")
 
-    orient = (character_orientation or "video").strip().lower()
-    if orient not in ("image", "video"):
-        raise HTTPException(status_code=400, detail="character_orientation: image или video.")
-
-    row = await session.get(StudioGeneration, gid)
-    if not row or row.user_id != oid:
-        raise HTTPException(status_code=404, detail="Генерация не найдена")
-
-    if mv_id:
-        vpath = resolve_motion_video_file(oid, mv_id)
-        if needs_motion_file and (vpath is None or not vpath.is_file()):
-            raise HTTPException(
-                status_code=404,
-                detail="Исходное видео не найдено. Снова выполните шаг «Сгенерировать кадр».",
-            )
+    try:
+        aspect_key = normalize_aspect_key(output_aspect)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
     pub = (settings.public_app_url or "").strip().rstrip("/")
     if not pub.lower().startswith("https://"):
@@ -3251,35 +3245,66 @@ async def api_studio_motion_render_video(
     except HTTPException:
         raise
 
-    if provider == "seedance_i2v":
-        ds_raw = (duration_seconds or "").strip()
-        if ds_raw:
-            try:
-                ds = int(ds_raw)
-            except ValueError:
-                raise HTTPException(
-                    status_code=400,
-                    detail="duration_seconds: укажите целое число секунд.",
-                ) from None
-            if ds < 4 or ds > 15:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Длительность Seedance I2V: от 4 до 15 секунд.",
-                )
+    stmt = (
+        select(UserStudioModel)
+        .where(UserStudioModel.id == mid, UserStudioModel.user_id == oid)
+        .options(selectinload(UserStudioModel.images))
+    )
+    sm = (await session.execute(stmt)).scalar_one_or_none()
+    if not sm:
+        raise HTTPException(status_code=404, detail="Модель не найдена")
+    if not sort_model_images_for_seedance_t2v(list(sm.images)):
+        raise HTTPException(
+            status_code=400,
+            detail="У модели нет фото для Seedance. Добавьте развёртку (turnaround) или другие снимки в кабинете модели.",
+        )
+
+    ds_raw = (duration_seconds or "").strip()
+    if ds_raw:
+        try:
+            ds = int(ds_raw)
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail="duration_seconds: укажите целое число секунд.",
+            ) from None
+        if ds < 4 or ds > 15:
+            raise HTTPException(
+                status_code=400,
+                detail="Длительность Seedance T2V: от 4 до 15 секунд.",
+            )
+
+    outfit_gid: int | None = None
+    raw_outfit = (outfit_generation_id or "").strip()
+    if raw_outfit:
+        try:
+            outfit_gid = int(raw_outfit)
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail="Некорректный outfit_generation_id",
+            ) from None
+
+    mv_id = str(motion_video_file_id).strip()
+    if mv_id:
+        vpath = resolve_motion_video_file(oid, mv_id)
+        if vpath is None or not vpath.is_file():
+            raise HTTPException(status_code=404, detail="Референс-видео не найдено.")
 
     return await _accept_studio_job(
         session,
         user,
         job_type="motion_render_video",
         params={
-            "generation_id": gid,
-            "motion_video_file_id": mv_id,
-            "character_orientation": orient,
+            "model_id": mid,
             "prompt": (prompt or "").strip(),
+            "output_aspect": aspect_key,
+            "motion_video_file_id": mv_id,
+            "outfit_generation_id": outfit_gid,
             "negative_prompt": (negative_prompt or "").strip(),
-            "keep_original_sound": (keep_original_sound or "1").strip(),
-            "duration_seconds": (duration_seconds or "").strip(),
-            "auto_motion_prompt": (auto_motion_prompt or "1").strip(),
+            "generate_audio": (generate_audio or "1").strip(),
+            "duration_seconds": ds_raw,
+            "auto_motion_prompt": (auto_motion_prompt or "0").strip(),
         },
     )
 
@@ -3291,25 +3316,21 @@ async def _studio_job_execute_motion_render_video(
 ) -> dict[str, Any]:
     params = studio_jobs.job_params(job)
     oid = workspace_owner_id(user)
-    gid = int(params["generation_id"])
-    mv_id = str(params.get("motion_video_file_id") or "").strip()
-    orient = str(params.get("character_orientation") or "video").strip().lower()
+    mid = int(params["model_id"])
     prompt = str(params.get("prompt") or "")
+    output_aspect = str(params.get("output_aspect") or "9:16")
+    mv_id = str(params.get("motion_video_file_id") or "").strip()
+    outfit_gid = params.get("outfit_generation_id")
     negative_prompt = str(params.get("negative_prompt") or "")
-    keep_original_sound = str(params.get("keep_original_sound") or "1")
+    generate_audio = str(params.get("generate_audio") or "1")
     duration_seconds = str(params.get("duration_seconds") or "")
-    auto_motion_prompt = str(params.get("auto_motion_prompt") or "1")
+    auto_motion_prompt = str(params.get("auto_motion_prompt") or "0")
 
-    sub_b, _llm, ws_row, plan, _credits = await load_owner_studio_billing(session, oid)
+    if not prompt.strip():
+        raise RuntimeError("Опишите сцену и движение для видео.")
+
+    sub_b, llm_row, ws_row, plan, _credits = await load_owner_studio_billing(session, oid)
     _require_studio_subscription(user, sub_b, credits_balance=_credits)
-
-    row = await session.get(StudioGeneration, gid)
-    if not row or row.user_id != oid:
-        raise RuntimeError("Генерация не найдена")
-
-    vpath = None
-    if mv_id:
-        vpath = resolve_motion_video_file(oid, mv_id)
 
     pub = (settings.public_app_url or "").strip().rstrip("/")
     if not pub.lower().startswith("https://"):
@@ -3317,125 +3338,112 @@ async def _studio_job_execute_motion_render_video(
 
     ws_key = studio_wavespeed_api_key(plan=plan, ws_row=ws_row, owner_subscription=sub_b)
 
+    stmt = (
+        select(UserStudioModel)
+        .where(UserStudioModel.id == mid, UserStudioModel.user_id == oid)
+        .options(selectinload(UserStudioModel.images))
+    )
+    sm = (await session.execute(stmt)).scalar_one_or_none()
+    if not sm:
+        raise RuntimeError("Модель не найдена")
+
+    imgs_t2v = sort_model_images_for_seedance_t2v(list(sm.images))
+    if not imgs_t2v:
+        raise RuntimeError(
+            "У модели нет фото для reference_images. Добавьте развёртку (turnaround) в кабинете модели."
+        )
+
+    ref_images = model_reference_public_urls(
+        owner_id=oid,
+        images=imgs_t2v,
+        public_app_base=pub,
+        token_factory=create_model_image_access_token,
+    )
+    n_model = len(ref_images)
+    n_outfit = 0
+    outfit_gen_id: int | None = None
+    if outfit_gid is not None:
+        try:
+            outfit_gen_id = int(outfit_gid)
+        except (TypeError, ValueError):
+            outfit_gen_id = None
+    if outfit_gen_id is not None:
+        row_outfit = await session.get(StudioGeneration, outfit_gen_id)
+        if not row_outfit or row_outfit.user_id != oid:
+            raise RuntimeError("Снимок наряда (outfit) не найден")
+        outfit_url = generation_still_public_url(
+            owner_id=oid,
+            generation_id=outfit_gen_id,
+            public_app_base=pub,
+            token_factory=create_generation_image_access_token,
+        )
+        if not outfit_url:
+            raise RuntimeError("Не удалось подготовить URL снимка наряда")
+        ref_images.append(outfit_url)
+        n_outfit = 1
+
+    if len(ref_images) > MAX_SEEDANCE_REFERENCE_IMAGES:
+        ref_images = ref_images[:MAX_SEEDANCE_REFERENCE_IMAGES]
+        if n_outfit:
+            n_model = max(0, len(ref_images) - n_outfit)
+
+    ref_videos: list[str] = []
+    motion_summary: str | None = None
+    vpath = None
+    if mv_id:
+        vpath = resolve_motion_video_file(oid, mv_id)
+        if vpath is not None and vpath.is_file():
+            vid_tok = create_motion_video_access_token(user_id=oid, file_id=mv_id)
+            ref_videos.append(
+                f"{pub}/api/studio/public-motion-video?t={quote(vid_tok, safe='')}"
+            )
+            if _truthy_wavespeed_flag(auto_motion_prompt):
+                try:
+                    llm_cr = studio_llm_credentials(plan=plan, llm_row=llm_row)
+                    frames = await anyio.to_thread.run_sync(
+                        lambda vp=vpath: extract_video_sample_frames_jpeg(vp, max_frames=4)
+                    )
+                    motion_summary = await describe_motion_video_frames_openai(
+                        frames_jpeg=frames,
+                        credentials=llm_cr,
+                    )
+                except Exception as e:
+                    log.warning("render-video t2v: auto motion describe failed: %s", e)
+
+    ar_t2v = aspect_ratio_for_seedance_i2v(output_aspect)
+    ds_effective = settings.wavespeed_seedance_20_t2v_duration
+    ds_raw = duration_seconds.strip()
+    if ds_raw:
+        ds_effective = max(4, min(15, int(ds_raw)))
+
+    seed_prompt, prompt_source = await build_seedance_t2v_prompt(
+        user_brief=prompt,
+        n_model_images=n_model,
+        n_outfit_images=n_outfit,
+        n_motion_videos=len(ref_videos),
+        motion_summary=motion_summary,
+        model_profile_text=(sm.profile_text or "").strip() or None,
+        negative=negative_prompt,
+        output_aspect=ar_t2v or output_aspect,
+        duration_seconds=ds_effective,
+    )
+
     cost = apply_studio_credit_cost(plan, settings.credit_cost_studio_motion_control)
     billing = await ensure_can_consume_credits(session, user, cost)
 
-    effective_motion_summary: str | None = row.motion_video_prompt_auto
-    want_auto_clip = (
-        _truthy_wavespeed_flag(auto_motion_prompt)
-        and bool(mv_id)
-        and vpath is not None
-        and vpath.is_file()
-        and _CLIP_MOTION_MARKER not in (row.motion_video_prompt_auto or "")
-        and _GROK_MOTION_MARKER not in (row.motion_video_prompt_auto or "")
-        and not settings.studio_grok_motion_timeline_enabled
-    )
-    if want_auto_clip:
-        try:
-            llm_cr = studio_llm_credentials(plan=plan, llm_row=None)
-            frames = await anyio.to_thread.run_sync(
-                lambda vp=vpath: extract_video_sample_frames_jpeg(vp, max_frames=4)
-            )
-            clip_summary_txt = await describe_motion_video_frames_openai(
-                frames_jpeg=frames,
-                credentials=llm_cr,
-            )
-            merged_txt = (
-                _merge_clip_motion_into_studio_generation_prompt(
-                    row.motion_video_prompt_auto,
-                    clip_summary_txt or "",
-                ).strip()
-            )
-            if merged_txt:
-                row.motion_video_prompt_auto = merged_txt
-                effective_motion_summary = merged_txt
-                session.add(row)
-        except Exception as e:
-            log.warning("render-video: auto clip motion describe failed: %s", e)
-
-    img_tok = create_generation_image_access_token(user_id=oid, generation_id=gid, days=30)
-    image_pub = f"{pub}/api/studio/public-generation-image?t={quote(img_tok, safe='')}"
-    video_pub = ""
-    if mv_id and vpath is not None and vpath.is_file():
-        vid_tok = create_motion_video_access_token(user_id=oid, file_id=mv_id)
-        video_pub = f"{pub}/api/studio/public-motion-video?t={quote(vid_tok, safe='')}"
-
-    keep_snd = _truthy_wavespeed_flag(keep_original_sound)
-
-    provider = settings.studio_motion_video_provider
-    seedance_duration_request: int | None = None
-    if provider == "seedance_i2v":
-        ds_raw = duration_seconds.strip()
-        if ds_raw:
-            seedance_duration_request = int(ds_raw)
-
-    seedance_duration_effective = settings.wavespeed_seedance_20_i2v_duration
-
     msg: str | None = None
     video_url: str | None = None
-    user_extra = prompt.strip()
-    motion_prompt = _build_wan_22_animate_prompt(
-        motion_summary=effective_motion_summary,
-        user_extra=user_extra,
-        negative=None,
-    )
-    neg = negative_prompt.strip()
-    provider_n = settings.studio_motion_video_provider
     try:
-        if provider_n == "wan":
-            if not video_pub.strip():
-                raise RuntimeError("Нужен файл референс-видео (шаг «Создать кадр» с загрузкой ролика).")
-            wan_prompt = _build_wan_22_animate_prompt(
-                motion_summary=effective_motion_summary,
-                user_extra=user_extra,
-                negative=negative_prompt,
-            )
-            video_url = await wan_22_animate_video_url(
-                api_key=ws_key,
-                image_url=image_pub,
-                video_url=video_pub,
-                prompt=wan_prompt,
-                mode=settings.wavespeed_wan_22_animate_mode,
-                resolution=settings.wavespeed_wan_22_animate_resolution,
-                seed=settings.wavespeed_wan_22_animate_seed,
-            )
-        elif provider_n == "seedance_i2v":
-            seed_txt = (motion_prompt or "").strip()
-            if neg:
-                seed_txt = f"{seed_txt}\nAvoid: {neg}" if seed_txt else f"Avoid: {neg}"
-            if not seed_txt.strip():
-                seed_txt = (
-                    "Natural cinematic motion; preserve the subject from the reference image; "
-                    "smooth camera work; expressive performance."
-                )
-            ar_i2v = aspect_ratio_for_seedance_i2v(row.output_aspect)
-            seedance_duration_effective = (
-                seedance_duration_request
-                if seedance_duration_request is not None
-                else settings.wavespeed_seedance_20_i2v_duration
-            )
-            seedance_duration_effective = max(4, min(15, int(seedance_duration_effective)))
-            video_url = await seedance_20_image_to_video_url(
-                api_key=ws_key,
-                image_url=image_pub,
-                prompt=seed_txt,
-                aspect_ratio=ar_i2v,
-                resolution=settings.wavespeed_seedance_20_i2v_resolution,
-                duration=seedance_duration_effective,
-                generate_audio=keep_snd,
-            )
-        else:
-            if not video_pub.strip():
-                raise RuntimeError("Нужен файл референс-видео (шаг «Создать кадр» с загрузкой ролика).")
-            video_url = await kling_motion_control_video_url(
-                api_key=ws_key,
-                image_url=image_pub,
-                video_url=video_pub,
-                character_orientation=orient,
-                prompt=(motion_prompt or ""),
-                negative_prompt=neg,
-                keep_original_sound=keep_snd,
-            )
+        video_url = await seedance_20_text_to_video_url(
+            api_key=ws_key,
+            prompt=seed_prompt,
+            reference_images=ref_images or None,
+            reference_videos=ref_videos or None,
+            aspect_ratio=ar_t2v,
+            resolution=settings.wavespeed_seedance_20_t2v_resolution,
+            duration=ds_effective,
+            generate_audio=_truthy_wavespeed_flag(generate_audio),
+        )
     except RuntimeError as e:
         msg = str(e)
 
@@ -3445,7 +3453,8 @@ async def _studio_job_execute_motion_render_video(
             session.add(
                 StudioMotionRender(
                     user_id=oid,
-                    studio_generation_id=gid,
+                    studio_model_id=mid,
+                    studio_generation_id=outfit_gen_id,
                     video_url=vu,
                 )
             )
@@ -3457,24 +3466,27 @@ async def _studio_job_execute_motion_render_video(
         "studio_motion_control",
         cost,
         {
-            "generation_id": gid,
-            "motion_video_file_id": mv_id,
-            "character_orientation": orient,
-            "motion_video_provider": provider_n,
-            "kling_motion_path": settings.wavespeed_kling_motion_control_path,
-            "wan_22_animate": settings.wavespeed_wan_22_animate_path,
-            "wan_22_animate_mode": settings.wavespeed_wan_22_animate_mode,
-            "seedance_20_i2v_path": settings.wavespeed_seedance_20_i2v_path,
-            "seedance_20_i2v_resolution": settings.wavespeed_seedance_20_i2v_resolution,
-            "seedance_20_i2v_duration": seedance_duration_effective,
-            "seedance_20_i2v_duration_requested": seedance_duration_request,
+            "studio_model_id": mid,
+            "outfit_generation_id": outfit_gen_id,
+            "motion_video_file_id": mv_id or None,
+            "motion_video_provider": "seedance_t2v",
+            "seedance_20_t2v_path": settings.wavespeed_seedance_20_t2v_path,
+            "seedance_20_t2v_resolution": settings.wavespeed_seedance_20_t2v_resolution,
+            "seedance_20_t2v_duration": ds_effective,
+            "reference_images": len(ref_images),
+            "reference_videos": len(ref_videos),
+            "seedance_t2v_prompt_source": prompt_source,
+            "seedance_t2v_prompt_chars": len(seed_prompt),
             "ok": bool(video_url),
         },
     )
     await session.commit()
 
+    if not video_url and msg:
+        raise RuntimeError(msg)
+
     return StudioMotionVideoOut(
         video_url=video_url,
         message=msg,
-        motion_video_prompt_auto=(effective_motion_summary or "").strip() or None,
+        motion_video_prompt_auto=seed_prompt[:4000] if seed_prompt else None,
     ).model_dump()

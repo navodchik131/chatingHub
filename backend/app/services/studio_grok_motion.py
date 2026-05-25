@@ -498,3 +498,102 @@ async def grok_two_step_motion_prompt_for_studio(
 
 def grok_motion_api_configured() -> bool:
     return bool((settings.grok_api_key or "").strip() or (settings.openai_api_key or "").strip())
+
+
+def _seedance_image_tag_range(n_model: int, n_outfit: int) -> str:
+    parts: list[str] = []
+    if n_model > 0:
+        if n_model == 1:
+            parts.append("@Image1 = character identity (face, body, hair from model reference sheet(s))")
+        else:
+            parts.append(
+                f"@Image1–@Image{n_model} = same character identity across model reference sheet(s); "
+                "use these tags wherever the scene mentions the model's look"
+            )
+    if n_outfit > 0:
+        idx = n_model + 1
+        parts.append(f"@Image{idx} = outfit / garment reference (match clothing when describing wardrobe)")
+    return "; ".join(parts)
+
+
+async def grok_expand_seedance_t2v_prompt(
+    *,
+    user_brief: str,
+    n_model_images: int,
+    n_outfit_images: int = 0,
+    n_motion_videos: int = 0,
+    motion_notes: str | None = None,
+    model_profile_text: str | None = None,
+    negative: str | None = None,
+    output_aspect: str | None = None,
+    duration_seconds: int = 5,
+    max_chars: int | None = None,
+    credentials: StudioOpenAiCredentials | None = None,
+) -> str:
+    """
+    Разворачивает краткий запрос пользователя в кинематографический промпт Seedance T2V
+    с @ImageN / @VideoN (English). Обрезает до max_chars.
+    """
+    from app.services.studio_seedance_t2v import truncate_seedance_t2v_prompt
+
+    brief = (user_brief or "").strip()
+    if not brief:
+        raise RuntimeError("Пустой запрос для Grok.")
+
+    creds = credentials or grok_motion_studio_credentials()
+    model = _grok_fps_stills_model()
+    lim = max_chars if max_chars is not None else settings.studio_seedance_t2v_prompt_max_chars
+
+    ref_lines: list[str] = []
+    if n_model_images > 0 or n_outfit_images > 0:
+        ref_lines.append(_seedance_image_tag_range(n_model_images, n_outfit_images))
+    if n_motion_videos > 0:
+        ref_lines.append("@Video1 = motion / pacing / body dynamics reference (follow timing and gestures)")
+    ref_block = "\n".join(ref_lines) if ref_lines else "No reference tags (text-only scene)."
+
+    profile = (model_profile_text or "").strip()
+    profile_block = profile if profile else "(empty — derive persona only from @Image references)"
+
+    notes = (motion_notes or "").strip()
+    notes_block = notes if notes else "(none)"
+
+    neg = (negative or "").strip()
+    neg_line = f"Avoid: {neg}" if neg else "(none specified)"
+
+    aspect = (output_aspect or "16:9").strip() or "16:9"
+    dur = max(4, min(15, int(duration_seconds)))
+
+    user_instruction = (
+        "You write a single Seedance 2.0 Text-to-Video prompt in ENGLISH.\n\n"
+        f"USER_BRIEF (any language — interpret intent):\n{brief}\n\n"
+        f"REFERENCE_TAG_RULES (order matches API reference_images / reference_videos arrays):\n{ref_block}\n\n"
+        f"TARGET_MODEL_PROFILE:\n{profile_block}\n\n"
+        f"MOTION_NOTES_FROM_REFERENCE_VIDEO (optional):\n{notes_block}\n\n"
+        f"NEGATIVE:\n{neg_line}\n\n"
+        f"OUTPUT_SPECS: aspect_ratio {aspect}, duration {dur} seconds, cinematic, native audio.\n\n"
+        "RULES:\n"
+        "1) Output ONLY the final video prompt text — no preamble, no markdown fences.\n"
+        f"2) Hard limit: entire output MUST be at most {lim} characters.\n"
+        "3) Use @Image1, @Image2, … exactly as assigned above wherever you describe identity, face, body, hair, or outfit.\n"
+        "4) If @Video1 exists, reference it for motion/choreography; do not describe the reference video's original actor identity.\n"
+        "5) Model reference sheets may show neutral base clothing — describe the wardrobe from USER_BRIEF or @Image outfit ref.\n"
+        "6) Include camera, lighting, mood, and action with director-level detail; keep one continuous scene for the clip duration.\n"
+        "7) Do not invent extra @Image or @Video tags beyond the ranges given.\n"
+    )
+
+    out = await chat_completion_openai_compatible_text(
+        model=model,
+        messages=[
+            {"role": "system", "content": _TIMELINE_SYSTEM_EN},
+            {"role": "user", "content": user_instruction},
+        ],
+        max_tokens=4096,
+        temperature=0.35,
+        credentials=creds,
+        timeout_seconds=min(600.0, float(settings.studio_archive_download_timeout_seconds) + 120.0),
+    )
+    text = truncate_seedance_t2v_prompt((out or "").strip(), max_chars=lim)
+    if len(text) < 40:
+        raise RuntimeError("Grok вернул слишком короткий промпт для Seedance T2V.")
+    log.info("grok seedance t2v prompt chars=%s", len(text))
+    return text

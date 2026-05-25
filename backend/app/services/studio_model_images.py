@@ -8,11 +8,12 @@ from fastapi import HTTPException
 if TYPE_CHECKING:
     from app.db.models import UserStudioModelImage
 
-STUDIO_MODEL_IMAGE_KINDS = frozenset({"face", "body", "genitals", "other"})
+STUDIO_MODEL_IMAGE_KINDS = frozenset({"face", "body", "genitals", "turnaround", "other"})
 
-_KIND_ORDER = {"face": 0, "body": 1, "genitals": 2, "other": 3}
+_KIND_ORDER = {"turnaround": 0, "face": 1, "body": 2, "genitals": 3, "other": 4}
 
 _RU_LABEL = {
+    "turnaround": "развёртка / character sheet (лицо, ракурсы)",
     "face": "лицо и идентичность",
     "body": "телосложение и тело целиком",
     "genitals": "интимная анатомия (референс для соответствующих зон)",
@@ -32,7 +33,7 @@ def assert_studio_image_kind(raw: object) -> str:
     if s not in STUDIO_MODEL_IMAGE_KINDS:
         raise HTTPException(
             status_code=400,
-            detail="kind: ожидается одно из: face, body, genitals, other",
+            detail="kind: ожидается одно из: face, body, genitals, turnaround, other",
         )
     return s
 

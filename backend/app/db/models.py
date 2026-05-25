@@ -455,9 +455,14 @@ class StudioMotionRender(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
-    studio_generation_id: Mapped[int] = mapped_column(
-        ForeignKey("studio_generations.id", ondelete="CASCADE"),
-        nullable=False,
+    studio_generation_id: Mapped[int | None] = mapped_column(
+        ForeignKey("studio_generations.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    studio_model_id: Mapped[int | None] = mapped_column(
+        ForeignKey("user_studio_models.id", ondelete="SET NULL"),
+        nullable=True,
         index=True,
     )
     video_url: Mapped[str] = mapped_column(Text, nullable=False)

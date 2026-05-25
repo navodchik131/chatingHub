@@ -95,6 +95,8 @@ class Settings(BaseSettings):
         le=50 * 1024 * 1024 - 4096,
     )
     grok_motion_full_video_timeout_seconds: float = Field(default=900.0, ge=60.0, le=2700.0)
+    # Seedance T2V: макс. длина финального промпта (символов) после Grok / сборки
+    studio_seedance_t2v_prompt_max_chars: int = Field(default=3000, ge=500, le=5000)
     credit_cost_studio_prompt_refine: int = Field(default=2)
     image_studio_skeleton_path: str = Field(default="data/prompts/image_studio_skeleton.txt")
     image_studio_skeleton_inline: str = Field(default="")
@@ -158,25 +160,27 @@ class Settings(BaseSettings):
     )
     wavespeed_upscale_sync: bool = Field(default=True)
     credit_cost_studio_upscale: int = Field(default=1)
-    # Студия «видео» /render-video: kling | wan | seedance_i2v
-    studio_motion_video_provider: str = Field(default="kling")
-    # Kling Motion Control — см. WAVESPEED_KLING_MOTION_*
+    # Студия «видео»: только ByteDance Seedance 2.0 Text-to-Video
+    # https://wavespeed.ai/models/bytedance/seedance-2.0/text-to-video
+    wavespeed_seedance_20_t2v_path: str = Field(
+        default="/api/v3/bytedance/seedance-2.0/text-to-video",
+    )
+    wavespeed_seedance_20_t2v_resolution: str = Field(default="720p")
+    wavespeed_seedance_20_t2v_duration: int = Field(default=5, ge=4, le=15)
+    wavespeed_seedance_20_t2v_web_search: bool = Field(default=False)
+    credit_cost_studio_motion_control: int = Field(default=10, ge=0)
+    # Legacy (не используется рендером видео; оставлено для совместимости .env)
+    studio_motion_video_provider: str = Field(default="seedance_t2v")
     wavespeed_kling_motion_control_path: str = Field(
         default="/api/v3/kwaivgi/kling-v3.0-pro/motion-control",
     )
     wavespeed_kling_motion_sync: bool = Field(default=True)
-    credit_cost_studio_motion_control: int = Field(default=10, ge=0)
-    # Альтернатива: WAN 2.2 Animate (replace / animate) — STUDIO_MOTION_VIDEO_PROVIDER=wan
     wavespeed_wan_22_animate_path: str = Field(
         default="/api/v3/wavespeed-ai/wan-2.2/animate",
     )
-    # replace | animate (док: replace = подмена исполнителя в видео, то же движение/камера)
     wavespeed_wan_22_animate_mode: str = Field(default="replace")
-    # 480p | 720p
     wavespeed_wan_22_animate_resolution: str = Field(default="720p")
     wavespeed_wan_22_animate_seed: int = Field(default=-1)
-    # Студия «видео»: ByteDance Seedance 2.0 Image-to-Video (prompt + стартовый кадр; движение задаётся текстом)
-    # https://wavespeed.ai/models/bytedance/seedance-2.0/image-to-video
     wavespeed_seedance_20_i2v_path: str = Field(
         default="/api/v3/bytedance/seedance-2.0/image-to-video",
     )
@@ -323,12 +327,13 @@ class Settings(BaseSettings):
     @field_validator("studio_motion_video_provider", mode="after")
     @classmethod
     def _normalize_motion_video_provider(cls, v: str) -> str:
-        s = (v or "kling").strip().lower().replace("-", "_")
-        if s == "wan":
-            return "wan"
-        if s in ("seedance_i2v", "seedance", "i2v", "seedance20_i2v"):
-            return "seedance_i2v"
-        return "kling"
+        return "seedance_t2v"
+
+    @field_validator("wavespeed_seedance_20_t2v_resolution", mode="after")
+    @classmethod
+    def _seedance_t2v_resolution(cls, v: str) -> str:
+        s = (v or "720p").strip().lower()
+        return s if s in ("480p", "720p", "1080p") else "720p"
 
     @field_validator("wavespeed_seedance_20_i2v_resolution", mode="after")
     @classmethod

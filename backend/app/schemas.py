@@ -205,7 +205,8 @@ class StudioMotionDrivingVideoUploadOut(BaseModel):
 class StudioMotionRenderOut(BaseModel):
     id: int
     created_at: datetime
-    studio_generation_id: int
+    studio_generation_id: int | None = None
+    studio_model_id: int | None = None
     video_url: str
     frame_image_url: str
 
