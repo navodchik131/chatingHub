@@ -137,6 +137,7 @@ from app.services.studio_model_images import (
     assert_studio_image_kind,
     model_images_for_wavespeed_profile,
     model_reference_photos_block,
+    select_grok_compose_wavespeed_identity_images,
     select_wan_identity_images_with_pose_ref,
     sort_model_images_for_wan_identity,
     parse_image_export_selfies_json,
@@ -438,6 +439,15 @@ def _studio_refine_wavespeed_preflight(
             raise HTTPException(
                 status_code=400,
                 detail="В режиме «Grok: сцена» загрузите референс сцены (поза, свет, кадр).",
+            )
+        id_for_ws = select_grok_compose_wavespeed_identity_images(imgs_model)
+        if not id_for_ws:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "В режиме «Grok: сцена» у модели нужна развёртка (turnaround) "
+                    "или снимок лица (face) — для удержания внешности в WaveSpeed."
+                ),
             )
     return ws_key
 
@@ -2438,8 +2448,15 @@ async def _studio_job_execute_refine_prompt(
 
             if not wavespeed_message:
                 attach_model_urls = False
+                grok_ws_identity: list[UserStudioModelImage] = []
                 if mode_n == "grok_compose":
-                    attach_model_urls = False
+                    grok_ws_identity = select_grok_compose_wavespeed_identity_images(
+                        imgs_for_ws,
+                        pose_reference_nude=reference_pose_is_nude_or_minimal_coverage(
+                            reference_scene
+                        ),
+                    )
+                    attach_model_urls = bool(grok_ws_identity)
                 elif mode_n == "model":
                     attach_model_urls = bool(imgs_model)
                 elif mode_n == "face_swap":
@@ -2448,7 +2465,9 @@ async def _studio_job_execute_refine_prompt(
                     attach_model_urls = bool(sm_loaded and imgs_model)
 
                 if attach_model_urls:
-                    if wave_profile_n == "nsfw" and user_pose_ref_prepended:
+                    if mode_n == "grok_compose":
+                        imgs_ws_order = grok_ws_identity
+                    elif wave_profile_n == "nsfw" and user_pose_ref_prepended:
                         imgs_ws_order = select_wan_identity_images_with_pose_ref(
                             imgs_for_ws,
                             max_count=3,

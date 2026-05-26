@@ -137,21 +137,23 @@ _WAN_COMPACT_POSE_PREFIX = (
 )
 
 _GROK_COMPOSED_WAN_PREFIX = (
-    "[GROK_SCENE_COMPOSE] Image 1 (if present) is **pose/framing/light/wardrobe lock only** — "
-    "do **not** copy face, skin tone, hair, body mass, tattoos, or intimate anatomy from it. "
-    "Subject identity is defined **only** in the English brief below.\n\n"
+    "[GROK_SCENE_COMPOSE] **Image 1** = user pose/scene reference — pose geometry, camera, framing, "
+    "background, environmental light, and wardrobe/body coverage ONLY; do **not** copy identity from image 1. "
+    "**Image 2** = model character sheet (turnaround) — face shape, hair, skin tone, body proportions; "
+    "do **not** copy neutral studio outfit, pose, or framing from image 2. "
+    "The English brief below (from Grok) reinforces identity; image 2 + brief win over image 1 for WHO.\n\n"
 )
 
 _GROK_COMPOSED_NANO_PREFIX = (
-    "[GROK_SCENE_COMPOSE — text-only identity] The attached image (when present) locks **pose, camera, "
-    "framing, background, environmental light, and wardrobe coverage** only. "
-    "Face, hair, skin, body proportions, and intimate anatomy must match **only** the English brief below — "
-    "never the incidental person in the last image.\n\n"
+    "[GROK_SCENE_COMPOSE] **Earlier image(s)** = model character sheet — identity WHO (face, hair, skin, "
+    "body proportions). **Last** image = pose/framing/light/wardrobe lock only — never copy donor identity "
+    "from the last image. English brief below aligns scene with Grok output.\n\n"
 )
 
 _GROK_COMPOSED_POSE_LAST_SUFFIX = (
-    "\n\n[LAST_INPUT_IMAGE] The **last** image locks pose geometry, crop edges, gaze, garments/nudity zones, "
-    "and light-on-body pattern. Ignore identity on that image."
+    "\n\n[LAST_INPUT_IMAGE — POSE_REF] The **last** image locks pose geometry, crop, gaze, garments/nudity zones, "
+    "and light-on-body pattern. Face and skin must match the character sheet image(s) before it and the brief — "
+    "not the incidental person on this last image."
 )
 
 _WAN_COMPACT_NO_FACE_PREFIX = (

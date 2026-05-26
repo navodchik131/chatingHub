@@ -145,6 +145,30 @@ def select_wan_identity_images_with_pose_ref(
     return sort_model_images_for_wan_identity(picked)[:cap]
 
 
+def select_grok_compose_wavespeed_identity_images(
+    imgs: list[UserStudioModelImage],
+    *,
+    pose_reference_nude: bool = False,
+) -> list[UserStudioModelImage]:
+    """
+    Режим «Grok: сцена»: в WaveSpeed одна identity-картинка — развёртка (приоритет) или face.
+    При nude-рефе позы — только face, без clothed turnaround.
+    """
+    if not imgs:
+        return []
+    sorted_imgs = sort_model_images_for_studio(imgs)
+    if pose_reference_nude:
+        for im in sorted_imgs:
+            if (im.image_kind or "other").lower() == "face":
+                return [im]
+        return []
+    for kind in ("turnaround", "face"):
+        for im in sorted_imgs:
+            if (im.image_kind or "other").lower() == kind:
+                return [im]
+    return []
+
+
 def model_images_for_wavespeed_profile(
     imgs_sorted: list[UserStudioModelImage],
     wave_profile: str,

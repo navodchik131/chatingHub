@@ -9,6 +9,7 @@ from app.services.studio_grok_scene_compose import (
     _parse_grok_compose_json,
     collect_model_images_for_grok_compose,
 )
+from app.services.studio_model_images import select_grok_compose_wavespeed_identity_images
 
 
 def _im(kind: str, id_: int = 1) -> UserStudioModelImage:
@@ -39,6 +40,20 @@ def test_collect_regular_skips_genitals() -> None:
     labels = [lb for lb, _ in labeled]
     assert "ANATOMY_REFERENCE_NUDE" not in labels
     assert "CHARACTER_SHEET_CLOTHED" in labels
+
+
+def test_wavespeed_identity_prefers_turnaround() -> None:
+    imgs = [_im("face", 1), _im("turnaround", 2)]
+    picked = select_grok_compose_wavespeed_identity_images(imgs)
+    assert len(picked) == 1
+    assert picked[0].image_kind == "turnaround"
+
+
+def test_wavespeed_identity_nude_ref_face_only() -> None:
+    imgs = [_im("turnaround", 1), _im("face", 2)]
+    picked = select_grok_compose_wavespeed_identity_images(imgs, pose_reference_nude=True)
+    assert len(picked) == 1
+    assert picked[0].image_kind == "face"
 
 
 def test_parse_grok_compose_json() -> None:

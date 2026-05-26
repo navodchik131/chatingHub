@@ -5048,8 +5048,8 @@ export default function App() {
                 className="muted"
                 style={{ display: 'block', marginTop: '0.35rem', fontSize: '0.85rem' }}
               >
-                В WaveSpeed всегда уходит только ваш референс сцены; листы модели видит Grok при
-                сборке промпта.
+                В WaveSpeed: ваш референс сцены + развёртка модели (лицо); остальные листы — только
+                для Grok при сборке промпта.
               </p>
             ) : studioMode === 'model' || studioMode === 'no_face' ? (
               <label
