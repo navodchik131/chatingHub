@@ -40,6 +40,8 @@ RUN pip install --upgrade pip setuptools wheel \
     && pip install --no-cache-dir --prefer-binary -r requirements.txt
 
 COPY backend/ ./
+# Промпты вне тома data/ (compose монтирует chating_app_data на /app/backend/data).
+COPY backend/data/prompts/ ./_bundled_prompts/
 COPY --from=frontend-build /app/frontend/dist ../frontend/dist
 
 EXPOSE 8080

@@ -53,18 +53,27 @@ def grok_scene_compose_configured() -> bool:
 
 
 def load_grok_scene_compose_system() -> str:
-    rel = (settings.grok_scene_compose_system_path or "").strip() or "data/prompts/grok_scene_compose_system.txt"
-    path = (BACKEND_DIR / rel).resolve()
-    if path.is_file():
-        t = path.read_text(encoding="utf-8").strip()
-        if t:
-            return t
+    """data/prompts (том Docker) → _bundled_prompts (в образе) → GROK_SCENE_COMPOSE_SYSTEM_INLINE."""
+    configured = (settings.grok_scene_compose_system_path or "").strip()
+    candidates: list[Path] = []
+    if configured:
+        candidates.append((BACKEND_DIR / configured).resolve())
+    else:
+        name = "grok_scene_compose_system.txt"
+        candidates.append((BACKEND_DIR / "data" / "prompts" / name).resolve())
+        candidates.append((BACKEND_DIR / "_bundled_prompts" / name).resolve())
+    for path in candidates:
+        if path.is_file():
+            t = path.read_text(encoding="utf-8").strip()
+            if t:
+                return t
     inline = (settings.grok_scene_compose_system_inline or "").strip()
     if inline:
         return inline
     raise RuntimeError(
-        "Промпт Grok scene compose пуст: заполните backend/data/prompts/grok_scene_compose_system.txt "
-        "или GROK_SCENE_COMPOSE_SYSTEM_INLINE"
+        "Промпт Grok scene compose пуст: добавьте grok_scene_compose_system.txt в образ "
+        "(пересборка api), скопируйте в /app/backend/data/prompts на томе или задайте "
+        "GROK_SCENE_COMPOSE_SYSTEM_INLINE"
     )
 
 
