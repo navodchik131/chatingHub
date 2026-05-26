@@ -291,6 +291,66 @@ async def init_db() -> None:
         await conn.run_sync(_migrate_studio_jobs_table)
         await conn.run_sync(_migrate_studio_generation_pipeline_phase_a)
         await conn.run_sync(_migrate_studio_motion_render_model_link)
+        await conn.run_sync(_migrate_workspace_member_studio_models)
+        await conn.run_sync(_migrate_conversation_studio_model_id)
+
+
+def _migrate_workspace_member_studio_models(sync_conn) -> None:
+    from sqlalchemy import inspect
+
+    insp = inspect(sync_conn)
+    if insp.has_table("workspace_member_studio_models"):
+        return
+    if sync_conn.dialect.name == "sqlite":
+        sync_conn.execute(
+            text(
+                """
+                CREATE TABLE workspace_member_studio_models (
+                    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                    member_user_id INTEGER NOT NULL,
+                    studio_model_id INTEGER NOT NULL,
+                    FOREIGN KEY(member_user_id) REFERENCES users (id) ON DELETE CASCADE,
+                    FOREIGN KEY(studio_model_id) REFERENCES user_studio_models (id) ON DELETE CASCADE,
+                    UNIQUE (member_user_id, studio_model_id)
+                )
+                """
+            )
+        )
+        sync_conn.execute(
+            text(
+                "CREATE INDEX ix_wmsm_member_user_id "
+                "ON workspace_member_studio_models (member_user_id)"
+            )
+        )
+        sync_conn.execute(
+            text(
+                "CREATE INDEX ix_wmsm_studio_model_id "
+                "ON workspace_member_studio_models (studio_model_id)"
+            )
+        )
+    else:
+        from app.db.models import WorkspaceMemberStudioModel
+
+        WorkspaceMemberStudioModel.__table__.create(sync_conn, checkfirst=True)
+
+
+def _migrate_conversation_studio_model_id(sync_conn) -> None:
+    from sqlalchemy import inspect
+
+    insp = inspect(sync_conn)
+    if not insp.has_table("conversations"):
+        return
+    cols = {c["name"] for c in insp.get_columns("conversations")}
+    if "studio_model_id" not in cols:
+        sync_conn.execute(
+            text("ALTER TABLE conversations ADD COLUMN studio_model_id INTEGER")
+        )
+        sync_conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_conversations_studio_model_id "
+                "ON conversations(studio_model_id)"
+            )
+        )
 
 
 def _migrate_studio_motion_render_model_link(sync_conn) -> None:

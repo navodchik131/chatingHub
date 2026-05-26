@@ -27,9 +27,26 @@ _SCENE_FROM_REF_LITERAL = "from_pose_reference_input_image_only"
 
 _COMPACT_MUST_KEEP = [
     "One real person; face, skin, hair, and body proportions from identity_reference and model reference photos (images 2+) on all visible skin",
-    "Pose, outfit, framing, background, and scene lighting from pose reference (image 1) only — bust/hips/waist/glute volume from MODEL, not donor",
+    "Pose, outfit, framing, background, and scene lighting from pose reference (image 1) and pose_reference_notes — never copy pose or backdrop from identity photos",
     "Unified skin grain face-to-body; scene light direction on MODEL skin, not donor complexion",
 ]
+
+_COMPACT_IDENTITY_FIELD_MAX = 420
+_COMPACT_SCENE_NOTES_MAX = 720
+
+_SCENE_NOTE_KEYS = (
+    "POSE:",
+    "FRAMING:",
+    "HEAD_GEOMETRY",
+    "CAMERA_",
+    "CLOTHING",
+    "BACKGROUND",
+    "LIGHT_ON",
+    "CAPTURE_TYPE",
+    "VIEW_DIRECTION",
+    "SHOT_TYPE",
+    "BODY_ORIENTATION",
+)
 
 # Слова сцены в always_avoid профиля — не тащим в negative (конфликт с балконом, закатом и т.д.)
 _SCENE_AVOID_RE = re.compile(
@@ -183,6 +200,44 @@ def _as_text(val: Any) -> str:
     return ""
 
 
+def _truncate_identity_field(text: str, *, max_len: int = _COMPACT_IDENTITY_FIELD_MAX) -> str:
+    s = (text or "").strip()
+    if len(s) <= max_len:
+        return s
+    return s[: max_len - 1].rstrip() + "…"
+
+
+def compact_scene_notes_from_reference(description: str | None) -> str:
+    """Короткая выжимка REFERENCE_IMAGE для compact JSON (поза в тексте + image 1)."""
+    raw = (description or "").strip()
+    if not raw:
+        return ""
+    lines: list[str] = []
+    for line in raw.splitlines():
+        t = line.strip()
+        if not t:
+            continue
+        upper = t.upper()
+        if any(k in upper for k in _SCENE_NOTE_KEYS):
+            lines.append(t)
+    text = " ".join(lines) if lines else raw
+    return _truncate_identity_field(text, max_len=_COMPACT_SCENE_NOTES_MAX)
+
+
+def _compact_profile_identity_fields(prof: dict[str, Any] | None) -> dict[str, str]:
+    """Сжатый identity для WAN compact — не весь вложенный профиль в одну строку."""
+    if not prof:
+        return {}
+    keywords = _as_text(prof.get("identity_lock_keywords"))
+    full = _profile_identity_fields(prof)
+    if keywords:
+        full["subject"] = _truncate_identity_field(keywords, max_len=300)
+    for key in ("face", "hair", "body_proportions"):
+        if full.get(key):
+            full[key] = _truncate_identity_field(full[key])
+    return full
+
+
 def _profile_identity_fields(prof: dict[str, Any] | None) -> dict[str, str]:
     if not prof:
         return {}
@@ -313,12 +368,14 @@ def coerce_compact_pose_positive(
     data: dict[str, Any],
     *,
     model_profile_text: str | None,
+    reference_scene_description: str | None = None,
 ) -> dict[str, Any]:
     """
-    Жёстко собирает compact JSON: сцена только литералы, identity (включая фигуру) — из профиля/LLM.
+    Жёстко собирает compact JSON: сцена — image 1 + краткие pose_reference_notes;
+    identity (включая фигуру) — сжато из профиля/LLM.
     """
     prof_root = _parse_model_profile_root(model_profile_text)
-    prof_id = _profile_identity_fields(prof_root)
+    prof_id = _compact_profile_identity_fields(prof_root)
     llm_id = _llm_identity_fields(data)
 
     identity = {
@@ -352,12 +409,15 @@ def coerce_compact_pose_positive(
         mood = _as_text(tv.get("mood"))
         life = _as_text(tv.get("life_in_frame") or tv.get("intimacy_level") or tv.get("intimacy"))
 
+    scene_notes = compact_scene_notes_from_reference(reference_scene_description)
+    scene_pose = scene_notes or _SCENE_FROM_REF_LITERAL
     return {
         "identity_reference": identity,
         "scene_from_reference_image": {
-            "pose_and_composition": _SCENE_FROM_REF_LITERAL,
-            "wardrobe_and_environment": _SCENE_FROM_REF_LITERAL,
-            "lighting_and_camera": _SCENE_FROM_REF_LITERAL,
+            "pose_and_composition": scene_pose,
+            "wardrobe_and_environment": scene_pose,
+            "lighting_and_camera": scene_pose,
+            "pose_reference_notes": scene_notes,
         },
         "user_overrides": user_overrides,
         "photography_style": {
@@ -426,6 +486,7 @@ def prepare_positive_prompt_json(
     *,
     brief_mode: str,
     model_profile_text: str | None,
+    reference_scene_description: str | None = None,
 ) -> tuple[str, str]:
     """
     Возвращает (positive_json_str, negative_prompt_line).
@@ -443,7 +504,11 @@ def prepare_positive_prompt_json(
 
     mode = (brief_mode or "full").strip().lower()
     if mode == "compact_pose_image":
-        data = coerce_compact_pose_positive(data, model_profile_text=model_profile_text)
+        data = coerce_compact_pose_positive(
+            data,
+            model_profile_text=model_profile_text,
+            reference_scene_description=reference_scene_description,
+        )
 
     re_obj = load_canonical_realism_engine()
     if re_obj is not None:

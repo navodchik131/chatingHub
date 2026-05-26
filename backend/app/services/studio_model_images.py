@@ -83,6 +83,47 @@ def sort_model_images_for_wan_identity(
     return sorted(imgs, key=key)
 
 
+def select_wan_identity_images_with_pose_ref(
+    imgs: list[UserStudioModelImage],
+    *,
+    max_count: int = 3,
+) -> list[UserStudioModelImage]:
+    """
+    При pose ref = image 1 не отправляем все фото модели (развёртка + face + body…),
+    иначе WAN копирует нейтральный character sheet. Оставляем до max_count: face, затем body или turnaround.
+    """
+    if max_count <= 0:
+        return []
+    cap = max(1, min(5, int(max_count)))
+    by_kind: dict[str, list[UserStudioModelImage]] = {}
+    for im in imgs:
+        k = (im.image_kind or "other").lower()
+        by_kind.setdefault(k, []).append(im)
+
+    picked: list[UserStudioModelImage] = []
+
+    def take(kind: str) -> None:
+        if len(picked) >= cap:
+            return
+        for im in by_kind.get(kind, []):
+            if im not in picked:
+                picked.append(im)
+                return
+
+    take("face")
+    if len(picked) < cap:
+        if by_kind.get("body"):
+            take("body")
+        else:
+            take("turnaround")
+    if len(picked) < cap and "turnaround" not in { (im.image_kind or "").lower() for im in picked }:
+        take("turnaround")
+    if len(picked) < cap:
+        for kind in ("body", "other"):
+            take(kind)
+    return sort_model_images_for_wan_identity(picked)[:cap]
+
+
 def model_images_for_wavespeed_profile(
     imgs_sorted: list[UserStudioModelImage],
     wave_profile: str,

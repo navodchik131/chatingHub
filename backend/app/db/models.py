@@ -253,6 +253,12 @@ class Conversation(Base):
     outbound_lang: Mapped[str | None] = mapped_column(String(16), nullable=True)
     # file_id варианта фото профиля (Telegram), только для platform=telegram
     telegram_photo_file_id: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    """Модель студии для доступа операторов; NULL — диалог виден только владельцу."""
+    studio_model_id: Mapped[int | None] = mapped_column(
+        ForeignKey("user_studio_models.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     last_read_message_id: Mapped[int | None] = mapped_column(nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
@@ -322,6 +328,27 @@ class PushSubscription(Base):
     )
 
     user: Mapped[User] = relationship("User", back_populates="push_subscriptions")
+
+
+class WorkspaceMemberStudioModel(Base):
+    """Ручной allowlist: какие модели студии доступны участнику workspace."""
+
+    __tablename__ = "workspace_member_studio_models"
+    __table_args__ = (
+        UniqueConstraint(
+            "member_user_id",
+            "studio_model_id",
+            name="uq_wmsm_member_model",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    member_user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    studio_model_id: Mapped[int] = mapped_column(
+        ForeignKey("user_studio_models.id", ondelete="CASCADE"), index=True
+    )
 
 
 class UserStudioModel(Base):

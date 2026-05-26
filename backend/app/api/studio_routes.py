@@ -74,6 +74,13 @@ from app.services.workspace import (
     has_any_studio_access,
     workspace_owner_id,
 )
+from app.services.workspace_model_access import (
+    apply_studio_model_id_filter,
+    assert_studio_generation_access,
+    member_allowed_studio_model_ids,
+    require_studio_model_access,
+    require_workspace_owner,
+)
 from app.services.crypto_secret import decrypt_secret
 from app.services.studio_aspect import (
     aspect_presets_public,
@@ -125,6 +132,7 @@ from app.services.studio_model_images import (
     assert_studio_image_kind,
     model_images_for_wavespeed_profile,
     model_reference_photos_block,
+    select_wan_identity_images_with_pose_ref,
     sort_model_images_for_wan_identity,
     parse_image_export_selfies_json,
     parse_image_kinds_json,
@@ -747,6 +755,7 @@ async def api_list_motion_renders(
     assert_permission(user, PERM_STUDIO_GENERATE)
     oid = workspace_owner_id(user)
     take = int(limit) + 1
+    allowed = await member_allowed_studio_model_ids(session, user)
     stmt = (
         select(StudioMotionRender)
         .where(StudioMotionRender.user_id == oid)
@@ -754,6 +763,7 @@ async def api_list_motion_renders(
         .offset(int(skip))
         .limit(take)
     )
+    stmt = apply_studio_model_id_filter(stmt, StudioMotionRender.studio_model_id, allowed)
     rows = list((await session.execute(stmt)).scalars().all())
     has_more = len(rows) > limit
     rows = rows[:limit]
@@ -794,6 +804,7 @@ async def api_list_studio_generations(
     assert_permission(user, PERM_STUDIO_GENERATE)
     oid = workspace_owner_id(user)
     take = int(limit) + 1
+    allowed = await member_allowed_studio_model_ids(session, user)
     stmt = (
         select(StudioGeneration)
         .where(StudioGeneration.user_id == oid)
@@ -803,6 +814,7 @@ async def api_list_studio_generations(
         .offset(int(skip))
         .limit(take)
     )
+    stmt = apply_studio_model_id_filter(stmt, StudioGeneration.studio_model_id, allowed)
     rows = list((await session.execute(stmt)).scalars().all())
     has_more = len(rows) > limit
     rows = rows[:limit]
@@ -844,6 +856,7 @@ async def api_delete_studio_generation(
     row = await session.get(StudioGeneration, gen_id)
     if not row or row.user_id != oid:
         raise HTTPException(status_code=404, detail="Не найдено")
+    await assert_studio_generation_access(session, user, row.studio_model_id)
     rel = row.relative_path
     await session.delete(row)
     await session.commit()
@@ -869,6 +882,7 @@ async def api_upscale_studio_generation(
     row = await session.get(StudioGeneration, gen_id)
     if not row or row.user_id != oid:
         raise HTTPException(status_code=404, detail="Не найдено")
+    await assert_studio_generation_access(session, user, row.studio_model_id)
 
     pub = (settings.public_app_url or "").strip().rstrip("/")
     if not pub.lower().startswith("https://"):
@@ -1034,6 +1048,7 @@ async def api_studio_carousel(
     row = await session.get(StudioGeneration, gen_id)
     if not row or row.user_id != oid:
         raise HTTPException(status_code=404, detail="Не найдено")
+    await assert_studio_generation_access(session, user, row.studio_model_id)
 
     master_text = (row.refined_prompt or row.prompt_excerpt or "").strip()
     if len(master_text) < 80:
@@ -1207,12 +1222,14 @@ async def api_list_studio_models(
     if not has_any_studio_access(user):
         raise HTTPException(status_code=403, detail="Нет доступа к студии")
     oid = workspace_owner_id(user)
+    allowed = await member_allowed_studio_model_ids(session, user)
     stmt = (
         select(UserStudioModel)
         .where(UserStudioModel.user_id == oid)
         .options(selectinload(UserStudioModel.images))
         .order_by(UserStudioModel.id.desc())
     )
+    stmt = apply_studio_model_id_filter(stmt, UserStudioModel.id, allowed)
     rows = (await session.execute(stmt)).scalars().all()
     return [_studio_model_to_out(oid, m) for m in rows]
 
@@ -1225,6 +1242,7 @@ async def api_generate_model_profile(
 ) -> StudioModelProfileGenerateOut:
     """Собрать JSON model_profile по референс-фотографиям (внешность, не поза/сцена)."""
     assert_permission(user, PERM_STUDIO_MODELS)
+    require_workspace_owner(user)
     oid = workspace_owner_id(user)
     sub_b, llm_row, _ws_row, plan, _credits = await load_owner_studio_billing(
         session, oid
@@ -1292,6 +1310,7 @@ async def api_create_studio_model(
     user: User = Depends(get_current_user),
 ) -> UserStudioModelOut:
     assert_permission(user, PERM_STUDIO_MODELS)
+    require_workspace_owner(user)
     oid = workspace_owner_id(user)
     sub_b, _, _, _, _credits = await load_owner_studio_billing(session, oid)
     _require_studio_subscription(user, sub_b, credits_balance=_credits)
@@ -1366,9 +1385,7 @@ async def api_patch_studio_model(
     oid = workspace_owner_id(user)
     sub_b, _, _, _, _credits = await load_owner_studio_billing(session, oid)
     _require_studio_subscription(user, sub_b, credits_balance=_credits)
-    m = await _load_studio_model_owned(session, oid, model_id)
-    if not m:
-        raise HTTPException(status_code=404, detail="Модель не найдена")
+    m = await require_studio_model_access(session, user, model_id, load_images=True)
     data = body.model_dump(exclude_unset=True)
     if not data:
         raise HTTPException(status_code=400, detail="Нет полей для обновления")
@@ -1401,8 +1418,7 @@ async def api_patch_studio_model(
                 detail="Передайте export_lat и export_lon вместе или сбросьте оба (null).",
             )
     await session.commit()
-    m2 = await _load_studio_model_owned(session, oid, model_id)
-    assert m2 is not None
+    m2 = await require_studio_model_access(session, user, model_id, load_images=True)
     return _studio_model_to_out(oid, m2)
 
 
@@ -1419,9 +1435,7 @@ async def api_add_studio_model_images(
     oid = workspace_owner_id(user)
     sub_b, _, _, _, _credits = await load_owner_studio_billing(session, oid)
     _require_studio_subscription(user, sub_b, credits_balance=_credits)
-    m = await _load_studio_model_owned(session, oid, model_id)
-    if not m:
-        raise HTTPException(status_code=404, detail="Модель не найдена")
+    m = await require_studio_model_access(session, user, model_id, load_images=True)
     uploads = [u for u in (images or []) if u is not None]
     kinds_list = parse_image_kinds_json(image_kinds, len(uploads))
     selfies_list = parse_image_export_selfies_json(image_export_selfies, len(uploads), kinds_list)
@@ -1462,8 +1476,7 @@ async def api_add_studio_model_images(
             )
         )
     await session.commit()
-    m2 = await _load_studio_model_owned(session, oid, model_id)
-    assert m2 is not None
+    m2 = await require_studio_model_access(session, user, model_id, load_images=True)
     return _studio_model_to_out(oid, m2)
 
 
@@ -1479,9 +1492,7 @@ async def api_patch_studio_model_image(
     oid = workspace_owner_id(user)
     sub_b, _, _, _, _credits = await load_owner_studio_billing(session, oid)
     _require_studio_subscription(user, sub_b, credits_balance=_credits)
-    m = await session.get(UserStudioModel, model_id)
-    if not m or m.user_id != oid:
-        raise HTTPException(status_code=404, detail="Модель не найдена")
+    await require_studio_model_access(session, user, model_id)
     img = await session.get(UserStudioModelImage, image_id)
     if not img or img.studio_model_id != model_id:
         raise HTTPException(status_code=404, detail="Изображение не найдено")
@@ -1493,8 +1504,7 @@ async def api_patch_studio_model_image(
     if "export_selfie" in data:
         img.export_selfie = bool(data["export_selfie"])
     await session.commit()
-    m2 = await _load_studio_model_owned(session, oid, model_id)
-    assert m2 is not None
+    m2 = await require_studio_model_access(session, user, model_id, load_images=True)
     return _studio_model_to_out(oid, m2)
 
 
@@ -1509,9 +1519,7 @@ async def api_delete_studio_model_image(
     oid = workspace_owner_id(user)
     sub_b, _, _, _, _credits = await load_owner_studio_billing(session, oid)
     _require_studio_subscription(user, sub_b, credits_balance=_credits)
-    m = await session.get(UserStudioModel, model_id)
-    if not m or m.user_id != oid:
-        raise HTTPException(status_code=404, detail="Модель не найдена")
+    await require_studio_model_access(session, user, model_id)
     img = await session.get(UserStudioModelImage, image_id)
     if not img or img.studio_model_id != model_id:
         raise HTTPException(status_code=404, detail="Изображение не найдено")
@@ -1534,6 +1542,7 @@ async def api_delete_studio_model(
     user: User = Depends(get_current_user),
 ) -> dict:
     assert_permission(user, PERM_STUDIO_MODELS)
+    require_workspace_owner(user)
     oid = workspace_owner_id(user)
     sub_b, _, _, _, _credits = await load_owner_studio_billing(session, oid)
     _require_studio_subscription(user, sub_b, credits_balance=_credits)
@@ -1848,6 +1857,7 @@ async def _studio_job_execute_refine_prompt(
             session,
             owner_id=oid,
             generation_id=existing_gen_from_archive,
+            actor=user,
         )
         image_bytes = arch_bytes
         image_mime = arch_mime
@@ -1855,14 +1865,9 @@ async def _studio_job_execute_refine_prompt(
     sm_loaded: UserStudioModel | None = None
     model_profile_text: str | None = None
     if mid is not None:
-        stmt = (
-            select(UserStudioModel)
-            .where(UserStudioModel.id == mid, UserStudioModel.user_id == oid)
-            .options(selectinload(UserStudioModel.images))
+        sm_loaded = await require_studio_model_access(
+            session, user, mid, load_images=True
         )
-        sm_loaded = (await session.execute(stmt)).scalar_one_or_none()
-        if not sm_loaded:
-            raise HTTPException(status_code=404, detail="Модель не найдена")
         model_profile_text = (sm_loaded.profile_text or "").strip() or None
 
     if mode_n == "photo_edit" and not image_bytes:
@@ -2361,11 +2366,16 @@ async def _studio_job_execute_refine_prompt(
                     attach_model_urls = bool(sm_loaded and imgs_model)
 
                 if attach_model_urls:
-                    imgs_ws_order = (
-                        sort_model_images_for_wan_identity(imgs_for_ws)
-                        if wave_profile_n == "nsfw"
-                        else imgs_for_ws
-                    )
+                    if wave_profile_n == "nsfw" and user_pose_ref_prepended:
+                        imgs_ws_order = select_wan_identity_images_with_pose_ref(
+                            imgs_for_ws, max_count=3
+                        )
+                    else:
+                        imgs_ws_order = (
+                            sort_model_images_for_wan_identity(imgs_for_ws)
+                            if wave_profile_n == "nsfw"
+                            else imgs_for_ws
+                        )
                     for im in imgs_ws_order[:10]:
                         tok = create_model_image_access_token(
                             user_id=oid, image_id=im.id
@@ -2389,9 +2399,8 @@ async def _studio_job_execute_refine_prompt(
                 if wave_profile_n == "nsfw" and _truthy_wavespeed_flag(
                     wavespeed_single_reference
                 ):
-                    # Раньше [:2] оставлял pose + только face — body-фото модели не доходили до WAN.
                     if user_pose_ref_prepended and len(image_urls) >= 2:
-                        image_urls = [image_urls[0]] + image_urls[1:9]
+                        image_urls = image_urls[:4]
                     else:
                         image_urls = image_urls[:9]
 
@@ -2416,6 +2425,7 @@ async def _studio_job_execute_refine_prompt(
                     prompt_brief_mode=prompt_brief_mode,
                     model_profile_text=model_profile_text,
                     wave_profile=wave_profile_n,
+                    reference_scene_description=reference_scene,
                 )
                 size_for_ws: str | None
                 if settings.wavespeed_seedream_omit_size:
@@ -2580,10 +2590,13 @@ async def _load_owned_generation_still_for_motion(
     *,
     owner_id: int,
     generation_id: int,
+    actor: User | None = None,
 ) -> tuple[StudioGeneration, bytes, str]:
     row = await session.get(StudioGeneration, generation_id)
     if not row or row.user_id != owner_id:
         raise HTTPException(status_code=404, detail="Генерация не найдена")
+    if actor is not None:
+        await assert_studio_generation_access(session, actor, row.studio_model_id)
     if not generation_has_archive_file(row):
         raise HTTPException(
             status_code=404,
@@ -2765,7 +2778,7 @@ async def _studio_job_execute_motion_first_frame(
 
     if existing_gid is not None:
         gen_arch_row, first_frame, first_frame_media = await _load_owned_generation_still_for_motion(
-            session, owner_id=oid, generation_id=existing_gid
+            session, owner_id=oid, generation_id=existing_gid, actor=user
         )
     elif has_still_upload:
         first_frame = studio_jobs.load_studio_job_file(str(p["first_frame_path"]))
@@ -2829,9 +2842,7 @@ async def _studio_job_execute_motion_first_frame(
     if eff_mid is None:
         raise HTTPException(status_code=400, detail="Выберите сохранённую модель.")
 
-    sm_loaded = await _load_studio_model_owned(session, oid, eff_mid)
-    if not sm_loaded:
-        raise HTTPException(status_code=404, detail="Модель не найдена")
+    sm_loaded = await require_studio_model_access(session, user, eff_mid, load_images=True)
     imgs_model = sort_model_images_for_studio(list(sm_loaded.images))
     if not imgs_model:
         raise HTTPException(status_code=400, detail="У модели нет фотографий.")
@@ -3100,6 +3111,7 @@ async def _studio_job_execute_motion_first_frame(
                 prompt_brief_mode=motion_brief_mode,
                 model_profile_text=model_profile_text,
                 wave_profile=wave_profile_n,
+                reference_scene_description=reference_scene,
             )
             if settings.wavespeed_seedream_omit_size:
                 size_for_ws: str | None = None
@@ -3226,6 +3238,7 @@ async def api_studio_motion_render_video(
         mid = int(str(model_id).strip())
     except ValueError:
         raise HTTPException(status_code=400, detail="Некорректный model_id") from None
+    await require_studio_model_access(session, user, mid)
 
     if not (prompt or "").strip():
         raise HTTPException(status_code=400, detail="Опишите сцену, движение и при необходимости одежду.")
@@ -3362,6 +3375,7 @@ async def _studio_job_execute_motion_render_video(
     params = studio_jobs.job_params(job)
     oid = workspace_owner_id(user)
     mid = int(params["model_id"])
+    await require_studio_model_access(session, user, mid, load_images=True)
     prompt = str(params.get("prompt") or "")
     output_aspect = str(params.get("output_aspect") or "9:16")
     mv_id = str(params.get("motion_video_file_id") or "").strip()
@@ -3427,6 +3441,7 @@ async def _studio_job_execute_motion_render_video(
             session,
             owner_id=oid,
             generation_id=first_frame_gen_id,
+            actor=user,
         )
         ff_url = generation_still_public_url(
             owner_id=oid,
@@ -3452,6 +3467,7 @@ async def _studio_job_execute_motion_render_video(
             row_outfit = await session.get(StudioGeneration, outfit_gen_id)
             if not row_outfit or row_outfit.user_id != oid:
                 raise RuntimeError("Снимок наряда (outfit) не найден")
+            await assert_studio_generation_access(session, user, row_outfit.studio_model_id)
 
     reserved = n_start + (1 if outfit_gen_id is not None else 0)
     max_model_slots = max(0, MAX_SEEDANCE_REFERENCE_IMAGES - reserved)

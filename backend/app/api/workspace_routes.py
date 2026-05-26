@@ -23,6 +23,10 @@ from app.services.workspace import (
     normalize_member_login,
     synthetic_member_email,
 )
+from app.services.workspace_model_access import (
+    load_member_studio_model_ids,
+    replace_member_studio_models,
+)
 
 router = APIRouter(prefix="/workspace", tags=["workspace"])
 
@@ -59,6 +63,17 @@ def _require_workspace_owner(user: User) -> None:
         )
 
 
+async def _member_out(session: AsyncSession, m: User) -> WorkspaceMemberOut:
+    model_ids = await load_member_studio_model_ids(session, m.id)
+    return WorkspaceMemberOut(
+        id=m.id,
+        member_login=m.member_login or "",
+        permissions_mask=m.permissions_mask,
+        is_active=m.is_active,
+        allowed_studio_model_ids=model_ids,
+    )
+
+
 @router.get("/members", response_model=list[WorkspaceMemberOut])
 async def list_workspace_members(
     session: AsyncSession = Depends(get_session),
@@ -71,15 +86,10 @@ async def list_workspace_members(
         .order_by(User.id.asc())
     )
     rows = (await session.execute(stmt)).scalars().all()
-    return [
-        WorkspaceMemberOut(
-            id=m.id,
-            member_login=m.member_login or "",
-            permissions_mask=m.permissions_mask,
-            is_active=m.is_active,
-        )
-        for m in rows
-    ]
+    out: list[WorkspaceMemberOut] = []
+    for m in rows:
+        out.append(await _member_out(session, m))
+    return out
 
 
 @router.post("/members", response_model=WorkspaceMemberOut)
@@ -116,14 +126,13 @@ async def create_workspace_member(
         is_active=True,
     )
     session.add(member)
+    await session.flush()
+    await replace_member_studio_models(
+        session, user.id, member, body.allowed_studio_model_ids
+    )
     await session.commit()
     await session.refresh(member)
-    return WorkspaceMemberOut(
-        id=member.id,
-        member_login=member.member_login or "",
-        permissions_mask=member.permissions_mask,
-        is_active=member.is_active,
-    )
+    return await _member_out(session, member)
 
 
 @router.patch("/members/{member_id}", response_model=WorkspaceMemberOut)
@@ -146,14 +155,16 @@ async def patch_workspace_member(
         m.hashed_password = hash_password(data["password"])
     if "is_active" in data and data["is_active"] is not None:
         m.is_active = bool(data["is_active"])
+    if "allowed_studio_model_ids" in data:
+        await replace_member_studio_models(
+            session,
+            user.id,
+            m,
+            data["allowed_studio_model_ids"] or [],
+        )
     await session.commit()
     await session.refresh(m)
-    return WorkspaceMemberOut(
-        id=m.id,
-        member_login=m.member_login or "",
-        permissions_mask=m.permissions_mask,
-        is_active=m.is_active,
-    )
+    return await _member_out(session, m)
 
 
 @router.delete("/members/{member_id}")

@@ -29,6 +29,8 @@ class ConversationOut(BaseModel):
     user_lang: str | None
     """Если задан — ответы переводим в этот язык; иначе по user_lang (детекция с последних входящих)."""
     outbound_lang: str | None = None
+    """Модель студии для доступа операторов; только владелец назначает."""
+    studio_model_id: int | None = None
     updated_at: datetime
     has_avatar: bool = False
 
@@ -46,6 +48,7 @@ class ConversationPatchIn(BaseModel):
     """Частичное обновление диалога. Пустая строка в outbound_lang сбрасывает принудительный язык."""
 
     outbound_lang: str | None = None
+    studio_model_id: int | None = None
 
     @field_validator("outbound_lang", mode="before")
     @classmethod
@@ -101,12 +104,15 @@ class WorkspaceMemberCreateIn(BaseModel):
     member_login: str = Field(min_length=3, max_length=32)
     password: str = Field(min_length=8, max_length=128)
     permissions_mask: int | None = None
+    """Пустой список — участник без моделей, пока владелец не назначит."""
+    allowed_studio_model_ids: list[int] = Field(default_factory=list)
 
 
 class WorkspaceMemberPatchIn(BaseModel):
     permissions_mask: int | None = None
     password: str | None = Field(default=None, min_length=8, max_length=128)
     is_active: bool | None = None
+    allowed_studio_model_ids: list[int] | None = None
 
 
 class WorkspaceMemberOut(BaseModel):
@@ -114,6 +120,7 @@ class WorkspaceMemberOut(BaseModel):
     member_login: str
     permissions_mask: int
     is_active: bool
+    allowed_studio_model_ids: list[int] = Field(default_factory=list)
 
 
 class CreditHistoryItemOut(BaseModel):

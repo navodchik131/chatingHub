@@ -42,7 +42,17 @@ from app.services.realtime import hub
 from app.services.translation import translate_from_russian
 from app.services.studio_grok_motion import grok_motion_api_configured
 from app.services.wavespeed_client import studio_wan_edit_tier_switch_available
-from app.services.workspace import PERM_CHAT, assert_permission, workspace_owner_id
+from app.services.workspace import (
+    PERM_CHAT,
+    assert_permission,
+    is_workspace_owner,
+    workspace_owner_id,
+)
+from app.services.workspace_model_access import (
+    filter_conversations_for_member,
+    require_conversation_chat_access,
+    validate_owner_studio_model_id,
+)
 
 log = logging.getLogger(__name__)
 
@@ -120,6 +130,7 @@ async def api_list_conversations(
     assert_permission(user, PERM_CHAT)
     oid = workspace_owner_id(user)
     convs = await list_conversations(session, oid)
+    convs = await filter_conversations_for_member(session, user, convs)
     out: list[ConversationWithPreview] = []
     for c in convs:
         last = await get_last_message(session, c.id, oid)
@@ -148,9 +159,7 @@ async def api_mark_read(
 ) -> dict:
     assert_permission(user, PERM_CHAT)
     oid = workspace_owner_id(user)
-    conv = await get_conversation(session, conv_id, oid)
-    if not conv:
-        raise HTTPException(status_code=404, detail="conversation not found")
+    await require_conversation_chat_access(session, user, conv_id, oid)
     await mark_conversation_read(session, conv_id, oid)
     await session.commit()
     return {"ok": True}
@@ -165,9 +174,7 @@ async def api_conversation_avatar(
     """Фото профиля собеседника (Telegram), прокси через бэкенд — токен бота не светится во фронте."""
     assert_permission(user, PERM_CHAT)
     oid = workspace_owner_id(user)
-    conv = await get_conversation(session, conv_id, oid)
-    if not conv:
-        raise HTTPException(status_code=404, detail="conversation not found")
+    conv = await require_conversation_chat_access(session, user, conv_id, oid)
     if conv.platform != Platform.telegram or not (conv.telegram_photo_file_id or "").strip():
         raise HTTPException(status_code=404, detail="no avatar")
 
@@ -205,9 +212,7 @@ async def api_messages(
 ) -> list[MessageOut]:
     assert_permission(user, PERM_CHAT)
     oid = workspace_owner_id(user)
-    conv = await get_conversation(session, conv_id, oid)
-    if not conv:
-        raise HTTPException(status_code=404, detail="conversation not found")
+    await require_conversation_chat_access(session, user, conv_id, oid)
     rows = await list_messages(
         session, conv_id, oid, limit=limit, before_id=before
     )
@@ -224,12 +229,18 @@ async def api_patch_conversation(
     """Обновление настроек диалога (язык исходящих и т.д.)."""
     assert_permission(user, PERM_CHAT)
     oid = workspace_owner_id(user)
-    conv = await get_conversation(session, conv_id, oid)
-    if not conv:
-        raise HTTPException(status_code=404, detail="conversation not found")
+    conv = await require_conversation_chat_access(session, user, conv_id, oid)
 
     if "outbound_lang" in body.model_fields_set:
         conv.outbound_lang = body.outbound_lang
+    if "studio_model_id" in body.model_fields_set:
+        if not is_workspace_owner(user):
+            raise HTTPException(
+                status_code=403,
+                detail="Назначение модели диалогу доступно только владельцу",
+            )
+        await validate_owner_studio_model_id(session, oid, body.studio_model_id)
+        conv.studio_model_id = body.studio_model_id
     await session.commit()
     await session.refresh(conv)
     return ConversationOut.model_validate(conv)
@@ -248,9 +259,7 @@ async def api_reply(
     if not text_ru:
         raise HTTPException(status_code=400, detail="empty text")
 
-    conv = await get_conversation(session, conv_id, oid)
-    if not conv:
-        raise HTTPException(status_code=404, detail="conversation not found")
+    conv = await require_conversation_chat_access(session, user, conv_id, oid)
 
     forced = (conv.outbound_lang or "").strip().lower()
     target_lang = forced if forced else (conv.user_lang or "en").strip().lower() or "en"

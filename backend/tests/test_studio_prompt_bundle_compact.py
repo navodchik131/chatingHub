@@ -41,3 +41,21 @@ def test_compact_strips_scene_keeps_body():
     assert "balcony" not in pos.lower()
     assert "bedroom" not in neg.lower()
     assert "deformed" in neg.lower()
+
+
+def test_compact_includes_scene_notes_when_reference_provided():
+    ref = (
+        "POSE: low-angle selfie, arm extended toward lens\n"
+        "FRAMING: face and shoulders, kitchen background\n"
+        "CLOTHING: grey crop top"
+    )
+    pos, _ = prepare_positive_prompt_json(
+        '{"identity_reference":{"subject":"test"}}',
+        brief_mode="compact_pose_image",
+        model_profile_text=None,
+        reference_scene_description=ref,
+    )
+    data = json.loads(pos)
+    notes = data["scene_from_reference_image"].get("pose_reference_notes", "")
+    assert "low-angle" in notes.lower()
+    assert "kitchen" in notes.lower()

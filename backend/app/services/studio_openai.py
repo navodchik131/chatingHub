@@ -130,9 +130,9 @@ _WAVESPEED_NO_FACE_SUFFIX = (
 _WAN_COMPACT_POSE_PREFIX = (
     "[POSE_REF=image 1] Pose, camera, framing, outfit, background, and light direction: image 1 ONLY. "
     "Do NOT copy donor body mass, hip width, bust volume, or limb thickness from image 1. "
-    "[IDENTITY=images 2+ and JSON body_proportions] Face, skin, and FULL BODY SILHOUETTE "
-    "(bust, waist, hips, glutes, legs) MUST match studio model reference photos — "
-    "garment drape adapts to MODEL frame; glute projection and hourglass from identity refs.\n\n"
+    "[IDENTITY=images 2+ and JSON] Face, skin tone, hair color, and body silhouette from the few identity "
+    "reference photos — NOT their pose, crop, wardrobe, backdrop, or studio-sheet layout. "
+    "Garment drape adapts to MODEL proportions from JSON; never paste a neutral character-sheet pose from images 2+.\n\n"
 )
 
 _WAN_COMPACT_NO_FACE_PREFIX = (
@@ -1303,6 +1303,7 @@ def assemble_wavespeed_image_edit_prompt(
     prompt_brief_mode: str,
     model_profile_text: str | None,
     wave_profile: str,
+    reference_scene_description: str | None = None,
 ) -> str:
     """Позитивный JSON без avoid/neg + короткие префиксы + [NEGATIVE_PROMPT] снаружи."""
     from app.services.studio_prompt_bundle import (
@@ -1314,6 +1315,7 @@ def assemble_wavespeed_image_edit_prompt(
         refined_raw,
         brief_mode=prompt_brief_mode,
         model_profile_text=model_profile_text,
+        reference_scene_description=reference_scene_description,
     )
     mode = (studio_mode or "model").strip().lower()
     brief = (prompt_brief_mode or "full").strip().lower()

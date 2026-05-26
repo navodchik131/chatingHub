@@ -45,6 +45,8 @@ interface Conversation {
   user_lang: string | null
   /** Принудительный язык исходящих (ISO); null/undefined = авто по user_lang */
   outbound_lang?: string | null
+  /** Модель студии для доступа операторов (назначает владелец). */
+  studio_model_id?: number | null
   updated_at: string
   last_message_preview: string | null
   unread_count?: number
@@ -310,6 +312,7 @@ interface WorkspaceMemberRow {
   member_login: string
   permissions_mask: number
   is_active: boolean
+  allowed_studio_model_ids: number[]
 }
 
 interface IntegrationStatus {
@@ -669,8 +672,11 @@ export default function App() {
   const [newTeamLogin, setNewTeamLogin] = useState('')
   const [newTeamPassword, setNewTeamPassword] = useState('')
   const [newTeamMask, setNewTeamMask] = useState(DEFAULT_MEMBER_PERMISSIONS)
+  const [newTeamModelIds, setNewTeamModelIds] = useState<number[]>([])
   const [memberEditPassword, setMemberEditPassword] = useState<Record<number, string>>({})
   const [memberMaskEdits, setMemberMaskEdits] = useState<Record<number, number>>({})
+  const [memberModelEdits, setMemberModelEdits] = useState<Record<number, number[]>>({})
+  const [convModelBusy, setConvModelBusy] = useState(false)
   const [integ, setInteg] = useState<IntegrationStatus | null>(null)
   const [modelDrafts, setModelDrafts] = useState<Record<number, StudioModelCabinetDraft>>({})
   const [studioCameraPresets, setStudioCameraPresets] = useState<StudioCameraPreset[]>([])
@@ -1160,6 +1166,7 @@ export default function App() {
         appSection === 'studio' ||
         appSection === 'studio_video') &&
         canStudioAny) ||
+      (appSection === 'chat' && isOwner) ||
       (accountOpen && accountTab === 'models' && canStudioModels)
     if (needModels) {
       void loadStudioModels()
@@ -1172,16 +1179,23 @@ export default function App() {
     appSection,
     canStudioAny,
     canStudioModels,
+    isOwner,
     loadStudioModels,
     loadStudioCameraPresets,
   ])
 
   useEffect(() => {
-    if (authed && accountOpen && accountTab === 'team' && isOwner) void refreshWorkspaceMembers()
-  }, [authed, accountOpen, accountTab, isOwner, refreshWorkspaceMembers])
+    if (authed && accountOpen && accountTab === 'team' && isOwner) {
+      void refreshWorkspaceMembers()
+      void loadStudioModels()
+    }
+  }, [authed, accountOpen, accountTab, isOwner, refreshWorkspaceMembers, loadStudioModels])
 
   useEffect(() => {
     setMemberMaskEdits(Object.fromEntries(workspaceMembers.map((x) => [x.id, x.permissions_mask])))
+    setMemberModelEdits(
+      Object.fromEntries(workspaceMembers.map((x) => [x.id, x.allowed_studio_model_ids ?? []])),
+    )
   }, [workspaceMembers])
 
   useEffect(() => {
@@ -1700,6 +1714,35 @@ export default function App() {
       return next
     })
   }, [])
+
+  const saveConversationStudioModel = async (convId: number, raw: string) => {
+    let studioModelId: number | null = null
+    if (raw !== '') {
+      const n = Number(raw)
+      if (!Number.isFinite(n) || n <= 0) return
+      studioModelId = n
+    }
+    setError(null)
+    setConvModelBusy(true)
+    try {
+      const r = await apiFetch(`/api/conversations/${convId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ studio_model_id: studioModelId }),
+      })
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}))
+        setError(formatHttpApiError(r, err))
+        return
+      }
+      const updated = (await r.json()) as Conversation
+      setConversations((prev) => prev.map((c) => (c.id === convId ? { ...c, ...updated } : c)))
+    } catch {
+      setError('Не удалось назначить модель диалогу')
+    } finally {
+      setConvModelBusy(false)
+    }
+  }
 
   const saveOutboundLang = async (convId: number, raw: string) => {
     const v = raw === '' ? null : raw
@@ -2792,6 +2835,7 @@ export default function App() {
           member_login: login,
           password: newTeamPassword,
           permissions_mask: newTeamMask,
+          allowed_studio_model_ids: newTeamModelIds,
         }),
       })
       if (!r.ok) {
@@ -2802,6 +2846,7 @@ export default function App() {
       setNewTeamLogin('')
       setNewTeamPassword('')
       setNewTeamMask(DEFAULT_MEMBER_PERMISSIONS)
+      setNewTeamModelIds([])
       void refreshWorkspaceMembers()
     } finally {
       setTeamBusy(false)
@@ -2818,7 +2863,12 @@ export default function App() {
     }
     setTeamBusy(true)
     try {
-      const body: { permissions_mask: number; password?: string } = { permissions_mask: mask }
+      const modelIds = memberModelEdits[row.id] ?? row.allowed_studio_model_ids ?? []
+      const body: {
+        permissions_mask: number
+        password?: string
+        allowed_studio_model_ids: number[]
+      } = { permissions_mask: mask, allowed_studio_model_ids: modelIds }
       if (pwd.length >= 8) body.password = pwd
       const r = await apiFetch(`/api/workspace/members/${row.id}`, {
         method: 'PATCH',
@@ -4144,7 +4194,8 @@ export default function App() {
             <div className="account-cabinet-pane" role="tabpanel">
               <p className="cabinet-lead muted">
                 Сотрудники входят с email владельца (ваш), отдельным логином команды и паролем. Кредиты и
-                подписка — на владельце; права ниже ограничивают разделы.
+                подписка — на владельце; права ниже ограничивают разделы. Модели студии и чаты назначаются
+                вручную — без галочки участник их не видит.
               </p>
               <h4 className="account-sub">Новый участник</h4>
               <div className="account-grid cabinet-keys-form">
@@ -4181,6 +4232,36 @@ export default function App() {
                     </label>
                   ))}
                 </div>
+                {studioModels.length > 0 ? (
+                  <div style={{ gridColumn: '1 / -1' }} className="team-model-grid">
+                    <span className="account-sub" style={{ margin: 0 }}>
+                      Модели студии
+                    </span>
+                    {studioModels.map((m) => (
+                      <label key={m.id} className="studio-label studio-check">
+                        <input
+                          type="checkbox"
+                          checked={newTeamModelIds.includes(m.id)}
+                          disabled={teamBusy}
+                          onChange={(e) => {
+                            const on = e.target.checked
+                            setNewTeamModelIds((prev) => {
+                              const s = new Set(prev)
+                              if (on) s.add(m.id)
+                              else s.delete(m.id)
+                              return [...s].sort((a, b) => a - b)
+                            })
+                          }}
+                        />
+                        <span>{m.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="muted" style={{ gridColumn: '1 / -1' }}>
+                    Сначала создайте модели в студии — затем назначьте их участникам.
+                  </p>
+                )}
                 <button
                   type="button"
                   className="send-btn"
@@ -4198,6 +4279,7 @@ export default function App() {
                 <ul className="team-member-list">
                   {workspaceMembers.map((row) => {
                     const mask = memberMaskEdits[row.id] ?? row.permissions_mask
+                    const modelIds = memberModelEdits[row.id] ?? row.allowed_studio_model_ids ?? []
                     const pwd = memberEditPassword[row.id] ?? ''
                     return (
                       <li key={row.id} className="team-member-card">
@@ -4231,6 +4313,33 @@ export default function App() {
                             </label>
                           ))}
                         </div>
+                        {studioModels.length > 0 ? (
+                          <div className="team-model-grid">
+                            <span className="account-sub" style={{ margin: 0 }}>
+                              Модели студии
+                            </span>
+                            {studioModels.map((m) => (
+                              <label key={m.id} className="studio-label studio-check">
+                                <input
+                                  type="checkbox"
+                                  checked={modelIds.includes(m.id)}
+                                  disabled={teamBusy}
+                                  onChange={(e) => {
+                                    const on = e.target.checked
+                                    setMemberModelEdits((prev) => {
+                                      const cur = prev[row.id] ?? modelIds
+                                      const s = new Set(cur)
+                                      if (on) s.add(m.id)
+                                      else s.delete(m.id)
+                                      return { ...prev, [row.id]: [...s].sort((a, b) => a - b) }
+                                    })
+                                  }}
+                                />
+                                <span>{m.name}</span>
+                              </label>
+                            ))}
+                          </div>
+                        ) : null}
                         <label>
                           Новый пароль (необязательно)
                           <input
@@ -4250,7 +4359,7 @@ export default function App() {
                             disabled={teamBusy}
                             onClick={() => void saveWorkspaceMemberRow(row)}
                           >
-                            Сохранить права и пароль
+                            Сохранить права, модели и пароль
                           </button>
                           <button
                             type="button"
@@ -4924,8 +5033,8 @@ export default function App() {
                   onChange={(e) => setStudioSendPoseRefToWavespeed(e.target.checked)}
                 />
                 <span>
-                  Отправить референс в генерацию (снимите: сцена только в промпте от LLM, в
-                  WaveSpeed — только фото модели).
+                  Отправить референс позы в WaveSpeed (image 1 = ваша сцена; 2–4 = лицо/тело
+                  модели, не вся развёртка). Снимите — поза только текстом, точность ниже.
                 </span>
               </label>
             ) : null}
@@ -5689,6 +5798,16 @@ export default function App() {
                       ) : null}
                     </span>
                     <span className="name">{c.user_display_name ?? 'Без имени'}</span>
+                    {c.studio_model_id != null ? (
+                      <span className="lang" title="Модель для операторов">
+                        {studioModels.find((m) => m.id === c.studio_model_id)?.name ??
+                          `модель #${c.studio_model_id}`}
+                      </span>
+                    ) : isOwner ? (
+                      <span className="lang muted" title="Только владелец видит диалог без модели">
+                        без модели
+                      </span>
+                    ) : null}
                     {(c.outbound_lang || c.user_lang) && (
                       <span
                         className="lang"
@@ -5765,6 +5884,34 @@ export default function App() {
                       ))}
                     </select>
                   </div>
+                  {isOwner && studioModels.length > 0 ? (
+                    <div
+                      className="outbound-lang-field"
+                      title="Операторы с доступом к этой модели увидят диалог в списке чатов."
+                    >
+                      <label className="outbound-lang-label" htmlFor="conv-studio-model-select">
+                        Модель (чат)
+                      </label>
+                      <select
+                        id="conv-studio-model-select"
+                        className="outbound-lang-select"
+                        value={
+                          selected.studio_model_id != null ? String(selected.studio_model_id) : ''
+                        }
+                        disabled={convModelBusy}
+                        onChange={(e) =>
+                          void saveConversationStudioModel(selected.id, e.target.value)
+                        }
+                      >
+                        <option value="">Не назначена (только владелец)</option>
+                        {studioModels.map((m) => (
+                          <option key={m.id} value={String(m.id)}>
+                            {m.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  ) : null}
                 </div>
               </div>
 
