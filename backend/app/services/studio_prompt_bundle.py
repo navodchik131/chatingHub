@@ -27,9 +27,23 @@ _SCENE_FROM_REF_LITERAL = "from_pose_reference_input_image_only"
 
 _COMPACT_MUST_KEEP = [
     "One real person; face, skin, hair, and body proportions from identity_reference and model reference photos (images 2+) on all visible skin",
-    "Pose, outfit, framing, background, and scene lighting from pose reference (image 1) and pose_reference_notes — never copy pose or backdrop from identity photos",
+    "Pose, framing, background, and lighting from pose reference (image 1) only — match limb angles and crop exactly",
+    "Wardrobe and body coverage (nude, topless, clothed) from image 1 and wardrobe_coverage only — never garments from identity photos or profile defaults",
     "Unified skin grain face-to-body; scene light direction on MODEL skin, not donor complexion",
 ]
+
+_NUDE_WARDROBE_NEGATIVE = (
+    "clothing from model reference photos, dressed when pose reference is nude, "
+    "sportswear, crop top, sports bra, leggings, bikini, lingerie, bodysuit, "
+    "outfit copied from character sheet, covering bare skin from pose reference"
+)
+
+_NUDE_CLOTHING_RE = re.compile(
+    r"\b(nude|naked|topless|bottomless|unclothed|no clothing|no garment|"
+    r"no clothes|without clothes|not wearing|bare skin|no top visible|no bra|"
+    r"no shirt|no pants|no underwear|fully nude)\b",
+    re.I,
+)
 
 _COMPACT_IDENTITY_FIELD_MAX = 420
 _COMPACT_SCENE_NOTES_MAX = 720
@@ -207,17 +221,46 @@ def _truncate_identity_field(text: str, *, max_len: int = _COMPACT_IDENTITY_FIEL
     return s[: max_len - 1].rstrip() + "…"
 
 
+def extract_wardrobe_from_reference(description: str | None) -> tuple[str, bool]:
+    """Строка CLOTHING из описания референса и флаг «минимальное покрытие / nude»."""
+    raw = (description or "").strip()
+    if not raw:
+        return "", False
+    clothing_line = ""
+    for line in raw.splitlines():
+        t = line.strip()
+        if t.upper().startswith("CLOTHING:"):
+            clothing_line = t
+            break
+    probe = clothing_line or raw[:500]
+    is_nude = bool(_NUDE_CLOTHING_RE.search(probe))
+    if clothing_line:
+        return _truncate_identity_field(clothing_line, max_len=320), is_nude
+    if is_nude:
+        return "CLOTHING: match pose reference image 1 — same nudity/coverage as visible (no garments)", True
+    return "", False
+
+
+def reference_pose_is_nude_or_minimal_coverage(description: str | None) -> bool:
+    return extract_wardrobe_from_reference(description)[1]
+
+
 def compact_scene_notes_from_reference(description: str | None) -> str:
     """Короткая выжимка REFERENCE_IMAGE для compact JSON (поза в тексте + image 1)."""
     raw = (description or "").strip()
     if not raw:
         return ""
+    wardrobe_line, _ = extract_wardrobe_from_reference(raw)
     lines: list[str] = []
+    if wardrobe_line:
+        lines.append(wardrobe_line)
     for line in raw.splitlines():
         t = line.strip()
         if not t:
             continue
         upper = t.upper()
+        if upper.startswith("CLOTHING:"):
+            continue
         if any(k in upper for k in _SCENE_NOTE_KEYS):
             lines.append(t)
     text = " ".join(lines) if lines else raw
@@ -410,12 +453,19 @@ def coerce_compact_pose_positive(
         life = _as_text(tv.get("life_in_frame") or tv.get("intimacy_level") or tv.get("intimacy"))
 
     scene_notes = compact_scene_notes_from_reference(reference_scene_description)
+    wardrobe_line, ref_nude = extract_wardrobe_from_reference(reference_scene_description)
     scene_pose = scene_notes or _SCENE_FROM_REF_LITERAL
+    wardrobe_cov = wardrobe_line or (
+        "Match pose reference image 1 exactly for garments or nudity — "
+        "do not use clothing from model identity photos"
+    )
     return {
         "identity_reference": identity,
+        "wardrobe_coverage": wardrobe_cov,
+        "pose_reference_is_nude_or_minimal": ref_nude,
         "scene_from_reference_image": {
             "pose_and_composition": scene_pose,
-            "wardrobe_and_environment": scene_pose,
+            "wardrobe_and_environment": wardrobe_cov,
             "lighting_and_camera": scene_pose,
             "pose_reference_notes": scene_notes,
         },
@@ -487,11 +537,24 @@ def prepare_positive_prompt_json(
     brief_mode: str,
     model_profile_text: str | None,
     reference_scene_description: str | None = None,
+    extra_negative: str | None = None,
 ) -> tuple[str, str]:
     """
     Возвращает (positive_json_str, negative_prompt_line).
-    brief_mode: full | compact_pose_image | text_scene
+    brief_mode: full | compact_pose_image | text_scene | grok_composed
     """
+    mode = (brief_mode or "full").strip().lower()
+    if mode == "grok_composed":
+        prose = (refined_text or "").strip()
+        negative = _merge_negative_parts(
+            _CANONICAL_STUDIO_NEGATIVE,
+            (extra_negative or "").strip(),
+            _always_avoid_from_profile(model_profile_text),
+        )
+        if reference_pose_is_nude_or_minimal_coverage(reference_scene_description):
+            negative = _merge_negative_parts(negative, _NUDE_WARDROBE_NEGATIVE)
+        return prose, negative
+
     raw = _strip_code_fences(refined_text)
     try:
         data = json.loads(raw)
@@ -515,6 +578,10 @@ def prepare_positive_prompt_json(
         data["realism_engine"] = re_obj
 
     negative = extract_studio_negative_prompt(data, model_profile_text=model_profile_text)
+    if reference_pose_is_nude_or_minimal_coverage(reference_scene_description):
+        negative = _merge_negative_parts(negative, _NUDE_WARDROBE_NEGATIVE)
+    if (extra_negative or "").strip():
+        negative = _merge_negative_parts(negative, extra_negative.strip())
 
     positive = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
     return positive, negative

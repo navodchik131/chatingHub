@@ -87,20 +87,39 @@ def select_wan_identity_images_with_pose_ref(
     imgs: list[UserStudioModelImage],
     *,
     max_count: int = 3,
+    pose_reference_nude: bool = False,
 ) -> list[UserStudioModelImage]:
     """
     При pose ref = image 1 не отправляем все фото модели (развёртка + face + body…),
-    иначе WAN копирует нейтральный character sheet. Оставляем до max_count: face, затем body или turnaround.
+    иначе WAN копирует нейтральный character sheet и одежду с листа.
+    Если референс nude — только face (без body/turnaround в одежде).
     """
     if max_count <= 0:
         return []
     cap = max(1, min(5, int(max_count)))
+    if pose_reference_nude:
+        cap = min(cap, 2)
+        by_kind: dict[str, list[UserStudioModelImage]] = {}
+        for im in imgs:
+            k = (im.image_kind or "other").lower()
+            by_kind.setdefault(k, []).append(im)
+        picked: list[UserStudioModelImage] = []
+        for im in by_kind.get("face", []):
+            if len(picked) >= cap:
+                break
+            picked.append(im)
+        if not picked:
+            for im in imgs[:cap]:
+                if (im.image_kind or "").lower() != "genitals":
+                    picked.append(im)
+        return picked[:cap]
+
     by_kind: dict[str, list[UserStudioModelImage]] = {}
     for im in imgs:
         k = (im.image_kind or "other").lower()
         by_kind.setdefault(k, []).append(im)
 
-    picked: list[UserStudioModelImage] = []
+    picked = []
 
     def take(kind: str) -> None:
         if len(picked) >= cap:
@@ -116,7 +135,9 @@ def select_wan_identity_images_with_pose_ref(
             take("body")
         else:
             take("turnaround")
-    if len(picked) < cap and "turnaround" not in { (im.image_kind or "").lower() for im in picked }:
+    if len(picked) < cap and "turnaround" not in {
+        (im.image_kind or "").lower() for im in picked
+    }:
         take("turnaround")
     if len(picked) < cap:
         for kind in ("body", "other"):

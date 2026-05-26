@@ -128,11 +128,30 @@ _WAVESPEED_NO_FACE_SUFFIX = (
 
 
 _WAN_COMPACT_POSE_PREFIX = (
-    "[POSE_REF=image 1] Pose, camera, framing, outfit, background, and light direction: image 1 ONLY. "
-    "Do NOT copy donor body mass, hip width, bust volume, or limb thickness from image 1. "
-    "[IDENTITY=images 2+ and JSON] Face, skin tone, hair color, and body silhouette from the few identity "
-    "reference photos — NOT their pose, crop, wardrobe, backdrop, or studio-sheet layout. "
-    "Garment drape adapts to MODEL proportions from JSON; never paste a neutral character-sheet pose from images 2+.\n\n"
+    "[POSE_REF=image 1 — PRIMARY] Match pose geometry (head yaw, gaze, limb angles, hands), crop, camera, "
+    "background, lighting, and wardrobe/body coverage EXACTLY from image 1 and JSON wardrobe_coverage. "
+    "Do NOT copy donor body mass from image 1 — use MODEL proportions for silhouette. "
+    "[IDENTITY=images 2+ and JSON] Face, skin tone, hair, body proportions only — "
+    "NEVER copy clothing, sportswear, lingerie, or neutral studio outfit from images 2+ or profile default_style. "
+    "If image 1 is nude/topless, output the same bare coverage; do not dress the subject.\n\n"
+)
+
+_GROK_COMPOSED_WAN_PREFIX = (
+    "[GROK_SCENE_COMPOSE] Image 1 (if present) is **pose/framing/light/wardrobe lock only** — "
+    "do **not** copy face, skin tone, hair, body mass, tattoos, or intimate anatomy from it. "
+    "Subject identity is defined **only** in the English brief below.\n\n"
+)
+
+_GROK_COMPOSED_NANO_PREFIX = (
+    "[GROK_SCENE_COMPOSE — text-only identity] The attached image (when present) locks **pose, camera, "
+    "framing, background, environmental light, and wardrobe coverage** only. "
+    "Face, hair, skin, body proportions, and intimate anatomy must match **only** the English brief below — "
+    "never the incidental person in the last image.\n\n"
+)
+
+_GROK_COMPOSED_POSE_LAST_SUFFIX = (
+    "\n\n[LAST_INPUT_IMAGE] The **last** image locks pose geometry, crop edges, gaze, garments/nudity zones, "
+    "and light-on-body pattern. Ignore identity on that image."
 )
 
 _WAN_COMPACT_NO_FACE_PREFIX = (
@@ -183,6 +202,8 @@ def finalize_wavespeed_studio_prompt(
                 p,
                 lock_model_hairstyle=lock_model_hairstyle,
             )
+        elif brief == "grok_composed":
+            out = _GROK_COMPOSED_WAN_PREFIX.strip() if not p else _GROK_COMPOSED_WAN_PREFIX + p
         elif brief == "compact_pose_image":
             prefix = (
                 _WAN_COMPACT_NO_FACE_PREFIX
@@ -295,6 +316,10 @@ def finalize_nano_banana_studio_prompt(
         )
     elif brief == "text_scene":
         out = _NANO_TEXT_SCENE_PREFIX.strip() if not p else _NANO_TEXT_SCENE_PREFIX + p
+    elif brief == "grok_composed":
+        out = _GROK_COMPOSED_NANO_PREFIX.strip() if not p else _GROK_COMPOSED_NANO_PREFIX + p
+        if user_pose_reference_is_last:
+            out = out.rstrip() + _GROK_COMPOSED_POSE_LAST_SUFFIX
     else:
         if brief == "compact_pose_image" and mode not in ("face_swap", "photo_edit"):
             head = (
@@ -1282,7 +1307,10 @@ def resolve_studio_prompt_brief_mode(
     has_uploaded_reference_bytes: bool,
     send_pose_reference_to_wavespeed: bool,
 ) -> str:
-    """full | compact_pose_image | text_scene"""
+    """full | compact_pose_image | text_scene | grok_composed"""
+    mode = (studio_mode or "model").strip().lower()
+    if mode == "grok_compose":
+        return "grok_composed"
     if not has_uploaded_reference_bytes or not has_reference_scene:
         return "full"
     mode = (studio_mode or "model").strip().lower()
@@ -1304,6 +1332,7 @@ def assemble_wavespeed_image_edit_prompt(
     model_profile_text: str | None,
     wave_profile: str,
     reference_scene_description: str | None = None,
+    extra_negative: str | None = None,
 ) -> str:
     """Позитивный JSON без avoid/neg + короткие префиксы + [NEGATIVE_PROMPT] снаружи."""
     from app.services.studio_prompt_bundle import (
@@ -1316,6 +1345,7 @@ def assemble_wavespeed_image_edit_prompt(
         brief_mode=prompt_brief_mode,
         model_profile_text=model_profile_text,
         reference_scene_description=reference_scene_description,
+        extra_negative=extra_negative,
     )
     mode = (studio_mode or "model").strip().lower()
     brief = (prompt_brief_mode or "full").strip().lower()

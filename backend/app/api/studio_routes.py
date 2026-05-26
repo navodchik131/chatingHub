@@ -128,6 +128,11 @@ from app.services.studio_openai import (
 )
 from app.services.studio_camera_presets import get_camera_preset_by_id, list_camera_presets
 from app.services.studio_carousel import build_carousel_wave_prompt
+from app.services.studio_grok_scene_compose import (
+    grok_compose_studio_scene,
+    grok_scene_compose_configured,
+)
+from app.services.studio_grok_motion import grok_motion_studio_credentials
 from app.services.studio_model_images import (
     assert_studio_image_kind,
     model_images_for_wavespeed_profile,
@@ -138,6 +143,7 @@ from app.services.studio_model_images import (
     parse_image_kinds_json,
     sort_model_images_for_studio,
 )
+from app.services.studio_prompt_bundle import reference_pose_is_nude_or_minimal_coverage
 from app.services.studio_pose_reference import (
     resolve_pose_reference_file,
     save_pose_reference_bytes,
@@ -417,6 +423,22 @@ def _studio_refine_wavespeed_preflight(
                 status_code=400,
                 detail="В режиме «Без лица» выберите модель с фото или загрузите референс.",
             )
+    elif mode_n == "grok_compose":
+        if mid is None or sm_loaded is None:
+            raise HTTPException(
+                status_code=400,
+                detail="В режиме «Grok: сцена» выберите сохранённую модель с фотографиями.",
+            )
+        if not imgs_model:
+            raise HTTPException(
+                status_code=400,
+                detail="У модели нет снимков — добавьте развёртку или лицо/тело в кабинете.",
+            )
+        if not image_bytes:
+            raise HTTPException(
+                status_code=400,
+                detail="В режиме «Grok: сцена» загрузите референс сцены (поза, свет, кадр).",
+            )
     return ws_key
 
 
@@ -508,7 +530,9 @@ def _truthy_send_pose_reference_to_wavespeed(raw: str | None) -> bool:
     return str(raw).strip().lower() not in ("0", "false", "no", "off")
 
 
-_ALLOWED_STUDIO_MODES = frozenset({"model", "photo_edit", "no_face", "face_swap"})
+_ALLOWED_STUDIO_MODES = frozenset(
+    {"model", "photo_edit", "no_face", "face_swap", "grok_compose"}
+)
 
 
 def _normalize_studio_mode(raw: str | None) -> str:
@@ -1681,20 +1705,28 @@ async def api_studio_refine_prompt(
     user: User = Depends(get_current_user),
 ) -> StudioRefinePromptOut | JSONResponse:
     _ = request
-    skeleton = prepare_studio_prompt_skeleton()
-    system_instr = load_image_studio_system()
-    if not skeleton:
-        raise HTTPException(
-            status_code=503,
-            detail="Шаблон промпта пуст: заполните backend/data/prompts/image_studio_skeleton.txt "
-            "или IMAGE_STUDIO_SKELETON_INLINE",
-        )
-    if not system_instr:
-        raise HTTPException(
-            status_code=503,
-            detail="Системный промпт студии пуст: заполните backend/data/prompts/image_studio_system.txt "
-            "или IMAGE_STUDIO_SYSTEM_INLINE",
-        )
+    mode_early = _normalize_studio_mode(studio_mode)
+    if mode_early == "grok_compose":
+        if not grok_scene_compose_configured():
+            raise HTTPException(
+                status_code=503,
+                detail="Grok не настроен: задайте GROK_API_KEY в .env на сервере.",
+            )
+    else:
+        skeleton = prepare_studio_prompt_skeleton()
+        system_instr = load_image_studio_system()
+        if not skeleton:
+            raise HTTPException(
+                status_code=503,
+                detail="Шаблон промпта пуст: заполните backend/data/prompts/image_studio_skeleton.txt "
+                "или IMAGE_STUDIO_SKELETON_INLINE",
+            )
+        if not system_instr:
+            raise HTTPException(
+                status_code=503,
+                detail="Системный промпт студии пуст: заполните backend/data/prompts/image_studio_system.txt "
+                "или IMAGE_STUDIO_SYSTEM_INLINE",
+            )
 
     assert_permission(user, PERM_STUDIO_GENERATE)
     oid = workspace_owner_id(user)
@@ -1895,8 +1927,29 @@ async def _studio_job_execute_refine_prompt(
             status_code=400,
             detail='Режим «Face swap»: выберите сохранённую модель студии.',
         )
+    if mode_n == "grok_compose":
+        if not grok_scene_compose_configured():
+            raise HTTPException(
+                status_code=503,
+                detail="Grok не настроен: задайте GROK_API_KEY в .env на сервере.",
+            )
+        if mid is None:
+            raise HTTPException(
+                status_code=400,
+                detail="В режиме «Grok: сцена» выберите сохранённую модель.",
+            )
+        if not image_bytes:
+            raise HTTPException(
+                status_code=400,
+                detail="В режиме «Grok: сцена» загрузите референс сцены.",
+            )
+        if mask_bytes:
+            raise HTTPException(
+                status_code=400,
+                detail="Режим «Grok: сцена» не поддерживает маску inpaint — снимите маску.",
+            )
 
-    if not desc and not image_bytes and not model_profile_text:
+    if mode_n != "grok_compose" and not desc and not image_bytes and not model_profile_text:
         raise HTTPException(
             status_code=400,
             detail="Добавьте описание, референс и/или выберите сохранённую модель",
@@ -1970,60 +2023,87 @@ async def _studio_job_execute_refine_prompt(
 
     lock_hair_req = _truthy_lock_model_hairstyle(lock_model_hairstyle)
     effective_lock_hairstyle = bool(lock_hair_req) if image_bytes else True
-    send_pose_to_ws = _truthy_send_pose_reference_to_wavespeed(
-        send_pose_reference_to_wavespeed
-    )
+    if mode_n == "grok_compose":
+        send_pose_to_ws = True
+    else:
+        send_pose_to_ws = _truthy_send_pose_reference_to_wavespeed(
+            send_pose_reference_to_wavespeed
+        )
 
     reference_scene: str | None = None
     prompt_brief_mode = "full"
+    grok_negative_extra: str | None = None
     try:
-        if image_bytes:
-            reference_scene = await describe_reference_image_openai(
-                image_bytes=image_bytes,
-                image_media_type=image_mime,
-                hairstyle_from_pose_reference=not effective_lock_hairstyle,
-                no_face_framing=(mode_n == "no_face"),
-                credentials=llm_creds,
+        if mode_n == "grok_compose":
+            assert image_bytes is not None
+            grok_creds = grok_motion_studio_credentials()
+            composed = await grok_compose_studio_scene(
+                user_ref_bytes=image_bytes,
+                user_ref_mime=image_mime,
+                model_images=imgs_model,
+                model_profile_text=model_profile_text,
+                wave_profile=wave_profile_n,
+                user_notes=desc,
+                lock_hairstyle=effective_lock_hairstyle,
+                credentials=grok_creds,
             )
-        ref_photo_block = (
-            None
-            if mode_n == "photo_edit" and not photo_edit_regional_identity_requested
-            else (model_reference_photos_block(imgs_for_ws) if imgs_for_ws else None)
-        )
-        prompt_brief_mode = resolve_studio_prompt_brief_mode(
-            studio_mode=mode_n,
-            has_reference_scene=bool(reference_scene),
-            has_uploaded_reference_bytes=bool(image_bytes),
-            send_pose_reference_to_wavespeed=send_pose_to_ws,
-        )
-        skeleton = prepare_studio_prompt_skeleton_for_brief(prompt_brief_mode)
-        if not skeleton:
-            raise RuntimeError(
-                "Шаблон промпта пуст: заполните backend/data/prompts/image_studio_skeleton.txt "
-                "или IMAGE_STUDIO_SKELETON_INLINE"
-            )
-        refined = await refine_prompt_via_openai(
-            system_instruction=system_instr,
-            skeleton=skeleton,
-            user_text=desc,
-            reference_scene_description=reference_scene,
-            model_profile_text=(
+            refined = composed.wavespeed_scene_prompt
+            reference_scene = composed.reference_scene_lock or None
+            grok_negative_extra = composed.negative_prompt or None
+            prompt_brief_mode = "grok_composed"
+            if gen_row is not None:
+                gen_row.refined_prompt = refined
+                gen_row.prompt_excerpt = (refined[:2000] if refined else None) or None
+                session.add(gen_row)
+                await session.flush()
+        else:
+            if image_bytes:
+                reference_scene = await describe_reference_image_openai(
+                    image_bytes=image_bytes,
+                    image_media_type=image_mime,
+                    hairstyle_from_pose_reference=not effective_lock_hairstyle,
+                    no_face_framing=(mode_n == "no_face"),
+                    credentials=llm_creds,
+                )
+            ref_photo_block = (
                 None
                 if mode_n == "photo_edit" and not photo_edit_regional_identity_requested
-                else model_profile_text
-            ),
-            model_reference_photos=ref_photo_block,
-            output_aspect_key=aspect_key,
-            studio_mode=mode_n,
-            lock_model_hairstyle=effective_lock_hairstyle,
-            prompt_brief_mode=prompt_brief_mode,
-            credentials=llm_creds,
-        )
-        if gen_row is not None:
-            gen_row.refined_prompt = refined
-            gen_row.prompt_excerpt = (refined[:2000] if refined else None) or None
-            session.add(gen_row)
-            await session.flush()
+                else (model_reference_photos_block(imgs_for_ws) if imgs_for_ws else None)
+            )
+            prompt_brief_mode = resolve_studio_prompt_brief_mode(
+                studio_mode=mode_n,
+                has_reference_scene=bool(reference_scene),
+                has_uploaded_reference_bytes=bool(image_bytes),
+                send_pose_reference_to_wavespeed=send_pose_to_ws,
+            )
+            skeleton = prepare_studio_prompt_skeleton_for_brief(prompt_brief_mode)
+            if not skeleton:
+                raise RuntimeError(
+                    "Шаблон промпта пуст: заполните backend/data/prompts/image_studio_skeleton.txt "
+                    "или IMAGE_STUDIO_SKELETON_INLINE"
+                )
+            refined = await refine_prompt_via_openai(
+                system_instruction=system_instr,
+                skeleton=skeleton,
+                user_text=desc,
+                reference_scene_description=reference_scene,
+                model_profile_text=(
+                    None
+                    if mode_n == "photo_edit" and not photo_edit_regional_identity_requested
+                    else model_profile_text
+                ),
+                model_reference_photos=ref_photo_block,
+                output_aspect_key=aspect_key,
+                studio_mode=mode_n,
+                lock_model_hairstyle=effective_lock_hairstyle,
+                prompt_brief_mode=prompt_brief_mode,
+                credentials=llm_creds,
+            )
+            if gen_row is not None:
+                gen_row.refined_prompt = refined
+                gen_row.prompt_excerpt = (refined[:2000] if refined else None) or None
+                session.add(gen_row)
+                await session.flush()
     except RuntimeError as e:
         if gen_row is not None:
             await mark_studio_generation_failed(
@@ -2358,7 +2438,9 @@ async def _studio_job_execute_refine_prompt(
 
             if not wavespeed_message:
                 attach_model_urls = False
-                if mode_n == "model":
+                if mode_n == "grok_compose":
+                    attach_model_urls = False
+                elif mode_n == "model":
                     attach_model_urls = bool(imgs_model)
                 elif mode_n == "face_swap":
                     attach_model_urls = bool(imgs_model)
@@ -2368,7 +2450,11 @@ async def _studio_job_execute_refine_prompt(
                 if attach_model_urls:
                     if wave_profile_n == "nsfw" and user_pose_ref_prepended:
                         imgs_ws_order = select_wan_identity_images_with_pose_ref(
-                            imgs_for_ws, max_count=3
+                            imgs_for_ws,
+                            max_count=3,
+                            pose_reference_nude=reference_pose_is_nude_or_minimal_coverage(
+                                reference_scene
+                            ),
                         )
                     else:
                         imgs_ws_order = (
@@ -2426,6 +2512,7 @@ async def _studio_job_execute_refine_prompt(
                     model_profile_text=model_profile_text,
                     wave_profile=wave_profile_n,
                     reference_scene_description=reference_scene,
+                    extra_negative=grok_negative_extra,
                 )
                 size_for_ws: str | None
                 if settings.wavespeed_seedream_omit_size:

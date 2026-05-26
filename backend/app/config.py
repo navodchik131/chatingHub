@@ -95,6 +95,14 @@ class Settings(BaseSettings):
         le=50 * 1024 * 1024 - 4096,
     )
     grok_motion_full_video_timeout_seconds: float = Field(default=900.0, ge=60.0, le=2700.0)
+    grok_scene_compose_system_path: str = Field(
+        default="data/prompts/grok_scene_compose_system.txt"
+    )
+    grok_scene_compose_system_inline: str = Field(default="")
+    grok_scene_compose_model: str = Field(default="")
+    grok_scene_compose_max_tokens: int = Field(default=8192, ge=1024, le=16384)
+    grok_scene_compose_temperature: float = Field(default=0.45, ge=0.0, le=1.5)
+    grok_scene_compose_timeout_seconds: float = Field(default=180.0, ge=30.0, le=600.0)
     # Seedance T2V: макс. длина финального промпта (символов) после Grok / сборки
     studio_seedance_t2v_prompt_max_chars: int = Field(default=3000, ge=500, le=5000)
     credit_cost_studio_prompt_refine: int = Field(default=2)

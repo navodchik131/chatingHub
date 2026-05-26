@@ -59,3 +59,21 @@ def test_compact_includes_scene_notes_when_reference_provided():
     notes = data["scene_from_reference_image"].get("pose_reference_notes", "")
     assert "low-angle" in notes.lower()
     assert "kitchen" in notes.lower()
+
+
+def test_compact_nude_reference_wardrobe_and_negative():
+    ref = (
+        "POSE: standing three-quarter\n"
+        "CLOTHING: no clothing visible; subject nude\n"
+        "FRAMING: full body"
+    )
+    pos, neg = prepare_positive_prompt_json(
+        "{}",
+        brief_mode="compact_pose_image",
+        model_profile_text=None,
+        reference_scene_description=ref,
+    )
+    data = json.loads(pos)
+    assert data.get("pose_reference_is_nude_or_minimal") is True
+    assert "nude" in data.get("wardrobe_coverage", "").lower()
+    assert "sportswear" in neg.lower() or "character sheet" in neg.lower()

@@ -237,6 +237,7 @@ interface HealthInfo {
   studio_seedance_t2v_prompt_max_chars?: number
   studio_grok_motion_timeline_enabled?: boolean
   studio_grok_motion_configured?: boolean
+  studio_grok_scene_compose_configured?: boolean
   studio_seedance_i2v_duration_default?: number
   studio_seedance_i2v_duration_min?: number
   studio_seedance_i2v_duration_max?: number
@@ -561,7 +562,7 @@ interface StudioMotionRendersPage {
 /** Должен совпадать с default limit у GET /api/studio/generations */
 const STUDIO_ARCHIVE_PAGE = 10
 
-type StudioJobMode = 'model' | 'photo_edit' | 'no_face' | 'face_swap'
+type StudioJobMode = 'model' | 'photo_edit' | 'no_face' | 'face_swap' | 'grok_compose'
 
 export default function App() {
   const navigate = useNavigate()
@@ -2036,6 +2037,7 @@ export default function App() {
       }
     } else if (
       studioMode !== 'face_swap' &&
+      studioMode !== 'grok_compose' &&
       !studioDesc.trim() &&
       !studioFile &&
       studioSelectedModelId == null
@@ -2056,6 +2058,20 @@ export default function App() {
     if (studioMode === 'no_face' && studioSelectedModelId == null && !studioFile) {
       setError('В режиме «Без лица» выберите модель или загрузите референс.')
       return
+    }
+    if (studioMode === 'grok_compose') {
+      if (health?.studio_grok_scene_compose_configured === false) {
+        setError('Grok не настроен на сервере (нужен GROK_API_KEY в .env).')
+        return
+      }
+      if (studioSelectedModelId == null) {
+        setError('В режиме «Grok: сцена» выберите модель с листами и JSON-профилем.')
+        return
+      }
+      if (!studioFile) {
+        setError('Загрузите референс сцены (поза, свет, кадр).')
+        return
+      }
     }
     const hasStudioBaseImage =
       studioFile != null ||
@@ -4739,6 +4755,7 @@ export default function App() {
                 {(
                   [
                     { id: 'model' as const, label: 'Модель' },
+                    { id: 'grok_compose' as const, label: 'Grok: сцена' },
                     { id: 'face_swap' as const, label: 'Подмена лица' },
                     { id: 'photo_edit' as const, label: 'Доработать фото' },
                     { id: 'no_face' as const, label: 'Без лица' },
@@ -4758,12 +4775,21 @@ export default function App() {
             <p className="studio-mode-hint">
               {studioMode === 'model'
                 ? 'Модель из кабинета, по желанию — референс позы и короткое описание сцены.'
-                : studioMode === 'face_swap'
+                : studioMode === 'grok_compose'
+                  ? 'Grok собирает промпт: сцена с вашего рефа, внешность — только с листов модели и JSON. В WaveSpeed уходит реф позы + текст.'
+                  : studioMode === 'face_swap'
                   ? 'Ваше фото со сценой и сохранённая модель — лицо и фигура подставятся с учётом света кадра.'
                   : studioMode === 'photo_edit'
                   ? 'Загрузите снимок или выберите из «Сохранённые» и опишите, что изменить.'
                   : 'Сцена без лица: укажите модель или свой референс.'}
             </p>
+            {studioMode === 'grok_compose' &&
+            health?.studio_grok_scene_compose_configured === false ? (
+              <div className="banner warn">
+                Grok не настроен: на сервере нужен <span className="mono">GROK_API_KEY</span> (или
+                OpenAI-совместимый ключ с vision).
+              </div>
+            ) : null}
             <div className="studio-mode-row" role="group" aria-label="Тип снимка">
               <span className="studio-mode-label">Стиль</span>
               <div className="studio-mode-segment">
@@ -5017,7 +5043,15 @@ export default function App() {
               <span>Причёска как у модели (снимите, чтобы взять укладку с загруженного фото).</span>
             </label>
             ) : null}
-            {studioMode === 'model' || studioMode === 'no_face' ? (
+            {studioMode === 'grok_compose' ? (
+              <p
+                className="muted"
+                style={{ display: 'block', marginTop: '0.35rem', fontSize: '0.85rem' }}
+              >
+                В WaveSpeed всегда уходит только ваш референс сцены; листы модели видит Grok при
+                сборке промпта.
+              </p>
+            ) : studioMode === 'model' || studioMode === 'no_face' ? (
               <label
                 className="studio-label studio-check"
                 style={!studioFile ? { opacity: 0.55 } : undefined}
@@ -5047,7 +5081,9 @@ export default function App() {
                     ? 'Что изменить: цвет фона, другая футболка, убрать объект, исправить свет, слегка сменить ракурс…'
                     : studioMode === 'face_swap'
                       ? 'По желанию: акцент (например «мягкий свет на лице», «сохранить естественность кожи»). Можно оставить пустым.'
-                      : 'Что показать на снимке: сцена, свет, настроение…'
+                      : studioMode === 'grok_compose'
+                        ? 'По желанию: уточнения для Grok (настроение, детали одежды, акценты). Можно оставить пустым.'
+                        : 'Что показать на снимке: сцена, свет, настроение…'
                 }
                 value={studioDesc}
                 onChange={(e) => setStudioDesc(e.target.value)}
@@ -5058,18 +5094,31 @@ export default function App() {
                 type="button"
                 className="send-btn"
                 title={
-                  !health?.openai_studio_configured
-                    ? 'Генерация временно недоступна'
-                    : !studioPromptOnlyDev && !integ?.wavespeed_configured
-                      ? studioIntegrationsHint()
-                      : undefined
+                  studioMode === 'grok_compose'
+                    ? health?.studio_grok_scene_compose_configured === false
+                      ? 'Grok не настроен на сервере'
+                      : !studioPromptOnlyDev && !integ?.wavespeed_configured
+                        ? studioIntegrationsHint()
+                        : undefined
+                    : !health?.openai_studio_configured
+                      ? 'Генерация временно недоступна'
+                      : !studioPromptOnlyDev && !integ?.wavespeed_configured
+                        ? studioIntegrationsHint()
+                        : undefined
                 }
                 disabled={
                   studioBusy ||
                   !canStudioGenerate ||
-                  (!studioDesc.trim() && !studioFile && studioSelectedModelId == null) ||
+                  (studioMode !== 'grok_compose' &&
+                    !studioDesc.trim() &&
+                    !studioFile &&
+                    studioSelectedModelId == null) ||
                   (studioMode === 'face_swap' &&
                     (studioSelectedModelId == null || studioFile == null)) ||
+                  (studioMode === 'grok_compose' &&
+                    (studioSelectedModelId == null ||
+                      studioFile == null ||
+                      health?.studio_grok_scene_compose_configured === false)) ||
                   (studioMode === 'photo_edit' &&
                     !studioFile &&
                     studioPhotoEditArchiveId == null) ||
@@ -5079,7 +5128,7 @@ export default function App() {
                     !studioSendPoseRefToWavespeed &&
                     studioSelectedModelId == null &&
                     (studioMode === 'model' || studioMode === 'no_face')) ||
-                  !health?.openai_studio_configured ||
+                  (studioMode !== 'grok_compose' && !health?.openai_studio_configured) ||
                   (!studioPromptOnlyDev && !integ?.wavespeed_configured)
                 }
                 onClick={() => void refineStudioPrompt()}
@@ -5090,12 +5139,15 @@ export default function App() {
                     ? 'Собрать промпт'
                     : 'Сгенерировать'}
               </button>
-              {canStudioGenerate && health?.openai_studio_configured ? (
+              {canStudioGenerate &&
+              (studioMode === 'grok_compose'
+                ? health?.studio_grok_scene_compose_configured !== false
+                : health?.openai_studio_configured) ? (
                 studioPromptOnlyDev || integ?.wavespeed_configured ? (
                   <span className="studio-credit-hint">
                     {(studioInpaintMaskFile != null || studioPaintInpaintMask
-                      ? health.studio_inpaint_credit_cost
-                      : health.studio_prompt_credit_cost) ?? '—'}{' '}
+                      ? health?.studio_inpaint_credit_cost
+                      : health?.studio_prompt_credit_cost) ?? '—'}{' '}
                     кр.
                   </span>
                 ) : (

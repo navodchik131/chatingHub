@@ -41,6 +41,7 @@ from app.services.crypto_secret import decrypt_secret
 from app.services.realtime import hub
 from app.services.translation import translate_from_russian
 from app.services.studio_grok_motion import grok_motion_api_configured
+from app.services.studio_grok_scene_compose import grok_scene_compose_configured
 from app.services.wavespeed_client import studio_wan_edit_tier_switch_available
 from app.services.workspace import (
     PERM_CHAT,
@@ -119,6 +120,7 @@ async def api_health(session: AsyncSession = Depends(get_session)) -> dict:
         "studio_seedance_i2v_duration_max": 15,
         "studio_grok_motion_timeline_enabled": settings.studio_grok_motion_timeline_enabled,
         "studio_grok_motion_configured": grok_motion_api_configured(),
+        "studio_grok_scene_compose_configured": grok_scene_compose_configured(),
         "web_push_configured": settings.web_push_configured,
     }
 
