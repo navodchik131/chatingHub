@@ -857,3 +857,53 @@
   max-width: 100%;
   overflow: hidden;
 }
+
+/* PWA / телефон: один скролл страницы, без «коробки в коробке» */
+@media (max-width: 900px) {
+  .studio-workspace {
+    gap: 1.15rem;
+  }
+
+  .studio-workspace__composer {
+    position: static;
+    top: auto;
+    max-height: none;
+    overflow: visible;
+  }
+
+  .studio-panel.studio-workspace-page {
+    padding: 0;
+    border: none;
+    background: transparent;
+    box-shadow: none;
+    backdrop-filter: none;
+  }
+
+  .studio-gallery {
+    padding-bottom: 0.5rem;
+  }
+
+  .studio-gallery__head h2 {
+    font-size: 0.88rem;
+  }
+
+  .studio-gallery__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.65rem;
+  }
+
+  .studio-gen-card__media {
+    aspect-ratio: 3 / 4;
+  }
+
+  .studio-archive-modal {
+    padding: max(0.5rem, env(safe-area-inset-top, 0px))
+      max(0.5rem, env(safe-area-inset-right, 0px))
+      max(0.5rem, env(safe-area-inset-bottom, 0px))
+      max(0.5rem, env(safe-area-inset-left, 0px));
+  }
+
+  .studio-archive-modal__panel {
+    max-height: min(94dvh, 900px);
+  }
+}

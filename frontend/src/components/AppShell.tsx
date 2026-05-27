@@ -49,6 +49,50 @@ export function AppShell({
 
   const visibleNav = nav.filter((x) => x.show)
 
+  const topNavButton = (item: NavItem) => (
+    <button
+      key={item.id}
+      type="button"
+      className={
+        appSection === item.id ? 'workspace-topnav-item is-active' : 'workspace-topnav-item'
+      }
+      onClick={() => onSectionChange(item.id)}
+      aria-current={appSection === item.id ? 'page' : undefined}
+    >
+      <span className="workspace-topnav-icon" aria-hidden>
+        {item.icon}
+      </span>
+      <span className="workspace-topnav-label">{item.label}</span>
+      {item.badge != null && item.badge > 0 ? (
+        <span className="workspace-topnav-badge">
+          {item.badge > 99 ? '99+' : item.badge}
+        </span>
+      ) : null}
+    </button>
+  )
+
+  const mobileNavButton = (item: NavItem) => (
+    <button
+      key={item.id}
+      type="button"
+      className={
+        appSection === item.id
+          ? 'workspace-mobile-nav-item is-active'
+          : 'workspace-mobile-nav-item'
+      }
+      onClick={() => onSectionChange(item.id)}
+      aria-current={appSection === item.id ? 'page' : undefined}
+    >
+      <span aria-hidden>{item.icon}</span>
+      <span>{item.label}</span>
+      {item.badge != null && item.badge > 0 ? (
+        <span className="workspace-mobile-nav-badge">
+          {item.badge > 99 ? '99+' : item.badge}
+        </span>
+      ) : null}
+    </button>
+  )
+
   return (
     <div className="workspace-shell workspace-shell--topnav">
       <div className="workspace-main">
@@ -60,34 +104,14 @@ export function AppShell({
               </span>
               <div className="workspace-topbar-brand-text">
                 <strong>ModelMate</strong>
-                <span className="workspace-logo-sub">Creator OS</span>
+                <span className="workspace-logo-sub workspace-logo-sub--desktop">
+                  Creator OS
+                </span>
               </div>
             </div>
 
-            <nav className="workspace-topnav" aria-label="Разделы">
-              {visibleNav.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  className={
-                    appSection === item.id
-                      ? 'workspace-topnav-item is-active'
-                      : 'workspace-topnav-item'
-                  }
-                  onClick={() => onSectionChange(item.id)}
-                  aria-current={appSection === item.id ? 'page' : undefined}
-                >
-                  <span className="workspace-topnav-icon" aria-hidden>
-                    {item.icon}
-                  </span>
-                  <span className="workspace-topnav-label">{item.label}</span>
-                  {item.badge != null && item.badge > 0 ? (
-                    <span className="workspace-topnav-badge">
-                      {item.badge > 99 ? '99+' : item.badge}
-                    </span>
-                  ) : null}
-                </button>
-              ))}
+            <nav className="workspace-topnav workspace-topnav--desktop" aria-label="Разделы">
+              {visibleNav.map((item) => topNavButton(item))}
             </nav>
           </div>
 
@@ -101,20 +125,23 @@ export function AppShell({
               <span className="workspace-credits-value">{creditsBalance ?? '—'}</span>
               <span className="workspace-credits-label">кр.</span>
             </button>
-            <button type="button" className="ghost-btn workspace-topbar-btn" onClick={onAccountOpen}>
-              Кабинет
-            </button>
-            <Link to="/" className="ghost-btn workspace-topbar-link workspace-topbar-btn">
-              Сайт
-            </Link>
-            <button type="button" className="ghost-btn workspace-topbar-btn" onClick={onLogout}>
-              Выйти
-            </button>
+            <div className="workspace-topbar-end-desktop">
+              <button type="button" className="ghost-btn workspace-topbar-btn" onClick={onAccountOpen}>
+                Кабинет
+              </button>
+              <Link to="/" className="ghost-btn workspace-topbar-link workspace-topbar-btn">
+                Сайт
+              </Link>
+              <button type="button" className="ghost-btn workspace-topbar-btn" onClick={onLogout}>
+                Выйти
+              </button>
+            </div>
             <button
               type="button"
               className="workspace-user-chip"
               onClick={onAccountOpen}
               title={userMeta}
+              aria-label="Личный кабинет"
             >
               <span className="workspace-user-avatar" aria-hidden>
                 {userTitle.slice(0, 1).toUpperCase()}
@@ -125,6 +152,10 @@ export function AppShell({
         </header>
 
         <div className="workspace-content">{children}</div>
+
+        <nav className="workspace-mobile-nav" aria-label="Разделы приложения">
+          {visibleNav.map((item) => mobileNavButton(item))}
+        </nav>
       </div>
     </div>
   )
