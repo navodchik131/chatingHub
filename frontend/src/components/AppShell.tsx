@@ -47,115 +47,85 @@ export function AppShell({
     { id: 'studio_video', label: 'Видео', icon: '🎬', show: canStudioAny },
   ]
 
-  const sectionTitle: Record<WorkspaceSection, string> = {
-    overview: 'Обзор',
-    chat: 'Диалоги',
-    studio: 'Студия · Картинки',
-    studio_video: 'Студия · Видео',
-  }
+  const visibleNav = nav.filter((x) => x.show)
 
   return (
-    <div className="workspace-shell">
-      <aside className="workspace-sidebar" aria-label="Навигация">
-        <div className="workspace-sidebar-brand">
-          <span className="workspace-logo-mark" aria-hidden>
-            M
-          </span>
-          <div>
-            <strong>ModelMate</strong>
-            <span className="workspace-logo-sub">Creator OS</span>
-          </div>
-        </div>
-
-        <nav className="workspace-nav">
-          {nav
-            .filter((x) => x.show)
-            .map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                className={
-                  appSection === item.id ? 'workspace-nav-item is-active' : 'workspace-nav-item'
-                }
-                onClick={() => onSectionChange(item.id)}
-                aria-current={appSection === item.id ? 'page' : undefined}
-              >
-                <span className="workspace-nav-icon" aria-hidden>
-                  {item.icon}
-                </span>
-                <span className="workspace-nav-label">{item.label}</span>
-                {item.badge != null && item.badge > 0 ? (
-                  <span className="workspace-nav-badge">{item.badge > 99 ? '99+' : item.badge}</span>
-                ) : null}
-              </button>
-            ))}
-        </nav>
-
-        <div className="workspace-sidebar-plan panel-glass">
-          <div className="workspace-plan-row">
-            <span className="muted">Кредиты</span>
-            <strong>{creditsBalance ?? '—'}</strong>
-          </div>
-          <div className="workspace-plan-row">
-            <span className="muted">Тариф</span>
-            <span>{billingPlanLabel}</span>
-          </div>
-          <button type="button" className="workspace-plan-btn" onClick={onAccountOpen}>
-            Кабинет и оплата
-          </button>
-        </div>
-
-        <div className="workspace-sidebar-user">
-          <div className="workspace-user-avatar" aria-hidden>
-            {userTitle.slice(0, 1).toUpperCase()}
-          </div>
-          <div className="workspace-user-text">
-            <span className="workspace-user-name">{userTitle}</span>
-            <span className="workspace-user-meta">{userMeta}</span>
-          </div>
-        </div>
-      </aside>
-
+    <div className="workspace-shell workspace-shell--topnav">
       <div className="workspace-main">
         <header className="workspace-topbar">
-          <div className="workspace-topbar-title">
-            <h1>{sectionTitle[appSection]}</h1>
+          <div className="workspace-topbar-start">
+            <div className="workspace-topbar-brand">
+              <span className="workspace-logo-mark" aria-hidden>
+                M
+              </span>
+              <div className="workspace-topbar-brand-text">
+                <strong>ModelMate</strong>
+                <span className="workspace-logo-sub">Creator OS</span>
+              </div>
+            </div>
+
+            <nav className="workspace-topnav" aria-label="Разделы">
+              {visibleNav.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  className={
+                    appSection === item.id
+                      ? 'workspace-topnav-item is-active'
+                      : 'workspace-topnav-item'
+                  }
+                  onClick={() => onSectionChange(item.id)}
+                  aria-current={appSection === item.id ? 'page' : undefined}
+                >
+                  <span className="workspace-topnav-icon" aria-hidden>
+                    {item.icon}
+                  </span>
+                  <span className="workspace-topnav-label">{item.label}</span>
+                  {item.badge != null && item.badge > 0 ? (
+                    <span className="workspace-topnav-badge">
+                      {item.badge > 99 ? '99+' : item.badge}
+                    </span>
+                  ) : null}
+                </button>
+              ))}
+            </nav>
           </div>
-          <div className="workspace-topbar-actions">
-            <Link to="/" className="ghost-btn workspace-topbar-link">
+
+          <div className="workspace-topbar-end">
+            <button
+              type="button"
+              className="workspace-credits-chip"
+              onClick={onAccountOpen}
+              title={`${creditsBalance ?? '—'} кр. · ${billingPlanLabel}`}
+            >
+              <span className="workspace-credits-value">{creditsBalance ?? '—'}</span>
+              <span className="workspace-credits-label">кр.</span>
+            </button>
+            <button type="button" className="ghost-btn workspace-topbar-btn" onClick={onAccountOpen}>
+              Кабинет
+            </button>
+            <Link to="/" className="ghost-btn workspace-topbar-link workspace-topbar-btn">
               Сайт
             </Link>
-            <button type="button" className="ghost-btn" onClick={onAccountOpen}>
-              Настройки
-            </button>
-            <button type="button" className="ghost-btn" onClick={onLogout}>
+            <button type="button" className="ghost-btn workspace-topbar-btn" onClick={onLogout}>
               Выйти
+            </button>
+            <button
+              type="button"
+              className="workspace-user-chip"
+              onClick={onAccountOpen}
+              title={userMeta}
+            >
+              <span className="workspace-user-avatar" aria-hidden>
+                {userTitle.slice(0, 1).toUpperCase()}
+              </span>
+              <span className="workspace-user-name">{userTitle}</span>
             </button>
           </div>
         </header>
 
         <div className="workspace-content">{children}</div>
       </div>
-
-      <nav className="workspace-mobile-nav" aria-label="Разделы (мобильный)">
-        {nav
-          .filter((x) => x.show)
-          .map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              className={
-                appSection === item.id
-                  ? 'workspace-mobile-nav-item is-active'
-                  : 'workspace-mobile-nav-item'
-              }
-              onClick={() => onSectionChange(item.id)}
-            >
-              <span aria-hidden>{item.icon}</span>
-              <span>{item.label}</span>
-            </button>
-          ))}
-      </nav>
     </div>
   )
 }

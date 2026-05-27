@@ -1,10 +1,10 @@
+import { useState, type ReactNode } from 'react'
 import {
   studioArchiveIsPending,
   studioArchiveThumbUrl,
   type StudioArchiveItem,
 } from '../../studioArchive'
-
-import type { ReactNode } from 'react'
+import { StudioArchiveMediaModal } from './StudioArchiveMediaModal'
 
 type Props = {
   title?: string
@@ -16,10 +16,8 @@ type Props = {
   loadingMore?: boolean
   onLoadMore?: () => void
   loadMoreLabel?: string
-  onOpen: (item: StudioArchiveItem) => void
   onDelete: (item: StudioArchiveItem) => void
   onVideoFromImage?: (item: StudioArchiveItem) => void
-  selectedId?: number | null
 }
 
 export function StudioGenerationGallery({
@@ -32,11 +30,11 @@ export function StudioGenerationGallery({
   loadingMore,
   onLoadMore,
   loadMoreLabel = 'Ещё',
-  onOpen,
   onDelete,
   onVideoFromImage,
-  selectedId,
 }: Props) {
+  const [preview, setPreview] = useState<StudioArchiveItem | null>(null)
+
   return (
     <section className="studio-gallery" aria-labelledby="studio-gallery-heading">
       <header className="studio-gallery__head">
@@ -69,15 +67,15 @@ export function StudioGenerationGallery({
                   className={
                     'studio-gen-card' +
                     (pending ? ' studio-gen-card--processing' : '') +
-                    (failed ? ' studio-gen-card--failed' : '') +
-                    (selectedId === g.id ? ' studio-gen-card--selected' : '')
+                    (failed ? ' studio-gen-card--failed' : '')
                   }
                 >
                   <button
                     type="button"
                     className="studio-gen-card__media"
                     disabled={!canOpen && !pending}
-                    onClick={() => canOpen && onOpen(g)}
+                    aria-label={canOpen ? 'Открыть результат' : undefined}
+                    onClick={() => canOpen && setPreview(g)}
                   >
                     {videoReady ? (
                       <video src={videoReady} muted playsInline preload="metadata" />
@@ -169,6 +167,7 @@ export function StudioGenerationGallery({
           ) : null}
         </>
       )}
+      <StudioArchiveMediaModal item={preview} onClose={() => setPreview(null)} />
     </section>
   )
 }

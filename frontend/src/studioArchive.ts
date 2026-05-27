@@ -47,8 +47,14 @@ export function studioArchiveThumbUrl(item: StudioArchiveItem): string | null {
   return (item.image_url || '').trim() || null
 }
 
-export async function fetchStudioArchivePage(skip: number, limit: number): Promise<StudioGenerationsPage> {
-  const r = await apiFetch(`/api/studio/generations?limit=${limit}&skip=${skip}`)
+export async function fetchStudioArchivePage(
+  skip: number,
+  limit: number,
+  mediaKind?: StudioArchiveMediaKind,
+): Promise<StudioGenerationsPage> {
+  const qs = new URLSearchParams({ limit: String(limit), skip: String(skip) })
+  if (mediaKind) qs.set('media_kind', mediaKind)
+  const r = await apiFetch(`/api/studio/generations?${qs}`)
   const data = (await r.json().catch(() => ({}))) as StudioGenerationsPage & { detail?: unknown }
   if (!r.ok) throw new Error(formatHttpApiError(r, data))
   return {
@@ -57,8 +63,11 @@ export async function fetchStudioArchivePage(skip: number, limit: number): Promi
   }
 }
 
-export async function fetchStudioArchivePending(): Promise<StudioGenerationsPendingPage> {
-  const r = await apiFetch('/api/studio/generations/pending')
+export async function fetchStudioArchivePending(
+  mediaKind?: StudioArchiveMediaKind,
+): Promise<StudioGenerationsPendingPage> {
+  const qs = mediaKind ? `?media_kind=${encodeURIComponent(mediaKind)}` : ''
+  const r = await apiFetch(`/api/studio/generations/pending${qs}`)
   const data = (await r.json().catch(() => ({}))) as StudioGenerationsPendingPage & { detail?: unknown }
   if (!r.ok) throw new Error(formatHttpApiError(r, data))
   return {

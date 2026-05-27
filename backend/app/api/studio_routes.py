@@ -7,7 +7,7 @@ import shutil
 import uuid
 from functools import partial
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 from urllib.parse import quote
 
 import anyio
@@ -15,7 +15,7 @@ import httpx
 
 from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -959,11 +959,29 @@ async def api_list_motion_renders(
     return StudioMotionRendersPageOut(items=out_items, has_more=has_more)
 
 
+def _apply_studio_generation_media_kind_filter(stmt, media_kind: str | None):
+    if media_kind == "video":
+        return stmt.where(StudioGeneration.content_type.like("video/%"))
+    if media_kind == "image":
+        return stmt.where(
+            or_(
+                StudioGeneration.content_type.is_(None),
+                StudioGeneration.content_type == "",
+                ~StudioGeneration.content_type.like("video/%"),
+            )
+        )
+    return stmt
+
+
 @router.get("/studio/generations", response_model=StudioGenerationsPageOut)
 async def api_list_studio_generations(
     request: Request,
     limit: int = Query(10, ge=1, le=50),
     skip: int = Query(0, ge=0, le=50_000),
+    media_kind: Literal["image", "video"] | None = Query(
+        None,
+        description="Фильтр истории: только картинки или только видео",
+    ),
     session: AsyncSession = Depends(get_session),
     user: User = Depends(get_current_user),
 ) -> StudioGenerationsPageOut:
@@ -986,6 +1004,7 @@ async def api_list_studio_generations(
         .offset(int(skip))
         .limit(take)
     )
+    stmt = _apply_studio_generation_media_kind_filter(stmt, media_kind)
     stmt = apply_studio_model_id_filter(stmt, StudioGeneration.studio_model_id, allowed)
     rows = list((await session.execute(stmt)).scalars().all())
     has_more = len(rows) > limit
@@ -1011,6 +1030,10 @@ async def api_list_studio_generations(
 async def api_list_pending_studio_generations(
     request: Request,
     limit: int = Query(30, ge=1, le=50),
+    media_kind: Literal["image", "video"] | None = Query(
+        None,
+        description="Только незавершённые картинки или видео",
+    ),
     session: AsyncSession = Depends(get_session),
     user: User = Depends(get_current_user),
 ) -> StudioGenerationsPendingOut:
@@ -1033,6 +1056,7 @@ async def api_list_pending_studio_generations(
         .order_by(StudioGeneration.created_at.desc(), StudioGeneration.id.desc())
         .limit(int(limit))
     )
+    stmt = _apply_studio_generation_media_kind_filter(stmt, media_kind)
     stmt = apply_studio_model_id_filter(stmt, StudioGeneration.studio_model_id, allowed)
     rows = list((await session.execute(stmt)).scalars().all())
     base = _public_app_base(request)

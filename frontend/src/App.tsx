@@ -26,6 +26,7 @@ import {
   studioArchiveIsPending,
   studioArchiveThumbUrl,
   type StudioArchiveItem,
+  type StudioArchiveMediaKind,
 } from './studioArchive'
 import './components/studio/studio-ui.css'
 import { StudioArchiveThumbPicker } from './components/studio/StudioArchiveThumbPicker'
@@ -561,6 +562,12 @@ interface StudioMotionRendersPage {
 /** Должен совпадать с default limit у GET /api/studio/generations */
 const STUDIO_ARCHIVE_PAGE = 10
 
+function studioGalleryMediaKind(section: WorkspaceSection): StudioArchiveMediaKind | undefined {
+  if (section === 'studio') return 'image'
+  if (section === 'studio_video') return 'video'
+  return undefined
+}
+
 type StudioJobMode = 'model' | 'photo_edit' | 'no_face' | 'face_swap' | 'grok_compose'
 
 export default function App() {
@@ -757,6 +764,14 @@ export default function App() {
   const [studioAspectPresets, setStudioAspectPresets] = useState<StudioAspectPreset[]>([])
   const [studioOutputAspect, setStudioOutputAspect] = useState('9:16')
   const [studioGenerations, setStudioGenerations] = useState<StudioArchiveItem[]>([])
+  /** Картинки архива для пикеров на странице видео (галерея там — только video). */
+  const [studioImagePickerArchive, setStudioImagePickerArchive] = useState<StudioArchiveItem[]>([])
+  const findStudioArchiveItem = useCallback(
+    (id: number): StudioArchiveItem | undefined =>
+      studioGenerations.find((x) => x.id === id) ??
+      studioImagePickerArchive.find((x) => x.id === id),
+    [studioGenerations, studioImagePickerArchive],
+  )
   const [studioGenHasMore, setStudioGenHasMore] = useState(false)
   const [studioGenLoadingMore, setStudioGenLoadingMore] = useState(false)
   const [studioArchiveInitialLoading, setStudioArchiveInitialLoading] = useState(false)
@@ -861,7 +876,7 @@ export default function App() {
   const studioInpaintBaseImageSrc =
     studioReferenceObjectUrl ??
     (studioMode === 'photo_edit' && studioPhotoEditArchiveId != null
-      ? studioGenerations.find((g) => g.id === studioPhotoEditArchiveId)?.image_url ?? null
+      ? findStudioArchiveItem(studioPhotoEditArchiveId)?.image_url ?? null
       : null)
 
   useEffect(() => {
@@ -1007,21 +1022,40 @@ export default function App() {
     if (r.ok) setStudioCameraPresets((await r.json()) as StudioCameraPreset[])
   }, [])
 
+  const loadStudioImagePickerArchive = useCallback(async () => {
+    const page = await fetchStudioArchivePage(0, STUDIO_ARCHIVE_PAGE, 'image')
+    setStudioImagePickerArchive(page.items)
+  }, [])
+
   const loadStudioGenerationsReset = useCallback(async () => {
-    const page = await fetchStudioArchivePage(0, STUDIO_ARCHIVE_PAGE)
+    const kind = studioGalleryMediaKind(appSection)
+    const page = await fetchStudioArchivePage(0, STUDIO_ARCHIVE_PAGE, kind)
     setStudioGenerations(page.items)
     setStudioGenHasMore(page.has_more)
-  }, [])
+    if (appSection === 'studio') {
+      setStudioImagePickerArchive(page.items)
+    } else if (appSection === 'studio_video') {
+      await loadStudioImagePickerArchive()
+    }
+  }, [appSection, loadStudioImagePickerArchive])
 
   const syncStudioArchivePending = useCallback(async () => {
     try {
-      const pending = await fetchStudioArchivePending()
-      if (!pending.items.length) return
-      setStudioGenerations((prev) => mergeStudioArchiveItems(prev, pending.items))
+      const kind = studioGalleryMediaKind(appSection)
+      const pending = await fetchStudioArchivePending(kind)
+      if (pending.items.length) {
+        setStudioGenerations((prev) => mergeStudioArchiveItems(prev, pending.items))
+      }
+      if (appSection === 'studio_video') {
+        const imgPending = await fetchStudioArchivePending('image')
+        if (imgPending.items.length) {
+          setStudioImagePickerArchive((prev) => mergeStudioArchiveItems(prev, imgPending.items))
+        }
+      }
     } catch {
       /* тихий опрос */
     }
-  }, [])
+  }, [appSection])
 
   const loadMoreStudioGenerations = useCallback(async () => {
     if (studioGenLoadingMore || !studioGenHasMore) return
@@ -1029,7 +1063,8 @@ export default function App() {
     setError(null)
     try {
       const skip = studioGenerationsRef.current.length
-      const page = await fetchStudioArchivePage(skip, STUDIO_ARCHIVE_PAGE)
+      const kind = studioGalleryMediaKind(appSection)
+      const page = await fetchStudioArchivePage(skip, STUDIO_ARCHIVE_PAGE, kind)
       setStudioGenerations((prev) => {
         const seen = new Set(prev.map((x) => x.id))
         const add = page.items.filter((x) => !seen.has(x.id))
@@ -1041,12 +1076,15 @@ export default function App() {
     } finally {
       setStudioGenLoadingMore(false)
     }
-  }, [studioGenLoadingMore, studioGenHasMore])
+  }, [appSection, studioGenLoadingMore, studioGenHasMore])
 
-  const studioArchiveHasPending = useMemo(
-    () => studioGenerations.some(studioArchiveIsPending),
-    [studioGenerations],
-  )
+  const studioArchiveHasPending = useMemo(() => {
+    if (studioGenerations.some(studioArchiveIsPending)) return true
+    if (appSection === 'studio_video') {
+      return studioImagePickerArchive.some(studioArchiveIsPending)
+    }
+    return false
+  }, [studioGenerations, studioImagePickerArchive, appSection])
 
   useEffect(() => {
     if (!authed || !canStudioGenerate || !studioArchiveHasPending) return
@@ -1265,29 +1303,29 @@ export default function App() {
   useEffect(() => {
     if (appSection !== 'studio_video') return
     if (motionFrameArchiveId == null) return
-    const g = studioGenerations.find((x) => x.id === motionFrameArchiveId)
+    const g = findStudioArchiveItem(motionFrameArchiveId)
     if (g) {
       const thumb = studioArchiveThumbUrl(g) || g.image_url
       if (thumb) setMotionPreviewUrl(thumb)
       setMotionPreviewGenId(g.id)
       setMotionPendingExternalStillUrl(null)
     }
-  }, [appSection, motionFrameArchiveId, studioGenerations])
+  }, [appSection, motionFrameArchiveId, findStudioArchiveItem])
 
   useEffect(() => {
     if (motionPreviewGenId == null) return
-    const g = studioGenerations.find((x) => x.id === motionPreviewGenId)
+    const g = findStudioArchiveItem(motionPreviewGenId)
     if (!g || g.status === 'failed') return
     const thumb = studioArchiveThumbUrl(g) || g.image_url
     if (thumb && g.status === 'ready') {
       setMotionPreviewUrl(thumb)
       setMotionPendingExternalStillUrl(null)
     }
-  }, [studioGenerations, motionPreviewGenId])
+  }, [findStudioArchiveItem, motionPreviewGenId])
 
   useEffect(() => {
     if (studioGenGenerationId == null) return
-    const g = studioGenerations.find((x) => x.id === studioGenGenerationId)
+    const g = findStudioArchiveItem(studioGenGenerationId)
     if (!g) return
     if (g.status === 'failed') return
     if (g.media_kind === 'video' && (g.video_url || '').trim()) {
@@ -1301,7 +1339,7 @@ export default function App() {
         url.includes('/api/studio/public-generation-image') ? null : url,
       )
     }
-  }, [studioGenerations, studioGenGenerationId])
+  }, [findStudioArchiveItem, studioGenGenerationId])
 
   useEffect(() => {
     if (!motionFirstFrameFile) {
@@ -2339,7 +2377,7 @@ export default function App() {
     const gId = typeof data.generation_id === 'number' ? data.generation_id : null
     if (gId != null) {
       setMotionPreviewGenId(gId)
-      const g = studioGenerations.find((x) => x.id === gId)
+      const g = findStudioArchiveItem(gId)
       if (g?.image_url) setMotionPreviewUrl(g.image_url)
     }
     if (data.motion_video_file_id) setMotionVideoFileId(data.motion_video_file_id)
@@ -5001,13 +5039,15 @@ export default function App() {
             <StudioPillField
               label="Формат"
               hint="Стороны кадра"
+              scrollRow
               options={
                 studioAspectPresets.length > 0
                   ? studioAspectPresets.map((p) => ({
                       value: p.key,
-                      label: p.label,
+                      label: p.key,
+                      title: p.label,
                     }))
-                  : [{ value: '9:16', label: '9:16' }]
+                  : [{ value: '9:16', label: '9:16', title: '9:16' }]
               }
               value={studioOutputAspect}
               onChange={(v) => v != null && setStudioOutputAspect(String(v))}
@@ -5020,6 +5060,7 @@ export default function App() {
                   : 'Листы для лица и тела'
               }
               icon={<IconModel className="studio-slot__icon-svg" />}
+              scrollRow={studioModels.length > 4}
               options={studioModels.map((m) => ({ value: m.id, label: m.name }))}
               value={studioSelectedModelId}
               onChange={(v) => setStudioSelectedModelId(v)}
@@ -5382,7 +5423,7 @@ export default function App() {
                     title="Открыть вкладку «Видео» с этим кадром"
                     onClick={() => {
                       if (studioGenGenerationId == null) return
-                      const g = studioGenerations.find((x) => x.id === studioGenGenerationId)
+                      const g = findStudioArchiveItem(studioGenGenerationId)
                       setMotionFrameArchiveId(studioGenGenerationId)
                       if (g?.studio_model_id != null) setStudioSelectedModelId(g.studio_model_id)
                       setMotionFirstFrameFile(null)
@@ -5417,17 +5458,6 @@ export default function App() {
                 loadingMore={studioGenLoadingMore}
                 onLoadMore={() => void loadMoreStudioGenerations()}
                 loadMoreLabel={`Ещё ${STUDIO_ARCHIVE_PAGE}`}
-                selectedId={studioGenGenerationId}
-                onOpen={(g) => {
-                  setStudioGenGenerationId(g.id)
-                  if (g.media_kind === 'video' && (g.video_url || '').trim()) {
-                    setMotionResultVideoUrl(g.video_url!.trim())
-                    setAppSection('studio_video')
-                  } else {
-                    setStudioGenImageUrl(g.image_url)
-                    setStudioPendingExternalImageUrl(null)
-                  }
-                }}
                 onDelete={(g) =>
                   void deleteStudioGeneration(g.id, g.image_url || g.video_url || '')
                 }
@@ -5465,10 +5495,15 @@ export default function App() {
               <div className="studio-slot-grid">
                 <StudioPillField
                   label="Формат"
+                  scrollRow
                   options={
                     studioAspectPresets.length > 0
-                      ? studioAspectPresets.map((p) => ({ value: p.key, label: p.label }))
-                      : [{ value: '9:16', label: '9:16' }]
+                      ? studioAspectPresets.map((p) => ({
+                          value: p.key,
+                          label: p.key,
+                          title: p.label,
+                        }))
+                      : [{ value: '9:16', label: '9:16', title: '9:16' }]
                   }
                   value={studioOutputAspect}
                   onChange={(v) => v != null && setStudioOutputAspect(String(v))}
@@ -5533,7 +5568,7 @@ export default function App() {
                   <StudioArchiveThumbPicker
                     label="Кадр из архива"
                     hint="Вместо загрузки файла"
-                    items={studioGenerations}
+                    items={studioImagePickerArchive}
                     value={motionFrameArchiveId}
                     onChange={(id, item) => {
                       setMotionFrameArchiveId(id)
@@ -5631,7 +5666,7 @@ export default function App() {
                   <StudioArchiveThumbPicker
                     label="Наряд (опционально)"
                     hint="Доп. референс одежды"
-                    items={studioGenerations}
+                    items={studioImagePickerArchive}
                     value={motionOutfitArchiveId}
                     onChange={(id) => setMotionOutfitArchiveId(id)}
                   />
@@ -5753,15 +5788,6 @@ export default function App() {
                 loadingMore={studioGenLoadingMore}
                 onLoadMore={() => void loadMoreStudioGenerations()}
                 loadMoreLabel={`Ещё ${STUDIO_ARCHIVE_PAGE}`}
-                onOpen={(g) => {
-                  if (g.media_kind === 'video' && (g.video_url || '').trim()) {
-                    setMotionResultVideoUrl(g.video_url!.trim())
-                  } else {
-                    setMotionPreviewGenId(g.id)
-                    setMotionPreviewUrl(studioArchiveThumbUrl(g) || g.image_url)
-                    setMotionFrameArchiveId(g.id)
-                  }
-                }}
                 onDelete={(g) =>
                   void deleteStudioGeneration(g.id, g.image_url || g.video_url || '')
                 }
