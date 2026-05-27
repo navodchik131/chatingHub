@@ -18,7 +18,21 @@ import {
 } from './webPush'
 import { billingReturnCopy } from './billingReturnCopy'
 import { formatClientFetchError, formatHttpApiError } from './apiErrors'
-import { postStudioJobAndWait } from './studioJobs'
+import { postStudioJobAndWait, postStudioJobStart } from './studioJobs'
+import {
+  fetchStudioArchivePage,
+  fetchStudioArchivePending,
+  mergeStudioArchiveItems,
+  studioArchiveIsPending,
+  studioArchiveThumbUrl,
+  type StudioArchiveItem,
+} from './studioArchive'
+import './components/studio/studio-ui.css'
+import { StudioArchiveThumbPicker } from './components/studio/StudioArchiveThumbPicker'
+import { StudioGenerationGallery } from './components/studio/StudioGenerationGallery'
+import { StudioMediaSlot } from './components/studio/StudioMediaSlot'
+import { StudioPillField } from './components/studio/StudioPillField'
+import { IconModel, IconSpark } from './components/studio/studioIcons'
 import { AuthPanel } from './AuthPanel'
 import { AppShell, type WorkspaceSection } from './components/AppShell'
 import { WorkspaceOverview } from './components/WorkspaceOverview'
@@ -530,21 +544,6 @@ interface StudioAspectPreset {
   size: string
 }
 
-interface StudioArchiveItem {
-  id: number
-  created_at: string
-  output_aspect: string | null
-  studio_model_id: number | null
-  model_name: string | null
-  prompt_excerpt: string | null
-  image_url: string
-}
-
-interface StudioGenerationsPage {
-  items: StudioArchiveItem[]
-  has_more: boolean
-}
-
 interface StudioMotionRenderItem {
   id: number
   created_at: string
@@ -1008,20 +1007,21 @@ export default function App() {
     if (r.ok) setStudioCameraPresets((await r.json()) as StudioCameraPreset[])
   }, [])
 
-  const fetchStudioArchivePage = useCallback(async (skip: number) => {
-    const p = new URLSearchParams()
-    p.set('limit', String(STUDIO_ARCHIVE_PAGE))
-    p.set('skip', String(skip))
-    const r = await apiFetch(`/api/studio/generations?${p}`)
-    if (!r.ok) throw new Error('Не удалось загрузить архив студии')
-    return (await r.json()) as StudioGenerationsPage
-  }, [])
-
   const loadStudioGenerationsReset = useCallback(async () => {
-    const page = await fetchStudioArchivePage(0)
+    const page = await fetchStudioArchivePage(0, STUDIO_ARCHIVE_PAGE)
     setStudioGenerations(page.items)
     setStudioGenHasMore(page.has_more)
-  }, [fetchStudioArchivePage])
+  }, [])
+
+  const syncStudioArchivePending = useCallback(async () => {
+    try {
+      const pending = await fetchStudioArchivePending()
+      if (!pending.items.length) return
+      setStudioGenerations((prev) => mergeStudioArchiveItems(prev, pending.items))
+    } catch {
+      /* тихий опрос */
+    }
+  }, [])
 
   const loadMoreStudioGenerations = useCallback(async () => {
     if (studioGenLoadingMore || !studioGenHasMore) return
@@ -1029,7 +1029,7 @@ export default function App() {
     setError(null)
     try {
       const skip = studioGenerationsRef.current.length
-      const page = await fetchStudioArchivePage(skip)
+      const page = await fetchStudioArchivePage(skip, STUDIO_ARCHIVE_PAGE)
       setStudioGenerations((prev) => {
         const seen = new Set(prev.map((x) => x.id))
         const add = page.items.filter((x) => !seen.has(x.id))
@@ -1041,7 +1041,26 @@ export default function App() {
     } finally {
       setStudioGenLoadingMore(false)
     }
-  }, [fetchStudioArchivePage, studioGenLoadingMore, studioGenHasMore])
+  }, [studioGenLoadingMore, studioGenHasMore])
+
+  const studioArchiveHasPending = useMemo(
+    () => studioGenerations.some(studioArchiveIsPending),
+    [studioGenerations],
+  )
+
+  useEffect(() => {
+    if (!authed || !canStudioGenerate || !studioArchiveHasPending) return
+    let cancelled = false
+    const tick = () => {
+      if (!cancelled) void syncStudioArchivePending()
+    }
+    tick()
+    const id = window.setInterval(tick, 12_000)
+    return () => {
+      cancelled = true
+      window.clearInterval(id)
+    }
+  }, [authed, canStudioGenerate, studioArchiveHasPending, syncStudioArchivePending])
 
   const refreshMotionRenders = useCallback(async () => {
     const r = await apiFetch('/api/studio/motion/renders?limit=40&skip=0')
@@ -1248,11 +1267,41 @@ export default function App() {
     if (motionFrameArchiveId == null) return
     const g = studioGenerations.find((x) => x.id === motionFrameArchiveId)
     if (g) {
-      setMotionPreviewUrl(g.image_url)
+      const thumb = studioArchiveThumbUrl(g) || g.image_url
+      if (thumb) setMotionPreviewUrl(thumb)
       setMotionPreviewGenId(g.id)
       setMotionPendingExternalStillUrl(null)
     }
   }, [appSection, motionFrameArchiveId, studioGenerations])
+
+  useEffect(() => {
+    if (motionPreviewGenId == null) return
+    const g = studioGenerations.find((x) => x.id === motionPreviewGenId)
+    if (!g || g.status === 'failed') return
+    const thumb = studioArchiveThumbUrl(g) || g.image_url
+    if (thumb && g.status === 'ready') {
+      setMotionPreviewUrl(thumb)
+      setMotionPendingExternalStillUrl(null)
+    }
+  }, [studioGenerations, motionPreviewGenId])
+
+  useEffect(() => {
+    if (studioGenGenerationId == null) return
+    const g = studioGenerations.find((x) => x.id === studioGenGenerationId)
+    if (!g) return
+    if (g.status === 'failed') return
+    if (g.media_kind === 'video' && (g.video_url || '').trim()) {
+      setMotionResultVideoUrl(g.video_url!.trim())
+      return
+    }
+    const url = (g.image_url || '').trim()
+    if (url && (g.status === 'ready' || g.status === 'provider_ready')) {
+      setStudioGenImageUrl(url)
+      setStudioPendingExternalImageUrl(
+        url.includes('/api/studio/public-generation-image') ? null : url,
+      )
+    }
+  }, [studioGenerations, studioGenGenerationId])
 
   useEffect(() => {
     if (!motionFirstFrameFile) {
@@ -1467,7 +1516,13 @@ export default function App() {
           message?: ChatMessage
           status?: string
         }
+        if (payload.type === 'studio_generation') {
+          void syncStudioArchivePending()
+          void loadStudioGenerationsReset()
+          return
+        }
         if (payload.type === 'studio_job') {
+          void syncStudioArchivePending()
           if (payload.status === 'completed' || payload.status === 'failed') {
             void refreshMotionRenders()
             void loadStudioGenerationsReset()
@@ -1536,7 +1591,15 @@ export default function App() {
       ws?.close()
       wsRef.current = null
     }
-  }, [loadConversations, loadHealth, authed, refreshMotionRenders, loadStudioGenerationsReset, refreshMe])
+  }, [
+    loadConversations,
+    loadHealth,
+    authed,
+    refreshMotionRenders,
+    loadStudioGenerationsReset,
+    syncStudioArchivePending,
+    refreshMe,
+  ])
 
   useEffect(() => {
     const onDoc = (e: MouseEvent) => {
@@ -2137,30 +2200,20 @@ export default function App() {
         studioSendPoseRefToWavespeed ? '1' : '0',
       )
       fd.append('lock_model_hairstyle', studioLockModelHairstyle ? '1' : '0')
-      const data = await postStudioJobAndWait<{
-        refined_prompt: string
-        reference_scene_description?: string | null
-        generated_image_url?: string | null
-        wavespeed_message?: string | null
-        generation_id?: number | null
-      }>('/api/studio/refine-prompt', {
+      const accepted = await postStudioJobStart('/api/studio/refine-prompt', {
         method: 'POST',
         body: fd,
       })
-      const gid = typeof data.generation_id === 'number' ? data.generation_id : null
-      const gurl = data.generated_image_url?.trim() || null
-      setStudioGenImageUrl(gurl)
-      setStudioGenGenerationId(gid)
-      setStudioPendingExternalImageUrl(
-        gid != null ||
-          !gurl ||
-          !gurl.startsWith('https://') ||
-          gurl.includes('/api/studio/public-generation-image')
-          ? null
-          : gurl,
+      const gid =
+        typeof accepted.generation_id === 'number' ? accepted.generation_id : null
+      if (gid != null) {
+        setStudioGenGenerationId(gid)
+        setStudioGenImageUrl(null)
+        setStudioPendingExternalImageUrl(null)
+      }
+      setStudioWavespeedMsg(
+        'Генерация запущена — смотрите прогресс в «Сохранённые». Результат подставится автоматически.',
       )
-      setStudioWavespeedMsg(data.wavespeed_message?.trim() || null)
-      setStudioRefinedPromptPreview((data.refined_prompt ?? '').trim() || null)
       void refreshMe()
       void loadStudioGenerationsReset()
     } catch (e) {
@@ -2248,11 +2301,18 @@ export default function App() {
     fd.append('lock_model_hairstyle', motionLockHairstyle ? '1' : '0')
     fd.append('use_still_as_final', useStillFinalEffective && motionFirstFrameFile ? '1' : '0')
     try {
-      const data = await postStudioJobAndWait<MotionFirstFrameApiData>(
-        '/api/studio/motion/first-frame',
-        { method: 'POST', body: fd },
-      )
-      return { ok: true as const, data }
+      const accepted = await postStudioJobStart('/api/studio/motion/first-frame', {
+        method: 'POST',
+        body: fd,
+      })
+      return {
+        ok: true as const,
+        data: {
+          generation_id: accepted.generation_id ?? null,
+          wavespeed_message:
+            'Кадр генерируется — смотрите прогресс в «Сохранённые».',
+        },
+      }
     } catch (e) {
       const msg = formatClientFetchError(e, true)
       return {
@@ -2424,20 +2484,16 @@ export default function App() {
       } else {
         fd.append('outfit_generation_id', '')
       }
-      const data = await postStudioJobAndWait<{
-        video_url?: string | null
-        message?: string | null
-        motion_video_prompt_auto?: string | null
-      }>('/api/studio/motion/render-video', {
+      await postStudioJobStart('/api/studio/motion/render-video', {
         method: 'POST',
         body: fd,
       })
-      setMotionResultVideoUrl(data.video_url?.trim() || null)
-      const mva = data.motion_video_prompt_auto?.trim()
-      if (mva)
-        setMotionAutoTextPreview(`Промпт Seedance T2V (отправлен на сервер):\n${mva}`)
-      setMotionMsg(data.message?.trim() || null)
+      setMotionResultVideoUrl(null)
+      setMotionMsg(
+        'Видео генерируется — заглушка в «Сохранённые», обычно 10–40 мин. Обновление по готовности автоматически.',
+      )
       void refreshMe()
+      void loadStudioGenerationsReset()
       void refreshMotionRenders()
     } catch (e) {
       setError(formatClientFetchError(e, true))
@@ -4787,9 +4843,13 @@ export default function App() {
       )}
 
       {hasAnyMainSection && appSection === 'studio' && canStudioAny && (
-        <>
-        <section className="studio-panel" aria-labelledby="studio-heading">
-          <h2 id="studio-heading">Новая картинка</h2>
+        <section className="studio-panel studio-workspace-page" aria-labelledby="studio-heading">
+          <div className="studio-workspace">
+            <div className="studio-workspace__composer" aria-labelledby="studio-heading">
+              <header className="studio-workspace__composer-head">
+                <h2 id="studio-heading">Картинки</h2>
+                <p className="studio-workspace__tagline">Модель, референс и описание — результат в истории справа.</p>
+              </header>
           {studioPaywalled ? (
             <div className="studio-paywall cabinet-module cabinet-module--highlight" role="status">
               <p className="cabinet-module-body" style={{ marginBottom: '0.75rem' }}>
@@ -4830,8 +4890,8 @@ export default function App() {
               {!canStudioGenerate ? (
                 <div className="banner info">Генерация недоступна по правам. Попросите владельца аккаунта.</div>
               ) : null}
-              <div className="studio-grid studio-grid--simple">
-            <div className="studio-mode-row" role="group" aria-label="Режим студии">
+              <div className="studio-slot-grid">
+            <div className="studio-mode-row studio-mode-compact" role="group" aria-label="Режим студии">
               <span className="studio-mode-label">Режим</span>
               <div className="studio-mode-segment">
                 {(
@@ -4854,17 +4914,6 @@ export default function App() {
                 ))}
               </div>
             </div>
-            <p className="studio-mode-hint">
-              {studioMode === 'model'
-                ? 'Модель из кабинета, по желанию — референс позы и короткое описание сцены.'
-                : studioMode === 'grok_compose'
-                  ? 'Grok собирает промпт: сцена с вашего рефа, внешность — только с листов модели и JSON. В WaveSpeed уходит реф позы + текст.'
-                  : studioMode === 'face_swap'
-                  ? 'Ваше фото со сценой и сохранённая модель — лицо и фигура подставятся с учётом света кадра.'
-                  : studioMode === 'photo_edit'
-                  ? 'Загрузите снимок или выберите из «Сохранённые» и опишите, что изменить.'
-                  : 'Сцена без лица: укажите модель или свой референс.'}
-            </p>
             {studioMode === 'grok_compose' &&
             health?.studio_grok_scene_compose_configured === false ? (
               <div className="banner warn">
@@ -4891,11 +4940,6 @@ export default function App() {
                 </button>
               </div>
             </div>
-            <p className="studio-mode-hint">
-              {studioWaveProfile === 'regular'
-                ? 'Для повседневных и рекламных кадров.'
-                : 'Для откровенных сцен и купальников.'}
-            </p>
             {import.meta.env.DEV && health?.studio_allow_prompt_only ? (
               <>
                 <div className="studio-mode-row" role="group" aria-label="Режим вывода студии (отладка)">
@@ -4954,86 +4998,67 @@ export default function App() {
                 <p className="studio-mode-hint">Pro — выше детализация, обычно дороже по кредитам.</p>
               </>
             ) : null}
-            <label className="studio-label">
-              Формат
-              <select
-                value={studioOutputAspect}
-                onChange={(e) => setStudioOutputAspect(e.target.value)}
-              >
-                {studioAspectPresets.length > 0 ? (
-                  studioAspectPresets.map((p) => (
-                    <option key={p.key} value={p.key}>
-                      {p.label} ({p.size} px)
-                    </option>
-                  ))
-                ) : (
-                  <option value="9:16">9:16 (1080×1920)</option>
-                )}
-              </select>
-            </label>
-            <label className="studio-label">
-              Модель
-              <select
-                value={studioSelectedModelId ?? ''}
-                onChange={(e) => {
-                  const v = e.target.value
-                  setStudioSelectedModelId(v === '' ? null : Number(v))
-                }}
-              >
-                <option value="">Без модели</option>
-                {studioModels.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name}
-                  </option>
-                ))}
-              </select>
-              {studioMode === 'face_swap' ? (
-                <span className="muted studio-file-name">Нужны модель и ваше исходное фото.</span>
-              ) : studioMode === 'photo_edit' ? (
-                <span className="muted studio-file-name">
-                  Для правок по всему кадру модель не обязательна; для замены лица в маске — выберите модель.
-                </span>
-              ) : null}
-            </label>
+            <StudioPillField
+              label="Формат"
+              hint="Стороны кадра"
+              options={
+                studioAspectPresets.length > 0
+                  ? studioAspectPresets.map((p) => ({
+                      value: p.key,
+                      label: p.label,
+                    }))
+                  : [{ value: '9:16', label: '9:16' }]
+              }
+              value={studioOutputAspect}
+              onChange={(v) => v != null && setStudioOutputAspect(String(v))}
+            />
+            <StudioPillField
+              label="Модель"
+              hint={
+                studioMode === 'face_swap'
+                  ? 'Обязательна вместе с фото'
+                  : 'Листы для лица и тела'
+              }
+              icon={<IconModel className="studio-slot__icon-svg" />}
+              options={studioModels.map((m) => ({ value: m.id, label: m.name }))}
+              value={studioSelectedModelId}
+              onChange={(v) => setStudioSelectedModelId(v)}
+              allowEmpty
+              emptyLabel="Без модели"
+            />
             {studioMode === 'photo_edit' ? (
-              <label className="studio-label">
-                Из сохранённых кадров (вместо файла)
-                <select
-                  value={studioPhotoEditArchiveId ?? ''}
-                  onChange={(e) => {
-                    const v = e.target.value
-                    const id = v === '' ? null : Number(v)
-                    setStudioPhotoEditArchiveId(id != null && Number.isFinite(id) ? id : null)
-                    if (id != null && Number.isFinite(id)) setStudioFile(null)
-                  }}
-                >
-                  <option value="">— не использовать —</option>
-                  {studioGenerations.map((g) => (
-                    <option key={g.id} value={g.id}>
-                      #{g.id} {g.model_name ? `· ${g.model_name}` : ''}{' '}
-                      {g.prompt_excerpt ? `· ${g.prompt_excerpt.slice(0, 36)}` : ''}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            ) : null}
-            <label className="studio-label">
-              {studioMode === 'photo_edit'
-                ? 'Файл с устройства (если не из архива)'
-                : studioMode === 'face_swap'
-                  ? 'Исходное фото (обязательно)'
-                  : 'Референс (по желанию)'}
-              <input
-                type="file"
-                accept="image/jpeg,image/png,image/webp,image/gif"
-                onChange={(e) => {
-                  const f = e.target.files?.[0] ?? null
-                  setStudioFile(f)
-                  if (f) setStudioPhotoEditArchiveId(null)
+              <StudioArchiveThumbPicker
+                label="Кадр из архива"
+                hint="Вместо загрузки с устройства"
+                items={studioGenerations}
+                value={studioPhotoEditArchiveId}
+                onChange={(id) => {
+                  setStudioPhotoEditArchiveId(id)
+                  if (id != null) setStudioFile(null)
                 }}
               />
-              {studioFile ? <span className="studio-file-name">{studioFile.name}</span> : null}
-            </label>
+            ) : null}
+            <StudioMediaSlot
+              label={
+                studioMode === 'photo_edit'
+                  ? 'Фото'
+                  : studioMode === 'face_swap'
+                    ? 'Исходное фото'
+                    : 'Референс'
+              }
+              hint={
+                studioMode === 'photo_edit' ? 'Или выберите миниатюру выше' : 'Поза и сцена'
+              }
+              icon="image"
+              previewUrl={studioReferenceObjectUrl}
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              onFile={(f) => {
+                setStudioFile(f)
+                if (f) setStudioPhotoEditArchiveId(null)
+              }}
+              onClear={() => setStudioFile(null)}
+              emptyLabel="JPG, PNG, WebP"
+            />
             <label
               className="studio-label studio-check"
               style={!studioInpaintBaseImageSrc ? { opacity: 0.55 } : undefined}
@@ -5111,33 +5136,27 @@ export default function App() {
                 </span>
               ) : null}
             </label>
+            <div className="studio-toggles">
             {studioMode !== 'photo_edit' ? (
-            <label
-              className="studio-label studio-check"
-              style={!studioFile ? { opacity: 0.55 } : undefined}
-            >
-              <input
-                type="checkbox"
-                checked={studioLockModelHairstyle}
-                disabled={!studioFile}
-                onChange={(e) => setStudioLockModelHairstyle(e.target.checked)}
-              />
-              <span>Причёска как у модели (снимите, чтобы взять укладку с загруженного фото).</span>
-            </label>
-            ) : null}
-            {studioMode === 'grok_compose' ? (
-              <p
-                className="muted"
-                style={{ display: 'block', marginTop: '0.35rem', fontSize: '0.85rem' }}
-              >
-                В WaveSpeed: ваш референс сцены + снимок лица модели (face); остальные листы — только
-                для Grok при сборке промпта.
-              </p>
-            ) : studioMode === 'model' || studioMode === 'no_face' ? (
               <label
-                className="studio-label studio-check"
+                className="studio-toggle-row"
                 style={!studioFile ? { opacity: 0.55 } : undefined}
               >
+                <span>Причёска с модели</span>
+                <input
+                  type="checkbox"
+                  checked={studioLockModelHairstyle}
+                  disabled={!studioFile}
+                  onChange={(e) => setStudioLockModelHairstyle(e.target.checked)}
+                />
+              </label>
+            ) : null}
+            {studioMode === 'model' || studioMode === 'no_face' ? (
+              <label
+                className="studio-toggle-row"
+                style={!studioFile ? { opacity: 0.55 } : undefined}
+              >
+                <span>Референс позы в WaveSpeed</span>
                 <input
                   type="checkbox"
                   checked={studioSendPoseRefToWavespeed}
@@ -5148,33 +5167,32 @@ export default function App() {
                   }
                   onChange={(e) => setStudioSendPoseRefToWavespeed(e.target.checked)}
                 />
-                <span>
-                  Отправить референс позы в WaveSpeed (image 1 = ваша сцена; 2–4 = лицо/тело
-                  модели, не вся развёртка). Снимите — поза только текстом, точность ниже.
-                </span>
               </label>
             ) : null}
-            <label className="studio-label">
-              Описание
+            </div>
+            <div className="studio-prompt-box studio-slot--wide">
+              <div className="studio-slot__head">
+                <span className="studio-slot__icon-wrap">
+                  <svg className="studio-slot__icon-svg" width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden>
+                    <path d="M4 6h16M4 12h10M4 18h7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                  </svg>
+                </span>
+                <div className="studio-slot__titles">
+                  <span className="studio-slot__label">Промпт</span>
+                  <span className="studio-slot__hint">Сцена, свет, настроение</span>
+                </div>
+              </div>
               <textarea
-                rows={5}
-                placeholder={
-                  studioMode === 'photo_edit'
-                    ? 'Что изменить: цвет фона, другая футболка, убрать объект, исправить свет, слегка сменить ракурс…'
-                    : studioMode === 'face_swap'
-                      ? 'По желанию: акцент (например «мягкий свет на лице», «сохранить естественность кожи»). Можно оставить пустым.'
-                      : studioMode === 'grok_compose'
-                        ? 'По желанию: уточнения для Grok (настроение, детали одежды, акценты). Можно оставить пустым.'
-                        : 'Что показать на снимке: сцена, свет, настроение…'
-                }
+                rows={4}
+                placeholder="Опишите кадр…"
                 value={studioDesc}
                 onChange={(e) => setStudioDesc(e.target.value)}
               />
-            </label>
-            <div className="studio-actions">
+            </div>
+            <div className="studio-workspace__actions">
               <button
                 type="button"
-                className="send-btn"
+                className="studio-magic-btn"
                 title={
                   studioMode === 'grok_compose'
                     ? health?.studio_grok_scene_compose_configured === false
@@ -5220,24 +5238,16 @@ export default function App() {
                   : studioPromptOnlyDev
                     ? 'Собрать промпт'
                     : 'Сгенерировать'}
-              </button>
-              {canStudioGenerate &&
-              (studioMode === 'grok_compose'
-                ? health?.studio_grok_scene_compose_configured !== false
-                : health?.openai_studio_configured) ? (
-                studioPromptOnlyDev || integ?.wavespeed_configured ? (
-                  <span className="studio-credit-hint">
+                {canStudioGenerate &&
+                (studioPromptOnlyDev || integ?.wavespeed_configured) ? (
+                  <span className="studio-magic-btn__cost">
+                    <IconSpark className="studio-slot__icon-svg" />
                     {(studioInpaintMaskFile != null || studioPaintInpaintMask
                       ? health?.studio_inpaint_credit_cost
-                      : health?.studio_prompt_credit_cost) ?? '—'}{' '}
-                    кр.
+                      : health?.studio_prompt_credit_cost) ?? '—'}
                   </span>
-                ) : (
-                  <span className="studio-credit-hint warn">{studioIntegrationsHint()}</span>
-                )
-              ) : !health?.openai_studio_configured && canStudioGenerate ? (
-                <span className="studio-credit-hint warn">Нет доступа к студии</span>
-              ) : null}
+                ) : null}
+              </button>
             </div>
             {import.meta.env.DEV &&
             health?.studio_allow_prompt_only &&
@@ -5273,7 +5283,7 @@ export default function App() {
               </div>
             ) : null}
             {studioGenImageUrl ? (
-              <div className="studio-generated">
+              <div className="studio-result-panel studio-generated">
                 <h3 className="studio-generated-title">Результат</h3>
                 <div className="studio-generated-frame">
                   <img src={studioGenImageUrl} alt="Сгенерировано" className="studio-gen-img" />
@@ -5396,86 +5406,53 @@ export default function App() {
           </div>
             </>
           )}
+            </div>
+            {canStudioGenerate ? (
+              <StudioGenerationGallery
+                title="История"
+                lead={studioArchiveRetentionLead(health)}
+                items={studioGenerations}
+                loading={studioArchiveInitialLoading}
+                hasMore={studioGenHasMore}
+                loadingMore={studioGenLoadingMore}
+                onLoadMore={() => void loadMoreStudioGenerations()}
+                loadMoreLabel={`Ещё ${STUDIO_ARCHIVE_PAGE}`}
+                selectedId={studioGenGenerationId}
+                onOpen={(g) => {
+                  setStudioGenGenerationId(g.id)
+                  if (g.media_kind === 'video' && (g.video_url || '').trim()) {
+                    setMotionResultVideoUrl(g.video_url!.trim())
+                    setAppSection('studio_video')
+                  } else {
+                    setStudioGenImageUrl(g.image_url)
+                    setStudioPendingExternalImageUrl(null)
+                  }
+                }}
+                onDelete={(g) =>
+                  void deleteStudioGeneration(g.id, g.image_url || g.video_url || '')
+                }
+                onVideoFromImage={(g) => {
+                  setMotionFrameArchiveId(g.id)
+                  if (g.studio_model_id != null) setStudioSelectedModelId(g.studio_model_id)
+                  setMotionFirstFrameFile(null)
+                  setAppSection('studio_video')
+                }}
+              />
+            ) : null}
+          </div>
         </section>
-        {canStudioGenerate ? (
-          <section className="studio-panel studio-archive-section" aria-labelledby="studio-archive-heading">
-            <h2 id="studio-archive-heading">Сохранённые</h2>
-            <p className="muted studio-archive-lead">{studioArchiveRetentionLead(health)}</p>
-            {studioArchiveInitialLoading ? (
-              <p className="muted">Загрузка архива…</p>
-            ) : studioGenerations.length === 0 ? (
-              <p className="muted empty-hint">Пока нет сохранённых генераций.</p>
-            ) : (
-              <>
-                <ul className="studio-archive-grid">
-                  {studioGenerations.map((g) => (
-                    <li key={g.id} className="studio-archive-item">
-                      <button
-                        type="button"
-                        className="studio-archive-thumb-btn"
-                        title={g.prompt_excerpt?.trim() || 'Открыть в «Результат»'}
-                        onClick={() => {
-                          setStudioGenGenerationId(g.id)
-                          setStudioGenImageUrl(g.image_url)
-                          setStudioPendingExternalImageUrl(null)
-                        }}
-                      >
-                        <img src={g.image_url} alt="" className="studio-archive-thumb" loading="lazy" />
-                      </button>
-                      <button
-                        type="button"
-                        className="studio-archive-video"
-                        title="Видео из этого снимка"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setMotionFrameArchiveId(g.id)
-                          if (g.studio_model_id != null) setStudioSelectedModelId(g.studio_model_id)
-                          setMotionFirstFrameFile(null)
-                          setAppSection('studio_video')
-                        }}
-                      >
-                        Видео
-                      </button>
-                      <button
-                        type="button"
-                        className="studio-archive-del"
-                        aria-label="Удалить из архива"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          void deleteStudioGeneration(g.id, g.image_url)
-                        }}
-                      >
-                        ×
-                      </button>
-                      <span className="studio-archive-meta" title={g.created_at}>
-                        {g.model_name ?? '—'}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-                {studioGenHasMore ? (
-                  <div className="studio-archive-more-wrap">
-                    <button
-                      type="button"
-                      className="send-btn studio-archive-more-btn"
-                      disabled={studioGenLoadingMore}
-                      onClick={() => void loadMoreStudioGenerations()}
-                    >
-                      {studioGenLoadingMore ? 'Загрузка…' : `Ещё ${STUDIO_ARCHIVE_PAGE}`}
-                    </button>
-                  </div>
-                ) : null}
-              </>
-            )}
-          </section>
-        ) : null}
-        </>
       )}
 
       {hasAnyMainSection && appSection === 'studio_video' && canStudioAny && (
-        <>
-          <section className="studio-panel studio-video-page" aria-labelledby="studio-motion-heading">
-            <h2 id="studio-motion-heading">Видео</h2>
+          <section className="studio-panel studio-workspace-page studio-video-page" aria-labelledby="studio-motion-heading">
+            <div className="studio-workspace">
+            <div className="studio-workspace__composer">
+              <header className="studio-workspace__composer-head">
+                <h2 id="studio-motion-heading">Видео</h2>
+                <p className="studio-workspace__tagline">
+                  Реф-ролик, первый кадр и бриф — готовые ролики в истории справа.
+                </p>
+              </header>
             {!canStudioGenerate ? (
               <div className="banner info" role="status">
                 Нет прав на генерацию. Обратитесь к владельцу аккаунта.
@@ -5485,179 +5462,151 @@ export default function App() {
                 Оформите подписку в кабинете → «Тариф и баланс».
               </div>
             ) : (
-              <>
-                <div className="studio-video-top">
-                  <label className="studio-label">
-                    Формат
-                    <select
-                      value={studioOutputAspect}
-                      onChange={(e) => setStudioOutputAspect(e.target.value)}
-                    >
-                      {studioAspectPresets.length > 0 ? (
-                        studioAspectPresets.map((p) => (
-                          <option key={p.key} value={p.key}>
-                            {p.label} ({p.size} px)
-                          </option>
-                        ))
-                      ) : (
-                        <option value="9:16">9:16 (1080×1920)</option>
-                      )}
-                    </select>
-                  </label>
-                  <label className="studio-label">
-                    Модель
-                    <select
-                      value={studioSelectedModelId ?? ''}
-                      onChange={(e) => {
-                        const v = e.target.value
-                        setStudioSelectedModelId(v === '' ? null : Number(v))
-                      }}
-                    >
-                      <option value="">Выберите модель</option>
-                      {studioModels.map((m) => (
-                        <option key={m.id} value={m.id}>
-                          {m.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                </div>
-                <p className="studio-lead studio-video-lead">
-                  Загрузите реф-видео и модель. Первый кадр — на выбор: сгенерировать (Grok + WaveSpeed),
-                  взять из архива или свой файл. Промпт по видео и ролик — независимо.
-                  {health?.studio_grok_motion_configured === false ? (
-                    <> Нужен Grok (OPENAI_API_KEY / xAI).</>
-                  ) : null}
-                </p>
+              <div className="studio-slot-grid">
+                <StudioPillField
+                  label="Формат"
+                  options={
+                    studioAspectPresets.length > 0
+                      ? studioAspectPresets.map((p) => ({ value: p.key, label: p.label }))
+                      : [{ value: '9:16', label: '9:16' }]
+                  }
+                  value={studioOutputAspect}
+                  onChange={(v) => v != null && setStudioOutputAspect(String(v))}
+                />
+                <StudioPillField
+                  label="Модель"
+                  icon={<IconModel className="studio-slot__icon-svg" />}
+                  options={studioModels.map((m) => ({ value: m.id, label: m.name }))}
+                  value={studioSelectedModelId}
+                  onChange={(v) => setStudioSelectedModelId(v)}
+                  allowEmpty
+                  emptyLabel="Выберите"
+                />
+                {health?.studio_grok_motion_configured === false ? (
+                  <div className="banner warn" style={{ gridColumn: '1 / -1' }}>
+                    Grok не настроен на сервере.
+                  </div>
+                ) : null}
 
-                <div className="studio-video-step">
-                  <h3 className="studio-video-step-title">Референс и первый кадр</h3>
-                  <p className="muted studio-inline-hint">
-                    Реф-видео обязательно для движения (@Video1). Кадр (@Image1) — любой из трёх способов ниже.
-                  </p>
-                  <div className="studio-grid studio-grid--simple studio-video-panel">
-                    <label className="studio-label">
-                      Референс-видео
-                      <input
-                        type="file"
-                        accept="video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov"
-                        disabled={motionDrivingUploadBusy}
-                        onChange={(e) => {
-                          const f = e.target.files?.[0] ?? null
-                          setMotionVideoFile(f)
-                          setMotionVideoFileId(null)
-                          setMotionPreviewGenId(null)
-                          setMotionPreviewUrl(null)
-                          setMotionGrokTimeline(null)
-                          setMotionResultVideoUrl(null)
-                          if (f) void uploadMotionDrivingVideo(f)
-                        }}
-                      />
-                      {motionVideoFile ? (
-                        <span className="studio-file-name">{motionVideoFile.name}</span>
-                      ) : null}
-                      {motionDrivingUploadBusy ? (
-                        <span className="muted studio-file-name"> Загрузка на сервер…</span>
-                      ) : null}
-                    </label>
-                    <label className="studio-label">
-                      Свой кадр (опционально, вместо первого кадра видео)
-                      <input
-                        type="file"
-                        accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
-                        onChange={(e) => {
-                          setMotionFirstFrameFile(e.target.files?.[0] ?? null)
-                          setMotionPreviewGenId(null)
-                          setMotionPreviewUrl(null)
-                        }}
-                      />
-                    </label>
-                    <label className="studio-label">
-                      Или кадр из архива (вход)
-                      <select
-                        value={motionFrameArchiveId ?? ''}
-                        onChange={(e) => {
-                          const v = e.target.value
-                          const id = v === '' ? null : Number(v)
-                          setMotionFrameArchiveId(id != null && Number.isFinite(id) ? id : null)
-                          if (id != null && Number.isFinite(id)) {
-                            const g = studioGenerations.find((x) => x.id === id)
-                            if (g?.studio_model_id != null) setStudioSelectedModelId(g.studio_model_id)
-                          }
-                        }}
-                      >
-                        <option value="">— не использовать —</option>
-                        {studioGenerations.map((g) => (
-                          <option key={g.id} value={g.id}>
-                            #{g.id} {g.model_name ? `· ${g.model_name}` : ''}{' '}
-                            {g.prompt_excerpt ? `· ${g.prompt_excerpt.slice(0, 36)}` : ''}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="studio-label">
-                      Профиль генерации кадра
-                      <select
-                        value={motionFirstFrameWaveProfile}
-                        onChange={(e) =>
-                          setMotionFirstFrameWaveProfile(e.target.value as 'regular' | 'nsfw')
+                <div className="studio-video-step-card" style={{ gridColumn: '1 / -1' }}>
+                  <h3>Кадр и движение</h3>
+                  <div className="studio-slot-grid">
+                    <StudioMediaSlot
+                      label="Реф. видео"
+                      hint="Движение · MP4"
+                      icon="video"
+                      busy={motionDrivingUploadBusy}
+                      emptyLabel={motionVideoFile?.name || 'Загрузить'}
+                      accept="video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov"
+                      onFile={(f) => {
+                        setMotionVideoFile(f)
+                        setMotionVideoFileId(null)
+                        setMotionPreviewGenId(null)
+                        setMotionPreviewUrl(null)
+                        setMotionGrokTimeline(null)
+                        setMotionResultVideoUrl(null)
+                        if (f) void uploadMotionDrivingVideo(f)
+                      }}
+                      onClear={() => {
+                        setMotionVideoFile(null)
+                        setMotionVideoFileId(null)
+                      }}
+                    />
+                    <StudioMediaSlot
+                      label="Первый кадр"
+                      hint="JPG, PNG"
+                      icon="image"
+                      previewUrl={studioMotionStillDisplayUrl}
+                      accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
+                      onFile={(f) => {
+                        setMotionFirstFrameFile(f)
+                        setMotionPreviewGenId(null)
+                        setMotionPreviewUrl(null)
+                        setMotionFrameArchiveId(null)
+                      }}
+                      onClear={() => {
+                        setMotionFirstFrameFile(null)
+                        setMotionPreviewUrl(null)
+                      }}
+                    />
+                  </div>
+                  <StudioArchiveThumbPicker
+                    label="Кадр из архива"
+                    hint="Вместо загрузки файла"
+                    items={studioGenerations}
+                    value={motionFrameArchiveId}
+                    onChange={(id, item) => {
+                      setMotionFrameArchiveId(id)
+                      if (id != null) {
+                        setMotionFirstFrameFile(null)
+                        if (item?.studio_model_id != null) {
+                          setStudioSelectedModelId(item.studio_model_id)
                         }
-                      >
-                        <option value="regular">Regular (Nano Banana)</option>
-                        <option value="nsfw">NSFW (WAN)</option>
-                      </select>
-                    </label>
-                    <label className="studio-label studio-check">
+                      }
+                    }}
+                  />
+                  <StudioPillField
+                    label="Стиль кадра"
+                    options={[
+                      { value: 'regular', label: 'Обычный' },
+                      { value: 'nsfw', label: 'NSFW' },
+                    ]}
+                    value={motionFirstFrameWaveProfile}
+                    onChange={(v) =>
+                      v != null &&
+                      setMotionFirstFrameWaveProfile(v as 'regular' | 'nsfw')
+                    }
+                  />
+                  <div className="studio-toggles">
+                    <label className="studio-toggle-row">
+                      <span>Timeline по ролику</span>
                       <input
                         type="checkbox"
                         checked={motionAutoPrompt}
                         onChange={(e) => setMotionAutoPrompt(e.target.checked)}
                       />
-                      <span>При генерации кадра — также timeline по ролику (Grok)</span>
                     </label>
-                    <label className="studio-label studio-check">
+                    <label className="studio-toggle-row">
+                      <span>Причёска модели</span>
                       <input
                         type="checkbox"
                         checked={motionLockHairstyle}
                         onChange={(e) => setMotionLockHairstyle(e.target.checked)}
                       />
-                      <span>Фиксировать причёску модели</span>
                     </label>
-                    <label className="studio-label studio-check">
+                    <label className="studio-toggle-row">
+                      <span>Кадр без WaveSpeed</span>
                       <input
                         type="checkbox"
                         checked={motionUseStillFinal}
                         onChange={(e) => setMotionUseStillFinal(e.target.checked)}
                       />
-                      <span>Использовать загруженный кадр как финал (без WaveSpeed)</span>
                     </label>
                   </div>
-                  <label className="studio-label">
-                    Пожелания к первому кадру (опционально)
-                    <textarea
-                      rows={2}
-                      placeholder="Свет, фон, наряд — если нужно уточнить"
-                      value={motionFrameNotes}
-                      onChange={(e) => setMotionFrameNotes(e.target.value)}
-                    />
-                  </label>
-                  <div className="studio-actions studio-actions--spaced studio-actions--wrap">
+                  <textarea
+                    rows={2}
+                    placeholder="Уточнения к кадру (по желанию)"
+                    value={motionFrameNotes}
+                    onChange={(e) => setMotionFrameNotes(e.target.value)}
+                  />
+                  {motionStep1Preview ? (
+                    <details className="studio-video-auto-block">
+                      <summary>Grok: сцена и движение</summary>
+                      <div className="studio-motion-auto-preview">{motionStep1Preview}</div>
+                    </details>
+                  ) : null}
+                  <div className="studio-workspace__actions">
                     <button
                       type="button"
-                      className="send-btn"
+                      className="ghost-btn"
                       disabled={
                         motionBusyCompose ||
                         !motionCanComposePrompt ||
                         health?.studio_grok_scene_compose_configured === false
                       }
-                      title={
-                        !motionVideoFileId
-                          ? 'Сначала загрузите референс-видео'
-                          : undefined
-                      }
                       onClick={() => void runMotionComposeVideoPrompt()}
                     >
-                      {motionBusyCompose ? 'Grok: промпт…' : 'Промпт по видео (Grok)'}
+                      {motionBusyCompose ? 'Grok…' : 'Промпт по видео'}
                     </button>
                     <button
                       type="button"
@@ -5672,241 +5621,154 @@ export default function App() {
                       }
                       onClick={() => void runMotionFirstFrame()}
                     >
-                      {motionBusyFrame ? 'Генерируем…' : 'Сгенерировать кадр (Grok)'}
+                      {motionBusyFrame ? 'Кадр…' : 'Сгенерировать кадр'}
                     </button>
                   </div>
-                  <p className="muted studio-inline-hint">
-                    «Промпт по видео» — без новой картинки: timeline + описание кадра. «Сгенерировать кадр» —
-                    Grok-сцена и WaveSpeed (лицо модели + реф позы).
-                  </p>
-                  {studioMotionStillDisplayUrl ? (
-                    <div className="studio-generated studio-video-frame-preview">
-                      <h4 className="studio-generated-title">
-                        Первый кадр
-                        {motionPreviewGenId != null ? ` · архив #${motionPreviewGenId}` : ''}
-                      </h4>
-                      <img
-                        src={studioMotionStillDisplayUrl}
-                        alt="Первый кадр для видео"
-                        className="studio-gen-img"
+                </div>
+
+                <div className="studio-video-step-card" style={{ gridColumn: '1 / -1' }}>
+                  <h3>Seedance</h3>
+                  <StudioArchiveThumbPicker
+                    label="Наряд (опционально)"
+                    hint="Доп. референс одежды"
+                    items={studioGenerations}
+                    value={motionOutfitArchiveId}
+                    onChange={(id) => setMotionOutfitArchiveId(id)}
+                  />
+                  <div className="studio-prompt-box">
+                    <div className="studio-slot__head">
+                      <span className="studio-slot__icon-wrap">
+                        <svg className="studio-slot__icon-svg" width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden>
+                          <path d="M4 6h16M4 12h10M4 18h7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                        </svg>
+                      </span>
+                      <div className="studio-slot__titles">
+                        <span className="studio-slot__label">Бриф</span>
+                        <span className="studio-slot__hint">Сцена и движение</span>
+                      </div>
+                    </div>
+                    <textarea
+                      rows={4}
+                      placeholder="Опишите ролик…"
+                      value={motionDesc}
+                      onChange={(e) => setMotionDesc(e.target.value)}
+                    />
+                  </div>
+                  <StudioPillField
+                    label="Длительность"
+                    options={Array.from(
+                      { length: Math.max(0, seedanceDurationMax - seedanceDurationMin + 1) },
+                      (_, i) => {
+                        const sec = seedanceDurationMin + i
+                        return { value: sec, label: `${sec} с` }
+                      },
+                    )}
+                    value={motionSeedanceDuration}
+                    onChange={(v) => v != null && setMotionSeedanceDuration(Number(v))}
+                  />
+                  <label className="studio-slot__hint" style={{ display: 'block', marginTop: '0.35rem' }}>
+                    Негатив (по желанию)
+                    <textarea
+                      rows={2}
+                      placeholder="Чего избегать"
+                      value={motionVideoNegPrompt}
+                      onChange={(e) => setMotionVideoNegPrompt(e.target.value)}
+                      style={{ marginTop: '0.35rem', width: '100%' }}
+                    />
+                  </label>
+                  <div className="studio-toggles">
+                    <label className="studio-toggle-row">
+                      <span>Звук</span>
+                      <input
+                        type="checkbox"
+                        checked={motionKeepSound}
+                        onChange={(e) => setMotionKeepSound(e.target.checked)}
                       />
-                      {motionPendingExternalStillUrl ? (
+                    </label>
+                  </div>
+                  {motionAutoTextPreview ? (
+                    <details className="studio-video-auto-block">
+                      <summary>Промпт Seedance</summary>
+                      <div className="studio-motion-auto-preview">{motionAutoTextPreview}</div>
+                    </details>
+                  ) : null}
+                  {motionMsg ? (
+                    <p className="muted" style={{ fontSize: '0.8rem', margin: 0 }}>
+                      {motionMsg}
+                    </p>
+                  ) : null}
+                  {motionVideoBtnBlockReason ? (
+                    <p className="studio-video-block-hint" role="status">
+                      {motionVideoBtnBlockReason}
+                    </p>
+                  ) : null}
+                  <div className="studio-workspace__actions">
+                    <button
+                      type="button"
+                      className="studio-magic-btn"
+                      disabled={motionBusyVideo || motionVideoBtnBlockReason != null}
+                      title={motionVideoBtnBlockReason ?? undefined}
+                      onClick={() => void runMotionRenderVideo()}
+                    >
+                      {motionBusyVideo ? 'Видео…' : 'Сгенерировать видео'}
+                      {health?.studio_motion_control_credit_cost != null ? (
+                        <span className="studio-magic-btn__cost">
+                          <IconSpark className="studio-slot__icon-svg" />
+                          {health.studio_motion_control_credit_cost}
+                        </span>
+                      ) : null}
+                    </button>
+                  </div>
+                  {motionResultVideoUrl ? (
+                    <div className="studio-result-panel">
+                      <video
+                        src={motionResultVideoUrl}
+                        controls
+                        playsInline
+                        className="studio-gen-img studio-video-player"
+                      />
+                      <div className="studio-workspace__actions">
                         <button
                           type="button"
                           className="ghost-btn"
-                          disabled={studioImportArchiveBusy}
-                          onClick={() => void retryImportStudioImageToArchive('motion_still')}
+                          disabled={motionVideoDownloadBusy}
+                          onClick={() => void downloadMotionResultVideo(motionResultVideoUrl)}
                         >
-                          Сохранить кадр в архив
+                          {motionVideoDownloadBusy ? 'Сохранение…' : 'Скачать'}
                         </button>
-                      ) : null}
-                    </div>
-                  ) : null}
-                  {motionStep1Preview ? (
-                    <div className="studio-video-auto-block">
-                      <span className="studio-video-auto-label">Справка шага 1</span>
-                      <p className="muted studio-inline-hint" style={{ margin: '0 0 0.35rem' }}>
-                        Это описание сцены для генерации кадра, не финальный промпт видео. @Image1…
-                        Grok подставит на шаге 2.
-                      </p>
-                      <div className="studio-motion-auto-preview">{motionStep1Preview}</div>
+                      </div>
                     </div>
                   ) : null}
                 </div>
-
-                <div className="studio-video-step">
-                  <h3 className="studio-video-step-title">Видео Seedance</h3>
-                  <p className="muted studio-inline-hint">
-                    @Image1 — первый кадр; @Image2+ — модель; @Video1 — реф-видео. Бриф ниже — Grok
-                    соберёт финальный промпт на сервере.
-                  </p>
-                  {motionPreviewGenId != null ? (
-                    <p className="studio-video-ready-hint" role="status">
-                      Первый кадр: архив #{motionPreviewGenId}
-                      {motionGrokTimeline ? ' · промпт по видео готов' : ''}.
-                    </p>
-                  ) : null}
-                  <div className="studio-grid studio-grid--simple studio-video-panel">
-                    <label className="studio-label">
-                      Наряд из архива (опционально, @Image после фото модели)
-                      <select
-                        value={motionOutfitArchiveId ?? ''}
-                        onChange={(e) => {
-                          const v = e.target.value
-                          const id = v === '' ? null : Number(v)
-                          setMotionOutfitArchiveId(id != null && Number.isFinite(id) ? id : null)
-                        }}
-                      >
-                        <option value="">— без референса наряда —</option>
-                        {studioGenerations.map((g) => (
-                          <option key={g.id} value={g.id}>
-                            #{g.id} {g.model_name ? `· ${g.model_name}` : ''}{' '}
-                            {g.prompt_excerpt ? `· ${g.prompt_excerpt.slice(0, 36)}` : ''}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  </div>
-                <label className="studio-label">
-                  Бриф для видео
-                  <textarea
-                    rows={5}
-                    placeholder="Кратко: настроение, движение, одежда. @Image/@Video подставит сервер."
-                    value={motionDesc}
-                    onChange={(e) => setMotionDesc(e.target.value)}
-                  />
-                </label>
-                <label className="studio-label">
-                  Чего избегать
-                  <textarea
-                    rows={2}
-                    placeholder="По желанию"
-                    value={motionVideoNegPrompt}
-                    onChange={(e) => setMotionVideoNegPrompt(e.target.value)}
-                  />
-                </label>
-                <label className="studio-label studio-check">
-                  <input
-                    type="checkbox"
-                    checked={motionKeepSound}
-                    onChange={(e) => setMotionKeepSound(e.target.checked)}
-                  />
-                  <span>Сгенерировать звук (Seedance native audio)</span>
-                </label>
-                <label className="studio-label">
-                  Длительность (сек.)
-                  <select
-                    value={String(motionSeedanceDuration)}
-                    onChange={(e) => setMotionSeedanceDuration(Number(e.target.value))}
-                  >
-                    {Array.from(
-                      { length: Math.max(0, seedanceDurationMax - seedanceDurationMin + 1) },
-                      (_, i) => seedanceDurationMin + i,
-                    ).map((sec) => (
-                      <option key={sec} value={String(sec)}>
-                        {sec} с
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                {motionAutoTextPreview ? (
-                  <div className="studio-video-auto-block">
-                    <span className="studio-video-auto-label">Отправленный промпт Seedance</span>
-                    <div className="studio-motion-auto-preview">{motionAutoTextPreview}</div>
-                  </div>
-                ) : null}
-                <div className="studio-actions studio-actions--spaced">
-                  <button
-                    type="button"
-                    className="send-btn"
-                    disabled={motionBusyVideo || motionVideoBtnBlockReason != null}
-                    title={motionVideoBtnBlockReason ?? undefined}
-                    onClick={() => void runMotionRenderVideo()}
-                  >
-                    {motionBusyVideo ? 'Готовим видео…' : 'Сгенерировать видео'}
-                  </button>
-                  {health?.studio_motion_control_credit_cost != null ? (
-                    <span className="studio-credit-hint">
-                      {health.studio_motion_control_credit_cost} кр.
-                    </span>
-                  ) : null}
-                </div>
-                {motionVideoBtnBlockReason ? (
-                  <p className="studio-video-block-hint" role="status">
-                    {motionVideoBtnBlockReason}
-                  </p>
-                ) : null}
-                {motionMsg ? (
-                  <p className="muted studio-inline-hint" style={{ marginTop: '0.5rem' }}>
-                    {motionMsg}
-                  </p>
-                ) : null}
-                {motionResultVideoUrl ? (
-                  <div className="studio-generated studio-video-result">
-                    <h3 className="studio-generated-title">Готово</h3>
-                    <video
-                      src={motionResultVideoUrl}
-                      controls
-                      playsInline
-                      className="studio-gen-img studio-video-player"
-                    />
-                    <div className="studio-actions studio-actions--spaced">
-                      <button
-                        type="button"
-                        className="send-btn studio-download"
-                        disabled={motionVideoDownloadBusy}
-                        title="На iPhone: меню «Поделиться» — сохраните в Файлы или Фото"
-                        onClick={() => void downloadMotionResultVideo(motionResultVideoUrl)}
-                      >
-                        {motionVideoDownloadBusy ? 'Сохранение…' : 'Сохранить / поделиться'}
-                      </button>
-                      <button
-                        type="button"
-                        className="ghost-btn"
-                        disabled={motionVideoDownloadBusy}
-                        onClick={() => {
-                          window.open(motionResultVideoUrl, '_blank', 'noopener,noreferrer')
-                        }}
-                      >
-                        Открыть в новой вкладке
-                      </button>
-                    </div>
-                  </div>
-                ) : null}
-                </div>
-                {motionRenders.length > 0 ? (
-                  <div className="studio-motion-history">
-                    <h3 className="studio-motion-history-title">Последние видео</h3>
-                    <ul className="studio-motion-history-grid">
-                      {motionRenders.map((item) => (
-                        <li key={item.id} className="studio-motion-history-item">
-                          <div className="studio-motion-history-thumb-wrap" aria-hidden>
-                            <video
-                              src={item.video_url}
-                              poster={item.frame_image_url}
-                              muted
-                              playsInline
-                              preload="metadata"
-                            />
-                          </div>
-                          <span className="studio-motion-history-meta">
-                            #{item.id}
-                            {item.studio_generation_id != null
-                              ? ` · наряд #${item.studio_generation_id}`
-                              : ''}
-                            <br />
-                            <span title={item.created_at}>
-                              {new Date(item.created_at).toLocaleString()}
-                            </span>
-                          </span>
-                          <div className="studio-motion-history-actions">
-                            <button
-                              type="button"
-                              className="ghost-btn"
-                              disabled={motionVideoDownloadBusy}
-                              onClick={() => void downloadMotionResultVideo(item.video_url)}
-                            >
-                              Сохранить
-                            </button>
-                            <button
-                              type="button"
-                              className="ghost-btn"
-                              onClick={() =>
-                                window.open(item.video_url, '_blank', 'noopener,noreferrer')
-                              }
-                            >
-                              Открыть
-                            </button>
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
-              </>
+              </div>
             )}
+            </div>
+            {canStudioGenerate ? (
+              <StudioGenerationGallery
+                title="История"
+                lead={studioArchiveRetentionLead(health)}
+                items={studioGenerations}
+                loading={studioArchiveInitialLoading}
+                hasMore={studioGenHasMore}
+                loadingMore={studioGenLoadingMore}
+                onLoadMore={() => void loadMoreStudioGenerations()}
+                loadMoreLabel={`Ещё ${STUDIO_ARCHIVE_PAGE}`}
+                onOpen={(g) => {
+                  if (g.media_kind === 'video' && (g.video_url || '').trim()) {
+                    setMotionResultVideoUrl(g.video_url!.trim())
+                  } else {
+                    setMotionPreviewGenId(g.id)
+                    setMotionPreviewUrl(studioArchiveThumbUrl(g) || g.image_url)
+                    setMotionFrameArchiveId(g.id)
+                  }
+                }}
+                onDelete={(g) =>
+                  void deleteStudioGeneration(g.id, g.image_url || g.video_url || '')
+                }
+              />
+            ) : null}
+            </div>
           </section>
-        </>
       )}
 
       {hasAnyMainSection && appSection === 'chat' && canChat && (

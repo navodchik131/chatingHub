@@ -849,8 +849,8 @@ async def seedance_20_text_to_video_url(
         full_post_url=url,
         body=body,
         timeout_submit=timeout_submit,
-        poll_interval=poll_interval,
-        max_polls=max_polls,
+        poll_interval=settings.wavespeed_video_poll_interval_seconds,
+        max_polls=settings.wavespeed_video_max_polls,
     )
 
 

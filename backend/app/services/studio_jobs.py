@@ -186,6 +186,21 @@ async def _run_studio_job(job_id: int) -> None:
 
 
 async def _notify_job(job: StudioJob) -> None:
+    generation_id: int | None = None
+    result = job_result_dict(job)
+    if result:
+        raw_gid = result.get("generation_id")
+        if isinstance(raw_gid, int):
+            generation_id = raw_gid
+        elif isinstance(raw_gid, str) and raw_gid.isdigit():
+            generation_id = int(raw_gid)
+    if generation_id is None:
+        ph = job_params(job).get("placeholder_generation_id")
+        if isinstance(ph, int):
+            generation_id = ph
+        elif isinstance(ph, str) and ph.isdigit():
+            generation_id = int(ph)
+
     await hub.broadcast_user(
         job.user_id,
         {
@@ -194,5 +209,16 @@ async def _notify_job(job: StudioJob) -> None:
             "job_type": job.job_type,
             "status": job.status,
             "error_message": job.error_message,
+            "generation_id": generation_id,
         },
     )
+    if generation_id is not None:
+        await hub.broadcast_user(
+            job.user_id,
+            {
+                "type": "studio_generation",
+                "generation_id": generation_id,
+                "status": job.status,
+                "job_id": job.id,
+            },
+        )

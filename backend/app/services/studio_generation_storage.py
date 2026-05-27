@@ -503,6 +503,32 @@ async def retry_pending_studio_archives() -> int:
     return done
 
 
+async def studio_finish_video_generation(
+    session: AsyncSession,
+    gen_row: StudioGeneration | None,
+    *,
+    video_url: str | None,
+    prompt_excerpt: str | None = None,
+) -> StudioGeneration | None:
+    """Готовое видео: CDN URL в source_url, без обязательного локального mp4."""
+    if gen_row is None:
+        return None
+    url = (video_url or "").strip()
+    if not url:
+        return None
+    gen_row.content_type = "video/mp4"
+    gen_row.source_url = url[:2000]
+    gen_row.status = StudioGenerationStatus.PROVIDER_READY
+    gen_row.error_message = None
+    gen_row.error_step = None
+    if prompt_excerpt:
+        ex = prompt_excerpt.strip()[:2000]
+        gen_row.prompt_excerpt = ex or gen_row.prompt_excerpt
+    session.add(gen_row)
+    await session.flush()
+    return gen_row
+
+
 def safe_delete_generation_file(relative_path: str) -> None:
     p = (BACKEND_DIR / relative_path).resolve()
     try:

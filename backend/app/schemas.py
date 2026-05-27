@@ -201,6 +201,7 @@ class StudioJobAcceptedOut(BaseModel):
     job_id: int
     status: str = "pending"
     job_type: str
+    generation_id: int | None = None
     message: str = "Задача принята. Ожидайте результат — статус обновится автоматически."
 
 
@@ -275,12 +276,24 @@ class StudioGenerationOut(BaseModel):
     studio_model_id: int | None = None
     model_name: str | None = None
     prompt_excerpt: str | None = None
-    image_url: str
+    status: str = "ready"
+    media_kind: Literal["image", "video"] = "image"
+    error_message: str | None = None
+    job_id: int | None = None
+    image_url: str = ""
+    video_url: str | None = None
 
 
 class StudioGenerationsPageOut(BaseModel):
     items: list[StudioGenerationOut]
     has_more: bool
+
+
+class StudioGenerationsPendingOut(BaseModel):
+    """Только незавершённые записи архива — для редкого опроса клиента."""
+
+    items: list[StudioGenerationOut]
+    poll_after_seconds: int = 12
 
 
 class WavespeedIntegrationIn(BaseModel):

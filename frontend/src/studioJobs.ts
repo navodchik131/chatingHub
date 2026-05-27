@@ -5,7 +5,27 @@ export interface StudioJobAccepted {
   job_id: number
   status: string
   job_type: string
+  generation_id?: number | null
   message?: string
+}
+
+/** POST студии: 202 — задача в фоне, без ожидания WaveSpeed. */
+export async function postStudioJobStart(
+  path: string,
+  init: RequestInit & { timeoutMs?: number },
+): Promise<StudioJobAccepted> {
+  const r = await apiFetch(path, init)
+  const data = (await r.json().catch(() => ({}))) as StudioJobAccepted & { detail?: unknown }
+  if (r.status === 202) {
+    if (!data.job_id) {
+      throw new Error(formatApiErrorDetail(data) || 'Не удалось создать задачу студии.')
+    }
+    return data
+  }
+  if (!r.ok) {
+    throw new Error(formatHttpApiError(r, data))
+  }
+  throw new Error('Ожидался ответ 202 (фоновая задача). Обновите страницу.')
 }
 
 export interface StudioJobStatus {

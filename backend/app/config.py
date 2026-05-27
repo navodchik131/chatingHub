@@ -145,7 +145,10 @@ class Settings(BaseSettings):
     # Фоновый догруз архива для записей provider_ready без файла на диске
     studio_archive_retry_interval_seconds: int = Field(default=300, ge=60, le=3600)
     studio_archive_retry_batch_size: int = Field(default=20, ge=1, le=100)
-    studio_generation_stale_processing_hours: int = Field(default=2, ge=1, le=48)
+    studio_generation_stale_processing_hours: int = Field(default=48, ge=1, le=96)
+    # Опрос Seedance / video на бэкенде: 800 × 3 с ≈ 40 мин (клиент не долбит API).
+    wavespeed_video_max_polls: int = Field(default=800, ge=60, le=1200)
+    wavespeed_video_poll_interval_seconds: float = Field(default=3.0, ge=1.0, le=15.0)
 
     wavespeed_api_base: str = Field(default="https://api.wavespeed.ai")
     # POST image-edit: WAN 2.7 по умолчанию; Pro / Seedream — см. .env.example

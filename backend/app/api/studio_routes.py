@@ -40,6 +40,7 @@ from app.schemas import (
     StudioCarouselOut,
     StudioGenerationOut,
     StudioGenerationsPageOut,
+    StudioGenerationsPendingOut,
     StudioImportArchiveImageIn,
     StudioImportArchiveImageOut,
     StudioJobAcceptedOut,
@@ -89,6 +90,12 @@ from app.services.studio_aspect import (
     normalize_aspect_key,
     wavespeed_size_string,
 )
+from app.services.studio_generation_placeholders import (
+    find_studio_generation_by_job_id,
+    generation_is_pending_in_ui,
+    generation_media_kind,
+    reserve_studio_generation_for_job,
+)
 from app.services.studio_generation_status import StudioGenerationStatus
 from app.services.studio_generation_storage import (
     begin_studio_generation_run,
@@ -98,6 +105,7 @@ from app.services.studio_generation_storage import (
     persist_studio_generation_from_uploaded_bytes,
     safe_delete_generation_file,
     studio_finish_image_generation,
+    studio_finish_video_generation,
     user_message_when_archive_download_failed,
 )
 from app.services.studio_image_token import (
@@ -288,6 +296,69 @@ def _studio_archive_image_url(owner_id: int, generation_id: int, arch_base: str)
     return f"{arch_base.rstrip('/')}/api/studio/public-generation-image?t={quote(tok, safe='')}"
 
 
+def _studio_archive_video_url(owner_id: int, generation_id: int, arch_base: str) -> str:
+    tok = create_generation_image_access_token(user_id=owner_id, generation_id=generation_id)
+    return f"{arch_base.rstrip('/')}/api/studio/public-generation-video?t={quote(tok, safe='')}"
+
+
+def _studio_generation_to_out(
+    row: StudioGeneration,
+    *,
+    arch_base: str,
+    owner_id: int,
+    name_by_id: dict[int, str],
+) -> StudioGenerationOut | None:
+    media = generation_media_kind(row)
+    st = (row.status or StudioGenerationStatus.READY).strip()
+    image_url = ""
+    video_url: str | None = None
+
+    if st == StudioGenerationStatus.FAILED:
+        pass
+    elif media == "video":
+        src = (row.source_url or "").strip()
+        if st == StudioGenerationStatus.READY and generation_has_archive_file(row):
+            video_url = _studio_archive_video_url(owner_id, row.id, arch_base)
+        elif src.startswith("https://"):
+            video_url = src
+        elif st in (
+            StudioGenerationStatus.PROCESSING,
+            StudioGenerationStatus.ARCHIVING,
+        ) and src.startswith("https://"):
+            image_url = src
+    elif generation_has_archive_file(row) and st == StudioGenerationStatus.READY:
+        image_url = _studio_archive_image_url(owner_id, row.id, arch_base)
+    elif st == StudioGenerationStatus.PROVIDER_READY:
+        src = (row.source_url or "").strip()
+        if src.startswith("https://"):
+            image_url = src
+        elif generation_has_archive_file(row):
+            image_url = _studio_archive_image_url(owner_id, row.id, arch_base)
+
+    if (
+        st == StudioGenerationStatus.READY
+        and media == "image"
+        and not image_url
+        and not generation_has_archive_file(row)
+    ):
+        return None
+
+    return StudioGenerationOut(
+        id=row.id,
+        created_at=row.created_at,
+        output_aspect=row.output_aspect,
+        studio_model_id=row.studio_model_id,
+        model_name=name_by_id.get(row.studio_model_id) if row.studio_model_id else None,
+        prompt_excerpt=row.prompt_excerpt,
+        status=st,
+        media_kind=media,
+        error_message=(row.error_message or "").strip()[:500] or None,
+        job_id=row.studio_job_id,
+        image_url=image_url,
+        video_url=video_url,
+    )
+
+
 def _studio_job_status_out(job: StudioJob) -> StudioJobStatusOut:
     return StudioJobStatusOut(
         job_id=job.id,
@@ -307,6 +378,7 @@ async def _accept_studio_job(
     *,
     job_type: str,
     params: dict[str, Any],
+    placeholder: dict[str, Any] | None = None,
 ) -> JSONResponse:
     oid = workspace_owner_id(user)
     job = await studio_jobs.create_studio_job(
@@ -316,10 +388,29 @@ async def _accept_studio_job(
         job_type=job_type,
         params=params,
     )
+    generation_id: int | None = None
+    if placeholder:
+        gen_row = await reserve_studio_generation_for_job(
+            session,
+            owner_id=oid,
+            studio_job_id=job.id,
+            studio_model_id=placeholder.get("studio_model_id"),
+            output_aspect=placeholder.get("output_aspect"),
+            content_type=str(placeholder.get("content_type") or "image/png"),
+            prompt_excerpt=placeholder.get("prompt_excerpt"),
+            preview_source_url=placeholder.get("preview_source_url"),
+        )
+        generation_id = gen_row.id
+        params = {**params, "placeholder_generation_id": generation_id}
+        await studio_jobs.update_studio_job_params(session, job, params)
     studio_jobs.schedule_studio_job(job.id)
     return JSONResponse(
         status_code=202,
-        content=StudioJobAcceptedOut(job_id=job.id, job_type=job_type).model_dump(),
+        content=StudioJobAcceptedOut(
+            job_id=job.id,
+            job_type=job_type,
+            generation_id=generation_id,
+        ).model_dump(),
     )
 
 
@@ -711,6 +802,39 @@ async def public_studio_pose_reference(t: str) -> FileResponse:
     return FileResponse(path, media_type=mime)
 
 
+@router.get("/studio/public-generation-video")
+async def public_studio_generation_video(
+    t: str,
+    session: AsyncSession = Depends(get_session),
+) -> FileResponse:
+    """Видео из архива: локальный файл или редирект на CDN (provider_ready)."""
+    try:
+        uid, gid = decode_generation_image_access_token(t)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Недействительная ссылка") from None
+    row = await session.get(StudioGeneration, gid)
+    if not row or row.user_id != uid:
+        raise HTTPException(status_code=404, detail="Не найдено") from None
+    if not (row.content_type or "").startswith("video/"):
+        raise HTTPException(status_code=404, detail="Не видео") from None
+    rel = (row.relative_path or "").strip()
+    if rel:
+        abs_path = (BACKEND_DIR / rel).resolve()
+        try:
+            abs_path.relative_to(BACKEND_DIR.resolve())
+        except ValueError:
+            raise HTTPException(status_code=404, detail="Не найдено") from None
+        if abs_path.is_file():
+            mime = row.content_type or mimetypes.guess_type(abs_path.name)[0] or "video/mp4"
+            return FileResponse(abs_path, media_type=mime)
+    src = (row.source_url or "").strip()
+    if src.startswith("https://"):
+        from fastapi.responses import RedirectResponse
+
+        return RedirectResponse(url=src, status_code=302)
+    raise HTTPException(status_code=404, detail="Видео ещё не готово") from None
+
+
 @router.get("/studio/public-generation-image")
 async def public_studio_generation_image(
     t: str,
@@ -847,11 +971,17 @@ async def api_list_studio_generations(
     oid = workspace_owner_id(user)
     take = int(limit) + 1
     allowed = await member_allowed_studio_model_ids(session, user)
+    visible = (
+        StudioGenerationStatus.PROCESSING,
+        StudioGenerationStatus.ARCHIVING,
+        StudioGenerationStatus.PROVIDER_READY,
+        StudioGenerationStatus.READY,
+        StudioGenerationStatus.FAILED,
+    )
     stmt = (
         select(StudioGeneration)
         .where(StudioGeneration.user_id == oid)
-        .where(StudioGeneration.status == StudioGenerationStatus.READY)
-        .where(StudioGeneration.relative_path != "")
+        .where(StudioGeneration.status.in_(visible))
         .order_by(StudioGeneration.created_at.desc(), StudioGeneration.id.desc())
         .offset(int(skip))
         .limit(take)
@@ -871,20 +1001,57 @@ async def api_list_studio_generations(
             name_by_id[m.id] = m.name
     out_items: list[StudioGenerationOut] = []
     for r in rows:
-        tok = create_generation_image_access_token(user_id=oid, generation_id=r.id)
-        url = f"{base}/api/studio/public-generation-image?t={quote(tok, safe='')}"
-        out_items.append(
-            StudioGenerationOut(
-                id=r.id,
-                created_at=r.created_at,
-                output_aspect=r.output_aspect,
-                studio_model_id=r.studio_model_id,
-                model_name=name_by_id.get(r.studio_model_id) if r.studio_model_id else None,
-                prompt_excerpt=r.prompt_excerpt,
-                image_url=url,
+        item = _studio_generation_to_out(r, arch_base=base, owner_id=oid, name_by_id=name_by_id)
+        if item is not None:
+            out_items.append(item)
+    return StudioGenerationsPageOut(items=out_items, has_more=has_more)
+
+
+@router.get("/studio/generations/pending", response_model=StudioGenerationsPendingOut)
+async def api_list_pending_studio_generations(
+    request: Request,
+    limit: int = Query(30, ge=1, le=50),
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> StudioGenerationsPendingOut:
+    """Незавершённые записи архива — для редкого опроса (≈12 с), пока идёт WaveSpeed."""
+    assert_permission(user, PERM_STUDIO_GENERATE)
+    oid = workspace_owner_id(user)
+    allowed = await member_allowed_studio_model_ids(session, user)
+    stmt = (
+        select(StudioGeneration)
+        .where(StudioGeneration.user_id == oid)
+        .where(
+            StudioGeneration.status.in_(
+                (
+                    StudioGenerationStatus.PROCESSING,
+                    StudioGenerationStatus.ARCHIVING,
+                    StudioGenerationStatus.PROVIDER_READY,
+                )
             )
         )
-    return StudioGenerationsPageOut(items=out_items, has_more=has_more)
+        .order_by(StudioGeneration.created_at.desc(), StudioGeneration.id.desc())
+        .limit(int(limit))
+    )
+    stmt = apply_studio_model_id_filter(stmt, StudioGeneration.studio_model_id, allowed)
+    rows = list((await session.execute(stmt)).scalars().all())
+    base = _public_app_base(request)
+    if not base:
+        return StudioGenerationsPendingOut(items=[], poll_after_seconds=12)
+    model_ids = {r.studio_model_id for r in rows if r.studio_model_id}
+    name_by_id: dict[int, str] = {}
+    if model_ids:
+        qm = await session.execute(select(UserStudioModel).where(UserStudioModel.id.in_(model_ids)))
+        for m in qm.scalars().all():
+            name_by_id[m.id] = m.name
+    out_items: list[StudioGenerationOut] = []
+    for r in rows:
+        if not generation_is_pending_in_ui(r):
+            continue
+        item = _studio_generation_to_out(r, arch_base=base, owner_id=oid, name_by_id=name_by_id)
+        if item is not None:
+            out_items.append(item)
+    return StudioGenerationsPendingOut(items=out_items, poll_after_seconds=12)
 
 
 @router.delete("/studio/generations/{gen_id}")
@@ -1800,10 +1967,37 @@ async def api_studio_refine_prompt(
     if params != studio_jobs.job_params(job):
         await studio_jobs.update_studio_job_params(session, job, params)
 
+    generation_id: int | None = None
+    if _effective_generate_wavespeed(generate_wavespeed):
+        try:
+            mid_reserve = int(str(model_id).strip()) if model_id else None
+        except ValueError:
+            mid_reserve = None
+        try:
+            aspect_reserve = normalize_aspect_key(output_aspect)
+        except ValueError:
+            aspect_reserve = None
+        gen_row = await reserve_studio_generation_for_job(
+            session,
+            owner_id=oid,
+            studio_job_id=job.id,
+            studio_model_id=mid_reserve,
+            output_aspect=aspect_reserve,
+            content_type="image/png",
+            prompt_excerpt=(description or "").strip()[:2000] or None,
+        )
+        generation_id = gen_row.id
+        params["placeholder_generation_id"] = generation_id
+        await studio_jobs.update_studio_job_params(session, job, params)
+
     studio_jobs.schedule_studio_job(job.id)
     return JSONResponse(
         status_code=202,
-        content=StudioJobAcceptedOut(job_id=job.id, job_type="refine_prompt").model_dump(),
+        content=StudioJobAcceptedOut(
+            job_id=job.id,
+            job_type="refine_prompt",
+            generation_id=generation_id,
+        ).model_dump(),
     )
 
 
@@ -2031,13 +2225,15 @@ async def _studio_job_execute_refine_prompt(
     gen_row: StudioGeneration | None = None
     wavespeed_task_id: str | None = None
     if do_wavespeed:
-        gen_row = await begin_studio_generation_run(
-            session,
-            owner_id=oid,
-            output_aspect=aspect_key,
-            studio_model_id=mid,
-            studio_job_id=job.id,
-        )
+        gen_row = await find_studio_generation_by_job_id(session, job.id)
+        if gen_row is None:
+            gen_row = await begin_studio_generation_run(
+                session,
+                owner_id=oid,
+                output_aspect=aspect_key,
+                studio_model_id=mid,
+                studio_job_id=job.id,
+            )
 
     lock_hair_req = _truthy_lock_model_hairstyle(lock_model_hairstyle)
     effective_lock_hairstyle = bool(lock_hair_req) if image_bytes else True
@@ -2832,10 +3028,34 @@ async def api_studio_motion_first_frame(
     if params != studio_jobs.job_params(job):
         await studio_jobs.update_studio_job_params(session, job, params)
 
+    try:
+        mid_ff = int(str(model_id).strip()) if (model_id or "").strip() else None
+    except ValueError:
+        mid_ff = None
+    try:
+        aspect_ff = normalize_aspect_key(output_aspect)
+    except ValueError:
+        aspect_ff = None
+    gen_row = await reserve_studio_generation_for_job(
+        session,
+        owner_id=oid,
+        studio_job_id=job.id,
+        studio_model_id=mid_ff,
+        output_aspect=aspect_ff,
+        content_type="image/png",
+        prompt_excerpt=(description or "").strip()[:2000] or None,
+    )
+    params["placeholder_generation_id"] = gen_row.id
+    await studio_jobs.update_studio_job_params(session, job, params)
+
     studio_jobs.schedule_studio_job(job.id)
     return JSONResponse(
         status_code=202,
-        content=StudioJobAcceptedOut(job_id=job.id, job_type="motion_first_frame").model_dump(),
+        content=StudioJobAcceptedOut(
+            job_id=job.id,
+            job_type="motion_first_frame",
+            generation_id=gen_row.id,
+        ).model_dump(),
     )
 
 
@@ -3046,13 +3266,15 @@ async def _studio_job_execute_motion_first_frame(
     gen_row: StudioGeneration | None = None
     wavespeed_task_id: str | None = None
     if not skip_ws:
-        gen_row = await begin_studio_generation_run(
-            session,
-            owner_id=oid,
-            output_aspect=aspect_key,
-            studio_model_id=eff_mid,
-            studio_job_id=job.id,
-        )
+        gen_row = await find_studio_generation_by_job_id(session, job.id)
+        if gen_row is None:
+            gen_row = await begin_studio_generation_run(
+                session,
+                owner_id=oid,
+                output_aspect=aspect_key,
+                studio_model_id=eff_mid,
+                studio_job_id=job.id,
+            )
         gen_row.refined_prompt = refined
         gen_row.prompt_excerpt = (refined[:2000] if refined else None) or None
         gen_row.motion_video_prompt_auto = motion_auto_for_db
@@ -3556,6 +3778,15 @@ async def api_studio_motion_render_video(
             detail="motion_timeline слишком длинный — сократите или отключите Grok timeline на шаге 1.",
         )
 
+    preview_url: str | None = None
+    if ff_gid is not None:
+        preview_url = generation_still_public_url(
+            owner_id=oid,
+            generation_id=ff_gid,
+            public_app_base=pub,
+            token_factory=create_generation_image_access_token,
+        )
+
     try:
         return await _accept_studio_job(
             session,
@@ -3573,6 +3804,13 @@ async def api_studio_motion_render_video(
                 "generate_audio": (generate_audio or "1").strip(),
                 "duration_seconds": ds_raw,
                 "auto_motion_prompt": (auto_motion_prompt or "0").strip(),
+            },
+            placeholder={
+                "studio_model_id": mid,
+                "output_aspect": aspect_key,
+                "content_type": "video/mp4",
+                "prompt_excerpt": (prompt or "").strip()[:2000] or None,
+                "preview_source_url": preview_url,
             },
         )
     except HTTPException:
@@ -3789,20 +4027,44 @@ async def _studio_job_execute_motion_render_video(
     except RuntimeError as e:
         msg = str(e)
 
+    gen_placeholder = await find_studio_generation_by_job_id(session, job.id)
+    ph_id = params.get("placeholder_generation_id")
+    if gen_placeholder is None and ph_id is not None:
+        try:
+            gen_placeholder = await session.get(StudioGeneration, int(ph_id))
+        except (TypeError, ValueError):
+            gen_placeholder = None
+
     if video_url:
         vu = (video_url or "").strip()
         if vu:
+            if gen_placeholder is not None:
+                await studio_finish_video_generation(
+                    session,
+                    gen_placeholder,
+                    video_url=vu,
+                    prompt_excerpt=(seed_prompt or "")[:2000] or None,
+                )
             try:
                 session.add(
                     StudioMotionRender(
                         user_id=oid,
                         studio_model_id=mid,
-                        studio_generation_id=first_frame_gen_id or outfit_gen_id,
+                        studio_generation_id=gen_placeholder.id
+                        if gen_placeholder is not None
+                        else (first_frame_gen_id or outfit_gen_id),
                         video_url=vu,
                     )
                 )
             except Exception as e:
                 log.warning("motion_render history insert failed (video ok): %s", e)
+    elif gen_placeholder is not None:
+        await mark_studio_generation_failed(
+            session,
+            gen_placeholder,
+            message=msg or "WaveSpeed не вернул видео",
+            step="wavespeed",
+        )
 
     try:
         await record_usage(
@@ -3835,8 +4097,11 @@ async def _studio_job_execute_motion_render_video(
     if not video_url and msg:
         raise RuntimeError(msg)
 
-    return StudioMotionVideoOut(
+    out: dict[str, Any] = StudioMotionVideoOut(
         video_url=video_url,
         message=msg,
         motion_video_prompt_auto=seed_prompt[:4000] if seed_prompt else None,
     ).model_dump()
+    if gen_placeholder is not None:
+        out["generation_id"] = gen_placeholder.id
+    return out
