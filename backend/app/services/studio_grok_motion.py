@@ -30,6 +30,57 @@ _TIMELINE_SYSTEM_EN = (
     "[t s] lines without ``` blocks."
 )
 
+# Shared guard for step2 + Seedance expand (video APIs flag detailed face/identity prose).
+_VIDEO_IDENTITY_GUARD_EN = (
+    "CONTENT_SAFETY (video provider): Do NOT write detailed facial identity in prose — "
+    "no eye color, lip shape, cheekbones, ethnicity, age, makeup catalog, skin texture, pores, "
+    "scars/tattoos on face, or distinctive biometric lists. Identity is locked via reference images "
+    "(@Image tags) and the first-frame still; text may only use short neutral face-MOTION tokens "
+    "(blink, brow lift, lips part) without describing who the person is."
+)
+
+
+def _compact_model_profile_for_video_grok(profile: str) -> str:
+    """
+    Убирает из JSON-профиля каталог лица перед Grok video prompt — идентичность через @Image.
+    Не-JSON профиль возвращаем как есть (инструкции Grok всё равно запрещают копировать лицо).
+    """
+    p = (profile or "").strip()
+    if not p:
+        return p
+    try:
+        data = json.loads(p)
+    except json.JSONDecodeError:
+        return p
+    if not isinstance(data, dict):
+        return p
+
+    def _trim_identity_block(ident: dict) -> None:
+        for key in ("face_features", "ethnicity", "age", "distinctive_marks"):
+            ident.pop(key, None)
+        skin = ident.get("skin")
+        if isinstance(skin, dict):
+            skin.pop("tone", None)
+            skin.pop("imperfections", None)
+            if not skin:
+                ident.pop("skin", None)
+
+    subject = data.get("subject")
+    if isinstance(subject, dict):
+        ident = subject.get("identity")
+        if isinstance(ident, dict):
+            _trim_identity_block(ident)
+        subject.pop("expression", None)
+    elif isinstance(data.get("identity"), dict):
+        _trim_identity_block(data["identity"])
+
+    compact = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
+    return (
+        f"{compact}\n"
+        "[VIDEO: face/skin identity omitted — use @Image model references; "
+        "hair length and body_type only for continuity.]"
+    )
+
 
 def grok_motion_studio_credentials() -> StudioOpenAiCredentials:
     key = (settings.grok_api_key or "").strip() or (settings.openai_api_key or "").strip()
@@ -252,14 +303,15 @@ def _timeline_instruction_fps_stills_intro(n_frames: int) -> str:
         "Structure:\n"
         "- For each second t from 0 through N-1 (N = number of images), output a line starting with "
         "the exact token `[t s]` then a rich description: full-body pose, limb angles, weight shifts, "
-        "head angle and gaze, facial expression micro-changes (brow/jaw/lips timing), hair motion, "
-        "clothing folds, hands, micro-movements, camera position/move (pan/tilt/dolly/track), lens feel, "
-        "background parallax, lighting direction and quality.\n"
+        "head angle and gaze direction, hair motion, clothing folds, hands, micro-movements, "
+        "camera position/move (pan/tilt/dolly/track), lens feel, background parallax, lighting direction and quality.\n"
+        "- Face/choreography per second: at most a few neutral MOTION tokens (e.g. \"brows lift\", \"lips press then part\", "
+        "\"eyes narrow slightly\") — timings only; NEVER face shape, beauty, ethnicity, age, makeup, skin, or eye color.\n"
         "- Then one paragraph prefixed `[Global motion]` summarizing rhythm, energy, transitions between seconds, "
         "and any repeating beats.\n"
         "Rules: describe only what is visible; do not invent story beats; do not name real celebrities; "
-        "write the performer neutrally (body type, wardrobe, markings) knowing identity will be replaced later — "
-        "but preserve motion and timing faithfully.\n"
+        "performer wording = body silhouette + wardrobe + props only (identity will be swapped later); "
+        "preserve motion and timing faithfully; no facial identity catalog.\n"
         "Plain text only (no Markdown tables)."
     )
 
@@ -282,7 +334,8 @@ def _timeline_instruction_full_video_intro(*, capped_seconds: int, approximate_d
         f"- For each integer second t from **0** through **{last_second}** (one `[t s]` line per second that you can "
         "confidently sample from playback), emit one line beginning with **`[t s]`** describing for that beat: "
         "full-body pose, torso twist and weight shifts, articulate arms/hands/fingers where visible, gait or step cues, "
-        "head yaw/tilt and gaze versus camera lens, facial micro-movement (**brows, lids, cheeks, lips, jaw** — timings and magnitudes neutrally, no identity guesses), "
+        "head yaw/tilt and gaze versus camera lens, optional brief face-MOTION cues (blink, brow/lip/jaw timing only — "
+        "no face shape, skin, eye color, ethnicity, makeup, or beauty descriptors), "
         "hair inertia, garment folds reacting to motion.\n"
         "- Camera: pan/tilt/dolly/track, stabilization feel, handheld micro-shake vs tripod, framing shifts, focal length cues, background parallax.\n"
         "- Lighting: dominant key/fill directions and how highlights travel with moving surfaces.\n"
@@ -290,7 +343,7 @@ def _timeline_instruction_full_video_intro(*, capped_seconds: int, approximate_d
         "- Closing paragraph **`[Global motion]`**: overall rhythm, energy arc, entrances/exits from frame, repeated gestures, climax micro-beats.\n"
         "Rules:\n"
         "- Describe ONLY what occurs in-video; avoid invented plot beats.\n"
-        "- Neutral performer wording (appearance will later be swapped for MODEL_PROFILE).\n"
+        "- Neutral performer wording: motion, wardrobe, body silhouette — not a facial identity write-up.\n"
         "- No markdown tables; no fenced code blocks.\n"
     )
 
@@ -421,7 +474,7 @@ async def grok_step2_rewrite_for_target_model(
         mime = "image/jpeg"
     b64 = base64.standard_b64encode(first_frame_jpeg).decode("ascii")
 
-    profile = (model_profile_text or "").strip()
+    profile = _compact_model_profile_for_video_grok((model_profile_text or "").strip())
     profile_block = (
         profile
         if profile
@@ -431,7 +484,10 @@ async def grok_step2_rewrite_for_target_model(
 
     user_instruction = (
         "You merge a motion timeline with a locked target persona for video generation.\n\n"
+        f"{_VIDEO_IDENTITY_GUARD_EN}\n\n"
         f"{profile_block}\n\n"
+        "TARGET_MODEL_PROFILE usage: context for wardrobe/hair length continuity only — "
+        "do NOT paste face_features, ethnicity, skin, eye color, or distinctive_marks into the output text.\n\n"
         "---\n"
         "REFERENCE_MOTION_TIMELINE (English, keep choreography and timing exactly):\n"
         f"{timeline_english.strip()}\n\n"
@@ -439,15 +495,16 @@ async def grok_step2_rewrite_for_target_model(
         "TASK:\n"
         "1) Read REFERENCE_MOTION_TIMELINE. Preserve every `[t s]` line and `[Global motion]` pacing — "
         "do not shorten the seconds coverage; keep the same chronological structure.\n"
-        "2) Wherever the timeline describes the on-screen person's identity or appearance "
-        "(face shape, ethnicity guess, hair, makeup, physique, tattoos, scars, approximate age/gender cues, wardrobe brand logos), "
-        "replace those phrases so they describe ONLY the TARGET_MODEL_PROFILE (text) "
-        "+ what is visibly consistent with the attached first-frame image.\n"
-        "3) Do NOT rename or invent new motions, camera beats, backgrounds, props, lighting setup, "
-        "or durations — choreography and environment stay from the timeline.\n"
-        "4) If the timeline is silent about a detail the profile requires (e.g. hair length), harmonize subtly "
-        "without changing the poses.\n"
-        "5) Maintain detailed facial-micro-expression timing from the timeline; only swap wording to match the locked persona visually.\n"
+        "2) Remove or shorten any identity/appearance catalog in the timeline (face shape, ethnicity, makeup, "
+        "skin texture, eye color, age, beauty adjectives, detailed micro-anatomy). Identity is implicit from "
+        "the attached first-frame image + downstream @Image reference tags — never restate it in prose.\n"
+        "3) Per `[t s]` line keep: full-body pose, limbs, weight, gait, torso, hands, head yaw/pitch/tilt, "
+        "gaze direction, hair movement, clothing folds, camera, lighting, environment. "
+        "Face: only short neutral MOTION tokens from the timeline (max ~12 words of face wording per second); "
+        "preserve timing, not biometric detail.\n"
+        "4) Do NOT invent new motions, camera beats, backgrounds, props, lighting setup, or durations.\n"
+        "5) If the profile implies hair length or wardrobe and the timeline is silent, add at most one short "
+        "continuity phrase in `[Global motion]` without changing poses.\n"
         "Output: a single plain English brief (same `[t s]` + `[Global motion]` skeleton), ready to paste "
         "into an image-to-video model together with the first-frame image.\n"
     )
@@ -517,12 +574,13 @@ def _seedance_image_tag_range(
         end_idx = start_idx + n_model - 1
         if n_model == 1:
             parts.append(
-                f"@Image{start_idx} = character identity (face, body, hair from model reference sheet(s))"
+                f"@Image{start_idx} = character identity via reference sheet(s) — bind face/body/hair in the API; "
+                "do not catalog facial identity in prompt prose"
             )
         else:
             parts.append(
                 f"@Image{start_idx}–@Image{end_idx} = same character identity across model reference sheet(s); "
-                "use these tags for face, body, hair — never the original actor from @Video1"
+                "bind face/body/hair via tags — never describe the @Video1 actor's face in text"
             )
     if n_outfit > 0:
         idx = 1 + n_start_frame + n_model
@@ -572,7 +630,7 @@ async def grok_expand_seedance_t2v_prompt(
         ref_lines.append("@Video1 = motion / pacing / body dynamics reference (follow timing and gestures)")
     ref_block = "\n".join(ref_lines) if ref_lines else "No reference tags (text-only scene)."
 
-    profile = (model_profile_text or "").strip()
+    profile = _compact_model_profile_for_video_grok((model_profile_text or "").strip())
     profile_block = profile if profile else "(empty — derive persona only from @Image references)"
 
     notes = (motion_notes or "").strip()
@@ -586,21 +644,25 @@ async def grok_expand_seedance_t2v_prompt(
 
     user_instruction = (
         "You write a single Seedance 2.0 Text-to-Video prompt in ENGLISH.\n\n"
+        f"{_VIDEO_IDENTITY_GUARD_EN}\n\n"
         f"USER_BRIEF (any language — interpret intent):\n{brief}\n\n"
         f"REFERENCE_TAG_RULES (order matches API reference_images / reference_videos arrays):\n{ref_block}\n\n"
-        f"TARGET_MODEL_PROFILE:\n{profile_block}\n\n"
-        f"MOTION_NOTES_FROM_REFERENCE_VIDEO (optional):\n{notes_block}\n\n"
+        f"TARGET_MODEL_PROFILE (context only — do not copy face_features into output):\n{profile_block}\n\n"
+        f"MOTION_NOTES_FROM_REFERENCE_VIDEO (optional — distill to motion/camera; strip identity prose):\n{notes_block}\n\n"
         f"NEGATIVE:\n{neg_line}\n\n"
         f"OUTPUT_SPECS: aspect_ratio {aspect}, duration {dur} seconds, cinematic, native audio.\n\n"
         "RULES:\n"
         "1) Output ONLY the final video prompt text — no preamble, no markdown fences.\n"
         f"2) Hard limit: entire output MUST be at most {lim} characters.\n"
         "3) Use @Image tags exactly as assigned above: @Image1 for opening still only; "
-        "identity tags for face/body/hair; outfit tag for wardrobe if present.\n"
+        "identity via model @Image tags (never restate face/body/hair in long prose).\n"
         "4) If @Video1 exists, reference it for motion/choreography; do not describe the reference video's original actor identity.\n"
-        "5) Wardrobe at t=0 comes from @Image1 and USER_BRIEF; identity from model reference @Image tags.\n"
-        "6) Include camera, lighting, mood, and action with director-level detail; keep one continuous scene for the clip duration.\n"
+        "5) Wardrobe at t=0 comes from @Image1 and USER_BRIEF; persona binding is implicit via @Image identity tags.\n"
+        "6) Include camera, lighting, mood, environment, wardrobe, and body choreography with director-level detail; "
+        "keep one continuous scene for the clip duration.\n"
         "7) Do not invent extra @Image or @Video tags beyond the ranges given.\n"
+        "8) Never output detailed facial identity lists — at most one short phrase like \"same person as model references\".\n"
+        "9) If USER_BRIEF or MOTION_NOTES contain `[t s]` timelines, keep timing but compress any face lines to motion-only tokens.\n"
     )
 
     out = await chat_completion_openai_compatible_text(

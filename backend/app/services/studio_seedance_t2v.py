@@ -110,7 +110,8 @@ def assemble_seedance_t2v_prompt(
         else:
             tags = f"@Image{start_idx}–@Image{end_idx}"
         parts.append(
-            f"Same person throughout — face, body proportions, skin tone, and hair strictly from {tags}. "
+            f"Same person throughout — identity only from {tags} (face/body/hair via reference images; "
+            "do not restate facial identity or skin details in this text). "
             "Reference sheets may show neutral base clothing; dress the character as in @Image1 or USER_BRIEF "
             "unless an outfit reference image is specified."
         )
