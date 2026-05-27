@@ -48,6 +48,7 @@ from app.schemas import (
     StudioModelImagePatchIn,
     StudioModelProfileGenerateOut,
     StudioMotionDrivingVideoUploadOut,
+    StudioMotionComposeVideoPromptOut,
     StudioMotionFirstFrameOut,
     StudioMotionRenderOut,
     StudioMotionRendersPageOut,
@@ -132,7 +133,14 @@ from app.services.studio_grok_scene_compose import (
     grok_compose_studio_scene,
     grok_scene_compose_configured,
 )
-from app.services.studio_grok_motion import grok_motion_studio_credentials
+from app.services.studio_motion_grok_pipeline import (
+    assemble_motion_grok_wavespeed_prompt,
+    describe_motion_still_for_ui,
+    extract_video_first_frame_or_raise,
+    grok_compose_motion_first_frame,
+    motion_grok_timeline_from_video_path,
+    motion_grok_wavespeed_image_urls,
+)
 from app.services.studio_model_images import (
     assert_studio_image_kind,
     model_images_for_wavespeed_profile,
@@ -445,8 +453,8 @@ def _studio_refine_wavespeed_preflight(
             raise HTTPException(
                 status_code=400,
                 detail=(
-                    "В режиме «Grok: сцена» у модели нужна развёртка (turnaround) "
-                    "или снимок лица (face) — для удержания внешности в WaveSpeed."
+                    "В режиме «Grok: сцена» у модели нужен снимок лица (face) — "
+                    "для удержания внешности в WaveSpeed."
                 ),
             )
     return ws_key
@@ -2747,12 +2755,10 @@ async def api_studio_motion_first_frame(
     user: User = Depends(get_current_user),
 ) -> StudioMotionFirstFrameOut | JSONResponse:
     _ = request
-    skeleton = prepare_studio_prompt_skeleton()
-    system_instr = load_image_studio_system()
-    if not skeleton or not system_instr:
+    if not grok_scene_compose_configured():
         raise HTTPException(
             status_code=503,
-            detail="Шаблон промпта студии не настроен (skeleton / system).",
+            detail="Grok не настроен (OPENAI_API_KEY / GROK_API_KEY с vision).",
         )
 
     assert_permission(user, PERM_STUDIO_GENERATE)
@@ -2849,10 +2855,10 @@ async def _studio_job_execute_motion_first_frame(
     lock_model_hairstyle = str(p.get("lock_model_hairstyle") or "1")
     use_still_as_final = str(p.get("use_still_as_final") or "0")
 
-    skeleton = prepare_studio_prompt_skeleton()
-    system_instr = load_image_studio_system()
-    if not skeleton or not system_instr:
-        raise RuntimeError("Шаблон промпта студии не настроен (skeleton / system).")
+    if not grok_scene_compose_configured():
+        raise RuntimeError(
+            "Grok не настроен: задайте OPENAI_API_KEY (xAI) с vision для motion."
+        )
 
     try:
         aspect_key = normalize_aspect_key(output_aspect)
@@ -2959,74 +2965,25 @@ async def _studio_job_execute_motion_first_frame(
     lock_hair_req = _truthy_lock_model_hairstyle(lock_model_hairstyle)
     effective_lock_hairstyle = bool(lock_hair_req)
 
-    try:
-        reference_scene = await describe_motion_video_first_frame_scene_openai(
-            image_bytes=first_frame,
-            image_media_type=first_frame_media,
-            credentials=llm_creds,
-        )
-    except RuntimeError as e:
-        log.warning("motion first-frame scene describe failed, fallback to standard reference describe: %s", e)
-        try:
-            reference_scene = await describe_reference_image_openai(
-                image_bytes=first_frame,
-                image_media_type=first_frame_media,
-                hairstyle_from_pose_reference=not effective_lock_hairstyle,
-                credentials=llm_creds,
-            )
-        except RuntimeError as e2:
-            raise HTTPException(
-                status_code=502,
-                detail=f"Не удалось описать первый кадр: {e2}",
-            ) from e2
-    reference_scene = (reference_scene or "").strip()
-    if not reference_scene:
-        raise HTTPException(
-            status_code=502,
-            detail="Пустое описание первого кадра. Проверьте vision-модель и файл motion_first_frame_scene_describe.txt.",
-        )
-
     model_profile_text = (sm_loaded.profile_text or "").strip() or None
 
     motion_clip_summary: str | None = None
-    if _truthy_wavespeed_flag(auto_motion_prompt):
-        if video_path is None:
-            raise HTTPException(
-                status_code=400,
-                detail="Для авто-описания движения по ролику загрузите референс-видео.",
-            )
+    if _truthy_wavespeed_flag(auto_motion_prompt) and video_path is not None:
         try:
-            if settings.studio_grok_motion_timeline_enabled:
-                g_creds = grok_motion_studio_credentials()
-                motion_clip_summary = await grok_two_step_motion_prompt_for_studio(
-                    video_path=video_path,
-                    model_profile_text=model_profile_text or "",
-                    first_frame_jpeg=first_frame,
-                    first_frame_media=first_frame_media,
-                    credentials=g_creds,
-                )
-            else:
-                frames = await anyio.to_thread.run_sync(
-                    lambda vp=video_path: extract_video_sample_frames_jpeg(vp, max_frames=4)
-                )
-                motion_clip_summary = await describe_motion_video_frames_openai(
-                    frames_jpeg=frames,
-                    credentials=llm_creds,
-                )
+            motion_clip_summary = await motion_grok_timeline_from_video_path(
+                video_path=video_path,
+                model_profile_text=model_profile_text or "",
+                first_frame_jpeg=first_frame,
+                first_frame_media=first_frame_media,
+                credentials=grok_motion_studio_credentials(),
+            )
         except HTTPException:
             raise
         except Exception as e:
             log.warning("motion clip summary failed: %s", e)
-            hint = (
-                "Проверьте ключ xAI (GROK_API_KEY или OPENAI_API_KEY), GROK_BASE_URL (https://api.x.ai/v1), "
-                "модели GROK_MOTION_FULL_VIDEO_MODEL (/responses по видео) и "
-                "GROK_MOTION_MODEL или OPENAI_STUDIO_MODEL_VISION (резерв по кадрам + шаг 2), ffmpeg, размер клипа или задайте GROK_MOTION_SEND_FULL_VIDEO=false."
-                if settings.studio_grok_motion_timeline_enabled
-                else "Отключите «Уточнить движение по ролику» или проверьте OPENAI_STUDIO_MODEL_VISION."
-            )
             raise HTTPException(
                 status_code=502,
-                detail=f"Не удалось описать движение по ролику ({e}). {hint}",
+                detail=f"Не удалось описать движение по ролику (Grok): {e}",
             ) from e
 
     desc_base = (description or "").strip()
@@ -3039,48 +2996,30 @@ async def _studio_job_execute_motion_first_frame(
         )
         user_extra_blocks.append(block_title + motion_clip_summary.strip())
     extra_joined = "\n\n".join(user_extra_blocks) if user_extra_blocks else ""
-    user_text_for_refine = "\n\n".join(x for x in (desc_base, extra_joined) if x).strip()
+    user_notes_grok = "\n\n".join(x for x in (desc_base, extra_joined) if x).strip()
 
-    if not user_text_for_refine and not model_profile_text:
-        raise HTTPException(
-            status_code=400,
-            detail="Добавьте пожелания в описание или заполните текстовый профиль модели.",
-        )
-
+    ref_nude = False
     try:
-        imgs_for_ws = model_images_for_wavespeed_profile(imgs_model, wave_profile_n)
-        ref_photo_block = model_reference_photos_block(imgs_for_ws)
-        motion_brief_mode = resolve_studio_prompt_brief_mode(
-            studio_mode="model",
-            has_reference_scene=bool(reference_scene),
-            has_uploaded_reference_bytes=True,
-            send_pose_reference_to_wavespeed=True,
+        refined, reference_scene, grok_neg = await grok_compose_motion_first_frame(
+            pose_reference_bytes=first_frame,
+            pose_reference_mime=first_frame_media,
+            sm=sm_loaded,
+            wave_profile=wave_profile_n,
+            user_notes=user_notes_grok,
+            lock_hairstyle=effective_lock_hairstyle,
+            credentials=grok_motion_studio_credentials(),
         )
-        motion_skeleton = prepare_studio_prompt_skeleton_for_brief(motion_brief_mode)
-        if not motion_skeleton:
-            raise RuntimeError("Шаблон промпта студии пуст (skeleton).")
-        refined = await refine_prompt_via_openai(
-            system_instruction=system_instr,
-            skeleton=motion_skeleton,
-            user_text=user_text_for_refine,
-            reference_scene_description=reference_scene,
-            model_profile_text=model_profile_text,
-            model_reference_photos=ref_photo_block,
-            output_aspect_key=aspect_key,
-            studio_mode="model",
-            lock_model_hairstyle=effective_lock_hairstyle,
-            prompt_brief_mode=motion_brief_mode,
-            credentials=llm_creds,
-        )
+        reference_scene = (reference_scene or "").strip()
+        ref_nude = reference_pose_is_nude_or_minimal_coverage(reference_scene)
     except RuntimeError as e:
         raise HTTPException(status_code=502, detail=str(e)) from e
 
-    motion_auto_for_db = reference_scene.strip()
+    motion_auto_for_db = (reference_scene or "").strip()
     if motion_clip_summary and motion_clip_summary.strip():
         marker = _GROK_MOTION_MARKER if settings.studio_grok_motion_timeline_enabled else _CLIP_MOTION_MARKER
         motion_auto_for_db += "\n\n" + marker + "\n" + motion_clip_summary.strip()
 
-    mode_n = "model"
+    mode_n = "grok_compose"
     skip_ws = gen_arch_row is not None or persist_uploaded_final
     ws_key = _studio_refine_wavespeed_preflight(
         do_wavespeed=not skip_ws,
@@ -3173,29 +3112,25 @@ async def _studio_job_execute_motion_first_frame(
         user_pose_ref_prepended = False
         pose_ct = first_frame_media if first_frame_media.startswith("image/") else "image/jpeg"
         try:
-            fid_pose = save_pose_reference_bytes(
+            image_urls = motion_grok_wavespeed_image_urls(
+                pub=pub,
                 owner_id=oid,
-                raw=first_frame,
-                content_type=pose_ct,
-            )
-            ptok = create_pose_reference_access_token(user_id=oid, file_id=fid_pose)
-            image_urls.append(
-                f"{pub}/api/studio/public-pose-reference?t={quote(ptok, safe='')}"
+                pose_bytes=first_frame,
+                pose_mime=pose_ct,
+                sm=sm_loaded,
+                wave_profile=wave_profile_n,
+                reference_scene_nude=ref_nude,
+                save_pose_reference_bytes=save_pose_reference_bytes,
+                create_pose_reference_access_token=create_pose_reference_access_token,
+                create_model_image_access_token=create_model_image_access_token,
             )
             user_pose_ref_prepended = True
         except Exception as e:
-            log.warning("motion: pose ref save failed: %s", e)
+            log.warning("motion: grok pose/identity urls failed: %s", e)
             wavespeed_message = "Не удалось подготовить кадр для WaveSpeed."
 
-        if not wavespeed_message:
-            for im in imgs_for_ws[:10]:
-                tok = create_model_image_access_token(user_id=oid, image_id=im.id)
-                image_urls.append(
-                    f"{pub}/api/studio/public-model-image?t={quote(tok, safe='')}"
-                )
-
         if not image_urls:
-            wavespeed_message = "Нет изображений для WaveSpeed."
+            wavespeed_message = wavespeed_message or "Нет изображений для WaveSpeed."
 
         if not wavespeed_message:
             pose_is_last_after_reorder = False
@@ -3208,16 +3143,15 @@ async def _studio_job_execute_motion_first_frame(
                     studio_mode=mode_n,
                     user_pose_ref_prepended=user_pose_ref_prepended,
                 )
-            wavespeed_prompt = assemble_wavespeed_image_edit_prompt(
-                refined,
-                studio_mode=mode_n,
-                user_pose_in_api=user_pose_ref_prepended,
-                user_pose_is_last=pose_is_last_after_reorder,
-                lock_model_hairstyle=effective_lock_hairstyle,
-                prompt_brief_mode=motion_brief_mode,
+            wavespeed_prompt = assemble_motion_grok_wavespeed_prompt(
+                refined=refined,
                 model_profile_text=model_profile_text,
+                reference_scene=reference_scene or None,
+                extra_negative=grok_neg,
+                lock_hairstyle=effective_lock_hairstyle,
                 wave_profile=wave_profile_n,
-                reference_scene_description=reference_scene,
+                user_pose_first=user_pose_ref_prepended,
+                user_pose_last=pose_is_last_after_reorder,
             )
             if settings.wavespeed_seedream_omit_size:
                 size_for_ws: str | None = None
@@ -3310,6 +3244,190 @@ async def _studio_job_execute_motion_first_frame(
         wavespeed_message=wavespeed_message,
         generation_id=generation_id,
         motion_video_file_id=motion_video_file_id,
+    ).model_dump()
+
+
+@router.post(
+    "/studio/motion/compose-video-prompt",
+    response_model=StudioMotionComposeVideoPromptOut,
+    responses={202: {"model": StudioJobAcceptedOut}},
+)
+async def api_studio_motion_compose_video_prompt(
+    request: Request,
+    motion_video_file_id: str = Form(...),
+    model_id: str = Form(...),
+    first_frame_image: UploadFile | None = File(None),
+    existing_generation_id: str = Form(""),
+    description: str = Form(""),
+    lock_model_hairstyle: str = Form("1"),
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> StudioMotionComposeVideoPromptOut | JSONResponse:
+    """Grok: timeline по реф-видео + кадр модели. Без WaveSpeed — для шага «видео» отдельно."""
+    _ = request
+    if not grok_scene_compose_configured():
+        raise HTTPException(
+            status_code=503,
+            detail="Grok не настроен (OPENAI_API_KEY / GROK_API_KEY с vision).",
+        )
+    assert_permission(user, PERM_STUDIO_GENERATE)
+    oid = workspace_owner_id(user)
+
+    mv_id = str(motion_video_file_id or "").strip()
+    if not mv_id:
+        raise HTTPException(status_code=400, detail="Загрузите референс-видео на сервер.")
+    if resolve_motion_video_file(oid, mv_id) is None:
+        raise HTTPException(status_code=404, detail="Референс-видео не найдено. Загрузите снова.")
+
+    still_bytes: bytes | None = None
+    still_mime = "image/jpeg"
+    if first_frame_image is not None and (first_frame_image.filename or "").strip():
+        still_bytes = await first_frame_image.read()
+        if len(still_bytes) > MAX_IMAGE_BYTES:
+            raise HTTPException(status_code=400, detail="Снимок слишком большой.")
+        if not still_bytes:
+            raise HTTPException(status_code=400, detail="Пустой файл кадра.")
+        still_mime = (first_frame_image.content_type or "image/jpeg").split(";")[0].strip()
+
+    params: dict[str, Any] = {
+        "motion_video_file_id": mv_id,
+        "model_id": model_id,
+        "existing_generation_id": (existing_generation_id or "").strip(),
+        "description": (description or "").strip(),
+        "lock_model_hairstyle": lock_model_hairstyle,
+    }
+    job = await studio_jobs.create_studio_job(
+        session,
+        owner_id=oid,
+        actor_user_id=user.id,
+        job_type="motion_compose_video_prompt",
+        params=params,
+    )
+    if still_bytes:
+        params["first_frame_path"] = studio_jobs.save_studio_job_file(
+            job.id, "first_frame.bin", still_bytes
+        )
+        params["first_frame_mime"] = still_mime
+    if params != studio_jobs.job_params(job):
+        await studio_jobs.update_studio_job_params(session, job, params)
+
+    studio_jobs.schedule_studio_job(job.id)
+    return JSONResponse(
+        status_code=202,
+        content=StudioJobAcceptedOut(
+            job_id=job.id, job_type="motion_compose_video_prompt"
+        ).model_dump(),
+    )
+
+
+async def _studio_job_execute_motion_compose_video_prompt(
+    session: AsyncSession,
+    job: StudioJob,
+    user: User,
+) -> dict[str, Any]:
+    p = studio_jobs.job_params(job)
+    mv_id = str(p.get("motion_video_file_id") or "").strip()
+    model_id = str(p.get("model_id") or "")
+    description = str(p.get("description") or "")
+    lock_model_hairstyle = str(p.get("lock_model_hairstyle") or "1")
+
+    oid = workspace_owner_id(user)
+    sub_b, llm_row, _ws_row, plan, _credits = await load_owner_studio_billing(session, oid)
+    _require_studio_subscription(user, sub_b, credits_balance=_credits)
+
+    vpath = resolve_motion_video_file(oid, mv_id)
+    if vpath is None:
+        raise RuntimeError("Референс-видео не найдено.")
+
+    eff_mid = _parse_optional_model_id(model_id)
+    if eff_mid is None:
+        raise RuntimeError("Выберите модель.")
+    sm_loaded = await require_studio_model_access(session, user, eff_mid, load_images=True)
+    if not select_grok_compose_wavespeed_identity_images(
+        sort_model_images_for_studio(list(sm_loaded.images))
+    ):
+        raise RuntimeError(
+            "У модели нужен снимок лица (face) для Grok и видео."
+        )
+
+    first_frame: bytes
+    first_frame_media = "image/jpeg"
+    generation_id: int | None = None
+    raw_ex = str(p.get("existing_generation_id") or "").strip()
+    if raw_ex:
+        try:
+            gid = int(raw_ex)
+        except ValueError:
+            raise RuntimeError("Некорректный номер генерации из архива.") from None
+        _row, first_frame, first_frame_media = await _load_owned_generation_still_for_motion(
+            session, owner_id=oid, generation_id=gid, actor=user
+        )
+        generation_id = gid
+    elif p.get("first_frame_path"):
+        first_frame = studio_jobs.load_studio_job_file(str(p["first_frame_path"]))
+        first_frame_media = str(p.get("first_frame_mime") or "image/jpeg")
+        gen_row = await persist_studio_generation_from_uploaded_bytes(
+            session,
+            owner_id=oid,
+            data=first_frame,
+            content_type=first_frame_media,
+            output_aspect="9:16",
+            studio_model_id=eff_mid,
+            refined_prompt=None,
+            motion_video_prompt_auto=None,
+        )
+        if gen_row is None:
+            raise RuntimeError("Не удалось сохранить кадр в архив.")
+        generation_id = gen_row.id
+    else:
+        first_frame, first_frame_media = await extract_video_first_frame_or_raise(vpath)
+
+    llm_creds = studio_llm_credentials(plan=plan, llm_row=llm_row)
+    lock_hair = _truthy_lock_model_hairstyle(lock_model_hairstyle)
+    profile = (sm_loaded.profile_text or "").strip() or ""
+
+    try:
+        timeline = await motion_grok_timeline_from_video_path(
+            video_path=vpath,
+            model_profile_text=profile,
+            first_frame_jpeg=first_frame,
+            first_frame_media=first_frame_media,
+            credentials=grok_motion_studio_credentials(),
+        )
+    except Exception as e:
+        raise RuntimeError(f"Не удалось собрать промпт по видео (Grok): {e}") from e
+
+    reference_scene: str | None = None
+    try:
+        reference_scene = (
+            await describe_motion_still_for_ui(
+                image_bytes=first_frame,
+                image_media_type=first_frame_media,
+                lock_hairstyle=lock_hair,
+                credentials=llm_creds,
+            )
+        ).strip() or None
+    except RuntimeError as e:
+        log.warning("motion compose: still describe skipped: %s", e)
+
+    cost = apply_studio_credit_cost(plan, settings.credit_cost_studio_prompt_refine)
+    billing = await ensure_can_consume_credits(session, user, cost)
+    await record_usage(
+        session,
+        user,
+        billing,
+        "studio_motion_compose_video_prompt",
+        cost,
+        {"motion_video_file_id": mv_id, "studio_model_id": eff_mid, "generation_id": generation_id},
+    )
+    await session.commit()
+
+    return StudioMotionComposeVideoPromptOut(
+        motion_video_prompt_auto=timeline.strip(),
+        reference_scene_description=reference_scene,
+        generation_id=generation_id,
+        motion_video_file_id=mv_id,
+        message=None,
     ).model_dump()
 
 
@@ -3430,12 +3548,6 @@ async def api_studio_motion_render_video(
                 status_code=400,
                 detail="Первый кадр ещё не сохранён на сервере. Дождитесь архива или сохраните кадр.",
             )
-
-    if mv_id and ff_gid is None:
-        raise HTTPException(
-            status_code=400,
-            detail="С референс-видео нужен первый кадр: сначала выполните шаг 1 «Сгенерировать первый кадр».",
-        )
 
     timeline_raw = (motion_timeline or "").strip()
     if len(timeline_raw) > 50000:

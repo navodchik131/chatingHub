@@ -42,18 +42,16 @@ def test_collect_regular_skips_genitals() -> None:
     assert "CHARACTER_SHEET_CLOTHED" in labels
 
 
-def test_wavespeed_identity_prefers_turnaround() -> None:
-    imgs = [_im("face", 1), _im("turnaround", 2)]
+def test_wavespeed_identity_face_only() -> None:
+    imgs = [_im("turnaround", 1), _im("face", 2)]
     picked = select_grok_compose_wavespeed_identity_images(imgs)
     assert len(picked) == 1
-    assert picked[0].image_kind == "turnaround"
-
-
-def test_wavespeed_identity_nude_ref_face_only() -> None:
-    imgs = [_im("turnaround", 1), _im("face", 2)]
-    picked = select_grok_compose_wavespeed_identity_images(imgs, pose_reference_nude=True)
-    assert len(picked) == 1
     assert picked[0].image_kind == "face"
+
+
+def test_wavespeed_identity_skips_turnaround_without_face() -> None:
+    imgs = [_im("turnaround", 1), _im("body", 2)]
+    assert select_grok_compose_wavespeed_identity_images(imgs) == []
 
 
 def test_parse_grok_compose_json() -> None:

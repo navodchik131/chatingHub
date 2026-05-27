@@ -139,20 +139,20 @@ _WAN_COMPACT_POSE_PREFIX = (
 _GROK_COMPOSED_WAN_PREFIX = (
     "[GROK_SCENE_COMPOSE] **Image 1** = user pose/scene reference — pose geometry, camera, framing, "
     "background, environmental light, and wardrobe/body coverage ONLY; do **not** copy identity from image 1. "
-    "**Image 2** = model character sheet (turnaround) — face shape, hair, skin tone, body proportions; "
-    "do **not** copy neutral studio outfit, pose, or framing from image 2. "
+    "**Image 2** = model face / identity portrait — face shape, hair, skin tone; "
+    "do **not** copy pose, outfit, or scene framing from image 2. "
     "The English brief below (from Grok) reinforces identity; image 2 + brief win over image 1 for WHO.\n\n"
 )
 
 _GROK_COMPOSED_NANO_PREFIX = (
-    "[GROK_SCENE_COMPOSE] **Earlier image(s)** = model character sheet — identity WHO (face, hair, skin, "
-    "body proportions). **Last** image = pose/framing/light/wardrobe lock only — never copy donor identity "
+    "[GROK_SCENE_COMPOSE] **Earlier image(s)** = model face / identity portrait — WHO (face, hair, skin). "
+    "**Last** image = pose/framing/light/wardrobe lock only — never copy donor identity "
     "from the last image. English brief below aligns scene with Grok output.\n\n"
 )
 
 _GROK_COMPOSED_POSE_LAST_SUFFIX = (
     "\n\n[LAST_INPUT_IMAGE — POSE_REF] The **last** image locks pose geometry, crop, gaze, garments/nudity zones, "
-    "and light-on-body pattern. Face and skin must match the character sheet image(s) before it and the brief — "
+    "and light-on-body pattern. Face and skin must match the identity portrait before it and the brief — "
     "not the incidental person on this last image."
 )
 

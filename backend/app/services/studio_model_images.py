@@ -151,21 +151,15 @@ def select_grok_compose_wavespeed_identity_images(
     pose_reference_nude: bool = False,
 ) -> list[UserStudioModelImage]:
     """
-    Режим «Grok: сцена»: в WaveSpeed одна identity-картинка — развёртка (приоритет) или face.
-    При nude-рефе позы — только face, без clothed turnaround.
+    Режим «Grok: сцена»: в WaveSpeed одна identity-картинка — только face (лицо / идентичность).
+    pose_reference_nude оставлен для совместимости вызова; логика та же — face.
     """
+    _ = pose_reference_nude
     if not imgs:
         return []
-    sorted_imgs = sort_model_images_for_studio(imgs)
-    if pose_reference_nude:
-        for im in sorted_imgs:
-            if (im.image_kind or "other").lower() == "face":
-                return [im]
-        return []
-    for kind in ("turnaround", "face"):
-        for im in sorted_imgs:
-            if (im.image_kind or "other").lower() == kind:
-                return [im]
+    for im in sort_model_images_for_studio(imgs):
+        if (im.image_kind or "other").lower() == "face":
+            return [im]
     return []
 
 

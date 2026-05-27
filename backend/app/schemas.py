@@ -179,6 +179,16 @@ class StudioMotionFirstFrameOut(BaseModel):
     motion_video_file_id: str | None = None
 
 
+class StudioMotionComposeVideoPromptOut(BaseModel):
+    """Grok: timeline движения по реф-видео + кадр модели (без генерации картинки)."""
+
+    motion_video_prompt_auto: str
+    reference_scene_description: str | None = None
+    generation_id: int | None = None
+    motion_video_file_id: str | None = None
+    message: str | None = None
+
+
 class StudioMotionVideoOut(BaseModel):
     """Шаг 2: референс-видео + кадр модели → WAN 2.2 Animate (replace / animate)."""
 
