@@ -545,8 +545,8 @@ def _studio_refine_wavespeed_preflight(
             raise HTTPException(
                 status_code=400,
                 detail=(
-                    "В режиме «Grok: сцена» у модели нужен снимок лица (face) — "
-                    "для удержания внешности в WaveSpeed."
+                    "В режиме «Grok: сцена» у модели нужен снимок тела (body) и/или лица (face) — "
+                    "для переноса фигуры и внешности в WaveSpeed."
                 ),
             )
     return ws_key
@@ -3596,7 +3596,7 @@ async def _studio_job_execute_motion_compose_video_prompt(
         sort_model_images_for_studio(list(sm_loaded.images))
     ):
         raise RuntimeError(
-            "У модели нужен снимок лица (face) для Grok и видео."
+            "У модели нужен снимок тела (body) и/или лица (face) для Grok и видео."
         )
 
     first_frame: bytes

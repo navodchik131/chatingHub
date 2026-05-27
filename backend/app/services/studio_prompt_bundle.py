@@ -32,6 +32,12 @@ _COMPACT_MUST_KEEP = [
     "Unified skin grain face-to-body; scene light direction on MODEL skin, not donor complexion",
 ]
 
+_GROK_COMPOSE_BODY_NEGATIVE = (
+    "reference sitter body, donor body proportions, wrong bust size, wrong waist, wrong hips, "
+    "flat chest from pose reference, oversized hips from pose reference, mismatched breast size, "
+    "skinny model on curvy reference body, curvy model on flat reference body"
+)
+
 _NUDE_WARDROBE_NEGATIVE = (
     "clothing from model reference photos, dressed when pose reference is nude, "
     "sportswear, crop top, sports bra, leggings, bikini, lingerie, bodysuit, "
@@ -548,6 +554,7 @@ def prepare_positive_prompt_json(
         prose = (refined_text or "").strip()
         negative = _merge_negative_parts(
             _CANONICAL_STUDIO_NEGATIVE,
+            _GROK_COMPOSE_BODY_NEGATIVE,
             (extra_negative or "").strip(),
             _always_avoid_from_profile(model_profile_text),
         )

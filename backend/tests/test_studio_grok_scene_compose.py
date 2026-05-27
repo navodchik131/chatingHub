@@ -42,16 +42,29 @@ def test_collect_regular_skips_genitals() -> None:
     assert "CHARACTER_SHEET_CLOTHED" in labels
 
 
-def test_wavespeed_identity_face_only() -> None:
-    imgs = [_im("turnaround", 1), _im("face", 2)]
+def test_wavespeed_identity_prefers_body_and_face() -> None:
+    imgs = [_im("turnaround", 1), _im("face", 2), _im("body", 3)]
     picked = select_grok_compose_wavespeed_identity_images(imgs)
-    assert len(picked) == 1
-    assert picked[0].image_kind == "face"
+    kinds = [(im.image_kind or "") for im in picked]
+    assert "body" in kinds
+    assert "face" in kinds
+    assert kinds.index("body") < kinds.index("face")
 
 
-def test_wavespeed_identity_skips_turnaround_without_face() -> None:
+def test_wavespeed_identity_body_without_face() -> None:
     imgs = [_im("turnaround", 1), _im("body", 2)]
-    assert select_grok_compose_wavespeed_identity_images(imgs) == []
+    picked = select_grok_compose_wavespeed_identity_images(imgs)
+    assert len(picked) >= 1
+    assert picked[0].image_kind == "body"
+
+
+def test_wavespeed_identity_nude_includes_genitals() -> None:
+    imgs = [_im("body", 1), _im("genitals", 2), _im("face", 3)]
+    picked = select_grok_compose_wavespeed_identity_images(imgs, pose_reference_nude=True)
+    kinds = [(im.image_kind or "") for im in picked]
+    assert "body" in kinds
+    assert "genitals" in kinds
+    assert "face" in kinds
 
 
 def test_parse_grok_compose_json() -> None:

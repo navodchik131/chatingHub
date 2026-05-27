@@ -149,18 +149,45 @@ def select_grok_compose_wavespeed_identity_images(
     imgs: list[UserStudioModelImage],
     *,
     pose_reference_nude: bool = False,
+    max_count: int = 4,
 ) -> list[UserStudioModelImage]:
     """
-    Режим «Grok: сцена»: в WaveSpeed одна identity-картинка — только face (лицо / идентичность).
-    pose_reference_nude оставлен для совместимости вызова; логика та же — face.
+    Режим «Grok: сцена»: после pose ref в API — силуэт модели (body, anatomy), затем face.
+    Только face давало копирование объёмов груди/талии/бёдер с референса позы.
     """
-    _ = pose_reference_nude
     if not imgs:
         return []
-    for im in sort_model_images_for_studio(imgs):
-        if (im.image_kind or "other").lower() == "face":
-            return [im]
-    return []
+    cap = max(1, min(5, int(max_count)))
+    if pose_reference_nude:
+        cap = min(cap, 4)
+
+    by_kind: dict[str, list[UserStudioModelImage]] = {}
+    for im in imgs:
+        k = (im.image_kind or "other").lower()
+        by_kind.setdefault(k, []).append(im)
+
+    picked: list[UserStudioModelImage] = []
+
+    def take(kind: str) -> None:
+        if len(picked) >= cap:
+            return
+        for im in by_kind.get(kind, []):
+            if im not in picked:
+                picked.append(im)
+                return
+
+    take("body")
+    if pose_reference_nude:
+        take("genitals")
+    take("face")
+    if not pose_reference_nude and len(picked) < cap:
+        take("turnaround")
+    if len(picked) < cap:
+        for kind in ("body", "face", "other"):
+            take(kind)
+    if not picked:
+        return []
+    return sort_model_images_for_wan_identity(picked)[:cap]
 
 
 def model_images_for_wavespeed_profile(

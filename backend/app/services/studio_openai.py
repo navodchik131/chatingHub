@@ -138,22 +138,24 @@ _WAN_COMPACT_POSE_PREFIX = (
 
 _GROK_COMPOSED_WAN_PREFIX = (
     "[GROK_SCENE_COMPOSE] **Image 1** = user pose/scene reference — pose geometry, camera, framing, "
-    "background, environmental light, and wardrobe/body coverage ONLY; do **not** copy identity from image 1. "
-    "**Image 2** = model face / identity portrait — face shape, hair, skin tone; "
-    "do **not** copy pose, outfit, or scene framing from image 2. "
-    "The English brief below (from Grok) reinforces identity; image 2 + brief win over image 1 for WHO.\n\n"
+    "background, environmental light, and wardrobe/body coverage ONLY; "
+    "do **not** copy body mass, bust/waist/hip proportions, or donor silhouette from image 1. "
+    "**Images 2+** = model identity — full figure from body/anatomy refs (bust, waist, hips, legs, shoulders), "
+    "face and skin from face refs; never pose or outfit from images 2+. "
+    "WHO (face + **body proportions**) = images 2+ and the English brief below — not image 1.\n\n"
 )
 
 _GROK_COMPOSED_NANO_PREFIX = (
-    "[GROK_SCENE_COMPOSE] **Earlier image(s)** = model face / identity portrait — WHO (face, hair, skin). "
-    "**Last** image = pose/framing/light/wardrobe lock only — never copy donor identity "
+    "[GROK_SCENE_COMPOSE] **Earlier image(s)** = model identity — body silhouette and anatomy refs first, "
+    "then face: WHO (face, skin, **bust/waist/hip proportions**). "
+    "**Last** image = pose/framing/light/wardrobe lock only — never copy donor body volumes or identity "
     "from the last image. English brief below aligns scene with Grok output.\n\n"
 )
 
 _GROK_COMPOSED_POSE_LAST_SUFFIX = (
     "\n\n[LAST_INPUT_IMAGE — POSE_REF] The **last** image locks pose geometry, crop, gaze, garments/nudity zones, "
-    "and light-on-body pattern. Face and skin must match the identity portrait before it and the brief — "
-    "not the incidental person on this last image."
+    "and light-on-body pattern only. Face, skin, and **figure proportions (bust, waist, hips)** must match "
+    "the model identity images before it and the brief — not the incidental sitter on this last image."
 )
 
 _WAN_COMPACT_NO_FACE_PREFIX = (

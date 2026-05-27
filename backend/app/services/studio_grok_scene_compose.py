@@ -192,6 +192,10 @@ async def grok_compose_studio_scene(
             "text": (
                 f"WAVE_PROFILE: {wp}\n"
                 f"HAIRSTYLE_RULE: {hair_rule}\n\n"
+                "BODY_FIGURE_RULE: USER_SCENE_REFERENCE supplies pose/camera/light/wardrobe coverage ONLY. "
+                "Bust, waist, hip width, glute volume, torso/leg proportions MUST come from MODEL_PROFILE_JSON "
+                "+ BODY_REFERENCE / ANATOMY_REFERENCE_NUDE / CHARACTER_SHEET — never from the pose-reference sitter. "
+                "State figure proportions explicitly in wavespeed_scene_prompt.\n\n"
                 f"MODEL_PROFILE_JSON:\n{profile}\n\n"
                 f"USER_NOTES:\n{notes or '(none)'}\n\n"
                 "Attached images follow. Labels in captions are authoritative."
