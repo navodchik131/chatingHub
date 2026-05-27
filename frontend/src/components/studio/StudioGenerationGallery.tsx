@@ -107,19 +107,17 @@ export function StudioGenerationGallery({
                     ) : null}
                   </button>
 
-                  {!pending ? (
-                    <button
-                      type="button"
-                      className="studio-gen-card__del"
-                      aria-label="Удалить"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        onDelete(g)
-                      }}
-                    >
-                      ×
-                    </button>
-                  ) : null}
+                  <button
+                    type="button"
+                    className="studio-gen-card__del"
+                    aria-label={pending ? 'Убрать из истории' : 'Удалить'}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onDelete(g)
+                    }}
+                  >
+                    ×
+                  </button>
 
                   <div className="studio-gen-card__foot">
                     <span className="studio-gen-card__model">{g.model_name ?? 'Без модели'}</span>

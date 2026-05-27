@@ -456,10 +456,35 @@ async def download_and_create_generation(
 
 async def retry_pending_studio_archives() -> int:
     """Догружает архив для provider_ready; помечает устаревшие processing как failed."""
+    from app.db.models import StudioJob, StudioJobStatus
+    from app.services.studio_generation_placeholders import (
+        finalize_studio_generation_for_terminal_job,
+    )
+
     batch = max(1, int(settings.studio_archive_retry_batch_size))
     stale_h = max(1, int(settings.studio_generation_stale_processing_hours))
     stale_cutoff = datetime.now(timezone.utc) - timedelta(hours=stale_h)
     done = 0
+
+    async with SessionLocal() as session:
+        terminal_stmt = (
+            select(StudioGeneration)
+            .where(StudioGeneration.status == StudioGenerationStatus.PROCESSING)
+            .where(StudioGeneration.studio_job_id.isnot(None))
+            .order_by(StudioGeneration.created_at.asc())
+            .limit(batch)
+        )
+        for gen in (await session.execute(terminal_stmt)).scalars().all():
+            job = await session.get(StudioJob, int(gen.studio_job_id))
+            if job is None or job.status not in (
+                StudioJobStatus.failed.value,
+                StudioJobStatus.completed.value,
+            ):
+                continue
+            if await finalize_studio_generation_for_terminal_job(session, job):
+                done += 1
+        if done:
+            await session.commit()
 
     async with SessionLocal() as session:
         stale_stmt = (

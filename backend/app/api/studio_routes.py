@@ -93,6 +93,7 @@ from app.services.studio_aspect import (
 from app.services.studio_generation_placeholders import (
     find_studio_generation_by_job_id,
     generation_is_pending_in_ui,
+    reconcile_stuck_studio_generations,
     generation_media_kind,
     reserve_studio_generation_for_job,
 )
@@ -1040,6 +1041,8 @@ async def api_list_pending_studio_generations(
     """Незавершённые записи архива — для редкого опроса (≈12 с), пока идёт WaveSpeed."""
     assert_permission(user, PERM_STUDIO_GENERATE)
     oid = workspace_owner_id(user)
+    if await reconcile_stuck_studio_generations(session, oid, limit=limit):
+        await session.commit()
     allowed = await member_allowed_studio_model_ids(session, user)
     stmt = (
         select(StudioGeneration)

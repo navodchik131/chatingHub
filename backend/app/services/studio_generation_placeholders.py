@@ -8,8 +8,13 @@ from typing import TYPE_CHECKING
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import StudioGeneration
+from app.db.models import StudioGeneration, StudioJob, StudioJobStatus
 from app.services.studio_generation_status import StudioGenerationStatus
+from app.services.studio_generation_storage import (
+    generation_has_archive_file,
+    mark_studio_generation_failed,
+)
+from app.services.studio_jobs import job_params
 
 if TYPE_CHECKING:
     pass
@@ -74,6 +79,104 @@ async def reserve_studio_generation_for_job(
 def generation_media_kind(row: StudioGeneration) -> str:
     ct = (row.content_type or "").strip().lower()
     return "video" if ct.startswith("video/") else "image"
+
+
+async def resolve_studio_generation_for_job(
+    session: AsyncSession,
+    job: StudioJob,
+) -> StudioGeneration | None:
+    row = await find_studio_generation_by_job_id(session, job.id)
+    if row is not None:
+        return row
+    ph = job_params(job).get("placeholder_generation_id")
+    if isinstance(ph, int):
+        return await session.get(StudioGeneration, ph)
+    if isinstance(ph, str) and ph.isdigit():
+        return await session.get(StudioGeneration, int(ph))
+    return None
+
+
+async def finalize_studio_generation_for_terminal_job(
+    session: AsyncSession,
+    job: StudioJob,
+) -> bool:
+    """Синхронизирует placeholder с завершённой задачей (failed/completed без файла)."""
+    if job.status not in (
+        StudioJobStatus.failed.value,
+        StudioJobStatus.completed.value,
+    ):
+        return False
+    gen = await resolve_studio_generation_for_job(session, job)
+    if gen is None:
+        return False
+    st = (gen.status or "").strip()
+    if st in (StudioGenerationStatus.READY, StudioGenerationStatus.FAILED):
+        return False
+
+    if job.status == StudioJobStatus.failed.value:
+        await mark_studio_generation_failed(
+            session,
+            gen,
+            message=(job.error_message or "").strip() or "Генерация не выполнена",
+            step="job",
+        )
+        return True
+
+    if job.status == StudioJobStatus.completed.value and st == StudioGenerationStatus.PROCESSING:
+        has_file = generation_has_archive_file(gen)
+        has_src = bool((gen.source_url or "").strip())
+        if not has_file and not has_src:
+            await mark_studio_generation_failed(
+                session,
+                gen,
+                message="Задача завершена без файла результата",
+                step="job",
+            )
+            return True
+    return False
+
+
+async def reconcile_stuck_studio_generations(
+    session: AsyncSession,
+    owner_id: int,
+    *,
+    limit: int = 30,
+) -> int:
+    """Помечает зависшие processing/archiving, если связанная studio_job уже завершилась."""
+    stmt = (
+        select(StudioGeneration)
+        .where(StudioGeneration.user_id == owner_id)
+        .where(
+            StudioGeneration.status.in_(
+                (
+                    StudioGenerationStatus.PROCESSING,
+                    StudioGenerationStatus.ARCHIVING,
+                )
+            )
+        )
+        .order_by(StudioGeneration.created_at.desc(), StudioGeneration.id.desc())
+        .limit(max(1, int(limit)))
+    )
+    changed = 0
+    for gen in (await session.execute(stmt)).scalars().all():
+        jid = gen.studio_job_id
+        if not jid:
+            continue
+        job = await session.get(StudioJob, jid)
+        if job is None:
+            await mark_studio_generation_failed(
+                session,
+                gen,
+                message="Связанная задача не найдена",
+                step="orphan",
+            )
+            changed += 1
+            continue
+        if await finalize_studio_generation_for_terminal_job(session, job):
+            changed += 1
+    if changed:
+        log.info("studio reconcile stuck generations owner=%s count=%s", owner_id, changed)
+    return changed
 
 
 def generation_is_pending_in_ui(row: StudioGeneration) -> bool:

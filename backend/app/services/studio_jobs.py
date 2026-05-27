@@ -169,6 +169,18 @@ async def _run_studio_job(job_id: int) -> None:
             job.completed_at = datetime.now(timezone.utc)
             job.updated_at = datetime.now(timezone.utc)
             await session.commit()
+            try:
+                from app.services.studio_generation_placeholders import (
+                    finalize_studio_generation_for_terminal_job,
+                )
+
+                if await finalize_studio_generation_for_terminal_job(session, job):
+                    await session.commit()
+            except Exception:
+                log.exception(
+                    "studio job %s: failed to sync placeholder generation",
+                    job_id,
+                )
             await _notify_job(job)
     except Exception:
         log.exception("studio job runner crashed for job_id=%s", job_id)
@@ -180,6 +192,18 @@ async def _run_studio_job(job_id: int) -> None:
                     job.error_message = "Внутренняя ошибка выполнения задачи"
                     job.completed_at = datetime.now(timezone.utc)
                     await session.commit()
+                    try:
+                        from app.services.studio_generation_placeholders import (
+                            finalize_studio_generation_for_terminal_job,
+                        )
+
+                        if await finalize_studio_generation_for_terminal_job(session, job):
+                            await session.commit()
+                    except Exception:
+                        log.exception(
+                            "studio job %s: failed to sync placeholder after crash",
+                            job_id,
+                        )
                     await _notify_job(job)
         except Exception:
             log.exception("failed to mark studio job %s as failed", job_id)
