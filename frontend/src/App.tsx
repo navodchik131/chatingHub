@@ -22,7 +22,9 @@ import { postStudioJobAndWait, postStudioJobStart } from './studioJobs'
 import {
   fetchStudioArchivePage,
   fetchStudioArchivePending,
+  isMotionRenderArchiveId,
   mergeStudioArchiveItems,
+  mergeVideoArchiveWithMotionRenders,
   studioArchiveIsPending,
   studioArchiveThumbUrl,
   type StudioArchiveItem,
@@ -259,7 +261,7 @@ interface HealthInfo {
   web_push_configured?: boolean
 }
 
-function studioArchiveRetentionLead(health: HealthInfo | null): ReactNode {
+function studioArchiveRetentionLead(health: HealthInfo | null, kind: 'image' | 'video' = 'image'): ReactNode {
   const days = health?.studio_generations_retention_days
   if (typeof days === 'number' && days > 0) {
     const n100 = days % 100
@@ -270,12 +272,23 @@ function studioArchiveRetentionLead(health: HealthInfo | null): ReactNode {
         : n10 >= 2 && n10 <= 4 && (n100 < 10 || n100 >= 20)
           ? 'дня'
           : 'дней'
+    if (kind === 'video') {
+      return (
+        <>
+          Ролики доступны по ссылке провайдера примерно <strong>{days}</strong> {word}. Сохраните
+          важное на устройство заранее.
+        </>
+      )
+    }
     return (
       <>
         Картинки с WaveSpeed хранятся на сервере примерно <strong>{days}</strong> {word}, затем
         удаляются автоматически. Сохраните важное на устройство заранее.
       </>
     )
+  }
+  if (kind === 'video') {
+    return <>Готовые ролики можно открыть и скачать из истории.</>
   }
   return <>Картинки с WaveSpeed сохраняются на сервере — их можно открыть позже.</>
 }
@@ -1027,6 +1040,13 @@ export default function App() {
     setStudioImagePickerArchive(page.items)
   }, [])
 
+  const refreshMotionRenders = useCallback(async () => {
+    const r = await apiFetch('/api/studio/motion/renders?limit=40&skip=0')
+    if (!r.ok) return
+    const data = (await r.json()) as StudioMotionRendersPage
+    setMotionRenders(Array.isArray(data.items) ? data.items : [])
+  }, [])
+
   const loadStudioGenerationsReset = useCallback(async () => {
     const kind = studioGalleryMediaKind(appSection)
     const page = await fetchStudioArchivePage(0, STUDIO_ARCHIVE_PAGE, kind)
@@ -1036,8 +1056,9 @@ export default function App() {
       setStudioImagePickerArchive(page.items)
     } else if (appSection === 'studio_video') {
       await loadStudioImagePickerArchive()
+      await refreshMotionRenders()
     }
-  }, [appSection, loadStudioImagePickerArchive])
+  }, [appSection, loadStudioImagePickerArchive, refreshMotionRenders])
 
   const syncStudioArchivePending = useCallback(async () => {
     try {
@@ -1078,6 +1099,11 @@ export default function App() {
     }
   }, [appSection, studioGenLoadingMore, studioGenHasMore])
 
+  const studioVideoGalleryItems = useMemo(
+    () => mergeVideoArchiveWithMotionRenders(studioGenerations, motionRenders),
+    [studioGenerations, motionRenders],
+  )
+
   const studioArchiveHasPending = useMemo(() => {
     if (studioGenerations.some(studioArchiveIsPending)) return true
     if (appSection === 'studio_video') {
@@ -1099,13 +1125,6 @@ export default function App() {
       window.clearInterval(id)
     }
   }, [authed, canStudioGenerate, studioArchiveHasPending, syncStudioArchivePending])
-
-  const refreshMotionRenders = useCallback(async () => {
-    const r = await apiFetch('/api/studio/motion/renders?limit=40&skip=0')
-    if (!r.ok) return
-    const data = (await r.json()) as StudioMotionRendersPage
-    setMotionRenders(Array.isArray(data.items) ? data.items : [])
-  }, [])
 
   const uploadMotionDrivingVideo = useCallback(async (file: File) => {
     setMotionDrivingUploadBusy(true)
@@ -1943,6 +1962,16 @@ export default function App() {
     setStudioGenImageUrl((prev) => (prev === imageUrl ? null : prev))
     setStudioGenGenerationId((prev) => (prev === id ? null : prev))
     void loadStudioGenerationsReset()
+    void refreshMotionRenders()
+  }
+
+  const deleteStudioVideoArchiveItem = (g: StudioArchiveItem) => {
+    if (isMotionRenderArchiveId(g.id)) {
+      const rid = -g.id
+      setMotionRenders((prev) => prev.filter((r) => r.id !== rid))
+      return
+    }
+    void deleteStudioGeneration(g.id, g.image_url || g.video_url || '')
   }
 
   const downloadStudioResultImage = async () => {
@@ -5781,16 +5810,15 @@ export default function App() {
             {canStudioGenerate ? (
               <StudioGenerationGallery
                 title="История"
-                lead={studioArchiveRetentionLead(health)}
-                items={studioGenerations}
+                lead={studioArchiveRetentionLead(health, 'video')}
+                items={studioVideoGalleryItems}
                 loading={studioArchiveInitialLoading}
                 hasMore={studioGenHasMore}
                 loadingMore={studioGenLoadingMore}
                 onLoadMore={() => void loadMoreStudioGenerations()}
                 loadMoreLabel={`Ещё ${STUDIO_ARCHIVE_PAGE}`}
-                onDelete={(g) =>
-                  void deleteStudioGeneration(g.id, g.image_url || g.video_url || '')
-                }
+                emptyText="Здесь появятся ваши ролики после «Сделать видео»"
+                onDelete={(g) => deleteStudioVideoArchiveItem(g)}
               />
             ) : null}
             </div>

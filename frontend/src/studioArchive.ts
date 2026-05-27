@@ -79,6 +79,75 @@ export async function fetchStudioArchivePending(
   }
 }
 
+export type MotionRenderArchiveSource = {
+  id: number
+  created_at: string
+  studio_generation_id: number | null
+  studio_model_id?: number | null
+  video_url: string
+  frame_image_url: string
+}
+
+/** Отрицательный id — запись только из motion/renders (нет video-строки в архиве). */
+export function isMotionRenderArchiveId(id: number): boolean {
+  return id < 0
+}
+
+export function motionRenderArchiveId(renderId: number): number {
+  return -renderId
+}
+
+/**
+ * Дополняет список video-архива роликами из /studio/motion/renders
+ * (как на главной), если их ещё нет в generations.
+ */
+export function mergeVideoArchiveWithMotionRenders(
+  generations: StudioArchiveItem[],
+  motionRenders: MotionRenderArchiveSource[],
+): StudioArchiveItem[] {
+  const seenUrls = new Set(
+    generations
+      .map((g) => (g.video_url || '').trim())
+      .filter(Boolean),
+  )
+  const videoGenIds = new Set(
+    generations.filter((g) => g.media_kind === 'video').map((g) => g.id),
+  )
+
+  const extra: StudioArchiveItem[] = []
+  for (const r of motionRenders) {
+    const url = (r.video_url || '').trim()
+    if (!url || seenUrls.has(url)) continue
+    const gid = r.studio_generation_id
+    if (gid != null && videoGenIds.has(gid)) continue
+    seenUrls.add(url)
+
+    const frame = (r.frame_image_url || '').trim()
+    extra.push({
+      id: motionRenderArchiveId(r.id),
+      created_at: r.created_at,
+      output_aspect: null,
+      studio_model_id: r.studio_model_id ?? null,
+      model_name: null,
+      prompt_excerpt: `Видео #${r.id}`,
+      status: 'ready',
+      media_kind: 'video',
+      error_message: null,
+      job_id: null,
+      image_url: frame || url,
+      video_url: url,
+    })
+  }
+
+  const merged = [...generations, ...extra]
+  merged.sort((a, b) => {
+    const ta = Date.parse(a.created_at) || 0
+    const tb = Date.parse(b.created_at) || 0
+    return tb - ta || Math.abs(b.id) - Math.abs(a.id)
+  })
+  return merged
+}
+
 /** Слить pending-статусы в список архива (по id). */
 export function mergeStudioArchiveItems(
   current: StudioArchiveItem[],
