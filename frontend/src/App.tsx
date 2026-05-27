@@ -4957,7 +4957,7 @@ export default function App() {
               {!canStudioGenerate ? (
                 <div className="banner info">Генерация недоступна по правам. Попросите владельца аккаунта.</div>
               ) : null}
-              <div className="studio-slot-grid">
+              <div className="studio-slot-grid studio-slot-grid--composer">
             <div className="studio-mode-row studio-mode-compact" role="group" aria-label="Режим студии">
               <span className="studio-mode-label">Режим</span>
               <div className="studio-mode-segment">
@@ -5521,7 +5521,7 @@ export default function App() {
                 Оформите подписку в кабинете → «Тариф и баланс».
               </div>
             ) : (
-              <div className="studio-slot-grid">
+              <div className="studio-slot-grid studio-slot-grid--composer">
                 <StudioPillField
                   label="Формат"
                   scrollRow
@@ -5547,12 +5547,12 @@ export default function App() {
                   emptyLabel="Выберите"
                 />
                 {health?.studio_grok_motion_configured === false ? (
-                  <div className="banner warn" style={{ gridColumn: '1 / -1' }}>
+                  <div className="banner warn">
                     Grok не настроен на сервере.
                   </div>
                 ) : null}
 
-                <div className="studio-video-step-card" style={{ gridColumn: '1 / -1' }}>
+                <div className="studio-video-step-card">
                   <h3>Кадр и движение</h3>
                   <div className="studio-slot-grid">
                     <StudioMediaSlot
@@ -5648,6 +5648,7 @@ export default function App() {
                     </label>
                   </div>
                   <textarea
+                    className="studio-field-textarea"
                     rows={2}
                     placeholder="Уточнения к кадру (по желанию)"
                     value={motionFrameNotes}
@@ -5690,7 +5691,7 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="studio-video-step-card" style={{ gridColumn: '1 / -1' }}>
+                <div className="studio-video-step-card">
                   <h3>Seedance</h3>
                   <StudioArchiveThumbPicker
                     label="Наряд (опционально)"
@@ -5730,14 +5731,13 @@ export default function App() {
                     value={motionSeedanceDuration}
                     onChange={(v) => v != null && setMotionSeedanceDuration(Number(v))}
                   />
-                  <label className="studio-slot__hint" style={{ display: 'block', marginTop: '0.35rem' }}>
+                  <label className="studio-field-optional">
                     Негатив (по желанию)
                     <textarea
                       rows={2}
                       placeholder="Чего избегать"
                       value={motionVideoNegPrompt}
                       onChange={(e) => setMotionVideoNegPrompt(e.target.value)}
-                      style={{ marginTop: '0.35rem', width: '100%' }}
                     />
                   </label>
                   <div className="studio-toggles">
@@ -5757,9 +5757,7 @@ export default function App() {
                     </details>
                   ) : null}
                   {motionMsg ? (
-                    <p className="muted" style={{ fontSize: '0.8rem', margin: 0 }}>
-                      {motionMsg}
-                    </p>
+                    <p className="muted studio-inline-msg">{motionMsg}</p>
                   ) : null}
                   {motionVideoBtnBlockReason ? (
                     <p className="studio-video-block-hint" role="status">
