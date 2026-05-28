@@ -636,6 +636,14 @@ function studioGalleryMediaKind(section: WorkspaceSection): StudioArchiveMediaKi
 
 type StudioJobMode = 'model' | 'photo_edit' | 'no_face' | 'face_swap' | 'grok_compose'
 
+/** Режимы генерации картинок в UI (режим «Модель» временно скрыт). */
+const STUDIO_IMAGE_MODE_OPTIONS: { id: StudioJobMode; label: string }[] = [
+  { id: 'grok_compose', label: 'Основная' },
+  { id: 'face_swap', label: 'Подмена лица' },
+  { id: 'photo_edit', label: 'Доработать фото' },
+  { id: 'no_face', label: 'Без лица' },
+]
+
 export default function App() {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -775,7 +783,7 @@ export default function App() {
   /** true = MODEL_LOCK (причёска с профиля); false = POSE_REFERENCE (с загруженного кадра). Только если есть studioFile. */
   const [studioLockModelHairstyle, setStudioLockModelHairstyle] = useState(true)
   const [studioSendPoseRefToWavespeed, setStudioSendPoseRefToWavespeed] = useState(true)
-  const [studioMode, setStudioMode] = useState<StudioJobMode>('model')
+  const [studioMode, setStudioMode] = useState<StudioJobMode>('grok_compose')
   const [studioWanEditTier, setStudioWanEditTier] = useState<'standard' | 'pro'>('standard')
   const [studioWaveProfile, setStudioWaveProfile] = useState<'regular' | 'nsfw'>('nsfw')
   const [studioBusy, setStudioBusy] = useState(false)
@@ -2313,7 +2321,7 @@ export default function App() {
         return
       }
       if (studioSelectedModelId == null) {
-        setError('В режиме «Grok: сцена» выберите модель с листами и JSON-профилем.')
+        setError('В режиме «Основная» выберите модель с листами и JSON-профилем.')
         return
       }
       if (!studioFile) {
@@ -5226,15 +5234,7 @@ export default function App() {
             <div className="studio-mode-row studio-mode-compact" role="group" aria-label="Режим студии">
               <span className="studio-mode-label">Режим</span>
               <div className="studio-mode-segment">
-                {(
-                  [
-                    { id: 'model' as const, label: 'Модель' },
-                    { id: 'grok_compose' as const, label: 'Grok: сцена' },
-                    { id: 'face_swap' as const, label: 'Подмена лица' },
-                    { id: 'photo_edit' as const, label: 'Доработать фото' },
-                    { id: 'no_face' as const, label: 'Без лица' },
-                  ] as const
-                ).map(({ id, label }) => (
+                {STUDIO_IMAGE_MODE_OPTIONS.map(({ id, label }) => (
                   <button
                     key={id}
                     type="button"
