@@ -24,6 +24,9 @@ backend/data/studio_motion_videos/
 frontend/node_modules/
 frontend/dist/
 
+# Статическая копия лендинга (HTML/CSS/JS, не в репозитории)
+static-landing-copy/
+
 # IDE / OS
 .idea/
 .vscode/

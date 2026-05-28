@@ -58,6 +58,7 @@ import {
   hasAllBits,
   togglePermission,
 } from './workspacePermissions'
+import { WAVESPEED_REF_URL } from './billing/planCatalog'
 
 type Platform = 'telegram' | 'fanvue'
 
@@ -3891,6 +3892,12 @@ export default function App() {
                   ). Поле ниже не обязательно.
                   <br />
                   <strong>Тариф BYOK:</strong> всегда ваш ключ — без него генерация недоступна.
+                  <br />
+                  <strong>Ключ:</strong>{' '}
+                  <a href={WAVESPEED_REF_URL} target="_blank" rel="noopener noreferrer">
+                    зарегистрируйтесь на wavespeed.ai
+                  </a>{' '}
+                  (реферальная ссылка ModelMate) и скопируйте API-ключ в поле ниже.
                 </p>
                 <div className="cabinet-module-form">
                   <label>

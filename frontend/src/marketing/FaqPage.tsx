@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
+import { WAVESPEED_REF_URL } from '../billing/planCatalog'
 
 function FaqItem({ question, children }: { question: string; children: ReactNode }) {
   return (
@@ -78,7 +79,7 @@ export function FaqPage() {
         <FaqItem question="Что такое BYOK и почему это выгоднее?">
           <p>
             BYOK — свой API-ключ{' '}
-            <a href="https://wavespeed.ai/?ref=modelmate" target="_blank" rel="noopener noreferrer">
+            <a href={WAVESPEED_REF_URL} target="_blank" rel="noopener noreferrer">
               WaveSpeed
             </a>
             : платите провайдеру напрямую за генерацию без наценки на картинки и видео. ModelMate берёт плату за
@@ -144,8 +145,11 @@ export function FaqPage() {
           <p>
             Нужен доступ к разделу «Студия» в кабинете, активная подписка (если на вашем сервисе так настроено) и
             баланс кредитов на тарифе Managed — либо подключённые ключи провайдеров на BYOK. Для генераций через внешние
-            сервисы в настройках интеграций сохраните ключ WaveSpeed (и при необходимости другие поля, которые просит
-            форма).
+            сервисы в настройках интеграций сохраните ключ{' '}
+            <a href={WAVESPEED_REF_URL} target="_blank" rel="noopener noreferrer">
+              WaveSpeed
+            </a>{' '}
+            (и при необходимости другие поля, которые просит форма).
           </p>
           <p>
             Вы выбираете модель персонажа, при желании прикладываете референс кадра, описываете сцену — результат

@@ -1,3 +1,5 @@
+import { WAVESPEED_REF_URL } from '../billing/planCatalog'
+
 export type WavespeedKeyInteg = {
   wavespeed_configured?: boolean
   wavespeed_managed_by_platform?: boolean
@@ -42,7 +44,7 @@ export function WavespeedSetupBanner({
         <ol className="ws-setup-banner__steps">
           <li>
             Зарегистрируйтесь на{' '}
-            <a href="https://wavespeed.ai" target="_blank" rel="noopener noreferrer">
+            <a href={WAVESPEED_REF_URL} target="_blank" rel="noopener noreferrer">
               wavespeed.ai
             </a>{' '}
             и пополните баланс.
