@@ -1,7 +1,9 @@
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
+import { parseReferralFromHealth } from '../billing/referral'
 import { WAVESPEED_REF_URL } from '../billing/planCatalog'
 import { MmContainer } from './components/MmUi'
+import { usePublicHealth } from './usePublicHealth'
 
 function FaqItem({ question, children }: { question: string; children: ReactNode }) {
   return (
@@ -13,6 +15,9 @@ function FaqItem({ question, children }: { question: string; children: ReactNode
 }
 
 export function FaqPage() {
+  const health = usePublicHealth()
+  const ref = parseReferralFromHealth(health)
+
   return (
     <div className="mm-main--page">
       <MmContainer>
@@ -60,8 +65,16 @@ export function FaqPage() {
           </FaqItem>
           <FaqItem question="Реферальная программа">
             <p>
-              В кабинете на вкладке «Тариф и баланс» — ваша ссылка приглашения. Друг получает бонусные
-              кредиты при регистрации; вы — после его первой оплаты подписки.
+              Ссылка в кабинете → «Тариф и баланс». Друг по ссылке получает{' '}
+              <strong>+{ref.friend_referral_credits} кредитов</strong> (плюс триал {ref.signup_base_credits} кр.). Вы
+              получаете <strong>{ref.referrer_payment_percent}%</strong> от <strong>каждой</strong> оплаты приглашённого
+              — подписка, продление, картой или кредитами — в кредитах по курсу{' '}
+              <strong>1 кр. = {ref.credit_unit_price_rub} ₽</strong>. Пример за один платёж {ref.referrer_reward_example_rub}{' '}
+              ₽ → ~{ref.referrer_reward_example_credits} кр. на ваш баланс; при следующем продлении — снова.
+            </p>
+            <p>
+              Подписку BYOK или Managed можно оплатить с баланса кредитами в кабинете. На BYOK генерации WaveSpeed идут
+              по вашему ключу — кредиты уходят на подписку ModelMate и Managed-студию, не на WaveSpeed.
             </p>
           </FaqItem>
           <FaqItem question="Чем тариф Managed отличается от BYOK?">

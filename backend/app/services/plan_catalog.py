@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from app.services.billing_plan import BILLING_PLAN_BYOK, BILLING_PLAN_MANAGED, normalize_billing_plan
+from app.services.referral import referral_public_dict
 
 PlanTier = Literal["solo", "pro", "studio"]
 BillingPeriod = Literal["month", "year"]
@@ -201,4 +202,5 @@ def catalog_public_dict() -> dict:
         "plans": plans,
         "legacy_products": LEGACY_PRODUCT_MAP,
         "wavespeed_referral_url": "https://wavespeed.ai/?ref=modelmate",
+        "referral": referral_public_dict(),
     }

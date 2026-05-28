@@ -139,6 +139,9 @@ export function MarketingLayout() {
                   <NavLink to="/pricing">BYOK и Managed</NavLink>
                 </li>
                 <li>
+                  <NavLink to="/#referral">Реферальная программа</NavLink>
+                </li>
+                <li>
                   <NavLink to="/faq">Триал и кредиты</NavLink>
                 </li>
               </ul>

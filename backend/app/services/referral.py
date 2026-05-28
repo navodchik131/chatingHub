@@ -4,15 +4,22 @@ from __future__ import annotations
 
 import json
 import logging
+from decimal import Decimal
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.db.models import CreditAccount, UsageEvent, User
+from app.services.billing_credits import (
+    credit_unit_price_rub,
+    referrer_reward_credits_from_payment_rub,
+)
 from app.services.plan_entitlements import generate_referral_code
 
 log = logging.getLogger(__name__)
+
+REFERRER_REWARD_KIND = "referral_referrer_reward"
 
 
 async def ensure_owner_referral_code(session: AsyncSession, owner: User) -> str:
@@ -51,7 +58,7 @@ async def apply_referral_on_signup(
     new_owner: User,
     referral_code: str | None,
 ) -> int | None:
-    """Привязка реферера и бонус новому пользователю. Возвращает referrer_id или None."""
+    """Привязка реферера и 25 кр. приглашённому. Возвращает referrer_id или None."""
     ref_code = (referral_code or "").strip().upper()
     if not ref_code:
         return None
@@ -83,27 +90,29 @@ async def apply_referral_on_signup(
 
 
 async def grant_referrer_reward_if_needed(
-    session: AsyncSession, referred_owner_id: int
+    session: AsyncSession,
+    referred_owner_id: int,
+    *,
+    trigger_product: str = "",
+    payment_amount_rub: Decimal | None = None,
 ) -> None:
-    """Бонус рефереру при первой оплате приглашённого."""
+    """Бонус рефереру: % от каждой оплаты приглашённого в кредитах (курс 1 кр. = unit ₽)."""
     referred = await session.get(User, referred_owner_id)
     if not referred or not referred.referred_by_user_id:
         return
     referrer_id = referred.referred_by_user_id
-    meta_match = await session.scalar(
-        select(func.count())
-        .select_from(UsageEvent)
-        .where(
-            UsageEvent.user_id == referrer_id,
-            UsageEvent.kind == "referral_referrer_reward",
-            UsageEvent.meta.contains(f'"referred_user_id": {referred_owner_id}'),
-        )
-    )
-    if int(meta_match or 0) > 0:
-        return
-    reward = max(0, int(settings.referral_referrer_reward_credits))
+
+    amount = payment_amount_rub if payment_amount_rub is not None else Decimal(0)
+    reward = referrer_reward_credits_from_payment_rub(amount)
     if reward <= 0:
+        log.info(
+            "referral skip zero reward referrer=%s referred=%s amount_rub=%s",
+            referrer_id,
+            referred_owner_id,
+            amount,
+        )
         return
+
     acc = await session.get(CreditAccount, referrer_id)
     if acc is None:
         acc = CreditAccount(user_id=referrer_id, balance=0)
@@ -113,15 +122,55 @@ async def grant_referrer_reward_if_needed(
     session.add(
         UsageEvent(
             user_id=referrer_id,
-            kind="referral_referrer_reward",
+            kind=REFERRER_REWARD_KIND,
             credits_delta=reward,
             meta=json.dumps(
-                {"referred_user_id": referred_owner_id},
+                {
+                    "referred_user_id": referred_owner_id,
+                    "trigger_product": (trigger_product or "")[:64],
+                    "payment_amount_rub": str(amount),
+                    "percent": settings.referral_referrer_payment_percent,
+                },
                 ensure_ascii=False,
             ),
         )
     )
-    log.info("referral reward referrer=%s referred=%s credits=%s", referrer_id, referred_owner_id, reward)
+    log.info(
+        "referral reward referrer=%s referred=%s credits=%s from_rub=%s",
+        referrer_id,
+        referred_owner_id,
+        reward,
+        amount,
+    )
+
+
+def referrer_reward_summary_text() -> str:
+    pub = referral_public_dict()
+    pct = pub["referrer_payment_percent"]
+    unit = pub["credit_unit_price_rub"]
+    ex_rub = pub["referrer_reward_example_rub"]
+    ex_cr = pub["referrer_reward_example_credits"]
+    return (
+        f"{pct}% с каждой оплаты приглашённого в кредитах (1 кр. = {unit:g} ₽; "
+        f"пример: {ex_rub} ₽ → ~{ex_cr} кр. за платёж)"
+    )
+
+
+def referral_public_dict() -> dict:
+    unit = float(credit_unit_price_rub())
+    pct = int(settings.referral_referrer_payment_percent)
+    friend = max(0, int(settings.referral_signup_bonus_credits))
+    base = max(0, int(settings.signup_bonus_credits))
+    example_rub = 990
+    example_credits = referrer_reward_credits_from_payment_rub(Decimal(example_rub))
+    return {
+        "friend_referral_credits": friend,
+        "signup_base_credits": base,
+        "referrer_payment_percent": pct,
+        "credit_unit_price_rub": unit,
+        "referrer_reward_example_rub": example_rub,
+        "referrer_reward_example_credits": example_credits,
+    }
 
 
 async def referral_stats(session: AsyncSession, owner_id: int) -> dict:
@@ -131,14 +180,13 @@ async def referral_stats(session: AsyncSession, owner_id: int) -> dict:
         )
         or 0
     )
-    rewards = int(
+    credits = int(
         await session.scalar(
-            select(func.coalesce(func.sum(UsageEvent.credits_delta), 0))
-            .where(
+            select(func.coalesce(func.sum(UsageEvent.credits_delta), 0)).where(
                 UsageEvent.user_id == owner_id,
-                UsageEvent.kind == "referral_referrer_reward",
+                UsageEvent.kind == REFERRER_REWARD_KIND,
             )
         )
         or 0
     )
-    return {"invited_count": invited, "credits_earned": rewards}
+    return {"invited_count": invited, "credits_earned": credits}

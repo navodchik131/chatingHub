@@ -5,6 +5,7 @@ import {
   MmCtaBanner,
   MmCommunityBand,
   MmHero,
+  MmReferralBand,
   MmHowSection,
   MmModelStrip,
   MmPainSection,
@@ -23,6 +24,7 @@ export function LandingPage() {
     <>
       <MmHero />
       <MmCommunityBand />
+      <MmReferralBand />
       <MmToolGrid />
       <MmPainSection />
       <MmShowcase />

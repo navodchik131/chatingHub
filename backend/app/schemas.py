@@ -458,8 +458,23 @@ class ReferralMeOut(BaseModel):
     referral_link: str
     invited_count: int
     credits_earned: int
-    signup_bonus_for_friend: int
-    referrer_reward_credits: int
+    friend_referral_credits: int
+    signup_base_credits: int
+    referrer_payment_percent: int
+    credit_unit_price_rub: float
+    referrer_reward_summary: str
+
+
+class SubscribeWithCreditsIn(BaseModel):
+    product: str = Field(min_length=3, max_length=64)
+
+
+class SubscribeWithCreditsOut(BaseModel):
+    product: str
+    credits_spent: int
+    price_rub: int
+    balance_after: int
+    managed_bonus_credits: int
 
 
 class YookassaPaymentCreateIn(BaseModel):

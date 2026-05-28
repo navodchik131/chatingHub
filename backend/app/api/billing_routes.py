@@ -7,24 +7,31 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.deps import get_current_user
 from app.config import settings
-from app.db.models import Subscription, User
+from app.db.models import CreditAccount, Subscription, User
 from app.db.session import get_session
 from app.schemas import (
     BillingCreditsPricingOut,
     BillingPlanItemOut,
     BillingPlansOut,
+    SubscribeWithCreditsIn,
+    SubscribeWithCreditsOut,
     YookassaPaymentCreateIn,
     YookassaPaymentOut,
 )
 from app.services.billing_credits import (
     assert_credits_quantity_allowed,
+    credit_unit_price_rub,
     credits_amount_yookassa_value,
     credits_total_rub,
+    rub_to_credits_ceil,
 )
+from app.services.billing_subscription import activate_subscription_product
+from app.services.credits import ensure_can_consume_credits, record_usage
 from app.services.entitlements import subscription_is_paid_active
 from app.services.billing_plan import normalize_billing_plan, platform_covers_studio_api_costs
 from app.services.plan_catalog import (
     catalog_public_dict,
+    get_plan_spec,
     list_subscription_products,
     managed_period_credits,
     resolve_product_id,
@@ -70,6 +77,54 @@ async def billing_plans() -> BillingPlansOut:
         )
     )
     return BillingPlansOut(items=items, catalog=catalog_public_dict())
+
+
+@router.post("/subscribe-with-credits", response_model=SubscribeWithCreditsOut)
+async def subscribe_with_credits(
+    body: SubscribeWithCreditsIn,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> SubscribeWithCreditsOut:
+    if not is_workspace_owner(user):
+        raise HTTPException(
+            status_code=403,
+            detail="Оплата доступна только владельцу аккаунта",
+        )
+    product = resolve_product_id(body.product.strip())
+    spec = get_plan_spec(product)
+    if spec is None:
+        raise HTTPException(status_code=400, detail="Неизвестный тариф")
+
+    billing_uid = workspace_owner_id(user)
+    cost = rub_to_credits_ceil(spec.price_rub)
+    billing = await ensure_can_consume_credits(session, user, cost)
+    await record_usage(
+        session,
+        user,
+        billing,
+        "subscription_credits_payment",
+        cost,
+        meta={"product": product, "price_rub": spec.price_rub},
+    )
+    ref = f"credits:{billing_uid}:{product}"
+    result = await activate_subscription_product(
+        session,
+        billing_uid,
+        product,
+        payment_ref=ref,
+        payment_kind="credits",
+        payment_amount_rub=spec.price_rub,
+    )
+    acc = await session.get(CreditAccount, billing_uid)
+    balance_after = int(acc.balance) if acc else 0
+    await session.commit()
+    return SubscribeWithCreditsOut(
+        product=result["product"],
+        credits_spent=cost,
+        price_rub=result["price_rub"],
+        balance_after=balance_after,
+        managed_bonus_credits=result["managed_bonus_credits"],
+    )
 
 
 @router.get("/catalog")
@@ -124,8 +179,6 @@ async def yookassa_start_payment(
         desc = f"Кредиты студии ({q} шт.)"
         meta_product = "credits_pack"
     else:
-        from app.services.plan_catalog import get_plan_spec
-
         spec = get_plan_spec(product)
         if spec is None:
             raise HTTPException(status_code=400, detail="Неизвестный продукт")

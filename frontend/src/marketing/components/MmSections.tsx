@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { WAVESPEED_REF_URL } from '../../billing/planCatalog'
+import { parseReferralFromHealth } from '../../billing/referral'
 import { usePublicHealth } from '../usePublicHealth'
 import {
   MmBadge,
@@ -104,6 +105,66 @@ export function MmHero() {
                 <MmBadge tone="num">{t.badge}</MmBadge>
               </div>
             ))}
+          </div>
+        </div>
+      </MmContainer>
+    </section>
+  )
+}
+
+export function MmReferralBand() {
+  const health = usePublicHealth()
+  const ref = parseReferralFromHealth(health)
+
+  return (
+    <section id="referral" className="mm-section mm-section--compact mm-referral-section" aria-labelledby="mm-referral-title">
+      <MmContainer>
+        <div className="mm-referral-band">
+          <div className="mm-referral-band__intro">
+            <MmEyebrow>Реферальная программа</MmEyebrow>
+            <h2 id="mm-referral-title" className="mm-referral-band__title">
+              Приглашай креаторов — зарабатывай с каждой оплаты.
+            </h2>
+            <p className="mm-referral-band__dek">
+              Пока друг с нами, вы получаете {ref.referrer_payment_percent}% от каждой его оплаты подписки — в кредитах
+              по курсу 1 кр. = {ref.credit_unit_price_rub} ₽. Картой, кредитами или продление — без лимита по времени.
+              Приглашённый стартует с +{ref.friend_referral_credits} кр. по вашей ссылке.
+            </p>
+            <p className="mm-muted mm-referral-band__note">
+              Персональная ссылка — в кабинете, раздел «Тариф и баланс». Подписку можно оплатить с баланса кредитов.
+            </p>
+          </div>
+          <div className="mm-referral-grid" role="list">
+            <article className="mm-referral-card" role="listitem">
+              <span className="mm-referral-card__who">Друг по ссылке</span>
+              <strong className="mm-referral-card__value">+{ref.friend_referral_credits} кр.</strong>
+              <p className="mm-referral-card__hint">
+                Бонус при регистрации по вашей ссылке (плюс стандартный триал {ref.signup_base_credits} кр.).
+              </p>
+            </article>
+            <article className="mm-referral-card mm-referral-card--accent" role="listitem">
+              <span className="mm-referral-card__who">Вы — реферер</span>
+              <strong className="mm-referral-card__value">{ref.referrer_payment_percent}%</strong>
+              <p className="mm-referral-card__hint">
+                С каждой оплаты и продления — снова и снова. Пример за платёж: {ref.referrer_reward_example_rub} ₽ →
+                ~{ref.referrer_reward_example_credits} кр.
+              </p>
+            </article>
+            <article className="mm-referral-card" role="listitem">
+              <span className="mm-referral-card__who">Оплата подписки</span>
+              <strong className="mm-referral-card__value">{ref.credit_unit_price_rub} ₽/кр.</strong>
+              <p className="mm-referral-card__hint">
+                Любой тариф в кабинете можно оплатить кредитами с баланса по тому же курсу.
+              </p>
+            </article>
+          </div>
+          <div className="mm-referral-band__actions">
+            <MmButton to="/login" size="lg">
+              Зарегистрироваться и получить ссылку
+            </MmButton>
+            <MmButton to="/faq" variant="secondary" size="lg">
+              Подробнее в FAQ
+            </MmButton>
           </div>
         </div>
       </MmContainer>

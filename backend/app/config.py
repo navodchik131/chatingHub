@@ -48,11 +48,13 @@ class Settings(BaseSettings):
     signup_bonus_credits: int = Field(default=100)
     referral_signup_bonus_credits: int = Field(
         default=25,
-        description="Доп. кредиты при регистрации по реферальному коду (к signup_bonus).",
+        description="Кредиты приглашённому по реферальному коду (доп. к signup_bonus).",
     )
-    referral_referrer_reward_credits: int = Field(
-        default=50,
-        description="Кредиты рефереру при первой оплате приглашённого.",
+    referral_referrer_payment_percent: int = Field(
+        default=10,
+        ge=0,
+        le=100,
+        description="Доля каждой оплаты приглашённого, начисляемая рефереру в кредитах (курс — billing_credits_unit_price_rub).",
     )
     marketing_beta_creators_count: int = Field(default=19)
     credit_cost_inbound_translation: int = Field(default=1)
@@ -309,7 +311,10 @@ class Settings(BaseSettings):
     # Покупка кредитов: произвольное количество (старый фиксированный пакет — только для совместимости вебхуков)
     billing_credits_min_purchase: int = Field(default=50)
     billing_credits_bulk_from: int = Field(default=200)
-    billing_credits_unit_price_rub: Decimal = Field(default=Decimal("3"))
+    billing_credits_unit_price_rub: Decimal = Field(
+        default=Decimal("3.7"),
+        description="1 кредит = N ₽ (оплата подписки кредитами, реферальный пересчёт, докупка до bulk_from).",
+    )
     billing_credits_bulk_unit_price_rub: Decimal = Field(default=Decimal("2.70"))
     billing_credits_max_purchase: int = Field(default=500_000)
     billing_subscription_period_days: int = Field(default=30)

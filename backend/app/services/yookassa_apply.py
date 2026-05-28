@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from decimal import Decimal, ROUND_HALF_UP
@@ -25,22 +24,24 @@ from app.db.models import (
     YookassaProcessedPayment,
 )
 from app.services.billing_plan import (
-    BILLING_PLAN_BYOK,
-    BILLING_PLAN_MANAGED,
     normalize_billing_plan,
     platform_covers_studio_api_costs,
 )
+from app.services.billing_subscription import activate_subscription_product
 from app.services.entitlements import subscription_is_paid_active
-from app.services.plan_catalog import get_plan_spec, managed_period_credits, resolve_product_id
-from app.services.plan_entitlements import subscription_period_days
+from app.services.plan_catalog import get_plan_spec, resolve_product_id
 from app.services.referral import grant_referrer_reward_if_needed
 
 log = logging.getLogger(__name__)
 
 
-def _period_end(product: str) -> datetime:
-    days = subscription_period_days(product)
-    return datetime.now(timezone.utc) + timedelta(days=days)
+def _payment_amount_rub(payment_object: dict[str, Any]) -> Decimal:
+    amount_raw = payment_object.get("amount")
+    if isinstance(amount_raw, dict):
+        return Decimal(str(amount_raw.get("value") or "0")).quantize(
+            Decimal("0.01"), rounding=ROUND_HALF_UP
+        )
+    return Decimal(0)
 
 
 async def apply_yookassa_payment_succeeded(
@@ -94,45 +95,25 @@ async def apply_yookassa_payment_succeeded(
 
     session.add(YookassaProcessedPayment(payment_id=pid))
 
+    paid_rub = _payment_amount_rub(payment_object)
     resolved = resolve_product_id(product)
     spec = get_plan_spec(resolved)
     if spec is not None:
-        sub.billing_plan = spec.billing_plan
-        sub.plan_tier = spec.tier
-        sub.status = SubscriptionStatus.active
-        sub.current_period_end = _period_end(resolved)
-        bonus = 0
-        period_bonus = managed_period_credits(spec)
-        if period_bonus > 0:
-            bonus = period_bonus
-            acc = await session.get(CreditAccount, billing_uid)
-            if acc is None:
-                acc = CreditAccount(user_id=billing_uid, balance=0)
-                session.add(acc)
-                await session.flush()
-            acc.balance += bonus
-            session.add(
-                UsageEvent(
-                    user_id=billing_uid,
-                    kind="yookassa_managed_subscription_bonus",
-                    credits_delta=bonus,
-                    meta=json.dumps(
-                        {
-                            "payment_id": pid,
-                            "product": resolved,
-                            "tier": spec.tier,
-                        },
-                        ensure_ascii=False,
-                    ),
-                )
-            )
-        await grant_referrer_reward_if_needed(session, billing_uid)
+        amount_rub = int(paid_rub) if paid_rub > 0 else spec.price_rub
+        result = await activate_subscription_product(
+            session,
+            billing_uid,
+            resolved,
+            payment_ref=pid,
+            payment_kind="yookassa",
+            payment_amount_rub=amount_rub,
+        )
         await session.commit()
         return {
             "ok": True,
             "payment_id": pid,
-            "granted": resolved,
-            "credits_bonus": bonus,
+            "granted": result["product"],
+            "credits_bonus": result["managed_bonus_credits"],
         }
 
     if product == "credits_pack":
@@ -155,26 +136,16 @@ async def apply_yookassa_payment_succeeded(
             n = max(1, int(settings.billing_credit_pack_credits))
             expected = legacy_pack_total_rub()
 
-        amount_raw = payment_object.get("amount")
-        paid = Decimal("0")
-        if isinstance(amount_raw, dict):
-            paid = Decimal(str(amount_raw.get("value") or "0")).quantize(Decimal("0.01"), ROUND_HALF_UP)
-        if paid != expected:
+        if paid_rub != expected:
             log.error(
                 "yookassa: amount mismatch payment %s paid=%s expected=%s credits=%s",
                 pid,
-                paid,
+                paid_rub,
                 expected,
                 n,
             )
             await session.commit()
             return {"ok": False, "error": "amount_mismatch", "payment_id": pid}
-
-        acc = await session.get(CreditAccount, billing_uid)
-        if acc is None:
-            acc = CreditAccount(user_id=billing_uid, balance=0)
-            session.add(acc)
-            await session.flush()
 
         plan_norm = normalize_billing_plan(sub.billing_plan)
         if not subscription_is_paid_active(sub) or not platform_covers_studio_api_costs(plan_norm):
@@ -186,17 +157,30 @@ async def apply_yookassa_payment_succeeded(
             await session.rollback()
             return {"ok": False, "error": "subscription_required", "payment_id": pid}
 
+        acc = await session.get(CreditAccount, billing_uid)
+        if acc is None:
+            acc = CreditAccount(user_id=billing_uid, balance=0)
+            session.add(acc)
+            await session.flush()
+
         acc.balance += n
-        ev = UsageEvent(
-            user_id=billing_uid,
-            kind="yookassa_credits_pack",
-            credits_delta=n,
-            meta=json.dumps(
-                {"payment_id": pid, "product": product, "credits_quantity": n},
-                ensure_ascii=False,
-            ),
+        session.add(
+            UsageEvent(
+                user_id=billing_uid,
+                kind="yookassa_credits_pack",
+                credits_delta=n,
+                meta=json.dumps(
+                    {"payment_id": pid, "product": product, "credits_quantity": n},
+                    ensure_ascii=False,
+                ),
+            )
         )
-        session.add(ev)
+        await grant_referrer_reward_if_needed(
+            session,
+            billing_uid,
+            trigger_product="credits_pack",
+            payment_amount_rub=paid_rub,
+        )
         await session.commit()
         return {"ok": True, "payment_id": pid, "granted": "credits", "amount": n}
 

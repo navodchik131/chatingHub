@@ -17,6 +17,8 @@ import {
   webPushEnvironmentOk,
 } from './webPush'
 import { billingReturnCopy } from './billingReturnCopy'
+import { creditUnitFromHealth } from './billing/credits'
+import { subscriptionCostCredits } from './billing/referral'
 import { formatClientFetchError, formatHttpApiError } from './apiErrors'
 import { postStudioJobAndWait, postStudioJobStart } from './studioJobs'
 import {
@@ -348,8 +350,11 @@ interface ReferralMe {
   referral_link: string
   invited_count: number
   credits_earned: number
-  signup_bonus_for_friend: number
-  referrer_reward_credits: number
+  friend_referral_credits: number
+  signup_base_credits: number
+  referrer_payment_percent: number
+  credit_unit_price_rub: number
+  referrer_reward_summary: string
 }
 
 interface AdminStats {
@@ -802,6 +807,7 @@ export default function App() {
   const [referralInfo, setReferralInfo] = useState<ReferralMe | null>(null)
   const [creditsPurchaseQty, setCreditsPurchaseQty] = useState(50)
   const [yookassaPayBusy, setYookassaPayBusy] = useState<string | null>(null)
+  const [billingCreditUnitRub, setBillingCreditUnitRub] = useState(3.7)
   const [creditHistoryItems, setCreditHistoryItems] = useState<
     { id: number; created_at: string; kind: string; credits_delta: number }[]
   >([])
@@ -1049,7 +1055,11 @@ export default function App() {
   }, [])
 
   const refreshBillingPlans = useCallback(async () => {
-    const r = await apiFetch('/api/billing/plans')
+    const [r, h] = await Promise.all([apiFetch('/api/billing/plans'), apiFetch('/api/health')])
+    if (h.ok) {
+      const health = (await h.json()) as Parameters<typeof creditUnitFromHealth>[0]
+      setBillingCreditUnitRub(creditUnitFromHealth(health))
+    }
     if (r.ok) {
       const data = (await r.json()) as { items: BillingPlanRow[] }
       setBillingPlanRows(Array.isArray(data.items) ? data.items : [])
@@ -3238,6 +3248,26 @@ export default function App() {
     void refreshWorkspaceMembers()
   }
 
+  const paySubscriptionWithCredits = async (product: BillingPlanRow['product']) => {
+    setError(null)
+    setYookassaPayBusy(product)
+    try {
+      const r = await apiFetch('/api/billing/subscribe-with-credits', {
+        method: 'POST',
+        body: JSON.stringify({ product }),
+      })
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        setError(formatHttpApiError(r, j))
+        return
+      }
+      void refreshMe()
+      void refreshBillingPlans()
+    } finally {
+      setYookassaPayBusy(null)
+    }
+  }
+
   const startYookassaPayment = async (
     product: BillingPlanRow['product'],
     creditsQuantity?: number,
@@ -3645,8 +3675,13 @@ export default function App() {
                     <span className="cabinet-module-title">Реферальная программа</span>
                   </div>
                   <p className="cabinet-module-body muted small">
-                    Приглашайте креаторов: друг получает +{referralInfo.signup_bonus_for_friend} кр. при регистрации,
-                    вы — {referralInfo.referrer_reward_credits} кр. после его первой оплаты.
+                    Друг по ссылке: +{referralInfo.friend_referral_credits} кр. (плюс триал{' '}
+                    {referralInfo.signup_base_credits} кр.). С каждой оплаты приглашённого:{' '}
+                    <strong>{referralInfo.referrer_reward_summary}</strong>
+                    {referralInfo.credits_earned > 0
+                      ? ` Уже начислено: ${referralInfo.credits_earned} кр.`
+                      : null}
+                    . Подписку можно оплатить кредитами (1 кр. = {referralInfo.credit_unit_price_rub} ₽).
                   </p>
                   <p className="mono small" style={{ wordBreak: 'break-all' }}>
                     {referralInfo.referral_link}
@@ -3792,6 +3827,9 @@ export default function App() {
                           </div>
                         )
                       }
+                      const subCredits = subscriptionCostCredits(row.price_rub, billingCreditUnitRub)
+                      const balance = me?.credits_balance ?? 0
+                      const canPayCredits = balance >= subCredits
                       return (
                         <div key={row.product} className="cabinet-yookassa-row">
                           <div>
@@ -3800,15 +3838,33 @@ export default function App() {
                               {row.price_rub}{' '}
                               {row.currency === 'RUB' || !row.currency ? '₽' : row.currency}
                             </div>
+                            <p className="muted small" style={{ margin: '0.35rem 0 0' }}>
+                              или {subCredits} кр. ({billingCreditUnitRub} ₽/кр.) · на балансе {balance} кр.
+                            </p>
                           </div>
-                          <button
-                            type="button"
-                            className="send-btn"
-                            disabled={yookassaPayBusy !== null}
-                            onClick={() => void startYookassaPayment(row.product)}
-                          >
-                            {yookassaPayBusy === row.product ? '…' : 'Оплатить'}
-                          </button>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.45rem' }}>
+                            <button
+                              type="button"
+                              className="ghost-btn"
+                              disabled={yookassaPayBusy !== null || !canPayCredits}
+                              title={
+                                canPayCredits
+                                  ? undefined
+                                  : `Нужно ${subCredits} кр., на балансе ${balance}`
+                              }
+                              onClick={() => void paySubscriptionWithCredits(row.product)}
+                            >
+                              {yookassaPayBusy === row.product ? '…' : 'Кредитами'}
+                            </button>
+                            <button
+                              type="button"
+                              className="send-btn"
+                              disabled={yookassaPayBusy !== null}
+                              onClick={() => void startYookassaPayment(row.product)}
+                            >
+                              {yookassaPayBusy === row.product ? '…' : 'Картой'}
+                            </button>
+                          </div>
                         </div>
                       )
                     })}

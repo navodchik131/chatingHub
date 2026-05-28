@@ -839,6 +839,120 @@ html {
   text-decoration: underline;
 }
 
+/* Referral band */
+.mm-referral-section {
+  padding-top: 0;
+}
+
+.mm-referral-band {
+  padding: var(--s-10) var(--s-8);
+  border-radius: var(--r-xl);
+  background: linear-gradient(155deg, var(--bg-2) 0%, rgba(216, 255, 61, 0.06) 100%);
+  border: 1px solid rgba(216, 255, 61, 0.22);
+  box-shadow: var(--elev-1);
+}
+
+.mm-referral-band__title {
+  margin: var(--s-3) 0 0;
+  font: 800 clamp(1.5rem, 3vw, 2.15rem) / 1.12 var(--font-sans);
+  letter-spacing: -0.02em;
+  max-width: 22ch;
+}
+
+.mm-referral-band__dek {
+  margin: var(--s-4) 0 0;
+  max-width: 44rem;
+  font-size: 0.9375rem;
+  line-height: 1.55;
+  color: var(--fg-2);
+}
+
+.mm-referral-band__note {
+  margin: var(--s-3) 0 0;
+  font-size: 0.8125rem;
+}
+
+.mm-referral-grid {
+  display: grid;
+  gap: var(--s-4);
+  margin-top: var(--s-8);
+}
+
+@media (min-width: 720px) {
+  .mm-referral-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.mm-referral-card {
+  padding: var(--s-5);
+  border-radius: var(--r-lg);
+  background: var(--bg-1);
+  border: 1px solid var(--border-1);
+}
+
+.mm-referral-card--accent {
+  border-color: rgba(216, 255, 61, 0.35);
+  background: rgba(216, 255, 61, 0.05);
+}
+
+.mm-referral-card__who {
+  display: block;
+  font: 600 0.6875rem/1.4 var(--font-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg-3);
+  margin-bottom: var(--s-2);
+}
+
+.mm-referral-card__value {
+  display: block;
+  font: 800 1.75rem/1 var(--font-sans);
+  letter-spacing: -0.03em;
+  color: var(--fg-1);
+  margin-bottom: var(--s-2);
+}
+
+.mm-referral-card__hint {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--fg-2);
+}
+
+.mm-referral-card__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.8125rem;
+  line-height: 1.55;
+  color: var(--fg-2);
+}
+
+.mm-referral-card__list li {
+  position: relative;
+  padding-left: 1rem;
+  margin-bottom: 0.35rem;
+}
+
+.mm-referral-card__list li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.55em;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.mm-referral-band__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-3);
+  margin-top: var(--s-8);
+}
+
 /* CTA banner */
 .mm-cta-banner-wrap {
   padding-bottom: var(--s-30);
