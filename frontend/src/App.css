@@ -2206,6 +2206,11 @@ select:focus {
   box-shadow: var(--shadow-md);
 }
 
+.account-panel .muted,
+.account-panel .cabinet-lead.muted {
+  color: var(--text-secondary);
+}
+
 .account-panel-header {
   display: flex;
   align-items: flex-start;
@@ -2358,6 +2363,39 @@ select:focus {
   margin-bottom: 1.25rem;
 }
 
+.mkt-pricing-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.mkt-toggle {
+  padding: 0.45rem 0.9rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background 0.15s var(--ease-out),
+    border-color 0.15s var(--ease-out),
+    color 0.15s var(--ease-out);
+}
+
+.mkt-toggle:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.mkt-toggle.active {
+  background: var(--accent-soft);
+  border-color: var(--accent-ring);
+  color: var(--text);
+}
+
 .cabinet-yookassa-rows {
   display: flex;
   flex-direction: column;
@@ -2380,9 +2418,16 @@ select:focus {
 
 .cabinet-dashboard-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  justify-content: center;
   gap: 1rem;
   margin-top: 0.75rem;
+}
+
+@media (min-width: 720px) {
+  .cabinet-dashboard-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
 }
 
 .cabinet-dash-card {
@@ -2394,7 +2439,7 @@ select:focus {
 
 .cabinet-dash-label {
   font-size: 0.75rem;
-  color: var(--muted);
+  color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
@@ -3607,13 +3652,23 @@ select:focus {
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
+  width: 100%;
   max-width: 1100px;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .dash-kpi-row {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  justify-content: center;
   gap: 0.85rem;
+}
+
+@media (min-width: 720px) {
+  .dash-kpi-row {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
 }
 
 .dash-kpi {
@@ -3633,7 +3688,7 @@ select:focus {
 
 .dash-kpi-label {
   font-size: 0.78rem;
-  color: var(--muted);
+  color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
@@ -3668,6 +3723,7 @@ select:focus {
 .dash-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  justify-content: center;
   gap: 1rem;
 }
 

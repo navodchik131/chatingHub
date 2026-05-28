@@ -27,8 +27,8 @@
 
   /* — Foreground (text + icons) — */
   --fg-1:          #F5F5F7;   /* primary */
-  --fg-2:          #9A9AA3;   /* secondary / body-muted */
-  --fg-3:          #5F5F68;   /* tertiary / meta / placeholder */
+  --fg-2:          #B4B4BE;   /* secondary / body-muted */
+  --fg-3:          #7A7A86;   /* tertiary / meta / placeholder */
   --fg-on-accent:  #08080A;   /* text sitting ON the lime accent */
 
   /* — Brand accent — */

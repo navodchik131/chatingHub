@@ -894,7 +894,17 @@ html {
 .mm-price-grid {
   display: grid;
   gap: var(--s-4);
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  justify-content: center;
+  max-width: 56rem;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+@media (min-width: 900px) {
+  .mm-price-grid {
+    grid-template-columns: repeat(3, minmax(0, 17.5rem));
+  }
 }
 
 .mm-price-card {
@@ -936,7 +946,7 @@ html {
 
 .mm-price-card__period {
   font-size: 0.8125rem;
-  color: var(--fg-3);
+  color: var(--fg-2);
   margin-bottom: var(--s-4);
 }
 
@@ -970,6 +980,9 @@ html {
 
 .mm-byok-explainer {
   margin-top: var(--s-8);
+  margin-left: auto;
+  margin-right: auto;
+  max-width: 56rem;
   padding: var(--s-6);
   border-radius: var(--r-lg);
   border: 1px solid var(--border-1);
@@ -985,6 +998,10 @@ html {
   margin: 0 0 var(--s-3);
   font-size: 0.9rem;
   line-height: 1.6;
+  color: var(--fg-2);
+}
+
+.mm-byok-explainer p.mm-muted {
   color: var(--fg-2);
 }
 
