@@ -19,7 +19,10 @@ import {
 import { billingReturnCopy } from './billingReturnCopy'
 import { formatClientFetchError, formatHttpApiError } from './apiErrors'
 import { postStudioJobAndWait, postStudioJobStart } from './studioJobs'
-import { computeMotionVideoCreditCost } from './studioMotionPricing'
+import {
+  computeMotionVideoCreditCost,
+  mergeMotionVideoPricing,
+} from './studioMotionPricing'
 import {
   fetchStudioArchivePage,
   fetchStudioArchivePending,
@@ -845,20 +848,15 @@ export default function App() {
   const seedanceDurationMax =
     health?.studio_seedance_t2v_duration_max ?? health?.studio_seedance_i2v_duration_max ?? 15
 
-  const motionHasReferenceVideo = Boolean(motionVideoFileId)
+  /** Реф выбран или уже загружен — сразу тариф «с реф-видео» на кнопке. */
+  const motionHasReferenceVideo = Boolean(motionVideoFileId || motionVideoFile)
 
-  const motionVideoCreditCost = useMemo(
-    () =>
-      computeMotionVideoCreditCost(
-        motionSeedanceDuration,
-        motionHasReferenceVideo,
-        health?.studio_motion_video_pricing,
-      ),
-    [
-      motionSeedanceDuration,
-      motionHasReferenceVideo,
-      health?.studio_motion_video_pricing,
-    ],
+  const motionVideoPricing = mergeMotionVideoPricing(health?.studio_motion_video_pricing)
+
+  const motionVideoCreditCost = computeMotionVideoCreditCost(
+    motionSeedanceDuration,
+    motionHasReferenceVideo,
+    motionVideoPricing,
   )
 
   useEffect(() => {
@@ -1510,6 +1508,12 @@ export default function App() {
     if (!authed || !canChat) return
     loadConversations().catch((e) => setError(String(e)))
   }, [loadConversations, loadHealth, authed, canChat])
+
+  useEffect(() => {
+    if (appSection === 'studio_video' && authed) {
+      void loadHealth()
+    }
+  }, [appSection, authed, loadHealth])
 
   useEffect(() => {
     const q = new URLSearchParams(window.location.search).get('conv')
@@ -5745,33 +5749,25 @@ export default function App() {
                         const cost = computeMotionVideoCreditCost(
                           sec,
                           motionHasReferenceVideo,
-                          health?.studio_motion_video_pricing,
+                          motionVideoPricing,
                         )
-                        const costSuffix =
-                          cost != null ? ` · ${cost} кр.` : ''
+                        const costSuffix = ` · ${cost} кр.`
                         return { value: sec, label: `${sec} с${costSuffix}` }
                       },
                     )}
                     value={motionSeedanceDuration}
                     onChange={(v) => v != null && setMotionSeedanceDuration(Number(v))}
                   />
-                  {health?.studio_motion_video_pricing ? (
-                    <p className="muted studio-field-hint">
-                      Стоимость:{' '}
-                      {motionHasReferenceVideo
-                        ? `$${health.studio_motion_video_pricing.usd_per_sec_with_reference_video}/с`
-                        : `$${health.studio_motion_video_pricing.usd_per_sec_without_reference_video}/с`}{' '}
-                      (≈{' '}
-                      {motionHasReferenceVideo
-                        ? health.studio_motion_video_pricing.credits_per_sec_with_reference_video ??
-                          12
-                        : health.studio_motion_video_pricing.credits_per_sec_without_reference_video ??
-                          6}{' '}
-                      кр./с при курсе {health.studio_motion_video_pricing.rub_per_usd} ₽/$ и{' '}
-                      {health.studio_motion_video_pricing.rub_per_credit} ₽/кредит). С реф-видео
-                      дороже.
-                    </p>
-                  ) : null}
+                  <p className="muted studio-field-hint">
+                    Стоимость:{' '}
+                    {motionHasReferenceVideo
+                      ? `$${motionVideoPricing.usd_per_sec_with_reference_video}/с`
+                      : `$${motionVideoPricing.usd_per_sec_without_reference_video}/с`}{' '}
+                    (≈{' '}
+                    {computeMotionVideoCreditCost(1, motionHasReferenceVideo, motionVideoPricing)}{' '}
+                    кр./с, курс {motionVideoPricing.rub_per_usd} ₽/$,{' '}
+                    {motionVideoPricing.rub_per_credit} ₽/кредит). С реф-видео дороже.
+                  </p>
                   <label className="studio-field-optional">
                     Негатив (по желанию)
                     <textarea
@@ -5814,12 +5810,13 @@ export default function App() {
                       onClick={() => void runMotionRenderVideo()}
                     >
                       {motionBusyVideo ? 'Видео…' : 'Сгенерировать видео'}
-                      {motionVideoCreditCost != null ? (
-                        <span className="studio-magic-btn__cost">
-                          <IconSpark className="studio-slot__icon-svg" />
-                          {motionVideoCreditCost}
-                        </span>
-                      ) : null}
+                      <span
+                        className="studio-magic-btn__cost"
+                        key={`${motionSeedanceDuration}-${motionHasReferenceVideo ? 1 : 0}`}
+                      >
+                        <IconSpark className="studio-slot__icon-svg" />
+                        {motionVideoCreditCost}
+                      </span>
                     </button>
                   </div>
                   {motionResultVideoUrl ? (
