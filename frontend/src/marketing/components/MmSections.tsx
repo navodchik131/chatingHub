@@ -14,10 +14,10 @@ import {
 const BETA_CREATORS = 19
 
 const HERO_TILES = [
-  { src: 'https://picsum.photos/seed/mm-portrait-1/520/650', badge: 'PHOTO · 4K', col: '1 / 2', row: '1 / 3', offset: 0 },
-  { src: 'https://picsum.photos/seed/mm-cine-9/520/360', badge: 'VIDEO · 15s', col: '2 / 3', row: '1 / 2', offset: 32 },
-  { src: 'https://picsum.photos/seed/mm-portrait-3/520/520', badge: 'GROK', col: '2 / 3', row: '2 / 3', offset: 32 },
-  { src: 'https://picsum.photos/seed/mm-cine-7/520/600', badge: 'CHAT · I2V', col: '1 / 2', row: '3 / 4', offset: 0 },
+  { src: '/marketing/hero/hero1.gif', badge: 'VIDEO · 4K', col: '1 / 2', row: '1 / 3', offset: 0 },
+  { src: '/marketing/hero/hero2.jpg', badge: 'PHOTO · 15s', col: '2 / 3', row: '1 / 2', offset: 32 },
+  { src: '/marketing/hero/hero3.gif', badge: 'VIDEO', col: '2 / 3', row: '2 / 3', offset: 32 },
+  { src: '/marketing/hero/hero4.gif', badge: 'VIDEO · I2V', col: '1 / 2', row: '3 / 4', offset: 0 },
 ] as const
 
 function MediaPair({
