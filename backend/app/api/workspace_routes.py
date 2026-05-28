@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.deps import get_current_user
 from app.auth.passwords import hash_password
-from app.db.models import UsageEvent, User
+from app.db.models import Subscription, UsageEvent, User
 from app.db.session import get_session
 from app.schemas import (
     CreditHistoryItemOut,
@@ -99,6 +99,10 @@ async def create_workspace_member(
     user: User = Depends(get_current_user),
 ) -> WorkspaceMemberOut:
     _require_workspace_owner(user)
+    sub = await session.scalar(select(Subscription).where(Subscription.user_id == user.id))
+    from app.services.plan_entitlements import assert_can_add_workspace_member
+
+    await assert_can_add_workspace_member(session, user, sub)
     login = normalize_member_login(body.member_login)
     email = synthetic_member_email(user.id, login)
     dup = await session.scalar(select(User.id).where(User.email == email))

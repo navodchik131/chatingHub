@@ -298,12 +298,30 @@ function studioArchiveRetentionLead(health: HealthInfo | null, kind: 'image' | '
   return <>Картинки с WaveSpeed сохраняются на сервере — их можно открыть позже.</>
 }
 
+interface PlanLimitsMe {
+  max_users: number
+  max_models: number
+  max_dialogs_per_month: number | null
+  max_grok_per_month: number | null
+}
+
+interface PlanUsageMe {
+  users: number
+  models: number
+  dialogs_this_month: number
+  grok_this_month: number
+  limits: PlanLimitsMe
+}
+
 interface UserMe {
   id: number
   email: string
   subscription_status: string
   /** managed | byok */
   billing_plan?: string
+  plan_tier?: string
+  plan_display_name?: string
+  plan_usage?: PlanUsageMe | null
   subscription_period_end?: string | null
   operators_count?: number
   credits_balance: number
@@ -315,6 +333,16 @@ interface UserMe {
   owner_email: string
   billing_require_active_subscription?: boolean
   online_payment_available?: boolean
+  signup_bonus_credits?: number
+}
+
+interface ReferralMe {
+  referral_code: string
+  referral_link: string
+  invited_count: number
+  credits_earned: number
+  signup_bonus_for_friend: number
+  referrer_reward_credits: number
 }
 
 interface AdminStats {
@@ -371,7 +399,7 @@ interface BillingCreditsPricing {
 }
 
 interface BillingPlanRow {
-  product: 'sub_byok_month' | 'sub_managed_month' | 'credits_pack'
+  product: string
   title: string
   price_rub: number
   currency?: string
@@ -470,16 +498,24 @@ const SUBSCRIPTION_STATUS_OPTIONS = [
 
 const ADMIN_BILLING_PLAN_OPTIONS = ['managed', 'byok'] as const
 
-function userBillingPlanLabel(plan: string | undefined): string {
-  const p = (plan || 'managed').toLowerCase()
-  return p === 'byok' ? 'BYOK · свои ключи' : 'Managed · платформа'
+function userBillingPlanLabel(me: UserMe | null | undefined): string {
+  if (me?.plan_display_name) return me.plan_display_name
+  const p = (me?.billing_plan || 'managed').toLowerCase()
+  return p === 'byok' ? 'BYOK Solo' : 'Managed Solo'
 }
 
-function userBillingPlanLong(plan: string | undefined): string {
-  const p = (plan || 'managed').toLowerCase()
-  return p === 'byok'
-    ? 'BYOK — свой WaveSpeed для картинок; текст студии на сервере; кредиты на студию не списываются'
-    : 'Managed — текст студии на сервере; картинки: свой WaveSpeed до оплаты, после оплаты ключ платформы; кредиты списываются'
+function billingPlanOptionLabel(plan: string): string {
+  return plan === 'byok' ? 'BYOK' : 'Managed'
+}
+
+function userBillingPlanLong(me: UserMe | null | undefined): string {
+  const p = (me?.billing_plan || 'managed').toLowerCase()
+  const tier = (me?.plan_tier || 'solo').toLowerCase()
+  const base =
+    p === 'byok'
+      ? 'BYOK — свой WaveSpeed; GROK и текст студии на сервере; кредиты на студию не списываются'
+      : 'Managed — ключ WaveSpeed платформы после оплаты; операции студии списывают кредиты'
+  return `${base} · тариф ${tier.toUpperCase()}`
 }
 
 function canPurchaseStudioCreditPack(me: UserMe | undefined): boolean {
@@ -752,6 +788,9 @@ export default function App() {
   const [llmApiKey, setLlmApiKey] = useState('')
   const [llmBaseUrl, setLlmBaseUrl] = useState('')
   const [billingPlanRows, setBillingPlanRows] = useState<BillingPlanRow[]>([])
+  const [billingPayMode, setBillingPayMode] = useState<'byok' | 'managed'>('byok')
+  const [billingPayPeriod, setBillingPayPeriod] = useState<'month' | 'year'>('month')
+  const [referralInfo, setReferralInfo] = useState<ReferralMe | null>(null)
   const [creditsPurchaseQty, setCreditsPurchaseQty] = useState(50)
   const [yookassaPayBusy, setYookassaPayBusy] = useState<string | null>(null)
   const [creditHistoryItems, setCreditHistoryItems] = useState<
@@ -1008,6 +1047,11 @@ export default function App() {
     }
   }, [])
 
+  const refreshReferral = useCallback(async () => {
+    const r = await apiFetch('/api/referral/me')
+    if (r.ok) setReferralInfo((await r.json()) as ReferralMe)
+  }, [])
+
   useEffect(() => {
     const p = billingPlanRows.find((r) => r.product === 'credits_pack')?.credits_pricing
     if (!p) return
@@ -1226,7 +1270,8 @@ export default function App() {
   useEffect(() => {
     if (!authed || !accountOpen || accountTab !== 'billing') return
     void refreshBillingPlans()
-  }, [authed, accountOpen, accountTab, refreshBillingPlans])
+    if (isOwner) void refreshReferral()
+  }, [authed, accountOpen, accountTab, refreshBillingPlans, refreshReferral, isOwner])
 
   useEffect(() => {
     if (!authed || !accountOpen || accountTab !== 'billing' || !isOwner) return
@@ -3458,8 +3503,8 @@ export default function App() {
                 </div>
                 <div className="cabinet-dash-card">
                   <div className="cabinet-dash-label">Тариф</div>
-                  <div className="cabinet-dash-value">{userBillingPlanLabel(me?.billing_plan)}</div>
-                  <p className="cabinet-dash-hint muted">{userBillingPlanLong(me?.billing_plan)}</p>
+                  <div className="cabinet-dash-value">{userBillingPlanLabel(me)}</div>
+                  <p className="cabinet-dash-hint muted">{userBillingPlanLong(me)}</p>
                 </div>
                 <div className="cabinet-dash-card">
                   <div className="cabinet-dash-label">Операторов</div>
@@ -3526,22 +3571,98 @@ export default function App() {
                     {subscriptionStatusLabel(me?.subscription_status)}
                   </span>
                 </div>
-                <p className="cabinet-module-body">{userBillingPlanLong(me?.billing_plan)}</p>
+                <p className="cabinet-module-body">{userBillingPlanLong(me)}</p>
                 <p className="muted cabinet-module-meta">
                   {me?.subscription_period_end
                     ? `Период до ${formatDateTimeRu(me.subscription_period_end)}`
                     : 'Дата окончания появится после оплаты'}
                   {' · '}Баланс: <strong>{me?.credits_balance ?? 0}</strong> кр.
                 </p>
+                {me?.plan_usage ? (
+                  <ul className="muted small" style={{ margin: '0.75rem 0 0', paddingLeft: '1.1rem' }}>
+                    <li>
+                      Пользователи: {me.plan_usage.users} / {me.plan_usage.limits.max_users}
+                    </li>
+                    <li>
+                      Модели: {me.plan_usage.models} / {me.plan_usage.limits.max_models}
+                    </li>
+                    <li>
+                      Диалоги в месяце: {me.plan_usage.dialogs_this_month}
+                      {me.plan_usage.limits.max_dialogs_per_month != null
+                        ? ` / ${me.plan_usage.limits.max_dialogs_per_month}`
+                        : ' · без лимита'}
+                    </li>
+                    <li>
+                      GROK в месяце: {me.plan_usage.grok_this_month}
+                      {me.plan_usage.limits.max_grok_per_month != null
+                        ? ` / ${me.plan_usage.limits.max_grok_per_month}`
+                        : ''}
+                    </li>
+                  </ul>
+                ) : null}
               </div>
+              {referralInfo ? (
+                <div className="cabinet-module" style={{ marginBottom: '1rem' }}>
+                  <div className="cabinet-module-head">
+                    <span className="cabinet-module-title">Реферальная программа</span>
+                  </div>
+                  <p className="cabinet-module-body muted small">
+                    Приглашайте креаторов: друг получает +{referralInfo.signup_bonus_for_friend} кр. при регистрации,
+                    вы — {referralInfo.referrer_reward_credits} кр. после его первой оплаты.
+                  </p>
+                  <p className="mono small" style={{ wordBreak: 'break-all' }}>
+                    {referralInfo.referral_link}
+                  </p>
+                  <p className="muted small">
+                    Приглашено: {referralInfo.invited_count} · Заработано: {referralInfo.credits_earned} кр.
+                  </p>
+                </div>
+              ) : null}
               <h4 className="account-sub">Тариф и пополнение</h4>
               {me?.online_payment_available ? (
                 <>
                   <p className="muted" style={{ marginBottom: '0.75rem' }}>
                     Оплата банковской картой. После успешной оплаты вернитесь в кабинет.
                   </p>
+                  <div className="mkt-pricing-toggles" style={{ marginBottom: '0.75rem' }}>
+                    <button
+                      type="button"
+                      className={billingPayMode === 'byok' ? 'mkt-toggle active' : 'mkt-toggle'}
+                      onClick={() => setBillingPayMode('byok')}
+                    >
+                      BYOK
+                    </button>
+                    <button
+                      type="button"
+                      className={billingPayMode === 'managed' ? 'mkt-toggle active' : 'mkt-toggle'}
+                      onClick={() => setBillingPayMode('managed')}
+                    >
+                      Managed
+                    </button>
+                    <button
+                      type="button"
+                      className={billingPayPeriod === 'month' ? 'mkt-toggle active' : 'mkt-toggle'}
+                      onClick={() => setBillingPayPeriod('month')}
+                    >
+                      Месяц
+                    </button>
+                    <button
+                      type="button"
+                      className={billingPayPeriod === 'year' ? 'mkt-toggle active' : 'mkt-toggle'}
+                      onClick={() => setBillingPayPeriod('year')}
+                    >
+                      Год
+                    </button>
+                  </div>
                   <div className="cabinet-yookassa-rows">
-                    {billingPlanRows.map((row) => {
+                    {billingPlanRows
+                      .filter((row) => {
+                        if (row.product === 'credits_pack') return true
+                        const m = row.product.match(/^sub_(byok|managed)_(solo|pro|studio)_(month|year)$/)
+                        if (!m) return false
+                        return m[1] === billingPayMode && m[3] === billingPayPeriod
+                      })
+                      .map((row) => {
                       if (row.product === 'credits_pack' && row.credits_pricing) {
                         const packOk = canPurchaseStudioCreditPack(me)
                         if (!packOk) {
@@ -4756,7 +4877,7 @@ export default function App() {
                             >
                               {ADMIN_BILLING_PLAN_OPTIONS.map((p) => (
                                 <option key={p} value={p}>
-                                  {userBillingPlanLabel(p)}
+                                  {billingPlanOptionLabel(p)}
                                 </option>
                               ))}
                             </select>
@@ -4863,13 +4984,13 @@ export default function App() {
           canStudioAny={canStudioAny}
           unreadTotal={unreadTotal}
           creditsBalance={me?.credits_balance ?? null}
-          billingPlanLabel={userBillingPlanLabel(me?.billing_plan)}
+          billingPlanLabel={userBillingPlanLabel(me)}
           userTitle={
             me?.is_workspace_owner
               ? me.email
               : `${me?.owner_email ?? ''}${me?.member_login ? ` · ${me.member_login}` : ''}`
           }
-          userMeta={`${me?.credits_balance ?? 0} кр. · ${userBillingPlanLabel(me?.billing_plan)}`}
+          userMeta={`${me?.credits_balance ?? 0} кр. · ${userBillingPlanLabel(me)}`}
           onAccountOpen={() => setAccountOpen(true)}
           onLogout={handleLogout}
         >
@@ -4882,7 +5003,7 @@ export default function App() {
           {appSection === 'overview' && me ? (
             <WorkspaceOverview
               creditsBalance={me.credits_balance}
-              billingPlanLabel={userBillingPlanLabel(me.billing_plan)}
+              billingPlanLabel={userBillingPlanLabel(me)}
               subscriptionLabel={subscriptionStatusLabel(me.subscription_status)}
               unreadTotal={unreadTotal}
               conversationsTotal={conversations.length}

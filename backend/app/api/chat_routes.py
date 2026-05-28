@@ -42,6 +42,7 @@ from app.services.realtime import hub
 from app.services.translation import translate_from_russian
 from app.services.studio_grok_motion import grok_motion_api_configured
 from app.services.studio_grok_scene_compose import grok_scene_compose_configured
+from app.services.plan_catalog import catalog_public_dict
 from app.services.studio_motion_pricing import (
     motion_video_credit_cost,
     motion_video_duration_seconds,
@@ -98,6 +99,9 @@ async def api_health(session: AsyncSession = Depends(get_session)) -> dict:
         "billing_require_active_subscription": settings.billing_require_active_subscription,
         "billing_price_managed_month_rub": settings.billing_price_managed_month_rub,
         "billing_price_byok_month_rub": settings.billing_price_byok_month_rub,
+        "signup_bonus_credits": settings.signup_bonus_credits,
+        "marketing_beta_creators_count": settings.marketing_beta_creators_count,
+        "billing_catalog": catalog_public_dict(),
         "billing_credit_pack_price_rub": settings.billing_credit_pack_price_rub,
         "billing_credit_pack_credits": settings.billing_credit_pack_credits,
         "billing_credits_min_purchase": settings.billing_credits_min_purchase,
@@ -266,6 +270,18 @@ async def api_reply(
 ) -> MessageOut:
     assert_permission(user, PERM_CHAT)
     oid = workspace_owner_id(user)
+    from app.db.models import Message, Subscription
+    from app.services.plan_entitlements import assert_dialog_activity_allowed, month_start_utc
+
+    start = month_start_utc()
+    has_msg_this_month = await session.scalar(
+        select(Message.id)
+        .where(Message.conversation_id == conv_id, Message.created_at >= start)
+        .limit(1)
+    )
+    if not has_msg_this_month:
+        sub = await session.scalar(select(Subscription).where(Subscription.user_id == oid))
+        await assert_dialog_activity_allowed(session, oid, sub)
     text_ru = body.text.strip()
     if not text_ru:
         raise HTTPException(status_code=400, detail="empty text")

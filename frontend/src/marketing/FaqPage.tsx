@@ -75,6 +75,32 @@ export function FaqPage() {
           </p>
         </FaqItem>
 
+        <FaqItem question="Что такое BYOK и почему это выгоднее?">
+          <p>
+            BYOK — свой API-ключ{' '}
+            <a href="https://wavespeed.ai/?ref=modelmate" target="_blank" rel="noopener noreferrer">
+              WaveSpeed
+            </a>
+            : платите провайдеру напрямую за генерацию без наценки на картинки и видео. ModelMate берёт плату за
+            кабинет, чат, команду и GROK для промптов.
+          </p>
+        </FaqItem>
+
+        <FaqItem question="Сколько тарифов и что входит?">
+          <p>
+            Шесть подписок: BYOK и Managed × Solo / Pro / Studio. Лимиты по пользователям, моделям, диалогам и GROK
+            зависят от уровня — см.{' '}
+            <Link to="/pricing">страницу тарифов</Link>. Годовая оплата со скидкой 25%.
+          </p>
+        </FaqItem>
+
+        <FaqItem question="Реферальная программа">
+          <p>
+            В кабинете на вкладке «Тариф и баланс» — ваша ссылка приглашения. Друг получает бонусные кредиты при
+            регистрации; вы — после его первой оплаты подписки.
+          </p>
+        </FaqItem>
+
         <FaqItem question="Чем тариф Managed отличается от BYOK?">
           <p>
             <strong>Managed</strong> — нейросети и связанные сервисы студии идут через инфраструктуру платформы.

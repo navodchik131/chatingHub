@@ -232,6 +232,114 @@
   color: var(--accent);
 }
 
+.mkt-h1--hero {
+  font-size: clamp(2rem, 5vw, 3.25rem);
+}
+
+.mkt-hero-fine {
+  font-size: 0.8125rem;
+  margin: 0 0 1rem;
+}
+
+.mkt-hero-mockup-placeholder {
+  min-height: 220px;
+  border-radius: var(--card-radius, 16px);
+  border: 1px dashed var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  text-align: center;
+}
+
+.mkt-section--alt {
+  background: color-mix(in srgb, var(--bg-elevated) 40%, var(--bg));
+  border-radius: 20px;
+  padding-left: max(1.25rem, env(safe-area-inset-left, 0px));
+  padding-right: max(1.25rem, env(safe-area-inset-right, 0px));
+}
+
+.mkt-grid--4 {
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+}
+
+.mkt-steps {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 1.25rem;
+  max-width: 640px;
+}
+
+.mkt-steps li strong {
+  display: block;
+  margin-bottom: 0.35rem;
+}
+
+.mkt-pricing-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.mkt-toggle {
+  padding: 0.45rem 0.9rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.mkt-toggle.active {
+  background: var(--accent-soft);
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+  color: var(--accent);
+}
+
+.mkt-price-row--3 {
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.mkt-byok-explainer {
+  margin-top: 2rem;
+  padding: 1.25rem 1.5rem;
+  border-radius: var(--card-radius, 16px);
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+}
+
+.mkt-table-wrap {
+  overflow-x: auto;
+}
+
+.mkt-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.mkt-table th,
+.mkt-table td {
+  padding: 0.65rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+}
+
+.mkt-cta-final {
+  text-align: center;
+  padding: 2.5rem 0 3rem;
+}
+
+.mkt-cta-final h2 {
+  margin: 0 0 0.5rem;
+}
+
 /* Hero */
 .mkt-hero {
   padding: 1rem 0 2.5rem;

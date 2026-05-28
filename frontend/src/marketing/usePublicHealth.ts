@@ -4,6 +4,9 @@ import { apiFetch } from '../api'
 /** Поля из GET /api/health, нужные маркетинговым страницам. */
 export interface PublicHealthPricing {
   ok?: boolean
+  signup_bonus_credits?: number
+  marketing_beta_creators_count?: number
+  billing_catalog?: { plans?: unknown[] }
   billing_price_managed_month_rub?: number
   billing_price_byok_month_rub?: number
   billing_credit_pack_price_rub?: number

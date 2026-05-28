@@ -64,6 +64,7 @@ class ConversationPatchIn(BaseModel):
 class RegisterIn(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8, max_length=128)
+    referral_code: str | None = Field(default=None, max_length=16)
 
 
 class LoginIn(BaseModel):
@@ -78,6 +79,21 @@ class TokenOut(BaseModel):
     token_type: str = "bearer"
 
 
+class PlanLimitsOut(BaseModel):
+    max_users: int
+    max_models: int
+    max_dialogs_per_month: int | None = None
+    max_grok_per_month: int | None = None
+
+
+class PlanUsageOut(BaseModel):
+    users: int
+    models: int
+    dialogs_this_month: int
+    grok_this_month: int
+    limits: PlanLimitsOut
+
+
 class UserMeOut(BaseModel):
     id: int
     email: str
@@ -85,6 +101,10 @@ class UserMeOut(BaseModel):
     credits_balance: int
     """План биллинга владельца пространства: managed | byok."""
     billing_plan: str = "managed"
+    """solo | pro | studio."""
+    plan_tier: str = "solo"
+    plan_display_name: str = "Managed Solo"
+    plan_usage: PlanUsageOut | None = None
     """Дата окончания оплаченного периода подписки (UTC), если есть."""
     subscription_period_end: datetime | None = None
     """Число подключённых операторов (участников), не считая владельца."""
@@ -98,6 +118,7 @@ class UserMeOut(BaseModel):
     billing_require_active_subscription: bool = True
     """Можно оформить или продлить подписку онлайн (на сервере настроена оплата)."""
     online_payment_available: bool = False
+    signup_bonus_credits: int = 0
 
 
 class WorkspaceMemberCreateIn(BaseModel):
@@ -429,19 +450,34 @@ class BillingPlanItemOut(BaseModel):
 
 class BillingPlansOut(BaseModel):
     items: list[BillingPlanItemOut]
+    catalog: dict[str, Any] | None = None
+
+
+class ReferralMeOut(BaseModel):
+    referral_code: str
+    referral_link: str
+    invited_count: int
+    credits_earned: int
+    signup_bonus_for_friend: int
+    referrer_reward_credits: int
 
 
 class YookassaPaymentCreateIn(BaseModel):
-    product: Literal["sub_byok_month", "sub_managed_month", "credits_pack"]
+    product: str = Field(min_length=3, max_length=64)
     credits_quantity: int | None = None
 
     @model_validator(mode="after")
     def credits_pack_needs_quantity(self) -> YookassaPaymentCreateIn:
-        if self.product == "credits_pack":
+        from app.services.plan_catalog import get_plan_spec, resolve_product_id
+
+        p = resolve_product_id(self.product.strip())
+        if p == "credits_pack":
             if self.credits_quantity is None:
                 raise ValueError("Для покупки кредитов укажите credits_quantity")
         elif self.credits_quantity is not None:
             raise ValueError("Поле credits_quantity только для product=credits_pack")
+        elif get_plan_spec(p) is None:
+            raise ValueError("Неизвестный продукт подписки")
         return self
 
 
@@ -532,7 +568,11 @@ class AdminSubscriptionPatchIn(BaseModel):
         default=None,
         description="none|incomplete|trialing|active|past_due|canceled|unpaid",
     )
-    plan_tier: str | None = Field(default=None, max_length=64)
+    plan_tier: str | None = Field(
+        default=None,
+        max_length=64,
+        description="solo | pro | studio",
+    )
     current_period_end: datetime | None = None
     billing_plan: str | None = Field(
         default=None,

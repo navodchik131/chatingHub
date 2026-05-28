@@ -1550,6 +1550,9 @@ async def api_create_studio_model(
     oid = workspace_owner_id(user)
     sub_b, _, _, _, _credits = await load_owner_studio_billing(session, oid)
     _require_studio_subscription(user, sub_b, credits_balance=_credits)
+    from app.services.plan_entitlements import assert_can_create_studio_model
+
+    await assert_can_create_studio_model(session, oid, sub_b)
     uploads = images or []
     kinds_list = parse_image_kinds_json(image_kinds, len(uploads))
     selfies_list = parse_image_export_selfies_json(image_export_selfies, len(uploads), kinds_list)
@@ -2277,6 +2280,10 @@ async def _studio_job_execute_refine_prompt(
     try:
         if mode_n == "grok_compose":
             assert image_bytes is not None
+            from app.services.plan_entitlements import assert_grok_allowed, record_grok_usage
+
+            await assert_grok_allowed(session, oid, sub_b)
+            await record_grok_usage(session, oid, source="grok_compose")
             grok_creds = grok_motion_studio_credentials()
             composed = await grok_compose_studio_scene(
                 user_ref_bytes=image_bytes,
@@ -3216,6 +3223,10 @@ async def _studio_job_execute_motion_first_frame(
 
     motion_clip_summary: str | None = None
     if _truthy_wavespeed_flag(auto_motion_prompt) and video_path is not None:
+        from app.services.plan_entitlements import assert_grok_allowed, record_grok_usage
+
+        await assert_grok_allowed(session, oid, sub_b)
+        await record_grok_usage(session, oid, source="motion_timeline")
         try:
             motion_clip_summary = await motion_grok_timeline_from_video_path(
                 video_path=video_path,
@@ -3247,6 +3258,10 @@ async def _studio_job_execute_motion_first_frame(
 
     ref_nude = False
     try:
+        from app.services.plan_entitlements import assert_grok_allowed, record_grok_usage
+
+        await assert_grok_allowed(session, oid, sub_b)
+        await record_grok_usage(session, oid, source="motion_first_frame")
         refined, reference_scene, grok_neg = await grok_compose_motion_first_frame(
             pose_reference_bytes=first_frame,
             pose_reference_mime=first_frame_media,

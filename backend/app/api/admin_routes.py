@@ -230,7 +230,10 @@ async def admin_user_subscription(
                 detail="Недопустимый status (none|incomplete|trialing|active|past_due|canceled|unpaid)",
             ) from e
     if "plan_tier" in patch:
-        sub.plan_tier = (body.plan_tier or "")[:64] or None
+        from app.services.plan_catalog import normalize_plan_tier
+
+        raw = (body.plan_tier or "").strip().lower() or None
+        sub.plan_tier = normalize_plan_tier(raw) if raw else None
     if "current_period_end" in patch:
         sub.current_period_end = body.current_period_end
     if "billing_plan" in patch:

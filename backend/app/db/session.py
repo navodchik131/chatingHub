@@ -172,6 +172,19 @@ def _migrate_studio_model_image_kind(sync_conn) -> None:
     )
 
 
+def _migrate_user_referral_columns(sync_conn) -> None:
+    from sqlalchemy import inspect, text
+
+    insp = inspect(sync_conn)
+    if not insp.has_table("users"):
+        return
+    cols = {c["name"] for c in insp.get_columns("users")}
+    if "referral_code" not in cols:
+        sync_conn.execute(text("ALTER TABLE users ADD COLUMN referral_code VARCHAR(16)"))
+    if "referred_by_user_id" not in cols:
+        sync_conn.execute(text("ALTER TABLE users ADD COLUMN referred_by_user_id INTEGER"))
+
+
 def _migrate_subscription_billing_plan(sync_conn) -> None:
     from sqlalchemy import inspect
 
@@ -288,6 +301,7 @@ async def init_db() -> None:
         await conn.run_sync(_migrate_user_studio_model_export_camera)
         await conn.run_sync(_migrate_studio_model_image_export_selfie)
         await conn.run_sync(_migrate_subscription_billing_plan)
+        await conn.run_sync(_migrate_user_referral_columns)
         await conn.run_sync(_migrate_studio_jobs_table)
         await conn.run_sync(_migrate_studio_generation_pipeline_phase_a)
         await conn.run_sync(_migrate_studio_motion_render_model_link)

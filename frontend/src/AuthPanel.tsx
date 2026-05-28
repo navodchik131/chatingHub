@@ -4,8 +4,10 @@ import { formatHttpApiError } from './apiErrors'
 
 export function AuthPanel({
   onSuccess,
+  referralCode,
 }: {
   onSuccess: (fromRegister?: boolean) => void | Promise<void>
+  referralCode?: string | null
 }) {
   const [tab, setTab] = useState<'login' | 'register'>('login')
   const [email, setEmail] = useState('')
@@ -21,7 +23,11 @@ export function AuthPanel({
       const path = tab === 'login' ? '/api/auth/login' : '/api/auth/register'
       const ml = memberLogin.trim().toLowerCase()
       const body =
-        tab === 'login' && ml ? { email, password, member_login: ml } : { email, password }
+        tab === 'login' && ml
+          ? { email, password, member_login: ml }
+          : tab === 'register' && referralCode
+            ? { email, password, referral_code: referralCode }
+            : { email, password }
       const r = await apiFetch(path, {
         method: 'POST',
         body: JSON.stringify(body),

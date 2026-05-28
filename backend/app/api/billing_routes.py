@@ -23,6 +23,7 @@ from app.services.billing_credits import (
 )
 from app.services.entitlements import subscription_is_paid_active
 from app.services.billing_plan import normalize_billing_plan, platform_covers_studio_api_costs
+from app.services.plan_catalog import catalog_public_dict, list_subscription_products, resolve_product_id
 from app.services.workspace import is_workspace_owner, workspace_owner_id
 from app.services.yookassa_apply import apply_yookassa_payment_succeeded
 from app.services.yookassa_client import create_payment, parse_notification_body
@@ -38,31 +39,50 @@ def _rub_amount_str(amount_rub: int) -> str:
 
 @router.get("/plans", response_model=BillingPlansOut)
 async def billing_plans() -> BillingPlansOut:
-    return BillingPlansOut(
-        items=[
+    items: list[BillingPlanItemOut] = []
+    for spec in list_subscription_products():
+        period_label = "год" if spec.period == "year" else "мес."
+        bonus = (
+            f", +{spec.managed_monthly_credits} кр./период"
+            if spec.managed_monthly_credits
+            else ""
+        )
+        items.append(
             BillingPlanItemOut(
-                product="sub_managed_month",
-                title="Подписка Managed — ключи платформы, кредиты на студию",
-                price_rub=settings.billing_price_managed_month_rub,
+                product=spec.product,
+                title=f"{spec.title_ru} — {period_label}{bonus}",
+                price_rub=spec.price_rub,
+            )
+        )
+    items.append(
+        BillingPlanItemOut(
+            product="credits_pack",
+            title="Кредиты студии — любое количество от 50 шт.",
+            price_rub=int(credits_total_rub(settings.billing_credits_min_purchase)),
+            credits_pricing=BillingCreditsPricingOut(
+                min_quantity=settings.billing_credits_min_purchase,
+                bulk_from=settings.billing_credits_bulk_from,
+                unit_price_rub=float(settings.billing_credits_unit_price_rub),
+                bulk_unit_price_rub=float(settings.billing_credits_bulk_unit_price_rub),
             ),
-            BillingPlanItemOut(
-                product="sub_byok_month",
-                title="Подписка BYOK — свой WaveSpeed для картинок; LLM студии на сервере; кредиты не списываются",
-                price_rub=settings.billing_price_byok_month_rub,
-            ),
-            BillingPlanItemOut(
-                product="credits_pack",
-                title="Кредиты студии — любое количество от 50 шт.",
-                price_rub=int(credits_total_rub(settings.billing_credits_min_purchase)),
-                credits_pricing=BillingCreditsPricingOut(
-                    min_quantity=settings.billing_credits_min_purchase,
-                    bulk_from=settings.billing_credits_bulk_from,
-                    unit_price_rub=float(settings.billing_credits_unit_price_rub),
-                    bulk_unit_price_rub=float(settings.billing_credits_bulk_unit_price_rub),
-                ),
-            ),
-        ]
+        )
     )
+    return BillingPlansOut(items=items, catalog=catalog_public_dict())
+
+
+@router.get("/catalog")
+async def billing_catalog() -> dict:
+    return {
+        **catalog_public_dict(),
+        "signup_bonus_credits": settings.signup_bonus_credits,
+        "credits_pricing": {
+            "min_quantity": settings.billing_credits_min_purchase,
+            "bulk_from": settings.billing_credits_bulk_from,
+            "unit_price_rub": float(settings.billing_credits_unit_price_rub),
+            "bulk_unit_price_rub": float(settings.billing_credits_bulk_unit_price_rub),
+        },
+        "marketing_beta_creators_count": settings.marketing_beta_creators_count,
+    }
 
 
 @router.post("/yookassa/payment", response_model=YookassaPaymentOut)
@@ -80,14 +100,9 @@ async def yookassa_start_payment(
         raise HTTPException(status_code=503, detail="ЮKassa не настроена на сервере")
 
     billing_uid = workspace_owner_id(user)
+    product = resolve_product_id(body.product)
 
-    if body.product == "sub_managed_month":
-        price = settings.billing_price_managed_month_rub
-        desc = "Подписка Chating Hub (Managed), 30 дн."
-    elif body.product == "sub_byok_month":
-        price = settings.billing_price_byok_month_rub
-        desc = "Подписка Chating Hub (BYOK), 30 дн."
-    elif body.product == "credits_pack":
+    if body.product == "credits_pack":
         sub_row = await session.scalar(
             select(Subscription).where(Subscription.user_id == billing_uid)
         )
@@ -105,19 +120,29 @@ async def yookassa_start_payment(
             raise HTTPException(status_code=400, detail=str(e)) from e
         amount_value = credits_amount_yookassa_value(q)
         desc = f"Кредиты студии ({q} шт.)"
+        meta_product = "credits_pack"
     else:
-        raise HTTPException(status_code=400, detail="Неизвестный продукт")
+        from app.services.plan_catalog import get_plan_spec
+
+        spec = get_plan_spec(product)
+        if spec is None:
+            raise HTTPException(status_code=400, detail="Неизвестный продукт")
+        price = spec.price_rub
+        period = "год" if spec.period == "year" else "30 дн."
+        desc = f"Подписка ModelMate ({spec.title_ru}), {period}"
+        amount_value = _rub_amount_str(price)
+        meta_product = spec.product
 
     base = settings.public_app_url.rstrip("/")
     return_url = f"{base}{settings.billing_success_path}"
 
-    meta: dict[str, str] = {"user_id": str(billing_uid), "product": body.product}
+    meta: dict[str, str] = {"user_id": str(billing_uid), "product": meta_product}
     if body.product == "credits_pack":
         meta["credits_quantity"] = str(body.credits_quantity)
 
     try:
         pay = await create_payment(
-            amount_value=amount_value if body.product == "credits_pack" else _rub_amount_str(price),
+            amount_value=amount_value,
             description=desc[:210],
             return_url=return_url,
             metadata=meta,

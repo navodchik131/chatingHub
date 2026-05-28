@@ -45,7 +45,16 @@ class Settings(BaseSettings):
     # Email владельцев (через запятую), которым разрешён /api/admin без is_platform_admin в БД
     admin_emails: str = Field(default="")
 
-    signup_bonus_credits: int = Field(default=50)
+    signup_bonus_credits: int = Field(default=100)
+    referral_signup_bonus_credits: int = Field(
+        default=25,
+        description="Доп. кредиты при регистрации по реферальному коду (к signup_bonus).",
+    )
+    referral_referrer_reward_credits: int = Field(
+        default=50,
+        description="Кредиты рефереру при первой оплате приглашённого.",
+    )
+    marketing_beta_creators_count: int = Field(default=19)
     credit_cost_inbound_translation: int = Field(default=1)
     credit_cost_outbound_translation: int = Field(default=1)
 

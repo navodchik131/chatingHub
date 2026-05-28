@@ -36,6 +36,7 @@ async def ensure_starter_managed_subscription(session: AsyncSession, owner_id: i
                 user_id=owner_id,
                 status=SubscriptionStatus.active,
                 billing_plan=BILLING_PLAN_MANAGED,
+                plan_tier="solo",
             )
         )
         return True

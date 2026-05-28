@@ -1,10 +1,15 @@
-import { useEffect } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useEffect, useMemo } from 'react'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { AuthPanel } from '../AuthPanel'
 import { getToken } from '../api'
 
 export function LoginPage() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const referralCode = useMemo(() => {
+    const ref = (searchParams.get('ref') || '').trim().toUpperCase()
+    return ref || null
+  }, [searchParams])
 
   useEffect(() => {
     if (getToken()) navigate('/workspace', { replace: true })
@@ -26,7 +31,15 @@ export function LoginPage() {
         </p>
       </header>
       <div className="mkt-login-wrap">
-        <AuthPanel onSuccess={() => navigate('/workspace', { replace: true })} />
+        {referralCode ? (
+          <p className="muted small" style={{ marginBottom: '0.75rem' }}>
+            Регистрация по приглашению: код <strong>{referralCode}</strong>
+          </p>
+        ) : null}
+        <AuthPanel
+          referralCode={referralCode}
+          onSuccess={() => navigate('/workspace', { replace: true })}
+        />
       </div>
       <p
         className="muted small"

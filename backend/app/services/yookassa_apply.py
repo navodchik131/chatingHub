@@ -31,12 +31,15 @@ from app.services.billing_plan import (
     platform_covers_studio_api_costs,
 )
 from app.services.entitlements import subscription_is_paid_active
+from app.services.plan_catalog import get_plan_spec, resolve_product_id
+from app.services.plan_entitlements import subscription_period_days
+from app.services.referral import grant_referrer_reward_if_needed
 
 log = logging.getLogger(__name__)
 
 
-def _period_end() -> datetime:
-    days = max(1, int(settings.billing_subscription_period_days or 30))
+def _period_end(product: str) -> datetime:
+    days = subscription_period_days(product)
     return datetime.now(timezone.utc) + timedelta(days=days)
 
 
@@ -74,7 +77,6 @@ async def apply_yookassa_payment_succeeded(
     if not user:
         return {"ok": False, "error": "user not found"}
 
-    # владелец пространства = тот же user если parent is None
     owner = user
     if user.parent_user_id is not None:
         parent = await session.get(User, user.parent_user_id)
@@ -92,19 +94,16 @@ async def apply_yookassa_payment_succeeded(
 
     session.add(YookassaProcessedPayment(payment_id=pid))
 
-    if product == "sub_byok_month":
-        sub.billing_plan = BILLING_PLAN_BYOK
+    resolved = resolve_product_id(product)
+    spec = get_plan_spec(resolved)
+    if spec is not None:
+        sub.billing_plan = spec.billing_plan
+        sub.plan_tier = spec.tier
         sub.status = SubscriptionStatus.active
-        sub.current_period_end = _period_end()
-        await session.commit()
-        return {"ok": True, "payment_id": pid, "granted": "sub_byok"}
-
-    if product == "sub_managed_month":
-        sub.billing_plan = BILLING_PLAN_MANAGED
-        sub.status = SubscriptionStatus.active
-        sub.current_period_end = _period_end()
-        bonus = max(0, int(settings.billing_managed_subscription_bonus_credits))
-        if bonus > 0:
+        sub.current_period_end = _period_end(resolved)
+        bonus = 0
+        if spec.billing_plan == BILLING_PLAN_MANAGED and spec.managed_monthly_credits > 0:
+            bonus = spec.managed_monthly_credits
             acc = await session.get(CreditAccount, billing_uid)
             if acc is None:
                 acc = CreditAccount(user_id=billing_uid, balance=0)
@@ -117,16 +116,21 @@ async def apply_yookassa_payment_succeeded(
                     kind="yookassa_managed_subscription_bonus",
                     credits_delta=bonus,
                     meta=json.dumps(
-                        {"payment_id": pid, "product": product},
+                        {
+                            "payment_id": pid,
+                            "product": resolved,
+                            "tier": spec.tier,
+                        },
                         ensure_ascii=False,
                     ),
                 )
             )
+        await grant_referrer_reward_if_needed(session, billing_uid)
         await session.commit()
         return {
             "ok": True,
             "payment_id": pid,
-            "granted": "sub_managed",
+            "granted": resolved,
             "credits_bonus": bonus,
         }
 
