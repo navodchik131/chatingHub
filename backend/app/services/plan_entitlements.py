@@ -85,7 +85,7 @@ async def count_dialogs_this_month(session: AsyncSession, owner_id: int) -> int:
         .select_from(Message)
         .join(Conversation, Conversation.id == Message.conversation_id)
         .where(
-            Conversation.owner_id == owner_id,
+            Conversation.user_id == owner_id,
             Message.created_at >= start,
         )
     )
