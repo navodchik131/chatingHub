@@ -12,7 +12,13 @@ def _fernet() -> Fernet:
             "FERNET_KEY не задан. Сгенерируйте: "
             'python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"'
         )
-    return Fernet(key.encode() if isinstance(key, str) else key)
+    try:
+        return Fernet(key.encode() if isinstance(key, str) else key)
+    except ValueError as e:
+        raise RuntimeError(
+            "FERNET_KEY неверного формата (нужен ключ Fernet из generate_key). "
+            'python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"'
+        ) from e
 
 
 def encrypt_secret(plain: str) -> str:

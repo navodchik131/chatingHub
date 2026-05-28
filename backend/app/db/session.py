@@ -201,6 +201,29 @@ def _migrate_subscription_billing_plan(sync_conn) -> None:
     )
 
 
+def _migrate_subscription_plan_tier(sync_conn) -> None:
+    from sqlalchemy import inspect, text
+
+    insp = inspect(sync_conn)
+    if not insp.has_table("subscriptions"):
+        return
+    cols = {c["name"] for c in insp.get_columns("subscriptions")}
+    if "plan_tier" in cols:
+        return
+    sync_conn.execute(text("ALTER TABLE subscriptions ADD COLUMN plan_tier VARCHAR(64)"))
+
+
+def _migrate_wavespeed_connections_table(sync_conn) -> None:
+    from sqlalchemy import inspect
+
+    from app.db.models import WavespeedConnection
+
+    insp = inspect(sync_conn)
+    if insp.has_table("wavespeed_connections"):
+        return
+    WavespeedConnection.__table__.create(sync_conn, checkfirst=True)
+
+
 def _migrate_user_studio_model_export_camera(sync_conn) -> None:
     from sqlalchemy import inspect, text
 
@@ -301,7 +324,9 @@ async def init_db() -> None:
         await conn.run_sync(_migrate_user_studio_model_export_camera)
         await conn.run_sync(_migrate_studio_model_image_export_selfie)
         await conn.run_sync(_migrate_subscription_billing_plan)
+        await conn.run_sync(_migrate_subscription_plan_tier)
         await conn.run_sync(_migrate_user_referral_columns)
+        await conn.run_sync(_migrate_wavespeed_connections_table)
         await conn.run_sync(_migrate_studio_jobs_table)
         await conn.run_sync(_migrate_studio_generation_pipeline_phase_a)
         await conn.run_sync(_migrate_studio_motion_render_model_link)

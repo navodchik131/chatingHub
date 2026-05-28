@@ -240,15 +240,25 @@ async def put_wavespeed(
     except RuntimeError as e:
         raise HTTPException(status_code=503, detail=str(e)) from e
 
-    row = await session.scalar(
-        select(WavespeedConnection).where(WavespeedConnection.user_id == oid)
-    )
-    if row:
-        row.api_key_encrypted = enc
-    else:
-        session.add(WavespeedConnection(user_id=oid, api_key_encrypted=enc))
-    await session.commit()
-    return await _integration_status(session, user)
+    try:
+        row = await session.scalar(
+            select(WavespeedConnection).where(WavespeedConnection.user_id == oid)
+        )
+        if row:
+            row.api_key_encrypted = enc
+        else:
+            session.add(WavespeedConnection(user_id=oid, api_key_encrypted=enc))
+        await session.commit()
+        return await _integration_status(session, user)
+    except HTTPException:
+        raise
+    except Exception as e:
+        await session.rollback()
+        log.exception("put_wavespeed failed user=%s owner=%s", user.id, oid)
+        raise HTTPException(
+            status_code=500,
+            detail="Не удалось сохранить ключ WaveSpeed. Обновите сервер (миграции БД) или проверьте FERNET_KEY.",
+        ) from e
 
 
 @router.put("/llm", response_model=IntegrationStatusOut)
