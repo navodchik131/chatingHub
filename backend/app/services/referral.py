@@ -75,6 +75,8 @@ async def apply_referral_on_signup(
     if bonus > 0:
         acc = await session.get(CreditAccount, new_owner.id)
         if acc is None:
+            acc = new_owner.credit_account
+        if acc is None:
             acc = CreditAccount(user_id=new_owner.id, balance=0)
             session.add(acc)
             await session.flush()

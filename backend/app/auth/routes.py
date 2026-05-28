@@ -51,6 +51,7 @@ async def register(body: RegisterIn, session: AsyncSession = Depends(get_session
     )
     bonus = max(0, settings.signup_bonus_credits)
     session.add(CreditAccount(user_id=user.id, balance=bonus))
+    await session.flush()
     await apply_referral_on_signup(
         session, new_owner=user, referral_code=body.referral_code
     )
