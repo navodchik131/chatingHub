@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import { parseCatalogFromHealth } from '../billing/planCatalog'
+import { MmButton, MmContainer, MmEyebrow } from './components/MmUi'
 import { PricingSection } from './PricingSection'
 import { usePublicHealth } from './usePublicHealth'
 
@@ -18,44 +19,54 @@ export function PricingPage() {
   const signupCredits = health?.signup_bonus_credits ?? 100
 
   return (
-    <>
-      <header className="mkt-section-head">
-        <h1 className="mkt-h1" style={{ fontSize: 'clamp(1.65rem, 4vw, 2.25rem)' }}>
-          Тарифы
-        </h1>
-        <p>
-          Шесть планов: BYOK и Managed в трёх размерах (Solo, Pro, Studio). Оплата в кабинете через
-          ЮKassa. Триал — {signupCredits} кредитов без срока.
-        </p>
-      </header>
-
+    <div className="mm-main--page">
+      <MmContainer>
+        <header className="mm-page-head">
+          <MmEyebrow>Тарифы · ЮKassa</MmEyebrow>
+          <h1>Тарифы</h1>
+          <p>
+            Шесть планов: BYOK и Managed в трёх размерах (Solo, Pro, Studio). Оплата в кабинете через
+            ЮKassa. Триал — {signupCredits} кредитов без срока.
+          </p>
+        </header>
+      </MmContainer>
       <PricingSection plans={plans} id="plans" />
-
-      <section className="mkt-section" aria-labelledby="credits-heading">
-        <h2 id="credits-heading">Докупка кредитов (Managed)</h2>
-        <p>
-          Любое количество от {creditsMin} шт. —{' '}
-          {creditsUnit.toLocaleString('ru-RU', { maximumFractionDigits: 2 })} ₽/кредит; от{' '}
-          {creditsBulkFrom} шт. —{' '}
-          {creditsBulkUnit.toLocaleString('ru-RU', { maximumFractionDigits: 2 })} ₽/кредит. Фиксированных
-          пакетов нет.
+      <MmContainer>
+        <section className="mm-section mm-section--border" aria-labelledby="credits-heading">
+          <MmEyebrow>Managed · докупка</MmEyebrow>
+          <h2 id="credits-heading" className="mm-display-lg" style={{ fontSize: 'clamp(1.5rem, 3vw, 2rem)' }}>
+            Кредиты без пакетов
+          </h2>
+          <p className="mm-muted">
+            Любое количество от {creditsMin} шт. —{' '}
+            {creditsUnit.toLocaleString('ru-RU', { maximumFractionDigits: 2 })} ₽/кредит; от{' '}
+            {creditsBulkFrom} шт. —{' '}
+            {creditsBulkUnit.toLocaleString('ru-RU', { maximumFractionDigits: 2 })} ₽/кредит.
+          </p>
+          <div style={{ marginTop: 'var(--s-4)' }}>
+            <MmButton to="/login">Пополнить в кабинете</MmButton>
+          </div>
+        </section>
+        <section className="mm-section mm-section--border">
+          <MmEyebrow>Триал</MmEyebrow>
+          <h2 className="mm-display-lg" style={{ fontSize: 'clamp(1.5rem, 3vw, 2rem)' }}>
+            Старт без карты
+          </h2>
+          <p className="mm-muted">
+            {signupCredits} кредитов при регистрации. Для генерации подключите свой ключ WaveSpeed в
+            интеграциях. Кредиты не сгорают по времени.
+          </p>
+        </section>
+        <p className="mm-muted">
+          <Link to="/faq" className="mm-link-arrow">
+            FAQ →
+          </Link>{' '}
+          ·{' '}
+          <Link to="/" className="mm-link-arrow">
+            На главную ↗
+          </Link>
         </p>
-        <Link to="/login" className="mkt-nav-cta" style={{ marginTop: '0.75rem' }}>
-          Пополнить в кабинете
-        </Link>
-      </section>
-
-      <section className="mkt-section mkt-section--alt">
-        <h2>Триал</h2>
-        <p>
-          {signupCredits} кредитов при регистрации, без привязки карты. Для генерации подключите свой
-          ключ WaveSpeed в интеграциях. Кредиты не сгорают по времени.
-        </p>
-      </section>
-
-      <p className="muted">
-        <Link to="/faq">FAQ</Link> · <Link to="/">На главную</Link>
-      </p>
-    </>
+      </MmContainer>
+    </div>
   )
 }

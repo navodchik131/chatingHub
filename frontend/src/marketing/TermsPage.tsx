@@ -1,25 +1,27 @@
 import { Link } from 'react-router-dom'
+import { MmContainer } from './components/MmUi'
 
 export function TermsPage() {
   const year = new Date().getFullYear()
   return (
-    <>
-      <header className="mkt-section-head">
-        <h1 className="mkt-h1" style={{ fontSize: 'clamp(1.65rem, 4vw, 2.25rem)' }}>
+    <div className="mm-main--page">
+      <MmContainer>
+      <header className="mm-page-head">
+        <h1>
           Пользовательское соглашение
         </h1>
-        <p className="muted" style={{ margin: 0 }}>
+        <p className="mm-muted">
           Условия использования Сервиса ModelMate. При размещении на своём инстансе замените контакты и реквизиты на
           актуальные; при необходимости согласуйте текст с юристом.
         </p>
       </header>
 
-      <article className="mkt-legal" aria-labelledby="legal-terms">
-        <p className="mkt-legal-meta" id="legal-terms">
+      <article className="mm-legal" aria-labelledby="legal-terms">
+        <p className="mm-legal-meta" id="legal-terms">
           Последнее обновление: {year}. Не является публичной офертой, если иное прямо не указано на стороне оператора.
         </p>
 
-        <section className="mkt-legal-block">
+        <section className="mm-legal-block">
           <h2>1. Термины</h2>
           <p>
             <strong>«Сервис»</strong> — программное обеспечение ModelMate, доступное через веб-интерфейс, включая чаты,
@@ -29,7 +31,7 @@ export function TermsPage() {
           </p>
         </section>
 
-        <section className="mkt-legal-block">
+        <section className="mm-legal-block">
           <h2>2. Акцепт и регистрация</h2>
           <p>
             Создание учётной записи и/или вход в Сервис означает согласие с настоящими условиями в редакции, опубликованной
@@ -38,7 +40,7 @@ export function TermsPage() {
           </p>
         </section>
 
-        <section className="mkt-legal-block">
+        <section className="mm-legal-block">
           <h2>3. Предоставление Сервиса</h2>
           <p>
             Функции Сервиса предоставляются «как есть» (as is) в рамках возможностей конкретной установки. Администратор
@@ -47,7 +49,7 @@ export function TermsPage() {
           </p>
         </section>
 
-        <section className="mkt-legal-block">
+        <section className="mm-legal-block">
           <h2>4. Тарифы, подписка и кредиты</h2>
           <p>
             Условия и стоимость подписки (в том числе тарифы Managed и BYOK), а также правила покупки кредитов студии
@@ -55,13 +57,13 @@ export function TermsPage() {
             ЮKassa). Зачисление доступа и кредитов происходит после подтверждения успешного платежа.
           </p>
           <p>
-            <Link to="/pricing" className="mkt-link-arrow">
+            <Link to="/pricing" className="mm-link-arrow">
               Тарифы →
             </Link>
           </p>
         </section>
 
-        <section className="mkt-legal-block">
+        <section className="mm-legal-block">
           <h2>5. Интеграции и контент пользователя</h2>
           <p>
             Пользователь самостоятельно настраивает ботов, вебхуки и ключи сторонних сервисов и несёт ответственность за
@@ -70,7 +72,7 @@ export function TermsPage() {
           </p>
         </section>
 
-        <section className="mkt-legal-block">
+        <section className="mm-legal-block">
           <h2>6. Запрещённые действия</h2>
           <p>Запрещается, в частности:</p>
           <ul>
@@ -80,7 +82,7 @@ export function TermsPage() {
           </ul>
         </section>
 
-        <section className="mkt-legal-block">
+        <section className="mm-legal-block">
           <h2>7. Ограничение ответственности</h2>
           <p>
             В максимальной степени, допускаемой применимым правом, сторона, предоставляющая Сервис, не отвечает за
@@ -89,7 +91,7 @@ export function TermsPage() {
           </p>
         </section>
 
-        <section className="mkt-legal-block">
+        <section className="mm-legal-block">
           <h2>8. Интеллектуальная собственность</h2>
           <p>
             Права на программное обеспечение, бренд и материалы сайта принадлежат правообладателям. Права на контент,
@@ -98,7 +100,7 @@ export function TermsPage() {
           </p>
         </section>
 
-        <section className="mkt-legal-block">
+        <section className="mm-legal-block">
           <h2>9. Изменение условий</h2>
           <p>
             Условия могут быть изменены; новая редакция публикуется на этой странице. Продолжение использования Сервиса
@@ -106,19 +108,20 @@ export function TermsPage() {
           </p>
         </section>
 
-        <section className="mkt-legal-block">
+        <section className="mm-legal-block">
           <h2>10. Контакты и применимое право</h2>
           <p>
             Вопросы по настоящему соглашению направляйте администратору инстанса ModelMate. Применимое право и порядок
             разрешения споров определяются политикой оператора конкретной установки.
           </p>
           <p>
-            <Link to="/privacy" className="mkt-link-arrow">
+            <Link to="/privacy" className="mm-link-arrow">
               Политика конфиденциальности →
             </Link>
           </p>
         </section>
       </article>
-    </>
+      </MmContainer>
+    </div>
   )
 }

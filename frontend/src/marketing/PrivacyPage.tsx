@@ -1,11 +1,14 @@
 import { Link } from 'react-router-dom'
 
+import { MmContainer } from './components/MmUi'
+
 export function PrivacyPage() {
   const year = new Date().getFullYear()
   return (
-    <>
-      <header className="mkt-section-head">
-        <h1 className="mkt-h1" style={{ fontSize: 'clamp(1.65rem, 4vw, 2.25rem)' }}>
+    <div className="mm-main--page">
+      <MmContainer>
+      <header className="mm-page-head">
+        <h1>
           Политика конфиденциальности
         </h1>
         <p className="muted" style={{ margin: 0 }}>
@@ -14,12 +17,12 @@ export function PrivacyPage() {
         </p>
       </header>
 
-      <article className="mkt-legal" aria-labelledby="legal-privacy">
-        <p className="mkt-legal-meta" id="legal-privacy">
+      <article className="mm-legal" aria-labelledby="legal-privacy">
+        <p className="mm-legal-meta" id="legal-privacy">
           Последнее обновление: {year}. Версия для публичного сайта ModelMate.
         </p>
 
-        <section className="mkt-legal-block">
+        <section className="mm-legal-block">
           <h2>1. Общие положения</h2>
           <p>
             Сервис ModelMate (далее — «Сервис») предназначен для работы команд с диалогами, интеграциями и студией
@@ -32,7 +35,7 @@ export function PrivacyPage() {
           </p>
         </section>
 
-        <section className="mkt-legal-block">
+        <section className="mm-legal-block">
           <h2>2. Какие данные могут обрабатываться</h2>
           <ul>
             <li>
@@ -61,7 +64,7 @@ export function PrivacyPage() {
           </ul>
         </section>
 
-        <section className="mkt-legal-block">
+        <section className="mm-legal-block">
           <h2>3. Цели обработки</h2>
           <p>Обработка данных осуществляется для:</p>
           <ul>
@@ -73,7 +76,7 @@ export function PrivacyPage() {
           </ul>
         </section>
 
-        <section className="mkt-legal-block">
+        <section className="mm-legal-block">
           <h2>4. Передача третьим лицам</h2>
           <p>
             Данные могут передаваться внешним провайдерам <strong>только в объёме и целях</strong>, необходимых для
@@ -82,7 +85,7 @@ export function PrivacyPage() {
           </p>
         </section>
 
-        <section className="mkt-legal-block">
+        <section className="mm-legal-block">
           <h2>5. Хранение и безопасность</h2>
           <p>
             Сроки хранения и технические меры определяются администратором инстанса. Рекомендуется использовать
@@ -91,7 +94,7 @@ export function PrivacyPage() {
           </p>
         </section>
 
-        <section className="mkt-legal-block">
+        <section className="mm-legal-block">
           <h2>6. Cookie и локальное хранилище</h2>
           <p>
             Веб-приложение может использовать локальное хранилище браузера или аналогичные механизмы для поддержки сеанса
@@ -100,7 +103,7 @@ export function PrivacyPage() {
           </p>
         </section>
 
-        <section className="mkt-legal-block">
+        <section className="mm-legal-block">
           <h2>7. Права субъектов данных</h2>
           <p>
             В зависимости от применимого законодательства вы можете иметь право на доступ, исправление, удаление данных,
@@ -109,7 +112,7 @@ export function PrivacyPage() {
           </p>
         </section>
 
-        <section className="mkt-legal-block">
+        <section className="mm-legal-block">
           <h2>8. Изменения политики</h2>
           <p>
             Администратор инстанса может обновлять настоящую политику. Актуальная версия публикуется по этому адресу;
@@ -117,15 +120,16 @@ export function PrivacyPage() {
           </p>
         </section>
 
-        <section className="mkt-legal-block">
+        <section className="mm-legal-block">
           <h2>9. Связанные документы</h2>
           <p>
-            <Link to="/terms" className="mkt-link-arrow">
+            <Link to="/terms" className="mm-link-arrow">
               Пользовательское соглашение →
             </Link>
           </p>
         </section>
       </article>
-    </>
+      </MmContainer>
+    </div>
   )
 }

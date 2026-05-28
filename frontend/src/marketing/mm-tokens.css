@@ -1,0 +1,220 @@
+/* =============================================================
+   ModelMate Design System — Tokens
+   Dark editorial studio. Void-black canvas, lime accent, mono numerals.
+   ============================================================= */
+
+/* ---- Fonts ----------------------------------------------------
+   Geist Sans + Geist Mono + Instrument Serif (italic accent only).
+   Loaded from Google Fonts CDN. If self-hosting, drop matching files
+   into /fonts and update the @font-face below.
+   --------------------------------------------------------------- */
+@import url("https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700;800;900&family=Geist+Mono:wght@400;500;600&family=Instrument+Serif:ital@1&display=swap");
+
+:root {
+  /* ============ COLOR ============ */
+
+  /* — Base surfaces (dark) — */
+  --bg-0:          #08080A;   /* page canvas (void black) */
+  --bg-1:          #121215;   /* elevated panel */
+  --bg-2:          #16161B;   /* card */
+  --bg-3:          #1A1A1F;   /* floating menu / modal */
+  --bg-inset:      #050507;   /* inputs / "below page" recesses */
+
+  /* — Borders / separators — */
+  --border-1:      #26262C;   /* default 1px hairline */
+  --border-2:      #34343B;   /* hover / focused container */
+  --border-strong: #4A4A52;   /* divider with weight */
+
+  /* — Foreground (text + icons) — */
+  --fg-1:          #F5F5F7;   /* primary */
+  --fg-2:          #9A9AA3;   /* secondary / body-muted */
+  --fg-3:          #5F5F68;   /* tertiary / meta / placeholder */
+  --fg-on-accent:  #08080A;   /* text sitting ON the lime accent */
+
+  /* — Brand accent — */
+  --accent:        #D8FF3D;   /* electric lime — primary CTA, focus */
+  --accent-hover:  #E4FF66;
+  --accent-press:  #BFE830;
+  --accent-glow:   rgba(216,255,61,0.25);
+
+  /* — Category accents (chips & tool-type, never UI chrome) — */
+  --cat-photo:     #FF7A4D;   /* photo tools */
+  --cat-video:     #5BD4FF;   /* video tools */
+  --cat-i2v:       #C58CFF;   /* image-to-video tools (rarer) */
+
+  /* — Semantic — */
+  --success:       #7CE38B;
+  --warning:       #F5C443;
+  --danger:        #FF5A6E;
+  --info:          var(--cat-video);
+
+  /* — Translucent layers — */
+  --scrim:         rgba(8,8,10,0.72);
+  --glass:         rgba(8,8,10,0.65);
+  --hairline-up:   inset 0 1px 0 rgba(255,255,255,0.04);
+  --hairline-down: inset 0 -1px 0 rgba(0,0,0,0.50);
+
+  /* ============ TYPE ============ */
+  --font-sans:    "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono:    "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --font-serif:   "Instrument Serif", "Times New Roman", serif;
+
+  /* size · line-height · tracking */
+  --t-display-xl: 88px;  --lh-display-xl: 0.95;  --ls-display-xl: -0.03em;
+  --t-display-lg: 64px;  --lh-display-lg: 1.00;  --ls-display-lg: -0.025em;
+  --t-display-md: 44px;  --lh-display-md: 1.05;  --ls-display-md: -0.02em;
+
+  --t-h1:         32px;  --lh-h1:        1.10;  --ls-h1:        -0.02em;
+  --t-h2:         24px;  --lh-h2:        1.20;  --ls-h2:        -0.015em;
+  --t-h3:         20px;  --lh-h3:        1.30;  --ls-h3:        -0.01em;
+
+  --t-body:       16px;  --lh-body:      1.50;  --ls-body:       0;
+  --t-body-sm:    14px;  --lh-body-sm:   1.45;  --ls-body-sm:    0;
+  --t-caption:    12px;  --lh-caption:   1.40;  --ls-caption:    0;
+
+  --t-mono-tag:   12px;  --lh-mono-tag:  1.20;  --ls-mono-tag:   0.08em;
+  --t-mono-md:    14px;  --lh-mono-md:   1.40;  --ls-mono-md:    0.02em;
+
+  /* ============ RADIUS ============ */
+  --r-sm:    6px;
+  --r-md:   10px;
+  --r-lg:   16px;
+  --r-xl:   24px;
+  --r-2xl:  32px;
+  --r-pill: 999px;
+
+  /* ============ SPACING (4-base) ============ */
+  --s-1:   4px;
+  --s-2:   8px;
+  --s-3:  12px;
+  --s-4:  16px;
+  --s-5:  20px;
+  --s-6:  24px;
+  --s-8:  32px;
+  --s-10: 40px;
+  --s-14: 56px;
+  --s-20: 80px;
+  --s-30: 120px;
+  --s-40: 160px;
+
+  /* ============ ELEVATION ============ */
+  --elev-0: none;
+  --elev-1: 0 1px 0 rgba(255,255,255,0.04) inset, 0 1px 2px rgba(0,0,0,0.4);
+  --elev-2: 0 1px 0 rgba(255,255,255,0.05) inset, 0 24px 60px -20px rgba(0,0,0,0.6), 0 6px 16px -8px rgba(0,0,0,0.5);
+  --elev-glow-accent: 0 0 0 4px var(--accent-glow);
+
+  /* ============ MOTION ============ */
+  --ease-studio: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-out:    cubic-bezier(0.16, 1, 0.3, 1);
+  --d-micro:  120ms;
+  --d-ui:     240ms;
+  --d-enter:  480ms;
+  --d-hero:   800ms;
+
+  /* ============ LAYOUT ============ */
+  --container:   1280px;
+  --gutter:      24px;
+  --rail-h:      64px;       /* sticky header */
+}
+
+/* =============================================================
+   SEMANTIC ROLES — element-level defaults.
+   Use class names below in components, or apply directly.
+   ============================================================= */
+
+html, body {
+  background: var(--bg-0);
+  color: var(--fg-1);
+  font-family: var(--font-sans);
+  font-size: var(--t-body);
+  line-height: var(--lh-body);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+::selection { background: var(--accent); color: var(--fg-on-accent); }
+
+/* — Display & headings — */
+.display-xl, h1.display {
+  font: 900 var(--t-display-xl)/var(--lh-display-xl) var(--font-sans);
+  letter-spacing: var(--ls-display-xl);
+  text-transform: uppercase;
+  color: var(--fg-1);
+  text-wrap: balance;
+}
+.display-lg {
+  font: 800 var(--t-display-lg)/var(--lh-display-lg) var(--font-sans);
+  letter-spacing: var(--ls-display-lg);
+  text-transform: uppercase;
+  text-wrap: balance;
+}
+.display-md {
+  font: 700 var(--t-display-md)/var(--lh-display-md) var(--font-sans);
+  letter-spacing: var(--ls-display-md);
+  text-transform: uppercase;
+  text-wrap: balance;
+}
+h1 { font: 700 var(--t-h1)/var(--lh-h1) var(--font-sans); letter-spacing: var(--ls-h1); }
+h2 { font: 600 var(--t-h2)/var(--lh-h2) var(--font-sans); letter-spacing: var(--ls-h2); }
+h3 { font: 600 var(--t-h3)/var(--lh-h3) var(--font-sans); letter-spacing: var(--ls-h3); }
+
+/* The single italic-serif accent word inside a display headline */
+.serif-accent {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: -0.01em;
+}
+
+/* — Body / muted / meta — */
+p, .body { font-size: var(--t-body); line-height: var(--lh-body); color: var(--fg-1); }
+.body-sm { font-size: var(--t-body-sm); line-height: var(--lh-body-sm); color: var(--fg-1); }
+.muted { color: var(--fg-2); }
+.meta { color: var(--fg-3); font-size: var(--t-caption); line-height: var(--lh-caption); }
+
+/* — Mono kicker / tag / numeric — */
+.eyebrow, .kicker {
+  font: 500 var(--t-mono-tag)/var(--lh-mono-tag) var(--font-mono);
+  letter-spacing: var(--ls-mono-tag);
+  text-transform: uppercase;
+  color: var(--fg-2);
+}
+.num, code, kbd { font-family: var(--font-mono); }
+
+/* — Links — */
+a {
+  color: var(--fg-1);
+  text-decoration: none;
+  background-image: linear-gradient(currentColor, currentColor);
+  background-position: 0 100%;
+  background-repeat: no-repeat;
+  background-size: 0 1px;
+  transition: background-size var(--d-ui) var(--ease-studio), color var(--d-micro) var(--ease-studio);
+}
+a:hover { background-size: 100% 1px; }
+
+/* — Focus — */
+:focus-visible {
+  outline: none;
+  box-shadow: var(--elev-glow-accent);
+  border-color: var(--accent) !important;
+  border-radius: var(--r-md);
+}
+
+/* — Hairlines / dividers — */
+hr, .divider { border: 0; border-top: 1px solid var(--border-1); margin: var(--s-6) 0; }
+
+/* — Subtle film-grain noise (apply with .noise on any dark panel) — */
+.noise {
+  position: relative;
+}
+.noise::after {
+  content: "";
+  position: absolute; inset: 0;
+  pointer-events: none;
+  opacity: 0.025;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)' opacity='1'/></svg>");
+}
