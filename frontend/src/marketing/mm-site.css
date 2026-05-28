@@ -793,6 +793,52 @@ html {
   max-width: 36rem;
 }
 
+/* Community / Telegram band (after hero) */
+.mm-community-section {
+  padding-top: 0;
+}
+
+.mm-community-band {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-6);
+  padding: var(--s-8);
+  border-radius: var(--r-xl);
+  background: linear-gradient(145deg, var(--bg-2) 0%, rgba(91, 212, 255, 0.06) 100%);
+  border: 1px solid rgba(91, 212, 255, 0.22);
+  box-shadow: var(--elev-1);
+}
+
+.mm-community-band__title {
+  margin: var(--s-3) 0 0;
+  font: 800 clamp(1.35rem, 2.8vw, 1.85rem) / 1.15 var(--font-sans);
+  letter-spacing: -0.02em;
+}
+
+.mm-community-band__dek {
+  margin: var(--s-3) 0 0;
+  color: var(--fg-2);
+  max-width: 40rem;
+  font-size: 0.9375rem;
+  line-height: 1.55;
+}
+
+.mm-community-band__link {
+  display: inline-flex;
+  margin-top: var(--s-4);
+  font: 600 0.875rem/1 var(--font-mono);
+  letter-spacing: 0.04em;
+  color: var(--cat-video);
+  text-decoration: none;
+}
+
+.mm-community-band__link:hover {
+  color: var(--fg-1);
+  text-decoration: underline;
+}
+
 /* CTA banner */
 .mm-cta-banner-wrap {
   padding-bottom: var(--s-30);

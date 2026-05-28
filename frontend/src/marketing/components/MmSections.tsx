@@ -13,6 +13,9 @@ import {
 
 const BETA_CREATORS = 19
 
+/** Канал: новости, обсуждения, предложения по продукту */
+export const TELEGRAM_CHANNEL_URL = 'https://t.me/ModelMate_app'
+
 const HERO_TILES = [
   { src: '/marketing/hero/hero1.gif', badge: 'VIDEO · 4K', col: '1 / 2', row: '1 / 3', offset: 0 },
   { src: '/marketing/hero/hero2.jpg', badge: 'PHOTO · 15s', col: '2 / 3', row: '1 / 2', offset: 32 },
@@ -102,6 +105,33 @@ export function MmHero() {
               </div>
             ))}
           </div>
+        </div>
+      </MmContainer>
+    </section>
+  )
+}
+
+export function MmCommunityBand() {
+  return (
+    <section className="mm-section mm-section--compact mm-community-section" aria-labelledby="mm-community-title">
+      <MmContainer>
+        <div className="mm-community-band">
+          <div className="mm-community-band__main">
+            <MmEyebrow tone="video">Telegram · @ModelMate_app</MmEyebrow>
+            <h2 id="mm-community-title" className="mm-community-band__title">
+              Общение и новости — в канале.
+            </h2>
+            <p className="mm-community-band__dek">
+              Всё общение, новости и обсуждения проходят в нашем Telegram. Предложения по продукту, обновления
+              студии и ответы команды — там же.
+            </p>
+            <a className="mm-community-band__link" href={TELEGRAM_CHANNEL_URL} target="_blank" rel="noopener noreferrer">
+              t.me/ModelMate_app ↗
+            </a>
+          </div>
+          <MmButton href={TELEGRAM_CHANNEL_URL} variant="primary" size="lg">
+            Перейти в канал
+          </MmButton>
         </div>
       </MmContainer>
     </section>

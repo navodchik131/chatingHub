@@ -3,6 +3,7 @@ import { parseCatalogFromHealth } from '../billing/planCatalog'
 import { formatRub, usePublicHealth } from './usePublicHealth'
 import {
   MmCtaBanner,
+  MmCommunityBand,
   MmHero,
   MmHowSection,
   MmModelStrip,
@@ -21,6 +22,7 @@ export function LandingPage() {
   return (
     <>
       <MmHero />
+      <MmCommunityBand />
       <MmToolGrid />
       <MmPainSection />
       <MmShowcase />
