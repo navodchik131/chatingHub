@@ -252,29 +252,111 @@
   text-align: center;
 }
 
-.mkt-section--alt {
+.mkt-section.mkt-section--alt {
   background: color-mix(in srgb, var(--bg-elevated) 40%, var(--bg));
+  border: 1px solid color-mix(in srgb, var(--border) 85%, transparent);
   border-radius: 20px;
-  padding-left: max(1.25rem, env(safe-area-inset-left, 0px));
-  padding-right: max(1.25rem, env(safe-area-inset-right, 0px));
+  padding: 2.25rem max(1.75rem, env(safe-area-inset-right, 0px)) 2.5rem
+    max(1.75rem, env(safe-area-inset-left, 0px));
+}
+
+@media (min-width: 768px) {
+  .mkt-section.mkt-section--alt {
+    padding: 2.75rem 2.5rem 3rem;
+  }
+}
+
+.mkt-section--alt .mkt-grid {
+  gap: 1.25rem;
 }
 
 .mkt-grid--4 {
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 560px) {
+  .mkt-grid--4 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1040px) {
+  .mkt-grid--4 {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.mkt-how-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2rem;
 }
 
 .mkt-steps {
   list-style: none;
   padding: 0;
   margin: 0;
+  width: 100%;
   display: grid;
   gap: 1.25rem;
-  max-width: 640px;
+  grid-template-columns: 1fr;
 }
 
-.mkt-steps li strong {
+@media (min-width: 720px) {
+  .mkt-steps {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.35rem;
+  }
+}
+
+.mkt-step-card {
+  padding: 1.35rem 1.5rem;
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-xs);
+}
+
+.mkt-step-card strong {
   display: block;
-  margin-bottom: 0.35rem;
+  margin-bottom: 0.5rem;
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.mkt-step-card p {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+
+.mkt-step-num {
+  display: inline-grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  margin-bottom: 0.85rem;
+  border-radius: 999px;
+  font-size: 0.8125rem;
+  font-weight: 800;
+  background: var(--accent-soft);
+  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
+.mkt-how-cta {
+  width: 100%;
+  padding-top: 0.25rem;
+}
+
+@media (min-width: 720px) {
+  .mkt-how-cta {
+    display: flex;
+    justify-content: center;
+  }
 }
 
 .mkt-pricing-toggles {

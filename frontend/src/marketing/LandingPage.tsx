@@ -128,32 +128,44 @@ export function LandingPage() {
       <section className="mkt-section mkt-section--alt" id="how" aria-labelledby="how-title">
         <div className="mkt-section-head">
           <h2 id="how-title">Запуск за 5 минут</h2>
+          <p>Три шага до первой генерации — без карты на старте.</p>
         </div>
-        <ol className="mkt-steps">
-          <li>
-            <strong>🔑 Подключи WaveSpeed</strong>
-            <p>
-              API-ключ на{' '}
-              <a href={WAVESPEED_REF_URL} target="_blank" rel="noopener noreferrer">
-                wavespeed.ai
-              </a>{' '}
-              — платите провайдеру напрямую.
-            </p>
-          </li>
-          <li>
-            <strong>🎨 Настрой модель</strong>
-            <p>Референсы, стиль, образ — один раз в профиле модели.</p>
-          </li>
-          <li>
-            <strong>🚀 Генерируй и общайся</strong>
-            <p>Контент, чаты и переводы в одном окне.</p>
-          </li>
-        </ol>
-        <p style={{ marginTop: '1.25rem' }}>
-          <Link to="/login" className="mkt-nav-cta">
-            Начать бесплатно — {signupCredits} кредитов
-          </Link>
-        </p>
+        <div className="mkt-how-panel">
+          <ol className="mkt-steps">
+            <li className="mkt-step-card">
+              <span className="mkt-step-num" aria-hidden>
+                1
+              </span>
+              <strong>🔑 Подключи WaveSpeed</strong>
+              <p>
+                API-ключ на{' '}
+                <a href={WAVESPEED_REF_URL} target="_blank" rel="noopener noreferrer">
+                  wavespeed.ai
+                </a>{' '}
+                — платите провайдеру напрямую.
+              </p>
+            </li>
+            <li className="mkt-step-card">
+              <span className="mkt-step-num" aria-hidden>
+                2
+              </span>
+              <strong>🎨 Настрой модель</strong>
+              <p>Референсы, стиль, образ — один раз в профиле модели.</p>
+            </li>
+            <li className="mkt-step-card">
+              <span className="mkt-step-num" aria-hidden>
+                3
+              </span>
+              <strong>🚀 Генерируй и общайся</strong>
+              <p>Контент, чаты и переводы в одном окне.</p>
+            </li>
+          </ol>
+          <div className="mkt-how-cta">
+            <Link to="/login" className="mkt-nav-cta">
+              Начать бесплатно — {signupCredits} кредитов
+            </Link>
+          </div>
+        </div>
       </section>
 
       <PricingSection plans={plans} />

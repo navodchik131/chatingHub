@@ -43,6 +43,10 @@ import { IconModel, IconSpark } from './components/studio/studioIcons'
 import { AuthPanel } from './AuthPanel'
 import { AppShell, type WorkspaceSection } from './components/AppShell'
 import { WorkspaceOverview } from './components/WorkspaceOverview'
+import {
+  WavespeedSetupBanner,
+  needsUserWavespeedKey,
+} from './components/WavespeedSetupBanner'
 import './App.css'
 import { StudioInpaintMaskPainter, type StudioInpaintMaskPainterRef } from './StudioInpaintMaskPainter'
 import {
@@ -130,8 +134,10 @@ function platformLabel(p: Platform): string {
 }
 
 function studioIntegrationsHint(): string {
-  return 'Подключите генерацию в кабинете → «Подключения».'
+  return 'Добавьте API-ключ WaveSpeed: кабинет → Подключения → блок WaveSpeed.'
 }
+
+const WS_ONBOARDING_LS = 'modelmate_ws_onboarding_v1'
 
 /** Загрузка аватара с авторизацией (JWT не передать через обычный src у img). */
 function useConversationAvatarBlob(convId: number | null, hasAvatar: boolean) {
@@ -739,6 +745,7 @@ export default function App() {
   const [memberModelEdits, setMemberModelEdits] = useState<Record<number, number[]>>({})
   const [convModelBusy, setConvModelBusy] = useState(false)
   const [integ, setInteg] = useState<IntegrationStatus | null>(null)
+  const studioNeedsUserWsKey = useMemo(() => needsUserWavespeedKey(integ), [integ])
   const [modelDrafts, setModelDrafts] = useState<Record<number, StudioModelCabinetDraft>>({})
   const [studioCameraPresets, setStudioCameraPresets] = useState<StudioCameraPreset[]>([])
   const [modelSavingId, setModelSavingId] = useState<number | null>(null)
@@ -785,6 +792,7 @@ export default function App() {
   const [adminDataBusy, setAdminDataBusy] = useState(false)
   const [adminCreditInput, setAdminCreditInput] = useState<Record<number, string>>({})
   const [wsApiKey, setWsApiKey] = useState('')
+  const [wsSetupPulse, setWsSetupPulse] = useState(false)
   const [llmApiKey, setLlmApiKey] = useState('')
   const [llmBaseUrl, setLlmBaseUrl] = useState('')
   const [billingPlanRows, setBillingPlanRows] = useState<BillingPlanRow[]>([])
@@ -1254,6 +1262,33 @@ export default function App() {
     if (accountTab === 'billing' && !isOwner) setAccountTab('overview')
   }, [me, accountOpen, accountTab, canPlatformAdmin, canStudioModels, isOwner])
 
+  const openWavespeedIntegrations = useCallback(() => {
+    setAccountOpen(true)
+    setAccountTab('integrations')
+    setWsSetupPulse(true)
+    window.setTimeout(() => {
+      document.getElementById('cabinet-wavespeed-key')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }, 120)
+  }, [])
+
+  useEffect(() => {
+    if (!studioNeedsUserWsKey) setWsSetupPulse(false)
+  }, [studioNeedsUserWsKey])
+
+  useEffect(() => {
+    if (!authed || !isOwner || !integ) return
+    if (!studioNeedsUserWsKey) return
+    try {
+      if (localStorage.getItem(WS_ONBOARDING_LS)) return
+      localStorage.setItem(WS_ONBOARDING_LS, '1')
+    } catch {
+      /* private mode */
+    }
+    setAccountOpen(true)
+    setAccountTab('integrations')
+    setWsSetupPulse(true)
+  }, [authed, isOwner, integ, studioNeedsUserWsKey])
+
   useEffect(() => {
     if (!me) return
     if (appSection === 'chat' && !canChat) setAppSection('overview')
@@ -1446,7 +1481,7 @@ export default function App() {
 
   const motionVideoBtnBlockReason = useMemo((): string | null => {
     if (motionBusyVideo) return null
-    if (!integ?.wavespeed_configured) return 'Подключите WaveSpeed в кабинете → Интеграции.'
+    if (studioNeedsUserWsKey) return studioIntegrationsHint()
     if (studioSelectedModelId == null) return 'Выберите модель вверху страницы.'
     if (!motionHasFirstFrame) {
       return 'Нужен первый кадр: архив, свой файл (и «Промпт по видео») или «Сгенерировать кадр».'
@@ -1457,7 +1492,7 @@ export default function App() {
     return null
   }, [
     motionBusyVideo,
-    integ?.wavespeed_configured,
+    studioNeedsUserWsKey,
     studioSelectedModelId,
     motionHasFirstFrame,
     motionDesc,
@@ -2744,6 +2779,7 @@ export default function App() {
       return
     }
     setWsApiKey('')
+    setWsSetupPulse(false)
     setInteg((await r.json()) as IntegrationStatus)
   }
 
@@ -3291,8 +3327,9 @@ export default function App() {
               if (r.ok) setMe((await r.json()) as UserMe)
               setAuthed(true)
               if (fromRegister) {
-                setAccountTab('overview')
+                setAccountTab('integrations')
                 setAccountOpen(true)
+                setWsSetupPulse(true)
               }
             }}
           />
@@ -3823,6 +3860,61 @@ export default function App() {
                 выдать доступ к интеграциям.
               </p>
 
+              {studioNeedsUserWsKey && isOwner ? (
+                <WavespeedSetupBanner
+                  variant="integrations"
+                  isTrialing={(me?.subscription_status || '').toLowerCase() === 'trialing'}
+                  canConnect={canIntegrations}
+                  onOpenIntegrations={openWavespeedIntegrations}
+                />
+              ) : null}
+
+              <section
+                id="cabinet-wavespeed-key"
+                className={`cabinet-module${studioNeedsUserWsKey ? ' cabinet-module--highlight' : ''}${wsSetupPulse ? ' cabinet-module--pulse' : ''}`}
+              >
+                <div className="cabinet-module-head">
+                  <h4 className="cabinet-module-title">WaveSpeed</h4>
+                  <span className={`cabinet-module-badge ${integ?.wavespeed_configured ? 'is-ok' : 'is-warn'}`}>
+                    {integ?.wavespeed_managed_by_platform
+                      ? 'Ключ платформы (Managed)'
+                      : integ?.wavespeed_configured
+                        ? 'Ключ сохранён'
+                        : 'Нет ключа'}
+                  </span>
+                </div>
+                <p className="muted cabinet-module-body">
+                  <strong>Пробный Managed:</strong> сохраните свой API-ключ — студия ходит в WaveSpeed только с ним, пока не
+                  оформлена оплата.
+                  <br />
+                  <strong>Оплаченный Managed:</strong> картинки через ключ платформы (<code>WAVESPEED_PLATFORM_API_KEY</code>
+                  ). Поле ниже не обязательно.
+                  <br />
+                  <strong>Тариф BYOK:</strong> всегда ваш ключ — без него генерация недоступна.
+                </p>
+                <div className="cabinet-module-form">
+                  <label>
+                    API-ключ
+                    <input
+                      type="password"
+                      autoComplete="off"
+                      value={wsApiKey}
+                      onChange={(e) => setWsApiKey(e.target.value)}
+                      placeholder="Вставьте ключ из wavespeed.ai"
+                      disabled={!canIntegrations}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    className="send-btn"
+                    disabled={!canIntegrations}
+                    onClick={() => void saveWavespeed()}
+                  >
+                    Сохранить
+                  </button>
+                </div>
+              </section>
+
               <section className="cabinet-module">
                 <div className="cabinet-module-head">
                   <h4 className="cabinet-module-title">Telegram</h4>
@@ -3907,48 +3999,7 @@ export default function App() {
                 </div>
               </section>
 
-              <section className="cabinet-module">
-                <div className="cabinet-module-head">
-                  <h4 className="cabinet-module-title">WaveSpeed</h4>
-                  <span className={`cabinet-module-badge ${integ?.wavespeed_configured ? 'is-ok' : 'is-warn'}`}>
-                    {integ?.wavespeed_managed_by_platform
-                      ? 'Ключ платформы (Managed)'
-                      : integ?.wavespeed_configured
-                        ? 'Ключ сохранён'
-                        : 'Нет ключа'}
-                  </span>
-                </div>
-                <p className="muted cabinet-module-body">
-                  <strong>Пробный Managed:</strong> сохраните свой API-ключ — студия ходит в WaveSpeed только с ним, пока не
-                  оформлена оплата.
-                  <br />
-                  <strong>Оплаченный Managed:</strong> картинки через ключ платформы (<code>WAVESPEED_PLATFORM_API_KEY</code>
-                  ). Поле ниже не обязательно.
-                  <br />
-                  <strong>Тариф BYOK:</strong> всегда ваш ключ — без него генерация недоступна.
-                </p>
-                <div className="cabinet-module-form">
-                  <label>
-                    API-ключ
-                    <input
-                      type="password"
-                      autoComplete="off"
-                      value={wsApiKey}
-                      onChange={(e) => setWsApiKey(e.target.value)}
-                      disabled={!canIntegrations}
-                    />
-                  </label>
-                  <button
-                    type="button"
-                    className="send-btn"
-                    disabled={!canIntegrations}
-                    onClick={() => void saveWavespeed()}
-                  >
-                    Сохранить
-                  </button>
-                </div>
-              </section>
-
+              {canPlatformAdmin ? (
               <section className="cabinet-module">
                 <div className="cabinet-module-head">
                   <h4 className="cabinet-module-title">Текстовая модель (студия)</h4>
@@ -3992,6 +4043,7 @@ export default function App() {
                   </button>
                 </div>
               </section>
+              ) : null}
 
               <section className="cabinet-module">
                 <div className="cabinet-module-head">
@@ -5059,6 +5111,14 @@ export default function App() {
                 <h2 id="studio-heading">Картинки</h2>
                 <p className="studio-workspace__tagline">Модель, референс и описание — результат в истории справа.</p>
               </header>
+              {!studioPaywalled && studioNeedsUserWsKey ? (
+                <WavespeedSetupBanner
+                  variant="studio"
+                  isTrialing={(me?.subscription_status || '').toLowerCase() === 'trialing'}
+                  canConnect={isOwner && canIntegrations}
+                  onOpenIntegrations={openWavespeedIntegrations}
+                />
+              ) : null}
           {studioPaywalled ? (
             <div className="studio-paywall cabinet-module cabinet-module--highlight" role="status">
               <p className="cabinet-module-body" style={{ marginBottom: '0.75rem' }}>
@@ -5654,6 +5714,14 @@ export default function App() {
                   Реф-ролик, первый кадр и бриф — готовые ролики в истории справа.
                 </p>
               </header>
+              {!studioPaywalled && studioNeedsUserWsKey ? (
+                <WavespeedSetupBanner
+                  variant="video"
+                  isTrialing={(me?.subscription_status || '').toLowerCase() === 'trialing'}
+                  canConnect={isOwner && canIntegrations}
+                  onOpenIntegrations={openWavespeedIntegrations}
+                />
+              ) : null}
             {!canStudioGenerate ? (
               <div className="banner info" role="status">
                 Нет прав на генерацию. Обратитесь к владельцу аккаунта.
