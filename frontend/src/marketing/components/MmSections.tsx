@@ -259,7 +259,7 @@ export function MmToolGrid() {
             desc="Модель, референс и промпт — GROK собирает сцену. Nano Banana, Seedance, карусель и доработка в истории."
             cta="Сделать кадр"
             badges={['Photo', '4K']}
-            img="https://picsum.photos/seed/mm-photolab-1/800/600"
+            img="/marketing/showcase/image_ref.png"
             href="/login"
           />
           <MmToolCard
@@ -269,7 +269,7 @@ export function MmToolGrid() {
             desc="Реф-ролик, первый кадр и бриф — готовые ролики в архиве. Motion control и сцены под вашу модель."
             cta="Сделать видео"
             badges={['Video', '15s']}
-            img="https://picsum.photos/seed/mm-video-1/800/600"
+            img="/marketing/showcase/video.gif"
             href="/login"
           />
           <MmToolCard
