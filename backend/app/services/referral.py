@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import logging
+import secrets
+import string
 from decimal import Decimal
 
 from sqlalchemy import func, select
@@ -15,11 +17,14 @@ from app.services.billing_credits import (
     credit_unit_price_rub,
     referrer_reward_credits_from_payment_rub,
 )
-from app.services.plan_entitlements import generate_referral_code
-
 log = logging.getLogger(__name__)
 
 REFERRER_REWARD_KIND = "referral_referrer_reward"
+
+
+def generate_referral_code() -> str:
+    alphabet = string.ascii_uppercase + string.digits
+    return "".join(secrets.choice(alphabet) for _ in range(8))
 
 
 async def ensure_owner_referral_code(session: AsyncSession, owner: User) -> str:

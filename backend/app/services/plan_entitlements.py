@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import json
-import secrets
-import string
 from datetime import datetime, timezone
 
 from fastapi import HTTPException
@@ -207,6 +205,3 @@ def subscription_period_days(product: str) -> int:
     return max(1, int(settings.billing_subscription_period_days or 30))
 
 
-def generate_referral_code() -> str:
-    alphabet = string.ascii_uppercase + string.digits
-    return "".join(secrets.choice(alphabet) for _ in range(8))
