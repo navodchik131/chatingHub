@@ -368,8 +368,8 @@ export function MmShowcase() {
         cta="Подключить WaveSpeed"
         ctaTo="/login"
         pairs={{
-          subjectSrc: 'https://picsum.photos/seed/mm-face-1/600/750',
-          motionSrc: 'https://picsum.photos/seed/mm-result-1/600/750',
+          subjectSrc: '/marketing/tools/img_ref.jpg',
+          motionSrc: '/marketing/tools/img_result.jpg',
           subjectLabel: 'REF',
           motionLabel: 'RESULT',
         }}
