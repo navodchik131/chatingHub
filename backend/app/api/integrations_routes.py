@@ -31,6 +31,7 @@ from app.services.billing_plan import (
     normalize_billing_plan,
     platform_covers_studio_api_costs,
 )
+from app.services.crypto_secret import encrypt_secret
 from app.services.entitlements import subscription_is_onboarding_trial
 from app.services.studio_keys import wavespeed_cabinet_flags
 from app.services.workspace import PERM_INTEGRATIONS, assert_permission, workspace_owner_id
