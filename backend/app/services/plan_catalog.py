@@ -75,6 +75,15 @@ def _product(billing: BillingPlanKind, tier: PlanTier, period: BillingPeriod) ->
     return f"sub_{billing}_{tier}_{period}"
 
 
+def managed_period_credits(spec: PlanSpec) -> int:
+    """Кредиты, начисляемые при оплате периода: месяц — monthly, год — 12× monthly."""
+    if spec.billing_plan != BILLING_PLAN_MANAGED or spec.managed_monthly_credits <= 0:
+        return 0
+    if spec.period == PERIOD_YEAR:
+        return spec.managed_monthly_credits * 12
+    return spec.managed_monthly_credits
+
+
 def _build_specs() -> dict[str, PlanSpec]:
     prices_month_byok: dict[PlanTier, int] = {
         TIER_SOLO: 990,
@@ -179,6 +188,7 @@ def catalog_public_dict() -> dict:
                 "title": spec.title_ru,
                 "popular": spec.popular,
                 "managed_monthly_credits": spec.managed_monthly_credits,
+                "managed_period_credits": managed_period_credits(spec),
                 "limits": {
                     "max_users": lim.max_users,
                     "max_models": lim.max_models,

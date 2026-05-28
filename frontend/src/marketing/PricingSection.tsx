@@ -81,7 +81,7 @@ export function PricingSection({
               <div className="mm-price-card__amount">{formatRub(plan.price_rub)}</div>
               <div className="mm-price-card__period">{period === 'year' ? 'в год' : 'в месяц'}</div>
               <ul>
-                {tierFeatures(plan.tier, plan.billing_plan).map((f) => (
+                {tierFeatures(plan.tier, plan.billing_plan, plan.period, plan.managed_monthly_credits).map((f) => (
                   <li key={f}>{f}</li>
                 ))}
               </ul>

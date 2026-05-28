@@ -23,7 +23,12 @@ from app.services.billing_credits import (
 )
 from app.services.entitlements import subscription_is_paid_active
 from app.services.billing_plan import normalize_billing_plan, platform_covers_studio_api_costs
-from app.services.plan_catalog import catalog_public_dict, list_subscription_products, resolve_product_id
+from app.services.plan_catalog import (
+    catalog_public_dict,
+    list_subscription_products,
+    managed_period_credits,
+    resolve_product_id,
+)
 from app.services.workspace import is_workspace_owner, workspace_owner_id
 from app.services.yookassa_apply import apply_yookassa_payment_succeeded
 from app.services.yookassa_client import create_payment, parse_notification_body
@@ -42,11 +47,8 @@ async def billing_plans() -> BillingPlansOut:
     items: list[BillingPlanItemOut] = []
     for spec in list_subscription_products():
         period_label = "год" if spec.period == "year" else "мес."
-        bonus = (
-            f", +{spec.managed_monthly_credits} кр./период"
-            if spec.managed_monthly_credits
-            else ""
-        )
+        period_credits = managed_period_credits(spec)
+        bonus = f", +{period_credits} кр." if period_credits else ""
         items.append(
             BillingPlanItemOut(
                 product=spec.product,

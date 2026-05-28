@@ -31,7 +31,7 @@ from app.services.billing_plan import (
     platform_covers_studio_api_costs,
 )
 from app.services.entitlements import subscription_is_paid_active
-from app.services.plan_catalog import get_plan_spec, resolve_product_id
+from app.services.plan_catalog import get_plan_spec, managed_period_credits, resolve_product_id
 from app.services.plan_entitlements import subscription_period_days
 from app.services.referral import grant_referrer_reward_if_needed
 
@@ -102,8 +102,9 @@ async def apply_yookassa_payment_succeeded(
         sub.status = SubscriptionStatus.active
         sub.current_period_end = _period_end(resolved)
         bonus = 0
-        if spec.billing_plan == BILLING_PLAN_MANAGED and spec.managed_monthly_credits > 0:
-            bonus = spec.managed_monthly_credits
+        period_bonus = managed_period_credits(spec)
+        if period_bonus > 0:
+            bonus = period_bonus
             acc = await session.get(CreditAccount, billing_uid)
             if acc is None:
                 acc = CreditAccount(user_id=billing_uid, balance=0)

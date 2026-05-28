@@ -22,7 +22,20 @@ export interface CatalogPlan {
   title: string
   popular: boolean
   managed_monthly_credits: number
+  /** Кредиты за оплаченный период (год = 12× monthly). С бэкенда; иначе считается на клиенте. */
+  managed_period_credits?: number
   limits: PlanLimits
+}
+
+/** Кредиты при оплате подписки Managed за выбранный период. */
+export function managedPeriodCredits(
+  plan: Pick<CatalogPlan, 'billing_plan' | 'period' | 'managed_monthly_credits' | 'managed_period_credits'>,
+): number {
+  if (plan.managed_period_credits != null && plan.managed_period_credits > 0) {
+    return plan.managed_period_credits
+  }
+  if (plan.billing_plan !== 'managed' || plan.managed_monthly_credits <= 0) return 0
+  return plan.period === 'year' ? plan.managed_monthly_credits * 12 : plan.managed_monthly_credits
 }
 
 const LIMITS: Record<PlanTier, PlanLimits> = {
@@ -85,7 +98,12 @@ export function filterPlans(
   return plans.filter((p) => p.billing_plan === billing && p.period === period)
 }
 
-export function tierFeatures(tier: PlanTier, billing: BillingPlanKind): string[] {
+export function tierFeatures(
+  tier: PlanTier,
+  billing: BillingPlanKind,
+  period: BillingPeriod = 'month',
+  managedMonthlyCredits?: number,
+): string[] {
   const l = LIMITS[tier]
   const users =
     l.max_users === 1
@@ -103,8 +121,12 @@ export function tierFeatures(tier: PlanTier, billing: BillingPlanKind): string[]
     'История генераций',
   ]
   if (billing === 'managed' && LIMITS[tier]) {
-    const cr = { solo: 150, pro: 400, studio: 1200 }[tier]
-    base[2] = `${cr} кредитов за период подписки`
+    const monthly = managedMonthlyCredits ?? { solo: 150, pro: 400, studio: 1200 }[tier]
+    const total = period === 'year' ? monthly * 12 : monthly
+    base[2] =
+      period === 'year'
+        ? `${total.toLocaleString('ru-RU')} кредитов за год (${monthly} / мес.)`
+        : `${total} кредитов за месяц`
   }
   if (tier === 'pro') base.push('Командная работа и роли')
   if (tier === 'studio') base.push('Расширенные лимиты диалогов и GROK')
