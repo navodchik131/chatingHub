@@ -42,6 +42,11 @@ from app.services.realtime import hub
 from app.services.translation import translate_from_russian
 from app.services.studio_grok_motion import grok_motion_api_configured
 from app.services.studio_grok_scene_compose import grok_scene_compose_configured
+from app.services.studio_motion_pricing import (
+    motion_video_credit_cost,
+    motion_video_duration_seconds,
+    motion_video_pricing_public,
+)
 from app.services.wavespeed_client import studio_wan_edit_tier_switch_available
 from app.services.workspace import (
     PERM_CHAT,
@@ -110,7 +115,11 @@ async def api_health(session: AsyncSession = Depends(get_session)) -> dict:
         "studio_carousel_credit_cost": settings.credit_cost_studio_carousel_shot,
         "studio_generations_retention_days": settings.studio_generations_retention_days,
         "studio_generations_retention_interval_hours": settings.studio_generations_retention_interval_hours,
-        "studio_motion_control_credit_cost": settings.credit_cost_studio_motion_control,
+        "studio_motion_video_pricing": motion_video_pricing_public(),
+        "studio_motion_control_credit_cost": motion_video_credit_cost(
+            motion_video_duration_seconds(None),
+            has_motion_reference_video=False,
+        ),
         "studio_motion_video_provider": "seedance_t2v",
         "studio_seedance_t2v_duration_default": settings.wavespeed_seedance_20_t2v_duration,
         "studio_seedance_t2v_duration_min": 4,

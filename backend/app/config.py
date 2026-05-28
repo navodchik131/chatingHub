@@ -179,6 +179,12 @@ class Settings(BaseSettings):
     wavespeed_seedance_20_t2v_resolution: str = Field(default="720p")
     wavespeed_seedance_20_t2v_duration: int = Field(default=5, ge=4, le=15)
     wavespeed_seedance_20_t2v_web_search: bool = Field(default=False)
+    # Видео Seedance T2V: USD/сек → кредиты через STUDIO_MOTION_RUB_PER_USD и STUDIO_MOTION_RUB_PER_CREDIT
+    studio_motion_usd_per_sec_with_ref: float = Field(default=0.50, ge=0.0)
+    studio_motion_usd_per_sec_no_ref: float = Field(default=0.25, ge=0.0)
+    studio_motion_rub_per_usd: float = Field(default=80.0, ge=0.01)
+    studio_motion_rub_per_credit: float = Field(default=3.6, ge=0.01)
+    # Устарело: заменено динамическим расчётом; оставлено для совместимости .env
     credit_cost_studio_motion_control: int = Field(default=10, ge=0)
     # Legacy (не используется рендером видео; оставлено для совместимости .env)
     studio_motion_video_provider: str = Field(default="seedance_t2v")

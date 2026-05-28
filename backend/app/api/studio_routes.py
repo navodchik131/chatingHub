@@ -3747,20 +3747,12 @@ async def api_studio_motion_render_video(
             detail="У модели нет фото для Seedance. Добавьте развёртку (turnaround) или другие снимки в кабинете модели.",
         )
 
-    ds_raw = (duration_seconds or "").strip()
-    if ds_raw:
-        try:
-            ds = int(ds_raw)
-        except ValueError:
-            raise HTTPException(
-                status_code=400,
-                detail="duration_seconds: укажите целое число секунд.",
-            ) from None
-        if ds < 4 or ds > 15:
-            raise HTTPException(
-                status_code=400,
-                detail="Длительность Seedance T2V: от 4 до 15 секунд.",
-            )
+    from app.services.studio_motion_pricing import (
+        motion_video_credit_cost,
+        motion_video_duration_seconds,
+    )
+
+    ds_effective = motion_video_duration_seconds(duration_seconds)
 
     outfit_gid: int | None = None
     raw_outfit = (outfit_generation_id or "").strip()
@@ -3805,6 +3797,13 @@ async def api_studio_motion_render_video(
             detail="motion_timeline слишком длинный — сократите или отключите Grok timeline на шаге 1.",
         )
 
+    motion_cost = motion_video_credit_cost(
+        ds_effective,
+        has_motion_reference_video=bool(mv_id),
+    )
+    motion_cost_billed = apply_studio_credit_cost(plan, motion_cost)
+    await ensure_can_consume_credits(session, user, motion_cost_billed)
+
     preview_url: str | None = None
     if ff_gid is not None:
         preview_url = generation_still_public_url(
@@ -3829,7 +3828,7 @@ async def api_studio_motion_render_video(
                 "outfit_generation_id": outfit_gid,
                 "negative_prompt": (negative_prompt or "").strip(),
                 "generate_audio": (generate_audio or "1").strip(),
-                "duration_seconds": ds_raw,
+                "duration_seconds": str(ds_effective),
                 "auto_motion_prompt": (auto_motion_prompt or "0").strip(),
             },
             placeholder={
@@ -4017,10 +4016,12 @@ async def _studio_job_execute_motion_render_video(
                     log.warning("render-video t2v: auto motion describe failed: %s", e)
 
     ar_t2v = aspect_ratio_for_seedance_i2v(output_aspect)
-    ds_effective = settings.wavespeed_seedance_20_t2v_duration
-    ds_raw = duration_seconds.strip()
-    if ds_raw:
-        ds_effective = max(4, min(15, int(ds_raw)))
+    from app.services.studio_motion_pricing import (
+        motion_video_credit_cost,
+        motion_video_duration_seconds,
+    )
+
+    ds_effective = motion_video_duration_seconds(duration_seconds)
 
     seed_prompt, prompt_source = await build_seedance_t2v_prompt(
         user_brief=prompt,
@@ -4035,7 +4036,13 @@ async def _studio_job_execute_motion_render_video(
         duration_seconds=ds_effective,
     )
 
-    cost = apply_studio_credit_cost(plan, settings.credit_cost_studio_motion_control)
+    cost = apply_studio_credit_cost(
+        plan,
+        motion_video_credit_cost(
+            ds_effective,
+            has_motion_reference_video=bool(mv_id),
+        ),
+    )
     billing = await ensure_can_consume_credits(session, user, cost)
 
     msg: str | None = None

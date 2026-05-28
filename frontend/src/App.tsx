@@ -19,6 +19,7 @@ import {
 import { billingReturnCopy } from './billingReturnCopy'
 import { formatClientFetchError, formatHttpApiError } from './apiErrors'
 import { postStudioJobAndWait, postStudioJobStart } from './studioJobs'
+import { computeMotionVideoCreditCost } from './studioMotionPricing'
 import {
   fetchStudioArchivePage,
   fetchStudioArchivePending,
@@ -246,6 +247,7 @@ interface HealthInfo {
   studio_generations_retention_days?: number
   studio_generations_retention_interval_hours?: number
   studio_motion_control_credit_cost?: number
+  studio_motion_video_pricing?: import('./studioMotionPricing').StudioMotionVideoPricing
   /** Всегда seedance_t2v (Seedance 2.0 Text-to-Video). */
   studio_motion_video_provider?: string
   studio_seedance_t2v_duration_default?: number
@@ -843,6 +845,21 @@ export default function App() {
   const seedanceDurationMax =
     health?.studio_seedance_t2v_duration_max ?? health?.studio_seedance_i2v_duration_max ?? 15
 
+  const motionHasReferenceVideo = Boolean(motionVideoFileId)
+
+  const motionVideoCreditCost = useMemo(
+    () =>
+      computeMotionVideoCreditCost(
+        motionSeedanceDuration,
+        motionHasReferenceVideo,
+        health?.studio_motion_video_pricing,
+      ),
+    [
+      motionSeedanceDuration,
+      motionHasReferenceVideo,
+      health?.studio_motion_video_pricing,
+    ],
+  )
 
   useEffect(() => {
     if (motionSeedanceDurationInitRef.current || !health) return
@@ -5725,12 +5742,36 @@ export default function App() {
                       { length: Math.max(0, seedanceDurationMax - seedanceDurationMin + 1) },
                       (_, i) => {
                         const sec = seedanceDurationMin + i
-                        return { value: sec, label: `${sec} с` }
+                        const cost = computeMotionVideoCreditCost(
+                          sec,
+                          motionHasReferenceVideo,
+                          health?.studio_motion_video_pricing,
+                        )
+                        const costSuffix =
+                          cost != null ? ` · ${cost} кр.` : ''
+                        return { value: sec, label: `${sec} с${costSuffix}` }
                       },
                     )}
                     value={motionSeedanceDuration}
                     onChange={(v) => v != null && setMotionSeedanceDuration(Number(v))}
                   />
+                  {health?.studio_motion_video_pricing ? (
+                    <p className="muted studio-field-hint">
+                      Стоимость:{' '}
+                      {motionHasReferenceVideo
+                        ? `$${health.studio_motion_video_pricing.usd_per_sec_with_reference_video}/с`
+                        : `$${health.studio_motion_video_pricing.usd_per_sec_without_reference_video}/с`}{' '}
+                      (≈{' '}
+                      {motionHasReferenceVideo
+                        ? health.studio_motion_video_pricing.credits_per_sec_with_reference_video ??
+                          12
+                        : health.studio_motion_video_pricing.credits_per_sec_without_reference_video ??
+                          6}{' '}
+                      кр./с при курсе {health.studio_motion_video_pricing.rub_per_usd} ₽/$ и{' '}
+                      {health.studio_motion_video_pricing.rub_per_credit} ₽/кредит). С реф-видео
+                      дороже.
+                    </p>
+                  ) : null}
                   <label className="studio-field-optional">
                     Негатив (по желанию)
                     <textarea
@@ -5773,10 +5814,10 @@ export default function App() {
                       onClick={() => void runMotionRenderVideo()}
                     >
                       {motionBusyVideo ? 'Видео…' : 'Сгенерировать видео'}
-                      {health?.studio_motion_control_credit_cost != null ? (
+                      {motionVideoCreditCost != null ? (
                         <span className="studio-magic-btn__cost">
                           <IconSpark className="studio-slot__icon-svg" />
-                          {health.studio_motion_control_credit_cost}
+                          {motionVideoCreditCost}
                         </span>
                       ) : null}
                     </button>
