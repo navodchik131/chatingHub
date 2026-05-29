@@ -7,6 +7,7 @@ import { MarketingLayout } from './marketing/MarketingLayout'
 import { PricingPage } from './marketing/PricingPage'
 import { PrivacyPage } from './marketing/PrivacyPage'
 import { TermsPage } from './marketing/TermsPage'
+import { AdminPage } from './admin/AdminPage'
 
 export default function Root() {
   return (
@@ -21,6 +22,7 @@ export default function Root() {
           <Route path="login" element={<LoginPage />} />
         </Route>
         <Route path="/workspace/*" element={<App />} />
+        <Route path="/admin" element={<AdminPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

@@ -2,19 +2,20 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.auth.deps import get_platform_admin
 from app.db.models import (
+    Conversation,
     CreditAccount,
     StudioGeneration,
     Subscription,
     SubscriptionStatus,
-    UsageEvent,
     User,
+    UserStudioModel,
 )
 from app.db.session import get_session
 from app.schemas import (
@@ -22,9 +23,11 @@ from app.schemas import (
     AdminCreditsOut,
     AdminStatsOut,
     AdminSubscriptionPatchIn,
+    AdminUserDetailOut,
     AdminUserPatchIn,
     AdminUserRow,
 )
+from app.services.admin_analytics import build_admin_dashboard
 from app.services.billing_plan import normalize_billing_plan
 from app.services.credits import admin_adjust_credits
 from app.services.workspace import workspace_owner_id
@@ -32,41 +35,61 @@ from app.services.workspace import workspace_owner_id
 router = APIRouter(tags=["admin"])
 
 
+def _owner_subscription_tuple(
+    sub: Subscription | None,
+) -> tuple[str, str, str | None, datetime | None]:
+    st = sub.status.value if sub else SubscriptionStatus.none.value
+    bp = (sub.billing_plan if sub else None) or "managed"
+    tier = sub.plan_tier if sub else None
+    pend = sub.current_period_end if sub else None
+    return st, bp, tier, pend
+
+
+async def _user_row(
+    session: AsyncSession,
+    u: User,
+    *,
+    owner_bal: dict[int, int],
+    owner_sub: dict[int, tuple[str, str, str | None, datetime | None]],
+) -> AdminUserRow:
+    oid = workspace_owner_id(u)
+    if oid not in owner_bal:
+        acc = await session.get(CreditAccount, oid)
+        owner_bal[oid] = acc.balance if acc else 0
+    if oid not in owner_sub:
+        ow_stmt = (
+            select(User)
+            .where(User.id == oid)
+            .options(selectinload(User.subscription))
+        )
+        ow = (await session.execute(ow_stmt)).scalar_one_or_none()
+        owner_sub[oid] = _owner_subscription_tuple(ow.subscription if ow else None)
+    st, bp, tier, pend = owner_sub[oid]
+    return AdminUserRow(
+        id=u.id,
+        email=u.email,
+        created_at=u.created_at,
+        is_active=u.is_active,
+        is_platform_admin=bool(u.is_platform_admin),
+        parent_user_id=u.parent_user_id,
+        parent_email=u.parent.email if u.parent else None,
+        member_login=u.member_login,
+        subscription_status=st,
+        billing_plan=bp,
+        plan_tier=tier,
+        subscription_period_end=pend,
+        credits_balance=owner_bal[oid],
+    )
+
+
 @router.get("/admin/stats", response_model=AdminStatsOut)
 async def admin_stats(
     session: AsyncSession = Depends(get_session),
     _: User = Depends(get_platform_admin),
+    chart_days: int = Query(default=30, ge=7, le=90),
 ) -> AdminStatsOut:
-    total_users = int(await session.scalar(select(func.count(User.id))) or 0)
-    owners = int(
-        await session.scalar(
-            select(func.count(User.id)).where(User.parent_user_id.is_(None))
-        )
-        or 0
-    )
-    members = max(0, total_users - owners)
-    total_credits = int(
-        await session.scalar(select(func.coalesce(func.sum(CreditAccount.balance), 0))) or 0
-    )
-    gen_total = int(
-        await session.scalar(select(func.count(StudioGeneration.id))) or 0
-    )
-
-    kind_rows = (
-        await session.execute(
-            select(UsageEvent.kind, func.count(UsageEvent.id)).group_by(UsageEvent.kind)
-        )
-    ).all()
-    by_kind: dict[str, int] = {str(k or ""): int(c) for k, c in kind_rows}
-
-    return AdminStatsOut(
-        total_users=total_users,
-        workspace_owners=owners,
-        workspace_members=members,
-        total_credits_balance=total_credits,
-        studio_generations_total=gen_total,
-        usage_by_kind=by_kind,
-    )
+    data = await build_admin_dashboard(session, chart_days=chart_days)
+    return AdminStatsOut(**data)
 
 
 @router.get("/admin/users", response_model=list[AdminUserRow])
@@ -90,43 +113,70 @@ async def admin_list_users(
     rows = (await session.execute(stmt)).scalars().all()
 
     owner_bal: dict[int, int] = {}
-    owner_sub: dict[int, tuple[str, str, datetime | None]] = {}
+    owner_sub: dict[int, tuple[str, str, str | None, datetime | None]] = {}
     out: list[AdminUserRow] = []
     for u in rows:
-        oid = workspace_owner_id(u)
-        if oid not in owner_bal:
-            acc = await session.get(CreditAccount, oid)
-            owner_bal[oid] = acc.balance if acc else 0
-        if oid not in owner_sub:
-            ow_stmt = (
-                select(User)
-                .where(User.id == oid)
-                .options(selectinload(User.subscription))
-            )
-            ow = (await session.execute(ow_stmt)).scalar_one_or_none()
-            s = ow.subscription if ow else None
-            st = s.status.value if s else SubscriptionStatus.none.value
-            bp = (s.billing_plan if s else None) or "managed"
-            pend = s.current_period_end if s else None
-            owner_sub[oid] = (st, bp, pend)
-        st, bp, pend = owner_sub[oid]
         out.append(
-            AdminUserRow(
-                id=u.id,
-                email=u.email,
-                created_at=u.created_at,
-                is_active=u.is_active,
-                is_platform_admin=bool(u.is_platform_admin),
-                parent_user_id=u.parent_user_id,
-                parent_email=u.parent.email if u.parent else None,
-                member_login=u.member_login,
-                subscription_status=st,
-                billing_plan=bp,
-                subscription_period_end=pend,
-                credits_balance=owner_bal[oid],
-            )
+            await _user_row(session, u, owner_bal=owner_bal, owner_sub=owner_sub)
         )
     return out
+
+
+@router.get("/admin/users/{user_id}", response_model=AdminUserDetailOut)
+async def admin_get_user(
+    user_id: int,
+    session: AsyncSession = Depends(get_session),
+    _: User = Depends(get_platform_admin),
+) -> AdminUserDetailOut:
+    stmt = select(User).where(User.id == user_id).options(selectinload(User.parent))
+    u = (await session.execute(stmt)).scalar_one_or_none()
+    if not u:
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
+    base = await _user_row(session, u, owner_bal={}, owner_sub={})
+    oid = workspace_owner_id(u)
+    studio_models_count = int(
+        await session.scalar(
+            select(func.count(UserStudioModel.id)).where(UserStudioModel.user_id == oid)
+        )
+        or 0
+    )
+    studio_generations_count = int(
+        await session.scalar(
+            select(func.count(StudioGeneration.id)).where(StudioGeneration.user_id == oid)
+        )
+        or 0
+    )
+    invited_users_count = int(
+        await session.scalar(
+            select(func.count(User.id)).where(User.referred_by_user_id == oid)
+        )
+        or 0
+    )
+    conversations_count = int(
+        await session.scalar(
+            select(func.count(Conversation.id)).where(Conversation.user_id == oid)
+        )
+        or 0
+    )
+    workspace_members_count = int(
+        await session.scalar(
+            select(func.count(User.id)).where(User.parent_user_id == oid)
+        )
+        or 0
+    )
+    referred_by_email = None
+    if u.referred_by_user_id:
+        ref = await session.get(User, u.referred_by_user_id)
+        referred_by_email = ref.email if ref else None
+    return AdminUserDetailOut(
+        **base.model_dump(),
+        studio_models_count=studio_models_count,
+        studio_generations_count=studio_generations_count,
+        invited_users_count=invited_users_count,
+        referred_by_email=referred_by_email,
+        conversations_count=conversations_count,
+        workspace_members_count=workspace_members_count,
+    )
 
 
 @router.patch("/admin/users/{user_id}", response_model=AdminUserRow)
@@ -151,29 +201,7 @@ async def admin_patch_user(
         u.is_active = body.is_active
     await session.commit()
     await session.refresh(u)
-    par = await session.get(User, u.parent_user_id) if u.parent_user_id else None
-    parent_email = par.email if par else None
-    oid = workspace_owner_id(u)
-    acc = await session.get(CreditAccount, oid)
-    bal = acc.balance if acc else 0
-    ow_row = await session.get(User, oid, options=(selectinload(User.subscription),))
-    sub = ow_row.subscription if ow_row else None
-    return AdminUserRow(
-        id=u.id,
-        email=u.email,
-        created_at=u.created_at,
-        is_active=u.is_active,
-        is_platform_admin=bool(u.is_platform_admin),
-        parent_user_id=u.parent_user_id,
-        parent_email=parent_email,
-        member_login=u.member_login,
-        subscription_status=sub.status.value
-        if sub
-        else SubscriptionStatus.none.value,
-        billing_plan=(sub.billing_plan if sub else None) or "managed",
-        subscription_period_end=sub.current_period_end if sub else None,
-        credits_balance=bal,
-    )
+    return await _user_row(session, u, owner_bal={}, owner_sub={})
 
 
 @router.post("/admin/users/{user_id}/credits", response_model=AdminCreditsOut)

@@ -357,30 +357,6 @@ interface ReferralMe {
   referrer_reward_summary: string
 }
 
-interface AdminStats {
-  total_users: number
-  workspace_owners: number
-  workspace_members: number
-  total_credits_balance: number
-  studio_generations_total: number
-  usage_by_kind: Record<string, number>
-}
-
-interface AdminUserRow {
-  id: number
-  email: string
-  created_at: string
-  is_active: boolean
-  is_platform_admin: boolean
-  parent_user_id: number | null
-  parent_email: string | null
-  member_login: string | null
-  subscription_status: string
-  billing_plan: string
-  subscription_period_end: string | null
-  credits_balance: number
-}
-
 interface WorkspaceMemberRow {
   id: number
   member_login: string
@@ -496,28 +472,12 @@ interface StudioCameraPreset {
   label: string
 }
 
-type AccountCabinetTab = 'overview' | 'billing' | 'integrations' | 'models' | 'team' | 'admin'
-
-const SUBSCRIPTION_STATUS_OPTIONS = [
-  'none',
-  'incomplete',
-  'trialing',
-  'active',
-  'past_due',
-  'canceled',
-  'unpaid',
-] as const
-
-const ADMIN_BILLING_PLAN_OPTIONS = ['managed', 'byok'] as const
+type AccountCabinetTab = 'overview' | 'billing' | 'integrations' | 'models' | 'team'
 
 function userBillingPlanLabel(me: UserMe | null | undefined): string {
   if (me?.plan_display_name) return me.plan_display_name
   const p = (me?.billing_plan || 'managed').toLowerCase()
   return p === 'byok' ? 'BYOK Solo' : 'Managed Solo'
-}
-
-function billingPlanOptionLabel(plan: string): string {
-  return plan === 'byok' ? 'BYOK' : 'Managed'
 }
 
 function userBillingPlanLong(me: UserMe | null | undefined): string {
@@ -585,24 +545,6 @@ function formatDateTimeRu(iso: string | undefined | null): string {
   } catch {
     return String(iso)
   }
-}
-
-/** Значение для input[type=datetime-local] из ISO UTC. */
-function isoToDatetimeLocalValue(iso: string | null | undefined): string {
-  if (!iso) return ''
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return ''
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
-}
-
-/** ISO UTC для API из локального datetime-local (или null если пусто / ошибка). */
-function datetimeLocalInputToIsoUtc(local: string): string | null {
-  const t = local.trim()
-  if (!t) return null
-  const d = new Date(t)
-  if (Number.isNaN(d.getTime())) return null
-  return d.toISOString()
 }
 
 interface StudioAspectPreset {
@@ -800,11 +742,6 @@ export default function App() {
   const [appendModelPhotosById, setAppendModelPhotosById] = useState<
     Record<number, NewModelPhotoRow[]>
   >({})
-  const [adminStats, setAdminStats] = useState<AdminStats | null>(null)
-  const [adminUsers, setAdminUsers] = useState<AdminUserRow[]>([])
-  const [adminUserSearch, setAdminUserSearch] = useState('')
-  const [adminDataBusy, setAdminDataBusy] = useState(false)
-  const [adminCreditInput, setAdminCreditInput] = useState<Record<number, string>>({})
   const [wsApiKey, setWsApiKey] = useState('')
   const [wsSetupPulse, setWsSetupPulse] = useState(false)
   const [llmApiKey, setLlmApiKey] = useState('')
@@ -1249,24 +1186,6 @@ export default function App() {
     }
   }, [])
 
-  const loadAdminStats = useCallback(async () => {
-    const r = await apiFetch('/api/admin/stats')
-    if (r.ok) setAdminStats((await r.json()) as AdminStats)
-  }, [])
-  const fetchAdminUsers = useCallback(async (search: string) => {
-    const q = new URLSearchParams()
-    q.set('limit', '150')
-    if (search.trim()) q.set('q', search.trim())
-    const r = await apiFetch(`/api/admin/users?${q}`)
-    if (r.ok) setAdminUsers((await r.json()) as AdminUserRow[])
-  }, [])
-
-  useEffect(() => {
-    if (!accountOpen || accountTab !== 'admin' || !canPlatformAdmin) return
-    setAdminDataBusy(true)
-    void Promise.all([loadAdminStats(), fetchAdminUsers('')]).finally(() => setAdminDataBusy(false))
-  }, [accountOpen, accountTab, canPlatformAdmin, loadAdminStats, fetchAdminUsers])
-
   useEffect(() => {
     setModelDrafts(
       Object.fromEntries(studioModels.map((m) => [m.id, defaultStudioModelCabinetDraft(m)])),
@@ -1275,7 +1194,6 @@ export default function App() {
 
   useEffect(() => {
     if (!me || !accountOpen) return
-    if (accountTab === 'admin' && !canPlatformAdmin) setAccountTab('overview')
     if (accountTab === 'models' && !canStudioModels) setAccountTab('overview')
     if (accountTab === 'team' && !isOwner) setAccountTab('overview')
     if (accountTab === 'billing' && !isOwner) setAccountTab('overview')
@@ -2910,98 +2828,6 @@ export default function App() {
     void loadStudioModels()
   }
 
-  const adminApplyCredits = async (userId: number) => {
-    setError(null)
-    const raw = adminCreditInput[userId] ?? ''
-    const delta = parseInt(raw, 10)
-    if (Number.isNaN(delta) || delta === 0) {
-      setError('Укажите целое число кредитов (не 0) для начисления или списания.')
-      return
-    }
-    setAdminDataBusy(true)
-    try {
-      const r = await apiFetch(`/api/admin/users/${userId}/credits`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ delta, note: 'admin panel' }),
-      })
-      if (!r.ok) {
-        const j = await r.json().catch(() => ({}))
-        setError(formatHttpApiError(r, j))
-        return
-      }
-      setAdminCreditInput((prev) => {
-        const n = { ...prev }
-        delete n[userId]
-        return n
-      })
-      void refreshMe()
-      void loadAdminStats()
-      void fetchAdminUsers(adminUserSearch)
-    } finally {
-      setAdminDataBusy(false)
-    }
-  }
-
-  const adminPatchSubscription = async (
-    userId: number,
-    patch: { status?: string; billing_plan?: string; current_period_end?: string | null },
-  ) => {
-    setError(null)
-    setAdminDataBusy(true)
-    try {
-      const body: Record<string, string | null> = {}
-      if (patch.status !== undefined) body.status = patch.status
-      if (patch.billing_plan !== undefined) body.billing_plan = patch.billing_plan
-      if (patch.current_period_end !== undefined) body.current_period_end = patch.current_period_end
-      const r = await apiFetch(`/api/admin/users/${userId}/subscription`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      })
-      if (!r.ok) {
-        const j = await r.json().catch(() => ({}))
-        setError(formatHttpApiError(r, j))
-        return
-      }
-      void fetchAdminUsers(adminUserSearch)
-      void refreshMe()
-    } finally {
-      setAdminDataBusy(false)
-    }
-  }
-
-  const adminSetUserActive = async (userId: number, isActive: boolean) => {
-    setError(null)
-    const r = await apiFetch(`/api/admin/users/${userId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ is_active: isActive }),
-    })
-    if (!r.ok) {
-      const j = await r.json().catch(() => ({}))
-      setError(formatHttpApiError(r, j))
-      return
-    }
-    void fetchAdminUsers(adminUserSearch)
-  }
-
-  const adminSetPlatformAdmin = async (userId: number, v: boolean) => {
-    setError(null)
-    const r = await apiFetch(`/api/admin/users/${userId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ is_platform_admin: v }),
-    })
-    if (!r.ok) {
-      const j = await r.json().catch(() => ({}))
-      setError(formatHttpApiError(r, j))
-      return
-    }
-    void fetchAdminUsers(adminUserSearch)
-    void refreshMe()
-  }
-
   const patchStudioModel = async (id: number) => {
     const d = modelDrafts[id]
     if (!d) return
@@ -3553,17 +3379,6 @@ export default function App() {
                 Команда
               </button>
             ) : null}
-            {canPlatformAdmin ? (
-              <button
-                type="button"
-                role="tab"
-                aria-selected={accountTab === 'admin'}
-                className={accountTab === 'admin' ? 'account-cabinet-tab active' : 'account-cabinet-tab'}
-                onClick={() => setAccountTab('admin')}
-              >
-                Админ
-              </button>
-            ) : null}
           </div>
 
           {accountTab === 'overview' && (
@@ -3622,6 +3437,11 @@ export default function App() {
                   <button type="button" className="ghost-btn" onClick={() => setAccountTab('team')}>
                     Команда
                   </button>
+                ) : null}
+                {canPlatformAdmin ? (
+                  <Link to="/admin" className="ghost-btn cabinet-admin-link">
+                    Админ-панель
+                  </Link>
                 ) : null}
               </div>
             </div>
@@ -4861,239 +4681,6 @@ export default function App() {
                   })}
                 </ul>
               )}
-            </div>
-          )}
-
-          {accountTab === 'admin' && canPlatformAdmin && (
-            <div className="account-cabinet-pane admin-cabinet-pane" role="tabpanel">
-              <p className="cabinet-lead muted">
-                Платформа: пользователи, кредиты, подписка (статус, тариф Managed/BYOK, дата окончания
-                периода), события usage. Счёт и подписка всегда у <strong>владельца</strong> пространства;
-                у участников отображаются те же значения. Доступ к этой вкладке выдаёт владелец платформы.
-              </p>
-              {adminDataBusy && !adminStats ? <p className="muted">Загрузка…</p> : null}
-              {adminStats ? (
-                <div className="admin-stat-grid">
-                  <div className="admin-stat-card">
-                    <div className="admin-stat-label">Пользователей</div>
-                    <div className="admin-stat-value">{adminStats.total_users}</div>
-                    <div className="admin-stat-hint">
-                      владельцев: {adminStats.workspace_owners} · в команде: {adminStats.workspace_members}
-                    </div>
-                  </div>
-                  <div className="admin-stat-card">
-                    <div className="admin-stat-label">Кредитов (сумма балансов)</div>
-                    <div className="admin-stat-value">{adminStats.total_credits_balance}</div>
-                  </div>
-                  <div className="admin-stat-card">
-                    <div className="admin-stat-label">Архив генераций студии</div>
-                    <div className="admin-stat-value">{adminStats.studio_generations_total}</div>
-                  </div>
-                </div>
-              ) : null}
-              {adminStats && Object.keys(adminStats.usage_by_kind).length > 0 ? (
-                <div className="admin-usage-block">
-                  <h4 className="account-sub">Usage по типам (события)</h4>
-                  <ul className="admin-usage-list">
-                    {Object.entries(adminStats.usage_by_kind)
-                      .sort((a, b) => a[0].localeCompare(b[0]))
-                      .map(([k, c]) => (
-                        <li key={k}>
-                          <span className="mono">{k || '—'}</span> — {c}
-                        </li>
-                      ))}
-                  </ul>
-                </div>
-              ) : null}
-
-              <h4 className="account-sub">Пользователи</h4>
-              <div className="admin-user-toolbar">
-                <input
-                  type="search"
-                  placeholder="Поиск по email"
-                  value={adminUserSearch}
-                  onChange={(e) => setAdminUserSearch(e.target.value)}
-                  className="admin-user-search"
-                />
-                <button
-                  type="button"
-                  className="ghost-btn"
-                  disabled={adminDataBusy}
-                  onClick={() => void fetchAdminUsers(adminUserSearch)}
-                >
-                  Найти
-                </button>
-                <button
-                  type="button"
-                  className="ghost-btn"
-                  disabled={adminDataBusy}
-                  onClick={() => {
-                    setAdminUserSearch('')
-                    void fetchAdminUsers('')
-                  }}
-                >
-                  Сброс
-                </button>
-              </div>
-
-              <div className="admin-user-table-wrap">
-                <table className="admin-user-table">
-                  <thead>
-                    <tr>
-                      <th>ID</th>
-                      <th>Email / роль</th>
-                      <th>Статус</th>
-                      <th>Тариф</th>
-                      <th>Действует до</th>
-                      <th>Кр. счёта</th>
-                      <th>Активен</th>
-                      <th>Админ</th>
-                      <th>Кредиты ±</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {adminUsers.map((u) => {
-                      const isOwnerRow = u.parent_user_id == null
-                      return (
-                        <tr key={u.id}>
-                          <td className="mono">{u.id}</td>
-                          <td>
-                            <div>{u.email}</div>
-                            {!isOwnerRow ? (
-                              <div className="muted small">
-                                участник: {u.member_login ?? '—'} · владелец:{' '}
-                                {u.parent_email ?? String(u.parent_user_id)}
-                              </div>
-                            ) : (
-                              <div className="muted small">владелец</div>
-                            )}
-                          </td>
-                          <td>
-                            <select
-                              value={u.subscription_status}
-                              onChange={(e) => {
-                                const v = e.target.value
-                                if (v !== u.subscription_status) void adminPatchSubscription(u.id, { status: v })
-                              }}
-                              className="admin-sub-select"
-                              disabled={adminDataBusy}
-                            >
-                              {SUBSCRIPTION_STATUS_OPTIONS.map((s) => (
-                                <option key={s} value={s}>
-                                  {SUBSCRIPTION_STATUS_LABELS[s] ?? s}
-                                </option>
-                              ))}
-                            </select>
-                          </td>
-                          <td>
-                            <select
-                              value={(u.billing_plan || 'managed').toLowerCase()}
-                              onChange={(e) => {
-                                const v = e.target.value
-                                if (v !== (u.billing_plan || 'managed').toLowerCase()) {
-                                  void adminPatchSubscription(u.id, { billing_plan: v })
-                                }
-                              }}
-                              className="admin-sub-select"
-                              disabled={adminDataBusy}
-                              title="План владельца пространства; у участников — как у владельца"
-                            >
-                              {ADMIN_BILLING_PLAN_OPTIONS.map((p) => (
-                                <option key={p} value={p}>
-                                  {billingPlanOptionLabel(p)}
-                                </option>
-                              ))}
-                            </select>
-                          </td>
-                          <td className="admin-period-cell">
-                            <div className="mono small" title={u.subscription_period_end ?? undefined}>
-                              {formatDateTimeRu(u.subscription_period_end)}
-                            </div>
-                            <div className="admin-period-edit">
-                              <input
-                                type="datetime-local"
-                                className="admin-period-inp"
-                                defaultValue={isoToDatetimeLocalValue(u.subscription_period_end)}
-                                key={`pe-${u.id}-${u.subscription_period_end ?? 'none'}`}
-                                id={`admin-period-${u.id}`}
-                                disabled={adminDataBusy}
-                              />
-                              <button
-                                type="button"
-                                className="ghost-btn small"
-                                disabled={adminDataBusy}
-                                onClick={() => {
-                                  const el = document.getElementById(
-                                    `admin-period-${u.id}`,
-                                  ) as HTMLInputElement | null
-                                  const raw = el?.value ?? ''
-                                  void adminPatchSubscription(u.id, {
-                                    current_period_end: raw
-                                      ? datetimeLocalInputToIsoUtc(raw)
-                                      : null,
-                                  })
-                                }}
-                              >
-                                ОК
-                              </button>
-                              <button
-                                type="button"
-                                className="ghost-btn small"
-                                disabled={adminDataBusy}
-                                onClick={() => void adminPatchSubscription(u.id, { current_period_end: null })}
-                              >
-                                Сброс
-                              </button>
-                            </div>
-                            <p className="muted small admin-sub-hint">Дата окончания периода подписки (UTC).</p>
-                          </td>
-                          <td>{u.credits_balance}</td>
-                          <td>
-                            <input
-                              type="checkbox"
-                              checked={u.is_active}
-                              onChange={(e) => void adminSetUserActive(u.id, e.target.checked)}
-                            />
-                          </td>
-                          <td>
-                            {isOwnerRow ? (
-                              <input
-                                type="checkbox"
-                                checked={u.is_platform_admin}
-                                onChange={(e) => void adminSetPlatformAdmin(u.id, e.target.checked)}
-                              />
-                            ) : (
-                              <span className="muted">—</span>
-                            )}
-                          </td>
-                          <td>
-                            <div className="admin-credit-row">
-                              <input
-                                type="text"
-                                inputMode="numeric"
-                                className="admin-credit-inp"
-                                placeholder="+/-"
-                                value={adminCreditInput[u.id] ?? ''}
-                                onChange={(e) =>
-                                  setAdminCreditInput((prev) => ({ ...prev, [u.id]: e.target.value }))
-                                }
-                              />
-                              <button
-                                type="button"
-                                className="ghost-btn small"
-                                disabled={adminDataBusy}
-                                onClick={() => void adminApplyCredits(u.id)}
-                              >
-                                OK
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
             </div>
           )}
         </div>

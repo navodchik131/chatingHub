@@ -817,6 +817,12 @@ select:focus {
   line-height: 1.45;
 }
 
+.cabinet-admin-link {
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+}
+
 .admin-cabinet-pane .small {
   font-size: 0.8rem;
 }

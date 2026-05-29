@@ -536,6 +536,16 @@ class PushUnsubscribeIn(BaseModel):
 # --- Admin ---
 
 
+class AdminLabelCount(BaseModel):
+    label: str
+    count: int
+
+
+class AdminDayCount(BaseModel):
+    date: str
+    count: int
+
+
 class AdminStatsOut(BaseModel):
     total_users: int
     workspace_owners: int
@@ -543,6 +553,19 @@ class AdminStatsOut(BaseModel):
     total_credits_balance: int
     studio_generations_total: int
     usage_by_kind: dict[str, int]
+    studio_models_total: int = 0
+    studio_model_images_total: int = 0
+    studio_images_total: int = 0
+    studio_videos_total: int = 0
+    studio_motion_renders_total: int = 0
+    conversations_total: int = 0
+    referrals_total: int = 0
+    yookassa_payments_total: int = 0
+    subscriptions_by_status: list[AdminLabelCount] = []
+    subscriptions_by_plan: list[AdminLabelCount] = []
+    registrations_by_day: list[AdminDayCount] = []
+    generations_by_day: list[AdminDayCount] = []
+    chart_days: int = 30
 
 
 class AdminUserRow(BaseModel):
@@ -557,10 +580,20 @@ class AdminUserRow(BaseModel):
     subscription_status: str
     """План биллинга владельца пространства (managed | byok)."""
     billing_plan: str = "managed"
+    plan_tier: str | None = None
     """Дата окончания оплаченного периода подписки владельца (UTC), если задана."""
     subscription_period_end: datetime | None = None
     credits_balance: int
     """Баланс счёта владельца пространства (для участника — тот же, что у владельца)."""
+
+
+class AdminUserDetailOut(AdminUserRow):
+    studio_models_count: int = 0
+    studio_generations_count: int = 0
+    invited_users_count: int = 0
+    referred_by_email: str | None = None
+    conversations_count: int = 0
+    workspace_members_count: int = 0
 
 
 class AdminUserPatchIn(BaseModel):
