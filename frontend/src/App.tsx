@@ -5214,12 +5214,13 @@ export default function App() {
                 onChange={(e) => setStudioDesc(e.target.value)}
               />
             </div>
-            {studioImageBtnBlockReason ? (
-              <p className="studio-generate-block-hint" role="status">
-                {studioImageBtnBlockReason}
-              </p>
-            ) : null}
-            <div className="studio-workspace__actions">
+            <div className="studio-generate-footer">
+              {studioImageBtnBlockReason ? (
+                <p className="studio-generate-block-hint" role="status">
+                  {studioImageBtnBlockReason}
+                </p>
+              ) : null}
+              <div className="studio-workspace__actions">
               <button
                 type="button"
                 className="studio-magic-btn"
@@ -5242,6 +5243,7 @@ export default function App() {
                   </span>
                 ) : null}
               </button>
+              </div>
             </div>
             {import.meta.env.DEV &&
             health?.studio_allow_prompt_only &&
@@ -5707,12 +5709,13 @@ export default function App() {
                   {motionMsg ? (
                     <p className="muted studio-inline-msg">{motionMsg}</p>
                   ) : null}
-                  {motionVideoBtnBlockReason ? (
-                    <p className="studio-video-block-hint" role="status">
-                      {motionVideoBtnBlockReason}
-                    </p>
-                  ) : null}
-                  <div className="studio-workspace__actions">
+                  <div className="studio-generate-footer">
+                    {motionVideoBtnBlockReason ? (
+                      <p className="studio-video-block-hint" role="status">
+                        {motionVideoBtnBlockReason}
+                      </p>
+                    ) : null}
+                    <div className="studio-workspace__actions">
                     <button
                       type="button"
                       className="studio-magic-btn"
@@ -5729,6 +5732,7 @@ export default function App() {
                         {motionVideoCreditCost}
                       </span>
                     </button>
+                    </div>
                   </div>
                   {motionResultVideoUrl ? (
                     <div className="studio-result-panel">

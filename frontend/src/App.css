@@ -487,7 +487,6 @@ select:focus {
 
 .studio-video-block-hint,
 .studio-generate-block-hint {
-  margin: 0.5rem 0 0;
   color: var(--warn, #c27803);
   font-size: 0.875rem;
 }
