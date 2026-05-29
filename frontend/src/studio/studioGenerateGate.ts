@@ -63,8 +63,11 @@ export function studioImageGenerateBlockReason(input: StudioGenerateGateInput): 
   }
 
   if (studioMode === 'model') {
+    if (!grokSceneConfigured) {
+      return 'По промту: нужен Grok на сервере (как в режиме «Основная»).'
+    }
     if (studioSelectedModelId == null) {
-      return 'По промту: выберите модель с фото и профилем.'
+      return 'По промту: выберите модель с фото «Тело целиком» (и «Интимная анатомия» для NSFW).'
     }
     if (!studioDesc.trim()) {
       return 'По промту: опишите сцену в поле промпта.'

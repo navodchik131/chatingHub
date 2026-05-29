@@ -9,7 +9,10 @@ from app.services.studio_grok_scene_compose import (
     _parse_grok_compose_json,
     collect_model_images_for_grok_compose,
 )
-from app.services.studio_model_images import select_grok_compose_wavespeed_identity_images
+from app.services.studio_model_images import (
+    select_grok_compose_wavespeed_identity_images,
+    select_prompt_only_wavespeed_identity_images,
+)
 
 
 def _im(kind: str, id_: int = 1) -> UserStudioModelImage:
@@ -65,6 +68,22 @@ def test_wavespeed_identity_nude_includes_genitals() -> None:
     assert "body" in kinds
     assert "genitals" in kinds
     assert "face" in kinds
+
+
+def test_prompt_only_identity_body_and_genitals_nsfw() -> None:
+    imgs = [_im("turnaround", 1), _im("face", 2), _im("body", 3), _im("genitals", 4)]
+    picked = select_prompt_only_wavespeed_identity_images(imgs, wave_profile="nsfw")
+    kinds = [(im.image_kind or "") for im in picked]
+    assert kinds == ["body", "genitals"]
+    assert "turnaround" not in kinds
+    assert "face" not in kinds
+
+
+def test_prompt_only_identity_regular_body_only() -> None:
+    imgs = [_im("turnaround", 1), _im("body", 2), _im("genitals", 3)]
+    picked = select_prompt_only_wavespeed_identity_images(imgs, wave_profile="regular")
+    assert len(picked) == 1
+    assert picked[0].image_kind == "body"
 
 
 def test_parse_grok_compose_json() -> None:

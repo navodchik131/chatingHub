@@ -2290,8 +2290,12 @@ export default function App() {
         return
       }
     } else if (studioMode === 'model') {
+      if (health?.studio_grok_scene_compose_configured === false) {
+        setError('Режим «По промту» использует Grok — на сервере нужен GROK_API_KEY.')
+        return
+      }
       if (studioSelectedModelId == null) {
-        setError('В режиме «По промту» выберите модель с фото и профилем.')
+        setError('В режиме «По промту» выберите модель с фото «Тело целиком» в кабинете.')
         return
       }
       if (!studioDesc.trim()) {

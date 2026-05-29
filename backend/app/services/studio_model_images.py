@@ -145,6 +145,35 @@ def select_wan_identity_images_with_pose_ref(
     return sort_model_images_for_wan_identity(picked)[:cap]
 
 
+def select_prompt_only_wavespeed_identity_images(
+    imgs: list[UserStudioModelImage],
+    *,
+    wave_profile: str,
+) -> list[UserStudioModelImage]:
+    """
+    Режим «По промту» (без референса сцены): в WaveSpeed только тело целиком и интимная анатомия.
+    Порядок: body → genitals (NSFW). Без turnaround/face — они тянут студийный лист вместо сцены из текста.
+    """
+    if not imgs:
+        return []
+    wp = (wave_profile or "nsfw").strip().lower()
+    by_kind: dict[str, UserStudioModelImage] = {}
+    for im in imgs:
+        k = (im.image_kind or "other").lower()
+        if k in ("body", "genitals") and k not in by_kind:
+            by_kind[k] = im
+
+    picked: list[UserStudioModelImage] = []
+    body = by_kind.get("body")
+    if body is not None:
+        picked.append(body)
+    if wp == "nsfw":
+        gen = by_kind.get("genitals")
+        if gen is not None and gen.id not in {x.id for x in picked}:
+            picked.append(gen)
+    return picked
+
+
 def select_grok_compose_wavespeed_identity_images(
     imgs: list[UserStudioModelImage],
     *,

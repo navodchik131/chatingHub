@@ -140,6 +140,7 @@ from app.services.studio_camera_presets import get_camera_preset_by_id, list_cam
 from app.services.studio_carousel import build_carousel_wave_prompt
 from app.services.studio_grok_scene_compose import (
     grok_compose_studio_scene,
+    grok_compose_studio_text_scene,
     grok_scene_compose_configured,
 )
 from app.services.studio_motion_grok_pipeline import (
@@ -155,6 +156,7 @@ from app.services.studio_model_images import (
     model_images_for_wavespeed_profile,
     model_reference_photos_block,
     select_grok_compose_wavespeed_identity_images,
+    select_prompt_only_wavespeed_identity_images,
     select_wan_identity_images_with_pose_ref,
     sort_model_images_for_wan_identity,
     parse_image_export_selfies_json,
@@ -496,6 +498,18 @@ def _studio_refine_wavespeed_preflight(
                 status_code=400,
                 detail="У выбранной модели нет загруженных фото — добавьте снимки к модели.",
             )
+        if not image_bytes:
+            ws_body = select_prompt_only_wavespeed_identity_images(
+                imgs_model, wave_profile=wp
+            )
+            if not ws_body:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        "В режиме «По промту» у модели нужен снимок «Тело целиком» (body). "
+                        "Для NSFW при необходимости добавьте «Интимная анатомия» (genitals)."
+                    ),
+                )
     elif mode_n == "face_swap":
         if mid is None or sm_loaded is None:
             raise HTTPException(
@@ -2169,6 +2183,17 @@ async def _studio_job_execute_refine_prompt(
             status_code=400,
             detail='Режим «Face swap»: выберите сохранённую модель студии.',
         )
+    if mode_n == "model" and not image_bytes:
+        if not (desc or "").strip():
+            raise HTTPException(
+                status_code=400,
+                detail="В режиме «По промту» опишите сцену в поле промпта.",
+            )
+        if not grok_scene_compose_configured():
+            raise HTTPException(
+                status_code=503,
+                detail="Режим «По промту» использует Grok (как «Основная»): задайте GROK_API_KEY на сервере.",
+            )
     if mode_n == "grok_compose":
         if not grok_scene_compose_configured():
             raise HTTPException(
@@ -2293,6 +2318,28 @@ async def _studio_job_execute_refine_prompt(
                 wave_profile=wave_profile_n,
                 user_notes=desc,
                 lock_hairstyle=effective_lock_hairstyle,
+                credentials=grok_creds,
+            )
+            refined = composed.wavespeed_scene_prompt
+            reference_scene = composed.reference_scene_lock or None
+            grok_negative_extra = composed.negative_prompt or None
+            prompt_brief_mode = "grok_composed"
+            if gen_row is not None:
+                gen_row.refined_prompt = refined
+                gen_row.prompt_excerpt = (refined[:2000] if refined else None) or None
+                session.add(gen_row)
+                await session.flush()
+        elif mode_n == "model" and not image_bytes:
+            from app.services.plan_entitlements import assert_grok_allowed, record_grok_usage
+
+            await assert_grok_allowed(session, oid, sub_b)
+            await record_grok_usage(session, oid, source="model_prompt")
+            grok_creds = grok_motion_studio_credentials()
+            composed = await grok_compose_studio_text_scene(
+                model_images=imgs_model,
+                model_profile_text=model_profile_text,
+                wave_profile=wave_profile_n,
+                user_notes=desc,
                 credentials=grok_creds,
             )
             refined = composed.wavespeed_scene_prompt
@@ -2696,7 +2743,13 @@ async def _studio_job_execute_refine_prompt(
                     )
                     attach_model_urls = bool(grok_ws_identity)
                 elif mode_n == "model":
-                    attach_model_urls = bool(imgs_model)
+                    if image_bytes:
+                        attach_model_urls = bool(imgs_model)
+                    else:
+                        prompt_only_ws = select_prompt_only_wavespeed_identity_images(
+                            imgs_for_ws, wave_profile=wave_profile_n
+                        )
+                        attach_model_urls = bool(prompt_only_ws)
                 elif mode_n == "face_swap":
                     attach_model_urls = bool(imgs_model)
                 elif mode_n == "no_face":
@@ -2705,6 +2758,10 @@ async def _studio_job_execute_refine_prompt(
                 if attach_model_urls:
                     if mode_n == "grok_compose":
                         imgs_ws_order = grok_ws_identity
+                    elif mode_n == "model" and not image_bytes:
+                        imgs_ws_order = select_prompt_only_wavespeed_identity_images(
+                            imgs_for_ws, wave_profile=wave_profile_n
+                        )
                     elif wave_profile_n == "nsfw" and user_pose_ref_prepended:
                         imgs_ws_order = select_wan_identity_images_with_pose_ref(
                             imgs_for_ws,

@@ -109,7 +109,11 @@ class Settings(BaseSettings):
     grok_scene_compose_system_path: str = Field(
         default="data/prompts/grok_scene_compose_system.txt"
     )
+    grok_scene_compose_text_system_path: str = Field(
+        default="data/prompts/grok_scene_compose_text_system.txt"
+    )
     grok_scene_compose_system_inline: str = Field(default="")
+    grok_scene_compose_text_system_inline: str = Field(default="")
     grok_scene_compose_model: str = Field(default="")
     grok_scene_compose_max_tokens: int = Field(default=8192, ge=1024, le=16384)
     grok_scene_compose_temperature: float = Field(default=0.45, ge=0.0, le=1.5)

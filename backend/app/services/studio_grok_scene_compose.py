@@ -18,7 +18,10 @@ from app.services.studio_grok_motion import (
     grok_motion_api_configured,
     grok_motion_studio_credentials,
 )
-from app.services.studio_model_images import sort_model_images_for_studio
+from app.services.studio_model_images import (
+    select_prompt_only_wavespeed_identity_images,
+    sort_model_images_for_studio,
+)
 from app.services.studio_openai import (
     StudioOpenAiCredentials,
     _strip_code_fences,
@@ -50,6 +53,29 @@ class GrokSceneComposeResult:
 
 def grok_scene_compose_configured() -> bool:
     return grok_motion_api_configured()
+
+
+def load_grok_scene_compose_text_system() -> str:
+    configured = (settings.grok_scene_compose_text_system_path or "").strip()
+    candidates: list[Path] = []
+    if configured:
+        candidates.append((BACKEND_DIR / configured).resolve())
+    else:
+        name = "grok_scene_compose_text_system.txt"
+        candidates.append((BACKEND_DIR / "data" / "prompts" / name).resolve())
+        candidates.append((BACKEND_DIR / "_bundled_prompts" / name).resolve())
+    for path in candidates:
+        if path.is_file():
+            t = path.read_text(encoding="utf-8").strip()
+            if t:
+                return t
+    inline = (settings.grok_scene_compose_text_system_inline or "").strip()
+    if inline:
+        return inline
+    raise RuntimeError(
+        "Промпт Grok text-only compose пуст: добавьте grok_scene_compose_text_system.txt "
+        "или GROK_SCENE_COMPOSE_TEXT_SYSTEM_INLINE"
+    )
 
 
 def load_grok_scene_compose_system() -> str:
@@ -127,6 +153,21 @@ def collect_model_images_for_grok_compose(
         label = _GROK_SCENE_LABELS.get(kind, "MODEL_REFERENCE")
         out.append((label, im))
         seen.add(im.id)
+    return out
+
+
+def collect_model_images_for_grok_text_compose(
+    imgs: list[UserStudioModelImage],
+    *,
+    wave_profile: str,
+) -> list[tuple[str, UserStudioModelImage]]:
+    """Grok «По промту»: только body + genitals (NSFW) для vision при сборке брифа."""
+    picked = select_prompt_only_wavespeed_identity_images(imgs, wave_profile=wave_profile)
+    out: list[tuple[str, UserStudioModelImage]] = []
+    for im in picked:
+        k = (im.image_kind or "other").lower()
+        label = _GROK_SCENE_LABELS.get(k, "MODEL_REFERENCE")
+        out.append((label, im))
     return out
 
 
@@ -252,6 +293,86 @@ async def grok_compose_studio_scene(
         return _parse_grok_compose_json(raw_out)
     except RuntimeError:
         log.warning("grok scene compose: JSON parse failed, using raw prose fallback")
+        prose = _strip_code_fences(raw_out).strip()
+        if len(prose) < 80:
+            raise RuntimeError("Grok вернул слишком короткий ответ без JSON")
+        return GrokSceneComposeResult(
+            wavespeed_scene_prompt=prose,
+            reference_scene_lock="",
+            negative_prompt="",
+        )
+
+
+async def grok_compose_studio_text_scene(
+    *,
+    model_images: list[UserStudioModelImage],
+    model_profile_text: str | None,
+    wave_profile: str,
+    user_notes: str,
+    credentials: StudioOpenAiCredentials | None = None,
+) -> GrokSceneComposeResult:
+    """«По промту»: сцена из USER_NOTES + профиль + body/genitals refs, без фото сцены пользователя."""
+    creds = credentials or grok_motion_studio_credentials()
+    labeled = collect_model_images_for_grok_text_compose(model_images, wave_profile=wave_profile)
+    if not labeled:
+        raise RuntimeError(
+            "Для режима «По промту» у модели нужен снимок «Тело целиком» (body). "
+            "Для NSFW добавьте «Интимная анатомия» (genitals) при необходимости."
+        )
+
+    system = load_grok_scene_compose_text_system()
+    wp = (wave_profile or "nsfw").strip().lower()
+    profile = (model_profile_text or "").strip() or "{}"
+    notes = (user_notes or "").strip()
+    if not notes:
+        raise RuntimeError("Для режима «По промту» заполните промпт — опишите сцену.")
+
+    user_parts: list[dict] = [
+        {
+            "type": "text",
+            "text": (
+                f"WAVE_PROFILE: {wp}\n"
+                "MODE: TEXT_SCENE_ONLY — no user pose reference image. "
+                "Compose pose, camera, framing, lighting, background, and wardrobe/nudity from USER_NOTES.\n\n"
+                "BODY_FIGURE_RULE: Bust, waist, hip width, glute volume, torso/leg proportions MUST come from "
+                "MODEL_PROFILE_JSON + BODY_REFERENCE / ANATOMY_REFERENCE_NUDE. "
+                "State figure proportions explicitly in wavespeed_scene_prompt.\n\n"
+                f"MODEL_PROFILE_JSON:\n{profile}\n\n"
+                f"USER_NOTES:\n{notes}\n\n"
+                "Attached images are identity references only (not scene). Labels in captions are authoritative."
+            ),
+        },
+    ]
+
+    for label, im in labeled:
+        raw, mime = _read_model_image_file(im)
+        b64 = base64.standard_b64encode(raw).decode("ascii")
+        user_parts.append(
+            {"type": "text", "text": f"[{label}] studio_model_image id={im.id}"}
+        )
+        user_parts.append(
+            {
+                "type": "image_url",
+                "image_url": {"url": f"data:{mime};base64,{b64}"},
+            }
+        )
+
+    model = _grok_scene_compose_model()
+    raw_out = await chat_completion_openai_compatible_text(
+        model=model,
+        messages=[
+            {"role": "system", "content": system + "\n\n" + _TIMELINE_SYSTEM_EN},
+            {"role": "user", "content": user_parts},
+        ],
+        max_tokens=int(settings.grok_scene_compose_max_tokens),
+        temperature=float(settings.grok_scene_compose_temperature),
+        credentials=creds,
+        timeout_seconds=float(settings.grok_scene_compose_timeout_seconds),
+    )
+    try:
+        return _parse_grok_compose_json(raw_out)
+    except RuntimeError:
+        log.warning("grok text scene compose: JSON parse failed, using raw prose fallback")
         prose = _strip_code_fences(raw_out).strip()
         if len(prose) < 80:
             raise RuntimeError("Grok вернул слишком короткий ответ без JSON")
