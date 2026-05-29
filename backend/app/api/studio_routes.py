@@ -489,7 +489,7 @@ def _studio_refine_wavespeed_preflight(
         if mid is None or sm_loaded is None:
             raise HTTPException(
                 status_code=400,
-                detail="В режиме «Модель» выберите сохранённую модель с фотографиями.",
+                detail="В режиме «По промту» выберите сохранённую модель с фотографиями.",
             )
         if not imgs_model:
             raise HTTPException(

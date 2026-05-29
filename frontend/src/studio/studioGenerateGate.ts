@@ -62,6 +62,16 @@ export function studioImageGenerateBlockReason(input: StudioGenerateGateInput): 
     return null
   }
 
+  if (studioMode === 'model') {
+    if (studioSelectedModelId == null) {
+      return 'По промту: выберите модель с фото и профилем.'
+    }
+    if (!studioDesc.trim()) {
+      return 'По промту: опишите сцену в поле промпта.'
+    }
+    return null
+  }
+
   if (studioMode === 'grok_compose') {
     if (studioSelectedModelId == null) {
       return 'Режим «Основная»: выберите модель с фото и профилем.'
@@ -98,7 +108,7 @@ export function studioImageGenerateBlockReason(input: StudioGenerateGateInput): 
     studioFile != null &&
     !studioSendPoseRefToWavespeed &&
     studioSelectedModelId == null &&
-    (studioMode === 'model' || studioMode === 'no_face')
+    studioMode === 'no_face'
   ) {
     return 'Выберите модель или включите «Референс позы в WaveSpeed» для загруженного фото.'
   }

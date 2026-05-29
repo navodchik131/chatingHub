@@ -585,9 +585,9 @@ function studioGalleryMediaKind(section: WorkspaceSection): StudioArchiveMediaKi
 
 type StudioJobMode = 'model' | 'photo_edit' | 'no_face' | 'face_swap' | 'grok_compose'
 
-/** Режимы генерации картинок в UI (режим «Модель» временно скрыт). */
 const STUDIO_IMAGE_MODE_OPTIONS: { id: StudioJobMode; label: string }[] = [
   { id: 'grok_compose', label: 'Основная' },
+  { id: 'model', label: 'По промту' },
   { id: 'face_swap', label: 'Подмена лица' },
   { id: 'photo_edit', label: 'Доработать фото' },
   { id: 'no_face', label: 'Без лица' },
@@ -937,6 +937,13 @@ export default function App() {
   }, [studioInpaintMaskFile])
 
   useEffect(() => {
+    if (studioMode === 'model') {
+      setStudioFile(null)
+      setStudioPhotoEditArchiveId(null)
+      setStudioPaintInpaintMask(false)
+      setStudioInpaintMaskFile(null)
+      setStudioSendPoseRefToWavespeed(false)
+    }
     if (studioMode !== 'photo_edit') {
       setStudioPhotoEditArchiveId(null)
     }
@@ -2282,6 +2289,15 @@ export default function App() {
         setError('Опишите, что изменить или исправить на фото.')
         return
       }
+    } else if (studioMode === 'model') {
+      if (studioSelectedModelId == null) {
+        setError('В режиме «По промту» выберите модель с фото и профилем.')
+        return
+      }
+      if (!studioDesc.trim()) {
+        setError('В режиме «По промту» опишите сцену в поле промпта.')
+        return
+      }
     } else if (
       studioMode !== 'face_swap' &&
       studioMode !== 'grok_compose' &&
@@ -2323,7 +2339,8 @@ export default function App() {
     const hasStudioBaseImage =
       studioFile != null ||
       (studioMode === 'photo_edit' && studioPhotoEditArchiveId != null)
-    const wantsInpaint = studioPaintInpaintMask || studioInpaintMaskFile != null
+    const wantsInpaint =
+      studioMode !== 'model' && (studioPaintInpaintMask || studioInpaintMaskFile != null)
     if (wantsInpaint && !hasStudioBaseImage) {
       setError(
         'Для маски загрузите изображение или выберите снимок из архива (режим «Доработать фото»).',
@@ -5039,16 +5056,18 @@ export default function App() {
             <StudioPillField
               label="Модель"
               hint={
-                studioMode === 'face_swap'
-                  ? 'Обязательна вместе с фото'
-                  : 'Листы для лица и тела'
+                studioMode === 'model'
+                  ? 'Обязательна — внешность из кабинета'
+                  : studioMode === 'face_swap'
+                    ? 'Обязательна вместе с фото'
+                    : 'Листы для лица и тела'
               }
               icon={<IconModel className="studio-slot__icon-svg" />}
               scrollRow={studioModels.length > 4}
               options={studioModels.map((m) => ({ value: m.id, label: m.name }))}
               value={studioSelectedModelId}
               onChange={(v) => setStudioSelectedModelId(v)}
-              allowEmpty
+              allowEmpty={studioMode !== 'model'}
               emptyLabel="Без модели"
             />
             {studioMode === 'photo_edit' ? (
@@ -5063,27 +5082,30 @@ export default function App() {
                 }}
               />
             ) : null}
-            <StudioMediaSlot
-              label={
-                studioMode === 'photo_edit'
-                  ? 'Фото'
-                  : studioMode === 'face_swap'
-                    ? 'Исходное фото'
-                    : 'Референс'
-              }
-              hint={
-                studioMode === 'photo_edit' ? 'Или выберите миниатюру выше' : 'Поза и сцена'
-              }
-              icon="image"
-              previewUrl={studioReferenceObjectUrl}
-              accept="image/jpeg,image/png,image/webp,image/gif"
-              onFile={(f) => {
-                setStudioFile(f)
-                if (f) setStudioPhotoEditArchiveId(null)
-              }}
-              onClear={() => setStudioFile(null)}
-              emptyLabel="JPG, PNG, WebP"
-            />
+            {studioMode !== 'model' ? (
+              <StudioMediaSlot
+                label={
+                  studioMode === 'photo_edit'
+                    ? 'Фото'
+                    : studioMode === 'face_swap'
+                      ? 'Исходное фото'
+                      : 'Референс'
+                }
+                hint={
+                  studioMode === 'photo_edit' ? 'Или выберите миниатюру выше' : 'Поза и сцена'
+                }
+                icon="image"
+                previewUrl={studioReferenceObjectUrl}
+                accept="image/jpeg,image/png,image/webp,image/gif"
+                onFile={(f) => {
+                  setStudioFile(f)
+                  if (f) setStudioPhotoEditArchiveId(null)
+                }}
+                onClear={() => setStudioFile(null)}
+                emptyLabel="JPG, PNG, WebP"
+              />
+            ) : null}
+            {studioMode !== 'model' ? (
             <label
               className="studio-label studio-check"
               style={!studioInpaintBaseImageSrc ? { opacity: 0.55 } : undefined}
@@ -5099,7 +5121,8 @@ export default function App() {
               />
               <span>Нарисовать маску кистью — белым отметьте, что нужно изменить на снимке.</span>
             </label>
-            {studioPaintInpaintMask && studioInpaintBaseImageSrc ? (
+            ) : null}
+            {studioMode !== 'model' && studioPaintInpaintMask && studioInpaintBaseImageSrc ? (
               <div className="studio-mask-painter-controls">
                 <div className="studio-mask-painter-row">
                   <label className="studio-mask-brush-label">
@@ -5131,6 +5154,7 @@ export default function App() {
                 />
               </div>
             ) : null}
+            {studioMode !== 'model' ? (
             <label
               className="studio-label"
               style={
@@ -5161,8 +5185,9 @@ export default function App() {
                 </span>
               ) : null}
             </label>
+            ) : null}
             <div className="studio-toggles">
-            {studioMode !== 'photo_edit' ? (
+            {studioMode !== 'photo_edit' && studioMode !== 'model' ? (
               <label
                 className="studio-toggle-row"
                 style={!studioFile ? { opacity: 0.55 } : undefined}
@@ -5176,7 +5201,7 @@ export default function App() {
                 />
               </label>
             ) : null}
-            {studioMode === 'model' || studioMode === 'no_face' ? (
+            {studioMode === 'no_face' ? (
               <label
                 className="studio-toggle-row"
                 style={!studioFile ? { opacity: 0.55 } : undefined}
@@ -5204,12 +5229,20 @@ export default function App() {
                 </span>
                 <div className="studio-slot__titles">
                   <span className="studio-slot__label">Промпт</span>
-                  <span className="studio-slot__hint">Сцена, свет, настроение</span>
+                  <span className="studio-slot__hint">
+                    {studioMode === 'model'
+                      ? 'Сцена целиком — без референса'
+                      : 'Сцена, свет, настроение'}
+                  </span>
                 </div>
               </div>
               <textarea
                 rows={4}
-                placeholder="Опишите кадр…"
+                placeholder={
+                  studioMode === 'model'
+                    ? 'Опишите кадр: место, поза, одежда, свет…'
+                    : 'Опишите кадр…'
+                }
                 value={studioDesc}
                 onChange={(e) => setStudioDesc(e.target.value)}
               />
