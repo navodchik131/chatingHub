@@ -35,6 +35,32 @@ from app.services.workspace import workspace_owner_id
 router = APIRouter(tags=["admin"])
 
 
+async def _owner_studio_counts(
+    session: AsyncSession, owner_ids: list[int]
+) -> tuple[dict[int, int], dict[int, int]]:
+    if not owner_ids:
+        return {}, {}
+    models: dict[int, int] = {}
+    gens: dict[int, int] = {}
+    for uid, n in (
+        await session.execute(
+            select(UserStudioModel.user_id, func.count(UserStudioModel.id))
+            .where(UserStudioModel.user_id.in_(owner_ids))
+            .group_by(UserStudioModel.user_id)
+        )
+    ).all():
+        models[int(uid)] = int(n or 0)
+    for uid, n in (
+        await session.execute(
+            select(StudioGeneration.user_id, func.count(StudioGeneration.id))
+            .where(StudioGeneration.user_id.in_(owner_ids))
+            .group_by(StudioGeneration.user_id)
+        )
+    ).all():
+        gens[int(uid)] = int(n or 0)
+    return models, gens
+
+
 def _owner_subscription_tuple(
     sub: Subscription | None,
 ) -> tuple[str, str, str | None, datetime | None]:
@@ -51,6 +77,8 @@ async def _user_row(
     *,
     owner_bal: dict[int, int],
     owner_sub: dict[int, tuple[str, str, str | None, datetime | None]],
+    owner_models: dict[int, int],
+    owner_gens: dict[int, int],
 ) -> AdminUserRow:
     oid = workspace_owner_id(u)
     if oid not in owner_bal:
@@ -79,6 +107,8 @@ async def _user_row(
         plan_tier=tier,
         subscription_period_end=pend,
         credits_balance=owner_bal[oid],
+        studio_models_count=owner_models.get(oid, 0),
+        studio_generations_count=owner_gens.get(oid, 0),
     )
 
 
@@ -114,10 +144,19 @@ async def admin_list_users(
 
     owner_bal: dict[int, int] = {}
     owner_sub: dict[int, tuple[str, str, str | None, datetime | None]] = {}
+    owner_ids = list({workspace_owner_id(u) for u in rows})
+    owner_models, owner_gens = await _owner_studio_counts(session, owner_ids)
     out: list[AdminUserRow] = []
     for u in rows:
         out.append(
-            await _user_row(session, u, owner_bal=owner_bal, owner_sub=owner_sub)
+            await _user_row(
+                session,
+                u,
+                owner_bal=owner_bal,
+                owner_sub=owner_sub,
+                owner_models=owner_models,
+                owner_gens=owner_gens,
+            )
         )
     return out
 
@@ -132,19 +171,15 @@ async def admin_get_user(
     u = (await session.execute(stmt)).scalar_one_or_none()
     if not u:
         raise HTTPException(status_code=404, detail="Пользователь не найден")
-    base = await _user_row(session, u, owner_bal={}, owner_sub={})
     oid = workspace_owner_id(u)
-    studio_models_count = int(
-        await session.scalar(
-            select(func.count(UserStudioModel.id)).where(UserStudioModel.user_id == oid)
-        )
-        or 0
-    )
-    studio_generations_count = int(
-        await session.scalar(
-            select(func.count(StudioGeneration.id)).where(StudioGeneration.user_id == oid)
-        )
-        or 0
+    owner_models, owner_gens = await _owner_studio_counts(session, [oid])
+    base = await _user_row(
+        session,
+        u,
+        owner_bal={},
+        owner_sub={},
+        owner_models=owner_models,
+        owner_gens=owner_gens,
     )
     invited_users_count = int(
         await session.scalar(
@@ -170,8 +205,6 @@ async def admin_get_user(
         referred_by_email = ref.email if ref else None
     return AdminUserDetailOut(
         **base.model_dump(),
-        studio_models_count=studio_models_count,
-        studio_generations_count=studio_generations_count,
         invited_users_count=invited_users_count,
         referred_by_email=referred_by_email,
         conversations_count=conversations_count,
@@ -201,7 +234,16 @@ async def admin_patch_user(
         u.is_active = body.is_active
     await session.commit()
     await session.refresh(u)
-    return await _user_row(session, u, owner_bal={}, owner_sub={})
+    oid = workspace_owner_id(u)
+    owner_models, owner_gens = await _owner_studio_counts(session, [oid])
+    return await _user_row(
+        session,
+        u,
+        owner_bal={},
+        owner_sub={},
+        owner_models=owner_models,
+        owner_gens=owner_gens,
+    )
 
 
 @router.post("/admin/users/{user_id}/credits", response_model=AdminCreditsOut)

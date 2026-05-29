@@ -585,11 +585,13 @@ class AdminUserRow(BaseModel):
     subscription_period_end: datetime | None = None
     credits_balance: int
     """Баланс счёта владельца пространства (для участника — тот же, что у владельца)."""
+    studio_models_count: int = 0
+    """Модели студии владельца пространства."""
+    studio_generations_count: int = 0
+    """Архив генераций владельца пространства."""
 
 
 class AdminUserDetailOut(AdminUserRow):
-    studio_models_count: int = 0
-    studio_generations_count: int = 0
     invited_users_count: int = 0
     referred_by_email: str | None = None
     conversations_count: int = 0

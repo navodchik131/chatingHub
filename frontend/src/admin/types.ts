@@ -44,6 +44,8 @@ export interface AdminUserRow {
   plan_tier: string | null
   subscription_period_end: string | null
   credits_balance: number
+  studio_models_count: number
+  studio_generations_count: number
 }
 
 export interface AdminUserDetail extends AdminUserRow {

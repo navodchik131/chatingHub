@@ -279,7 +279,8 @@ export function AdminPage() {
                     <th>Подписка</th>
                     <th>Тариф</th>
                     <th>Кредиты</th>
-                    <th>Контент</th>
+                    <th>Модели</th>
+                    <th>Генерации</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -304,7 +305,8 @@ export function AdminPage() {
                           <div className="muted small">{formatDateTimeRu(u.subscription_period_end)}</div>
                         </td>
                         <td className="mono">{u.credits_balance}</td>
-                        <td className="muted small">откройте карточку</td>
+                        <td className="mono">{u.studio_models_count ?? 0}</td>
+                        <td className="mono">{u.studio_generations_count ?? 0}</td>
                       </tr>
                     )
                   })}
