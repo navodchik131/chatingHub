@@ -4,21 +4,35 @@ import logging
 import mimetypes
 from datetime import datetime, timezone
 from io import BytesIO
-
-from aiogram import Bot
-from aiogram.client.session.aiohttp import AiohttpSession
-from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect
-from fastapi.responses import Response
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Query,
+    Request,
+    UploadFile,
+    WebSocket,
+    WebSocketDisconnect,
+)
+from fastapi.responses import FileResponse, Response
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.deps import get_current_user
 from app.auth.jwt_utils import decode_token
 from app.config import BACKEND_DIR, settings
-from app.connectors.fanvue.client import FanvueAPIError, send_direct_message
 from app.connectors.telegram.bot_for_user import open_telegram_bot_for_owner
 from app.connectors.telegram.state import get_telegram_api_status
-from app.db.models import FanvueConnection, MessageDirection, Platform, TelegramConnection, User
+from app.db.models import (
+    FanvueConnection,
+    Message,
+    MessageAttachment,
+    MessageDirection,
+    Platform,
+    TelegramConnection,
+    User,
+)
 from app.db.repo import (
     add_message,
     count_rows,
@@ -36,6 +50,22 @@ from app.schemas import (
     ConversationWithPreview,
     MessageOut,
     ReplyIn,
+)
+from app.services.chat_attachment import (
+    decode_chat_attachment_access_token,
+    resolve_chat_attachment_file,
+    save_chat_image_bytes,
+)
+from app.services.chat_messages import (
+    add_message_attachment,
+    load_messages_for_api,
+    message_preview_text,
+    message_to_out,
+)
+from app.services.chat_outbound import (
+    resolve_outbound_image,
+    send_fanvue_outbound,
+    send_telegram_outbound,
 )
 from app.services.crypto_secret import decrypt_secret
 from app.services.realtime import hub
@@ -149,9 +179,7 @@ async def api_list_conversations(
     out: list[ConversationWithPreview] = []
     for c in convs:
         last = await get_last_message(session, c.id, oid)
-        preview = None
-        if last:
-            preview = (last.text_translated or last.text_original)[:280]
+        preview = message_preview_text(last) if last else None
         unread = await unread_inbound_count(session, c.id, oid)
         base = ConversationOut.model_validate(c)
         out.append(
@@ -231,7 +259,40 @@ async def api_messages(
     rows = await list_messages(
         session, conv_id, oid, limit=limit, before_id=before
     )
-    return [MessageOut.model_validate(m) for m in rows]
+    return await load_messages_for_api(session, rows, owner_id=oid)
+
+
+@router.get("/chat/attachment")
+async def api_chat_attachment(
+    t: str = Query(..., min_length=10),
+    session: AsyncSession = Depends(get_session),
+) -> FileResponse:
+    """Публичная раздача вложения чата по JWT (для <img src>)."""
+    try:
+        uid, aid = decode_chat_attachment_access_token(t)
+    except ValueError:
+        raise HTTPException(status_code=401, detail="invalid token") from None
+    stmt = (
+        select(MessageAttachment)
+        .where(MessageAttachment.id == aid)
+        .options(
+            selectinload(MessageAttachment.message).selectinload(Message.conversation)
+        )
+    )
+    att = (await session.execute(stmt)).scalar_one_or_none()
+    if not att:
+        raise HTTPException(status_code=404, detail="not found")
+    msg = att.message
+    if not msg:
+        raise HTTPException(status_code=404, detail="not found")
+    conv = msg.conversation
+    if not conv or conv.user_id != uid:
+        raise HTTPException(status_code=404, detail="not found")
+    path = resolve_chat_attachment_file(uid, att.relative_path)
+    if not path:
+        raise HTTPException(status_code=404, detail="file missing")
+    media = att.mime_type or mimetypes.guess_type(path.name)[0] or "image/jpeg"
+    return FileResponse(path, media_type=media)
 
 
 @router.patch("/conversations/{conv_id}", response_model=ConversationOut)
@@ -264,7 +325,7 @@ async def api_patch_conversation(
 @router.post("/conversations/{conv_id}/reply", response_model=MessageOut)
 async def api_reply(
     conv_id: int,
-    body: ReplyIn,
+    request: Request,
     session: AsyncSession = Depends(get_session),
     user: User = Depends(get_current_user),
 ) -> MessageOut:
@@ -272,6 +333,40 @@ async def api_reply(
     oid = workspace_owner_id(user)
     from app.db.models import Message, Subscription
     from app.services.plan_entitlements import assert_dialog_activity_allowed, month_start_utc
+
+    content_type = (request.headers.get("content-type") or "").lower()
+    text_ru = ""
+    upload: UploadFile | None = None
+    studio_generation_id: int | None = None
+
+    if "multipart/form-data" in content_type:
+        form = await request.form()
+        text_ru = str(form.get("text") or "").strip()
+        raw_sg = form.get("studio_generation_id")
+        if raw_sg not in (None, ""):
+            try:
+                studio_generation_id = int(str(raw_sg).strip())
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail="invalid studio_generation_id") from e
+        img_field = form.get("image")
+        if img_field is not None and hasattr(img_field, "read"):
+            upload = img_field  # type: ignore[assignment]
+    else:
+        try:
+            data = await request.json()
+        except Exception as e:
+            raise HTTPException(status_code=400, detail="invalid body") from e
+        body = ReplyIn.model_validate(data)
+        text_ru = body.text.strip()
+
+    image_pair = await resolve_outbound_image(
+        session,
+        owner_id=oid,
+        upload=upload,
+        studio_generation_id=studio_generation_id,
+    )
+    if not text_ru and not image_pair:
+        raise HTTPException(status_code=400, detail="empty message")
 
     start = month_start_utc()
     has_msg_this_month = await session.scalar(
@@ -282,17 +377,21 @@ async def api_reply(
     if not has_msg_this_month:
         sub = await session.scalar(select(Subscription).where(Subscription.user_id == oid))
         await assert_dialog_activity_allowed(session, oid, sub)
-    text_ru = body.text.strip()
-    if not text_ru:
-        raise HTTPException(status_code=400, detail="empty text")
 
     conv = await require_conversation_chat_access(session, user, conv_id, oid)
 
     forced = (conv.outbound_lang or "").strip().lower()
     target_lang = forced if forced else (conv.user_lang or "en").strip().lower() or "en"
-    outgoing = await translate_from_russian(text_ru, target_lang)
-    if not (outgoing or "").strip():
-        outgoing = text_ru
+    outgoing = ""
+    if text_ru:
+        outgoing = await translate_from_russian(text_ru, target_lang)
+        if not (outgoing or "").strip():
+            outgoing = text_ru
+
+    image_bytes: bytes | None = None
+    image_mime: str | None = None
+    if image_pair:
+        image_bytes, image_mime = image_pair
 
     if conv.platform == Platform.telegram:
         row_tg = await session.scalar(
@@ -304,22 +403,19 @@ async def api_reply(
                 detail="Подключите Telegram-бота в настройках интеграций",
             )
         token = decrypt_secret(row_tg.bot_token_encrypted)
-        proxy = (settings.telegram_proxy or "").strip()
-        session_aio = AiohttpSession(proxy=proxy) if proxy else None
-        bot = Bot(token=token, session=session_aio) if session_aio else Bot(token=token)
         try:
-            try:
-                tid = int(conv.external_topic_id)
-                cid = int(conv.external_chat_id)
-            except ValueError as e:
-                raise HTTPException(status_code=500, detail="bad telegram ids") from e
-            await bot.send_message(
-                chat_id=cid,
-                text=outgoing,
-                direct_messages_topic_id=tid,
-            )
-        finally:
-            await bot.session.close()
+            tid = int(conv.external_topic_id)
+            cid = int(conv.external_chat_id)
+        except ValueError as e:
+            raise HTTPException(status_code=500, detail="bad telegram ids") from e
+        await send_telegram_outbound(
+            token=token,
+            chat_id=cid,
+            topic_id=tid,
+            text=outgoing,
+            image_bytes=image_bytes,
+            image_mime=image_mime,
+        )
     elif conv.platform == Platform.fanvue:
         row_fv = await session.scalar(
             select(FanvueConnection).where(FanvueConnection.user_id == oid)
@@ -330,18 +426,13 @@ async def api_reply(
                 detail="Подключите Fanvue в настройках интеграций",
             )
         fv_tok = decrypt_secret(row_fv.access_token_encrypted)
-        try:
-            await send_direct_message(fv_tok, conv.external_chat_id, outgoing)
-        except FanvueAPIError as e:
-            st = e.status
-            if st >= 500:
-                st = 502
-            elif st < 400:
-                st = 502
-            raise HTTPException(
-                status_code=st,
-                detail=(e.body or str(e))[:2000],
-            ) from e
+        await send_fanvue_outbound(
+            access_token=fv_tok,
+            fan_uuid=conv.external_chat_id,
+            text=outgoing,
+            image_bytes=image_bytes,
+            image_mime=image_mime,
+        )
     else:
         raise HTTPException(status_code=400, detail="unknown platform")
 
@@ -351,22 +442,40 @@ async def api_reply(
         conv.id,
         MessageDirection.outbound,
         text_ru,
-        outgoing,
+        outgoing or None,
         meta=None,
     )
+    if image_bytes:
+        try:
+            rel, mime = save_chat_image_bytes(
+                owner_id=oid,
+                raw=image_bytes,
+                content_type=image_mime,
+            )
+            await add_message_attachment(
+                session,
+                message_id=row.id,
+                relative_path=rel,
+                mime_type=mime,
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
     await mark_conversation_read(session, conv.id, oid)
     await session.commit()
     await session.refresh(row)
+    await session.refresh(row, attribute_names=["attachments"])
+    out = message_to_out(row, owner_id=oid)
 
     await hub.broadcast_user(
         oid,
         {
             "type": "new_message",
             "conversation_id": conv.id,
-            "message": MessageOut.model_validate(row).model_dump(mode="json"),
+            "message": out.model_dump(mode="json"),
         },
     )
-    return MessageOut.model_validate(row)
+    return out
 
 
 @router.websocket("/ws")

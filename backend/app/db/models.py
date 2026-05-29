@@ -31,6 +31,10 @@ class MessageDirection(str, enum.Enum):
     outbound = "outbound"
 
 
+class MessageAttachmentKind(str, enum.Enum):
+    image = "image"
+
+
 class SubscriptionStatus(str, enum.Enum):
     none = "none"
     incomplete = "incomplete"
@@ -530,3 +534,31 @@ class Message(Base):
     conversation: Mapped[Conversation] = relationship(
         "Conversation", back_populates="messages"
     )
+    attachments: Mapped[list["MessageAttachment"]] = relationship(
+        "MessageAttachment",
+        back_populates="message",
+        order_by="MessageAttachment.id",
+        cascade="all, delete-orphan",
+    )
+
+
+class MessageAttachment(Base):
+    __tablename__ = "message_attachments"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    message_id: Mapped[int] = mapped_column(
+        ForeignKey("messages.id", ondelete="CASCADE"), index=True
+    )
+    kind: Mapped[MessageAttachmentKind] = mapped_column(
+        Enum(MessageAttachmentKind, native_enum=False, length=16),
+        default=MessageAttachmentKind.image,
+    )
+    relative_path: Mapped[str] = mapped_column(String(512))
+    mime_type: Mapped[str] = mapped_column(String(64), default="image/jpeg")
+    width: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    height: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+    message: Mapped[Message] = relationship("Message", back_populates="attachments")

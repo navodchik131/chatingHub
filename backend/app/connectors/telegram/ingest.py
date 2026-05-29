@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timezone
 
 from aiogram.types import Message
 
@@ -12,17 +11,12 @@ from app.connectors.telegram.bot_for_user import (
     open_telegram_bot_for_owner,
     telegram_profile_photo_file_id,
 )
-from app.db.models import MessageDirection, Platform
-from app.db.repo import (
-    add_message,
-    get_or_create_conversation,
-    get_user_with_billing,
-)
+from app.connectors.telegram.media import download_telegram_image
+from app.db.models import Platform
+from app.db.repo import get_or_create_conversation, get_user_with_billing
 from app.db.session import SessionLocal
-from app.schemas import MessageOut
-from app.services.realtime import hub
+from app.services.chat_ingest import persist_inbound_chat_message
 from app.services.translation import translate_to_russian
-from app.services.webpush import notify_inbound_message
 
 log = logging.getLogger(__name__)
 
@@ -34,7 +28,11 @@ async def ingest_telegram_dm(
     source: str,
 ) -> None:
     text = (message.text or message.caption or "").strip()
-    if not text:
+    has_photo = bool(message.photo) or (
+        message.document is not None
+        and (message.document.mime_type or "").lower().startswith("image/")
+    )
+    if not text and not has_photo:
         return
 
     topic_id_str: str | None = None
@@ -65,13 +63,19 @@ async def ingest_telegram_dm(
             log.warning("telegram ingest: user %s not found", owner_user_id)
             return
 
-        translated, src_lang = await translate_to_russian(text)
+        translated, src_lang = await translate_to_russian(text) if text else ("", None)
 
         photo_fid: str | None = None
+        image_bytes: bytes | None = None
+        image_mime: str | None = None
         bot, close_bot = await open_telegram_bot_for_owner(session, owner_user_id)
         try:
             if bot and from_user:
                 photo_fid = await telegram_profile_photo_file_id(bot, from_user.id)
+            if bot and has_photo:
+                img = await download_telegram_image(message, bot)
+                if img:
+                    image_bytes, image_mime = img
         finally:
             if close_bot and bot:
                 await bot.session.close()
@@ -85,52 +89,35 @@ async def ingest_telegram_dm(
             display,
             telegram_photo_file_id=photo_fid,
         )
-        if not conv.user_lang:
-            conv.user_lang = src_lang
-        elif src_lang and src_lang != "unknown":
-            conv.user_lang = src_lang
-        conv.updated_at = datetime.now(timezone.utc)
 
         meta = json.dumps(
             {
                 "message_id": message.message_id,
                 "from_user_id": from_user.id if from_user else None,
                 "ingest_source": source,
+                "has_image": bool(image_bytes),
             },
             ensure_ascii=False,
         )
-        row = await add_message(
+        conv_id, _ = await persist_inbound_chat_message(
             session,
-            conv.id,
-            MessageDirection.inbound,
-            text,
-            translated,
+            owner_user_id=owner_user_id,
+            conv=conv,
+            display=display or "Telegram",
+            text_original=text,
+            text_translated=translated if text else None,
+            src_lang=src_lang,
             meta=meta,
+            image_bytes=image_bytes,
+            image_mime=image_mime,
         )
         await session.commit()
-        await session.refresh(row)
-        conv_id = conv.id
-        payload = MessageOut.model_validate(row).model_dump(mode="json")
 
-    await hub.broadcast_user(
-        owner_user_id,
-        {
-            "type": "new_message",
-            "conversation_id": conv_id,
-            "message": payload,
-        },
-    )
-    preview = (translated or text)[:200]
-    await notify_inbound_message(
-        owner_user_id,
-        conversation_id=conv_id,
-        title=f"{display} · Telegram",
-        body=preview,
-    )
     log.info(
-        "ingested telegram DM user=%s conv=%s topic=%s source=%s",
+        "ingested telegram DM user=%s conv=%s topic=%s source=%s image=%s",
         owner_user_id,
         conv_id,
         topic_id_str,
         source,
+        bool(image_bytes),
     )

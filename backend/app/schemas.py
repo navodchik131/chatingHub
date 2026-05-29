@@ -8,6 +8,13 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, mo
 from app.db.models import MessageDirection, Platform
 
 
+class MessageAttachmentOut(BaseModel):
+    id: int
+    kind: str
+    url: str
+    mime_type: str
+
+
 class MessageOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -16,6 +23,7 @@ class MessageOut(BaseModel):
     text_original: str
     text_translated: str | None
     created_at: datetime
+    attachments: list[MessageAttachmentOut] = []
 
 
 class ConversationOut(BaseModel):

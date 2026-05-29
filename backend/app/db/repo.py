@@ -109,12 +109,15 @@ async def list_conversations(session: AsyncSession, user_id: int) -> list[Conver
 async def get_last_message(
     session: AsyncSession, conv_id: int, user_id: int
 ) -> Message | None:
+    from sqlalchemy.orm import selectinload
+
     conv = await get_conversation(session, conv_id, user_id)
     if not conv:
         return None
     stmt = (
         select(Message)
         .where(Message.conversation_id == conv_id)
+        .options(selectinload(Message.attachments))
         .order_by(Message.id.desc())
         .limit(1)
     )

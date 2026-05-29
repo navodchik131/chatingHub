@@ -332,6 +332,35 @@ async def init_db() -> None:
         await conn.run_sync(_migrate_studio_motion_render_model_link)
         await conn.run_sync(_migrate_workspace_member_studio_models)
         await conn.run_sync(_migrate_conversation_studio_model_id)
+        await conn.run_sync(_migrate_message_attachments_table)
+
+
+def _migrate_message_attachments_table(sync_conn) -> None:
+    from sqlalchemy import inspect
+
+    insp = inspect(sync_conn)
+    if insp.has_table("message_attachments"):
+        return
+    sync_conn.execute(
+        text(
+            """
+            CREATE TABLE message_attachments (
+                id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                message_id INTEGER NOT NULL,
+                kind VARCHAR(16) NOT NULL DEFAULT 'image',
+                relative_path VARCHAR(512) NOT NULL,
+                mime_type VARCHAR(64) NOT NULL DEFAULT 'image/jpeg',
+                width INTEGER,
+                height INTEGER,
+                created_at DATETIME NOT NULL,
+                FOREIGN KEY(message_id) REFERENCES messages (id) ON DELETE CASCADE
+            )
+            """
+        )
+    )
+    sync_conn.execute(
+        text("CREATE INDEX ix_message_attachments_message_id ON message_attachments (message_id)")
+    )
 
 
 def _migrate_workspace_member_studio_models(sync_conn) -> None:

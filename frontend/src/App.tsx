@@ -108,12 +108,22 @@ const OUTBOUND_LANG_OPTIONS: { value: string; label: string }[] = [
   { value: 'zh', label: '中文' },
 ]
 
+interface ChatMessageAttachment {
+  id: number
+  kind: string
+  url: string
+  mime_type: string
+}
+
 interface ChatMessage {
   id: number
   direction: 'inbound' | 'outbound'
   text_original: string
   text_translated: string | null
   created_at: string
+  attachments?: ChatMessageAttachment[]
+  /** Локальный превью до ответа сервера. */
+  localPreviewUrl?: string
   /** Локальный черновик до ответа сервера (перевод ещё готовится). */
   pending?: boolean
 }
@@ -614,6 +624,19 @@ export default function App() {
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [draft, setDraft] = useState('')
+  const [chatReplyFile, setChatReplyFile] = useState<File | null>(null)
+  const [chatReplyArchiveId, setChatReplyArchiveId] = useState<number | null>(null)
+  const [chatArchivePickerOpen, setChatArchivePickerOpen] = useState(false)
+  const chatReplyFileInputRef = useRef<HTMLInputElement | null>(null)
+  const chatReplyFilePreview = useMemo(
+    () => (chatReplyFile ? URL.createObjectURL(chatReplyFile) : null),
+    [chatReplyFile],
+  )
+  useEffect(() => {
+    return () => {
+      if (chatReplyFilePreview) URL.revokeObjectURL(chatReplyFilePreview)
+    }
+  }, [chatReplyFilePreview])
   const [loading, setLoading] = useState(false)
   const [loadingOlder, setLoadingOlder] = useState(false)
   const [hasMoreOlder, setHasMoreOlder] = useState(false)
@@ -2013,10 +2036,34 @@ export default function App() {
     }
   }
 
+  const clearChatReplyAttachment = useCallback(() => {
+    setChatReplyFile(null)
+    setChatReplyArchiveId(null)
+    if (chatReplyFileInputRef.current) chatReplyFileInputRef.current.value = ''
+  }, [])
+
+  useEffect(() => {
+    setChatArchivePickerOpen(false)
+    clearChatReplyAttachment()
+  }, [selectedId, clearChatReplyAttachment])
+
+  const chatReplyHasAttachment = Boolean(chatReplyFile || chatReplyArchiveId)
+
   const sendReply = async () => {
-    if (selectedId == null || !draft.trim()) return
-    const convId = selectedId
+    if (selectedId == null) return
     const text = draft.trim()
+    if (!text && !chatReplyHasAttachment) return
+    const convId = selectedId
+    const fileToSend = chatReplyFile
+    const archiveIdToSend = chatReplyArchiveId
+    let localPreviewUrl: string | undefined
+    if (fileToSend) {
+      localPreviewUrl = URL.createObjectURL(fileToSend)
+    } else if (archiveIdToSend != null) {
+      const g = findStudioArchiveItem(archiveIdToSend)
+      const thumb = g ? studioArchiveThumbUrl(g) || g.image_url : null
+      if (thumb) localPreviewUrl = thumb
+    }
     pendingOutboundIdRef.current -= 1
     const tempId = pendingOutboundIdRef.current
     const optimistic: ChatMessage = {
@@ -2026,17 +2073,34 @@ export default function App() {
       text_translated: null,
       created_at: new Date().toISOString(),
       pending: true,
+      localPreviewUrl,
     }
     setError(null)
     setDraft('')
     setEmojiOpen(false)
+    clearChatReplyAttachment()
+    setChatArchivePickerOpen(false)
     setMessages((prev) => [...prev, optimistic])
     requestAnimationFrame(() => scrollToBottom(true))
     try {
-      const r = await apiFetch(`/api/conversations/${convId}/reply`, {
-        method: 'POST',
-        body: JSON.stringify({ text }),
-      })
+      let r: Response
+      if (fileToSend || archiveIdToSend != null) {
+        const fd = new FormData()
+        if (text) fd.append('text', text)
+        if (fileToSend) fd.append('image', fileToSend, fileToSend.name || 'image.jpg')
+        if (archiveIdToSend != null && !fileToSend) {
+          fd.append('studio_generation_id', String(archiveIdToSend))
+        }
+        r = await apiFetch(`/api/conversations/${convId}/reply`, {
+          method: 'POST',
+          body: fd,
+        })
+      } else {
+        r = await apiFetch(`/api/conversations/${convId}/reply`, {
+          method: 'POST',
+          body: JSON.stringify({ text }),
+        })
+      }
       if (!r.ok) {
         const err = await r.json().catch(() => ({}))
         setError(formatHttpApiError(r, err))
@@ -2045,9 +2109,13 @@ export default function App() {
           return prev.filter((m) => m.id !== tempId)
         })
         setDraft((d) => (d.trim() ? `${text}\n\n${d}` : text))
+        if (fileToSend) setChatReplyFile(fileToSend)
+        if (archiveIdToSend != null) setChatReplyArchiveId(archiveIdToSend)
+        if (localPreviewUrl && fileToSend) URL.revokeObjectURL(localPreviewUrl)
         return
       }
       const msg: ChatMessage = await r.json()
+      if (localPreviewUrl && fileToSend) URL.revokeObjectURL(localPreviewUrl)
       const mid = Number(msg.id)
       setMessages((prev) => {
         if (selectedIdRef.current !== convId) return prev
@@ -2060,11 +2128,14 @@ export default function App() {
       void refreshMe()
       requestAnimationFrame(() => scrollToBottom(true))
     } catch {
+      if (localPreviewUrl && fileToSend) URL.revokeObjectURL(localPreviewUrl)
       setMessages((prev) => {
         if (selectedIdRef.current !== convId) return prev
         return prev.filter((m) => m.id !== tempId)
       })
       setDraft((d) => (d.trim() ? `${text}\n\n${d}` : text))
+      if (fileToSend) setChatReplyFile(fileToSend)
+      if (archiveIdToSend != null) setChatReplyArchiveId(archiveIdToSend)
       setError('Не удалось отправить сообщение')
     }
   }
@@ -5988,7 +6059,17 @@ export default function App() {
                           <span className="muted">Загрузка истории…</span>
                         </div>
                       ) : null}
-                      {displayMessages.map((m) => (
+                      {displayMessages.map((m) => {
+                        const hasMedia =
+                          Boolean(m.localPreviewUrl) ||
+                          Boolean(m.attachments && m.attachments.length > 0)
+                        const hasText = Boolean(
+                          (m.direction === 'inbound'
+                            ? m.text_translated ?? m.text_original
+                            : m.text_original
+                          )?.trim(),
+                        )
+                        return (
                       <article
                         key={m.id}
                         className={
@@ -5999,14 +6080,34 @@ export default function App() {
                               : 'bubble out msg-enter'
                         }
                       >
-                        {m.direction === 'inbound' ? (
+                        {hasMedia ? (
+                          <div className="bubble-media">
+                            {m.localPreviewUrl ? (
+                              <img
+                                src={m.localPreviewUrl}
+                                alt=""
+                                className="bubble-media__img"
+                              />
+                            ) : null}
+                            {(m.attachments ?? []).map((a) => (
+                              <img
+                                key={a.id}
+                                src={a.url}
+                                alt=""
+                                className="bubble-media__img"
+                                loading="lazy"
+                              />
+                            ))}
+                          </div>
+                        ) : null}
+                        {hasText && m.direction === 'inbound' ? (
                           <>
                             <div className="ru">{m.text_translated ?? m.text_original}</div>
                             <div className="orig" title="Оригинал">
                               {m.text_original}
                             </div>
                           </>
-                        ) : (
+                        ) : hasText ? (
                           <>
                             <div className="ru">{m.text_original}</div>
                             <div
@@ -6019,7 +6120,7 @@ export default function App() {
                                 : m.text_translated ?? '—'}
                             </div>
                           </>
-                        )}
+                        ) : null}
                         <time>
                           {new Date(m.created_at).toLocaleString('ru-RU', {
                             day: '2-digit',
@@ -6029,7 +6130,8 @@ export default function App() {
                           })}
                         </time>
                       </article>
-                    ))}
+                        )
+                      })}
                       <div className="messages-end" aria-hidden />
                     </>
                   )}
@@ -6047,7 +6149,90 @@ export default function App() {
 
                 <div className="composer-shell" ref={composerRef}>
                   <div className="composer-inner" ref={emojiWrapRef}>
+                    {(chatReplyFile || chatReplyArchiveId != null) && (
+                      <div className="chat-composer-attach-preview">
+                        {chatReplyFile && chatReplyFilePreview ? (
+                          <img
+                            src={chatReplyFilePreview}
+                            alt=""
+                            className="chat-composer-attach-preview__img"
+                          />
+                        ) : chatReplyArchiveId != null ? (
+                          (() => {
+                            const g = findStudioArchiveItem(chatReplyArchiveId)
+                            const src = g
+                              ? studioArchiveThumbUrl(g) || g.image_url
+                              : null
+                            return src ? (
+                              <img src={src} alt="" className="chat-composer-attach-preview__img" />
+                            ) : (
+                              <span className="muted">Архив #{chatReplyArchiveId}</span>
+                            )
+                          })()
+                        ) : null}
+                        <button
+                          type="button"
+                          className="chat-composer-attach-preview__clear"
+                          onClick={clearChatReplyAttachment}
+                          title="Убрать вложение"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    )}
+                    {chatArchivePickerOpen ? (
+                      <div className="chat-composer-archive">
+                        <StudioArchiveThumbPicker
+                          label="Из архива студии"
+                          hint="Готовое изображение уйдёт в чат"
+                          items={studioImagePickerArchive}
+                          value={chatReplyArchiveId}
+                          onChange={(id) => {
+                            setChatReplyArchiveId(id)
+                            if (id != null) setChatReplyFile(null)
+                            if (chatReplyFileInputRef.current) {
+                              chatReplyFileInputRef.current.value = ''
+                            }
+                          }}
+                        />
+                      </div>
+                    ) : null}
                     <div className="composer-toolbar">
+                      <input
+                        ref={chatReplyFileInputRef}
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp,image/gif"
+                        className="chat-composer-file-input"
+                        onChange={(e) => {
+                          const f = e.target.files?.[0]
+                          if (!f) return
+                          setChatReplyFile(f)
+                          setChatReplyArchiveId(null)
+                        }}
+                      />
+                      <button
+                        type="button"
+                        className="icon-btn"
+                        title="Фото с устройства"
+                        onClick={() => chatReplyFileInputRef.current?.click()}
+                      >
+                        <span aria-hidden>📎</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="icon-btn"
+                        title="Из архива студии"
+                        aria-expanded={chatArchivePickerOpen}
+                        onClick={() => {
+                          setChatArchivePickerOpen((o) => {
+                            const next = !o
+                            if (next) void loadStudioImagePickerArchive()
+                            return next
+                          })
+                        }}
+                      >
+                        <span aria-hidden>🖼</span>
+                      </button>
                       <button
                         type="button"
                         className="icon-btn"
@@ -6106,7 +6291,7 @@ export default function App() {
                         type="button"
                         className="send-btn"
                         onClick={() => void sendReply()}
-                        disabled={!draft.trim()}
+                        disabled={!draft.trim() && !chatReplyHasAttachment}
                       >
                         Отправить
                       </button>

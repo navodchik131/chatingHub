@@ -23,6 +23,8 @@ async def send_direct_message(
     access_token: str,
     fan_user_uuid: str,
     text: str,
+    *,
+    media_uuids: list[str] | None = None,
 ) -> str:
     token = (access_token or "").strip()
     if not token:
@@ -35,7 +37,9 @@ async def send_direct_message(
         "X-Fanvue-API-Version": settings.fanvue_api_version,
         "Content-Type": "application/json",
     }
-    payload: dict[str, Any] = {"text": text}
+    payload: dict[str, Any] = {"text": text or ""}
+    if media_uuids:
+        payload["mediaUuids"] = [u for u in media_uuids if u]
     async with httpx.AsyncClient(timeout=60.0) as client:
         r = await client.post(url, json=payload, headers=headers)
     if r.status_code >= 400:
