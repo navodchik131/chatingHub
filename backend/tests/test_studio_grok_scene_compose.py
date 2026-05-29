@@ -5,9 +5,12 @@ from __future__ import annotations
 import json
 
 from app.db.models import UserStudioModelImage
+from app.config import BACKEND_DIR
 from app.services.studio_grok_scene_compose import (
+    _grok_prompt_file_candidates,
     _parse_grok_compose_json,
     collect_model_images_for_grok_compose,
+    load_grok_scene_compose_text_system,
 )
 from app.services.studio_model_images import (
     select_grok_compose_wavespeed_identity_images,
@@ -22,6 +25,24 @@ def _im(kind: str, id_: int = 1) -> UserStudioModelImage:
         relative_path=f"uploads/studio/x/{kind}_{id_}.jpg",
         image_kind=kind,
     )
+
+
+def test_grok_text_system_loads_from_bundled_prompts() -> None:
+    bundled = (
+        BACKEND_DIR / "_bundled_prompts" / "grok_scene_compose_text_system.txt"
+    ).resolve()
+    assert bundled.is_file(), "bundled text prompt must ship in repo / Docker image"
+    text = load_grok_scene_compose_text_system()
+    assert "TEXT_SCENE_ONLY" in text or "text-only" in text.lower()
+
+
+def test_grok_prompt_candidates_include_bundled_fallback() -> None:
+    paths = _grok_prompt_file_candidates(
+        "data/prompts/grok_scene_compose_text_system.txt",
+        "grok_scene_compose_text_system.txt",
+    )
+    assert any("_bundled_prompts" in str(p) for p in paths)
+    assert len(paths) >= 2
 
 
 def test_collect_nsfw_includes_genitals() -> None:

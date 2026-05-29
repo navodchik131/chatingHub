@@ -55,15 +55,35 @@ def grok_scene_compose_configured() -> bool:
     return grok_motion_api_configured()
 
 
+def _grok_prompt_file_candidates(configured_rel: str, default_filename: str) -> list[Path]:
+    """Том Docker часто перекрывает data/prompts — всегда пробуем _bundled_prompts из образа."""
+    rel = (configured_rel or "").strip()
+    name = default_filename
+    if rel:
+        p = (BACKEND_DIR / rel).resolve()
+        name = p.name
+    ordered = [
+        (BACKEND_DIR / rel).resolve() if rel else None,
+        (BACKEND_DIR / "data" / "prompts" / name).resolve(),
+        (BACKEND_DIR / "_bundled_prompts" / name).resolve(),
+    ]
+    seen: set[Path] = set()
+    out: list[Path] = []
+    for item in ordered:
+        if item is None:
+            continue
+        if item in seen:
+            continue
+        seen.add(item)
+        out.append(item)
+    return out
+
+
 def load_grok_scene_compose_text_system() -> str:
     configured = (settings.grok_scene_compose_text_system_path or "").strip()
-    candidates: list[Path] = []
-    if configured:
-        candidates.append((BACKEND_DIR / configured).resolve())
-    else:
-        name = "grok_scene_compose_text_system.txt"
-        candidates.append((BACKEND_DIR / "data" / "prompts" / name).resolve())
-        candidates.append((BACKEND_DIR / "_bundled_prompts" / name).resolve())
+    candidates = _grok_prompt_file_candidates(
+        configured, "grok_scene_compose_text_system.txt"
+    )
     for path in candidates:
         if path.is_file():
             t = path.read_text(encoding="utf-8").strip()
@@ -81,13 +101,9 @@ def load_grok_scene_compose_text_system() -> str:
 def load_grok_scene_compose_system() -> str:
     """data/prompts (том Docker) → _bundled_prompts (в образе) → GROK_SCENE_COMPOSE_SYSTEM_INLINE."""
     configured = (settings.grok_scene_compose_system_path or "").strip()
-    candidates: list[Path] = []
-    if configured:
-        candidates.append((BACKEND_DIR / configured).resolve())
-    else:
-        name = "grok_scene_compose_system.txt"
-        candidates.append((BACKEND_DIR / "data" / "prompts" / name).resolve())
-        candidates.append((BACKEND_DIR / "_bundled_prompts" / name).resolve())
+    candidates = _grok_prompt_file_candidates(
+        configured, "grok_scene_compose_system.txt"
+    )
     for path in candidates:
         if path.is_file():
             t = path.read_text(encoding="utf-8").strip()
