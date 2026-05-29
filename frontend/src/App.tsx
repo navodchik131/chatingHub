@@ -46,6 +46,13 @@ import { AuthPanel } from './AuthPanel'
 import { AppShell, type WorkspaceSection } from './components/AppShell'
 import { WorkspaceOverview } from './components/WorkspaceOverview'
 import {
+  SetupTour,
+  dismissSetupTour,
+  readSetupTourDismissed,
+  resolveSetupTourPhase,
+} from './components/SetupTour'
+import { studioImageGenerateBlockReason } from './studio/studioGenerateGate'
+import {
   WavespeedSetupBanner,
   needsUserWavespeedKey,
 } from './components/WavespeedSetupBanner'
@@ -744,6 +751,7 @@ export default function App() {
   >({})
   const [wsApiKey, setWsApiKey] = useState('')
   const [wsSetupPulse, setWsSetupPulse] = useState(false)
+  const [setupTourDismissed, setSetupTourDismissed] = useState(readSetupTourDismissed)
   const [llmApiKey, setLlmApiKey] = useState('')
   const [llmBaseUrl, setLlmBaseUrl] = useState('')
   const [billingPlanRows, setBillingPlanRows] = useState<BillingPlanRow[]>([])
@@ -1434,6 +1442,71 @@ export default function App() {
     motionHasFirstFrame,
     motionDesc,
   ])
+
+  const studioImageBtnBlockReason = useMemo(
+    () =>
+      studioImageGenerateBlockReason({
+        studioBusy,
+        canStudioGenerate,
+        studioMode,
+        studioDesc,
+        studioFile,
+        studioPhotoEditArchiveId,
+        studioSelectedModelId,
+        studioSendPoseRefToWavespeed,
+        studioPaintInpaintMask,
+        studioInpaintMaskFile,
+        grokSceneConfigured: health?.studio_grok_scene_compose_configured !== false,
+        openaiStudioConfigured: health?.openai_studio_configured === true,
+        wavespeedConfigured: integ?.wavespeed_configured === true,
+        studioPromptOnlyDev,
+        studioNeedsUserWsKey,
+      }),
+    [
+      studioBusy,
+      canStudioGenerate,
+      studioMode,
+      studioDesc,
+      studioFile,
+      studioPhotoEditArchiveId,
+      studioSelectedModelId,
+      studioSendPoseRefToWavespeed,
+      studioPaintInpaintMask,
+      studioInpaintMaskFile,
+      health?.studio_grok_scene_compose_configured,
+      health?.openai_studio_configured,
+      integ?.wavespeed_configured,
+      studioPromptOnlyDev,
+      studioNeedsUserWsKey,
+    ],
+  )
+
+  const setupTourPhase = useMemo(
+    () =>
+      me && authed && canStudioAny && !studioPaywalled
+        ? resolveSetupTourPhase({
+            dismissed: setupTourDismissed,
+            wavespeedReady: !studioNeedsUserWsKey,
+            modelsCount: studioModels.length,
+            generationsCount: studioGenerations.length,
+          })
+        : null,
+    [
+      me,
+      authed,
+      canStudioAny,
+      studioPaywalled,
+      setupTourDismissed,
+      studioNeedsUserWsKey,
+      studioModels.length,
+      studioGenerations.length,
+    ],
+  )
+
+  const dismissSetupTourUi = useCallback(() => {
+    dismissSetupTour()
+    setSetupTourDismissed(true)
+  }, [])
 
   const loadHealth = useCallback(async () => {
     const r = await fetch('/api/health')
@@ -4711,6 +4784,21 @@ export default function App() {
           )}
 
           {appSection === 'overview' && me ? (
+            <>
+            {setupTourPhase && setupTourPhase !== 'done' ? (
+              <SetupTour
+                phase={setupTourPhase}
+                isOwner={isOwner}
+                canStudioModels={canStudioModels}
+                onOpenIntegrations={openWavespeedIntegrations}
+                onOpenModels={() => {
+                  setAccountOpen(true)
+                  setAccountTab('models')
+                }}
+                onGoStudio={() => setAppSection('studio')}
+                onDismiss={dismissSetupTourUi}
+              />
+            ) : null}
             <WorkspaceOverview
               creditsBalance={me.credits_balance}
               billingPlanLabel={userBillingPlanLabel(me)}
@@ -4728,6 +4816,7 @@ export default function App() {
               onOpenVideo={() => setAppSection('studio_video')}
               onOpenAccount={() => setAccountOpen(true)}
             />
+            </>
           ) : null}
 
       {import.meta.env.DEV && health && appSection !== 'studio' && appSection !== 'studio_video' && (
@@ -4775,6 +4864,20 @@ export default function App() {
                   isTrialing={(me?.subscription_status || '').toLowerCase() === 'trialing'}
                   canConnect={isOwner && canIntegrations}
                   onOpenIntegrations={openWavespeedIntegrations}
+                />
+              ) : null}
+              {!studioPaywalled && setupTourPhase && setupTourPhase !== 'done' ? (
+                <SetupTour
+                  phase={setupTourPhase}
+                  isOwner={isOwner}
+                  canStudioModels={canStudioModels}
+                  onOpenIntegrations={openWavespeedIntegrations}
+                  onOpenModels={() => {
+                    setAccountOpen(true)
+                    setAccountTab('models')
+                  }}
+                  onGoStudio={() => setAppSection('studio')}
+                  onDismiss={dismissSetupTourUi}
                 />
               ) : null}
           {studioPaywalled ? (
@@ -5111,48 +5214,17 @@ export default function App() {
                 onChange={(e) => setStudioDesc(e.target.value)}
               />
             </div>
+            {studioImageBtnBlockReason ? (
+              <p className="studio-generate-block-hint" role="status">
+                {studioImageBtnBlockReason}
+              </p>
+            ) : null}
             <div className="studio-workspace__actions">
               <button
                 type="button"
                 className="studio-magic-btn"
-                title={
-                  studioMode === 'grok_compose'
-                    ? health?.studio_grok_scene_compose_configured === false
-                      ? 'Grok не настроен на сервере'
-                      : !studioPromptOnlyDev && !integ?.wavespeed_configured
-                        ? studioIntegrationsHint()
-                        : undefined
-                    : !health?.openai_studio_configured
-                      ? 'Генерация временно недоступна'
-                      : !studioPromptOnlyDev && !integ?.wavespeed_configured
-                        ? studioIntegrationsHint()
-                        : undefined
-                }
-                disabled={
-                  studioBusy ||
-                  !canStudioGenerate ||
-                  (studioMode !== 'grok_compose' &&
-                    !studioDesc.trim() &&
-                    !studioFile &&
-                    studioSelectedModelId == null) ||
-                  (studioMode === 'face_swap' &&
-                    (studioSelectedModelId == null || studioFile == null)) ||
-                  (studioMode === 'grok_compose' &&
-                    (studioSelectedModelId == null ||
-                      studioFile == null ||
-                      health?.studio_grok_scene_compose_configured === false)) ||
-                  (studioMode === 'photo_edit' &&
-                    !studioFile &&
-                    studioPhotoEditArchiveId == null) ||
-                  (studioMode === 'photo_edit' && !studioDesc.trim()) ||
-                  (studioMode === 'no_face' && studioSelectedModelId == null && !studioFile) ||
-                  (studioFile != null &&
-                    !studioSendPoseRefToWavespeed &&
-                    studioSelectedModelId == null &&
-                    (studioMode === 'model' || studioMode === 'no_face')) ||
-                  (studioMode !== 'grok_compose' && !health?.openai_studio_configured) ||
-                  (!studioPromptOnlyDev && !integ?.wavespeed_configured)
-                }
+                title={studioImageBtnBlockReason ?? undefined}
+                disabled={studioBusy || studioImageBtnBlockReason != null}
                 onClick={() => void refineStudioPrompt()}
               >
                 {studioBusy

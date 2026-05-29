@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import type { StudioArchiveItem } from '../../studioArchive'
 
 type Props = {
@@ -88,15 +89,26 @@ export function StudioArchiveMediaModal({ item, onClose }: Props) {
   useEffect(() => {
     if (!item) return
     setHint(null)
+    const scrollY = window.scrollY
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose()
     }
     document.addEventListener('keydown', onKey)
-    const prev = document.body.style.overflow
+    const prevOverflow = document.body.style.overflow
+    const prevPosition = document.body.style.position
+    const prevTop = document.body.style.top
+    const prevWidth = document.body.style.width
     document.body.style.overflow = 'hidden'
+    document.body.style.position = 'fixed'
+    document.body.style.top = `-${scrollY}px`
+    document.body.style.width = '100%'
     return () => {
       document.removeEventListener('keydown', onKey)
-      document.body.style.overflow = prev
+      document.body.style.overflow = prevOverflow
+      document.body.style.position = prevPosition
+      document.body.style.top = prevTop
+      document.body.style.width = prevWidth
+      window.scrollTo(0, scrollY)
     }
   }, [item, onClose])
 
@@ -120,7 +132,7 @@ export function StudioArchiveMediaModal({ item, onClose }: Props) {
   const mediaUrl = (isVideo ? item.video_url : item.image_url)?.trim()
   if (!mediaUrl) return null
 
-  return (
+  const modal = (
     <div
       className="studio-archive-modal"
       role="dialog"
@@ -176,4 +188,6 @@ export function StudioArchiveMediaModal({ item, onClose }: Props) {
       </div>
     </div>
   )
+
+  return createPortal(modal, document.body)
 }
