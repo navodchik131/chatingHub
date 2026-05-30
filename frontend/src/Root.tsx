@@ -9,7 +9,8 @@ import { PrivacyPage } from './marketing/PrivacyPage'
 import { TermsPage } from './marketing/TermsPage'
 import { AdminPage } from './admin/AdminPage'
 
-function MarketingRoutes() {
+/** Дочерние <Route> маркетинга (не компонент-обёртка — RR требует Route напрямую). */
+function marketingRouteChildren() {
   return (
     <>
       <Route index element={<LandingPage />} />
@@ -26,11 +27,9 @@ export default function Root() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route element={<MarketingLayout />}>
-          <MarketingRoutes />
-        </Route>
+        <Route element={<MarketingLayout />}>{marketingRouteChildren()}</Route>
         <Route path="en" element={<MarketingLayout />}>
-          <MarketingRoutes />
+          {marketingRouteChildren()}
         </Route>
         <Route path="/workspace/*" element={<App />} />
         <Route path="/admin" element={<AdminPage />} />
