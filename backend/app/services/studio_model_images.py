@@ -151,8 +151,8 @@ def select_prompt_only_wavespeed_identity_images(
     wave_profile: str,
 ) -> list[UserStudioModelImage]:
     """
-    Режим «По промту» (без референса сцены): в WaveSpeed только тело целиком и интимная анатомия.
-    Порядок: body → genitals (NSFW). Без turnaround/face — они тянут студийный лист вместо сцены из текста.
+    Режим «По промту» (без референса сцены): body → face → genitals (NSFW).
+    Без turnaround — студийный лист тянет нейтральный фон/свет вместо сцены из текста.
     """
     if not imgs:
         return []
@@ -160,13 +160,14 @@ def select_prompt_only_wavespeed_identity_images(
     by_kind: dict[str, UserStudioModelImage] = {}
     for im in imgs:
         k = (im.image_kind or "other").lower()
-        if k in ("body", "genitals") and k not in by_kind:
+        if k in ("body", "face", "genitals") and k not in by_kind:
             by_kind[k] = im
 
     picked: list[UserStudioModelImage] = []
-    body = by_kind.get("body")
-    if body is not None:
-        picked.append(body)
+    for kind in ("body", "face"):
+        im = by_kind.get(kind)
+        if im is not None:
+            picked.append(im)
     if wp == "nsfw":
         gen = by_kind.get("genitals")
         if gen is not None and gen.id not in {x.id for x in picked}:

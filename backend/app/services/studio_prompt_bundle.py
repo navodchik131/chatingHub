@@ -537,6 +537,68 @@ def extract_studio_negative_prompt(
     return _merge_negative_parts(_CANONICAL_STUDIO_NEGATIVE, neg_s, avoid_merged, profile_avoid)
 
 
+def build_grok_text_scene_positive_json(
+    grok_prose: str,
+    *,
+    model_profile_text: str | None,
+    output_aspect_key: str = "3:4",
+    extra_negative: str | None = None,
+    reference_scene_description: str | None = None,
+) -> tuple[str, str]:
+    """
+    «По промту»: Grok prose → JSON с realism_engine (как основная студия).
+    negative_prompt внутри JSON; в API WaveSpeed не дублируем блок [NEGATIVE_PROMPT].
+    """
+    prose = (grok_prose or "").strip()
+    grok_neg = _filter_avoid_csv((extra_negative or "").strip())
+    negative = _merge_negative_parts(
+        _CANONICAL_STUDIO_NEGATIVE,
+        _GROK_COMPOSE_BODY_NEGATIVE,
+        grok_neg,
+        _always_avoid_from_profile(model_profile_text),
+    )
+    if reference_pose_is_nude_or_minimal_coverage(reference_scene_description):
+        negative = _merge_negative_parts(negative, _NUDE_WARDROBE_NEGATIVE)
+
+    re_obj = load_canonical_realism_engine()
+    aspect = (output_aspect_key or "3:4").strip() or "3:4"
+    data: dict[str, Any] = {
+        "scene_brief": prose,
+        "photography": {
+            "camera_style": (
+                "casual smartphone snapshot or friend-shot phone photo — "
+                "not studio, not catalog, not influencer campaign"
+            ),
+            "device": "unknown smartphone main/rear lens",
+            "depth_of_field": (
+                "natural phone DoF — background readable and mostly in focus; "
+                "no portrait-mode bokeh, no heavy background blur, no DSLR isolation"
+            ),
+            "lighting": (
+                "incidental ambient light on scene (window, room lamp, overcast outdoor); "
+                "no softbox glamour, no ring-light beauty setup"
+            ),
+            "snapshot_authenticity": (
+                "mundane real camera-roll candid — ordinary life, not stock photo"
+            ),
+            "aspect_ratio": aspect,
+        },
+        "constraints": {
+            "must_keep": [
+                "One real person; face and body identity from MODEL_PROFILE and attached reference images on all visible skin",
+                "Scene composition, pose, room, and light from scene_brief only — not from studio character sheet aesthetics",
+                "Phone snapshot realism per realism_engine: natural grain, no fake bokeh, no plastic beauty-filter skin",
+            ],
+        },
+        "negative_prompt": negative,
+    }
+    if re_obj is not None:
+        data["realism_engine"] = re_obj
+
+    positive = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
+    return positive, negative
+
+
 def prepare_positive_prompt_json(
     refined_text: str,
     *,
@@ -544,18 +606,27 @@ def prepare_positive_prompt_json(
     model_profile_text: str | None,
     reference_scene_description: str | None = None,
     extra_negative: str | None = None,
+    output_aspect_key: str = "3:4",
 ) -> tuple[str, str]:
     """
     Возвращает (positive_json_str, negative_prompt_line).
-    brief_mode: full | compact_pose_image | text_scene | grok_composed
+    brief_mode: full | compact_pose_image | text_scene | grok_composed | grok_composed_text
     """
     mode = (brief_mode or "full").strip().lower()
+    if mode == "grok_composed_text":
+        return build_grok_text_scene_positive_json(
+            refined_text,
+            model_profile_text=model_profile_text,
+            output_aspect_key=output_aspect_key,
+            extra_negative=extra_negative,
+            reference_scene_description=reference_scene_description,
+        )
     if mode == "grok_composed":
         prose = (refined_text or "").strip()
         negative = _merge_negative_parts(
             _CANONICAL_STUDIO_NEGATIVE,
             _GROK_COMPOSE_BODY_NEGATIVE,
-            (extra_negative or "").strip(),
+            _filter_avoid_csv((extra_negative or "").strip()),
             _always_avoid_from_profile(model_profile_text),
         )
         if reference_pose_is_nude_or_minimal_coverage(reference_scene_description):
@@ -594,7 +665,20 @@ def prepare_positive_prompt_json(
     return positive, negative
 
 
-def append_negative_to_wavespeed_prompt(prompt: str, negative: str) -> str:
+def append_negative_to_wavespeed_prompt(
+    prompt: str,
+    negative: str,
+    *,
+    brief_mode: str = "full",
+) -> str:
+    """
+    WaveSpeed image-edit API принимает только поле ``prompt`` — отдельного negative нет.
+    Для JSON-брифа (grok_composed_text) negative уже в ключе negative_prompt внутри JSON.
+    Для prose (grok_composed с pose-ref) оставляем суффикс [NEGATIVE_PROMPT] как слабую подсказку модели.
+    """
+    mode = (brief_mode or "full").strip().lower()
+    if mode == "grok_composed_text":
+        return (prompt or "").rstrip()
     neg = (negative or "").strip()
     if not neg:
         return prompt

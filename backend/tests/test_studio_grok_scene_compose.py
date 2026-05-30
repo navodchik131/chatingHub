@@ -16,6 +16,10 @@ from app.services.studio_model_images import (
     select_grok_compose_wavespeed_identity_images,
     select_prompt_only_wavespeed_identity_images,
 )
+from app.services.studio_prompt_bundle import (
+    append_negative_to_wavespeed_prompt,
+    build_grok_text_scene_positive_json,
+)
 
 
 def _im(kind: str, id_: int = 1) -> UserStudioModelImage:
@@ -91,20 +95,36 @@ def test_wavespeed_identity_nude_includes_genitals() -> None:
     assert "face" in kinds
 
 
-def test_prompt_only_identity_body_and_genitals_nsfw() -> None:
+def test_prompt_only_identity_body_face_genitals_nsfw() -> None:
     imgs = [_im("turnaround", 1), _im("face", 2), _im("body", 3), _im("genitals", 4)]
     picked = select_prompt_only_wavespeed_identity_images(imgs, wave_profile="nsfw")
     kinds = [(im.image_kind or "") for im in picked]
-    assert kinds == ["body", "genitals"]
+    assert kinds == ["body", "face", "genitals"]
     assert "turnaround" not in kinds
-    assert "face" not in kinds
 
 
-def test_prompt_only_identity_regular_body_only() -> None:
-    imgs = [_im("turnaround", 1), _im("body", 2), _im("genitals", 3)]
+def test_prompt_only_identity_regular_body_and_face() -> None:
+    imgs = [_im("turnaround", 1), _im("body", 2), _im("genitals", 3), _im("face", 4)]
     picked = select_prompt_only_wavespeed_identity_images(imgs, wave_profile="regular")
-    assert len(picked) == 1
-    assert picked[0].image_kind == "body"
+    kinds = [(im.image_kind or "") for im in picked]
+    assert kinds == ["body", "face"]
+
+
+def test_grok_text_scene_json_has_realism_engine_and_no_suffix_negative() -> None:
+    positive, neg = build_grok_text_scene_positive_json(
+        "A woman in a sunlit kitchen, casual phone snapshot.",
+        model_profile_text='{"model_profile":{"identity_lock_keywords":"test"}}',
+        extra_negative="wrong person, heavy fake bokeh",
+    )
+    data = json.loads(positive)
+    assert "scene_brief" in data
+    assert data.get("realism_engine") is not None
+    assert "photo_realism" in json.dumps(data["realism_engine"])
+    assert data.get("negative_prompt")
+    assert "heavy fake bokeh" in data["negative_prompt"] or "bokeh" in data["negative_prompt"]
+    ws = append_negative_to_wavespeed_prompt(positive, neg, brief_mode="grok_composed_text")
+    assert "[NEGATIVE_PROMPT]" not in ws
+    assert "realism_engine" in ws
 
 
 def test_parse_grok_compose_json() -> None:

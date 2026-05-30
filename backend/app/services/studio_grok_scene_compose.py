@@ -177,7 +177,7 @@ def collect_model_images_for_grok_text_compose(
     *,
     wave_profile: str,
 ) -> list[tuple[str, UserStudioModelImage]]:
-    """Grok «По промту»: только body + genitals (NSFW) для vision при сборке брифа."""
+    """Grok «По промту»: body + face + genitals (NSFW) для vision при сборке брифа."""
     picked = select_prompt_only_wavespeed_identity_images(imgs, wave_profile=wave_profile)
     out: list[tuple[str, UserStudioModelImage]] = []
     for im in picked:

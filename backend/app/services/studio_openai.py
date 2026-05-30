@@ -158,6 +158,21 @@ _GROK_COMPOSED_POSE_LAST_SUFFIX = (
     "the model identity images before it and the brief — not the incidental sitter on this last image."
 )
 
+_GROK_TEXT_SCENE_WAN_PREFIX = (
+    "[TEXT_SCENE — identity refs only] Attached images are ONE model: **body** (silhouette), **face** (likeness), "
+    "optional **anatomy** (NSFW). Scene, pose, camera, background, and light come **only** from the JSON brief below "
+    "(scene_brief + photography + realism_engine). "
+    "Do **not** copy studio-sheet backdrop, catalog lighting, or portrait-mode bokeh from reference photos. "
+    "Background must stay **natural-phone sharp/readable** unless the brief says otherwise. "
+    "Face and body proportions must match references and MODEL_PROFILE — not a generic glamour model.\n\n"
+)
+
+_GROK_TEXT_SCENE_NANO_PREFIX = (
+    "[TEXT_SCENE — identity refs] Earlier images = same model (**body**, **face**, optional anatomy). "
+    "JSON brief below defines pose, room, camera, and light — **not** the reference photos. "
+    "No heavy fake bokeh; mundane smartphone snapshot; preserve identity on all visible skin.\n\n"
+)
+
 _WAN_COMPACT_NO_FACE_PREFIX = (
     "[POSE_REF=image 1 — crop locked] Visible limbs, framing, outfit, light: image 1 only. "
     "Identity skin on visible body from model refs + JSON; never add a face outside the crop.\n\n"
@@ -223,6 +238,8 @@ def finalize_wavespeed_studio_prompt(
             )
     elif brief == "text_scene":
         out = (_NANO_TEXT_SCENE_PREFIX.strip() if not p else _NANO_TEXT_SCENE_PREFIX + p)
+    elif brief == "grok_composed_text":
+        out = _GROK_TEXT_SCENE_WAN_PREFIX.strip() if not p else _GROK_TEXT_SCENE_WAN_PREFIX + p
     else:
         out = p
     if mode == "no_face" and brief != "compact_pose_image":
@@ -324,6 +341,8 @@ def finalize_nano_banana_studio_prompt(
         out = _GROK_COMPOSED_NANO_PREFIX.strip() if not p else _GROK_COMPOSED_NANO_PREFIX + p
         if user_pose_reference_is_last:
             out = out.rstrip() + _GROK_COMPOSED_POSE_LAST_SUFFIX
+    elif brief == "grok_composed_text":
+        out = _GROK_TEXT_SCENE_NANO_PREFIX.strip() if not p else _GROK_TEXT_SCENE_NANO_PREFIX + p
     else:
         if brief == "compact_pose_image" and mode not in ("face_swap", "photo_edit"):
             head = (
@@ -1337,8 +1356,9 @@ def assemble_wavespeed_image_edit_prompt(
     wave_profile: str,
     reference_scene_description: str | None = None,
     extra_negative: str | None = None,
+    output_aspect_key: str = "3:4",
 ) -> str:
-    """Позитивный JSON без avoid/neg + короткие префиксы + [NEGATIVE_PROMPT] снаружи."""
+    """Позитивный промпт для WaveSpeed; negative в JSON (text scene) или суффикс [NEGATIVE_PROMPT] (prose)."""
     from app.services.studio_prompt_bundle import (
         append_negative_to_wavespeed_prompt,
         prepare_positive_prompt_json,
@@ -1350,6 +1370,7 @@ def assemble_wavespeed_image_edit_prompt(
         model_profile_text=model_profile_text,
         reference_scene_description=reference_scene_description,
         extra_negative=extra_negative,
+        output_aspect_key=output_aspect_key,
     )
     mode = (studio_mode or "model").strip().lower()
     brief = (prompt_brief_mode or "full").strip().lower()
@@ -1370,7 +1391,9 @@ def assemble_wavespeed_image_edit_prompt(
             lock_model_hairstyle=lock_model_hairstyle,
             prompt_brief_mode=brief,
         )
-    return append_negative_to_wavespeed_prompt(prompt, negative)
+    return append_negative_to_wavespeed_prompt(
+        prompt, negative, brief_mode=brief
+    )
 
 
 _DEFAULT_MODEL_PROFILE_GEN_SYSTEM = (

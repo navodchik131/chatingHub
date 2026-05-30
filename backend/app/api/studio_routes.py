@@ -2345,7 +2345,7 @@ async def _studio_job_execute_refine_prompt(
             refined = composed.wavespeed_scene_prompt
             reference_scene = composed.reference_scene_lock or None
             grok_negative_extra = composed.negative_prompt or None
-            prompt_brief_mode = "grok_composed"
+            prompt_brief_mode = "grok_composed_text"
             if gen_row is not None:
                 gen_row.refined_prompt = refined
                 gen_row.prompt_excerpt = (refined[:2000] if refined else None) or None
@@ -2827,6 +2827,7 @@ async def _studio_job_execute_refine_prompt(
                     wave_profile=wave_profile_n,
                     reference_scene_description=reference_scene,
                     extra_negative=grok_negative_extra,
+                    output_aspect_key=aspect_key,
                 )
                 size_for_ws: str | None
                 if settings.wavespeed_seedream_omit_size:

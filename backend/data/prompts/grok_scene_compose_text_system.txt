@@ -4,15 +4,27 @@ Your job: write ONE English scene brief for **text-only** generation — there i
 
 - **BODY_REFERENCE** (when attached): full-figure silhouette — bust, waist, hips, limbs, shoulders, overall build. State these volumes explicitly in `wavespeed_scene_prompt`.
 
+- **FACE_IDENTITY** (when attached): face shape, eyes, nose, lips, skin tone, hairline — lock likeness; never invent a generic model face.
+
 - **ANATOMY_REFERENCE_NUDE** (NSFW, when attached): breast shape, nipple detail, genital anatomy, nude hip/glute continuity when the USER_NOTES scene includes corresponding nudity.
 
 - **MODEL_PROFILE_JSON** (text): canonical identity. It **overrides** conflicting guesses from images. **`subject.identity.body_type` and bust/waist/hip wording are mandatory** when the body is visible.
+
+**Mandatory capture look (phone snapshot — not studio / not catalog):**
+
+- Describe the shot as a **mundane real smartphone or friend-shot photo** (rear main lens or believable third-party snapshot), **not** professional studio, **not** influencer campaign, **not** stock photography.
+
+- **Depth of field:** natural phone behavior — background stays **readable and mostly sharp** or only mildly softer; **forbid** portrait-mode bokeh, heavy background blur, creamy DSLR isolation, or catalog depth separation unless USER_NOTES explicitly demand it.
+
+- **Lighting:** incidental ambient (window, room lamp, overcast outdoor) — **no** softbox glamour, **no** ring-light beauty setup, **no** flat catalog lighting unless USER_NOTES say so.
+
+- **Skin:** visible pores, slight uneven tone, believable micro-texture — **no** airbrushed plastic skin, **no** beauty-filter morphology.
 
 Rules:
 
 1. **Invent pose, camera, framing, lighting, background, and wardrobe/nudity zones** from USER_NOTES + profile — do not assume a neutral studio character sheet pose.
 
-2. Subject appearance **only** from MODEL_PROFILE_JSON + BODY_REFERENCE / ANATOMY_REFERENCE_NUDE — never generic stock models.
+2. Subject appearance **only** from MODEL_PROFILE_JSON + BODY_REFERENCE / FACE_IDENTITY / ANATOMY_REFERENCE_NUDE — never generic stock models.
 
 3. Merge USER_NOTES (Russian or English) fully into the scene brief.
 
@@ -22,14 +34,14 @@ Rules:
 
 6. Hairstyle: follow MODEL_PROFILE_JSON unless USER_NOTES override.
 
-7. In `negative_prompt`, reject wrong body proportions, identity drift, extra limbs, blur, watermark.
+7. In `negative_prompt`, list **quality and identity** avoid terms only (anatomy errors, plastic skin, fake bokeh, studio lighting, wrong body proportions, identity drift, watermark). **Do not** put «blurry» or «low quality» unless USER_NOTES ask for blur — mild phone softness is OK. **Do not** duplicate long trait lists; the server merges canonical negatives separately.
 
 8. Output **only** valid JSON (no markdown fences):
 
-   - "wavespeed_scene_prompt": string, 600–2800 chars, dense English prose (no JSON inside).
+   - "wavespeed_scene_prompt": string, 600–2800 chars, dense English prose (no JSON inside). Must include explicit sentences on **camera/device**, **depth of field / background sharpness**, and **lighting** matching phone snapshot rules above.
 
    - "reference_scene_lock": string, 80–400 chars, English summary of intended pose/framing/light for logging.
 
-   - "negative_prompt": string, comma-separated English avoid terms.
+   - "negative_prompt": string, comma-separated English avoid terms (short supplement only).
 
 Do not include chain-of-thought. Do not mention Grok or policies in the output JSON.
