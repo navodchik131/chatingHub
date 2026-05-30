@@ -38,7 +38,7 @@ export function managedPeriodCredits(
   return plan.period === 'year' ? plan.managed_monthly_credits * 12 : plan.managed_monthly_credits
 }
 
-const LIMITS: Record<PlanTier, PlanLimits> = {
+export const LIMITS: Record<PlanTier, PlanLimits> = {
   solo: { max_users: 1, max_models: 1, max_dialogs_per_month: 1000, max_grok_per_month: 500 },
   pro: { max_users: 3, max_models: 3, max_dialogs_per_month: 5000, max_grok_per_month: 2000 },
   studio: { max_users: 10, max_models: 10, max_dialogs_per_month: null, max_grok_per_month: 10000 },

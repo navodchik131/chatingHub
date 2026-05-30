@@ -9,17 +9,28 @@ import { PrivacyPage } from './marketing/PrivacyPage'
 import { TermsPage } from './marketing/TermsPage'
 import { AdminPage } from './admin/AdminPage'
 
+function MarketingRoutes() {
+  return (
+    <>
+      <Route index element={<LandingPage />} />
+      <Route path="pricing" element={<PricingPage />} />
+      <Route path="faq" element={<FaqPage />} />
+      <Route path="privacy" element={<PrivacyPage />} />
+      <Route path="terms" element={<TermsPage />} />
+      <Route path="login" element={<LoginPage />} />
+    </>
+  )
+}
+
 export default function Root() {
   return (
     <BrowserRouter>
       <Routes>
         <Route element={<MarketingLayout />}>
-          <Route index element={<LandingPage />} />
-          <Route path="pricing" element={<PricingPage />} />
-          <Route path="faq" element={<FaqPage />} />
-          <Route path="privacy" element={<PrivacyPage />} />
-          <Route path="terms" element={<TermsPage />} />
-          <Route path="login" element={<LoginPage />} />
+          <MarketingRoutes />
+        </Route>
+        <Route path="en" element={<MarketingLayout />}>
+          <MarketingRoutes />
         </Route>
         <Route path="/workspace/*" element={<App />} />
         <Route path="/admin" element={<AdminPage />} />

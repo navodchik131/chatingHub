@@ -1,12 +1,49 @@
 import { useEffect, useReducer, useState } from 'react'
 import { NavLink, Outlet, useSearchParams } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { getToken } from '../api'
-import { billingReturnCopy } from '../billingReturnCopy'
 import { MmButton, MmContainer } from './components/MmUi'
+import { LanguageSwitcher } from './i18n/LanguageSwitcher'
+import { MarketingI18nSync } from './i18n/MarketingI18nSync'
+import { useMarketingPath } from './i18n/useMarketingPath'
 import './mm-tokens.css'
 import './mm-site.css'
 
+function useBillingBanner(param: string | null) {
+  const { t } = useTranslation('marketing')
+  const k = (param || '').trim().toLowerCase()
+  if (!k) return null
+  if (k === 'success' || k === 'ok' || k === 'paid') {
+    return {
+      variant: 'success' as const,
+      title: t('layout.billingSuccessTitle'),
+      body: t('layout.billingSuccessBody'),
+    }
+  }
+  if (k === 'cancel' || k === 'cancelled' || k === 'canceled') {
+    return {
+      variant: 'warn' as const,
+      title: t('layout.billingCancelTitle'),
+      body: t('layout.billingCancelBody'),
+    }
+  }
+  if (k === 'fail' || k === 'failed' || k === 'error') {
+    return {
+      variant: 'error' as const,
+      title: t('layout.billingFailTitle'),
+      body: t('layout.billingFailBody'),
+    }
+  }
+  return {
+    variant: 'warn' as const,
+    title: t('layout.billingUnknownTitle'),
+    body: t('layout.billingUnknownBody'),
+  }
+}
+
 export function MarketingLayout() {
+  const { t } = useTranslation('marketing')
+  const { path } = useMarketingPath()
   const [, bump] = useReducer((x: number) => x + 1, 0)
   const [scrolled, setScrolled] = useState(false)
 
@@ -27,8 +64,8 @@ export function MarketingLayout() {
 
   const hasToken = Boolean(getToken())
   const [searchParams, setSearchParams] = useSearchParams()
-  const billingParam = searchParams.get('billing')
-  const billingCopy = billingReturnCopy(billingParam)
+  const billingCopy = useBillingBanner(searchParams.get('billing'))
+  const year = new Date().getFullYear()
 
   const dismissBillingBanner = () => {
     const next = new URLSearchParams(searchParams)
@@ -36,46 +73,53 @@ export function MarketingLayout() {
     setSearchParams(next, { replace: true })
   }
 
+  const homePath = path('/')
+  const hashTools = path('/#tools')
+  const hashShowcase = path('/#showcase')
+  const hashReferral = path('/#referral')
+
   return (
     <div className="mm-root">
+      <MarketingI18nSync />
       <a className="mm-skip" href="#main-content">
-        К содержимому
+        {t('layout.skipLink')}
       </a>
       <header className={`mm-header${scrolled ? ' is-scrolled' : ''}`}>
         <MmContainer className="mm-header__inner">
-          <NavLink to="/" className="mm-wordmark" end>
+          <NavLink to={homePath} className="mm-wordmark" end>
             MODELMATE
             <span className="mm-wordmark__dot" aria-hidden />
           </NavLink>
-          <nav className="mm-nav" aria-label="Разделы сайта">
-            <NavLink to="/" end className="mm-nav__link">
-              Главная
+          <nav className="mm-nav" aria-label={t('layout.navAria')}>
+            <NavLink to={homePath} end className="mm-nav__link">
+              {t('layout.navHome')}
             </NavLink>
-            <NavLink to="/#tools" className="mm-nav__link">
-              Студия
+            <NavLink to={hashTools} className="mm-nav__link">
+              {t('layout.navStudio')}
             </NavLink>
-            <NavLink to="/#showcase" className="mm-nav__link">
-              Примеры
+            <NavLink to={hashShowcase} className="mm-nav__link">
+              {t('layout.navShowcase')}
             </NavLink>
-            <NavLink to="/pricing" className="mm-nav__link">
-              Тарифы
+            <NavLink to={path('/pricing')} className="mm-nav__link">
+              {t('layout.navPricing')}
             </NavLink>
-            <NavLink to="/faq" className="mm-nav__link">
-              FAQ
+            <NavLink to={path('/faq')} className="mm-nav__link">
+              {t('layout.navFaq')}
             </NavLink>
           </nav>
           <div className="mm-header__actions">
+            <LanguageSwitcher />
             {hasToken ? (
               <NavLink to="/workspace" className="mm-header__login">
-                Кабинет
+                {t('layout.headerWorkspace')}
               </NavLink>
             ) : (
-              <NavLink to="/login" className="mm-header__login">
-                Войти
+              <NavLink to={path('/login')} className="mm-header__login">
+                {t('layout.headerLogin')}
               </NavLink>
             )}
             <MmButton to={hasToken ? '/workspace' : '/login'} size="sm">
-              {hasToken ? 'Открыть студию' : 'Открыть студию'}
+              {t('layout.headerCta')}
             </MmButton>
           </div>
         </MmContainer>
@@ -93,15 +137,15 @@ export function MarketingLayout() {
             <div className="billing-return-banner__actions">
               {hasToken ? (
                 <MmButton to="/workspace" size="sm">
-                  В кабинет
+                  {t('layout.billingToWorkspace')}
                 </MmButton>
               ) : (
-                <MmButton to="/login" size="sm">
-                  Войти
+                <MmButton to={path('/login')} size="sm">
+                  {t('layout.billingLogin')}
                 </MmButton>
               )}
               <button type="button" className="mm-btn mm-btn--ghost mm-btn--sm" onClick={dismissBillingBanner}>
-                Закрыть
+                {t('layout.billingDismiss')}
               </button>
             </div>
           </div>
@@ -112,66 +156,66 @@ export function MarketingLayout() {
         <MmContainer>
           <div className="mm-footer__grid">
             <div className="mm-footer__brand">
-              <NavLink to="/" className="mm-wordmark" end>
+              <NavLink to={homePath} className="mm-wordmark" end>
                 MODELMATE
                 <span className="mm-wordmark__dot" aria-hidden />
               </NavLink>
-              <p>Студия для ИИ фото и видео. Чаты Fanvue и Telegram, команда и биллинг в одном окне.</p>
+              <p>{t('layout.footerBrand')}</p>
             </div>
             <div className="mm-footer__col">
-              <h4>Студия</h4>
+              <h4>{t('layout.footerStudio')}</h4>
               <ul>
                 <li>
-                  <a href="/#tools">Картинки</a>
+                  <a href={hashTools}>{t('layout.footerStudioImages')}</a>
                 </li>
                 <li>
-                  <a href="/#tools">Видео</a>
+                  <a href={hashTools}>{t('layout.footerStudioVideo')}</a>
                 </li>
                 <li>
-                  <a href="/#tools">Чат</a>
+                  <a href={hashTools}>{t('layout.footerStudioChat')}</a>
                 </li>
               </ul>
             </div>
             <div className="mm-footer__col">
-              <h4>Тарифы</h4>
+              <h4>{t('layout.footerPricing')}</h4>
               <ul>
                 <li>
-                  <NavLink to="/pricing">BYOK и Managed</NavLink>
+                  <NavLink to={path('/pricing')}>{t('layout.footerPricingPlans')}</NavLink>
                 </li>
                 <li>
-                  <NavLink to="/#referral">Реферальная программа</NavLink>
+                  <a href={hashReferral}>{t('layout.footerPricingReferral')}</a>
                 </li>
                 <li>
-                  <NavLink to="/faq">Триал и кредиты</NavLink>
+                  <NavLink to={path('/faq')}>{t('layout.footerPricingTrial')}</NavLink>
                 </li>
               </ul>
             </div>
             <div className="mm-footer__col">
-              <h4>Помощь</h4>
+              <h4>{t('layout.footerHelp')}</h4>
               <ul>
                 <li>
-                  <NavLink to="/faq">FAQ</NavLink>
+                  <NavLink to={path('/faq')}>{t('layout.footerHelpFaq')}</NavLink>
                 </li>
                 <li>
-                  <NavLink to="/login">Вход</NavLink>
+                  <NavLink to={path('/login')}>{t('layout.footerHelpLogin')}</NavLink>
                 </li>
               </ul>
             </div>
             <div className="mm-footer__col">
-              <h4>Юр.</h4>
+              <h4>{t('layout.footerLegal')}</h4>
               <ul>
                 <li>
-                  <NavLink to="/terms">Соглашение</NavLink>
+                  <NavLink to={path('/terms')}>{t('layout.footerLegalTerms')}</NavLink>
                 </li>
                 <li>
-                  <NavLink to="/privacy">Конфиденциальность</NavLink>
+                  <NavLink to={path('/privacy')}>{t('layout.footerLegalPrivacy')}</NavLink>
                 </li>
               </ul>
             </div>
           </div>
           <div className="mm-footer__bottom">
-            <span>© {new Date().getFullYear()} ModelMate · model-mate.online</span>
-            <span>BYOK · Managed · без сгорающих кредитов</span>
+            <span>{t('layout.footerCopyright', { year })}</span>
+            <span>{t('layout.footerTagline')}</span>
           </div>
         </MmContainer>
       </footer>

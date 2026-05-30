@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
+import { useMarketingPath } from '../i18n/useMarketingPath'
 
 export function MmContainer({ children, className = '' }: { children: ReactNode; className?: string }) {
   return <div className={`mm-container ${className}`.trim()}>{children}</div>
@@ -21,11 +22,14 @@ type BtnProps = {
 }
 
 export function MmButton({ children, variant = 'primary', size = 'md', to, href, className = '', onClick }: BtnProps) {
+  const { path } = useMarketingPath()
   const cls = `mm-btn mm-btn--${variant} mm-btn--${size} ${className}`.trim()
   const icon = variant === 'primary' && size !== 'sm' ? <MmArrowRight /> : null
-  if (to) {
+  const toResolved =
+    to && to.startsWith('/') && !to.startsWith('/workspace') ? path(to) : to
+  if (toResolved) {
     return (
-      <Link to={to} className={cls}>
+      <Link to={toResolved} className={cls}>
         {children}
         {icon}
       </Link>

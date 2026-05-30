@@ -1,13 +1,14 @@
 import { useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   type BillingPeriod,
   type BillingPlanKind,
   type CatalogPlan,
   filterPlans,
-  tierFeatures,
   WAVESPEED_REF_URL,
 } from '../billing/planCatalog'
 import { formatRub } from './usePublicHealth'
+import { marketingTierFeatures } from './i18n/pricingFeatures'
 import { MmButton, MmContainer, MmDisplayLg, MmEyebrow, MmSerifAccent } from './components/MmUi'
 
 export function PricingSection({
@@ -19,6 +20,7 @@ export function PricingSection({
   id?: string
   compact?: boolean
 }) {
+  const { t } = useTranslation('marketing')
   const [billing, setBilling] = useState<BillingPlanKind>('byok')
   const [period, setPeriod] = useState<BillingPeriod>('month')
   const visible = useMemo(() => filterPlans(plans, billing, period), [plans, billing, period])
@@ -27,86 +29,90 @@ export function PricingSection({
     <section className="mm-pricing-section" id={id} aria-labelledby={`${id}-title`}>
       <MmContainer>
         <div className="mm-pricing-section__head">
-          <MmEyebrow>Pricing · BYOK · Managed</MmEyebrow>
+          <MmEyebrow>{t('pricing.section.eyebrow')}</MmEyebrow>
           <MmDisplayLg id={`${id}-title`}>
-            Платишь за <MmSerifAccent>подписку</MmSerifAccent>.
+            {t('pricing.section.titleBefore')}
+            <MmSerifAccent>{t('pricing.section.titleAccent')}</MmSerifAccent>
             <br />
-            Генерация — по правилам тарифа.
+            {t('pricing.section.titleLine2')}
           </MmDisplayLg>
           <p className="mm-muted" style={{ marginTop: 'var(--s-4)' }}>
-            Свой ключ{' '}
+            {t('pricing.section.dekBefore')}
             <a href={WAVESPEED_REF_URL} target="_blank" rel="noopener noreferrer">
-              WaveSpeed
-            </a>{' '}
-            (BYOK) или кредиты платформы (Managed). Год — скидка 25%.
+              {t('pricing.section.dekWavespeed')}
+            </a>
+            {t('pricing.section.dekAfter')}
           </p>
         </div>
-        <div className="mm-pricing-toggles" role="group" aria-label="Формат тарифа">
+        <div className="mm-pricing-toggles" role="group" aria-label={t('pricing.toggles.kindAria')}>
           <button
             type="button"
             className={billing === 'byok' ? 'mm-toggle active' : 'mm-toggle'}
             onClick={() => setBilling('byok')}
           >
-            Со своим ключом (BYOK)
+            {t('pricing.toggles.byok')}
           </button>
           <button
             type="button"
             className={billing === 'managed' ? 'mm-toggle active' : 'mm-toggle'}
             onClick={() => setBilling('managed')}
           >
-            Всё включено (Managed)
+            {t('pricing.toggles.managed')}
           </button>
         </div>
-        <div className="mm-pricing-toggles" role="group" aria-label="Период оплаты">
+        <div className="mm-pricing-toggles" role="group" aria-label={t('pricing.toggles.periodAria')}>
           <button
             type="button"
             className={period === 'month' ? 'mm-toggle active' : 'mm-toggle'}
             onClick={() => setPeriod('month')}
           >
-            Месяц
+            {t('pricing.toggles.month')}
           </button>
           <button
             type="button"
             className={period === 'year' ? 'mm-toggle active' : 'mm-toggle'}
             onClick={() => setPeriod('year')}
           >
-            Год — скидка 25%
+            {t('pricing.toggles.year')}
           </button>
         </div>
         <div className="mm-price-grid">
           {visible.map((plan) => (
             <article key={plan.product} className={`mm-price-card${plan.popular ? ' featured' : ''}`}>
-              {plan.popular ? <span className="mm-badge mm-badge--new">Популярный</span> : null}
+              {plan.popular ? <span className="mm-badge mm-badge--new">{t('pricing.cards.popular')}</span> : null}
               <h3>{plan.title}</h3>
               <div className="mm-price-card__amount">{formatRub(plan.price_rub)}</div>
-              <div className="mm-price-card__period">{period === 'year' ? 'в год' : 'в месяц'}</div>
+              <div className="mm-price-card__period">
+                {period === 'year' ? t('pricing.cards.periodYear') : t('pricing.cards.periodMonth')}
+              </div>
               <ul>
-                {tierFeatures(plan.tier, plan.billing_plan, plan.period, plan.managed_monthly_credits).map((f) => (
+                {marketingTierFeatures(
+                  t,
+                  plan.tier,
+                  plan.billing_plan,
+                  plan.period,
+                  plan.managed_monthly_credits,
+                ).map((f) => (
                   <li key={f}>{f}</li>
                 ))}
               </ul>
               <MmButton to="/login" variant={plan.popular ? 'primary' : 'secondary'} size="md">
-                {plan.tier === 'studio' ? 'Связаться / начать' : 'Попробовать бесплатно'}
+                {plan.tier === 'studio' ? t('pricing.cards.ctaStudio') : t('pricing.cards.ctaDefault')}
               </MmButton>
             </article>
           ))}
         </div>
         {!compact ? (
           <div className="mm-byok-explainer">
-            <h3>Что такое BYOK?</h3>
+            <h3>{t('pricing.byokExplainer.title')}</h3>
             <p>
-              BYOK (Bring Your Own Key) — вы подключаете API-ключ{' '}
+              {t('pricing.byokExplainer.p1Before')}
               <a href={WAVESPEED_REF_URL} target="_blank" rel="noopener noreferrer">
-                wavespeed.ai
+                {t('pricing.byokExplainer.p1Wavespeed')}
               </a>
-              . Платите провайдеру напрямую по реальной цене генерации, без наценки платформы на
-              картинки и видео. ModelMate берёт плату за инфраструктуру, чат, команду и GROK для
-              промптов.
+              {t('pricing.byokExplainer.p1After')}
             </p>
-            <p className="mm-muted">
-              Не хотите регистрироваться на WaveSpeed — выберите Managed: кредиты на студию уже в
-              подписке, докупка от 50 шт. по текущим ценам в кабинете.
-            </p>
+            <p className="mm-muted">{t('pricing.byokExplainer.p2')}</p>
           </div>
         ) : null}
       </MmContainer>

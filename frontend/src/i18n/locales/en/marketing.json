@@ -1,0 +1,523 @@
+{
+  "layout": {
+    "skipLink": "Skip to content",
+    "navAria": "Site sections",
+    "navHome": "Home",
+    "navStudio": "Studio",
+    "navShowcase": "Showcase",
+    "navPricing": "Pricing",
+    "navFaq": "FAQ",
+    "headerLogin": "Log in",
+    "headerWorkspace": "Dashboard",
+    "headerCta": "Open studio",
+    "footerBrand": "AI photo and video studio. Fanvue and Telegram chat, team workflows, and billing in one workspace.",
+    "footerStudio": "Studio",
+    "footerStudioImages": "Images",
+    "footerStudioVideo": "Video",
+    "footerStudioChat": "Chat",
+    "footerPricing": "Pricing",
+    "footerPricingPlans": "BYOK & Managed",
+    "footerPricingReferral": "Referral program",
+    "footerPricingTrial": "Trial & credits",
+    "footerHelp": "Help",
+    "footerHelpFaq": "FAQ",
+    "footerHelpLogin": "Log in",
+    "footerLegal": "Legal",
+    "footerLegalTerms": "Terms",
+    "footerLegalPrivacy": "Privacy",
+    "footerCopyright": "© {{year}} ModelMate · model-mate.online",
+    "footerTagline": "BYOK · Managed · credits never expire",
+    "billingSuccessTitle": "Payment received",
+    "billingSuccessBody": "If the payment went through, your subscription or credits will update shortly (within a few minutes). Open your dashboard and check Plan & top-up if needed.",
+    "billingCancelTitle": "Payment not completed",
+    "billingCancelBody": "You closed the checkout page or cancelled the attempt. Funds are usually not charged in this case.",
+    "billingFailTitle": "Could not confirm payment",
+    "billingFailBody": "If you were charged, save your receipt and contact support. Otherwise, retry payment from your dashboard.",
+    "billingUnknownTitle": "Returned from checkout",
+    "billingUnknownBody": "Check your subscription status and credit balance in the dashboard.",
+    "billingToWorkspace": "Go to dashboard",
+    "billingLogin": "Log in",
+    "billingDismiss": "Dismiss",
+    "langSwitchAria": "Site language"
+  },
+  "hero": {
+    "eyebrow": "Creator OS · Photo · Video · Chat",
+    "titleBefore": "Build ",
+    "titleAccent": "AI models",
+    "titleAfter": " and connect with fans.",
+    "dek": "Photo and video generation, Fanvue and Telegram chat, auto-translation, and team workflows — without juggling five separate tools.",
+    "ctaPrimary": "Try free — {{signupCredits}} cr.",
+    "ctaSecondary": "Launch in 5 minutes",
+    "statBetaValue": "{{betaCount}}",
+    "statBetaLabel": "in closed beta",
+    "statSetupValue": "5 min",
+    "statSetupLabel": "WaveSpeed setup",
+    "statByokValue": "BYOK",
+    "statByokLabel": "keys encrypted"
+  },
+  "community": {
+    "eyebrow": "Telegram · @ModelMate_app",
+    "title": "Community and updates — in our channel.",
+    "dek": "All community chat, news, and product discussion live in our Telegram channel. Feature requests, studio updates, and team replies — all in one place.",
+    "link": "t.me/ModelMate_app ↗",
+    "cta": "Join the channel"
+  },
+  "referral": {
+    "eyebrow": "Referral program",
+    "title": "Invite creators — earn on every payment.",
+    "dek": "While your referral stays with us, you earn {{ref.referrer_payment_percent}}% of every subscription payment — as credits at 1 cr. = {{ref.credit_unit_price_rub}} ₽. Card, credits, or renewal — no time limit. Invited users start with +{{ref.friend_referral_credits}} cr. via your link.",
+    "note": "Your personal link is in the dashboard under Plan & balance. Subscriptions can be paid from your credit balance.",
+    "cardFriendWho": "Invited friend",
+    "cardFriendValue": "+{{ref.friend_referral_credits}} cr.",
+    "cardFriendHint": "Signup bonus via your link (plus the standard {{ref.signup_base_credits}} cr. trial).",
+    "cardReferrerWho": "You — referrer",
+    "cardReferrerValue": "{{ref.referrer_payment_percent}}%",
+    "cardReferrerHint": "On every payment and renewal — again and again. Example per payment: {{ref.referrer_reward_example_rub}} ₽ → ~{{ref.referrer_reward_example_credits}} cr.",
+    "cardPayWho": "Paying for a plan",
+    "cardPayValue": "{{ref.credit_unit_price_rub}} ₽/cr.",
+    "cardPayHint": "Any plan in the dashboard can be paid with credits from your balance at the same rate.",
+    "ctaPrimary": "Sign up and get your link",
+    "ctaSecondary": "Learn more in FAQ"
+  },
+  "tools": {
+    "eyebrow": "Studio · what's inside",
+    "titleLine1": "Three sections.",
+    "titleLine2": "One workspace.",
+    "linkCabinet": "Open dashboard ↗",
+    "cards": [
+      {
+        "eyebrow": "Photo · WaveSpeed · model profile",
+        "title": "Images",
+        "desc": "Model, reference, and prompt — GROK builds the scene. Nano Banana, Seedance, carousels, and refinements in history.",
+        "cta": "Create a shot",
+        "badges": ["Photo", "4K"]
+      },
+      {
+        "eyebrow": "Video · Seedance · motion",
+        "title": "Video",
+        "desc": "Reference clip, first frame, and brief — finished clips in your archive. Motion control and scenes tailored to your model.",
+        "cta": "Create a video",
+        "badges": ["Video", "15s"]
+      },
+      {
+        "eyebrow": "Chat · Fanvue · Telegram",
+        "title": "Chat & translation",
+        "desc": "One inbox for fans. Auto-translation across dozens of languages — your team writes in English, fans see their language.",
+        "cta": "Open chats",
+        "badges": ["Chat", "New"]
+      }
+    ]
+  },
+  "pain": {
+    "eyebrow": "Pain · sound familiar?",
+    "title": "Five tools. Zero cohesion.",
+    "items": [
+      {
+        "title": "Jumping between 5 services",
+        "text": "Prompts, generation, translation, CRM, and team spreadsheets — context switching eats your day."
+      },
+      {
+        "title": "Every generation from scratch",
+        "text": "Your model's look never sticks — back to \"as before, but…\" and random results again."
+      },
+      {
+        "title": "Chatters get mixed up",
+        "text": "Multiple models — different personas and languages. Fans can tell when something feels off."
+      },
+      {
+        "title": "International fans",
+        "text": "Robotic machine translation kills trust — and tips."
+      }
+    ]
+  },
+  "showcase": {
+    "rows": [
+      {
+        "eyebrow": "WaveSpeed · BYOK · Managed",
+        "titleLine1": "One key.",
+        "titleLine2": "Full studio.",
+        "dek": "On Managed trial — bring your WaveSpeed key. On BYOK — always yours. Model profile and references stay in your dashboard.",
+        "cta": "Connect WaveSpeed",
+        "subjectLabel": "REF",
+        "motionLabel": "RESULT"
+      },
+      {
+        "eyebrow": "Fanvue · Telegram · translation",
+        "titleLine1": "One inbox.",
+        "titleLine2": "Any language.",
+        "dek": "Conversations in one window. Auto-translation for inbound and outbound — chatters keep each model's voice consistent.",
+        "cta": "Set up chats",
+        "subjectLabel": "IN",
+        "motionLabel": "OUT · LANG"
+      },
+      {
+        "eyebrow": "GROK · scenes · video",
+        "titleLine1": "Prompts that",
+        "titleLine2": "keep the look.",
+        "dek": "Reference → model-ready prompt. Storyboards and motion briefs for video — no manual tab-hopping.",
+        "cta": "Open studio",
+        "subjectLabel": "SCENE",
+        "motionLabel": "PROMPT"
+      }
+    ]
+  },
+  "how": {
+    "eyebrow": "Onboarding · 5 minutes",
+    "titleBefore": "Launch without a ",
+    "titleAccent": "card",
+    "titleAfter": ".",
+    "steps": [
+      {
+        "title": "Connect WaveSpeed",
+        "text": "API key at wavespeed.ai — pay the provider directly."
+      },
+      {
+        "title": "Set up your model",
+        "text": "References, style, and look — once in the model profile."
+      },
+      {
+        "title": "Generate and chat",
+        "text": "Content, chats, and translations in one workspace."
+      }
+    ],
+    "cta": "Start free — {{signupCredits}} credits"
+  },
+  "modelsStrip": {
+    "eyebrow": "Integrations · one balance"
+  },
+  "trial": {
+    "eyebrow": "Beta · access",
+    "title": "{{betaCount}} creators already inside",
+    "dek": "{{signupCredits}} credits on signup. No card required. Credits do not expire over time.",
+    "cta": "Get access"
+  },
+  "cta": {
+    "eyebrow": "Studio is open",
+    "titleLine1": "Stop jumping",
+    "titleLine2": "between tools.",
+    "dek": "Images, video, chats, and team — in ModelMate. {{signupCredits}} credits to start, no card required.",
+    "ctaPrimary": "Start now",
+    "ctaSecondary": "FAQ"
+  },
+  "compare": {
+    "eyebrow": "Compare",
+    "title": "Solo · Pro · Studio",
+    "dek": "BYOK and Managed — user limits, model limits, and GROK in one table.",
+    "link": "Full pricing table ↗"
+  },
+  "pricing": {
+    "section": {
+      "eyebrow": "Pricing · BYOK · Managed",
+      "titleBefore": "Pay for ",
+      "titleAccent": "the platform",
+      "titleLine2": "Generation follows your plan.",
+      "dekBefore": "Your own ",
+      "dekWavespeed": "WaveSpeed",
+      "dekAfter": " key (BYOK) or platform credits (Managed). Annual billing — 25% off."
+    },
+    "toggles": {
+      "kindAria": "Plan type",
+      "byok": "Bring your own key (BYOK)",
+      "managed": "All-inclusive (Managed)",
+      "periodAria": "Billing period",
+      "month": "Monthly",
+      "year": "Annual — 25% off"
+    },
+    "cards": {
+      "popular": "Popular",
+      "periodMonth": "per month",
+      "periodYear": "per year",
+      "ctaDefault": "Try free",
+      "ctaStudio": "Contact / get started"
+    },
+    "byokExplainer": {
+      "title": "What is BYOK?",
+      "p1Before": "BYOK (Bring Your Own Key) — you connect an API key from ",
+      "p1Wavespeed": "wavespeed.ai",
+      "p1After": ". Pay the provider directly at real generation rates, with no platform markup on images and video. ModelMate charges for infrastructure, chat, team features, and GROK for prompts.",
+      "p2": "Don't want to sign up for WaveSpeed? Choose Managed: studio credits are included in your subscription, with top-ups from 50 credits at current dashboard rates."
+    },
+    "features": {
+      "usersOne": "1 user",
+      "usersMany": "Up to {{count}} users",
+      "modelsOne": "1 model",
+      "modelsMany": "Up to {{count}} models",
+      "byokKey": "Your WaveSpeed key",
+      "managedCredits": "Generation credits included",
+      "chat": "Fanvue + Telegram chat",
+      "translation": "Auto-translate conversations",
+      "grok": "GROK for prompts & scenes",
+      "history": "Generation history",
+      "creditsYear": "{{total}} credits per year ({{monthly}} / mo.)",
+      "creditsMonth": "{{total}} credits per month",
+      "team": "Team workflows & roles",
+      "studioLimits": "Extended chat and GROK limits"
+    }
+  },
+  "landing": {
+    "compare": {
+      "eyebrow": "Table",
+      "title": "Compare plans",
+      "linkFull": "Full table and details →",
+      "colFeature": "Feature",
+      "colByokSolo": "BYOK Solo",
+      "colByokPro": "BYOK Pro",
+      "colByokStudio": "BYOK Studio",
+      "colManagedPro": "Managed Pro",
+      "rowPrice": "Price / mo",
+      "rowUsers": "Users",
+      "rowModels": "Models",
+      "rowByokKey": "Your WaveSpeed key",
+      "rowCredits": "Credits in plan",
+      "rowChat": "Chat + translation",
+      "rowGrok": "GROK",
+      "yes": "✓",
+      "no": "—",
+      "managedCreditsValue": "400 / mo"
+    },
+    "faqTeaser": {
+      "eyebrow": "FAQ",
+      "link": "Common questions about BYOK, trial, and billing →"
+    }
+  },
+  "pricingPage": {
+    "eyebrow": "Pricing · YooKassa",
+    "title": "Pricing",
+    "intro": "Six plans: BYOK and Managed in three sizes (Solo, Pro, Studio). Pay in the dashboard via YooKassa. Trial — {{signupCredits}} credits with no expiry.",
+    "creditsEyebrow": "Managed · top-up",
+    "creditsTitle": "Credits without bundles",
+    "creditsDek": "Any amount from {{creditsMin}} — {{creditsUnit}} ₽/credit; from {{creditsBulkFrom}} — {{creditsBulkUnit}} ₽/credit.",
+    "creditsCta": "Top up in dashboard",
+    "trialEyebrow": "Trial",
+    "trialTitle": "Start without a card",
+    "trialDek": "{{signupCredits}} credits on signup. For generation, connect your WaveSpeed key in Integrations. Credits do not expire over time.",
+    "footerFaq": "FAQ →",
+    "footerHome": "Back to home ↗"
+  },
+  "loginPage": {
+    "backHome": "← Back to home",
+    "title": "Dashboard access",
+    "intro": "Log in or create a workspace — set up integrations and the studio after sign-in.",
+    "referralNotice": "Invited signup: code {{code}}",
+    "legalPrefix": "By continuing, you agree to the",
+    "legalTerms": "Terms of Service",
+    "legalAnd": "and",
+    "legalPrivacy": "Privacy Policy"
+  },
+  "faq": {
+    "title": "Frequently asked questions",
+    "intro": "Quick answers on using ModelMate: sign-in, channel setup, pricing, and the studio.",
+    "listAria": "Questions and answers",
+    "footerPricing": "Pricing →",
+    "footerHome": "Back to home ↗",
+    "items": [
+      {
+        "question": "Where do I start after signing up?",
+        "paragraphs": [
+          "Log in to the dashboard with your email and password. Open Connections — WaveSpeed, Telegram, and Fanvue live there. During trial, you need your own WaveSpeed key for images and video."
+        ]
+      },
+      {
+        "question": "How do I sign up and log in?",
+        "paragraphs": [
+          "On the login page, choose sign-up and enter an email and password at least eight characters long.",
+          "Go to login →"
+        ]
+      },
+      {
+        "question": "What is BYOK and why is it better?",
+        "paragraphs": [
+          "BYOK means your own WaveSpeed API key: you pay the provider directly for generation with no platform markup on images and video."
+        ]
+      },
+      {
+        "question": "How many plans are there and what's included?",
+        "paragraphs": [
+          "Six subscriptions: BYOK and Managed × Solo / Pro / Studio. Annual billing saves 25%.",
+          "See the pricing page →"
+        ]
+      },
+      {
+        "question": "Referral program",
+        "paragraphs": [
+          "Your link is in the dashboard → Plan & balance. A friend who signs up via your link gets +{{ref.friend_referral_credits}} credits (plus the {{ref.signup_base_credits}} cr. trial). You earn {{ref.referrer_payment_percent}}% of every payment they make — subscription, renewal, card, or credits — as credits at 1 cr. = {{ref.credit_unit_price_rub}} ₽. Example for one payment: {{ref.referrer_reward_example_rub}} ₽ → ~{{ref.referrer_reward_example_credits}} cr. to your balance; again on the next renewal.",
+          "BYOK or Managed subscriptions can be paid from your credit balance in the dashboard. On BYOK, WaveSpeed generations use your key — credits go toward ModelMate subscription and Managed studio, not WaveSpeed."
+        ]
+      },
+      {
+        "question": "How is Managed different from BYOK?",
+        "paragraphs": [
+          "Managed — studio generations spend credits from your balance; the platform may supply a WaveSpeed key after payment.",
+          "BYOK — you connect your own WaveSpeed key; credits are not spent on provider-side generation."
+        ]
+      },
+      {
+        "question": "How do I pay for a subscription or credits?",
+        "paragraphs": [
+          "The account owner purchases a subscription or credit top-up in the dashboard via YooKassa."
+        ]
+      },
+      {
+        "question": "How does chat translation work?",
+        "paragraphs": [
+          "Incoming messages can be shown in your language. You write in English — the fan receives text in theirs."
+        ]
+      },
+      {
+        "question": "What do I need for the image studio?",
+        "paragraphs": [
+          "Studio access, an active subscription (if the gate is enabled), and a WaveSpeed key in Integrations on Managed trial or always on BYOK."
+        ]
+      }
+    ]
+  },
+  "legal": {
+    "privacy": {
+      "title": "Privacy Policy",
+      "intro": "How ModelMate handles personal and operational data when you use the service. This text is informational; when deploying your own instance, update operator details and owner contacts.",
+      "meta": "Last updated: {{year}}. Public ModelMate website version.",
+      "linkTerms": "Terms of Service →",
+      "sections": [
+        {
+          "title": "1. General",
+          "paragraphs": [
+            "ModelMate (the \"Service\") helps teams manage conversations, integrations, and a content generation studio. This policy describes categories of data that may be processed when you use the Service and the general principles of that processing.",
+            "The data controller for a specific Service deployment is the person or organization that administers that instance and decides how user data is processed."
+          ]
+        },
+        {
+          "title": "2. Data we may process",
+          "list": [
+            "<strong>Account:</strong> email address, user identifier, password hash or other secure credential storage, profile settings, and access permissions within a workspace.",
+            "<strong>Content needed to provide the Service:</strong> message text and conversation metadata from connected channels (e.g. Telegram, Fanvue) when required to display threads, translate messages, and let operators reply.",
+            "<strong>Technical data:</strong> request logs, device and browser information (as needed for security and web app operation), session or authentication tokens.",
+            "<strong>Payment information:</strong> when paying via YooKassa, card payment details are processed by the payment provider under its rules; the Service may receive payment status and amount for billing purposes.",
+            "<strong>Integrations:</strong> API keys and secrets that a workspace owner enters for Telegram, Fanvue, translation providers, language models, and the studio — stored and used to run user-selected workflows."
+          ]
+        },
+        {
+          "title": "3. Purposes of processing",
+          "paragraphs": [
+            "Data is processed to:"
+          ],
+          "list": [
+            "provide and improve Service features;",
+            "authenticate users and enforce permissions within a workspace;",
+            "perform translations and other actions at the user's request;",
+            "manage subscriptions, credits, and payments;",
+            "maintain security, prevent abuse, and investigate incidents."
+          ]
+        },
+        {
+          "title": "4. Sharing with third parties",
+          "paragraphs": [
+            "Data may be shared with external providers <strong>only to the extent and for the purposes</strong> required by selected integrations and features (translation, LLM, image studio, messengers, etc.), and with the payment operator when you pay. Each provider's terms govern its processing."
+          ]
+        },
+        {
+          "title": "5. Retention and security",
+          "paragraphs": [
+            "Retention periods and technical measures are determined by the instance administrator. We recommend HTTPS, restricted account access, and regular rotation of integration secrets."
+          ]
+        },
+        {
+          "title": "6. Cookies and local storage",
+          "paragraphs": [
+            "The web app may use browser local storage or similar mechanisms to maintain login sessions and interface preferences. You can clear site data in your browser settings; you may need to log in again."
+          ]
+        },
+        {
+          "title": "7. Your rights",
+          "paragraphs": [
+            "Depending on applicable law, you may have the right to access, correct, delete, or restrict processing of your data, or withdraw consent. To exercise these rights, contact the administrator of the ModelMate instance you use."
+          ]
+        },
+        {
+          "title": "8. Policy changes",
+          "paragraphs": [
+            "The instance administrator may update this policy. The current version is published at this address; material changes should reasonably be communicated via the dashboard or email."
+          ]
+        },
+        {
+          "title": "9. Related documents",
+          "linkToTerms": true
+        }
+      ]
+    },
+    "terms": {
+      "title": "Terms of Service",
+      "intro": "Terms for using the ModelMate Service. When deploying your own instance, replace contacts and legal details with current information; have legal counsel review if needed.",
+      "meta": "Last updated: {{year}}. Not a public offer unless explicitly stated by the operator.",
+      "linkPrivacy": "Privacy Policy →",
+      "sections": [
+        {
+          "title": "1. Definitions",
+          "paragraphs": [
+            "<strong>\"Service\"</strong> means the ModelMate software available through the web interface, including chat, integration settings, studio, and billing. <strong>\"User\"</strong> means an individual or legal entity using the Service. <strong>\"Workspace owner\"</strong> means the user on whose behalf a subscription is purchased and integrations are configured."
+          ]
+        },
+        {
+          "title": "2. Acceptance and registration",
+          "paragraphs": [
+            "Creating an account and/or logging in means you accept these terms as published at the time of use. You agree to provide accurate information and not share credentials with third parties except workspace members explicitly granted access by the owner."
+          ]
+        },
+        {
+          "title": "3. Provision of the Service",
+          "paragraphs": [
+            "Service features are provided \"as is\" within the capabilities of a given installation. The instance administrator may limit load, individual features, or geography for technical, legal, or operational reasons."
+          ]
+        },
+        {
+          "title": "4. Plans, subscriptions, and credits",
+          "paragraphs": [
+            "Subscription terms and pricing (including Managed and BYOK plans) and rules for purchasing studio credits are listed on the pricing page and in the dashboard. Payment may be processed via a payment operator (e.g. YooKassa). Access and credits are granted after successful payment confirmation.",
+            "See the pricing page →"
+          ]
+        },
+        {
+          "title": "5. Integrations and user content",
+          "paragraphs": [
+            "Users configure bots, webhooks, and third-party keys independently and are responsible for the legality of their activity and content. The Service may process messages and files only as needed for selected features (display, translation, studio)."
+          ]
+        },
+        {
+          "title": "6. Prohibited conduct",
+          "paragraphs": [
+            "You must not, among other things:"
+          ],
+          "list": [
+            "attempt unauthorized access to the Service, other workspaces, or user data;",
+            "use the Service in a way that creates excessive load or security risk;",
+            "violate third-party rights or applicable law."
+          ]
+        },
+        {
+          "title": "7. Limitation of liability",
+          "paragraphs": [
+            "To the maximum extent permitted by applicable law, the party providing the Service is not liable for indirect damages, lost profits, downtime of third-party services (including Telegram, Fanvue, AI and translation providers), or decisions made based on data obtained through the Service."
+          ]
+        },
+        {
+          "title": "8. Intellectual property",
+          "paragraphs": [
+            "Rights to the software, brand, and site materials belong to the rights holders. Rights to content created by users or imported from external channels remain with users or the respective rights holders."
+          ]
+        },
+        {
+          "title": "9. Changes to terms",
+          "paragraphs": [
+            "These terms may be updated; the new version is published on this page. Continued use after changes may constitute acceptance of the new version unless the administrator states otherwise."
+          ]
+        },
+        {
+          "title": "10. Contact and governing law",
+          "paragraphs": [
+            "Direct questions about these terms to the administrator of your ModelMate instance. Governing law and dispute resolution are determined by the operator of the specific installation."
+          ],
+          "linkToPrivacy": true
+        }
+      ]
+    }
+  }
+}

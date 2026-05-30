@@ -1,11 +1,15 @@
 import { useEffect, useMemo } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { AuthPanel } from '../AuthPanel'
 import { getToken } from '../api'
 import '../App.css'
 import { MmContainer } from './components/MmUi'
+import { useMarketingPath } from './i18n/useMarketingPath'
 
 export function LoginPage() {
+  const { t } = useTranslation('marketing')
+  const { path } = useMarketingPath()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const referralCode = useMemo(() => {
@@ -20,19 +24,17 @@ export function LoginPage() {
   return (
     <div className="mm-main--page">
       <MmContainer>
-        <Link to="/" className="mm-link-arrow" style={{ marginBottom: 'var(--s-6)', display: 'inline-flex' }}>
-          ← На главную
+        <Link to={path('/')} className="mm-link-arrow" style={{ marginBottom: 'var(--s-6)', display: 'inline-flex' }}>
+          {t('loginPage.backHome')}
         </Link>
         <header className="mm-page-head">
-          <h1>Доступ к кабинету</h1>
-          <p className="mm-muted">
-            Войдите или создайте пространство — интеграции и студию настроите после входа.
-          </p>
+          <h1>{t('loginPage.title')}</h1>
+          <p className="mm-muted">{t('loginPage.intro')}</p>
         </header>
         <div className="mm-login-wrap">
           {referralCode ? (
             <p className="mm-muted" style={{ marginBottom: 'var(--s-4)', fontSize: '0.8125rem' }}>
-              Регистрация по приглашению: код <strong>{referralCode}</strong>
+              {t('loginPage.referralNotice', { code: referralCode })}
             </p>
           ) : null}
           <AuthPanel referralCode={referralCode} onSuccess={() => navigate('/workspace', { replace: true })} />
@@ -47,8 +49,9 @@ export function LoginPage() {
             lineHeight: 1.55,
           }}
         >
-          Продолжая, вы соглашаетесь с{' '}
-          <Link to="/terms">соглашением</Link> и <Link to="/privacy">политикой конфиденциальности</Link>.
+          {t('loginPage.legalPrefix')}{' '}
+          <Link to={path('/terms')}>{t('loginPage.legalTerms')}</Link> {t('loginPage.legalAnd')}{' '}
+          <Link to={path('/privacy')}>{t('loginPage.legalPrivacy')}</Link>.
         </p>
       </MmContainer>
     </div>
