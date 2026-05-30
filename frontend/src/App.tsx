@@ -976,6 +976,7 @@ export default function App() {
   }, [studioMode])
 
   const studioGenerationsRef = useRef<StudioArchiveItem[]>([])
+  const studioImageGenInFlightRef = useRef(false)
 
   useEffect(() => {
     studioGenerationsRef.current = studioGenerations
@@ -1111,7 +1112,14 @@ export default function App() {
   const loadStudioGenerationsReset = useCallback(async () => {
     const kind = studioGalleryMediaKind(appSection)
     const page = await fetchStudioArchivePage(0, STUDIO_ARCHIVE_PAGE, kind)
-    setStudioGenerations(page.items)
+    let merged = page.items
+    try {
+      const pending = await fetchStudioArchivePending(kind)
+      merged = mergeStudioArchiveItems(page.items, pending.items)
+    } catch {
+      /* pending опционален */
+    }
+    setStudioGenerations(merged)
     setStudioGenHasMore(page.has_more)
     if (appSection === 'studio') {
       setStudioImagePickerArchive(page.items)
@@ -1716,7 +1724,6 @@ export default function App() {
         }
         if (payload.type === 'studio_generation') {
           void syncStudioArchivePending()
-          void loadStudioGenerationsReset()
           return
         }
         if (payload.type === 'studio_job') {
@@ -2350,6 +2357,7 @@ export default function App() {
   }
 
   const refineStudioPrompt = async () => {
+    if (studioImageGenInFlightRef.current || studioBusy) return
     setError(null)
     if (studioMode === 'photo_edit') {
       if (!studioFile && studioPhotoEditArchiveId == null) {
@@ -2434,6 +2442,7 @@ export default function App() {
     } else if (studioInpaintMaskFile) {
       inpaintAttach = studioInpaintMaskFile
     }
+    studioImageGenInFlightRef.current = true
     setStudioBusy(true)
     setStudioGenImageUrl(null)
     setStudioGenGenerationId(null)
@@ -2489,6 +2498,7 @@ export default function App() {
     } catch (e) {
       setError(formatClientFetchError(e, true))
     } finally {
+      studioImageGenInFlightRef.current = false
       setStudioBusy(false)
     }
   }

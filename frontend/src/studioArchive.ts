@@ -148,17 +148,29 @@ export function mergeVideoArchiveWithMotionRenders(
   return merged
 }
 
+/** Убрать дубликаты по id (первая запись в списке сохраняется). */
+export function dedupeStudioArchiveById(items: StudioArchiveItem[]): StudioArchiveItem[] {
+  const seen = new Set<number>()
+  const out: StudioArchiveItem[] = []
+  for (const g of items) {
+    if (seen.has(g.id)) continue
+    seen.add(g.id)
+    out.push(g)
+  }
+  return out
+}
+
 /** Слить pending-статусы в список архива (по id). */
 export function mergeStudioArchiveItems(
   current: StudioArchiveItem[],
   pending: StudioArchiveItem[],
 ): StudioArchiveItem[] {
-  if (!pending.length) return current
+  if (!pending.length) return dedupeStudioArchiveById(current)
   const byId = new Map(pending.map((p) => [p.id, p]))
   const merged = current.map((g) => byId.get(g.id) ?? g)
   const seen = new Set(merged.map((g) => g.id))
   for (const p of pending) {
     if (!seen.has(p.id)) merged.unshift(p)
   }
-  return merged
+  return dedupeStudioArchiveById(merged)
 }
