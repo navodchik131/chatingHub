@@ -20,6 +20,7 @@ from app.services.studio_prompt_bundle import (
     append_negative_to_wavespeed_prompt,
     build_grok_scene_positive_json,
     build_grok_text_scene_positive_json,
+    grok_figure_anchor_from_profile,
 )
 
 
@@ -71,13 +72,12 @@ def test_collect_regular_skips_genitals() -> None:
     assert "CHARACTER_SHEET_CLOTHED" in labels
 
 
-def test_wavespeed_identity_prefers_body_and_face() -> None:
+def test_wavespeed_identity_clothed_pose_body_and_face_no_turnaround() -> None:
     imgs = [_im("turnaround", 1), _im("face", 2), _im("body", 3)]
-    picked = select_grok_compose_wavespeed_identity_images(imgs)
+    picked = select_grok_compose_wavespeed_identity_images(imgs, pose_reference_nude=False)
     kinds = [(im.image_kind or "") for im in picked]
-    assert "body" in kinds
-    assert "face" in kinds
-    assert kinds.index("body") < kinds.index("face")
+    assert kinds == ["body", "face"]
+    assert "turnaround" not in kinds
 
 
 def test_wavespeed_identity_body_without_face() -> None:
@@ -87,13 +87,13 @@ def test_wavespeed_identity_body_without_face() -> None:
     assert picked[0].image_kind == "body"
 
 
-def test_wavespeed_identity_nude_includes_genitals() -> None:
-    imgs = [_im("body", 1), _im("genitals", 2), _im("face", 3)]
+def test_wavespeed_identity_nude_pose_face_and_genitals_only() -> None:
+    imgs = [_im("body", 1), _im("genitals", 2), _im("face", 3), _im("turnaround", 4)]
     picked = select_grok_compose_wavespeed_identity_images(imgs, pose_reference_nude=True)
     kinds = [(im.image_kind or "") for im in picked]
-    assert "body" in kinds
-    assert "genitals" in kinds
-    assert "face" in kinds
+    assert kinds == ["face", "genitals"]
+    assert "body" not in kinds
+    assert "turnaround" not in kinds
 
 
 def test_prompt_only_identity_body_face_genitals_nsfw() -> None:
@@ -109,6 +109,14 @@ def test_prompt_only_identity_regular_body_and_face() -> None:
     picked = select_prompt_only_wavespeed_identity_images(imgs, wave_profile="regular")
     kinds = [(im.image_kind or "") for im in picked]
     assert kinds == ["body", "face"]
+
+
+def test_grok_figure_anchor_from_profile() -> None:
+    anchor = grok_figure_anchor_from_profile(
+        '{"model_profile":{"body_type":"curvy hourglass, full bust, narrow waist"}}'
+    )
+    assert "FIGURE_LOCK" in anchor
+    assert "hourglass" in anchor.lower() or "curvy" in anchor.lower()
 
 
 def test_grok_compose_pose_ref_json_has_realism_engine_and_no_suffix_negative() -> None:

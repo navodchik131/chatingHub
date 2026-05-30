@@ -182,14 +182,16 @@ def select_grok_compose_wavespeed_identity_images(
     max_count: int = 4,
 ) -> list[UserStudioModelImage]:
     """
-    Режим «Grok: сцена»: после pose ref в API — силуэт модели (body, anatomy), затем face.
-    Только face давало копирование объёмов груди/талии/бёдер с референса позы.
+    Режим «Grok: сцена» — identity URL после pose ref (WAN) или до pose (Nano reorder).
+
+    Nude pose ref: только face + genitals — без body/turnaround (полный body ref + pose bitmap
+    дают силуэт донора; face отдельно → «приклеенная голова»).
+
+    Clothed pose ref: body + face, без turnaround (лист тянет студийный outfit/фон).
     """
     if not imgs:
         return []
     cap = max(1, min(5, int(max_count)))
-    if pose_reference_nude:
-        cap = min(cap, 4)
 
     by_kind: dict[str, list[UserStudioModelImage]] = {}
     for im in imgs:
@@ -206,12 +208,18 @@ def select_grok_compose_wavespeed_identity_images(
                 picked.append(im)
                 return
 
-    take("body")
     if pose_reference_nude:
+        cap = min(cap, 3)
+        take("face")
         take("genitals")
+        if not picked:
+            for im in imgs[:cap]:
+                if (im.image_kind or "").lower() != "body":
+                    picked.append(im)
+        return picked[:cap]
+
+    take("body")
     take("face")
-    if not pose_reference_nude and len(picked) < cap:
-        take("turnaround")
     if len(picked) < cap:
         for kind in ("body", "face", "other"):
             take(kind)

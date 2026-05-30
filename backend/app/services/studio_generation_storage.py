@@ -60,6 +60,14 @@ async def begin_studio_generation_run(
     studio_model_id: int | None,
     studio_job_id: int | None = None,
 ) -> StudioGeneration:
+    if studio_job_id is not None:
+        from app.services.studio_generation_placeholders import (
+            find_studio_generation_by_job_id,
+        )
+
+        existing = await find_studio_generation_by_job_id(session, studio_job_id)
+        if existing is not None:
+            return existing
     row = StudioGeneration(
         user_id=owner_id,
         status=StudioGenerationStatus.PROCESSING,

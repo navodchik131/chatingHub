@@ -22,6 +22,7 @@ from app.services.studio_model_images import (
     select_prompt_only_wavespeed_identity_images,
     sort_model_images_for_studio,
 )
+from app.services.studio_prompt_bundle import grok_figure_anchor_from_profile
 from app.services.studio_openai import (
     StudioOpenAiCredentials,
     _strip_code_fences,
@@ -243,6 +244,7 @@ async def grok_compose_studio_scene(
         else "Hairstyle may follow USER_SCENE_REFERENCE when USER_NOTES request it."
     )
 
+    figure_anchor = grok_figure_anchor_from_profile(model_profile_text)
     user_parts: list[dict] = [
         {
             "type": "text",
@@ -252,7 +254,8 @@ async def grok_compose_studio_scene(
                 "BODY_FIGURE_RULE: USER_SCENE_REFERENCE supplies pose/camera/light/wardrobe coverage ONLY. "
                 "Bust, waist, hip width, glute volume, torso/leg proportions MUST come from MODEL_PROFILE_JSON "
                 "+ BODY_REFERENCE / ANATOMY_REFERENCE_NUDE / CHARACTER_SHEET — never from the pose-reference sitter. "
-                "State figure proportions explicitly in wavespeed_scene_prompt.\n\n"
+                "Start wavespeed_scene_prompt with a FIGURE_LOCK sentence using the anchor below.\n\n"
+                f"FIGURE_LOCK_ANCHOR (mandatory in prose):\n{figure_anchor}\n\n"
                 f"MODEL_PROFILE_JSON:\n{profile}\n\n"
                 f"USER_NOTES:\n{notes or '(none)'}\n\n"
                 "Attached images follow. Labels in captions are authoritative."

@@ -137,27 +137,27 @@ _WAN_COMPACT_POSE_PREFIX = (
 )
 
 _GROK_COMPOSED_WAN_PREFIX = (
-    "[GROK_SCENE_COMPOSE] **Image 1** = user pose/scene reference — pose geometry, camera, framing, "
-    "background, environmental light, and wardrobe/body coverage ONLY; "
-    "do **not** copy body mass, bust/waist/hip proportions, or donor silhouette from image 1. "
-    "**Images 2+** = model identity — full figure from body/anatomy refs (bust, waist, hips, legs, shoulders), "
-    "face and skin from face refs; never pose or outfit from images 2+. "
-    "WHO (face + **body proportions**) = images 2+ and the JSON brief below (scene_brief + realism_engine) "
-    "— not image 1.\n\n"
+    "[GROK_SCENE_COMPOSE — NOT face-swap] **Image 1** = pose/scene bitmap: pose geometry, camera, framing, "
+    "background, environmental light, and wardrobe/nudity zones ONLY. "
+    "Do **not** copy donor face, skin tone, bust/waist/hip mass, muscle definition, or limb thickness from image 1. "
+    "**Images 2+** = MODEL identity (face likeness, nude anatomy when present, clothed body ref when present). "
+    "Rebuild **one continuous person**: unified skin undertone and grain from face through neck, chest, and limbs; "
+    "**no** pasted head, **no** composite collage. "
+    "Figure volumes (bust, waist, hips) = JSON FIGURE_LOCK / scene_brief + identity images — not image 1.\n\n"
 )
 
 _GROK_COMPOSED_NANO_PREFIX = (
-    "[GROK_SCENE_COMPOSE] **Earlier image(s)** = model identity — body silhouette and anatomy refs first, "
-    "then face: WHO (face, skin, **bust/waist/hip proportions**). "
-    "**Last** image = pose/framing/light/wardrobe lock only — never copy donor body volumes or identity "
-    "from the last image. JSON brief below (scene_brief + realism_engine + reference_scene_lock) "
-    "aligns scene with Grok output.\n\n"
+    "[GROK_SCENE_COMPOSE — NOT face-swap] **Earlier image(s)** = MODEL identity (face, optional anatomy/body ref). "
+    "Apply **one** skin/light model on all visible skin — seamless neck and shoulders, no pasted face. "
+    "**Last** image = pose/framing/light/wardrobe only — never donor body volumes or identity from last image. "
+    "JSON brief (scene_brief + realism_engine) defines bust/waist/hip wording — overrides silhouette on last image.\n\n"
 )
 
 _GROK_COMPOSED_POSE_LAST_SUFFIX = (
     "\n\n[LAST_INPUT_IMAGE — POSE_REF] The **last** image locks pose geometry, crop, gaze, garments/nudity zones, "
-    "and light-on-body pattern only. Face, skin, and **figure proportions (bust, waist, hips)** must match "
-    "the model identity images before it and the brief — not the incidental sitter on this last image."
+    "and how light falls on the scene — **not** donor face or body proportions. "
+    "Reshape visible body mass to match identity images + JSON FIGURE_LOCK; "
+    "illuminate MODEL face/skin with the same light direction as this last image (no floating head)."
 )
 
 _GROK_TEXT_SCENE_WAN_PREFIX = (

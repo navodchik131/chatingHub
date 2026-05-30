@@ -35,7 +35,9 @@ _COMPACT_MUST_KEEP = [
 _GROK_COMPOSE_BODY_NEGATIVE = (
     "reference sitter body, donor body proportions, wrong bust size, wrong waist, wrong hips, "
     "flat chest from pose reference, oversized hips from pose reference, mismatched breast size, "
-    "skinny model on curvy reference body, curvy model on flat reference body"
+    "skinny model on curvy reference body, curvy model on flat reference body, "
+    "face pasted on wrong body, disconnected neck, mismatched face vs body lighting, composite collage, "
+    "face swap artifact, floating head"
 )
 
 _NUDE_WARDROBE_NEGATIVE = (
@@ -245,6 +247,42 @@ def extract_wardrobe_from_reference(description: str | None) -> tuple[str, bool]
     if is_nude:
         return "CLOTHING: match pose reference image 1 — same nudity/coverage as visible (no garments)", True
     return "", False
+
+
+def grok_figure_anchor_from_profile(model_profile_text: str | None) -> str:
+    """Короткий FIGURE_LOCK для Grok compose — явные объёмы из профиля модели."""
+    raw = (model_profile_text or "").strip()
+    if not raw:
+        return (
+            "FIGURE_LOCK: use BODY_REFERENCE and MODEL_PROFILE body_type for bust, waist, hip width, "
+            "glute volume, shoulder width — explicitly contradict any donor silhouette on USER_SCENE_REFERENCE."
+        )
+    try:
+        data = json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        return (
+            "FIGURE_LOCK: extract body proportions from MODEL_PROFILE_JSON text; "
+            "never copy bust/waist/hips from USER_SCENE_REFERENCE sitter."
+        )
+    prof: dict[str, Any] | None = None
+    if isinstance(data, dict):
+        mp = data.get("model_profile")
+        prof = mp if isinstance(mp, dict) else data
+    fields = _profile_identity_fields(prof if isinstance(prof, dict) else None)
+    body = (fields.get("body_proportions") or "").strip()
+    subj = (fields.get("subject") or "").strip()
+    bits = [b for b in (body, subj) if b]
+    if bits:
+        joined = "; ".join(bits)[:520]
+        return (
+            f"FIGURE_LOCK (mandatory first sentence in wavespeed_scene_prompt): "
+            f"Model body proportions are {joined} — "
+            "do not use pose-reference sitter bust, waist, hip width, or muscle definition."
+        )
+    return (
+        "FIGURE_LOCK: state bust, waist, hip width, and glute volume from BODY_REFERENCE / profile; "
+        "forbid copying donor body mass from USER_SCENE_REFERENCE."
+    )
 
 
 def reference_pose_is_nude_or_minimal_coverage(description: str | None) -> bool:
@@ -588,14 +626,15 @@ def build_grok_scene_positive_json(
             ),
             "identity_lock": (
                 "face, skin, hair, bust/waist/hip proportions from model identity images and "
-                "scene_brief — never donor body volumes from pose reference"
+                "scene_brief FIGURE_LOCK — never donor body volumes from pose reference; "
+                "one continuous skin tone from face through neck and torso"
             ),
             "aspect_ratio": aspect,
         }
         must_keep = [
             "One real person; pose/framing/background/light topology from pose reference — match limb angles and crop",
-            "Face, skin, hair, and body proportions from model identity images and MODEL_PROFILE — not pose-reference sitter",
-            "Skin texture and photoreal capture per realism_engine; no fake bokeh or plastic beauty-filter on MODEL skin",
+            "FIGURE_LOCK in scene_brief defines bust/waist/hips — reshape body mass to model, not pose-reference sitter",
+            "Face and skin from identity images with seamless neck; same light on face and body; no face-swap paste per realism_engine",
         ]
     else:
         photography = {
