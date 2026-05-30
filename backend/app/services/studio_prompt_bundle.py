@@ -249,6 +249,84 @@ def extract_wardrobe_from_reference(description: str | None) -> tuple[str, bool]
     return "", False
 
 
+def compact_studio_prompt_for_nano_banana(
+    prompt: str,
+    *,
+    max_chars: int | None = None,
+) -> str:
+    """
+    Укорачивает промпт для Nano Banana Pro (лимит Google / WaveSpeed).
+    Сохраняет префиксы до JSON; внутри JSON режет scene_brief, убирает тяжёлый realism_engine.
+    """
+    from app.config import settings
+
+    lim = max_chars if max_chars is not None else int(settings.wavespeed_nano_prompt_max_chars)
+    lim = max(2000, lim)
+    p = (prompt or "").strip()
+    if len(p) <= lim:
+        return p
+
+    brace = p.find("{")
+    if brace < 0:
+        return p[: lim - 1] + "…"
+
+    prefix = p[:brace]
+    raw_json = p[brace:].strip()
+    try:
+        data = json.loads(raw_json)
+    except (json.JSONDecodeError, TypeError):
+        return (prefix + raw_json)[: lim - 1] + "…"
+
+    if not isinstance(data, dict):
+        return p[: lim - 1] + "…"
+
+    data.pop("realism_engine", None)
+    sb = str(data.get("scene_brief") or "").strip()
+    budget = max(800, lim - len(prefix) - 600)
+    if len(sb) > budget:
+        data["scene_brief"] = sb[: budget - 1] + "…"
+    neg = str(data.get("negative_prompt") or "")
+    if len(neg) > 900:
+        data["negative_prompt"] = neg[:899] + "…"
+    compact = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
+    out = (prefix + compact).strip()
+    if len(out) <= lim:
+        return out
+    return out[: lim - 1] + "…"
+
+
+def nano_banana_preflight_error(
+    *,
+    wave_profile: str | None,
+    reference_scene_description: str | None,
+    image_urls: list[str],
+) -> str | None:
+    """Проверка до вызова Nano Banana; возвращает текст ошибки или None."""
+    if (wave_profile or "").strip().lower() != "regular":
+        return None
+    if not image_urls:
+        return (
+            "Для режима «Обычные фотографии» (Nano Banana) нужно хотя бы одно изображение "
+            "(референс позы или фото модели в кабинете)."
+        )
+    bad = [
+        u
+        for u in image_urls
+        if not (u or "").strip().lower().startswith("https://")
+    ]
+    if bad:
+        return (
+            "WaveSpeed не может скачать референсы: нужны публичные HTTPS-URL "
+            "(настройте PUBLIC_APP_URL=https://ваш-домен на сервере)."
+        )
+    if reference_pose_is_nude_or_minimal_coverage(reference_scene_description):
+        return (
+            "Режим «Обычные фотографии» (Google Nano Banana) не принимает откровенную наготу "
+            "в референсе позы. Переключите тип генерации на «NSFW (WAN)» или загрузите одетый референс."
+        )
+    return None
+
+
 def grok_figure_anchor_from_profile(model_profile_text: str | None) -> str:
     """Короткий FIGURE_LOCK для Grok compose — явные объёмы из профиля модели."""
     raw = (model_profile_text or "").strip()

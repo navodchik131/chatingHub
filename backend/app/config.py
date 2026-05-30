@@ -237,6 +237,8 @@ class Settings(BaseSettings):
     wavespeed_nano_banana_pro_resolution: str = Field(default="2k")
     wavespeed_nano_banana_pro_sync: bool = Field(default=True)
     wavespeed_nano_banana_pro_output_format: str = Field(default="png")
+    # Google Nano Banana часто отвечает «check your input parameters» на слишком длинный prompt
+    wavespeed_nano_prompt_max_chars: int = Field(default=12000, ge=2000, le=32000)
     # Z-Image Turbo Inpaint (маска: белое — редактировать, чёрное — сохранить)
     # https://wavespeed.ai/docs/docs-api/wavespeed-ai/z-image-turbo-inpaint
     wavespeed_z_image_inpaint_path: str = Field(

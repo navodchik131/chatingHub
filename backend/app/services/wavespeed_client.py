@@ -533,6 +533,8 @@ async def nano_banana_pro_edit_image_url(
     image_urls: list[str],
     prompt: str,
     aspect_ratio: str,
+    wave_profile: str | None = None,
+    reference_scene_description: str | None = None,
     timeout_submit: float = 300.0,
     poll_interval: float = 2.0,
     max_polls: int = 120,
@@ -541,10 +543,43 @@ async def nano_banana_pro_edit_image_url(
     Google Nano Banana Pro Edit: images + prompt + aspect_ratio + resolution.
     Док: /docs/docs-api/google/google-nano-banana-pro-edit
     """
+    from app.services.studio_prompt_bundle import (
+        compact_studio_prompt_for_nano_banana,
+        nano_banana_preflight_error,
+    )
+
+    pre = nano_banana_preflight_error(
+        wave_profile=wave_profile,
+        reference_scene_description=reference_scene_description,
+        image_urls=image_urls,
+    )
+    if pre:
+        raise RuntimeError(pre)
+
     if not image_urls:
         raise RuntimeError("no image URLs")
     if not (prompt or "").strip():
         raise RuntimeError("empty prompt")
+
+    prompt_use = compact_studio_prompt_for_nano_banana(prompt)
+    ar = (aspect_ratio or "").strip()
+    if ar not in (
+        "1:1",
+        "3:2",
+        "2:3",
+        "3:4",
+        "4:3",
+        "4:5",
+        "5:4",
+        "9:16",
+        "16:9",
+        "21:9",
+    ):
+        raise RuntimeError(
+            f"Nano Banana: недопустимый aspect_ratio «{ar}». "
+            "Доступно: 1:1, 3:2, 2:3, 3:4, 4:3, 4:5, 5:4, 9:16, 16:9, 21:9."
+        )
+
     res = (settings.wavespeed_nano_banana_pro_resolution or "2k").strip().lower()
     if res not in ("1k", "2k", "4k"):
         res = "2k"
@@ -557,18 +592,26 @@ async def nano_banana_pro_edit_image_url(
     url = f"{_wavespeed_base()}{path}"
     body: dict[str, Any] = {
         "images": image_urls[:14],
-        "prompt": prompt.strip(),
-        "aspect_ratio": aspect_ratio.strip(),
+        "prompt": prompt_use,
+        "aspect_ratio": ar,
         "resolution": res,
         "output_format": fmt,
         "enable_sync_mode": bool(settings.wavespeed_nano_banana_pro_sync),
         "enable_base64_output": False,
     }
+    log.info(
+        "wavespeed nano-banana-pro path=%s images=%s aspect=%s res=%s prompt_chars=%s",
+        path,
+        len(body.get("images") or []),
+        ar,
+        res,
+        len(prompt_use),
+    )
     log.debug(
         "wavespeed nano-banana-pro path=%s images=%s aspect=%s res=%s",
         path,
         len(body.get("images") or []),
-        aspect_ratio,
+        ar,
         res,
     )
     return await _wavespeed_post_json_and_resolve_image_url(

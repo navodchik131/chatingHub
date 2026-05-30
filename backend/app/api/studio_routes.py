@@ -680,6 +680,21 @@ def _normalize_studio_wave_profile(raw: str | None) -> str:
     return "regular" if p == "regular" else "nsfw"
 
 
+def _append_nano_banana_error_hint(message: str, *, wave_profile: str) -> str:
+    """Расшифровка типичной ошибки Google «check your input parameters»."""
+    if (wave_profile or "").strip().lower() != "regular":
+        return message
+    low = (message or "").lower()
+    if "input parameter" not in low and "invalid parameter" not in low:
+        return message
+    return (
+        f"{message} "
+        "Для «Обычные фотографии» (Nano Banana): часто nude-референс или откровенный промпт "
+        "(переключите «NSFW»), недоступные HTTPS-ссылки на картинки (PUBLIC_APP_URL), "
+        "слишком длинный JSON-промпт или неверный формат кадра."
+    )
+
+
 def _nano_banana_reorder_image_urls(
     image_urls: list[str],
     *,
@@ -1403,6 +1418,7 @@ async def _studio_job_execute_carousel(
                     image_urls=[master_url],
                     prompt=wavespeed_prompt,
                     aspect_ratio=aspect_key,
+                    wave_profile=wave_profile_n,
                 )
                 raw_url = ws_car.url
             else:
@@ -2520,6 +2536,8 @@ async def _studio_job_execute_refine_prompt(
                             image_urls=nano_image_urls_wm,
                             prompt=ws_mask_prompt,
                             aspect_ratio=aspect_key,
+                            wave_profile=wave_profile_n,
+                            reference_scene_description=reference_scene,
                         )
                     else:
                         ws_res = await seedream_v45_edit_image_url(
@@ -2841,6 +2859,8 @@ async def _studio_job_execute_refine_prompt(
                             image_urls=image_urls,
                             prompt=wavespeed_prompt,
                             aspect_ratio=aspect_key,
+                            wave_profile=wave_profile_n,
+                            reference_scene_description=reference_scene,
                         )
                     else:
                         ws_res = await seedream_v45_edit_image_url(
@@ -2853,7 +2873,9 @@ async def _studio_job_execute_refine_prompt(
                     generated_image_url = ws_res.url
                     wavespeed_task_id = ws_res.task_id or wavespeed_task_id
                 except RuntimeError as e:
-                    wavespeed_message = str(e)
+                    wavespeed_message = _append_nano_banana_error_hint(
+                        str(e), wave_profile=wave_profile_n
+                    )
                     low = wavespeed_message.lower()
                     if wave_profile_n == "regular" and (
                         "safety" in low
@@ -3486,6 +3508,8 @@ async def _studio_job_execute_motion_first_frame(
                         image_urls=image_urls,
                         prompt=wavespeed_prompt,
                         aspect_ratio=aspect_key,
+                        wave_profile=wave_profile_n,
+                        reference_scene_description=reference_scene,
                     )
                 else:
                     ws_res = await seedream_v45_edit_image_url(
