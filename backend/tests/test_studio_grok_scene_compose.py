@@ -18,6 +18,7 @@ from app.services.studio_model_images import (
 )
 from app.services.studio_prompt_bundle import (
     append_negative_to_wavespeed_prompt,
+    build_grok_scene_positive_json,
     build_grok_text_scene_positive_json,
 )
 
@@ -108,6 +109,24 @@ def test_prompt_only_identity_regular_body_and_face() -> None:
     picked = select_prompt_only_wavespeed_identity_images(imgs, wave_profile="regular")
     kinds = [(im.image_kind or "") for im in picked]
     assert kinds == ["body", "face"]
+
+
+def test_grok_compose_pose_ref_json_has_realism_engine_and_no_suffix_negative() -> None:
+    positive, neg = build_grok_scene_positive_json(
+        "Mirror selfie, nude on bed edge, same pose as reference.",
+        model_profile_text='{"model_profile":{"identity_lock_keywords":"test"}}',
+        extra_negative="reference sitter body, wrong bust size",
+        reference_scene_description="seated nude, mirror selfie, window side light",
+        with_pose_reference=True,
+    )
+    data = json.loads(positive)
+    assert data.get("reference_scene_lock", "").startswith("seated")
+    assert data.get("realism_engine") is not None
+    assert data["photography"].get("pose_lock")
+    ws = append_negative_to_wavespeed_prompt(positive, neg, brief_mode="grok_composed")
+    assert "[NEGATIVE_PROMPT]" not in ws
+    assert "realism_engine" in ws
+    assert "reference sitter body" in data["negative_prompt"]
 
 
 def test_grok_text_scene_json_has_realism_engine_and_no_suffix_negative() -> None:

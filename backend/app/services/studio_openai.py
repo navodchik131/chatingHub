@@ -142,14 +142,16 @@ _GROK_COMPOSED_WAN_PREFIX = (
     "do **not** copy body mass, bust/waist/hip proportions, or donor silhouette from image 1. "
     "**Images 2+** = model identity — full figure from body/anatomy refs (bust, waist, hips, legs, shoulders), "
     "face and skin from face refs; never pose or outfit from images 2+. "
-    "WHO (face + **body proportions**) = images 2+ and the English brief below — not image 1.\n\n"
+    "WHO (face + **body proportions**) = images 2+ and the JSON brief below (scene_brief + realism_engine) "
+    "— not image 1.\n\n"
 )
 
 _GROK_COMPOSED_NANO_PREFIX = (
     "[GROK_SCENE_COMPOSE] **Earlier image(s)** = model identity — body silhouette and anatomy refs first, "
     "then face: WHO (face, skin, **bust/waist/hip proportions**). "
     "**Last** image = pose/framing/light/wardrobe lock only — never copy donor body volumes or identity "
-    "from the last image. English brief below aligns scene with Grok output.\n\n"
+    "from the last image. JSON brief below (scene_brief + realism_engine + reference_scene_lock) "
+    "aligns scene with Grok output.\n\n"
 )
 
 _GROK_COMPOSED_POSE_LAST_SUFFIX = (
