@@ -114,6 +114,188 @@
   margin-bottom: 1.5rem;
 }
 
+.admin-kpi-grid--engagement {
+  margin-bottom: 0;
+}
+
+.admin-engagement {
+  margin-bottom: 1.5rem;
+}
+
+.admin-engagement__dek {
+  margin: -0.5rem 0 1rem;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  max-width: 52rem;
+}
+
+.admin-kpi--highlight {
+  border-color: rgba(120, 180, 255, 0.35);
+  background: rgba(120, 180, 255, 0.06);
+}
+
+.admin-kpi--warn {
+  border-color: rgba(255, 180, 100, 0.35);
+  background: rgba(255, 180, 100, 0.06);
+}
+
+.admin-kpi__pct {
+  font-size: 0.85em;
+  font-weight: 500;
+  color: #8ec5ff;
+}
+
+.admin-kpi--clickable {
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  font: inherit;
+  color: inherit;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.admin-kpi--clickable:hover {
+  border-color: rgba(120, 180, 255, 0.55);
+  background: rgba(120, 180, 255, 0.1);
+}
+
+.admin-kpi--clickable:focus-visible {
+  outline: 2px solid rgba(120, 180, 255, 0.7);
+  outline-offset: 2px;
+}
+
+.admin-kpi--split .admin-kpi__split-vals {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.admin-kpi--split .admin-drill-link {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.admin-kpi__split-sep {
+  color: #6b7a94;
+  font-size: 1.25rem;
+  line-height: 1;
+  padding-bottom: 0.15rem;
+}
+
+.admin-drill-link {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: rgba(142, 197, 255, 0.35);
+  text-underline-offset: 2px;
+}
+
+.admin-drill-link:hover {
+  color: #8ec5ff;
+}
+
+.admin-drill-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(0, 0, 0, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.admin-drill {
+  width: min(920px, 100%);
+  max-height: min(85vh, 720px);
+  background: #141820;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+
+.admin-drill__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 1rem 1.15rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.admin-drill__title {
+  margin: 0;
+  font-size: 1.15rem;
+}
+
+.admin-drill__sub {
+  margin: 0.35rem 0 0;
+  font-size: 0.8rem;
+}
+
+.admin-drill__close {
+  background: none;
+  border: none;
+  color: #a8b4cc;
+  cursor: pointer;
+  font-size: 1.1rem;
+  padding: 0.25rem 0.5rem;
+}
+
+.admin-drill__loading,
+.admin-drill__error {
+  padding: 1rem 1.15rem;
+}
+
+.admin-drill__error {
+  color: #ffb4b4;
+}
+
+.admin-drill__table-wrap {
+  overflow: auto;
+  padding: 0 1.15rem 1rem;
+  flex: 1;
+}
+
+.admin-drill__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.admin-drill__table th,
+.admin-drill__table td {
+  text-align: left;
+  padding: 0.5rem 0.65rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  vertical-align: top;
+}
+
+.admin-drill__table th {
+  color: #8b9ab8;
+  font-weight: 600;
+  position: sticky;
+  top: 0;
+  background: #141820;
+}
+
+.admin-drill__row--clickable {
+  cursor: pointer;
+}
+
+.admin-drill__row--clickable:hover td {
+  background: rgba(120, 180, 255, 0.08);
+}
+
 .admin-kpi {
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.08);

@@ -8,6 +8,47 @@ export interface AdminDayCount {
   count: number
 }
 
+export interface AdminSegmentItem {
+  user_id: number | null
+  email: string | null
+  user_created_at: string | null
+  subscription_status: string | null
+  billing_plan: string | null
+  plan_tier: string | null
+  detail: string | null
+  occurred_at: string | null
+  payment_id: string | null
+}
+
+export interface AdminSegmentResponse {
+  segment: string
+  title: string
+  total: number
+  items: AdminSegmentItem[]
+}
+
+export interface AdminEngagementStats {
+  active_owners_7d: number
+  active_owners_30d: number
+  active_owners_7d_pct: number
+  active_owners_30d_pct: number
+  paid_active_owners: number
+  paid_active_pct: number
+  trialing_owners: number
+  past_due_owners: number
+  paid_or_trialing_owners: number
+  paid_or_trialing_pct: number
+  zombie_owners: number
+  zombie_pct: number
+  engaged_owners_ever: number
+  owners_yookassa_credits_buyers: number
+  owners_with_studio: number
+  owners_with_chat: number
+  registered_owners_30d: number
+  new_paid_active_owners_30d: number
+  new_paid_active_30d_pct: number
+}
+
 export interface AdminStats {
   total_users: number
   workspace_owners: number
@@ -28,6 +69,7 @@ export interface AdminStats {
   registrations_by_day: AdminDayCount[]
   generations_by_day: AdminDayCount[]
   chart_days: number
+  engagement: AdminEngagementStats
 }
 
 export interface AdminUserRow {

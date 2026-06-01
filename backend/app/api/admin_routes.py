@@ -21,6 +21,7 @@ from app.db.session import get_session
 from app.schemas import (
     AdminCreditsIn,
     AdminCreditsOut,
+    AdminSegmentOut,
     AdminStatsOut,
     AdminSubscriptionPatchIn,
     AdminUserDetailOut,
@@ -28,6 +29,7 @@ from app.schemas import (
     AdminUserRow,
 )
 from app.services.admin_analytics import build_admin_dashboard
+from app.services.admin_segments import VALID_ADMIN_SEGMENTS, list_admin_segment
 from app.services.billing_plan import normalize_billing_plan
 from app.services.credits import admin_adjust_credits
 from app.services.workspace import workspace_owner_id
@@ -120,6 +122,26 @@ async def admin_stats(
 ) -> AdminStatsOut:
     data = await build_admin_dashboard(session, chart_days=chart_days)
     return AdminStatsOut(**data)
+
+
+@router.get("/admin/stats/segment", response_model=AdminSegmentOut)
+async def admin_stats_segment(
+    segment: str = Query(..., min_length=1, max_length=64),
+    session: AsyncSession = Depends(get_session),
+    _: User = Depends(get_platform_admin),
+    limit: int = Query(default=200, ge=1, le=500),
+) -> AdminSegmentOut:
+    key = segment.strip().lower()
+    if key not in VALID_ADMIN_SEGMENTS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Неизвестный сегмент. Доступны: {', '.join(sorted(VALID_ADMIN_SEGMENTS))}",
+        )
+    try:
+        data = await list_admin_segment(session, key, limit=limit)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    return AdminSegmentOut(**data)
 
 
 @router.get("/admin/users", response_model=list[AdminUserRow])

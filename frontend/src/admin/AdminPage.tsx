@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { apiFetch, getToken } from '../api'
 import { AdminBarChart, AdminHBarChart } from './AdminBarChart'
+import { AdminDrillableKpi, AdminDrillLink } from './AdminDrillableKpi'
+import { AdminSegmentDrill } from './AdminSegmentDrill'
 import { AdminUserPanel } from './AdminUserPanel'
 import {
   SUBSCRIPTION_STATUS_LABELS,
@@ -29,6 +31,13 @@ export function AdminPage() {
   const [error, setError] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [selectedDetail, setSelectedDetail] = useState<AdminUserDetail | null>(null)
+  const [drillSegment, setDrillSegment] = useState<string | null>(null)
+  const [drillTitle, setDrillTitle] = useState('')
+
+  const openDrill = useCallback((segment: string, title: string) => {
+    setDrillSegment(segment)
+    setDrillTitle(title)
+  }, [])
 
   const loadStats = useCallback(async () => {
     const r = await apiFetch('/api/admin/stats?chart_days=30')
@@ -47,6 +56,16 @@ export function AdminPage() {
     const r = await apiFetch(`/api/admin/users/${id}`)
     if (r.ok) setSelectedDetail((await r.json()) as AdminUserDetail)
   }, [])
+
+  const onSelectUserFromDrill = useCallback(
+    (userId: number) => {
+      setDrillSegment(null)
+      setTab('users')
+      setSelectedId(userId)
+      void loadUserDetail(userId)
+    },
+    [loadUserDetail],
+  )
 
   useEffect(() => {
     if (!getToken()) {
@@ -203,16 +222,189 @@ export function AdminPage() {
               <span className="admin-kpi__label">Диалоги</span>
               <strong className="admin-kpi__value">{stats.conversations_total}</strong>
             </div>
-            <div className="admin-kpi">
+            <AdminDrillableKpi
+              segment="yookassa_payments"
+              title="Оплаты ЮKassa"
+              count={stats.yookassa_payments_total}
+              onDrill={openDrill}
+            >
               <span className="admin-kpi__label">Оплат (ЮKassa)</span>
               <strong className="admin-kpi__value">{stats.yookassa_payments_total}</strong>
-            </div>
-            <div className="admin-kpi">
+              <span className="admin-kpi__hint">клик — кто оплатил и что</span>
+            </AdminDrillableKpi>
+            <AdminDrillableKpi
+              segment="referrals"
+              title="Регистрации по рефералке"
+              count={stats.referrals_total}
+              onDrill={openDrill}
+            >
               <span className="admin-kpi__label">По рефералке</span>
               <strong className="admin-kpi__value">{stats.referrals_total}</strong>
               <span className="admin-kpi__hint">зарегистрировались по приглашению</span>
-            </div>
+            </AdminDrillableKpi>
           </div>
+
+          {stats.engagement ? (
+            <section className="admin-engagement">
+              <h2 className="admin-section-title">Вовлечённость владельцев</h2>
+              <p className="admin-engagement__dek muted">
+                Активность: сообщения в чатах, студия или usage за период. «Зомби» — зарегистрировались, но ни
+                разу не пользовались продуктом (без учёта бонусных событий). Оплаченная подписка — status active,
+                период не истёк (не trial после регистрации).
+              </p>
+              <div className="admin-kpi-grid admin-kpi-grid--engagement">
+                <AdminDrillableKpi
+                  segment="active_7d"
+                  title="Активны за 7 дней"
+                  count={stats.engagement.active_owners_7d}
+                  onDrill={openDrill}
+                  className="admin-kpi--highlight"
+                >
+                  <span className="admin-kpi__label">Активны за 7 дн.</span>
+                  <strong className="admin-kpi__value">
+                    {stats.engagement.active_owners_7d}
+                    <span className="admin-kpi__pct"> ({stats.engagement.active_owners_7d_pct}%)</span>
+                  </strong>
+                  <span className="admin-kpi__hint">от {stats.workspace_owners} владельцев</span>
+                </AdminDrillableKpi>
+                <AdminDrillableKpi
+                  segment="active_30d"
+                  title="Активны за 30 дней"
+                  count={stats.engagement.active_owners_30d}
+                  onDrill={openDrill}
+                  className="admin-kpi--highlight"
+                >
+                  <span className="admin-kpi__label">Активны за 30 дн.</span>
+                  <strong className="admin-kpi__value">
+                    {stats.engagement.active_owners_30d}
+                    <span className="admin-kpi__pct"> ({stats.engagement.active_owners_30d_pct}%)</span>
+                  </strong>
+                </AdminDrillableKpi>
+                <AdminDrillableKpi
+                  segment="paid_active"
+                  title="Оплаченная подписка"
+                  count={stats.engagement.paid_active_owners}
+                  onDrill={openDrill}
+                >
+                  <span className="admin-kpi__label">Оплаченная подписка</span>
+                  <strong className="admin-kpi__value">
+                    {stats.engagement.paid_active_owners}
+                    <span className="admin-kpi__pct"> ({stats.engagement.paid_active_pct}%)</span>
+                  </strong>
+                  <span className="admin-kpi__hint">
+                    <AdminDrillLink
+                      segment="trialing"
+                      title="Пробный период"
+                      count={stats.engagement.trialing_owners}
+                      onDrill={openDrill}
+                    >
+                      trial {stats.engagement.trialing_owners}
+                    </AdminDrillLink>
+                    {' · '}
+                    <AdminDrillLink
+                      segment="past_due"
+                      title="Просрочен платёж"
+                      count={stats.engagement.past_due_owners}
+                      onDrill={openDrill}
+                    >
+                      past_due {stats.engagement.past_due_owners}
+                    </AdminDrillLink>
+                  </span>
+                </AdminDrillableKpi>
+                <AdminDrillableKpi
+                  segment="paid_or_trialing"
+                  title="Подписка active / trial / past_due"
+                  count={stats.engagement.paid_or_trialing_owners}
+                  onDrill={openDrill}
+                >
+                  <span className="admin-kpi__label">Подписка (active / trial / past_due)</span>
+                  <strong className="admin-kpi__value">
+                    {stats.engagement.paid_or_trialing_owners}
+                    <span className="admin-kpi__pct"> ({stats.engagement.paid_or_trialing_pct}%)</span>
+                  </strong>
+                </AdminDrillableKpi>
+                <AdminDrillableKpi
+                  segment="zombie"
+                  title="Без активности"
+                  count={stats.engagement.zombie_owners}
+                  onDrill={openDrill}
+                  className="admin-kpi--warn"
+                >
+                  <span className="admin-kpi__label">Зомби (без активности)</span>
+                  <strong className="admin-kpi__value">
+                    {stats.engagement.zombie_owners}
+                    <span className="admin-kpi__pct"> ({stats.engagement.zombie_pct}%)</span>
+                  </strong>
+                  <span className="admin-kpi__hint">
+                    активных хоть раз:{' '}
+                    <AdminDrillLink
+                      segment="engaged_ever"
+                      title="Активны хотя бы раз"
+                      count={stats.engagement.engaged_owners_ever}
+                      onDrill={openDrill}
+                    >
+                      {stats.engagement.engaged_owners_ever}
+                    </AdminDrillLink>
+                  </span>
+                </AdminDrillableKpi>
+                <AdminDrillableKpi
+                  segment="registered_30d"
+                  title="Регистрации за 30 дней"
+                  count={stats.engagement.registered_owners_30d}
+                  onDrill={openDrill}
+                >
+                  <span className="admin-kpi__label">Регистрации за 30 дн.</span>
+                  <strong className="admin-kpi__value">{stats.engagement.registered_owners_30d}</strong>
+                  <span className="admin-kpi__hint">
+                    из них paid active:{' '}
+                    <AdminDrillLink
+                      segment="new_paid_active_30d"
+                      title="Новые с paid active"
+                      count={stats.engagement.new_paid_active_owners_30d}
+                      onDrill={openDrill}
+                    >
+                      {stats.engagement.new_paid_active_owners_30d} ({stats.engagement.new_paid_active_30d_pct}%)
+                    </AdminDrillLink>
+                  </span>
+                </AdminDrillableKpi>
+                <AdminDrillableKpi
+                  segment="yookassa_credits_buyers"
+                  title="Покупали кредиты"
+                  count={stats.engagement.owners_yookassa_credits_buyers}
+                  onDrill={openDrill}
+                >
+                  <span className="admin-kpi__label">Покупали кредиты (ЮKassa)</span>
+                  <strong className="admin-kpi__value">
+                    {stats.engagement.owners_yookassa_credits_buyers}
+                  </strong>
+                </AdminDrillableKpi>
+                <div className="admin-kpi admin-kpi--split">
+                  <span className="admin-kpi__label">Студия / чаты</span>
+                  <div className="admin-kpi__split-vals">
+                    <AdminDrillLink
+                      segment="owners_with_studio"
+                      title="Пробовали студию"
+                      count={stats.engagement.owners_with_studio}
+                      onDrill={openDrill}
+                    >
+                      <strong className="admin-kpi__value">{stats.engagement.owners_with_studio}</strong>
+                      <span className="admin-kpi__hint">студия</span>
+                    </AdminDrillLink>
+                    <span className="admin-kpi__split-sep">/</span>
+                    <AdminDrillLink
+                      segment="owners_with_chat"
+                      title="Писали в чатах"
+                      count={stats.engagement.owners_with_chat}
+                      onDrill={openDrill}
+                    >
+                      <strong className="admin-kpi__value">{stats.engagement.owners_with_chat}</strong>
+                      <span className="admin-kpi__hint">чаты</span>
+                    </AdminDrillLink>
+                  </div>
+                </div>
+              </div>
+            </section>
+          ) : null}
 
           <div className="admin-charts-grid">
             <AdminBarChart title="Регистрации владельцев (30 дн.)" series={stats.registrations_by_day} />
@@ -331,6 +523,13 @@ export function AdminPage() {
           )}
         </div>
       ) : null}
+
+      <AdminSegmentDrill
+        segment={drillSegment}
+        title={drillTitle}
+        onClose={() => setDrillSegment(null)}
+        onSelectUser={onSelectUserFromDrill}
+      />
     </div>
   )
 }

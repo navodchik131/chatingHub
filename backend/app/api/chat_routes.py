@@ -15,7 +15,7 @@ from fastapi import (
     WebSocketDisconnect,
 )
 from fastapi.responses import FileResponse, Response
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -110,6 +110,12 @@ async def api_health(session: AsyncSession = Depends(get_session)) -> dict:
         rest = settings.database_url.replace("sqlite+aiosqlite:///", "", 1)
         db_path = rest
     n_conv, n_msg = await count_rows(session)
+    registered_users = int(
+        await session.scalar(
+            select(func.count(User.id)).where(User.parent_user_id.is_(None))
+        )
+        or 0
+    )
     tg = get_telegram_api_status()
     return {
         "ok": True,
@@ -130,7 +136,7 @@ async def api_health(session: AsyncSession = Depends(get_session)) -> dict:
         "billing_price_managed_month_rub": settings.billing_price_managed_month_rub,
         "billing_price_byok_month_rub": settings.billing_price_byok_month_rub,
         "signup_bonus_credits": settings.signup_bonus_credits,
-        "marketing_beta_creators_count": settings.marketing_beta_creators_count,
+        "marketing_beta_creators_count": registered_users,
         "billing_catalog": catalog_public_dict(),
         "billing_credit_pack_price_rub": settings.billing_credit_pack_price_rub,
         "billing_credit_pack_credits": settings.billing_credit_pack_credits,

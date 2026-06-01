@@ -554,6 +554,49 @@ class AdminDayCount(BaseModel):
     count: int
 
 
+class AdminSegmentItemOut(BaseModel):
+    user_id: int | None = None
+    email: str | None = None
+    user_created_at: datetime | None = None
+    subscription_status: str | None = None
+    billing_plan: str | None = None
+    plan_tier: str | None = None
+    detail: str | None = None
+    occurred_at: datetime | None = None
+    payment_id: str | None = None
+
+
+class AdminSegmentOut(BaseModel):
+    segment: str
+    title: str
+    total: int
+    items: list[AdminSegmentItemOut] = []
+
+
+class AdminEngagementStats(BaseModel):
+    """Вовлечённость и конверсия владельцев пространств."""
+
+    active_owners_7d: int = 0
+    active_owners_30d: int = 0
+    active_owners_7d_pct: float = 0.0
+    active_owners_30d_pct: float = 0.0
+    paid_active_owners: int = 0
+    paid_active_pct: float = 0.0
+    trialing_owners: int = 0
+    past_due_owners: int = 0
+    paid_or_trialing_owners: int = 0
+    paid_or_trialing_pct: float = 0.0
+    zombie_owners: int = 0
+    zombie_pct: float = 0.0
+    engaged_owners_ever: int = 0
+    owners_yookassa_credits_buyers: int = 0
+    owners_with_studio: int = 0
+    owners_with_chat: int = 0
+    registered_owners_30d: int = 0
+    new_paid_active_owners_30d: int = 0
+    new_paid_active_30d_pct: float = 0.0
+
+
 class AdminStatsOut(BaseModel):
     total_users: int
     workspace_owners: int
@@ -574,6 +617,7 @@ class AdminStatsOut(BaseModel):
     registrations_by_day: list[AdminDayCount] = []
     generations_by_day: list[AdminDayCount] = []
     chart_days: int = 30
+    engagement: AdminEngagementStats = AdminEngagementStats()
 
 
 class AdminUserRow(BaseModel):

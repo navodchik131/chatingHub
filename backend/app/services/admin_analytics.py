@@ -5,12 +5,13 @@ from __future__ import annotations
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, or_, select, union_all
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import (
     Conversation,
     CreditAccount,
+    Message,
     StudioGeneration,
     StudioMotionRender,
     Subscription,
@@ -22,11 +23,218 @@ from app.db.models import (
     YookassaProcessedPayment,
 )
 
+# События, не считающиеся «осмысленной» активностью владельца (бонусы при регистрации и т.п.)
+_USAGE_KINDS_NOT_ENGAGEMENT = frozenset(
+    {"referral_signup_bonus", "managed_subscription_bonus"}
+)
+
+_PAID_SUBSCRIPTION_STATUSES = (
+    SubscriptionStatus.active,
+    SubscriptionStatus.trialing,
+    SubscriptionStatus.past_due,
+)
+
 
 def _day_key(dt: datetime) -> str:
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
     return dt.astimezone(timezone.utc).date().isoformat()
+
+
+def _pct(part: int, total: int) -> float:
+    if total <= 0:
+        return 0.0
+    return round(100.0 * part / total, 1)
+
+
+def _owner_id_expr():
+    """ID владельца пространства для строки users (владелец или участник)."""
+    return func.coalesce(User.parent_user_id, User.id)
+
+
+async def _count_distinct_active_owners(
+    session: AsyncSession, since: datetime
+) -> int:
+    usage_owners = (
+        select(_owner_id_expr().label("oid"))
+        .select_from(UsageEvent)
+        .join(User, User.id == UsageEvent.user_id)
+        .where(UsageEvent.created_at >= since)
+    )
+    studio_owners = select(StudioGeneration.user_id.label("oid")).where(
+        StudioGeneration.created_at >= since
+    )
+    chat_owners = (
+        select(Conversation.user_id.label("oid"))
+        .select_from(Message)
+        .join(Conversation, Conversation.id == Message.conversation_id)
+        .where(Message.created_at >= since)
+    )
+    combined = union_all(usage_owners, studio_owners, chat_owners).subquery()
+    return int(
+        await session.scalar(
+            select(func.count(func.distinct(combined.c.oid))).select_from(combined)
+        )
+        or 0
+    )
+
+
+async def _count_engaged_owners_ever(session: AsyncSession) -> int:
+    """Владельцы с хотя бы одной осмысленной активностью (чаты, студия, usage)."""
+    usage_owners = (
+        select(_owner_id_expr().label("oid"))
+        .select_from(UsageEvent)
+        .join(User, User.id == UsageEvent.user_id)
+        .where(~UsageEvent.kind.in_(_USAGE_KINDS_NOT_ENGAGEMENT))
+    )
+    studio_owners = select(StudioGeneration.user_id.label("oid"))
+    chat_owners = (
+        select(Conversation.user_id.label("oid"))
+        .select_from(Message)
+        .join(Conversation, Conversation.id == Message.conversation_id)
+    )
+    combined = union_all(usage_owners, studio_owners, chat_owners).subquery()
+    return int(
+        await session.scalar(
+            select(func.count(func.distinct(combined.c.oid))).select_from(combined)
+        )
+        or 0
+    )
+
+
+async def _build_engagement_stats(session: AsyncSession, owners: int) -> dict:
+    now = datetime.now(timezone.utc)
+    since_7 = now - timedelta(days=7)
+    since_30 = now - timedelta(days=30)
+
+    active_7d = await _count_distinct_active_owners(session, since_7)
+    active_30d = await _count_distinct_active_owners(session, since_30)
+
+    paid_active = int(
+        await session.scalar(
+            select(func.count(Subscription.id))
+            .join(User, User.id == Subscription.user_id)
+            .where(
+                User.parent_user_id.is_(None),
+                Subscription.status == SubscriptionStatus.active,
+                or_(
+                    Subscription.current_period_end.is_(None),
+                    Subscription.current_period_end >= now,
+                ),
+            )
+        )
+        or 0
+    )
+    trialing = int(
+        await session.scalar(
+            select(func.count(Subscription.id))
+            .join(User, User.id == Subscription.user_id)
+            .where(
+                User.parent_user_id.is_(None),
+                Subscription.status == SubscriptionStatus.trialing,
+            )
+        )
+        or 0
+    )
+    past_due = int(
+        await session.scalar(
+            select(func.count(Subscription.id))
+            .join(User, User.id == Subscription.user_id)
+            .where(
+                User.parent_user_id.is_(None),
+                Subscription.status == SubscriptionStatus.past_due,
+            )
+        )
+        or 0
+    )
+    paid_or_due = int(
+        await session.scalar(
+            select(func.count(Subscription.id))
+            .join(User, User.id == Subscription.user_id)
+            .where(
+                User.parent_user_id.is_(None),
+                Subscription.status.in_(_PAID_SUBSCRIPTION_STATUSES),
+            )
+        )
+        or 0
+    )
+
+    engaged_ever = await _count_engaged_owners_ever(session)
+    zombie = max(0, owners - engaged_ever)
+
+    yookassa_buyers = int(
+        await session.scalar(
+            select(func.count(func.distinct(_owner_id_expr())))
+            .select_from(UsageEvent)
+            .join(User, User.id == UsageEvent.user_id)
+            .where(UsageEvent.kind == "yookassa_credits_pack")
+        )
+        or 0
+    )
+
+    owners_with_studio = int(
+        await session.scalar(
+            select(func.count(func.distinct(StudioGeneration.user_id)))
+        )
+        or 0
+    )
+    owners_with_chat = int(
+        await session.scalar(
+            select(func.count(func.distinct(Conversation.user_id)))
+            .select_from(Message)
+            .join(Conversation, Conversation.id == Message.conversation_id)
+        )
+        or 0
+    )
+
+    registered_30d = int(
+        await session.scalar(
+            select(func.count(User.id)).where(
+                User.parent_user_id.is_(None),
+                User.created_at >= since_30,
+            )
+        )
+        or 0
+    )
+
+    new_paid_30d = int(
+        await session.scalar(
+            select(func.count(User.id))
+            .join(Subscription, Subscription.user_id == User.id)
+            .where(
+                User.parent_user_id.is_(None),
+                User.created_at >= since_30,
+                Subscription.status == SubscriptionStatus.active,
+                or_(
+                    Subscription.current_period_end.is_(None),
+                    Subscription.current_period_end >= now,
+                ),
+            )
+        )
+        or 0
+    )
+
+    return {
+        "active_owners_7d": active_7d,
+        "active_owners_30d": active_30d,
+        "active_owners_7d_pct": _pct(active_7d, owners),
+        "active_owners_30d_pct": _pct(active_30d, owners),
+        "paid_active_owners": paid_active,
+        "paid_active_pct": _pct(paid_active, owners),
+        "trialing_owners": trialing,
+        "past_due_owners": past_due,
+        "paid_or_trialing_owners": paid_or_due,
+        "paid_or_trialing_pct": _pct(paid_or_due, owners),
+        "zombie_owners": zombie,
+        "zombie_pct": _pct(zombie, owners),
+        "engaged_owners_ever": engaged_ever,
+        "owners_yookassa_credits_buyers": yookassa_buyers,
+        "owners_with_studio": owners_with_studio,
+        "owners_with_chat": owners_with_chat,
+        "registered_owners_30d": registered_30d,
+        "new_paid_active_owners_30d": new_paid_30d,
+        "new_paid_active_30d_pct": _pct(new_paid_30d, registered_30d),
+    }
 
 
 def _series_last_days(counts: dict[str, int], days: int = 30) -> list[dict[str, int | str]]:
@@ -170,10 +378,13 @@ async def build_admin_dashboard(session: AsyncSession, *, chart_days: int = 30) 
         if created_at:
             gen_counts[_day_key(created_at)] += 1
 
+    engagement = await _build_engagement_stats(session, owners)
+
     return {
         "total_users": total_users,
         "workspace_owners": owners,
         "workspace_members": members,
+        "engagement": engagement,
         "total_credits_balance": total_credits,
         "studio_generations_total": gen_total,
         "usage_by_kind": usage_by_kind,

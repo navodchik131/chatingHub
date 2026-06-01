@@ -49,7 +49,7 @@
     "ctaPrimary": "Try free — {{signupCredits}} cr.",
     "ctaSecondary": "Launch in 5 minutes",
     "statBetaValue": "{{betaCount}}",
-    "statBetaLabel": "in closed beta",
+    "statBetaLabel": "registered",
     "statSetupValue": "5 min",
     "statSetupLabel": "WaveSpeed setup",
     "statByokValue": "BYOK",
@@ -187,7 +187,7 @@
   },
   "trial": {
     "eyebrow": "Beta · access",
-    "title": "{{betaCount}} creators already inside",
+    "title": "{{betaCount}} users on the platform",
     "dek": "{{signupCredits}} credits on signup. No card required. Credits do not expire over time.",
     "cta": "Get access"
   },
@@ -409,19 +409,28 @@
           ]
         },
         {
-          "title": "4. Sharing with third parties",
+          "title": "4. User content, AI, and liability",
+          "paragraphs": [
+            "ModelMate is software and an interface layer for conversations, integrations, and the studio. Image, video, text, and other generation runs at the user's request using <strong>third-party models and APIs</strong> (including language models, image synthesis, and translation) that the user or instance administrator connects.",
+            "All content created, uploaded, imported, or published by users through the Service (including chats, prompts, generated media, and bot replies) is <strong>user content</strong>. Users and respective rights holders are responsible for that content and for complying with applicable law and platform rules (Telegram, Fanvue, etc.).",
+            "The operator of a ModelMate instance <strong>does not create</strong> that content on its own behalf, does not pre-moderate it for legality before publication, and <strong>is not liable</strong> for the substance, accuracy, legality, or consequences of user content or third-party AI output — to the fullest extent permitted by law. The Service is provided \"as is\"; output quality and safety from external models are not guaranteed.",
+            "If third-party rights, law, or integration rules are violated, the instance administrator may restrict access, remove materials, or disable accounts under the Terms of Service."
+          ]
+        },
+        {
+          "title": "5. Sharing with third parties",
           "paragraphs": [
             "Data may be shared with external providers <strong>only to the extent and for the purposes</strong> required by selected integrations and features (translation, LLM, image studio, messengers, etc.), and with the payment operator when you pay. Each provider's terms govern its processing."
           ]
         },
         {
-          "title": "5. Retention and security",
+          "title": "6. Retention and security",
           "paragraphs": [
             "Retention periods and technical measures are determined by the instance administrator. We recommend HTTPS, restricted account access, and regular rotation of integration secrets."
           ]
         },
         {
-          "title": "6. Cookies and local storage",
+          "title": "7. Cookies and local storage",
           "paragraphs": [
             "The web app may use browser local storage or similar mechanisms to maintain login sessions and interface preferences. You can clear site data in your browser settings; you may need to log in again."
           ]
@@ -433,13 +442,13 @@
           ]
         },
         {
-          "title": "8. Policy changes",
+          "title": "9. Policy changes",
           "paragraphs": [
             "The instance administrator may update this policy. The current version is published at this address; material changes should reasonably be communicated via the dashboard or email."
           ]
         },
         {
-          "title": "9. Related documents",
+          "title": "10. Related documents",
           "linkToTerms": true
         }
       ]
@@ -476,9 +485,10 @@
           ]
         },
         {
-          "title": "5. Integrations and user content",
+          "title": "5. Integrations, user content, and AI",
           "paragraphs": [
-            "Users configure bots, webhooks, and third-party keys independently and are responsible for the legality of their activity and content. The Service may process messages and files only as needed for selected features (display, translation, studio)."
+            "Users configure bots, webhooks, and third-party keys independently and are fully responsible for the legality of their activity and all content they create or distribute.",
+            "The Service is an orchestration layer over third-party models and APIs; it does not guarantee the accuracy, safety, or fitness of generated materials. Messages and files are processed only as needed for selected features (display, translation, studio)."
           ]
         },
         {
@@ -495,7 +505,7 @@
         {
           "title": "7. Limitation of liability",
           "paragraphs": [
-            "To the maximum extent permitted by applicable law, the party providing the Service is not liable for indirect damages, lost profits, downtime of third-party services (including Telegram, Fanvue, AI and translation providers), or decisions made based on data obtained through the Service."
+            "To the maximum extent permitted by applicable law, the party providing the Service is not liable for indirect damages, lost profits, downtime of third-party services (including Telegram, Fanvue, AI and translation providers), user-generated content or third-party model output, or decisions made based on data obtained through the Service."
           ]
         },
         {
