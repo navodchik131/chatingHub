@@ -168,16 +168,28 @@
     "titleAfter": ".",
     "steps": [
       {
-        "title": "Connect WaveSpeed",
-        "text": "API key at wavespeed.ai — pay the provider directly."
+        "title": "Sign up and log in",
+        "text": "Create your account with email, sign in, and open the Connections section."
       },
       {
-        "title": "Set up your model",
-        "text": "References, style, and look — once in the model profile."
+        "title": "Create a key at wavespeed.ai",
+        "text": "Register at wavespeed.ai, open API Keys, and copy your key."
       },
       {
-        "title": "Generate and chat",
-        "text": "Content, chats, and translations in one workspace."
+        "title": "Add the key in Integrations",
+        "text": "Paste your WaveSpeed key in Connections → WaveSpeed and save."
+      },
+      {
+        "title": "Build your model profile",
+        "text": "In Studio, create a model, upload 8–15 reference photos, and save."
+      },
+      {
+        "title": "Generate with the right mode",
+        "text": "Images for shots and carousels, Video for motion clips, Chat for replies and translation."
+      },
+      {
+        "title": "Connect Telegram/Fanvue",
+        "text": "After studio setup, connect channels in Connections to work from one inbox."
       }
     ],
     "cta": "Start free — {{signupCredits}} credits"
@@ -188,7 +200,7 @@
   "trial": {
     "eyebrow": "Beta · access",
     "title": "{{betaCount}} users on the platform",
-    "dek": "{{signupCredits}} credits on signup. No card required. Credits do not expire over time.",
+    "dek": "{{signupCredits}} credits on signup. During the trial period, both ModelMate credits and your WaveSpeed balance may be charged to validate both platform-side and provider-side billing flows. After you choose a plan, behavior is fixed by plan rules: BYOK bills generation on WaveSpeed, Managed uses platform credits.",
     "cta": "Get access"
   },
   "cta": {
@@ -314,7 +326,14 @@
       {
         "question": "Where do I start after signing up?",
         "paragraphs": [
-          "Log in to the dashboard with your email and password. Open Connections — WaveSpeed, Telegram, and Fanvue live there. During trial, you need your own WaveSpeed key for images and video."
+          "1) Log in to the dashboard. 2) Add your WaveSpeed key in Connections. 3) Create your model and upload references in Studio. 4) Use Images for shots, Video for clips, and Chat for translation/replies. 5) Then connect Telegram/Fanvue in Connections."
+        ]
+      },
+      {
+        "question": "Why are both credits and WaveSpeed balance charged during trial?",
+        "paragraphs": [
+          "This is intentional in trial: the system validates both billing paths — platform billing (ModelMate credits) and provider billing (WaveSpeed via your API key).",
+          "After you select a plan, billing behavior is fixed: BYOK charges generation on WaveSpeed, Managed uses platform credits according to your plan."
         ]
       },
       {

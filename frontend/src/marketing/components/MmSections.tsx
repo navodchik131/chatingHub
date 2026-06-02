@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { WAVESPEED_REF_URL } from '../../billing/planCatalog'
+import { renderWithWavespeedRef } from '../../billing/wavespeedRefLink'
 import { parseReferralFromHealth } from '../../billing/referral'
 import { usePublicHealth } from '../usePublicHealth'
 import { useMarketingPath } from '../i18n/useMarketingPath'
@@ -406,18 +406,8 @@ export function MmHowSection() {
             ? steps.map((step, i) => (
                 <article key={step.title} className="mm-how-card">
                   <span className="mm-how-card__num">{i + 1}</span>
-                  <strong>{step.title}</strong>
-                  {i === 0 ? (
-                    <p>
-                      {step.text.split('wavespeed.ai')[0]}
-                      <a href={WAVESPEED_REF_URL} target="_blank" rel="noopener noreferrer">
-                        wavespeed.ai
-                      </a>
-                      {step.text.includes('wavespeed.ai') ? step.text.split('wavespeed.ai')[1] : ''}
-                    </p>
-                  ) : (
-                    <p>{step.text}</p>
-                  )}
+                  <strong>{renderWithWavespeedRef(step.title)}</strong>
+                  <p>{renderWithWavespeedRef(step.text)}</p>
                 </article>
               ))
             : null}

@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { parseReferralFromHealth } from '../billing/referral'
+import { renderWithWavespeedRef } from '../billing/wavespeedRefLink'
 import { MmContainer } from './components/MmUi'
 import { usePublicHealth } from './usePublicHealth'
 import { useMarketingPath } from './i18n/useMarketingPath'
@@ -31,7 +32,7 @@ function FaqAnswerParagraph({ text }: { text: string }) {
       </p>
     )
   }
-  return <p>{text}</p>
+  return <p>{renderWithWavespeedRef(text)}</p>
 }
 
 export function FaqPage() {
