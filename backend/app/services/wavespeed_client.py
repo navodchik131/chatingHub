@@ -395,15 +395,43 @@ async def _wavespeed_submit_image_prediction(
     body: dict[str, Any],
     timeout_submit: float = 300.0,
 ) -> WaveSpeedSubmitOutcome:
+    """
+    Submit prediction. Не повторяем POST при 502/503/504: шлюз мог оборвать ответ,
+    а задача на стороне WaveSpeed уже создана — повторный POST = дубликат и списание.
+    """
     headers = {
         "Authorization": f"Bearer {api_key.strip()}",
         "Content-Type": "application/json",
     }
     async with httpx.AsyncClient(timeout=timeout_submit) as client:
-        r = None
+        r: httpx.Response | None = None
         for attempt in range(3):
-            r = await client.post(full_post_url, headers=headers, json=body)
+            try:
+                r = await client.post(full_post_url, headers=headers, json=body)
+            except (httpx.TimeoutException, httpx.NetworkError, httpx.ConnectError) as e:
+                if attempt >= 2:
+                    raise RuntimeError(
+                        format_wavespeed_user_error(
+                            "таймаут или сеть при отправке задачи в WaveSpeed"
+                        )
+                    ) from e
+                log.warning(
+                    "wavespeed submit network error (attempt %s), retry: %s",
+                    attempt + 1,
+                    e,
+                )
+                await asyncio.sleep(2.0 * (attempt + 1))
+                continue
             if r.status_code < 500:
+                break
+            if _is_transient_wavespeed_http(r.status_code):
+                log.warning(
+                    "wavespeed submit %s: no POST retry (avoid duplicate tasks): %s",
+                    r.status_code,
+                    (r.text or "")[:500],
+                )
+                break
+            if attempt >= 2:
                 break
             log.warning(
                 "wavespeed submit %s (attempt %s), retry: %s",
@@ -698,7 +726,8 @@ async def gpt_image_2_edit_image_url(
         "resolution": res,
         "quality": qual,
         "output_format": fmt,
-        "enable_sync_mode": bool(settings.wavespeed_seedream_sync),
+        # Всегда async: sync держит POST минутами → 504 stgw и наш retry плодил дубликаты.
+        "enable_sync_mode": False,
         "enable_base64_output": False,
     }
     _apply_wavespeed_extra_body(body)
@@ -707,7 +736,7 @@ async def gpt_image_2_edit_image_url(
         api_key=api_key,
         full_post_url=url,
         body=body,
-        timeout_submit=timeout_submit,
+        timeout_submit=min(timeout_submit, 120.0),
     )
     if on_task_submitted and submitted.task_id:
         await on_task_submitted(submitted.task_id)

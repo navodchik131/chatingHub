@@ -35,6 +35,49 @@ def test_humanize_sensitive_sheet_error():
     assert "модерац" in msg.lower()
 
 
+def test_submit_does_not_retry_on_504(monkeypatch):
+    """POST при 504 не должен повторяться — иначе две задачи в WaveSpeed."""
+    import httpx
+
+    from app.services import wavespeed_client as wc
+
+    calls = {"n": 0}
+
+    class FakeResp:
+        status_code = 504
+        text = "<html>504 Gateway Time-out</html>"
+
+        def json(self):
+            raise ValueError("not json")
+
+    class FakeClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+        async def post(self, *args, **kwargs):
+            calls["n"] += 1
+            return FakeResp()
+
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kw: FakeClient())
+
+    import pytest
+
+    with pytest.raises(RuntimeError, match="504"):
+        import asyncio
+
+        asyncio.run(
+            wc._wavespeed_submit_image_prediction(
+                api_key="k",
+                full_post_url="https://api.wavespeed.ai/api/v3/openai/gpt-image-2/edit",
+                body={"prompt": "x", "images": []},
+            )
+        )
+    assert calls["n"] == 1
+
+
 def test_humanize_gateway_timeout_strips_html():
     from app.services.wavespeed_client import format_wavespeed_user_error
 
