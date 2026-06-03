@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
+import { TelegramChannelBanner } from './TelegramChannelBanner'
 
 export type WorkspaceSection =
   | 'overview'
@@ -106,6 +107,7 @@ export function AppShell({
 
   return (
     <div className="workspace-shell workspace-shell--topnav">
+      <TelegramChannelBanner />
       <div className="workspace-main">
         <header className="workspace-topbar">
           <div className="workspace-topbar-start">

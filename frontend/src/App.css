@@ -3519,6 +3519,55 @@ select:focus {
   min-width: 0;
 }
 
+.workspace-tg-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 100%;
+  flex-shrink: 0;
+  padding: 0.4rem max(1rem, env(safe-area-inset-right, 0px)) 0.4rem
+    max(1rem, env(safe-area-inset-left, 0px));
+  font-size: 0.8125rem;
+  line-height: 1.35;
+  color: color-mix(in srgb, #e8f4fc 92%, var(--text));
+  text-decoration: none;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, #37aee2 22%, transparent),
+    color-mix(in srgb, #37aee2 12%, transparent) 50%,
+    color-mix(in srgb, #37aee2 18%, transparent)
+  );
+  border-bottom: 1px solid color-mix(in srgb, #37aee2 35%, var(--border));
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.workspace-tg-banner:hover {
+  color: #fff;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, #37aee2 32%, transparent),
+    color-mix(in srgb, #37aee2 20%, transparent) 50%,
+    color-mix(in srgb, #37aee2 28%, transparent)
+  );
+}
+
+.workspace-tg-banner__icon {
+  flex-shrink: 0;
+  width: 1.375rem;
+  height: 1.375rem;
+  border-radius: 4px;
+}
+
+.workspace-tg-banner__text {
+  text-align: center;
+}
+
+.workspace-tg-banner__emph {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 /* Навигация вверху — больше места для студии и чата (десктоп) */
 .workspace-shell--topnav .workspace-sidebar {
   display: none !important;
