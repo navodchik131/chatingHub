@@ -80,6 +80,22 @@ def _grok_prompt_file_candidates(configured_rel: str, default_filename: str) -> 
     return out
 
 
+def load_grok_scene_compose_model_scene_system() -> str:
+    configured = (settings.grok_scene_compose_model_scene_system_path or "").strip()
+    candidates = _grok_prompt_file_candidates(
+        configured, "grok_scene_compose_model_scene_system.txt"
+    )
+    for path in candidates:
+        if path.is_file():
+            t = path.read_text(encoding="utf-8").strip()
+            if t:
+                return t
+    inline = (settings.grok_scene_compose_model_scene_system_inline or "").strip()
+    if inline:
+        return inline
+    return load_grok_scene_compose_text_system()
+
+
 def load_grok_scene_compose_text_system() -> str:
     configured = (settings.grok_scene_compose_text_system_path or "").strip()
     candidates = _grok_prompt_file_candidates(
@@ -225,6 +241,7 @@ async def grok_compose_studio_scene(
     user_notes: str,
     lock_hairstyle: bool,
     credentials: StudioOpenAiCredentials | None = None,
+    standalone_scene_prompt: bool = False,
 ) -> GrokSceneComposeResult:
     creds = credentials or grok_motion_studio_credentials()
     labeled = collect_model_images_for_grok_compose(model_images, wave_profile=wave_profile)
@@ -245,6 +262,15 @@ async def grok_compose_studio_scene(
     )
 
     figure_anchor = grok_figure_anchor_from_profile(model_profile_text)
+    output_rule = ""
+    if standalone_scene_prompt:
+        output_rule = (
+            "\n\nPROMPT_OUTPUT_RULE: wavespeed_scene_prompt must be fully self-contained English prose "
+            "for an image API that will NOT receive USER_SCENE_REFERENCE. "
+            "Never write 'reference image', 'user photo', 'as in the reference', 'image 1', or similar. "
+            "Describe pose, camera angle, framing, lighting, background, wardrobe, expression, and mood "
+            "as concrete facts distilled from USER_SCENE_REFERENCE + USER_NOTES.\n"
+        )
     user_parts: list[dict] = [
         {
             "type": "text",
@@ -257,7 +283,8 @@ async def grok_compose_studio_scene(
                 "Start wavespeed_scene_prompt with a FIGURE_LOCK sentence using the anchor below.\n\n"
                 f"FIGURE_LOCK_ANCHOR (mandatory in prose):\n{figure_anchor}\n\n"
                 f"MODEL_PROFILE_JSON:\n{profile}\n\n"
-                f"USER_NOTES:\n{notes or '(none)'}\n\n"
+                f"USER_NOTES:\n{notes or '(none)'}"
+                f"{output_rule}\n\n"
                 "Attached images follow. Labels in captions are authoritative."
             ),
         },
@@ -392,6 +419,94 @@ async def grok_compose_studio_text_scene(
         return _parse_grok_compose_json(raw_out)
     except RuntimeError:
         log.warning("grok text scene compose: JSON parse failed, using raw prose fallback")
+        prose = _strip_code_fences(raw_out).strip()
+        if len(prose) < 80:
+            raise RuntimeError("Grok вернул слишком короткий ответ без JSON")
+        return GrokSceneComposeResult(
+            wavespeed_scene_prompt=prose,
+            reference_scene_lock="",
+            negative_prompt="",
+        )
+
+
+async def grok_compose_studio_model_scene(
+    *,
+    model_images: list[UserStudioModelImage],
+    model_profile_text: str | None,
+    wave_profile: str,
+    user_notes: str,
+    credentials: StudioOpenAiCredentials | None = None,
+) -> GrokSceneComposeResult:
+    """
+    Режим «Модель + промпт»: сцена только из USER_NOTES, identity из листов модели (включая развёртку),
+    без референса пользователя в Grok и WaveSpeed.
+    """
+    creds = credentials or grok_motion_studio_credentials()
+    labeled = collect_model_images_for_grok_compose(model_images, wave_profile=wave_profile)
+    if not labeled:
+        raise RuntimeError(
+            "Для режима «Модель + промпт» у модели нужны снимки: развёртка (turnaround) "
+            "и/или лицо/тело. Добавьте их в кабинете модели."
+        )
+
+    system = load_grok_scene_compose_model_scene_system()
+    wp = (wave_profile or "nsfw").strip().lower()
+    profile = (model_profile_text or "").strip() or "{}"
+    notes = (user_notes or "").strip()
+    if not notes:
+        raise RuntimeError(
+            "Опишите сцену в промпте: место, поза, одежда, свет — референс-фото в этом режиме не используется."
+        )
+
+    figure_anchor = grok_figure_anchor_from_profile(model_profile_text)
+    user_parts: list[dict] = [
+        {
+            "type": "text",
+            "text": (
+                f"WAVE_PROFILE: {wp}\n"
+                "MODE: MODEL_SCENE_ONLY — no user pose/scene reference image. "
+                "Compose pose, camera, framing, lighting, background, and wardrobe/nudity from USER_NOTES only.\n\n"
+                "BODY_FIGURE_RULE: Bust, waist, hip width, glute volume, torso/leg proportions MUST come from "
+                "MODEL_PROFILE_JSON + CHARACTER_SHEET_CLOTHED + BODY_REFERENCE / ANATOMY_REFERENCE_NUDE. "
+                "State figure proportions and distinctive traits explicitly in wavespeed_scene_prompt.\n\n"
+                f"FIGURE_LOCK_ANCHOR (mandatory in prose):\n{figure_anchor}\n\n"
+                f"MODEL_PROFILE_JSON:\n{profile}\n\n"
+                f"USER_NOTES:\n{notes}\n\n"
+                "Attached images are model identity references only (not a scene donor). "
+                "Labels in captions are authoritative."
+            ),
+        },
+    ]
+
+    for label, im in labeled:
+        raw, mime = _read_model_image_file(im)
+        b64 = base64.standard_b64encode(raw).decode("ascii")
+        user_parts.append(
+            {"type": "text", "text": f"[{label}] studio_model_image id={im.id}"}
+        )
+        user_parts.append(
+            {
+                "type": "image_url",
+                "image_url": {"url": f"data:{mime};base64,{b64}"},
+            }
+        )
+
+    model = _grok_scene_compose_model()
+    raw_out = await chat_completion_openai_compatible_text(
+        model=model,
+        messages=[
+            {"role": "system", "content": system + "\n\n" + _TIMELINE_SYSTEM_EN},
+            {"role": "user", "content": user_parts},
+        ],
+        max_tokens=int(settings.grok_scene_compose_max_tokens),
+        temperature=float(settings.grok_scene_compose_temperature),
+        credentials=creds,
+        timeout_seconds=float(settings.grok_scene_compose_timeout_seconds),
+    )
+    try:
+        return _parse_grok_compose_json(raw_out)
+    except RuntimeError:
+        log.warning("grok model_scene compose: JSON parse failed, using raw prose fallback")
         prose = _strip_code_fences(raw_out).strip()
         if len(prose) < 80:
             raise RuntimeError("Grok вернул слишком короткий ответ без JSON")

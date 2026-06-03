@@ -145,6 +145,47 @@ def select_wan_identity_images_with_pose_ref(
     return sort_model_images_for_wan_identity(picked)[:cap]
 
 
+def select_model_scene_wavespeed_identity_images(
+    imgs: list[UserStudioModelImage],
+    *,
+    wave_profile: str,
+    max_count: int = 6,
+) -> list[UserStudioModelImage]:
+    """
+    Режим «Модель + промпт»: только снимки модели (развёртка, тело, лицо, анатомия) — без референса сцены.
+    """
+    if not imgs:
+        return []
+    wp = (wave_profile or "nsfw").strip().lower()
+    cap = max(1, min(8, int(max_count)))
+    sorted_imgs = sort_model_images_for_studio(imgs)
+    by_kind: dict[str, UserStudioModelImage] = {}
+    for im in sorted_imgs:
+        k = (im.image_kind or "other").lower()
+        if k not in by_kind:
+            by_kind[k] = im
+
+    order: list[str] = ["turnaround", "body", "face", "genitals"]
+    if wp == "regular":
+        order = ["turnaround", "body", "face"]
+
+    picked: list[UserStudioModelImage] = []
+    seen: set[int] = set()
+    for kind in order:
+        if kind == "genitals" and wp != "nsfw":
+            continue
+        im = by_kind.get(kind)
+        if im is None or im.id in seen:
+            continue
+        picked.append(im)
+        seen.add(im.id)
+    if not picked:
+        for im in sorted_imgs[:cap]:
+            if im.id not in seen:
+                picked.append(im)
+    return sort_model_images_for_wan_identity(picked)[:cap]
+
+
 def select_prompt_only_wavespeed_identity_images(
     imgs: list[UserStudioModelImage],
     *,

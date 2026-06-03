@@ -1,6 +1,12 @@
 /** Почему кнопка «Сгенерировать» в студии картинок неактивна (для title и подсказки под кнопкой). */
 
-export type StudioImageMode = 'model' | 'photo_edit' | 'no_face' | 'face_swap' | 'grok_compose'
+export type StudioImageMode =
+  | 'model_scene'
+  | 'model'
+  | 'photo_edit'
+  | 'no_face'
+  | 'face_swap'
+  | 'grok_compose'
 
 export function studioIntegrationsHint(): string {
   return 'Добавьте API-ключ WaveSpeed: кабинет → Подключения → блок WaveSpeed.'
@@ -48,8 +54,12 @@ export function studioImageGenerateBlockReason(input: StudioGenerateGateInput): 
 
   if (studioNeedsUserWsKey) return studioIntegrationsHint()
 
+  if (studioMode === 'model_scene' && !grokSceneConfigured) {
+    return 'Grok не настроен на сервере — режим «Основная» временно недоступен.'
+  }
+
   if (studioMode === 'grok_compose' && !grokSceneConfigured) {
-    return 'Grok не настроен на сервере — генерация «Основная» временно недоступна.'
+    return 'Grok не настроен на сервере — режим «С референсом» временно недоступен.'
   }
 
   if (studioMode === 'face_swap') {
@@ -62,9 +72,19 @@ export function studioImageGenerateBlockReason(input: StudioGenerateGateInput): 
     return null
   }
 
+  if (studioMode === 'model_scene') {
+    if (studioSelectedModelId == null) {
+      return 'Основная: выберите модель с развёрткой/лицом/телом и JSON-профилем.'
+    }
+    if (!studioFile) {
+      return 'Основная: загрузите референс сцены — для Grok (поза, свет, кадр). В WaveSpeed уйдут только фото модели.'
+    }
+    return null
+  }
+
   if (studioMode === 'model') {
     if (!grokSceneConfigured) {
-      return 'По промту: нужен Grok на сервере (как в режиме «Основная»).'
+      return 'По промту: нужен Grok на сервере.'
     }
     if (studioSelectedModelId == null) {
       return 'По промту: выберите модель с фото «Тело целиком» (и «Интимная анатомия» для NSFW).'
@@ -77,10 +97,10 @@ export function studioImageGenerateBlockReason(input: StudioGenerateGateInput): 
 
   if (studioMode === 'grok_compose') {
     if (studioSelectedModelId == null) {
-      return 'Режим «Основная»: выберите модель с фото и профилем.'
+      return 'С референсом: выберите модель с фото и профилем.'
     }
     if (!studioFile) {
-      return 'Режим «Основная»: загрузите референс сцены (поза, свет, кадр).'
+      return 'С референсом: загрузите референс сцены (поза, свет, кадр).'
     }
     return null
   }

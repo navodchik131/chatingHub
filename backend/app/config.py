@@ -112,6 +112,10 @@ class Settings(BaseSettings):
     grok_scene_compose_text_system_path: str = Field(
         default="data/prompts/grok_scene_compose_text_system.txt"
     )
+    grok_scene_compose_model_scene_system_path: str = Field(
+        default="data/prompts/grok_scene_compose_model_scene_system.txt"
+    )
+    grok_scene_compose_model_scene_system_inline: str = Field(default="")
     grok_scene_compose_system_inline: str = Field(default="")
     grok_scene_compose_text_system_inline: str = Field(default="")
     grok_scene_compose_model: str = Field(default="")

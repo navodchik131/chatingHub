@@ -599,10 +599,24 @@ function studioGalleryMediaKind(section: WorkspaceSection): StudioArchiveMediaKi
   return undefined
 }
 
-type StudioJobMode = 'model' | 'photo_edit' | 'no_face' | 'face_swap' | 'grok_compose'
+type StudioJobMode =
+  | 'model_scene'
+  | 'model'
+  | 'photo_edit'
+  | 'no_face'
+  | 'face_swap'
+  | 'grok_compose'
+
+/** Только текст в промпт, без референса даже для Grok. */
+const STUDIO_TEXT_ONLY_MODES: StudioJobMode[] = ['model']
+
+function studioModeUsesTextOnlyPrompt(mode: StudioJobMode): boolean {
+  return STUDIO_TEXT_ONLY_MODES.includes(mode)
+}
 
 const STUDIO_IMAGE_MODE_OPTIONS: { id: StudioJobMode; label: string }[] = [
-  { id: 'grok_compose', label: 'Основная' },
+  { id: 'model_scene', label: 'Основная' },
+  { id: 'grok_compose', label: 'С референсом' },
   { id: 'model', label: 'По промту' },
   { id: 'face_swap', label: 'Подмена лица' },
   { id: 'photo_edit', label: 'Доработать фото' },
@@ -761,7 +775,7 @@ export default function App() {
   /** true = MODEL_LOCK (причёска с профиля); false = POSE_REFERENCE (с загруженного кадра). Только если есть studioFile. */
   const [studioLockModelHairstyle, setStudioLockModelHairstyle] = useState(true)
   const [studioSendPoseRefToWavespeed, setStudioSendPoseRefToWavespeed] = useState(true)
-  const [studioMode, setStudioMode] = useState<StudioJobMode>('grok_compose')
+  const [studioMode, setStudioMode] = useState<StudioJobMode>('model_scene')
   const [studioWanEditTier, setStudioWanEditTier] = useState<'standard' | 'pro'>('standard')
   const [studioWaveProfile, setStudioWaveProfile] = useState<'regular' | 'nsfw'>('nsfw')
   const [studioBusy, setStudioBusy] = useState(false)
@@ -973,7 +987,7 @@ export default function App() {
   }, [studioInpaintMaskFile])
 
   useEffect(() => {
-    if (studioMode === 'model') {
+    if (studioModeUsesTextOnlyPrompt(studioMode)) {
       setStudioFile(null)
       setStudioPhotoEditArchiveId(null)
       setStudioPaintInpaintMask(false)
@@ -2431,6 +2445,19 @@ export default function App() {
         setError('Опишите, что изменить или исправить на фото.')
         return
       }
+    } else if (studioMode === 'model_scene') {
+      if (health?.studio_grok_scene_compose_configured === false) {
+        setError('Режим «Основная» использует Grok — на сервере нужен GROK_API_KEY.')
+        return
+      }
+      if (studioSelectedModelId == null) {
+        setError('В режиме «Основная» выберите модель с развёрткой и профилем.')
+        return
+      }
+      if (!studioFile) {
+        setError('Загрузите референс сцены — Grok возьмёт позу, свет и кадр; в генерацию уйдут только фото модели.')
+        return
+      }
     } else if (studioMode === 'model') {
       if (health?.studio_grok_scene_compose_configured === false) {
         setError('Режим «По промту» использует Grok — на сервере нужен GROK_API_KEY.')
@@ -2474,7 +2501,7 @@ export default function App() {
         return
       }
       if (studioSelectedModelId == null) {
-        setError('В режиме «Основная» выберите модель с листами и JSON-профилем.')
+        setError('В режиме «С референсом» выберите модель с листами и JSON-профилем.')
         return
       }
       if (!studioFile) {
@@ -2486,7 +2513,9 @@ export default function App() {
       studioFile != null ||
       (studioMode === 'photo_edit' && studioPhotoEditArchiveId != null)
     const wantsInpaint =
-      studioMode !== 'model' && (studioPaintInpaintMask || studioInpaintMaskFile != null)
+      !studioModeUsesTextOnlyPrompt(studioMode) &&
+      studioMode !== 'model_scene' &&
+      (studioPaintInpaintMask || studioInpaintMaskFile != null)
     if (wantsInpaint && !hasStudioBaseImage) {
       setError(
         'Для маски загрузите изображение или выберите снимок из архива (режим «Доработать фото»).',
@@ -5332,18 +5361,20 @@ export default function App() {
             <StudioPillField
               label="Модель"
               hint={
-                studioMode === 'model'
-                  ? 'Обязательна — внешность из кабинета'
-                  : studioMode === 'face_swap'
-                    ? 'Обязательна вместе с фото'
-                    : 'Листы для лица и тела'
+                studioMode === 'model_scene'
+                  ? 'Внешность в WaveSpeed; сцена — из референса через Grok'
+                  : studioModeUsesTextOnlyPrompt(studioMode)
+                    ? 'Обязательна — только её фото в генерацию'
+                    : studioMode === 'face_swap'
+                      ? 'Обязательна вместе с фото'
+                      : 'Листы для лица и тела'
               }
               icon={<IconModel className="studio-slot__icon-svg" />}
               scrollRow={studioModels.length > 4}
               options={studioModels.map((m) => ({ value: m.id, label: m.name }))}
               value={studioSelectedModelId}
               onChange={(v) => setStudioSelectedModelId(v)}
-              allowEmpty={studioMode !== 'model'}
+              allowEmpty={studioMode !== 'model_scene' && !studioModeUsesTextOnlyPrompt(studioMode)}
               emptyLabel="Без модели"
             />
             {studioMode === 'photo_edit' ? (
@@ -5358,7 +5389,7 @@ export default function App() {
                 }}
               />
             ) : null}
-            {studioMode !== 'model' ? (
+            {!studioModeUsesTextOnlyPrompt(studioMode) ? (
               <StudioMediaSlot
                 label={
                   studioMode === 'photo_edit'
@@ -5368,7 +5399,11 @@ export default function App() {
                       : 'Референс'
                 }
                 hint={
-                  studioMode === 'photo_edit' ? 'Или выберите миниатюру выше' : 'Поза и сцена'
+                  studioMode === 'photo_edit'
+                    ? 'Или выберите миниатюру выше'
+                    : studioMode === 'model_scene'
+                      ? 'Для Grok: поза, свет, кадр (не уходит в WaveSpeed)'
+                      : 'Поза и сцена'
                 }
                 icon="image"
                 previewUrl={studioReferenceObjectUrl}
@@ -5380,8 +5415,18 @@ export default function App() {
                 onClear={() => setStudioFile(null)}
                 emptyLabel="JPG, PNG, WebP"
               />
+            ) : (
+              <p className="studio-mode-hint">
+                Режим «По промту»: сцена только из текста промпта, без референс-фото.
+              </p>
+            )}
+            {studioMode === 'model_scene' ? (
+              <p className="studio-mode-hint">
+                Референс читает Grok и попадает в текстовый промпт без отсылок к «реф-фото». В
+                WaveSpeed — только снимки модели (развёртка, тело, лицо).
+              </p>
             ) : null}
-            {studioMode !== 'model' ? (
+            {!studioModeUsesTextOnlyPrompt(studioMode) && studioMode !== 'model_scene' ? (
             <label
               className="studio-label studio-check"
               style={!studioInpaintBaseImageSrc ? { opacity: 0.55 } : undefined}
@@ -5398,7 +5443,10 @@ export default function App() {
               <span>Нарисовать маску кистью — белым отметьте, что нужно изменить на снимке.</span>
             </label>
             ) : null}
-            {studioMode !== 'model' && studioPaintInpaintMask && studioInpaintBaseImageSrc ? (
+            {!studioModeUsesTextOnlyPrompt(studioMode) &&
+            studioMode !== 'model_scene' &&
+            studioPaintInpaintMask &&
+            studioInpaintBaseImageSrc ? (
               <div className="studio-mask-painter-controls">
                 <div className="studio-mask-painter-row">
                   <label className="studio-mask-brush-label">
@@ -5430,7 +5478,7 @@ export default function App() {
                 />
               </div>
             ) : null}
-            {studioMode !== 'model' ? (
+            {!studioModeUsesTextOnlyPrompt(studioMode) && studioMode !== 'model_scene' ? (
             <label
               className="studio-label"
               style={
@@ -5490,7 +5538,9 @@ export default function App() {
               </p>
             ) : null}
             <div className="studio-toggles">
-            {studioMode !== 'photo_edit' && studioMode !== 'model' ? (
+            {studioMode !== 'photo_edit' &&
+            !studioModeUsesTextOnlyPrompt(studioMode) &&
+            studioMode !== 'model_scene' ? (
               <label
                 className="studio-toggle-row"
                 style={!studioFile ? { opacity: 0.55 } : undefined}
@@ -5533,18 +5583,22 @@ export default function App() {
                 <div className="studio-slot__titles">
                   <span className="studio-slot__label">Промпт</span>
                   <span className="studio-slot__hint">
-                    {studioMode === 'model'
-                      ? 'Сцена целиком — без референса'
-                      : 'Сцена, свет, настроение'}
+                    {studioMode === 'model_scene'
+                      ? 'Уточнения к сцене (опционально)'
+                      : studioModeUsesTextOnlyPrompt(studioMode)
+                        ? 'Поза, место, одежда, свет — подробно'
+                        : 'Сцена, свет, настроение'}
                   </span>
                 </div>
               </div>
               <textarea
                 rows={4}
                 placeholder={
-                  studioMode === 'model'
-                    ? 'Опишите кадр: место, поза, одежда, свет…'
-                    : 'Опишите кадр…'
+                  studioMode === 'model_scene'
+                    ? 'По желанию: уточнить одежду, настроение, детали…'
+                    : studioModeUsesTextOnlyPrompt(studioMode)
+                      ? 'Например: спальня, стоит у окна, красное платье, мягкий дневной свет…'
+                      : 'Опишите кадр…'
                 }
                 value={studioDesc}
                 onChange={(e) => setStudioDesc(e.target.value)}

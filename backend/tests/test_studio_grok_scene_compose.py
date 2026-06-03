@@ -14,6 +14,7 @@ from app.services.studio_grok_scene_compose import (
 )
 from app.services.studio_model_images import (
     select_grok_compose_wavespeed_identity_images,
+    select_model_scene_wavespeed_identity_images,
     select_prompt_only_wavespeed_identity_images,
 )
 from app.services.studio_prompt_bundle import (
@@ -102,6 +103,19 @@ def test_prompt_only_identity_body_face_genitals_nsfw() -> None:
     kinds = [(im.image_kind or "") for im in picked]
     assert kinds == ["body", "face", "genitals"]
     assert "turnaround" not in kinds
+
+
+def test_model_scene_identity_includes_turnaround() -> None:
+    imgs = [
+        _im("turnaround", 1),
+        _im("body", 2),
+        _im("face", 3),
+        _im("genitals", 4),
+    ]
+    picked = select_model_scene_wavespeed_identity_images(imgs, wave_profile="nsfw")
+    kinds = [(im.image_kind or "").lower() for im in picked]
+    assert "turnaround" in kinds
+    assert "body" in kinds
 
 
 def test_prompt_only_identity_regular_body_and_face() -> None:

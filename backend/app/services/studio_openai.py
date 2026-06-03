@@ -1334,12 +1334,12 @@ def resolve_studio_prompt_brief_mode(
 ) -> str:
     """full | compact_pose_image | text_scene | grok_composed"""
     mode = (studio_mode or "model").strip().lower()
-    if mode == "grok_compose":
+    if mode in ("grok_compose", "model_scene"):
         return "grok_composed"
     if not has_uploaded_reference_bytes or not has_reference_scene:
         return "full"
     mode = (studio_mode or "model").strip().lower()
-    if mode not in ("model", "no_face"):
+    if mode not in ("model", "model_scene", "no_face"):
         return "full"
     if send_pose_reference_to_wavespeed:
         return "compact_pose_image"
