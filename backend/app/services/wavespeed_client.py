@@ -121,6 +121,31 @@ def _wavespeed_envelope_error(resp_json: dict[str, Any]) -> str | None:
     return " — ".join(parts) if parts else f"WaveSpeed вернул code={c}"
 
 
+def _wavespeed_task_failed_error(resp_json: dict[str, Any]) -> str | None:
+    """
+    Ошибка конкретной задачи (data.status=failed, data.error) — приоритетнее message обёртки.
+    В UI WaveSpeed часто видна именно data.error (модерация), а в API ещё code/message про баланс.
+    """
+    data = resp_json.get("data")
+    if not isinstance(data, dict):
+        return None
+    if (data.get("status") or "").lower() != "failed":
+        return None
+    err = str(data.get("error") or "").strip()
+    return err or "WaveSpeed task failed"
+
+
+def _wavespeed_raise_from_response(resp_json: dict[str, Any], *, context: str) -> None:
+    task_err = _wavespeed_task_failed_error(resp_json)
+    if task_err:
+        log.warning("wavespeed %s task failed: %s", context, task_err[:500])
+        raise RuntimeError(f"WaveSpeed: {task_err}")
+    env_err = _wavespeed_envelope_error(resp_json)
+    if env_err:
+        log.warning("wavespeed %s envelope: %s", context, env_err[:500])
+        raise RuntimeError(f"WaveSpeed: {env_err}")
+
+
 def _first_output_url(outputs: Any) -> str | None:
     """
     WaveSpeed: data.outputs — массив URL; в ряде ответов встречаются одна строка-URL
@@ -285,12 +310,7 @@ async def _wavespeed_post_json_and_resolve_image_url(
             raise RuntimeError("WaveSpeed: невалидный JSON в ответе") from e
         if not isinstance(resp, dict):
             raise RuntimeError("WaveSpeed: неожиданный формат ответа")
-        env_err = _wavespeed_envelope_error(resp)
-        if env_err:
-            log.warning("wavespeed submit envelope: %s", env_err)
-            raise RuntimeError(
-                f"WaveSpeed: {env_err}. Проверьте баланс и параметры; если ошибка общая (try again) — подождите и повторите."
-            )
+        _wavespeed_raise_from_response(resp, context="submit")
         d = _unwrap_data(resp)
         u0 = _image_url_from_prediction(d)
         task_id = _task_id_from_prediction(d)
@@ -318,6 +338,14 @@ async def _wavespeed_post_json_and_resolve_image_url(
             await asyncio.sleep(poll_interval)
             pr = await client.get(result_url, headers={"Authorization": headers["Authorization"]})
             if pr.status_code >= 400:
+                try:
+                    ej = pr.json()
+                    if isinstance(ej, dict):
+                        _wavespeed_raise_from_response(ej, context="poll-http")
+                except RuntimeError:
+                    raise
+                except Exception:
+                    pass
                 log.warning("wavespeed poll %s: %s", pr.status_code, (pr.text or "")[:800])
                 continue
             try:
@@ -327,12 +355,7 @@ async def _wavespeed_post_json_and_resolve_image_url(
                 continue
             if not isinstance(raw_poll, dict):
                 continue
-            penv = _wavespeed_envelope_error(raw_poll)
-            if penv:
-                log.warning("wavespeed poll envelope: %s", penv)
-                raise RuntimeError(
-                    f"WaveSpeed: {penv}. Проверьте баланс и ссылку на результат задачи; при 5xx повторите позже."
-                )
+            _wavespeed_raise_from_response(raw_poll, context="poll")
             pd = _unwrap_data(raw_poll)
             st = (pd.get("status") or "").lower()
             if st == "failed":
