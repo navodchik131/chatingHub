@@ -5583,7 +5583,7 @@ export default function App() {
               <header className="studio-workspace__composer-head">
                 <h2 id="studio-bootstrap-heading">База модели</h2>
                 <p className="studio-workspace__tagline">
-                  Первые фото модели: слияние двух референсов, затем развёртка 16:9 для профиля.
+                  Развёртка 16:9 из своего фото или архива; опционально — слияние двух референсов.
                 </p>
               </header>
               {!canStudioGenerate ? (
@@ -5610,9 +5610,7 @@ export default function App() {
                       : [{ value: '9:16', label: '9:16', title: '9:16' }]
                   }
                   defaultAspect={studioOutputAspect}
-                  models={studioModels.map((m) => ({ value: m.id, label: m.name }))}
-                  selectedModelId={studioSelectedModelId}
-                  onModelChange={setStudioSelectedModelId}
+                  archiveItems={studioGenerations}
                   onArchiveRefresh={() => {
                     void loadStudioGenerationsReset()
                     void loadStudioImagePickerArchive()
