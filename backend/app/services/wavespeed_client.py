@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Awaitable, Callable
 import json
 import logging
 from dataclasses import dataclass
@@ -142,6 +143,16 @@ def format_wavespeed_user_error(message: str) -> str:
     if not body:
         return "WaveSpeed: ошибка запроса к провайдеру."
     low = body.lower()
+    if (
+        "<html" in low
+        or "gateway time" in low
+        or "gateway timeout" in low
+        or ("504" in body and "http" in low)
+    ):
+        return (
+            "WaveSpeed: сервер провайдера временно недоступен (504). "
+            "Подождите 1–2 минуты и обновите страницу — картинка могла уже сохраниться в архиве."
+        )
     if "insufficient credits" in low or "top up" in low:
         return (
             f"WaveSpeed: {body} "
@@ -283,21 +294,111 @@ class WaveSpeedImageResult:
     task_id: str | None = None
 
 
-async def _wavespeed_post_json_and_resolve_image_url(
+@dataclass(frozen=True, slots=True)
+class WaveSpeedSubmitOutcome:
+    """Ответ submit: сразу URL и/или task_id для опроса."""
+
+    immediate_url: str | None = None
+    task_id: str | None = None
+
+
+def _is_transient_wavespeed_http(status_code: int) -> bool:
+    return status_code in (502, 503, 504)
+
+
+async def wavespeed_poll_image_by_task_id(
+    *,
+    api_key: str,
+    task_id: str,
+    timeout_submit: float = 300.0,
+    poll_interval: float = 2.0,
+    max_polls: int = 120,
+    max_transient_poll_errors: int = 90,
+) -> WaveSpeedImageResult:
+    """Опрашивает /predictions/{id}/result до completed или ошибки."""
+    tid = (task_id or "").strip()
+    if not tid:
+        raise RuntimeError("WaveSpeed: пустой task id")
+    headers = {"Authorization": f"Bearer {api_key.strip()}"}
+    base = _wavespeed_base()
+    result_url = f"{base}/api/v3/predictions/{tid}/result"
+    transient_errors = 0
+    async with httpx.AsyncClient(timeout=timeout_submit) as client:
+        for _ in range(max_polls):
+            await asyncio.sleep(poll_interval)
+            pr = await client.get(result_url, headers=headers)
+            if pr.status_code >= 400:
+                if _is_transient_wavespeed_http(pr.status_code):
+                    transient_errors += 1
+                    if transient_errors > max_transient_poll_errors:
+                        raise RuntimeError(
+                            format_wavespeed_user_error(
+                                f"HTTP {pr.status_code} Gateway timeout при опросе результата"
+                            )
+                        )
+                    wait_s = min(30.0, 2.0 * transient_errors)
+                    log.warning(
+                        "wavespeed poll transient %s, wait %.0fs: %s",
+                        pr.status_code,
+                        wait_s,
+                        (pr.text or "")[:200],
+                    )
+                    await asyncio.sleep(wait_s)
+                    continue
+                try:
+                    ej = pr.json()
+                    if isinstance(ej, dict):
+                        _wavespeed_raise_from_response(ej, context="poll-http")
+                except RuntimeError:
+                    raise
+                except Exception:
+                    pass
+                log.warning("wavespeed poll %s: %s", pr.status_code, (pr.text or "")[:800])
+                continue
+            try:
+                raw_poll = pr.json()
+            except Exception:
+                log.warning("wavespeed poll: не JSON %s", (pr.text or "")[:400])
+                continue
+            if not isinstance(raw_poll, dict):
+                continue
+            _wavespeed_raise_from_response(raw_poll, context="poll")
+            pd = _unwrap_data(raw_poll)
+            st = (pd.get("status") or "").lower()
+            if st == "failed":
+                raise RuntimeError(
+                    format_wavespeed_user_error(str(pd.get("error") or "task failed"))
+                )
+            if st == "completed":
+                u = _image_url_from_prediction(pd)
+                if u:
+                    return WaveSpeedImageResult(url=u, task_id=tid)
+                raise RuntimeError(
+                    format_wavespeed_user_error(
+                        str(
+                            pd.get("error")
+                            or "задача completed, но нет URL изображения"
+                        )
+                    )
+                )
+            u = _image_url_from_prediction(pd)
+            if u:
+                return WaveSpeedImageResult(url=u, task_id=tid)
+
+    raise RuntimeError("WaveSpeed: timeout waiting for result")
+
+
+async def _wavespeed_submit_image_prediction(
     *,
     api_key: str,
     full_post_url: str,
     body: dict[str, Any],
     timeout_submit: float = 300.0,
-    poll_interval: float = 2.0,
-    max_polls: int = 120,
-) -> WaveSpeedImageResult:
-    """Общий POST + разбор ответа / опрос prediction до появления URL картинки."""
+) -> WaveSpeedSubmitOutcome:
     headers = {
         "Authorization": f"Bearer {api_key.strip()}",
         "Content-Type": "application/json",
     }
-    base = _wavespeed_base()
     async with httpx.AsyncClient(timeout=timeout_submit) as client:
         r = None
         for attempt in range(3):
@@ -351,8 +452,7 @@ async def _wavespeed_post_json_and_resolve_image_url(
         u0 = _image_url_from_prediction(d)
         task_id = _task_id_from_prediction(d)
         if u0:
-            return WaveSpeedImageResult(url=u0, task_id=task_id)
-
+            return WaveSpeedSubmitOutcome(immediate_url=u0, task_id=task_id)
         status = (d.get("status") or "").lower()
         if status == "failed":
             raise RuntimeError(
@@ -367,60 +467,40 @@ async def _wavespeed_post_json_and_resolve_image_url(
                     )
                 )
             )
-
         if not task_id:
             raise RuntimeError(
                 format_wavespeed_user_error(
                     str(d.get("error") or "нет task id и outputs")
                 )
             )
+        return WaveSpeedSubmitOutcome(immediate_url=None, task_id=task_id)
 
-        result_url = f"{base}/api/v3/predictions/{task_id}/result"
-        for _ in range(max_polls):
-            await asyncio.sleep(poll_interval)
-            pr = await client.get(result_url, headers={"Authorization": headers["Authorization"]})
-            if pr.status_code >= 400:
-                try:
-                    ej = pr.json()
-                    if isinstance(ej, dict):
-                        _wavespeed_raise_from_response(ej, context="poll-http")
-                except RuntimeError:
-                    raise
-                except Exception:
-                    pass
-                log.warning("wavespeed poll %s: %s", pr.status_code, (pr.text or "")[:800])
-                continue
-            try:
-                raw_poll = pr.json()
-            except Exception:
-                log.warning("wavespeed poll: не JSON %s", (pr.text or "")[:400])
-                continue
-            if not isinstance(raw_poll, dict):
-                continue
-            _wavespeed_raise_from_response(raw_poll, context="poll")
-            pd = _unwrap_data(raw_poll)
-            st = (pd.get("status") or "").lower()
-            if st == "failed":
-                raise RuntimeError(
-                    format_wavespeed_user_error(str(pd.get("error") or "task failed"))
-                )
-            if st == "completed":
-                u = _image_url_from_prediction(pd)
-                if u:
-                    return WaveSpeedImageResult(url=u, task_id=task_id)
-                raise RuntimeError(
-                    format_wavespeed_user_error(
-                        str(
-                            pd.get("error")
-                            or "задача completed, но нет URL изображения"
-                        )
-                    )
-                )
-            u = _image_url_from_prediction(pd)
-            if u:
-                return WaveSpeedImageResult(url=u, task_id=task_id)
 
-    raise RuntimeError("WaveSpeed: timeout waiting for result")
+async def _wavespeed_post_json_and_resolve_image_url(
+    *,
+    api_key: str,
+    full_post_url: str,
+    body: dict[str, Any],
+    timeout_submit: float = 300.0,
+    poll_interval: float = 2.0,
+    max_polls: int = 120,
+) -> WaveSpeedImageResult:
+    """Общий POST + разбор ответа / опрос prediction до появления URL картинки."""
+    submitted = await _wavespeed_submit_image_prediction(
+        api_key=api_key,
+        full_post_url=full_post_url,
+        body=body,
+        timeout_submit=timeout_submit,
+    )
+    if submitted.immediate_url:
+        return WaveSpeedImageResult(url=submitted.immediate_url, task_id=submitted.task_id)
+    return await wavespeed_poll_image_by_task_id(
+        api_key=api_key,
+        task_id=submitted.task_id or "",
+        timeout_submit=timeout_submit,
+        poll_interval=poll_interval,
+        max_polls=max_polls,
+    )
 
 
 async def seedream_v45_edit_image_url(
@@ -595,6 +675,7 @@ async def gpt_image_2_edit_image_url(
     timeout_submit: float = 300.0,
     poll_interval: float = 2.0,
     max_polls: int = 120,
+    on_task_submitted: Callable[[str], Awaitable[None]] | None = None,
 ) -> WaveSpeedImageResult:
     """Развёртка модели — OpenAI GPT Image 2 Edit на WaveSpeed."""
     if not image_urls:
@@ -622,10 +703,21 @@ async def gpt_image_2_edit_image_url(
     }
     _apply_wavespeed_extra_body(body)
     url = f"{_wavespeed_base()}{post_path}"
-    return await _wavespeed_post_json_and_resolve_image_url(
+    submitted = await _wavespeed_submit_image_prediction(
         api_key=api_key,
         full_post_url=url,
         body=body,
+        timeout_submit=timeout_submit,
+    )
+    if on_task_submitted and submitted.task_id:
+        await on_task_submitted(submitted.task_id)
+    if submitted.immediate_url:
+        return WaveSpeedImageResult(
+            url=submitted.immediate_url, task_id=submitted.task_id
+        )
+    return await wavespeed_poll_image_by_task_id(
+        api_key=api_key,
+        task_id=submitted.task_id or "",
         timeout_submit=timeout_submit,
         poll_interval=poll_interval,
         max_polls=max_polls,

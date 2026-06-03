@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { WavespeedSetupBanner } from '../WavespeedSetupBanner'
 import { StudioArchiveThumbPicker } from './StudioArchiveThumbPicker'
 import { StudioMediaSlot } from './StudioMediaSlot'
@@ -61,6 +61,7 @@ export function StudioModelBootstrapPanel({
   const [sheetPreview, setSheetPreview] = useState<string | null>(null)
   const [sheetSource, setSheetSource] = useState<SheetSource | null>(null)
   const [sheetArchiveId, setSheetArchiveId] = useState<number | null>(null)
+  const sheetInFlightRef = useRef(false)
 
   useEffect(() => {
     if (!refFormFile) {
@@ -124,7 +125,6 @@ export function StudioModelBootstrapPanel({
       fd.append('ref_face', refFaceFile)
       if (prompt.trim()) fd.append('prompt', prompt.trim())
       fd.append('output_aspect', aspect)
-      if (selectedModelId != null) fd.append('model_id', String(selectedModelId))
       const res = await postStudioJobAndWait<BootstrapResult>(
         '/api/studio/model-bootstrap/face-merge',
         { method: 'POST', body: fd, timeoutMs: 600_000 },
@@ -151,6 +151,8 @@ export function StudioModelBootstrapPanel({
   ])
 
   const runSheet = useCallback(async () => {
+    if (sheetInFlightRef.current) return
+    sheetInFlightRef.current = true
     setSheetBusy(true)
     onError(null)
     try {
@@ -181,6 +183,7 @@ export function StudioModelBootstrapPanel({
       const msg = e instanceof Error ? e.message : 'Не удалось сделать развёртку'
       onError(msg)
     } finally {
+      sheetInFlightRef.current = false
       setSheetBusy(false)
     }
   }, [

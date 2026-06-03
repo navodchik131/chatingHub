@@ -96,6 +96,21 @@ async def mark_studio_generation_failed(
     await session.flush()
 
 
+async def attach_studio_generation_wavespeed_task(
+    session: AsyncSession,
+    row: StudioGeneration,
+    *,
+    task_id: str,
+) -> None:
+    """Сохраняет task_id WaveSpeed, пока запись ещё в processing (для восстановления после 504)."""
+    tid = (task_id or "").strip()
+    if not tid:
+        return
+    row.wavespeed_task_id = tid[:128]
+    session.add(row)
+    await session.flush()
+
+
 async def mark_studio_generation_provider_ready(
     session: AsyncSession,
     row: StudioGeneration,
@@ -462,6 +477,102 @@ async def download_and_create_generation(
     return None
 
 
+async def try_recover_studio_generation_from_wavespeed(
+    session: AsyncSession,
+    row: StudioGeneration,
+    *,
+    api_key: str,
+    refined_prompt: str | None = None,
+) -> bool:
+    """
+    Догружает результат, если задача WaveSpeed уже completed, а у нас failed/processing.
+    """
+    from app.services.studio_generation_status import StudioGenerationStatus
+    from app.services.wavespeed_client import (
+        WaveSpeedImageResult,
+        format_wavespeed_user_error,
+        wavespeed_poll_image_by_task_id,
+    )
+
+    tid = (row.wavespeed_task_id or "").strip()
+    if not tid:
+        return False
+    st = (row.status or "").strip()
+    if st == StudioGenerationStatus.READY and generation_has_archive_file(row):
+        return False
+    rp = (refined_prompt or row.refined_prompt or row.prompt_excerpt or "").strip()
+    try:
+        ws_res: WaveSpeedImageResult = await wavespeed_poll_image_by_task_id(
+            api_key=api_key,
+            task_id=tid,
+            max_polls=45,
+            poll_interval=2.0,
+        )
+    except Exception as e:
+        log.info(
+            "studio recover gen=%s task=%s: %s",
+            row.id,
+            tid,
+            format_wavespeed_user_error(str(e))[:200],
+        )
+        return False
+
+    _, _preview = await studio_finish_image_generation(
+        session,
+        gen_row=row,
+        owner_id=row.user_id,
+        studio_model_id=row.studio_model_id,
+        output_aspect=row.output_aspect,
+        refined_prompt=rp,
+        source_url=ws_res.url,
+        wavespeed_task_id=ws_res.task_id or tid,
+    )
+    await session.flush()
+    if row.status == StudioGenerationStatus.READY and generation_has_archive_file(row):
+        log.info("studio recover gen=%s task=%s: archived", row.id, tid)
+        return True
+    if (row.source_url or "").strip().startswith("https://"):
+        log.info("studio recover gen=%s task=%s: provider_ready", row.id, tid)
+        return True
+    return False
+
+
+async def recover_recent_failed_studio_generations(
+    session: AsyncSession,
+    owner_id: int,
+    *,
+    limit: int = 5,
+) -> int:
+    """При опросе pending: подтянуть failed-записи, у которых WaveSpeed уже отдал результат."""
+    from app.services.studio_generation_status import StudioGenerationStatus
+    from app.services.studio_keys import load_owner_studio_billing, studio_wavespeed_api_key
+
+    recover_cutoff = datetime.now(timezone.utc) - timedelta(hours=48)
+    stmt = (
+        select(StudioGeneration)
+        .where(StudioGeneration.user_id == owner_id)
+        .where(StudioGeneration.wavespeed_task_id.isnot(None))
+        .where(StudioGeneration.status == StudioGenerationStatus.FAILED)
+        .where(StudioGeneration.created_at >= recover_cutoff)
+        .order_by(StudioGeneration.created_at.desc())
+        .limit(max(1, int(limit)))
+    )
+    rows = list((await session.execute(stmt)).scalars().all())
+    if not rows:
+        return 0
+    sub_b, _, ws_row, plan, _credits = await load_owner_studio_billing(session, owner_id)
+    ws_key = studio_wavespeed_api_key(plan=plan, ws_row=ws_row, owner_subscription=sub_b)
+    if not (ws_key or "").strip():
+        return 0
+    done = 0
+    for row in rows:
+        if await try_recover_studio_generation_from_wavespeed(
+            session, row, api_key=ws_key
+        ):
+            done += 1
+    return done
+
+
 async def retry_pending_studio_archives() -> int:
     """Догружает архив для provider_ready; помечает устаревшие processing как failed."""
     from app.db.models import StudioJob, StudioJobStatus
@@ -528,6 +639,33 @@ async def retry_pending_studio_archives() -> int:
                 done += 1
                 continue
             if await archive_studio_generation_from_url(session, row):
+                done += 1
+        await session.commit()
+
+    recover_cutoff = datetime.now(timezone.utc) - timedelta(hours=48)
+    async with SessionLocal() as session:
+        from app.services.studio_keys import load_owner_studio_billing, studio_wavespeed_api_key
+
+        recover_stmt = (
+            select(StudioGeneration)
+            .where(StudioGeneration.wavespeed_task_id.isnot(None))
+            .where(StudioGeneration.status == StudioGenerationStatus.FAILED)
+            .where(StudioGeneration.created_at >= recover_cutoff)
+            .order_by(StudioGeneration.created_at.desc())
+            .limit(batch)
+        )
+        for row in (await session.execute(recover_stmt)).scalars().all():
+            sub_b, _, ws_row, plan, _credits = await load_owner_studio_billing(
+                session, row.user_id
+            )
+            ws_key = studio_wavespeed_api_key(
+                plan=plan, ws_row=ws_row, owner_subscription=sub_b
+            )
+            if not (ws_key or "").strip():
+                continue
+            if await try_recover_studio_generation_from_wavespeed(
+                session, row, api_key=ws_key
+            ):
                 done += 1
         await session.commit()
 

@@ -13,7 +13,9 @@ from app.services.studio_generation_status import StudioGenerationStatus
 from app.services.studio_generation_storage import (
     generation_has_archive_file,
     mark_studio_generation_failed,
+    try_recover_studio_generation_from_wavespeed,
 )
+from app.services.studio_keys import load_owner_studio_billing, studio_wavespeed_api_key
 from app.services.studio_jobs import job_params
 
 if TYPE_CHECKING:
@@ -114,6 +116,20 @@ async def finalize_studio_generation_for_terminal_job(
         return False
 
     if job.status == StudioJobStatus.failed.value:
+        ws_key = ""
+        try:
+            sub_b, _, ws_row, plan, _credits = await load_owner_studio_billing(
+                session, gen.user_id
+            )
+            ws_key = studio_wavespeed_api_key(
+                plan=plan, ws_row=ws_row, owner_subscription=sub_b
+            )
+        except Exception:
+            log.exception("studio recover: billing load failed gen=%s", gen.id)
+        if (ws_key or "").strip() and await try_recover_studio_generation_from_wavespeed(
+            session, gen, api_key=ws_key
+        ):
+            return True
         await mark_studio_generation_failed(
             session,
             gen,

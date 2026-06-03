@@ -5,11 +5,12 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
 from fastapi import HTTPException
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import BACKEND_DIR
@@ -99,6 +100,38 @@ async def get_owned_studio_job(
     if not job or job.user_id != owner_id:
         return None
     return job
+
+
+async def find_recent_inflight_studio_job(
+    session: AsyncSession,
+    *,
+    owner_id: int,
+    job_type: str,
+    dedupe_key: str,
+    within_seconds: int = 180,
+) -> StudioJob | None:
+    """Не создавать дубликат WaveSpeed, если та же задача уже pending/running."""
+    key = (dedupe_key or "").strip()
+    if not key:
+        return None
+    cutoff = datetime.now(timezone.utc) - timedelta(seconds=max(30, within_seconds))
+    stmt = (
+        select(StudioJob)
+        .where(StudioJob.user_id == owner_id)
+        .where(StudioJob.job_type == job_type)
+        .where(
+            StudioJob.status.in_(
+                (StudioJobStatus.pending.value, StudioJobStatus.running.value)
+            )
+        )
+        .where(StudioJob.created_at >= cutoff)
+        .order_by(StudioJob.created_at.desc())
+        .limit(12)
+    )
+    for job in (await session.execute(stmt)).scalars().all():
+        if job_params(job).get("dedupe_key") == key:
+            return job
+    return None
 
 
 def job_params(job: StudioJob) -> dict[str, Any]:

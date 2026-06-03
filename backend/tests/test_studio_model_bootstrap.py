@@ -35,6 +35,17 @@ def test_humanize_sensitive_sheet_error():
     assert "модерац" in msg.lower()
 
 
+def test_humanize_gateway_timeout_strips_html():
+    from app.services.wavespeed_client import format_wavespeed_user_error
+
+    msg = format_wavespeed_user_error(
+        "<html><head><title>504 Gateway Time-out</title></head></html>"
+    )
+    assert "504" in msg
+    assert "<html" not in msg.lower()
+    assert "архив" in msg.lower()
+
+
 def test_humanize_credits_no_public_app_url_hint():
     msg = humanize_wavespeed_provider_error(
         "WaveSpeed: Insufficient credits. Please top up your account to continue."

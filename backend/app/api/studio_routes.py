@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import mimetypes
@@ -100,13 +101,16 @@ from app.services.studio_generation_placeholders import (
 )
 from app.services.studio_generation_status import StudioGenerationStatus
 from app.services.studio_generation_storage import (
+    attach_studio_generation_wavespeed_task,
     begin_studio_generation_run,
     download_and_create_generation,
     generation_has_archive_file,
     mark_studio_generation_failed,
     persist_studio_generation_from_uploaded_bytes,
+    recover_recent_failed_studio_generations,
     safe_delete_generation_file,
     studio_finish_image_generation,
+    try_recover_studio_generation_from_wavespeed,
     studio_finish_video_generation,
     user_message_when_archive_download_failed,
 )
@@ -1082,6 +1086,8 @@ async def api_list_pending_studio_generations(
     assert_permission(user, PERM_STUDIO_GENERATE)
     oid = workspace_owner_id(user)
     if await reconcile_stuck_studio_generations(session, oid, limit=limit):
+        await session.commit()
+    if await recover_recent_failed_studio_generations(session, oid, limit=5):
         await session.commit()
     allowed = await member_allowed_studio_model_ids(session, user)
     stmt = (
@@ -4397,11 +4403,37 @@ async def api_model_bootstrap_sheet(
     aspect_key = MODEL_SHEET_ASPECT_KEY
     resolved_prompt = DEFAULT_MODEL_SHEET_PROMPT
 
+    if gen_id is not None:
+        dedupe_key = f"sheet:gen:{gen_id}"
+    elif image_bytes:
+        dedupe_key = f"sheet:upload:{hashlib.sha256(image_bytes).hexdigest()}"
+    else:
+        dedupe_key = ""
+
+    existing = await studio_jobs.find_recent_inflight_studio_job(
+        session,
+        owner_id=oid,
+        job_type="model_bootstrap_sheet",
+        dedupe_key=dedupe_key,
+    )
+    if existing is not None:
+        ex_params = studio_jobs.job_params(existing)
+        return JSONResponse(
+            status_code=202,
+            content=StudioJobAcceptedOut(
+                job_id=existing.id,
+                job_type="model_bootstrap_sheet",
+                generation_id=ex_params.get("placeholder_generation_id"),
+                message="Такая развёртка уже выполняется — дождитесь завершения.",
+            ).model_dump(),
+        )
+
     params: dict[str, Any] = {
         "output_aspect": aspect_key,
         "prompt": resolved_prompt,
         "model_id": mid,
         "source_generation_id": gen_id,
+        "dedupe_key": dedupe_key,
     }
     job = await studio_jobs.create_studio_job(
         session,
@@ -4594,6 +4626,13 @@ async def _studio_job_execute_model_bootstrap_sheet(
     cost = apply_studio_credit_cost(plan, settings.credit_cost_studio_prompt_refine)
     billing = await ensure_can_consume_credits(session, user, cost)
 
+    async def _on_sheet_task_submitted(task_id: str) -> None:
+        if gen_row is not None:
+            await attach_studio_generation_wavespeed_task(
+                session, gen_row, task_id=task_id
+            )
+            await session.commit()
+
     try:
         ws_res = await gpt_image_2_edit_image_url(
             api_key=ws_key,
@@ -4603,8 +4642,35 @@ async def _studio_job_execute_model_bootstrap_sheet(
             resolution="1k",
             quality="medium",
             output_format="png",
+            max_polls=300,
+            poll_interval=2.5,
+            on_task_submitted=_on_sheet_task_submitted,
         )
     except RuntimeError as e:
+        if gen_row is not None and (gen_row.wavespeed_task_id or "").strip():
+            if await try_recover_studio_generation_from_wavespeed(
+                session, gen_row, api_key=ws_key, refined_prompt=prompt
+            ):
+                await session.commit()
+                arch_base = _public_app_base(None)
+                out_url = _studio_archive_image_url(oid, gen_row.id, arch_base)
+                if gen_row.status != StudioGenerationStatus.READY:
+                    out_url = (gen_row.source_url or "").strip() or out_url
+                await record_usage(
+                    session,
+                    user,
+                    billing,
+                    "studio_model_bootstrap_sheet",
+                    cost,
+                    {"studio_model_id": mid, "generation_id": gen_row.id},
+                )
+                await session.commit()
+                return StudioModelBootstrapOut(
+                    refined_prompt=prompt,
+                    generated_image_url=out_url,
+                    generation_id=gen_row.id,
+                    wavespeed_message=None,
+                ).model_dump()
         raise RuntimeError(humanize_wavespeed_provider_error(str(e))) from e
 
     arch_base = _public_app_base(None)
