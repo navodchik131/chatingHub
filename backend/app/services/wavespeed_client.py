@@ -135,15 +135,44 @@ def _wavespeed_task_failed_error(resp_json: dict[str, Any]) -> str | None:
     return err or "WaveSpeed task failed"
 
 
+def format_wavespeed_user_error(message: str) -> str:
+    """Текст ошибки WaveSpeed для UI (без лишних подсказок про PUBLIC_APP_URL)."""
+    raw = (message or "").strip()
+    body = raw.split(":", 1)[1].strip() if raw.lower().startswith("wavespeed:") else raw
+    if not body:
+        return "WaveSpeed: ошибка запроса к провайдеру."
+    low = body.lower()
+    if "insufficient credits" in low or "top up" in low:
+        return (
+            f"WaveSpeed: {body} "
+            "Пополните баланс на wavespeed.ai (API-ключ в «Подключения»)."
+        )
+    if (
+        "flagged" in low
+        or "potentially sensitive" in low
+        or ("sensitive" in low and "content" in low)
+    ):
+        return (
+            f"WaveSpeed: {body} "
+            "Контент отклонён модерацией — попробуйте более нейтральное исходное фото."
+        )
+    if "provider rejected" in low or "check your inputs" in low:
+        return (
+            f"WaveSpeed: {body} "
+            "Проверьте формат и содержание загруженных изображений."
+        )
+    return f"WaveSpeed: {body}"
+
+
 def _wavespeed_raise_from_response(resp_json: dict[str, Any], *, context: str) -> None:
     task_err = _wavespeed_task_failed_error(resp_json)
     if task_err:
         log.warning("wavespeed %s task failed: %s", context, task_err[:500])
-        raise RuntimeError(f"WaveSpeed: {task_err}")
+        raise RuntimeError(format_wavespeed_user_error(task_err))
     env_err = _wavespeed_envelope_error(resp_json)
     if env_err:
         log.warning("wavespeed %s envelope: %s", context, env_err[:500])
-        raise RuntimeError(f"WaveSpeed: {env_err}")
+        raise RuntimeError(format_wavespeed_user_error(env_err))
 
 
 def _first_output_url(outputs: Any) -> str | None:
@@ -241,7 +270,7 @@ def _unwrap_data(resp_json: dict[str, Any]) -> dict[str, Any]:
         hint = str(resp_json.get("message") or "").strip()
         raise RuntimeError(
             hint
-            or "WaveSpeed: пустой data в ответе (проверьте API-ключ, баланс и публичный HTTPS URL референсов)"
+            or "WaveSpeed: пустой data в ответе (проверьте API-ключ и баланс на wavespeed.ai)"
         )
     raise RuntimeError(
         str(resp_json.get("message") or "WaveSpeed: некорректное поле data в ответе")
@@ -285,6 +314,14 @@ async def _wavespeed_post_json_and_resolve_image_url(
         if r is None:
             raise RuntimeError("WaveSpeed: пустой ответ")
         if r.status_code >= 400:
+            try:
+                ej = r.json()
+                if isinstance(ej, dict):
+                    _wavespeed_raise_from_response(ej, context="submit-http")
+            except RuntimeError:
+                raise
+            except Exception:
+                pass
             detail = (r.text or "")[:2000]
             try:
                 ej = r.json()
@@ -299,8 +336,7 @@ async def _wavespeed_post_json_and_resolve_image_url(
                 pass
             log.warning("wavespeed submit %s: %s", r.status_code, (r.text or "")[:1200])
             raise RuntimeError(
-                f"WaveSpeed: {detail or f'HTTP {r.status_code}'}. "
-                "Проверьте баланс, https://status.wavespeed.ai и публичный HTTPS URL картинок (PUBLIC_APP_URL)."
+                format_wavespeed_user_error(detail or f"HTTP {r.status_code}")
             )
 
         try:
@@ -319,18 +355,24 @@ async def _wavespeed_post_json_and_resolve_image_url(
 
         status = (d.get("status") or "").lower()
         if status == "failed":
-            raise RuntimeError(str(d.get("error") or "WaveSpeed task failed"))
+            raise RuntimeError(
+                format_wavespeed_user_error(str(d.get("error") or "task failed"))
+            )
         if status == "completed":
             raise RuntimeError(
-                str(
-                    d.get("error")
-                    or "WaveSpeed: статус completed, но нет ссылки на изображение (проверьте ответ в логах сервера)"
+                format_wavespeed_user_error(
+                    str(
+                        d.get("error")
+                        or "статус completed, но нет ссылки на изображение"
+                    )
                 )
             )
 
         if not task_id:
             raise RuntimeError(
-                str(d.get("error") or "WaveSpeed: нет task id и outputs (проверьте ответ API)")
+                format_wavespeed_user_error(
+                    str(d.get("error") or "нет task id и outputs")
+                )
             )
 
         result_url = f"{base}/api/v3/predictions/{task_id}/result"
@@ -359,15 +401,19 @@ async def _wavespeed_post_json_and_resolve_image_url(
             pd = _unwrap_data(raw_poll)
             st = (pd.get("status") or "").lower()
             if st == "failed":
-                raise RuntimeError(str(pd.get("error") or "WaveSpeed task failed"))
+                raise RuntimeError(
+                    format_wavespeed_user_error(str(pd.get("error") or "task failed"))
+                )
             if st == "completed":
                 u = _image_url_from_prediction(pd)
                 if u:
                     return WaveSpeedImageResult(url=u, task_id=task_id)
                 raise RuntimeError(
-                    str(
-                        pd.get("error")
-                        or "WaveSpeed: задача completed, но нет URL изображения (неизвестный формат outputs)"
+                    format_wavespeed_user_error(
+                        str(
+                            pd.get("error")
+                            or "задача completed, но нет URL изображения"
+                        )
                     )
                 )
             u = _image_url_from_prediction(pd)
@@ -860,10 +906,7 @@ async def _wavespeed_post_json_and_resolve_video_url(
             except Exception:
                 pass
             log.warning("wavespeed video submit %s: %s", r.status_code, (r.text or "")[:1200])
-            raise RuntimeError(
-                f"WaveSpeed: {detail or f'HTTP {r.status_code}'}. "
-                "Проверьте баланс и параметры запроса к WaveSpeed."
-            )
+            raise RuntimeError(format_wavespeed_user_error(detail or f"HTTP {r.status_code}"))
         try:
             resp = r.json()
         except Exception as e:

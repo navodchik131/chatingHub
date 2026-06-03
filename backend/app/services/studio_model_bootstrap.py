@@ -12,7 +12,7 @@ from app.services.studio_image_token import (
     create_pose_reference_access_token,
 )
 from app.services.studio_pose_reference import save_pose_reference_bytes
-from app.services.wavespeed_client import wavespeed_upload_image_bytes
+from app.services.wavespeed_client import format_wavespeed_user_error, wavespeed_upload_image_bytes
 
 log = logging.getLogger(__name__)
 
@@ -122,30 +122,4 @@ async def wavespeed_url_for_bootstrap_generation(
 
 
 def humanize_wavespeed_provider_error(message: str) -> str:
-    raw = (message or "").strip()
-    low = raw.lower()
-    if (
-        "flagged" in low
-        or "potentially sensitive" in low
-        or ("sensitive" in low and "content" in low)
-    ):
-        return (
-            "WaveSpeed отклонил результат модерацией (контент помечен как чувствительный). "
-            "Для развёртки загрузите более нейтральный кадр (шаг 2 — своё фото) или сделайте шаг 1 "
-            "с менее откровенным исходником; текст развёртки фиксированный. "
-            f"Ответ провайдера: {raw}"
-        )
-    if "insufficient credits" in low or "top up" in low:
-        return (
-            "Недостаточно баланса WaveSpeed по API-ключу в «Подключения». Пополните счёт на wavespeed.ai. "
-            "Если в кабинете WaveSpeed задача есть, но статус failed с другой причиной — обновите приложение "
-            "(после деплоя показывается точная ошибка из задачи, а не только «нет кредитов»). "
-            f"Ответ API: {raw}"
-        )
-    if "provider rejected" in low or "check your inputs" in low:
-        return (
-            "Провайдер WaveSpeed отклонил запрос. Проверьте фото (JPG/PNG/WebP, до ~20 МБ), "
-            "лица и сцену без нарушений правил; при необходимости смените исходник. "
-            f"Ответ API: {raw}"
-        )
-    return raw
+    return format_wavespeed_user_error(message)

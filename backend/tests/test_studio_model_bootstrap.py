@@ -33,3 +33,11 @@ def test_humanize_sensitive_sheet_error():
         "WaveSpeed: Content flagged as potentially sensitive."
     )
     assert "модерац" in msg.lower()
+
+
+def test_humanize_credits_no_public_app_url_hint():
+    msg = humanize_wavespeed_provider_error(
+        "WaveSpeed: Insufficient credits. Please top up your account to continue."
+    )
+    assert "insufficient credits" in msg.lower() or "пополните баланс" in msg.lower()
+    assert "PUBLIC_APP_URL" not in msg
