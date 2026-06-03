@@ -1,12 +1,21 @@
 import { useMemo } from 'react'
 
 export const SETUP_TOUR_LS = 'modelmate_setup_tour_v1'
+export const SETUP_TOUR_HAD_GEN_LS = 'modelmate_setup_tour_had_gen_v1'
 
 export type SetupTourPhase = 'wavespeed' | 'model' | 'generate' | 'done'
 
 export function readSetupTourDismissed(): boolean {
   try {
     return localStorage.getItem(SETUP_TOUR_LS) === '1'
+  } catch {
+    return false
+  }
+}
+
+export function readSetupTourHadGeneration(): boolean {
+  try {
+    return localStorage.getItem(SETUP_TOUR_HAD_GEN_LS) === '1'
   } catch {
     return false
   }
@@ -20,13 +29,25 @@ export function dismissSetupTour(): void {
   }
 }
 
+export function markSetupTourHadGeneration(): void {
+  try {
+    localStorage.setItem(SETUP_TOUR_HAD_GEN_LS, '1')
+    localStorage.setItem(SETUP_TOUR_LS, '1')
+  } catch {
+    /* private mode */
+  }
+}
+
 export function resolveSetupTourPhase(input: {
   dismissed: boolean
+  hadGeneration: boolean
+  archiveReady: boolean
   wavespeedReady: boolean
   modelsCount: number
   generationsCount: number
 }): SetupTourPhase | null {
-  if (input.dismissed) return null
+  if (input.dismissed || input.hadGeneration) return null
+  if (!input.archiveReady) return null
   if (!input.wavespeedReady) return 'wavespeed'
   if (input.modelsCount < 1) return 'model'
   if (input.generationsCount < 1) return 'generate'
@@ -83,7 +104,7 @@ export function SetupTour({
   if (!content) return null
 
   return (
-    <div className="setup-tour" role="status" aria-live="polite">
+    <div className="setup-tour" role="status">
       <div className="setup-tour__head">
         <strong className="setup-tour__title">{content.title}</strong>
         <button type="button" className="setup-tour__dismiss" onClick={onDismiss} aria-label="Скрыть подсказки">

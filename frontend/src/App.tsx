@@ -49,7 +49,9 @@ import { WorkspaceOverview } from './components/WorkspaceOverview'
 import {
   SetupTour,
   dismissSetupTour,
+  markSetupTourHadGeneration,
   readSetupTourDismissed,
+  readSetupTourHadGeneration,
   resolveSetupTourPhase,
 } from './components/SetupTour'
 import { studioImageGenerateBlockReason } from './studio/studioGenerateGate'
@@ -776,6 +778,8 @@ export default function App() {
   const [wsApiKey, setWsApiKey] = useState('')
   const [wsSetupPulse, setWsSetupPulse] = useState(false)
   const [setupTourDismissed, setSetupTourDismissed] = useState(readSetupTourDismissed)
+  const [setupTourHadGen, setSetupTourHadGen] = useState(readSetupTourHadGeneration)
+  const [studioArchiveReady, setStudioArchiveReady] = useState(false)
   const [llmApiKey, setLlmApiKey] = useState('')
   const [llmBaseUrl, setLlmBaseUrl] = useState('')
   const [billingPlanRows, setBillingPlanRows] = useState<BillingPlanRow[]>([])
@@ -1412,7 +1416,10 @@ export default function App() {
     setError(null)
     void loadStudioGenerationsReset()
       .catch((e) => setError(String(e)))
-      .finally(() => setStudioArchiveInitialLoading(false))
+      .finally(() => {
+        setStudioArchiveInitialLoading(false)
+        setStudioArchiveReady(true)
+      })
   }, [authed, appSection, canStudioGenerate, loadStudioGenerationsReset])
 
   useEffect(() => {
@@ -1542,14 +1549,22 @@ export default function App() {
     ],
   )
 
+  const setupTourGenerationsCount = useMemo(
+    () =>
+      studioGenerations.filter((g) => (g.status || '').trim() !== 'failed').length,
+    [studioGenerations],
+  )
+
   const setupTourPhase = useMemo(
     () =>
       me && authed && canStudioAny && !studioPaywalled
         ? resolveSetupTourPhase({
             dismissed: setupTourDismissed,
+            hadGeneration: setupTourHadGen,
+            archiveReady: studioArchiveReady,
             wavespeedReady: !studioNeedsUserWsKey,
             modelsCount: studioModels.length,
-            generationsCount: studioGenerations.length,
+            generationsCount: setupTourGenerationsCount,
           })
         : null,
     [
@@ -1558,11 +1573,27 @@ export default function App() {
       canStudioAny,
       studioPaywalled,
       setupTourDismissed,
+      setupTourHadGen,
+      studioArchiveReady,
       studioNeedsUserWsKey,
       studioModels.length,
-      studioGenerations.length,
+      setupTourGenerationsCount,
     ],
   )
+
+  const showSetupTour =
+    Boolean(setupTourPhase) &&
+    setupTourPhase !== 'done' &&
+    !studioArchiveInitialLoading &&
+    studioArchiveReady
+
+  useEffect(() => {
+    if (setupTourGenerationsCount < 1) return
+    if (setupTourHadGen) return
+    markSetupTourHadGeneration()
+    setSetupTourHadGen(true)
+    setSetupTourDismissed(true)
+  }, [setupTourGenerationsCount, setupTourHadGen])
 
   const dismissSetupTourUi = useCallback(() => {
     dismissSetupTour()
@@ -4910,7 +4941,7 @@ export default function App() {
 
           {appSection === 'overview' && me ? (
             <>
-            {setupTourPhase && setupTourPhase !== 'done' ? (
+            {showSetupTour ? (
               <SetupTour
                 phase={setupTourPhase}
                 isOwner={isOwner}
@@ -4995,7 +5026,7 @@ export default function App() {
                   onOpenIntegrations={openWavespeedIntegrations}
                 />
               ) : null}
-              {!studioPaywalled && setupTourPhase && setupTourPhase !== 'done' ? (
+              {!studioPaywalled && showSetupTour ? (
                 <SetupTour
                   phase={setupTourPhase}
                   isOwner={isOwner}
