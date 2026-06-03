@@ -4487,7 +4487,7 @@ async def _studio_job_execute_model_bootstrap_face_merge(
         pub=pub,
     )
 
-    gen_row = await find_studio_generation_by_job_id(session, oid, job.id)
+    gen_row = await find_studio_generation_by_job_id(session, job.id)
     cost = apply_studio_credit_cost(plan, settings.credit_cost_studio_prompt_refine)
     billing = await ensure_can_consume_credits(session, user, cost)
 
@@ -4588,7 +4588,7 @@ async def _studio_job_execute_model_bootstrap_sheet(
     if not image_urls:
         raise RuntimeError("Нет исходного изображения для развёртки.")
 
-    gen_row = await find_studio_generation_by_job_id(session, oid, job.id)
+    gen_row = await find_studio_generation_by_job_id(session, job.id)
     cost = apply_studio_credit_cost(plan, settings.credit_cost_studio_prompt_refine)
     billing = await ensure_can_consume_credits(session, user, cost)
 
