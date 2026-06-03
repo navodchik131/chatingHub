@@ -616,9 +616,8 @@ function studioModeUsesTextOnlyPrompt(mode: StudioJobMode): boolean {
 
 const STUDIO_IMAGE_MODE_OPTIONS: { id: StudioJobMode; label: string }[] = [
   { id: 'model_scene', label: 'Основная' },
-  { id: 'grok_compose', label: 'С референсом' },
+  { id: 'grok_compose', label: 'Face swap' },
   { id: 'model', label: 'По промту' },
-  { id: 'face_swap', label: 'Подмена лица' },
   { id: 'photo_edit', label: 'Доработать фото' },
   { id: 'no_face', label: 'Без лица' },
 ]
@@ -2501,7 +2500,7 @@ export default function App() {
         return
       }
       if (studioSelectedModelId == null) {
-        setError('В режиме «С референсом» выберите модель с листами и JSON-профилем.')
+        setError('В режиме «Face swap» выберите модель с листами и JSON-профилем.')
         return
       }
       if (!studioFile) {

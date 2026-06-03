@@ -59,7 +59,7 @@ export function studioImageGenerateBlockReason(input: StudioGenerateGateInput): 
   }
 
   if (studioMode === 'grok_compose' && !grokSceneConfigured) {
-    return 'Grok не настроен на сервере — режим «С референсом» временно недоступен.'
+    return 'Grok не настроен на сервере — режим «Face swap» временно недоступен.'
   }
 
   if (studioMode === 'face_swap') {
@@ -97,10 +97,10 @@ export function studioImageGenerateBlockReason(input: StudioGenerateGateInput): 
 
   if (studioMode === 'grok_compose') {
     if (studioSelectedModelId == null) {
-      return 'С референсом: выберите модель с фото и профилем.'
+      return 'Face swap: выберите модель с фото и профилем.'
     }
     if (!studioFile) {
-      return 'С референсом: загрузите референс сцены (поза, свет, кадр).'
+      return 'Face swap: загрузите референс сцены (поза, свет, кадр).'
     }
     return null
   }
