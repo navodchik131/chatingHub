@@ -40,6 +40,7 @@ import './components/studio/studio-ui.css'
 import { StudioArchiveThumbPicker } from './components/studio/StudioArchiveThumbPicker'
 import { StudioGenerationGallery } from './components/studio/StudioGenerationGallery'
 import { StudioMediaSlot } from './components/studio/StudioMediaSlot'
+import { StudioModelBootstrapPanel } from './components/studio/StudioModelBootstrapPanel'
 import { StudioPillField } from './components/studio/StudioPillField'
 import { IconModel, IconSpark } from './components/studio/studioIcons'
 import { AuthPanel } from './AuthPanel'
@@ -588,7 +589,7 @@ interface StudioMotionRendersPage {
 const STUDIO_ARCHIVE_PAGE = 10
 
 function studioGalleryMediaKind(section: WorkspaceSection): StudioArchiveMediaKind | undefined {
-  if (section === 'studio') return 'image'
+  if (section === 'studio' || section === 'studio_bootstrap') return 'image'
   if (section === 'studio_video') return 'video'
   return undefined
 }
@@ -1121,7 +1122,7 @@ export default function App() {
     }
     setStudioGenerations(merged)
     setStudioGenHasMore(page.has_more)
-    if (appSection === 'studio') {
+    if (appSection === 'studio' || appSection === 'studio_bootstrap') {
       setStudioImagePickerArchive(page.items)
     } else if (appSection === 'studio_video') {
       await loadStudioImagePickerArchive()
@@ -1275,9 +1276,21 @@ export default function App() {
   useEffect(() => {
     if (!me) return
     if (appSection === 'chat' && !canChat) setAppSection('overview')
-    if ((appSection === 'studio' || appSection === 'studio_video') && !canStudioAny && canChat)
+    if (
+      (appSection === 'studio' ||
+        appSection === 'studio_bootstrap' ||
+        appSection === 'studio_video') &&
+      !canStudioAny &&
+      canChat
+    )
       setAppSection('chat')
-    if ((appSection === 'studio' || appSection === 'studio_video') && !canStudioAny && !canChat)
+    if (
+      (appSection === 'studio' ||
+        appSection === 'studio_bootstrap' ||
+        appSection === 'studio_video') &&
+      !canStudioAny &&
+      !canChat
+    )
       setAppSection('overview')
   }, [me?.id, appSection, canChat, canStudioAny])
 
@@ -1320,6 +1333,7 @@ export default function App() {
     const needModels =
       ((appSection === 'overview' ||
         appSection === 'studio' ||
+        appSection === 'studio_bootstrap' ||
         appSection === 'studio_video') &&
         canStudioAny) ||
       (appSection === 'chat' && isOwner) ||
@@ -1357,7 +1371,10 @@ export default function App() {
   useEffect(() => {
     if (
       authed &&
-      (appSection === 'overview' || appSection === 'studio' || appSection === 'studio_video')
+      (appSection === 'overview' ||
+        appSection === 'studio' ||
+        appSection === 'studio_bootstrap' ||
+        appSection === 'studio_video')
     )
       void refreshIntegrations()
   }, [authed, appSection, refreshIntegrations])
@@ -1365,7 +1382,10 @@ export default function App() {
   useEffect(() => {
     if (
       !authed ||
-      (appSection !== 'overview' && appSection !== 'studio' && appSection !== 'studio_video')
+      (appSection !== 'overview' &&
+        appSection !== 'studio' &&
+        appSection !== 'studio_bootstrap' &&
+        appSection !== 'studio_video')
     )
       return
     fetch('/api/studio/output-aspects')
@@ -1381,7 +1401,10 @@ export default function App() {
   useEffect(() => {
     if (
       !authed ||
-      (appSection !== 'overview' && appSection !== 'studio' && appSection !== 'studio_video') ||
+      (appSection !== 'overview' &&
+        appSection !== 'studio' &&
+        appSection !== 'studio_bootstrap' &&
+        appSection !== 'studio_video') ||
       !canStudioGenerate
     )
       return
@@ -4921,7 +4944,11 @@ export default function App() {
             </>
           ) : null}
 
-      {import.meta.env.DEV && health && appSection !== 'studio' && appSection !== 'studio_video' && (
+      {import.meta.env.DEV &&
+        health &&
+        appSection !== 'studio' &&
+        appSection !== 'studio_bootstrap' &&
+        appSection !== 'studio_video' && (
         <div className="health-strip" title={health.database_file}>
           Режим: {health.mode ?? '—'} · всего в БД: {health.conversations_count ?? 0} диалогов,{' '}
           {health.messages_count ?? 0} сообщений
@@ -5520,6 +5547,79 @@ export default function App() {
           </div>
             </>
           )}
+            </div>
+            {canStudioGenerate ? (
+              <StudioGenerationGallery
+                title="История"
+                lead={studioArchiveRetentionLead(health)}
+                items={studioGenerations}
+                loading={studioArchiveInitialLoading}
+                hasMore={studioGenHasMore}
+                loadingMore={studioGenLoadingMore}
+                onLoadMore={() => void loadMoreStudioGenerations()}
+                loadMoreLabel={`Ещё ${STUDIO_ARCHIVE_PAGE}`}
+                onDelete={(g) =>
+                  void deleteStudioGeneration(g.id, g.image_url || g.video_url || '')
+                }
+                onVideoFromImage={(g) => {
+                  setMotionFrameArchiveId(g.id)
+                  if (g.studio_model_id != null) setStudioSelectedModelId(g.studio_model_id)
+                  setMotionFirstFrameFile(null)
+                  setAppSection('studio_video')
+                }}
+              />
+            ) : null}
+          </div>
+        </section>
+      )}
+
+      {hasAnyMainSection && appSection === 'studio_bootstrap' && canStudioAny && (
+        <section
+          className="studio-panel studio-workspace-page"
+          aria-labelledby="studio-bootstrap-heading"
+        >
+          <div className="studio-workspace">
+            <div className="studio-workspace__composer">
+              <header className="studio-workspace__composer-head">
+                <h2 id="studio-bootstrap-heading">База модели</h2>
+                <p className="studio-workspace__tagline">
+                  Первые фото модели: слияние двух референсов, затем развёртка 16:9 для профиля.
+                </p>
+              </header>
+              {!canStudioGenerate ? (
+                <div className="banner info">Генерация недоступна по правам.</div>
+              ) : studioPaywalled ? (
+                <div className="banner info">
+                  Оформите подписку в кабинете → «Тариф и баланс».
+                </div>
+              ) : (
+                <StudioModelBootstrapPanel
+                  canGenerate={canStudioGenerate}
+                  studioPaywalled={studioPaywalled}
+                  studioNeedsUserWsKey={studioNeedsUserWsKey}
+                  isTrialing={(me?.subscription_status || '').toLowerCase() === 'trialing'}
+                  canConnectIntegrations={isOwner && canIntegrations}
+                  onOpenIntegrations={openWavespeedIntegrations}
+                  aspectOptions={
+                    studioAspectPresets.length > 0
+                      ? studioAspectPresets.map((p) => ({
+                          value: p.key,
+                          label: p.key,
+                          title: p.label,
+                        }))
+                      : [{ value: '9:16', label: '9:16', title: '9:16' }]
+                  }
+                  defaultAspect={studioOutputAspect}
+                  models={studioModels.map((m) => ({ value: m.id, label: m.name }))}
+                  selectedModelId={studioSelectedModelId}
+                  onModelChange={setStudioSelectedModelId}
+                  onArchiveRefresh={() => {
+                    void loadStudioGenerationsReset()
+                    void loadStudioImagePickerArchive()
+                  }}
+                  onError={setError}
+                />
+              )}
             </div>
             {canStudioGenerate ? (
               <StudioGenerationGallery

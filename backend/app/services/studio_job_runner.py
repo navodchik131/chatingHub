@@ -19,6 +19,8 @@ async def execute_studio_job(session: AsyncSession, job: StudioJob, user: User) 
         "motion_render_video": sr._studio_job_execute_motion_render_video,
         "upscale": sr._studio_job_execute_upscale,
         "carousel": sr._studio_job_execute_carousel,
+        "model_bootstrap_face_merge": sr._studio_job_execute_model_bootstrap_face_merge,
+        "model_bootstrap_sheet": sr._studio_job_execute_model_bootstrap_sheet,
     }
     fn = handlers.get(job.job_type)
     if fn is None:

@@ -1,7 +1,12 @@
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 
-export type WorkspaceSection = 'overview' | 'chat' | 'studio' | 'studio_video'
+export type WorkspaceSection =
+  | 'overview'
+  | 'chat'
+  | 'studio'
+  | 'studio_bootstrap'
+  | 'studio_video'
 
 type NavItem = {
   id: WorkspaceSection
@@ -44,6 +49,12 @@ export function AppShell({
     { id: 'overview', label: 'Обзор', icon: '◆', show: true },
     { id: 'chat', label: 'Диалоги', icon: '💬', show: canChat, badge: unreadTotal },
     { id: 'studio', label: 'Картинки', icon: '🎨', show: canStudioAny },
+    {
+      id: 'studio_bootstrap',
+      label: 'База модели',
+      icon: '✨',
+      show: canStudioAny,
+    },
     { id: 'studio_video', label: 'Видео', icon: '🎬', show: canStudioAny },
   ]
 

@@ -53,6 +53,7 @@ from app.schemas import (
     StudioMotionFirstFrameOut,
     StudioMotionRenderOut,
     StudioMotionRendersPageOut,
+    StudioModelBootstrapOut,
     StudioMotionVideoOut,
     StudioRefinePromptOut,
     StudioUpscaleGenerationIn,
@@ -186,9 +187,16 @@ from app.services.studio_seedance_t2v import (
     model_reference_public_urls,
     sort_model_images_for_seedance_t2v,
 )
+from app.services.studio_model_bootstrap import (
+    DEFAULT_MODEL_SHEET_PROMPT,
+    MODEL_SHEET_ASPECT_KEY,
+    resolve_face_merge_prompt,
+)
 from app.services.wavespeed_client import (
+    gpt_image_2_edit_image_url,
     nano_banana_pro_edit_image_url,
     seedance_20_text_to_video_url,
+    seedream_v45_bootstrap_edit_image_url,
     seedream_v45_edit_image_url,
     wavespeed_image_upscale_url,
     z_image_turbo_inpaint_image_url,
@@ -4236,3 +4244,393 @@ async def _studio_job_execute_motion_render_video(
     if gen_placeholder is not None:
         out["generation_id"] = gen_placeholder.id
     return out
+
+
+def _require_public_https_for_wavespeed() -> str:
+    pub = (settings.public_app_url or "").strip().rstrip("/")
+    if not pub.lower().startswith("https://"):
+        raise HTTPException(
+            status_code=503,
+            detail="WaveSpeed скачивает референсы по HTTPS. Укажите PUBLIC_APP_URL=https://…",
+        )
+    return pub
+
+
+def _public_https_base_runtime() -> str:
+    pub = (settings.public_app_url or "").strip().rstrip("/")
+    if not pub.lower().startswith("https://"):
+        raise RuntimeError("Нужен PUBLIC_APP_URL=https://… для WaveSpeed.")
+    return pub
+
+
+def _bootstrap_pose_public_url(*, owner_id: int, raw: bytes, content_type: str, pub: str) -> str:
+    fid = save_pose_reference_bytes(
+        owner_id=owner_id,
+        raw=raw,
+        content_type=content_type or "image/jpeg",
+    )
+    ptok = create_pose_reference_access_token(user_id=owner_id, file_id=fid)
+    return f"{pub}/api/studio/public-pose-reference?t={quote(ptok, safe='')}"
+
+
+@router.post(
+    "/studio/model-bootstrap/face-merge",
+    response_model=StudioModelBootstrapOut,
+    responses={202: {"model": StudioJobAcceptedOut}},
+)
+async def api_model_bootstrap_face_merge(
+    request: Request,
+    ref_form: UploadFile = File(..., description="Референс 1: волосы и форма лица"),
+    ref_face: UploadFile = File(..., description="Референс 2: лицо для наложения"),
+    prompt: str = Form(""),
+    output_aspect: str = Form("9:16"),
+    model_id: str | None = Form(None),
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> StudioModelBootstrapOut | JSONResponse:
+    _ = request
+    assert_permission(user, PERM_STUDIO_GENERATE)
+    oid = workspace_owner_id(user)
+    _require_public_https_for_wavespeed()
+
+    ref1 = await ref_form.read()
+    ref2 = await ref_face.read()
+    if not ref1 or not ref2:
+        raise HTTPException(status_code=400, detail="Загрузите оба референса.")
+    if len(ref1) > MAX_IMAGE_BYTES or len(ref2) > MAX_IMAGE_BYTES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Файл слишком большой (макс. {MAX_IMAGE_BYTES // (1024 * 1024)} МБ)",
+        )
+
+    try:
+        aspect_key = normalize_aspect_key(output_aspect)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    mid = _parse_optional_model_id(model_id)
+    resolved_prompt = resolve_face_merge_prompt(prompt)
+
+    params: dict[str, Any] = {
+        "output_aspect": aspect_key,
+        "prompt": resolved_prompt,
+        "model_id": mid,
+        "ref_form_mime": (ref_form.content_type or "").strip(),
+        "ref_face_mime": (ref_face.content_type or "").strip(),
+    }
+    job = await studio_jobs.create_studio_job(
+        session,
+        owner_id=oid,
+        actor_user_id=user.id,
+        job_type="model_bootstrap_face_merge",
+        params=params,
+    )
+    params["ref_form_path"] = studio_jobs.save_studio_job_file(job.id, "ref_form.bin", ref1)
+    params["ref_face_path"] = studio_jobs.save_studio_job_file(job.id, "ref_face.bin", ref2)
+    gen_row = await reserve_studio_generation_for_job(
+        session,
+        owner_id=oid,
+        studio_job_id=job.id,
+        studio_model_id=mid,
+        output_aspect=aspect_key,
+        content_type="image/png",
+        prompt_excerpt=resolved_prompt[:2000],
+    )
+    params["placeholder_generation_id"] = gen_row.id
+    await studio_jobs.update_studio_job_params(session, job, params)
+    studio_jobs.schedule_studio_job(job.id)
+    return JSONResponse(
+        status_code=202,
+        content=StudioJobAcceptedOut(
+            job_id=job.id,
+            job_type="model_bootstrap_face_merge",
+            generation_id=gen_row.id,
+        ).model_dump(),
+    )
+
+
+@router.post(
+    "/studio/model-bootstrap/sheet",
+    response_model=StudioModelBootstrapOut,
+    responses={202: {"model": StudioJobAcceptedOut}},
+)
+async def api_model_bootstrap_sheet(
+    request: Request,
+    source_generation_id: str = Form(""),
+    image: UploadFile | None = File(None),
+    model_id: str | None = Form(None),
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> StudioModelBootstrapOut | JSONResponse:
+    _ = request
+    assert_permission(user, PERM_STUDIO_GENERATE)
+    oid = workspace_owner_id(user)
+    pub = _require_public_https_for_wavespeed()
+
+    gen_id_raw = (source_generation_id or "").strip()
+    image_bytes: bytes | None = None
+    image_mime = ""
+    if image is not None and (image.filename or "").strip():
+        image_bytes = await image.read()
+        if not image_bytes:
+            raise HTTPException(status_code=400, detail="Пустой файл изображения")
+        if len(image_bytes) > MAX_IMAGE_BYTES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Файл слишком большой (макс. {MAX_IMAGE_BYTES // (1024 * 1024)} МБ)",
+            )
+        image_mime = (image.content_type or "").strip()
+
+    gen_id: int | None = None
+    if gen_id_raw:
+        try:
+            gen_id = int(gen_id_raw)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Некорректный source_generation_id") from None
+
+    if gen_id is None and not image_bytes:
+        raise HTTPException(
+            status_code=400,
+            detail="Укажите кадр из шага 1 или загрузите своё изображение.",
+        )
+
+    if gen_id is not None:
+        row = await session.get(StudioGeneration, gen_id)
+        if not row or row.user_id != oid:
+            raise HTTPException(status_code=404, detail="Генерация не найдена")
+        await assert_studio_generation_access(session, user, row.studio_model_id)
+
+    mid = _parse_optional_model_id(model_id)
+    aspect_key = MODEL_SHEET_ASPECT_KEY
+    resolved_prompt = DEFAULT_MODEL_SHEET_PROMPT
+
+    params: dict[str, Any] = {
+        "output_aspect": aspect_key,
+        "prompt": resolved_prompt,
+        "model_id": mid,
+        "source_generation_id": gen_id,
+    }
+    job = await studio_jobs.create_studio_job(
+        session,
+        owner_id=oid,
+        actor_user_id=user.id,
+        job_type="model_bootstrap_sheet",
+        params=params,
+    )
+    if image_bytes:
+        params["image_path"] = studio_jobs.save_studio_job_file(job.id, "sheet_src.bin", image_bytes)
+        params["image_mime"] = image_mime
+    preview_url: str | None = None
+    if gen_id is not None:
+        tok = create_generation_image_access_token(user_id=oid, generation_id=gen_id)
+        preview_url = f"{pub}/api/studio/public-generation-image?t={quote(tok, safe='')}"
+    gen_row = await reserve_studio_generation_for_job(
+        session,
+        owner_id=oid,
+        studio_job_id=job.id,
+        studio_model_id=mid,
+        output_aspect=aspect_key,
+        content_type="image/png",
+        prompt_excerpt=resolved_prompt[:2000],
+        preview_source_url=preview_url,
+    )
+    params["placeholder_generation_id"] = gen_row.id
+    await studio_jobs.update_studio_job_params(session, job, params)
+    studio_jobs.schedule_studio_job(job.id)
+    return JSONResponse(
+        status_code=202,
+        content=StudioJobAcceptedOut(
+            job_id=job.id,
+            job_type="model_bootstrap_sheet",
+            generation_id=gen_row.id,
+        ).model_dump(),
+    )
+
+
+async def _studio_job_execute_model_bootstrap_face_merge(
+    session: AsyncSession,
+    job: StudioJob,
+    user: User,
+) -> dict[str, Any]:
+    p = studio_jobs.job_params(job)
+    oid = workspace_owner_id(user)
+    pub = _public_https_base_runtime()
+
+    sub_b, _, ws_row, plan, _credits = await load_owner_studio_billing(session, oid)
+    _require_studio_subscription(user, sub_b, credits_balance=_credits)
+    ws_key = studio_wavespeed_api_key(plan=plan, ws_row=ws_row, owner_subscription=sub_b)
+
+    aspect_key = normalize_aspect_key(str(p.get("output_aspect") or "9:16"))
+    prompt = resolve_face_merge_prompt(str(p.get("prompt") or ""))
+    mid = p.get("model_id")
+    if mid is not None:
+        try:
+            mid = int(mid)
+        except (TypeError, ValueError):
+            mid = None
+
+    ref1 = studio_jobs.load_studio_job_file(str(p.get("ref_form_path") or ""))
+    ref2 = studio_jobs.load_studio_job_file(str(p.get("ref_face_path") or ""))
+    if not ref1 or not ref2:
+        raise RuntimeError("Файлы референсов не найдены в задаче.")
+
+    url1 = _bootstrap_pose_public_url(
+        owner_id=oid,
+        raw=ref1,
+        content_type=str(p.get("ref_form_mime") or "image/jpeg"),
+        pub=pub,
+    )
+    url2 = _bootstrap_pose_public_url(
+        owner_id=oid,
+        raw=ref2,
+        content_type=str(p.get("ref_face_mime") or "image/jpeg"),
+        pub=pub,
+    )
+
+    gen_row = await find_studio_generation_by_job_id(session, oid, job.id)
+    cost = apply_studio_credit_cost(plan, settings.credit_cost_studio_prompt_refine)
+    billing = await ensure_can_consume_credits(session, user, cost)
+
+    size_for_ws: str | None = None
+    if not settings.wavespeed_seedream_omit_size:
+        size_for_ws = wavespeed_size_string(aspect_key)
+
+    ws_res = await seedream_v45_bootstrap_edit_image_url(
+        api_key=ws_key,
+        image_urls=[url1, url2],
+        prompt=prompt,
+        size=size_for_ws,
+    )
+
+    arch_base = _public_app_base(None)
+    _, preview_url = await studio_finish_image_generation(
+        session,
+        gen_row=gen_row,
+        owner_id=oid,
+        studio_model_id=mid,
+        output_aspect=aspect_key,
+        refined_prompt=prompt,
+        source_url=ws_res.url,
+        wavespeed_task_id=ws_res.task_id,
+    )
+
+    out_url = preview_url
+    if gen_row is not None and gen_row.status == StudioGenerationStatus.READY:
+        out_url = _studio_archive_image_url(oid, gen_row.id, arch_base)
+
+    await record_usage(
+        session,
+        user,
+        billing,
+        "studio_model_bootstrap_face_merge",
+        cost,
+        {"studio_model_id": mid, "generation_id": gen_row.id if gen_row else None},
+    )
+    await session.commit()
+
+    return StudioModelBootstrapOut(
+        refined_prompt=prompt,
+        generated_image_url=out_url,
+        generation_id=gen_row.id if gen_row else None,
+        wavespeed_message=None,
+    ).model_dump()
+
+
+async def _studio_job_execute_model_bootstrap_sheet(
+    session: AsyncSession,
+    job: StudioJob,
+    user: User,
+) -> dict[str, Any]:
+    p = studio_jobs.job_params(job)
+    oid = workspace_owner_id(user)
+    pub = _public_https_base_runtime()
+
+    sub_b, _, ws_row, plan, _credits = await load_owner_studio_billing(session, oid)
+    _require_studio_subscription(user, sub_b, credits_balance=_credits)
+    ws_key = studio_wavespeed_api_key(plan=plan, ws_row=ws_row, owner_subscription=sub_b)
+
+    prompt = DEFAULT_MODEL_SHEET_PROMPT
+    aspect_key = MODEL_SHEET_ASPECT_KEY
+    mid = p.get("model_id")
+    if mid is not None:
+        try:
+            mid = int(mid)
+        except (TypeError, ValueError):
+            mid = None
+
+    image_urls: list[str] = []
+    if p.get("image_path"):
+        raw = studio_jobs.load_studio_job_file(str(p["image_path"]))
+        if raw:
+            image_urls.append(
+                _bootstrap_pose_public_url(
+                    owner_id=oid,
+                    raw=raw,
+                    content_type=str(p.get("image_mime") or "image/jpeg"),
+                    pub=pub,
+                )
+            )
+    else:
+        gen_src_id = p.get("source_generation_id")
+        if gen_src_id is not None:
+            try:
+                gid = int(gen_src_id)
+                row = await session.get(StudioGeneration, gid)
+                if not row or row.user_id != oid:
+                    raise RuntimeError("Исходная генерация не найдена")
+                tok = create_generation_image_access_token(user_id=oid, generation_id=gid)
+                image_urls.append(
+                    f"{pub}/api/studio/public-generation-image?t={quote(tok, safe='')}"
+                )
+            except (TypeError, ValueError) as e:
+                raise RuntimeError("Некорректный идентификатор исходной генерации") from e
+
+    if not image_urls:
+        raise RuntimeError("Нет исходного изображения для развёртки.")
+
+    gen_row = await find_studio_generation_by_job_id(session, oid, job.id)
+    cost = apply_studio_credit_cost(plan, settings.credit_cost_studio_prompt_refine)
+    billing = await ensure_can_consume_credits(session, user, cost)
+
+    ws_res = await gpt_image_2_edit_image_url(
+        api_key=ws_key,
+        image_urls=image_urls,
+        prompt=prompt,
+        aspect_ratio=aspect_key,
+        resolution="1k",
+        quality="medium",
+        output_format="png",
+    )
+
+    arch_base = _public_app_base(None)
+    _, preview_url = await studio_finish_image_generation(
+        session,
+        gen_row=gen_row,
+        owner_id=oid,
+        studio_model_id=mid,
+        output_aspect=aspect_key,
+        refined_prompt=prompt,
+        source_url=ws_res.url,
+        wavespeed_task_id=ws_res.task_id,
+    )
+
+    out_url = preview_url
+    if gen_row is not None and gen_row.status == StudioGenerationStatus.READY:
+        out_url = _studio_archive_image_url(oid, gen_row.id, arch_base)
+
+    await record_usage(
+        session,
+        user,
+        billing,
+        "studio_model_bootstrap_sheet",
+        cost,
+        {"studio_model_id": mid, "generation_id": gen_row.id if gen_row else None},
+    )
+    await session.commit()
+
+    return StudioModelBootstrapOut(
+        refined_prompt=prompt,
+        generated_image_url=out_url,
+        generation_id=gen_row.id if gen_row else None,
+        wavespeed_message=None,
+    ).model_dump()

@@ -25,6 +25,8 @@ def _seedream_edit_post_path() -> str:
 # Фиксированные пути WAN 2.7 (переключение в UI при WAVESPEED_SEEDREAM_EDIT_PATH = WAN).
 WAN_27_IMAGE_EDIT_STANDARD_PATH = "/api/v3/alibaba/wan-2.7/image-edit"
 WAN_27_IMAGE_EDIT_PRO_PATH = "/api/v3/alibaba/wan-2.7/image-edit-pro"
+SEEDREAM_V45_EDIT_PATH = "/api/v3/bytedance/seedream-v4.5/edit"
+GPT_IMAGE_2_EDIT_PATH = "/api/v3/openai/gpt-image-2/edit"
 
 
 def resolve_studio_image_edit_post_path(*, wan_edit_tier: str | None) -> str:
@@ -408,6 +410,94 @@ async def seedream_v45_edit_image_url(
         list(body.keys()),
     )
 
+    return await _wavespeed_post_json_and_resolve_image_url(
+        api_key=api_key,
+        full_post_url=url,
+        body=body,
+        timeout_submit=timeout_submit,
+        poll_interval=poll_interval,
+        max_polls=max_polls,
+    )
+
+
+async def seedream_v45_bootstrap_edit_image_url(
+    *,
+    api_key: str,
+    image_urls: list[str],
+    prompt: str,
+    size: str | None = None,
+    timeout_submit: float = 300.0,
+    poll_interval: float = 2.0,
+    max_polls: int = 120,
+) -> WaveSpeedImageResult:
+    """Создание базового кадра модели — всегда Seedream v4.5 edit (не WAN из .env)."""
+    if not image_urls:
+        raise RuntimeError("no image URLs")
+    if not (prompt or "").strip():
+        raise RuntimeError("empty prompt")
+    post_path = SEEDREAM_V45_EDIT_PATH
+    body: dict[str, Any] = {
+        "images": image_urls[:10],
+        "prompt": prompt.strip(),
+        "enable_sync_mode": bool(settings.wavespeed_seedream_sync),
+        "enable_base64_output": False,
+    }
+    if size and size.strip():
+        body["size"] = _format_size_for_wavespeed_path(post_path, size)
+    fmt = (settings.wavespeed_seedream_output_format or "").strip().lower()
+    if fmt in ("jpeg", "jpg", "png"):
+        body["output_format"] = "jpeg" if fmt in ("jpeg", "jpg") else "png"
+    _apply_wavespeed_extra_body(body)
+    url = f"{_wavespeed_base()}{post_path}"
+    return await _wavespeed_post_json_and_resolve_image_url(
+        api_key=api_key,
+        full_post_url=url,
+        body=body,
+        timeout_submit=timeout_submit,
+        poll_interval=poll_interval,
+        max_polls=max_polls,
+    )
+
+
+async def gpt_image_2_edit_image_url(
+    *,
+    api_key: str,
+    image_urls: list[str],
+    prompt: str,
+    aspect_ratio: str = "16:9",
+    resolution: str = "1k",
+    quality: str = "medium",
+    output_format: str = "png",
+    timeout_submit: float = 300.0,
+    poll_interval: float = 2.0,
+    max_polls: int = 120,
+) -> WaveSpeedImageResult:
+    """Развёртка модели — OpenAI GPT Image 2 Edit на WaveSpeed."""
+    if not image_urls:
+        raise RuntimeError("no image URLs")
+    if not (prompt or "").strip():
+        raise RuntimeError("empty prompt")
+    ar = (aspect_ratio or "16:9").strip()
+    res = (resolution or "1k").strip().lower()
+    qual = (quality or "medium").strip().lower()
+    fmt = (output_format or "png").strip().lower()
+    if fmt == "jpg":
+        fmt = "jpeg"
+    if fmt not in ("jpeg", "png", "webp"):
+        fmt = "png"
+    post_path = GPT_IMAGE_2_EDIT_PATH
+    body: dict[str, Any] = {
+        "images": image_urls[:10],
+        "prompt": prompt.strip(),
+        "aspect_ratio": ar,
+        "resolution": res,
+        "quality": qual,
+        "output_format": fmt,
+        "enable_sync_mode": bool(settings.wavespeed_seedream_sync),
+        "enable_base64_output": False,
+    }
+    _apply_wavespeed_extra_body(body)
+    url = f"{_wavespeed_base()}{post_path}"
     return await _wavespeed_post_json_and_resolve_image_url(
         api_key=api_key,
         full_post_url=url,

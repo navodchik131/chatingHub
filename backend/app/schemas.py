@@ -196,6 +196,15 @@ class StudioImportArchiveImageOut(BaseModel):
     message: str | None = None
 
 
+class StudioModelBootstrapOut(BaseModel):
+    """Результат шага «База модели»: слияние лиц или развёртка."""
+
+    refined_prompt: str
+    generated_image_url: str | None = None
+    generation_id: int | None = None
+    wavespeed_message: str | None = None
+
+
 class StudioMotionFirstFrameOut(BaseModel):
     """Шаг 1: первый кадр видео детально разбирается (без личности/оверлеев); опционально — сводка движения по клипу."""
 
