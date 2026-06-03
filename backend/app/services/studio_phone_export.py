@@ -112,6 +112,22 @@ def apply_phone_export_to_jpeg(
         piexif.ExifIFD.LensModel: _b(lens),
         piexif.ExifIFD.FocalLengthIn35mmFilm: focal,
     }
+    software = str(preset.get("software") or "").strip()
+    if software:
+        zeroth[piexif.ImageIFD.Software] = _b(software)
+    iso = preset.get("iso")
+    if iso is not None:
+        try:
+            exif_ifd[piexif.ExifIFD.ISOSpeedRatings] = int(iso)
+        except (TypeError, ValueError):
+            pass
+    fnum = preset.get("f_number")
+    if fnum is not None:
+        try:
+            fv = float(fnum)
+            exif_ifd[piexif.ExifIFD.FNumber] = (int(fv * 100), 100)
+        except (TypeError, ValueError):
+            pass
 
     gps_ifd: dict[int, Any] = {}
     if export_lat is not None and export_lon is not None:

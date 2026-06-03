@@ -423,15 +423,14 @@ interface StudioModelImage {
   id: number
   url: string
   kind: string
-  export_selfie?: boolean
 }
 
 type StudioModelImageKind = 'face' | 'body' | 'genitals' | 'turnaround' | 'other'
+type StudioExifCamera = 'selfie' | 'main'
 
 interface NewModelPhotoRow {
   file: File
   kind: StudioModelImageKind
-  export_selfie: boolean
 }
 
 const STUDIO_MODEL_MAX_IMAGES = 8
@@ -465,6 +464,10 @@ interface UserStudioModel {
   camera_preset_id?: string | null
   export_lat?: number | null
   export_lon?: number | null
+  phone_exif_selfie_ready?: boolean
+  phone_exif_main_ready?: boolean
+  phone_exif_selfie_summary?: string | null
+  phone_exif_main_summary?: string | null
 }
 
 type StudioModelCabinetDraft = {
@@ -764,6 +767,8 @@ export default function App() {
   const [studioBusy, setStudioBusy] = useState(false)
   const [studioModels, setStudioModels] = useState<UserStudioModel[]>([])
   const [studioSelectedModelId, setStudioSelectedModelId] = useState<number | null>(null)
+  /** EXIF при сохранении кадра: фронталка или основная камера (эталоны на модели). */
+  const [studioExifCamera, setStudioExifCamera] = useState<StudioExifCamera>('main')
   const [newModelName, setNewModelName] = useState('')
   const [newModelProfile, setNewModelProfile] = useState('')
   const [newModelProfileGenBusy, setNewModelProfileGenBusy] = useState(false)
@@ -771,6 +776,9 @@ export default function App() {
   const [newModelCameraPresetId, setNewModelCameraPresetId] = useState('')
   const [newModelExportLat, setNewModelExportLat] = useState('')
   const [newModelExportLon, setNewModelExportLon] = useState('')
+  const [newModelPhoneExifSelfie, setNewModelPhoneExifSelfie] = useState<File | null>(null)
+  const [newModelPhoneExifMain, setNewModelPhoneExifMain] = useState<File | null>(null)
+  const [modelPhoneExifBusy, setModelPhoneExifBusy] = useState<string | null>(null)
   /** Черновик файлов для «Добавить фото» на карточке модели (до загрузки на сервер). */
   const [appendModelPhotosById, setAppendModelPhotosById] = useState<
     Record<number, NewModelPhotoRow[]>
@@ -2299,6 +2307,7 @@ export default function App() {
           refined_prompt: rp || (scope === 'studio_photo' ? '[import фото]' : '[import кадр для видео]'),
           output_aspect: studioOutputAspect,
           studio_model_id: studioSelectedModelId ?? undefined,
+          exif_camera: studioExifCamera,
         }),
         timeoutMs: 300_000,
       })
@@ -2533,6 +2542,7 @@ export default function App() {
         studioSendPoseRefToWavespeed ? '1' : '0',
       )
       fd.append('lock_model_hairstyle', studioLockModelHairstyle ? '1' : '0')
+      fd.append('exif_camera', studioExifCamera)
       const accepted = await postStudioJobStart('/api/studio/refine-prompt', {
         method: 'POST',
         body: fd,
@@ -2634,6 +2644,7 @@ export default function App() {
     fd.append('auto_motion_prompt', motionAutoPrompt ? '1' : '0')
     fd.append('lock_model_hairstyle', motionLockHairstyle ? '1' : '0')
     fd.append('use_still_as_final', useStillFinalEffective && motionFirstFrameFile ? '1' : '0')
+    fd.append('exif_camera', studioExifCamera)
     try {
       const accepted = await postStudioJobStart('/api/studio/motion/first-frame', {
         method: 'POST',
@@ -2997,6 +3008,45 @@ export default function App() {
     }
   }
 
+  const uploadModelPhoneExifRef = async (
+    modelId: number,
+    role: 'selfie' | 'main',
+    file: File,
+  ): Promise<boolean> => {
+    const fd = new FormData()
+    fd.append('role', role)
+    fd.append('image', file)
+    const r = await apiFetch(`/api/studio/models/${modelId}/phone-exif-reference`, {
+      method: 'POST',
+      body: fd,
+    })
+    if (!r.ok) {
+      const j = await r.json().catch(() => ({}))
+      setError(formatHttpApiError(r, j))
+      return false
+    }
+    return true
+  }
+
+  const clearModelPhoneExifRef = async (modelId: number, role: 'selfie' | 'main') => {
+    setError(null)
+    setModelPhoneExifBusy(`${modelId}-${role}`)
+    try {
+      const r = await apiFetch(
+        `/api/studio/models/${modelId}/phone-exif-reference?role=${encodeURIComponent(role)}`,
+        { method: 'DELETE' },
+      )
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        setError(formatHttpApiError(r, j))
+        return
+      }
+      void loadStudioModels()
+    } finally {
+      setModelPhoneExifBusy(null)
+    }
+  }
+
   const createStudioModel = async () => {
     setError(null)
     const name = newModelName.trim()
@@ -3018,10 +3068,6 @@ export default function App() {
       'image_kinds',
       JSON.stringify(newModelPhotos.map((r) => r.kind)),
     )
-    fd.append(
-      'image_export_selfies',
-      JSON.stringify(newModelPhotos.map((r) => r.export_selfie)),
-    )
     fd.append('camera_preset_id', newModelCameraPresetId.trim())
     fd.append('export_lat', lt)
     fd.append('export_lon', ln)
@@ -3031,12 +3077,21 @@ export default function App() {
       setError(formatHttpApiError(r, j))
       return
     }
+    const created = (await r.json()) as UserStudioModel
+    if (newModelPhoneExifSelfie) {
+      await uploadModelPhoneExifRef(created.id, 'selfie', newModelPhoneExifSelfie)
+    }
+    if (newModelPhoneExifMain) {
+      await uploadModelPhoneExifRef(created.id, 'main', newModelPhoneExifMain)
+    }
     setNewModelName('')
     setNewModelProfile('')
     setNewModelPhotos([])
     setNewModelCameraPresetId('')
     setNewModelExportLat('')
     setNewModelExportLon('')
+    setNewModelPhoneExifSelfie(null)
+    setNewModelPhoneExifMain(null)
     void loadStudioModels()
   }
 
@@ -3112,10 +3167,6 @@ export default function App() {
         'image_kinds',
         JSON.stringify(rows.map((r) => r.kind)),
       )
-      fd.append(
-        'image_export_selfies',
-        JSON.stringify(rows.map((r) => r.export_selfie)),
-      )
       const r = await apiFetch(`/api/studio/models/${id}/images`, { method: 'POST', body: fd })
       if (!r.ok) {
         const j = await r.json().catch(() => ({}))
@@ -3136,7 +3187,7 @@ export default function App() {
   const patchStudioModelImage = async (
     modelId: number,
     imageId: number,
-    patch: { kind?: StudioModelImageKind; export_selfie?: boolean },
+    patch: { kind?: StudioModelImageKind },
   ) => {
     setError(null)
     setModelSavingId(modelId)
@@ -4268,7 +4319,6 @@ export default function App() {
                         list.slice(0, STUDIO_MODEL_MAX_IMAGES).map((file, i) => ({
                           file,
                           kind: (i === 0 ? 'face' : 'other') as StudioModelImageKind,
-                          export_selfie: i === 0,
                         })),
                       )
                     }}
@@ -4297,20 +4347,6 @@ export default function App() {
                               </option>
                             ))}
                           </select>
-                          <label className="studio-label studio-check studio-model-selfie-inline">
-                            <input
-                              type="checkbox"
-                              checked={row.export_selfie}
-                              disabled={studioPaywalled}
-                              onChange={(e) => {
-                                const v = e.target.checked
-                                setNewModelPhotos((prev) =>
-                                  prev.map((p, i) => (i === idx ? { ...p, export_selfie: v } : p)),
-                                )
-                              }}
-                            />
-                            <span>Селфи (EXIF)</span>
-                          </label>
                         </li>
                       ))}
                     </ul>
@@ -4341,12 +4377,45 @@ export default function App() {
                     Экспорт «как с телефона»
                   </h4>
                   <p className="muted small" style={{ margin: 0 }}>
-                    На сохранённый снимок студии: лёгкий шум, JPEG и EXIF по пресету. Пустой пресет — без
-                    этой обработки. Тип камеры (селфи / основная) задаётся отдельно для каждого фото модели
-                    ниже; в файл попадает настройка кадра «лицо», иначе — первого по порядку.
+                    На сохранённые кадры студии: шум, JPEG и EXIF. Сначала эталоны с телефона (ниже), иначе
+                    пресет из списка. Фронталка или основная камера выбирается при каждой генерации на
+                    странице «Картинки».
                   </p>
+                  <div className="studio-phone-exif-refs">
+                    <p className="studio-phone-exif-refs__title">Эталоны EXIF с телефона</p>
+                    <label className="studio-phone-exif-refs__slot">
+                      <span>Фронтальная камера</span>
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/jpg"
+                        disabled={studioPaywalled}
+                        onChange={(e) =>
+                          setNewModelPhoneExifSelfie(e.target.files?.[0] ?? null)
+                        }
+                      />
+                      {newModelPhoneExifSelfie ? (
+                        <span className="muted small">{newModelPhoneExifSelfie.name}</span>
+                      ) : (
+                        <span className="muted small">JPEG из галереи (не из мессенджера)</span>
+                      )}
+                    </label>
+                    <label className="studio-phone-exif-refs__slot">
+                      <span>Основная камера</span>
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/jpg"
+                        disabled={studioPaywalled}
+                        onChange={(e) => setNewModelPhoneExifMain(e.target.files?.[0] ?? null)}
+                      />
+                      {newModelPhoneExifMain ? (
+                        <span className="muted small">{newModelPhoneExifMain.name}</span>
+                      ) : (
+                        <span className="muted small">Обычное фото с задней камеры</span>
+                      )}
+                    </label>
+                  </div>
                   <label>
-                    Пресет камеры
+                    Пресет камеры (запасной)
                     <select
                       value={newModelCameraPresetId}
                       disabled={studioPaywalled}
@@ -4451,19 +4520,6 @@ export default function App() {
                                     </option>
                                   ))}
                                 </select>
-                                <label className="studio-label studio-check model-thumb-selfie-check">
-                                  <input
-                                    type="checkbox"
-                                    checked={!!im.export_selfie}
-                                    disabled={busy || studioPaywalled}
-                                    onChange={(e) =>
-                                      void patchStudioModelImage(m.id, im.id, {
-                                        export_selfie: e.target.checked,
-                                      })
-                                    }
-                                  />
-                                  <span>Селфи EXIF</span>
-                                </label>
                               </div>
                             ))
                           )}
@@ -4503,24 +4559,6 @@ export default function App() {
                                       </option>
                                     ))}
                                   </select>
-                                  <label className="studio-label studio-check studio-model-selfie-inline">
-                                    <input
-                                      type="checkbox"
-                                      checked={row.export_selfie}
-                                      disabled={busy || studioPaywalled}
-                                      onChange={(e) => {
-                                        const v = e.target.checked
-                                        setAppendModelPhotosById((prev) => {
-                                          const cur = prev[m.id] ?? []
-                                          const nextRows = cur.map((p, i) =>
-                                            i === idx ? { ...p, export_selfie: v } : p,
-                                          )
-                                          return { ...prev, [m.id]: nextRows }
-                                        })
-                                      }}
-                                    />
-                                    <span>Селфи (EXIF)</span>
-                                  </label>
                                   <button
                                     type="button"
                                     className="ghost-btn danger-text"
@@ -4606,11 +4644,107 @@ export default function App() {
                             Экспорт «как с телефона»
                           </h4>
                           <p className="muted small" style={{ margin: 0 }}>
-                            Дата/время в EXIF — момент сохранения кадра. ГЕО — опционально (оба поля). Селфи
-                            / основная камера в EXIF — у каждого фото в блоке референсов выше.
+                            Эталоны с телефона важнее пресета. Дата в EXIF — при сохранении кадра. ГЕО —
+                            опционально. Фронталка или основная — переключатель на странице «Картинки» при
+                            генерации.
                           </p>
+                          <div className="studio-phone-exif-refs">
+                            <p className="studio-phone-exif-refs__title">Эталоны EXIF с телефона</p>
+                            <div className="studio-phone-exif-refs__slot">
+                              <span>Фронтальная камера</span>
+                              {m.phone_exif_selfie_ready && m.phone_exif_selfie_summary ? (
+                                <p className="muted small studio-phone-exif-refs__ok">
+                                  ✓ {m.phone_exif_selfie_summary}
+                                </p>
+                              ) : (
+                                <p className="muted small">Не загружен</p>
+                              )}
+                              <label className="model-card-add-files">
+                                <input
+                                  type="file"
+                                  accept="image/jpeg,image/jpg"
+                                  className="sr-only-input"
+                                  disabled={busy || studioPaywalled}
+                                  onChange={(e) => {
+                                    const f = e.target.files?.[0]
+                                    if (!f) return
+                                    void (async () => {
+                                      setModelPhoneExifBusy(`${m.id}-selfie`)
+                                      await uploadModelPhoneExifRef(m.id, 'selfie', f)
+                                      setModelPhoneExifBusy(null)
+                                      void loadStudioModels()
+                                    })()
+                                    e.target.value = ''
+                                  }}
+                                />
+                                <span className="ghost-btn">
+                                  {modelPhoneExifBusy === `${m.id}-selfie`
+                                    ? 'Чтение…'
+                                    : m.phone_exif_selfie_ready
+                                      ? 'Заменить'
+                                      : 'Загрузить'}
+                                </span>
+                              </label>
+                              {m.phone_exif_selfie_ready ? (
+                                <button
+                                  type="button"
+                                  className="ghost-btn small"
+                                  disabled={busy || studioPaywalled}
+                                  onClick={() => void clearModelPhoneExifRef(m.id, 'selfie')}
+                                >
+                                  Сбросить
+                                </button>
+                              ) : null}
+                            </div>
+                            <div className="studio-phone-exif-refs__slot">
+                              <span>Основная камера</span>
+                              {m.phone_exif_main_ready && m.phone_exif_main_summary ? (
+                                <p className="muted small studio-phone-exif-refs__ok">
+                                  ✓ {m.phone_exif_main_summary}
+                                </p>
+                              ) : (
+                                <p className="muted small">Не загружен</p>
+                              )}
+                              <label className="model-card-add-files">
+                                <input
+                                  type="file"
+                                  accept="image/jpeg,image/jpg"
+                                  className="sr-only-input"
+                                  disabled={busy || studioPaywalled}
+                                  onChange={(e) => {
+                                    const f = e.target.files?.[0]
+                                    if (!f) return
+                                    void (async () => {
+                                      setModelPhoneExifBusy(`${m.id}-main`)
+                                      await uploadModelPhoneExifRef(m.id, 'main', f)
+                                      setModelPhoneExifBusy(null)
+                                      void loadStudioModels()
+                                    })()
+                                    e.target.value = ''
+                                  }}
+                                />
+                                <span className="ghost-btn">
+                                  {modelPhoneExifBusy === `${m.id}-main`
+                                    ? 'Чтение…'
+                                    : m.phone_exif_main_ready
+                                      ? 'Заменить'
+                                      : 'Загрузить'}
+                                </span>
+                              </label>
+                              {m.phone_exif_main_ready ? (
+                                <button
+                                  type="button"
+                                  className="ghost-btn small"
+                                  disabled={busy || studioPaywalled}
+                                  onClick={() => void clearModelPhoneExifRef(m.id, 'main')}
+                                >
+                                  Сбросить
+                                </button>
+                              ) : null}
+                            </div>
+                          </div>
                           <label>
-                            Пресет камеры
+                            Пресет камеры (запасной)
                             <select
                               value={draft.camera_preset_id}
                               disabled={busy || studioPaywalled}
@@ -4697,7 +4831,6 @@ export default function App() {
                                           kind: (isFirstEver
                                             ? 'face'
                                             : 'other') as StudioModelImageKind,
-                                          export_selfie: isFirstEver,
                                         }
                                       }),
                                     ],
@@ -5329,6 +5462,33 @@ export default function App() {
               ) : null}
             </label>
             ) : null}
+            {studioSelectedModelId != null ? (
+              <div className="studio-mode-row" role="group" aria-label="Камера для EXIF при сохранении">
+                <span className="studio-mode-label">EXIF</span>
+                <div className="studio-mode-segment">
+                  <button
+                    type="button"
+                    className={`studio-mode-btn${studioExifCamera === 'selfie' ? ' is-active' : ''}`}
+                    onClick={() => setStudioExifCamera('selfie')}
+                  >
+                    Фронталка
+                  </button>
+                  <button
+                    type="button"
+                    className={`studio-mode-btn${studioExifCamera === 'main' ? ' is-active' : ''}`}
+                    onClick={() => setStudioExifCamera('main')}
+                  >
+                    Основная
+                  </button>
+                </div>
+              </div>
+            ) : null}
+            {studioSelectedModelId != null ? (
+              <p className="studio-mode-hint">
+                При сохранении кадра в архив подставляются эталоны EXIF модели (фронталка или основная
+                камера) или пресет «как с телефона».
+              </p>
+            ) : null}
             <div className="studio-toggles">
             {studioMode !== 'photo_edit' && studioMode !== 'model' ? (
               <label
@@ -5802,6 +5962,27 @@ export default function App() {
                       setMotionFirstFrameWaveProfile(v as 'regular' | 'nsfw')
                     }
                   />
+                  {studioSelectedModelId != null ? (
+                    <div className="studio-mode-row" role="group" aria-label="Камера для EXIF при сохранении кадра">
+                      <span className="studio-mode-label">EXIF</span>
+                      <div className="studio-mode-segment">
+                        <button
+                          type="button"
+                          className={`studio-mode-btn${studioExifCamera === 'selfie' ? ' is-active' : ''}`}
+                          onClick={() => setStudioExifCamera('selfie')}
+                        >
+                          Фронталка
+                        </button>
+                        <button
+                          type="button"
+                          className={`studio-mode-btn${studioExifCamera === 'main' ? ' is-active' : ''}`}
+                          onClick={() => setStudioExifCamera('main')}
+                        >
+                          Основная
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
                   <div className="studio-toggles">
                     <label className="studio-toggle-row">
                       <span>Timeline по ролику</span>

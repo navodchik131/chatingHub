@@ -273,15 +273,16 @@ def parse_image_export_selfies_json(
     return out
 
 
-def export_selfie_flag_for_phone_exif(imgs: list[UserStudioModelImage]) -> bool:
-    """Какой флаг «передняя камера» подставить в итоговый JPEG: сначала кадр с kind=face, иначе первый в студийном порядке."""
-    ordered = sort_model_images_for_studio(imgs)
-    for im in ordered:
-        if (im.image_kind or "").lower() == "face":
-            return bool(getattr(im, "export_selfie", False))
-    if ordered:
-        return bool(getattr(ordered[0], "export_selfie", False))
-    return False
+def normalize_exif_camera(value: str | None) -> str:
+    """Режим EXIF при сохранении кадра: selfie (фронталка) или main (основная камера)."""
+    v = (value or "main").strip().lower()
+    if v in ("selfie", "front", "frontal", "1", "true", "yes"):
+        return "selfie"
+    return "main"
+
+
+def exif_camera_is_selfie(exif_camera: str | None) -> bool:
+    return normalize_exif_camera(exif_camera) == "selfie"
 
 
 def model_reference_photos_block(imgs_sorted: list[UserStudioModelImage]) -> str:
@@ -294,6 +295,5 @@ def model_reference_photos_block(imgs_sorted: list[UserStudioModelImage]) -> str
     for im in imgs_sorted:
         k = (im.image_kind or "other").lower()
         lab = _RU_LABEL.get(k, _RU_LABEL["other"])
-        cam = "селфи" if bool(getattr(im, "export_selfie", False)) else "основная камера"
-        lines.append(f"- Снимок id={im.id}: **{lab}** (для EXIF-экспорта: {cam}).")
+        lines.append(f"- Снимок id={im.id}: **{lab}**.")
     return "\n".join(lines)

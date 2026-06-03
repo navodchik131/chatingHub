@@ -377,6 +377,10 @@ class UserStudioModel(Base):
     camera_preset_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     export_lat: Mapped[float | None] = mapped_column(Float, nullable=True)
     export_lon: Mapped[float | None] = mapped_column(Float, nullable=True)
+    """EXIF-профиль с эталона фронтальной камеры (JSON)."""
+    phone_exif_selfie_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    """EXIF-профиль с эталона основной камеры (JSON)."""
+    phone_exif_main_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
@@ -441,6 +445,8 @@ class StudioGeneration(Base):
     wavespeed_task_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     error_step: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # EXIF при сохранении в архив: selfie (фронталка) | main (основная камера) — задаётся при генерации.
+    exif_camera: Mapped[str] = mapped_column(String(16), default="main", nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

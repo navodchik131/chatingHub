@@ -5,7 +5,7 @@ import logging
 import uuid
 from datetime import datetime, timedelta, timezone
 from functools import partial
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import anyio
 import httpx
@@ -17,7 +17,7 @@ from app.config import BACKEND_DIR, settings
 from app.db.models import StudioGeneration, UserStudioModel
 from app.db.session import SessionLocal
 from app.services.studio_generation_status import StudioGenerationStatus
-from app.services.studio_model_images import export_selfie_flag_for_phone_exif
+from app.services.studio_model_images import exif_camera_is_selfie, normalize_exif_camera
 
 if TYPE_CHECKING:
     pass
@@ -59,6 +59,7 @@ async def begin_studio_generation_run(
     output_aspect: str | None,
     studio_model_id: int | None,
     studio_job_id: int | None = None,
+    exif_camera: str | None = None,
 ) -> StudioGeneration:
     if studio_job_id is not None:
         from app.services.studio_generation_placeholders import (
@@ -76,6 +77,7 @@ async def begin_studio_generation_run(
         output_aspect=output_aspect,
         studio_model_id=studio_model_id,
         studio_job_id=studio_job_id,
+        exif_camera=normalize_exif_camera(exif_camera),
     )
     session.add(row)
     await session.flush()
@@ -180,6 +182,7 @@ async def _apply_phone_export_if_needed(
     session: AsyncSession,
     *,
     studio_model_id: int | None,
+    exif_camera: str | None,
     data: bytes,
     ext: str,
     media: str,
@@ -192,15 +195,29 @@ async def _apply_phone_export_if_needed(
         .options(selectinload(UserStudioModel.images))
     )
     model_row = (await session.execute(stmt)).scalar_one_or_none()
-    if model_row is None or not (model_row.camera_preset_id or "").strip():
+    if model_row is None:
         return data, ext, media
     from app.services.studio_camera_presets import get_camera_preset_by_id
+    from app.services.studio_exif_profile import (
+        phone_exif_profile_from_json,
+        profile_for_phone_export,
+    )
     from app.services.studio_phone_export import apply_phone_export_to_jpeg
 
-    preset = get_camera_preset_by_id(model_row.camera_preset_id.strip())
+    selfie_for_exif = exif_camera_is_selfie(exif_camera)
+    profile_raw = (
+        model_row.phone_exif_selfie_json
+        if selfie_for_exif
+        else model_row.phone_exif_main_json
+    )
+    profile = phone_exif_profile_from_json(profile_raw)
+    preset: dict[str, Any] | None = None
+    if profile:
+        preset = profile_for_phone_export(profile, selfie=selfie_for_exif)
+    elif (model_row.camera_preset_id or "").strip():
+        preset = get_camera_preset_by_id(model_row.camera_preset_id.strip())
     if not preset:
         return data, ext, media
-    selfie_for_exif = export_selfie_flag_for_phone_exif(list(model_row.images))
     export_bytes = await anyio.to_thread.run_sync(
         partial(
             apply_phone_export_to_jpeg,
@@ -230,9 +247,11 @@ async def _write_generation_file(
         return False
 
     ext, media = _ext_and_media_from_content_type(content_type_header)
+    exif_cam = normalize_exif_camera(getattr(row, "exif_camera", None))
     data, ext, media = await _apply_phone_export_if_needed(
         session,
         studio_model_id=studio_model_id,
+        exif_camera=exif_cam,
         data=data,
         ext=ext,
         media=media,
@@ -339,6 +358,7 @@ async def studio_finish_image_generation(
     uploaded_bytes: bytes | None = None,
     uploaded_content_type: str = "image/png",
     motion_video_prompt_auto: str | None = None,
+    exif_camera: str | None = None,
 ) -> tuple[StudioGeneration | None, str | None]:
     """
     Завершает пайплайн: provider_ready + попытка архива, либо сразу ready из байтов.
@@ -358,7 +378,10 @@ async def studio_finish_image_generation(
             owner_id=owner_id,
             output_aspect=output_aspect,
             studio_model_id=studio_model_id,
+            exif_camera=exif_camera,
         )
+    elif exif_camera is not None:
+        row.exif_camera = normalize_exif_camera(exif_camera)
 
     if rp:
         row.refined_prompt = rp
@@ -412,6 +435,7 @@ async def persist_studio_generation_from_uploaded_bytes(
     motion_video_prompt_auto: str | None,
     studio_job_id: int | None = None,
     existing_row: StudioGeneration | None = None,
+    exif_camera: str | None = None,
 ) -> StudioGeneration | None:
     """Сохраняет уже готовый кадр (upload) в архив студии без WaveSpeed."""
     if not data:
@@ -426,7 +450,10 @@ async def persist_studio_generation_from_uploaded_bytes(
             output_aspect=output_aspect,
             studio_model_id=studio_model_id,
             studio_job_id=studio_job_id,
+            exif_camera=exif_camera,
         )
+    elif exif_camera is not None:
+        row.exif_camera = normalize_exif_camera(exif_camera)
     row.refined_prompt = rp or None
     row.prompt_excerpt = excerpt
     row.motion_video_prompt_auto = (motion_video_prompt_auto or "").strip() or None
@@ -452,12 +479,16 @@ async def download_and_create_generation(
     refined_prompt_full: str | None = None,
     motion_video_prompt_auto: str | None = None,
     existing_row: StudioGeneration | None = None,
+    exif_camera: str | None = None,
 ) -> StudioGeneration | None:
     """Скачивает картинку с WaveSpeed/CDN и сохраняет в data/studio_generations/…"""
     url = (source_url or "").strip()
     if not url:
         return None
     rp = (refined_prompt_full or refined_prompt or "").strip()
+    resolved_exif = exif_camera
+    if resolved_exif is None and existing_row is not None:
+        resolved_exif = getattr(existing_row, "exif_camera", None)
     row, _ = await studio_finish_image_generation(
         session,
         gen_row=existing_row,
@@ -467,6 +498,7 @@ async def download_and_create_generation(
         refined_prompt=rp,
         source_url=url,
         motion_video_prompt_auto=motion_video_prompt_auto,
+        exif_camera=resolved_exif,
     )
     if row is None:
         return None

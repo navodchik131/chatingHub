@@ -582,6 +582,38 @@ select:focus {
   display: block;
 }
 
+.studio-phone-exif-refs {
+  display: grid;
+  gap: 0.65rem;
+  grid-column: 1 / -1;
+  padding: 0.75rem 0.85rem;
+  border-radius: var(--control-radius-sm, 10px);
+  border: 1px solid color-mix(in srgb, var(--accent, #5b6cff) 22%, var(--border));
+  background: color-mix(in srgb, var(--accent, #5b6cff) 6%, transparent);
+}
+
+.studio-phone-exif-refs__title {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.studio-phone-exif-refs__slot {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.875rem;
+}
+
+.studio-phone-exif-refs__slot > span:first-child {
+  font-weight: 500;
+}
+
+.studio-phone-exif-refs__ok {
+  margin: 0;
+  color: var(--ok, #2d6a4f);
+}
+
 .studio-bootstrap__archive-picker {
   padding: 0.5rem 0.35rem;
   margin-top: 0.15rem;

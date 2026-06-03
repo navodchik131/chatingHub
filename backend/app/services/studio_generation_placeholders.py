@@ -15,6 +15,7 @@ from app.services.studio_generation_storage import (
     mark_studio_generation_failed,
     try_recover_studio_generation_from_wavespeed,
 )
+from app.services.studio_model_images import normalize_exif_camera
 from app.services.studio_keys import load_owner_studio_billing, studio_wavespeed_api_key
 from app.services.studio_jobs import job_params
 
@@ -47,6 +48,7 @@ async def reserve_studio_generation_for_job(
     content_type: str = "image/png",
     prompt_excerpt: str | None = None,
     preview_source_url: str | None = None,
+    exif_camera: str | None = None,
 ) -> StudioGeneration:
     """Создаёт запись processing, привязанную к job (идемпотентно по studio_job_id)."""
     existing = await find_studio_generation_by_job_id(session, studio_job_id)
@@ -66,6 +68,7 @@ async def reserve_studio_generation_for_job(
         studio_job_id=studio_job_id,
         prompt_excerpt=excerpt,
         source_url=preview,
+        exif_camera=normalize_exif_camera(exif_camera),
     )
     session.add(row)
     await session.flush()

@@ -155,6 +155,23 @@ def _migrate_studio_generation_motion_video_prompt(sync_conn) -> None:
     )
 
 
+def _migrate_studio_generation_exif_camera(sync_conn) -> None:
+    from sqlalchemy import inspect
+
+    insp = inspect(sync_conn)
+    if not insp.has_table("studio_generations"):
+        return
+    cols = {c["name"] for c in insp.get_columns("studio_generations")}
+    if "exif_camera" in cols:
+        return
+    sync_conn.execute(
+        text(
+            "ALTER TABLE studio_generations "
+            "ADD COLUMN exif_camera VARCHAR(16) NOT NULL DEFAULT 'main'"
+        )
+    )
+
+
 def _migrate_studio_model_image_kind(sync_conn) -> None:
     from sqlalchemy import inspect
 
@@ -320,8 +337,10 @@ async def init_db() -> None:
         await conn.run_sync(_migrate_user_is_platform_admin)
         await conn.run_sync(_migrate_studio_generation_refined_prompt)
         await conn.run_sync(_migrate_studio_generation_motion_video_prompt)
+        await conn.run_sync(_migrate_studio_generation_exif_camera)
         await conn.run_sync(_migrate_studio_model_image_kind)
         await conn.run_sync(_migrate_user_studio_model_export_camera)
+        await conn.run_sync(_migrate_user_studio_model_phone_exif_refs)
         await conn.run_sync(_migrate_studio_model_image_export_selfie)
         await conn.run_sync(_migrate_subscription_billing_plan)
         await conn.run_sync(_migrate_subscription_plan_tier)
@@ -333,6 +352,23 @@ async def init_db() -> None:
         await conn.run_sync(_migrate_workspace_member_studio_models)
         await conn.run_sync(_migrate_conversation_studio_model_id)
         await conn.run_sync(_migrate_message_attachments_table)
+
+
+def _migrate_user_studio_model_phone_exif_refs(sync_conn) -> None:
+    from sqlalchemy import inspect, text
+
+    insp = inspect(sync_conn)
+    if not insp.has_table("user_studio_models"):
+        return
+    cols = {c["name"] for c in insp.get_columns("user_studio_models")}
+    if "phone_exif_selfie_json" not in cols:
+        sync_conn.execute(
+            text("ALTER TABLE user_studio_models ADD COLUMN phone_exif_selfie_json TEXT")
+        )
+    if "phone_exif_main_json" not in cols:
+        sync_conn.execute(
+            text("ALTER TABLE user_studio_models ADD COLUMN phone_exif_main_json TEXT")
+        )
 
 
 def _migrate_message_attachments_table(sync_conn) -> None:

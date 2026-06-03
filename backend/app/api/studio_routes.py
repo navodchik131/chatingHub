@@ -59,6 +59,7 @@ from app.schemas import (
     StudioRefinePromptOut,
     StudioUpscaleGenerationIn,
     StudioUpscaleGenerationOut,
+    PhoneExifReferenceOut,
     UserStudioModelOut,
     UserStudioModelPatchIn,
 )
@@ -164,7 +165,7 @@ from app.services.studio_model_images import (
     select_prompt_only_wavespeed_identity_images,
     select_wan_identity_images_with_pose_ref,
     sort_model_images_for_wan_identity,
-    parse_image_export_selfies_json,
+    normalize_exif_camera,
     parse_image_kinds_json,
     sort_model_images_for_studio,
 )
@@ -767,6 +768,11 @@ def _model_dir(user_id: int, model_id: int) -> Path:
 
 
 def _studio_model_to_out(user_id: int, m: UserStudioModel) -> UserStudioModelOut:
+    from app.services.studio_exif_profile import (
+        phone_exif_profile_from_json,
+        phone_exif_profile_summary,
+    )
+
     ordered = sort_model_images_for_studio(list(m.images))
     images = [
         StudioModelImageOut(
@@ -774,10 +780,11 @@ def _studio_model_to_out(user_id: int, m: UserStudioModel) -> UserStudioModelOut
             url="/api/studio/public-model-image?t="
             + quote(create_model_image_access_token(user_id=user_id, image_id=im.id), safe=""),
             kind=(im.image_kind or "other").strip().lower(),
-            export_selfie=bool(im.export_selfie),
         )
         for im in ordered
     ]
+    selfie_prof = phone_exif_profile_from_json(m.phone_exif_selfie_json)
+    main_prof = phone_exif_profile_from_json(m.phone_exif_main_json)
     return UserStudioModelOut(
         id=m.id,
         name=m.name,
@@ -787,6 +794,10 @@ def _studio_model_to_out(user_id: int, m: UserStudioModel) -> UserStudioModelOut
         camera_preset_id=(m.camera_preset_id or "").strip() or None,
         export_lat=m.export_lat,
         export_lon=m.export_lon,
+        phone_exif_selfie_ready=selfie_prof is not None,
+        phone_exif_main_ready=main_prof is not None,
+        phone_exif_selfie_summary=phone_exif_profile_summary(selfie_prof),
+        phone_exif_main_summary=phone_exif_profile_summary(main_prof),
     )
 
 
@@ -1260,6 +1271,7 @@ async def _studio_job_execute_upscale(
                 refined_prompt=up_note,
                 output_aspect=row.output_aspect,
                 studio_model_id=row.studio_model_id,
+                exif_camera=getattr(row, "exif_camera", None),
             )
             if gen is None:
                 msg = user_message_when_archive_download_failed(
@@ -1466,6 +1478,7 @@ async def _studio_job_execute_carousel(
             output_aspect=aspect_key,
             studio_model_id=row.studio_model_id,
             refined_prompt_full=wavespeed_prompt,
+            exif_camera=getattr(row, "exif_camera", None),
         )
         if gen is None:
             last_msg = "Не удалось сохранить кадр карусели — повторите позже."
@@ -1585,7 +1598,6 @@ async def api_create_studio_model(
     profile_text: str = Form(""),
     images: list[UploadFile] | None = File(None),
     image_kinds: str | None = Form(None),
-    image_export_selfies: str | None = Form(None),
     camera_preset_id: str | None = Form(None),
     export_lat: str | None = Form(None),
     export_lon: str | None = Form(None),
@@ -1602,7 +1614,6 @@ async def api_create_studio_model(
     await assert_can_create_studio_model(session, oid, sub_b)
     uploads = images or []
     kinds_list = parse_image_kinds_json(image_kinds, len(uploads))
-    selfies_list = parse_image_export_selfies_json(image_export_selfies, len(uploads), kinds_list)
     if len(uploads) > MAX_MODEL_IMAGES:
         raise HTTPException(
             status_code=400,
@@ -1642,14 +1653,13 @@ async def api_create_studio_model(
         rel = f"data/studio_user_models/{oid}/{m.id}/{fn}"
         (d / fn).write_bytes(raw)
         kind = kinds_list[i] if i < len(kinds_list) else "other"
-        selfie_b = selfies_list[i] if i < len(selfies_list) else (kind == "face")
         session.add(
             UserStudioModelImage(
                 studio_model_id=m.id,
                 relative_path=rel,
                 original_name=(up.filename or "")[:255] or None,
                 image_kind=kind,
-                export_selfie=selfie_b,
+                export_selfie=False,
             )
         )
 
@@ -1708,12 +1718,83 @@ async def api_patch_studio_model(
     return _studio_model_to_out(oid, m2)
 
 
+@router.post(
+    "/studio/models/{model_id}/phone-exif-reference",
+    response_model=PhoneExifReferenceOut,
+)
+async def api_upload_studio_model_phone_exif_reference(
+    model_id: int,
+    role: Literal["selfie", "main"] = Form(...),
+    image: UploadFile | None = File(None),
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> PhoneExifReferenceOut:
+    """Эталон с телефона: парсинг EXIF для фронтальной или основной камеры."""
+    assert_permission(user, PERM_STUDIO_MODELS)
+    oid = workspace_owner_id(user)
+    sub_b, _, _, _, _credits = await load_owner_studio_billing(session, oid)
+    _require_studio_subscription(user, sub_b, credits_balance=_credits)
+    m = await require_studio_model_access(session, user, model_id, load_images=False)
+    if image is None or not (image.filename or "").strip():
+        raise HTTPException(status_code=400, detail="Выберите файл изображения (JPEG).")
+    raw = await image.read()
+    if not raw:
+        raise HTTPException(status_code=400, detail="Пустой файл.")
+    if len(raw) > MAX_IMAGE_BYTES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Файл слишком большой (макс. {MAX_IMAGE_BYTES // (1024 * 1024)} МБ)",
+        )
+    from app.services.studio_exif_profile import (
+        extract_phone_exif_profile,
+        phone_exif_profile_summary,
+        phone_exif_profile_to_json,
+    )
+
+    try:
+        profile = extract_phone_exif_profile(raw)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    blob = phone_exif_profile_to_json(profile)
+    if role == "selfie":
+        m.phone_exif_selfie_json = blob
+    else:
+        m.phone_exif_main_json = blob
+    await session.commit()
+    return PhoneExifReferenceOut(
+        role=role,
+        ready=True,
+        summary=phone_exif_profile_summary(profile),
+    )
+
+
+@router.delete(
+    "/studio/models/{model_id}/phone-exif-reference",
+    response_model=PhoneExifReferenceOut,
+)
+async def api_delete_studio_model_phone_exif_reference(
+    model_id: int,
+    role: Literal["selfie", "main"] = Query(...),
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> PhoneExifReferenceOut:
+    assert_permission(user, PERM_STUDIO_MODELS)
+    oid = workspace_owner_id(user)
+    m = await require_studio_model_access(session, user, model_id, load_images=False)
+    if role == "selfie":
+        m.phone_exif_selfie_json = None
+    else:
+        m.phone_exif_main_json = None
+    await session.commit()
+    return PhoneExifReferenceOut(role=role, ready=False, summary=None)
+
+
 @router.post("/studio/models/{model_id}/images", response_model=UserStudioModelOut)
 async def api_add_studio_model_images(
     model_id: int,
     images: list[UploadFile] | None = File(None),
     image_kinds: str | None = Form(None),
-    image_export_selfies: str | None = Form(None),
     session: AsyncSession = Depends(get_session),
     user: User = Depends(get_current_user),
 ) -> UserStudioModelOut:
@@ -1724,7 +1805,6 @@ async def api_add_studio_model_images(
     m = await require_studio_model_access(session, user, model_id, load_images=True)
     uploads = [u for u in (images or []) if u is not None]
     kinds_list = parse_image_kinds_json(image_kinds, len(uploads))
-    selfies_list = parse_image_export_selfies_json(image_export_selfies, len(uploads), kinds_list)
     current_n = len(m.images)
     if not uploads:
         return _studio_model_to_out(oid, m)
@@ -1751,14 +1831,13 @@ async def api_add_studio_model_images(
         rel = f"data/studio_user_models/{oid}/{m.id}/{fn}"
         (d / fn).write_bytes(raw)
         kind = kinds_list[i] if i < len(kinds_list) else "other"
-        selfie_b = selfies_list[i] if i < len(selfies_list) else (kind == "face")
         session.add(
             UserStudioModelImage(
                 studio_model_id=m.id,
                 relative_path=rel,
                 original_name=(up.filename or "")[:255] or None,
                 image_kind=kind,
-                export_selfie=selfie_b,
+                export_selfie=False,
             )
         )
     await session.commit()
@@ -1784,11 +1863,9 @@ async def api_patch_studio_model_image(
         raise HTTPException(status_code=404, detail="Изображение не найдено")
     data = body.model_dump(exclude_unset=True)
     if not data:
-        raise HTTPException(status_code=400, detail="Передайте kind и/или export_selfie")
+        raise HTTPException(status_code=400, detail="Передайте kind")
     if "kind" in data:
         img.image_kind = assert_studio_image_kind(data["kind"])
-    if "export_selfie" in data:
-        img.export_selfie = bool(data["export_selfie"])
     await session.commit()
     m2 = await require_studio_model_access(session, user, model_id, load_images=True)
     return _studio_model_to_out(oid, m2)
@@ -1911,6 +1988,9 @@ async def api_import_studio_archive_image(
         if not (existing_row.source_url or "").strip():
             existing_row.source_url = raw_u[:2000]
 
+    exif_cam = normalize_exif_camera(payload.exif_camera)
+    if existing_row is not None and payload.exif_camera is None:
+        exif_cam = normalize_exif_camera(getattr(existing_row, "exif_camera", None))
     gen = await download_and_create_generation(
         session,
         owner_id=oid,
@@ -1922,6 +2002,7 @@ async def api_import_studio_archive_image(
         ),
         refined_prompt_full=rp,
         existing_row=existing_row,
+        exif_camera=exif_cam,
     )
     await session.commit()
 
@@ -1962,6 +2043,7 @@ async def api_studio_refine_prompt(
     wavespeed_single_reference: str | None = Form(None),
     send_pose_reference_to_wavespeed: str | None = Form("1"),
     lock_model_hairstyle: str | None = Form("1"),
+    exif_camera: str = Form("main"),
     inpaint_mask: UploadFile | None = File(None),
     session: AsyncSession = Depends(get_session),
     user: User = Depends(get_current_user),
@@ -2027,6 +2109,7 @@ async def api_studio_refine_prompt(
         "wavespeed_single_reference": wavespeed_single_reference,
         "send_pose_reference_to_wavespeed": send_pose_reference_to_wavespeed,
         "lock_model_hairstyle": lock_model_hairstyle,
+        "exif_camera": normalize_exif_camera(exif_camera),
     }
     job = await studio_jobs.create_studio_job(
         session,
@@ -2062,6 +2145,7 @@ async def api_studio_refine_prompt(
             output_aspect=aspect_reserve,
             content_type="image/png",
             prompt_excerpt=(description or "").strip()[:2000] or None,
+            exif_camera=normalize_exif_camera(exif_camera),
         )
         generation_id = gen_row.id
         params["placeholder_generation_id"] = generation_id
@@ -2095,6 +2179,7 @@ async def _studio_job_execute_refine_prompt(
     wavespeed_single_reference = p.get("wavespeed_single_reference")
     send_pose_reference_to_wavespeed = p.get("send_pose_reference_to_wavespeed")
     lock_model_hairstyle = p.get("lock_model_hairstyle")
+    exif_camera_job = normalize_exif_camera(str(p.get("exif_camera") or "main"))
 
     system_instr = load_image_studio_system()
     if not system_instr:
@@ -2321,7 +2406,12 @@ async def _studio_job_execute_refine_prompt(
                 output_aspect=aspect_key,
                 studio_model_id=mid,
                 studio_job_id=job.id,
+                exif_camera=exif_camera_job,
             )
+        else:
+            gen_row.exif_camera = exif_camera_job
+            session.add(gen_row)
+            await session.flush()
 
     lock_hair_req = _truthy_lock_model_hairstyle(lock_model_hairstyle)
     effective_lock_hairstyle = bool(lock_hair_req) if image_bytes else True
@@ -3078,6 +3168,7 @@ async def api_studio_motion_first_frame(
     auto_motion_prompt: str = Form("1"),
     lock_model_hairstyle: str = Form("1"),
     use_still_as_final: str = Form("0"),
+    exif_camera: str = Form("main"),
     session: AsyncSession = Depends(get_session),
     user: User = Depends(get_current_user),
 ) -> StudioMotionFirstFrameOut | JSONResponse:
@@ -3140,6 +3231,7 @@ async def api_studio_motion_first_frame(
         "auto_motion_prompt": auto_motion_prompt,
         "lock_model_hairstyle": lock_model_hairstyle,
         "use_still_as_final": use_still_as_final,
+        "exif_camera": normalize_exif_camera(exif_camera),
     }
     job = await studio_jobs.create_studio_job(
         session,
@@ -3175,6 +3267,7 @@ async def api_studio_motion_first_frame(
         output_aspect=aspect_ff,
         content_type="image/png",
         prompt_excerpt=(description or "").strip()[:2000] or None,
+        exif_camera=normalize_exif_camera(exif_camera),
     )
     params["placeholder_generation_id"] = gen_row.id
     await studio_jobs.update_studio_job_params(session, job, params)
@@ -3205,6 +3298,7 @@ async def _studio_job_execute_motion_first_frame(
     auto_motion_prompt = str(p.get("auto_motion_prompt") or "1")
     lock_model_hairstyle = str(p.get("lock_model_hairstyle") or "1")
     use_still_as_final = str(p.get("use_still_as_final") or "0")
+    exif_camera_job = normalize_exif_camera(str(p.get("exif_camera") or "main"))
 
     if not grok_scene_compose_configured():
         raise RuntimeError(
@@ -3413,7 +3507,10 @@ async def _studio_job_execute_motion_first_frame(
                 output_aspect=aspect_key,
                 studio_model_id=eff_mid,
                 studio_job_id=job.id,
+                exif_camera=exif_camera_job,
             )
+        else:
+            gen_row.exif_camera = exif_camera_job
         gen_row.refined_prompt = refined
         gen_row.prompt_excerpt = (refined[:2000] if refined else None) or None
         gen_row.motion_video_prompt_auto = motion_auto_for_db

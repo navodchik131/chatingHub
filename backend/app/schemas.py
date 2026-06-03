@@ -188,6 +188,10 @@ class StudioImportArchiveImageIn(BaseModel):
     refined_prompt: str | None = Field(default=None, max_length=65536)
     output_aspect: str | None = Field(default=None, max_length=48)
     studio_model_id: int | None = Field(default=None, ge=1)
+    exif_camera: str | None = Field(
+        default=None,
+        description="EXIF при сохранении: selfie (фронталка) или main (основная камера)",
+    )
 
 
 class StudioImportArchiveImageOut(BaseModel):
@@ -375,17 +379,21 @@ class StudioModelImageOut(BaseModel):
     id: int
     url: str
     kind: str = "other"
-    export_selfie: bool = False
 
 
 class StudioModelImagePatchIn(BaseModel):
     kind: str | None = Field(default=None, min_length=1, max_length=24)
-    export_selfie: bool | None = None
 
 
 class StudioCameraPresetOut(BaseModel):
     id: str
     label: str
+
+
+class PhoneExifReferenceOut(BaseModel):
+    role: str
+    ready: bool
+    summary: str | None = None
 
 
 class UserStudioModelOut(BaseModel):
@@ -397,6 +405,10 @@ class UserStudioModelOut(BaseModel):
     camera_preset_id: str | None = None
     export_lat: float | None = None
     export_lon: float | None = None
+    phone_exif_selfie_ready: bool = False
+    phone_exif_main_ready: bool = False
+    phone_exif_selfie_summary: str | None = None
+    phone_exif_main_summary: str | None = None
 
 
 class UserStudioModelPatchIn(BaseModel):
