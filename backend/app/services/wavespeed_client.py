@@ -27,6 +27,7 @@ WAN_27_IMAGE_EDIT_STANDARD_PATH = "/api/v3/alibaba/wan-2.7/image-edit"
 WAN_27_IMAGE_EDIT_PRO_PATH = "/api/v3/alibaba/wan-2.7/image-edit-pro"
 SEEDREAM_V45_EDIT_PATH = "/api/v3/bytedance/seedream-v4.5/edit"
 GPT_IMAGE_2_EDIT_PATH = "/api/v3/openai/gpt-image-2/edit"
+WAVESPEED_MEDIA_UPLOAD_PATH = "/api/v3/media/upload/binary"
 
 
 def resolve_studio_image_edit_post_path(*, wan_edit_tier: str | None) -> str:
@@ -420,6 +421,60 @@ async def seedream_v45_edit_image_url(
     )
 
 
+async def wavespeed_upload_image_bytes(
+    *,
+    api_key: str,
+    data: bytes,
+    filename: str = "image.jpg",
+    content_type: str = "image/jpeg",
+    timeout: float = 120.0,
+) -> str:
+    """Загрузка в WaveSpeed Media; URL для полей images/image в моделях."""
+    if not data:
+        raise RuntimeError("empty image bytes")
+    base = _wavespeed_base()
+    url = f"{base}{WAVESPEED_MEDIA_UPLOAD_PATH}"
+    headers = {"Authorization": f"Bearer {api_key}"}
+    ct = (content_type or "image/jpeg").strip() or "image/jpeg"
+    fname = (filename or "image.jpg").strip() or "image.jpg"
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        r = await client.post(
+            url,
+            headers=headers,
+            files={"file": (fname, data, ct)},
+        )
+    if r.status_code >= 400:
+        detail = (r.text or "")[:1500]
+        try:
+            ej = r.json()
+            if isinstance(ej, dict):
+                detail = str(
+                    ej.get("message")
+                    or (ej.get("data") or {}).get("error")
+                    or ej.get("error")
+                    or detail
+                )
+        except Exception:
+            pass
+        raise RuntimeError(f"WaveSpeed upload: {detail or f'HTTP {r.status_code}'}")
+    try:
+        resp = r.json()
+    except Exception as e:
+        raise RuntimeError("WaveSpeed upload: невалидный JSON") from e
+    if not isinstance(resp, dict):
+        raise RuntimeError("WaveSpeed upload: неожиданный ответ")
+    env_err = _wavespeed_envelope_error(resp)
+    if env_err:
+        raise RuntimeError(f"WaveSpeed upload: {env_err}")
+    data_obj = resp.get("data")
+    if isinstance(data_obj, dict):
+        for key in ("download_url", "url"):
+            u = data_obj.get(key)
+            if isinstance(u, str) and u.strip().startswith("http"):
+                return u.strip()
+    raise RuntimeError("WaveSpeed upload: нет download_url в ответе")
+
+
 async def seedream_v45_bootstrap_edit_image_url(
     *,
     api_key: str,
@@ -443,10 +498,10 @@ async def seedream_v45_bootstrap_edit_image_url(
         "enable_base64_output": False,
     }
     if size and size.strip():
-        body["size"] = _format_size_for_wavespeed_path(post_path, size)
-    fmt = (settings.wavespeed_seedream_output_format or "").strip().lower()
-    if fmt in ("jpeg", "jpg", "png"):
-        body["output_format"] = "jpeg" if fmt in ("jpeg", "jpg") else "png"
+        s = size.strip()
+        if "x" in s.lower() and "*" not in s:
+            s = s.replace("x", "*").replace("X", "*")
+        body["size"] = s
     _apply_wavespeed_extra_body(body)
     url = f"{_wavespeed_base()}{post_path}"
     return await _wavespeed_post_json_and_resolve_image_url(

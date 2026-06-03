@@ -190,7 +190,10 @@ from app.services.studio_seedance_t2v import (
 from app.services.studio_model_bootstrap import (
     DEFAULT_MODEL_SHEET_PROMPT,
     MODEL_SHEET_ASPECT_KEY,
+    humanize_wavespeed_provider_error,
     resolve_face_merge_prompt,
+    wavespeed_image_url_for_bootstrap,
+    wavespeed_url_for_bootstrap_generation,
 )
 from app.services.wavespeed_client import (
     gpt_image_2_edit_image_url,
@@ -4263,16 +4266,6 @@ def _public_https_base_runtime() -> str:
     return pub
 
 
-def _bootstrap_pose_public_url(*, owner_id: int, raw: bytes, content_type: str, pub: str) -> str:
-    fid = save_pose_reference_bytes(
-        owner_id=owner_id,
-        raw=raw,
-        content_type=content_type or "image/jpeg",
-    )
-    ptok = create_pose_reference_access_token(user_id=owner_id, file_id=fid)
-    return f"{pub}/api/studio/public-pose-reference?t={quote(ptok, safe='')}"
-
-
 @router.post(
     "/studio/model-bootstrap/face-merge",
     response_model=StudioModelBootstrapOut,
@@ -4474,33 +4467,36 @@ async def _studio_job_execute_model_bootstrap_face_merge(
     if not ref1 or not ref2:
         raise RuntimeError("Файлы референсов не найдены в задаче.")
 
-    url1 = _bootstrap_pose_public_url(
+    url1 = await wavespeed_image_url_for_bootstrap(
+        api_key=ws_key,
         owner_id=oid,
+        pub=pub,
         raw=ref1,
         content_type=str(p.get("ref_form_mime") or "image/jpeg"),
-        pub=pub,
+        label="ref_form",
     )
-    url2 = _bootstrap_pose_public_url(
+    url2 = await wavespeed_image_url_for_bootstrap(
+        api_key=ws_key,
         owner_id=oid,
+        pub=pub,
         raw=ref2,
         content_type=str(p.get("ref_face_mime") or "image/jpeg"),
-        pub=pub,
+        label="ref_face",
     )
 
     gen_row = await find_studio_generation_by_job_id(session, job.id)
     cost = apply_studio_credit_cost(plan, settings.credit_cost_studio_prompt_refine)
     billing = await ensure_can_consume_credits(session, user, cost)
 
-    size_for_ws: str | None = None
-    if not settings.wavespeed_seedream_omit_size:
-        size_for_ws = wavespeed_size_string(aspect_key)
-
-    ws_res = await seedream_v45_bootstrap_edit_image_url(
-        api_key=ws_key,
-        image_urls=[url1, url2],
-        prompt=prompt,
-        size=size_for_ws,
-    )
+    try:
+        ws_res = await seedream_v45_bootstrap_edit_image_url(
+            api_key=ws_key,
+            image_urls=[url1, url2],
+            prompt=prompt,
+            size=None,
+        )
+    except RuntimeError as e:
+        raise RuntimeError(humanize_wavespeed_provider_error(str(e))) from e
 
     arch_base = _public_app_base(None)
     _, preview_url = await studio_finish_image_generation(
@@ -4563,11 +4559,13 @@ async def _studio_job_execute_model_bootstrap_sheet(
         raw = studio_jobs.load_studio_job_file(str(p["image_path"]))
         if raw:
             image_urls.append(
-                _bootstrap_pose_public_url(
+                await wavespeed_image_url_for_bootstrap(
+                    api_key=ws_key,
                     owner_id=oid,
+                    pub=pub,
                     raw=raw,
                     content_type=str(p.get("image_mime") or "image/jpeg"),
-                    pub=pub,
+                    label="sheet_upload",
                 )
             )
     else:
@@ -4578,9 +4576,13 @@ async def _studio_job_execute_model_bootstrap_sheet(
                 row = await session.get(StudioGeneration, gid)
                 if not row or row.user_id != oid:
                     raise RuntimeError("Исходная генерация не найдена")
-                tok = create_generation_image_access_token(user_id=oid, generation_id=gid)
                 image_urls.append(
-                    f"{pub}/api/studio/public-generation-image?t={quote(tok, safe='')}"
+                    await wavespeed_url_for_bootstrap_generation(
+                        api_key=ws_key,
+                        owner_id=oid,
+                        pub=pub,
+                        row=row,
+                    )
                 )
             except (TypeError, ValueError) as e:
                 raise RuntimeError("Некорректный идентификатор исходной генерации") from e
@@ -4592,15 +4594,18 @@ async def _studio_job_execute_model_bootstrap_sheet(
     cost = apply_studio_credit_cost(plan, settings.credit_cost_studio_prompt_refine)
     billing = await ensure_can_consume_credits(session, user, cost)
 
-    ws_res = await gpt_image_2_edit_image_url(
-        api_key=ws_key,
-        image_urls=image_urls,
-        prompt=prompt,
-        aspect_ratio=aspect_key,
-        resolution="1k",
-        quality="medium",
-        output_format="png",
-    )
+    try:
+        ws_res = await gpt_image_2_edit_image_url(
+            api_key=ws_key,
+            image_urls=image_urls,
+            prompt=prompt,
+            aspect_ratio=aspect_key,
+            resolution="1k",
+            quality="medium",
+            output_format="png",
+        )
+    except RuntimeError as e:
+        raise RuntimeError(humanize_wavespeed_provider_error(str(e))) from e
 
     arch_base = _public_app_base(None)
     _, preview_url = await studio_finish_image_generation(
