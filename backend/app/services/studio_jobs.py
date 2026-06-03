@@ -27,6 +27,8 @@ STUDIO_JOB_TYPES = frozenset(
         "motion_render_video",
         "upscale",
         "carousel",
+        "model_bootstrap_face_merge",
+        "model_bootstrap_sheet",
     }
 )
 
