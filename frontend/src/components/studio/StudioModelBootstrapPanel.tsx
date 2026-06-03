@@ -206,95 +206,11 @@ export function StudioModelBootstrapPanel({
         />
       ) : null}
 
-      <section className="studio-bootstrap__step" aria-labelledby="bootstrap-step2-title">
-        <h3 id="bootstrap-step2-title">Развёртка модели</h3>
-        <p className="studio-bootstrap__lead muted">
-          Кадр 16:9 с раскладкой (лицо, профили, рост) через GPT Image 2 Edit. Шаг 1 не обязателен —
-          загрузите своё фото или выберите готовый кадр из архива.
-        </p>
-
-        <div className="studio-slot-grid studio-slot-grid--composer">
-          <StudioMediaSlot
-            label="Своё фото"
-            hint="JPG, PNG, WebP"
-            previewUrl={sheetSource === 'upload' ? sheetPreview : null}
-            accept="image/jpeg,image/png,image/webp"
-            onFile={selectSheetUpload}
-            onClear={() => selectSheetUpload(null)}
-            emptyLabel="Загрузить"
-            className={sheetSource === 'upload' ? 'studio-bootstrap__source--active' : ''}
-          />
-          <div
-            className={
-              'studio-bootstrap__archive-picker' +
-              (sheetSource === 'archive' ? ' studio-bootstrap__source--active' : '')
-            }
-            style={{ gridColumn: '1 / -1' }}
-          >
-            <StudioArchiveThumbPicker
-              label="Или из архива"
-              hint="Готовые кадры из истории"
-              items={archiveItems}
-              value={sheetSource === 'archive' ? sheetArchiveId : null}
-              onChange={(id) => {
-                if (id == null) {
-                  if (sheetSource === 'archive') setSheetSource(null)
-                  setSheetArchiveId(null)
-                  return
-                }
-                setSheetSource('archive')
-                setSheetArchiveId(id)
-                setSheetFile(null)
-              }}
-            />
-          </div>
-          {mergePreviewUrl ? (
-            <button
-              type="button"
-              className={
-                'studio-bootstrap__source-thumb studio-bootstrap__source-pick' +
-                (sheetSource === 'step1' ? ' is-selected' : '')
-              }
-              onClick={() => {
-                setSheetSource('step1')
-                setSheetArchiveId(null)
-                setSheetFile(null)
-              }}
-            >
-              <span className="muted small">Кадр из шага 1 (ниже)</span>
-              <img src={mergePreviewUrl} alt="" />
-            </button>
-          ) : null}
-        </div>
-
-        <div className="studio-bootstrap__actions">
-          <button
-            type="button"
-            className="send-btn"
-            disabled={!canRunSheet}
-            onClick={() => void runSheet()}
-          >
-            {sheetBusy ? 'Генерация…' : 'Сделать развёртку модели'}
-          </button>
-        </div>
-
-        {sheetResult?.generated_image_url ? (
-          <div className="studio-bootstrap__result">
-            <p className="studio-bootstrap__result-label">Развёртка 16:9</p>
-            <img
-              src={sheetResult.generated_image_url}
-              alt="Развёртка модели"
-              className="studio-bootstrap__result-img studio-bootstrap__result-img--wide"
-            />
-          </div>
-        ) : null}
-      </section>
-
-      <section className="studio-bootstrap__step studio-bootstrap__step--optional" aria-labelledby="bootstrap-step1-title">
+      <section className="studio-bootstrap__step" aria-labelledby="bootstrap-step1-title">
         <h3 id="bootstrap-step1-title">Шаг 1 — базовый кадр (опционально)</h3>
         <p className="studio-bootstrap__lead muted">
           Два референса: первый — волосы и форма лица, второй — лицо для наложения. Результат можно
-          использовать для развёртки выше.
+          использовать для развёртки ниже.
         </p>
 
         <div className="studio-slot-grid studio-slot-grid--composer">
@@ -356,6 +272,90 @@ export function StudioModelBootstrapPanel({
           <div className="studio-bootstrap__result">
             <p className="studio-bootstrap__result-label">Результат шага 1</p>
             <img src={mergePreviewUrl} alt="Базовый кадр модели" className="studio-bootstrap__result-img" />
+          </div>
+        ) : null}
+      </section>
+
+      <section className="studio-bootstrap__step" aria-labelledby="bootstrap-step2-title">
+        <h3 id="bootstrap-step2-title">Развёртка модели</h3>
+        <p className="studio-bootstrap__lead muted">
+          Кадр 16:9 с раскладкой (лицо, профили, рост) через GPT Image 2 Edit. Шаг 1 не обязателен —
+          загрузите своё фото или выберите готовый кадр из архива.
+        </p>
+
+        <div className="studio-slot-grid studio-slot-grid--composer">
+          <StudioMediaSlot
+            label="Своё фото"
+            hint="JPG, PNG, WebP"
+            previewUrl={sheetSource === 'upload' ? sheetPreview : null}
+            accept="image/jpeg,image/png,image/webp"
+            onFile={selectSheetUpload}
+            onClear={() => selectSheetUpload(null)}
+            emptyLabel="Загрузить"
+            className={sheetSource === 'upload' ? 'studio-bootstrap__source--active' : ''}
+          />
+          <div
+            className={
+              'studio-bootstrap__archive-picker' +
+              (sheetSource === 'archive' ? ' studio-bootstrap__source--active' : '')
+            }
+            style={{ gridColumn: '1 / -1' }}
+          >
+            <StudioArchiveThumbPicker
+              label="Или из архива"
+              hint="Готовые кадры из истории"
+              items={archiveItems}
+              value={sheetSource === 'archive' ? sheetArchiveId : null}
+              onChange={(id) => {
+                if (id == null) {
+                  if (sheetSource === 'archive') setSheetSource(null)
+                  setSheetArchiveId(null)
+                  return
+                }
+                setSheetSource('archive')
+                setSheetArchiveId(id)
+                setSheetFile(null)
+              }}
+            />
+          </div>
+          {mergePreviewUrl ? (
+            <button
+              type="button"
+              className={
+                'studio-bootstrap__source-thumb studio-bootstrap__source-pick' +
+                (sheetSource === 'step1' ? ' is-selected' : '')
+              }
+              onClick={() => {
+                setSheetSource('step1')
+                setSheetArchiveId(null)
+                setSheetFile(null)
+              }}
+            >
+              <span className="muted small">Кадр из шага 1 (выше)</span>
+              <img src={mergePreviewUrl} alt="" />
+            </button>
+          ) : null}
+        </div>
+
+        <div className="studio-bootstrap__actions">
+          <button
+            type="button"
+            className="send-btn"
+            disabled={!canRunSheet}
+            onClick={() => void runSheet()}
+          >
+            {sheetBusy ? 'Генерация…' : 'Сделать развёртку модели'}
+          </button>
+        </div>
+
+        {sheetResult?.generated_image_url ? (
+          <div className="studio-bootstrap__result">
+            <p className="studio-bootstrap__result-label">Развёртка 16:9</p>
+            <img
+              src={sheetResult.generated_image_url}
+              alt="Развёртка модели"
+              className="studio-bootstrap__result-img studio-bootstrap__result-img--wide"
+            />
           </div>
         ) : null}
       </section>
