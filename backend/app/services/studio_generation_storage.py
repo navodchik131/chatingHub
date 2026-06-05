@@ -199,17 +199,17 @@ async def _apply_analog_humanize_if_needed(
     data: bytes,
     ext: str,
     media: str,
-) -> tuple[bytes, str, str]:
+) -> tuple[bytes, str, str, bool]:
     if not (media or "").startswith("image/"):
-        return data, ext, media
+        return data, ext, media, False
     from app.services.studio_ai_metadata_strip import apply_analog_humanize_to_image_bytes
 
     out_bytes, applied = await anyio.to_thread.run_sync(
         partial(apply_analog_humanize_to_image_bytes, data, ext=ext)
     )
     if applied:
-        return out_bytes, ext, media
-    return data, ext, media
+        return out_bytes, ext, media, True
+    return data, ext, media, False
 
 
 async def _apply_phone_export_if_needed(
@@ -220,6 +220,7 @@ async def _apply_phone_export_if_needed(
     data: bytes,
     ext: str,
     media: str,
+    skip_grain: bool = False,
 ) -> tuple[bytes, str, str]:
     if studio_model_id is None:
         return data, ext, media
@@ -260,6 +261,7 @@ async def _apply_phone_export_if_needed(
             selfie=selfie_for_exif,
             export_lat=model_row.export_lat,
             export_lon=model_row.export_lon,
+            skip_grain=skip_grain,
         ),
     )
     if export_bytes is not None:
@@ -282,7 +284,7 @@ async def _write_generation_file(
 
     ext, media = _ext_and_media_from_content_type(content_type_header)
     data, ext, media = await _apply_ai_metadata_strip_if_needed(data, ext, media)
-    data, ext, media = await _apply_analog_humanize_if_needed(data, ext, media)
+    data, ext, media, humanized = await _apply_analog_humanize_if_needed(data, ext, media)
     exif_cam = normalize_exif_camera(getattr(row, "exif_camera", None))
     data, ext, media = await _apply_phone_export_if_needed(
         session,
@@ -291,6 +293,7 @@ async def _write_generation_file(
         data=data,
         ext=ext,
         media=media,
+        skip_grain=humanized,
     )
 
     rel = f"data/studio_generations/{row.user_id}/{uuid.uuid4().hex}{ext}"

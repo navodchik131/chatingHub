@@ -62,6 +62,7 @@ def apply_phone_export_to_jpeg(
     export_lat: float | None,
     export_lon: float | None,
     captured_at: datetime | None = None,
+    skip_grain: bool = False,
 ) -> bytes | None:
     """Перекодирует в JPEG с лёгким шумом/резкостью и EXIF «как у телефона». При ошибке — None."""
     try:
@@ -76,11 +77,14 @@ def apply_phone_export_to_jpeg(
         log.warning("phone export: decode failed: %s", e)
         return None
 
-    base_sigma = float(preset.get("grain_sigma") or 3.6)
-    sigma = base_sigma * float(settings.studio_phone_export_grain_multiplier)
     jpeg_q = int(settings.studio_phone_export_jpeg_quality)
     try:
-        processed = _add_grain_sharpen(rgb, sigma)
+        if skip_grain:
+            processed = rgb.filter(ImageFilter.UnsharpMask(radius=0.6, percent=95, threshold=4))
+        else:
+            base_sigma = float(preset.get("grain_sigma") or 3.6)
+            sigma = base_sigma * float(settings.studio_phone_export_grain_multiplier)
+            processed = _add_grain_sharpen(rgb, sigma)
         out_io = BytesIO()
         processed.save(
             out_io,

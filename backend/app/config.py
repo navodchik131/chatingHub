@@ -168,10 +168,10 @@ class Settings(BaseSettings):
     studio_strip_ai_metadata_enabled: bool = Field(default=True)
     # Analog Humanizer: film grain + хроматика против пиксельных AI-классификаторов (CPU).
     studio_analog_humanize_enabled: bool = Field(default=True)
-    studio_analog_humanize_grain: float = Field(default=4.0, ge=0.0, le=12.0)
+    studio_analog_humanize_grain: float = Field(default=2.5, ge=0.0, le=12.0)
     studio_analog_humanize_chromatic_shift: int = Field(default=1, ge=0, le=4)
-    # Усиление шума/перекодирования при phone EXIF (поверх humanize).
-    studio_phone_export_grain_multiplier: float = Field(default=1.45, ge=1.0, le=3.0)
+    # Множитель grain_sigma в phone EXIF; при уже применённом humanize grain не дублируется.
+    studio_phone_export_grain_multiplier: float = Field(default=1.15, ge=1.0, le=3.0)
     studio_phone_export_jpeg_quality: int = Field(default=88, ge=75, le=95)
     studio_generation_stale_processing_hours: int = Field(default=48, ge=1, le=96)
     # Опрос Seedance / video на бэкенде: 800 × 3 с ≈ 40 мин (клиент не долбит API).
