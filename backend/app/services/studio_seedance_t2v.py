@@ -17,9 +17,11 @@ log = logging.getLogger(__name__)
 
 MAX_SEEDANCE_REFERENCE_IMAGES = 9
 MAX_SEEDANCE_REFERENCE_VIDEOS = 3
+MAX_SEEDANCE_VIDEO_MODEL_IDENTITY_IMAGES = 2
 SEEDANCE_T2V_PROMPT_MAX_CHARS = 3000
 
 _T2V_KIND_ORDER = {"turnaround": 0, "face": 1, "body": 2, "other": 3, "genitals": 99}
+_VIDEO_IDENTITY_KINDS = frozenset({"turnaround", "face"})
 
 _MOTION_NOTE_BANNED_SUBSTRINGS = (
     "skin tone",
@@ -78,6 +80,32 @@ def sort_model_images_for_seedance_t2v(
         )
     )
     return filtered[:MAX_SEEDANCE_REFERENCE_IMAGES]
+
+
+def filter_model_images_for_seedance_video(
+    imgs: list[UserStudioModelImage],
+    *,
+    minimal: bool = False,
+    max_identity: int | None = None,
+) -> list[UserStudioModelImage]:
+    """
+    Для render-video: только turnaround (+ face), без body/other/genitals.
+    Полные ню-листы модели чаще всего триггерят sensitive у Seedance.
+    """
+    cap = max_identity if max_identity is not None else MAX_SEEDANCE_VIDEO_MODEL_IDENTITY_IMAGES
+    cap = max(1, min(cap, MAX_SEEDANCE_REFERENCE_IMAGES))
+    kinds = frozenset({"turnaround"}) if minimal else _VIDEO_IDENTITY_KINDS
+    sorted_all = sort_model_images_for_seedance_t2v(imgs)
+    picked: list[UserStudioModelImage] = []
+    for im in sorted_all:
+        k = (im.image_kind or "other").lower()
+        if k in kinds:
+            picked.append(im)
+        if len(picked) >= cap:
+            break
+    if not picked:
+        picked = sorted_all[:cap]
+    return picked
 
 
 def model_reference_public_urls(
@@ -217,6 +245,7 @@ async def build_seedance_t2v_prompt(
     negative: str | None = None,
     output_aspect: str | None = None,
     duration_seconds: int = 5,
+    force_template: bool = False,
 ) -> tuple[str, str]:
     """
     Grok (если настроен) → иначе шаблон. Возвращает (prompt, source: grok|template).
@@ -228,7 +257,7 @@ async def build_seedance_t2v_prompt(
 
     lim = settings.studio_seedance_t2v_prompt_max_chars
     safe_motion = prepare_motion_notes_for_seedance(motion_summary)
-    if grok_motion_api_configured():
+    if not force_template and grok_motion_api_configured():
         try:
             p = await grok_expand_seedance_t2v_prompt(
                 user_brief=user_brief,

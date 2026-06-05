@@ -158,11 +158,7 @@ def format_wavespeed_user_error(message: str) -> str:
             f"WaveSpeed: {body} "
             "Пополните баланс на wavespeed.ai (API-ключ в «Подключения»)."
         )
-    if (
-        "flagged" in low
-        or "potentially sensitive" in low
-        or ("sensitive" in low and "content" in low)
-    ):
+    if wavespeed_is_sensitive_content_error(body):
         return (
             f"WaveSpeed: {body} "
             "Контент отклонён модерацией — попробуйте более нейтральное исходное фото."
@@ -173,6 +169,15 @@ def format_wavespeed_user_error(message: str) -> str:
             "Проверьте формат и содержание загруженных изображений."
         )
     return f"WaveSpeed: {body}"
+
+
+def wavespeed_is_sensitive_content_error(message: str | None) -> bool:
+    low = (message or "").lower()
+    return (
+        "flagged" in low
+        or "potentially sensitive" in low
+        or ("sensitive" in low and "content" in low)
+    )
 
 
 def _wavespeed_raise_from_response(resp_json: dict[str, Any], *, context: str) -> None:

@@ -1,9 +1,12 @@
+from app.db.models import UserStudioModelImage
 from app.services.studio_seedance_t2v import (
     assemble_seedance_t2v_prompt,
+    filter_model_images_for_seedance_video,
     prepare_motion_notes_for_seedance,
     soften_seedance_provider_prompt,
     truncate_seedance_t2v_prompt,
 )
+from app.services.wavespeed_client import wavespeed_is_sensitive_content_error
 
 
 def test_truncate_prompt():
@@ -78,6 +81,26 @@ def test_prepare_motion_notes_strips_biometric_lines():
     assert "camera push" in out
     assert "skin tone" not in out.lower()
     assert "facial identity" not in out.lower()
+
+
+def test_filter_model_images_for_video_excludes_body():
+    imgs = [
+        UserStudioModelImage(id=1, image_kind="body"),
+        UserStudioModelImage(id=2, image_kind="turnaround"),
+        UserStudioModelImage(id=3, image_kind="face"),
+        UserStudioModelImage(id=4, image_kind="genitals"),
+    ]
+    out = filter_model_images_for_seedance_video(imgs)
+    kinds = [(im.image_kind or "") for im in out]
+    assert kinds == ["turnaround", "face"]
+    assert filter_model_images_for_seedance_video(imgs, minimal=True)[0].image_kind == "turnaround"
+
+
+def test_wavespeed_sensitive_detector():
+    assert wavespeed_is_sensitive_content_error(
+        "Content flagged as potentially sensitive. Please try different prompts or images."
+    )
+    assert not wavespeed_is_sensitive_content_error("Insufficient credits")
 
 
 def test_soften_provider_prompt():
