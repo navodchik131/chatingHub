@@ -34,11 +34,9 @@ _TIMELINE_SYSTEM_EN = (
 _VIDEO_IDENTITY_GUARD_EN = (
     "CONTENT_SAFETY (video provider): Do NOT write detailed facial identity in prose — "
     "no eye color, lip shape, cheekbones, ethnicity, age, makeup catalog, skin texture, pores, "
-    "scars/tattoos on face, or distinctive biometric lists. "
-    "Face, skin tone, body proportions, and hair MUST bind strictly to model @Image tags only — "
-    "never to @Video1 or any reference video actor. "
-    "Text may only use short neutral face-MOTION tokens (blink, brow lift, lips part) "
-    "without describing who the person is."
+    "scars/tattoos on face, or distinctive biometric lists. Identity is locked via reference images "
+    "(@Image tags) and the first-frame still; text may only use short neutral face-MOTION tokens "
+    "(blink, brow lift, lips part) without describing who the person is."
 )
 
 
@@ -576,16 +574,14 @@ def _seedance_image_tag_range(
         end_idx = start_idx + n_model - 1
         if n_model == 1:
             parts.append(
-                f"@Image{start_idx} = character identity ONLY — face, body proportions, skin tone, "
-                "and hair MUST strictly match; IGNORE any clothing on this sheet; "
-                "do not catalog facial identity in prose"
+                f"@Image{start_idx} = character identity via reference sheet(s) — bind face/body/hair in the API; "
+                "IGNORE any clothing on this sheet; do not catalog facial identity in prompt prose"
             )
         else:
             parts.append(
-                f"@Image{start_idx}–@Image{end_idx} = character identity ONLY across model reference sheet(s); "
-                "face, body, skin tone, and hair MUST strictly match — "
-                "IGNORE all garments/clothing on these sheets; "
-                "never copy the @Video1 actor's face or identity"
+                f"@Image{start_idx}–@Image{end_idx} = same character identity across model reference sheet(s); "
+                "bind face/body/hair via tags — IGNORE garments on these sheets; "
+                "never describe the @Video1 actor's face in text"
             )
     if n_outfit > 0:
         idx = 1 + n_start_frame + n_model
@@ -666,10 +662,9 @@ async def grok_expand_seedance_t2v_prompt(
         "1) Output ONLY the final video prompt text — no preamble, no markdown fences.\n"
         f"2) Hard limit: entire output MUST be at most {lim} characters.\n"
         "3) Use @Image tags exactly as assigned above: @Image1 for opening still only; "
-        "face, body proportions, skin tone, and hair MUST strictly come from model @Image tags "
-        "(never restate them in long prose, but DO state they are locked to those tags).\n"
-        "4) If @Video1 exists, use it ONLY for motion/choreography/timing — "
-        "explicitly forbid copying the reference video actor's face, skin, hair, or body identity.\n"
+        "identity via model @Image tags (never restate face/body/hair in long prose).\n"
+        "4) If @Video1 exists, reference it for motion/choreography only; "
+        "do not describe the reference video's original actor identity.\n"
         "5) Wardrobe for the full clip comes from the outfit @Image tag when present, else @Image1 and USER_BRIEF; "
         "never copy clothing from model identity @Image tags.\n"
         "6) Include camera, lighting, mood, environment, wardrobe, and body choreography with director-level detail; "
