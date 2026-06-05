@@ -22,6 +22,18 @@ def test_assemble_with_start_frame():
     assert "do not copy face" in p.lower()
 
 
+def test_assemble_wardrobe_from_start_frame_ignores_model_clothing():
+    p = assemble_seedance_t2v_prompt(
+        "Dance.",
+        n_start_frame=1,
+        n_model_images=2,
+        n_outfit_images=1,
+    )
+    assert "wardrobe authority" in p.lower() or "@Image1" in p
+    assert "ignore all clothing" in p.lower()
+    assert "match @image4 exactly" in p.lower()
+
+
 def test_assemble_prompt_includes_image_tags():
     p = assemble_seedance_t2v_prompt(
         "She walks in the rain.",

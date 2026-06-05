@@ -99,8 +99,9 @@ def assemble_seedance_t2v_prompt(
     parts: list[str] = []
     if n_start_frame > 0:
         parts.append(
-            "@Image1 is the approved opening still at t=0: starting pose, wardrobe, lighting, "
-            "camera framing, and environment. Do not treat @Image1 as the sole identity reference."
+            "@Image1 is the approved opening still at t=0: starting pose, wardrobe, garments, lighting, "
+            "camera framing, and environment. @Image1 is the wardrobe authority at t=0. "
+            "Do not treat @Image1 as the sole face/body identity reference."
         )
     if n_model_images > 0:
         start_idx = 1 + n_start_frame
@@ -112,14 +113,21 @@ def assemble_seedance_t2v_prompt(
         parts.append(
             f"Same person throughout — face, body proportions, skin tone, and hair strictly from {tags}. "
             "Never adopt the reference video actor's face or identity. "
-            "Reference sheets may show neutral base clothing; dress the character as in @Image1 or USER_BRIEF "
-            "unless an outfit reference image is specified."
+            f"IGNORE all clothing, garments, and wardrobe visible on {tags} — those sheets are identity-only "
+            "and may show neutral base outfits."
         )
+        if n_start_frame > 0 and n_outfit_images == 0:
+            parts.append(
+                "Dress the character in the exact wardrobe shown in @Image1 and USER_BRIEF for the full clip."
+            )
     if n_outfit_images > 0:
         start = 1 + n_start_frame + n_model_images
         for j in range(n_outfit_images):
             idx = start + j
-            parts.append(f"Outfit and garment details: match @Image{idx}.")
+            parts.append(
+                f"Wardrobe and garment details for the entire clip: match @Image{idx} exactly "
+                "(override any clothing visible on model identity references or @Image1 if they differ)."
+            )
     if n_motion_videos > 0:
         vtags = ", ".join(f"@Video{i}" for i in range(1, n_motion_videos + 1))
         parts.append(

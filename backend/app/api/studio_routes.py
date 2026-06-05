@@ -4195,9 +4195,12 @@ async def _studio_job_execute_motion_render_video(
     n_start = 0
     n_outfit = 0
     outfit_gen_id: int | None = None
+    explicit_outfit_gen_id: int | None = None
+    auto_outfit_from_first_frame = False
     first_frame_gen_id: int | None = None
     first_frame_bytes: bytes | None = None
     first_frame_media = "image/jpeg"
+    ff_url: str | None = None
     ref_images: list[str] = []
 
     if first_frame_gid is not None:
@@ -4230,15 +4233,18 @@ async def _studio_job_execute_motion_render_video(
             outfit_gen_id = None
     if outfit_gen_id is not None:
         if first_frame_gen_id is not None and outfit_gen_id == first_frame_gen_id:
-            outfit_gen_id = None
-            n_outfit = 0
+            auto_outfit_from_first_frame = True
         else:
-            row_outfit = await session.get(StudioGeneration, outfit_gen_id)
+            explicit_outfit_gen_id = outfit_gen_id
+            row_outfit = await session.get(StudioGeneration, explicit_outfit_gen_id)
             if not row_outfit or row_outfit.user_id != oid:
                 raise RuntimeError("Снимок наряда (outfit) не найден")
             await assert_studio_generation_access(session, user, row_outfit.studio_model_id)
+    elif first_frame_gen_id is not None:
+        auto_outfit_from_first_frame = True
 
-    reserved = n_start + (1 if outfit_gen_id is not None else 0)
+    will_reserve_outfit = explicit_outfit_gen_id is not None or auto_outfit_from_first_frame
+    reserved = n_start + (1 if will_reserve_outfit else 0)
     max_model_slots = max(0, MAX_SEEDANCE_REFERENCE_IMAGES - reserved)
     model_imgs = imgs_t2v[:max_model_slots]
     ref_images.extend(
@@ -4251,16 +4257,19 @@ async def _studio_job_execute_motion_render_video(
     )
     n_model = len(model_imgs)
 
-    if outfit_gen_id is not None:
+    if explicit_outfit_gen_id is not None:
         outfit_url = generation_still_public_url(
             owner_id=oid,
-            generation_id=outfit_gen_id,
+            generation_id=explicit_outfit_gen_id,
             public_app_base=pub,
             token_factory=create_generation_image_access_token,
         )
         if not outfit_url:
             raise RuntimeError("Не удалось подготовить URL снимка наряда")
         ref_images.append(outfit_url)
+        n_outfit = 1
+    elif auto_outfit_from_first_frame and ff_url:
+        ref_images.append(ff_url)
         n_outfit = 1
 
     if len(ref_images) > MAX_SEEDANCE_REFERENCE_IMAGES:

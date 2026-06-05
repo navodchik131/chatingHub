@@ -568,26 +568,31 @@ def _seedance_image_tag_range(
     parts: list[str] = []
     if n_start_frame > 0:
         parts.append(
-            "@Image1 = approved opening still at t=0 (pose, wardrobe, lighting, framing, environment — "
-            "NOT the primary face/body identity source)"
+            "@Image1 = approved opening still at t=0 (pose, wardrobe, garments, lighting, framing, environment — "
+            "wardrobe authority at t=0; NOT the primary face/body identity source)"
         )
     if n_model > 0:
         start_idx = 1 + n_start_frame
         end_idx = start_idx + n_model - 1
         if n_model == 1:
             parts.append(
-                f"@Image{start_idx} = sole character identity source — face, body proportions, skin tone, "
-                "and hair MUST strictly match this reference in the API; do not catalog facial identity in prose"
+                f"@Image{start_idx} = character identity ONLY — face, body proportions, skin tone, "
+                "and hair MUST strictly match; IGNORE any clothing on this sheet; "
+                "do not catalog facial identity in prose"
             )
         else:
             parts.append(
-                f"@Image{start_idx}–@Image{end_idx} = same character identity across model reference sheet(s); "
-                "face, body, skin tone, and hair MUST strictly match these tags — "
+                f"@Image{start_idx}–@Image{end_idx} = character identity ONLY across model reference sheet(s); "
+                "face, body, skin tone, and hair MUST strictly match — "
+                "IGNORE all garments/clothing on these sheets; "
                 "never copy the @Video1 actor's face or identity"
             )
     if n_outfit > 0:
         idx = 1 + n_start_frame + n_model
-        parts.append(f"@Image{idx} = outfit / garment reference (match clothing when describing wardrobe)")
+        parts.append(
+            f"@Image{idx} = wardrobe / garment authority for the full clip "
+            "(match clothing exactly; overrides model-sheet outfits)"
+        )
     return "; ".join(parts)
 
 
@@ -665,7 +670,8 @@ async def grok_expand_seedance_t2v_prompt(
         "(never restate them in long prose, but DO state they are locked to those tags).\n"
         "4) If @Video1 exists, use it ONLY for motion/choreography/timing — "
         "explicitly forbid copying the reference video actor's face, skin, hair, or body identity.\n"
-        "5) Wardrobe at t=0 comes from @Image1 and USER_BRIEF; persona binding is strict via model @Image tags.\n"
+        "5) Wardrobe for the full clip comes from the outfit @Image tag when present, else @Image1 and USER_BRIEF; "
+        "never copy clothing from model identity @Image tags.\n"
         "6) Include camera, lighting, mood, environment, wardrobe, and body choreography with director-level detail; "
         "keep one continuous scene for the clip duration.\n"
         "7) Do not invent extra @Image or @Video tags beyond the ranges given.\n"
