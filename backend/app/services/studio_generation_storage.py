@@ -178,6 +178,23 @@ def _ext_and_media_from_content_type(ct_header: str | None) -> tuple[str, str]:
     return ".png", "image/png"
 
 
+async def _apply_ai_metadata_strip_if_needed(
+    data: bytes,
+    ext: str,
+    media: str,
+) -> tuple[bytes, str, str]:
+    if not (media or "").startswith("image/"):
+        return data, ext, media
+    from app.services.studio_ai_metadata_strip import strip_ai_metadata_from_image_bytes
+
+    stripped, did_strip = await anyio.to_thread.run_sync(
+        partial(strip_ai_metadata_from_image_bytes, data, ext=ext)
+    )
+    if did_strip:
+        return stripped, ext, media
+    return data, ext, media
+
+
 async def _apply_phone_export_if_needed(
     session: AsyncSession,
     *,
@@ -247,6 +264,7 @@ async def _write_generation_file(
         return False
 
     ext, media = _ext_and_media_from_content_type(content_type_header)
+    data, ext, media = await _apply_ai_metadata_strip_if_needed(data, ext, media)
     exif_cam = normalize_exif_camera(getattr(row, "exif_camera", None))
     data, ext, media = await _apply_phone_export_if_needed(
         session,

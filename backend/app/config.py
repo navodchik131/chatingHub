@@ -164,6 +164,8 @@ class Settings(BaseSettings):
     # Фоновый догруз архива для записей provider_ready без файла на диске
     studio_archive_retry_interval_seconds: int = Field(default=300, ge=60, le=3600)
     studio_archive_retry_batch_size: int = Field(default=20, ge=1, le=100)
+    # Перед phone EXIF: снять C2PA / XMP «Made with AI» / AI EXIF (remove-ai-watermarks, CPU).
+    studio_strip_ai_metadata_enabled: bool = Field(default=True)
     studio_generation_stale_processing_hours: int = Field(default=48, ge=1, le=96)
     # Опрос Seedance / video на бэкенде: 800 × 3 с ≈ 40 мин (клиент не долбит API).
     wavespeed_video_max_polls: int = Field(default=800, ge=60, le=1200)
