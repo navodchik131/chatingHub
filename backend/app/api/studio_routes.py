@@ -4196,7 +4196,6 @@ async def _studio_job_execute_motion_render_video(
     n_outfit = 0
     outfit_gen_id: int | None = None
     explicit_outfit_gen_id: int | None = None
-    auto_outfit_from_first_frame = False
     first_frame_gen_id: int | None = None
     first_frame_bytes: bytes | None = None
     first_frame_media = "image/jpeg"
@@ -4232,18 +4231,14 @@ async def _studio_job_execute_motion_render_video(
         except (TypeError, ValueError):
             outfit_gen_id = None
     if outfit_gen_id is not None:
-        if first_frame_gen_id is not None and outfit_gen_id == first_frame_gen_id:
-            auto_outfit_from_first_frame = True
-        else:
+        if first_frame_gen_id is None or outfit_gen_id != first_frame_gen_id:
             explicit_outfit_gen_id = outfit_gen_id
             row_outfit = await session.get(StudioGeneration, explicit_outfit_gen_id)
             if not row_outfit or row_outfit.user_id != oid:
                 raise RuntimeError("Снимок наряда (outfit) не найден")
             await assert_studio_generation_access(session, user, row_outfit.studio_model_id)
-    elif first_frame_gen_id is not None:
-        auto_outfit_from_first_frame = True
 
-    will_reserve_outfit = explicit_outfit_gen_id is not None or auto_outfit_from_first_frame
+    will_reserve_outfit = explicit_outfit_gen_id is not None
     reserved = n_start + (1 if will_reserve_outfit else 0)
     max_model_slots = max(0, MAX_SEEDANCE_REFERENCE_IMAGES - reserved)
     model_imgs = imgs_t2v[:max_model_slots]
@@ -4267,9 +4262,6 @@ async def _studio_job_execute_motion_render_video(
         if not outfit_url:
             raise RuntimeError("Не удалось подготовить URL снимка наряда")
         ref_images.append(outfit_url)
-        n_outfit = 1
-    elif auto_outfit_from_first_frame and ff_url:
-        ref_images.append(ff_url)
         n_outfit = 1
 
     if len(ref_images) > MAX_SEEDANCE_REFERENCE_IMAGES:
