@@ -32,8 +32,11 @@ _TIMELINE_SYSTEM_EN = (
 
 # Shared guard for step2 + Seedance expand (video APIs flag detailed face/identity prose).
 _VIDEO_IDENTITY_GUARD_EN = (
-    "CONTENT_SAFETY (video provider): Keep prose neutral — motion, camera, lighting, wardrobe, environment. "
-    "Character consistency comes from @Image reference tags; do not write long appearance or biometric catalogs."
+    "CONTENT_SAFETY (video provider): Do NOT write detailed facial identity in prose — "
+    "no eye color, lip shape, cheekbones, ethnicity, age, makeup catalog, skin texture, pores, "
+    "scars/tattoos on face, or distinctive biometric lists. Identity is locked via reference images "
+    "(@Image tags) and the first-frame still; text may only use short neutral face-MOTION tokens "
+    "(blink, brow lift, lips part) without describing who the person is."
 )
 
 
@@ -562,19 +565,26 @@ def _seedance_image_tag_range(
 ) -> str:
     parts: list[str] = []
     if n_start_frame > 0:
-        parts.append("@Image1 = opening still at t=0 (pose, scene, lighting, framing)")
+        parts.append(
+            "@Image1 = approved opening still at t=0 (pose, wardrobe, lighting, framing, environment — "
+            "NOT the primary face/body identity source)"
+        )
     if n_model > 0:
         start_idx = 1 + n_start_frame
         end_idx = start_idx + n_model - 1
         if n_model == 1:
-            parts.append(f"@Image{start_idx} = character reference sheet")
+            parts.append(
+                f"@Image{start_idx} = character identity via reference sheet(s) — bind face/body/hair in the API; "
+                "do not catalog facial identity in prompt prose"
+            )
         else:
             parts.append(
-                f"@Image{start_idx}–@Image{end_idx} = same character across model reference sheets"
+                f"@Image{start_idx}–@Image{end_idx} = same character identity across model reference sheet(s); "
+                "bind face/body/hair via tags — never describe the @Video1 actor's face in text"
             )
     if n_outfit > 0:
         idx = 1 + n_start_frame + n_model
-        parts.append(f"@Image{idx} = wardrobe reference for the clip")
+        parts.append(f"@Image{idx} = outfit / garment reference (match clothing when describing wardrobe)")
     return "; ".join(parts)
 
 
@@ -617,7 +627,7 @@ async def grok_expand_seedance_t2v_prompt(
             )
         )
     if n_motion_videos > 0:
-        ref_lines.append("@Video1 = motion and pacing reference (timing, gestures, choreography)")
+        ref_lines.append("@Video1 = motion / pacing / body dynamics reference (follow timing and gestures)")
     ref_block = "\n".join(ref_lines) if ref_lines else "No reference tags (text-only scene)."
 
     profile = _compact_model_profile_for_video_grok((model_profile_text or "").strip())
@@ -644,15 +654,15 @@ async def grok_expand_seedance_t2v_prompt(
         "RULES:\n"
         "1) Output ONLY the final video prompt text — no preamble, no markdown fences.\n"
         f"2) Hard limit: entire output MUST be at most {lim} characters.\n"
-        "3) Use @Image tags exactly as assigned above: @Image1 for opening still; "
-        "character via model @Image tags.\n"
-        "4) If @Video1 exists, reference it for motion/choreography only.\n"
-        "5) Wardrobe: outfit @Image tag when present, else @Image1 and USER_BRIEF.\n"
+        "3) Use @Image tags exactly as assigned above: @Image1 for opening still only; "
+        "identity via model @Image tags (never restate face/body/hair in long prose).\n"
+        "4) If @Video1 exists, reference it for motion/choreography; do not describe the reference video's original actor identity.\n"
+        "5) Wardrobe at t=0 comes from @Image1 and USER_BRIEF; persona binding is implicit via @Image identity tags.\n"
         "6) Include camera, lighting, mood, environment, wardrobe, and body choreography with director-level detail; "
         "keep one continuous scene for the clip duration.\n"
         "7) Do not invent extra @Image or @Video tags beyond the ranges given.\n"
-        "8) At most one short phrase like \"same character as model references\" — no appearance catalogs.\n"
-        "9) If USER_BRIEF or MOTION_NOTES contain `[t s]` timelines, keep timing; drop appearance-only lines.\n"
+        "8) Never output detailed facial identity lists — at most one short phrase like \"same person as model references\".\n"
+        "9) If USER_BRIEF or MOTION_NOTES contain `[t s]` timelines, keep timing but compress any face lines to motion-only tokens.\n"
     )
 
     out = await chat_completion_openai_compatible_text(

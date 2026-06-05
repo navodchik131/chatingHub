@@ -6110,7 +6110,7 @@ export default function App() {
                   <h3>Seedance</h3>
                   <StudioArchiveThumbPicker
                     label="Наряд (опционально)"
-                    hint="По умолчанию одежда с первого кадра (@Image1). Укажите другой снимок — только если нужен иной наряд"
+                    hint="Доп. референс одежды"
                     items={studioImagePickerArchive}
                     value={motionOutfitArchiveId}
                     onChange={(id) => setMotionOutfitArchiveId(id)}
