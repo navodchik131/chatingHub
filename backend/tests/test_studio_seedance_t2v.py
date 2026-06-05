@@ -18,6 +18,8 @@ def test_assemble_with_start_frame():
     assert "@Image2" in p
     assert "opening still" in p.lower() or "t=0" in p.lower()
     assert "@Video1" in p
+    assert "strictly from @Image2" in p
+    assert "do not copy face" in p.lower()
 
 
 def test_assemble_prompt_includes_image_tags():

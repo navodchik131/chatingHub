@@ -34,9 +34,11 @@ _TIMELINE_SYSTEM_EN = (
 _VIDEO_IDENTITY_GUARD_EN = (
     "CONTENT_SAFETY (video provider): Do NOT write detailed facial identity in prose — "
     "no eye color, lip shape, cheekbones, ethnicity, age, makeup catalog, skin texture, pores, "
-    "scars/tattoos on face, or distinctive biometric lists. Identity is locked via reference images "
-    "(@Image tags) and the first-frame still; text may only use short neutral face-MOTION tokens "
-    "(blink, brow lift, lips part) without describing who the person is."
+    "scars/tattoos on face, or distinctive biometric lists. "
+    "Face, skin tone, body proportions, and hair MUST bind strictly to model @Image tags only — "
+    "never to @Video1 or any reference video actor. "
+    "Text may only use short neutral face-MOTION tokens (blink, brow lift, lips part) "
+    "without describing who the person is."
 )
 
 
@@ -574,13 +576,14 @@ def _seedance_image_tag_range(
         end_idx = start_idx + n_model - 1
         if n_model == 1:
             parts.append(
-                f"@Image{start_idx} = character identity via reference sheet(s) — bind face/body/hair in the API; "
-                "do not catalog facial identity in prompt prose"
+                f"@Image{start_idx} = sole character identity source — face, body proportions, skin tone, "
+                "and hair MUST strictly match this reference in the API; do not catalog facial identity in prose"
             )
         else:
             parts.append(
                 f"@Image{start_idx}–@Image{end_idx} = same character identity across model reference sheet(s); "
-                "bind face/body/hair via tags — never describe the @Video1 actor's face in text"
+                "face, body, skin tone, and hair MUST strictly match these tags — "
+                "never copy the @Video1 actor's face or identity"
             )
     if n_outfit > 0:
         idx = 1 + n_start_frame + n_model
@@ -627,7 +630,10 @@ async def grok_expand_seedance_t2v_prompt(
             )
         )
     if n_motion_videos > 0:
-        ref_lines.append("@Video1 = motion / pacing / body dynamics reference (follow timing and gestures)")
+        ref_lines.append(
+            "@Video1 = motion / pacing / body dynamics ONLY (timing, gestures, choreography) — "
+            "NEVER face, skin tone, hair, or body identity"
+        )
     ref_block = "\n".join(ref_lines) if ref_lines else "No reference tags (text-only scene)."
 
     profile = _compact_model_profile_for_video_grok((model_profile_text or "").strip())
@@ -655,9 +661,11 @@ async def grok_expand_seedance_t2v_prompt(
         "1) Output ONLY the final video prompt text — no preamble, no markdown fences.\n"
         f"2) Hard limit: entire output MUST be at most {lim} characters.\n"
         "3) Use @Image tags exactly as assigned above: @Image1 for opening still only; "
-        "identity via model @Image tags (never restate face/body/hair in long prose).\n"
-        "4) If @Video1 exists, reference it for motion/choreography; do not describe the reference video's original actor identity.\n"
-        "5) Wardrobe at t=0 comes from @Image1 and USER_BRIEF; persona binding is implicit via @Image identity tags.\n"
+        "face, body proportions, skin tone, and hair MUST strictly come from model @Image tags "
+        "(never restate them in long prose, but DO state they are locked to those tags).\n"
+        "4) If @Video1 exists, use it ONLY for motion/choreography/timing — "
+        "explicitly forbid copying the reference video actor's face, skin, hair, or body identity.\n"
+        "5) Wardrobe at t=0 comes from @Image1 and USER_BRIEF; persona binding is strict via model @Image tags.\n"
         "6) Include camera, lighting, mood, environment, wardrobe, and body choreography with director-level detail; "
         "keep one continuous scene for the clip duration.\n"
         "7) Do not invent extra @Image or @Video tags beyond the ranges given.\n"

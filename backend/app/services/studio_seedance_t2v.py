@@ -110,8 +110,8 @@ def assemble_seedance_t2v_prompt(
         else:
             tags = f"@Image{start_idx}–@Image{end_idx}"
         parts.append(
-            f"Same person throughout — identity only from {tags} (face/body/hair via reference images; "
-            "do not restate facial identity or skin details in this text). "
+            f"Same person throughout — face, body proportions, skin tone, and hair strictly from {tags}. "
+            "Never adopt the reference video actor's face or identity. "
             "Reference sheets may show neutral base clothing; dress the character as in @Image1 or USER_BRIEF "
             "unless an outfit reference image is specified."
         )
@@ -122,7 +122,10 @@ def assemble_seedance_t2v_prompt(
             parts.append(f"Outfit and garment details: match @Image{idx}.")
     if n_motion_videos > 0:
         vtags = ", ".join(f"@Video{i}" for i in range(1, n_motion_videos + 1))
-        parts.append(f"Motion, pacing, and body dynamics: follow {vtags}.")
+        parts.append(
+            f"Motion, pacing, and body dynamics: follow {vtags} for choreography and timing ONLY. "
+            "Do NOT copy face, skin tone, hair, or body identity from any reference video."
+        )
     if motion_summary and motion_summary.strip():
         parts.append(f"Additional motion notes:\n{motion_summary.strip()}")
     up = (user_prompt or "").strip()
