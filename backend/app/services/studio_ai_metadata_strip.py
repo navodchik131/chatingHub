@@ -75,3 +75,71 @@ def strip_ai_metadata_from_image_bytes(
                     p.unlink(missing_ok=True)
                 except OSError:
                     pass
+
+
+def _encode_cv_image(img, *, ext: str) -> bytes | None:
+    import cv2
+
+    norm = _normalize_image_ext(ext)
+    if norm in (".jpg", ".jpeg"):
+        ok, buf = cv2.imencode(
+            ".jpg",
+            img,
+            [int(cv2.IMWRITE_JPEG_QUALITY), int(settings.studio_phone_export_jpeg_quality)],
+        )
+    elif norm == ".webp":
+        ok, buf = cv2.imencode(".webp", img)
+    else:
+        ok, buf = cv2.imencode(".png", img)
+    if not ok or buf is None:
+        return None
+    return buf.tobytes()
+
+
+def apply_analog_humanize_to_image_bytes(
+    data: bytes,
+    *,
+    ext: str,
+) -> tuple[bytes, bool]:
+    """
+    Film grain + лёгкая хроматическая аберрация (remove-ai-watermarks humanizer).
+    Возвращает (байты, applied). При ошибке — исходные байты.
+    """
+    if not settings.studio_analog_humanize_enabled:
+        return data, False
+    grain = float(settings.studio_analog_humanize_grain)
+    if grain <= 0.0 and int(settings.studio_analog_humanize_chromatic_shift) <= 0:
+        return data, False
+    if not data or len(data) < 32:
+        return data, False
+
+    norm_ext = _normalize_image_ext(ext)
+    if norm_ext not in _IMAGE_EXTS:
+        return data, False
+
+    try:
+        import cv2
+        import numpy as np
+        from remove_ai_watermarks.humanizer import apply_analog_humanizer
+    except ImportError:
+        log.warning("remove-ai-watermarks/cv2 not available; skip analog humanize")
+        return data, False
+
+    try:
+        arr = np.frombuffer(data, dtype=np.uint8)
+        img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+        if img is None:
+            return data, False
+        out = apply_analog_humanizer(
+            img,
+            grain_intensity=grain,
+            chromatic_shift=int(settings.studio_analog_humanize_chromatic_shift),
+        )
+        encoded = _encode_cv_image(out, ext=norm_ext)
+        if encoded and len(encoded) <= 25 * 1024 * 1024:
+            log.info("studio: analog humanize applied (%s bytes)", len(encoded))
+            return encoded, True
+        return data, False
+    except Exception as e:
+        log.warning("studio: analog humanize failed: %s", e)
+        return data, False

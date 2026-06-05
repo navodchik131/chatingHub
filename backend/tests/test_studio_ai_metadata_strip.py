@@ -4,7 +4,10 @@ import pytest
 from PIL import Image
 from PIL.PngImagePlugin import PngInfo
 
-from app.services.studio_ai_metadata_strip import strip_ai_metadata_from_image_bytes
+from app.services.studio_ai_metadata_strip import (
+    apply_analog_humanize_to_image_bytes,
+    strip_ai_metadata_from_image_bytes,
+)
 
 
 def _png_with_sd_parameters() -> bytes:
@@ -26,6 +29,16 @@ def test_strip_removes_sd_parameters_chunk() -> None:
     assert cleaned != raw
     with Image.open(BytesIO(cleaned)) as img:
         assert "parameters" not in img.info
+
+
+def test_analog_humanize_changes_image() -> None:
+    buf = BytesIO()
+    Image.new("RGB", (32, 32), color=(90, 120, 150)).save(buf, format="PNG")
+    raw = buf.getvalue()
+    out, applied = apply_analog_humanize_to_image_bytes(raw, ext=".png")
+    assert applied is True
+    assert out != raw
+    assert len(out) > 64
 
 
 def test_strip_skips_clean_png() -> None:

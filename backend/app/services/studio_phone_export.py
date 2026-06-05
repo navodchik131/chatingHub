@@ -8,6 +8,8 @@ from typing import Any
 import piexif
 from PIL import Image, ImageFilter
 
+from app.config import settings
+
 log = logging.getLogger(__name__)
 
 
@@ -49,7 +51,7 @@ def _add_grain_sharpen(rgb: Image.Image, sigma: float) -> Image.Image:
     noise = np.random.default_rng().standard_normal(arr.shape, dtype=np.float64) * float(sigma)
     arr = np.clip(arr + noise.astype(np.float32), 0.0, 255.0).astype(np.uint8)
     im = Image.fromarray(arr, "RGB")
-    return im.filter(ImageFilter.UnsharpMask(radius=0.75, percent=108, threshold=2))
+    return im.filter(ImageFilter.UnsharpMask(radius=0.8, percent=100, threshold=3))
 
 
 def apply_phone_export_to_jpeg(
@@ -74,14 +76,16 @@ def apply_phone_export_to_jpeg(
         log.warning("phone export: decode failed: %s", e)
         return None
 
-    sigma = float(preset.get("grain_sigma") or 3.6)
+    base_sigma = float(preset.get("grain_sigma") or 3.6)
+    sigma = base_sigma * float(settings.studio_phone_export_grain_multiplier)
+    jpeg_q = int(settings.studio_phone_export_jpeg_quality)
     try:
         processed = _add_grain_sharpen(rgb, sigma)
         out_io = BytesIO()
         processed.save(
             out_io,
             format="JPEG",
-            quality=92,
+            quality=jpeg_q,
             subsampling=2,
             optimize=True,
         )
