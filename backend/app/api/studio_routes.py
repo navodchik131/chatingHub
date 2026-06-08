@@ -90,7 +90,6 @@ from app.services.crypto_secret import decrypt_secret
 from app.services.studio_aspect import (
     aspect_presets_public,
     aspect_ratio_for_seedance_i2v,
-    aspect_ratio_for_seedance_video_edit,
     normalize_aspect_key,
     wavespeed_size_string,
 )
@@ -188,7 +187,6 @@ from app.services.studio_motion_video import (
 )
 from app.services.studio_seedance_t2v import (
     MAX_SEEDANCE_REFERENCE_IMAGES,
-    assemble_seedance_video_edit_prompt,
     build_seedance_t2v_prompt,
     filter_model_images_for_seedance_video,
     generation_still_public_url,
@@ -207,12 +205,10 @@ from app.services.wavespeed_client import (
     gpt_image_2_edit_image_url,
     nano_banana_pro_edit_image_url,
     seedance_20_text_to_video_url,
-    seedance_studio_video_edit_video_url,
     seedream_v45_bootstrap_edit_image_url,
     seedream_v45_edit_image_url,
     wavespeed_image_upscale_url,
     wavespeed_is_sensitive_content_error,
-    wavespeed_is_video_poll_timeout_error,
     z_image_turbo_inpaint_image_url,
 )
 
@@ -4291,21 +4287,9 @@ async def _studio_job_execute_motion_render_video(
     )
     billing = await ensure_can_consume_credits(session, user, cost)
 
-    seedance_attempts: list[dict[str, Any]] = []
-    if motion_vid_url and ff_url:
-        seedance_attempts.append(
-            {
-                "label": "video_edit_identity",
-                "provider": "video_edit",
-                "minimal": False,
-                "include_body": True,
-            }
-        )
-    seedance_attempts.extend(
-        [
+    seedance_attempts: list[dict[str, Any]] = [
         {
             "label": "identity_video_body",
-            "provider": "t2v",
             "minimal": False,
             "include_video": True,
             "include_body": True,
@@ -4313,7 +4297,6 @@ async def _studio_job_execute_motion_render_video(
         },
         {
             "label": "identity_video",
-            "provider": "t2v",
             "minimal": False,
             "include_video": True,
             "include_body": False,
@@ -4321,7 +4304,6 @@ async def _studio_job_execute_motion_render_video(
         },
         {
             "label": "identity_no_video",
-            "provider": "t2v",
             "minimal": False,
             "include_video": False,
             "include_body": False,
@@ -4329,14 +4311,12 @@ async def _studio_job_execute_motion_render_video(
         },
         {
             "label": "turnaround_only",
-            "provider": "t2v",
             "minimal": True,
             "include_video": False,
             "include_body": False,
             "force_template": True,
         },
-        ]
-    )
+    ]
 
     msg: str | None = None
     video_url: str | None = None
@@ -4346,10 +4326,7 @@ async def _studio_job_execute_motion_render_video(
     ref_videos: list[str] = []
     seedance_attempt_label = seedance_attempts[0]["label"]
 
-    ar_ve = aspect_ratio_for_seedance_video_edit(output_aspect)
-
     for attempt in seedance_attempts:
-        provider = str(attempt.get("provider") or "t2v")
         model_imgs = filter_model_images_for_seedance_video(
             list(sm.images),
             minimal=bool(attempt.get("minimal")),
@@ -4369,7 +4346,7 @@ async def _studio_job_execute_motion_render_video(
         )
         n_model = len(model_imgs)
 
-        if outfit_gen_id is not None and provider == "t2v":
+        if outfit_gen_id is not None:
             outfit_url = generation_still_public_url(
                 owner_id=oid,
                 generation_id=outfit_gen_id,
@@ -4533,11 +4510,7 @@ async def _studio_job_execute_motion_render_video(
                 "first_frame_generation_id": first_frame_gen_id,
                 "outfit_generation_id": outfit_gen_id,
                 "motion_video_file_id": mv_id or None,
-                "motion_video_provider": (
-                    "seedance_video_edit"
-                    if seedance_attempt_label == "video_edit_identity"
-                    else "seedance_t2v"
-                ),
+                "motion_video_provider": "seedance_t2v",
                 "seedance_20_t2v_path": settings.wavespeed_seedance_20_t2v_path,
                 "seedance_20_t2v_resolution": settings.wavespeed_seedance_20_t2v_resolution,
                 "seedance_20_t2v_duration": ds_effective,
