@@ -367,6 +367,41 @@ async def build_seedance_t2v_prompt(
     )
 
 
+def assemble_seedance_video_edit_prompt(
+    user_brief: str,
+    *,
+    n_ref_images: int,
+    motion_summary: str | None = None,
+    negative: str | None = None,
+) -> str:
+    """
+    Промпт для Seedance Video-Edit: исходное видео = motion, reference_images = модель.
+    Префикс «Edit the input video.» WaveSpeed добавляет сам.
+    """
+    parts = [
+        "Replace the performer with the character from the reference images.",
+        "Keep exact motion, choreography, camera movement, pacing, background, and lighting from the input video.",
+        "Face, body, and hair must match the reference images in every frame — never keep the original video actor.",
+    ]
+    if n_ref_images > 0:
+        if n_ref_images == 1:
+            parts.append("Identity: reference image 1 is the approved model look.")
+        else:
+            parts.append(
+                f"Identity: reference images 1–{n_ref_images}; image 1 is the approved opening still with the target model."
+            )
+    safe_motion = prepare_motion_notes_for_seedance(motion_summary)
+    if safe_motion:
+        parts.append(f"Motion notes:\n{safe_motion}")
+    up = (user_brief or "").strip()
+    if up:
+        parts.append(up)
+    neg = (negative or "").strip()
+    if neg:
+        parts.append(f"Avoid: {neg}")
+    return "\n\n".join(parts)
+
+
 def model_has_turnaround_sheet(model: UserStudioModel | None) -> bool:
     if model is None:
         return False

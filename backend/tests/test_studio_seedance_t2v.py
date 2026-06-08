@@ -2,6 +2,7 @@ from app.db.models import UserStudioModelImage
 from app.services.studio_seedance_t2v import (
     append_seedance_identity_lock,
     assemble_seedance_t2v_prompt,
+    assemble_seedance_video_edit_prompt,
     filter_model_images_for_seedance_video,
     prepare_motion_notes_for_seedance,
     seedance_model_identity_tag_expr,
@@ -115,6 +116,18 @@ def test_assemble_includes_identity_lock_with_video():
     assert "@Image2" in p
     assert "@Video1" in p
     assert "not performer look" in p.lower() or "never copy" in p.lower()
+
+
+def test_video_edit_prompt_swap_identity():
+    p = assemble_seedance_video_edit_prompt(
+        "City promenade scene.",
+        n_ref_images=3,
+        motion_summary="[0.0s] fist raised",
+    )
+    assert "replace the performer" in p.lower()
+    assert "reference images" in p.lower()
+    assert "original video actor" in p.lower()
+    assert "city promenade" in p.lower()
 
 
 def test_filter_model_images_for_video_excludes_body():
