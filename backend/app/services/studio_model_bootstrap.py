@@ -39,6 +39,11 @@ def resolve_face_merge_prompt(user_prompt: str | None) -> str:
     return p if p else DEFAULT_FACE_MERGE_PROMPT
 
 
+def resolve_model_sheet_prompt(user_prompt: str | None) -> str:
+    p = (user_prompt or "").strip()
+    return p if p else DEFAULT_MODEL_SHEET_PROMPT
+
+
 def _guess_upload_filename(content_type: str, label: str) -> str:
     ct = (content_type or "").lower()
     ext = "png" if "png" in ct else "webp" if "webp" in ct else "jpg"

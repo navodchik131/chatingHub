@@ -1,7 +1,9 @@
 from app.services.studio_model_bootstrap import (
     DEFAULT_FACE_MERGE_PROMPT,
+    DEFAULT_MODEL_SHEET_PROMPT,
     humanize_wavespeed_provider_error,
     resolve_face_merge_prompt,
+    resolve_model_sheet_prompt,
 )
 from app.services.wavespeed_client import _wavespeed_task_failed_error
 
@@ -14,6 +16,16 @@ def test_resolve_face_merge_prompt_empty_uses_default():
 def test_resolve_face_merge_prompt_custom():
     custom = "My custom merge prompt"
     assert resolve_face_merge_prompt(custom) == custom
+
+
+def test_resolve_model_sheet_prompt_empty_uses_default():
+    assert resolve_model_sheet_prompt("") == DEFAULT_MODEL_SHEET_PROMPT
+    assert resolve_model_sheet_prompt("   ") == DEFAULT_MODEL_SHEET_PROMPT
+
+
+def test_resolve_model_sheet_prompt_custom():
+    custom = "Своя раскладка на белом фоне"
+    assert resolve_model_sheet_prompt(custom) == custom
 
 
 def test_task_failed_error_beats_envelope_credits_message():

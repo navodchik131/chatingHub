@@ -9,6 +9,12 @@ import type { StudioArchiveItem } from '../../studioArchive'
 const DEFAULT_FACE_MERGE_HINT =
   'Integrate a face into an existing scene. Substitute the face in the reference image with the face from the donor image…'
 
+const DEFAULT_MODEL_SHEET_PROMPT =
+  'Сделай на нейтральном сером фоне раскладку персонажа с картинки, треть раскладки слева — ' +
+  'крупный план лица, остальное — крупные планы вид справа, вид слева, вид сзади. ' +
+  'В полный рост спереди и в полный рост сзади. ' +
+  'Одежда - черный топ с глубоким декольте черные спортивные шорты из облегающего материала'
+
 export type BootstrapAspectOption = { value: string; label: string; title?: string }
 
 type BootstrapResult = {
@@ -61,6 +67,7 @@ export function StudioModelBootstrapPanel({
   const [sheetPreview, setSheetPreview] = useState<string | null>(null)
   const [sheetSource, setSheetSource] = useState<SheetSource | null>(null)
   const [sheetArchiveId, setSheetArchiveId] = useState<number | null>(null)
+  const [sheetPrompt, setSheetPrompt] = useState(DEFAULT_MODEL_SHEET_PROMPT)
   const sheetInFlightRef = useRef(false)
 
   useEffect(() => {
@@ -169,6 +176,8 @@ export function StudioModelBootstrapPanel({
         return
       }
 
+      fd.append('prompt', sheetPrompt.trim())
+
       const res = await postStudioJobAndWait<BootstrapResult>(
         '/api/studio/model-bootstrap/sheet',
         { method: 'POST', body: fd, timeoutMs: 600_000 },
@@ -191,6 +200,7 @@ export function StudioModelBootstrapPanel({
     sheetFile,
     sheetArchiveId,
     mergeResult?.generation_id,
+    sheetPrompt,
     onError,
     onArchiveRefresh,
   ])
@@ -336,6 +346,20 @@ export function StudioModelBootstrapPanel({
             </button>
           ) : null}
         </div>
+
+        <label className="studio-label studio-bootstrap__prompt">
+          <span>Промпт развёртки</span>
+          <span className="muted small studio-bootstrap__prompt-hint">
+            Стандартный промпт для GPT Image 2 Edit — можно отредактировать перед генерацией.
+            Если очистить поле, снова подставится значение по умолчанию.
+          </span>
+          <textarea
+            className="studio-textarea studio-bootstrap__textarea"
+            rows={5}
+            value={sheetPrompt}
+            onChange={(e) => setSheetPrompt(e.target.value)}
+          />
+        </label>
 
         <div className="studio-bootstrap__actions">
           <button

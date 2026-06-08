@@ -193,10 +193,10 @@ from app.services.studio_seedance_t2v import (
     sort_model_images_for_seedance_t2v,
 )
 from app.services.studio_model_bootstrap import (
-    DEFAULT_MODEL_SHEET_PROMPT,
     MODEL_SHEET_ASPECT_KEY,
     humanize_wavespeed_provider_error,
     resolve_face_merge_prompt,
+    resolve_model_sheet_prompt,
     wavespeed_image_url_for_bootstrap,
     wavespeed_url_for_bootstrap_generation,
 )
@@ -4531,6 +4531,7 @@ async def api_model_bootstrap_sheet(
     request: Request,
     source_generation_id: str = Form(""),
     image: UploadFile | None = File(None),
+    prompt: str = Form(""),
     model_id: str | None = Form(None),
     session: AsyncSession = Depends(get_session),
     user: User = Depends(get_current_user),
@@ -4575,7 +4576,7 @@ async def api_model_bootstrap_sheet(
 
     mid = _parse_optional_model_id(model_id)
     aspect_key = MODEL_SHEET_ASPECT_KEY
-    resolved_prompt = DEFAULT_MODEL_SHEET_PROMPT
+    resolved_prompt = resolve_model_sheet_prompt(prompt)
 
     if gen_id is not None:
         dedupe_key = f"sheet:gen:{gen_id}"
@@ -4751,7 +4752,7 @@ async def _studio_job_execute_model_bootstrap_sheet(
     _require_studio_subscription(user, sub_b, credits_balance=_credits)
     ws_key = studio_wavespeed_api_key(plan=plan, ws_row=ws_row, owner_subscription=sub_b)
 
-    prompt = DEFAULT_MODEL_SHEET_PROMPT
+    prompt = resolve_model_sheet_prompt(str(p.get("prompt") or ""))
     aspect_key = MODEL_SHEET_ASPECT_KEY
     mid = p.get("model_id")
     if mid is not None:
