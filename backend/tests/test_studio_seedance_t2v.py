@@ -1,8 +1,10 @@
 from app.db.models import UserStudioModelImage
 from app.services.studio_seedance_t2v import (
+    append_seedance_identity_lock,
     assemble_seedance_t2v_prompt,
     filter_model_images_for_seedance_video,
     prepare_motion_notes_for_seedance,
+    seedance_model_identity_tag_expr,
     soften_seedance_provider_prompt,
     truncate_seedance_t2v_prompt,
 )
@@ -27,7 +29,7 @@ def test_assemble_with_start_frame():
     assert "@Image2" in p
     assert "opening still" in p.lower() or "t=0" in p.lower()
     assert "@Video1" in p
-    assert "same character" in p.lower()
+    assert "same person" in p.lower()
     assert "facial identity" not in p.lower()
     assert "face/body" not in p.lower()
 
@@ -83,6 +85,38 @@ def test_prepare_motion_notes_strips_biometric_lines():
     assert "facial identity" not in out.lower()
 
 
+def test_identity_tag_expr_with_start_frame():
+    assert seedance_model_identity_tag_expr(1, 2) == "@Image2–@Image3"
+    assert seedance_model_identity_tag_expr(0, 1) == "@Image1"
+
+
+def test_append_identity_lock_uses_explicit_image_tags():
+    out = append_seedance_identity_lock(
+        "Cinematic scene.",
+        n_start_frame=1,
+        n_model_images=2,
+        n_motion_videos=1,
+    )
+    assert "@Image2" in out
+    assert "@Image3" in out
+    assert "CHARACTER LOCK" in out
+    assert "@Video1" in out
+    assert "model references" not in out.lower()
+
+
+def test_assemble_includes_identity_lock_with_video():
+    p = assemble_seedance_t2v_prompt(
+        "Dance.",
+        n_start_frame=1,
+        n_model_images=2,
+        n_motion_videos=1,
+    )
+    assert "CHARACTER LOCK" in p
+    assert "@Image2" in p
+    assert "@Video1" in p
+    assert "not performer look" in p.lower() or "never copy" in p.lower()
+
+
 def test_filter_model_images_for_video_excludes_body():
     imgs = [
         UserStudioModelImage(id=1, image_kind="body"),
@@ -94,6 +128,9 @@ def test_filter_model_images_for_video_excludes_body():
     kinds = [(im.image_kind or "") for im in out]
     assert kinds == ["turnaround", "face"]
     assert filter_model_images_for_seedance_video(imgs, minimal=True)[0].image_kind == "turnaround"
+    with_body = filter_model_images_for_seedance_video(imgs, include_body=True)
+    assert len(with_body) == 3
+    assert [im.image_kind for im in with_body] == ["turnaround", "face", "body"]
 
 
 def test_wavespeed_sensitive_detector():

@@ -627,7 +627,20 @@ async def grok_expand_seedance_t2v_prompt(
             )
         )
     if n_motion_videos > 0:
-        ref_lines.append("@Video1 = motion / pacing / body dynamics reference (follow timing and gestures)")
+        id_tags = ""
+        if n_model_images > 0:
+            start_idx = 1 + n_start_frame
+            end_idx = start_idx + n_model_images - 1
+            id_tags = (
+                f"@Image{start_idx}"
+                if n_model_images == 1
+                else f"@Image{start_idx}–@Image{end_idx}"
+            )
+        ref_lines.append(
+            "@Video1 = motion / pacing / body dynamics ONLY (timing, gestures, camera — "
+            "NEVER copy the reference video performer's face or body)"
+            + (f"; appearance stays from {id_tags}" if id_tags else "")
+        )
     ref_block = "\n".join(ref_lines) if ref_lines else "No reference tags (text-only scene)."
 
     profile = _compact_model_profile_for_video_grok((model_profile_text or "").strip())
@@ -654,14 +667,17 @@ async def grok_expand_seedance_t2v_prompt(
         "RULES:\n"
         "1) Output ONLY the final video prompt text — no preamble, no markdown fences.\n"
         f"2) Hard limit: entire output MUST be at most {lim} characters.\n"
-        "3) Use @Image tags exactly as assigned above: @Image1 for opening still only; "
-        "identity via model @Image tags (never restate face/body/hair in long prose).\n"
-        "4) If @Video1 exists, reference it for motion/choreography; do not describe the reference video's original actor identity.\n"
-        "5) Wardrobe at t=0 comes from @Image1 and USER_BRIEF; persona binding is implicit via @Image identity tags.\n"
+        "3) Use @Image tags exactly as assigned: @Image1 = opening still only; "
+        "face/body/hair identity ONLY from the model @Image tag range — repeat those @Image numbers "
+        "at least twice in the prompt (never vague \"model references\" without @Image numbers).\n"
+        "4) @Video1 is attached for motion/choreography ONLY — follow its timing and gestures but "
+        "NEVER adopt the reference video performer's face, body, hair, or skin; identity stays on model @Image tags "
+        "for the ENTIRE clip including after 2–3 seconds.\n"
+        "5) Wardrobe at t=0 comes from @Image1 and USER_BRIEF.\n"
         "6) Include camera, lighting, mood, environment, wardrobe, and body choreography with director-level detail; "
         "keep one continuous scene for the clip duration.\n"
         "7) Do not invent extra @Image or @Video tags beyond the ranges given.\n"
-        "8) Never output detailed facial identity lists — at most one short phrase like \"same person as model references\".\n"
+        "8) Never output detailed facial identity lists in prose — bind identity only via explicit @Image tag numbers.\n"
         "9) If USER_BRIEF or MOTION_NOTES contain `[t s]` timelines, keep timing but compress any face lines to motion-only tokens.\n"
     )
 

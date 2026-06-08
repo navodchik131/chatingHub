@@ -4288,9 +4288,34 @@ async def _studio_job_execute_motion_render_video(
     billing = await ensure_can_consume_credits(session, user, cost)
 
     seedance_attempts: list[dict[str, Any]] = [
-        {"label": "identity_video", "minimal": False, "include_video": True, "force_template": False},
-        {"label": "identity_no_video", "minimal": False, "include_video": False, "force_template": True},
-        {"label": "turnaround_only", "minimal": True, "include_video": False, "force_template": True},
+        {
+            "label": "identity_video_body",
+            "minimal": False,
+            "include_video": True,
+            "include_body": True,
+            "force_template": False,
+        },
+        {
+            "label": "identity_video",
+            "minimal": False,
+            "include_video": True,
+            "include_body": False,
+            "force_template": False,
+        },
+        {
+            "label": "identity_no_video",
+            "minimal": False,
+            "include_video": False,
+            "include_body": False,
+            "force_template": True,
+        },
+        {
+            "label": "turnaround_only",
+            "minimal": True,
+            "include_video": False,
+            "include_body": False,
+            "force_template": True,
+        },
     ]
 
     msg: str | None = None
@@ -4305,6 +4330,7 @@ async def _studio_job_execute_motion_render_video(
         model_imgs = filter_model_images_for_seedance_video(
             list(sm.images),
             minimal=bool(attempt["minimal"]),
+            include_body=bool(attempt.get("include_body")),
         )
         ref_images = []
         n_outfit = 0
