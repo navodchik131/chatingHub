@@ -2475,10 +2475,9 @@ async def _studio_job_execute_refine_prompt(
 
     lock_hair_req = _truthy_lock_model_hairstyle(lock_model_hairstyle)
     effective_lock_hairstyle = bool(lock_hair_req) if image_bytes else True
-    if mode_n == "grok_compose":
+    if mode_n in ("grok_compose", "model_scene"):
+        # model_scene: полный набор фото модели + реф-кадр (поза) — точность модели и кадр ≈1:1
         send_pose_to_ws = True
-    elif mode_n == "model_scene":
-        send_pose_to_ws = False
     else:
         send_pose_to_ws = _truthy_send_pose_reference_to_wavespeed(
             send_pose_reference_to_wavespeed

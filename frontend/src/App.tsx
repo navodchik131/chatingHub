@@ -5433,7 +5433,7 @@ export default function App() {
               label="Модель"
               hint={
                 studioMode === 'model_scene'
-                  ? 'Внешность в WaveSpeed; сцена — из референса через Grok'
+                  ? 'Развёртка, тело, лицо — фигура и внешность модели'
                   : studioModeUsesTextOnlyPrompt(studioMode)
                     ? 'Обязательна — только её фото в генерацию'
                     : studioMode === 'face_swap'
@@ -5473,7 +5473,7 @@ export default function App() {
                   studioMode === 'photo_edit'
                     ? 'Или выберите миниатюру выше'
                     : studioMode === 'model_scene'
-                      ? 'Для Grok: поза, свет, кадр (не уходит в WaveSpeed)'
+                      ? 'Якорь кадра: Grok + WaveSpeed (поза, свет, ракурс)'
                       : 'Поза и сцена'
                 }
                 icon="image"
@@ -5493,8 +5493,9 @@ export default function App() {
             )}
             {studioMode === 'model_scene' ? (
               <p className="studio-mode-hint">
-                Референс читает Grok и попадает в текстовый промпт без отсылок к «реф-фото». В
-                WaveSpeed — только снимки модели (развёртка, тело, лицо).
+                Референс: Grok пишет точный бриф по позе и кадру, тот же снимок уходит в WaveSpeed как
+                якорь кадра. В генерацию — полный набор модели (развёртка, тело, лицо): фигура и
+                внешность с модели, кадр максимально близко к референсу.
               </p>
             ) : null}
             {!studioModeUsesTextOnlyPrompt(studioMode) && studioMode !== 'model_scene' ? (

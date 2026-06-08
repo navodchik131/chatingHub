@@ -133,6 +133,26 @@ def test_grok_figure_anchor_from_profile() -> None:
     assert "hourglass" in anchor.lower() or "curvy" in anchor.lower()
 
 
+def test_model_scene_wan_prefix_differs_from_grok_compose() -> None:
+    from app.services.studio_openai import finalize_wavespeed_studio_prompt
+
+    grok = finalize_wavespeed_studio_prompt(
+        "FIGURE_LOCK: curvy hourglass. Mirror selfie on bed.",
+        studio_mode="grok_compose",
+        user_image_first=True,
+        prompt_brief_mode="grok_composed",
+    )
+    main = finalize_wavespeed_studio_prompt(
+        "FIGURE_LOCK: curvy hourglass. Mirror selfie on bed.",
+        studio_mode="model_scene",
+        user_image_first=True,
+        prompt_brief_mode="grok_composed",
+    )
+    assert "MODEL_SCENE" in main
+    assert "MODEL_SCENE" not in grok
+    assert "GROK_SCENE_COMPOSE" in grok
+
+
 def test_grok_compose_pose_ref_json_has_realism_engine_and_no_suffix_negative() -> None:
     positive, neg = build_grok_scene_positive_json(
         "Mirror selfie, nude on bed edge, same pose as reference.",

@@ -77,7 +77,7 @@ export function studioImageGenerateBlockReason(input: StudioGenerateGateInput): 
       return 'Основная: выберите модель с развёрткой/лицом/телом и JSON-профилем.'
     }
     if (!studioFile) {
-      return 'Основная: загрузите референс сцены — для Grok (поза, свет, кадр). В WaveSpeed уйдут только фото модели.'
+      return 'Основная: загрузите референс сцены — Grok и WaveSpeed используют его для точного кадра.'
     }
     return null
   }

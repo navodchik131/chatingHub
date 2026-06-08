@@ -265,11 +265,14 @@ async def grok_compose_studio_scene(
     output_rule = ""
     if standalone_scene_prompt:
         output_rule = (
-            "\n\nPROMPT_OUTPUT_RULE: wavespeed_scene_prompt must be fully self-contained English prose "
-            "for an image API that will NOT receive USER_SCENE_REFERENCE. "
-            "Never write 'reference image', 'user photo', 'as in the reference', 'image 1', or similar. "
-            "Describe pose, camera angle, framing, lighting, background, wardrobe, expression, and mood "
-            "as concrete facts distilled from USER_SCENE_REFERENCE + USER_NOTES.\n"
+            "\n\nPROMPT_OUTPUT_RULE (MODEL_SCENE / Основная): wavespeed_scene_prompt must be fully "
+            "self-contained English prose. The image API will also receive USER_SCENE_REFERENCE as a "
+            "pose/framing bitmap — your text must **agree** with it on geometry, crop, light, and wardrobe zones. "
+            "Never write 'reference image', 'user photo', 'as in the reference', 'image 1', or similar meta phrases. "
+            "Describe pose with **maximal geometric precision**: limb angles, hand/finger placement, weight on each leg, "
+            "head yaw/pitch, gaze vs lens, camera height, distance, crop edges, background layout, light direction, "
+            "wardrobe/nudity coverage, expression — distilled from USER_SCENE_REFERENCE + USER_NOTES. "
+            "FIGURE_LOCK (bust/waist/hips/build) stays from MODEL only — never the sitter's body mass.\n"
         )
     user_parts: list[dict] = [
         {

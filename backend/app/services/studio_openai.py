@@ -146,6 +146,17 @@ _GROK_COMPOSED_WAN_PREFIX = (
     "Figure volumes (bust, waist, hips) = JSON FIGURE_LOCK / scene_brief + identity images — not image 1.\n\n"
 )
 
+_GROK_MODEL_SCENE_WAN_PREFIX = (
+    "[MODEL_SCENE — identity-first compose] **Image 1** = POSE_LOCK bitmap only: match pose articulation, head yaw/gaze, "
+    "camera angle/height/distance, crop edges, background, environmental light topology, and wardrobe/nudity **coverage** "
+    "from image 1 with **minimal deviation** (target: indistinguishable framing vs source). "
+    "**Images 2+** = OUR saved MODEL (character sheet turnaround, body reference, face, anatomy when NSFW): "
+    "**WHO** — face likeness, skin undertone/grain, bust/waist/hip width, glute volume, limb build, shoulder width. "
+    "**Never** keep donor face, skin tone, or body mass from image 1 — reshape silhouette to MODEL + JSON FIGURE_LOCK. "
+    "One cohesive person: seamless neck, unified complexion head→torso→limbs under **image 1's** light direction; "
+    "**no** floating head, **no** face-swap paste, **no** composite collage.\n\n"
+)
+
 _GROK_COMPOSED_NANO_PREFIX = (
     "[GROK_SCENE_COMPOSE — NOT face-swap] **Earlier image(s)** = MODEL identity (face, optional anatomy/body ref). "
     "Apply **one** skin/light model on all visible skin — seamless neck and shoulders, no pasted face. "
@@ -224,7 +235,12 @@ def finalize_wavespeed_studio_prompt(
                 lock_model_hairstyle=lock_model_hairstyle,
             )
         elif brief == "grok_composed":
-            out = _GROK_COMPOSED_WAN_PREFIX.strip() if not p else _GROK_COMPOSED_WAN_PREFIX + p
+            prefix = (
+                _GROK_MODEL_SCENE_WAN_PREFIX
+                if mode == "model_scene"
+                else _GROK_COMPOSED_WAN_PREFIX
+            )
+            out = prefix.strip() if not p else prefix + p
         elif brief == "compact_pose_image":
             prefix = (
                 _WAN_COMPACT_NO_FACE_PREFIX
@@ -340,7 +356,16 @@ def finalize_nano_banana_studio_prompt(
     elif brief == "text_scene":
         out = _NANO_TEXT_SCENE_PREFIX.strip() if not p else _NANO_TEXT_SCENE_PREFIX + p
     elif brief == "grok_composed":
-        out = _GROK_COMPOSED_NANO_PREFIX.strip() if not p else _GROK_COMPOSED_NANO_PREFIX + p
+        if mode == "model_scene":
+            head = (
+                "[MODEL_SCENE — identity refs first] **Earlier images** = MODEL (turnaround, body, face, anatomy): "
+                "face, skin, hair, bust/waist/hip proportions — FIGURE_LOCK from JSON. "
+                "**Last image** = POSE_LOCK: match pose geometry, crop, camera, background, light, wardrobe zones "
+                "with **minimal deviation** from source. Never donor identity from last image.\n\n"
+            )
+            out = head.strip() if not p else head + p
+        else:
+            out = _GROK_COMPOSED_NANO_PREFIX.strip() if not p else _GROK_COMPOSED_NANO_PREFIX + p
         if user_pose_reference_is_last:
             out = out.rstrip() + _GROK_COMPOSED_POSE_LAST_SUFFIX
     elif brief == "grok_composed_text":
