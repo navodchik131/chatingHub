@@ -154,7 +154,7 @@ from app.services.studio_motion_grok_pipeline import (
     extract_video_first_frame_or_raise,
     grok_compose_motion_first_frame,
     motion_grok_timeline_from_video_path,
-    motion_grok_wavespeed_image_urls,
+    motion_model_scene_wavespeed_image_urls,
 )
 from app.services.studio_model_images import (
     assert_studio_image_kind,
@@ -188,6 +188,7 @@ from app.services.studio_motion_video import (
 from app.services.studio_seedance_t2v import (
     MAX_SEEDANCE_REFERENCE_IMAGES,
     build_seedance_t2v_prompt,
+    filter_model_images_for_seedance_video,
     generation_still_public_url,
     model_reference_public_urls,
     sort_model_images_for_seedance_t2v,
@@ -207,6 +208,7 @@ from app.services.wavespeed_client import (
     seedream_v45_bootstrap_edit_image_url,
     seedream_v45_edit_image_url,
     wavespeed_image_upscale_url,
+    wavespeed_is_sensitive_content_error,
     z_image_turbo_inpaint_image_url,
 )
 
@@ -3523,7 +3525,6 @@ async def _studio_job_execute_motion_first_frame(
     extra_joined = "\n\n".join(user_extra_blocks) if user_extra_blocks else ""
     user_notes_grok = "\n\n".join(x for x in (desc_base, extra_joined) if x).strip()
 
-    ref_nude = False
     try:
         from app.services.plan_entitlements import assert_grok_allowed, record_grok_usage
 
@@ -3539,7 +3540,6 @@ async def _studio_job_execute_motion_first_frame(
             credentials=grok_motion_studio_credentials(),
         )
         reference_scene = (reference_scene or "").strip()
-        ref_nude = reference_pose_is_nude_or_minimal_coverage(reference_scene)
     except RuntimeError as e:
         raise HTTPException(status_code=502, detail=str(e)) from e
 
@@ -3548,7 +3548,7 @@ async def _studio_job_execute_motion_first_frame(
         marker = _GROK_MOTION_MARKER if settings.studio_grok_motion_timeline_enabled else _CLIP_MOTION_MARKER
         motion_auto_for_db += "\n\n" + marker + "\n" + motion_clip_summary.strip()
 
-    mode_n = "grok_compose"
+    mode_n = "model_scene"
     skip_ws = gen_arch_row is not None or persist_uploaded_final
     ws_key = _studio_refine_wavespeed_preflight(
         do_wavespeed=not skip_ws,
@@ -3646,14 +3646,13 @@ async def _studio_job_execute_motion_first_frame(
         user_pose_ref_prepended = False
         pose_ct = first_frame_media if first_frame_media.startswith("image/") else "image/jpeg"
         try:
-            image_urls = motion_grok_wavespeed_image_urls(
+            image_urls = motion_model_scene_wavespeed_image_urls(
                 pub=pub,
                 owner_id=oid,
                 pose_bytes=first_frame,
                 pose_mime=pose_ct,
                 sm=sm_loaded,
                 wave_profile=wave_profile_n,
-                reference_scene_nude=ref_nude,
                 save_pose_reference_bytes=save_pose_reference_bytes,
                 create_pose_reference_access_token=create_pose_reference_access_token,
                 create_model_image_access_token=create_model_image_access_token,
@@ -3686,6 +3685,7 @@ async def _studio_job_execute_motion_first_frame(
                 wave_profile=wave_profile_n,
                 user_pose_first=user_pose_ref_prepended,
                 user_pose_last=pose_is_last_after_reorder,
+                studio_mode=mode_n,
             )
             if settings.wavespeed_seedream_omit_size:
                 size_for_ws: str | None = None
@@ -4177,8 +4177,7 @@ async def _studio_job_execute_motion_render_video(
     if not sm:
         raise RuntimeError("Модель не найдена")
 
-    imgs_t2v = sort_model_images_for_seedance_t2v(list(sm.images))
-    if not imgs_t2v:
+    if not sort_model_images_for_seedance_t2v(list(sm.images)):
         raise RuntimeError(
             "У модели нет фото для reference_images. Добавьте развёртку (turnaround) в кабинете модели."
         )
@@ -4193,12 +4192,11 @@ async def _studio_job_execute_motion_render_video(
     )
 
     n_start = 0
-    n_outfit = 0
     outfit_gen_id: int | None = None
     first_frame_gen_id: int | None = None
     first_frame_bytes: bytes | None = None
     first_frame_media = "image/jpeg"
-    ref_images: list[str] = []
+    ff_url: str | None = None
 
     if first_frame_gid is not None:
         try:
@@ -4220,7 +4218,6 @@ async def _studio_job_execute_motion_render_video(
         )
         if not ff_url:
             raise RuntimeError("Не удалось подготовить URL первого кадра")
-        ref_images.append(ff_url)
         n_start = 1
 
     if outfit_gid is not None:
@@ -4231,49 +4228,20 @@ async def _studio_job_execute_motion_render_video(
     if outfit_gen_id is not None:
         if first_frame_gen_id is not None and outfit_gen_id == first_frame_gen_id:
             outfit_gen_id = None
-            n_outfit = 0
         else:
             row_outfit = await session.get(StudioGeneration, outfit_gen_id)
             if not row_outfit or row_outfit.user_id != oid:
                 raise RuntimeError("Снимок наряда (outfit) не найден")
             await assert_studio_generation_access(session, user, row_outfit.studio_model_id)
 
-    reserved = n_start + (1 if outfit_gen_id is not None else 0)
-    max_model_slots = max(0, MAX_SEEDANCE_REFERENCE_IMAGES - reserved)
-    model_imgs = imgs_t2v[:max_model_slots]
-    ref_images.extend(
-        model_reference_public_urls(
-            owner_id=oid,
-            images=model_imgs,
-            public_app_base=pub,
-            token_factory=create_model_image_access_token,
-        )
-    )
-    n_model = len(model_imgs)
-
-    if outfit_gen_id is not None:
-        outfit_url = generation_still_public_url(
-            owner_id=oid,
-            generation_id=outfit_gen_id,
-            public_app_base=pub,
-            token_factory=create_generation_image_access_token,
-        )
-        if not outfit_url:
-            raise RuntimeError("Не удалось подготовить URL снимка наряда")
-        ref_images.append(outfit_url)
-        n_outfit = 1
-
-    if len(ref_images) > MAX_SEEDANCE_REFERENCE_IMAGES:
-        ref_images = ref_images[:MAX_SEEDANCE_REFERENCE_IMAGES]
-
-    ref_videos: list[str] = []
+    motion_vid_url: str | None = None
     motion_summary: str | None = motion_timeline or None
     vpath = None
     if mv_id:
         vpath = resolve_motion_video_file(oid, mv_id)
         if vpath is not None and vpath.is_file():
             vid_tok = create_motion_video_access_token(user_id=oid, file_id=mv_id)
-            ref_videos.append(
+            motion_vid_url = (
                 f"{pub}/api/studio/public-motion-video?t={quote(vid_tok, safe='')}"
             )
             if _truthy_wavespeed_flag(auto_motion_prompt) and not motion_summary:
@@ -4310,19 +4278,6 @@ async def _studio_job_execute_motion_render_video(
 
     ds_effective = motion_video_duration_seconds(duration_seconds)
 
-    seed_prompt, prompt_source = await build_seedance_t2v_prompt(
-        user_brief=prompt,
-        n_start_frame=n_start,
-        n_model_images=n_model,
-        n_outfit_images=n_outfit,
-        n_motion_videos=len(ref_videos),
-        motion_summary=motion_summary,
-        model_profile_text=(sm.profile_text or "").strip() or None,
-        negative=negative_prompt,
-        output_aspect=ar_t2v or output_aspect,
-        duration_seconds=ds_effective,
-    )
-
     cost = apply_studio_credit_cost(
         plan,
         motion_video_credit_cost(
@@ -4332,21 +4287,109 @@ async def _studio_job_execute_motion_render_video(
     )
     billing = await ensure_can_consume_credits(session, user, cost)
 
+    seedance_attempts: list[dict[str, Any]] = [
+        {"label": "identity_video", "minimal": False, "include_video": True, "force_template": False},
+        {"label": "identity_no_video", "minimal": False, "include_video": False, "force_template": True},
+        {"label": "turnaround_only", "minimal": True, "include_video": False, "force_template": True},
+    ]
+
     msg: str | None = None
     video_url: str | None = None
-    try:
-        video_url = await seedance_20_text_to_video_url(
-            api_key=ws_key,
-            prompt=seed_prompt,
-            reference_images=ref_images or None,
-            reference_videos=ref_videos or None,
-            aspect_ratio=ar_t2v,
-            resolution=settings.wavespeed_seedance_20_t2v_resolution,
-            duration=ds_effective,
-            generate_audio=_truthy_wavespeed_flag(generate_audio),
+    seed_prompt = ""
+    prompt_source = "template"
+    ref_images: list[str] = []
+    ref_videos: list[str] = []
+    seedance_attempt_label = seedance_attempts[0]["label"]
+
+    for attempt in seedance_attempts:
+        model_imgs = filter_model_images_for_seedance_video(
+            list(sm.images),
+            minimal=bool(attempt["minimal"]),
         )
-    except RuntimeError as e:
-        msg = str(e)
+        ref_images = []
+        n_outfit = 0
+        if ff_url:
+            ref_images.append(ff_url)
+        ref_images.extend(
+            model_reference_public_urls(
+                owner_id=oid,
+                images=model_imgs,
+                public_app_base=pub,
+                token_factory=create_model_image_access_token,
+            )
+        )
+        n_model = len(model_imgs)
+
+        if outfit_gen_id is not None:
+            outfit_url = generation_still_public_url(
+                owner_id=oid,
+                generation_id=outfit_gen_id,
+                public_app_base=pub,
+                token_factory=create_generation_image_access_token,
+            )
+            if not outfit_url:
+                raise RuntimeError("Не удалось подготовить URL снимка наряда")
+            ref_images.append(outfit_url)
+            n_outfit = 1
+
+        if len(ref_images) > MAX_SEEDANCE_REFERENCE_IMAGES:
+            ref_images = ref_images[:MAX_SEEDANCE_REFERENCE_IMAGES]
+
+        ref_videos = (
+            [motion_vid_url]
+            if attempt["include_video"] and motion_vid_url
+            else []
+        )
+
+        seed_prompt, prompt_source = await build_seedance_t2v_prompt(
+            user_brief=prompt,
+            n_start_frame=n_start,
+            n_model_images=n_model,
+            n_outfit_images=n_outfit,
+            n_motion_videos=len(ref_videos),
+            motion_summary=motion_summary,
+            model_profile_text=None,
+            negative=negative_prompt,
+            output_aspect=ar_t2v or output_aspect,
+            duration_seconds=ds_effective,
+            force_template=bool(attempt["force_template"]),
+        )
+
+        try:
+            video_url = await seedance_20_text_to_video_url(
+                api_key=ws_key,
+                prompt=seed_prompt,
+                reference_images=ref_images or None,
+                reference_videos=ref_videos or None,
+                aspect_ratio=ar_t2v,
+                resolution=settings.wavespeed_seedance_20_t2v_resolution,
+                duration=ds_effective,
+                generate_audio=_truthy_wavespeed_flag(generate_audio),
+            )
+            msg = None
+            seedance_attempt_label = str(attempt["label"])
+            log.info(
+                "motion_render_video ok job=%s attempt=%s imgs=%s vids=%s prompt=%s",
+                job.id,
+                seedance_attempt_label,
+                len(ref_images),
+                len(ref_videos),
+                prompt_source,
+            )
+            break
+        except RuntimeError as e:
+            msg = str(e)
+            video_url = None
+            if not wavespeed_is_sensitive_content_error(msg):
+                break
+            log.warning(
+                "motion_render_video sensitive job=%s attempt=%s imgs=%s vids=%s: %s",
+                job.id,
+                attempt["label"],
+                len(ref_images),
+                len(ref_videos),
+                msg[:240],
+            )
 
     gen_placeholder = await find_studio_generation_by_job_id(session, job.id)
     ph_id = params.get("placeholder_generation_id")
@@ -4405,6 +4448,7 @@ async def _studio_job_execute_motion_render_video(
                 "seedance_20_t2v_duration": ds_effective,
                 "reference_images": len(ref_images),
                 "reference_videos": len(ref_videos),
+                "seedance_t2v_attempt": seedance_attempt_label,
                 "seedance_t2v_prompt_source": prompt_source,
                 "seedance_t2v_prompt_chars": len(seed_prompt),
                 "ok": bool(video_url),

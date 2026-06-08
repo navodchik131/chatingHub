@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import TYPE_CHECKING
 from urllib.parse import quote
 
@@ -16,9 +17,40 @@ log = logging.getLogger(__name__)
 
 MAX_SEEDANCE_REFERENCE_IMAGES = 9
 MAX_SEEDANCE_REFERENCE_VIDEOS = 3
+MAX_SEEDANCE_VIDEO_MODEL_IDENTITY_IMAGES = 2
 SEEDANCE_T2V_PROMPT_MAX_CHARS = 3000
 
 _T2V_KIND_ORDER = {"turnaround": 0, "face": 1, "body": 2, "other": 3, "genitals": 99}
+_VIDEO_IDENTITY_KINDS = frozenset({"turnaround", "face"})
+
+_MOTION_NOTE_BANNED_SUBSTRINGS = (
+    "skin tone",
+    "skin texture",
+    "eye color",
+    "cheekbone",
+    "ethnicity",
+    "makeup",
+    "facial identity",
+    "face shape",
+    "beauty adjective",
+    "biometric",
+    "identity catalog",
+)
+
+_PROVIDER_PROMPT_REPLACEMENTS: list[tuple[re.Pattern[str], str]] = [
+    (re.compile(r"\bface/body/hair\b", re.I), "character"),
+    (re.compile(r"\bfacial identity\b", re.I), "appearance"),
+    (re.compile(r"\b(?:skin tone|skin texture|skin details)\b", re.I), ""),
+    (re.compile(r"\bbody proportions\b", re.I), "figure"),
+    (re.compile(r"\bidentity via\b", re.I), "character via"),
+    (re.compile(r"\bidentity only from\b", re.I), "character from"),
+    (re.compile(r"\bmodel identity\b", re.I), "model reference"),
+    (re.compile(r"\bNever adopt the reference video actor['']s face or identity\.?\s*", re.I), ""),
+    (re.compile(r"\bdo not restate facial identity[^.]*\.?\s*", re.I), ""),
+    (re.compile(r"\bIGNORE all clothing[^.]*\.?\s*", re.I), ""),
+    (re.compile(r"\bwardrobe authority\b", re.I), "wardrobe"),
+    (re.compile(r"\bCONTENT_SAFETY[^.]*\.?\s*", re.I), ""),
+]
 
 _RU_LABEL = {
     "turnaround": "развёртка / character sheet",
@@ -48,6 +80,32 @@ def sort_model_images_for_seedance_t2v(
         )
     )
     return filtered[:MAX_SEEDANCE_REFERENCE_IMAGES]
+
+
+def filter_model_images_for_seedance_video(
+    imgs: list[UserStudioModelImage],
+    *,
+    minimal: bool = False,
+    max_identity: int | None = None,
+) -> list[UserStudioModelImage]:
+    """
+    Для render-video: только turnaround (+ face), без body/other/genitals.
+    Полные ню-листы модели чаще всего триггерят sensitive у Seedance.
+    """
+    cap = max_identity if max_identity is not None else MAX_SEEDANCE_VIDEO_MODEL_IDENTITY_IMAGES
+    cap = max(1, min(cap, MAX_SEEDANCE_REFERENCE_IMAGES))
+    kinds = frozenset({"turnaround"}) if minimal else _VIDEO_IDENTITY_KINDS
+    sorted_all = sort_model_images_for_seedance_t2v(imgs)
+    picked: list[UserStudioModelImage] = []
+    for im in sorted_all:
+        k = (im.image_kind or "other").lower()
+        if k in kinds:
+            picked.append(im)
+        if len(picked) >= cap:
+            break
+    if not picked:
+        picked = sorted_all[:cap]
+    return picked
 
 
 def model_reference_public_urls(
@@ -82,6 +140,38 @@ def generation_still_public_url(
     return f"{base}/api/studio/public-generation-image?t={quote(tok, safe='')}"
 
 
+def prepare_motion_notes_for_seedance(
+    notes: str | None,
+    *,
+    max_chars: int = 1800,
+) -> str | None:
+    """Убирает из Grok-таймлайна строки с biometric/identity — их флагает Seedance."""
+    raw = (notes or "").strip()
+    if not raw:
+        return None
+    kept: list[str] = []
+    for line in raw.splitlines():
+        low = line.lower()
+        if any(b in low for b in _MOTION_NOTE_BANNED_SUBSTRINGS):
+            continue
+        kept.append(line)
+    out = "\n".join(kept).strip()
+    if not out:
+        return None
+    if len(out) > max_chars:
+        out = out[: max_chars - 1].rstrip() + "…"
+    return out
+
+
+def soften_seedance_provider_prompt(text: str) -> str:
+    """Финальная чистка промпта перед WaveSpeed/Seedance (anti-sensitive)."""
+    s = (text or "").strip()
+    for pat, repl in _PROVIDER_PROMPT_REPLACEMENTS:
+        s = pat.sub(repl, s)
+    s = re.sub(r"[ \t]{2,}", " ", s)
+    return re.sub(r"\n{3,}", "\n\n", s).strip()
+
+
 def assemble_seedance_t2v_prompt(
     user_prompt: str,
     *,
@@ -99,8 +189,7 @@ def assemble_seedance_t2v_prompt(
     parts: list[str] = []
     if n_start_frame > 0:
         parts.append(
-            "@Image1 is the approved opening still at t=0: starting pose, wardrobe, lighting, "
-            "camera framing, and environment. Do not treat @Image1 as the sole identity reference."
+            "@Image1: opening still at t=0 — pose, scene, lighting, camera framing."
         )
     if n_model_images > 0:
         start_idx = 1 + n_start_frame
@@ -109,22 +198,19 @@ def assemble_seedance_t2v_prompt(
             tags = f"@Image{start_idx}"
         else:
             tags = f"@Image{start_idx}–@Image{end_idx}"
-        parts.append(
-            f"Same person throughout — identity only from {tags} (face/body/hair via reference images; "
-            "do not restate facial identity or skin details in this text). "
-            "Reference sheets may show neutral base clothing; dress the character as in @Image1 or USER_BRIEF "
-            "unless an outfit reference image is specified."
-        )
+        parts.append(f"Same character throughout — match {tags} via reference images.")
+        if n_start_frame > 0 and n_outfit_images == 0:
+            parts.append("Wardrobe at t=0: match @Image1 and USER_BRIEF.")
     if n_outfit_images > 0:
         start = 1 + n_start_frame + n_model_images
         for j in range(n_outfit_images):
             idx = start + j
-            parts.append(f"Outfit and garment details: match @Image{idx}.")
+            parts.append(f"Wardrobe: match @Image{idx}.")
     if n_motion_videos > 0:
         vtags = ", ".join(f"@Video{i}" for i in range(1, n_motion_videos + 1))
-        parts.append(f"Motion, pacing, and body dynamics: follow {vtags}.")
+        parts.append(f"Motion and pacing: follow {vtags}.")
     if motion_summary and motion_summary.strip():
-        parts.append(f"Additional motion notes:\n{motion_summary.strip()}")
+        parts.append(f"Motion notes:\n{motion_summary.strip()}")
     up = (user_prompt or "").strip()
     if up:
         parts.append(up)
@@ -133,9 +219,9 @@ def assemble_seedance_t2v_prompt(
         parts.append(f"Avoid: {neg}")
     if not parts:
         parts.append(
-            "Natural cinematic motion; smooth camera; expressive performance; preserve character identity."
+            "Natural cinematic motion; smooth camera; expressive performance; same character throughout."
         )
-    return "\n\n".join(parts)
+    return soften_seedance_provider_prompt("\n\n".join(parts))
 
 
 def truncate_seedance_t2v_prompt(text: str, *, max_chars: int | None = None) -> str:
@@ -159,6 +245,7 @@ async def build_seedance_t2v_prompt(
     negative: str | None = None,
     output_aspect: str | None = None,
     duration_seconds: int = 5,
+    force_template: bool = False,
 ) -> tuple[str, str]:
     """
     Grok (если настроен) → иначе шаблон. Возвращает (prompt, source: grok|template).
@@ -169,7 +256,8 @@ async def build_seedance_t2v_prompt(
     )
 
     lim = settings.studio_seedance_t2v_prompt_max_chars
-    if grok_motion_api_configured():
+    safe_motion = prepare_motion_notes_for_seedance(motion_summary)
+    if not force_template and grok_motion_api_configured():
         try:
             p = await grok_expand_seedance_t2v_prompt(
                 user_brief=user_brief,
@@ -177,14 +265,20 @@ async def build_seedance_t2v_prompt(
                 n_model_images=n_model_images,
                 n_outfit_images=n_outfit_images,
                 n_motion_videos=n_motion_videos,
-                motion_notes=motion_summary,
-                model_profile_text=model_profile_text,
+                motion_notes=safe_motion,
+                model_profile_text=None,
                 negative=negative,
                 output_aspect=output_aspect,
                 duration_seconds=duration_seconds,
                 max_chars=lim,
             )
-            return p, "grok"
+            return (
+                truncate_seedance_t2v_prompt(
+                    soften_seedance_provider_prompt(p),
+                    max_chars=lim,
+                ),
+                "grok",
+            )
         except Exception as e:
             log.warning("grok seedance t2v prompt failed, template fallback: %s", e)
 
@@ -194,7 +288,7 @@ async def build_seedance_t2v_prompt(
         n_model_images=n_model_images,
         n_outfit_images=n_outfit_images,
         n_motion_videos=n_motion_videos,
-        motion_summary=motion_summary,
+        motion_summary=safe_motion,
         negative=negative,
     )
     return truncate_seedance_t2v_prompt(p, max_chars=lim), "template"

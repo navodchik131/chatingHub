@@ -175,6 +175,15 @@ def format_wavespeed_user_error(message: str) -> str:
     return f"WaveSpeed: {body}"
 
 
+def wavespeed_is_sensitive_content_error(message: str | None) -> bool:
+    low = (message or "").lower()
+    return (
+        "flagged" in low
+        or "potentially sensitive" in low
+        or ("sensitive" in low and "content" in low)
+    )
+
+
 def _wavespeed_raise_from_response(resp_json: dict[str, Any], *, context: str) -> None:
     task_err = _wavespeed_task_failed_error(resp_json)
     if task_err:

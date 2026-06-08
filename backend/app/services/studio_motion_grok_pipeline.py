@@ -19,6 +19,7 @@ from app.services.studio_grok_scene_compose import grok_compose_studio_scene
 from app.services.studio_model_images import (
     model_images_for_wavespeed_profile,
     select_grok_compose_wavespeed_identity_images,
+    select_model_scene_wavespeed_identity_images,
     sort_model_images_for_studio,
 )
 from app.services.studio_motion_video import extract_first_frame_jpeg
@@ -60,6 +61,7 @@ async def grok_compose_motion_first_frame(
         user_notes=user_notes,
         lock_hairstyle=lock_hairstyle,
         credentials=creds,
+        standalone_scene_prompt=True,
     )
     return (
         composed.wavespeed_scene_prompt,
@@ -113,10 +115,11 @@ def assemble_motion_grok_wavespeed_prompt(
     wave_profile: str,
     user_pose_first: bool,
     user_pose_last: bool,
+    studio_mode: str = "model_scene",
 ) -> str:
     return assemble_wavespeed_image_edit_prompt(
         refined,
-        studio_mode="grok_compose",
+        studio_mode=studio_mode,
         user_pose_in_api=user_pose_first,
         user_pose_is_last=user_pose_last,
         lock_model_hairstyle=lock_hairstyle,
