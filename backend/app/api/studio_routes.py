@@ -108,7 +108,6 @@ from app.services.studio_generation_storage import (
     generation_has_archive_file,
     mark_studio_generation_failed,
     persist_studio_generation_from_uploaded_bytes,
-    recover_recent_failed_studio_generations,
     safe_delete_generation_file,
     studio_finish_image_generation,
     try_recover_studio_generation_from_wavespeed,
@@ -1127,12 +1126,14 @@ async def api_list_pending_studio_generations(
     session: AsyncSession = Depends(get_session),
     user: User = Depends(get_current_user),
 ) -> StudioGenerationsPendingOut:
-    """Незавершённые записи архива — для редкого опроса (≈12 с), пока идёт WaveSpeed."""
+    """Незавершённые записи архива — для редкого опроса (≈12 с), пока идёт WaveSpeed.
+
+    Восстановление failed-записей с WaveSpeed — только в фоне (retry_pending_studio_archives),
+    не на каждом опросе UI.
+    """
     assert_permission(user, PERM_STUDIO_GENERATE)
     oid = workspace_owner_id(user)
     if await reconcile_stuck_studio_generations(session, oid, limit=limit):
-        await session.commit()
-    if await recover_recent_failed_studio_generations(session, oid, limit=5):
         await session.commit()
     allowed = await member_allowed_studio_model_ids(session, user)
     stmt = (

@@ -42,7 +42,7 @@ export function StudioGenerationGallery({
         {lead ? <p className="studio-gallery__lead">{lead}</p> : null}
       </header>
 
-      {loading ? (
+      {loading && items.length === 0 ? (
         <p className="muted studio-gallery__status">Загрузка…</p>
       ) : items.length === 0 ? (
         <p className="muted studio-gallery__status">{emptyText}</p>

@@ -26,11 +26,16 @@ import {
   mergeMotionVideoPricing,
 } from './studioMotionPricing'
 import {
+  createOptimisticStudioArchiveItem,
   fetchStudioArchivePage,
   fetchStudioArchivePending,
   isMotionRenderArchiveId,
+  isOptimisticStudioArchiveId,
   mergeStudioArchiveItems,
   mergeVideoArchiveWithMotionRenders,
+  prependOptimisticStudioArchive,
+  removeOptimisticStudioArchive,
+  replaceOptimisticStudioArchiveId,
   studioArchiveIsPending,
   studioArchiveThumbUrl,
   type StudioArchiveItem,
@@ -1135,38 +1140,75 @@ export default function App() {
     setMotionRenders(Array.isArray(data.items) ? data.items : [])
   }, [])
 
+  const studioArchiveOptimisticOpts = useCallback(
+    (mediaKind: StudioArchiveMediaKind, promptExcerpt?: string | null) => {
+      const model =
+        studioSelectedModelId != null
+          ? studioModels.find((m) => m.id === studioSelectedModelId)
+          : undefined
+      return createOptimisticStudioArchiveItem({
+        mediaKind,
+        promptExcerpt,
+        studioModelId: studioSelectedModelId,
+        modelName: model?.name ?? null,
+        outputAspect: studioOutputAspect,
+      })
+    },
+    [studioModels, studioOutputAspect, studioSelectedModelId],
+  )
+
+  const pushOptimisticStudioGeneration = useCallback((item: StudioArchiveItem) => {
+    setStudioGenerations((prev) => prependOptimisticStudioArchive(prev, item))
+  }, [])
+
+  const resolveOptimisticStudioGeneration = useCallback(
+    (tempId: number, realId: number | null) => {
+      setStudioGenerations((prev) => {
+        if (realId == null) return removeOptimisticStudioArchive(prev, tempId)
+        return replaceOptimisticStudioArchiveId(prev, tempId, realId)
+      })
+    },
+    [],
+  )
+
   const loadStudioGenerationsReset = useCallback(async () => {
     const kind = studioGalleryMediaKind(appSection)
     const page = await fetchStudioArchivePage(0, STUDIO_ARCHIVE_PAGE, kind)
-    let merged = page.items
-    try {
-      const pending = await fetchStudioArchivePending(kind)
-      merged = mergeStudioArchiveItems(page.items, pending.items)
-    } catch {
-      /* pending опционален */
-    }
-    setStudioGenerations(merged)
+    setStudioGenerations((prev) => {
+      const optimistic = prev.filter((g) => isOptimisticStudioArchiveId(g.id))
+      return mergeStudioArchiveItems(page.items, optimistic)
+    })
     setStudioGenHasMore(page.has_more)
     if (appSection === 'studio' || appSection === 'studio_bootstrap') {
       setStudioImagePickerArchive(page.items)
     } else if (appSection === 'studio_video') {
-      await loadStudioImagePickerArchive()
-      await refreshMotionRenders()
+      void loadStudioImagePickerArchive()
+      void refreshMotionRenders()
     }
+    void fetchStudioArchivePending(kind)
+      .then((pending) => {
+        if (!pending.items.length) return
+        setStudioGenerations((prev) => mergeStudioArchiveItems(prev, pending.items))
+      })
+      .catch(() => {
+        /* pending опционален */
+      })
   }, [appSection, loadStudioImagePickerArchive, refreshMotionRenders])
 
   const syncStudioArchivePending = useCallback(async () => {
     try {
       const kind = studioGalleryMediaKind(appSection)
-      const pending = await fetchStudioArchivePending(kind)
+      const pendingPromise = fetchStudioArchivePending(kind)
+      const imagePendingPromise =
+        appSection === 'studio_video'
+          ? fetchStudioArchivePending('image')
+          : Promise.resolve({ items: [] as StudioArchiveItem[], poll_after_seconds: 12 })
+      const [pending, imgPending] = await Promise.all([pendingPromise, imagePendingPromise])
       if (pending.items.length) {
         setStudioGenerations((prev) => mergeStudioArchiveItems(prev, pending.items))
       }
-      if (appSection === 'studio_video') {
-        const imgPending = await fetchStudioArchivePending('image')
-        if (imgPending.items.length) {
-          setStudioImagePickerArchive((prev) => mergeStudioArchiveItems(prev, imgPending.items))
-        }
+      if (imgPending.items.length) {
+        setStudioImagePickerArchive((prev) => mergeStudioArchiveItems(prev, imgPending.items))
       }
     } catch {
       /* тихий опрос */
@@ -2237,6 +2279,10 @@ export default function App() {
   }
 
   const deleteStudioVideoArchiveItem = (g: StudioArchiveItem) => {
+    if (isOptimisticStudioArchiveId(g.id)) {
+      setStudioGenerations((prev) => removeOptimisticStudioArchive(prev, g.id))
+      return
+    }
     if (isMotionRenderArchiveId(g.id)) {
       const rid = -g.id
       setMotionRenders((prev) => prev.filter((r) => r.id !== rid))
@@ -2540,6 +2586,11 @@ export default function App() {
     setStudioWavespeedMsg(null)
     setStudioPendingExternalImageUrl(null)
     setStudioRefinedPromptPreview(null)
+    const { item: optimisticItem, tempId: optimisticTempId } = studioArchiveOptimisticOpts(
+      'image',
+      studioDesc.trim(),
+    )
+    pushOptimisticStudioGeneration(optimisticItem)
     try {
       const promptOnlyActive =
         import.meta.env.DEV &&
@@ -2577,6 +2628,7 @@ export default function App() {
       })
       const gid =
         typeof accepted.generation_id === 'number' ? accepted.generation_id : null
+      resolveOptimisticStudioGeneration(optimisticTempId, gid)
       if (gid != null) {
         setStudioGenGenerationId(gid)
         setStudioGenImageUrl(null)
@@ -2586,8 +2638,9 @@ export default function App() {
         'Генерация запущена — смотрите прогресс в «Сохранённые». Результат подставится автоматически.',
       )
       void refreshMe()
-      void loadStudioGenerationsReset()
+      void syncStudioArchivePending()
     } catch (e) {
+      resolveOptimisticStudioGeneration(optimisticTempId, null)
       setError(formatClientFetchError(e, true))
     } finally {
       studioImageGenInFlightRef.current = false
@@ -2797,18 +2850,28 @@ export default function App() {
     setMotionStep1Preview(null)
     setMotionGrokTimeline(null)
     setMotionPendingExternalStillUrl(null)
+    const { item: optimisticFrame, tempId: optimisticFrameTempId } = studioArchiveOptimisticOpts(
+      'image',
+      motionFrameNotes.trim() || 'Первый кадр…',
+    )
+    pushOptimisticStudioGeneration(optimisticFrame)
     try {
       const res = await callMotionFirstFrameApi(
         !!(motionUseStillFinal && motionFirstFrameFile),
       )
       if (!res.ok) {
+        resolveOptimisticStudioGeneration(optimisticFrameTempId, null)
         setError(formatHttpApiError(res.response, res.data))
         return
       }
+      const frameGid =
+        typeof res.data.generation_id === 'number' ? res.data.generation_id : null
+      resolveOptimisticStudioGeneration(optimisticFrameTempId, frameGid)
       applyMotionFirstFrameResponse(res.data)
       void refreshMe()
-      void loadStudioGenerationsReset()
+      void syncStudioArchivePending()
     } catch (e) {
+      resolveOptimisticStudioGeneration(optimisticFrameTempId, null)
       setError(formatClientFetchError(e, true))
     } finally {
       setMotionBusyFrame(false)
@@ -2832,6 +2895,11 @@ export default function App() {
 
     setMotionBusyVideo(true)
     setMotionResultVideoUrl(null)
+    const { item: optimisticVideo, tempId: optimisticVideoTempId } = studioArchiveOptimisticOpts(
+      'video',
+      motionDesc.trim(),
+    )
+    pushOptimisticStudioGeneration(optimisticVideo)
     try {
       const fd = new FormData()
       fd.append('model_id', String(studioSelectedModelId))
@@ -2857,18 +2925,22 @@ export default function App() {
       } else {
         fd.append('outfit_generation_id', '')
       }
-      await postStudioJobStart('/api/studio/motion/render-video', {
+      const accepted = await postStudioJobStart('/api/studio/motion/render-video', {
         method: 'POST',
         body: fd,
       })
+      const videoGid =
+        typeof accepted.generation_id === 'number' ? accepted.generation_id : null
+      resolveOptimisticStudioGeneration(optimisticVideoTempId, videoGid)
       setMotionResultVideoUrl(null)
       setMotionMsg(
         'Видео генерируется — заглушка в «Сохранённые», обычно 10–40 мин. Обновление по готовности автоматически.',
       )
       void refreshMe()
-      void loadStudioGenerationsReset()
+      void syncStudioArchivePending()
       void refreshMotionRenders()
     } catch (e) {
+      resolveOptimisticStudioGeneration(optimisticVideoTempId, null)
       setError(formatClientFetchError(e, true))
       void refreshMotionRenders()
     } finally {

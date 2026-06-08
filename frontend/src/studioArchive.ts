@@ -88,9 +88,71 @@ export type MotionRenderArchiveSource = {
   frame_image_url: string
 }
 
+const OPTIMISTIC_STUDIO_ARCHIVE_ID_FLOOR = -1_000_000_000
+
+/** Временная карточка «Генерация…» до ответа API (отрицательный id ниже порога). */
+export function isOptimisticStudioArchiveId(id: number): boolean {
+  return id <= OPTIMISTIC_STUDIO_ARCHIVE_ID_FLOOR
+}
+
 /** Отрицательный id — запись только из motion/renders (нет video-строки в архиве). */
 export function isMotionRenderArchiveId(id: number): boolean {
-  return id < 0
+  return id < 0 && id > OPTIMISTIC_STUDIO_ARCHIVE_ID_FLOOR
+}
+
+let optimisticStudioArchiveSeq = 0
+
+export function createOptimisticStudioArchiveItem(opts: {
+  mediaKind: StudioArchiveMediaKind
+  promptExcerpt?: string | null
+  studioModelId?: number | null
+  modelName?: string | null
+  outputAspect?: string | null
+}): { item: StudioArchiveItem; tempId: number } {
+  optimisticStudioArchiveSeq += 1
+  const tempId = OPTIMISTIC_STUDIO_ARCHIVE_ID_FLOOR - optimisticStudioArchiveSeq
+  return {
+    tempId,
+    item: {
+      id: tempId,
+      created_at: new Date().toISOString(),
+      output_aspect: opts.outputAspect ?? null,
+      studio_model_id: opts.studioModelId ?? null,
+      model_name: opts.modelName ?? null,
+      prompt_excerpt: (opts.promptExcerpt ?? '').trim().slice(0, 200) || 'Генерация…',
+      status: 'processing',
+      media_kind: opts.mediaKind,
+      error_message: null,
+      job_id: null,
+      image_url: '',
+      video_url: null,
+    },
+  }
+}
+
+export function prependOptimisticStudioArchive(
+  current: StudioArchiveItem[],
+  item: StudioArchiveItem,
+): StudioArchiveItem[] {
+  return dedupeStudioArchiveById([item, ...current])
+}
+
+export function replaceOptimisticStudioArchiveId(
+  current: StudioArchiveItem[],
+  tempId: number,
+  realId: number,
+  patch?: Partial<StudioArchiveItem>,
+): StudioArchiveItem[] {
+  return dedupeStudioArchiveById(
+    current.map((g) => (g.id === tempId ? { ...g, id: realId, ...patch } : g)),
+  )
+}
+
+export function removeOptimisticStudioArchive(
+  current: StudioArchiveItem[],
+  tempId: number,
+): StudioArchiveItem[] {
+  return current.filter((g) => g.id !== tempId)
 }
 
 export function motionRenderArchiveId(renderId: number): number {
