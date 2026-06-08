@@ -4361,66 +4361,42 @@ async def _studio_job_execute_motion_render_video(
         if len(ref_images) > MAX_SEEDANCE_REFERENCE_IMAGES:
             ref_images = ref_images[:MAX_SEEDANCE_REFERENCE_IMAGES]
 
-        ref_videos: list[str] = []
-        if provider == "video_edit":
-            assert motion_vid_url
-            ref_videos = [motion_vid_url]
-            seed_prompt = assemble_seedance_video_edit_prompt(
-                prompt,
-                n_ref_images=len(ref_images),
-                motion_summary=motion_summary,
-                negative=negative_prompt,
-            )
-            prompt_source = "video_edit"
-        else:
-            ref_videos = (
-                [motion_vid_url]
-                if attempt.get("include_video") and motion_vid_url
-                else []
-            )
-            seed_prompt, prompt_source = await build_seedance_t2v_prompt(
-                user_brief=prompt,
-                n_start_frame=n_start,
-                n_model_images=n_model,
-                n_outfit_images=n_outfit,
-                n_motion_videos=len(ref_videos),
-                motion_summary=motion_summary,
-                model_profile_text=None,
-                negative=negative_prompt,
-                output_aspect=ar_t2v or output_aspect,
-                duration_seconds=ds_effective,
-                force_template=bool(attempt.get("force_template")),
-            )
+        ref_videos = (
+            [motion_vid_url]
+            if attempt.get("include_video") and motion_vid_url
+            else []
+        )
+        seed_prompt, prompt_source = await build_seedance_t2v_prompt(
+            user_brief=prompt,
+            n_start_frame=n_start,
+            n_model_images=n_model,
+            n_outfit_images=n_outfit,
+            n_motion_videos=len(ref_videos),
+            motion_summary=motion_summary,
+            model_profile_text=None,
+            negative=negative_prompt,
+            output_aspect=ar_t2v or output_aspect,
+            duration_seconds=ds_effective,
+            force_template=bool(attempt.get("force_template")),
+        )
 
         try:
-            if provider == "video_edit":
-                video_url = await seedance_studio_video_edit_video_url(
-                    api_key=ws_key,
-                    video_url=motion_vid_url,
-                    reference_image_urls=ref_images,
-                    prompt=seed_prompt,
-                    aspect_ratio=ar_ve,
-                    duration=ds_effective,
-                    keep_original_sound=not _truthy_wavespeed_flag(generate_audio),
-                )
-            else:
-                video_url = await seedance_20_text_to_video_url(
-                    api_key=ws_key,
-                    prompt=seed_prompt,
-                    reference_images=ref_images or None,
-                    reference_videos=ref_videos or None,
-                    aspect_ratio=ar_t2v,
-                    resolution=settings.wavespeed_seedance_20_t2v_resolution,
-                    duration=ds_effective,
-                    generate_audio=_truthy_wavespeed_flag(generate_audio),
-                )
+            video_url = await seedance_20_text_to_video_url(
+                api_key=ws_key,
+                prompt=seed_prompt,
+                reference_images=ref_images or None,
+                reference_videos=ref_videos or None,
+                aspect_ratio=ar_t2v,
+                resolution=settings.wavespeed_seedance_20_t2v_resolution,
+                duration=ds_effective,
+                generate_audio=_truthy_wavespeed_flag(generate_audio),
+            )
             msg = None
             seedance_attempt_label = str(attempt["label"])
             log.info(
-                "motion_render_video ok job=%s attempt=%s provider=%s imgs=%s vids=%s prompt=%s",
+                "motion_render_video ok job=%s attempt=%s imgs=%s vids=%s prompt=%s",
                 job.id,
                 seedance_attempt_label,
-                provider,
                 len(ref_images),
                 len(ref_videos),
                 prompt_source,
@@ -4429,25 +4405,6 @@ async def _studio_job_execute_motion_render_video(
         except RuntimeError as e:
             msg = str(e)
             video_url = None
-            if provider == "video_edit":
-                if wavespeed_is_video_poll_timeout_error(msg):
-                    log.warning(
-                        "motion_render_video video_edit poll timeout job=%s "
-                        "(task may still be processing on WaveSpeed — no t2v fallback)",
-                        job.id,
-                    )
-                    msg = (
-                        "WaveSpeed: video-edit ещё обрабатывается (локальный таймаут опроса). "
-                        "Задача могла остаться в processing — не запускаем второй запрос. "
-                        "Подождите и обновите архив или проверьте кабинет WaveSpeed."
-                    )
-                    break
-                log.warning(
-                    "motion_render_video video_edit failed job=%s: %s",
-                    job.id,
-                    msg[:240],
-                )
-                continue
             if not wavespeed_is_sensitive_content_error(msg):
                 break
             log.warning(
