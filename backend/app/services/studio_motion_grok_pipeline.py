@@ -70,6 +70,40 @@ async def grok_compose_motion_first_frame(
     )
 
 
+def motion_model_scene_wavespeed_image_urls(
+    *,
+    pub: str,
+    owner_id: int,
+    pose_bytes: bytes,
+    pose_mime: str,
+    sm: UserStudioModel,
+    wave_profile: str,
+    save_pose_reference_bytes,
+    create_pose_reference_access_token,
+    create_model_image_access_token,
+) -> list[str]:
+    """Реф позы + полный набор фото модели (режим model_scene, как «Основная»)."""
+    from urllib.parse import quote
+
+    imgs_model = sort_model_images_for_studio(list(sm.images))
+    imgs_for_ws = model_images_for_wavespeed_profile(imgs_model, wave_profile)
+    image_urls: list[str] = []
+    fid_pose = save_pose_reference_bytes(
+        owner_id=owner_id,
+        raw=pose_bytes,
+        content_type=pose_mime if pose_mime.startswith("image/") else "image/jpeg",
+    )
+    ptok = create_pose_reference_access_token(user_id=owner_id, file_id=fid_pose)
+    image_urls.append(f"{pub}/api/studio/public-pose-reference?t={quote(ptok, safe='')}")
+    for im in select_model_scene_wavespeed_identity_images(
+        imgs_for_ws,
+        wave_profile=wave_profile,
+    ):
+        tok = create_model_image_access_token(user_id=owner_id, image_id=im.id)
+        image_urls.append(f"{pub}/api/studio/public-model-image?t={quote(tok, safe='')}")
+    return image_urls
+
+
 def motion_grok_wavespeed_image_urls(
     *,
     pub: str,
