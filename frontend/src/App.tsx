@@ -5313,6 +5313,7 @@ export default function App() {
               {!canStudioGenerate ? (
                 <div className="banner info">Генерация недоступна по правам. Попросите владельца аккаунта.</div>
               ) : null}
+              <div className="studio-workspace__composer-scroll">
               <div className="studio-slot-grid studio-slot-grid--composer">
             <div className="studio-mode-row studio-mode-compact" role="group" aria-label="Режим студии">
               <span className="studio-mode-label">Режим</span>
@@ -5676,36 +5677,6 @@ export default function App() {
                 onChange={(e) => setStudioDesc(e.target.value)}
               />
             </div>
-            <div className="studio-generate-footer">
-              {studioImageBtnBlockReason ? (
-                <p className="studio-generate-block-hint" role="status">
-                  {studioImageBtnBlockReason}
-                </p>
-              ) : null}
-              <div className="studio-workspace__actions">
-              <button
-                type="button"
-                className="studio-magic-btn"
-                title={studioImageBtnBlockReason ?? undefined}
-                disabled={studioBusy || studioImageBtnBlockReason != null}
-                onClick={() => void refineStudioPrompt()}
-              >
-                {studioBusy
-                  ? 'Генерация…'
-                  : studioPromptOnlyDev
-                    ? 'Собрать промпт'
-                    : 'Сгенерировать'}
-                {canStudioGenerate &&
-                (studioPromptOnlyDev || integ?.wavespeed_configured) ? (
-                  <span className="studio-magic-btn__cost">
-                    <IconSpark className="studio-slot__icon-svg" />
-                    {(studioInpaintMaskFile != null || studioPaintInpaintMask
-                      ? health?.studio_inpaint_credit_cost
-                      : health?.studio_prompt_credit_cost) ?? '—'}
-                  </span>
-                ) : null}
-              </button>
-              </div>
             </div>
             {import.meta.env.DEV &&
             health?.studio_allow_prompt_only &&
@@ -5861,7 +5832,40 @@ export default function App() {
                 </button>
               </div>
             ) : null}
-          </div>
+              </div>
+              <div className="studio-workspace__composer-bar">
+                <div className="studio-generate-footer">
+                  {studioImageBtnBlockReason ? (
+                    <p className="studio-generate-block-hint" role="status">
+                      {studioImageBtnBlockReason}
+                    </p>
+                  ) : null}
+                  <div className="studio-workspace__actions">
+                    <button
+                      type="button"
+                      className="studio-magic-btn"
+                      title={studioImageBtnBlockReason ?? undefined}
+                      disabled={studioBusy || studioImageBtnBlockReason != null}
+                      onClick={() => void refineStudioPrompt()}
+                    >
+                      {studioBusy
+                        ? 'Генерация…'
+                        : studioPromptOnlyDev
+                          ? 'Собрать промпт'
+                          : 'Сгенерировать'}
+                      {canStudioGenerate &&
+                      (studioPromptOnlyDev || integ?.wavespeed_configured) ? (
+                        <span className="studio-magic-btn__cost">
+                          <IconSpark className="studio-slot__icon-svg" />
+                          {(studioInpaintMaskFile != null || studioPaintInpaintMask
+                            ? health?.studio_inpaint_credit_cost
+                            : health?.studio_prompt_credit_cost) ?? '—'}
+                        </span>
+                      ) : null}
+                    </button>
+                  </div>
+                </div>
+              </div>
             </>
           )}
             </div>
@@ -5910,6 +5914,7 @@ export default function App() {
                   Оформите подписку в кабинете → «Тариф и баланс».
                 </div>
               ) : (
+                <div className="studio-workspace__composer-scroll">
                 <StudioModelBootstrapPanel
                   canGenerate={canStudioGenerate}
                   studioPaywalled={studioPaywalled}
@@ -5934,6 +5939,7 @@ export default function App() {
                   }}
                   onError={setError}
                 />
+                </div>
               )}
             </div>
             {canStudioGenerate ? (
@@ -5988,6 +5994,8 @@ export default function App() {
                 Оформите подписку в кабинете → «Тариф и баланс».
               </div>
             ) : (
+              <>
+              <div className="studio-workspace__composer-scroll">
               <div className="studio-slot-grid studio-slot-grid--composer">
                 <StudioPillField
                   label="Формат"
@@ -6263,31 +6271,6 @@ export default function App() {
                   {motionMsg ? (
                     <p className="muted studio-inline-msg">{motionMsg}</p>
                   ) : null}
-                  <div className="studio-generate-footer">
-                    {motionVideoBtnBlockReason ? (
-                      <p className="studio-video-block-hint" role="status">
-                        {motionVideoBtnBlockReason}
-                      </p>
-                    ) : null}
-                    <div className="studio-workspace__actions">
-                    <button
-                      type="button"
-                      className="studio-magic-btn"
-                      disabled={motionBusyVideo || motionVideoBtnBlockReason != null}
-                      title={motionVideoBtnBlockReason ?? undefined}
-                      onClick={() => void runMotionRenderVideo()}
-                    >
-                      {motionBusyVideo ? 'Видео…' : 'Сгенерировать видео'}
-                      <span
-                        className="studio-magic-btn__cost"
-                        key={`${motionSeedanceDuration}-${motionHasReferenceVideo ? 1 : 0}`}
-                      >
-                        <IconSpark className="studio-slot__icon-svg" />
-                        {motionVideoCreditCost}
-                      </span>
-                    </button>
-                    </div>
-                  </div>
                   {motionResultVideoUrl ? (
                     <div className="studio-result-panel">
                       <video
@@ -6310,6 +6293,35 @@ export default function App() {
                   ) : null}
                 </div>
               </div>
+              </div>
+              <div className="studio-workspace__composer-bar">
+                <div className="studio-generate-footer">
+                  {motionVideoBtnBlockReason ? (
+                    <p className="studio-video-block-hint" role="status">
+                      {motionVideoBtnBlockReason}
+                    </p>
+                  ) : null}
+                  <div className="studio-workspace__actions">
+                    <button
+                      type="button"
+                      className="studio-magic-btn"
+                      disabled={motionBusyVideo || motionVideoBtnBlockReason != null}
+                      title={motionVideoBtnBlockReason ?? undefined}
+                      onClick={() => void runMotionRenderVideo()}
+                    >
+                      {motionBusyVideo ? 'Видео…' : 'Сгенерировать видео'}
+                      <span
+                        className="studio-magic-btn__cost"
+                        key={`${motionSeedanceDuration}-${motionHasReferenceVideo ? 1 : 0}`}
+                      >
+                        <IconSpark className="studio-slot__icon-svg" />
+                        {motionVideoCreditCost}
+                      </span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+              </>
             )}
             </div>
             {canStudioGenerate ? (

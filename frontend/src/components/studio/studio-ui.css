@@ -30,23 +30,48 @@
   top: calc(var(--topbar-height, 56px) + 0.5rem);
   display: flex;
   flex-direction: column;
-  gap: var(--studio-gap-lg);
+  gap: 0;
   min-width: 0;
   max-width: 100%;
   max-height: calc(100dvh - var(--topbar-height, 56px) - 2rem);
-  overflow-x: hidden;
-  overflow-y: auto;
+  overflow: hidden;
   padding: var(--studio-gap-lg);
   border-radius: var(--radius-md);
   border: 1px solid var(--border);
   background: color-mix(in srgb, var(--bg-elevated) 88%, transparent);
 }
 
+.studio-workspace__composer-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--studio-gap-lg);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-gutter: stable;
+  padding-bottom: 0.35rem;
+  margin-right: -0.15rem;
+  padding-right: 0.15rem;
+}
+
+.studio-workspace__composer-bar {
+  flex-shrink: 0;
+  margin-top: 0.65rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid color-mix(in srgb, var(--border) 85%, transparent);
+  background: color-mix(in srgb, var(--bg-elevated) 94%, transparent);
+}
+
 .studio-workspace__composer-head {
   display: flex;
   flex-direction: column;
   gap: var(--studio-gap-sm);
-  padding-bottom: 0.15rem;
+  flex-shrink: 0;
+  padding-bottom: 0.65rem;
+  margin-bottom: 0.15rem;
 }
 
 .studio-workspace__composer-head h2 {
