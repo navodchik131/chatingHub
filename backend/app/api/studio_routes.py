@@ -212,6 +212,7 @@ from app.services.wavespeed_client import (
     seedream_v45_edit_image_url,
     wavespeed_image_upscale_url,
     wavespeed_is_sensitive_content_error,
+    wavespeed_is_video_poll_timeout_error,
     z_image_turbo_inpaint_image_url,
 )
 
@@ -4452,6 +4453,18 @@ async def _studio_job_execute_motion_render_video(
             msg = str(e)
             video_url = None
             if provider == "video_edit":
+                if wavespeed_is_video_poll_timeout_error(msg):
+                    log.warning(
+                        "motion_render_video video_edit poll timeout job=%s "
+                        "(task may still be processing on WaveSpeed — no t2v fallback)",
+                        job.id,
+                    )
+                    msg = (
+                        "WaveSpeed: video-edit ещё обрабатывается (локальный таймаут опроса). "
+                        "Задача могла остаться в processing — не запускаем второй запрос. "
+                        "Подождите и обновите архив или проверьте кабинет WaveSpeed."
+                    )
+                    break
                 log.warning(
                     "motion_render_video video_edit failed job=%s: %s",
                     job.id,

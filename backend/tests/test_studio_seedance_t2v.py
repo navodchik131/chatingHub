@@ -9,7 +9,10 @@ from app.services.studio_seedance_t2v import (
     soften_seedance_provider_prompt,
     truncate_seedance_t2v_prompt,
 )
-from app.services.wavespeed_client import wavespeed_is_sensitive_content_error
+from app.services.wavespeed_client import (
+    wavespeed_is_sensitive_content_error,
+    wavespeed_is_video_poll_timeout_error,
+)
 
 
 def test_truncate_prompt():
@@ -144,6 +147,11 @@ def test_filter_model_images_for_video_excludes_body():
     with_body = filter_model_images_for_seedance_video(imgs, include_body=True)
     assert len(with_body) == 3
     assert [im.image_kind for im in with_body] == ["turnaround", "face", "body"]
+
+
+def test_wavespeed_poll_timeout_detector():
+    assert wavespeed_is_video_poll_timeout_error("WaveSpeed: timeout waiting for video")
+    assert not wavespeed_is_video_poll_timeout_error("WaveSpeed task failed")
 
 
 def test_wavespeed_sensitive_detector():

@@ -184,6 +184,11 @@ def wavespeed_is_sensitive_content_error(message: str | None) -> bool:
     )
 
 
+def wavespeed_is_video_poll_timeout_error(message: str | None) -> bool:
+    """Локальный таймаут опроса — задача на WaveSpeed может ещё быть в processing."""
+    return "timeout waiting for video" in (message or "").lower()
+
+
 def _wavespeed_raise_from_response(resp_json: dict[str, Any], *, context: str) -> None:
     task_err = _wavespeed_task_failed_error(resp_json)
     if task_err:
@@ -1371,8 +1376,8 @@ async def seedance_studio_video_edit_video_url(
         full_post_url=url,
         body=body,
         timeout_submit=timeout_submit,
-        poll_interval=poll_interval,
-        max_polls=max_polls,
+        poll_interval=settings.wavespeed_video_poll_interval_seconds,
+        max_polls=settings.wavespeed_video_max_polls,
     )
 
 
