@@ -18,9 +18,10 @@ def _patch_motion_pricing_defaults():
     )
 
 
-def test_duration_clamp_allows_one_second() -> None:
-    assert motion_video_duration_seconds(1) == 1
-    assert motion_video_duration_seconds(0) == 1
+def test_duration_clamp_api_minimum_four_seconds() -> None:
+    assert motion_video_duration_seconds(1) == 4
+    assert motion_video_duration_seconds(3) == 4
+    assert motion_video_duration_seconds(4) == 4
     assert motion_video_duration_seconds(99) == 15
 
 
@@ -35,7 +36,7 @@ def test_one_second_rate_defaults() -> None:
 
 def test_billing_uses_api_duration_minimum() -> None:
     with _patch_motion_pricing_defaults():
-        assert motion_video_credit_cost(1, has_motion_reference_video=True) == 12
+        assert motion_video_credit_cost(1, has_motion_reference_video=True) == 45
 
 
 def test_five_seconds_scales_with_duration() -> None:
@@ -45,7 +46,7 @@ def test_five_seconds_scales_with_duration() -> None:
 
 
 def test_matches_settings_formula() -> None:
-    for dur in (1, 4, 10, 15):
+    for dur in (4, 10, 15):
         for ref in (True, False):
             usd = (
                 settings.studio_motion_usd_per_sec_with_ref

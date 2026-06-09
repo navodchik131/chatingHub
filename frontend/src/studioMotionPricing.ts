@@ -16,7 +16,7 @@ export const DEFAULT_MOTION_VIDEO_PRICING: StudioMotionVideoPricing = {
   usd_per_sec_without_reference_video: 0.25,
   rub_per_usd: 80,
   rub_per_credit: 3.6,
-  duration_min: 1,
+  duration_min: 4,
   duration_max: 15,
   duration_default: 5,
 }

@@ -3712,7 +3712,10 @@ async def _studio_job_execute_motion_first_frame(
                 generated_image_url = ws_res.url
                 wavespeed_task_id = ws_res.task_id or wavespeed_task_id
             except RuntimeError as e:
-                wavespeed_message = str(e)
+                wavespeed_message = _append_nano_banana_error_hint(
+                    str(e),
+                    wave_profile=wave_profile_n,
+                )
 
         if generated_image_url and gen_row is not None:
             finished_row, cdn_preview = await studio_finish_image_generation(

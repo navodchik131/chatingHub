@@ -208,7 +208,8 @@ class Settings(BaseSettings):
         default="/api/v3/bytedance/seedance-2.0/text-to-video",
     )
     wavespeed_seedance_20_t2v_resolution: str = Field(default="720p")
-    studio_motion_video_duration_min: int = Field(default=1, ge=1, le=15)
+    # WaveSpeed Seedance T2V принимает duration только 4–15 с (см. доки API).
+    studio_motion_video_duration_min: int = Field(default=4, ge=4, le=15)
     studio_motion_video_duration_max: int = Field(default=15, ge=1, le=60)
     wavespeed_seedance_20_t2v_duration: int = Field(default=5, ge=1, le=15)
     wavespeed_seedance_20_t2v_web_search: bool = Field(default=False)

@@ -8,7 +8,7 @@ from app.config import settings
 
 
 def motion_video_duration_seconds(raw: str | int | None, *, default: int | None = None) -> int:
-    """1–15 с (лимит Seedance T2V); пустое значение → default из настроек."""
+    """4–15 с (лимит WaveSpeed Seedance T2V); пустое значение → default из настроек."""
     lim_min = int(settings.studio_motion_video_duration_min)
     lim_max = int(settings.studio_motion_video_duration_max)
     fallback = default if default is not None else settings.wavespeed_seedance_20_t2v_duration

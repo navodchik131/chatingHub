@@ -905,7 +905,7 @@ export default function App() {
   )
 
   const seedanceDurationMin =
-    health?.studio_seedance_t2v_duration_min ?? health?.studio_seedance_i2v_duration_min ?? 1
+    health?.studio_seedance_t2v_duration_min ?? health?.studio_seedance_i2v_duration_min ?? 4
   const seedanceDurationMax =
     health?.studio_seedance_t2v_duration_max ?? health?.studio_seedance_i2v_duration_max ?? 15
 
@@ -925,7 +925,7 @@ export default function App() {
     const d =
       health.studio_seedance_t2v_duration_default ?? health.studio_seedance_i2v_duration_default
     const mn =
-      health.studio_seedance_t2v_duration_min ?? health.studio_seedance_i2v_duration_min ?? 1
+      health.studio_seedance_t2v_duration_min ?? health.studio_seedance_i2v_duration_min ?? 4
     const mx =
       health.studio_seedance_t2v_duration_max ?? health.studio_seedance_i2v_duration_max ?? 15
     if (typeof d === 'number' && Number.isFinite(d)) {
