@@ -653,7 +653,9 @@ async def grok_expand_seedance_t2v_prompt(
     neg_line = f"Avoid: {neg}" if neg else "(none specified)"
 
     aspect = (output_aspect or "16:9").strip() or "16:9"
-    dur = max(4, min(15, int(duration_seconds)))
+    from app.services.studio_motion_pricing import motion_video_duration_seconds
+
+    dur = motion_video_duration_seconds(duration_seconds)
 
     user_instruction = (
         "You write a single Seedance 2.0 Text-to-Video prompt in ENGLISH.\n\n"

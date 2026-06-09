@@ -173,6 +173,9 @@ class Settings(BaseSettings):
     # Множитель grain_sigma в phone EXIF; при уже применённом humanize grain не дублируется.
     studio_phone_export_grain_multiplier: float = Field(default=1.15, ge=1.0, le=3.0)
     studio_phone_export_jpeg_quality: int = Field(default=88, ge=75, le=95)
+    # Архив видео: phone Make/Model/Lens/GPS/дата и снятие C2PA/XMP без перекодирования (exiftool).
+    studio_video_phone_export_enabled: bool = Field(default=True)
+    studio_video_metadata_exiftool_timeout_seconds: float = Field(default=180.0, ge=30.0, le=600.0)
     studio_generation_stale_processing_hours: int = Field(default=48, ge=1, le=96)
     # Опрос Seedance / video на бэкенде: 800 × 3 с ≈ 40 мин (клиент не долбит API).
     wavespeed_video_max_polls: int = Field(default=800, ge=60, le=1200)
@@ -205,7 +208,9 @@ class Settings(BaseSettings):
         default="/api/v3/bytedance/seedance-2.0/text-to-video",
     )
     wavespeed_seedance_20_t2v_resolution: str = Field(default="720p")
-    wavespeed_seedance_20_t2v_duration: int = Field(default=5, ge=4, le=15)
+    studio_motion_video_duration_min: int = Field(default=1, ge=1, le=15)
+    studio_motion_video_duration_max: int = Field(default=15, ge=1, le=60)
+    wavespeed_seedance_20_t2v_duration: int = Field(default=5, ge=1, le=15)
     wavespeed_seedance_20_t2v_web_search: bool = Field(default=False)
     # Видео Seedance T2V: USD/сек → кредиты через STUDIO_MOTION_RUB_PER_USD и STUDIO_MOTION_RUB_PER_CREDIT
     studio_motion_usd_per_sec_with_ref: float = Field(default=0.50, ge=0.0)
@@ -230,7 +235,7 @@ class Settings(BaseSettings):
         default="/api/v3/bytedance/seedance-2.0/image-to-video",
     )
     wavespeed_seedance_20_i2v_resolution: str = Field(default="720p")
-    wavespeed_seedance_20_i2v_duration: int = Field(default=5, ge=4, le=15)
+    wavespeed_seedance_20_i2v_duration: int = Field(default=5, ge=1, le=15)
     wavespeed_seedance_20_i2v_web_search: bool = Field(default=False)
     # Опционально: ByteDance Seedance Fast Video-Edit (не используется шагом рендера по умолчанию)
     wavespeed_studio_video_edit_path: str = Field(
@@ -242,6 +247,8 @@ class Settings(BaseSettings):
     studio_motion_max_upload_mb: int = Field(default=64, ge=1, le=200)
     # Имя или абсолютный путь к ffmpeg (в официальном Docker-образе — /usr/bin/ffmpeg)
     ffmpeg_binary: str = Field(default="ffmpeg")
+    # exiftool для метаданных видео (в Docker: libimage-exiftool-perl → /usr/bin/exiftool)
+    exiftool_binary: str = Field(default="exiftool")
     # Режим «Обычные фотографии»: та же учётка WaveSpeed, что и WAN — см. модель
     # https://wavespeed.ai/models/google/nano-banana-pro/edit и API /api/v3/google/nano-banana-pro/edit
     wavespeed_nano_banana_pro_edit_path: str = Field(

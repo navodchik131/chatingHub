@@ -2,7 +2,10 @@ import math
 from unittest.mock import patch
 
 from app.config import settings
-from app.services.studio_motion_pricing import motion_video_credit_cost
+from app.services.studio_motion_pricing import (
+    motion_video_credit_cost,
+    motion_video_duration_seconds,
+)
 
 
 def _patch_motion_pricing_defaults():
@@ -15,18 +18,24 @@ def _patch_motion_pricing_defaults():
     )
 
 
+def test_duration_clamp_allows_one_second() -> None:
+    assert motion_video_duration_seconds(1) == 1
+    assert motion_video_duration_seconds(0) == 1
+    assert motion_video_duration_seconds(99) == 15
+
+
 def test_one_second_rate_defaults() -> None:
     from app.services.studio_motion_pricing import _motion_video_credit_cost_raw
 
     with _patch_motion_pricing_defaults():
-        # $0.50 × 80 / 3.6 ≈ 11.11 → 12 (тариф за 1 с; ролик мин. 4 с → 48 кр.)
+        # $0.50 × 80 / 3.6 ≈ 11.11 → 12 кр. за 1 с
         assert _motion_video_credit_cost_raw(1, has_motion_reference_video=True) == 12
         assert _motion_video_credit_cost_raw(1, has_motion_reference_video=False) == 6
 
 
 def test_billing_uses_api_duration_minimum() -> None:
     with _patch_motion_pricing_defaults():
-        assert motion_video_credit_cost(1, has_motion_reference_video=True) == 45
+        assert motion_video_credit_cost(1, has_motion_reference_video=True) == 12
 
 
 def test_five_seconds_scales_with_duration() -> None:
@@ -36,7 +45,7 @@ def test_five_seconds_scales_with_duration() -> None:
 
 
 def test_matches_settings_formula() -> None:
-    for dur in (4, 10, 15):
+    for dur in (1, 4, 10, 15):
         for ref in (True, False):
             usd = (
                 settings.studio_motion_usd_per_sec_with_ref

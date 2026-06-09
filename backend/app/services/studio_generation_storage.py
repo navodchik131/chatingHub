@@ -175,6 +175,10 @@ def _ext_and_media_from_content_type(ct_header: str | None) -> tuple[str, str]:
         return ".webp", "image/webp"
     if "gif" in ct:
         return ".gif", "image/gif"
+    if "quicktime" in ct or "mp4" in ct:
+        return ".mp4", "video/mp4"
+    if "webm" in ct:
+        return ".webm", "video/webm"
     return ".png", "image/png"
 
 
@@ -269,6 +273,66 @@ async def _apply_phone_export_if_needed(
     return data, ext, media
 
 
+async def _apply_video_metadata_if_needed(
+    session: AsyncSession,
+    *,
+    studio_model_id: int | None,
+    exif_camera: str | None,
+    data: bytes,
+    ext: str,
+    media: str,
+) -> tuple[bytes, str, str]:
+    if not (media or "").startswith("video/"):
+        return data, ext, media
+    from app.services.studio_camera_presets import get_camera_preset_by_id
+    from app.services.studio_exif_profile import (
+        phone_exif_profile_from_json,
+        profile_for_phone_export,
+    )
+    from app.services.studio_video_metadata import process_video_archive_bytes
+
+    selfie_for_exif = exif_camera_is_selfie(exif_camera)
+    preset: dict[str, Any] | None = None
+    export_lat: float | None = None
+    export_lon: float | None = None
+
+    if studio_model_id is not None:
+        stmt = (
+            select(UserStudioModel)
+            .where(UserStudioModel.id == studio_model_id)
+            .options(selectinload(UserStudioModel.images))
+        )
+        model_row = (await session.execute(stmt)).scalar_one_or_none()
+        if model_row is not None:
+            export_lat = model_row.export_lat
+            export_lon = model_row.export_lon
+            profile_raw = (
+                model_row.phone_exif_selfie_json
+                if selfie_for_exif
+                else model_row.phone_exif_main_json
+            )
+            profile = phone_exif_profile_from_json(profile_raw)
+            if profile:
+                preset = profile_for_phone_export(profile, selfie=selfie_for_exif)
+            elif (model_row.camera_preset_id or "").strip():
+                preset = get_camera_preset_by_id(model_row.camera_preset_id.strip())
+
+    out_bytes, changed = await anyio.to_thread.run_sync(
+        partial(
+            process_video_archive_bytes,
+            data,
+            ext=ext,
+            preset=preset,
+            selfie=selfie_for_exif,
+            export_lat=export_lat,
+            export_lon=export_lon,
+        ),
+    )
+    if changed and out_bytes:
+        return out_bytes, ext, media
+    return data, ext, media
+
+
 async def _write_generation_file(
     session: AsyncSession,
     row: StudioGeneration,
@@ -294,6 +358,14 @@ async def _write_generation_file(
         ext=ext,
         media=media,
         skip_grain=humanized,
+    )
+    data, ext, media = await _apply_video_metadata_if_needed(
+        session,
+        studio_model_id=studio_model_id,
+        exif_camera=exif_cam,
+        data=data,
+        ext=ext,
+        media=media,
     )
 
     rel = f"data/studio_generations/{row.user_id}/{uuid.uuid4().hex}{ext}"

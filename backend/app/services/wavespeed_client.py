@@ -1197,8 +1197,12 @@ async def seedance_20_text_to_video_url(
     res = (resolution or settings.wavespeed_seedance_20_t2v_resolution or "720p").strip().lower()
     if res not in ("480p", "720p", "1080p"):
         res = "720p"
-    dur = int(duration if duration is not None else settings.wavespeed_seedance_20_t2v_duration)
-    dur = max(4, min(15, dur))
+    from app.services.studio_motion_pricing import motion_video_duration_seconds
+
+    dur = motion_video_duration_seconds(
+        duration if duration is not None else None,
+        default=settings.wavespeed_seedance_20_t2v_duration,
+    )
     path = _seedance_20_t2v_post_path()
     url = f"{_wavespeed_base()}{path}"
     body: dict[str, Any] = {
@@ -1274,8 +1278,12 @@ async def seedance_20_image_to_video_url(
     res = (resolution or settings.wavespeed_seedance_20_i2v_resolution or "720p").strip().lower()
     if res not in ("480p", "720p", "1080p"):
         res = "720p"
-    dur = int(duration if duration is not None else settings.wavespeed_seedance_20_i2v_duration)
-    dur = max(4, min(15, dur))
+    from app.services.studio_motion_pricing import motion_video_duration_seconds
+
+    dur = motion_video_duration_seconds(
+        duration if duration is not None else None,
+        default=settings.wavespeed_seedance_20_i2v_duration,
+    )
     path = _seedance_20_i2v_post_path()
     url = f"{_wavespeed_base()}{path}"
     body: dict[str, Any] = {
@@ -1359,7 +1367,9 @@ async def seedance_studio_video_edit_video_url(
         "generate_audio": not bool(keep_original_sound),
     }
     if duration is not None:
-        body["duration"] = max(4, min(15, int(duration)))
+        from app.services.studio_motion_pricing import motion_video_duration_seconds
+
+        body["duration"] = motion_video_duration_seconds(duration)
     ar = (aspect_ratio or "").strip()
     if ar:
         body["aspect_ratio"] = ar

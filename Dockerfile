@@ -33,6 +33,7 @@ ENV DEBCONF_NONINTERACTIVE_SEEN=true
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     ffmpeg \
+    libimage-exiftool-perl \
     && rm -rf /var/lib/apt/lists/*
 
 COPY backend/requirements.txt ./
