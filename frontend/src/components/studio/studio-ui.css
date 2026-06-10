@@ -41,8 +41,7 @@
   background: color-mix(in srgb, var(--bg-elevated) 88%, transparent);
 }
 
-.studio-workspace__composer > .studio-workspace__composer-head,
-.studio-workspace__composer > .banner {
+.studio-workspace__composer > :not(.studio-workspace__composer-scroll) {
   flex-shrink: 0;
 }
 
@@ -915,25 +914,25 @@
   overflow: hidden;
 }
 
-/* Видео (десктоп): два независимых скролла — настройки слева, история справа */
+/* Студия (десктоп): два независимых скролла — composer слева, история справа */
 @media (min-width: 901px) {
-  .studio-video-page.studio-panel {
+  .studio-workspace-page.studio-panel {
     display: flex;
     flex-direction: column;
     flex: 1;
     min-height: 0;
-    max-height: calc(100dvh - var(--topbar-height, 56px) - 2rem);
+    max-height: calc(100dvh - var(--topbar-height, 56px) - 2.5rem);
     overflow: hidden;
   }
 
-  .studio-video-page .studio-workspace {
+  .studio-workspace-page .studio-workspace {
     flex: 1;
     min-height: 0;
     align-items: stretch;
     overflow: hidden;
   }
 
-  .studio-video-page .studio-workspace__composer {
+  .studio-workspace-page .studio-workspace__composer {
     position: static;
     top: auto;
     height: 100%;
@@ -941,7 +940,7 @@
     min-height: 0;
   }
 
-  .studio-video-page .studio-gallery {
+  .studio-workspace-page .studio-gallery {
     display: flex;
     flex-direction: column;
     min-height: 0;
@@ -956,19 +955,19 @@
     padding-right: 0.2rem;
   }
 
-  .studio-video-page .studio-gallery__grid {
+  .studio-workspace-page .studio-gallery__grid {
     padding-bottom: 0.5rem;
   }
 }
 
-.app.app--shell .workspace-content:has(.studio-video-page) {
+.app.app--shell .workspace-content:has(.studio-workspace-page) {
   overflow: hidden;
   display: flex;
   flex-direction: column;
   min-height: 0;
 }
 
-.app.app--shell .workspace-content > .studio-video-page {
+.app.app--shell .workspace-content > .studio-workspace-page {
   flex: 1;
   min-height: 0;
   margin-bottom: 0;
