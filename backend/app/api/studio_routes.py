@@ -3411,11 +3411,7 @@ async def _studio_job_execute_motion_first_frame(
     has_still_upload = bool(p.get("first_frame_path"))
     has_video_upload = bool(p.get("video_path"))
 
-    if existing_gid is not None:
-        gen_arch_row, first_frame, first_frame_media = await _load_owned_generation_still_for_motion(
-            session, owner_id=oid, generation_id=existing_gid, actor=user
-        )
-    elif has_still_upload:
+    if has_still_upload:
         first_frame = studio_jobs.load_studio_job_file(str(p["first_frame_path"]))
         first_frame_media = str(p.get("first_frame_mime") or "image/jpeg")
         explicit_still_file_upload = True
@@ -3445,6 +3441,10 @@ async def _studio_job_execute_motion_first_frame(
         if len(first_frame) < 64:
             raise RuntimeError("Не удалось извлечь кадр из видео.")
         first_frame_media = "image/jpeg"
+    elif existing_gid is not None:
+        gen_arch_row, first_frame, first_frame_media = await _load_owned_generation_still_for_motion(
+            session, owner_id=oid, generation_id=existing_gid, actor=user
+        )
     else:
         raise RuntimeError(
             "Загрузите референс-видео, файл первого кадра или выберите снимок из архива."

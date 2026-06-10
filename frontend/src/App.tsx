@@ -869,6 +869,7 @@ export default function App() {
   /** Только для провайдера Seedance I2V (сек., диапазон с health). */
   const [motionSeedanceDuration, setMotionSeedanceDuration] = useState(5)
   const motionSeedanceDurationInitRef = useRef(false)
+  const motionVideoUploadSeqRef = useRef(0)
   const [motionBusyFrame, setMotionBusyFrame] = useState(false)
   const [motionBusyCompose, setMotionBusyCompose] = useState(false)
   const [motionBusyVideo, setMotionBusyVideo] = useState(false)
@@ -1263,7 +1264,20 @@ export default function App() {
     }
   }, [authed, canStudioGenerate, studioArchiveHasPending, syncStudioArchivePending])
 
+  const resetMotionVideoWorkflow = useCallback(() => {
+    setMotionPreviewGenId(null)
+    setMotionPreviewUrl(null)
+    setMotionFrameArchiveId(null)
+    setMotionFirstFrameFile(null)
+    setMotionGrokTimeline(null)
+    setMotionStep1Preview(null)
+    setMotionResultVideoUrl(null)
+    setMotionPendingExternalStillUrl(null)
+    setMotionAutoTextPreview(null)
+  }, [])
+
   const uploadMotionDrivingVideo = useCallback(async (file: File) => {
+    const uploadSeq = ++motionVideoUploadSeqRef.current
     setMotionDrivingUploadBusy(true)
     setMotionMsg(null)
     setError(null)
@@ -1279,6 +1293,7 @@ export default function App() {
         motion_video_file_id?: string
         detail?: unknown
       }
+      if (uploadSeq !== motionVideoUploadSeqRef.current) return
       if (!r.ok) {
         setError(formatHttpApiError(r, data))
         setMotionVideoFileId(null)
@@ -1287,6 +1302,7 @@ export default function App() {
       const id = typeof data.motion_video_file_id === 'string' ? data.motion_video_file_id.trim() : ''
       setMotionVideoFileId(id || null)
     } catch (e) {
+      if (uploadSeq !== motionVideoUploadSeqRef.current) return
       setMotionVideoFileId(null)
       setError(
         e instanceof TypeError && e.message === 'Failed to fetch'
@@ -1296,7 +1312,9 @@ export default function App() {
             : 'Ошибка загрузки видео',
       )
     } finally {
-      setMotionDrivingUploadBusy(false)
+      if (uploadSeq === motionVideoUploadSeqRef.current) {
+        setMotionDrivingUploadBusy(false)
+      }
     }
   }, [])
 
@@ -2705,7 +2723,9 @@ export default function App() {
     | { ok: false; data: MotionFirstFrameApiData; response: Response }
   > => {
     const fd = new FormData()
-    if (motionFrameArchiveId != null) {
+    const sendArchiveStill =
+      motionFrameArchiveId != null && !motionVideoFile && !motionFirstFrameFile
+    if (sendArchiveStill) {
       fd.append('existing_generation_id', String(motionFrameArchiveId))
     }
     if (motionFirstFrameFile) {
@@ -6038,17 +6058,17 @@ export default function App() {
                       emptyLabel={motionVideoFile?.name || 'Загрузить'}
                       accept="video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov"
                       onFile={(f) => {
+                        ++motionVideoUploadSeqRef.current
                         setMotionVideoFile(f)
                         setMotionVideoFileId(null)
-                        setMotionPreviewGenId(null)
-                        setMotionPreviewUrl(null)
-                        setMotionGrokTimeline(null)
-                        setMotionResultVideoUrl(null)
+                        resetMotionVideoWorkflow()
                         if (f) void uploadMotionDrivingVideo(f)
                       }}
                       onClear={() => {
+                        ++motionVideoUploadSeqRef.current
                         setMotionVideoFile(null)
                         setMotionVideoFileId(null)
+                        resetMotionVideoWorkflow()
                       }}
                     />
                     <StudioMediaSlot
@@ -6174,15 +6194,25 @@ export default function App() {
                       className="ghost-btn"
                       disabled={
                         motionBusyFrame ||
+                        (motionDrivingUploadBusy && Boolean(motionVideoFile)) ||
                         !integ?.wavespeed_configured ||
                         studioSelectedModelId == null ||
                         (!motionVideoFile &&
                           !motionFirstFrameFile &&
                           motionFrameArchiveId == null)
                       }
+                      title={
+                        motionDrivingUploadBusy && motionVideoFile
+                          ? 'Дождитесь окончания загрузки реф-видео на сервер'
+                          : undefined
+                      }
                       onClick={() => void runMotionFirstFrame()}
                     >
-                      {motionBusyFrame ? 'Кадр…' : 'Сгенерировать кадр'}
+                      {motionBusyFrame
+                        ? 'Кадр…'
+                        : motionDrivingUploadBusy && motionVideoFile
+                          ? 'Загрузка видео…'
+                          : 'Сгенерировать кадр'}
                     </button>
                   </div>
                 </div>
