@@ -13,9 +13,15 @@
 .first-gen-wizard {
   width: min(920px, 100%);
   max-height: min(92vh, 900px);
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
   padding: 1.25rem 1.35rem 1.5rem;
   border-radius: 18px;
+}
+
+.first-gen-wizard__body {
+  min-height: 360px;
 }
 
 .first-gen-wizard__head {
@@ -131,6 +137,10 @@
 }
 
 .first-gen-wizard__body--center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   text-align: center;
   padding: 2rem 1rem;
 }

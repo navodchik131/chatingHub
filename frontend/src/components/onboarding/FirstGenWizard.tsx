@@ -70,6 +70,15 @@ export function FirstGenWizard({
     setResultGenId(null)
   }, [open])
 
+  useEffect(() => {
+    if (!open) return
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = prev
+    }
+  }, [open])
+
   const canProceedPhotos = Boolean(modelFile && refFile)
 
   const skip = useCallback(() => {
@@ -153,7 +162,7 @@ export function FirstGenWizard({
       genFd.append('output_aspect', '3:4')
       genFd.append('studio_mode', 'model_scene')
       genFd.append('wan_edit_tier', 'standard')
-      genFd.append('studio_wave_profile', 'regular')
+      genFd.append('studio_wave_profile', 'nsfw')
       genFd.append('generate_wavespeed', '1')
       genFd.append('wavespeed_single_reference', '1')
       genFd.append('send_pose_reference_to_wavespeed', '0')
