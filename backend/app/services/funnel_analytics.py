@@ -129,7 +129,7 @@ async def _owners_with_model(session: AsyncSession, owner_ids: set[int]) -> set[
         return set()
     rows = (
         await session.execute(
-            select(UserStudioModel.owner_id).where(UserStudioModel.owner_id.in_(owner_ids))
+            select(UserStudioModel.user_id).where(UserStudioModel.user_id.in_(owner_ids))
         )
     ).all()
     return {int(r[0]) for r in rows if r[0] is not None}
