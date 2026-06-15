@@ -1446,6 +1446,20 @@ def load_model_profile_gen_system() -> str:
     return _DEFAULT_MODEL_PROFILE_GEN_SYSTEM
 
 
+def load_model_profile_json_template() -> str:
+    rel = _relative_prompt_path(
+        settings.image_studio_model_profile_template_path,
+        "data/prompts/model_profile_template.json",
+    )
+    path = (BACKEND_DIR / rel).resolve()
+    if path.is_file():
+        t = path.read_text(encoding="utf-8").strip()
+        if t:
+            return t
+    log.warning("model_profile_gen: template file missing, using minimal schema")
+    return '{"model_profile":{"name":"<FILL_NAME>","identity_lock_keywords":"<FILL>"}}'
+
+
 def _normalize_model_profile_json_output(raw_text: str) -> str:
     t = _strip_code_fences(raw_text)
     try:
@@ -1468,12 +1482,16 @@ async def generate_model_profile_json_from_images(
     system = load_model_profile_gen_system()
     if not system.strip():
         raise RuntimeError("Пустой системный промпт генерации профиля")
+    template = load_model_profile_json_template()
     user_content: list[dict] = [
         {
             "type": "text",
             "text": (
-                "These reference photos show one person. Output the JSON as instructed. "
-                f"Number of images: {len(image_items)}."
+                "These reference photos show one person. Fill the JSON schema template below "
+                "with traits from THIS person only. Keep the exact same keys and nesting.\n\n"
+                f"Number of images: {len(image_items)}.\n\n"
+                "JSON SCHEMA TEMPLATE (replace every placeholder value):\n"
+                f"{template}"
             ),
         }
     ]

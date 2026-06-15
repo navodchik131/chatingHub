@@ -81,6 +81,11 @@ async def begin_studio_generation_run(
     )
     session.add(row)
     await session.flush()
+    from app.services.funnel_analytics import record_funnel_event_for_owner_once
+
+    await record_funnel_event_for_owner_once(
+        session, owner_id=owner_id, event="first_generation"
+    )
     return row
 
 

@@ -29,6 +29,7 @@ from app.schemas import (
     AdminUserRow,
 )
 from app.services.admin_analytics import build_admin_dashboard
+from app.services.funnel_analytics import build_activation_funnel
 from app.services.admin_segments import VALID_ADMIN_SEGMENTS, list_admin_segment
 from app.services.billing_plan import normalize_billing_plan
 from app.services.credits import admin_adjust_credits
@@ -121,6 +122,7 @@ async def admin_stats(
     chart_days: int = Query(default=30, ge=7, le=90),
 ) -> AdminStatsOut:
     data = await build_admin_dashboard(session, chart_days=chart_days)
+    data["activation_funnel"] = await build_activation_funnel(session, days=chart_days)
     return AdminStatsOut(**data)
 
 

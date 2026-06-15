@@ -64,6 +64,13 @@ import {
   WavespeedSetupBanner,
   needsUserWavespeedKey,
 } from './components/WavespeedSetupBanner'
+import { FirstGenWizard } from './components/onboarding/FirstGenWizard'
+import {
+  consumeJustRegistered,
+  markJustRegistered,
+  readFirstGenWizardDone,
+  trackFunnelEvent,
+} from './analytics/funnel'
 import './App.css'
 import { StudioInpaintMaskPainter, type StudioInpaintMaskPainterRef } from './StudioInpaintMaskPainter'
 import {
@@ -743,6 +750,7 @@ export default function App() {
   const canPlatformAdmin = Boolean(me?.is_platform_admin)
 
   const [accountOpen, setAccountOpen] = useState(false)
+  const [firstGenWizardOpen, setFirstGenWizardOpen] = useState(false)
   const [accountTab, setAccountTab] = useState<AccountCabinetTab>('overview')
   const [workspaceMembers, setWorkspaceMembers] = useState<WorkspaceMemberRow[]>([])
   const [teamBusy, setTeamBusy] = useState(false)
@@ -1054,6 +1062,19 @@ export default function App() {
     }
     void boot()
   }, [])
+
+  useEffect(() => {
+    if (!authed || !isOwner) return
+    trackFunnelEvent('workspace_opened')
+  }, [authed, isOwner])
+
+  useEffect(() => {
+    if (!authed || !isOwner || !canStudioGenerate || studioPaywalled) return
+    if (readFirstGenWizardDone()) return
+    if (consumeJustRegistered()) {
+      setFirstGenWizardOpen(true)
+    }
+  }, [authed, isOwner, canStudioGenerate, studioPaywalled])
 
   const refreshMe = useCallback(async () => {
     const r = await apiFetch('/api/auth/me')
@@ -3592,9 +3613,8 @@ export default function App() {
               if (r.ok) setMe((await r.json()) as UserMe)
               setAuthed(true)
               if (fromRegister) {
-                setAccountTab('integrations')
-                setAccountOpen(true)
-                setWsSetupPulse(true)
+                markJustRegistered()
+                setFirstGenWizardOpen(true)
               }
             }}
           />
@@ -3706,7 +3726,32 @@ export default function App() {
           </div>
         </header>
       ) : null}
-      {error && <div className="banner error">{error}</div>}
+      {error && !accountOpen && !firstGenWizardOpen ? (
+        <div className="banner error" role="alert">
+          {error}
+        </div>
+      ) : null}
+
+      <FirstGenWizard
+        open={firstGenWizardOpen}
+        studioNeedsUserWsKey={studioNeedsUserWsKey}
+        grokConfigured={health?.studio_grok_scene_compose_configured !== false}
+        onClose={() => setFirstGenWizardOpen(false)}
+        onOpenIntegrations={() => {
+          setAccountTab('integrations')
+          setAccountOpen(true)
+          trackFunnelEvent('integrations_opened')
+        }}
+        onComplete={() => {
+          markSetupTourHadGeneration()
+          setSetupTourHadGen(true)
+          setAppSection('studio')
+          trackFunnelEvent('studio_opened')
+          void loadStudioModels()
+          void loadStudioGenerationsReset()
+          void refreshMe()
+        }}
+      />
 
       {!hasAnyMainSection ? (
         <div className="banner info" style={{ margin: '0 1rem', display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center' }}>
@@ -3727,6 +3772,11 @@ export default function App() {
               Закрыть
             </button>
           </div>
+          {error ? (
+            <div className="account-panel-error banner error" role="alert">
+              {error}
+            </div>
+          ) : null}
           <div className="account-cabinet-tabs" role="tablist" aria-label="Разделы кабинета">
             <button
               type="button"

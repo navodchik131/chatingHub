@@ -352,6 +352,7 @@ async def init_db() -> None:
         await conn.run_sync(_migrate_workspace_member_studio_models)
         await conn.run_sync(_migrate_conversation_studio_model_id)
         await conn.run_sync(_migrate_message_attachments_table)
+        await conn.run_sync(_migrate_funnel_events_table)
 
 
 def _migrate_user_studio_model_phone_exif_refs(sync_conn) -> None:
@@ -396,6 +397,45 @@ def _migrate_message_attachments_table(sync_conn) -> None:
     )
     sync_conn.execute(
         text("CREATE INDEX ix_message_attachments_message_id ON message_attachments (message_id)")
+    )
+
+
+def _migrate_funnel_events_table(sync_conn) -> None:
+    from sqlalchemy import inspect
+
+    insp = inspect(sync_conn)
+    if insp.has_table("funnel_events"):
+        return
+    if sync_conn.dialect.name == "sqlite":
+        sync_conn.execute(
+            text(
+                """
+                CREATE TABLE funnel_events (
+                    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                    owner_id INTEGER NOT NULL,
+                    user_id INTEGER NOT NULL,
+                    event VARCHAR(64) NOT NULL,
+                    meta TEXT,
+                    created_at DATETIME NOT NULL,
+                    FOREIGN KEY(owner_id) REFERENCES users (id) ON DELETE CASCADE,
+                    FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE
+                )
+                """
+            )
+        )
+    else:
+        from app.db.models import FunnelEvent
+
+        FunnelEvent.__table__.create(sync_conn, checkfirst=True)
+        return
+    sync_conn.execute(
+        text("CREATE INDEX ix_funnel_events_owner_id ON funnel_events (owner_id)")
+    )
+    sync_conn.execute(
+        text("CREATE INDEX ix_funnel_events_event ON funnel_events (event)")
+    )
+    sync_conn.execute(
+        text("CREATE INDEX ix_funnel_events_created_at ON funnel_events (created_at)")
     )
 
 

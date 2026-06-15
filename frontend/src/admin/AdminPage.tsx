@@ -406,6 +406,47 @@ export function AdminPage() {
             </section>
           ) : null}
 
+          {stats?.activation_funnel && stats.activation_funnel.registered > 0 ? (
+            <section className="admin-section">
+              <h2 className="admin-section-title">
+                Воронка активации ({stats.activation_funnel.days} дн.)
+              </h2>
+              <p className="admin-section-lead muted">
+                Когорта новых владельцев: от регистрации до первой генерации. Шаги WS / модель / студия
+                считаются по данным БД; wizard — по событиям funnel_events.
+              </p>
+              <div className="admin-funnel">
+                {stats.activation_funnel.steps.map((step) => (
+                  <div key={step.key} className="admin-funnel__row">
+                    <div className="admin-funnel__label">{step.label}</div>
+                    <div className="admin-funnel__bar-wrap">
+                      <div
+                        className="admin-funnel__bar"
+                        style={{ width: `${Math.max(step.pct_of_registered, 2)}%` }}
+                      />
+                    </div>
+                    <div className="admin-funnel__meta mono">
+                      {step.count}{' '}
+                      <span className="admin-kpi__pct">({step.pct_of_registered}%)</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {Object.keys(stats.activation_funnel.events_by_name).length > 0 ? (
+                <ul className="admin-usage-list" style={{ marginTop: '1rem' }}>
+                  {Object.entries(stats.activation_funnel.events_by_name)
+                    .sort((a, b) => b[1] - a[1])
+                    .map(([k, c]) => (
+                      <li key={k}>
+                        <span>{k}</span>
+                        <span className="mono">{c}</span>
+                      </li>
+                    ))}
+                </ul>
+              ) : null}
+            </section>
+          ) : null}
+
           <div className="admin-charts-grid">
             <AdminBarChart title="Регистрации владельцев (30 дн.)" series={stats.registrations_by_day} />
             <AdminBarChart title="Генерации в архиве (30 дн.)" series={stats.generations_by_day} />

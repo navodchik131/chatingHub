@@ -618,6 +618,20 @@ class AdminEngagementStats(BaseModel):
     new_paid_active_30d_pct: float = 0.0
 
 
+class AdminFunnelStepOut(BaseModel):
+    key: str
+    label: str
+    count: int
+    pct_of_registered: float = 0.0
+
+
+class AdminActivationFunnelOut(BaseModel):
+    days: int = 30
+    registered: int = 0
+    steps: list[AdminFunnelStepOut] = []
+    events_by_name: dict[str, int] = {}
+
+
 class AdminStatsOut(BaseModel):
     total_users: int
     workspace_owners: int
@@ -639,6 +653,7 @@ class AdminStatsOut(BaseModel):
     generations_by_day: list[AdminDayCount] = []
     chart_days: int = 30
     engagement: AdminEngagementStats = AdminEngagementStats()
+    activation_funnel: AdminActivationFunnelOut = AdminActivationFunnelOut()
 
 
 class AdminUserRow(BaseModel):

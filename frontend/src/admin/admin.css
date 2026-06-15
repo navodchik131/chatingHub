@@ -714,3 +714,46 @@
 .admin-page .small {
   font-size: 0.78rem;
 }
+
+.admin-section-lead {
+  margin: -0.35rem 0 1rem;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  max-width: 52rem;
+}
+
+.admin-funnel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.admin-funnel__row {
+  display: grid;
+  grid-template-columns: minmax(140px, 220px) 1fr minmax(88px, 110px);
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.admin-funnel__label {
+  font-size: 0.8125rem;
+}
+
+.admin-funnel__bar-wrap {
+  height: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.admin-funnel__bar {
+  height: 100%;
+  min-width: 4px;
+  background: linear-gradient(90deg, #7c5cff, #ff6b9d);
+  border-radius: 999px;
+}
+
+.admin-funnel__meta {
+  font-size: 0.8125rem;
+  text-align: right;
+}

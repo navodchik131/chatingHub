@@ -27,6 +27,20 @@ export interface AdminSegmentResponse {
   items: AdminSegmentItem[]
 }
 
+export interface AdminFunnelStep {
+  key: string
+  label: string
+  count: number
+  pct_of_registered: number
+}
+
+export interface AdminActivationFunnel {
+  days: number
+  registered: number
+  steps: AdminFunnelStep[]
+  events_by_name: Record<string, number>
+}
+
 export interface AdminEngagementStats {
   active_owners_7d: number
   active_owners_30d: number
@@ -70,6 +84,7 @@ export interface AdminStats {
   generations_by_day: AdminDayCount[]
   chart_days: number
   engagement: AdminEngagementStats
+  activation_funnel: AdminActivationFunnel
 }
 
 export interface AdminUserRow {

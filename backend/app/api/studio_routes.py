@@ -1700,6 +1700,9 @@ async def api_create_studio_model(
             )
         )
 
+    from app.services.funnel_analytics import record_funnel_event_once
+
+    await record_funnel_event_once(session, user=user, event="model_created")
     await session.commit()
     m2 = await _load_studio_model_owned(session, oid, m.id)
     if not m2:

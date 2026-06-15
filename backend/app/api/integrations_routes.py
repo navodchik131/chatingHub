@@ -249,6 +249,9 @@ async def put_wavespeed(
             row.api_key_encrypted = enc
         else:
             session.add(WavespeedConnection(user_id=oid, api_key_encrypted=enc))
+        from app.services.funnel_analytics import record_funnel_event_once
+
+        await record_funnel_event_once(session, user=user, event="ws_key_saved")
         await session.commit()
         return await _integration_status(session, user)
     except HTTPException:

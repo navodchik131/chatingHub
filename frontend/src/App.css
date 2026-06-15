@@ -2542,6 +2542,14 @@ select:focus {
   flex-shrink: 0;
 }
 
+.account-panel-error {
+  flex-shrink: 0;
+  margin: 0 0 0.85rem;
+  position: sticky;
+  top: 0;
+  z-index: 3;
+}
+
 .account-cabinet-tabs {
   display: flex;
   flex-wrap: wrap;

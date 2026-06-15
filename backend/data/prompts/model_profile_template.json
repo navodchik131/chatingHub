@@ -1,0 +1,90 @@
+{
+  "model_profile": {
+    "name": "<FILL_NAME>",
+    "age": "<FILL_AGE_OR_ESTIMATE>",
+    "ethnicity": "<FILL_FROM_PHOTOS>",
+    "face": {
+      "shape": "<FILL>",
+      "forehead": "<FILL>",
+      "cheeks": "<FILL>",
+      "cheekbones": "<FILL>",
+      "jaw": "<FILL>",
+      "chin": "<FILL>",
+      "symmetry": "<FILL>"
+    },
+    "eyes": {
+      "shape": "<FILL>",
+      "spacing": "<FILL>",
+      "color": "<FILL>",
+      "eyelids": "<FILL>",
+      "eyelashes": "<FILL>",
+      "eyebrows": "<FILL>",
+      "under_eyes": "<FILL>"
+    },
+    "nose": {
+      "shape": "<FILL>",
+      "nostrils": "<FILL>",
+      "details": "<FILL>"
+    },
+    "lips": {
+      "shape": "<FILL>",
+      "upper_lip": "<FILL>",
+      "lower_lip": "<FILL>",
+      "color": "<FILL>",
+      "details": "<FILL>"
+    },
+    "skin": {
+      "tone": "<FILL>",
+      "undertone": "<FILL>",
+      "imperfections": "<FILL>",
+      "texture": "<FILL>",
+      "luminosity": "<FILL>"
+    },
+    "hair": {
+      "color": "<FILL>",
+      "length": "<FILL>",
+      "texture": "<FILL>",
+      "density": "<FILL>",
+      "hairline": "<FILL>",
+      "bangs": "<FILL>",
+      "style": "<FILL>",
+      "details": "<FILL>"
+    },
+    "body": {
+      "frame": "<FILL>",
+      "height_impression": "<FILL>",
+      "shoulders": "<FILL>",
+      "neck": "<FILL>",
+      "chest": "<FILL>",
+      "torso": "<FILL>",
+      "waist": "<FILL>",
+      "hips_and_glutes": "<FILL>",
+      "legs": "<FILL>",
+      "arms": "<FILL>",
+      "hands": "<FILL>",
+      "posture": "<FILL>",
+      "overall_silhouette": "<FILL>"
+    },
+    "distinctive_marks": {
+      "skin_clarity": "<FILL>",
+      "moles": "<FILL>",
+      "piercings": "<FILL>",
+      "tattoos": "<FILL>",
+      "scars": "<FILL>"
+    },
+    "signature_traits": ["<FILL_5_TO_10_TRAITS_FROM_PHOTOS>"],
+    "always_avoid": ["<FILL_WRONG_HAIR>", "<FILL_WRONG_EYES>", "<FILL_WRONG_SKIN>", "<FILL_WRONG_BODY>", "<FILL_QUALITY_BANS>"],
+    "default_style": {
+      "_note": "Overridden by scene when needed",
+      "hair_style": "<FILL_TYPICAL_STYLE>",
+      "makeup": "<FILL>",
+      "jewelry": "<FILL>"
+    },
+    "default_mood": {
+      "_note": "Overridden by scene when needed",
+      "expression": "<FILL>",
+      "energy": "<FILL>"
+    },
+    "identity_lock_keywords": "<FILL_ONE_DENSE_PARAGRAPH>"
+  }
+}
