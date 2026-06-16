@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { apiFetch, setToken } from './api'
 import { formatHttpApiError } from './apiErrors'
-import { markJustRegistered } from './analytics/funnel'
+import { markFirstGenWizardPending } from './analytics/funnel'
 
 export function AuthPanel({
   onSuccess,
@@ -40,7 +40,7 @@ export function AuthPanel({
       }
       const data = (await r.json()) as { access_token: string }
       setToken(data.access_token)
-      if (tab === 'register') markJustRegistered()
+      if (tab === 'register') markFirstGenWizardPending()
       onSuccess(tab === 'register')
     } finally {
       setBusy(false)

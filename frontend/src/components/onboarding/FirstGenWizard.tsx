@@ -4,7 +4,7 @@ import { formatHttpApiError, formatClientFetchError } from '../../apiErrors'
 import { WAVESPEED_REF_URL } from '../../billing/planCatalog'
 import { postStudioJobAndWait } from '../../studioJobs'
 import {
-  markFirstGenWizardDone,
+  markFirstGenWizardDoneForUser,
   trackFunnelEvent,
 } from '../../analytics/funnel'
 import './first-gen-wizard.css'
@@ -13,6 +13,7 @@ type Phase = 'photos' | 'wavespeed' | 'generating' | 'result'
 
 type Props = {
   open: boolean
+  ownerId: number
   studioNeedsUserWsKey: boolean
   grokConfigured: boolean
   onClose: () => void
@@ -22,6 +23,7 @@ type Props = {
 
 export function FirstGenWizard({
   open,
+  ownerId,
   studioNeedsUserWsKey,
   grokConfigured,
   onClose,
@@ -83,9 +85,9 @@ export function FirstGenWizard({
 
   const skip = useCallback(() => {
     trackFunnelEvent('onboarding_wizard_skipped')
-    markFirstGenWizardDone()
+    if (ownerId > 0) markFirstGenWizardDoneForUser(ownerId)
     onClose()
-  }, [onClose])
+  }, [onClose, ownerId])
 
   const saveWsKey = async (): Promise<boolean> => {
     const k = wsKey.trim()
@@ -181,7 +183,7 @@ export function FirstGenWizard({
       setPhase('result')
       trackFunnelEvent('onboarding_generation_success', { generation_id: gid })
       trackFunnelEvent('onboarding_wizard_completed')
-      markFirstGenWizardDone()
+      if (ownerId > 0) markFirstGenWizardDoneForUser(ownerId)
     } catch (e) {
       setError(formatClientFetchError(e, true))
       setPhase(studioNeedsUserWsKey ? 'wavespeed' : 'photos')

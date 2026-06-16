@@ -66,9 +66,11 @@ import {
 } from './components/WavespeedSetupBanner'
 import { FirstGenWizard } from './components/onboarding/FirstGenWizard'
 import {
-  consumeJustRegistered,
-  markJustRegistered,
-  readFirstGenWizardDone,
+  clearFirstGenWizardPending,
+  hasFirstGenWizardPending,
+  markFirstGenWizardDoneForUser,
+  markFirstGenWizardPending,
+  readFirstGenWizardDoneForUser,
   trackFunnelEvent,
 } from './analytics/funnel'
 import './App.css'
@@ -1069,12 +1071,17 @@ export default function App() {
   }, [authed, isOwner])
 
   useEffect(() => {
-    if (!authed || !isOwner || !canStudioGenerate || studioPaywalled) return
-    if (readFirstGenWizardDone()) return
-    if (consumeJustRegistered()) {
-      setFirstGenWizardOpen(true)
-    }
-  }, [authed, isOwner, canStudioGenerate, studioPaywalled])
+    if (!authed || !me || !isOwner || !canStudioGenerate) return
+    if (readFirstGenWizardDoneForUser(me.id)) return
+    if (!hasFirstGenWizardPending()) return
+    if (studioPaywalled) return
+    clearFirstGenWizardPending()
+    setFirstGenWizardOpen(true)
+  }, [authed, me, isOwner, canStudioGenerate, studioPaywalled])
+
+  useEffect(() => {
+    if (firstGenWizardOpen) setAccountOpen(false)
+  }, [firstGenWizardOpen])
 
   const refreshMe = useCallback(async () => {
     const r = await apiFetch('/api/auth/me')
@@ -1366,8 +1373,10 @@ export default function App() {
   }, [studioNeedsUserWsKey])
 
   useEffect(() => {
-    if (!authed || !isOwner || !integ) return
+    if (!authed || !isOwner || !integ || !me) return
     if (!studioNeedsUserWsKey) return
+    if (firstGenWizardOpen || hasFirstGenWizardPending()) return
+    if (!readFirstGenWizardDoneForUser(me.id)) return
     try {
       if (localStorage.getItem(WS_ONBOARDING_LS)) return
       localStorage.setItem(WS_ONBOARDING_LS, '1')
@@ -1377,7 +1386,7 @@ export default function App() {
     setAccountOpen(true)
     setAccountTab('integrations')
     setWsSetupPulse(true)
-  }, [authed, isOwner, integ, studioNeedsUserWsKey])
+  }, [authed, isOwner, integ, studioNeedsUserWsKey, firstGenWizardOpen, me])
 
   useEffect(() => {
     if (!me) return
@@ -3610,11 +3619,23 @@ export default function App() {
           <AuthPanel
             onSuccess={async (fromRegister?: boolean) => {
               const r = await apiFetch('/api/auth/me')
-              if (r.ok) setMe((await r.json()) as UserMe)
+              let user: UserMe | null = null
+              if (r.ok) {
+                user = (await r.json()) as UserMe
+                setMe(user)
+              }
               setAuthed(true)
               if (fromRegister) {
-                markJustRegistered()
-                setFirstGenWizardOpen(true)
+                markFirstGenWizardPending()
+                const paywalled =
+                  user != null &&
+                  (user.billing_require_active_subscription ?? true) &&
+                  !subscriptionCoversStudioAccess(user) &&
+                  !user.is_platform_admin
+                if (!paywalled) {
+                  clearFirstGenWizardPending()
+                  setFirstGenWizardOpen(true)
+                }
               }
             }}
           />
@@ -3734,6 +3755,7 @@ export default function App() {
 
       <FirstGenWizard
         open={firstGenWizardOpen}
+        ownerId={me?.id ?? 0}
         studioNeedsUserWsKey={studioNeedsUserWsKey}
         grokConfigured={health?.studio_grok_scene_compose_configured !== false}
         onClose={() => setFirstGenWizardOpen(false)}
@@ -3743,6 +3765,7 @@ export default function App() {
           trackFunnelEvent('integrations_opened')
         }}
         onComplete={() => {
+          if (me) markFirstGenWizardDoneForUser(me.id)
           markSetupTourHadGeneration()
           setSetupTourHadGen(true)
           setAppSection('studio')

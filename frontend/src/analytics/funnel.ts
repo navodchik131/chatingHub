@@ -45,39 +45,77 @@ export function trackFunnelEvent(
   }, 400)
 }
 
-export const FIRST_GEN_WIZARD_LS = 'mm_first_gen_wizard_done'
-export const JUST_REGISTERED_SS = 'mm_just_registered'
+/** sessionStorage: показать wizard после регистрации (снимается при открытии). */
+export const FIRST_GEN_WIZARD_PENDING_SS = 'mm_first_gen_wizard_pending'
 
-export function readFirstGenWizardDone(): boolean {
+/** localStorage: id владельца, для которого wizard завершён/пропущен. */
+export const FIRST_GEN_WIZARD_DONE_LS = 'mm_first_gen_wizard_done_uid'
+
+const FIRST_GEN_WIZARD_LS_LEGACY = 'mm_first_gen_wizard_v1'
+
+export function markFirstGenWizardPending(): void {
   try {
-    return localStorage.getItem(FIRST_GEN_WIZARD_LS) === '1'
+    sessionStorage.setItem(FIRST_GEN_WIZARD_PENDING_SS, '1')
+  } catch {
+    /* ignore */
+  }
+}
+
+export function hasFirstGenWizardPending(): boolean {
+  try {
+    return sessionStorage.getItem(FIRST_GEN_WIZARD_PENDING_SS) === '1'
   } catch {
     return false
   }
 }
 
-export function markFirstGenWizardDone(): void {
+export function clearFirstGenWizardPending(): void {
   try {
-    localStorage.setItem(FIRST_GEN_WIZARD_LS, '1')
+    sessionStorage.removeItem(FIRST_GEN_WIZARD_PENDING_SS)
+  } catch {
+    /* ignore */
+  }
+}
+
+export function readFirstGenWizardDoneForUser(ownerId: number): boolean {
+  if (!Number.isFinite(ownerId) || ownerId <= 0) return false
+  try {
+    return localStorage.getItem(FIRST_GEN_WIZARD_DONE_LS) === String(ownerId)
+  } catch {
+    return false
+  }
+}
+
+export function markFirstGenWizardDoneForUser(ownerId: number): void {
+  if (!Number.isFinite(ownerId) || ownerId <= 0) return
+  try {
+    localStorage.setItem(FIRST_GEN_WIZARD_DONE_LS, String(ownerId))
+    localStorage.removeItem(FIRST_GEN_WIZARD_LS_LEGACY)
+    clearFirstGenWizardPending()
   } catch {
     /* private mode */
   }
 }
 
-export function consumeJustRegistered(): boolean {
+/** @deprecated глобальный флаг — не используйте для новых аккаунтов. */
+export function readFirstGenWizardDone(): boolean {
   try {
-    if (sessionStorage.getItem(JUST_REGISTERED_SS) !== '1') return false
-    sessionStorage.removeItem(JUST_REGISTERED_SS)
-    return true
+    return localStorage.getItem(FIRST_GEN_WIZARD_LS_LEGACY) === '1'
   } catch {
     return false
   }
 }
 
-export function markJustRegistered(): void {
+/** @deprecated — предпочитайте markFirstGenWizardDoneForUser */
+export function markFirstGenWizardDone(): void {
   try {
-    sessionStorage.setItem(JUST_REGISTERED_SS, '1')
+    localStorage.setItem(FIRST_GEN_WIZARD_LS_LEGACY, '1')
   } catch {
-    /* ignore */
+    /* private mode */
   }
+}
+
+/** @deprecated alias */
+export function markJustRegistered(): void {
+  markFirstGenWizardPending()
 }
