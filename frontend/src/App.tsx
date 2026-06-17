@@ -24,6 +24,9 @@ import { postStudioJobAndWait, postStudioJobStart } from './studioJobs'
 import {
   computeMotionVideoCreditCost,
   mergeMotionVideoPricing,
+  motionVideoUsdPerSec,
+  type SeedanceT2vResolution,
+  type SeedanceT2vVariant,
 } from './studioMotionPricing'
 import {
   createOptimisticStudioArchiveItem,
@@ -300,6 +303,9 @@ interface HealthInfo {
   studio_seedance_t2v_duration_min?: number
   studio_seedance_t2v_duration_max?: number
   studio_seedance_t2v_prompt_max_chars?: number
+  studio_seedance_t2v_default_resolution?: string
+  studio_seedance_t2v_resolutions?: string[]
+  studio_seedance_t2v_variants?: string[]
   studio_grok_motion_timeline_enabled?: boolean
   studio_grok_motion_configured?: boolean
   studio_grok_scene_compose_configured?: boolean
@@ -878,6 +884,8 @@ export default function App() {
   const [motionKeepSound, setMotionKeepSound] = useState(true)
   /** Только для провайдера Seedance I2V (сек., диапазон с health). */
   const [motionSeedanceDuration, setMotionSeedanceDuration] = useState(5)
+  const [motionSeedanceVariant, setMotionSeedanceVariant] = useState<SeedanceT2vVariant>('standard')
+  const [motionVideoResolution, setMotionVideoResolution] = useState<SeedanceT2vResolution>('720p')
   const motionSeedanceDurationInitRef = useRef(false)
   const motionVideoUploadSeqRef = useRef(0)
   const [motionBusyFrame, setMotionBusyFrame] = useState(false)
@@ -929,6 +937,14 @@ export default function App() {
     motionSeedanceDuration,
     motionHasReferenceVideo,
     motionVideoPricing,
+    { variant: motionSeedanceVariant, resolution: motionVideoResolution },
+  )
+
+  const motionVideoUsdPerSecDisplay = motionVideoUsdPerSec(
+    motionSeedanceVariant,
+    motionVideoResolution,
+    motionHasReferenceVideo,
+    motionVideoPricing,
   )
 
   useEffect(() => {
@@ -943,6 +959,10 @@ export default function App() {
       setMotionSeedanceDuration(Math.max(mn, Math.min(mx, Math.round(d))))
     } else {
       setMotionSeedanceDuration(Math.max(mn, Math.min(mx, 5)))
+    }
+    const res = health.studio_seedance_t2v_default_resolution
+    if (res === '480p' || res === '720p' || res === '1080p') {
+      setMotionVideoResolution(res)
     }
     motionSeedanceDurationInitRef.current = true
   }, [health])
@@ -2958,6 +2978,8 @@ export default function App() {
       fd.append('negative_prompt', motionVideoNegPrompt.trim())
       fd.append('generate_audio', motionKeepSound ? '1' : '0')
       fd.append('duration_seconds', String(motionSeedanceDuration))
+      fd.append('seedance_variant', motionSeedanceVariant)
+      fd.append('video_resolution', motionVideoResolution)
       fd.append('auto_motion_prompt', motionAutoPrompt ? '1' : '0')
       if (motionPreviewGenId != null) {
         fd.append('first_frame_generation_id', String(motionPreviewGenId))
@@ -6319,6 +6341,32 @@ export default function App() {
                     />
                   </div>
                   <StudioPillField
+                    label="Модель"
+                    options={[
+                      {
+                        value: 'standard',
+                        label: 'Seedance 2.0',
+                      },
+                      {
+                        value: 'mini',
+                        label: 'Seedance 2.0 Mini',
+                      },
+                    ]}
+                    value={motionSeedanceVariant}
+                    onChange={(v) => v != null && setMotionSeedanceVariant(v as SeedanceT2vVariant)}
+                  />
+                  <StudioPillField
+                    label="Качество"
+                    options={(health?.studio_seedance_t2v_resolutions ?? ['480p', '720p', '1080p']).map(
+                      (res) => ({
+                        value: res,
+                        label: res.toUpperCase(),
+                      }),
+                    )}
+                    value={motionVideoResolution}
+                    onChange={(v) => v != null && setMotionVideoResolution(v as SeedanceT2vResolution)}
+                  />
+                  <StudioPillField
                     label="Длительность"
                     options={Array.from(
                       { length: Math.max(0, seedanceDurationMax - seedanceDurationMin + 1) },
@@ -6328,6 +6376,10 @@ export default function App() {
                           sec,
                           motionHasReferenceVideo,
                           motionVideoPricing,
+                          {
+                            variant: motionSeedanceVariant,
+                            resolution: motionVideoResolution,
+                          },
                         )
                         const costSuffix = ` · ${cost} кр.`
                         return { value: sec, label: `${sec} с${costSuffix}` }
@@ -6337,14 +6389,15 @@ export default function App() {
                     onChange={(v) => v != null && setMotionSeedanceDuration(Number(v))}
                   />
                   <p className="muted studio-field-hint">
-                    Стоимость:{' '}
-                    {motionHasReferenceVideo
-                      ? `$${motionVideoPricing.usd_per_sec_with_reference_video}/с`
-                      : `$${motionVideoPricing.usd_per_sec_without_reference_video}/с`}{' '}
-                    (≈{' '}
-                    {computeMotionVideoCreditCost(1, motionHasReferenceVideo, motionVideoPricing)}{' '}
-                    кр./с, курс {motionVideoPricing.rub_per_usd} ₽/$,{' '}
-                    {motionVideoPricing.rub_per_credit} ₽/кредит). С реф-видео дороже.
+                    Стоимость: ${motionVideoUsdPerSecDisplay.toFixed(3)}/с (≈{' '}
+                    {computeMotionVideoCreditCost(1, motionHasReferenceVideo, motionVideoPricing, {
+                      variant: motionSeedanceVariant,
+                      resolution: motionVideoResolution,
+                    })}{' '}
+                    кр./с, {motionVideoResolution},{' '}
+                    {motionSeedanceVariant === 'mini' ? 'Mini' : 'Standard'}
+                    {motionHasReferenceVideo ? ', с реф-видео' : ''}). Курс {motionVideoPricing.rub_per_usd}{' '}
+                    ₽/$, {motionVideoPricing.rub_per_credit} ₽/кредит.
                   </p>
                   <label className="studio-field-optional">
                     Негатив (по желанию)

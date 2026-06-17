@@ -187,6 +187,38 @@ def seedance_model_identity_tag_expr(
     return f"@Image{start_idx}–@Image{end_idx}"
 
 
+_IDENTITY_NEGATIVE_DEFAULTS = (
+    "different person, face change mid-clip, identity drift, morphing face, "
+    "reference video actor face, character swap, inconsistent appearance, "
+    "wrong face, actor from reference video"
+)
+
+
+def _seedance_identity_lock_block(
+    *,
+    tags: str,
+    n_start_frame: int,
+    n_motion_videos: int,
+) -> str:
+    lines = [
+        f"CHARACTER LOCK (all frames, entire clip): face, body, hair ONLY from {tags}. "
+        "Never change or morph the character.",
+    ]
+    if n_start_frame > 0:
+        lines.append(
+            "@Image1 = pose, scene, lighting, wardrobe at t=0 ONLY — "
+            "never take face, body, or hair from @Image1."
+        )
+    if n_motion_videos > 0:
+        vtags = ", ".join(f"@Video{i}" for i in range(1, n_motion_videos + 1))
+        lines.append(
+            f"{vtags} = choreography and camera motion ONLY — "
+            f"ignore the performer's face, body, and hair in {vtags}; "
+            f"character look stays {tags} in every frame."
+        )
+    return " ".join(lines)
+
+
 def append_seedance_identity_lock(
     prompt: str,
     *,
@@ -196,25 +228,19 @@ def append_seedance_identity_lock(
     max_chars: int | None = None,
 ) -> str:
     """
-    Жёсткий lock после soften: Seedance привязывает identity только к явным @ImageN.
-    Фразы вроде «model references» без номеров слотов не работают.
+    Жёсткий lock до и после тела промпта: Seedance привязывает identity только к явным @ImageN.
     """
     lim = max_chars if max_chars is not None else settings.studio_seedance_t2v_prompt_max_chars
     tags = seedance_model_identity_tag_expr(n_start_frame, n_model_images)
     if not tags:
         return truncate_seedance_t2v_prompt(prompt, max_chars=lim)
-    lines = [
-        f"CHARACTER LOCK (every frame, full clip): face, body, hair ONLY from {tags}.",
-    ]
-    if n_start_frame > 0:
-        lines.append("@Image1 = t=0 pose, scene, lighting — NOT the identity source.")
-    if n_motion_videos > 0:
-        lines.append(
-            "@Video1 = motion timing, gestures, camera moves ONLY — "
-            f"never copy the performer's face or body from the video; keep look from {tags}."
-        )
-    lock = " ".join(lines)
-    combined = f"{prompt.strip()}\n\n{lock}".strip()
+    lock = _seedance_identity_lock_block(
+        tags=tags,
+        n_start_frame=n_start_frame,
+        n_motion_videos=n_motion_videos,
+    )
+    body = (prompt or "").strip()
+    combined = f"{lock}\n\n{body}\n\n{lock}".strip()
     return truncate_seedance_t2v_prompt(combined, max_chars=lim)
 
 
@@ -242,16 +268,17 @@ def assemble_seedance_t2v_prompt(
     При n_start_frame=1: @Image1 — opening still; @Image2+ — identity модели.
     """
     parts: list[str] = []
-    if n_start_frame > 0:
-        parts.append(
-            "@Image1: opening still at t=0 — pose, scene, lighting, camera framing."
-        )
     identity_tags = seedance_model_identity_tag_expr(n_start_frame, n_model_images)
     if identity_tags:
         parts.append(
-            f"Same person in every frame for the full clip — face and body from {identity_tags} only."
+            f"One consistent character for the full clip — face, body, hair from {identity_tags} only."
         )
-        if n_start_frame > 0 and n_outfit_images == 0:
+    if n_start_frame > 0:
+        parts.append(
+            "@Image1: opening frame — pose, scene, lighting, camera, wardrobe at t=0. "
+            "Do NOT use face, body, or hair from @Image1."
+        )
+        if n_outfit_images == 0:
             parts.append("Wardrobe at t=0: match @Image1 and USER_BRIEF.")
     if n_outfit_images > 0:
         start = 1 + n_start_frame + n_model_images
@@ -260,18 +287,26 @@ def assemble_seedance_t2v_prompt(
             parts.append(f"Wardrobe: match @Image{idx}.")
     if n_motion_videos > 0:
         vtags = ", ".join(f"@Video{i}" for i in range(1, n_motion_videos + 1))
-        motion_line = f"Motion and pacing from {vtags} only (timing, gestures, camera — not performer look)."
         if identity_tags:
-            motion_line += f" Keep appearance from {identity_tags} throughout."
-        parts.append(motion_line)
+            parts.append(
+                f"Motion timing, gestures, and camera from {vtags} only — "
+                f"not the performer's face or body. Character look locked to {identity_tags}."
+            )
+        else:
+            parts.append(f"Motion and pacing from {vtags} only (timing, gestures, camera).")
     if motion_summary and motion_summary.strip():
         parts.append(f"Motion notes:\n{motion_summary.strip()}")
     up = (user_prompt or "").strip()
     if up:
         parts.append(up)
+    neg_parts: list[str] = []
+    if identity_tags:
+        neg_parts.append(_IDENTITY_NEGATIVE_DEFAULTS)
     neg = (negative or "").strip()
     if neg:
-        parts.append(f"Avoid: {neg}")
+        neg_parts.append(neg)
+    if neg_parts:
+        parts.append(f"Avoid: {'; '.join(neg_parts)}")
     if not parts:
         parts.append(
             "Natural cinematic motion; smooth camera; expressive performance; same character throughout."

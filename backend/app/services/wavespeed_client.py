@@ -1166,9 +1166,16 @@ async def wan_22_animate_video_url(
     )
 
 
-def _seedance_20_t2v_post_path() -> str:
-    p = (settings.wavespeed_seedance_20_t2v_path or "").strip()
-    p = p or "/api/v3/bytedance/seedance-2.0/text-to-video"
+def _seedance_20_t2v_post_path(*, variant: str = "standard") -> str:
+    from app.services.studio_motion_pricing import normalize_seedance_t2v_variant
+
+    v = normalize_seedance_t2v_variant(variant)
+    if v == "mini":
+        p = (settings.wavespeed_seedance_20_mini_t2v_path or "").strip()
+        p = p or "/api/v3/bytedance/seedance-2.0-mini/text-to-video"
+    else:
+        p = (settings.wavespeed_seedance_20_t2v_path or "").strip()
+        p = p or "/api/v3/bytedance/seedance-2.0/text-to-video"
     return p if p.startswith("/") else f"/{p}"
 
 
@@ -1184,26 +1191,31 @@ async def seedance_20_text_to_video_url(
     duration: int | None = None,
     generate_audio: bool = True,
     enable_web_search: bool | None = None,
+    variant: str = "standard",
     timeout_submit: float = 900.0,
     poll_interval: float = 3.0,
     max_polls: int = 180,
 ) -> str:
     """
     ByteDance Seedance 2.0 Text-to-Video: prompt + reference_images (@ImageN в тексте).
+    variant=standard → …/seedance-2.0/text-to-video
+    variant=mini → …/seedance-2.0-mini/text-to-video
     Док: https://wavespeed.ai/docs/docs-api/bytedance/bytedance-seedance-2.0-text-to-video
     """
     if not (prompt or "").strip():
         raise RuntimeError("prompt required for text-to-video")
-    res = (resolution or settings.wavespeed_seedance_20_t2v_resolution or "720p").strip().lower()
-    if res not in ("480p", "720p", "1080p"):
-        res = "720p"
+    from app.services.studio_motion_pricing import normalize_seedance_t2v_resolution
+
+    res = normalize_seedance_t2v_resolution(
+        resolution or settings.wavespeed_seedance_20_t2v_resolution
+    )
     from app.services.studio_motion_pricing import motion_video_duration_seconds
 
     dur = motion_video_duration_seconds(
         duration if duration is not None else None,
         default=settings.wavespeed_seedance_20_t2v_duration,
     )
-    path = _seedance_20_t2v_post_path()
+    path = _seedance_20_t2v_post_path(variant=variant)
     url = f"{_wavespeed_base()}{path}"
     body: dict[str, Any] = {
         "prompt": prompt.strip(),
@@ -1230,7 +1242,8 @@ async def seedance_20_text_to_video_url(
         body["reference_audios"] = auds[:3]
     _apply_wavespeed_extra_body(body)
     log.debug(
-        "wavespeed seedance 2.0 t2v path=%s res=%s dur=%s imgs=%s vids=%s",
+        "wavespeed seedance t2v variant=%s path=%s res=%s dur=%s imgs=%s vids=%s",
+        variant,
         path,
         res,
         dur,

@@ -210,15 +210,23 @@ class Settings(BaseSettings):
     wavespeed_seedance_20_t2v_path: str = Field(
         default="/api/v3/bytedance/seedance-2.0/text-to-video",
     )
+    # Seedance 2.0 Mini T2V (легче/дешевле; см. wavespeed.ai/docs …/seedance-2.0-mini-text-to-video)
+    wavespeed_seedance_20_mini_t2v_path: str = Field(
+        default="/api/v3/bytedance/seedance-2.0-mini/text-to-video",
+    )
     wavespeed_seedance_20_t2v_resolution: str = Field(default="720p")
     # WaveSpeed Seedance T2V принимает duration только 4–15 с (см. доки API).
     studio_motion_video_duration_min: int = Field(default=4, ge=4, le=15)
     studio_motion_video_duration_max: int = Field(default=15, ge=1, le=60)
     wavespeed_seedance_20_t2v_duration: int = Field(default=5, ge=1, le=15)
     wavespeed_seedance_20_t2v_web_search: bool = Field(default=False)
-    # Видео Seedance T2V: USD/сек → кредиты через STUDIO_MOTION_RUB_PER_USD и STUDIO_MOTION_RUB_PER_CREDIT
+    # Видео Seedance T2V: USD/сек при 720p → кредиты через STUDIO_MOTION_RUB_PER_USD и STUDIO_MOTION_RUB_PER_CREDIT
+    # Standard 720p: WaveSpeed docs ≈ $0.24/с без реф-видео, $0.15/с с реф-видео (упрощённо по output duration)
     studio_motion_usd_per_sec_with_ref: float = Field(default=0.50, ge=0.0)
     studio_motion_usd_per_sec_no_ref: float = Field(default=0.25, ge=0.0)
+    # Mini 720p: ориентир ~75% от Seedance 2.0 Fast (официальный прайс Mini — в env после релиза)
+    studio_motion_mini_usd_per_sec_with_ref: float = Field(default=0.0975, ge=0.0)
+    studio_motion_mini_usd_per_sec_no_ref: float = Field(default=0.15, ge=0.0)
     studio_motion_rub_per_usd: float = Field(default=80.0, ge=0.01)
     studio_motion_rub_per_credit: float = Field(default=3.6, ge=0.01)
     # Устарело: заменено динамическим расчётом; оставлено для совместимости .env

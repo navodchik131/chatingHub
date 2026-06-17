@@ -208,7 +208,6 @@ from app.services.wavespeed_client import (
     seedream_v45_bootstrap_edit_image_url,
     seedream_v45_edit_image_url,
     wavespeed_image_upscale_url,
-    wavespeed_is_sensitive_content_error,
     z_image_turbo_inpaint_image_url,
 )
 
@@ -3990,6 +3989,8 @@ async def api_studio_motion_render_video(
     negative_prompt: str = Form(""),
     generate_audio: str = Form("1"),
     duration_seconds: str = Form(""),
+    seedance_variant: str = Form("standard"),
+    video_resolution: str = Form(""),
     auto_motion_prompt: str = Form("0"),
     session: AsyncSession = Depends(get_session),
     user: User = Depends(get_current_user),
@@ -4043,9 +4044,15 @@ async def api_studio_motion_render_video(
     from app.services.studio_motion_pricing import (
         motion_video_credit_cost,
         motion_video_duration_seconds,
+        normalize_seedance_t2v_resolution,
+        normalize_seedance_t2v_variant,
     )
 
     ds_effective = motion_video_duration_seconds(duration_seconds)
+    seedance_v = normalize_seedance_t2v_variant(seedance_variant)
+    video_res = normalize_seedance_t2v_resolution(
+        video_resolution or settings.wavespeed_seedance_20_t2v_resolution
+    )
 
     outfit_gid: int | None = None
     raw_outfit = (outfit_generation_id or "").strip()
@@ -4092,6 +4099,8 @@ async def api_studio_motion_render_video(
 
     motion_cost = motion_video_credit_cost(
         ds_effective,
+        variant=seedance_v,
+        resolution=video_res,
         has_motion_reference_video=bool(mv_id),
     )
     motion_cost_billed = apply_studio_credit_cost(plan, motion_cost)
@@ -4122,6 +4131,8 @@ async def api_studio_motion_render_video(
                 "negative_prompt": (negative_prompt or "").strip(),
                 "generate_audio": (generate_audio or "1").strip(),
                 "duration_seconds": str(ds_effective),
+                "seedance_variant": seedance_v,
+                "video_resolution": video_res,
                 "auto_motion_prompt": (auto_motion_prompt or "0").strip(),
             },
             placeholder={
@@ -4160,6 +4171,8 @@ async def _studio_job_execute_motion_render_video(
     negative_prompt = str(params.get("negative_prompt") or "")
     generate_audio = str(params.get("generate_audio") or "1")
     duration_seconds = str(params.get("duration_seconds") or "")
+    seedance_variant = str(params.get("seedance_variant") or "standard")
+    video_resolution = str(params.get("video_resolution") or "")
     auto_motion_prompt = str(params.get("auto_motion_prompt") or "0")
 
     if not prompt.strip():
@@ -4280,49 +4293,26 @@ async def _studio_job_execute_motion_render_video(
     from app.services.studio_motion_pricing import (
         motion_video_credit_cost,
         motion_video_duration_seconds,
+        normalize_seedance_t2v_resolution,
+        normalize_seedance_t2v_variant,
     )
 
     ds_effective = motion_video_duration_seconds(duration_seconds)
+    seedance_v = normalize_seedance_t2v_variant(seedance_variant)
+    video_res = normalize_seedance_t2v_resolution(
+        video_resolution or settings.wavespeed_seedance_20_t2v_resolution
+    )
 
     cost = apply_studio_credit_cost(
         plan,
         motion_video_credit_cost(
             ds_effective,
+            variant=seedance_v,
+            resolution=video_res,
             has_motion_reference_video=bool(mv_id),
         ),
     )
     billing = await ensure_can_consume_credits(session, user, cost)
-
-    seedance_attempts: list[dict[str, Any]] = [
-        {
-            "label": "identity_video_body",
-            "minimal": False,
-            "include_video": True,
-            "include_body": True,
-            "force_template": False,
-        },
-        {
-            "label": "identity_video",
-            "minimal": False,
-            "include_video": True,
-            "include_body": False,
-            "force_template": False,
-        },
-        {
-            "label": "identity_no_video",
-            "minimal": False,
-            "include_video": False,
-            "include_body": False,
-            "force_template": True,
-        },
-        {
-            "label": "turnaround_only",
-            "minimal": True,
-            "include_video": False,
-            "include_body": False,
-            "force_template": True,
-        },
-    ]
 
     msg: str | None = None
     video_url: str | None = None
@@ -4330,97 +4320,86 @@ async def _studio_job_execute_motion_render_video(
     prompt_source = "template"
     ref_images: list[str] = []
     ref_videos: list[str] = []
-    seedance_attempt_label = seedance_attempts[0]["label"]
 
-    for attempt in seedance_attempts:
-        model_imgs = filter_model_images_for_seedance_video(
-            list(sm.images),
-            minimal=bool(attempt.get("minimal")),
-            include_body=bool(attempt.get("include_body")),
+    model_imgs = filter_model_images_for_seedance_video(
+        list(sm.images),
+        minimal=False,
+        include_body=False,
+    )
+    n_outfit = 0
+    if ff_url:
+        ref_images.append(ff_url)
+    ref_images.extend(
+        model_reference_public_urls(
+            owner_id=oid,
+            images=model_imgs,
+            public_app_base=pub,
+            token_factory=create_model_image_access_token,
         )
-        ref_images = []
-        n_outfit = 0
-        if ff_url:
-            ref_images.append(ff_url)
-        ref_images.extend(
-            model_reference_public_urls(
-                owner_id=oid,
-                images=model_imgs,
-                public_app_base=pub,
-                token_factory=create_model_image_access_token,
-            )
+    )
+    n_model = len(model_imgs)
+
+    if outfit_gen_id is not None:
+        outfit_url = generation_still_public_url(
+            owner_id=oid,
+            generation_id=outfit_gen_id,
+            public_app_base=pub,
+            token_factory=create_generation_image_access_token,
         )
-        n_model = len(model_imgs)
+        if not outfit_url:
+            raise RuntimeError("Не удалось подготовить URL снимка наряда")
+        ref_images.append(outfit_url)
+        n_outfit = 1
 
-        if outfit_gen_id is not None:
-            outfit_url = generation_still_public_url(
-                owner_id=oid,
-                generation_id=outfit_gen_id,
-                public_app_base=pub,
-                token_factory=create_generation_image_access_token,
-            )
-            if not outfit_url:
-                raise RuntimeError("Не удалось подготовить URL снимка наряда")
-            ref_images.append(outfit_url)
-            n_outfit = 1
+    if len(ref_images) > MAX_SEEDANCE_REFERENCE_IMAGES:
+        ref_images = ref_images[:MAX_SEEDANCE_REFERENCE_IMAGES]
 
-        if len(ref_images) > MAX_SEEDANCE_REFERENCE_IMAGES:
-            ref_images = ref_images[:MAX_SEEDANCE_REFERENCE_IMAGES]
+    ref_videos = [motion_vid_url] if motion_vid_url else []
 
-        ref_videos = (
-            [motion_vid_url]
-            if attempt.get("include_video") and motion_vid_url
-            else []
+    seed_prompt, prompt_source = await build_seedance_t2v_prompt(
+        user_brief=prompt,
+        n_start_frame=n_start,
+        n_model_images=n_model,
+        n_outfit_images=n_outfit,
+        n_motion_videos=len(ref_videos),
+        motion_summary=motion_summary,
+        model_profile_text=None,
+        negative=negative_prompt,
+        output_aspect=ar_t2v or output_aspect,
+        duration_seconds=ds_effective,
+        force_template=False,
+    )
+
+    try:
+        video_url = await seedance_20_text_to_video_url(
+            api_key=ws_key,
+            prompt=seed_prompt,
+            reference_images=ref_images or None,
+            reference_videos=ref_videos or None,
+            aspect_ratio=ar_t2v,
+            resolution=video_res,
+            duration=ds_effective,
+            generate_audio=_truthy_wavespeed_flag(generate_audio),
+            variant=seedance_v,
         )
-        seed_prompt, prompt_source = await build_seedance_t2v_prompt(
-            user_brief=prompt,
-            n_start_frame=n_start,
-            n_model_images=n_model,
-            n_outfit_images=n_outfit,
-            n_motion_videos=len(ref_videos),
-            motion_summary=motion_summary,
-            model_profile_text=None,
-            negative=negative_prompt,
-            output_aspect=ar_t2v or output_aspect,
-            duration_seconds=ds_effective,
-            force_template=bool(attempt.get("force_template")),
+        msg = None
+        log.info(
+            "motion_render_video ok job=%s imgs=%s vids=%s prompt=%s",
+            job.id,
+            len(ref_images),
+            len(ref_videos),
+            prompt_source,
         )
-
-        try:
-            video_url = await seedance_20_text_to_video_url(
-                api_key=ws_key,
-                prompt=seed_prompt,
-                reference_images=ref_images or None,
-                reference_videos=ref_videos or None,
-                aspect_ratio=ar_t2v,
-                resolution=settings.wavespeed_seedance_20_t2v_resolution,
-                duration=ds_effective,
-                generate_audio=_truthy_wavespeed_flag(generate_audio),
-            )
-            msg = None
-            seedance_attempt_label = str(attempt["label"])
-            log.info(
-                "motion_render_video ok job=%s attempt=%s imgs=%s vids=%s prompt=%s",
-                job.id,
-                seedance_attempt_label,
-                len(ref_images),
-                len(ref_videos),
-                prompt_source,
-            )
-            break
-        except RuntimeError as e:
-            msg = str(e)
-            video_url = None
-            if not wavespeed_is_sensitive_content_error(msg):
-                break
-            log.warning(
-                "motion_render_video sensitive job=%s attempt=%s imgs=%s vids=%s: %s",
-                job.id,
-                attempt["label"],
-                len(ref_images),
-                len(ref_videos),
-                msg[:240],
-            )
+    except RuntimeError as e:
+        msg = str(e)
+        video_url = None
+        log.warning(
+            "motion_render_video failed job=%s imgs=%s vids=%s: %s",
+            job.id,
+            len(ref_images),
+            len(ref_videos),
+            msg[:240],
+        )
 
     gen_placeholder = await find_studio_generation_by_job_id(session, job.id)
     ph_id = params.get("placeholder_generation_id")
@@ -4474,12 +4453,16 @@ async def _studio_job_execute_motion_render_video(
                 "outfit_generation_id": outfit_gen_id,
                 "motion_video_file_id": mv_id or None,
                 "motion_video_provider": "seedance_t2v",
-                "seedance_20_t2v_path": settings.wavespeed_seedance_20_t2v_path,
-                "seedance_20_t2v_resolution": settings.wavespeed_seedance_20_t2v_resolution,
+                "seedance_t2v_variant": seedance_v,
+                "seedance_20_t2v_path": (
+                    settings.wavespeed_seedance_20_mini_t2v_path
+                    if seedance_v == "mini"
+                    else settings.wavespeed_seedance_20_t2v_path
+                ),
+                "seedance_20_t2v_resolution": video_res,
                 "seedance_20_t2v_duration": ds_effective,
                 "reference_images": len(ref_images),
                 "reference_videos": len(ref_videos),
-                "seedance_t2v_attempt": seedance_attempt_label,
                 "seedance_t2v_prompt_source": prompt_source,
                 "seedance_t2v_prompt_chars": len(seed_prompt),
                 "ok": bool(video_url),

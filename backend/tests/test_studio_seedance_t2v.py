@@ -33,7 +33,7 @@ def test_assemble_with_start_frame():
     assert "@Image2" in p
     assert "opening still" in p.lower() or "t=0" in p.lower()
     assert "@Video1" in p
-    assert "same person" in p.lower()
+    assert "consistent character" in p.lower() or "same person" in p.lower()
     assert "facial identity" not in p.lower()
     assert "face/body" not in p.lower()
 
@@ -103,7 +103,7 @@ def test_append_identity_lock_uses_explicit_image_tags():
     )
     assert "@Image2" in out
     assert "@Image3" in out
-    assert "CHARACTER LOCK" in out
+    assert out.count("CHARACTER LOCK") >= 2
     assert "@Video1" in out
     assert "model references" not in out.lower()
 
@@ -118,7 +118,7 @@ def test_assemble_includes_identity_lock_with_video():
     assert "CHARACTER LOCK" in p
     assert "@Image2" in p
     assert "@Video1" in p
-    assert "not performer look" in p.lower() or "never copy" in p.lower()
+    assert "performer" in p.lower() or "never copy" in p.lower()
 
 
 def test_video_edit_prompt_swap_identity():
