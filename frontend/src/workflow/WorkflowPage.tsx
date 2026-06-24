@@ -11,7 +11,7 @@ import {
 } from './api'
 import { WORKFLOW_GRAPH_STORAGE_KEY } from './constants'
 import { FlowCanvas } from './FlowCanvas'
-import { hydrateGraphFromServer, serializeGraph } from './graphResolver'
+import { hydrateGraphFromServer } from './graphResolver'
 import { WorkspaceSidebar, type WorkflowWorkspaceItem } from './WorkspaceSidebar'
 import { downloadWorkflowExport, parseWorkflowImport } from './workspaceExport'
 import { WorkflowModelsContext } from './WorkflowModelsContext'
@@ -190,8 +190,7 @@ export function WorkflowPage() {
 
   const handleExport = useCallback(() => {
     if (activeId == null) return
-    const clean = serializeGraph(graph.nodes, graph.edges)
-    downloadWorkflowExport(activeWorkspaceName, clean)
+    downloadWorkflowExport(activeWorkspaceName, { nodes: graph.nodes, edges: graph.edges })
   }, [activeId, activeWorkspaceName, graph])
 
   const handleImport = useCallback(

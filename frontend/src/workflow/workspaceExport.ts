@@ -1,3 +1,4 @@
+import { sanitizeGraphForExport } from './graphResolver'
 import type { ProjectGraph } from './types'
 
 export const WORKFLOW_EXPORT_FORMAT = 'modelmate-workflow' as const
@@ -70,7 +71,7 @@ export function buildWorkflowExport(name: string, graph: ProjectGraph): Workflow
     version: WORKFLOW_EXPORT_VERSION,
     name: name.trim() || 'Проект',
     exported_at: new Date().toISOString(),
-    graph,
+    graph: sanitizeGraphForExport(graph),
   }
 }
 
