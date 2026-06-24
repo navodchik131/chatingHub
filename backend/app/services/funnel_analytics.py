@@ -11,11 +11,31 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import (
     FunnelEvent,
     StudioGeneration,
+    UsageEvent,
     User,
     UserStudioModel,
     WavespeedConnection,
 )
 from app.services.workspace import workspace_owner_id
+
+_FIRST_GENERATION_FUNNEL_EVENTS = frozenset(
+    {
+        "first_generation",
+        "onboarding_generation_success",
+    }
+)
+
+_STUDIO_GENERATION_USAGE_KINDS = frozenset(
+    {
+        "studio_prompt_refine",
+        "studio_motion_first_frame",
+        "studio_motion_control",
+        "studio_image_upscale",
+        "studio_carousel_shot",
+        "studio_model_bootstrap_face_merge",
+        "studio_model_bootstrap_sheet",
+    }
+)
 
 ALLOWED_FUNNEL_EVENTS = frozenset(
     {
@@ -136,14 +156,40 @@ async def _owners_with_model(session: AsyncSession, owner_ids: set[int]) -> set[
 
 
 async def _owners_with_generation(session: AsyncSession, owner_ids: set[int]) -> set[int]:
+    """
+    Владельцы из когорты, у которых была хотя бы одна студийная генерация.
+    Источники: studio_generations, funnel_events, usage (списание за генерацию).
+    """
     if not owner_ids:
         return set()
-    rows = (
+    found: set[int] = set()
+    gen_rows = (
         await session.execute(
             select(StudioGeneration.user_id).where(StudioGeneration.user_id.in_(owner_ids))
         )
     ).all()
-    return {int(r[0]) for r in rows if r[0] is not None}
+    found.update(int(r[0]) for r in gen_rows if r[0] is not None)
+
+    ev_rows = (
+        await session.execute(
+            select(FunnelEvent.owner_id).where(
+                FunnelEvent.owner_id.in_(owner_ids),
+                FunnelEvent.event.in_(tuple(_FIRST_GENERATION_FUNNEL_EVENTS)),
+            )
+        )
+    ).all()
+    found.update(int(r[0]) for r in ev_rows if r[0] is not None)
+
+    usage_rows = (
+        await session.execute(
+            select(UsageEvent.user_id).where(
+                UsageEvent.user_id.in_(owner_ids),
+                UsageEvent.kind.in_(tuple(_STUDIO_GENERATION_USAGE_KINDS)),
+            )
+        )
+    ).all()
+    found.update(int(r[0]) for r in usage_rows if r[0] is not None)
+    return found
 
 
 async def _owners_opened_wizard(session: AsyncSession, owner_ids: set[int]) -> set[int]:
@@ -235,7 +281,7 @@ async def build_activation_funnel(session: AsyncSession, *, days: int = 30) -> d
         },
         {
             "key": "first_generation",
-            "label": "Первая генерация в студии",
+            "label": "Первая генерация в студии (когорта за период)",
             "count": len(gen_ids),
             "pct_of_registered": _pct(len(gen_ids), registered),
         },

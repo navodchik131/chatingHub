@@ -412,8 +412,9 @@ export function AdminPage() {
                 Воронка активации ({stats.activation_funnel.days} дн.)
               </h2>
               <p className="admin-section-lead muted">
-                Когорта новых владельцев: от регистрации до первой генерации. Шаги WS / модель / студия
-                считаются по данным БД; wizard — по событиям funnel_events.
+                Только владельцы, зарегистрировавшиеся за выбранный период. Ваши генерации на старом
+                аккаунте сюда не попадают. «Первая генерация» — архив studio_generations, события
+                onboarding_generation_success / first_generation или списание кредитов за студию.
               </p>
               <div className="admin-funnel">
                 {stats.activation_funnel.steps.map((step) => (
