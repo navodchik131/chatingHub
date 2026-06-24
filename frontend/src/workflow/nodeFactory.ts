@@ -1,6 +1,4 @@
-import { DEFAULT_WAVESPEED_MODEL_ID } from './wavespeedModels'
 import type { AppNode, AppNodeData, NodeType } from './types'
-
 let nodeIdCounter = 0
 
 export function createNodeId(type: NodeType): string {
@@ -22,8 +20,8 @@ export function createDefaultNodeData(type: NodeType): AppNodeData {
       return {}
     case 'imageGeneration':
       return {
-        waveModelId: DEFAULT_WAVESPEED_MODEL_ID,
-        nsfwEnabled: true,
+        waveModelId: 'nano-banana-pro',
+        nsfwEnabled: false,
         outputAspect: '3:4',
       }
     case 'preview':

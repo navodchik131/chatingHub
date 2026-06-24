@@ -204,47 +204,57 @@ function ImageGenerationNodeComponent({ id, data }: NodeProps) {
           reference
         </span>
 
-        <label className="workflow-node__label">Модель</label>
-        <select
-          className="workflow-node__field nodrag nowheel"
-          value={waveModelId || DEFAULT_GENERATION_MODEL_ID}
-          onChange={(e) => onModelChange(e.target.value)}
-          disabled={nodeData.isRunning || !availableModels.length}
-        >
-          {availableModels.map((model) => (
-            <option key={model.id} value={model.id}>
-              {model.label}
-            </option>
-          ))}
-        </select>
-
-        {aspectOptions.length > 0 ? (
-          <>
-            <label className="workflow-node__label">Формат</label>
+        <div className="workflow-gen-form">
+          <div className="workflow-gen-form__row">
+            <label className="workflow-gen-form__label" htmlFor={`${id}-model`}>
+              Модель
+            </label>
             <select
-              className="workflow-node__field nodrag nowheel"
-              value={outputAspect || DEFAULT_OUTPUT_ASPECT}
-              onChange={(e) => updateNodeData({ outputAspect: e.target.value })}
-              disabled={nodeData.isRunning}
+              id={`${id}-model`}
+              className="workflow-gen-form__select nodrag nowheel"
+              value={waveModelId || DEFAULT_GENERATION_MODEL_ID}
+              onChange={(e) => onModelChange(e.target.value)}
+              disabled={nodeData.isRunning || !availableModels.length}
             >
-              {aspectOptions.map((aspect) => (
-                <option key={aspect.key} value={aspect.key}>
-                  {aspect.label} · {aspect.size}
+              {availableModels.map((model) => (
+                <option key={model.id} value={model.id}>
+                  {model.label}
                 </option>
               ))}
             </select>
-          </>
-        ) : null}
+          </div>
 
-        <label className="workflow-node__toggle nodrag">
-          <input
-            type="checkbox"
-            checked={nsfwEnabled}
-            onChange={(e) => onNsfwToggle(e.target.checked)}
-            disabled={nodeData.isRunning}
-          />
-          <span>{nsfwEnabled ? 'NSFW' : 'Regular'}</span>
-        </label>
+          {aspectOptions.length > 0 ? (
+            <div className="workflow-gen-form__row">
+              <label className="workflow-gen-form__label" htmlFor={`${id}-aspect`}>
+                Формат
+              </label>
+              <select
+                id={`${id}-aspect`}
+                className="workflow-gen-form__select nodrag nowheel"
+                value={outputAspect || DEFAULT_OUTPUT_ASPECT}
+                onChange={(e) => updateNodeData({ outputAspect: e.target.value })}
+                disabled={nodeData.isRunning}
+              >
+                {aspectOptions.map((aspect) => (
+                  <option key={aspect.key} value={aspect.key}>
+                    {aspect.key} · {aspect.size}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
+
+          <label className="workflow-gen-form__check nodrag">
+            <input
+              type="checkbox"
+              checked={nsfwEnabled}
+              onChange={(e) => onNsfwToggle(e.target.checked)}
+              disabled={nodeData.isRunning}
+            />
+            <span>{nsfwEnabled ? 'NSFW' : 'Обычная генерация'}</span>
+          </label>
+        </div>
 
         {nodeData.imageUrl ? (
           <button
