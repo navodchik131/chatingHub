@@ -11,8 +11,6 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.deps import get_current_user
-from app.auth.permissions import assert_permission
-from app.auth.workspace import PERM_STUDIO_GENERATE
 from app.db.models import User
 from app.db.session import get_session
 from app.schemas import StudioJobAcceptedOut
@@ -21,7 +19,11 @@ from app.services.studio_workflow_resolver import (
     WorkflowResolutionError,
     resolve_workflow_generation_plan,
 )
-from app.services.workspace import workspace_owner_id
+from app.services.workspace import (
+    PERM_STUDIO_GENERATE,
+    assert_permission,
+    workspace_owner_id,
+)
 
 log = logging.getLogger(__name__)
 
