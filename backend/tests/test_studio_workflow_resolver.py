@@ -155,10 +155,38 @@ def test_resolve_workflow_realism_disabled():
     assert plan.realism_enabled is False
 
 
-def test_resolve_workflow_missing_model():
+def test_resolve_workflow_without_model_ok():
     g = _base_graph()
-    g["edges"] = [e for e in g["edges"] if e["targetHandle"] != "model-in"]
-    with pytest.raises(WorkflowResolutionError, match="Модель"):
+    g["edges"] = [e for e in g["edges"] if e.get("targetHandle") != "model-in"]
+    plan = resolve_workflow_generation_plan(
+        target_node_id="gen-1",
+        nodes=g["nodes"],
+        edges=g["edges"],
+    )
+    assert plan.model_id is None
+    assert "sunset beach" in plan.description
+
+
+def test_resolve_workflow_without_model_needs_prompt():
+    g = _base_graph(prompt="")
+    g["edges"] = [e for e in g["edges"] if e.get("targetHandle") != "model-in"]
+    for n in g["nodes"]:
+        if n["id"] == "desc-1":
+            n["data"] = {"role": "", "description": ""}
+    with pytest.raises(WorkflowResolutionError, match="Без модели"):
+        resolve_workflow_generation_plan(
+            target_node_id="gen-1",
+            nodes=g["nodes"],
+            edges=g["edges"],
+        )
+
+
+def test_resolve_workflow_connected_model_empty():
+    g = _base_graph()
+    for n in g["nodes"]:
+        if n["id"] == "model-1":
+            n["data"] = {"modelId": None}
+    with pytest.raises(WorkflowResolutionError, match="Выберите модель"):
         resolve_workflow_generation_plan(
             target_node_id="gen-1",
             nodes=g["nodes"],

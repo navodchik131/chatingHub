@@ -2238,15 +2238,15 @@ async def _accept_studio_refine_job_from_workflow(
 
     params: dict[str, Any] = {
         "description": plan.description,
-        "model_id": str(plan.model_id),
+        "model_id": str(plan.model_id) if plan.model_id is not None else "",
         "existing_generation_id": "",
         "output_aspect": plan.output_aspect,
-        "studio_mode": "model_scene",
+        "studio_mode": "model_scene" if plan.model_id is not None else "no_face",
         "wan_edit_tier": plan.wan_edit_tier,
         "studio_wave_profile": plan.studio_wave_profile,
         "generate_wavespeed": "1",
         "wavespeed_single_reference": "1",
-        "send_pose_reference_to_wavespeed": "0",
+        "send_pose_reference_to_wavespeed": "0" if plan.model_id is not None else "1",
         "lock_model_hairstyle": "0",
         "exif_camera": normalize_exif_camera(plan.exif_camera),
         "include_realism_engine": "1" if plan.realism_enabled else "0",

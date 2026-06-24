@@ -16,7 +16,7 @@ class WorkflowResolutionError(ValueError):
 
 @dataclass(frozen=True)
 class WorkflowGenerationPlan:
-    model_id: int
+    model_id: int | None
     description: str
     reference_ref_id: str
     reference_role: str
@@ -119,16 +119,20 @@ def resolve_workflow_generation_plan(
     model_node = _source_for_target(
         target_id, HANDLE["gen_model_in"], edges, node_map
     )
-    if not model_node or str(model_node.get("type") or "") != "model":
-        raise WorkflowResolutionError("Подключите ноду «Модель» к входу model")
-    model_data = model_node.get("data") if isinstance(model_node.get("data"), dict) else {}
-    raw_mid = model_data.get("modelId")
-    try:
-        model_id = int(raw_mid)
-    except (TypeError, ValueError):
-        raise WorkflowResolutionError("Выберите модель в ноде «Модель»") from None
-    if model_id <= 0:
-        raise WorkflowResolutionError("Выберите модель в ноде «Модель»")
+    model_id: int | None = None
+    if model_node is not None:
+        if str(model_node.get("type") or "") != "model":
+            raise WorkflowResolutionError("К входу model можно подключить только ноду «Модель»")
+        model_data = model_node.get("data") if isinstance(model_node.get("data"), dict) else {}
+        raw_mid = model_data.get("modelId")
+        if raw_mid is None or str(raw_mid).strip() == "":
+            raise WorkflowResolutionError("Выберите модель в ноде «Модель» или отключите её")
+        try:
+            model_id = int(raw_mid)
+        except (TypeError, ValueError):
+            raise WorkflowResolutionError("Выберите модель в ноде «Модель»") from None
+        if model_id <= 0:
+            raise WorkflowResolutionError("Выберите модель в ноде «Модель»")
 
     ref_node = _source_for_target(
         target_id, HANDLE["gen_reference_in"], edges, node_map
@@ -161,6 +165,13 @@ def resolve_workflow_generation_plan(
     if prompt_node and str(prompt_node.get("type") or "") == "prompt":
         pdata = prompt_node.get("data") if isinstance(prompt_node.get("data"), dict) else {}
         prompt_text = str(pdata.get("prompt") or "").strip()
+
+    if model_id is None and not (
+        prompt_text.strip() or ref_role.strip() or ref_description.strip()
+    ):
+        raise WorkflowResolutionError(
+            "Без модели из кабинета добавьте промпт или описание референса"
+        )
 
     description = assemble_workflow_grok_notes(
         prompt_text=prompt_text,
