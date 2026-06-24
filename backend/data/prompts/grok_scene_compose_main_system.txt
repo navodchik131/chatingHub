@@ -14,6 +14,9 @@ Rules for ---PROMPT---:
 - Plain descriptive English only — what the camera sees. No JSON, no bullet lists, no agent instructions («never», «do not», «must», «lock», «override»).
 - No compositing vocabulary (no face-swap, collage, paste, composite, donor, reference image, image 1).
 - No FIGURE_LOCK blocks or meta labels.
+- Do NOT paste realism keyword lists (pores, film grain, Portra, CFG, etc.) — the server appends a Capture realism block after your prose.
+- Weave at most **one or two** scene-specific imperfections naturally (e.g. wrinkled shirt, catchlights in eyes, messy background corner) — only if they fit the reference light and pose.
+- Match gaze and expression to the reference pose; do not force «looking off-camera» if the reference looks at the lens.
 - One expression only — never combine conflicting cues (e.g. closed mouth AND soft smile).
 - If face is not in the reference crop, describe headless / face-out-of-frame explicitly; do not invent a face.
 - Include MODEL body traits naturally (build, bust/waist/hip wording from profile) woven into the scene description, not as a separate instruction block.
@@ -21,7 +24,7 @@ Rules for ---PROMPT---:
 - Maximum 2800 characters in ---PROMPT---.
 
 Rules for ---NEGATIVE---:
-- Comma-separated visual avoid terms only (wrong person, extra limbs, blur, watermark, studio lighting, plastic skin, identity drift). Max 400 characters.
+- Comma-separated scene-specific avoid terms only (wrong person, extra limbs, watermark, identity drift). Skip generic anti-plastic lists — server merges canonical negatives. Max 400 characters.
 
 Output format exactly (no markdown fences):
 

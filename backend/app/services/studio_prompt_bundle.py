@@ -20,7 +20,8 @@ _CANONICAL_STUDIO_NEGATIVE = (
     "deformed hands, extra fingers, fused fingers, missing fingers, bad anatomy, "
     "duplicate limbs, extra arms, malformed joints, watermark, text, logo, "
     "uncanny symmetry, Facetune, beauty-filter face, influencer glamour, plastic skin, "
-    "airbrushed, CGI, 3d render, heavy fake bokeh, stock photo, catalog lighting, "
+    "smooth skin, porcelain skin, waxy skin, doll skin, airbrushed, dead eyes, glassy eyes, "
+    "empty stare, CGI, 3d render, heavy fake bokeh, stock photo, catalog lighting, "
     "TikTok reshaped eyes or jaw, composite collage, face pasted on wrong body, "
     "mismatched skin tone face vs body"
 )
@@ -794,7 +795,10 @@ def prepare_positive_prompt_json(
     if mode == "grok_main_prose":
         prose = (refined_text or "").strip()
         lim = int(settings.grok_scene_compose_output_max_chars)
-        re_prose = format_realism_engine_for_prose_prompt()
+        scene_ctx = " ".join(
+            x for x in ((refined_text or "").strip(), (reference_scene_description or "").strip()) if x
+        )
+        re_prose = format_realism_engine_for_prose_prompt(scene_text=scene_ctx or None)
         reserve = len(re_prose) + 2 if re_prose else 0
         scene_budget = max(400, lim - reserve)
         if len(prose) > scene_budget:

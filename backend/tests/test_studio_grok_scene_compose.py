@@ -182,10 +182,26 @@ def test_grok_main_prose_prepare_is_plain_text_not_json() -> None:
     assert "Image 1: character sheet" in positive
     assert "Seated on sofa" in positive
     assert "Capture realism:" in positive
-    assert "skin texture" in positive.lower() or "pores" in positive.lower()
+    assert "catchlights" in positive.lower() or "pores" in positive.lower()
+    assert "on-camera phone flash" not in positive.lower()
+    assert "porcelain skin" in neg
     ws = append_negative_to_wavespeed_prompt(positive, neg, brief_mode="grok_main_prose")
     assert "[NEGATIVE_PROMPT]" in ws
     assert '"realism_engine"' not in ws
+
+
+def test_phone_candid_flash_triggers_only_for_indoor_night() -> None:
+    from app.services.studio_openai import (
+        format_realism_engine_for_prose_prompt,
+        phone_candid_scene_triggers,
+    )
+
+    assert phone_candid_scene_triggers("sunny window light, outdoor terrace") == ""
+    assert "flash" in phone_candid_scene_triggers("bedroom at night, dim lamp").lower()
+    day = format_realism_engine_for_prose_prompt("sunny balcony daylight")
+    night = format_realism_engine_for_prose_prompt("bedroom at night")
+    assert "on-camera phone flash" not in day.lower()
+    assert "on-camera phone flash" in night.lower()
 
 
 def test_model_scene_wan_prefix_differs_from_grok_compose() -> None:

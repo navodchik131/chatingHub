@@ -752,7 +752,43 @@ def load_canonical_realism_engine() -> dict | None:
     return _realism_engine_dict_for_prompt(inner)
 
 
-def format_realism_engine_for_prose_prompt() -> str:
+_PHONE_FLASH_SCENE_MARKERS = (
+    "night",
+    "indoor",
+    "bedroom",
+    "bathroom",
+    "dim",
+    "dark",
+    "low light",
+    "low-light",
+    "tungsten",
+    "fluorescent",
+    "on-camera flash",
+    "phone flash",
+    "harsh flash",
+    "overhead light",
+    "ceiling light",
+    "mirror selfie",
+)
+
+
+def phone_candid_scene_triggers(scene_text: str | None) -> str:
+    """
+    Доп. phone-candid триггеры по тексту сцены. Flash — только для indoor/night,
+    чтобы не ломать дневной референс у окна.
+    """
+    t = (scene_text or "").strip().lower()
+    if not t:
+        return ""
+    if any(m in t for m in _PHONE_FLASH_SCENE_MARKERS):
+        return (
+            "on-camera phone flash, slight overexposure on highlights, "
+            "harsh flash falloff on background"
+        )
+    return ""
+
+
+def format_realism_engine_for_prose_prompt(scene_text: str | None = None) -> str:
     """
     Канонический realism_engine → компактный descriptive блок для prose-промптов (не JSON).
     """
@@ -762,18 +798,23 @@ def format_realism_engine_for_prose_prompt() -> str:
     parts: list[str] = []
     for key in (
         "skin_realism",
+        "eye_realism",
         "hair_realism",
         "fabric_realism",
         "environment_realism",
         "photo_realism",
         "color_grading",
         "capture_authenticity",
+        "capture_triggers_phone",
         "character_rendering",
         "imperfection_level",
     ):
         val = re_obj.get(key)
         if isinstance(val, str) and val.strip():
             parts.append(val.strip())
+    scene_extra = phone_candid_scene_triggers(scene_text)
+    if scene_extra:
+        parts.append(scene_extra)
     if not parts:
         return ""
     return "Capture realism: " + " ".join(parts)
