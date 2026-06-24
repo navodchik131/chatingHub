@@ -8,6 +8,7 @@ import { PricingPage } from './marketing/PricingPage'
 import { PrivacyPage } from './marketing/PrivacyPage'
 import { TermsPage } from './marketing/TermsPage'
 import { AdminPage } from './admin/AdminPage'
+import { WorkflowPage } from './workflow/WorkflowPage'
 
 /** Дочерние <Route> маркетинга (не компонент-обёртка — RR требует Route напрямую). */
 function marketingRouteChildren() {
@@ -31,6 +32,7 @@ export default function Root() {
         <Route path="en" element={<MarketingLayout />}>
           {marketingRouteChildren()}
         </Route>
+        <Route path="/workspace/workflow" element={<WorkflowPage />} />
         <Route path="/workspace/*" element={<App />} />
         <Route path="/admin" element={<AdminPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />

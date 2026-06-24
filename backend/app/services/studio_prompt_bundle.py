@@ -786,6 +786,7 @@ def prepare_positive_prompt_json(
     extra_negative: str | None = None,
     output_aspect_key: str = "3:4",
     wavespeed_identity_legend: str | None = None,
+    include_realism_engine: bool = True,
 ) -> tuple[str, str]:
     """
     Возвращает (positive_for_wavespeed, negative_prompt_line).
@@ -798,7 +799,11 @@ def prepare_positive_prompt_json(
         scene_ctx = " ".join(
             x for x in ((refined_text or "").strip(), (reference_scene_description or "").strip()) if x
         )
-        re_prose = format_realism_engine_for_prose_prompt(scene_text=scene_ctx or None)
+        re_prose = (
+            format_realism_engine_for_prose_prompt(scene_text=scene_ctx or None)
+            if include_realism_engine
+            else ""
+        )
         reserve = len(re_prose) + 2 if re_prose else 0
         scene_budget = max(400, lim - reserve)
         if len(prose) > scene_budget:

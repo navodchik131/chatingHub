@@ -149,6 +149,7 @@ from app.services.studio_grok_scene_compose import (
     grok_compose_studio_text_scene,
     grok_scene_compose_configured,
 )
+from app.services.studio_workflow_resolver import WorkflowGenerationPlan
 from app.services.studio_motion_grok_pipeline import (
     assemble_motion_grok_wavespeed_prompt,
     describe_motion_still_for_ui,
@@ -2207,6 +2208,87 @@ async def api_studio_refine_prompt(
     )
 
 
+async def _accept_studio_refine_job_from_workflow(
+    session: AsyncSession,
+    user: User,
+    *,
+    plan: WorkflowGenerationPlan,
+    image_bytes: bytes,
+    image_mime: str,
+) -> JSONResponse:
+    """Workflow execute → фоновый refine_prompt (model_scene)."""
+    if not grok_scene_compose_configured():
+        raise HTTPException(
+            status_code=503,
+            detail="Grok не настроен: задайте GROK_API_KEY в .env на сервере.",
+        )
+    assert_permission(user, PERM_STUDIO_GENERATE)
+    oid = workspace_owner_id(user)
+
+    if len(image_bytes) > MAX_IMAGE_BYTES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Референс слишком большой (макс. {MAX_IMAGE_BYTES // (1024 * 1024)} МБ)",
+        )
+
+    try:
+        aspect_reserve = normalize_aspect_key(plan.output_aspect)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    params: dict[str, Any] = {
+        "description": plan.description,
+        "model_id": str(plan.model_id),
+        "existing_generation_id": "",
+        "output_aspect": plan.output_aspect,
+        "studio_mode": "model_scene",
+        "wan_edit_tier": plan.wan_edit_tier,
+        "studio_wave_profile": plan.studio_wave_profile,
+        "generate_wavespeed": "1",
+        "wavespeed_single_reference": "1",
+        "send_pose_reference_to_wavespeed": "0",
+        "lock_model_hairstyle": "0",
+        "exif_camera": normalize_exif_camera(plan.exif_camera),
+        "include_realism_engine": "1" if plan.realism_enabled else "0",
+        "workflow_source": "1",
+    }
+    job = await studio_jobs.create_studio_job(
+        session,
+        owner_id=oid,
+        actor_user_id=user.id,
+        job_type="refine_prompt",
+        params=params,
+    )
+    params["image_path"] = studio_jobs.save_studio_job_file(
+        job.id, "image.bin", image_bytes
+    )
+    params["image_mime"] = (image_mime or "image/jpeg").split(";")[0].strip()
+    await studio_jobs.update_studio_job_params(session, job, params)
+
+    gen_row = await reserve_studio_generation_for_job(
+        session,
+        owner_id=oid,
+        studio_job_id=job.id,
+        studio_model_id=plan.model_id,
+        output_aspect=aspect_reserve,
+        content_type="image/png",
+        prompt_excerpt=(plan.description or "")[:2000] or None,
+        exif_camera=normalize_exif_camera(plan.exif_camera),
+    )
+    params["placeholder_generation_id"] = gen_row.id
+    await studio_jobs.update_studio_job_params(session, job, params)
+
+    studio_jobs.schedule_studio_job(job.id)
+    return JSONResponse(
+        status_code=202,
+        content=StudioJobAcceptedOut(
+            job_id=job.id,
+            job_type="refine_prompt",
+            generation_id=gen_row.id,
+        ).model_dump(),
+    )
+
+
 async def _studio_job_execute_refine_prompt(
     session: AsyncSession,
     job: StudioJob,
@@ -2225,6 +2307,11 @@ async def _studio_job_execute_refine_prompt(
     send_pose_reference_to_wavespeed = p.get("send_pose_reference_to_wavespeed")
     lock_model_hairstyle = p.get("lock_model_hairstyle")
     exif_camera_job = normalize_exif_camera(str(p.get("exif_camera") or "main"))
+    include_realism_engine = str(p.get("include_realism_engine") or "1").strip().lower() not in (
+        "0",
+        "false",
+        "no",
+    )
 
     system_instr = load_image_studio_system()
     if not system_instr:
@@ -3065,6 +3152,7 @@ async def _studio_job_execute_refine_prompt(
                     extra_negative=grok_negative_extra,
                     output_aspect_key=aspect_key,
                     wavespeed_identity_legend=ws_identity_legend,
+                    include_realism_engine=include_realism_engine,
                 )
                 size_for_ws: str | None
                 if settings.wavespeed_seedream_omit_size:

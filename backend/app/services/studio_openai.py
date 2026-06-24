@@ -1469,6 +1469,7 @@ def assemble_wavespeed_image_edit_prompt(
     extra_negative: str | None = None,
     output_aspect_key: str = "3:4",
     wavespeed_identity_legend: str | None = None,
+    include_realism_engine: bool = True,
 ) -> str:
     """Позитивный промпт для WaveSpeed; negative в JSON (text scene) или суффикс [NEGATIVE_PROMPT] (prose)."""
     from app.services.studio_prompt_bundle import (
@@ -1484,6 +1485,7 @@ def assemble_wavespeed_image_edit_prompt(
         extra_negative=extra_negative,
         output_aspect_key=output_aspect_key,
         wavespeed_identity_legend=wavespeed_identity_legend,
+        include_realism_engine=include_realism_engine,
     )
     mode = (studio_mode or "model").strip().lower()
     brief = (prompt_brief_mode or "full").strip().lower()
