@@ -21,19 +21,19 @@ function RefDescriptionNodeComponent({ id, data }: NodeProps) {
   return (
     <BaseNode nodeId={id} type="refDescription" error={nodeData.error}>
       <p className="workflow-node__hint">
-        Опишите, зачем этот референс: поза, outfit, локация…
+        Роль — назначение референса для Grok (можно несколько референсов на одну генерацию).
       </p>
       <label className="workflow-node__label">Роль</label>
       <input
         className="workflow-node__field nodrag nowheel"
-        placeholder="Например: pose donor, outfit ref"
+        placeholder="photo base, clothes, pose, scene, face…"
         value={nodeData.role ?? ''}
         onChange={(e) => update({ role: e.target.value })}
       />
       <label className="workflow-node__label">Описание</label>
       <textarea
         className="workflow-node__textarea nodrag nowheel"
-        placeholder="Сидит на диване, вечерний свет, casual hoodie…"
+        placeholder="photo base: кого/кадр редактируем; clothes: донор одежды — цвет, фасон"
         value={nodeData.description ?? ''}
         onChange={(e) => update({ description: e.target.value })}
       />

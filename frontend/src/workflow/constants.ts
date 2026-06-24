@@ -16,8 +16,8 @@ export const NODE_DESCRIPTIONS: Record<NodeType, string> = {
   model: 'Модель из кабинета студии',
   realism: 'Реалистичный вид снимка',
   prompt: 'Дополнительные указания для сцены',
-  refDescription: 'Роль и назначение референса',
-  reference: 'Фото-референс с входом для описания',
+  refDescription: 'Роль и назначение референса (photo base, clothes, pose…)',
+  reference: 'Фото-референс — к генерации можно подключить несколько',
   imageGeneration: 'Сборка промпта и генерация',
   preview: 'Просмотр и скачивание результата',
 }

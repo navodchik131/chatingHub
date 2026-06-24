@@ -330,12 +330,19 @@ async def api_workflow_execute(
     except WorkflowResolutionError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 
-    try:
-        ref_bytes, ref_mime = load_workflow_reference(oid, plan.reference_ref_id)
-    except FileNotFoundError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
+    loaded_refs: list[tuple[bytes, str, Any]] = []
+
+    for ref_item in plan.references:
+        try:
+            ref_bytes, ref_mime = load_workflow_reference(oid, ref_item.ref_id)
+        except FileNotFoundError as e:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Референс «{ref_item.file_name or ref_item.ref_id}» не найден",
+            ) from e
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        loaded_refs.append((ref_bytes, ref_mime, ref_item))
 
     from app.api.studio_routes import _accept_studio_refine_job_from_workflow
 
@@ -344,8 +351,7 @@ async def api_workflow_execute(
             session,
             user,
             plan=plan,
-            image_bytes=ref_bytes,
-            image_mime=ref_mime,
+            reference_images=loaded_refs,
         )
     except HTTPException:
         raise

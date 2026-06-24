@@ -672,3 +672,142 @@ async def grok_compose_studio_model_scene(
             reference_scene_lock="",
             negative_prompt="",
         )
+
+
+_WORKFLOW_MULTI_REF_SYSTEM_ADDON = """
+WORKFLOW MULTI-REFERENCE MODE:
+The user attached one or more labeled USER_WORKFLOW_REFERENCE images (after any MODEL studio photos).
+Each reference has a Role in USER_NOTES → REFERENCE_CONTEXT — treat Roles as authoritative.
+
+Common roles (honor strictly):
+- photo base / model / subject — the photo to edit: keep this person's identity, pose, camera, crop, background, light; apply changes only where SCENE_DIRECTION and other roles allow.
+- pose / scene — geometry, camera, framing, light, background only — not identity.
+- clothes / outfit / wardrobe — garment donor only: copy outfit style, colors, coverage zones onto the base person; never copy the outfit model's face, body, or scene.
+- face — face likeness donor when SCENE_DIRECTION requests it.
+
+Rules:
+- Merge SCENE_DIRECTION with REFERENCE_CONTEXT; on conflict, Role instructions win for that reference's domain.
+- Never paste an outfit-donor person's identity onto the base photo person.
+- When MODEL studio photos are present, identity (face, hair, skin, body volumes) comes from MODEL photos + profile — workflow refs supply pose/scene/outfit unless Role says otherwise.
+- Output format: ---PROMPT--- / ---NEGATIVE--- / ---VISIBLE--- blocks (plain descriptive English in PROMPT).
+"""
+
+
+@dataclass(frozen=True)
+class WorkflowGrokUserRef:
+    data: bytes
+    mime: str
+    role: str
+    description: str
+    file_name: str
+
+
+def _workflow_ref_caption(ref: WorkflowGrokUserRef, index: int) -> str:
+    role = (ref.role or "").strip() or "reference"
+    parts = [f"[USER_WORKFLOW_REFERENCE_{index}] Role: {role}"]
+    if (ref.description or "").strip():
+        parts.append(f"Notes: {ref.description.strip()}")
+    if (ref.file_name or "").strip():
+        parts.append(f"File: {ref.file_name.strip()}")
+    parts.append(
+        "Follow the Role — do not copy identity from outfit/clothes donors onto the base subject."
+    )
+    return " — ".join(parts)
+
+
+async def grok_compose_studio_workflow_multi_ref(
+    *,
+    user_refs: list[WorkflowGrokUserRef],
+    model_images: list[UserStudioModelImage],
+    model_profile_text: str | None,
+    wave_profile: str,
+    user_notes: str,
+    lock_hairstyle: bool,
+    credentials: StudioOpenAiCredentials | None = None,
+) -> GrokSceneComposeResult:
+    """Workflow: несколько референсов с ролями + опционально фото модели из кабинета."""
+    if not user_refs:
+        raise RuntimeError("Workflow: нужен хотя бы один референс")
+    creds = credentials or grok_motion_studio_credentials()
+    wp = (wave_profile or "nsfw").strip().lower()
+    profile = (model_profile_text or "").strip() or "{}"
+    notes = (user_notes or "").strip()
+    hair_rule = (
+        "Hairstyle from MODEL photos and profile when present; otherwise from photo-base workflow ref."
+        if lock_hairstyle
+        else "Hairstyle may follow workflow references when USER_NOTES request it."
+    )
+    max_out = int(settings.grok_scene_compose_output_max_chars)
+
+    labeled: list[tuple[str, UserStudioModelImage]] = []
+    if model_images:
+        labeled = collect_model_images_for_grok_compose(model_images, wave_profile=wave_profile)
+
+    system = load_grok_scene_compose_main_system() + _WORKFLOW_MULTI_REF_SYSTEM_ADDON
+
+    model_rule = ""
+    if labeled:
+        model_rule = (
+            "Attached MODEL studio photos define WHO when present. "
+            "USER_WORKFLOW_REFERENCE images follow their Role labels.\n\n"
+        )
+    else:
+        model_rule = (
+            "No MODEL studio photos — identity and base scene come from the workflow reference "
+            "whose Role is photo base / model / subject; other refs are donors only.\n\n"
+        )
+
+    user_parts: list[dict] = [
+        {
+            "type": "text",
+            "text": (
+                f"WAVE_PROFILE: {wp}\n"
+                f"HAIRSTYLE: {hair_rule}\n"
+                f"MAX_PROMPT_CHARS: {max_out}\n\n"
+                f"{model_rule}"
+                f"MODEL_PROFILE_JSON:\n{profile}\n\n"
+                f"USER_NOTES:\n{notes or '(none)'}\n\n"
+                "Attached images: MODEL studio photos first (if any), then USER_WORKFLOW_REFERENCE images in order."
+            ),
+        },
+    ]
+
+    for label, im in labeled:
+        raw, mime = _read_model_image_file(im)
+        b64 = base64.standard_b64encode(raw).decode("ascii")
+        user_parts.append(
+            {"type": "text", "text": f"[{label}] studio_model_image id={im.id}"}
+        )
+        user_parts.append(
+            {
+                "type": "image_url",
+                "image_url": {"url": f"data:{mime};base64,{b64}"},
+            }
+        )
+
+    for i, ref in enumerate(user_refs, 1):
+        ref_mime = (ref.mime or "image/jpeg").split(";")[0].strip()
+        if ref_mime not in ("image/jpeg", "image/png", "image/gif", "image/webp"):
+            ref_mime = "image/jpeg"
+        ref_b64 = base64.standard_b64encode(ref.data).decode("ascii")
+        user_parts.append({"type": "text", "text": _workflow_ref_caption(ref, i)})
+        user_parts.append(
+            {
+                "type": "image_url",
+                "image_url": {"url": f"data:{ref_mime};base64,{ref_b64}"},
+            }
+        )
+
+    model = _grok_scene_compose_model()
+    raw_out = await chat_completion_openai_compatible_text(
+        model=model,
+        messages=[
+            {"role": "system", "content": system + "\n\n" + _TIMELINE_SYSTEM_EN},
+            {"role": "user", "content": user_parts},
+        ],
+        max_tokens=int(settings.grok_scene_compose_max_tokens),
+        temperature=float(settings.grok_scene_compose_temperature),
+        credentials=creds,
+        timeout_seconds=float(settings.grok_scene_compose_timeout_seconds),
+    )
+    return _parse_grok_main_prose_output(raw_out)

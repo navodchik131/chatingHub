@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from app.services.studio_workflow_resolver import (
+    WorkflowReferenceItem,
     WorkflowResolutionError,
     assemble_workflow_grok_notes,
     resolve_workflow_generation_plan,
@@ -86,15 +87,44 @@ def _base_graph(*, realism_enabled: bool = True, prompt: str = "sunset beach"):
 def test_assemble_workflow_grok_notes():
     notes = assemble_workflow_grok_notes(
         prompt_text="smile at camera",
-        reference_role="pose donor",
-        reference_description="casual hoodie",
-        reference_file_name="ref.png",
+        references=[
+            WorkflowReferenceItem(
+                ref_id="abc",
+                role="pose donor",
+                description="casual hoodie",
+                file_name="ref.png",
+            )
+        ],
     )
     assert "SCENE_DIRECTION:" in notes
     assert "smile at camera" in notes
-    assert "REFERENCE_CONTEXT:" in notes
+    assert "REFERENCE_CONTEXT" in notes
     assert "pose donor" in notes
     assert "ref.png" in notes
+
+
+def test_assemble_workflow_grok_notes_multi_ref():
+    notes = assemble_workflow_grok_notes(
+        prompt_text="swap outfit",
+        references=[
+            WorkflowReferenceItem(
+                ref_id="a",
+                role="photo base",
+                description="person to edit",
+                file_name="model.jpg",
+            ),
+            WorkflowReferenceItem(
+                ref_id="b",
+                role="clothes",
+                description="outfit donor",
+                file_name="outfit.jpg",
+            ),
+        ],
+    )
+    assert "Reference 1:" in notes
+    assert "Reference 2:" in notes
+    assert "photo base" in notes
+    assert "clothes" in notes
 
 
 def test_resolve_workflow_generation_plan_ok():
@@ -205,3 +235,45 @@ def test_resolve_workflow_missing_reference_ref_id():
             nodes=g["nodes"],
             edges=g["edges"],
         )
+
+
+def test_resolve_workflow_multiple_references():
+    g = _base_graph()
+    g["nodes"].append(
+        {
+            "id": "ref-2",
+            "type": "reference",
+            "data": {"refId": "def456", "fileName": "outfit.jpg"},
+        }
+    )
+    g["nodes"].append(
+        {
+            "id": "desc-2",
+            "type": "refDescription",
+            "data": {"role": "clothes", "description": "outfit donor"},
+        }
+    )
+    g["edges"].extend(
+        [
+            {
+                "source": "ref-2",
+                "target": "gen-1",
+                "targetHandle": "reference-in",
+            },
+            {
+                "source": "desc-2",
+                "target": "ref-2",
+                "targetHandle": "description-in",
+            },
+        ]
+    )
+    plan = resolve_workflow_generation_plan(
+        target_node_id="gen-1",
+        nodes=g["nodes"],
+        edges=g["edges"],
+    )
+    assert len(plan.references) == 2
+    assert plan.references[0].role == "pose donor"
+    assert plan.references[1].role == "clothes"
+    assert "Reference 1:" in plan.description
+    assert "Reference 2:" in plan.description

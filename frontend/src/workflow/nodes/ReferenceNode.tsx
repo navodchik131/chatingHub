@@ -1,11 +1,13 @@
-import { memo, useCallback, useEffect, useRef, useState } from 'react'
-import { Handle, Position, useReactFlow, type NodeProps } from '@xyflow/react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Handle, Position, useEdges, useNodes, useReactFlow, type NodeProps } from '@xyflow/react'
 import { fetchWorkflowReferencePreviewUrl, uploadWorkflowReference } from '../api'
 import { BaseNode } from './BaseNode'
-import { HandleIds, type ReferenceNodeData } from '../types'
+import { HandleIds, type RefDescriptionNodeData, type ReferenceNodeData } from '../types'
 
 function ReferenceNodeComponent({ id, data }: NodeProps) {
   const { setNodes } = useReactFlow()
+  const edges = useEdges()
+  const nodes = useNodes()
   const nodeData = data as ReferenceNodeData
   const fileInputRef = useRef<HTMLInputElement>(null)
   const previewUrlRef = useRef<string | null>(null)
@@ -156,6 +158,17 @@ function ReferenceNodeComponent({ id, data }: NodeProps) {
   const showPreview = hasMedia && Boolean(nodeData.previewUrl)
   const showLoading = isUploading || (hasMedia && isPreviewLoading && !nodeData.previewUrl)
 
+  const assignedRole = useMemo(() => {
+    for (const edge of edges) {
+      if (edge.target !== id || edge.targetHandle !== HandleIds.referenceDescriptionIn) continue
+      const source = nodes.find((node) => node.id === edge.source)
+      if (source?.type !== 'refDescription') continue
+      const role = String((source.data as RefDescriptionNodeData).role ?? '').trim()
+      if (role) return role
+    }
+    return ''
+  }, [edges, id, nodes])
+
   return (
     <BaseNode
       nodeId={id}
@@ -177,7 +190,15 @@ function ReferenceNodeComponent({ id, data }: NodeProps) {
         desc
       </span>
 
-      <p className="workflow-node__hint">Референс сцены — подключите «Описание» слева</p>
+      <p className="workflow-node__hint">
+        {assignedRole ? (
+          <>
+            Роль: <strong>{assignedRole}</strong> — подключите к «Генерация» → references
+          </>
+        ) : (
+          <>Загрузите фото и задайте роль в ноде «Описание» слева</>
+        )}
+      </p>
       <input
         ref={fileInputRef}
         type="file"

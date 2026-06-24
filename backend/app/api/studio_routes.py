@@ -149,7 +149,7 @@ from app.services.studio_grok_scene_compose import (
     grok_compose_studio_text_scene,
     grok_scene_compose_configured,
 )
-from app.services.studio_workflow_resolver import WorkflowGenerationPlan
+from app.services.studio_workflow_resolver import WorkflowGenerationPlan, WorkflowReferenceItem
 from app.services.studio_motion_grok_pipeline import (
     assemble_motion_grok_wavespeed_prompt,
     describe_motion_still_for_ui,
@@ -700,6 +700,26 @@ def _truthy_send_pose_reference_to_wavespeed(raw: str | None) -> bool:
     if raw is None:
         return True
     return str(raw).strip().lower() not in ("0", "false", "no", "off")
+
+
+def _load_workflow_refs_from_job(
+    p: dict[str, Any],
+) -> list[tuple[bytes, str, dict[str, Any]]]:
+    """Загрузить все workflow-референсы из параметров studio job."""
+    raw_wr = p.get("workflow_refs")
+    if not isinstance(raw_wr, list):
+        return []
+    out: list[tuple[bytes, str, dict[str, Any]]] = []
+    for item in raw_wr:
+        if not isinstance(item, dict):
+            continue
+        path = str(item.get("path") or "").strip()
+        if not path:
+            continue
+        data = studio_jobs.load_studio_job_file(path)
+        mime = str(item.get("mime") or "image/jpeg").strip()
+        out.append((data, mime, item))
+    return out
 
 
 _ALLOWED_STUDIO_MODES = frozenset(
@@ -2213,10 +2233,9 @@ async def _accept_studio_refine_job_from_workflow(
     user: User,
     *,
     plan: WorkflowGenerationPlan,
-    image_bytes: bytes,
-    image_mime: str,
+    reference_images: list[tuple[bytes, str, WorkflowReferenceItem]],
 ) -> JSONResponse:
-    """Workflow execute → фоновый refine_prompt (model_scene)."""
+    """Workflow execute → фоновый refine_prompt."""
     if not grok_scene_compose_configured():
         raise HTTPException(
             status_code=503,
@@ -2225,16 +2244,26 @@ async def _accept_studio_refine_job_from_workflow(
     assert_permission(user, PERM_STUDIO_GENERATE)
     oid = workspace_owner_id(user)
 
-    if len(image_bytes) > MAX_IMAGE_BYTES:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Референс слишком большой (макс. {MAX_IMAGE_BYTES // (1024 * 1024)} МБ)",
-        )
+    if not reference_images:
+        raise HTTPException(status_code=400, detail="Нет референсов для генерации")
+
+    for ref_bytes, _ref_mime, ref_item in reference_images:
+        if len(ref_bytes) > MAX_IMAGE_BYTES:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Референс «{ref_item.file_name or ref_item.ref_id}» слишком большой "
+                    f"(макс. {MAX_IMAGE_BYTES // (1024 * 1024)} МБ)"
+                ),
+            )
 
     try:
         aspect_reserve = normalize_aspect_key(plan.output_aspect)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
+
+    primary_bytes, primary_mime, _primary_ref = reference_images[0]
+    _ = primary_bytes, primary_mime
 
     params: dict[str, Any] = {
         "description": plan.description,
@@ -2246,7 +2275,7 @@ async def _accept_studio_refine_job_from_workflow(
         "studio_wave_profile": plan.studio_wave_profile,
         "generate_wavespeed": "1",
         "wavespeed_single_reference": "1",
-        "send_pose_reference_to_wavespeed": "0" if plan.model_id is not None else "1",
+        "send_pose_reference_to_wavespeed": "1",
         "lock_model_hairstyle": "0",
         "exif_camera": normalize_exif_camera(plan.exif_camera),
         "include_realism_engine": "1" if plan.realism_enabled else "0",
@@ -2260,10 +2289,25 @@ async def _accept_studio_refine_job_from_workflow(
         job_type="refine_prompt",
         params=params,
     )
-    params["image_path"] = studio_jobs.save_studio_job_file(
-        job.id, "image.bin", image_bytes
-    )
-    params["image_mime"] = (image_mime or "image/jpeg").split(";")[0].strip()
+
+    workflow_refs_meta: list[dict[str, str]] = []
+    for i, (ref_bytes, ref_mime, ref_item) in enumerate(reference_images):
+        path = studio_jobs.save_studio_job_file(job.id, f"workflow_ref_{i}.bin", ref_bytes)
+        mime_clean = (ref_mime or "image/jpeg").split(";")[0].strip()
+        workflow_refs_meta.append(
+            {
+                "ref_id": ref_item.ref_id,
+                "role": ref_item.role,
+                "description": ref_item.description,
+                "file_name": ref_item.file_name,
+                "path": path,
+                "mime": mime_clean,
+            }
+        )
+
+    params["workflow_refs"] = workflow_refs_meta
+    params["image_path"] = workflow_refs_meta[0]["path"]
+    params["image_mime"] = workflow_refs_meta[0]["mime"]
     await studio_jobs.update_studio_job_params(session, job, params)
 
     gen_row = await reserve_studio_generation_for_job(
@@ -2359,6 +2403,11 @@ async def _studio_job_execute_refine_prompt(
         image_bytes = studio_jobs.load_studio_job_file(str(p["image_path"]))
         raw_mime = str(p.get("image_mime") or "").strip()
         image_mime = raw_mime or None
+
+    workflow_ref_loaded = _load_workflow_refs_from_job(p) if workflow_source else []
+    if workflow_ref_loaded:
+        image_bytes = workflow_ref_loaded[0][0]
+        image_mime = workflow_ref_loaded[0][1]
 
     mask_bytes: bytes | None = None
     mask_mime: str | None = None
@@ -2575,7 +2624,9 @@ async def _studio_job_execute_refine_prompt(
 
     lock_hair_req = _truthy_lock_model_hairstyle(lock_model_hairstyle)
     effective_lock_hairstyle = bool(lock_hair_req) if image_bytes else True
-    if mode_n == "model_scene":
+    if workflow_source and workflow_ref_loaded:
+        send_pose_to_ws = True
+    elif mode_n == "model_scene":
         send_pose_to_ws = False
     elif mode_n == "grok_compose":
         send_pose_to_ws = True
@@ -2588,7 +2639,45 @@ async def _studio_job_execute_refine_prompt(
     prompt_brief_mode = "full"
     grok_negative_extra: str | None = None
     try:
-        if mode_n == "model_scene":
+        if workflow_source and workflow_ref_loaded:
+            from app.services.plan_entitlements import assert_grok_allowed, record_grok_usage
+            from app.services.studio_grok_scene_compose import (
+                WorkflowGrokUserRef,
+                grok_compose_studio_workflow_multi_ref,
+            )
+
+            await assert_grok_allowed(session, oid, sub_b)
+            await record_grok_usage(session, oid, source="workflow_multi_ref")
+            grok_creds = grok_motion_studio_credentials()
+            user_refs = [
+                WorkflowGrokUserRef(
+                    data=ref_bytes,
+                    mime=ref_mime,
+                    role=str(meta.get("role") or ""),
+                    description=str(meta.get("description") or ""),
+                    file_name=str(meta.get("file_name") or ""),
+                )
+                for ref_bytes, ref_mime, meta in workflow_ref_loaded
+            ]
+            composed = await grok_compose_studio_workflow_multi_ref(
+                user_refs=user_refs,
+                model_images=imgs_model if mid is not None else [],
+                model_profile_text=model_profile_text,
+                wave_profile=wave_profile_n,
+                user_notes=desc,
+                lock_hairstyle=effective_lock_hairstyle,
+                credentials=grok_creds,
+            )
+            refined = composed.wavespeed_scene_prompt
+            reference_scene = composed.reference_scene_lock or None
+            grok_negative_extra = composed.negative_prompt or None
+            prompt_brief_mode = "grok_main_prose"
+            if gen_row is not None:
+                gen_row.refined_prompt = refined
+                gen_row.prompt_excerpt = (refined[:2000] if refined else None) or None
+                session.add(gen_row)
+                await session.flush()
+        elif mode_n == "model_scene":
             assert image_bytes is not None
             from app.services.plan_entitlements import assert_grok_allowed, record_grok_usage
 
@@ -3014,7 +3103,31 @@ async def _studio_job_execute_refine_prompt(
             image_urls: list[str] = []
             user_pose_ref_prepended = False
             ws_identity_legend: str | None = None
-            if image_bytes and send_pose_to_ws:
+            if workflow_ref_loaded and send_pose_to_ws:
+                try:
+                    for ref_bytes, ref_mime, _meta in workflow_ref_loaded:
+                        fid = save_pose_reference_bytes(
+                            owner_id=oid,
+                            raw=ref_bytes,
+                            content_type=ref_mime,
+                        )
+                        ptok = create_pose_reference_access_token(
+                            user_id=oid, file_id=fid
+                        )
+                        image_urls.append(
+                            f"{pub}/api/studio/public-pose-reference?t={quote(ptok, safe='')}"
+                        )
+                    user_pose_ref_prepended = True
+                except Exception as e:
+                    log.warning(
+                        "studio workflow: не удалось сохранить референсы для WaveSpeed: %s",
+                        e,
+                    )
+                    wavespeed_message = (
+                        "Не удалось подготовить референсы workflow для WaveSpeed. "
+                        "Повторите или перезагрузите файлы."
+                    )
+            elif image_bytes and send_pose_to_ws:
                 try:
                     fid = save_pose_reference_bytes(
                         owner_id=oid,
@@ -3111,7 +3224,7 @@ async def _studio_job_execute_refine_prompt(
                         )
 
                 if not image_urls:
-                    if mode_n == "model_scene":
+                    if mode_n == "model_scene" and not workflow_ref_loaded:
                         wavespeed_message = (
                             "Нет фото модели для WaveSpeed — добавьте развёртку, тело или лицо в кабинете модели."
                         )

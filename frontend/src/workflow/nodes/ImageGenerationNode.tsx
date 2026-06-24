@@ -201,8 +201,12 @@ function ImageGenerationNodeComponent({ id, data }: NodeProps) {
           className="workflow-node__handle-label workflow-node__handle-label--left"
           style={{ top: '60%' }}
         >
-          reference
+          references
         </span>
+
+        <p className="workflow-node__hint">
+          К inputs references можно подключить несколько нод «Референс» — у каждой своя роль в «Описание».
+        </p>
 
         <div className="workflow-gen-form">
           <div className="workflow-gen-form__row">
