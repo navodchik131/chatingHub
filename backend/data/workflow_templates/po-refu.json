@@ -1,0 +1,128 @@
+{
+  "format": "modelmate-workflow",
+  "version": 1,
+  "name": "По рефу",
+  "exported_at": "2026-06-24T20:15:30.300Z",
+  "graph": {
+    "nodes": [
+      {
+        "id": "reference-2",
+        "type": "reference",
+        "position": {
+          "x": -399.25373131633387,
+          "y": 184.44314599785514
+        },
+        "data": {}
+      },
+      {
+        "id": "preview-5",
+        "type": "preview",
+        "position": {
+          "x": 860.7418435560993,
+          "y": 61.63565600565781
+        },
+        "data": {}
+      },
+      {
+        "id": "realism-6",
+        "type": "realism",
+        "position": {
+          "x": -17.916786750111385,
+          "y": 49.374110179630044
+        },
+        "data": {
+          "enabled": true
+        }
+      },
+      {
+        "id": "model-8",
+        "type": "model",
+        "position": {
+          "x": -410.72458111370895,
+          "y": -121.84789733541726
+        },
+        "data": {}
+      },
+      {
+        "id": "imageGeneration-1",
+        "type": "imageGeneration",
+        "position": {
+          "x": 433.4110483723475,
+          "y": -46.57908029520928
+        },
+        "data": {
+          "waveModelId": "wan-2.7",
+          "nsfwEnabled": true,
+          "outputAspect": "9:16"
+        }
+      },
+      {
+        "id": "prompt-1",
+        "type": "prompt",
+        "position": {
+          "x": 9.327290192100406,
+          "y": -298.31087127725505
+        },
+        "data": {
+          "prompt": "PRIORITY: match USER_SCENE_REFERENCE geometry as closely as possible.\nIf text conflicts with the reference image, the reference wins for pose/camera/light/crop."
+        }
+      },
+      {
+        "id": "refDescription-2",
+        "type": "refDescription",
+        "position": {
+          "x": -870.3121191687835,
+          "y": 161.96556385343996
+        },
+        "data": {
+          "role": "pose + camera + framing + light donor",
+          "description": "This image locks ONLY: body pose, limb angles, head yaw/gaze (if visible),\ncamera height/angle/distance, crop edges, background layout,\nenvironmental light direction, wardrobe/nudity coverage zones.\nDo NOT copy from this image: face, skin tone, hair, body proportions,\nbust/waist/hip size, muscle build, glute volume, ethnicity, age look.\nIdentity comes from the studio model photos only."
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "xy-edge__realism-6realism-out-imageGeneration-1realism-in",
+        "source": "realism-6",
+        "target": "imageGeneration-1",
+        "sourceHandle": "realism-out",
+        "targetHandle": "realism-in"
+      },
+      {
+        "id": "xy-edge__model-8model-out-imageGeneration-1model-in",
+        "source": "model-8",
+        "target": "imageGeneration-1",
+        "sourceHandle": "model-out",
+        "targetHandle": "model-in"
+      },
+      {
+        "id": "xy-edge__reference-2reference-out-imageGeneration-1reference-in",
+        "source": "reference-2",
+        "target": "imageGeneration-1",
+        "sourceHandle": "reference-out",
+        "targetHandle": "reference-in"
+      },
+      {
+        "id": "xy-edge__imageGeneration-1image-out-preview-5image-in",
+        "source": "imageGeneration-1",
+        "target": "preview-5",
+        "sourceHandle": "image-out",
+        "targetHandle": "image-in"
+      },
+      {
+        "id": "xy-edge__prompt-1prompt-out-imageGeneration-1prompt-in",
+        "source": "prompt-1",
+        "target": "imageGeneration-1",
+        "sourceHandle": "prompt-out",
+        "targetHandle": "prompt-in"
+      },
+      {
+        "id": "xy-edge__refDescription-2description-out-reference-2description-in",
+        "source": "refDescription-2",
+        "target": "reference-2",
+        "sourceHandle": "description-out",
+        "targetHandle": "description-in"
+      }
+    ]
+  }
+}

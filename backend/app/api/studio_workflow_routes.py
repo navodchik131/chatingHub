@@ -24,6 +24,7 @@ from app.services.studio_workflow_resolver import (
     WorkflowResolutionError,
     resolve_workflow_generation_plan,
 )
+from app.services.studio_workflow_defaults import ensure_default_workflow_workspaces
 from app.services.workspace import (
     PERM_STUDIO_GENERATE,
     assert_permission,
@@ -167,6 +168,8 @@ async def api_workflow_list_workspaces(
 ) -> list[WorkflowWorkspaceListItem]:
     assert_permission(user, PERM_STUDIO_GENERATE)
     oid = workspace_owner_id(user)
+    await ensure_default_workflow_workspaces(session, owner_id=oid)
+    await session.commit()
     rows = (
         await session.scalars(
             select(WorkflowWorkspace)

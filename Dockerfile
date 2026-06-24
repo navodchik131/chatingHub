@@ -43,6 +43,7 @@ RUN pip install --upgrade pip setuptools wheel \
 COPY backend/ ./
 # Промпты вне тома data/ (compose монтирует chating_app_data на /app/backend/data).
 COPY backend/data/prompts/ ./_bundled_prompts/
+COPY backend/data/workflow_templates/ ./_bundled_workflow_templates/
 COPY --from=frontend-build /app/frontend/dist ../frontend/dist
 
 EXPOSE 8080

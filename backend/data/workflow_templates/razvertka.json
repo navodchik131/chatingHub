@@ -1,0 +1,93 @@
+{
+  "format": "modelmate-workflow",
+  "version": 1,
+  "name": "Развертка",
+  "exported_at": "2026-06-24T20:15:22.291Z",
+  "graph": {
+    "nodes": [
+      {
+        "id": "realism-1",
+        "type": "realism",
+        "position": {
+          "x": 870.2394380374262,
+          "y": 132.2873323527255
+        },
+        "data": {
+          "enabled": true
+        }
+      },
+      {
+        "id": "prompt-2",
+        "type": "prompt",
+        "position": {
+          "x": 870.6941121258046,
+          "y": 268.15109978903564
+        },
+        "data": {
+          "prompt": "Сделай на нейтральном сером фоне раскладку персонажа с картинки, треть раскладки слева — крупный план лица, остальное — крупные планы вид справа, вид слева, вид сзади. В полный рост спереди и в полный рост сзади. Одежда - черный топ с глубоким декольте черные спортивные шорты из облегающего материала"
+        }
+      },
+      {
+        "id": "reference-3",
+        "type": "reference",
+        "position": {
+          "x": 868.4869434036776,
+          "y": 483.89719018312564
+        },
+        "data": {}
+      },
+      {
+        "id": "preview-4",
+        "type": "preview",
+        "position": {
+          "x": 1780.8239337380157,
+          "y": 443.8518642715039
+        },
+        "data": {}
+      },
+      {
+        "id": "imageGeneration-5",
+        "type": "imageGeneration",
+        "position": {
+          "x": 1415.1926971536438,
+          "y": 183.55724584596268
+        },
+        "data": {
+          "waveModelId": "gpt-image-2",
+          "nsfwEnabled": false,
+          "outputAspect": "16:9"
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "xy-edge__imageGeneration-5image-out-preview-4image-in",
+        "source": "imageGeneration-5",
+        "target": "preview-4",
+        "sourceHandle": "image-out",
+        "targetHandle": "image-in"
+      },
+      {
+        "id": "xy-edge__realism-1realism-out-imageGeneration-5realism-in",
+        "source": "realism-1",
+        "target": "imageGeneration-5",
+        "sourceHandle": "realism-out",
+        "targetHandle": "realism-in"
+      },
+      {
+        "id": "xy-edge__prompt-2prompt-out-imageGeneration-5prompt-in",
+        "source": "prompt-2",
+        "target": "imageGeneration-5",
+        "sourceHandle": "prompt-out",
+        "targetHandle": "prompt-in"
+      },
+      {
+        "id": "xy-edge__reference-3reference-out-imageGeneration-5reference-in",
+        "source": "reference-3",
+        "target": "imageGeneration-5",
+        "sourceHandle": "reference-out",
+        "targetHandle": "reference-in"
+      }
+    ]
+  }
+}

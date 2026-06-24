@@ -18,6 +18,7 @@ from app.services.plan_entitlements import plan_usage_snapshot
 from app.services.referral import apply_referral_on_signup, ensure_owner_referral_code
 from app.services.starter_plan import ensure_starter_managed_subscription, starter_managed_effective
 from app.services.funnel_analytics import record_funnel_event_once
+from app.services.studio_workflow_defaults import ensure_default_workflow_workspaces
 from app.services.workspace import resolve_billing_user, workspace_owner_id
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -58,6 +59,7 @@ async def register(body: RegisterIn, session: AsyncSession = Depends(get_session
     )
     await ensure_owner_referral_code(session, user)
     await record_funnel_event_once(session, user=user, event="signup")
+    await ensure_default_workflow_workspaces(session, owner_id=user.id)
     await session.commit()
     token = create_access_token(str(user.id))
     return TokenOut(access_token=token)

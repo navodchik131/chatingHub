@@ -1,0 +1,147 @@
+{
+  "format": "modelmate-workflow",
+  "version": 1,
+  "name": "Создание Лица",
+  "exported_at": "2026-06-24T20:15:48.323Z",
+  "graph": {
+    "nodes": [
+      {
+        "id": "reference-2",
+        "type": "reference",
+        "position": {
+          "x": 610.9356883137267,
+          "y": 336.66353360054876
+        },
+        "data": {}
+      },
+      {
+        "id": "refDescription-3",
+        "type": "refDescription",
+        "position": {
+          "x": 105.92843683723075,
+          "y": 307.96172881372394
+        },
+        "data": {
+          "role": "face",
+          "description": "Фотография референс лица девушки"
+        }
+      },
+      {
+        "id": "reference-4",
+        "type": "reference",
+        "position": {
+          "x": 599.2885656226256,
+          "y": 684.8887032932533
+        },
+        "data": {}
+      },
+      {
+        "id": "imageGeneration-5",
+        "type": "imageGeneration",
+        "position": {
+          "x": 1557.6612460031017,
+          "y": 407.270352533755
+        },
+        "data": {
+          "waveModelId": "nano-banana-2",
+          "nsfwEnabled": false,
+          "outputAspect": "3:4"
+        }
+      },
+      {
+        "id": "preview-6",
+        "type": "preview",
+        "position": {
+          "x": 1874.8871814549552,
+          "y": 581.3146056887069
+        },
+        "data": {}
+      },
+      {
+        "id": "refDescription-7",
+        "type": "refDescription",
+        "position": {
+          "x": 104.18733571063851,
+          "y": 697.0978306070914
+        },
+        "data": {
+          "role": "head",
+          "description": "Фотография референс формы головы и прически"
+        }
+      },
+      {
+        "id": "realism-8",
+        "type": "realism",
+        "position": {
+          "x": 1148.0211735989485,
+          "y": 937.0345024252774
+        },
+        "data": {
+          "enabled": true
+        }
+      },
+      {
+        "id": "prompt-9",
+        "type": "prompt",
+        "position": {
+          "x": 1051.0789256878495,
+          "y": 162.37723097624752
+        },
+        "data": {
+          "prompt": "Создай новую модель на базе двух референсов которые прикреплены, нужна на их базе новая уникальная внешность. Результат это крупный план лица по грудь "
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "xy-edge__refDescription-3description-out-reference-2description-in",
+        "source": "refDescription-3",
+        "target": "reference-2",
+        "sourceHandle": "description-out",
+        "targetHandle": "description-in"
+      },
+      {
+        "id": "xy-edge__refDescription-7description-out-reference-4description-in",
+        "source": "refDescription-7",
+        "target": "reference-4",
+        "sourceHandle": "description-out",
+        "targetHandle": "description-in"
+      },
+      {
+        "id": "xy-edge__reference-2reference-out-imageGeneration-5reference-in",
+        "source": "reference-2",
+        "target": "imageGeneration-5",
+        "sourceHandle": "reference-out",
+        "targetHandle": "reference-in"
+      },
+      {
+        "id": "xy-edge__reference-4reference-out-imageGeneration-5reference-in",
+        "source": "reference-4",
+        "target": "imageGeneration-5",
+        "sourceHandle": "reference-out",
+        "targetHandle": "reference-in"
+      },
+      {
+        "id": "xy-edge__imageGeneration-5image-out-preview-6image-in",
+        "source": "imageGeneration-5",
+        "target": "preview-6",
+        "sourceHandle": "image-out",
+        "targetHandle": "image-in"
+      },
+      {
+        "id": "xy-edge__realism-8realism-out-imageGeneration-5realism-in",
+        "source": "realism-8",
+        "target": "imageGeneration-5",
+        "sourceHandle": "realism-out",
+        "targetHandle": "realism-in"
+      },
+      {
+        "id": "xy-edge__prompt-9prompt-out-imageGeneration-5prompt-in",
+        "source": "prompt-9",
+        "target": "imageGeneration-5",
+        "sourceHandle": "prompt-out",
+        "targetHandle": "prompt-in"
+      }
+    ]
+  }
+}
