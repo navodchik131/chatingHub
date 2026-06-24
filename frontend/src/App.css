@@ -3902,6 +3902,23 @@ select:focus {
   text-align: center;
 }
 
+.workspace-topnav-beta {
+  padding: 0.05rem 0.35rem;
+  border-radius: 999px;
+  border: 1px solid rgba(251, 191, 36, 0.45);
+  background: rgba(251, 191, 36, 0.12);
+  color: #fcd34d;
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: lowercase;
+  line-height: 1.2;
+}
+
+a.workspace-topnav-item {
+  text-decoration: none;
+}
+
 .workspace-credits-chip {
   display: inline-flex;
   align-items: baseline;
@@ -4007,6 +4024,23 @@ select:focus {
   font-size: 0.58rem;
   font-weight: 700;
   line-height: 1.2;
+}
+
+.workspace-mobile-nav-beta {
+  padding: 0.02rem 0.28rem;
+  border-radius: 999px;
+  border: 1px solid rgba(251, 191, 36, 0.45);
+  background: rgba(251, 191, 36, 0.12);
+  color: #fcd34d;
+  font-size: 0.5rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: lowercase;
+  line-height: 1.2;
+}
+
+a.workspace-mobile-nav-item {
+  text-decoration: none;
 }
 
 .workspace-mobile-nav-item {

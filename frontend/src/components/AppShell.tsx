@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { TelegramChannelBanner } from './TelegramChannelBanner'
 
 export type WorkspaceSection =
@@ -10,11 +10,13 @@ export type WorkspaceSection =
   | 'studio_video'
 
 type NavItem = {
-  id: WorkspaceSection
+  id?: WorkspaceSection
+  href?: string
   label: string
   icon: string
   show: boolean
   badge?: number
+  beta?: boolean
 }
 
 export interface AppShellProps {
@@ -46,6 +48,8 @@ export function AppShell({
   onLogout,
   children,
 }: AppShellProps) {
+  const location = useLocation()
+
   const nav: NavItem[] = [
     { id: 'overview', label: 'Обзор', icon: '◆', show: true },
     { id: 'chat', label: 'Диалоги', icon: '💬', show: canChat, badge: unreadTotal },
@@ -57,53 +61,111 @@ export function AppShell({
       show: canStudioAny,
     },
     { id: 'studio_video', label: 'Видео', icon: '🎬', show: canStudioAny },
+    {
+      href: '/workspace/workflow',
+      label: 'Workflow',
+      icon: '🧩',
+      show: canStudioAny,
+      beta: true,
+    },
   ]
 
   const visibleNav = nav.filter((x) => x.show)
 
-  const topNavButton = (item: NavItem) => (
-    <button
-      key={item.id}
-      type="button"
-      className={
-        appSection === item.id ? 'workspace-topnav-item is-active' : 'workspace-topnav-item'
-      }
-      onClick={() => onSectionChange(item.id)}
-      aria-current={appSection === item.id ? 'page' : undefined}
-    >
-      <span className="workspace-topnav-icon" aria-hidden>
-        {item.icon}
-      </span>
-      <span className="workspace-topnav-label">{item.label}</span>
-      {item.badge != null && item.badge > 0 ? (
-        <span className="workspace-topnav-badge">
-          {item.badge > 99 ? '99+' : item.badge}
-        </span>
-      ) : null}
-    </button>
-  )
+  const navItemActive = (item: NavItem) =>
+    item.href
+      ? location.pathname.startsWith(item.href)
+      : appSection === item.id
 
-  const mobileNavButton = (item: NavItem) => (
-    <button
-      key={item.id}
-      type="button"
-      className={
-        appSection === item.id
-          ? 'workspace-mobile-nav-item is-active'
-          : 'workspace-mobile-nav-item'
-      }
-      onClick={() => onSectionChange(item.id)}
-      aria-current={appSection === item.id ? 'page' : undefined}
-    >
-      <span aria-hidden>{item.icon}</span>
-      <span>{item.label}</span>
-      {item.badge != null && item.badge > 0 ? (
-        <span className="workspace-mobile-nav-badge">
-          {item.badge > 99 ? '99+' : item.badge}
+  const navItemKey = (item: NavItem) => item.href ?? item.id ?? item.label
+
+  const topNavButton = (item: NavItem) => {
+    const className = navItemActive(item)
+      ? 'workspace-topnav-item is-active'
+      : 'workspace-topnav-item'
+    const content = (
+      <>
+        <span className="workspace-topnav-icon" aria-hidden>
+          {item.icon}
         </span>
-      ) : null}
-    </button>
-  )
+        <span className="workspace-topnav-label">{item.label}</span>
+        {item.beta ? <span className="workspace-topnav-beta">beta</span> : null}
+        {item.badge != null && item.badge > 0 ? (
+          <span className="workspace-topnav-badge">
+            {item.badge > 99 ? '99+' : item.badge}
+          </span>
+        ) : null}
+      </>
+    )
+
+    if (item.href) {
+      return (
+        <Link
+          key={navItemKey(item)}
+          to={item.href}
+          className={className}
+          aria-current={navItemActive(item) ? 'page' : undefined}
+        >
+          {content}
+        </Link>
+      )
+    }
+
+    return (
+      <button
+        key={navItemKey(item)}
+        type="button"
+        className={className}
+        onClick={() => item.id && onSectionChange(item.id)}
+        aria-current={navItemActive(item) ? 'page' : undefined}
+      >
+        {content}
+      </button>
+    )
+  }
+
+  const mobileNavButton = (item: NavItem) => {
+    const className = navItemActive(item)
+      ? 'workspace-mobile-nav-item is-active'
+      : 'workspace-mobile-nav-item'
+    const content = (
+      <>
+        <span aria-hidden>{item.icon}</span>
+        <span>{item.label}</span>
+        {item.beta ? <span className="workspace-mobile-nav-beta">beta</span> : null}
+        {item.badge != null && item.badge > 0 ? (
+          <span className="workspace-mobile-nav-badge">
+            {item.badge > 99 ? '99+' : item.badge}
+          </span>
+        ) : null}
+      </>
+    )
+
+    if (item.href) {
+      return (
+        <Link
+          key={navItemKey(item)}
+          to={item.href}
+          className={className}
+          aria-current={navItemActive(item) ? 'page' : undefined}
+        >
+          {content}
+        </Link>
+      )
+    }
+
+    return (
+      <button
+        key={navItemKey(item)}
+        type="button"
+        className={className}
+        onClick={() => item.id && onSectionChange(item.id)}
+        aria-current={navItemActive(item) ? 'page' : undefined}
+      >
+        {content}
+      </button>
+    )
+  }
 
   return (
     <div className="workspace-shell workspace-shell--topnav">
