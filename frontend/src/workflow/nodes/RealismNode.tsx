@@ -23,9 +23,7 @@ function RealismNodeComponent({ id, data }: NodeProps) {
 
   return (
     <BaseNode nodeId={id} type="realism" error={nodeData.error}>
-      <p className="workflow-node__hint">
-        Phone candid realism — EXIF, grain, anti-plastic negative
-      </p>
+      <p className="workflow-node__hint">Реалистичный вид снимка с телефона</p>
       <label className="workflow-node__toggle nodrag">
         <input type="checkbox" checked={enabled} onChange={onToggle} />
         <span>{enabled ? 'Включён' : 'Выключен'}</span>

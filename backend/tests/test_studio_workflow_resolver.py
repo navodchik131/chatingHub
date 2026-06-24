@@ -47,7 +47,7 @@ def _base_graph(*, realism_enabled: bool = True, prompt: str = "sunset beach"):
                 "type": "imageGeneration",
                 "data": {
                     "outputAspect": "3:4",
-                    "waveModelId": "nano-banana-pro",
+                    "waveModelId": "wan-2.7",
                     "nsfwEnabled": True,
                     "exifCamera": "iphone15",
                 },
@@ -112,7 +112,7 @@ def test_resolve_workflow_generation_plan_ok():
     assert plan.reference_role == "pose donor"
     assert plan.output_aspect == "3:4"
     assert plan.studio_wave_profile == "nsfw"
-    assert plan.workflow_wave_model == "nano-banana-pro"
+    assert plan.workflow_wave_model == "wan-2.7"
     assert plan.exif_camera == "iphone15"
     assert plan.realism_enabled is True
 
@@ -122,12 +122,27 @@ def test_resolve_workflow_nsfw_off():
     for n in g["nodes"]:
         if n["id"] == "gen-1":
             n["data"]["nsfwEnabled"] = False
+            n["data"]["waveModelId"] = "nano-banana-pro"
     plan = resolve_workflow_generation_plan(
         target_node_id="gen-1",
         nodes=g["nodes"],
         edges=g["edges"],
     )
     assert plan.studio_wave_profile == "regular"
+    assert plan.workflow_wave_model == "nano-banana-pro"
+
+
+def test_resolve_workflow_nsfw_only_wan():
+    g = _base_graph()
+    for n in g["nodes"]:
+        if n["id"] == "gen-1":
+            n["data"]["waveModelId"] = "gpt-image-2"
+    with pytest.raises(WorkflowResolutionError, match="Wan"):
+        resolve_workflow_generation_plan(
+            target_node_id="gen-1",
+            nodes=g["nodes"],
+            edges=g["edges"],
+        )
 
 
 def test_resolve_workflow_realism_disabled():

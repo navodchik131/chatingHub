@@ -35,7 +35,7 @@ function ModelNodeComponent({ id, data }: NodeProps) {
 
   return (
     <BaseNode nodeId={id} type="model" error={nodeData.error}>
-      <p className="workflow-node__hint">Модель из кабинета — фото уйдут в Grok и WaveSpeed</p>
+      <p className="workflow-node__hint">Модель из кабинета — её фото используются при генерации</p>
       <select
         className="workflow-node__field nodrag nowheel"
         value={nodeData.modelId ?? ''}

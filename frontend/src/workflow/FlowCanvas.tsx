@@ -14,48 +14,43 @@ import {
   type Edge,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { WORKFLOW_GRAPH_STORAGE_KEY } from './constants'
+import { NodePaletteDock } from './NodePaletteDock'
 import { createNode, REACT_FLOW_DRAG_TYPE } from './nodeFactory'
 import { nodeTypes } from './nodes'
-import { NodeSidebar } from './NodeSidebar'
-import type { AppNode, NodeType } from './types'
+import type { AppNode, NodeType, ProjectGraph } from './types'
 
-function loadStoredGraph(): { nodes: AppNode[]; edges: Edge[] } | null {
-  for (const key of [WORKFLOW_GRAPH_STORAGE_KEY, 'mm_workflow_graph_v1']) {
-    try {
-      const raw = localStorage.getItem(key)
-      if (!raw) continue
-      const parsed = JSON.parse(raw) as { nodes?: AppNode[]; edges?: Edge[] }
-      if (!Array.isArray(parsed.nodes) || !Array.isArray(parsed.edges)) continue
-      return { nodes: parsed.nodes, edges: parsed.edges }
-    } catch {
-      continue
-    }
-  }
-  return null
+type Props = {
+  workspaceId: number
+  initialGraph: ProjectGraph
+  onGraphChange: (graph: ProjectGraph) => void
 }
 
-function FlowCanvasInner() {
+function FlowCanvasInner({ workspaceId, initialGraph, onGraphChange }: Props) {
   const reactFlowWrapper = useRef<HTMLDivElement>(null)
   const { screenToFlowPosition } = useReactFlow()
-  const stored = loadStoredGraph()
+  const saveTimerRef = useRef<number | null>(null)
 
-  const [nodes, setNodes, onNodesChange] = useNodesState<AppNode>(stored?.nodes ?? [])
-  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(stored?.edges ?? [])
+  const [nodes, setNodes, onNodesChange] = useNodesState<AppNode>(initialGraph.nodes as AppNode[])
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(initialGraph.edges)
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      localStorage.setItem(
-        WORKFLOW_GRAPH_STORAGE_KEY,
-        JSON.stringify({ nodes, edges }),
-      )
-    }, 400)
-    return () => window.clearTimeout(timer)
-  }, [nodes, edges])
+    setNodes((initialGraph.nodes as AppNode[]) ?? [])
+    setEdges(initialGraph.edges ?? [])
+  }, [workspaceId, initialGraph, setEdges, setNodes])
+
+  useEffect(() => {
+    if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = window.setTimeout(() => {
+      onGraphChange({ nodes, edges })
+    }, 600)
+    return () => {
+      if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current)
+    }
+  }, [nodes, edges, onGraphChange])
 
   const onConnect = useCallback(
     (connection: Connection) => {
-      setEdges((current) => addEdge({ ...connection, animated: true }, current))
+      setEdges((current) => addEdge({ ...connection, animated: false }, current))
     },
     [setEdges],
   )
@@ -80,16 +75,8 @@ function FlowCanvasInner() {
     [screenToFlowPosition, setNodes],
   )
 
-  const clearGraph = useCallback(() => {
-    if (!window.confirm('Очистить граф на канвасе?')) return
-    setNodes([])
-    setEdges([])
-    localStorage.removeItem(WORKFLOW_GRAPH_STORAGE_KEY)
-  }, [setEdges, setNodes])
-
   return (
     <div className="workflow-layout">
-      <NodeSidebar />
       <div className="workflow-canvas-wrap">
         <div
           ref={reactFlowWrapper}
@@ -111,7 +98,9 @@ function FlowCanvasInner() {
             panOnDrag
             zoomOnScroll
             zoomOnPinch
+            edgesFocusable={false}
             deleteKeyCode={['Backspace', 'Delete']}
+            defaultEdgeOptions={{ animated: false }}
             style={{ width: '100%', height: '100%' }}
           >
             <Background variant={BackgroundVariant.Lines} gap={24} size={1} color="#27272a" />
@@ -124,22 +113,15 @@ function FlowCanvasInner() {
           </ReactFlow>
         </div>
       </div>
-      <button
-        type="button"
-        className="workflow-page__btn workflow-page__btn--danger"
-        style={{ position: 'fixed', bottom: '1rem', left: '17rem', zIndex: 5 }}
-        onClick={clearGraph}
-      >
-        Очистить граф
-      </button>
+      <NodePaletteDock />
     </div>
   )
 }
 
-export function FlowCanvas() {
+export function FlowCanvas(props: Props) {
   return (
     <ReactFlowProvider>
-      <FlowCanvasInner />
+      <FlowCanvasInner {...props} />
     </ReactFlowProvider>
   )
 }

@@ -190,6 +190,15 @@ def resolve_workflow_generation_plan(
     else:
         wave_profile = "nsfw"
 
+    if wave_profile == "nsfw" and wave_model != "wan-2.7":
+        raise WorkflowResolutionError(
+            "В режиме NSFW доступна только модель Wan 2.7"
+        )
+    if wave_profile == "regular" and wave_model == "wan-2.7":
+        raise WorkflowResolutionError(
+            "Wan 2.7 доступна только в режиме NSFW — отключите Regular или выберите другую модель"
+        )
+
     wan_tier = str(gen_data.get("wanEditTier") or "standard").strip().lower()
     if wan_tier not in ("standard", "mini"):
         wan_tier = "standard"

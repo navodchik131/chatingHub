@@ -353,6 +353,18 @@ async def init_db() -> None:
         await conn.run_sync(_migrate_conversation_studio_model_id)
         await conn.run_sync(_migrate_message_attachments_table)
         await conn.run_sync(_migrate_funnel_events_table)
+        await conn.run_sync(_migrate_workflow_workspaces_table)
+
+
+def _migrate_workflow_workspaces_table(sync_conn) -> None:
+    from sqlalchemy import inspect
+
+    from app.db.models import WorkflowWorkspace
+
+    insp = inspect(sync_conn)
+    if insp.has_table("workflow_workspaces"):
+        return
+    WorkflowWorkspace.__table__.create(sync_conn, checkfirst=True)
 
 
 def _migrate_user_studio_model_phone_exif_refs(sync_conn) -> None:

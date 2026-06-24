@@ -14,11 +14,11 @@ export const NODE_LABELS: Record<NodeType, string> = {
 
 export const NODE_DESCRIPTIONS: Record<NodeType, string> = {
   model: 'Модель из кабинета студии',
-  realism: 'Phone candid realism engine',
-  prompt: 'Общие указания для сцены (Grok)',
+  realism: 'Реалистичный вид снимка',
+  prompt: 'Дополнительные указания для сцены',
   refDescription: 'Роль и назначение референса',
   reference: 'Фото-референс с входом для описания',
-  imageGeneration: 'Grok → WaveSpeed, выбор модели API',
+  imageGeneration: 'Сборка промпта и генерация',
   preview: 'Просмотр и скачивание результата',
 }
 

@@ -26,7 +26,7 @@ function PromptNodeComponent({ id, data }: NodeProps) {
       isRunning={nodeData.isRunning}
       error={nodeData.error}
     >
-      <p className="workflow-node__hint">Дополнительные указания для Grok (необязательно)</p>
+      <p className="workflow-node__hint">Дополнительные указания (необязательно)</p>
       <textarea
         className="workflow-node__textarea nodrag nowheel"
         placeholder="Например: вечерний свет, улыбка, casual outfit…"

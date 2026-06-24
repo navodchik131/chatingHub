@@ -1,6 +1,7 @@
-import { memo, useMemo } from 'react'
+import { memo, useMemo, useState } from 'react'
 import { Handle, Position, useEdges, useNodes, type NodeProps } from '@xyflow/react'
 import { resolveConnectedImageUrl } from '../graphResolver'
+import { WorkflowImageLightbox } from '../WorkflowImageLightbox'
 import { BaseNode } from './BaseNode'
 import { HandleIds, type PreviewNodeData } from '../types'
 
@@ -8,6 +9,7 @@ function PreviewNodeComponent({ id, data }: NodeProps) {
   const nodes = useNodes()
   const edges = useEdges()
   const nodeData = data as PreviewNodeData
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
 
   const imageUrl = useMemo(() => {
     if (nodeData.imageUrl) return nodeData.imageUrl
@@ -27,37 +29,47 @@ function PreviewNodeComponent({ id, data }: NodeProps) {
   }
 
   return (
-    <BaseNode nodeId={id} type="preview" isRunning={nodeData.isRunning} error={nodeData.error}>
-      <Handle
-        id={HandleIds.previewIn}
-        type="target"
-        position={Position.Left}
-        className="workflow-handle workflow-handle--preview"
-        style={{ top: '50%' }}
-      />
-      <span className="workflow-node__handle-label workflow-node__handle-label--left">image</span>
+    <>
+      <BaseNode nodeId={id} type="preview" isRunning={nodeData.isRunning} error={nodeData.error}>
+        <Handle
+          id={HandleIds.previewIn}
+          type="target"
+          position={Position.Left}
+          className="workflow-handle workflow-handle--preview"
+          style={{ top: '50%' }}
+        />
+        <span className="workflow-node__handle-label workflow-node__handle-label--left">image</span>
 
-      <p className="workflow-node__hint">Итоговое изображение</p>
+        <p className="workflow-node__hint">Итоговое изображение</p>
 
-      <div
-        className={`workflow-node__preview-box ${hasImage ? 'workflow-node__preview-box--filled' : ''}`}
-      >
         {hasImage ? (
-          <img src={imageUrl} alt="Результат генерации" />
+          <button
+            type="button"
+            className="workflow-node__preview-box workflow-node__preview-box--filled workflow-node__preview-click nodrag"
+            onClick={() => setLightboxUrl(imageUrl ?? null)}
+          >
+            <img src={imageUrl!} alt="Результат генерации" />
+          </button>
         ) : (
-          <span className="workflow-node__hint">Подключите выход генерации</span>
+          <div className="workflow-node__preview-box">
+            <span className="workflow-node__hint">Подключите выход генерации</span>
+          </div>
         )}
-      </div>
 
-      <button
-        type="button"
-        className="workflow-node__btn workflow-node__btn--ghost nodrag"
-        onClick={handleDownload}
-        disabled={!hasImage}
-      >
-        Скачать
-      </button>
-    </BaseNode>
+        <button
+          type="button"
+          className="workflow-node__btn workflow-node__btn--ghost nodrag"
+          onClick={handleDownload}
+          disabled={!hasImage}
+        >
+          Скачать
+        </button>
+      </BaseNode>
+      <WorkflowImageLightbox
+        imageUrl={lightboxUrl}
+        onClose={() => setLightboxUrl(null)}
+      />
+    </>
   )
 }
 

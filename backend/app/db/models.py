@@ -127,6 +127,11 @@ class User(Base):
         back_populates="user",
         cascade="all, delete-orphan",
     )
+    workflow_workspaces: Mapped[list["WorkflowWorkspace"]] = relationship(
+        "WorkflowWorkspace",
+        back_populates="owner",
+        cascade="all, delete-orphan",
+    )
 
 
 class Subscription(Base):
@@ -587,3 +592,24 @@ class MessageAttachment(Base):
     )
 
     message: Mapped[Message] = relationship("Message", back_populates="attachments")
+
+
+class WorkflowWorkspace(Base):
+    __tablename__ = "workflow_workspaces"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    name: Mapped[str] = mapped_column(String(120), default="Новый проект")
+    graph_json: Mapped[str] = mapped_column(Text, default='{"nodes":[],"edges":[]}')
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    owner: Mapped[User] = relationship("User", back_populates="workflow_workspaces")
