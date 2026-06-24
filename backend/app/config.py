@@ -115,7 +115,11 @@ class Settings(BaseSettings):
     grok_scene_compose_model_scene_system_path: str = Field(
         default="data/prompts/grok_scene_compose_model_scene_system.txt"
     )
-    grok_scene_compose_model_scene_system_inline: str = Field(default="")
+    grok_scene_compose_main_system_path: str = Field(
+        default="data/prompts/grok_scene_compose_main_system.txt"
+    )
+    grok_scene_compose_main_system_inline: str = Field(default="")
+    grok_scene_compose_output_max_chars: int = Field(default=3000, ge=800, le=5000)
     grok_scene_compose_system_inline: str = Field(default="")
     grok_scene_compose_text_system_inline: str = Field(default="")
     grok_scene_compose_model: str = Field(default="")
@@ -267,7 +271,7 @@ class Settings(BaseSettings):
         default="/api/v3/google/nano-banana-pro/edit",
     )
     wavespeed_nano_banana_pro_resolution: str = Field(default="2k")
-    wavespeed_nano_banana_pro_sync: bool = Field(default=True)
+    wavespeed_nano_banana_pro_sync: bool = Field(default=False)
     wavespeed_nano_banana_pro_output_format: str = Field(default="png")
     # Google Nano Banana часто отвечает «check your input parameters» на слишком длинный prompt
     wavespeed_nano_prompt_max_chars: int = Field(default=12000, ge=2000, le=32000)

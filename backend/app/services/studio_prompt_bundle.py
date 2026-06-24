@@ -7,8 +7,10 @@ import logging
 import re
 from typing import Any
 
+from app.config import settings
 from app.services.studio_openai import (
     _strip_code_fences,
+    format_realism_engine_for_prose_prompt,
     load_canonical_realism_engine,
 )
 
@@ -782,12 +784,32 @@ def prepare_positive_prompt_json(
     reference_scene_description: str | None = None,
     extra_negative: str | None = None,
     output_aspect_key: str = "3:4",
+    wavespeed_identity_legend: str | None = None,
 ) -> tuple[str, str]:
     """
-    Возвращает (positive_json_str, negative_prompt_line).
-    brief_mode: full | compact_pose_image | text_scene | grok_composed | grok_composed_text
+    Возвращает (positive_for_wavespeed, negative_prompt_line).
+    brief_mode: full | compact_pose_image | text_scene | grok_composed | grok_composed_text | grok_main_prose
     """
     mode = (brief_mode or "full").strip().lower()
+    if mode == "grok_main_prose":
+        prose = (refined_text or "").strip()
+        lim = int(settings.grok_scene_compose_output_max_chars)
+        re_prose = format_realism_engine_for_prose_prompt()
+        reserve = len(re_prose) + 2 if re_prose else 0
+        scene_budget = max(400, lim - reserve)
+        if len(prose) > scene_budget:
+            prose = prose[: scene_budget - 1].rstrip() + "…"
+        leg = (wavespeed_identity_legend or "").strip()
+        if leg:
+            prose = f"Attached model reference photos — {leg}\n\n{prose}"
+        if re_prose:
+            prose = f"{prose}\n\n{re_prose}".strip()
+        negative = _merge_grok_scene_negative(
+            model_profile_text=model_profile_text,
+            extra_negative=extra_negative,
+            reference_scene_description=reference_scene_description,
+        )
+        return prose, negative
     if mode == "grok_composed_text":
         return build_grok_text_scene_positive_json(
             refined_text,

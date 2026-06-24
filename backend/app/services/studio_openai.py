@@ -186,6 +186,18 @@ _GROK_TEXT_SCENE_NANO_PREFIX = (
     "No heavy fake bokeh; mundane smartphone snapshot; preserve identity on all visible skin.\n\n"
 )
 
+_GROK_MAIN_PROSE_WAN_PREFIX = (
+    "[MODEL_SCENE] One person — identity from attached model reference photos only. "
+    "Recreate the scene exactly as described below (pose, crop, light, wardrobe). "
+    "Plain phone snapshot look; natural skin texture.\n\n"
+)
+
+_GROK_MAIN_PROSE_NANO_PREFIX = (
+    "[MODEL_SCENE] Attached images = one saved model (identity). "
+    "Generate the scene described below — same pose, framing, and lighting. "
+    "Mundane smartphone photo; no studio glamour.\n\n"
+)
+
 _WAN_COMPACT_NO_FACE_PREFIX = (
     "[POSE_REF=image 1 — crop locked] Visible limbs, framing, outfit, light: image 1 only. "
     "Identity skin on visible body from model refs + JSON; never add a face outside the crop.\n\n"
@@ -258,6 +270,8 @@ def finalize_wavespeed_studio_prompt(
         out = (_NANO_TEXT_SCENE_PREFIX.strip() if not p else _NANO_TEXT_SCENE_PREFIX + p)
     elif brief == "grok_composed_text":
         out = _GROK_TEXT_SCENE_WAN_PREFIX.strip() if not p else _GROK_TEXT_SCENE_WAN_PREFIX + p
+    elif brief == "grok_main_prose":
+        out = _GROK_MAIN_PROSE_WAN_PREFIX.strip() if not p else _GROK_MAIN_PROSE_WAN_PREFIX + p
     else:
         out = p
     if mode == "no_face" and brief != "compact_pose_image":
@@ -370,6 +384,8 @@ def finalize_nano_banana_studio_prompt(
             out = out.rstrip() + _GROK_COMPOSED_POSE_LAST_SUFFIX
     elif brief == "grok_composed_text":
         out = _GROK_TEXT_SCENE_NANO_PREFIX.strip() if not p else _GROK_TEXT_SCENE_NANO_PREFIX + p
+    elif brief == "grok_main_prose":
+        out = _GROK_MAIN_PROSE_NANO_PREFIX.strip() if not p else _GROK_MAIN_PROSE_NANO_PREFIX + p
     else:
         if brief == "compact_pose_image" and mode not in ("face_swap", "photo_edit"):
             head = (
@@ -734,6 +750,33 @@ def load_canonical_realism_engine() -> dict | None:
     if inner is None:
         return None
     return _realism_engine_dict_for_prompt(inner)
+
+
+def format_realism_engine_for_prose_prompt() -> str:
+    """
+    Канонический realism_engine → компактный descriptive блок для prose-промптов (не JSON).
+    """
+    re_obj = load_canonical_realism_engine()
+    if not re_obj:
+        return ""
+    parts: list[str] = []
+    for key in (
+        "skin_realism",
+        "hair_realism",
+        "fabric_realism",
+        "environment_realism",
+        "photo_realism",
+        "color_grading",
+        "capture_authenticity",
+        "character_rendering",
+        "imperfection_level",
+    ):
+        val = re_obj.get(key)
+        if isinstance(val, str) and val.strip():
+            parts.append(val.strip())
+    if not parts:
+        return ""
+    return "Capture realism: " + " ".join(parts)
 
 
 def prepare_studio_prompt_skeleton() -> str:
@@ -1384,6 +1427,7 @@ def assemble_wavespeed_image_edit_prompt(
     reference_scene_description: str | None = None,
     extra_negative: str | None = None,
     output_aspect_key: str = "3:4",
+    wavespeed_identity_legend: str | None = None,
 ) -> str:
     """Позитивный промпт для WaveSpeed; negative в JSON (text scene) или суффикс [NEGATIVE_PROMPT] (prose)."""
     from app.services.studio_prompt_bundle import (
@@ -1398,6 +1442,7 @@ def assemble_wavespeed_image_edit_prompt(
         reference_scene_description=reference_scene_description,
         extra_negative=extra_negative,
         output_aspect_key=output_aspect_key,
+        wavespeed_identity_legend=wavespeed_identity_legend,
     )
     mode = (studio_mode or "model").strip().lower()
     brief = (prompt_brief_mode or "full").strip().lower()

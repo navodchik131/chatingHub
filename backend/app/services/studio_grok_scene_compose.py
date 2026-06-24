@@ -40,9 +40,12 @@ _GROK_SCENE_LABELS: dict[str, str] = {
 }
 
 _TIMELINE_SYSTEM_EN = (
-    "You follow instructions precisely. Reply only in the requested JSON schema. "
-    "No preamble, no markdown code fences."
+    "Follow the output format exactly. No markdown fences, no preamble."
 )
+
+_MAIN_PROMPT_MARKER = "---PROMPT---"
+_MAIN_NEGATIVE_MARKER = "---NEGATIVE---"
+_MAIN_VISIBLE_MARKER = "---VISIBLE---"
 
 
 @dataclass(frozen=True)
@@ -78,6 +81,25 @@ def _grok_prompt_file_candidates(configured_rel: str, default_filename: str) -> 
         seen.add(item)
         out.append(item)
     return out
+
+
+def load_grok_scene_compose_main_system() -> str:
+    configured = (settings.grok_scene_compose_main_system_path or "").strip()
+    candidates = _grok_prompt_file_candidates(
+        configured, "grok_scene_compose_main_system.txt"
+    )
+    for path in candidates:
+        if path.is_file():
+            t = path.read_text(encoding="utf-8").strip()
+            if t:
+                return t
+    inline = (settings.grok_scene_compose_main_system_inline or "").strip()
+    if inline:
+        return inline
+    raise RuntimeError(
+        "Промпт Grok main scene compose пуст: добавьте grok_scene_compose_main_system.txt "
+        "или GROK_SCENE_COMPOSE_MAIN_SYSTEM_INLINE"
+    )
 
 
 def load_grok_scene_compose_model_scene_system() -> str:
@@ -204,6 +226,42 @@ def collect_model_images_for_grok_text_compose(
     return out
 
 
+def _parse_grok_main_prose_output(raw: str) -> GrokSceneComposeResult:
+    t = _strip_code_fences(raw).strip()
+    prompt = ""
+    negative = ""
+    visible = ""
+
+    p_idx = t.find(_MAIN_PROMPT_MARKER)
+    n_idx = t.find(_MAIN_NEGATIVE_MARKER)
+    v_idx = t.find(_MAIN_VISIBLE_MARKER)
+
+    if p_idx >= 0:
+        p_start = p_idx + len(_MAIN_PROMPT_MARKER)
+        ends = [x for x in (n_idx, v_idx) if x >= 0 and x > p_start]
+        p_end = min(ends) if ends else len(t)
+        prompt = t[p_start:p_end].strip()
+    if n_idx >= 0:
+        n_start = n_idx + len(_MAIN_NEGATIVE_MARKER)
+        n_end = v_idx if v_idx > n_start else len(t)
+        negative = t[n_start:n_end].strip()
+    if v_idx >= 0:
+        visible = t[v_idx + len(_MAIN_VISIBLE_MARKER) :].strip()
+
+    if not prompt:
+        prompt = t
+    lim = int(settings.grok_scene_compose_output_max_chars)
+    if len(prompt) > lim:
+        prompt = prompt[: lim - 1].rstrip() + "…"
+    if not prompt:
+        raise RuntimeError("Grok main compose: пустой промпт")
+    return GrokSceneComposeResult(
+        wavespeed_scene_prompt=prompt,
+        reference_scene_lock=visible[:400] if visible else "",
+        negative_prompt=negative,
+    )
+
+
 def _parse_grok_compose_json(raw: str) -> GrokSceneComposeResult:
     t = _strip_code_fences(raw)
     try:
@@ -229,6 +287,102 @@ def _parse_grok_compose_json(raw: str) -> GrokSceneComposeResult:
 def _grok_scene_compose_model() -> str:
     m = (settings.grok_scene_compose_model or "").strip()
     return m if m else _grok_fps_stills_model()
+
+
+async def grok_compose_studio_main_scene(
+    *,
+    user_ref_bytes: bytes,
+    user_ref_mime: str | None,
+    model_images: list[UserStudioModelImage],
+    model_profile_text: str | None,
+    wave_profile: str,
+    user_notes: str,
+    lock_hairstyle: bool,
+    credentials: StudioOpenAiCredentials | None = None,
+) -> GrokSceneComposeResult:
+    """
+    Режим «Основная»: Grok → plain prose (без JSON), референс только для анализа сцены.
+    WaveSpeed получает prose + фото модели, без реф-кадра пользователя.
+    """
+    creds = credentials or grok_motion_studio_credentials()
+    labeled = collect_model_images_for_grok_compose(model_images, wave_profile=wave_profile)
+    if not labeled:
+        raise RuntimeError(
+            "Для режима «Основная» у модели нужны снимки: развёртка (turnaround) "
+            "и/или лицо/тело. Добавьте их в кабинете модели."
+        )
+
+    system = load_grok_scene_compose_main_system()
+    wp = (wave_profile or "nsfw").strip().lower()
+    profile = (model_profile_text or "").strip() or "{}"
+    notes = (user_notes or "").strip()
+    hair_rule = (
+        "Hairstyle from MODEL photos and profile, not from USER_SCENE_REFERENCE."
+        if lock_hairstyle
+        else "Hairstyle may follow USER_SCENE_REFERENCE when USER_NOTES request it."
+    )
+    max_out = int(settings.grok_scene_compose_output_max_chars)
+
+    user_parts: list[dict] = [
+        {
+            "type": "text",
+            "text": (
+                f"WAVE_PROFILE: {wp}\n"
+                f"HAIRSTYLE: {hair_rule}\n"
+                f"MAX_PROMPT_CHARS: {max_out}\n\n"
+                f"MODEL_PROFILE_JSON:\n{profile}\n\n"
+                f"USER_NOTES:\n{notes or '(none)'}\n\n"
+                "Attached model images are labeled. USER_SCENE_REFERENCE is last."
+            ),
+        },
+    ]
+
+    for label, im in labeled:
+        raw, mime = _read_model_image_file(im)
+        b64 = base64.standard_b64encode(raw).decode("ascii")
+        user_parts.append(
+            {"type": "text", "text": f"[{label}] studio_model_image id={im.id}"}
+        )
+        user_parts.append(
+            {
+                "type": "image_url",
+                "image_url": {"url": f"data:{mime};base64,{b64}"},
+            }
+        )
+
+    ref_mime = (user_ref_mime or "image/jpeg").split(";")[0].strip()
+    if ref_mime not in ("image/jpeg", "image/png", "image/gif", "image/webp"):
+        ref_mime = "image/jpeg"
+    ref_b64 = base64.standard_b64encode(user_ref_bytes).decode("ascii")
+    user_parts.append(
+        {
+            "type": "text",
+            "text": (
+                "[USER_SCENE_REFERENCE] Scene donor — pose, camera, light, environment, "
+                "wardrobe coverage only. Do NOT copy sitter identity."
+            ),
+        }
+    )
+    user_parts.append(
+        {
+            "type": "image_url",
+            "image_url": {"url": f"data:{ref_mime};base64,{ref_b64}"},
+        }
+    )
+
+    model = _grok_scene_compose_model()
+    raw_out = await chat_completion_openai_compatible_text(
+        model=model,
+        messages=[
+            {"role": "system", "content": system + "\n\n" + _TIMELINE_SYSTEM_EN},
+            {"role": "user", "content": user_parts},
+        ],
+        max_tokens=int(settings.grok_scene_compose_max_tokens),
+        temperature=float(settings.grok_scene_compose_temperature),
+        credentials=creds,
+        timeout_seconds=float(settings.grok_scene_compose_timeout_seconds),
+    )
+    return _parse_grok_main_prose_output(raw_out)
 
 
 async def grok_compose_studio_scene(

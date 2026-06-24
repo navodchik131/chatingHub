@@ -133,6 +133,61 @@ def test_grok_figure_anchor_from_profile() -> None:
     assert "hourglass" in anchor.lower() or "curvy" in anchor.lower()
 
 
+def test_model_scene_wan_prefix_uses_main_prose() -> None:
+    from app.services.studio_openai import finalize_wavespeed_studio_prompt
+
+    main = finalize_wavespeed_studio_prompt(
+        "A woman in warm window light, seated on the bed edge, three-quarter view.",
+        studio_mode="model_scene",
+        user_image_first=False,
+        prompt_brief_mode="grok_main_prose",
+    )
+    assert "MODEL_SCENE" in main
+    assert "JSON" not in main
+    assert "face-swap" not in main.lower()
+
+
+def test_parse_grok_main_prose_output() -> None:
+    from app.services.studio_grok_scene_compose import _parse_grok_main_prose_output
+
+    raw = (
+        "---PROMPT---\n"
+        "Warm side light on a mirror selfie, model in beige ribbed crop top, "
+        "standing with weight on left leg, phone at chest height.\n"
+        "---NEGATIVE---\n"
+        "wrong person, blur, watermark\n"
+        "---VISIBLE---\n"
+        "full body, face visible"
+    )
+    out = _parse_grok_main_prose_output(raw)
+    assert "mirror selfie" in out.wavespeed_scene_prompt
+    assert "blur" in out.negative_prompt
+    assert "face visible" in out.reference_scene_lock
+
+
+def test_grok_main_prose_prepare_is_plain_text_not_json() -> None:
+    from app.services.studio_prompt_bundle import (
+        append_negative_to_wavespeed_prompt,
+        prepare_positive_prompt_json,
+    )
+
+    positive, neg = prepare_positive_prompt_json(
+        "Seated on sofa, soft window light, casual phone snapshot.",
+        brief_mode="grok_main_prose",
+        model_profile_text='{"model_profile":{"body_type":"athletic"}}',
+        extra_negative="wrong person",
+        wavespeed_identity_legend="Image 1: character sheet; Image 2: body",
+    )
+    assert not positive.strip().startswith("{")
+    assert "Image 1: character sheet" in positive
+    assert "Seated on sofa" in positive
+    assert "Capture realism:" in positive
+    assert "skin texture" in positive.lower() or "pores" in positive.lower()
+    ws = append_negative_to_wavespeed_prompt(positive, neg, brief_mode="grok_main_prose")
+    assert "[NEGATIVE_PROMPT]" in ws
+    assert '"realism_engine"' not in ws
+
+
 def test_model_scene_wan_prefix_differs_from_grok_compose() -> None:
     from app.services.studio_openai import finalize_wavespeed_studio_prompt
 
@@ -145,8 +200,8 @@ def test_model_scene_wan_prefix_differs_from_grok_compose() -> None:
     main = finalize_wavespeed_studio_prompt(
         "FIGURE_LOCK: curvy hourglass. Mirror selfie on bed.",
         studio_mode="model_scene",
-        user_image_first=True,
-        prompt_brief_mode="grok_composed",
+        user_image_first=False,
+        prompt_brief_mode="grok_main_prose",
     )
     assert "MODEL_SCENE" in main
     assert "MODEL_SCENE" not in grok

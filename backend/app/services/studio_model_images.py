@@ -186,6 +186,27 @@ def select_model_scene_wavespeed_identity_images(
     return sort_model_images_for_wan_identity(picked)[:cap]
 
 
+_WAVESPEED_KIND_LEGEND: dict[str, str] = {
+    "turnaround": "character sheet — face, hair, clothed silhouette",
+    "face": "face likeness and skin tone",
+    "body": "body proportions and overall build",
+    "genitals": "nude anatomy",
+    "other": "model reference",
+}
+
+
+def wavespeed_identity_image_legend(imgs: list[UserStudioModelImage]) -> str:
+    """Краткая подпись порядка identity-фото для prose-промпта WaveSpeed."""
+    if not imgs:
+        return ""
+    parts: list[str] = []
+    for i, im in enumerate(imgs, 1):
+        k = (im.image_kind or "other").lower()
+        desc = _WAVESPEED_KIND_LEGEND.get(k, "model reference")
+        parts.append(f"Image {i}: {desc}")
+    return "; ".join(parts)
+
+
 def select_prompt_only_wavespeed_identity_images(
     imgs: list[UserStudioModelImage],
     *,

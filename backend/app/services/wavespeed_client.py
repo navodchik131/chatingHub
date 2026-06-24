@@ -886,7 +886,7 @@ async def nano_banana_pro_edit_image_url(
     reference_scene_description: str | None = None,
     timeout_submit: float = 300.0,
     poll_interval: float = 2.0,
-    max_polls: int = 120,
+    max_polls: int = 180,
 ) -> WaveSpeedImageResult:
     """
     Google Nano Banana Pro Edit: images + prompt + aspect_ratio + resolution.
@@ -945,11 +945,11 @@ async def nano_banana_pro_edit_image_url(
         "aspect_ratio": ar,
         "resolution": res,
         "output_format": fmt,
-        "enable_sync_mode": bool(settings.wavespeed_nano_banana_pro_sync),
+        "enable_sync_mode": False,
         "enable_base64_output": False,
     }
     log.info(
-        "wavespeed nano-banana-pro path=%s images=%s aspect=%s res=%s prompt_chars=%s",
+        "wavespeed nano-banana-pro path=%s images=%s aspect=%s res=%s sync=async prompt_chars=%s",
         path,
         len(body.get("images") or []),
         ar,

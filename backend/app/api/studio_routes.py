@@ -144,6 +144,7 @@ from app.services.studio_openai import (
 from app.services.studio_camera_presets import get_camera_preset_by_id, list_camera_presets
 from app.services.studio_carousel import build_carousel_wave_prompt
 from app.services.studio_grok_scene_compose import (
+    grok_compose_studio_main_scene,
     grok_compose_studio_scene,
     grok_compose_studio_text_scene,
     grok_scene_compose_configured,
@@ -168,6 +169,7 @@ from app.services.studio_model_images import (
     normalize_exif_camera,
     parse_image_kinds_json,
     sort_model_images_for_studio,
+    wavespeed_identity_image_legend,
 )
 from app.services.studio_prompt_bundle import reference_pose_is_nude_or_minimal_coverage
 from app.services.studio_pose_reference import (
@@ -2479,8 +2481,9 @@ async def _studio_job_execute_refine_prompt(
 
     lock_hair_req = _truthy_lock_model_hairstyle(lock_model_hairstyle)
     effective_lock_hairstyle = bool(lock_hair_req) if image_bytes else True
-    if mode_n in ("grok_compose", "model_scene"):
-        # model_scene: полный набор фото модели + реф-кадр (поза) — точность модели и кадр ≈1:1
+    if mode_n == "model_scene":
+        send_pose_to_ws = False
+    elif mode_n == "grok_compose":
         send_pose_to_ws = True
     else:
         send_pose_to_ws = _truthy_send_pose_reference_to_wavespeed(
@@ -2491,16 +2494,38 @@ async def _studio_job_execute_refine_prompt(
     prompt_brief_mode = "full"
     grok_negative_extra: str | None = None
     try:
-        if mode_n in ("grok_compose", "model_scene"):
+        if mode_n == "model_scene":
             assert image_bytes is not None
             from app.services.plan_entitlements import assert_grok_allowed, record_grok_usage
 
             await assert_grok_allowed(session, oid, sub_b)
-            await record_grok_usage(
-                session,
-                oid,
-                source="model_scene" if mode_n == "model_scene" else "grok_compose",
+            await record_grok_usage(session, oid, source="model_scene")
+            grok_creds = grok_motion_studio_credentials()
+            composed = await grok_compose_studio_main_scene(
+                user_ref_bytes=image_bytes,
+                user_ref_mime=image_mime,
+                model_images=imgs_model,
+                model_profile_text=model_profile_text,
+                wave_profile=wave_profile_n,
+                user_notes=desc,
+                lock_hairstyle=effective_lock_hairstyle,
+                credentials=grok_creds,
             )
+            refined = composed.wavespeed_scene_prompt
+            reference_scene = composed.reference_scene_lock or None
+            grok_negative_extra = composed.negative_prompt or None
+            prompt_brief_mode = "grok_main_prose"
+            if gen_row is not None:
+                gen_row.refined_prompt = refined
+                gen_row.prompt_excerpt = (refined[:2000] if refined else None) or None
+                session.add(gen_row)
+                await session.flush()
+        elif mode_n == "grok_compose":
+            assert image_bytes is not None
+            from app.services.plan_entitlements import assert_grok_allowed, record_grok_usage
+
+            await assert_grok_allowed(session, oid, sub_b)
+            await record_grok_usage(session, oid, source="grok_compose")
             grok_creds = grok_motion_studio_credentials()
             composed = await grok_compose_studio_scene(
                 user_ref_bytes=image_bytes,
@@ -2511,7 +2536,7 @@ async def _studio_job_execute_refine_prompt(
                 user_notes=desc,
                 lock_hairstyle=effective_lock_hairstyle,
                 credentials=grok_creds,
-                standalone_scene_prompt=(mode_n == "model_scene"),
+                standalone_scene_prompt=False,
             )
             refined = composed.wavespeed_scene_prompt
             reference_scene = composed.reference_scene_lock or None
@@ -2894,6 +2919,7 @@ async def _studio_job_execute_refine_prompt(
         else:
             image_urls: list[str] = []
             user_pose_ref_prepended = False
+            ws_identity_legend: str | None = None
             if image_bytes and send_pose_to_ws:
                 try:
                     fid = save_pose_reference_bytes(
@@ -2963,6 +2989,7 @@ async def _studio_job_execute_refine_prompt(
                         imgs_ws_order = select_model_scene_wavespeed_identity_images(
                             imgs_for_ws, wave_profile=wave_profile_n
                         )
+                        ws_identity_legend = wavespeed_identity_image_legend(imgs_ws_order)
                     elif mode_n == "model" and not image_bytes:
                         imgs_ws_order = select_prompt_only_wavespeed_identity_images(
                             imgs_for_ws, wave_profile=wave_profile_n
@@ -2990,7 +3017,11 @@ async def _studio_job_execute_refine_prompt(
                         )
 
                 if not image_urls:
-                    if image_bytes and not send_pose_to_ws:
+                    if mode_n == "model_scene":
+                        wavespeed_message = (
+                            "Нет фото модели для WaveSpeed — добавьте развёртку, тело или лицо в кабинете модели."
+                        )
+                    elif image_bytes and not send_pose_to_ws:
                         wavespeed_message = (
                             "Референс в WaveSpeed отключён — нужна модель с фото в кабинете "
                             "или включите «Отправить референс в генерацию»."
@@ -3033,6 +3064,7 @@ async def _studio_job_execute_refine_prompt(
                     reference_scene_description=reference_scene,
                     extra_negative=grok_negative_extra,
                     output_aspect_key=aspect_key,
+                    wavespeed_identity_legend=ws_identity_legend,
                 )
                 size_for_ws: str | None
                 if settings.wavespeed_seedream_omit_size:
