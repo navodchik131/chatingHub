@@ -11,7 +11,9 @@ import {
 } from './api'
 import { WORKFLOW_GRAPH_STORAGE_KEY } from './constants'
 import { FlowCanvas } from './FlowCanvas'
+import { hydrateGraphFromServer, serializeGraph } from './graphResolver'
 import { WorkspaceSidebar, type WorkflowWorkspaceItem } from './WorkspaceSidebar'
+import { downloadWorkflowExport, parseWorkflowImport } from './workspaceExport'
 import { WorkflowModelsContext } from './WorkflowModelsContext'
 import type { ProjectGraph, StudioModelOption } from './types'
 import './workflow.css'
@@ -96,11 +98,11 @@ export function WorkflowPage() {
         }
         list = await refreshWorkspaces()
         setActiveId(created.id)
-        setGraph(legacy?.nodes?.length ? legacy : created.graph)
+        setGraph(hydrateGraphFromServer(legacy?.nodes?.length ? legacy : created.graph))
       } else {
         setActiveId(list[0].id)
         const ws = await getWorkflowWorkspace(list[0].id)
-        setGraph(ws.graph)
+        setGraph(hydrateGraphFromServer(ws.graph))
       }
       setGate('ok')
     })()
@@ -112,7 +114,7 @@ export function WorkflowPage() {
     try {
       const ws = await getWorkflowWorkspace(id)
       setActiveId(id)
-      setGraph(ws.graph)
+      setGraph(hydrateGraphFromServer(ws.graph))
     } finally {
       setBusy(false)
     }
@@ -137,7 +139,7 @@ export function WorkflowPage() {
         const created = await createWorkflowWorkspace(name)
         await refreshWorkspaces()
         setActiveId(created.id)
-        setGraph(created.graph)
+        setGraph(hydrateGraphFromServer(created.graph))
       } finally {
         setBusy(false)
       }
@@ -168,19 +170,62 @@ export function WorkflowPage() {
           const created = await createWorkflowWorkspace('Новый проект')
           await refreshWorkspaces()
           setActiveId(created.id)
-          setGraph(created.graph)
+          setGraph(hydrateGraphFromServer(created.graph))
           return
         }
         if (activeId === id) {
           const ws = await getWorkflowWorkspace(list[0].id)
           setActiveId(list[0].id)
-          setGraph(ws.graph)
+          setGraph(hydrateGraphFromServer(ws.graph))
         }
       } finally {
         setBusy(false)
       }
     },
     [activeId, refreshWorkspaces],
+  )
+
+  const activeWorkspaceName =
+    workspaces.find((ws) => ws.id === activeId)?.name ?? 'Проект'
+
+  const handleExport = useCallback(() => {
+    if (activeId == null) return
+    const clean = serializeGraph(graph.nodes, graph.edges)
+    downloadWorkflowExport(activeWorkspaceName, clean)
+  }, [activeId, activeWorkspaceName, graph])
+
+  const handleImport = useCallback(
+    async (file: File) => {
+      setBusy(true)
+      try {
+        const text = await file.text()
+        const imported = parseWorkflowImport(text)
+        const graphClean = hydrateGraphFromServer(imported.graph)
+
+        const replaceCurrent =
+          activeId != null &&
+          window.confirm(
+            `Заменить текущий проект «${activeWorkspaceName}» графом из «${imported.name}»?`,
+          )
+
+        if (replaceCurrent && activeId != null) {
+          await saveWorkflowWorkspace(activeId, { graph: graphClean })
+          setGraph(graphClean)
+          return
+        }
+
+        const created = await createWorkflowWorkspace(imported.name.slice(0, 120))
+        await saveWorkflowWorkspace(created.id, { graph: graphClean })
+        await refreshWorkspaces()
+        setActiveId(created.id)
+        setGraph(graphClean)
+      } catch (error) {
+        window.alert(error instanceof Error ? error.message : 'Не удалось импортировать JSON')
+      } finally {
+        setBusy(false)
+      }
+    },
+    [activeId, activeWorkspaceName, refreshWorkspaces],
   )
 
   if (gate === 'loading') {
@@ -252,11 +297,14 @@ export function WorkflowPage() {
             <WorkspaceSidebar
               workspaces={workspaces}
               activeId={activeId}
+              activeName={activeWorkspaceName}
               busy={busy}
               onSelect={(id) => void selectWorkspace(id)}
               onCreate={(name) => void handleCreate(name)}
               onRename={(id, name) => void handleRename(id, name)}
               onDelete={(id) => void handleDelete(id)}
+              onExport={handleExport}
+              onImport={(file) => void handleImport(file)}
             />
             {activeId != null ? (
               <FlowCanvas

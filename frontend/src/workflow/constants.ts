@@ -31,13 +31,3 @@ export const NODE_PALETTE: NodeType[] = [
   'imageGeneration',
   'preview',
 ]
-
-export const NODE_ICONS: Record<NodeType, string> = {
-  model: '👤',
-  realism: '◉',
-  prompt: '✦',
-  refDescription: '📝',
-  reference: '◎',
-  imageGeneration: '⚡',
-  preview: '◈',
-}

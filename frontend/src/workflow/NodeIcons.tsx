@@ -1,0 +1,107 @@
+import type { NodeType } from './types'
+
+type Props = {
+  type: NodeType
+  size?: number
+  className?: string
+}
+
+const stroke = 'currentColor'
+
+export function NodeIcon({ type, size = 16, className }: Props) {
+  const common = {
+    width: size,
+    height: size,
+    viewBox: '0 0 24 24',
+    fill: 'none',
+    xmlns: 'http://www.w3.org/2000/svg',
+    className,
+    'aria-hidden': true as const,
+  }
+
+  switch (type) {
+    case 'model':
+      return (
+        <svg {...common}>
+          <circle cx="12" cy="8" r="3.5" stroke={stroke} strokeWidth="1.75" />
+          <path
+            d="M5.5 20c0-3.5 2.9-6 6.5-6s6.5 2.5 6.5 6"
+            stroke={stroke}
+            strokeWidth="1.75"
+            strokeLinecap="round"
+          />
+        </svg>
+      )
+    case 'realism':
+      return (
+        <svg {...common}>
+          <rect x="4" y="7" width="16" height="12" rx="2" stroke={stroke} strokeWidth="1.75" />
+          <circle cx="12" cy="13" r="3" stroke={stroke} strokeWidth="1.75" />
+          <path d="M9 7l1.2-2h3.6L15 7" stroke={stroke} strokeWidth="1.75" strokeLinecap="round" />
+        </svg>
+      )
+    case 'prompt':
+      return (
+        <svg {...common}>
+          <path d="M6 7h12M6 12h9M6 17h11" stroke={stroke} strokeWidth="1.75" strokeLinecap="round" />
+        </svg>
+      )
+    case 'refDescription':
+      return (
+        <svg {...common}>
+          <path
+            d="M7 5h10a2 2 0 012 2v10l-3-2H7a2 2 0 01-2-2V7a2 2 0 012-2z"
+            stroke={stroke}
+            strokeWidth="1.75"
+            strokeLinejoin="round"
+          />
+          <path d="M9 9h6M9 12h4" stroke={stroke} strokeWidth="1.75" strokeLinecap="round" />
+        </svg>
+      )
+    case 'reference':
+      return (
+        <svg {...common}>
+          <rect x="4" y="5" width="16" height="14" rx="2" stroke={stroke} strokeWidth="1.75" />
+          <circle cx="9" cy="10" r="1.5" fill={stroke} />
+          <path
+            d="M4 16l4.5-4.5 3 3L15 11l5 5"
+            stroke={stroke}
+            strokeWidth="1.75"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      )
+    case 'imageGeneration':
+      return (
+        <svg {...common}>
+          <path
+            d="M13 3L5 14h6l-1 7 8-11h-6l1-7z"
+            stroke={stroke}
+            strokeWidth="1.75"
+            strokeLinejoin="round"
+          />
+        </svg>
+      )
+    case 'preview':
+      return (
+        <svg {...common}>
+          <rect x="3" y="5" width="18" height="14" rx="2" stroke={stroke} strokeWidth="1.75" />
+          <circle cx="12" cy="12" r="2.5" stroke={stroke} strokeWidth="1.75" />
+          <path d="M3 9h18" stroke={stroke} strokeWidth="1.75" />
+        </svg>
+      )
+    default:
+      return null
+  }
+}
+
+export const NODE_ICON_COLORS: Record<NodeType, string> = {
+  model: '#ec4899',
+  realism: '#22c55e',
+  prompt: '#10b981',
+  refDescription: '#a855f7',
+  reference: '#f59e0b',
+  imageGeneration: '#6366f1',
+  preview: '#0ea5e9',
+}

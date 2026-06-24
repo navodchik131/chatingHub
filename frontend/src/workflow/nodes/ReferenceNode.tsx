@@ -1,6 +1,6 @@
-import { memo, useCallback, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { Handle, Position, useReactFlow, type NodeProps } from '@xyflow/react'
-import { uploadWorkflowReference } from '../api'
+import { fetchWorkflowReferencePreviewUrl, uploadWorkflowReference } from '../api'
 import { BaseNode } from './BaseNode'
 import { HandleIds, type ReferenceNodeData } from '../types'
 
@@ -8,10 +8,18 @@ function ReferenceNodeComponent({ id, data }: NodeProps) {
   const { setNodes } = useReactFlow()
   const nodeData = data as ReferenceNodeData
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const previewUrlRef = useRef<string | null>(null)
   const [isDragging, setIsDragging] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
+  const [isPreviewLoading, setIsPreviewLoading] = useState(false)
 
   const hasMedia = Boolean(nodeData.refId)
+
+  const revokePreviewUrl = useCallback((url: string | null | undefined) => {
+    if (url?.startsWith('blob:')) {
+      URL.revokeObjectURL(url)
+    }
+  }, [])
 
   const updateNodeData = useCallback(
     (patch: Partial<ReferenceNodeData>) => {
@@ -24,17 +32,72 @@ function ReferenceNodeComponent({ id, data }: NodeProps) {
     [id, setNodes],
   )
 
+  const clearMedia = useCallback(() => {
+    revokePreviewUrl(previewUrlRef.current)
+    previewUrlRef.current = null
+    updateNodeData({
+      refId: undefined,
+      fileName: undefined,
+      previewUrl: undefined,
+      error: undefined,
+    })
+  }, [revokePreviewUrl, updateNodeData])
+
+  useEffect(() => {
+    const refId = nodeData.refId?.trim()
+    if (!refId) {
+      revokePreviewUrl(previewUrlRef.current)
+      previewUrlRef.current = null
+      return
+    }
+
+    let cancelled = false
+    setIsPreviewLoading(true)
+
+    void (async () => {
+      try {
+        const url = await fetchWorkflowReferencePreviewUrl(refId)
+        if (cancelled) {
+          revokePreviewUrl(url)
+          return
+        }
+        revokePreviewUrl(previewUrlRef.current)
+        previewUrlRef.current = url
+        updateNodeData({ previewUrl: url, error: undefined })
+      } catch {
+        if (!cancelled) {
+          clearMedia()
+          updateNodeData({
+            error: 'Референс не найден на сервере — загрузите файл снова',
+          })
+        }
+      } finally {
+        if (!cancelled) setIsPreviewLoading(false)
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [nodeData.refId, clearMedia, revokePreviewUrl, updateNodeData])
+
+  useEffect(
+    () => () => {
+      revokePreviewUrl(previewUrlRef.current)
+    },
+    [revokePreviewUrl],
+  )
+
   const handleUpload = useCallback(
     async (file: File) => {
       setIsUploading(true)
       updateNodeData({ error: undefined })
       try {
-        const previewUrl = URL.createObjectURL(file)
         const result = await uploadWorkflowReference(file)
         updateNodeData({
           refId: result.ref_id,
           fileName: result.file_name,
-          previewUrl,
+          previewUrl: undefined,
           error: undefined,
         })
       } catch (error) {
@@ -59,20 +122,15 @@ function ReferenceNodeComponent({ id, data }: NodeProps) {
   )
 
   const onDropZoneClick = useCallback(() => {
-    if (!isUploading) fileInputRef.current?.click()
-  }, [isUploading])
+    if (!isUploading && !isPreviewLoading) fileInputRef.current?.click()
+  }, [isUploading, isPreviewLoading])
 
   const onClearMedia = useCallback(
     (event: React.MouseEvent) => {
       event.stopPropagation()
-      updateNodeData({
-        refId: undefined,
-        fileName: undefined,
-        previewUrl: undefined,
-        error: undefined,
-      })
+      clearMedia()
     },
-    [updateNodeData],
+    [clearMedia],
   )
 
   const dropzoneClass = [
@@ -83,11 +141,13 @@ function ReferenceNodeComponent({ id, data }: NodeProps) {
     .filter(Boolean)
     .join(' ')
 
+  const showPreview = hasMedia && Boolean(nodeData.previewUrl) && !isPreviewLoading
+
   return (
     <BaseNode
       nodeId={id}
       type="reference"
-      isRunning={nodeData.isRunning || isUploading}
+      isRunning={nodeData.isRunning || isUploading || isPreviewLoading}
       error={nodeData.error}
     >
       <Handle
@@ -141,12 +201,14 @@ function ReferenceNodeComponent({ id, data }: NodeProps) {
           if (file) void handleUpload(file)
         }}
       >
-        {isUploading ? (
+        {isUploading || isPreviewLoading ? (
           <>
             <span className="workflow-spinner" />
-            <p className="workflow-node__hint">Загрузка…</p>
+            <p className="workflow-node__hint">
+              {isUploading ? 'Загрузка…' : 'Загрузка превью…'}
+            </p>
           </>
-        ) : hasMedia && nodeData.previewUrl ? (
+        ) : showPreview ? (
           <>
             <img
               src={nodeData.previewUrl}

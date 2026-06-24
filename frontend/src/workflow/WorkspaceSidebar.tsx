@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 
 export interface WorkflowWorkspaceItem {
   id: number
@@ -9,26 +9,33 @@ export interface WorkflowWorkspaceItem {
 type Props = {
   workspaces: WorkflowWorkspaceItem[]
   activeId: number | null
+  activeName: string
   busy: boolean
   onSelect: (id: number) => void
   onCreate: (name: string) => void
   onRename: (id: number, name: string) => void
   onDelete: (id: number) => void
+  onExport: () => void
+  onImport: (file: File) => void
 }
 
 export function WorkspaceSidebar({
   workspaces,
   activeId,
+  activeName,
   busy,
   onSelect,
   onCreate,
   onRename,
   onDelete,
+  onExport,
+  onImport,
 }: Props) {
   const [creating, setCreating] = useState(false)
   const [newName, setNewName] = useState('')
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editName, setEditName] = useState('')
+  const importRef = useRef<HTMLInputElement>(null)
 
   const submitCreate = useCallback(() => {
     const name = newName.trim()
@@ -132,6 +139,38 @@ export function WorkspaceSidebar({
           </li>
         ))}
       </ul>
+
+      <div className="workflow-workspaces__io">
+        <button
+          type="button"
+          className="workflow-workspaces__io-btn"
+          disabled={busy || activeId == null}
+          onClick={onExport}
+          title={activeName ? `Скачать «${activeName}» как JSON` : 'Скачать проект'}
+        >
+          ↓ JSON
+        </button>
+        <button
+          type="button"
+          className="workflow-workspaces__io-btn"
+          disabled={busy}
+          onClick={() => importRef.current?.click()}
+          title="Загрузить проект из JSON"
+        >
+          ↑ JSON
+        </button>
+        <input
+          ref={importRef}
+          type="file"
+          accept="application/json,.json"
+          hidden
+          onChange={(e) => {
+            const file = e.target.files?.[0]
+            if (file) onImport(file)
+            e.target.value = ''
+          }}
+        />
+      </div>
     </aside>
   )
 }

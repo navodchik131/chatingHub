@@ -84,6 +84,18 @@ export async function uploadWorkflowReference(
   return { ref_id: data.ref_id, file_name: data.file_name ?? file.name }
 }
 
+export async function fetchWorkflowReferencePreviewUrl(refId: string): Promise<string> {
+  const r = await apiFetch(
+    `/api/studio/workflow/reference/${encodeURIComponent(refId)}`,
+  )
+  if (!r.ok) {
+    const data = await r.json().catch(() => ({}))
+    throw new Error(formatHttpApiError(r, data))
+  }
+  const blob = await r.blob()
+  return URL.createObjectURL(blob)
+}
+
 export async function executeWorkflowGeneration(
   graph: ProjectGraph,
   targetNodeId: string,

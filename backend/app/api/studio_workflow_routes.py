@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -277,6 +277,23 @@ async def api_workflow_upload_reference(
         "ref_id": ref_id,
         "file_name": (file.filename or "reference").strip()[:200],
     }
+
+
+@router.get("/studio/workflow/reference/{ref_id}")
+async def api_workflow_get_reference(
+    ref_id: str,
+    user: User = Depends(get_current_user),
+) -> Response:
+    """Превью загруженного референса workflow (для UI после перезагрузки страницы)."""
+    assert_permission(user, PERM_STUDIO_GENERATE)
+    oid = workspace_owner_id(user)
+    try:
+        raw, mime = load_workflow_reference(oid, ref_id)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail="Референс не найден") from e
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    return Response(content=raw, media_type=mime)
 
 
 @router.post(

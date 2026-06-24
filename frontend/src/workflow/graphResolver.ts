@@ -32,7 +32,7 @@ export function serializeGraph(nodes: Node[], edges: Edge[]) {
       id: n.id,
       type: n.type,
       position: n.position,
-      data: n.data,
+      data: sanitizeNodeDataForPersist(n.type, n.data as Record<string, unknown>),
     })),
     edges: edges.map((e) => ({
       id: e.id,
@@ -41,5 +41,30 @@ export function serializeGraph(nodes: Node[], edges: Edge[]) {
       sourceHandle: e.sourceHandle,
       targetHandle: e.targetHandle,
     })),
+  }
+}
+
+/** blob: URL не переживают перезагрузку — не сохраняем в рабочее пространство. */
+export function sanitizeNodeDataForPersist(
+  type: string | undefined,
+  data: Record<string, unknown>,
+): Record<string, unknown> {
+  if (type !== 'reference') return data
+  const { previewUrl: _preview, ...rest } = data
+  return rest
+}
+
+export function hydrateGraphFromServer(graph: {
+  nodes?: Node[]
+  edges?: Edge[]
+}): { nodes: Node[]; edges: Edge[] } {
+  const nodes = Array.isArray(graph.nodes) ? graph.nodes : []
+  const edges = Array.isArray(graph.edges) ? graph.edges : []
+  return {
+    nodes: nodes.map((n) => ({
+      ...n,
+      data: sanitizeNodeDataForPersist(n.type, (n.data ?? {}) as Record<string, unknown>),
+    })),
+    edges,
   }
 }

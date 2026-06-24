@@ -1,8 +1,9 @@
 import type { ReactNode } from 'react'
 import { useCallback } from 'react'
 import { useReactFlow } from '@xyflow/react'
+import { NODE_LABELS } from '../constants'
+import { NODE_ICON_COLORS, NodeIcon } from '../NodeIcons'
 import type { NodeType } from '../types'
-import { NODE_ICONS, NODE_LABELS } from '../constants'
 
 interface BaseNodeProps {
   nodeId: string
@@ -34,11 +35,18 @@ export function BaseNode({
   if (isRunning) classes.push('workflow-node--running')
   if (error) classes.push('workflow-node--error')
 
+  const iconColor = NODE_ICON_COLORS[type]
+
   return (
     <div className={classes.join(' ')}>
       <div className="workflow-node__header">
         <div className="workflow-node__header-left">
-          <span aria-hidden>{NODE_ICONS[type]}</span>
+          <span
+            className="workflow-node__type-icon"
+            style={{ color: iconColor, background: `${iconColor}18` }}
+          >
+            <NodeIcon type={type} size={14} />
+          </span>
           <span>{NODE_LABELS[type]}</span>
           {isRunning ? <span className="workflow-spinner" aria-hidden /> : null}
         </div>

@@ -15,6 +15,7 @@ import {
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { NodePaletteDock } from './NodePaletteDock'
+import { serializeGraph } from './graphResolver'
 import { createNode, REACT_FLOW_DRAG_TYPE } from './nodeFactory'
 import { nodeTypes } from './nodes'
 import type { AppNode, NodeType, ProjectGraph } from './types'
@@ -41,7 +42,7 @@ function FlowCanvasInner({ workspaceId, initialGraph, onGraphChange }: Props) {
   useEffect(() => {
     if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current)
     saveTimerRef.current = window.setTimeout(() => {
-      onGraphChange({ nodes, edges })
+      onGraphChange(serializeGraph(nodes, edges))
     }, 600)
     return () => {
       if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current)
