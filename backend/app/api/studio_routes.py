@@ -2251,6 +2251,7 @@ async def _accept_studio_refine_job_from_workflow(
         "exif_camera": normalize_exif_camera(plan.exif_camera),
         "include_realism_engine": "1" if plan.realism_enabled else "0",
         "workflow_source": "1",
+        "workflow_wave_model": plan.workflow_wave_model,
     }
     job = await studio_jobs.create_studio_job(
         session,
@@ -2312,6 +2313,12 @@ async def _studio_job_execute_refine_prompt(
         "false",
         "no",
     )
+    workflow_source = str(p.get("workflow_source") or "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+    )
+    workflow_wave_model = str(p.get("workflow_wave_model") or "").strip().lower()
 
     system_instr = load_image_studio_system()
     if not system_instr:
@@ -3160,7 +3167,21 @@ async def _studio_job_execute_refine_prompt(
                 else:
                     size_for_ws = wavespeed_size_string(aspect_key)
                 try:
-                    if wave_profile_n == "regular":
+                    if workflow_source and workflow_wave_model:
+                        from app.services.wavespeed_client import workflow_edit_image_url
+
+                        ws_res = await workflow_edit_image_url(
+                            api_key=ws_key,
+                            wave_model_id=workflow_wave_model,
+                            image_urls=image_urls,
+                            prompt=wavespeed_prompt,
+                            aspect_ratio=aspect_key,
+                            wan_edit_tier=wan_tier_n,
+                            wave_profile=wave_profile_n,
+                            reference_scene_description=reference_scene,
+                            size=size_for_ws,
+                        )
+                    elif wave_profile_n == "regular":
                         ws_res = await nano_banana_pro_edit_image_url(
                             api_key=ws_key,
                             image_urls=image_urls,

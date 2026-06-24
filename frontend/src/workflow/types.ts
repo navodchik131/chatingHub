@@ -9,6 +9,7 @@ export type NodeType =
   | 'model'
   | 'realism'
   | 'prompt'
+  | 'refDescription'
   | 'reference'
   | 'imageGeneration'
   | 'preview'
@@ -35,6 +36,14 @@ export interface PromptNodeData {
   [key: string]: unknown
 }
 
+export interface RefDescriptionNodeData {
+  role: string
+  description: string
+  isRunning?: boolean
+  error?: string
+  [key: string]: unknown
+}
+
 export interface ReferenceNodeData {
   refId?: string
   fileName?: string
@@ -45,10 +54,9 @@ export interface ReferenceNodeData {
 }
 
 export interface ImageGenerationNodeData {
+  waveModelId?: string
+  nsfwEnabled?: boolean
   outputAspect?: string
-  waveProfile?: string
-  wanEditTier?: string
-  exifCamera?: string
   imageUrl?: string
   generationId?: number | null
   isRunning?: boolean
@@ -67,6 +75,7 @@ export type AppNodeData =
   | ModelNodeData
   | RealismNodeData
   | PromptNodeData
+  | RefDescriptionNodeData
   | ReferenceNodeData
   | ImageGenerationNodeData
   | PreviewNodeData
@@ -82,7 +91,9 @@ export const HandleIds = {
   modelOut: 'model-out',
   realismOut: 'realism-out',
   promptOut: 'prompt-out',
+  descriptionOut: 'description-out',
   referenceOut: 'reference-out',
+  referenceDescriptionIn: 'description-in',
   imageGenModelIn: 'model-in',
   imageGenRealismIn: 'realism-in',
   imageGenPromptIn: 'prompt-in',

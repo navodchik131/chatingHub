@@ -105,7 +105,7 @@ export function WorkflowPage() {
           <div>
             <h1 className="workflow-page__title">Workflow · фаза 0</h1>
             <p className="workflow-page__subtitle">
-              Тестовый node-редактор · /workspace/workflow · Grok main scene
+              Node-редактор · Grok собирает промпт из графа
             </p>
           </div>
           <div className="workflow-page__actions">

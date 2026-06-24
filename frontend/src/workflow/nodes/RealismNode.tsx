@@ -22,7 +22,7 @@ function RealismNodeComponent({ id, data }: NodeProps) {
   )
 
   return (
-    <BaseNode type="realism" error={nodeData.error}>
+    <BaseNode nodeId={id} type="realism" error={nodeData.error}>
       <p className="workflow-node__hint">
         Phone candid realism — EXIF, grain, anti-plastic negative
       </p>
@@ -34,6 +34,7 @@ function RealismNodeComponent({ id, data }: NodeProps) {
         id={HandleIds.realismOut}
         type="source"
         position={Position.Right}
+        className="workflow-handle workflow-handle--realism"
         style={{ top: '50%' }}
       />
       <span className="workflow-node__handle-label workflow-node__handle-label--right">realism</span>

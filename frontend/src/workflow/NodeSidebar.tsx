@@ -33,8 +33,8 @@ export function NodeSidebar() {
         ))}
       </div>
       <div className="workflow-sidebar__hint">
-        <p>• Соедините model, realism, prompt, reference → генерация</p>
-        <p>• Delete — удалить выбранное</p>
+        <p>• Описание → Референс → Генерация</p>
+        <p>• × на ноде или Delete — удалить</p>
         <p>• Граф сохраняется локально</p>
       </div>
     </aside>

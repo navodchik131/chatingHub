@@ -85,11 +85,26 @@ function ReferenceNodeComponent({ id, data }: NodeProps) {
 
   return (
     <BaseNode
+      nodeId={id}
       type="reference"
       isRunning={nodeData.isRunning || isUploading}
       error={nodeData.error}
     >
-      <p className="workflow-node__hint">Референс сцены — Grok опишет позу и окружение</p>
+      <Handle
+        id={HandleIds.referenceDescriptionIn}
+        type="target"
+        position={Position.Left}
+        className="workflow-handle workflow-handle--description"
+        style={{ top: '28%' }}
+      />
+      <span
+        className="workflow-node__handle-label workflow-node__handle-label--left"
+        style={{ top: '28%' }}
+      >
+        desc
+      </span>
+
+      <p className="workflow-node__hint">Референс сцены — подключите «Описание» слева</p>
       <input
         ref={fileInputRef}
         type="file"
@@ -154,9 +169,15 @@ function ReferenceNodeComponent({ id, data }: NodeProps) {
         id={HandleIds.referenceOut}
         type="source"
         position={Position.Right}
-        style={{ top: '50%' }}
+        className="workflow-handle workflow-handle--reference"
+        style={{ top: '72%' }}
       />
-      <span className="workflow-node__handle-label workflow-node__handle-label--right">ref</span>
+      <span
+        className="workflow-node__handle-label workflow-node__handle-label--right"
+        style={{ top: '72%' }}
+      >
+        ref
+      </span>
     </BaseNode>
   )
 }

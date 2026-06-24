@@ -21,15 +21,18 @@ import { NodeSidebar } from './NodeSidebar'
 import type { AppNode, NodeType } from './types'
 
 function loadStoredGraph(): { nodes: AppNode[]; edges: Edge[] } | null {
-  try {
-    const raw = localStorage.getItem(WORKFLOW_GRAPH_STORAGE_KEY)
-    if (!raw) return null
-    const parsed = JSON.parse(raw) as { nodes?: AppNode[]; edges?: Edge[] }
-    if (!Array.isArray(parsed.nodes) || !Array.isArray(parsed.edges)) return null
-    return { nodes: parsed.nodes, edges: parsed.edges }
-  } catch {
-    return null
+  for (const key of [WORKFLOW_GRAPH_STORAGE_KEY, 'mm_workflow_graph_v1']) {
+    try {
+      const raw = localStorage.getItem(key)
+      if (!raw) continue
+      const parsed = JSON.parse(raw) as { nodes?: AppNode[]; edges?: Edge[] }
+      if (!Array.isArray(parsed.nodes) || !Array.isArray(parsed.edges)) continue
+      return { nodes: parsed.nodes, edges: parsed.edges }
+    } catch {
+      continue
+    }
   }
+  return null
 }
 
 function FlowCanvasInner() {

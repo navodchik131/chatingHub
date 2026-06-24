@@ -1,9 +1,13 @@
-"""Разбор графа workflow → план генерации (фаза 0)."""
+"""Разбор графа workflow → план генерации."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any
+
+WORKFLOW_WAVE_MODELS = frozenset(
+    {"nano-banana-2", "nano-banana-pro", "wan-2.7", "gpt-image-2"}
+)
 
 
 class WorkflowResolutionError(ValueError):
@@ -15,8 +19,12 @@ class WorkflowGenerationPlan:
     model_id: int
     description: str
     reference_ref_id: str
+    reference_role: str
+    reference_description: str
+    reference_file_name: str
     output_aspect: str
     studio_wave_profile: str
+    workflow_wave_model: str
     wan_edit_tier: str
     exif_camera: str
     realism_enabled: bool
@@ -25,8 +33,10 @@ class WorkflowGenerationPlan:
 HANDLE = {
     "prompt_out": "prompt-out",
     "reference_out": "reference-out",
+    "description_out": "description-out",
     "model_out": "model-out",
     "realism_out": "realism-out",
+    "ref_description_in": "description-in",
     "gen_prompt_in": "prompt-in",
     "gen_reference_in": "reference-in",
     "gen_model_in": "model-in",
@@ -59,6 +69,35 @@ def _source_for_target(
         if src_id and src_id in node_map:
             return node_map[src_id]
     return None
+
+
+def assemble_workflow_grok_notes(
+    *,
+    prompt_text: str,
+    reference_role: str = "",
+    reference_description: str = "",
+    reference_file_name: str = "",
+) -> str:
+    """Сборка USER_NOTES для Grok из подключённых нод workflow."""
+    sections: list[str] = []
+    scene = (prompt_text or "").strip()
+    if scene:
+        sections.append(f"SCENE_DIRECTION:\n{scene}")
+
+    ref_lines: list[str] = []
+    role = (reference_role or "").strip()
+    desc = (reference_description or "").strip()
+    fname = (reference_file_name or "").strip()
+    if role:
+        ref_lines.append(f"Reference role: {role}")
+    if desc:
+        ref_lines.append(desc)
+    if fname:
+        ref_lines.append(f"Attached reference file: {fname}")
+    if ref_lines:
+        sections.append("REFERENCE_CONTEXT:\n" + "\n".join(ref_lines))
+
+    return "\n\n".join(sections).strip()
 
 
 def resolve_workflow_generation_plan(
@@ -100,14 +139,35 @@ def resolve_workflow_generation_plan(
     ref_id = str(ref_data.get("refId") or "").strip()
     if not ref_id:
         raise WorkflowResolutionError("Загрузите изображение в ноду «Референс»")
+    ref_file_name = str(ref_data.get("fileName") or "").strip()
+
+    ref_role = ""
+    ref_description = ""
+    desc_node = _source_for_target(
+        str(ref_node.get("id") or ""),
+        HANDLE["ref_description_in"],
+        edges,
+        node_map,
+    )
+    if desc_node and str(desc_node.get("type") or "") == "refDescription":
+        ddata = desc_node.get("data") if isinstance(desc_node.get("data"), dict) else {}
+        ref_role = str(ddata.get("role") or "").strip()
+        ref_description = str(ddata.get("description") or "").strip()
 
     prompt_node = _source_for_target(
         target_id, HANDLE["gen_prompt_in"], edges, node_map
     )
-    description = ""
+    prompt_text = ""
     if prompt_node and str(prompt_node.get("type") or "") == "prompt":
         pdata = prompt_node.get("data") if isinstance(prompt_node.get("data"), dict) else {}
-        description = str(pdata.get("prompt") or "").strip()
+        prompt_text = str(pdata.get("prompt") or "").strip()
+
+    description = assemble_workflow_grok_notes(
+        prompt_text=prompt_text,
+        reference_role=ref_role,
+        reference_description=ref_description,
+        reference_file_name=ref_file_name,
+    )
 
     realism_enabled = True
     realism_node = _source_for_target(
@@ -119,9 +179,17 @@ def resolve_workflow_generation_plan(
             realism_enabled = False
 
     output_aspect = str(gen_data.get("outputAspect") or "3:4").strip() or "3:4"
-    wave_profile = str(gen_data.get("waveProfile") or "nsfw").strip().lower()
-    if wave_profile not in ("regular", "nsfw"):
+
+    wave_model = str(gen_data.get("waveModelId") or "wan-2.7").strip().lower()
+    if wave_model not in WORKFLOW_WAVE_MODELS:
+        wave_model = "wan-2.7"
+
+    nsfw_enabled = gen_data.get("nsfwEnabled")
+    if nsfw_enabled is False:
+        wave_profile = "regular"
+    else:
         wave_profile = "nsfw"
+
     wan_tier = str(gen_data.get("wanEditTier") or "standard").strip().lower()
     if wan_tier not in ("standard", "mini"):
         wan_tier = "standard"
@@ -134,8 +202,12 @@ def resolve_workflow_generation_plan(
         model_id=model_id,
         description=description,
         reference_ref_id=ref_id,
+        reference_role=ref_role,
+        reference_description=ref_description,
+        reference_file_name=ref_file_name,
         output_aspect=output_aspect,
         studio_wave_profile=wave_profile,
+        workflow_wave_model=wave_model,
         wan_edit_tier=wan_tier,
         exif_camera=exif_camera,
         realism_enabled=realism_enabled,

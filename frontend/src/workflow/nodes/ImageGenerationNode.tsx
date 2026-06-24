@@ -1,5 +1,9 @@
 import { memo, useCallback } from 'react'
 import { Handle, Position, useReactFlow, type NodeProps } from '@xyflow/react'
+import {
+  DEFAULT_WAVESPEED_MODEL_ID,
+  WAVESPEED_MODELS,
+} from '../wavespeedModels'
 import { executeWorkflowGeneration } from '../api'
 import { getDownstreamPreviewNodeIds, serializeGraph } from '../graphResolver'
 import { BaseNode } from './BaseNode'
@@ -8,6 +12,8 @@ import { HandleIds, type ImageGenerationNodeData } from '../types'
 function ImageGenerationNodeComponent({ id, data }: NodeProps) {
   const { setNodes, getNodes, getEdges } = useReactFlow()
   const nodeData = data as ImageGenerationNodeData
+  const waveModelId = nodeData.waveModelId ?? DEFAULT_WAVESPEED_MODEL_ID
+  const nsfwEnabled = nodeData.nsfwEnabled !== false
 
   const updateNodeData = useCallback(
     (patch: Partial<ImageGenerationNodeData>) => {
@@ -71,6 +77,7 @@ function ImageGenerationNodeComponent({ id, data }: NodeProps) {
 
   return (
     <BaseNode
+      nodeId={id}
       type="imageGeneration"
       isRunning={nodeData.isRunning}
       error={nodeData.error}
@@ -82,11 +89,12 @@ function ImageGenerationNodeComponent({ id, data }: NodeProps) {
         id={HandleIds.imageGenModelIn}
         type="target"
         position={Position.Left}
-        style={{ top: '22%' }}
+        className="workflow-handle workflow-handle--model"
+        style={{ top: '18%' }}
       />
       <span
         className="workflow-node__handle-label workflow-node__handle-label--left"
-        style={{ top: '22%' }}
+        style={{ top: '18%' }}
       >
         model
       </span>
@@ -95,11 +103,12 @@ function ImageGenerationNodeComponent({ id, data }: NodeProps) {
         id={HandleIds.imageGenRealismIn}
         type="target"
         position={Position.Left}
-        style={{ top: '38%' }}
+        className="workflow-handle workflow-handle--realism"
+        style={{ top: '32%' }}
       />
       <span
         className="workflow-node__handle-label workflow-node__handle-label--left"
-        style={{ top: '38%' }}
+        style={{ top: '32%' }}
       >
         realism
       </span>
@@ -108,11 +117,12 @@ function ImageGenerationNodeComponent({ id, data }: NodeProps) {
         id={HandleIds.imageGenPromptIn}
         type="target"
         position={Position.Left}
-        style={{ top: '54%' }}
+        className="workflow-handle workflow-handle--prompt"
+        style={{ top: '46%' }}
       />
       <span
         className="workflow-node__handle-label workflow-node__handle-label--left"
-        style={{ top: '54%' }}
+        style={{ top: '46%' }}
       >
         prompt
       </span>
@@ -121,18 +131,39 @@ function ImageGenerationNodeComponent({ id, data }: NodeProps) {
         id={HandleIds.imageGenReferenceIn}
         type="target"
         position={Position.Left}
-        style={{ top: '70%' }}
+        className="workflow-handle workflow-handle--reference"
+        style={{ top: '60%' }}
       />
       <span
         className="workflow-node__handle-label workflow-node__handle-label--left"
-        style={{ top: '70%' }}
+        style={{ top: '60%' }}
       >
         reference
       </span>
 
-      <p className="workflow-node__hint">
-        Режим «Основная»: Grok prose → WaveSpeed без рефа в API
-      </p>
+      <label className="workflow-node__label">Модель WaveSpeed</label>
+      <select
+        className="workflow-node__field nodrag nowheel"
+        value={waveModelId}
+        onChange={(e) => updateNodeData({ waveModelId: e.target.value })}
+        disabled={nodeData.isRunning}
+      >
+        {WAVESPEED_MODELS.map((model) => (
+          <option key={model.id} value={model.id}>
+            {model.label} · {model.provider}
+          </option>
+        ))}
+      </select>
+
+      <label className="workflow-node__toggle nodrag">
+        <input
+          type="checkbox"
+          checked={nsfwEnabled}
+          onChange={(e) => updateNodeData({ nsfwEnabled: e.target.checked })}
+          disabled={nodeData.isRunning}
+        />
+        <span>{nsfwEnabled ? 'NSFW (без лимитов Google)' : 'Regular (ограничения Google)'}</span>
+      </label>
 
       {nodeData.imageUrl ? (
         <div className="workflow-node__preview-box workflow-node__preview-box--filled">
@@ -140,7 +171,7 @@ function ImageGenerationNodeComponent({ id, data }: NodeProps) {
         </div>
       ) : (
         <div className="workflow-node__preview-box">
-          <span className="workflow-node__hint">Результат появится после генерации</span>
+          <span className="workflow-node__hint">Grok соберёт промпт из графа → WaveSpeed</span>
         </div>
       )}
 
@@ -157,6 +188,7 @@ function ImageGenerationNodeComponent({ id, data }: NodeProps) {
         id={HandleIds.imageGenOut}
         type="source"
         position={Position.Right}
+        className="workflow-handle workflow-handle--generation"
         style={{ top: '50%' }}
       />
       <span className="workflow-node__handle-label workflow-node__handle-label--right">image</span>

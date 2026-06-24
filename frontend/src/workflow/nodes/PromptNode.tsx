@@ -20,7 +20,12 @@ function PromptNodeComponent({ id, data }: NodeProps) {
   )
 
   return (
-    <BaseNode type="prompt" isRunning={nodeData.isRunning} error={nodeData.error}>
+    <BaseNode
+      nodeId={id}
+      type="prompt"
+      isRunning={nodeData.isRunning}
+      error={nodeData.error}
+    >
       <p className="workflow-node__hint">Дополнительные указания для Grok (необязательно)</p>
       <textarea
         className="workflow-node__textarea nodrag nowheel"
@@ -32,6 +37,7 @@ function PromptNodeComponent({ id, data }: NodeProps) {
         id={HandleIds.promptOut}
         type="source"
         position={Position.Right}
+        className="workflow-handle workflow-handle--prompt"
         style={{ top: '50%' }}
       />
       <span className="workflow-node__handle-label workflow-node__handle-label--right">prompt</span>

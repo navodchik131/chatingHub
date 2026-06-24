@@ -6,6 +6,7 @@ import pytest
 
 from app.services.studio_workflow_resolver import (
     WorkflowResolutionError,
+    assemble_workflow_grok_notes,
     resolve_workflow_generation_plan,
 )
 
@@ -21,7 +22,15 @@ def _base_graph(*, realism_enabled: bool = True, prompt: str = "sunset beach"):
             {
                 "id": "ref-1",
                 "type": "reference",
-                "data": {"refId": "abc123"},
+                "data": {"refId": "abc123", "fileName": "scene.jpg"},
+            },
+            {
+                "id": "desc-1",
+                "type": "refDescription",
+                "data": {
+                    "role": "pose donor",
+                    "description": "sitting on couch, evening light",
+                },
             },
             {
                 "id": "prompt-1",
@@ -38,8 +47,8 @@ def _base_graph(*, realism_enabled: bool = True, prompt: str = "sunset beach"):
                 "type": "imageGeneration",
                 "data": {
                     "outputAspect": "3:4",
-                    "waveProfile": "nsfw",
-                    "wanEditTier": "standard",
+                    "waveModelId": "nano-banana-pro",
+                    "nsfwEnabled": True,
                     "exifCamera": "iphone15",
                 },
             },
@@ -56,6 +65,11 @@ def _base_graph(*, realism_enabled: bool = True, prompt: str = "sunset beach"):
                 "targetHandle": "reference-in",
             },
             {
+                "source": "desc-1",
+                "target": "ref-1",
+                "targetHandle": "description-in",
+            },
+            {
                 "source": "prompt-1",
                 "target": "gen-1",
                 "targetHandle": "prompt-in",
@@ -69,6 +83,20 @@ def _base_graph(*, realism_enabled: bool = True, prompt: str = "sunset beach"):
     }
 
 
+def test_assemble_workflow_grok_notes():
+    notes = assemble_workflow_grok_notes(
+        prompt_text="smile at camera",
+        reference_role="pose donor",
+        reference_description="casual hoodie",
+        reference_file_name="ref.png",
+    )
+    assert "SCENE_DIRECTION:" in notes
+    assert "smile at camera" in notes
+    assert "REFERENCE_CONTEXT:" in notes
+    assert "pose donor" in notes
+    assert "ref.png" in notes
+
+
 def test_resolve_workflow_generation_plan_ok():
     g = _base_graph()
     plan = resolve_workflow_generation_plan(
@@ -77,13 +105,29 @@ def test_resolve_workflow_generation_plan_ok():
         edges=g["edges"],
     )
     assert plan.model_id == 42
-    assert plan.description == "sunset beach"
+    assert "SCENE_DIRECTION:" in plan.description
+    assert "sunset beach" in plan.description
+    assert "pose donor" in plan.description
     assert plan.reference_ref_id == "abc123"
+    assert plan.reference_role == "pose donor"
     assert plan.output_aspect == "3:4"
     assert plan.studio_wave_profile == "nsfw"
-    assert plan.wan_edit_tier == "standard"
+    assert plan.workflow_wave_model == "nano-banana-pro"
     assert plan.exif_camera == "iphone15"
     assert plan.realism_enabled is True
+
+
+def test_resolve_workflow_nsfw_off():
+    g = _base_graph()
+    for n in g["nodes"]:
+        if n["id"] == "gen-1":
+            n["data"]["nsfwEnabled"] = False
+    plan = resolve_workflow_generation_plan(
+        target_node_id="gen-1",
+        nodes=g["nodes"],
+        edges=g["edges"],
+    )
+    assert plan.studio_wave_profile == "regular"
 
 
 def test_resolve_workflow_realism_disabled():

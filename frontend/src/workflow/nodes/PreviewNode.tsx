@@ -27,11 +27,12 @@ function PreviewNodeComponent({ id, data }: NodeProps) {
   }
 
   return (
-    <BaseNode type="preview" isRunning={nodeData.isRunning} error={nodeData.error}>
+    <BaseNode nodeId={id} type="preview" isRunning={nodeData.isRunning} error={nodeData.error}>
       <Handle
         id={HandleIds.previewIn}
         type="target"
         position={Position.Left}
+        className="workflow-handle workflow-handle--preview"
         style={{ top: '50%' }}
       />
       <span className="workflow-node__handle-label workflow-node__handle-label--left">image</span>

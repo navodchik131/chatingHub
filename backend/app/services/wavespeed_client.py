@@ -973,6 +973,98 @@ async def nano_banana_pro_edit_image_url(
     )
 
 
+NANO_BANANA_2_EDIT_PATH = "/api/v3/google/nano-banana-2/edit"
+
+
+async def nano_banana_2_edit_image_url(
+    *,
+    api_key: str,
+    image_urls: list[str],
+    prompt: str,
+    aspect_ratio: str = "3:4",
+    timeout_submit: float = 300.0,
+    poll_interval: float = 2.0,
+    max_polls: int = 180,
+) -> WaveSpeedImageResult:
+    """Google Nano Banana 2 Edit."""
+    if not image_urls:
+        raise RuntimeError("no image URLs")
+    if not (prompt or "").strip():
+        raise RuntimeError("empty prompt")
+    ar = (aspect_ratio or "3:4").strip()
+    path = NANO_BANANA_2_EDIT_PATH
+    url = f"{_wavespeed_base()}{path}"
+    body: dict[str, Any] = {
+        "images": image_urls[:14],
+        "prompt": prompt.strip(),
+        "aspect_ratio": ar,
+        "resolution": "1k",
+        "output_format": "png",
+        "enable_sync_mode": False,
+        "enable_base64_output": False,
+    }
+    _apply_wavespeed_extra_body(body)
+    return await _wavespeed_post_json_and_resolve_image_url(
+        api_key=api_key,
+        full_post_url=url,
+        body=body,
+        timeout_submit=timeout_submit,
+        poll_interval=poll_interval,
+        max_polls=max_polls,
+    )
+
+
+async def workflow_edit_image_url(
+    *,
+    api_key: str,
+    wave_model_id: str,
+    image_urls: list[str],
+    prompt: str,
+    aspect_ratio: str,
+    wan_edit_tier: str = "standard",
+    wave_profile: str | None = None,
+    reference_scene_description: str | None = None,
+    size: str | None = None,
+) -> WaveSpeedImageResult:
+    """WaveSpeed edit по выбору модели в workflow-редакторе."""
+    model = (wave_model_id or "wan-2.7").strip().lower()
+    if model == "nano-banana-pro":
+        return await nano_banana_pro_edit_image_url(
+            api_key=api_key,
+            image_urls=image_urls,
+            prompt=prompt,
+            aspect_ratio=aspect_ratio,
+            wave_profile=wave_profile,
+            reference_scene_description=reference_scene_description,
+        )
+    if model == "nano-banana-2":
+        return await nano_banana_2_edit_image_url(
+            api_key=api_key,
+            image_urls=image_urls,
+            prompt=prompt,
+            aspect_ratio=aspect_ratio,
+        )
+    if model == "gpt-image-2":
+        return await gpt_image_2_edit_image_url(
+            api_key=api_key,
+            image_urls=image_urls,
+            prompt=prompt,
+            aspect_ratio=aspect_ratio,
+        )
+    if model == "wan-2.7":
+        return await seedream_v45_edit_image_url(
+            api_key=api_key,
+            image_urls=image_urls,
+            prompt=prompt,
+            size=size,
+            wan_edit_tier=wan_edit_tier,
+        )
+    raise RuntimeError(
+        f"Неизвестная модель workflow: {wave_model_id}. "
+        "Доступны: gpt-image-2, nano-banana-2, nano-banana-pro, wan-2.7"
+    )
+
+
 def _looks_like_video_asset_url(u: str) -> bool:
     s = (u or "").strip().lower().split("?")[0]
     return s.endswith((".mp4", ".webm", ".mov", ".m4v"))

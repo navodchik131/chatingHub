@@ -1,3 +1,4 @@
+import { DEFAULT_WAVESPEED_MODEL_ID } from './wavespeedModels'
 import type { AppNode, AppNodeData, NodeType } from './types'
 
 let nodeIdCounter = 0
@@ -15,14 +16,15 @@ export function createDefaultNodeData(type: NodeType): AppNodeData {
       return { enabled: true }
     case 'prompt':
       return { prompt: '' }
+    case 'refDescription':
+      return { role: '', description: '' }
     case 'reference':
       return {}
     case 'imageGeneration':
       return {
+        waveModelId: DEFAULT_WAVESPEED_MODEL_ID,
+        nsfwEnabled: true,
         outputAspect: '3:4',
-        waveProfile: 'nsfw',
-        wanEditTier: 'standard',
-        exifCamera: 'main',
       }
     case 'preview':
       return {}
