@@ -51,6 +51,11 @@ function ReferenceNodeComponent({ id, data }: NodeProps) {
       return
     }
 
+    if (nodeData.previewUrl) {
+      previewUrlRef.current = nodeData.previewUrl
+      return
+    }
+
     let cancelled = false
     setIsPreviewLoading(true)
 
@@ -79,7 +84,7 @@ function ReferenceNodeComponent({ id, data }: NodeProps) {
     return () => {
       cancelled = true
     }
-  }, [nodeData.refId, clearMedia, revokePreviewUrl, updateNodeData])
+  }, [nodeData.refId, nodeData.previewUrl, clearMedia, revokePreviewUrl, updateNodeData])
 
   useEffect(
     () => () => {
@@ -92,16 +97,23 @@ function ReferenceNodeComponent({ id, data }: NodeProps) {
     async (file: File) => {
       setIsUploading(true)
       updateNodeData({ error: undefined })
+      const localPreview = URL.createObjectURL(file)
+      revokePreviewUrl(previewUrlRef.current)
+      previewUrlRef.current = localPreview
+      updateNodeData({ previewUrl: localPreview })
       try {
         const result = await uploadWorkflowReference(file)
         updateNodeData({
           refId: result.ref_id,
           fileName: result.file_name,
-          previewUrl: undefined,
+          previewUrl: localPreview,
           error: undefined,
         })
       } catch (error) {
+        revokePreviewUrl(localPreview)
+        previewUrlRef.current = null
         updateNodeData({
+          previewUrl: undefined,
           error: error instanceof Error ? error.message : 'Ошибка загрузки',
         })
       } finally {
@@ -109,7 +121,7 @@ function ReferenceNodeComponent({ id, data }: NodeProps) {
         setIsDragging(false)
       }
     },
-    [updateNodeData],
+    [revokePreviewUrl, updateNodeData],
   )
 
   const onFileInputChange = useCallback(
@@ -141,7 +153,8 @@ function ReferenceNodeComponent({ id, data }: NodeProps) {
     .filter(Boolean)
     .join(' ')
 
-  const showPreview = hasMedia && Boolean(nodeData.previewUrl) && !isPreviewLoading
+  const showPreview = hasMedia && Boolean(nodeData.previewUrl)
+  const showLoading = isUploading || (hasMedia && isPreviewLoading && !nodeData.previewUrl)
 
   return (
     <BaseNode
@@ -201,7 +214,7 @@ function ReferenceNodeComponent({ id, data }: NodeProps) {
           if (file) void handleUpload(file)
         }}
       >
-        {isUploading || isPreviewLoading ? (
+        {showLoading ? (
           <>
             <span className="workflow-spinner" />
             <p className="workflow-node__hint">

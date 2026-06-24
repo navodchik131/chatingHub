@@ -30,11 +30,15 @@ function FlowCanvasInner({ workspaceId, initialGraph, onGraphChange }: Props) {
   const reactFlowWrapper = useRef<HTMLDivElement>(null)
   const { screenToFlowPosition } = useReactFlow()
   const saveTimerRef = useRef<number | null>(null)
+  const loadedWorkspaceRef = useRef<number | null>(null)
 
   const [nodes, setNodes, onNodesChange] = useNodesState<AppNode>(initialGraph.nodes as AppNode[])
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(initialGraph.edges)
 
+  // Подгружать граф только при смене проекта — не после автосохранения (иначе теряется previewUrl).
   useEffect(() => {
+    if (loadedWorkspaceRef.current === workspaceId) return
+    loadedWorkspaceRef.current = workspaceId
     setNodes((initialGraph.nodes as AppNode[]) ?? [])
     setEdges(initialGraph.edges ?? [])
   }, [workspaceId, initialGraph, setEdges, setNodes])
