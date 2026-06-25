@@ -269,8 +269,8 @@ function FirstFrameGenerationNodeComponent({ id, data }: NodeProps) {
         </span>
 
         <p className="workflow-node__hint">
-          Первый кадр: из motion-видео (как в студии), готовый кадр в «Референс» (опц.)
-          или генерация по модели и промпту.
+          Как в студии motion: видео → Grok (timeline + сцена) → WaveSpeed с моделью.
+          Готовый кадр — опционально в «Референс».
         </p>
 
         <div className="workflow-gen-form">

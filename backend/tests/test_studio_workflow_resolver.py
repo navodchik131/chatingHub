@@ -412,6 +412,97 @@ def test_first_frame_model_prompt_without_reference():
     assert "Sunset beach walk" in plan.description
 
 
+def test_first_frame_motion_model_without_prompt():
+    g = {
+        "nodes": [
+            {"id": "model-1", "type": "model", "data": {"modelId": 9}},
+            {"id": "mv-1", "type": "motionVideo", "data": {"motionVideoFileId": "mv9"}},
+            {"id": "ff-1", "type": "firstFrameGeneration", "data": {}},
+        ],
+        "edges": [
+            {"source": "model-1", "target": "ff-1", "targetHandle": "model-in"},
+            {
+                "source": "mv-1",
+                "target": "ff-1",
+                "sourceHandle": "motion-video-out",
+                "targetHandle": "motion-video-in",
+            },
+        ],
+    }
+    plan = resolve_workflow_generation_plan(
+        target_node_id="ff-1",
+        nodes=g["nodes"],
+        edges=g["edges"],
+    )
+    assert plan.motion_video_file_id == "mv9"
+    assert plan.model_id == 9
+
+
+def test_first_frame_motion_from_downstream_video_node():
+    """Motion только на «Видео» — первый кадр всё равно идёт через motion_first_frame."""
+    g = {
+        "nodes": [
+            {"id": "model-1", "type": "model", "data": {"modelId": 5}},
+            {"id": "prompt-1", "type": "prompt", "data": {"prompt": "Slow dance"}},
+            {"id": "mv-1", "type": "motionVideo", "data": {"motionVideoFileId": "mv-shared"}},
+            {
+                "id": "ff-1",
+                "type": "firstFrameGeneration",
+                "data": {"waveModelId": "nano-banana-pro", "nsfwEnabled": False},
+            },
+            {"id": "video-1", "type": "videoGeneration", "data": {}},
+        ],
+        "edges": [
+            {"source": "model-1", "target": "ff-1", "targetHandle": "model-in"},
+            {"source": "prompt-1", "target": "ff-1", "targetHandle": "prompt-in"},
+            {
+                "source": "ff-1",
+                "target": "video-1",
+                "sourceHandle": "image-out",
+                "targetHandle": "first-frame-in",
+            },
+            {
+                "source": "mv-1",
+                "target": "video-1",
+                "sourceHandle": "motion-video-out",
+                "targetHandle": "motion-video-in",
+            },
+        ],
+    }
+    plan = resolve_workflow_generation_plan(
+        target_node_id="ff-1",
+        nodes=g["nodes"],
+        edges=g["edges"],
+    )
+    assert plan.motion_video_file_id == "mv-shared"
+    assert plan.references == ()
+
+
+def test_first_frame_motion_wire_without_upload_raises():
+    g = {
+        "nodes": [
+            {"id": "model-1", "type": "model", "data": {"modelId": 1}},
+            {"id": "mv-1", "type": "motionVideo", "data": {}},
+            {"id": "ff-1", "type": "firstFrameGeneration", "data": {}},
+        ],
+        "edges": [
+            {"source": "model-1", "target": "ff-1", "targetHandle": "model-in"},
+            {
+                "source": "mv-1",
+                "target": "ff-1",
+                "sourceHandle": "motion-video-out",
+                "targetHandle": "motion-video-in",
+            },
+        ],
+    }
+    with pytest.raises(WorkflowResolutionError, match="Motion-видео"):
+        resolve_workflow_generation_plan(
+            target_node_id="ff-1",
+            nodes=g["nodes"],
+            edges=g["edges"],
+        )
+
+
 def test_first_frame_motion_requires_model():
     g = {
         "nodes": [

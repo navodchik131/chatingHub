@@ -492,9 +492,16 @@ async def _accept_workflow_motion_first_frame_job(
         raise HTTPException(status_code=400, detail=str(e)) from e
 
     motion_id = str(plan.motion_video_file_id or "").strip()
+    default_motion_notes = (
+        "Движение как в реф-видео. Сохранить сцену, одежду и свет с первого кадра."
+    )
+    description = (plan.description or "").strip()
+    if motion_id and not description:
+        description = default_motion_notes
+
     params: dict[str, Any] = {
         "model_id": str(plan.model_id),
-        "description": plan.description,
+        "description": description,
         "output_aspect": plan.output_aspect,
         "wan_edit_tier": plan.wan_edit_tier,
         "studio_wave_profile": plan.studio_wave_profile,

@@ -346,6 +346,90 @@ def _sources_for_target(
     return out
 
 
+def _motion_video_file_id_from_node(node: dict[str, Any] | None) -> str:
+    if node is None:
+        return ""
+    if str(node.get("type") or "") != "motionVideo":
+        return ""
+    data = node.get("data") if isinstance(node.get("data"), dict) else {}
+    return str(data.get("motionVideoFileId") or "").strip()
+
+
+def _first_frame_has_motion_video_wire(
+    target_id: str,
+    edges: list[dict[str, Any]],
+    node_map: dict[str, dict[str, Any]],
+) -> bool:
+    if _sources_for_target(target_id, HANDLE["motion_video_in"], edges, node_map):
+        return True
+    for edge in edges:
+        if str(edge.get("source") or "") != target_id:
+            continue
+        if edge.get("sourceHandle") is not None and str(edge.get("sourceHandle")) != HANDLE[
+            "image_out"
+        ]:
+            continue
+        if edge.get("targetHandle") is not None and str(edge.get("targetHandle")) != HANDLE[
+            "first_frame_in"
+        ]:
+            continue
+        video_id = str(edge.get("target") or "").strip()
+        video_node = node_map.get(video_id)
+        if str((video_node or {}).get("type") or "") != "videoGeneration":
+            continue
+        if _sources_for_target(video_id, HANDLE["motion_video_in"], edges, node_map):
+            return True
+    return False
+
+
+def _first_frame_motion_video_file_id(
+    target_id: str,
+    gen_data: dict[str, Any],
+    edges: list[dict[str, Any]],
+    node_map: dict[str, dict[str, Any]],
+) -> str:
+    """Motion-видео: прямой вход на «Первый кадр» или та же нода, что и у «Видео» downstream."""
+    motion_nodes = _sources_for_target(target_id, HANDLE["motion_video_in"], edges, node_map)
+    if motion_nodes:
+        mnode = motion_nodes[0]
+        if str(mnode.get("type") or "") != "motionVideo":
+            raise WorkflowResolutionError(
+                "К входу motion video можно подключить только ноду «Motion-видео»"
+            )
+        mid = _motion_video_file_id_from_node(mnode)
+        if mid:
+            return mid
+
+    mid = str(gen_data.get("motionVideoFileId") or "").strip()
+    if mid:
+        return mid
+
+    for edge in edges:
+        if str(edge.get("source") or "") != target_id:
+            continue
+        if edge.get("sourceHandle") is not None and str(edge.get("sourceHandle")) != HANDLE[
+            "image_out"
+        ]:
+            continue
+        if edge.get("targetHandle") is not None and str(edge.get("targetHandle")) != HANDLE[
+            "first_frame_in"
+        ]:
+            continue
+        video_id = str(edge.get("target") or "").strip()
+        video_node = node_map.get(video_id)
+        if str((video_node or {}).get("type") or "") != "videoGeneration":
+            continue
+        for mnode in _sources_for_target(video_id, HANDLE["motion_video_in"], edges, node_map):
+            if str(mnode.get("type") or "") != "motionVideo":
+                raise WorkflowResolutionError(
+                    "К входу motion video можно подключить только ноду «Motion-видео»"
+                )
+            mid = _motion_video_file_id_from_node(mnode)
+            if mid:
+                return mid
+    return ""
+
+
 def _reference_description_for_node(
     ref_node: dict[str, Any],
     edges: list[dict[str, Any]],
@@ -508,17 +592,13 @@ def resolve_workflow_generation_plan(
 
     motion_video_file_id = ""
     if is_first_frame:
-        motion_nodes = _sources_for_target(target_id, HANDLE["motion_video_in"], edges, node_map)
-        if motion_nodes:
-            mnode = motion_nodes[0]
-            if str(mnode.get("type") or "") != "motionVideo":
-                raise WorkflowResolutionError(
-                    "К входу motion video можно подключить только ноду «Motion-видео»"
-                )
-            mdata = mnode.get("data") if isinstance(mnode.get("data"), dict) else {}
-            motion_video_file_id = str(mdata.get("motionVideoFileId") or "").strip()
-        if not motion_video_file_id:
-            motion_video_file_id = str(gen_data.get("motionVideoFileId") or "").strip()
+        motion_video_file_id = _first_frame_motion_video_file_id(
+            target_id, gen_data, edges, node_map
+        )
+        if _first_frame_has_motion_video_wire(target_id, edges, node_map) and not motion_video_file_id:
+            raise WorkflowResolutionError(
+                "Загрузите видео в ноду «Motion-видео» — по нему Grok соберёт первый кадр"
+            )
     elif not ref_nodes:
         raise WorkflowResolutionError("Подключите хотя бы одну ноду «Референс» к входу reference")
     elif not references:
@@ -562,7 +642,7 @@ def resolve_workflow_generation_plan(
             and not prompt_text.strip()
         ):
             raise WorkflowResolutionError(
-                "Добавьте промпт для генерации первого кадра по модели"
+                "Добавьте промпт для генерации первого кадра по модели (без motion-видео)"
             )
     elif model_id is None and not (prompt_text.strip() or has_ref_context):
         raise WorkflowResolutionError(
