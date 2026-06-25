@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import smtplib
+from functools import partial
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.utils import formataddr, formatdate
@@ -86,10 +87,12 @@ async def send_email(
     import anyio.to_thread
 
     await anyio.to_thread.run_sync(
-        _send_smtp_sync,
-        to_email=to_email.strip(),
-        subject=subject.strip(),
-        body_html=body_html,
-        body_text=body_text,
+        partial(
+            _send_smtp_sync,
+            to_email=to_email.strip(),
+            subject=subject.strip(),
+            body_html=body_html,
+            body_text=body_text,
+        ),
     )
     log.info("Email sent to %s subject=%r", to_email, subject[:80])
