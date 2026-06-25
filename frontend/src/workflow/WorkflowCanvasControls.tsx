@@ -1,0 +1,62 @@
+import { Panel } from '@xyflow/react'
+
+type Props = {
+  locked: boolean
+  onZoomIn: () => void
+  onZoomOut: () => void
+  onFitView: () => void
+  onToggleLock: () => void
+}
+
+export function WorkflowCanvasControls({
+  locked,
+  onZoomIn,
+  onZoomOut,
+  onFitView,
+  onToggleLock,
+}: Props) {
+  return (
+    <Panel position="bottom-left" className="workflow-canvas-controls-panel">
+      <div className="workflow-canvas-controls" role="toolbar" aria-label="Масштаб холста">
+        <span className="workflow-canvas-controls__label">Масштаб</span>
+        <button
+          type="button"
+          className="workflow-canvas-controls__btn"
+          title="Увеличить"
+          aria-label="Увеличить"
+          onClick={onZoomIn}
+        >
+          +
+        </button>
+        <button
+          type="button"
+          className="workflow-canvas-controls__btn"
+          title="Уменьшить"
+          aria-label="Уменьшить"
+          onClick={onZoomOut}
+        >
+          −
+        </button>
+        <button
+          type="button"
+          className="workflow-canvas-controls__btn"
+          title="Показать весь граф"
+          aria-label="Показать весь граф"
+          onClick={onFitView}
+        >
+          ⊡
+        </button>
+        <button
+          type="button"
+          className={`workflow-canvas-controls__btn workflow-canvas-controls__btn--lock${locked ? ' is-active' : ''}`}
+          title={locked ? 'Разблокировать перетаскивание нод' : 'Заблокировать перетаскивание нод'}
+          aria-label={locked ? 'Разблокировать ноды' : 'Заблокировать ноды'}
+          aria-pressed={locked}
+          onClick={onToggleLock}
+        >
+          {locked ? 'Блок' : 'Движ'}
+        </button>
+      </div>
+    </Panel>
+  )
+}

@@ -1,8 +1,7 @@
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   Background,
   BackgroundVariant,
-  Controls,
   MiniMap,
   ReactFlow,
   ReactFlowProvider,
@@ -15,6 +14,7 @@ import {
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { NodePaletteDock } from './NodePaletteDock'
+import { WorkflowCanvasControls } from './WorkflowCanvasControls'
 import { serializeGraph } from './graphResolver'
 import { createNode, REACT_FLOW_DRAG_TYPE } from './nodeFactory'
 import { nodeTypes } from './nodes'
@@ -28,9 +28,10 @@ type Props = {
 
 function FlowCanvasInner({ workspaceId, initialGraph, onGraphChange }: Props) {
   const reactFlowWrapper = useRef<HTMLDivElement>(null)
-  const { screenToFlowPosition } = useReactFlow()
+  const { screenToFlowPosition, zoomIn, zoomOut, fitView } = useReactFlow()
   const saveTimerRef = useRef<number | null>(null)
   const loadedWorkspaceRef = useRef<number | null>(null)
+  const [nodesLocked, setNodesLocked] = useState(false)
 
   const [nodes, setNodes, onNodesChange] = useNodesState<AppNode>(initialGraph.nodes as AppNode[])
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(initialGraph.edges)
@@ -96,6 +97,9 @@ function FlowCanvasInner({ workspaceId, initialGraph, onGraphChange }: Props) {
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
             nodeTypes={nodeTypes}
+            nodesDraggable={!nodesLocked}
+            nodesConnectable={!nodesLocked}
+            elementsSelectable={!nodesLocked}
             fitView
             fitViewOptions={{ padding: 0.2 }}
             minZoom={0.1}
@@ -104,12 +108,20 @@ function FlowCanvasInner({ workspaceId, initialGraph, onGraphChange }: Props) {
             zoomOnScroll
             zoomOnPinch
             edgesFocusable={false}
-            deleteKeyCode={['Backspace', 'Delete']}
+            deleteKeyCode={nodesLocked ? null : ['Backspace', 'Delete']}
             defaultEdgeOptions={{ animated: false }}
             style={{ width: '100%', height: '100%' }}
           >
             <Background variant={BackgroundVariant.Lines} gap={24} size={1} color="#27272a" />
-            <Controls position="bottom-left" showInteractive />
+            <WorkflowCanvasControls
+              locked={nodesLocked}
+              onZoomIn={() => zoomIn({ duration: 150 })}
+              onZoomOut={() => zoomOut({ duration: 150 })}
+              onFitView={() => {
+                void fitView({ padding: 0.2, duration: 200 })
+              }}
+              onToggleLock={() => setNodesLocked((v) => !v)}
+            />
             <MiniMap
               position="bottom-right"
               nodeColor="#6366f1"

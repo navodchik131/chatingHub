@@ -325,6 +325,65 @@
   background: #09090b;
 }
 
+.workflow-canvas-controls-panel {
+  margin: 0 0 0.75rem 0.75rem !important;
+}
+
+.workflow-canvas-controls {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.25rem;
+  padding: 0.45rem;
+  border-radius: 0.625rem;
+  border: 1px solid #3f3f46;
+  background: rgba(24, 24, 27, 0.94);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.workflow-canvas-controls__label {
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #a1a1aa;
+  text-align: center;
+  padding-bottom: 0.15rem;
+}
+
+.workflow-canvas-controls__btn {
+  width: 2rem;
+  min-height: 2rem;
+  border-radius: 0.45rem;
+  border: 1px solid #52525b;
+  background: #27272a;
+  color: #fafafa;
+  font-size: 0.9375rem;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.15rem;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.workflow-canvas-controls__btn--lock {
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.workflow-canvas-controls__btn:hover {
+  background: #3f3f46;
+  border-color: #71717a;
+}
+
+.workflow-canvas-controls__btn.is-active {
+  border-color: #6366f1;
+  background: rgba(99, 102, 241, 0.2);
+}
+
 .workflow-node {
   min-width: 280px;
   max-width: 320px;
