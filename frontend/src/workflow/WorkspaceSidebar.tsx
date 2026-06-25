@@ -12,6 +12,8 @@ type Props = {
   activeName: string
   busy: boolean
   demoLimited?: boolean
+  mobileOpen?: boolean
+  onClose?: () => void
   onSelect: (id: number) => void
   onCreate: (name: string) => void
   onRename: (id: number, name: string) => void
@@ -26,6 +28,8 @@ export function WorkspaceSidebar({
   activeName,
   busy,
   demoLimited = false,
+  mobileOpen = false,
+  onClose,
   onSelect,
   onCreate,
   onRename,
@@ -57,20 +61,32 @@ export function WorkspaceSidebar({
   }, [editName, editingId, onRename])
 
   return (
-    <aside className="workflow-workspaces">
+    <aside className={`workflow-workspaces${mobileOpen ? ' is-open' : ''}`}>
       <div className="workflow-workspaces__head">
         <h2>Проекты</h2>
-        {!demoLimited ? (
-          <button
-            type="button"
-            className="workflow-workspaces__add"
-            disabled={busy}
-            onClick={() => setCreating(true)}
-            title="Новый проект"
-          >
-            +
-          </button>
-        ) : null}
+        <div className="workflow-workspaces__head-actions">
+          {!demoLimited ? (
+            <button
+              type="button"
+              className="workflow-workspaces__add"
+              disabled={busy}
+              onClick={() => setCreating(true)}
+              title="Новый проект"
+            >
+              +
+            </button>
+          ) : null}
+          {onClose ? (
+            <button
+              type="button"
+              className="workflow-workspaces__close"
+              aria-label="Закрыть список проектов"
+              onClick={onClose}
+            >
+              ×
+            </button>
+          ) : null}
+        </div>
       </div>
 
       {creating ? (
@@ -120,7 +136,10 @@ export function WorkspaceSidebar({
               <button
                 type="button"
                 className={`workflow-workspaces__link${activeId === ws.id ? ' is-active' : ''}`}
-                onClick={() => onSelect(ws.id)}
+                onClick={() => {
+                  onSelect(ws.id)
+                  onClose?.()
+                }}
                 onDoubleClick={() => {
                   if (demoLimited) return
                   setEditingId(ws.id)
@@ -130,6 +149,20 @@ export function WorkspaceSidebar({
                 {ws.name}
               </button>
             )}
+            {!demoLimited && editingId !== ws.id ? (
+              <button
+                type="button"
+                className="workflow-workspaces__edit"
+                title="Переименовать"
+                aria-label={`Переименовать «${ws.name}»`}
+                onClick={() => {
+                  setEditingId(ws.id)
+                  setEditName(ws.name)
+                }}
+              >
+                ✎
+              </button>
+            ) : null}
             {!demoLimited ? (
               <button
                 type="button"

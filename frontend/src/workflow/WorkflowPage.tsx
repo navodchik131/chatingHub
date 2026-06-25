@@ -17,6 +17,7 @@ import { downloadWorkflowExport, parseWorkflowImport } from './workspaceExport'
 import { WorkflowRunProvider } from './WorkflowRunContext'
 import { WorkflowBillingProvider, workflowBillingHeaderLine } from './WorkflowBillingContext'
 import { WorkflowModelsContext } from './WorkflowModelsContext'
+import { useWorkflowMobile } from './useWorkflowMobile'
 import type { BillingMeLike } from '../billing/planLabels'
 import type { ProjectGraph, StudioModelOption } from './types'
 import './workflow.css'
@@ -51,6 +52,8 @@ export function WorkflowPage() {
   const [graph, setGraph] = useState<ProjectGraph>({ nodes: [], edges: [] })
   const [me, setMe] = useState<UserMe | null>(null)
   const [busy, setBusy] = useState(false)
+  const [projectsOpen, setProjectsOpen] = useState(false)
+  const isMobile = useWorkflowMobile()
   const saveRef = useRef<number | null>(null)
   const graphRef = useRef(graph)
 
@@ -288,17 +291,23 @@ export function WorkflowPage() {
   return (
     <WorkflowModelsContext.Provider value={models}>
       <WorkflowBillingProvider me={me}>
-      <div className="workflow-page">
+      <div className={`workflow-page${isMobile ? ' workflow-page--mobile' : ''}`}>
         <header className="workflow-page__header">
-          <div>
+          <div className="workflow-page__header-main">
             <h1 className="workflow-page__title">Workflow</h1>
-            <p className="workflow-page__subtitle">
-              Соберите цепочку и сгенерируйте изображение
-              {me ? (
-                <span className="workflow-page__billing"> · {workflowBillingHeaderLine(me)}</span>
-              ) : null}
-            </p>
-            {demoLimited ? (
+            {isMobile ? (
+              <p className="workflow-page__active-project" title={activeWorkspaceName}>
+                {activeWorkspaceName}
+              </p>
+            ) : (
+              <p className="workflow-page__subtitle">
+                Соберите цепочку и сгенерируйте изображение
+                {me ? (
+                  <span className="workflow-page__billing"> · {workflowBillingHeaderLine(me)}</span>
+                ) : null}
+              </p>
+            )}
+            {demoLimited && !isMobile ? (
               <p className="workflow-page__demo-hint muted small">
                 Демо-режим: в списке только «По рефу»; остальные шаблоны откроются после пополнения
                 кредитов или подписки. Генерации списываются из бесплатных демо.
@@ -306,12 +315,29 @@ export function WorkflowPage() {
             ) : null}
           </div>
           <div className="workflow-page__actions">
+            {isMobile ? (
+              <button
+                type="button"
+                className="workflow-page__btn"
+                onClick={() => setProjectsOpen(true)}
+              >
+                Проекты
+              </button>
+            ) : null}
             <Link className="workflow-page__btn" to="/workspace">
               ← Студия
             </Link>
           </div>
         </header>
         <div className="workflow-page__body">
+          {isMobile && projectsOpen ? (
+            <button
+              type="button"
+              className="workflow-drawer-backdrop"
+              aria-label="Закрыть список проектов"
+              onClick={() => setProjectsOpen(false)}
+            />
+          ) : null}
           <div className="workflow-main">
             <WorkspaceSidebar
               workspaces={workspaces}
@@ -319,6 +345,8 @@ export function WorkflowPage() {
               activeName={activeWorkspaceName}
               busy={busy}
               demoLimited={demoLimited}
+              mobileOpen={isMobile && projectsOpen}
+              onClose={() => setProjectsOpen(false)}
               onSelect={(id) => void selectWorkspace(id)}
               onCreate={(name) => void handleCreate(name)}
               onRename={(id, name) => void handleRename(id, name)}

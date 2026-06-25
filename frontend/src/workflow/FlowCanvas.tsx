@@ -18,6 +18,7 @@ import { WorkflowCanvasControls } from './WorkflowCanvasControls'
 import { serializeGraph } from './graphResolver'
 import { createNode, REACT_FLOW_DRAG_TYPE } from './nodeFactory'
 import { nodeTypes } from './nodes'
+import { useWorkflowMobile } from './useWorkflowMobile'
 import type { AppNode, NodeType, ProjectGraph } from './types'
 
 type Props = {
@@ -32,6 +33,7 @@ function FlowCanvasInner({ workspaceId, initialGraph, onGraphChange }: Props) {
   const saveTimerRef = useRef<number | null>(null)
   const loadedWorkspaceRef = useRef<number | null>(null)
   const [nodesLocked, setNodesLocked] = useState(false)
+  const isMobile = useWorkflowMobile()
 
   const [nodes, setNodes, onNodesChange] = useNodesState<AppNode>(initialGraph.nodes as AppNode[])
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(initialGraph.edges)
@@ -81,6 +83,20 @@ function FlowCanvasInner({ workspaceId, initialGraph, onGraphChange }: Props) {
     [screenToFlowPosition, setNodes],
   )
 
+  const addNodeAtViewportCenter = useCallback(
+    (type: NodeType) => {
+      const el = reactFlowWrapper.current
+      if (!el) return
+      const rect = el.getBoundingClientRect()
+      const position = screenToFlowPosition({
+        x: rect.left + rect.width / 2,
+        y: rect.top + rect.height / 2,
+      })
+      setNodes((current) => [...current, createNode(type, position)])
+    },
+    [screenToFlowPosition, setNodes],
+  )
+
   return (
     <div className="workflow-layout">
       <div className="workflow-canvas-wrap">
@@ -105,8 +121,10 @@ function FlowCanvasInner({ workspaceId, initialGraph, onGraphChange }: Props) {
             minZoom={0.1}
             maxZoom={2}
             panOnDrag
-            zoomOnScroll
+            zoomOnScroll={!isMobile}
             zoomOnPinch
+            panOnScroll={!isMobile}
+            preventScrolling={isMobile}
             edgesFocusable={false}
             deleteKeyCode={nodesLocked ? null : ['Backspace', 'Delete']}
             defaultEdgeOptions={{ animated: false }}
@@ -123,6 +141,7 @@ function FlowCanvasInner({ workspaceId, initialGraph, onGraphChange }: Props) {
               onToggleLock={() => setNodesLocked((v) => !v)}
             />
             <MiniMap
+              className={isMobile ? 'workflow-minimap--hidden' : undefined}
               position="bottom-right"
               nodeColor="#6366f1"
               maskColor="rgb(9, 9, 11, 0.75)"
@@ -130,7 +149,7 @@ function FlowCanvasInner({ workspaceId, initialGraph, onGraphChange }: Props) {
           </ReactFlow>
         </div>
       </div>
-      <NodePaletteDock />
+      <NodePaletteDock onTapAdd={addNodeAtViewportCenter} />
     </div>
   )
 }
