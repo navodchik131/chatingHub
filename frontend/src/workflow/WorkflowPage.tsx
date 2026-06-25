@@ -16,6 +16,7 @@ import { WorkspaceSidebar, type WorkflowWorkspaceItem } from './WorkspaceSidebar
 import { downloadWorkflowExport, parseWorkflowImport } from './workspaceExport'
 import { WorkflowRunProvider } from './WorkflowRunContext'
 import { WorkflowBillingProvider, workflowBillingHeaderLine } from './WorkflowBillingContext'
+import { WorkflowModelsContext } from './WorkflowModelsContext'
 import type { BillingMeLike } from '../billing/planLabels'
 import type { ProjectGraph, StudioModelOption } from './types'
 import './workflow.css'
