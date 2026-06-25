@@ -30,6 +30,13 @@ _TIMELINE_SYSTEM_EN = (
     "[t s] lines without ``` blocks."
 )
 
+_SEEDANCE_T2V_GROK_SYSTEM_EN = (
+    "You follow instructions precisely. "
+    "Output ONLY the final Seedance 2.0 video prompt in English. "
+    "Keep @ImageN and @VideoN tags exactly as Latin tokens — never translate or localize tag names. "
+    "No preamble, no markdown fences."
+)
+
 _SEEDANCE_T2V_GROK_SYSTEM_ZH = (
     "You follow instructions precisely. "
     "Output ONLY the final Seedance 2.0 video prompt in Simplified Chinese (简体中文). "
@@ -742,11 +749,16 @@ async def grok_expand_seedance_t2v_prompt(
             "10) Write the entire prompt body in Simplified Chinese. "
             "Keep @ImageN / @VideoN tags in Latin as-is.\n"
         )
+    else:
+        user_instruction += (
+            "10) Write the entire prompt body in English. "
+            "Keep @ImageN / @VideoN tags in Latin as-is.\n"
+        )
 
     system_content = (
         _SEEDANCE_T2V_GROK_SYSTEM_ZH
         if settings.studio_seedance_grok_prompt_zh
-        else _TIMELINE_SYSTEM_EN
+        else _SEEDANCE_T2V_GROK_SYSTEM_EN
     )
 
     out = await chat_completion_openai_compatible_text(
