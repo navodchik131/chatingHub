@@ -282,20 +282,18 @@ def _seedance_identity_lock_block(
     n_motion_videos: int,
 ) -> str:
     lines = [
-        f"CHARACTER LOCK (all frames, entire clip): face, body, hair ONLY from {tags}. "
-        "Never change or morph the character.",
+        f"Cinematic continuity: same lead performer from {tags} throughout the clip.",
     ]
     if n_start_frame > 0:
         lines.append(
-            "@Image1 = pose, scene, lighting, wardrobe at t=0 ONLY — "
-            "never take face, body, or hair from @Image1."
+            f"@Image1 = opening composition, pose, lighting, and wardrobe at t=0 only; "
+            f"performer appearance from {tags}."
         )
     if n_motion_videos > 0:
         vtags = ", ".join(f"@Video{i}" for i in range(1, n_motion_videos + 1))
         lines.append(
-            f"{vtags} = choreography and camera motion ONLY — "
-            f"ignore the performer's face, body, and hair in {vtags}; "
-            f"character look stays {tags} in every frame."
+            f"{vtags} = choreography and camera motion only; "
+            f"performer look stays {tags}."
         )
     return " ".join(lines)
 
@@ -307,22 +305,39 @@ def append_seedance_identity_lock(
     n_model_images: int,
     n_motion_videos: int,
     max_chars: int | None = None,
+    duplicate_lock: bool = False,
 ) -> str:
     """
-    Жёсткий lock до и после тела промпта: Seedance привязывает identity только к явным @ImageN.
+    Лёгкий lock в конце промпта (без дубля «face/body/hair» — триggerит moderation).
     """
     lim = max_chars if max_chars is not None else settings.studio_seedance_t2v_prompt_max_chars
     tags = seedance_model_identity_tag_expr(n_start_frame, n_model_images)
     if not tags:
-        return truncate_seedance_t2v_prompt(prompt, max_chars=lim)
+        return finalize_seedance_t2v_prompt(prompt, max_chars=lim)
     lock = _seedance_identity_lock_block(
         tags=tags,
         n_start_frame=n_start_frame,
         n_motion_videos=n_motion_videos,
     )
     body = (prompt or "").strip()
-    combined = f"{lock}\n\n{body}\n\n{lock}".strip()
-    return truncate_seedance_t2v_prompt(combined, max_chars=lim)
+    if duplicate_lock:
+        combined = f"{lock}\n\n{body}\n\n{lock}".strip()
+    else:
+        combined = f"{body}\n\n{lock}".strip()
+    return finalize_seedance_t2v_prompt(combined, max_chars=lim)
+
+
+def finalize_seedance_t2v_prompt(text: str, *, max_chars: int | None = None) -> str:
+    """Финальная полировка перед WaveSpeed: кино-стиль, триgger-слова, soften."""
+    lim = max_chars if max_chars is not None else settings.studio_seedance_t2v_prompt_max_chars
+    s = (text or "").strip()
+    if not s:
+        return s
+    if _CINEMATIC_FRAMING_EN.split(".")[0].lower() not in s.lower()[:120]:
+        s = f"{_CINEMATIC_FRAMING_EN}\n\n{s}"
+    s = sanitize_seedance_user_brief(s)
+    s = soften_seedance_provider_prompt(s)
+    return truncate_seedance_t2v_prompt(s, max_chars=lim)
 
 
 def soften_seedance_provider_prompt(text: str) -> str:
@@ -352,12 +367,12 @@ def assemble_seedance_t2v_prompt(
     identity_tags = seedance_model_identity_tag_expr(n_start_frame, n_model_images)
     if identity_tags:
         parts.append(
-            f"One consistent character for the full clip — face, body, hair from {identity_tags} only."
+            f"One consistent lead performer for the full clip — appearance from {identity_tags}."
         )
     if n_start_frame > 0:
         parts.append(
-            "@Image1: opening frame — pose, scene, lighting, camera, wardrobe at t=0. "
-            "Do NOT use face, body, or hair from @Image1."
+            "@Image1: opening frame — composition, pose, scene, lighting, camera, wardrobe at t=0. "
+            f"Performer appearance from {identity_tags or 'model references'}."
         )
         if n_outfit_images == 0:
             parts.append("Wardrobe at t=0: match @Image1 and USER_BRIEF.")
@@ -370,8 +385,8 @@ def assemble_seedance_t2v_prompt(
         vtags = ", ".join(f"@Video{i}" for i in range(1, n_motion_videos + 1))
         if identity_tags:
             parts.append(
-                f"Motion timing, gestures, and camera from {vtags} only — "
-                f"not the performer's face or body. Character look locked to {identity_tags}."
+                f"Motion timing, gestures, and camera from {vtags} only. "
+                f"Performer look locked to {identity_tags}."
             )
         else:
             parts.append(f"Motion and pacing from {vtags} only (timing, gestures, camera).")
@@ -393,12 +408,14 @@ def assemble_seedance_t2v_prompt(
             "Natural cinematic motion; smooth camera; expressive performance; same character throughout."
         )
     body = soften_seedance_provider_prompt("\n\n".join(parts))
-    return append_seedance_identity_lock(
+    locked = append_seedance_identity_lock(
         body,
         n_start_frame=n_start_frame,
         n_model_images=n_model_images,
         n_motion_videos=n_motion_videos,
+        duplicate_lock=False,
     )
+    return locked
 
 
 def truncate_seedance_t2v_prompt(text: str, *, max_chars: int | None = None) -> str:
@@ -438,11 +455,13 @@ async def build_seedance_t2v_prompt(
     lim = settings.studio_seedance_t2v_prompt_max_chars
     brief = prepare_seedance_user_brief(
         user_brief,
-        sanitize=sanitize_brief or cinematic_framing or translate_zh,
-        cinematic=cinematic_framing and not translate_zh,
+        sanitize=True,
+        cinematic=True,
         translate_zh=translate_zh,
     )
     safe_motion = prepare_motion_notes_for_seedance(motion_summary)
+    if safe_motion:
+        safe_motion = sanitize_seedance_user_brief(safe_motion)
     if not force_template and grok_motion_api_configured():
         try:
             p = await grok_expand_seedance_t2v_prompt(
@@ -465,6 +484,7 @@ async def build_seedance_t2v_prompt(
                     n_model_images=n_model_images,
                     n_motion_videos=n_motion_videos,
                     max_chars=lim,
+                    duplicate_lock=False,
                 ),
                 "grok",
             )
@@ -480,16 +500,7 @@ async def build_seedance_t2v_prompt(
         motion_summary=safe_motion,
         negative=negative,
     )
-    return (
-        append_seedance_identity_lock(
-            p,
-            n_start_frame=n_start_frame,
-            n_model_images=n_model_images,
-            n_motion_videos=n_motion_videos,
-            max_chars=lim,
-        ),
-        "template",
-    )
+    return (p, "template")
 
 
 def assemble_seedance_video_edit_prompt(

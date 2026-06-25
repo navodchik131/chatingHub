@@ -4651,11 +4651,18 @@ async def _studio_job_execute_motion_render_video(
 
     model_imgs = filter_model_images_for_seedance_video(
         list(sm.images),
-        minimal=False,
+        minimal=True,
         include_body=False,
     )
     n_outfit = 0
-    if ff_url:
+    n_start_effective = n_start
+    if settings.studio_seedance_video_skip_start_frame_ref and ff_url:
+        log.info(
+            "motion_render_video job=%s: skip start frame ref (moderation); scene from prompt",
+            job.id,
+        )
+        n_start_effective = 0
+    elif ff_url:
         ref_images.append(ff_url)
     ref_images.extend(
         model_reference_public_urls(
@@ -4686,7 +4693,7 @@ async def _studio_job_execute_motion_render_video(
 
     seed_prompt, prompt_source = await build_seedance_t2v_prompt(
         user_brief=prompt,
-        n_start_frame=n_start,
+        n_start_frame=n_start_effective,
         n_model_images=n_model,
         n_outfit_images=n_outfit,
         n_motion_videos=len(ref_videos),
@@ -4722,11 +4729,12 @@ async def _studio_job_execute_motion_render_video(
         msg = str(e)
         video_url = None
         log.warning(
-            "motion_render_video failed job=%s imgs=%s vids=%s: %s",
+            "motion_render_video failed job=%s imgs=%s vids=%s: %s | prompt=%s",
             job.id,
             len(ref_images),
             len(ref_videos),
             msg[:240],
+            (seed_prompt or "")[:400],
         )
 
     gen_placeholder = await find_studio_generation_by_job_id(session, job.id)
