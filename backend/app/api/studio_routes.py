@@ -4535,6 +4535,11 @@ async def _studio_job_execute_motion_render_video(
     auto_motion_prompt = str(params.get("auto_motion_prompt") or "0")
     sheet_gid_raw = params.get("sheet_generation_id")
     remove_face_grid = _truthy_wavespeed_flag(str(params.get("remove_face_grid") or ""))
+    workflow_source = str(params.get("workflow_source") or "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+    )
 
     if not prompt.strip():
         raise RuntimeError("Опишите сцену и движение для видео.")
@@ -4754,6 +4759,7 @@ async def _studio_job_execute_motion_render_video(
         duration_seconds=ds_effective,
         force_template=False,
         remove_face_grid=remove_face_grid,
+        soft_identity=workflow_source or remove_face_grid,
     )
 
     try:

@@ -46,6 +46,12 @@ _VIDEO_IDENTITY_GUARD_EN = (
     "(blink, brow lift, lips part) without describing who the person is."
 )
 
+_VIDEO_IDENTITY_GUARD_SOFT_EN = (
+    "CONTENT_SAFETY: Keep prose cinematic — describe scene, motion, camera, wardrobe. "
+    "Do not catalog facial features in text; bind the lead character via @Image tag numbers only. "
+    "Avoid words like swap, replace performer, or never adopt actor face."
+)
+
 
 def _compact_model_profile_for_video_grok(profile: str) -> str:
     """
@@ -569,17 +575,32 @@ def _seedance_image_tag_range(
     n_outfit: int,
     *,
     n_start_frame: int = 0,
+    soft: bool = False,
 ) -> str:
     parts: list[str] = []
     if n_start_frame > 0:
-        parts.append(
-            "@Image1 = approved opening still at t=0 (pose, wardrobe, lighting, framing, environment — "
-            "NOT the primary face/body identity source)"
-        )
+        if soft:
+            parts.append(
+                "@Image1 = opening still at t=0 (pose, wardrobe, lighting, framing — scene reference)"
+            )
+        else:
+            parts.append(
+                "@Image1 = approved opening still at t=0 (pose, wardrobe, lighting, framing, environment — "
+                "NOT the primary face/body identity source)"
+            )
     if n_model > 0:
         start_idx = 1 + n_start_frame
         end_idx = start_idx + n_model - 1
-        if n_model == 1:
+        if soft:
+            if n_model == 1:
+                parts.append(
+                    f"@Image{start_idx} = character-sheet reference for the lead character look"
+                )
+            else:
+                parts.append(
+                    f"@Image{start_idx}–@Image{end_idx} = character-sheet references for the lead character look"
+                )
+        elif n_model == 1:
             parts.append(
                 f"@Image{start_idx} = character identity via reference sheet(s) — bind face/body/hair in the API; "
                 "do not catalog facial identity in prompt prose"
@@ -609,6 +630,7 @@ async def grok_expand_seedance_t2v_prompt(
     duration_seconds: int = 5,
     max_chars: int | None = None,
     credentials: StudioOpenAiCredentials | None = None,
+    soft_identity: bool = False,
 ) -> str:
     """
     Разворачивает краткий запрос пользователя в кинематографический промпт Seedance T2V
@@ -631,6 +653,7 @@ async def grok_expand_seedance_t2v_prompt(
                 n_model_images,
                 n_outfit_images,
                 n_start_frame=n_start_frame,
+                soft=soft_identity,
             )
         )
     if n_motion_videos > 0:
@@ -643,11 +666,17 @@ async def grok_expand_seedance_t2v_prompt(
                 if n_model_images == 1
                 else f"@Image{start_idx}–@Image{end_idx}"
             )
-        ref_lines.append(
-            "@Video1 = motion / pacing / body dynamics ONLY (timing, gestures, camera — "
-            "NEVER copy the reference video performer's face or body)"
-            + (f"; appearance stays from {id_tags}" if id_tags else "")
-        )
+        if soft_identity:
+            ref_lines.append(
+                "@Video1 = motion / pacing / gestures reference"
+                + (f"; on-screen character matches {id_tags}" if id_tags else "")
+            )
+        else:
+            ref_lines.append(
+                "@Video1 = motion / pacing / body dynamics ONLY (timing, gestures, camera — "
+                "NEVER copy the reference video performer's face or body)"
+                + (f"; appearance stays from {id_tags}" if id_tags else "")
+            )
     ref_block = "\n".join(ref_lines) if ref_lines else "No reference tags (text-only scene)."
 
     profile = _compact_model_profile_for_video_grok((model_profile_text or "").strip())
@@ -669,9 +698,10 @@ async def grok_expand_seedance_t2v_prompt(
         if settings.studio_seedance_grok_prompt_zh
         else "English"
     )
+    guard = _VIDEO_IDENTITY_GUARD_SOFT_EN if soft_identity else _VIDEO_IDENTITY_GUARD_EN
     user_instruction = (
         f"You write a single Seedance 2.0 Text-to-Video prompt in {output_lang}.\n\n"
-        f"{_VIDEO_IDENTITY_GUARD_EN}\n\n"
+        f"{guard}\n\n"
         f"USER_BRIEF (any language — interpret intent):\n{brief}\n\n"
         f"REFERENCE_TAG_RULES (order matches API reference_images / reference_videos arrays):\n{ref_block}\n\n"
         f"TARGET_MODEL_PROFILE (context only — do not copy face_features into output):\n{profile_block}\n\n"
@@ -681,19 +711,32 @@ async def grok_expand_seedance_t2v_prompt(
         "RULES:\n"
         "1) Output ONLY the final video prompt text — no preamble, no markdown fences.\n"
         f"2) Hard limit: entire output MUST be at most {lim} characters.\n"
-        "3) Use @Image tags exactly as assigned: @Image1 = opening still only; "
-        "face/body/hair identity ONLY from the model @Image tag range — repeat those @Image numbers "
-        "at least twice in the prompt (never vague \"model references\" without @Image numbers).\n"
-        "4) @Video1 is attached for motion/choreography ONLY — follow its timing and gestures but "
-        "NEVER adopt the reference video performer's face, body, hair, or skin; identity stays on model @Image tags "
-        "for the ENTIRE clip including after 2–3 seconds.\n"
-        "5) Wardrobe at t=0 comes from @Image1 and USER_BRIEF.\n"
-        "6) Include camera, lighting, mood, environment, wardrobe, and body choreography with director-level detail; "
-        "keep one continuous scene for the clip duration.\n"
-        "7) Do not invent extra @Image or @Video tags beyond the ranges given.\n"
-        "8) Never output detailed facial identity lists in prose — bind identity only via explicit @Image tag numbers.\n"
-        "9) If USER_BRIEF or MOTION_NOTES contain `[t s]` timelines, keep timing but compress any face lines to motion-only tokens.\n"
     )
+    if soft_identity:
+        user_instruction += (
+            "3) Mention @Image tag numbers once or twice in natural cinematic prose — "
+            "do not repeat aggressive identity-lock paragraphs.\n"
+            "4) @Video1 supplies timing and body movement; the lead character look comes from the character-sheet @Image tag.\n"
+            "5) Wardrobe at t=0 follows @Image1 and USER_BRIEF.\n"
+            "6) Include camera, lighting, mood, environment, wardrobe, and choreography with director-level detail.\n"
+            "7) Do not invent extra @Image or @Video tags beyond the ranges given.\n"
+            "8) No facial feature catalogs, no swap/replace-performer wording.\n"
+        )
+    else:
+        user_instruction += (
+            "3) Use @Image tags exactly as assigned: @Image1 = opening still only; "
+            "face/body/hair identity ONLY from the model @Image tag range — repeat those @Image numbers "
+            "at least twice in the prompt (never vague \"model references\" without @Image numbers).\n"
+            "4) @Video1 is attached for motion/choreography ONLY — follow its timing and gestures but "
+            "NEVER adopt the reference video performer's face, body, hair, or skin; identity stays on model @Image tags "
+            "for the ENTIRE clip including after 2–3 seconds.\n"
+            "5) Wardrobe at t=0 comes from @Image1 and USER_BRIEF.\n"
+            "6) Include camera, lighting, mood, environment, wardrobe, and body choreography with director-level detail; "
+            "keep one continuous scene for the clip duration.\n"
+            "7) Do not invent extra @Image or @Video tags beyond the ranges given.\n"
+            "8) Never output detailed facial identity lists in prose — bind identity only via explicit @Image tag numbers.\n"
+            "9) If USER_BRIEF or MOTION_NOTES contain `[t s]` timelines, keep timing but compress any face lines to motion-only tokens.\n"
+        )
     if settings.studio_seedance_grok_prompt_zh:
         user_instruction += (
             "10) Write the entire prompt body in Simplified Chinese. "

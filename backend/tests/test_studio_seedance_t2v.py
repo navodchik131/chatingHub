@@ -162,6 +162,32 @@ def test_wavespeed_sensitive_detector():
     assert not wavespeed_is_sensitive_content_error("Insufficient credits")
 
 
+def test_append_identity_lock_soft_single_block():
+    out = append_seedance_identity_lock(
+        "Cinematic scene.",
+        n_start_frame=1,
+        n_model_images=2,
+        n_motion_videos=1,
+        soft=True,
+    )
+    assert "@Image2" in out
+    assert out.count("One lead character") == 1
+    assert out.count("Same character") == 0
+
+
+def test_assemble_soft_identity_prompt():
+    p = assemble_seedance_t2v_prompt(
+        "She dances.",
+        n_start_frame=1,
+        n_model_images=1,
+        n_motion_videos=1,
+        soft_identity=True,
+    )
+    assert "reference video actor" not in p.lower()
+    assert "lead character" in p.lower()
+    assert p.count("One lead character") <= 1
+
+
 def test_append_workflow_face_grid_removal():
     out = append_workflow_face_grid_removal("Scene.", language="en")
     assert "grid" in out.lower()

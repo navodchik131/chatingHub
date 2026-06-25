@@ -193,12 +193,19 @@ _IDENTITY_NEGATIVE_DEFAULTS = (
     "wrong face, actor from reference video"
 )
 
-_WORKFLOW_FACE_GRID_REMOVAL_EN = (
-    "Remove the white guide grid overlay from the face in every frame; "
-    "keep natural skin texture and the same character identity from the reference images."
+_IDENTITY_NEGATIVE_SOFT = (
+    "morphing face, character swap mid-clip, inconsistent look, flickering features"
 )
 
-_WORKFLOW_FACE_GRID_REMOVAL_ZH = "每一帧都要去掉脸上的白色参考网格线，保留自然肤色和参考图里的同一角色外观。"
+_WORKFLOW_FACE_GRID_REMOVAL_EN = (
+    "If reference stills show a white layout grid on the face, do not reproduce it in the video — "
+    "render a clean natural finish while keeping the same lead character from the character-sheet reference."
+)
+
+_WORKFLOW_FACE_GRID_REMOVAL_ZH = (
+    "参考图若脸部有白色辅助网格，成片不要保留网格线，呈现自然肤质，"
+    "并保持与角色参考图一致的主角外观。"
+)
 
 
 def append_workflow_face_grid_removal(prompt: str, *, language: str = "en") -> str:
@@ -206,7 +213,7 @@ def append_workflow_face_grid_removal(prompt: str, *, language: str = "en") -> s
     body = (prompt or "").strip()
     if not body:
         return line
-    if line.lower() in body.lower():
+    if "white layout grid" in body.lower() or "白色辅助网格" in body:
         return body
     return f"{body}\n\n{line}".strip()
 
@@ -217,7 +224,28 @@ def _seedance_identity_lock_block(
     n_start_frame: int,
     n_motion_videos: int,
     language: str = "en",
+    soft: bool = False,
 ) -> str:
+    if soft:
+        if language == "zh":
+            lines = [f"整段保持同一主角，外观以 {tags} 为准。"]
+            if n_start_frame > 0:
+                lines.append("@Image1 仅作开场画面（姿势、场景、光线、服装）。")
+            if n_motion_videos > 0:
+                vtags = ", ".join(f"@Video{i}" for i in range(1, n_motion_videos + 1))
+                lines.append(f"{vtags} 提供动作与节奏参考。")
+            return " ".join(lines)
+
+        lines = [f"One lead character for the full clip; look aligned with {tags}."]
+        if n_start_frame > 0:
+            lines.append(
+                "@Image1 sets the opening shot (pose, scene, lighting, wardrobe)."
+            )
+        if n_motion_videos > 0:
+            vtags = ", ".join(f"@Video{i}" for i in range(1, n_motion_videos + 1))
+            lines.append(f"{vtags} guides motion and pacing.")
+        return " ".join(lines)
+
     if language == "zh":
         lines = [
             f"整段视频保持同一角色——外观参照 {tags}。",
@@ -260,9 +288,10 @@ def append_seedance_identity_lock(
     n_motion_videos: int,
     max_chars: int | None = None,
     language: str = "en",
+    soft: bool = False,
 ) -> str:
     """
-    Жёсткий lock до и после тела промпта: Seedance привязывает identity только к явным @ImageN.
+    Lock до/после тела промпта (standard) или одна мягкая строка в конце (soft / workflow).
     """
     lim = max_chars if max_chars is not None else settings.studio_seedance_t2v_prompt_max_chars
     tags = seedance_model_identity_tag_expr(n_start_frame, n_model_images)
@@ -273,9 +302,13 @@ def append_seedance_identity_lock(
         n_start_frame=n_start_frame,
         n_motion_videos=n_motion_videos,
         language=language,
+        soft=soft,
     )
     body = (prompt or "").strip()
-    combined = f"{lock}\n\n{body}\n\n{lock}".strip()
+    if soft:
+        combined = f"{body}\n\n{lock}".strip() if body else lock
+    else:
+        combined = f"{lock}\n\n{body}\n\n{lock}".strip()
     return truncate_seedance_t2v_prompt(combined, max_chars=lim)
 
 
@@ -297,23 +330,35 @@ def assemble_seedance_t2v_prompt(
     n_motion_videos: int = 0,
     motion_summary: str | None = None,
     negative: str | None = None,
+    soft_identity: bool = False,
 ) -> str:
     """
     Собирает промпт с метками @ImageN / @VideoN (порядок = порядок в reference_* массивах).
-    При n_start_frame=1: @Image1 — opening still; @Image2+ — identity модели.
+    При n_start_frame=1: @Image1 — opening still; @Image2+ — character sheet refs.
     """
     parts: list[str] = []
     identity_tags = seedance_model_identity_tag_expr(n_start_frame, n_model_images)
     if identity_tags:
-        parts.append(
-            f"One consistent character — appearance from {identity_tags}."
-        )
+        if soft_identity:
+            parts.append(
+                f"Cinematic clip with one lead character; appearance aligned with {identity_tags}."
+            )
+        else:
+            parts.append(
+                f"One consistent character — appearance from {identity_tags}."
+            )
     if n_start_frame > 0:
         if identity_tags:
-            parts.append(
-                "@Image1 — opening frame at t=0 (pose, scene, lighting, camera, wardrobe). "
-                f"Character look from {identity_tags}."
-            )
+            if soft_identity:
+                parts.append(
+                    "@Image1 — opening shot at t=0 (pose, scene, lighting, wardrobe). "
+                    f"Character look from {identity_tags}."
+                )
+            else:
+                parts.append(
+                    "@Image1 — opening frame at t=0 (pose, scene, lighting, camera, wardrobe). "
+                    f"Character look from {identity_tags}."
+                )
         else:
             parts.append(
                 "@Image1 — opening frame at t=0 (pose, scene, lighting, camera, wardrobe)."
@@ -328,10 +373,16 @@ def assemble_seedance_t2v_prompt(
     if n_motion_videos > 0:
         vtags = ", ".join(f"@Video{i}" for i in range(1, n_motion_videos + 1))
         if identity_tags:
-            parts.append(
-                f"Motion and pacing from {vtags}; "
-                f"character appearance from {identity_tags}."
-            )
+            if soft_identity:
+                parts.append(
+                    f"Motion and pacing from {vtags}; "
+                    f"on-screen character matches {identity_tags}."
+                )
+            else:
+                parts.append(
+                    f"Motion and pacing from {vtags}; "
+                    f"character appearance from {identity_tags}."
+                )
         else:
             parts.append(f"Motion and pacing from {vtags} only (timing, gestures, camera).")
     if motion_summary and motion_summary.strip():
@@ -341,7 +392,7 @@ def assemble_seedance_t2v_prompt(
         parts.append(up)
     neg_parts: list[str] = []
     if identity_tags:
-        neg_parts.append(_IDENTITY_NEGATIVE_DEFAULTS)
+        neg_parts.append(_IDENTITY_NEGATIVE_SOFT if soft_identity else _IDENTITY_NEGATIVE_DEFAULTS)
     neg = (negative or "").strip()
     if neg:
         neg_parts.append(neg)
@@ -357,6 +408,7 @@ def assemble_seedance_t2v_prompt(
         n_start_frame=n_start_frame,
         n_model_images=n_model_images,
         n_motion_videos=n_motion_videos,
+        soft=soft_identity,
     )
 
 
@@ -383,6 +435,7 @@ async def build_seedance_t2v_prompt(
     duration_seconds: int = 5,
     force_template: bool = False,
     remove_face_grid: bool = False,
+    soft_identity: bool = False,
 ) -> tuple[str, str]:
     """
     Grok (если настроен) → иначе шаблон. Возвращает (prompt, source: grok|template).
@@ -394,6 +447,7 @@ async def build_seedance_t2v_prompt(
 
     lim = settings.studio_seedance_t2v_prompt_max_chars
     safe_motion = prepare_motion_notes_for_seedance(motion_summary)
+    use_soft = soft_identity or remove_face_grid
     if not force_template and grok_motion_api_configured():
         try:
             p = await grok_expand_seedance_t2v_prompt(
@@ -408,6 +462,7 @@ async def build_seedance_t2v_prompt(
                 output_aspect=output_aspect,
                 duration_seconds=duration_seconds,
                 max_chars=lim,
+                soft_identity=use_soft,
             )
             lock_lang = "zh" if settings.studio_seedance_grok_prompt_zh else "en"
             locked = append_seedance_identity_lock(
@@ -417,6 +472,7 @@ async def build_seedance_t2v_prompt(
                 n_motion_videos=n_motion_videos,
                 max_chars=lim,
                 language=lock_lang,
+                soft=use_soft,
             )
             if remove_face_grid:
                 locked = append_workflow_face_grid_removal(locked, language=lock_lang)
@@ -432,6 +488,7 @@ async def build_seedance_t2v_prompt(
         n_motion_videos=n_motion_videos,
         motion_summary=safe_motion,
         negative=negative,
+        soft_identity=use_soft,
     )
     if remove_face_grid:
         p = append_workflow_face_grid_removal(p, language="en")
