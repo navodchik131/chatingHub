@@ -251,11 +251,26 @@ function FirstFrameGenerationNodeComponent({ id, data }: NodeProps) {
           className="workflow-node__handle-label workflow-node__handle-label--left"
           style={{ top: '60%' }}
         >
-          references
+          ref (опц.)
+        </span>
+
+        <Handle
+          id={HandleIds.motionVideoIn}
+          type="target"
+          position={Position.Left}
+          className="workflow-handle workflow-handle--motion"
+          style={{ top: '74%' }}
+        />
+        <span
+          className="workflow-node__handle-label workflow-node__handle-label--left"
+          style={{ top: '74%' }}
+        >
+          motion
         </span>
 
         <p className="workflow-node__hint">
-          Первый кадр сцены (Wan / Nano Banana). GPT Image 2 — только в ноде «Развёртка».
+          Первый кадр: из motion-видео (как в студии), готовый кадр в «Референс» (опц.)
+          или генерация по модели и промпту.
         </p>
 
         <div className="workflow-gen-form">

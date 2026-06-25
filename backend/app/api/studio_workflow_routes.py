@@ -396,6 +396,16 @@ async def api_workflow_execute(
                     raise HTTPException(status_code=400, detail=str(e)) from e
                 loaded_refs.append((ref_bytes, ref_mime, ref_item))
 
+            if target_type == "firstFrameGeneration" and (
+                plan.motion_video_file_id or loaded_refs
+            ):
+                return await _accept_workflow_motion_first_frame_job(
+                    session,
+                    user,
+                    plan=plan,
+                    reference_images=loaded_refs,
+                )
+
             from app.api.studio_routes import _accept_studio_refine_job_from_workflow
 
             return await _accept_studio_refine_job_from_workflow(
@@ -435,6 +445,107 @@ async def api_workflow_execute(
             status_code=500,
             detail=f"Не удалось запустить генерацию: {e}",
         ) from e
+
+
+async def _accept_workflow_motion_first_frame_job(
+    session: AsyncSession,
+    user: User,
+    *,
+    plan,
+    reference_images: list[tuple[bytes, str, Any]],
+) -> JSONResponse:
+    from app.api.studio_routes import grok_scene_compose_configured, normalize_exif_camera
+    from app.services.studio_aspect import normalize_aspect_key
+    from app.services.studio_generation_placeholders import reserve_studio_generation_for_job
+    from app.services.studio_jobs import create_studio_job, schedule_studio_job, update_studio_job_params
+    from app.services import studio_jobs
+
+    if not grok_scene_compose_configured():
+        raise HTTPException(
+            status_code=503,
+            detail="Grok не настроен: задайте GROK_API_KEY в .env на сервере.",
+        )
+    assert_permission(user, PERM_STUDIO_GENERATE)
+    oid = workspace_owner_id(user)
+
+    if plan.model_id is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Для первого кадра из видео или референса выберите модель в ноде «Модель»",
+        )
+
+    for ref_bytes, _ref_mime, ref_item in reference_images:
+        from app.api.studio_routes import MAX_IMAGE_BYTES
+
+        if len(ref_bytes) > MAX_IMAGE_BYTES:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Референс «{ref_item.file_name or ref_item.ref_id}» слишком большой "
+                    f"(макс. {MAX_IMAGE_BYTES // (1024 * 1024)} МБ)"
+                ),
+            )
+
+    try:
+        aspect_reserve = normalize_aspect_key(plan.output_aspect)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    motion_id = str(plan.motion_video_file_id or "").strip()
+    params: dict[str, Any] = {
+        "model_id": str(plan.model_id),
+        "description": plan.description,
+        "output_aspect": plan.output_aspect,
+        "wan_edit_tier": plan.wan_edit_tier,
+        "studio_wave_profile": plan.studio_wave_profile,
+        "auto_motion_prompt": "1" if motion_id else "0",
+        "lock_model_hairstyle": "1",
+        "use_still_as_final": "0",
+        "exif_camera": normalize_exif_camera(plan.exif_camera),
+        "workflow_source": "1",
+    }
+    if motion_id:
+        params["motion_video_file_id"] = motion_id
+
+    job = await create_studio_job(
+        session,
+        owner_id=oid,
+        actor_user_id=user.id,
+        job_type="motion_first_frame",
+        params=params,
+    )
+
+    if reference_images:
+        ref_bytes, ref_mime, _ref_item = reference_images[0]
+        params["first_frame_path"] = studio_jobs.save_studio_job_file(
+            job.id, "first_frame.bin", ref_bytes
+        )
+        params["first_frame_mime"] = (ref_mime or "image/jpeg").split(";")[0].strip()
+
+    await update_studio_job_params(session, job, params)
+
+    gen_row = await reserve_studio_generation_for_job(
+        session,
+        owner_id=oid,
+        studio_job_id=job.id,
+        studio_model_id=plan.model_id,
+        output_aspect=aspect_reserve,
+        content_type="image/png",
+        prompt_excerpt=(plan.description or "")[:2000] or None,
+        exif_camera=normalize_exif_camera(plan.exif_camera),
+    )
+    params["placeholder_generation_id"] = gen_row.id
+    await update_studio_job_params(session, job, params)
+
+    schedule_studio_job(job.id)
+    return JSONResponse(
+        status_code=202,
+        content=StudioJobAcceptedOut(
+            job_id=job.id,
+            job_type="motion_first_frame",
+            generation_id=gen_row.id,
+        ).model_dump(),
+    )
 
 
 async def _accept_workflow_turnaround_job(

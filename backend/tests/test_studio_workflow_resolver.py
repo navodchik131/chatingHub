@@ -348,3 +348,88 @@ def test_resolve_video_plan():
     assert plan.sheet_generation_id == 20
     assert plan.motion_video_file_id == "mv1"
     assert plan.seedance_variant == "mini"
+
+
+def test_first_frame_motion_without_reference():
+    g = {
+        "nodes": [
+            {"id": "model-1", "type": "model", "data": {"modelId": 7}},
+            {"id": "prompt-1", "type": "prompt", "data": {"prompt": "Dancing in studio"}},
+            {"id": "mv-1", "type": "motionVideo", "data": {"motionVideoFileId": "mv-workflow"}},
+            {
+                "id": "ff-1",
+                "type": "firstFrameGeneration",
+                "data": {"waveModelId": "nano-banana-pro", "nsfwEnabled": False},
+            },
+            {"id": "ref-empty", "type": "reference", "data": {}},
+        ],
+        "edges": [
+            {"source": "model-1", "target": "ff-1", "targetHandle": "model-in"},
+            {"source": "prompt-1", "target": "ff-1", "targetHandle": "prompt-in"},
+            {
+                "source": "mv-1",
+                "target": "ff-1",
+                "sourceHandle": "motion-video-out",
+                "targetHandle": "motion-video-in",
+            },
+            {"source": "ref-empty", "target": "ff-1", "targetHandle": "reference-in"},
+        ],
+    }
+    plan = resolve_workflow_generation_plan(
+        target_node_id="ff-1",
+        nodes=g["nodes"],
+        edges=g["edges"],
+    )
+    assert plan.motion_video_file_id == "mv-workflow"
+    assert plan.references == ()
+    assert plan.model_id == 7
+
+
+def test_first_frame_model_prompt_without_reference():
+    g = {
+        "nodes": [
+            {"id": "model-1", "type": "model", "data": {"modelId": 3}},
+            {"id": "prompt-1", "type": "prompt", "data": {"prompt": "Sunset beach walk"}},
+            {
+                "id": "ff-1",
+                "type": "firstFrameGeneration",
+                "data": {"waveModelId": "nano-banana-pro", "nsfwEnabled": False},
+            },
+        ],
+        "edges": [
+            {"source": "model-1", "target": "ff-1", "targetHandle": "model-in"},
+            {"source": "prompt-1", "target": "ff-1", "targetHandle": "prompt-in"},
+        ],
+    }
+    plan = resolve_workflow_generation_plan(
+        target_node_id="ff-1",
+        nodes=g["nodes"],
+        edges=g["edges"],
+    )
+    assert plan.motion_video_file_id == ""
+    assert plan.references == ()
+    assert plan.model_id == 3
+    assert "Sunset beach walk" in plan.description
+
+
+def test_first_frame_motion_requires_model():
+    g = {
+        "nodes": [
+            {"id": "mv-1", "type": "motionVideo", "data": {"motionVideoFileId": "mv1"}},
+            {"id": "ff-1", "type": "firstFrameGeneration", "data": {}},
+        ],
+        "edges": [
+            {
+                "source": "mv-1",
+                "target": "ff-1",
+                "sourceHandle": "motion-video-out",
+                "targetHandle": "motion-video-in",
+            },
+        ],
+    }
+    with pytest.raises(WorkflowResolutionError, match="модель"):
+        resolve_workflow_generation_plan(
+            target_node_id="ff-1",
+            nodes=g["nodes"],
+            edges=g["edges"],
+        )

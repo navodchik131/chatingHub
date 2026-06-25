@@ -2280,8 +2280,11 @@ async def _accept_studio_refine_job_from_workflow(
     assert_permission(user, PERM_STUDIO_GENERATE)
     oid = workspace_owner_id(user)
 
-    if not reference_images:
-        raise HTTPException(status_code=400, detail="Нет референсов для генерации")
+    if not reference_images and plan.model_id is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Подключите референс, motion-видео или выберите модель с промптом",
+        )
 
     for ref_bytes, _ref_mime, ref_item in reference_images:
         if len(ref_bytes) > MAX_IMAGE_BYTES:
@@ -2298,20 +2301,27 @@ async def _accept_studio_refine_job_from_workflow(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 
-    primary_bytes, primary_mime, _primary_ref = reference_images[0]
+    primary_bytes, primary_mime, _primary_ref = (
+        reference_images[0] if reference_images else (b"", "", None)
+    )
     _ = primary_bytes, primary_mime
+
+    if reference_images:
+        studio_mode = "model_scene" if plan.model_id is not None else "no_face"
+    else:
+        studio_mode = "model"
 
     params: dict[str, Any] = {
         "description": plan.description,
         "model_id": str(plan.model_id) if plan.model_id is not None else "",
         "existing_generation_id": "",
         "output_aspect": plan.output_aspect,
-        "studio_mode": "model_scene" if plan.model_id is not None else "no_face",
+        "studio_mode": studio_mode,
         "wan_edit_tier": plan.wan_edit_tier,
         "studio_wave_profile": plan.studio_wave_profile,
         "generate_wavespeed": "1",
-        "wavespeed_single_reference": "1",
-        "send_pose_reference_to_wavespeed": "1",
+        "wavespeed_single_reference": "1" if reference_images else "0",
+        "send_pose_reference_to_wavespeed": "1" if reference_images else "0",
         "lock_model_hairstyle": "0",
         "exif_camera": normalize_exif_camera(plan.exif_camera),
         "include_realism_engine": "1" if plan.realism_enabled else "0",
@@ -2341,9 +2351,10 @@ async def _accept_studio_refine_job_from_workflow(
             }
         )
 
-    params["workflow_refs"] = workflow_refs_meta
-    params["image_path"] = workflow_refs_meta[0]["path"]
-    params["image_mime"] = workflow_refs_meta[0]["mime"]
+    if workflow_refs_meta:
+        params["workflow_refs"] = workflow_refs_meta
+        params["image_path"] = workflow_refs_meta[0]["path"]
+        params["image_mime"] = workflow_refs_meta[0]["mime"]
     await studio_jobs.update_studio_job_params(session, job, params)
 
     gen_row = await reserve_studio_generation_for_job(
@@ -3774,6 +3785,23 @@ async def _studio_job_execute_motion_first_frame(
         gen_arch_row, first_frame, first_frame_media = await _load_owned_generation_still_for_motion(
             session, owner_id=oid, generation_id=existing_gid, actor=user
         )
+    elif str(p.get("motion_video_file_id") or "").strip():
+        motion_video_file_id = str(p["motion_video_file_id"]).strip()
+        video_path = resolve_motion_video_file(oid, motion_video_file_id)
+        if video_path is None:
+            raise RuntimeError("Motion-видео не найдено — загрузите файл в ноду «Motion-видео».")
+        try:
+            first_frame = await anyio.to_thread.run_sync(
+                lambda vp=video_path: extract_first_frame_jpeg(vp)
+            )
+        except Exception as e:
+            log.warning("motion first frame ffmpeg (workflow): %s", e)
+            raise RuntimeError(
+                "Не удалось прочитать видео. Нужен MP4/WebM/MOV и ffmpeg на сервере."
+            ) from e
+        if len(first_frame) < 64:
+            raise RuntimeError("Не удалось извлечь кадр из видео.")
+        first_frame_media = "image/jpeg"
     else:
         raise RuntimeError(
             "Загрузите референс-видео, файл первого кадра или выберите снимок из архива."

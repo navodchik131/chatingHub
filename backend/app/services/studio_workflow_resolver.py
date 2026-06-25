@@ -46,6 +46,7 @@ class WorkflowGenerationPlan:
     wan_edit_tier: str
     exif_camera: str
     realism_enabled: bool
+    motion_video_file_id: str = ""
 
     @property
     def reference_ref_id(self) -> str:
@@ -482,8 +483,7 @@ def resolve_workflow_generation_plan(
             raise WorkflowResolutionError("Выберите модель в ноде «Модель»")
 
     ref_nodes = _sources_for_target(target_id, HANDLE["gen_reference_in"], edges, node_map)
-    if not ref_nodes:
-        raise WorkflowResolutionError("Подключите хотя бы одну ноду «Референс» к входу reference")
+    is_first_frame = str(target.get("type") or "") == "firstFrameGeneration"
 
     references: list[WorkflowReferenceItem] = []
     for ref_node in ref_nodes:
@@ -492,6 +492,8 @@ def resolve_workflow_generation_plan(
         ref_data = ref_node.get("data") if isinstance(ref_node.get("data"), dict) else {}
         ref_id = str(ref_data.get("refId") or "").strip()
         if not ref_id:
+            if is_first_frame:
+                continue
             raise WorkflowResolutionError("Загрузите изображение во все подключённые ноды «Референс»")
         ref_role, ref_description = _reference_description_for_node(ref_node, edges, node_map)
         references.append(
@@ -503,6 +505,24 @@ def resolve_workflow_generation_plan(
                 node_id=str(ref_node.get("id") or "").strip(),
             )
         )
+
+    motion_video_file_id = ""
+    if is_first_frame:
+        motion_nodes = _sources_for_target(target_id, HANDLE["motion_video_in"], edges, node_map)
+        if motion_nodes:
+            mnode = motion_nodes[0]
+            if str(mnode.get("type") or "") != "motionVideo":
+                raise WorkflowResolutionError(
+                    "К входу motion video можно подключить только ноду «Motion-видео»"
+                )
+            mdata = mnode.get("data") if isinstance(mnode.get("data"), dict) else {}
+            motion_video_file_id = str(mdata.get("motionVideoFileId") or "").strip()
+        if not motion_video_file_id:
+            motion_video_file_id = str(gen_data.get("motionVideoFileId") or "").strip()
+    elif not ref_nodes:
+        raise WorkflowResolutionError("Подключите хотя бы одну ноду «Референс» к входу reference")
+    elif not references:
+        raise WorkflowResolutionError("Загрузите изображение во все подключённые ноды «Референс»")
 
     sorted_refs = sort_workflow_references(references)
 
@@ -516,7 +536,35 @@ def resolve_workflow_generation_plan(
     has_ref_context = any(
         (r.role or "").strip() or (r.description or "").strip() for r in sorted_refs
     )
-    if model_id is None and not (prompt_text.strip() or has_ref_context):
+    if is_first_frame:
+        if (
+            not references
+            and not motion_video_file_id
+            and model_id is None
+            and not prompt_text.strip()
+        ):
+            raise WorkflowResolutionError(
+                "Подключите motion-видео, загрузите кадр в «Референс», "
+                "или укажите модель и промпт"
+            )
+        if not references and not motion_video_file_id and model_id is None:
+            raise WorkflowResolutionError(
+                "Без motion-видео и референса выберите модель в ноде «Модель»"
+            )
+        if (references or motion_video_file_id) and model_id is None:
+            raise WorkflowResolutionError(
+                "Для первого кадра из видео или референса выберите модель в ноде «Модель»"
+            )
+        if (
+            not references
+            and not motion_video_file_id
+            and model_id is not None
+            and not prompt_text.strip()
+        ):
+            raise WorkflowResolutionError(
+                "Добавьте промпт для генерации первого кадра по модели"
+            )
+    elif model_id is None and not (prompt_text.strip() or has_ref_context):
         raise WorkflowResolutionError(
             "Без модели из кабинета добавьте промпт или описание референса"
         )
@@ -573,4 +621,5 @@ def resolve_workflow_generation_plan(
         wan_edit_tier=wan_tier,
         exif_camera=exif_camera,
         realism_enabled=realism_enabled,
+        motion_video_file_id=motion_video_file_id,
     )

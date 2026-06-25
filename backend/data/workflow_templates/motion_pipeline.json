@@ -20,12 +20,6 @@
         }
       },
       {
-        "id": "ref-pose",
-        "type": "reference",
-        "position": { "x": 80, "y": 420 },
-        "data": {}
-      },
-      {
         "id": "first-frame",
         "type": "firstFrameGeneration",
         "position": { "x": 420, "y": 200 },
@@ -95,11 +89,11 @@
         "targetHandle": "prompt-in"
       },
       {
-        "id": "e-ref-ff",
-        "source": "ref-pose",
+        "id": "e-motion-ff",
+        "source": "motion-ref",
         "target": "first-frame",
-        "sourceHandle": "reference-out",
-        "targetHandle": "reference-in"
+        "sourceHandle": "motion-video-out",
+        "targetHandle": "motion-video-in"
       },
       {
         "id": "e-ff-preview",
