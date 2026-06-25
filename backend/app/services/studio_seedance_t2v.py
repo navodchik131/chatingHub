@@ -39,6 +39,25 @@ _MOTION_NOTE_BANNED_SUBSTRINGS = (
     "identity catalog",
 )
 
+_WORKFLOW_GENERIC_USER_BRIEF_MARKERS = (
+    "опишите сцену",
+    "describe the scene",
+    "lighting and movement",
+    "освещение и движение",
+)
+
+
+def seedance_optional_user_notes(text: str | None) -> str | None:
+    """Пропускает пустой/placeholder USER_BRIEF — для reference-only промпта."""
+    s = (text or "").strip()
+    if not s:
+        return None
+    low = s.lower()
+    if any(m in low for m in _WORKFLOW_GENERIC_USER_BRIEF_MARKERS):
+        return None
+    return s
+
+
 _PROVIDER_PROMPT_REPLACEMENTS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"\bface/body/hair\b", re.I), "character"),
     (re.compile(r"\bfacial identity\b", re.I), "appearance"),
@@ -412,6 +431,75 @@ def assemble_seedance_t2v_prompt(
     )
 
 
+def assemble_seedance_t2v_reference_prompt(
+    *,
+    n_start_frame: int = 0,
+    n_model_images: int,
+    n_outfit_images: int = 0,
+    n_motion_videos: int = 0,
+    output_aspect: str | None = None,
+    duration_seconds: int = 5,
+    negative: str | None = None,
+    user_notes: str | None = None,
+) -> str:
+    """
+    Фиксированный Seedance T2V промпт только по @Image/@Video — без выдуманной сцены.
+    @Image1 = первый кадр (среда, поза, свет, одежда); model @Image = развёртка; @Video = motion.
+    """
+    aspect = (output_aspect or "9:16").strip() or "9:16"
+    dur = max(4, int(duration_seconds or 5))
+    identity_tags = seedance_model_identity_tag_expr(n_start_frame, n_model_images)
+
+    parts: list[str] = [
+        (
+            f"Cinematic {dur}-second video, {aspect} aspect ratio, smooth camera, "
+            "natural performance, film-grade lighting, native audio."
+        ),
+    ]
+    if n_start_frame > 0:
+        parts.append(
+            "Opening frame at t=0: match @Image1 exactly — same pose, scene, environment, "
+            "background, lighting, wardrobe, and framing. "
+            "Do not invent a different location, weather, or time of day."
+        )
+    if identity_tags:
+        parts.append(f"Lead character for the full clip: appearance from {identity_tags}.")
+    if n_outfit_images > 0:
+        start = 1 + n_start_frame + n_model_images
+        for j in range(n_outfit_images):
+            parts.append(f"Wardrobe: match @Image{start + j}.")
+    elif n_start_frame > 0:
+        parts.append("Wardrobe at t=0: match @Image1.")
+    if n_motion_videos > 0:
+        vtags = ", ".join(f"@Video{i}" for i in range(1, n_motion_videos + 1))
+        parts.append(
+            f"Motion, pacing, gestures, body dynamics, and camera movement from {vtags} only. "
+            f"Audio rhythm and ambient sound follow {vtags}."
+        )
+    notes = (user_notes or "").strip()
+    if notes:
+        parts.append(f"Additional notes: {notes}")
+
+    neg_parts: list[str] = [_IDENTITY_NEGATIVE_SOFT]
+    neg = (negative or "").strip()
+    if neg:
+        neg_parts.append(neg)
+    neg_parts.append(
+        "invented environment, different location, urban street, rain, night city, "
+        "weather or backdrop mismatch with @Image1"
+    )
+    parts.append(f"Avoid: {'; '.join(neg_parts)}")
+
+    body = soften_seedance_provider_prompt("\n\n".join(parts))
+    return append_seedance_identity_lock(
+        body,
+        n_start_frame=n_start_frame,
+        n_model_images=n_model_images,
+        n_motion_videos=n_motion_videos,
+        soft=True,
+    )
+
+
 def truncate_seedance_t2v_prompt(text: str, *, max_chars: int | None = None) -> str:
     lim = max_chars if max_chars is not None else settings.studio_seedance_t2v_prompt_max_chars
     s = (text or "").strip()
@@ -434,11 +522,13 @@ async def build_seedance_t2v_prompt(
     output_aspect: str | None = None,
     duration_seconds: int = 5,
     force_template: bool = False,
+    reference_only: bool = False,
     remove_face_grid: bool = False,
     soft_identity: bool = False,
 ) -> tuple[str, str]:
     """
-    Grok (если настроен) → иначе шаблон. Возвращает (prompt, source: grok|template).
+    Grok (если настроен) → иначе шаблон. Возвращает (prompt, source: grok|template|reference_template).
+    reference_only: фиксированный промпт по @Image/@Video без Grok и без motion_notes в тексте.
     """
     from app.services.studio_grok_motion import (
         grok_expand_seedance_t2v_prompt,
@@ -446,6 +536,23 @@ async def build_seedance_t2v_prompt(
     )
 
     lim = settings.studio_seedance_t2v_prompt_max_chars
+    lock_lang = "zh" if settings.studio_seedance_grok_prompt_zh else "en"
+
+    if reference_only:
+        p = assemble_seedance_t2v_reference_prompt(
+            n_start_frame=n_start_frame,
+            n_model_images=n_model_images,
+            n_outfit_images=n_outfit_images,
+            n_motion_videos=n_motion_videos,
+            output_aspect=output_aspect,
+            duration_seconds=duration_seconds,
+            negative=negative,
+            user_notes=seedance_optional_user_notes(user_brief),
+        )
+        if remove_face_grid:
+            p = append_workflow_face_grid_removal(p, language=lock_lang)
+        return (truncate_seedance_t2v_prompt(p, max_chars=lim), "reference_template")
+
     safe_motion = prepare_motion_notes_for_seedance(motion_summary)
     use_soft = soft_identity or remove_face_grid
     if not force_template and grok_motion_api_configured():

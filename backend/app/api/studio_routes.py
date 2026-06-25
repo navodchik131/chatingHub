@@ -4556,7 +4556,7 @@ async def _studio_job_execute_motion_render_video(
         "yes",
     )
 
-    if not prompt.strip():
+    if not prompt.strip() and not workflow_source:
         raise RuntimeError("Опишите сцену и движение для видео.")
 
     sub_b, llm_row, ws_row, plan, _credits, _demo = await load_owner_studio_billing(session, oid)
@@ -4772,7 +4772,8 @@ async def _studio_job_execute_motion_render_video(
         negative=negative_prompt,
         output_aspect=ar_t2v or output_aspect,
         duration_seconds=ds_effective,
-        force_template=False,
+        force_template=workflow_source,
+        reference_only=workflow_source,
         remove_face_grid=remove_face_grid,
         soft_identity=workflow_source or remove_face_grid,
     )

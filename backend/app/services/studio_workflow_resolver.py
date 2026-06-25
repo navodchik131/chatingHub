@@ -237,8 +237,6 @@ def resolve_workflow_video_plan(
     if prompt_nodes and str(prompt_nodes[0].get("type") or "") == "prompt":
         pdata = prompt_nodes[0].get("data") if isinstance(prompt_nodes[0].get("data"), dict) else {}
         prompt_text = str(pdata.get("prompt") or "").strip()
-    if not prompt_text:
-        raise WorkflowResolutionError("Подключите промпт с описанием сцены и движения")
 
     output_aspect = str(gen_data.get("outputAspect") or "9:16").strip() or "9:16"
 

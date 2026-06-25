@@ -3,10 +3,12 @@ from app.services.studio_seedance_t2v import (
     append_seedance_identity_lock,
     append_workflow_face_grid_removal,
     assemble_seedance_t2v_prompt,
+    assemble_seedance_t2v_reference_prompt,
     assemble_seedance_video_edit_prompt,
     filter_model_images_for_seedance_video,
     prepare_motion_notes_for_seedance,
     seedance_model_identity_tag_expr,
+    seedance_optional_user_notes,
     soften_seedance_provider_prompt,
     truncate_seedance_t2v_prompt,
 )
@@ -217,3 +219,28 @@ def test_soften_provider_prompt():
     assert "never adopt" not in out.lower()
     assert "ignore all clothing" not in out.lower()
     assert "character via" in out.lower()
+
+
+def test_assemble_reference_prompt_binds_refs_not_invented_scene():
+    p = assemble_seedance_t2v_reference_prompt(
+        n_start_frame=1,
+        n_model_images=1,
+        n_motion_videos=1,
+        output_aspect="9:16",
+        duration_seconds=5,
+    )
+    assert "@Image1" in p
+    assert "@Image2" in p
+    assert "@Video1" in p
+    assert "match @Image1 exactly" in p
+    assert "appearance from @Image2" in p
+    assert "from @Video1 only" in p
+    assert "urban street" in p.lower()
+    assert "rain" in p.lower()
+    assert "invented environment" in p.lower()
+    assert "She walks in the rain." not in p
+
+
+def test_seedance_optional_user_notes_skips_placeholder():
+    assert seedance_optional_user_notes("Опишите сцену, освещение и движение персонажа.") is None
+    assert seedance_optional_user_notes("Slow turn to camera") == "Slow turn to camera"
