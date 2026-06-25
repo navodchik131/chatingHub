@@ -160,7 +160,11 @@ export async function uploadWorkflowMotionVideo(
 ): Promise<{ motion_video_file_id: string }> {
   const fd = new FormData()
   fd.append('video', file)
-  const r = await apiFetch('/api/studio/motion/driving-video', { method: 'POST', body: fd })
+  const r = await apiFetch('/api/studio/motion/upload-driving-video', {
+    method: 'POST',
+    body: fd,
+    timeoutMs: 120_000,
+  })
   const data = (await r.json().catch(() => ({}))) as {
     motion_video_file_id?: string
     detail?: unknown
