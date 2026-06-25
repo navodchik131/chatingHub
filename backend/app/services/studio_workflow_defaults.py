@@ -22,6 +22,7 @@ _BUNDLED_TEMPLATES_DIR = (BACKEND_DIR / "_bundled_workflow_templates").resolve()
 
 # Порядок отображения в sidebar (сверху — первый шаблон).
 _DEFAULT_TEMPLATE_FILES: tuple[str, ...] = (
+    "motion_pipeline.json",
     "razvertka.json",
     "sozdanie-litsa.json",
     "smena-odezhdy.json",

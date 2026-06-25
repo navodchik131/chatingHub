@@ -4489,7 +4489,10 @@ async def _studio_job_execute_motion_render_video(
     params = studio_jobs.job_params(job)
     oid = workspace_owner_id(user)
     mid = int(params["model_id"])
-    await require_studio_model_access(session, user, mid, load_images=True)
+    sheet_gid_raw = params.get("sheet_generation_id")
+    await require_studio_model_access(
+        session, user, mid, load_images=sheet_gid_raw is None
+    )
     prompt = str(params.get("prompt") or "")
     output_aspect = str(params.get("output_aspect") or "9:16")
     mv_id = str(params.get("motion_video_file_id") or "").strip()
@@ -4502,6 +4505,8 @@ async def _studio_job_execute_motion_render_video(
     seedance_variant = str(params.get("seedance_variant") or "standard")
     video_resolution = str(params.get("video_resolution") or "")
     auto_motion_prompt = str(params.get("auto_motion_prompt") or "0")
+    sheet_gid_raw = params.get("sheet_generation_id")
+    remove_face_grid = _truthy_wavespeed_flag(str(params.get("remove_face_grid") or ""))
 
     if not prompt.strip():
         raise RuntimeError("Опишите сцену и движение для видео.")
@@ -4525,9 +4530,12 @@ async def _studio_job_execute_motion_render_video(
         raise RuntimeError("Модель не найдена")
 
     if not sort_model_images_for_seedance_t2v(list(sm.images)):
-        raise RuntimeError(
-            "У модели нет фото для reference_images. Добавьте развёртку (turnaround) в кабинете модели."
-        )
+        sheet_gid_check = params.get("sheet_generation_id")
+        if sheet_gid_check is None:
+            raise RuntimeError(
+                "У модели нет фото для reference_images. Добавьте развёртку (turnaround) в кабинете модели "
+                "или укажите sheet_generation_id из workflow."
+            )
 
     log.info(
         "motion_render_video job=%s model=%s ff=%s mv=%s outfit=%s",
@@ -4649,23 +4657,44 @@ async def _studio_job_execute_motion_render_video(
     ref_images: list[str] = []
     ref_videos: list[str] = []
 
+    sheet_gen_id: int | None = None
+    if sheet_gid_raw is not None:
+        try:
+            sheet_gen_id = int(sheet_gid_raw)
+        except (TypeError, ValueError):
+            sheet_gen_id = None
+
     model_imgs = filter_model_images_for_seedance_video(
         list(sm.images),
         minimal=False,
         include_body=False,
     )
     n_outfit = 0
-    if ff_url:
-        ref_images.append(ff_url)
-    ref_images.extend(
-        model_reference_public_urls(
+    if sheet_gen_id is not None:
+        sheet_url = generation_still_public_url(
             owner_id=oid,
-            images=model_imgs,
+            generation_id=sheet_gen_id,
             public_app_base=pub,
-            token_factory=create_model_image_access_token,
+            token_factory=create_generation_image_access_token,
         )
-    )
-    n_model = len(model_imgs)
+        if not sheet_url:
+            raise RuntimeError("Не удалось подготовить URL развёртки")
+        if ff_url:
+            ref_images.append(ff_url)
+        ref_images.append(sheet_url)
+        n_model = 1
+    else:
+        if ff_url:
+            ref_images.append(ff_url)
+        ref_images.extend(
+            model_reference_public_urls(
+                owner_id=oid,
+                images=model_imgs,
+                public_app_base=pub,
+                token_factory=create_model_image_access_token,
+            )
+        )
+        n_model = len(model_imgs)
 
     if outfit_gen_id is not None:
         outfit_url = generation_still_public_url(
@@ -4696,6 +4725,7 @@ async def _studio_job_execute_motion_render_video(
         output_aspect=ar_t2v or output_aspect,
         duration_seconds=ds_effective,
         force_template=False,
+        remove_face_grid=remove_face_grid,
     )
 
     try:
@@ -5138,6 +5168,10 @@ async def _studio_job_execute_model_bootstrap_sheet(
     ws_key = studio_wavespeed_api_key(plan=plan, ws_row=ws_row, owner_subscription=sub_b, demo_generations_remaining=_demo)
 
     prompt = resolve_model_sheet_prompt(str(p.get("prompt") or ""))
+    if _truthy_wavespeed_flag(str(p.get("workflow_turnaround") or "")):
+        from app.services.studio_model_bootstrap import resolve_workflow_model_sheet_prompt
+
+        prompt = resolve_workflow_model_sheet_prompt(str(p.get("prompt_extra") or ""))
     aspect_key = MODEL_SHEET_ASPECT_KEY
     mid = p.get("model_id")
     if mid is not None:

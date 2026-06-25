@@ -422,7 +422,10 @@
   border-color: rgba(245, 158, 11, 0.35);
 }
 
-.workflow-node--imageGeneration {
+.workflow-node--imageGeneration,
+.workflow-node--firstFrameGeneration,
+.workflow-node--turnaroundSheet,
+.workflow-node--videoGeneration {
   border-color: rgba(99, 102, 241, 0.35);
   min-width: 200px;
   max-width: 220px;
@@ -529,6 +532,22 @@
 .workflow-node--imageGeneration .workflow-node__badge {
   font-size: 0.5625rem;
   padding: 0.05rem 0.3rem;
+}
+
+.workflow-node__preview-video {
+  width: 100%;
+  max-height: 220px;
+  border-radius: 8px;
+  display: block;
+  background: #000;
+}
+
+.workflow-node__file-input {
+  display: none;
+}
+
+.workflow-node--motionVideo {
+  min-width: 240px;
 }
 
 .workflow-node--preview {

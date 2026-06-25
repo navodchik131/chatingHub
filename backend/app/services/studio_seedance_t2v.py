@@ -193,6 +193,23 @@ _IDENTITY_NEGATIVE_DEFAULTS = (
     "wrong face, actor from reference video"
 )
 
+_WORKFLOW_FACE_GRID_REMOVAL_EN = (
+    "Remove the white guide grid overlay from the face in every frame; "
+    "keep natural skin texture and the same character identity from the reference images."
+)
+
+_WORKFLOW_FACE_GRID_REMOVAL_ZH = "每一帧都要去掉脸上的白色参考网格线，保留自然肤色和参考图里的同一角色外观。"
+
+
+def append_workflow_face_grid_removal(prompt: str, *, language: str = "en") -> str:
+    line = _WORKFLOW_FACE_GRID_REMOVAL_ZH if language == "zh" else _WORKFLOW_FACE_GRID_REMOVAL_EN
+    body = (prompt or "").strip()
+    if not body:
+        return line
+    if line.lower() in body.lower():
+        return body
+    return f"{body}\n\n{line}".strip()
+
 
 def _seedance_identity_lock_block(
     *,
@@ -365,6 +382,7 @@ async def build_seedance_t2v_prompt(
     output_aspect: str | None = None,
     duration_seconds: int = 5,
     force_template: bool = False,
+    remove_face_grid: bool = False,
 ) -> tuple[str, str]:
     """
     Grok (если настроен) → иначе шаблон. Возвращает (prompt, source: grok|template).
@@ -392,17 +410,17 @@ async def build_seedance_t2v_prompt(
                 max_chars=lim,
             )
             lock_lang = "zh" if settings.studio_seedance_grok_prompt_zh else "en"
-            return (
-                append_seedance_identity_lock(
-                    soften_seedance_provider_prompt(p),
-                    n_start_frame=n_start_frame,
-                    n_model_images=n_model_images,
-                    n_motion_videos=n_motion_videos,
-                    max_chars=lim,
-                    language=lock_lang,
-                ),
-                "grok",
+            locked = append_seedance_identity_lock(
+                soften_seedance_provider_prompt(p),
+                n_start_frame=n_start_frame,
+                n_model_images=n_model_images,
+                n_motion_videos=n_motion_videos,
+                max_chars=lim,
+                language=lock_lang,
             )
+            if remove_face_grid:
+                locked = append_workflow_face_grid_removal(locked, language=lock_lang)
+            return (locked, "grok")
         except Exception as e:
             log.warning("grok seedance t2v prompt failed, template fallback: %s", e)
 
@@ -415,6 +433,8 @@ async def build_seedance_t2v_prompt(
         motion_summary=safe_motion,
         negative=negative,
     )
+    if remove_face_grid:
+        p = append_workflow_face_grid_removal(p, language="en")
     return (p, "template")
 
 

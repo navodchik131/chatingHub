@@ -277,3 +277,74 @@ def test_resolve_workflow_multiple_references():
     assert plan.references[1].role == "clothes"
     assert "Reference 1:" in plan.description
     assert "Reference 2:" in plan.description
+
+
+def _motion_pipeline_graph(*, ff_gen_id: int = 10, sheet_gen_id: int = 20, motion_id: str = "mv1"):
+    return {
+        "nodes": [
+            {"id": "model-1", "type": "model", "data": {"modelId": 1}},
+            {"id": "prompt-1", "type": "prompt", "data": {"prompt": "She dances slowly."}},
+            {
+                "id": "ff-1",
+                "type": "firstFrameGeneration",
+                "data": {"generationId": ff_gen_id, "imageUrl": "https://x/ff.png"},
+            },
+            {
+                "id": "sheet-1",
+                "type": "turnaroundSheet",
+                "data": {"generationId": sheet_gen_id, "imageUrl": "https://x/sheet.png"},
+            },
+            {"id": "mv-1", "type": "motionVideo", "data": {"motionVideoFileId": motion_id}},
+            {
+                "id": "video-1",
+                "type": "videoGeneration",
+                "data": {
+                    "durationSeconds": 5,
+                    "seedanceVariant": "mini",
+                    "videoResolution": "720p",
+                },
+            },
+        ],
+        "edges": [
+            {"source": "model-1", "target": "sheet-1", "targetHandle": "model-in"},
+            {"source": "ff-1", "target": "sheet-1", "targetHandle": "first-frame-in"},
+            {"source": "model-1", "target": "video-1", "targetHandle": "model-in"},
+            {"source": "prompt-1", "target": "video-1", "targetHandle": "prompt-in"},
+            {"source": "ff-1", "target": "video-1", "targetHandle": "first-frame-in"},
+            {"source": "sheet-1", "target": "video-1", "targetHandle": "sheet-in"},
+            {
+                "source": "mv-1",
+                "target": "video-1",
+                "sourceHandle": "motion-video-out",
+                "targetHandle": "motion-video-in",
+            },
+        ],
+    }
+
+
+def test_resolve_turnaround_plan():
+    from app.services.studio_workflow_resolver import resolve_workflow_turnaround_plan
+
+    g = _motion_pipeline_graph()
+    plan = resolve_workflow_turnaround_plan(
+        target_node_id="sheet-1",
+        nodes=g["nodes"],
+        edges=g["edges"],
+    )
+    assert plan.source_generation_id == 10
+    assert plan.model_id == 1
+
+
+def test_resolve_video_plan():
+    from app.services.studio_workflow_resolver import resolve_workflow_video_plan
+
+    g = _motion_pipeline_graph()
+    plan = resolve_workflow_video_plan(
+        target_node_id="video-1",
+        nodes=g["nodes"],
+        edges=g["edges"],
+    )
+    assert plan.first_frame_generation_id == 10
+    assert plan.sheet_generation_id == 20
+    assert plan.motion_video_file_id == "mv1"
+    assert plan.seedance_variant == "mini"

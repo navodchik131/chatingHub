@@ -1,6 +1,9 @@
 import { apiFetch } from '../api'
 import { formatHttpApiError } from '../apiErrors'
 import { postStudioJobAndWait } from '../studioJobs'
+import {
+  fetchGenerationModelOptions,
+} from './wavespeedModels'
 import type { ProjectGraph } from './types'
 
 export interface WorkflowWorkspaceRecord {
@@ -96,6 +99,34 @@ export async function fetchWorkflowReferencePreviewUrl(refId: string): Promise<s
   return URL.createObjectURL(blob)
 }
 
+export async function fetchWorkflowModelOptions(): Promise<{
+  models: import('./wavespeedModels').GenerationModelDefinition[]
+  video?: import('../studioMotionPricing').StudioMotionVideoPricing
+}> {
+  const r = await apiFetch('/api/studio/workflow/model-options')
+  if (!r.ok) {
+    return { models: await fetchGenerationModelOptions() }
+  }
+  const data = (await r.json()) as {
+    models?: Array<{
+      id: string
+      label: string
+      nsfw_only?: boolean
+      aspects?: import('./wavespeedModels').GenerationAspectOption[]
+    }>
+    video?: import('../studioMotionPricing').StudioMotionVideoPricing
+  }
+  const models = Array.isArray(data.models)
+    ? data.models.map((m) => ({
+        id: m.id,
+        label: m.label,
+        nsfwOnly: Boolean(m.nsfw_only),
+        aspects: Array.isArray(m.aspects) ? m.aspects : [],
+      }))
+    : await fetchGenerationModelOptions()
+  return { models, video: data.video }
+}
+
 export async function executeWorkflowGeneration(
   graph: ProjectGraph,
   targetNodeId: string,
@@ -105,7 +136,12 @@ export async function executeWorkflowGeneration(
     maxWaitMs?: number
     workspaceId?: number | null
   },
-): Promise<{ generated_image_url?: string | null; generation_id?: number | null }> {
+): Promise<{
+  generated_image_url?: string | null
+  generation_id?: number | null
+  video_url?: string | null
+  refined_prompt?: string | null
+}> {
   const fd = new FormData()
   fd.append('graph', JSON.stringify(graph))
   fd.append('target_node_id', targetNodeId)
@@ -115,6 +151,24 @@ export async function executeWorkflowGeneration(
   return postStudioJobAndWait(
     '/api/studio/workflow/execute',
     { method: 'POST', body: fd, timeoutMs: 120_000, signal: opts?.signal },
-    { pollMs: opts?.pollMs, maxWaitMs: opts?.maxWaitMs, signal: opts?.signal },
+    { pollMs: opts?.pollMs, maxWaitMs: opts?.maxWaitMs ?? 25 * 60 * 1000, signal: opts?.signal },
   )
+}
+
+export async function uploadWorkflowMotionVideo(
+  file: File,
+): Promise<{ motion_video_file_id: string }> {
+  const fd = new FormData()
+  fd.append('video', file)
+  const r = await apiFetch('/api/studio/motion/driving-video', { method: 'POST', body: fd })
+  const data = (await r.json().catch(() => ({}))) as {
+    motion_video_file_id?: string
+    detail?: unknown
+  }
+  if (!r.ok) {
+    throw new Error(formatHttpApiError(r, data))
+  }
+  const id = data.motion_video_file_id?.trim()
+  if (!id) throw new Error('Сервер не вернул motion_video_file_id')
+  return { motion_video_file_id: id }
 }

@@ -1,0 +1,176 @@
+{
+  "format": "modelmate-workflow",
+  "version": 1,
+  "name": "Motion pipeline",
+  "exported_at": "2026-06-25T12:00:00.000Z",
+  "graph": {
+    "nodes": [
+      {
+        "id": "model-1",
+        "type": "model",
+        "position": { "x": 80, "y": 120 },
+        "data": {}
+      },
+      {
+        "id": "prompt-scene",
+        "type": "prompt",
+        "position": { "x": 80, "y": 280 },
+        "data": {
+          "prompt": "Опишите сцену, освещение и движение персонажа."
+        }
+      },
+      {
+        "id": "ref-pose",
+        "type": "reference",
+        "position": { "x": 80, "y": 420 },
+        "data": {}
+      },
+      {
+        "id": "first-frame",
+        "type": "firstFrameGeneration",
+        "position": { "x": 420, "y": 200 },
+        "data": {
+          "waveModelId": "nano-banana-pro",
+          "nsfwEnabled": false,
+          "outputAspect": "9:16"
+        }
+      },
+      {
+        "id": "preview-frame",
+        "type": "preview",
+        "position": { "x": 780, "y": 200 },
+        "data": {}
+      },
+      {
+        "id": "turnaround",
+        "type": "turnaroundSheet",
+        "position": { "x": 420, "y": 520 },
+        "data": {}
+      },
+      {
+        "id": "preview-sheet",
+        "type": "preview",
+        "position": { "x": 780, "y": 520 },
+        "data": {}
+      },
+      {
+        "id": "motion-ref",
+        "type": "motionVideo",
+        "position": { "x": 80, "y": 680 },
+        "data": {}
+      },
+      {
+        "id": "video-gen",
+        "type": "videoGeneration",
+        "position": { "x": 420, "y": 820 },
+        "data": {
+          "outputAspect": "9:16",
+          "durationSeconds": 5,
+          "seedanceVariant": "standard",
+          "videoResolution": "720p",
+          "generateAudio": true,
+          "autoMotionPrompt": true
+        }
+      },
+      {
+        "id": "preview-video",
+        "type": "preview",
+        "position": { "x": 820, "y": 820 },
+        "data": {}
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-model-ff",
+        "source": "model-1",
+        "target": "first-frame",
+        "sourceHandle": "model-out",
+        "targetHandle": "model-in"
+      },
+      {
+        "id": "e-prompt-ff",
+        "source": "prompt-scene",
+        "target": "first-frame",
+        "sourceHandle": "prompt-out",
+        "targetHandle": "prompt-in"
+      },
+      {
+        "id": "e-ref-ff",
+        "source": "ref-pose",
+        "target": "first-frame",
+        "sourceHandle": "reference-out",
+        "targetHandle": "reference-in"
+      },
+      {
+        "id": "e-ff-preview",
+        "source": "first-frame",
+        "target": "preview-frame",
+        "sourceHandle": "image-out",
+        "targetHandle": "image-in"
+      },
+      {
+        "id": "e-ff-turn",
+        "source": "first-frame",
+        "target": "turnaround",
+        "sourceHandle": "image-out",
+        "targetHandle": "first-frame-in"
+      },
+      {
+        "id": "e-model-turn",
+        "source": "model-1",
+        "target": "turnaround",
+        "sourceHandle": "model-out",
+        "targetHandle": "model-in"
+      },
+      {
+        "id": "e-turn-preview",
+        "source": "turnaround",
+        "target": "preview-sheet",
+        "sourceHandle": "image-out",
+        "targetHandle": "image-in"
+      },
+      {
+        "id": "e-model-video",
+        "source": "model-1",
+        "target": "video-gen",
+        "sourceHandle": "model-out",
+        "targetHandle": "model-in"
+      },
+      {
+        "id": "e-prompt-video",
+        "source": "prompt-scene",
+        "target": "video-gen",
+        "sourceHandle": "prompt-out",
+        "targetHandle": "prompt-in"
+      },
+      {
+        "id": "e-ff-video",
+        "source": "first-frame",
+        "target": "video-gen",
+        "sourceHandle": "image-out",
+        "targetHandle": "first-frame-in"
+      },
+      {
+        "id": "e-sheet-video",
+        "source": "turnaround",
+        "target": "video-gen",
+        "sourceHandle": "image-out",
+        "targetHandle": "sheet-in"
+      },
+      {
+        "id": "e-motion-video",
+        "source": "motion-ref",
+        "target": "video-gen",
+        "sourceHandle": "motion-video-out",
+        "targetHandle": "motion-video-in"
+      },
+      {
+        "id": "e-video-preview",
+        "source": "video-gen",
+        "target": "preview-video",
+        "sourceHandle": "video-out",
+        "targetHandle": "image-in"
+      }
+    ]
+  }
+}

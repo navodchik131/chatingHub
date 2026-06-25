@@ -12,6 +12,10 @@ export type NodeType =
   | 'refDescription'
   | 'reference'
   | 'imageGeneration'
+  | 'firstFrameGeneration'
+  | 'turnaroundSheet'
+  | 'motionVideo'
+  | 'videoGeneration'
   | 'preview'
 
 export interface ModelNodeData {
@@ -64,8 +68,47 @@ export interface ImageGenerationNodeData {
   [key: string]: unknown
 }
 
+export type FirstFrameGenerationNodeData = ImageGenerationNodeData
+
+export interface TurnaroundSheetNodeData {
+  imageUrl?: string
+  generationId?: number | null
+  isRunning?: boolean
+  error?: string
+  [key: string]: unknown
+}
+
+export interface MotionVideoNodeData {
+  motionVideoFileId?: string
+  fileName?: string
+  isRunning?: boolean
+  error?: string
+  [key: string]: unknown
+}
+
+export type SeedanceT2vVariant = 'standard' | 'mini'
+export type SeedanceT2vResolution = '480p' | '720p' | '1080p'
+
+export interface VideoGenerationNodeData {
+  outputAspect?: string
+  durationSeconds?: number
+  seedanceVariant?: SeedanceT2vVariant
+  videoResolution?: SeedanceT2vResolution
+  generateAudio?: boolean
+  autoMotionPrompt?: boolean
+  negativePrompt?: string
+  motionVideoFileId?: string
+  videoUrl?: string
+  generationId?: number | null
+  isRunning?: boolean
+  error?: string
+  [key: string]: unknown
+}
+
 export interface PreviewNodeData {
   imageUrl?: string
+  videoUrl?: string
+  mediaKind?: 'image' | 'video'
   isRunning?: boolean
   error?: string
   [key: string]: unknown
@@ -78,6 +121,10 @@ export type AppNodeData =
   | RefDescriptionNodeData
   | ReferenceNodeData
   | ImageGenerationNodeData
+  | FirstFrameGenerationNodeData
+  | TurnaroundSheetNodeData
+  | MotionVideoNodeData
+  | VideoGenerationNodeData
   | PreviewNodeData
 
 export type AppNode = Node<AppNodeData, NodeType>
@@ -99,5 +146,16 @@ export const HandleIds = {
   imageGenPromptIn: 'prompt-in',
   imageGenReferenceIn: 'reference-in',
   imageGenOut: 'image-out',
+  firstFrameIn: 'first-frame-in',
+  sheetIn: 'sheet-in',
+  motionVideoIn: 'motion-video-in',
+  motionVideoOut: 'motion-video-out',
+  videoOut: 'video-out',
   previewIn: 'image-in',
 } as const
+
+export const IMAGE_OUTPUT_NODE_TYPES = new Set([
+  'imageGeneration',
+  'firstFrameGeneration',
+  'turnaroundSheet',
+])

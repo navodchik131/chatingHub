@@ -1,31 +1,75 @@
 import type { Edge, Node } from '@xyflow/react'
-import { HandleIds, type ProjectGraph } from './types'
+import { HandleIds, IMAGE_OUTPUT_NODE_TYPES, type ProjectGraph } from './types'
 
 const RUNTIME_NODE_DATA_KEYS = ['isRunning', 'error'] as const
+
+const OUTPUT_HANDLES = new Set([
+  HandleIds.imageGenOut,
+  HandleIds.videoOut,
+])
 
 export function getDownstreamPreviewNodeIds(sourceNodeId: string, edges: Edge[]): string[] {
   return edges
     .filter(
       (edge) =>
-        edge.source === sourceNodeId && edge.sourceHandle === HandleIds.imageGenOut,
+        edge.source === sourceNodeId &&
+        (edge.sourceHandle === HandleIds.imageGenOut ||
+          edge.sourceHandle === HandleIds.videoOut),
     )
     .map((edge) => edge.target)
 }
 
+function mediaFromSourceNode(sourceNode: Node): {
+  imageUrl?: string
+  videoUrl?: string
+  mediaKind?: 'image' | 'video'
+} {
+  const data = (sourceNode.data ?? {}) as Record<string, unknown>
+  if (sourceNode.type === 'videoGeneration') {
+    const videoUrl = data.videoUrl
+    if (typeof videoUrl === 'string' && videoUrl) {
+      return { videoUrl, mediaKind: 'video' }
+    }
+    return {}
+  }
+  const imageUrl = data.imageUrl
+  if (typeof imageUrl === 'string' && imageUrl) {
+    return { imageUrl, mediaKind: 'image' }
+  }
+  return {}
+}
+
+export function resolveConnectedPreviewMedia(
+  nodeId: string,
+  nodes: Node[],
+  edges: Edge[],
+): { imageUrl?: string; videoUrl?: string; mediaKind?: 'image' | 'video' } {
+  for (const edge of edges) {
+    if (edge.target !== nodeId) continue
+    if (edge.targetHandle !== HandleIds.previewIn) continue
+    const sourceNode = nodes.find((node) => node.id === edge.source)
+    if (!sourceNode) continue
+    const outHandle = edge.sourceHandle
+    if (outHandle && !OUTPUT_HANDLES.has(outHandle as typeof HandleIds.imageGenOut)) continue
+    if (
+      sourceNode.type &&
+      (IMAGE_OUTPUT_NODE_TYPES.has(sourceNode.type) ||
+        sourceNode.type === 'videoGeneration')
+    ) {
+      const media = mediaFromSourceNode(sourceNode)
+      if (media.imageUrl || media.videoUrl) return media
+    }
+  }
+  return {}
+}
+
+/** @deprecated use resolveConnectedPreviewMedia */
 export function resolveConnectedImageUrl(
   nodeId: string,
   nodes: Node[],
   edges: Edge[],
 ): string | undefined {
-  for (const edge of edges) {
-    if (edge.target !== nodeId) continue
-    if (edge.targetHandle !== HandleIds.previewIn) continue
-    const sourceNode = nodes.find((node) => node.id === edge.source)
-    if (!sourceNode || sourceNode.type !== 'imageGeneration') continue
-    const url = sourceNode.data?.imageUrl
-    if (typeof url === 'string' && url) return url
-  }
-  return undefined
+  return resolveConnectedPreviewMedia(nodeId, nodes, edges).imageUrl
 }
 
 export function serializeGraph(nodes: Node[], edges: Edge[]) {
@@ -65,6 +109,16 @@ export function sanitizeNodeDataForPersist(
   return rest
 }
 
+function stripGenerationResults(base: Record<string, unknown>): Record<string, unknown> {
+  const {
+    imageUrl: _imageUrl,
+    videoUrl: _videoUrl,
+    generationId: _generationId,
+    ...rest
+  } = base
+  return rest
+}
+
 /** JSON-экспорт: только структура графа, тексты и настройки — без рефов, моделей и результатов. */
 export function sanitizeNodeDataForExport(
   type: string | undefined,
@@ -81,12 +135,17 @@ export function sanitizeNodeDataForExport(
       const { modelId: _modelId, modelName: _modelName, ...rest } = base
       return rest
     }
-    case 'imageGeneration': {
-      const { imageUrl: _imageUrl, generationId: _generationId, ...rest } = base
+    case 'imageGeneration':
+    case 'firstFrameGeneration':
+    case 'turnaroundSheet':
+    case 'videoGeneration':
+      return stripGenerationResults(base)
+    case 'motionVideo': {
+      const { motionVideoFileId: _id, fileName: _fn, ...rest } = base
       return rest
     }
     case 'preview': {
-      const { imageUrl: _imageUrl, ...rest } = base
+      const { imageUrl: _imageUrl, videoUrl: _videoUrl, mediaKind: _mk, ...rest } = base
       return rest
     }
     default:

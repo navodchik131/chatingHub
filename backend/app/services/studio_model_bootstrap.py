@@ -31,6 +31,23 @@ DEFAULT_MODEL_SHEET_PROMPT = (
     "Одежда - черный топ с глубоким декольте черные спортивные шорты из облегающего материала"
 )
 
+# Workflow turnaround: character sheet + тонкая белая сетка только на face close-up (moderation guide).
+_WORKFLOW_FACE_GRID_INSTRUCTION = (
+    "On the front face close-up panel only: overlay a thin white guide grid on the face "
+    "(fine lines, ~30–40% opacity, 1–2 px) — like a neutral wireframe overlay. "
+    "The grid must NOT hide eyes, nose, mouth, or facial structure; identity stays fully readable. "
+    "Do NOT add the grid on side/back views or full-body panels."
+)
+
+DEFAULT_WORKFLOW_SHEET_PROMPT = (
+    "On a neutral gray background, create a character turnaround sheet from the source image. "
+    "Left third: large front face close-up. "
+    "Remaining panels: face right profile, face left profile, face back; "
+    "full body front, full body left side, full body right side. "
+    "Keep the exact same outfit, colors, and styling as the source image. "
+    f"{_WORKFLOW_FACE_GRID_INSTRUCTION}"
+)
+
 MODEL_SHEET_ASPECT_KEY = "16:9"
 
 
@@ -42,6 +59,15 @@ def resolve_face_merge_prompt(user_prompt: str | None) -> str:
 def resolve_model_sheet_prompt(user_prompt: str | None) -> str:
     p = (user_prompt or "").strip()
     return p if p else DEFAULT_MODEL_SHEET_PROMPT
+
+
+def resolve_workflow_model_sheet_prompt(user_prompt: str | None) -> str:
+    """Развёртка для workflow: ракурсы + сетка на лице + одежда с первого кадра."""
+    extra = (user_prompt or "").strip()
+    base = DEFAULT_WORKFLOW_SHEET_PROMPT
+    if extra:
+        return f"{base}\n\nAdditional wardrobe/scene notes from user:\n{extra}"
+    return base
 
 
 def _guess_upload_filename(content_type: str, label: str) -> str:

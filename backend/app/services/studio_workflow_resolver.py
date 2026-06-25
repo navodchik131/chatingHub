@@ -64,6 +64,232 @@ class WorkflowGenerationPlan:
         return self.references[0].file_name if self.references else ""
 
 
+@dataclass(frozen=True)
+class WorkflowTurnaroundPlan:
+    source_generation_id: int
+    model_id: int | None
+    prompt_extra: str
+
+
+@dataclass(frozen=True)
+class WorkflowVideoPlan:
+    model_id: int | None
+    first_frame_generation_id: int
+    sheet_generation_id: int
+    motion_video_file_id: str
+    prompt: str
+    output_aspect: str
+    duration_seconds: int
+    seedance_variant: str
+    video_resolution: str
+    generate_audio: bool
+    auto_motion_prompt: bool
+    negative_prompt: str
+
+
+def _parse_model_id_from_node(model_node: dict[str, Any] | None) -> int | None:
+    if model_node is None:
+        return None
+    if str(model_node.get("type") or "") != "model":
+        raise WorkflowResolutionError("К входу model можно подключить только ноду «Модель»")
+    model_data = model_node.get("data") if isinstance(model_node.get("data"), dict) else {}
+    raw_mid = model_data.get("modelId")
+    if raw_mid is None or str(raw_mid).strip() == "":
+        return None
+    try:
+        mid = int(raw_mid)
+    except (TypeError, ValueError):
+        raise WorkflowResolutionError("Выберите модель в ноде «Модель»") from None
+    if mid <= 0:
+        raise WorkflowResolutionError("Выберите модель в ноде «Модель»")
+    return mid
+
+
+def _generation_id_from_node(node: dict[str, Any]) -> int | None:
+    data = node.get("data") if isinstance(node.get("data"), dict) else {}
+    raw = data.get("generationId")
+    if raw is None or str(raw).strip() == "":
+        return None
+    try:
+        gid = int(raw)
+    except (TypeError, ValueError):
+        return None
+    return gid if gid > 0 else None
+
+
+def resolve_upstream_generation_id(
+    *,
+    target_id: str,
+    target_handle: str,
+    edges: list[dict[str, Any]],
+    node_map: dict[str, dict[str, Any]],
+    label: str = "изображение",
+) -> int:
+    sources = _sources_for_target(target_id, target_handle, edges, node_map)
+    if not sources:
+        raise WorkflowResolutionError(f"Подключите вход {label}")
+    for src in sources:
+        ntype = str(src.get("type") or "")
+        if ntype not in _IMAGE_OUTPUT_NODE_TYPES:
+            raise WorkflowResolutionError(
+                f"К входу {label} можно подключить ноду с результатом генерации изображения"
+            )
+        gid = _generation_id_from_node(src)
+        if gid is not None:
+            return gid
+    raise WorkflowResolutionError(
+        f"Сначала выполните генерацию upstream-ноды для {label} (нет generationId)"
+    )
+
+
+def resolve_workflow_turnaround_plan(
+    *,
+    target_node_id: str,
+    nodes: list[dict[str, Any]],
+    edges: list[dict[str, Any]],
+) -> WorkflowTurnaroundPlan:
+    node_map = _node_map(nodes)
+    target_id = (target_node_id or "").strip()
+    target = node_map.get(target_id)
+    if not target:
+        raise WorkflowResolutionError("Целевая нода не найдена в графе")
+    if str(target.get("type") or "") != "turnaroundSheet":
+        raise WorkflowResolutionError("Неверный тип ноды для развёртки")
+
+    source_gid = resolve_upstream_generation_id(
+        target_id=target_id,
+        target_handle=HANDLE["first_frame_in"],
+        edges=edges,
+        node_map=node_map,
+        label="первый кадр",
+    )
+
+    model_nodes = _sources_for_target(target_id, HANDLE["gen_model_in"], edges, node_map)
+    model_id = _parse_model_id_from_node(model_nodes[0] if model_nodes else None)
+
+    prompt_nodes = _sources_for_target(target_id, HANDLE["gen_prompt_in"], edges, node_map)
+    prompt_extra = ""
+    if prompt_nodes and str(prompt_nodes[0].get("type") or "") == "prompt":
+        pdata = prompt_nodes[0].get("data") if isinstance(prompt_nodes[0].get("data"), dict) else {}
+        prompt_extra = str(pdata.get("prompt") or "").strip()
+
+    return WorkflowTurnaroundPlan(
+        source_generation_id=source_gid,
+        model_id=model_id,
+        prompt_extra=prompt_extra,
+    )
+
+
+def resolve_workflow_video_plan(
+    *,
+    target_node_id: str,
+    nodes: list[dict[str, Any]],
+    edges: list[dict[str, Any]],
+) -> WorkflowVideoPlan:
+    node_map = _node_map(nodes)
+    target_id = (target_node_id or "").strip()
+    target = node_map.get(target_id)
+    if not target:
+        raise WorkflowResolutionError("Целевая нода не найдена в графе")
+    if str(target.get("type") or "") != "videoGeneration":
+        raise WorkflowResolutionError("Неверный тип ноды для видео")
+
+    gen_data = target.get("data") if isinstance(target.get("data"), dict) else {}
+
+    ff_gid = resolve_upstream_generation_id(
+        target_id=target_id,
+        target_handle=HANDLE["first_frame_in"],
+        edges=edges,
+        node_map=node_map,
+        label="первый кадр",
+    )
+    sheet_gid = resolve_upstream_generation_id(
+        target_id=target_id,
+        target_handle=HANDLE["sheet_in"],
+        edges=edges,
+        node_map=node_map,
+        label="развёртка",
+    )
+
+    motion_nodes = _sources_for_target(target_id, HANDLE["motion_video_in"], edges, node_map)
+    motion_video_file_id = ""
+    if motion_nodes:
+        mnode = motion_nodes[0]
+        if str(mnode.get("type") or "") != "motionVideo":
+            raise WorkflowResolutionError(
+                "К входу motion video можно подключить только ноду «Motion-видео»"
+            )
+        mdata = mnode.get("data") if isinstance(mnode.get("data"), dict) else {}
+        motion_video_file_id = str(mdata.get("motionVideoFileId") or "").strip()
+    if not motion_video_file_id:
+        motion_video_file_id = str(gen_data.get("motionVideoFileId") or "").strip()
+    if not motion_video_file_id:
+        raise WorkflowResolutionError(
+            "Загрузите motion-видео в ноду или подключите ноду «Motion-видео»"
+        )
+
+    model_nodes = _sources_for_target(target_id, HANDLE["gen_model_in"], edges, node_map)
+    model_id = _parse_model_id_from_node(model_nodes[0] if model_nodes else None)
+
+    prompt_nodes = _sources_for_target(target_id, HANDLE["gen_prompt_in"], edges, node_map)
+    prompt_text = ""
+    if prompt_nodes and str(prompt_nodes[0].get("type") or "") == "prompt":
+        pdata = prompt_nodes[0].get("data") if isinstance(prompt_nodes[0].get("data"), dict) else {}
+        prompt_text = str(pdata.get("prompt") or "").strip()
+    if not prompt_text:
+        raise WorkflowResolutionError("Подключите промпт с описанием сцены и движения")
+
+    output_aspect = str(gen_data.get("outputAspect") or "9:16").strip() or "9:16"
+
+    try:
+        duration_seconds = int(gen_data.get("durationSeconds") or 5)
+    except (TypeError, ValueError):
+        duration_seconds = 5
+
+    seedance_variant = str(gen_data.get("seedanceVariant") or "standard").strip().lower()
+    if seedance_variant not in ("standard", "mini"):
+        seedance_variant = "standard"
+
+    video_resolution = str(gen_data.get("videoResolution") or "720p").strip().lower()
+    if video_resolution not in ("480p", "720p", "1080p"):
+        video_resolution = "720p"
+
+    generate_audio = gen_data.get("generateAudio") is not False
+    auto_motion_prompt = gen_data.get("autoMotionPrompt") is not False
+    negative_prompt = str(gen_data.get("negativePrompt") or "").strip()
+
+    return WorkflowVideoPlan(
+        model_id=model_id,
+        first_frame_generation_id=ff_gid,
+        sheet_generation_id=sheet_gid,
+        motion_video_file_id=motion_video_file_id,
+        prompt=prompt_text,
+        output_aspect=output_aspect,
+        duration_seconds=duration_seconds,
+        seedance_variant=seedance_variant,
+        video_resolution=video_resolution,
+        generate_audio=generate_audio,
+        auto_motion_prompt=auto_motion_prompt,
+        negative_prompt=negative_prompt,
+    )
+
+    @property
+    def reference_ref_id(self) -> str:
+        return self.references[0].ref_id if self.references else ""
+
+    @property
+    def reference_role(self) -> str:
+        return self.references[0].role if self.references else ""
+
+    @property
+    def reference_description(self) -> str:
+        return self.references[0].description if self.references else ""
+
+    @property
+    def reference_file_name(self) -> str:
+        return self.references[0].file_name if self.references else ""
+
+
 HANDLE = {
     "prompt_out": "prompt-out",
     "reference_out": "reference-out",
@@ -75,7 +301,14 @@ HANDLE = {
     "gen_reference_in": "reference-in",
     "gen_model_in": "model-in",
     "gen_realism_in": "realism-in",
+    "image_out": "image-out",
+    "first_frame_in": "first-frame-in",
+    "sheet_in": "sheet-in",
+    "motion_video_in": "motion-video-in",
+    "video_out": "video-out",
 }
+
+_IMAGE_OUTPUT_NODE_TYPES = frozenset({"imageGeneration", "firstFrameGeneration", "turnaroundSheet"})
 
 
 def _node_map(nodes: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
@@ -217,10 +450,19 @@ def resolve_workflow_generation_plan(
     target = node_map.get(target_id)
     if not target:
         raise WorkflowResolutionError("Целевая нода не найдена в графе")
-    if str(target.get("type") or "") != "imageGeneration":
-        raise WorkflowResolutionError("Execute поддерживает только ноду «Генерация»")
+    if str(target.get("type") or "") not in ("imageGeneration", "firstFrameGeneration"):
+        raise WorkflowResolutionError(
+            "Execute поддерживает ноды «Генерация» и «Первый кадр»"
+        )
 
     gen_data = target.get("data") if isinstance(target.get("data"), dict) else {}
+
+    if str(target.get("type") or "") == "firstFrameGeneration":
+        wave_model = str(gen_data.get("waveModelId") or "nano-banana-pro").strip().lower()
+        if wave_model == "gpt-image-2":
+            raise WorkflowResolutionError(
+                "Для первого кадра используйте Wan / Nano Banana — GPT Image 2 только для развёртки"
+            )
 
     model_node = _sources_for_target(target_id, HANDLE["gen_model_in"], edges, node_map)
     model_node = model_node[0] if model_node else None

@@ -91,6 +91,39 @@ export function NodeIcon({ type, size = 16, className }: Props) {
           <path d="M3 9h18" stroke={stroke} strokeWidth="1.75" />
         </svg>
       )
+    case 'firstFrameGeneration':
+      return (
+        <svg {...common}>
+          <rect x="5" y="4" width="14" height="16" rx="2" stroke={stroke} strokeWidth="1.75" />
+          <path d="M9 8h6M9 12h4" stroke={stroke} strokeWidth="1.75" strokeLinecap="round" />
+        </svg>
+      )
+    case 'turnaroundSheet':
+      return (
+        <svg {...common}>
+          <rect x="3" y="6" width="8" height="12" rx="1" stroke={stroke} strokeWidth="1.5" />
+          <rect x="13" y="6" width="8" height="5" rx="1" stroke={stroke} strokeWidth="1.5" />
+          <rect x="13" y="13" width="8" height="5" rx="1" stroke={stroke} strokeWidth="1.5" />
+        </svg>
+      )
+    case 'motionVideo':
+      return (
+        <svg {...common}>
+          <rect x="3" y="6" width="18" height="12" rx="2" stroke={stroke} strokeWidth="1.75" />
+          <path d="M10 10l5 3-5 3V10z" fill={stroke} />
+        </svg>
+      )
+    case 'videoGeneration':
+      return (
+        <svg {...common}>
+          <path
+            d="M4 7h12v10H4V7zm14 3l4-2v8l-4-2v-4z"
+            stroke={stroke}
+            strokeWidth="1.75"
+            strokeLinejoin="round"
+          />
+        </svg>
+      )
     default:
       return null
   }
@@ -103,5 +136,9 @@ export const NODE_ICON_COLORS: Record<NodeType, string> = {
   refDescription: '#a855f7',
   reference: '#f59e0b',
   imageGeneration: '#6366f1',
+  firstFrameGeneration: '#8b5cf6',
+  turnaroundSheet: '#14b8a6',
+  motionVideo: '#f97316',
+  videoGeneration: '#ef4444',
   preview: '#0ea5e9',
 }

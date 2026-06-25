@@ -9,6 +9,10 @@ export const NODE_LABELS: Record<NodeType, string> = {
   refDescription: 'Описание',
   reference: 'Референс',
   imageGeneration: 'Генерация',
+  firstFrameGeneration: 'Первый кадр',
+  turnaroundSheet: 'Развёртка',
+  motionVideo: 'Motion-видео',
+  videoGeneration: 'Видео',
   preview: 'Просмотр',
 }
 
@@ -19,6 +23,10 @@ export const NODE_DESCRIPTIONS: Record<NodeType, string> = {
   refDescription: 'Роль и назначение референса (photo base, clothes, pose…)',
   reference: 'Фото-референс — к генерации можно подключить несколько',
   imageGeneration: 'Сборка промпта и генерация',
+  firstFrameGeneration: 'Первый кадр сцены для motion-пайплайна',
+  turnaroundSheet: 'Character sheet GPT Image 2.0 с сеткой на лице',
+  motionVideo: 'Референс движения для Seedance',
+  videoGeneration: 'Seedance 2.0 / Mini — кадр + развёртка + motion',
   preview: 'Просмотр и скачивание результата',
 }
 
@@ -28,6 +36,10 @@ export const NODE_PALETTE: NodeType[] = [
   'prompt',
   'refDescription',
   'reference',
+  'firstFrameGeneration',
+  'turnaroundSheet',
+  'motionVideo',
+  'videoGeneration',
   'imageGeneration',
   'preview',
 ]

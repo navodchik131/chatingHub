@@ -24,6 +24,25 @@ export function createDefaultNodeData(type: NodeType): AppNodeData {
         nsfwEnabled: false,
         outputAspect: '3:4',
       }
+    case 'firstFrameGeneration':
+      return {
+        waveModelId: 'nano-banana-pro',
+        nsfwEnabled: false,
+        outputAspect: '9:16',
+      }
+    case 'turnaroundSheet':
+      return {}
+    case 'motionVideo':
+      return {}
+    case 'videoGeneration':
+      return {
+        outputAspect: '9:16',
+        durationSeconds: 5,
+        seedanceVariant: 'standard',
+        videoResolution: '720p',
+        generateAudio: true,
+        autoMotionPrompt: true,
+      }
     case 'preview':
       return {}
     default: {

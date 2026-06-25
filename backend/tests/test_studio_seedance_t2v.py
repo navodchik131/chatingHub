@@ -1,6 +1,7 @@
 from app.db.models import UserStudioModelImage
 from app.services.studio_seedance_t2v import (
     append_seedance_identity_lock,
+    append_workflow_face_grid_removal,
     assemble_seedance_t2v_prompt,
     assemble_seedance_video_edit_prompt,
     filter_model_images_for_seedance_video,
@@ -159,6 +160,11 @@ def test_wavespeed_sensitive_detector():
         "Content flagged as potentially sensitive. Please try different prompts or images."
     )
     assert not wavespeed_is_sensitive_content_error("Insufficient credits")
+
+
+def test_append_workflow_face_grid_removal():
+    out = append_workflow_face_grid_removal("Scene.", language="en")
+    assert "grid" in out.lower()
 
 
 def test_append_identity_lock_zh():

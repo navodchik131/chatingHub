@@ -23,6 +23,8 @@ from app.services.studio_workflow_resolver import (
     WORKFLOW_WAVE_MODELS,
     WorkflowResolutionError,
     resolve_workflow_generation_plan,
+    resolve_workflow_turnaround_plan,
+    resolve_workflow_video_plan,
 )
 from app.services.studio_workflow_defaults import (
     DEMO_WORKFLOW_NAME,
@@ -172,7 +174,13 @@ async def api_workflow_model_options() -> dict:
                 "aspects": aspects,
             }
         )
-    return {"models": models}
+    return {"models": models, "video": _workflow_video_options()}
+
+
+def _workflow_video_options() -> dict[str, Any]:
+    from app.services.studio_motion_pricing import motion_video_pricing_public
+
+    return motion_video_pricing_public()
 
 
 @router.get("/studio/workflow/workspaces", response_model=list[WorkflowWorkspaceListItem])
@@ -363,37 +371,62 @@ async def api_workflow_execute(
         raise HTTPException(status_code=400, detail="nodes и edges обязательны")
 
     try:
-        plan = resolve_workflow_generation_plan(
-            target_node_id=target_node_id,
-            nodes=nodes,
-            edges=edges,
+        target = next(
+            (n for n in nodes if str(n.get("id") or "").strip() == (target_node_id or "").strip()),
+            None,
+        )
+        target_type = str(target.get("type") or "") if target else ""
+
+        if target_type in ("imageGeneration", "firstFrameGeneration"):
+            plan = resolve_workflow_generation_plan(
+                target_node_id=target_node_id,
+                nodes=nodes,
+                edges=edges,
+            )
+            loaded_refs: list[tuple[bytes, str, Any]] = []
+            for ref_item in plan.references:
+                try:
+                    ref_bytes, ref_mime = load_workflow_reference(oid, ref_item.ref_id)
+                except FileNotFoundError as e:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Референс «{ref_item.file_name or ref_item.ref_id}» не найден",
+                    ) from e
+                except ValueError as e:
+                    raise HTTPException(status_code=400, detail=str(e)) from e
+                loaded_refs.append((ref_bytes, ref_mime, ref_item))
+
+            from app.api.studio_routes import _accept_studio_refine_job_from_workflow
+
+            return await _accept_studio_refine_job_from_workflow(
+                session,
+                user,
+                plan=plan,
+                reference_images=loaded_refs,
+            )
+
+        if target_type == "turnaroundSheet":
+            plan = resolve_workflow_turnaround_plan(
+                target_node_id=target_node_id,
+                nodes=nodes,
+                edges=edges,
+            )
+            return await _accept_workflow_turnaround_job(session, user, plan=plan)
+
+        if target_type == "videoGeneration":
+            plan = resolve_workflow_video_plan(
+                target_node_id=target_node_id,
+                nodes=nodes,
+                edges=edges,
+            )
+            return await _accept_workflow_video_job(session, user, plan=plan)
+
+        raise HTTPException(
+            status_code=400,
+            detail="Неподдерживаемый тип ноды для запуска",
         )
     except WorkflowResolutionError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
-
-    loaded_refs: list[tuple[bytes, str, Any]] = []
-
-    for ref_item in plan.references:
-        try:
-            ref_bytes, ref_mime = load_workflow_reference(oid, ref_item.ref_id)
-        except FileNotFoundError as e:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Референс «{ref_item.file_name or ref_item.ref_id}» не найден",
-            ) from e
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e)) from e
-        loaded_refs.append((ref_bytes, ref_mime, ref_item))
-
-    from app.api.studio_routes import _accept_studio_refine_job_from_workflow
-
-    try:
-        return await _accept_studio_refine_job_from_workflow(
-            session,
-            user,
-            plan=plan,
-            reference_images=loaded_refs,
-        )
     except HTTPException:
         raise
     except Exception as e:
@@ -402,3 +435,205 @@ async def api_workflow_execute(
             status_code=500,
             detail=f"Не удалось запустить генерацию: {e}",
         ) from e
+
+
+async def _accept_workflow_turnaround_job(
+    session: AsyncSession,
+    user: User,
+    *,
+    plan,
+) -> JSONResponse:
+    from app.api.studio_routes import _require_public_https_for_wavespeed
+    from app.services.studio_generation_placeholders import reserve_studio_generation_for_job
+    from app.services.studio_jobs import create_studio_job, schedule_studio_job, update_studio_job_params
+    from app.services.studio_model_bootstrap import (
+        MODEL_SHEET_ASPECT_KEY,
+        resolve_workflow_model_sheet_prompt,
+    )
+
+    assert_permission(user, PERM_STUDIO_GENERATE)
+    oid = workspace_owner_id(user)
+    _require_public_https_for_wavespeed()
+
+    resolved_prompt = resolve_workflow_model_sheet_prompt(plan.prompt_extra)
+    dedupe_key = f"wf-sheet:gen:{plan.source_generation_id}"
+
+    from app.services import studio_jobs
+
+    existing = await studio_jobs.find_recent_inflight_studio_job(
+        session,
+        owner_id=oid,
+        job_type="model_bootstrap_sheet",
+        dedupe_key=dedupe_key,
+    )
+    if existing is not None:
+        ex_params = studio_jobs.job_params(existing)
+        return JSONResponse(
+            status_code=202,
+            content=StudioJobAcceptedOut(
+                job_id=existing.id,
+                job_type="model_bootstrap_sheet",
+                generation_id=ex_params.get("placeholder_generation_id"),
+                message="Такая развёртка уже выполняется — дождитесь завершения.",
+            ).model_dump(),
+        )
+
+    params: dict[str, Any] = {
+        "output_aspect": MODEL_SHEET_ASPECT_KEY,
+        "prompt": resolved_prompt,
+        "model_id": plan.model_id,
+        "source_generation_id": plan.source_generation_id,
+        "dedupe_key": dedupe_key,
+        "workflow_turnaround": "1",
+        "prompt_extra": plan.prompt_extra or "",
+    }
+    job = await create_studio_job(
+        session,
+        owner_id=oid,
+        actor_user_id=user.id,
+        job_type="model_bootstrap_sheet",
+        params=params,
+    )
+    gen_row = await reserve_studio_generation_for_job(
+        session,
+        owner_id=oid,
+        studio_job_id=job.id,
+        studio_model_id=plan.model_id,
+        output_aspect=MODEL_SHEET_ASPECT_KEY,
+        content_type="image/png",
+        prompt_excerpt=resolved_prompt[:2000],
+    )
+    params["placeholder_generation_id"] = gen_row.id
+    await update_studio_job_params(session, job, params)
+    schedule_studio_job(job.id)
+    return JSONResponse(
+        status_code=202,
+        content=StudioJobAcceptedOut(
+            job_id=job.id,
+            job_type="model_bootstrap_sheet",
+            generation_id=gen_row.id,
+        ).model_dump(),
+    )
+
+
+async def _accept_workflow_video_job(
+    session: AsyncSession,
+    user: User,
+    *,
+    plan,
+) -> JSONResponse:
+    from app.api.studio_routes import _accept_studio_job, _public_https_base_runtime
+    from app.db.models import StudioGeneration
+    from app.services.studio_generation_storage import generation_has_archive_file
+    from app.services.studio_seedance_t2v import generation_still_public_url
+    from app.services.studio_aspect import normalize_aspect_key
+    from app.services.studio_image_token import create_generation_image_access_token
+    from app.services.studio_motion_pricing import (
+        motion_video_credit_cost,
+        motion_video_duration_seconds,
+        normalize_seedance_t2v_resolution,
+        normalize_seedance_t2v_variant,
+    )
+    from app.services.studio_motion_video import resolve_motion_video_file
+    from app.services.studio_plan import apply_studio_credit_cost, ensure_can_consume_credits
+    from app.services.studio_routes import load_owner_studio_billing, studio_wavespeed_api_key
+
+    assert_permission(user, PERM_STUDIO_GENERATE)
+    oid = workspace_owner_id(user)
+    pub = _public_https_base_runtime()
+    if not pub.lower().startswith("https://"):
+        raise HTTPException(
+            status_code=400,
+            detail="Нужен публичный HTTPS (PUBLIC_APP_URL) для WaveSpeed.",
+        )
+
+    sub_b, _llm, ws_row, billing_plan, credits, demo = await load_owner_studio_billing(session, oid)
+    from app.api.studio_routes import _require_studio_subscription
+
+    _require_studio_subscription(user, sub_b, credits_balance=credits, demo_generations_remaining=demo)
+    try:
+        studio_wavespeed_api_key(
+            plan=billing_plan, ws_row=ws_row, owner_subscription=sub_b, demo_generations_remaining=demo
+        )
+    except HTTPException:
+        raise
+
+    if resolve_motion_video_file(oid, plan.motion_video_file_id) is None:
+        raise HTTPException(status_code=404, detail="Motion-видео не найдено. Загрузите снова.")
+
+    ff_row = await session.get(StudioGeneration, plan.first_frame_generation_id)
+    if not ff_row or ff_row.user_id != oid:
+        raise HTTPException(status_code=404, detail="Первый кадр не найден")
+    if not generation_has_archive_file(ff_row):
+        raise HTTPException(status_code=400, detail="Первый кадр ещё не сохранён на сервере.")
+
+    sheet_row = await session.get(StudioGeneration, plan.sheet_generation_id)
+    if not sheet_row or sheet_row.user_id != oid:
+        raise HTTPException(status_code=404, detail="Развёртка не найдена")
+    if not generation_has_archive_file(sheet_row):
+        raise HTTPException(status_code=400, detail="Развёртка ещё не сохранена на сервере.")
+
+    mid = plan.model_id
+    if mid is None:
+        mid = ff_row.studio_model_id or sheet_row.studio_model_id
+    if mid is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Подключите ноду «Модель» или укажите модель при генерации первого кадра.",
+        )
+
+    try:
+        aspect_key = normalize_aspect_key(plan.output_aspect)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    ds_effective = motion_video_duration_seconds(plan.duration_seconds)
+    seedance_v = normalize_seedance_t2v_variant(plan.seedance_variant)
+    video_res = normalize_seedance_t2v_resolution(plan.video_resolution)
+
+    motion_cost = motion_video_credit_cost(
+        ds_effective,
+        variant=seedance_v,
+        resolution=video_res,
+        has_motion_reference_video=True,
+    )
+    motion_cost_billed = apply_studio_credit_cost(billing_plan, motion_cost)
+    await ensure_can_consume_credits(session, user, motion_cost_billed)
+
+    preview_url = generation_still_public_url(
+        owner_id=oid,
+        generation_id=plan.first_frame_generation_id,
+        public_app_base=pub,
+        token_factory=create_generation_image_access_token,
+    )
+
+    return await _accept_studio_job(
+        session,
+        user,
+        job_type="motion_render_video",
+        params={
+            "model_id": mid,
+            "prompt": plan.prompt.strip(),
+            "output_aspect": aspect_key,
+            "motion_video_file_id": plan.motion_video_file_id,
+            "first_frame_generation_id": plan.first_frame_generation_id,
+            "sheet_generation_id": plan.sheet_generation_id,
+            "motion_timeline": "",
+            "outfit_generation_id": None,
+            "negative_prompt": plan.negative_prompt,
+            "generate_audio": "1" if plan.generate_audio else "0",
+            "duration_seconds": str(ds_effective),
+            "seedance_variant": seedance_v,
+            "video_resolution": video_res,
+            "auto_motion_prompt": "1" if plan.auto_motion_prompt else "0",
+            "remove_face_grid": "1",
+            "workflow_source": "1",
+        },
+        placeholder={
+            "studio_model_id": mid,
+            "output_aspect": aspect_key,
+            "content_type": "video/mp4",
+            "prompt_excerpt": plan.prompt.strip()[:2000] or None,
+            "preview_source_url": preview_url,
+        },
+    )
