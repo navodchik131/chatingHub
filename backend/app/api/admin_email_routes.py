@@ -24,7 +24,7 @@ from app.services.admin_segments import (
     count_email_eligible_recipients,
 )
 from app.services.email_campaigns import queue_campaign
-from app.services.email_service import render_email_body, send_email
+from app.services.email_service import check_smtp_connectivity, render_email_body, send_email
 from app.services.email_templates import EMAIL_TEMPLATES, list_email_templates
 
 router = APIRouter(tags=["admin-email"])
@@ -64,6 +64,15 @@ async def admin_email_config(
         from_name=settings.smtp_from_name or None,
         segments=segments,
     )
+
+
+@router.get("/admin/email/smtp-check")
+async def admin_email_smtp_check(
+    _: User = Depends(get_platform_admin),
+) -> dict:
+    if not settings.smtp_configured:
+        raise HTTPException(status_code=503, detail="SMTP не настроен")
+    return check_smtp_connectivity()
 
 
 @router.get("/admin/email/templates", response_model=list[AdminEmailTemplateOut])

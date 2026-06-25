@@ -23,6 +23,9 @@ export function AdminEmailTab({ meEmail, onError }: Props) {
   const [subject, setSubject] = useState('')
   const [bodyHtml, setBodyHtml] = useState('')
   const [preview, setPreview] = useState<AdminEmailSegmentPreview | null>(null)
+  const [smtpCheck, setSmtpCheck] = useState<{ ok: boolean; error?: string; hint?: string } | null>(
+    null,
+  )
 
   const loadAll = useCallback(async () => {
     const [cfgR, tplR, campR] = await Promise.all([
@@ -30,7 +33,14 @@ export function AdminEmailTab({ meEmail, onError }: Props) {
       apiFetch('/api/admin/email/templates'),
       apiFetch('/api/admin/email/campaigns'),
     ])
-    if (cfgR.ok) setConfig((await cfgR.json()) as AdminEmailConfig)
+    if (cfgR.ok) {
+      const cfg = (await cfgR.json()) as AdminEmailConfig
+      setConfig(cfg)
+      if (cfg.smtp_configured) {
+        const chk = await apiFetch('/api/admin/email/smtp-check')
+        if (chk.ok) setSmtpCheck((await chk.json()) as { ok: boolean; error?: string; hint?: string })
+      }
+    }
     if (tplR.ok) setTemplates((await tplR.json()) as AdminEmailTemplate[])
     if (campR.ok) setCampaigns((await campR.json()) as AdminEmailCampaign[])
   }, [])
@@ -125,9 +135,25 @@ export function AdminEmailTab({ meEmail, onError }: Props) {
           SMTP_USER / SMTP_PASSWORD. Можно свой Postfix на localhost:587 или relay (Yandex, Mailgun).
         </div>
       ) : (
-        <p className="admin-section-lead muted">
-          Отправитель: {config.from_name} &lt;{config.from_email}&gt;. Письма уходят пачками в фоне.
-        </p>
+        <>
+          <p className="admin-section-lead muted">
+            Отправитель: {config.from_name} &lt;{config.from_email}&gt;. Письма уходят пачками в фоне.
+          </p>
+          {smtpCheck && !smtpCheck.ok ? (
+            <div className="admin-banner admin-banner--error" style={{ marginBottom: '1rem' }}>
+              <div>
+                <strong>Нет TCP-соединения с SMTP</strong>
+                {smtpCheck.error ? `: ${smtpCheck.error}` : ''}
+              </div>
+              {smtpCheck.hint ? <div className="small" style={{ marginTop: '0.35rem' }}>{smtpCheck.hint}</div> : null}
+            </div>
+          ) : null}
+          {smtpCheck?.ok ? (
+            <p className="muted small" style={{ marginBottom: '1rem' }}>
+              SMTP-сервер доступен из контейнера.
+            </p>
+          ) : null}
+        </>
       )}
 
       <div className="admin-email-grid">

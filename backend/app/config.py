@@ -447,6 +447,7 @@ class Settings(BaseSettings):
     smtp_from_name: str = Field(default="ModelMate")
     smtp_use_tls: bool = Field(default=True, description="STARTTLS (порт 587)")
     smtp_use_ssl: bool = Field(default=False, description="SSL с самого начала (порт 465)")
+    smtp_timeout_seconds: float = Field(default=15.0, ge=5.0, le=120.0)
     email_campaign_batch_size: int = Field(default=25, ge=1, le=200)
     email_campaign_batch_delay_seconds: float = Field(default=2.0, ge=0.0, le=60.0)
 
