@@ -33,6 +33,8 @@ def test_resolve_model_sheet_prompt_custom():
 def test_resolve_workflow_model_sheet_prompt_includes_grid():
     out = resolve_workflow_model_sheet_prompt("")
     assert "grid" in out.lower()
+    assert "back" in out.lower()
+    assert "65" in out or "75" in out
     assert DEFAULT_WORKFLOW_SHEET_PROMPT.split()[0] in out
 
 

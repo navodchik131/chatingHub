@@ -31,19 +31,23 @@ DEFAULT_MODEL_SHEET_PROMPT = (
     "Одежда - черный топ с глубоким декольте черные спортивные шорты из облегающего материала"
 )
 
-# Workflow turnaround: character sheet + тонкая белая сетка только на face close-up (moderation guide).
+# Workflow turnaround: character sheet + белая сетка на лице (moderation guide).
 _WORKFLOW_FACE_GRID_INSTRUCTION = (
-    "On the front face close-up panel only: overlay a thin white guide grid on the face "
-    "(fine lines, ~30–40% opacity, 1–2 px) — like a neutral wireframe overlay. "
+    "On EVERY panel where the face is clearly visible, overlay a white guide grid on the face: "
+    "front face close-up, left and right face profile close-ups, and the face area in full-body "
+    "front and full-body side panels when the face is shown. "
+    "Grid style: crisp bright white lines, clearly visible (~65–75% opacity, 2–3 px stroke) — "
+    "not faint or washed-out; like a neutral wireframe overlay. "
     "The grid must NOT hide eyes, nose, mouth, or facial structure; identity stays fully readable. "
-    "Do NOT add the grid on side/back views or full-body panels."
+    "Do NOT add any grid on back-of-head panels, rear views where only the back of the head/hair is "
+    "visible, full-body back panel, or any panel where the face is not visible."
 )
 
 DEFAULT_WORKFLOW_SHEET_PROMPT = (
     "On a neutral gray background, create a character turnaround sheet from the source image. "
     "Left third: large front face close-up. "
-    "Remaining panels: face right profile, face left profile, face back; "
-    "full body front, full body left side, full body right side. "
+    "Remaining panels: face right profile, face left profile, back of head (no face visible); "
+    "full body front, full body left side, full body right side, full body back. "
     "Keep the exact same outfit, colors, and styling as the source image. "
     f"{_WORKFLOW_FACE_GRID_INSTRUCTION}"
 )

@@ -168,8 +168,8 @@ function TurnaroundSheetNodeComponent({ id, data }: NodeProps) {
         </span>
 
         <p className="workflow-node__hint">
-          GPT Image 2.0 · character sheet 16:9 · белая сетка только на лице · одежда с первого
-          кадра
+          GPT Image 2.0 · character sheet 16:9 · белая сетка на всех ракурсах с лицом (не сзади) ·
+          одежда с первого кадра
         </p>
 
         {nodeData.imageUrl ? (

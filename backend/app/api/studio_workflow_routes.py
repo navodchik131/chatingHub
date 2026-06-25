@@ -653,8 +653,12 @@ async def _accept_workflow_video_job(
         normalize_seedance_t2v_variant,
     )
     from app.services.studio_motion_video import resolve_motion_video_file
-    from app.services.studio_plan import apply_studio_credit_cost, ensure_can_consume_credits
-    from app.services.studio_routes import load_owner_studio_billing, studio_wavespeed_api_key
+    from app.services.credits import ensure_can_consume_credits
+    from app.services.studio_keys import (
+        apply_studio_credit_cost,
+        load_owner_studio_billing,
+        studio_wavespeed_api_key,
+    )
 
     assert_permission(user, PERM_STUDIO_GENERATE)
     oid = workspace_owner_id(user)

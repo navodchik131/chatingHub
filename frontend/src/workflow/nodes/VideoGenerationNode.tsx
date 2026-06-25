@@ -239,7 +239,7 @@ function VideoGenerationNodeComponent({ id, data }: NodeProps) {
       </span>
 
       <p className="workflow-node__hint">
-        Seedance 2.0 / Mini · первый кадр + развёртка + motion · сетка с лица убирается в промпте
+        Seedance 2.0 / Mini · кадр + развёртка + motion · сетку с лица снимаем при генерации видео
       </p>
 
       <div className="workflow-gen-form">

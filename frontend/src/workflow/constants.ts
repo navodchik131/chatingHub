@@ -24,7 +24,7 @@ export const NODE_DESCRIPTIONS: Record<NodeType, string> = {
   reference: 'Фото-референс — к генерации можно подключить несколько',
   imageGeneration: 'Сборка промпта и генерация',
   firstFrameGeneration: 'Первый кадр сцены для motion-пайплайна',
-  turnaroundSheet: 'Character sheet GPT Image 2.0 с сеткой на лице',
+  turnaroundSheet: 'Character sheet GPT Image 2.0 — сетка на лице (кроме вида сзади)',
   motionVideo: 'Референс движения для Seedance',
   videoGeneration: 'Seedance 2.0 / Mini — кадр + развёртка + motion',
   preview: 'Просмотр и скачивание результата',
