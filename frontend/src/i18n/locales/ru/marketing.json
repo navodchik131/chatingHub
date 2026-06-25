@@ -46,14 +46,14 @@
     "titleAccent": "AI-моделей",
     "titleAfter": " и общайся с фанами.",
     "dek": "Генерация фото и видео, чат Fanvue и Telegram, авто-перевод и команда — без переключения между пятью сервисами.",
-    "ctaPrimary": "Попробовать бесплатно — {{signupCredits}} кр.",
+    "ctaPrimary": "Попробовать бесплатно — {{demoGenerations}} картинки",
     "ctaSecondary": "Запуск за 5 минут",
     "statBetaValue": "{{betaCount}}",
     "statBetaLabel": "зарегистрировано",
     "statSetupValue": "5 мин",
     "statSetupLabel": "подключение WaveSpeed",
-    "statByokValue": "BYOK",
-    "statByokLabel": "ключи шифруются"
+    "statByokValue": "Pro",
+    "statByokLabel": "свой ключ WaveSpeed"
   },
   "community": {
     "eyebrow": "Telegram · @ModelMate_app",
@@ -192,7 +192,7 @@
         "text": "После студии подключите каналы в «Подключения», чтобы работать в одном инбоксе."
       }
     ],
-    "cta": "Начать бесплатно — {{signupCredits}} кредитов"
+    "cta": "Начать бесплатно — {{demoGenerations}} картинки"
   },
   "modelsStrip": {
     "eyebrow": "Интеграции · один баланс"
@@ -200,37 +200,37 @@
   "trial": {
     "eyebrow": "Beta · доступ",
     "title": "{{betaCount}} пользователей на платформе",
-    "dek": "{{signupCredits}} кредитов при регистрации. В тестовом периоде может списываться и баланс ModelMate (кредиты), и баланс WaveSpeed по вашему ключу — это нужно, чтобы проверить оплату платформы и оплату провайдера в реальных сценариях. После выбора тарифа логика фиксируется: BYOK — генерации оплачиваются на стороне WaveSpeed, Managed — из кредитов платформы.",
+    "dek": "{{demoGenerations}} бесплатных генераций картинок при регистрации. На тарифе Pro оплата идёт напрямую в WaveSpeed по вашему ключу. Standard — кредиты платформы на студию.",
     "cta": "Получить доступ"
   },
   "cta": {
     "eyebrow": "Студия открыта",
     "titleLine1": "Хватит прыгать",
     "titleLine2": "между сервисами.",
-    "dek": "Картинки, видео, чаты и команда — в ModelMate. {{signupCredits}} кредитов на старт, без привязки карты.",
+    "dek": "Картинки, видео, чаты и команда — в ModelMate. {{demoGenerations}} бесплатных генераций на старт, без привязки карты.",
     "ctaPrimary": "Начать сейчас",
     "ctaSecondary": "Частые вопросы"
   },
   "compare": {
     "eyebrow": "Сравнение",
     "title": "Solo · Pro · Studio",
-    "dek": "BYOK и Managed — лимиты пользователей, моделей и GROK в одной таблице.",
+    "dek": "Pro и Standard — лимиты пользователей, моделей и диалогов в одной таблице.",
     "link": "Полная таблица тарифов ↗"
   },
   "pricing": {
     "section": {
-      "eyebrow": "Pricing · BYOK · Managed",
+      "eyebrow": "Pricing · Pro · Standard",
       "titleBefore": "Платишь за ",
       "titleAccent": "подписку",
       "titleLine2": "Генерация — по правилам тарифа.",
       "dekBefore": "Свой ключ ",
       "dekWavespeed": "WaveSpeed",
-      "dekAfter": " (BYOK) или кредиты платформы (Managed). Год — скидка 25%."
+      "dekAfter": " (Pro) или кредиты платформы (Standard). Год — скидка 25%."
     },
     "toggles": {
       "kindAria": "Формат тарифа",
-      "byok": "Со своим ключом (BYOK)",
-      "managed": "Всё включено (Managed)",
+      "pro": "Pro — свой ключ",
+      "standard": "Standard — кредиты включены",
       "periodAria": "Период оплаты",
       "month": "Месяц",
       "year": "Год — скидка 25%"
@@ -242,28 +242,27 @@
       "ctaDefault": "Попробовать бесплатно",
       "ctaStudio": "Связаться / начать"
     },
-    "byokExplainer": {
-      "title": "Что такое BYOK?",
-      "p1Before": "BYOK (Bring Your Own Key) — вы подключаете API-ключ ",
+    "proExplainer": {
+      "title": "Что такое Pro?",
+      "p1Before": "Pro — вы подключаете API-ключ ",
       "p1Wavespeed": "wavespeed.ai",
-      "p1After": ". Платите провайдеру напрямую по реальной цене генерации, без наценки платформы на картинки и видео. ModelMate берёт плату за инфраструктуру, чат, команду и GROK для промптов.",
-      "p2": "Не хотите регистрироваться на WaveSpeed — выберите Managed: кредиты на студию уже в подписке, докупка от 50 шт. по текущим ценам в кабинете."
+      "p1After": ". Платите провайдеру напрямую по реальной цене генерации — платформа не списывает кредиты за картинки и видео. ModelMate берёт плату за инфраструктуру, чат и команду.",
+      "p2": "Не хотите регистрироваться на WaveSpeed — выберите Standard: кредиты на студию уже в подписке, докупка от 50 шт. по текущим ценам в кабинете."
     },
     "features": {
       "usersOne": "1 пользователь",
       "usersMany": "До {{count}} пользователей",
       "modelsOne": "1 модель",
       "modelsMany": "До {{count}} моделей",
-      "byokKey": "Свой ключ WaveSpeed",
-      "managedCredits": "Кредиты на генерацию включены",
+      "proKey": "Свой ключ WaveSpeed — без списаний на платформе",
+      "standardCredits": "Кредиты на генерацию включены",
       "chat": "Чат Fanvue + Telegram",
       "translation": "Авто-перевод переписок",
-      "grok": "GROK для промптов и сцен",
       "history": "История генераций",
       "creditsYear": "{{total}} кредитов за год ({{monthly}} / мес.)",
       "creditsMonth": "{{total}} кредитов за месяц",
       "team": "Командная работа и роли",
-      "studioLimits": "Расширенные лимиты диалогов и GROK"
+      "studioLimits": "Расширенные лимиты диалогов"
     }
   },
   "landing": {
@@ -295,14 +294,14 @@
   "pricingPage": {
     "eyebrow": "Тарифы · ЮKassa",
     "title": "Тарифы",
-    "intro": "Шесть планов: BYOK и Managed в трёх размерах (Solo, Pro, Studio). Оплата в кабинете через ЮKassa. Триал — {{signupCredits}} кредитов без срока.",
-    "creditsEyebrow": "Managed · докупка",
+    "intro": "Шесть планов: Pro и Standard в трёх размерах (Solo, Pro, Studio). Оплата в кабинете через ЮKassa. Старт — {{demoGenerations}} бесплатных генераций.",
+    "creditsEyebrow": "Standard · докупка",
     "creditsTitle": "Кредиты без пакетов",
     "creditsDek": "Любое количество от {{creditsMin}} шт. — {{creditsUnit}} ₽/кредит; от {{creditsBulkFrom}} шт. — {{creditsBulkUnit}} ₽/кредит.",
     "creditsCta": "Пополнить в кабинете",
     "trialEyebrow": "Триал",
     "trialTitle": "Старт без карты",
-    "trialDek": "{{signupCredits}} кредитов при регистрации. Для генерации подключите свой ключ WaveSpeed в интеграциях. Кредиты не сгорают по времени.",
+    "trialDek": "{{demoGenerations}} бесплатных генераций картинок при регистрации. Для Pro подключите ключ WaveSpeed в интеграциях. Демо не сгорает по времени.",
     "footerFaq": "FAQ →",
     "footerHome": "На главную ↗"
   },

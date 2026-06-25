@@ -107,11 +107,11 @@ class UserMeOut(BaseModel):
     email: str
     subscription_status: str
     credits_balance: int
-    """План биллинга владельца пространства: managed | byok."""
-    billing_plan: str = "managed"
+    """План биллинга: credits | standard | pro."""
+    billing_plan: str = "standard"
     """solo | pro | studio."""
     plan_tier: str = "solo"
-    plan_display_name: str = "Managed Solo"
+    plan_display_name: str = "Credits"
     plan_usage: PlanUsageOut | None = None
     """Дата окончания оплаченного периода подписки (UTC), если есть."""
     subscription_period_end: datetime | None = None
@@ -127,6 +127,8 @@ class UserMeOut(BaseModel):
     """Можно оформить или продлить подписку онлайн (на сервере настроена оплата)."""
     online_payment_available: bool = False
     signup_bonus_credits: int = 0
+    demo_generations_remaining: int = 0
+    demo_generations_grant: int = 3
 
 
 class WorkspaceMemberCreateIn(BaseModel):
@@ -666,8 +668,8 @@ class AdminUserRow(BaseModel):
     parent_email: str | None = None
     member_login: str | None = None
     subscription_status: str
-    """План биллинга владельца пространства (managed | byok)."""
-    billing_plan: str = "managed"
+    """План биллинга: credits | standard | pro."""
+    billing_plan: str = "standard"
     plan_tier: str | None = None
     """Дата окончания оплаченного периода подписки владельца (UTC), если задана."""
     subscription_period_end: datetime | None = None
@@ -714,7 +716,7 @@ class AdminSubscriptionPatchIn(BaseModel):
     current_period_end: datetime | None = None
     billing_plan: str | None = Field(
         default=None,
-        description="managed | byok; биллинг всегда у владельца пространства",
+        description="credits | standard | pro (legacy: managed, byok)",
     )
 
     @field_validator("billing_plan", mode="before")
@@ -723,6 +725,9 @@ class AdminSubscriptionPatchIn(BaseModel):
         if v is None:
             return None
         s = str(v).strip().lower()
-        if s not in ("managed", "byok"):
-            raise ValueError("billing_plan must be managed or byok")
+        legacy = {"managed": "standard", "byok": "pro"}
+        if s in legacy:
+            return legacy[s]
+        if s not in ("credits", "standard", "pro"):
+            raise ValueError("billing_plan must be credits, standard, or pro")
         return s

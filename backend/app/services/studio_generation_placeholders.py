@@ -126,11 +126,14 @@ async def finalize_studio_generation_for_terminal_job(
     if job.status == StudioJobStatus.failed.value:
         ws_key = ""
         try:
-            sub_b, _, ws_row, plan, _credits = await load_owner_studio_billing(
+            sub_b, _, ws_row, plan, _credits, _demo = await load_owner_studio_billing(
                 session, gen.user_id
             )
             ws_key = studio_wavespeed_api_key(
-                plan=plan, ws_row=ws_row, owner_subscription=sub_b
+                plan=plan,
+                ws_row=ws_row,
+                owner_subscription=sub_b,
+                demo_generations_remaining=_demo,
             )
         except Exception:
             log.exception("studio recover: billing load failed gen=%s", gen.id)

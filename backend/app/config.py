@@ -45,7 +45,19 @@ class Settings(BaseSettings):
     # Email владельцев (через запятую), которым разрешён /api/admin без is_platform_admin в БД
     admin_emails: str = Field(default="")
 
-    signup_bonus_credits: int = Field(default=100)
+    signup_bonus_credits: int = Field(
+        default=0,
+        description="Кредиты при регистрации (0 — используется demo_generations_grant).",
+    )
+    demo_generations_grant: int = Field(
+        default=3,
+        ge=0,
+        description="Бесплатные генерации картинок для тарифа Credits.",
+    )
+    demo_studio_wave_model: str = Field(
+        default="nano-banana-2",
+        description="Модель WaveSpeed для демо (обычные фото). NSFW в демо — wan-2.7.",
+    )
     referral_signup_bonus_credits: int = Field(
         default=25,
         description="Кредиты приглашённому по реферальному коду (доп. к signup_bonus).",

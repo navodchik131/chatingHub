@@ -25,7 +25,7 @@ from app.db.models import (
 
 # События, не считающиеся «осмысленной» активностью владельца (бонусы при регистрации и т.п.)
 _USAGE_KINDS_NOT_ENGAGEMENT = frozenset(
-    {"referral_signup_bonus", "managed_subscription_bonus"}
+    {"referral_signup_bonus", "managed_subscription_bonus", "standard_subscription_bonus"}
 )
 
 _PAID_SUBSCRIPTION_STATUSES = (
@@ -347,7 +347,7 @@ async def build_admin_dashboard(session: AsyncSession, *, chart_days: int = 30) 
     ).all()
     subscriptions_by_plan = [
         {
-            "label": f"{(bp or 'managed').lower()} · {(tier or 'solo').lower()} · "
+            "label": f"{(bp or 'standard').lower()} · {(tier or 'solo').lower()} · "
             f"{(st.value if hasattr(st, 'value') else str(st))}",
             "count": int(c),
         }

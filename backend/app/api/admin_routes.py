@@ -68,7 +68,7 @@ def _owner_subscription_tuple(
     sub: Subscription | None,
 ) -> tuple[str, str, str | None, datetime | None]:
     st = sub.status.value if sub else SubscriptionStatus.none.value
-    bp = (sub.billing_plan if sub else None) or "managed"
+    bp = (sub.billing_plan if sub else None) or "credits"
     tier = sub.plan_tier if sub else None
     pend = sub.current_period_end if sub else None
     return st, bp, tier, pend

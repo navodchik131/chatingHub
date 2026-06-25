@@ -24,14 +24,13 @@ export function marketingTierFeatures(
   const base = [
     users,
     models,
-    billing === 'byok' ? t('pricing.features.byokKey') : t('pricing.features.managedCredits'),
+    billing === 'pro' ? t('pricing.features.proKey') : t('pricing.features.standardCredits'),
     t('pricing.features.chat'),
     t('pricing.features.translation'),
-    t('pricing.features.grok'),
     t('pricing.features.history'),
   ]
 
-  if (billing === 'managed' && LIMITS[tier]) {
+  if (billing === 'standard' && LIMITS[tier]) {
     const monthly = managedMonthlyCredits ?? { solo: 150, pro: 400, studio: 1200 }[tier]
     const total = period === 'year' ? monthly * 12 : monthly
     base[2] =

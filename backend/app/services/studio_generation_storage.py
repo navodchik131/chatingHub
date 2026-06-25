@@ -708,8 +708,13 @@ async def recover_recent_failed_studio_generations(
     rows = list((await session.execute(stmt)).scalars().all())
     if not rows:
         return 0
-    sub_b, _, ws_row, plan, _credits = await load_owner_studio_billing(session, owner_id)
-    ws_key = studio_wavespeed_api_key(plan=plan, ws_row=ws_row, owner_subscription=sub_b)
+    sub_b, _, ws_row, plan, _credits, _demo = await load_owner_studio_billing(session, owner_id)
+    ws_key = studio_wavespeed_api_key(
+        plan=plan,
+        ws_row=ws_row,
+        owner_subscription=sub_b,
+        demo_generations_remaining=_demo,
+    )
     if not (ws_key or "").strip():
         return 0
     done = 0
@@ -803,11 +808,14 @@ async def retry_pending_studio_archives() -> int:
             .limit(batch)
         )
         for row in (await session.execute(recover_stmt)).scalars().all():
-            sub_b, _, ws_row, plan, _credits = await load_owner_studio_billing(
+            sub_b, _, ws_row, plan, _credits, _demo = await load_owner_studio_billing(
                 session, row.user_id
             )
             ws_key = studio_wavespeed_api_key(
-                plan=plan, ws_row=ws_row, owner_subscription=sub_b
+                plan=plan,
+                ws_row=ws_row,
+                owner_subscription=sub_b,
+                demo_generations_remaining=_demo,
             )
             if not (ws_key or "").strip():
                 continue

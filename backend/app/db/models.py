@@ -141,9 +141,9 @@ class Subscription(Base):
     user_id: Mapped[int] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), unique=True, index=True
     )
-    # managed: кредиты на студию; WaveSpeed — платформенный после оплаты или свой в trial/BYOK; LLM студии — с сервера
+    # managed → standard; WaveSpeed платформы на Credits/Standard
     billing_plan: Mapped[str] = mapped_column(
-        String(16), default="managed", nullable=False
+        String(16), default="standard", nullable=False
     )
     status: Mapped[SubscriptionStatus] = mapped_column(
         Enum(SubscriptionStatus, native_enum=False, length=32),
@@ -169,6 +169,7 @@ class CreditAccount(Base):
         ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
     )
     balance: Mapped[int] = mapped_column(Integer, default=0)
+    demo_generations_remaining: Mapped[int] = mapped_column(Integer, default=0)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),

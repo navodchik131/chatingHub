@@ -7,7 +7,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.db.models import CreditAccount, LlmConnection, Subscription, SubscriptionStatus, WavespeedConnection
 from app.services.billing_plan import (
-    assert_byok_wavespeed,
+    assert_pro_wavespeed,
+    is_credits_plan,
+    is_pro_plan,
     normalize_billing_plan,
     platform_covers_studio_api_costs,
 )
@@ -16,9 +18,24 @@ from app.services.entitlements import subscription_is_paid_active
 from app.services.studio_openai import StudioOpenAiCredentials
 
 
+def demo_uses_platform_wavespeed(
+    *,
+    demo_generations_remaining: int,
+    billing_plan: str,
+    owner_subscription: Subscription | None,
+) -> bool:
+    if demo_generations_remaining <= 0:
+        return False
+    if not is_credits_plan(billing_plan):
+        return False
+    if owner_subscription and subscription_is_paid_active(owner_subscription):
+        return False
+    return bool((settings.wavespeed_platform_api_key or "").strip())
+
+
 async def load_owner_studio_billing(
     session: AsyncSession, owner_id: int
-) -> tuple[Subscription | None, LlmConnection | None, WavespeedConnection | None, str, int]:
+) -> tuple[Subscription | None, LlmConnection | None, WavespeedConnection | None, str, int, int]:
     sub = await session.scalar(select(Subscription).where(Subscription.user_id == owner_id))
     llm = await session.scalar(select(LlmConnection).where(LlmConnection.user_id == owner_id))
     ws = await session.scalar(
@@ -27,17 +44,17 @@ async def load_owner_studio_billing(
     cr = await session.scalar(select(CreditAccount).where(CreditAccount.user_id == owner_id))
     plan = normalize_billing_plan(sub.billing_plan if sub else None)
     bal = int(cr.balance) if cr is not None else 0
-    return sub, llm, ws, plan, bal
+    demo_rem = int(cr.demo_generations_remaining) if cr is not None else 0
+    return sub, llm, ws, plan, bal, demo_rem
 
 
 def studio_llm_credentials(*, plan: str | None = None, llm_row: LlmConnection | None = None) -> StudioOpenAiCredentials:
-    """Студия всегда использует LLM с сервера (OPENAI_* / xAI и т.д.); ключи из кабинета не применяются."""
     _ = plan, llm_row
     key = (settings.openai_api_key or "").strip()
     if not key:
         raise HTTPException(
             status_code=503,
-            detail="На сервере не задан OPENAI_API_KEY для студии (текст и vision).",
+            detail="Студия временно недоступна. Обратитесь к администратору.",
         )
     base = (settings.openai_base_url or "").strip().rstrip("/") or "https://api.openai.com/v1"
     org = (settings.openai_organization or "").strip()
@@ -49,32 +66,37 @@ def studio_wavespeed_api_key(
     plan: str,
     ws_row: WavespeedConnection | None,
     owner_subscription: Subscription | None,
+    demo_generations_remaining: int = 0,
 ) -> str:
-    """
-    WaveSpeed: период onboarding (trialing) — только ключ владельца из интеграций.
-    Оплаченный Managed — платформенный ключ из .env.
-    Оплаченный BYOK — ключ владельца.
-    """
-    st = owner_subscription.status if owner_subscription else None
-    if st == SubscriptionStatus.trialing:
-        assert_byok_wavespeed(plan, ws_row)
-        try:
-            return decrypt_secret(ws_row.api_key_encrypted)  # type: ignore[union-attr]
-        except ValueError as e:
-            raise HTTPException(
-                status_code=400, detail="Не удалось расшифровать ключ WaveSpeed"
-            ) from e
-
-    if platform_covers_studio_api_costs(plan) and subscription_is_paid_active(owner_subscription):
+    plan_n = normalize_billing_plan(plan)
+    if demo_uses_platform_wavespeed(
+        demo_generations_remaining=demo_generations_remaining,
+        billing_plan=plan_n,
+        owner_subscription=owner_subscription,
+    ):
         key = (settings.wavespeed_platform_api_key or "").strip()
         if not key:
             raise HTTPException(
                 status_code=503,
-                detail="На сервере не задан WAVESPEED_PLATFORM_API_KEY для тарифа Managed (студия WaveSpeed).",
+                detail="Демо-генерации временно недоступны. Попробуйте позже или пополните кредиты.",
             )
         return key
 
-    assert_byok_wavespeed(plan, ws_row)
+    if platform_covers_studio_api_costs(plan_n) and subscription_is_paid_active(owner_subscription):
+        key = (settings.wavespeed_platform_api_key or "").strip()
+        if not key:
+            raise HTTPException(
+                status_code=503,
+                detail="Генерация временно недоступна. Обратитесь к администратору.",
+            )
+        return key
+
+    if is_credits_plan(plan_n) and platform_covers_studio_api_costs(plan_n):
+        key = (settings.wavespeed_platform_api_key or "").strip()
+        if key:
+            return key
+
+    assert_pro_wavespeed(plan_n, ws_row)
     try:
         return decrypt_secret(ws_row.api_key_encrypted)  # type: ignore[union-attr]
     except ValueError as e:
@@ -84,7 +106,6 @@ def studio_wavespeed_api_key(
 
 
 def studio_charges_credits(plan: str) -> bool:
-    """True — операции студии расходуют кредиты (тариф managed, в т.ч. onboarding до оплаты)."""
     return platform_covers_studio_api_costs(plan)
 
 
@@ -99,17 +120,26 @@ def wavespeed_cabinet_flags(
     plan: str,
     ws_row: WavespeedConnection | None,
     sub: Subscription | None,
+    demo_generations_remaining: int = 0,
 ) -> tuple[bool, bool]:
-    """
-    (wavespeed_configured, wavespeed_managed_by_platform) — как в студии: пробный managed — только ключ из кабинета;
-    оплаченный managed — WAVESPEED_PLATFORM_API_KEY; BYOK — ключ из кабинета.
-    """
+    plan_n = normalize_billing_plan(plan)
     platform_ws_ok = bool((settings.wavespeed_platform_api_key or "").strip())
     user_ws_ok = bool(ws_row and (ws_row.api_key_encrypted or "").strip())
-    managed = platform_covers_studio_api_costs(plan)
-    st = sub.status if sub else None
-    if st == SubscriptionStatus.trialing:
-        return user_ws_ok, False
-    if managed and subscription_is_paid_active(sub):
+
+    if demo_uses_platform_wavespeed(
+        demo_generations_remaining=demo_generations_remaining,
+        billing_plan=plan_n,
+        owner_subscription=sub,
+    ):
         return platform_ws_ok, platform_ws_ok
+
+    if platform_covers_studio_api_costs(plan_n) and subscription_is_paid_active(sub):
+        return platform_ws_ok, platform_ws_ok
+
+    if is_credits_plan(plan_n) and platform_ws_ok:
+        return platform_ws_ok, True
+
+    if is_pro_plan(plan_n):
+        return user_ws_ok, False
+
     return user_ws_ok, False

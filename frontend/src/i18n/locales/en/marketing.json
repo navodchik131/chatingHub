@@ -46,14 +46,14 @@
     "titleAccent": "AI models",
     "titleAfter": " and connect with fans.",
     "dek": "Photo and video generation, Fanvue and Telegram chat, auto-translation, and team workflows — without juggling five separate tools.",
-    "ctaPrimary": "Try free — {{signupCredits}} cr.",
+    "ctaPrimary": "Try free — {{demoGenerations}} images",
     "ctaSecondary": "Launch in 5 minutes",
     "statBetaValue": "{{betaCount}}",
     "statBetaLabel": "registered",
     "statSetupValue": "5 min",
     "statSetupLabel": "WaveSpeed setup",
-    "statByokValue": "BYOK",
-    "statByokLabel": "keys encrypted"
+    "statByokValue": "Pro",
+    "statByokLabel": "your WaveSpeed key"
   },
   "community": {
     "eyebrow": "Telegram · @ModelMate_app",
@@ -192,7 +192,7 @@
         "text": "After studio setup, connect channels in Connections to work from one inbox."
       }
     ],
-    "cta": "Start free — {{signupCredits}} credits"
+    "cta": "Start free — {{demoGenerations}} images"
   },
   "modelsStrip": {
     "eyebrow": "Integrations · one balance"
@@ -200,37 +200,37 @@
   "trial": {
     "eyebrow": "Beta · access",
     "title": "{{betaCount}} users on the platform",
-    "dek": "{{signupCredits}} credits on signup. During the trial period, both ModelMate credits and your WaveSpeed balance may be charged to validate both platform-side and provider-side billing flows. After you choose a plan, behavior is fixed by plan rules: BYOK bills generation on WaveSpeed, Managed uses platform credits.",
+    "dek": "{{demoGenerations}} free image generations on signup. On Pro, billing goes directly to WaveSpeed via your key. Standard uses platform credits for the studio.",
     "cta": "Get access"
   },
   "cta": {
     "eyebrow": "Studio is open",
     "titleLine1": "Stop jumping",
     "titleLine2": "between tools.",
-    "dek": "Images, video, chats, and team — in ModelMate. {{signupCredits}} credits to start, no card required.",
+    "dek": "Images, video, chats, and team — in ModelMate. {{demoGenerations}} free generations to start, no card required.",
     "ctaPrimary": "Start now",
     "ctaSecondary": "FAQ"
   },
   "compare": {
     "eyebrow": "Compare",
     "title": "Solo · Pro · Studio",
-    "dek": "BYOK and Managed — user limits, model limits, and GROK in one table.",
+    "dek": "Pro and Standard — user limits, model limits, and dialogs in one table.",
     "link": "Full pricing table ↗"
   },
   "pricing": {
     "section": {
-      "eyebrow": "Pricing · BYOK · Managed",
+      "eyebrow": "Pricing · Pro · Standard",
       "titleBefore": "Pay for ",
       "titleAccent": "the platform",
       "titleLine2": "Generation follows your plan.",
       "dekBefore": "Your own ",
       "dekWavespeed": "WaveSpeed",
-      "dekAfter": " key (BYOK) or platform credits (Managed). Annual billing — 25% off."
+      "dekAfter": " key (Pro) or platform credits (Standard). Annual billing — 25% off."
     },
     "toggles": {
       "kindAria": "Plan type",
-      "byok": "Bring your own key (BYOK)",
-      "managed": "All-inclusive (Managed)",
+      "pro": "Pro — your key",
+      "standard": "Standard — credits included",
       "periodAria": "Billing period",
       "month": "Monthly",
       "year": "Annual — 25% off"
@@ -242,28 +242,27 @@
       "ctaDefault": "Try free",
       "ctaStudio": "Contact / get started"
     },
-    "byokExplainer": {
-      "title": "What is BYOK?",
-      "p1Before": "BYOK (Bring Your Own Key) — you connect an API key from ",
+    "proExplainer": {
+      "title": "What is Pro?",
+      "p1Before": "Pro — you connect an API key from ",
       "p1Wavespeed": "wavespeed.ai",
-      "p1After": ". Pay the provider directly at real generation rates, with no platform markup on images and video. ModelMate charges for infrastructure, chat, team features, and GROK for prompts.",
-      "p2": "Don't want to sign up for WaveSpeed? Choose Managed: studio credits are included in your subscription, with top-ups from 50 credits at current dashboard rates."
+      "p1After": ". Pay the provider directly at real generation rates — the platform does not charge credits for images and video. ModelMate charges for infrastructure, chat, and team features.",
+      "p2": "Don't want to sign up for WaveSpeed? Choose Standard: studio credits are included in your subscription, with top-ups from 50 credits at current dashboard rates."
     },
     "features": {
       "usersOne": "1 user",
       "usersMany": "Up to {{count}} users",
       "modelsOne": "1 model",
       "modelsMany": "Up to {{count}} models",
-      "byokKey": "Your WaveSpeed key",
-      "managedCredits": "Generation credits included",
+      "proKey": "Your WaveSpeed key — no platform charges for generation",
+      "standardCredits": "Generation credits included",
       "chat": "Fanvue + Telegram chat",
       "translation": "Auto-translate conversations",
-      "grok": "GROK for prompts & scenes",
       "history": "Generation history",
       "creditsYear": "{{total}} credits per year ({{monthly}} / mo.)",
       "creditsMonth": "{{total}} credits per month",
       "team": "Team workflows & roles",
-      "studioLimits": "Extended chat and GROK limits"
+      "studioLimits": "Extended dialog limits"
     }
   },
   "landing": {
@@ -295,14 +294,14 @@
   "pricingPage": {
     "eyebrow": "Pricing · YooKassa",
     "title": "Pricing",
-    "intro": "Six plans: BYOK and Managed in three sizes (Solo, Pro, Studio). Pay in the dashboard via YooKassa. Trial — {{signupCredits}} credits with no expiry.",
-    "creditsEyebrow": "Managed · top-up",
+    "intro": "Six plans: Pro and Standard in three sizes (Solo, Pro, Studio). Pay in the dashboard via YooKassa. Start with {{demoGenerations}} free generations.",
+    "creditsEyebrow": "Standard · top-up",
     "creditsTitle": "Credits without bundles",
     "creditsDek": "Any amount from {{creditsMin}} — {{creditsUnit}} ₽/credit; from {{creditsBulkFrom}} — {{creditsBulkUnit}} ₽/credit.",
     "creditsCta": "Top up in dashboard",
     "trialEyebrow": "Trial",
     "trialTitle": "Start without a card",
-    "trialDek": "{{signupCredits}} credits on signup. For generation, connect your WaveSpeed key in Integrations. Credits do not expire over time.",
+    "trialDek": "{{demoGenerations}} free image generations on signup. For Pro, connect your WaveSpeed key in Integrations. Demo generations do not expire over time.",
     "footerFaq": "FAQ →",
     "footerHome": "Back to home ↗"
   },

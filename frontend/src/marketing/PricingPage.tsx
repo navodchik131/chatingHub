@@ -20,7 +20,7 @@ export function PricingPage() {
   const creditsBulkFrom = health?.billing_credits_bulk_from ?? FALLBACK_CREDITS_BULK_FROM
   const creditsUnit = health?.billing_credits_unit_price_rub ?? FALLBACK_UNIT
   const creditsBulkUnit = health?.billing_credits_bulk_unit_price_rub ?? FALLBACK_BULK_UNIT
-  const signupCredits = health?.signup_bonus_credits ?? 100
+  const demoGenerations = health?.demo_generations_grant ?? 3
   const locale = i18n.language === 'en' ? 'en-US' : 'ru-RU'
 
   return (
@@ -29,7 +29,7 @@ export function PricingPage() {
         <header className="mm-page-head">
           <MmEyebrow>{t('pricingPage.eyebrow')}</MmEyebrow>
           <h1>{t('pricingPage.title')}</h1>
-          <p>{t('pricingPage.intro', { signupCredits })}</p>
+          <p>{t('pricingPage.intro', { demoGenerations })}</p>
         </header>
       </MmContainer>
       <PricingSection plans={plans} id="plans" />
@@ -56,7 +56,7 @@ export function PricingPage() {
           <h2 className="mm-display-lg" style={{ fontSize: 'clamp(1.5rem, 3vw, 2rem)' }}>
             {t('pricingPage.trialTitle')}
           </h2>
-          <p className="mm-muted">{t('pricingPage.trialDek', { signupCredits })}</p>
+          <p className="mm-muted">{t('pricingPage.trialDek', { demoGenerations })}</p>
         </section>
         <p className="mm-muted">
           <Link to={path('/faq')} className="mm-link-arrow">

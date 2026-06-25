@@ -354,6 +354,85 @@ async def init_db() -> None:
         await conn.run_sync(_migrate_message_attachments_table)
         await conn.run_sync(_migrate_funnel_events_table)
         await conn.run_sync(_migrate_workflow_workspaces_table)
+        await conn.run_sync(_migrate_credit_account_demo_generations)
+        await conn.run_sync(_migrate_billing_plans_rename)
+        await conn.run_sync(_migrate_trialing_to_credits_demo)
+
+
+def _migrate_credit_account_demo_generations(sync_conn) -> None:
+    from sqlalchemy import inspect, text
+
+    insp = inspect(sync_conn)
+    if not insp.has_table("credit_accounts"):
+        return
+    cols = {c["name"] for c in insp.get_columns("credit_accounts")}
+    if "demo_generations_remaining" not in cols:
+        sync_conn.execute(
+            text(
+                "ALTER TABLE credit_accounts "
+                "ADD COLUMN demo_generations_remaining INTEGER NOT NULL DEFAULT 0"
+            )
+        )
+
+
+def _migrate_billing_plans_rename(sync_conn) -> None:
+    from sqlalchemy import inspect, text
+
+    insp = inspect(sync_conn)
+    if not insp.has_table("subscriptions"):
+        return
+    sync_conn.execute(
+        text("UPDATE subscriptions SET billing_plan = 'standard' WHERE billing_plan = 'managed'")
+    )
+    sync_conn.execute(
+        text("UPDATE subscriptions SET billing_plan = 'pro' WHERE billing_plan = 'byok'")
+    )
+
+
+def _migrate_trialing_to_credits_demo(sync_conn) -> None:
+    """Пробные без оплат → Credits, 3 демо, баланс 0."""
+    from sqlalchemy import inspect, text
+
+    insp = inspect(sync_conn)
+    if not insp.has_table("credit_accounts") or not insp.has_table("subscriptions"):
+        return
+    cols = {c["name"] for c in insp.get_columns("credit_accounts")}
+    if "demo_generations_remaining" not in cols:
+        return
+    paid_kinds = (
+        "yookassa_credits_pack",
+        "managed_subscription_bonus",
+        "standard_subscription_bonus",
+        "subscription_credits_payment",
+    )
+    ph = ", ".join(f"'{k}'" for k in paid_kinds)
+    sync_conn.execute(
+        text(
+            f"""
+            UPDATE subscriptions SET billing_plan = 'credits', status = 'none'
+            WHERE status = 'trialing'
+              AND user_id NOT IN (
+                SELECT DISTINCT user_id FROM usage_events WHERE kind IN ({ph})
+              )
+            """
+        )
+    )
+    sync_conn.execute(
+        text(
+            f"""
+            UPDATE credit_accounts
+            SET demo_generations_remaining = 3, balance = 0
+            WHERE demo_generations_remaining = 0
+              AND user_id IN (
+                SELECT user_id FROM subscriptions
+                WHERE billing_plan = 'credits' AND status = 'none'
+              )
+              AND user_id NOT IN (
+                SELECT DISTINCT user_id FROM usage_events WHERE kind IN ({ph})
+              )
+            """
+        )
+    )
 
 
 def _migrate_workflow_workspaces_table(sync_conn) -> None:

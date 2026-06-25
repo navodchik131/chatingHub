@@ -21,7 +21,7 @@ export function PricingSection({
   compact?: boolean
 }) {
   const { t } = useTranslation('marketing')
-  const [billing, setBilling] = useState<BillingPlanKind>('byok')
+  const [billing, setBilling] = useState<BillingPlanKind>('pro')
   const [period, setPeriod] = useState<BillingPeriod>('month')
   const visible = useMemo(() => filterPlans(plans, billing, period), [plans, billing, period])
 
@@ -47,17 +47,17 @@ export function PricingSection({
         <div className="mm-pricing-toggles" role="group" aria-label={t('pricing.toggles.kindAria')}>
           <button
             type="button"
-            className={billing === 'byok' ? 'mm-toggle active' : 'mm-toggle'}
-            onClick={() => setBilling('byok')}
+            className={billing === 'pro' ? 'mm-toggle active' : 'mm-toggle'}
+            onClick={() => setBilling('pro')}
           >
-            {t('pricing.toggles.byok')}
+            {t('pricing.toggles.pro')}
           </button>
           <button
             type="button"
-            className={billing === 'managed' ? 'mm-toggle active' : 'mm-toggle'}
-            onClick={() => setBilling('managed')}
+            className={billing === 'standard' ? 'mm-toggle active' : 'mm-toggle'}
+            onClick={() => setBilling('standard')}
           >
-            {t('pricing.toggles.managed')}
+            {t('pricing.toggles.standard')}
           </button>
         </div>
         <div className="mm-pricing-toggles" role="group" aria-label={t('pricing.toggles.periodAria')}>
@@ -103,16 +103,16 @@ export function PricingSection({
           ))}
         </div>
         {!compact ? (
-          <div className="mm-byok-explainer">
-            <h3>{t('pricing.byokExplainer.title')}</h3>
+          <div className="mm-pro-explainer">
+            <h3>{t('pricing.proExplainer.title')}</h3>
             <p>
-              {t('pricing.byokExplainer.p1Before')}
+              {t('pricing.proExplainer.p1Before')}
               <a href={WAVESPEED_REF_URL} target="_blank" rel="noopener noreferrer">
-                {t('pricing.byokExplainer.p1Wavespeed')}
+                {t('pricing.proExplainer.p1Wavespeed')}
               </a>
-              {t('pricing.byokExplainer.p1After')}
+              {t('pricing.proExplainer.p1After')}
             </p>
-            <p className="mm-muted">{t('pricing.byokExplainer.p2')}</p>
+            <p className="mm-muted">{t('pricing.proExplainer.p2')}</p>
           </div>
         ) : null}
       </MmContainer>

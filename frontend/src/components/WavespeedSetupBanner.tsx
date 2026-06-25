@@ -13,14 +13,12 @@ export function needsUserWavespeedKey(integ: WavespeedKeyInteg | null | undefine
 
 type Props = {
   variant: 'integrations' | 'studio' | 'video'
-  isTrialing?: boolean
   canConnect: boolean
   onOpenIntegrations: () => void
 }
 
 export function WavespeedSetupBanner({
   variant,
-  isTrialing,
   canConnect,
   onOpenIntegrations,
 }: Props) {
@@ -29,17 +27,8 @@ export function WavespeedSetupBanner({
       <div className="ws-setup-banner ws-setup-banner--integrations" role="status">
         <h4 className="ws-setup-banner__title">Подключите WaveSpeed для картинок и видео</h4>
         <p className="muted ws-setup-banner__lead">
-          {isTrialing ? (
-            <>
-              На пробном периоде генерация идёт через <strong>ваш</strong> ключ WaveSpeed — без него студия
-              не запустится. Текстовые промпты и vision уже работают с ключа платформы.
-            </>
-          ) : (
-            <>
-              Для тарифа BYOK и пробного Managed нужен ваш API-ключ WaveSpeed. После оплаты Managed ключ
-              может подставлять платформа.
-            </>
-          )}
+          На тарифе <strong>Pro</strong> нужен ваш API-ключ WaveSpeed. На <strong>Standard</strong> и{' '}
+          <strong>Credits</strong> платформа может использовать свой ключ — тогда поле ниже не обязательно.
         </p>
         <ol className="ws-setup-banner__steps">
           <li>
@@ -64,8 +53,8 @@ export function WavespeedSetupBanner({
   return (
     <div className="ws-setup-banner ws-setup-banner--studio" role="status">
       <p className="ws-setup-banner__compact">
-        <strong>Нет ключа WaveSpeed</strong> — {place} не сможет сгенерировать результат.
-        {isTrialing ? ' На пробном периоде нужен ваш ключ.' : ' Добавьте ключ в кабинете.'}
+        <strong>Нет ключа WaveSpeed</strong> — {place} не сможет сгенерировать результат. Добавьте ключ в кабинете →
+        Подключения.
       </p>
       {canConnect ? (
         <button type="button" className="send-btn ws-setup-banner__cta" onClick={onOpenIntegrations}>

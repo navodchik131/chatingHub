@@ -87,7 +87,7 @@ function MediaPair({
 export function MmHero() {
   const { t } = useTranslation('marketing')
   const health = usePublicHealth()
-  const signupCredits = health?.signup_bonus_credits ?? 100
+  const demoGenerations = health?.demo_generations_grant ?? 3
   const betaCount = health?.marketing_beta_creators_count ?? BETA_CREATORS
 
   return (
@@ -104,7 +104,7 @@ export function MmHero() {
             <p className="mm-hero__dek">{t('hero.dek')}</p>
             <div className="mm-hero__actions">
               <MmButton to="/login" size="lg">
-                {t('hero.ctaPrimary', { signupCredits })}
+                {t('hero.ctaPrimary', { demoGenerations })}
               </MmButton>
               <MmButton to="/#how" variant="secondary" size="lg">
                 {t('hero.ctaSecondary')}
@@ -389,7 +389,7 @@ export function MmShowcase() {
 export function MmHowSection() {
   const { t } = useTranslation('marketing')
   const health = usePublicHealth()
-  const signupCredits = health?.signup_bonus_credits ?? 100
+  const demoGenerations = health?.demo_generations_grant ?? 3
   const steps = t('how.steps', { returnObjects: true }) as Array<{ title: string; text: string }>
 
   return (
@@ -414,7 +414,7 @@ export function MmHowSection() {
         </div>
         <div className="mm-how-cta">
           <MmButton to="/login" size="lg">
-            {t('how.cta', { signupCredits })}
+            {t('how.cta', { demoGenerations })}
           </MmButton>
         </div>
       </MmContainer>
@@ -450,7 +450,7 @@ export function MmTrialBand() {
   const { t } = useTranslation('marketing')
   const health = usePublicHealth()
   const betaCount = health?.marketing_beta_creators_count ?? BETA_CREATORS
-  const signupCredits = health?.signup_bonus_credits ?? 100
+  const demoGenerations = health?.demo_generations_grant ?? 3
 
   return (
     <section className="mm-section mm-section--border">
@@ -459,7 +459,7 @@ export function MmTrialBand() {
           <div>
             <MmEyebrow>{t('trial.eyebrow')}</MmEyebrow>
             <h2 className="mm-trial-band__title">{t('trial.title', { betaCount })}</h2>
-            <p className="mm-trial-band__dek">{t('trial.dek', { signupCredits })}</p>
+            <p className="mm-trial-band__dek">{t('trial.dek', { demoGenerations })}</p>
           </div>
           <MmButton to="/login">{t('trial.cta')}</MmButton>
         </div>
@@ -471,7 +471,7 @@ export function MmTrialBand() {
 export function MmCtaBanner() {
   const { t } = useTranslation('marketing')
   const health = usePublicHealth()
-  const signupCredits = health?.signup_bonus_credits ?? 100
+  const demoGenerations = health?.demo_generations_grant ?? 3
 
   return (
     <section className="mm-section mm-cta-banner-wrap">
@@ -483,7 +483,7 @@ export function MmCtaBanner() {
             <br />
             {t('cta.titleLine2')}
           </h2>
-          <p className="mm-cta-banner__dek">{t('cta.dek', { signupCredits })}</p>
+          <p className="mm-cta-banner__dek">{t('cta.dek', { demoGenerations })}</p>
           <div className="mm-cta-banner__actions">
             <MmButton to="/login" size="lg">
               {t('cta.ctaPrimary')}

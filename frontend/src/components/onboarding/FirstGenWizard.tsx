@@ -15,7 +15,6 @@ type Props = {
   open: boolean
   ownerId: number
   studioNeedsUserWsKey: boolean
-  grokConfigured: boolean
   onClose: () => void
   onComplete: (generationId: number | null) => void
   onOpenIntegrations: () => void
@@ -25,7 +24,6 @@ export function FirstGenWizard({
   open,
   ownerId,
   studioNeedsUserWsKey,
-  grokConfigured,
   onClose,
   onComplete,
   onOpenIntegrations,
@@ -120,16 +118,12 @@ export function FirstGenWizard({
 
   const runPipeline = async () => {
     if (!modelFile || !refFile) return
-    if (!grokConfigured) {
-      setError('Режим «Основная» требует Grok на сервере (GROK_API_KEY).')
-      return
-    }
     setError(null)
     setBusy(true)
     setPhase('generating')
     trackFunnelEvent('onboarding_generate_clicked')
     try {
-      setStatus('Анализируем фото модели и собираем JSON-профиль…')
+      setStatus('Анализируем фото модели и собираем профиль…')
       const profileFd = new FormData()
       profileFd.append('images', modelFile)
       const profileR = await apiFetch('/api/studio/models/generate-profile', {
@@ -156,20 +150,22 @@ export function FirstGenWizard({
       }
       const model = (await modelR.json()) as { id: number }
 
-      setStatus('Grok + WaveSpeed: первая картинка в режиме «Основная»…')
+      setStatus('Генерируем первую картинку…')
       const genFd = new FormData()
       genFd.append('description', '')
       genFd.append('model_id', String(model.id))
       genFd.append('image', refFile)
       genFd.append('output_aspect', '3:4')
-      genFd.append('studio_mode', 'model_scene')
+      genFd.append('studio_mode', 'no_face')
       genFd.append('wan_edit_tier', 'standard')
-      genFd.append('studio_wave_profile', 'nsfw')
+      genFd.append('studio_wave_profile', 'regular')
       genFd.append('generate_wavespeed', '1')
       genFd.append('wavespeed_single_reference', '1')
       genFd.append('send_pose_reference_to_wavespeed', '0')
       genFd.append('lock_model_hairstyle', '0')
       genFd.append('exif_camera', 'iphone15')
+      genFd.append('workflow_source', '1')
+      genFd.append('workflow_wave_model', 'nano-banana-2')
 
       const result = await postStudioJobAndWait<{
         generated_image_url?: string | null
@@ -220,11 +216,10 @@ export function FirstGenWizard({
       <div className="first-gen-wizard panel-glass">
         <header className="first-gen-wizard__head">
           <div>
-            <p className="first-gen-wizard__eyebrow">Первая картинка · режим «Основная»</p>
+            <p className="first-gen-wizard__eyebrow">Первая картинка</p>
             <h2 id="fgw-title">Попробуйте студию за 2 минуты</h2>
             <p className="muted first-gen-wizard__lead">
-              Два фото — модель и референс сцены. Мы соберём JSON-профиль по вашему снимку и сгенерируем
-              кадр, как в основном режиме.
+              Два фото — модель и референс сцены. Мы соберём профиль по вашему снимку и сгенерируем кадр.
             </p>
           </div>
           <button type="button" className="ghost-btn first-gen-wizard__skip" onClick={skip} disabled={busy}>
@@ -281,11 +276,11 @@ export function FirstGenWizard({
         {phase === 'wavespeed' ? (
           <div className="first-gen-wizard__body">
             <p className="muted">
-              На пробном периоде нужен ваш ключ{' '}
+              На тарифе <strong>Pro</strong> нужен ваш ключ{' '}
               <a href={WAVESPEED_REF_URL} target="_blank" rel="noopener noreferrer">
                 WaveSpeed
               </a>
-              . После оплаты Managed ключ может подставлять платформа.
+              . На Standard и Credits платформа может использовать свой ключ.
             </p>
             <label className="first-gen-wizard__ws-field">
               API-ключ WaveSpeed

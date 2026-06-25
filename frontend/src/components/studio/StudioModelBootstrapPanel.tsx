@@ -30,7 +30,6 @@ type Props = {
   canGenerate: boolean
   studioPaywalled: boolean
   studioNeedsUserWsKey: boolean
-  isTrialing: boolean
   canConnectIntegrations: boolean
   onOpenIntegrations: () => void
   aspectOptions: BootstrapAspectOption[]
@@ -44,7 +43,6 @@ export function StudioModelBootstrapPanel({
   canGenerate,
   studioPaywalled,
   studioNeedsUserWsKey,
-  isTrialing,
   canConnectIntegrations,
   onOpenIntegrations,
   aspectOptions,
@@ -210,7 +208,6 @@ export function StudioModelBootstrapPanel({
       {!studioPaywalled && studioNeedsUserWsKey ? (
         <WavespeedSetupBanner
           variant="studio"
-          isTrialing={isTrialing}
           canConnect={canConnectIntegrations}
           onOpenIntegrations={onOpenIntegrations}
         />

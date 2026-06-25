@@ -17,9 +17,15 @@ from app.db.models import (
     User,
     UserStudioModel,
 )
-from app.services.billing_plan import normalize_billing_plan
+from app.services.billing_plan import (
+    is_credits_plan,
+    is_pro_plan,
+    normalize_billing_plan,
+    plan_allows_chat,
+)
 from app.services.entitlements import subscription_is_paid_active
 from app.services.plan_catalog import (
+    CREDITS_PLAN_LIMITS,
     PLAN_SPECS,
     PlanLimits,
     PlanSpec,
@@ -39,20 +45,28 @@ def month_start_utc() -> datetime:
 
 def effective_plan_spec(sub: Subscription | None) -> PlanSpec:
     if sub is None:
-        return PLAN_SPECS["sub_managed_solo_month"]
+        return PLAN_SPECS["sub_standard_solo_month"]
     tier = normalize_plan_tier(sub.plan_tier)
     bp = normalize_billing_plan(sub.billing_plan)
+    if bp == "credits":
+        return PLAN_SPECS["sub_standard_solo_month"]
     key = f"sub_{bp}_{tier}_month"
-    return PLAN_SPECS.get(key) or PLAN_SPECS["sub_managed_solo_month"]
-
-
-def limits_apply(sub: Subscription | None) -> bool:
-    """Лимиты тарифа — только для оплаченной активной подписки."""
-    return subscription_is_paid_active(sub)
+    return PLAN_SPECS.get(key) or PLAN_SPECS["sub_standard_solo_month"]
 
 
 def plan_limits_for_sub(sub: Subscription | None) -> PlanLimits:
+    if sub is not None and is_credits_plan(sub.billing_plan):
+        if subscription_is_paid_active(sub):
+            return effective_plan_spec(sub).limits
+        return CREDITS_PLAN_LIMITS
     return effective_plan_spec(sub).limits
+
+
+def limits_apply(sub: Subscription | None) -> bool:
+    """Лимиты подписки — для оплаченной active; Credits без оплаты — свои лимиты."""
+    if sub is not None and is_credits_plan(sub.billing_plan):
+        return not subscription_is_paid_active(sub)
+    return subscription_is_paid_active(sub)
 
 
 async def count_workspace_users(session: AsyncSession, owner_id: int) -> int:
@@ -126,9 +140,25 @@ def _limit_http(detail: str) -> HTTPException:
     return HTTPException(status_code=402, detail=detail)
 
 
+def assert_chat_allowed_for_plan(sub: Subscription | None) -> None:
+    plan = normalize_billing_plan(sub.billing_plan if sub else None)
+    if not plan_allows_chat(plan):
+        raise HTTPException(
+            status_code=403,
+            detail="Чаты доступны на подписке Standard или Pro. Пополните кредиты или оформите тариф.",
+        )
+    if sub is not None and is_credits_plan(plan) and not subscription_is_paid_active(sub):
+        raise HTTPException(
+            status_code=403,
+            detail="Чаты доступны на подписке Standard или Pro.",
+        )
+
+
 async def assert_can_add_workspace_member(
     session: AsyncSession, owner: User, sub: Subscription | None
 ) -> None:
+    if is_credits_plan(sub.billing_plan if sub else None) and not subscription_is_paid_active(sub):
+        raise _limit_http("Команда доступна на подписке Standard или Pro.")
     if not limits_apply(sub):
         return
     lim = plan_limits_for_sub(sub)
@@ -136,27 +166,30 @@ async def assert_can_add_workspace_member(
     if n >= lim.max_users:
         raise _limit_http(
             f"На тарифе {plan_display_name(sub.billing_plan if sub else None, sub.plan_tier if sub else None)} "
-            f"доступно до {lim.max_users} пользователей (включая владельца). Перейдите на Pro или Studio."
+            f"доступно до {lim.max_users} пользователей (включая владельца). Повысьте план."
         )
 
 
 async def assert_can_create_studio_model(
     session: AsyncSession, owner_id: int, sub: Subscription | None
 ) -> None:
-    if not limits_apply(sub):
-        return
     lim = plan_limits_for_sub(sub)
+    if not limits_apply(sub) and not (
+        sub is not None and is_credits_plan(sub.billing_plan) and not subscription_is_paid_active(sub)
+    ):
+        return
     n = await count_studio_models(session, owner_id)
     if n >= lim.max_models:
         raise _limit_http(
             f"Достигнут лимит моделей ({lim.max_models}) для вашего тарифа. "
-            "Удалите лишнюю модель или повысьте план."
+            "Удалите лишнюю модель или оформите Standard / Pro."
         )
 
 
 async def assert_dialog_activity_allowed(
     session: AsyncSession, owner_id: int, sub: Subscription | None
 ) -> None:
+    assert_chat_allowed_for_plan(sub)
     if not limits_apply(sub):
         return
     lim = plan_limits_for_sub(sub)
@@ -171,6 +204,8 @@ async def assert_dialog_activity_allowed(
 
 
 async def assert_grok_allowed(session: AsyncSession, owner_id: int, sub: Subscription | None) -> None:
+    if is_pro_plan(sub.billing_plan if sub else None) and subscription_is_paid_active(sub):
+        return
     if not limits_apply(sub):
         return
     lim = plan_limits_for_sub(sub)
@@ -179,8 +214,7 @@ async def assert_grok_allowed(session: AsyncSession, owner_id: int, sub: Subscri
     n = await count_grok_this_month(session, owner_id)
     if n >= lim.max_grok_per_month:
         raise _limit_http(
-            f"Исчерпан месячный лимит запросов GROK ({lim.max_grok_per_month}). "
-            "Повысьте тариф или дождитесь нового месяца."
+            "Исчерпан месячный лимит запросов студии. Повысьте тариф или дождитесь нового месяца."
         )
 
 
@@ -203,5 +237,3 @@ def subscription_period_days(product: str) -> int:
     from app.config import settings
 
     return max(1, int(settings.billing_subscription_period_days or 30))
-
-

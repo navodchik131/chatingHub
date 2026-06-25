@@ -20,10 +20,14 @@ export const SUBSCRIPTION_STATUS_LABELS: Record<string, string> = {
 
 export const PLAN_TIER_OPTIONS = ['solo', 'pro', 'studio'] as const
 
-export const BILLING_PLAN_OPTIONS = ['managed', 'byok'] as const
+export const BILLING_PLAN_OPTIONS = ['credits', 'standard', 'pro'] as const
 
 export function billingPlanLabel(plan: string): string {
-  return plan === 'byok' ? 'BYOK' : 'Managed'
+  const p = (plan || 'standard').trim().toLowerCase()
+  if (p === 'credits') return 'Credits'
+  if (p === 'pro' || p === 'byok') return 'Pro'
+  if (p === 'standard' || p === 'managed') return 'Standard'
+  return p.charAt(0).toUpperCase() + p.slice(1)
 }
 
 export function planTierLabel(tier: string | null | undefined): string {
@@ -37,7 +41,9 @@ export const USAGE_KIND_LABELS: Record<string, string> = {
   studio_carousel_shot: 'Студия: карусель',
   studio_model_profile_generate: 'Студия: профиль модели',
   yookassa_credits_pack: 'Пополнение баланса',
-  yookassa_managed_subscription_bonus: 'Подписка Managed: бонус',
+  yookassa_managed_subscription_bonus: 'Подписка Standard: бонус',
+  standard_subscription_bonus: 'Подписка Standard: бонус',
+  demo_studio_image: 'Бесплатная генерация',
   referral_signup_bonus: 'Реферал: регистрация',
   referral_referrer_reward: 'Реферал: реферер',
   admin_credit_adjustment: 'Админ: баланс',

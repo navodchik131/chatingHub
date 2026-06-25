@@ -64,7 +64,7 @@ async def activate_subscription_product(
         session.add(
             UsageEvent(
                 user_id=billing_uid,
-                kind="managed_subscription_bonus",
+                kind="standard_subscription_bonus",
                 credits_delta=bonus,
                 meta=json.dumps(
                     {

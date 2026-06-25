@@ -73,6 +73,8 @@ from app.services.translation import translate_from_russian
 from app.services.studio_grok_motion import grok_motion_api_configured
 from app.services.studio_grok_scene_compose import grok_scene_compose_configured
 from app.services.plan_catalog import catalog_public_dict
+from app.services.plan_entitlements import assert_chat_allowed_for_plan
+from app.services.studio_image_pricing import image_pricing_public_dict
 from app.services.studio_motion_pricing import (
     motion_video_credit_cost,
     motion_video_duration_seconds,
@@ -84,6 +86,7 @@ from app.services.workspace import (
     assert_permission,
     is_workspace_owner,
     workspace_owner_id,
+    resolve_billing_user,
 )
 from app.services.workspace_model_access import (
     filter_conversations_for_member,
@@ -94,6 +97,11 @@ from app.services.workspace_model_access import (
 log = logging.getLogger(__name__)
 
 router = APIRouter(tags=["chat"])
+
+
+async def _require_chat_plan(session: AsyncSession, user: User) -> None:
+    billing = await resolve_billing_user(session, user)
+    assert_chat_allowed_for_plan(billing.subscription)
 
 
 @router.get("/health")
@@ -136,6 +144,8 @@ async def api_health(session: AsyncSession = Depends(get_session)) -> dict:
         "billing_price_managed_month_rub": settings.billing_price_managed_month_rub,
         "billing_price_byok_month_rub": settings.billing_price_byok_month_rub,
         "signup_bonus_credits": settings.signup_bonus_credits,
+        "demo_generations_grant": settings.demo_generations_grant,
+        "studio_image_pricing": image_pricing_public_dict(),
         "marketing_beta_creators_count": registered_users,
         "billing_catalog": catalog_public_dict(),
         "billing_credit_pack_price_rub": settings.billing_credit_pack_price_rub,
@@ -182,6 +192,7 @@ async def api_list_conversations(
     user: User = Depends(get_current_user),
 ) -> list[ConversationWithPreview]:
     assert_permission(user, PERM_CHAT)
+    await _require_chat_plan(session, user)
     oid = workspace_owner_id(user)
     convs = await list_conversations(session, oid)
     convs = await filter_conversations_for_member(session, user, convs)
@@ -210,6 +221,7 @@ async def api_mark_read(
     user: User = Depends(get_current_user),
 ) -> dict:
     assert_permission(user, PERM_CHAT)
+    await _require_chat_plan(session, user)
     oid = workspace_owner_id(user)
     await require_conversation_chat_access(session, user, conv_id, oid)
     await mark_conversation_read(session, conv_id, oid)
@@ -225,6 +237,7 @@ async def api_conversation_avatar(
 ) -> Response:
     """Фото профиля собеседника (Telegram), прокси через бэкенд — токен бота не светится во фронте."""
     assert_permission(user, PERM_CHAT)
+    await _require_chat_plan(session, user)
     oid = workspace_owner_id(user)
     conv = await require_conversation_chat_access(session, user, conv_id, oid)
     if conv.platform != Platform.telegram or not (conv.telegram_photo_file_id or "").strip():
@@ -263,6 +276,7 @@ async def api_messages(
     user: User = Depends(get_current_user),
 ) -> list[MessageOut]:
     assert_permission(user, PERM_CHAT)
+    await _require_chat_plan(session, user)
     oid = workspace_owner_id(user)
     await require_conversation_chat_access(session, user, conv_id, oid)
     rows = await list_messages(
@@ -313,6 +327,7 @@ async def api_patch_conversation(
 ) -> ConversationOut:
     """Обновление настроек диалога (язык исходящих и т.д.)."""
     assert_permission(user, PERM_CHAT)
+    await _require_chat_plan(session, user)
     oid = workspace_owner_id(user)
     conv = await require_conversation_chat_access(session, user, conv_id, oid)
 
@@ -339,6 +354,7 @@ async def api_reply(
     user: User = Depends(get_current_user),
 ) -> MessageOut:
     assert_permission(user, PERM_CHAT)
+    await _require_chat_plan(session, user)
     oid = workspace_owner_id(user)
     from app.db.models import Message, Subscription
     from app.services.plan_entitlements import assert_dialog_activity_allowed, month_start_utc

@@ -5,6 +5,7 @@ import { apiFetch } from '../api'
 export interface PublicHealthPricing {
   ok?: boolean
   signup_bonus_credits?: number
+  demo_generations_grant?: number
   marketing_beta_creators_count?: number
   billing_catalog?: { plans?: unknown[]; referral?: unknown }
   billing_price_managed_month_rub?: number
@@ -18,6 +19,7 @@ export interface PublicHealthPricing {
   studio_prompt_credit_cost?: number
   studio_upscale_credit_cost?: number
   studio_carousel_credit_cost?: number
+  studio_image_pricing?: unknown
 }
 
 export function usePublicHealth(): PublicHealthPricing | null {

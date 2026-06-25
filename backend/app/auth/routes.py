@@ -1,3 +1,4 @@
+
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -12,7 +13,7 @@ from app.db.models import CreditAccount, Subscription, SubscriptionStatus, User
 from app.db.session import get_session
 from app.schemas import LoginIn, PlanLimitsOut, PlanUsageOut, RegisterIn, TokenOut, UserMeOut
 from app.services.admin_access import user_is_platform_admin
-from app.services.billing_plan import normalize_billing_plan
+from app.services.billing_plan import BILLING_PLAN_CREDITS, BILLING_PLAN_STANDARD, normalize_billing_plan
 from app.services.plan_catalog import normalize_plan_tier, plan_display_name
 from app.services.plan_entitlements import plan_usage_snapshot
 from app.services.referral import apply_referral_on_signup, ensure_owner_referral_code
@@ -37,22 +38,33 @@ async def register(body: RegisterIn, session: AsyncSession = Depends(get_session
     )
     session.add(user)
     await session.flush()
+    demo_grant = max(0, int(settings.demo_generations_grant))
     if starter_managed_effective():
         reg_status = SubscriptionStatus.active
+        reg_plan = BILLING_PLAN_STANDARD
+        demo_grant = 0
     elif settings.yookassa_configured:
-        reg_status = SubscriptionStatus.trialing
+        reg_status = SubscriptionStatus.none
+        reg_plan = BILLING_PLAN_CREDITS
     else:
         reg_status = SubscriptionStatus.none
+        reg_plan = BILLING_PLAN_CREDITS
     session.add(
         Subscription(
             user_id=user.id,
             status=reg_status,
-            billing_plan="managed",
+            billing_plan=reg_plan,
             plan_tier="solo",
         )
     )
     bonus = max(0, settings.signup_bonus_credits)
-    session.add(CreditAccount(user_id=user.id, balance=bonus))
+    session.add(
+        CreditAccount(
+            user_id=user.id,
+            balance=bonus,
+            demo_generations_remaining=demo_grant,
+        )
+    )
     await session.flush()
     await apply_referral_on_signup(
         session, new_owner=user, referral_code=body.referral_code
@@ -148,4 +160,6 @@ async def me(
         billing_require_active_subscription=settings.billing_require_active_subscription,
         online_payment_available=settings.yookassa_configured,
         signup_bonus_credits=settings.signup_bonus_credits,
+        demo_generations_remaining=int(cr.demo_generations_remaining) if cr else 0,
+        demo_generations_grant=max(0, int(settings.demo_generations_grant)),
     )

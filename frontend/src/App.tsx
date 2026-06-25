@@ -88,6 +88,13 @@ import {
   togglePermission,
 } from './workspacePermissions'
 import { WAVESPEED_REF_URL } from './billing/planCatalog'
+import {
+  canPurchaseCredits,
+  normalizeBillingPlan,
+  planDisplayLong,
+  planDisplayShort,
+  studioAccessAllowed,
+} from './billing/planLabels'
 
 type Platform = 'telegram' | 'fanvue'
 
@@ -383,6 +390,8 @@ interface UserMe {
   billing_require_active_subscription?: boolean
   online_payment_available?: boolean
   signup_bonus_credits?: number
+  demo_generations_remaining?: number
+  demo_generations_grant?: number
 }
 
 interface ReferralMe {
@@ -517,30 +526,6 @@ interface StudioCameraPreset {
 
 type AccountCabinetTab = 'overview' | 'billing' | 'integrations' | 'models' | 'team'
 
-function userBillingPlanLabel(me: UserMe | null | undefined): string {
-  if (me?.plan_display_name) return me.plan_display_name
-  const p = (me?.billing_plan || 'managed').toLowerCase()
-  return p === 'byok' ? 'BYOK Solo' : 'Managed Solo'
-}
-
-function userBillingPlanLong(me: UserMe | null | undefined): string {
-  const p = (me?.billing_plan || 'managed').toLowerCase()
-  const tier = (me?.plan_tier || 'solo').toLowerCase()
-  const base =
-    p === 'byok'
-      ? 'BYOK — свой WaveSpeed; GROK и текст студии на сервере; кредиты на студию не списываются'
-      : 'Managed — ключ WaveSpeed платформы после оплаты; операции студии списывают кредиты'
-  return `${base} · тариф ${tier.toUpperCase()}`
-}
-
-function canPurchaseStudioCreditPack(me: UserMe | undefined): boolean {
-  if (!me?.online_payment_available) return false
-  const st = (me.subscription_status || '').toLowerCase()
-  if (st !== 'active') return false
-  const p = (me.billing_plan || 'managed').toLowerCase()
-  return p === 'managed'
-}
-
 const SUBSCRIPTION_STATUS_LABELS: Record<string, string> = {
   none: 'Нет подписки',
   incomplete: 'Оформление',
@@ -557,24 +542,15 @@ const CREDIT_KIND_LABELS: Record<string, string> = {
   studio_carousel_shot: 'Студия: карусель',
   studio_model_profile_generate: 'Студия: профиль модели',
   yookassa_credits_pack: 'Пополнение баланса',
-  yookassa_managed_subscription_bonus: 'Подписка Managed: бонус кредитов',
+  yookassa_managed_subscription_bonus: 'Подписка Standard: бонус кредитов',
+  standard_subscription_bonus: 'Подписка Standard: бонус кредитов',
+  demo_studio_image: 'Бесплатная генерация',
   admin_credit_adjustment: 'Изменение баланса',
 }
 
 function subscriptionStatusLabel(status: string | undefined): string {
   if (!status) return '—'
   return SUBSCRIPTION_STATUS_LABELS[status] ?? status
-}
-
-/** Соответствует серверной subscription_active: active/trialing и период не истёк. */
-function subscriptionCoversStudioAccess(me: UserMe): boolean {
-  const st = (me.subscription_status || '').toLowerCase()
-  if (st !== 'active' && st !== 'trialing') return false
-  if (me.subscription_period_end) {
-    const end = new Date(me.subscription_period_end).getTime()
-    if (!Number.isNaN(end) && end < Date.now()) return false
-  }
-  return true
 }
 
 function creditKindLabel(kind: string): string {
@@ -748,11 +724,10 @@ export default function App() {
 
   const studioPaywalled = useMemo(() => {
     if (!me) return false
-    if (me.is_platform_admin) return false
     const gate =
       me.billing_require_active_subscription ?? health?.billing_require_active_subscription ?? true
     if (!gate) return false
-    return !subscriptionCoversStudioAccess(me)
+    return !studioAccessAllowed(me)
   }, [me, health])
 
   const canPlatformAdmin = Boolean(me?.is_platform_admin)
@@ -825,7 +800,7 @@ export default function App() {
   const [llmApiKey, setLlmApiKey] = useState('')
   const [llmBaseUrl, setLlmBaseUrl] = useState('')
   const [billingPlanRows, setBillingPlanRows] = useState<BillingPlanRow[]>([])
-  const [billingPayMode, setBillingPayMode] = useState<'byok' | 'managed'>('byok')
+  const [billingPayMode, setBillingPayMode] = useState<'standard' | 'pro'>('pro')
   const [billingPayPeriod, setBillingPayPeriod] = useState<'month' | 'year'>('month')
   const [referralInfo, setReferralInfo] = useState<ReferralMe | null>(null)
   const [creditsPurchaseQty, setCreditsPurchaseQty] = useState(50)
@@ -3652,7 +3627,7 @@ export default function App() {
                 const paywalled =
                   user != null &&
                   (user.billing_require_active_subscription ?? true) &&
-                  !subscriptionCoversStudioAccess(user) &&
+                  !studioAccessAllowed(user) &&
                   !user.is_platform_admin
                 if (!paywalled) {
                   clearFirstGenWizardPending()
@@ -3779,7 +3754,6 @@ export default function App() {
         open={firstGenWizardOpen}
         ownerId={me?.id ?? 0}
         studioNeedsUserWsKey={studioNeedsUserWsKey}
-        grokConfigured={health?.studio_grok_scene_compose_configured !== false}
         onClose={() => setFirstGenWizardOpen(false)}
         onOpenIntegrations={() => {
           setAccountTab('integrations')
@@ -3889,8 +3863,8 @@ export default function App() {
                 </div>
                 <div className="cabinet-dash-card">
                   <div className="cabinet-dash-label">Тариф</div>
-                  <div className="cabinet-dash-value">{userBillingPlanLabel(me)}</div>
-                  <p className="cabinet-dash-hint muted">{userBillingPlanLong(me)}</p>
+                  <div className="cabinet-dash-value">{planDisplayShort(me)}</div>
+                  <p className="cabinet-dash-hint muted">{planDisplayLong(me)}</p>
                 </div>
                 <div className="cabinet-dash-card">
                   <div className="cabinet-dash-label">Операторов</div>
@@ -3907,13 +3881,15 @@ export default function App() {
                   </p>
                 </div>
               </div>
-              {me?.billing_require_active_subscription && me.subscription_status === 'trialing' ? (
+              {(me?.demo_generations_remaining ?? 0) > 0 &&
+              me?.billing_require_active_subscription &&
+              normalizeBillingPlan(me.billing_plan) === 'credits' ? (
                 <div className="banner info" style={{ marginTop: '1rem' }}>
-                  <strong>Пробный доступ:</strong> студия доступна, пока есть бонусные кредиты. Подключите свой ключ
-                  WaveSpeed в разделе «Подключения». После нулевого баланса оформите подписку Managed или BYOK — иначе
-                  студия заблокируется.
+                  <strong>Бесплатный старт:</strong> осталось {me.demo_generations_remaining} из{' '}
+                  {me.demo_generations_grant ?? 3} бесплатных генераций картинок. Пополните кредиты или оформите
+                  Standard / Pro, когда закончатся.
                 </div>
-              ) : me?.billing_require_active_subscription && !subscriptionCoversStudioAccess(me) ? (
+              ) : me?.billing_require_active_subscription && !studioAccessAllowed(me) ? (
                 <div className="banner info" style={{ marginTop: '1rem' }}>
                   Для студии нужна активная подписка. Сейчас:{' '}
                   <strong>{subscriptionStatusLabel(me?.subscription_status)}</strong>.
@@ -3945,13 +3921,12 @@ export default function App() {
           {accountTab === 'billing' && isOwner && (
             <div className="account-cabinet-pane" role="tabpanel">
               <p className="cabinet-lead muted">
-                <strong>Здесь выбираете тариф</strong> (Managed или BYOK) <strong>и оплачиваете</strong> подписку. Пакет
-                кредитов — только после оплаченного Managed.
+                <strong>Здесь выбираете тариф</strong> (Standard или Pro) <strong>и оплачиваете</strong> подписку.
+                Пакет кредитов доступен на Credits и Standard.
               </p>
               <p className="cabinet-lead muted">
-                <strong>Managed</strong> — кредиты на студию; картинки до оплаты через ваш WaveSpeed, после оплаты через
-                ключ платформы. <strong>BYOK</strong> — всегда ваш WaveSpeed; кредиты на студию не списываются. Текст и
-                vision студии всегда обрабатываются на сервере.
+                <strong>Standard</strong> — кредиты на студию включены, чат и команда.{' '}
+                <strong>Pro</strong> — свой ключ WaveSpeed, генерации не списывают кредиты платформы.
               </p>
               <div className="cabinet-module cabinet-module--highlight">
                 <div className="cabinet-module-head">
@@ -3962,7 +3937,7 @@ export default function App() {
                     {subscriptionStatusLabel(me?.subscription_status)}
                   </span>
                 </div>
-                <p className="cabinet-module-body">{userBillingPlanLong(me)}</p>
+                <p className="cabinet-module-body">{planDisplayLong(me)}</p>
                 <p className="muted cabinet-module-meta">
                   {me?.subscription_period_end
                     ? `Период до ${formatDateTimeRu(me.subscription_period_end)}`
@@ -3982,12 +3957,6 @@ export default function App() {
                       {me.plan_usage.limits.max_dialogs_per_month != null
                         ? ` / ${me.plan_usage.limits.max_dialogs_per_month}`
                         : ' · без лимита'}
-                    </li>
-                    <li>
-                      GROK в месяце: {me.plan_usage.grok_this_month}
-                      {me.plan_usage.limits.max_grok_per_month != null
-                        ? ` / ${me.plan_usage.limits.max_grok_per_month}`
-                        : ''}
                     </li>
                   </ul>
                 ) : null}
@@ -4023,17 +3992,17 @@ export default function App() {
                   <div className="mkt-pricing-toggles" style={{ marginBottom: '0.75rem' }}>
                     <button
                       type="button"
-                      className={billingPayMode === 'byok' ? 'mkt-toggle active' : 'mkt-toggle'}
-                      onClick={() => setBillingPayMode('byok')}
+                      className={billingPayMode === 'pro' ? 'mkt-toggle active' : 'mkt-toggle'}
+                      onClick={() => setBillingPayMode('pro')}
                     >
-                      BYOK
+                      Pro
                     </button>
                     <button
                       type="button"
-                      className={billingPayMode === 'managed' ? 'mkt-toggle active' : 'mkt-toggle'}
-                      onClick={() => setBillingPayMode('managed')}
+                      className={billingPayMode === 'standard' ? 'mkt-toggle active' : 'mkt-toggle'}
+                      onClick={() => setBillingPayMode('standard')}
                     >
-                      Managed
+                      Standard
                     </button>
                     <button
                       type="button"
@@ -4053,22 +4022,25 @@ export default function App() {
                   <div className="cabinet-yookassa-rows">
                     {billingPlanRows
                       .filter((row) => {
-                        if (row.product === 'credits_pack') return true
-                        const m = row.product.match(/^sub_(byok|managed)_(solo|pro|studio)_(month|year)$/)
+                        if (row.product === 'credits_pack') {
+                          const plan = normalizeBillingPlan(me?.billing_plan)
+                          return plan === 'credits' || plan === 'standard'
+                        }
+                        const m = row.product.match(/^sub_(standard|pro)_(solo|pro|studio)_(month|year)$/)
                         if (!m) return false
                         return m[1] === billingPayMode && m[3] === billingPayPeriod
                       })
                       .map((row) => {
                       if (row.product === 'credits_pack' && row.credits_pricing) {
-                        const packOk = canPurchaseStudioCreditPack(me)
+                        const packOk = canPurchaseCredits(me)
                         if (!packOk) {
                           return (
                             <div key={row.product} className="cabinet-yookassa-row">
                               <div>
                                 <div className="cabinet-offer-title">{row.title}</div>
                                 <p className="muted small" style={{ margin: '0.35rem 0 0' }}>
-                                  Покупка кредитов открывается после оплаты подписки Managed (статус «Активна», не пробный
-                                  период).
+                                  Покупка кредитов доступна на тарифе Credits или после оплаты подписки Standard
+                                  (статус «Активна»).
                                 </p>
                               </div>
                               <button type="button" className="send-btn" disabled>
@@ -4243,7 +4215,6 @@ export default function App() {
               {studioNeedsUserWsKey && isOwner ? (
                 <WavespeedSetupBanner
                   variant="integrations"
-                  isTrialing={(me?.subscription_status || '').toLowerCase() === 'trialing'}
                   canConnect={canIntegrations}
                   onOpenIntegrations={openWavespeedIntegrations}
                 />
@@ -4257,20 +4228,16 @@ export default function App() {
                   <h4 className="cabinet-module-title">WaveSpeed</h4>
                   <span className={`cabinet-module-badge ${integ?.wavespeed_configured ? 'is-ok' : 'is-warn'}`}>
                     {integ?.wavespeed_managed_by_platform
-                      ? 'Ключ платформы (Managed)'
+                      ? 'Ключ платформы'
                       : integ?.wavespeed_configured
                         ? 'Ключ сохранён'
                         : 'Нет ключа'}
                   </span>
                 </div>
                 <p className="muted cabinet-module-body">
-                  <strong>Пробный Managed:</strong> сохраните свой API-ключ — студия ходит в WaveSpeed только с ним, пока не
-                  оформлена оплата.
+                  <strong>Pro:</strong> нужен ваш API-ключ WaveSpeed — без него генерация недоступна.
                   <br />
-                  <strong>Оплаченный Managed:</strong> картинки через ключ платформы (<code>WAVESPEED_PLATFORM_API_KEY</code>
-                  ). Поле ниже не обязательно.
-                  <br />
-                  <strong>Тариф BYOK:</strong> всегда ваш ключ — без него генерация недоступна.
+                  <strong>Standard / Credits:</strong> платформа может использовать свой ключ; ваш ключ не обязателен.
                   <br />
                   <strong>Ключ:</strong>{' '}
                   <a href={WAVESPEED_REF_URL} target="_blank" rel="noopener noreferrer">
@@ -5271,13 +5238,13 @@ export default function App() {
           canStudioAny={canStudioAny}
           unreadTotal={unreadTotal}
           creditsBalance={me?.credits_balance ?? null}
-          billingPlanLabel={userBillingPlanLabel(me)}
+          billingPlanLabel={planDisplayShort(me)}
           userTitle={
             me?.is_workspace_owner
               ? me.email
               : `${me?.owner_email ?? ''}${me?.member_login ? ` · ${me.member_login}` : ''}`
           }
-          userMeta={`${me?.credits_balance ?? 0} кр. · ${userBillingPlanLabel(me)}`}
+          userMeta={`${me?.credits_balance ?? 0} кр. · ${planDisplayShort(me)}`}
           onAccountOpen={() => setAccountOpen(true)}
           onLogout={handleLogout}
         >
@@ -5305,7 +5272,7 @@ export default function App() {
             ) : null}
             <WorkspaceOverview
               creditsBalance={me.credits_balance}
-              billingPlanLabel={userBillingPlanLabel(me)}
+              billingPlanLabel={planDisplayShort(me)}
               subscriptionLabel={subscriptionStatusLabel(me.subscription_status)}
               unreadTotal={unreadTotal}
               conversationsTotal={conversations.length}
@@ -5369,7 +5336,6 @@ export default function App() {
               {!studioPaywalled && studioNeedsUserWsKey ? (
                 <WavespeedSetupBanner
                   variant="studio"
-                  isTrialing={(me?.subscription_status || '').toLowerCase() === 'trialing'}
                   canConnect={isOwner && canIntegrations}
                   onOpenIntegrations={openWavespeedIntegrations}
                 />
@@ -6034,7 +6000,6 @@ export default function App() {
                   canGenerate={canStudioGenerate}
                   studioPaywalled={studioPaywalled}
                   studioNeedsUserWsKey={studioNeedsUserWsKey}
-                  isTrialing={(me?.subscription_status || '').toLowerCase() === 'trialing'}
                   canConnectIntegrations={isOwner && canIntegrations}
                   onOpenIntegrations={openWavespeedIntegrations}
                   aspectOptions={
@@ -6095,7 +6060,6 @@ export default function App() {
               {!studioPaywalled && studioNeedsUserWsKey ? (
                 <WavespeedSetupBanner
                   variant="video"
-                  isTrialing={(me?.subscription_status || '').toLowerCase() === 'trialing'}
                   canConnect={isOwner && canIntegrations}
                   onOpenIntegrations={openWavespeedIntegrations}
                 />

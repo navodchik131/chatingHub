@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.deps import get_current_user
 from app.config import settings
 from app.db.models import (
+    CreditAccount,
     FanvueConnection,
     LlmConnection,
     Subscription,
@@ -27,12 +28,7 @@ from app.schemas import (
     TelegramIntegrationIn,
     WavespeedIntegrationIn,
 )
-from app.services.billing_plan import (
-    normalize_billing_plan,
-    platform_covers_studio_api_costs,
-)
-from app.services.crypto_secret import encrypt_secret
-from app.services.entitlements import subscription_is_onboarding_trial
+from app.services.billing_plan import is_credits_plan, normalize_billing_plan
 from app.services.studio_keys import wavespeed_cabinet_flags
 from app.services.workspace import PERM_INTEGRATIONS, assert_permission, workspace_owner_id
 
@@ -60,11 +56,11 @@ async def _integration_status(session: AsyncSession, user: User) -> IntegrationS
     sub = await session.scalar(
         select(Subscription).where(Subscription.user_id == oid)
     )
+    cr = await session.scalar(select(CreditAccount).where(CreditAccount.user_id == oid))
+    demo_rem = int(cr.demo_generations_remaining) if cr else 0
     plan = normalize_billing_plan(sub.billing_plan if sub else None)
-    managed = platform_covers_studio_api_costs(plan)
-    trialing_managed = managed and subscription_is_onboarding_trial(sub)
     wavespeed_configured, wavespeed_managed_by_platform = wavespeed_cabinet_flags(
-        plan=plan, ws_row=ws, sub=sub
+        plan=plan, ws_row=ws, sub=sub, demo_generations_remaining=demo_rem
     )
     platform_llm_ok = bool((settings.openai_api_key or "").strip())
     llm_configured = platform_llm_ok
@@ -73,10 +69,14 @@ async def _integration_status(session: AsyncSession, user: User) -> IntegrationS
     reg = _telegram_webhook_registered(tg)
     hint: str | None = None
     hint_parts: list[str] = []
-    if trialing_managed and not wavespeed_configured:
+    if is_credits_plan(plan) and demo_rem > 0 and wavespeed_managed_by_platform:
         hint_parts.append(
-            "Пробный период Managed: сохраните свой API-ключ WaveSpeed в поле ниже. "
-            "После успешной оплаты подписки Managed студия использует ключ платформы с сервера (если он задан администратором)."
+            f"Бесплатные генерации: осталось {demo_rem}. Ключ WaveSpeed не нужен — "
+            "студия работает на нашей инфраструктуре."
+        )
+    elif is_credits_plan(plan) and not wavespeed_configured and demo_rem <= 0:
+        hint_parts.append(
+            "Пополните кредиты в «Тариф и баланс» или оформите Standard / Pro для работы в студии."
         )
     if tg and tg.is_active and not reg:
         if not https:
