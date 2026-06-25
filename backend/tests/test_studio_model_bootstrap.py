@@ -6,6 +6,7 @@ from app.services.studio_model_bootstrap import (
     resolve_face_merge_prompt,
     resolve_model_sheet_prompt,
     resolve_workflow_model_sheet_prompt,
+    append_workflow_first_frame_face_grid,
 )
 from app.services.wavespeed_client import _wavespeed_task_failed_error
 
@@ -28,6 +29,14 @@ def test_resolve_model_sheet_prompt_empty_uses_default():
 def test_resolve_model_sheet_prompt_custom():
     custom = "Своя раскладка на белом фоне"
     assert resolve_model_sheet_prompt(custom) == custom
+
+
+def test_append_workflow_first_frame_face_grid():
+    out = append_workflow_first_frame_face_grid("Scene with model.")
+    assert "white guide grid" in out.lower()
+    assert "Scene with model." in out
+    again = append_workflow_first_frame_face_grid(out)
+    assert again == out
 
 
 def test_resolve_workflow_model_sheet_prompt_includes_grid():

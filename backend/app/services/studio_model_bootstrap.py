@@ -52,6 +52,26 @@ DEFAULT_WORKFLOW_SHEET_PROMPT = (
     f"{_WORKFLOW_FACE_GRID_INSTRUCTION}"
 )
 
+# Один кадр (первый кадр workflow) — та же сетка, что на character sheet.
+WORKFLOW_SINGLE_FRAME_FACE_GRID_INSTRUCTION = (
+    "On the visible face in the output image, overlay the same crisp bright white guide grid "
+    "used on workflow character sheets: clearly visible white lines (~65–75% opacity, 2–3 px stroke) "
+    "as a neutral wireframe on the face only. The grid must NOT hide eyes, nose, mouth, "
+    "or facial structure; keep the same character identity from the model references."
+)
+
+
+def append_workflow_first_frame_face_grid(prompt: str) -> str:
+    """Добавляет инструкцию сетки на лицо для первого кадра workflow."""
+    body = (prompt or "").strip()
+    marker = "white guide grid"
+    if marker in body.lower():
+        return body
+    if body:
+        return f"{body}\n\n{WORKFLOW_SINGLE_FRAME_FACE_GRID_INSTRUCTION}"
+    return WORKFLOW_SINGLE_FRAME_FACE_GRID_INSTRUCTION
+
+
 MODEL_SHEET_ASPECT_KEY = "16:9"
 
 

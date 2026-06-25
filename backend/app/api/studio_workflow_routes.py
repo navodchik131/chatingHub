@@ -413,6 +413,7 @@ async def api_workflow_execute(
                 user,
                 plan=plan,
                 reference_images=loaded_refs,
+                workflow_first_frame=(target_type == "firstFrameGeneration"),
             )
 
         if target_type == "turnaroundSheet":
@@ -510,6 +511,7 @@ async def _accept_workflow_motion_first_frame_job(
         "use_still_as_final": "0",
         "exif_camera": normalize_exif_camera(plan.exif_camera),
         "workflow_source": "1",
+        "workflow_first_frame": "1",
     }
     if motion_id:
         params["motion_video_file_id"] = motion_id

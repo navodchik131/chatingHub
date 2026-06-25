@@ -2270,6 +2270,7 @@ async def _accept_studio_refine_job_from_workflow(
     *,
     plan: WorkflowGenerationPlan,
     reference_images: list[tuple[bytes, str, WorkflowReferenceItem]],
+    workflow_first_frame: bool = False,
 ) -> JSONResponse:
     """Workflow execute → фоновый refine_prompt."""
     if not grok_scene_compose_configured():
@@ -2328,6 +2329,8 @@ async def _accept_studio_refine_job_from_workflow(
         "workflow_source": "1",
         "workflow_wave_model": plan.workflow_wave_model,
     }
+    if workflow_first_frame:
+        params["workflow_first_frame"] = "1"
     job = await studio_jobs.create_studio_job(
         session,
         owner_id=oid,
@@ -2410,6 +2413,7 @@ async def _studio_job_execute_refine_prompt(
         "yes",
     )
     workflow_wave_model = str(p.get("workflow_wave_model") or "").strip().lower()
+    workflow_first_frame = _truthy_wavespeed_flag(str(p.get("workflow_first_frame") or ""))
 
     system_instr = load_image_studio_system()
     if not system_instr:
@@ -3357,6 +3361,10 @@ async def _studio_job_execute_refine_prompt(
                     wavespeed_identity_legend=ws_identity_legend,
                     include_realism_engine=include_realism_engine,
                 )
+                if workflow_first_frame:
+                    from app.services.studio_model_bootstrap import append_workflow_first_frame_face_grid
+
+                    wavespeed_prompt = append_workflow_first_frame_face_grid(wavespeed_prompt)
                 size_for_ws: str | None
                 if settings.wavespeed_seedream_omit_size:
                     size_for_ws = None
@@ -3717,6 +3725,9 @@ async def _studio_job_execute_motion_first_frame(
     lock_model_hairstyle = str(p.get("lock_model_hairstyle") or "1")
     use_still_as_final = str(p.get("use_still_as_final") or "0")
     exif_camera_job = normalize_exif_camera(str(p.get("exif_camera") or "main"))
+    workflow_first_frame = _truthy_wavespeed_flag(str(p.get("workflow_first_frame") or "")) or str(
+        p.get("workflow_source") or ""
+    ).strip().lower() in ("1", "true", "yes")
 
     if not grok_scene_compose_configured():
         raise RuntimeError(
@@ -4045,6 +4056,10 @@ async def _studio_job_execute_motion_first_frame(
                 user_pose_last=pose_is_last_after_reorder,
                 studio_mode=mode_n,
             )
+            if workflow_first_frame:
+                from app.services.studio_model_bootstrap import append_workflow_first_frame_face_grid
+
+                wavespeed_prompt = append_workflow_first_frame_face_grid(wavespeed_prompt)
             if settings.wavespeed_seedream_omit_size:
                 size_for_ws: str | None = None
             else:
