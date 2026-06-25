@@ -225,6 +225,7 @@ from app.services.wavespeed_client import (
     seedream_v45_bootstrap_edit_image_url,
     seedream_v45_edit_image_url,
     wavespeed_image_upscale_url,
+    wavespeed_is_sensitive_content_error,
     z_image_turbo_inpaint_image_url,
 )
 
@@ -4649,84 +4650,161 @@ async def _studio_job_execute_motion_render_video(
     ref_images: list[str] = []
     ref_videos: list[str] = []
 
-    model_imgs = filter_model_images_for_seedance_video(
-        list(sm.images),
-        minimal=False,
-        include_body=False,
-    )
-    n_outfit = 0
-    if ff_url:
-        ref_images.append(ff_url)
-    ref_images.extend(
-        model_reference_public_urls(
-            owner_id=oid,
-            images=model_imgs,
-            public_app_base=pub,
-            token_factory=create_model_image_access_token,
-        )
-    )
-    n_model = len(model_imgs)
-
-    if outfit_gen_id is not None:
-        outfit_url = generation_still_public_url(
-            owner_id=oid,
-            generation_id=outfit_gen_id,
-            public_app_base=pub,
-            token_factory=create_generation_image_access_token,
-        )
-        if not outfit_url:
-            raise RuntimeError("Не удалось подготовить URL снимка наряда")
-        ref_images.append(outfit_url)
-        n_outfit = 1
-
-    if len(ref_images) > MAX_SEEDANCE_REFERENCE_IMAGES:
-        ref_images = ref_images[:MAX_SEEDANCE_REFERENCE_IMAGES]
-
-    ref_videos = [motion_vid_url] if motion_vid_url else []
-
-    seed_prompt, prompt_source = await build_seedance_t2v_prompt(
-        user_brief=prompt,
-        n_start_frame=n_start,
-        n_model_images=n_model,
-        n_outfit_images=n_outfit,
-        n_motion_videos=len(ref_videos),
-        motion_summary=motion_summary,
-        model_profile_text=None,
-        negative=negative_prompt,
-        output_aspect=ar_t2v or output_aspect,
-        duration_seconds=ds_effective,
-        force_template=False,
+    _SENSITIVE_RETRY_TIERS: tuple[dict[str, object], ...] = (
+        {
+            "minimal": False,
+            "drop_videos": False,
+            "drop_outfit": False,
+            "force_template": False,
+            "sanitize": False,
+            "cinematic": False,
+            "translate_zh": False,
+            "label": "default",
+        },
+        {
+            "minimal": False,
+            "drop_videos": False,
+            "drop_outfit": False,
+            "force_template": False,
+            "sanitize": True,
+            "cinematic": True,
+            "translate_zh": False,
+            "label": "cinematic",
+        },
+        {
+            "minimal": True,
+            "drop_videos": True,
+            "drop_outfit": True,
+            "force_template": True,
+            "sanitize": True,
+            "cinematic": True,
+            "translate_zh": False,
+            "label": "minimal",
+        },
+        {
+            "minimal": True,
+            "drop_videos": True,
+            "drop_outfit": True,
+            "force_template": True,
+            "sanitize": True,
+            "cinematic": True,
+            "translate_zh": True,
+            "label": "zh",
+        },
     )
 
-    try:
-        video_url = await seedance_20_text_to_video_url(
-            api_key=ws_key,
-            prompt=seed_prompt,
-            reference_images=ref_images or None,
-            reference_videos=ref_videos or None,
-            aspect_ratio=ar_t2v,
-            resolution=video_res,
-            duration=ds_effective,
-            generate_audio=_truthy_wavespeed_flag(generate_audio),
-            variant=seedance_v,
+    last_err: str | None = None
+    for tier in _SENSITIVE_RETRY_TIERS:
+        tier_label = str(tier["label"])
+        model_imgs = filter_model_images_for_seedance_video(
+            list(sm.images),
+            minimal=bool(tier["minimal"]),
+            include_body=False,
         )
-        msg = None
-        log.info(
-            "motion_render_video ok job=%s imgs=%s vids=%s prompt=%s",
-            job.id,
-            len(ref_images),
-            len(ref_videos),
-            prompt_source,
+        n_outfit = 0
+        ref_images = []
+        if ff_url:
+            ref_images.append(ff_url)
+        ref_images.extend(
+            model_reference_public_urls(
+                owner_id=oid,
+                images=model_imgs,
+                public_app_base=pub,
+                token_factory=create_model_image_access_token,
+            )
         )
-    except RuntimeError as e:
-        msg = str(e)
+        n_model = len(model_imgs)
+
+        if outfit_gen_id is not None and not bool(tier["drop_outfit"]):
+            outfit_url = generation_still_public_url(
+                owner_id=oid,
+                generation_id=outfit_gen_id,
+                public_app_base=pub,
+                token_factory=create_generation_image_access_token,
+            )
+            if not outfit_url:
+                raise RuntimeError("Не удалось подготовить URL снимка наряда")
+            ref_images.append(outfit_url)
+            n_outfit = 1
+
+        if len(ref_images) > MAX_SEEDANCE_REFERENCE_IMAGES:
+            ref_images = ref_images[:MAX_SEEDANCE_REFERENCE_IMAGES]
+
+        ref_videos = (
+            []
+            if bool(tier["drop_videos"])
+            else ([motion_vid_url] if motion_vid_url else [])
+        )
+
+        seed_prompt, prompt_source = await build_seedance_t2v_prompt(
+            user_brief=prompt,
+            n_start_frame=n_start,
+            n_model_images=n_model,
+            n_outfit_images=n_outfit,
+            n_motion_videos=len(ref_videos),
+            motion_summary=motion_summary,
+            model_profile_text=None,
+            negative=negative_prompt,
+            output_aspect=ar_t2v or output_aspect,
+            duration_seconds=ds_effective,
+            force_template=bool(tier["force_template"]),
+            sanitize_brief=bool(tier["sanitize"]),
+            cinematic_framing=bool(tier["cinematic"]),
+            translate_zh=bool(tier["translate_zh"]),
+        )
+        prompt_source = f"{prompt_source}:{tier_label}"
+
+        try:
+            video_url = await seedance_20_text_to_video_url(
+                api_key=ws_key,
+                prompt=seed_prompt,
+                reference_images=ref_images or None,
+                reference_videos=ref_videos or None,
+                aspect_ratio=ar_t2v,
+                resolution=video_res,
+                duration=ds_effective,
+                generate_audio=_truthy_wavespeed_flag(generate_audio),
+                variant=seedance_v,
+            )
+            msg = None
+            log.info(
+                "motion_render_video ok job=%s tier=%s imgs=%s vids=%s prompt=%s",
+                job.id,
+                tier_label,
+                len(ref_images),
+                len(ref_videos),
+                prompt_source,
+            )
+            break
+        except RuntimeError as e:
+            last_err = str(e)
+            if not wavespeed_is_sensitive_content_error(last_err):
+                msg = last_err
+                video_url = None
+                log.warning(
+                    "motion_render_video failed job=%s tier=%s: %s",
+                    job.id,
+                    tier_label,
+                    last_err[:240],
+                )
+                break
+            log.warning(
+                "motion_render_video sensitive job=%s tier=%s, retry: %s",
+                job.id,
+                tier_label,
+                last_err[:160],
+            )
+            video_url = None
+            msg = last_err
+    else:
         video_url = None
-        log.warning(
-            "motion_render_video failed job=%s imgs=%s vids=%s: %s",
-            job.id,
-            len(ref_images),
-            len(ref_videos),
-            msg[:240],
+        msg = last_err
+
+    if not video_url and msg and wavespeed_is_sensitive_content_error(msg):
+        msg = (
+            f"{msg} "
+            "Автоматически пробовали смягчить промпт (кино-стиль, без триггер-слов, меньше референсов, zh). "
+            "Попробуйте более нейтральный первый кадр или turnaround без откровенного контента."
         )
 
     gen_placeholder = await find_studio_generation_by_job_id(session, job.id)

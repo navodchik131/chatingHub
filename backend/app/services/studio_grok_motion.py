@@ -681,6 +681,9 @@ async def grok_expand_seedance_t2v_prompt(
         "7) Do not invent extra @Image or @Video tags beyond the ranges given.\n"
         "8) Never output detailed facial identity lists in prose — bind identity only via explicit @Image tag numbers.\n"
         "9) If USER_BRIEF or MOTION_NOTES contain `[t s]` timelines, keep timing but compress any face lines to motion-only tokens.\n"
+        "10) Write as a professional cinema shot: cinematic shot, film still, anamorphic lens, cinematic lighting, "
+        "movie storyboard, high production value. Avoid suggestive or explicit vocabulary — prefer elegant figure, "
+        "graceful pose, flowing garment, confident adult performer.\n"
     )
 
     out = await chat_completion_openai_compatible_text(

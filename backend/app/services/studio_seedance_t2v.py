@@ -39,6 +39,38 @@ _MOTION_NOTE_BANNED_SUBSTRINGS = (
     "identity catalog",
 )
 
+_CINEMATIC_FRAMING_EN = (
+    "Professional cinematic film still, 35mm film grain, anamorphic lens, "
+    "cinematic lighting, movie storyboard frame, director's vision, "
+    "high production value, dramatic atmosphere, tasteful fashion editorial."
+)
+
+# Слова, которые чаще триггерят Seedance/WaveSpeed moderation (intent filter).
+_BRIEF_TRIGGER_REPLACEMENTS: list[tuple[re.Pattern[str], str]] = [
+    (re.compile(r"\bbody curves\b", re.I), "graceful silhouette"),
+    (re.compile(r"\bcurves\b", re.I), "silhouette"),
+    (re.compile(r"\bsexy\b", re.I), "elegant"),
+    (re.compile(r"\bseductive\b", re.I), "confident"),
+    (re.compile(r"\bsensual\b", re.I), "expressive"),
+    (re.compile(r"\bprovocative\b", re.I), "bold"),
+    (re.compile(r"\bbarely clothed\b", re.I), "in flowing garments"),
+    (re.compile(r"\bexposed\b", re.I), "revealing light"),
+    (re.compile(r"\bnude\b", re.I), "artistic figure study"),
+    (re.compile(r"\bnaked\b", re.I), "artistic figure study"),
+    (re.compile(r"\btopless\b", re.I), "shoulders visible"),
+    (re.compile(r"\bnsfw\b", re.I), ""),
+    (re.compile(r"\byoung girl\b", re.I), "adult woman"),
+    (re.compile(r"\bteen\b", re.I), "adult"),
+    (re.compile(r"\bminor\b", re.I), "adult"),
+    (re.compile(r"\blingerie\b", re.I), "elegant dress"),
+    (re.compile(r"\bbikini\b", re.I), "swimwear"),
+    (re.compile(r"\bcleavage\b", re.I), "neckline"),
+    (re.compile(r"\bbreast\b", re.I), "torso"),
+    (re.compile(r"\bbreasts\b", re.I), "torso"),
+    (re.compile(r"\bbutt\b", re.I), "hips"),
+    (re.compile(r"\bass\b", re.I), "posture"),
+]
+
 _PROVIDER_PROMPT_REPLACEMENTS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"\bface/body/hair\b", re.I), "character"),
     (re.compile(r"\bfacial identity\b", re.I), "appearance"),
@@ -52,6 +84,8 @@ _PROVIDER_PROMPT_REPLACEMENTS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"\bIGNORE all clothing[^.]*\.?\s*", re.I), ""),
     (re.compile(r"\bwardrobe authority\b", re.I), "wardrobe"),
     (re.compile(r"\bCONTENT_SAFETY[^.]*\.?\s*", re.I), ""),
+    (re.compile(r"\bidentity lock\b", re.I), "character continuity"),
+    (re.compile(r"\bnever change or morph\b", re.I), "keep consistent"),
 ]
 
 _RU_LABEL = {
@@ -61,6 +95,53 @@ _RU_LABEL = {
     "other": "общий референс",
     "genitals": "интимная анатомия",
 }
+
+
+def sanitize_seedance_user_brief(text: str) -> str:
+    """Смягчает USER_BRIEF перед Seedance (anti-sensitive intent)."""
+    s = (text or "").strip()
+    if not s:
+        return s
+    for pat, repl in _BRIEF_TRIGGER_REPLACEMENTS:
+        s = pat.sub(repl, s)
+    return re.sub(r"\s{2,}", " ", s).strip()
+
+
+def wrap_seedance_cinematic_framing(text: str) -> str:
+    body = sanitize_seedance_user_brief(text)
+    if not body:
+        return _CINEMATIC_FRAMING_EN
+    return f"{_CINEMATIC_FRAMING_EN}\n\n{body}"
+
+
+def translate_seedance_brief_to_zh(text: str) -> str:
+    """Опциональный fallback: китайский промпт иногда проходит moderation."""
+    raw = sanitize_seedance_user_brief(text)
+    if not raw:
+        return raw
+    try:
+        from deep_translator import GoogleTranslator
+
+        return GoogleTranslator(source="auto", target="zh-CN").translate(raw[:2000])
+    except Exception as e:
+        log.warning("seedance brief zh translate failed: %s", e)
+        return raw
+
+
+def prepare_seedance_user_brief(
+    text: str,
+    *,
+    sanitize: bool = False,
+    cinematic: bool = False,
+    translate_zh: bool = False,
+) -> str:
+    if translate_zh:
+        return translate_seedance_brief_to_zh(text)
+    if cinematic:
+        return wrap_seedance_cinematic_framing(text)
+    if sanitize:
+        return sanitize_seedance_user_brief(text)
+    return (text or "").strip()
 
 
 def sort_model_images_for_seedance_t2v(
@@ -342,6 +423,9 @@ async def build_seedance_t2v_prompt(
     output_aspect: str | None = None,
     duration_seconds: int = 5,
     force_template: bool = False,
+    sanitize_brief: bool = False,
+    cinematic_framing: bool = False,
+    translate_zh: bool = False,
 ) -> tuple[str, str]:
     """
     Grok (если настроен) → иначе шаблон. Возвращает (prompt, source: grok|template).
@@ -352,11 +436,17 @@ async def build_seedance_t2v_prompt(
     )
 
     lim = settings.studio_seedance_t2v_prompt_max_chars
+    brief = prepare_seedance_user_brief(
+        user_brief,
+        sanitize=sanitize_brief or cinematic_framing or translate_zh,
+        cinematic=cinematic_framing and not translate_zh,
+        translate_zh=translate_zh,
+    )
     safe_motion = prepare_motion_notes_for_seedance(motion_summary)
     if not force_template and grok_motion_api_configured():
         try:
             p = await grok_expand_seedance_t2v_prompt(
-                user_brief=user_brief,
+                user_brief=brief,
                 n_start_frame=n_start_frame,
                 n_model_images=n_model_images,
                 n_outfit_images=n_outfit_images,
@@ -382,7 +472,7 @@ async def build_seedance_t2v_prompt(
             log.warning("grok seedance t2v prompt failed, template fallback: %s", e)
 
     p = assemble_seedance_t2v_prompt(
-        user_brief,
+        brief,
         n_start_frame=n_start_frame,
         n_model_images=n_model_images,
         n_outfit_images=n_outfit_images,

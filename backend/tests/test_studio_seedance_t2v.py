@@ -5,9 +5,11 @@ from app.services.studio_seedance_t2v import (
     assemble_seedance_video_edit_prompt,
     filter_model_images_for_seedance_video,
     prepare_motion_notes_for_seedance,
+    sanitize_seedance_user_brief,
     seedance_model_identity_tag_expr,
     soften_seedance_provider_prompt,
     truncate_seedance_t2v_prompt,
+    wrap_seedance_cinematic_framing,
 )
 from app.services.wavespeed_client import (
     wavespeed_is_sensitive_content_error,
@@ -172,3 +174,19 @@ def test_soften_provider_prompt():
     assert "never adopt" not in out.lower()
     assert "ignore all clothing" not in out.lower()
     assert "character via" in out.lower()
+
+
+def test_sanitize_user_brief_trigger_words():
+    raw = "Sexy curves, barely clothed young girl on the beach."
+    out = sanitize_seedance_user_brief(raw)
+    assert "sexy" not in out.lower()
+    assert "curves" not in out.lower()
+    assert "young girl" not in out.lower()
+    assert "elegant" in out.lower() or "silhouette" in out.lower()
+
+
+def test_wrap_cinematic_framing():
+    out = wrap_seedance_cinematic_framing("She walks in the rain.")
+    assert "cinematic" in out.lower()
+    assert "35mm" in out.lower()
+    assert "She walks in the rain." in out
