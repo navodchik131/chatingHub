@@ -40,7 +40,9 @@ export function FaqPage() {
   const { path } = useMarketingPath()
   const health = usePublicHealth()
   const ref = parseReferralFromHealth(health)
-  const items = t('faq.items', { returnObjects: true }) as FaqItemData[]
+  const demoGenerations = health?.demo_generations_grant ?? 3
+  const faqCtx = { ref, demoGenerations }
+  const items = t('faq.items', { returnObjects: true, ...faqCtx }) as FaqItemData[]
 
   return (
     <div className="mm-main--page">
@@ -59,7 +61,7 @@ export function FaqPage() {
                       <FaqAnswerParagraph
                         key={`${itemIdx}-${pIdx}`}
                         text={t(`faq.items.${itemIdx}.paragraphs.${pIdx}`, {
-                          ref,
+                          ...faqCtx,
                           defaultValue: p,
                         })}
                       />

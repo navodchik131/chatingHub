@@ -3111,7 +3111,7 @@ export default function App() {
     setError(null)
     const k = llmApiKey.trim()
     if (k.length < 8) {
-      setError('Вставьте API-ключ LLM (OpenAI-совместимый, для тарифа BYOK).')
+      setError('Вставьте API-ключ WaveSpeed (тариф Pro).')
       return
     }
     const bu = llmBaseUrl.trim()
@@ -3967,8 +3967,7 @@ export default function App() {
                     <span className="cabinet-module-title">Реферальная программа</span>
                   </div>
                   <p className="cabinet-module-body muted small">
-                    Друг по ссылке: +{referralInfo.friend_referral_credits} кр. (плюс триал{' '}
-                    {referralInfo.signup_base_credits} кр.). С каждой оплаты приглашённого:{' '}
+                    Друг по ссылке: +{referralInfo.friend_referral_credits} кр. С каждой оплаты приглашённого:{' '}
                     <strong>{referralInfo.referrer_reward_summary}</strong>
                     {referralInfo.credits_earned > 0
                       ? ` Уже начислено: ${referralInfo.credits_earned} кр.`
@@ -5357,7 +5356,7 @@ export default function App() {
           {studioPaywalled ? (
             <div className="studio-paywall cabinet-module cabinet-module--highlight" role="status">
               <p className="cabinet-module-body" style={{ marginBottom: '0.75rem' }}>
-                Чтобы генерировать картинки, сначала оформите тариф: активная подписка Managed или BYOK.
+                Чтобы генерировать картинки, пополните кредиты или оформите подписку Standard / Pro в разделе «Тариф и баланс».
               </p>
               <p className="muted small" style={{ marginBottom: '1rem' }}>
                 {isOwner ? (

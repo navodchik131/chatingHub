@@ -16,9 +16,9 @@
     "footerStudioVideo": "Video",
     "footerStudioChat": "Chat",
     "footerPricing": "Pricing",
-    "footerPricingPlans": "BYOK & Managed",
+    "footerPricingPlans": "Credits, Standard & Pro",
     "footerPricingReferral": "Referral program",
-    "footerPricingTrial": "Trial & credits",
+    "footerPricingTrial": "Demo & credits",
     "footerHelp": "Help",
     "footerHelpFaq": "FAQ",
     "footerHelpLogin": "Log in",
@@ -26,7 +26,7 @@
     "footerLegalTerms": "Terms",
     "footerLegalPrivacy": "Privacy",
     "footerCopyright": "© {{year}} ModelMate · model-mate.online",
-    "footerTagline": "BYOK · Managed · credits never expire",
+    "footerTagline": "Credits · Standard · Pro · credits never expire",
     "billingSuccessTitle": "Payment received",
     "billingSuccessBody": "If the payment went through, your subscription or credits will update shortly (within a few minutes). Open your dashboard and check Plan & top-up if needed.",
     "billingCancelTitle": "Payment not completed",
@@ -48,12 +48,12 @@
     "dek": "Photo and video generation, Fanvue and Telegram chat, auto-translation, and team workflows — without juggling five separate tools.",
     "ctaPrimary": "Try free — {{demoGenerations}} images",
     "ctaSecondary": "Launch in 5 minutes",
-    "statBetaValue": "{{betaCount}}",
-    "statBetaLabel": "registered",
-    "statSetupValue": "5 min",
-    "statSetupLabel": "WaveSpeed setup",
-    "statByokValue": "Pro",
-    "statByokLabel": "your WaveSpeed key"
+    "statDemoValue": "{{demoGenerations}}",
+    "statDemoLabel": "free images",
+    "statStartValue": "2 min",
+    "statStartLabel": "to first generation",
+    "statPlansValue": "Standard",
+    "statPlansLabel": "or Pro subscription"
   },
   "community": {
     "eyebrow": "Telegram · @ModelMate_app",
@@ -69,7 +69,7 @@
     "note": "Your personal link is in the dashboard under Plan & balance. Subscriptions can be paid from your credit balance.",
     "cardFriendWho": "Invited friend",
     "cardFriendValue": "+{{ref.friend_referral_credits}} cr.",
-    "cardFriendHint": "Signup bonus via your link (plus the standard {{ref.signup_base_credits}} cr. trial).",
+    "cardFriendHint": "Signup bonus via your referral link.",
     "cardReferrerWho": "You — referrer",
     "cardReferrerValue": "{{ref.referrer_payment_percent}}%",
     "cardReferrerHint": "On every payment and renewal — again and again. Example per payment: {{ref.referrer_reward_example_rub}} ₽ → ~{{ref.referrer_reward_example_credits}} cr.",
@@ -88,7 +88,7 @@
       {
         "eyebrow": "Photo · WaveSpeed · model profile",
         "title": "Images",
-        "desc": "Model, reference, and prompt — GROK builds the scene. Nano Banana, Seedance, carousels, and refinements in history.",
+        "desc": "Model, reference, and prompt — the studio builds the scene. Nano Banana, Wan, Seedance, carousels, and refinements in history.",
         "cta": "Create a shot",
         "badges": ["Photo", "4K"]
       },
@@ -133,11 +133,11 @@
   "showcase": {
     "rows": [
       {
-        "eyebrow": "WaveSpeed · BYOK · Managed",
-        "titleLine1": "One key.",
-        "titleLine2": "Full studio.",
-        "dek": "On Managed trial — bring your WaveSpeed key. On BYOK — always yours. Model profile and references stay in your dashboard.",
-        "cta": "Connect WaveSpeed",
+        "eyebrow": "WaveSpeed · Credits · Standard · Pro",
+        "titleLine1": "No key",
+        "titleLine2": "to start.",
+        "dek": "Credits — {{demoGenerations}} free generations on platform WaveSpeed. Standard — credits in your plan. Pro — your own key with no platform generation charges.",
+        "cta": "Open studio",
         "subjectLabel": "REF",
         "motionLabel": "RESULT"
       },
@@ -151,7 +151,7 @@
         "motionLabel": "OUT · LANG"
       },
       {
-        "eyebrow": "GROK · scenes · video",
+        "eyebrow": "Scenes · prompt · video",
         "titleLine1": "Prompts that",
         "titleLine2": "keep the look.",
         "dek": "Reference → model-ready prompt. Storyboards and motion briefs for video — no manual tab-hopping.",
@@ -169,27 +169,27 @@
     "steps": [
       {
         "title": "Sign up and log in",
-        "text": "Create your account with email, sign in, and open the Connections section."
+        "text": "Email and password — no card required. You get {{demoGenerations}} free image generations right away."
       },
       {
-        "title": "Create a key at wavespeed.ai",
-        "text": "Register at wavespeed.ai, open API Keys, and copy your key."
+        "title": "Open the studio",
+        "text": "On Credits you don't need a WaveSpeed key — the platform uses its own. Regular photos — nano-banana-2, NSFW — wan-2.7."
       },
       {
-        "title": "Add the key in Integrations",
-        "text": "Paste your WaveSpeed key in Connections → WaveSpeed and save."
+        "title": "Build your model",
+        "text": "Upload model photos and references — the profile stays in your dashboard."
       },
       {
-        "title": "Build your model profile",
-        "text": "In Studio, create a model, upload 8–15 reference photos, and save."
+        "title": "Generate shots",
+        "text": "Images for photos and carousels. Video and chat — after subscribing to Standard or Pro."
       },
       {
-        "title": "Generate with the right mode",
-        "text": "Images for shots and carousels, Video for motion clips, Chat for replies and translation."
+        "title": "Top up or choose a plan",
+        "text": "Credits — buy credits without a subscription. Standard — credits and chat included. Pro — your own WaveSpeed key."
       },
       {
         "title": "Connect Telegram/Fanvue",
-        "text": "After studio setup, connect channels in Connections to work from one inbox."
+        "text": "On Standard and Pro — one inbox with auto-translation in Connections."
       }
     ],
     "cta": "Start free — {{demoGenerations}} images"
@@ -271,24 +271,22 @@
       "title": "Compare plans",
       "linkFull": "Full table and details →",
       "colFeature": "Feature",
-      "colByokSolo": "BYOK Solo",
-      "colByokPro": "BYOK Pro",
-      "colByokStudio": "BYOK Studio",
-      "colManagedPro": "Managed Pro",
+      "colCredits": "Credits",
       "rowPrice": "Price / mo",
       "rowUsers": "Users",
       "rowModels": "Models",
-      "rowByokKey": "Your WaveSpeed key",
-      "rowCredits": "Credits in plan",
+      "rowOwnKey": "Your WaveSpeed key",
+      "rowCredits": "Credits / demo",
       "rowChat": "Chat + translation",
-      "rowGrok": "GROK",
       "yes": "✓",
       "no": "—",
-      "managedCreditsValue": "400 / mo"
+      "creditsPriceValue": "from {{unit}} ₽/cr.",
+      "creditsDemoValue": "{{count}} free",
+      "standardCreditsValue": "{{count}} / mo"
     },
     "faqTeaser": {
       "eyebrow": "FAQ",
-      "link": "Common questions about BYOK, trial, and billing →"
+      "link": "Questions about Credits, Standard, and Pro →"
     }
   },
   "pricingPage": {
@@ -299,8 +297,8 @@
     "creditsTitle": "Credits without bundles",
     "creditsDek": "Any amount from {{creditsMin}} — {{creditsUnit}} ₽/credit; from {{creditsBulkFrom}} — {{creditsBulkUnit}} ₽/credit.",
     "creditsCta": "Top up in dashboard",
-    "trialEyebrow": "Trial",
-    "trialTitle": "Start without a card",
+    "trialEyebrow": "Get started",
+    "trialTitle": "No card required",
     "trialDek": "{{demoGenerations}} free image generations on signup. For Pro, connect your WaveSpeed key in Integrations. Demo generations do not expire over time.",
     "footerFaq": "FAQ →",
     "footerHome": "Back to home ↗"
@@ -325,14 +323,19 @@
       {
         "question": "Where do I start after signing up?",
         "paragraphs": [
-          "1) Log in to the dashboard. 2) Add your WaveSpeed key in Connections. 3) Create your model and upload references in Studio. 4) Use Images for shots, Video for clips, and Chat for translation/replies. 5) Then connect Telegram/Fanvue in Connections."
+          "1) Log in — free image generations (Credits) are available immediately. 2) Create your model and upload references in Studio. 3) Images — first shots without a WaveSpeed key. 4) For chat and video, subscribe to Standard or Pro. 5) A WaveSpeed key is only required on Pro — in Connections."
         ]
       },
       {
-        "question": "Why are both credits and WaveSpeed balance charged during trial?",
+        "question": "What are Credits, Standard, and Pro?",
         "paragraphs": [
-          "This is intentional in trial: the system validates both billing paths — platform billing (ModelMate credits) and provider billing (WaveSpeed via your API key).",
-          "After you select a plan, billing behavior is fixed: BYOK charges generation on WaveSpeed, Managed uses platform credits according to your plan."
+          "Credits — no subscription: buy credits, studio runs on platform WaveSpeed, no chat. Standard — subscription with generation credits, chat, and team. Pro — subscription with your own WaveSpeed key: you pay the provider directly; the platform does not charge credits for images and video."
+        ]
+      },
+      {
+        "question": "How many free generations on signup?",
+        "paragraphs": [
+          "{{demoGenerations}} image generations on the Credits plan. No WaveSpeed key needed. Regular photos — nano-banana-2, NSFW — wan-2.7. After demo — top up credits or subscribe to Standard / Pro."
         ]
       },
       {
@@ -343,48 +346,48 @@
         ]
       },
       {
-        "question": "What is BYOK and why is it better?",
+        "question": "What is Pro and when is it worth it?",
         "paragraphs": [
-          "BYOK means your own WaveSpeed API key: you pay the provider directly for generation with no platform markup on images and video."
+          "Pro — your own WaveSpeed API key: you pay the provider directly for generation. ModelMate does not charge platform credits for images and video — the subscription covers infrastructure, chat, and team features."
         ]
       },
       {
         "question": "How many plans are there and what's included?",
         "paragraphs": [
-          "Six subscriptions: BYOK and Managed × Solo / Pro / Studio. Annual billing saves 25%.",
+          "Credits (no subscription) plus six subscriptions: Standard and Pro × Solo / Pro / Studio. Annual billing saves 25%.",
           "See the pricing page →"
         ]
       },
       {
         "question": "Referral program",
         "paragraphs": [
-          "Your link is in the dashboard → Plan & balance. A friend who signs up via your link gets +{{ref.friend_referral_credits}} credits (plus the {{ref.signup_base_credits}} cr. trial). You earn {{ref.referrer_payment_percent}}% of every payment they make — subscription, renewal, card, or credits — as credits at 1 cr. = {{ref.credit_unit_price_rub}} ₽. Example for one payment: {{ref.referrer_reward_example_rub}} ₽ → ~{{ref.referrer_reward_example_credits}} cr. to your balance; again on the next renewal.",
-          "BYOK or Managed subscriptions can be paid from your credit balance in the dashboard. On BYOK, WaveSpeed generations use your key — credits go toward ModelMate subscription and Managed studio, not WaveSpeed."
+          "Your link is in the dashboard → Plan & balance. A friend who signs up via your link gets +{{ref.friend_referral_credits}} credits. You earn {{ref.referrer_payment_percent}}% of every payment they make — subscription, renewal, card, or credits — as credits at 1 cr. = {{ref.credit_unit_price_rub}} ₽.",
+          "Standard or Pro subscriptions can be paid from your credit balance. On Pro, generations use your WaveSpeed key."
         ]
       },
       {
-        "question": "How is Managed different from BYOK?",
+        "question": "How is Standard different from Pro?",
         "paragraphs": [
-          "Managed — studio generations spend credits from your balance; the platform may supply a WaveSpeed key after payment.",
-          "BYOK — you connect your own WaveSpeed key; credits are not spent on provider-side generation."
+          "Standard — studio generations spend credits from your balance; the platform supplies the WaveSpeed key.",
+          "Pro — you connect your own WaveSpeed key; platform credits are not spent on provider-side generation."
         ]
       },
       {
         "question": "How do I pay for a subscription or credits?",
         "paragraphs": [
-          "The account owner purchases a subscription or credit top-up in the dashboard via YooKassa."
+          "The account owner purchases a subscription or credit top-up in the dashboard via YooKassa. Credits can be bought without a subscription; Standard top-ups require an active subscription."
         ]
       },
       {
         "question": "How does chat translation work?",
         "paragraphs": [
-          "Incoming messages can be shown in your language. You write in English — the fan receives text in theirs."
+          "Incoming messages can be shown in your language. You write in English — the fan receives text in theirs. Chat is available on Standard and Pro."
         ]
       },
       {
         "question": "What do I need for the image studio?",
         "paragraphs": [
-          "Studio access, an active subscription (if the gate is enabled), and a WaveSpeed key in Integrations on Managed trial or always on BYOK."
+          "Credits: demo generations or credit balance — no key required. Standard: active subscription. Pro: active subscription and a WaveSpeed key in Connections."
         ]
       }
     ]
@@ -498,7 +501,7 @@
         {
           "title": "4. Plans, subscriptions, and credits",
           "paragraphs": [
-            "Subscription terms and pricing (including Managed and BYOK plans) and rules for purchasing studio credits are listed on the pricing page and in the dashboard. Payment may be processed via a payment operator (e.g. YooKassa). Access and credits are granted after successful payment confirmation.",
+            "Subscription terms and pricing (Credits, Standard, and Pro plans) and rules for purchasing studio credits are listed on the pricing page and in the dashboard. Payment may be processed via a payment operator (e.g. YooKassa). Access and credits are granted after successful payment confirmation.",
             "See the pricing page →"
           ]
         },

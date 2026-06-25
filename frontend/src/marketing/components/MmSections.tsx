@@ -51,7 +51,7 @@ const MODEL_CHIPS = [
   { name: 'WaveSpeed', mark: 'W', bg: '#D8FF3D' },
   { name: 'Seedance 2.0', mark: 'S', bg: '#FF7A4D' },
   { name: 'Nano Banana Pro', mark: 'N', bg: '#FFD66E' },
-  { name: 'GROK', mark: 'G', bg: '#5BD4FF' },
+  { name: 'Scene AI', mark: 'A', bg: '#5BD4FF' },
   { name: 'Wan 2.7', mark: 'W', bg: '#C58CFF' },
   { name: 'Kling Motion', mark: 'K', bg: '#7CE38B' },
   { name: 'Fanvue', mark: 'F', bg: '#F5F5F7' },
@@ -88,7 +88,6 @@ export function MmHero() {
   const { t } = useTranslation('marketing')
   const health = usePublicHealth()
   const demoGenerations = health?.demo_generations_grant ?? 3
-  const betaCount = health?.marketing_beta_creators_count ?? BETA_CREATORS
 
   return (
     <section className="mm-hero" aria-labelledby="mm-hero-title">
@@ -112,16 +111,16 @@ export function MmHero() {
             </div>
             <div className="mm-hero__stats">
               <div>
-                <div className="mm-hero__stat-val">{t('hero.statBetaValue', { betaCount })}</div>
-                <div className="mm-hero__stat-label">{t('hero.statBetaLabel')}</div>
+                <div className="mm-hero__stat-val">{t('hero.statDemoValue', { demoGenerations })}</div>
+                <div className="mm-hero__stat-label">{t('hero.statDemoLabel')}</div>
               </div>
               <div>
-                <div className="mm-hero__stat-val">{t('hero.statSetupValue')}</div>
-                <div className="mm-hero__stat-label">{t('hero.statSetupLabel')}</div>
+                <div className="mm-hero__stat-val">{t('hero.statStartValue')}</div>
+                <div className="mm-hero__stat-label">{t('hero.statStartLabel')}</div>
               </div>
               <div>
-                <div className="mm-hero__stat-val">{t('hero.statByokValue')}</div>
-                <div className="mm-hero__stat-label">{t('hero.statByokLabel')}</div>
+                <div className="mm-hero__stat-val">{t('hero.statPlansValue')}</div>
+                <div className="mm-hero__stat-label">{t('hero.statPlansLabel')}</div>
               </div>
             </div>
           </div>
@@ -356,7 +355,9 @@ function ShowcaseRow({
 
 export function MmShowcase() {
   const { t } = useTranslation('marketing')
-  const rows = t('showcase.rows', { returnObjects: true }) as Array<{
+  const health = usePublicHealth()
+  const demoGenerations = health?.demo_generations_grant ?? 3
+  const rows = t('showcase.rows', { returnObjects: true, demoGenerations }) as Array<{
     eyebrow: string
     titleLine1: string
     titleLine2: string
@@ -390,7 +391,7 @@ export function MmHowSection() {
   const { t } = useTranslation('marketing')
   const health = usePublicHealth()
   const demoGenerations = health?.demo_generations_grant ?? 3
-  const steps = t('how.steps', { returnObjects: true }) as Array<{ title: string; text: string }>
+  const steps = t('how.steps', { returnObjects: true, demoGenerations }) as Array<{ title: string; text: string }>
 
   return (
     <section id="how" className="mm-section mm-section--how">
