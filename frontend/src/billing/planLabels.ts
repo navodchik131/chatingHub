@@ -14,6 +14,13 @@ export interface BillingMeLike {
   online_payment_available?: boolean
   is_platform_admin?: boolean
   billing_require_active_subscription?: boolean
+  chat_allowed?: boolean
+}
+
+/** Чаты доступны на Standard / Pro (не на Credits без оплаченной подписки). */
+export function chatAllowedForPlan(me: BillingMeLike): boolean {
+  if (me.chat_allowed != null) return me.chat_allowed
+  return normalizeBillingPlan(me.billing_plan) !== 'credits'
 }
 
 /** Соответствует серверной subscription_active: active/trialing и период не истёк. */

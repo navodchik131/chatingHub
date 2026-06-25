@@ -140,18 +140,28 @@ def _limit_http(detail: str) -> HTTPException:
     return HTTPException(status_code=402, detail=detail)
 
 
+def chat_allowed_for_subscription(sub: Subscription | None) -> bool:
+    plan = normalize_billing_plan(sub.billing_plan if sub else None)
+    if not plan_allows_chat(plan):
+        return False
+    if sub is not None and is_credits_plan(plan) and not subscription_is_paid_active(sub):
+        return False
+    return True
+
+
 def assert_chat_allowed_for_plan(sub: Subscription | None) -> None:
+    if chat_allowed_for_subscription(sub):
+        return
     plan = normalize_billing_plan(sub.billing_plan if sub else None)
     if not plan_allows_chat(plan):
         raise HTTPException(
             status_code=403,
             detail="Чаты доступны на подписке Standard или Pro. Пополните кредиты или оформите тариф.",
         )
-    if sub is not None and is_credits_plan(plan) and not subscription_is_paid_active(sub):
-        raise HTTPException(
-            status_code=403,
-            detail="Чаты доступны на подписке Standard или Pro.",
-        )
+    raise HTTPException(
+        status_code=403,
+        detail="Чаты доступны на подписке Standard или Pro.",
+    )
 
 
 async def assert_can_add_workspace_member(

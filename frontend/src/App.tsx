@@ -81,6 +81,7 @@ import { StudioInpaintMaskPainter, type StudioInpaintMaskPainterRef } from './St
 import {
   DEFAULT_MEMBER_PERMISSIONS,
   MEMBER_PERMISSION_LABELS,
+  PERM_CHAT,
   PERM_INTEGRATIONS,
   PERM_STUDIO_GENERATE,
   PERM_STUDIO_MODELS,
@@ -90,6 +91,7 @@ import {
 import { WAVESPEED_REF_URL } from './billing/planCatalog'
 import {
   canPurchaseCredits,
+  chatAllowedForPlan,
   normalizeBillingPlan,
   planDisplayLong,
   planDisplayShort,
@@ -397,6 +399,7 @@ interface UserMe {
   signup_bonus_credits?: number
   demo_generations_remaining?: number
   demo_generations_grant?: number
+  chat_allowed?: boolean
 }
 
 interface ReferralMe {
@@ -706,19 +709,19 @@ export default function App() {
     }
     const owner = me.is_workspace_owner
     const m = me.permissions_mask
-    const chat = owner || hasAllBits(m, 1)
+    const chatPerm = owner || hasAllBits(m, PERM_CHAT)
     const gen = owner || hasAllBits(m, PERM_STUDIO_GENERATE)
     const models = owner || hasAllBits(m, PERM_STUDIO_MODELS)
     const integ = owner || hasAllBits(m, PERM_INTEGRATIONS)
     const studioAny = owner || !!(m & (PERM_STUDIO_GENERATE | PERM_STUDIO_MODELS))
     return {
       isOwner: owner,
-      canChat: chat,
+      canChat: chatPerm && chatAllowedForPlan(me),
       canStudioGenerate: gen,
       canStudioModels: models,
       canIntegrations: integ,
       canStudioAny: studioAny,
-      hasAnyMainSection: chat || studioAny,
+      hasAnyMainSection: chatPerm && chatAllowedForPlan(me) || studioAny,
     }
   }, [me])
 
@@ -1756,6 +1759,10 @@ export default function App() {
 
   const loadConversations = useCallback(async () => {
     const r = await apiFetch('/api/conversations')
+    if (r.status === 403) {
+      setConversations([])
+      return
+    }
     if (!r.ok) throw new Error('Не удалось загрузить диалоги')
     const data: Conversation[] = await r.json()
     setConversations(data)

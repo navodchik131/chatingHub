@@ -129,6 +129,8 @@ class UserMeOut(BaseModel):
     signup_bonus_credits: int = 0
     demo_generations_remaining: int = 0
     demo_generations_grant: int = 3
+    """Чаты и диалоги доступны (Standard / Pro; не Credits без оплаченной подписки)."""
+    chat_allowed: bool = False
 
 
 class WorkspaceMemberCreateIn(BaseModel):

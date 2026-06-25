@@ -15,7 +15,7 @@ from app.schemas import LoginIn, PlanLimitsOut, PlanUsageOut, RegisterIn, TokenO
 from app.services.admin_access import user_is_platform_admin
 from app.services.billing_plan import BILLING_PLAN_CREDITS, BILLING_PLAN_STANDARD, normalize_billing_plan
 from app.services.plan_catalog import normalize_plan_tier, plan_display_name
-from app.services.plan_entitlements import plan_usage_snapshot
+from app.services.plan_entitlements import chat_allowed_for_subscription, plan_usage_snapshot
 from app.services.referral import apply_referral_on_signup, ensure_owner_referral_code
 from app.services.starter_plan import ensure_starter_managed_subscription, starter_managed_effective
 from app.services.funnel_analytics import record_funnel_event_once
@@ -162,4 +162,5 @@ async def me(
         signup_bonus_credits=settings.signup_bonus_credits,
         demo_generations_remaining=int(cr.demo_generations_remaining) if cr else 0,
         demo_generations_grant=max(0, int(settings.demo_generations_grant)),
+        chat_allowed=chat_allowed_for_subscription(sub),
     )
