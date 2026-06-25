@@ -735,3 +735,70 @@ class AdminSubscriptionPatchIn(BaseModel):
         if s not in ("credits", "standard", "pro"):
             raise ValueError("billing_plan must be credits, standard, or pro")
         return s
+
+
+class AdminEmailSegmentOption(BaseModel):
+    id: str
+    title: str
+
+
+class AdminEmailConfigOut(BaseModel):
+    smtp_configured: bool
+    from_email: str | None = None
+    from_name: str | None = None
+    segments: list[AdminEmailSegmentOption] = []
+
+
+class AdminEmailTemplateOut(BaseModel):
+    id: str
+    name: str
+    subject: str
+    body_html: str
+    body_text: str = ""
+
+
+class AdminEmailSegmentPreviewOut(BaseModel):
+    segment: str
+    title: str
+    segment_total: int = 0
+    eligible: int = 0
+    opted_out: int = 0
+    inactive: int = 0
+
+
+class AdminEmailCampaignOut(BaseModel):
+    id: int
+    segment: str
+    segment_title: str
+    subject: str
+    body_html: str
+    body_text: str | None = None
+    status: str
+    recipient_count: int = 0
+    sent_count: int = 0
+    failed_count: int = 0
+    skipped_count: int = 0
+    error_message: str | None = None
+    created_at: datetime
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+
+
+class AdminEmailCampaignCreateIn(BaseModel):
+    segment: str = Field(..., min_length=1, max_length=64)
+    subject: str = Field(default="", max_length=500)
+    body_html: str = Field(default="")
+    body_text: str | None = None
+    template_id: str | None = Field(default=None, max_length=64)
+    use_template_body: bool = Field(
+        default=True,
+        description="Подставить HTML/текст из template_id",
+    )
+    send_now: bool = Field(default=False, description="Сразу поставить в очередь")
+
+
+class AdminEmailSendTestIn(BaseModel):
+    to_email: EmailStr
+    subject: str = Field(..., max_length=500)
+    body_html: str
+    body_text: str | None = None

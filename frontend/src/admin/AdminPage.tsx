@@ -4,6 +4,7 @@ import { apiFetch, getToken } from '../api'
 import { AdminBarChart, AdminHBarChart } from './AdminBarChart'
 import { AdminDrillableKpi, AdminDrillLink } from './AdminDrillableKpi'
 import { AdminSegmentDrill } from './AdminSegmentDrill'
+import { AdminEmailTab } from './AdminEmailTab'
 import { AdminUserPanel } from './AdminUserPanel'
 import {
   SUBSCRIPTION_STATUS_LABELS,
@@ -23,7 +24,7 @@ interface UserMe {
 export function AdminPage() {
   const [gate, setGate] = useState<'loading' | 'ok' | 'denied' | 'anon'>('loading')
   const [meEmail, setMeEmail] = useState('')
-  const [tab, setTab] = useState<'overview' | 'users'>('overview')
+  const [tab, setTab] = useState<'overview' | 'users' | 'email'>('overview')
   const [stats, setStats] = useState<AdminStats | null>(null)
   const [users, setUsers] = useState<AdminUserRow[]>([])
   const [userSearch, setUserSearch] = useState('')
@@ -188,6 +189,15 @@ export function AdminPage() {
           onClick={() => setTab('users')}
         >
           Пользователи
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === 'email'}
+          className={tab === 'email' ? 'admin-tabs__btn active' : 'admin-tabs__btn'}
+          onClick={() => setTab('email')}
+        >
+          Рассылки
         </button>
       </nav>
 
@@ -564,6 +574,10 @@ export function AdminPage() {
             </div>
           )}
         </div>
+      ) : null}
+
+      {tab === 'email' ? (
+        <AdminEmailTab meEmail={meEmail} onError={setError} />
       ) : null}
 
       <AdminSegmentDrill

@@ -357,6 +357,8 @@ async def init_db() -> None:
         await conn.run_sync(_migrate_credit_account_demo_generations)
         await conn.run_sync(_migrate_billing_plans_rename)
         await conn.run_sync(_migrate_trialing_to_credits_demo)
+        await conn.run_sync(_migrate_user_email_marketing_opt_out)
+        await conn.run_sync(_migrate_email_campaigns_tables)
 
 
 def _migrate_credit_account_demo_generations(sync_conn) -> None:
@@ -722,6 +724,42 @@ def _migrate_studio_jobs_table(sync_conn) -> None:
         from app.db.models import StudioJob
 
         StudioJob.__table__.create(sync_conn, checkfirst=True)
+
+
+def _migrate_user_email_marketing_opt_out(sync_conn) -> None:
+    from sqlalchemy import inspect, text
+
+    insp = inspect(sync_conn)
+    if not insp.has_table("users"):
+        return
+    cols = {c["name"] for c in insp.get_columns("users")}
+    if "email_marketing_opt_out" in cols:
+        return
+    dialect = sync_conn.dialect.name
+    if dialect == "sqlite":
+        sync_conn.execute(
+            text(
+                "ALTER TABLE users ADD COLUMN email_marketing_opt_out BOOLEAN NOT NULL DEFAULT 0"
+            )
+        )
+    else:
+        sync_conn.execute(
+            text(
+                "ALTER TABLE users ADD COLUMN email_marketing_opt_out BOOLEAN NOT NULL DEFAULT false"
+            )
+        )
+
+
+def _migrate_email_campaigns_tables(sync_conn) -> None:
+    from sqlalchemy import inspect
+
+    from app.db.models import EmailCampaign, EmailCampaignRecipient
+
+    insp = inspect(sync_conn)
+    if not insp.has_table("email_campaigns"):
+        EmailCampaign.__table__.create(sync_conn, checkfirst=True)
+    if not insp.has_table("email_campaign_recipients"):
+        EmailCampaignRecipient.__table__.create(sync_conn, checkfirst=True)
 
 
 async def get_session() -> AsyncGenerator[AsyncSession, None]:

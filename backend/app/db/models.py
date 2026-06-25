@@ -75,6 +75,8 @@ class User(Base):
         nullable=True,
         index=True,
     )
+    """Не слать маркетинговые письма (транзакционные — отдельно)."""
+    email_marketing_opt_out: Mapped[bool] = mapped_column(Boolean, default=False)
 
     parent: Mapped[User | None] = relationship(
         "User",
@@ -614,3 +616,84 @@ class WorkflowWorkspace(Base):
     )
 
     owner: Mapped[User] = relationship("User", back_populates="workflow_workspaces")
+
+
+class EmailCampaignStatus(str, enum.Enum):
+    draft = "draft"
+    queued = "queued"
+    sending = "sending"
+    completed = "completed"
+    failed = "failed"
+    cancelled = "cancelled"
+
+
+class EmailCampaignRecipientStatus(str, enum.Enum):
+    pending = "pending"
+    sent = "sent"
+    skipped = "skipped"
+    failed = "failed"
+
+
+class EmailCampaign(Base):
+    __tablename__ = "email_campaigns"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    segment: Mapped[str] = mapped_column(String(64), index=True)
+    subject: Mapped[str] = mapped_column(String(500))
+    body_html: Mapped[str] = mapped_column(Text)
+    body_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[EmailCampaignStatus] = mapped_column(
+        Enum(EmailCampaignStatus, native_enum=False, length=16),
+        default=EmailCampaignStatus.draft,
+        index=True,
+    )
+    created_by_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    recipient_count: Mapped[int] = mapped_column(Integer, default=0)
+    sent_count: Mapped[int] = mapped_column(Integer, default=0)
+    failed_count: Mapped[int] = mapped_column(Integer, default=0)
+    skipped_count: Mapped[int] = mapped_column(Integer, default=0)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    recipients: Mapped[list["EmailCampaignRecipient"]] = relationship(
+        "EmailCampaignRecipient",
+        back_populates="campaign",
+        cascade="all, delete-orphan",
+    )
+
+
+class EmailCampaignRecipient(Base):
+    __tablename__ = "email_campaign_recipients"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    campaign_id: Mapped[int] = mapped_column(
+        ForeignKey("email_campaigns.id", ondelete="CASCADE"), index=True
+    )
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    email: Mapped[str] = mapped_column(String(320))
+    status: Mapped[EmailCampaignRecipientStatus] = mapped_column(
+        Enum(EmailCampaignRecipientStatus, native_enum=False, length=16),
+        default=EmailCampaignRecipientStatus.pending,
+        index=True,
+    )
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    sent_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    campaign: Mapped[EmailCampaign] = relationship(
+        "EmailCampaign", back_populates="recipients"
+    )

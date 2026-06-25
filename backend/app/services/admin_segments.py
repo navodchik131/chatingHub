@@ -36,6 +36,7 @@ SEGMENT_TITLES: dict[str, str] = {
     "engaged_ever": "Активны хотя бы раз",
     "yookassa_credits_buyers": "Покупали кредиты через ЮKassa",
     "owners_with_studio": "Пробовали студию",
+    "owners_without_studio": "Не пробовали студию",
     "owners_with_chat": "Писали в чатах",
     "registered_30d": "Регистрации за 30 дней",
     "new_paid_active_30d": "Новые с paid active за 30 дней",
@@ -45,6 +46,11 @@ SEGMENT_TITLES: dict[str, str] = {
 }
 
 VALID_ADMIN_SEGMENTS = frozenset(SEGMENT_TITLES.keys())
+
+# Сегменты для email-рассылок (без платёжных строк и служебных списков)
+EMAIL_CAMPAIGN_SEGMENTS = frozenset(
+    VALID_ADMIN_SEGMENTS - {"yookassa_payments"}
+)
 
 
 async def _active_owner_ids(session: AsyncSession, since: datetime) -> set[int]:
@@ -415,6 +421,13 @@ async def list_admin_segment(
             details[o] = f"Генераций: {int(cnt or 0)}"
             if last_at:
                 details[o] += f" · последняя {last_at.date().isoformat()}"
+    elif segment == "owners_without_studio":
+        studio_ids = await _owners_with_studio_ids(session)
+        stmt = select(User.id).where(User.parent_user_id.is_(None))
+        if studio_ids:
+            stmt = stmt.where(~User.id.in_(studio_ids))
+        rows = (await session.execute(stmt.order_by(User.created_at.desc()))).all()
+        owner_ids = [int(r[0]) for r in rows][:limit]
     elif segment == "owners_with_chat":
         rows = (
             await session.execute(
@@ -480,3 +493,210 @@ async def list_admin_segment(
 
     items = await _owners_by_ids(session, owner_ids, details=details, limit=limit)
     return {"segment": segment, "title": title, "total": len(items), "items": items}
+
+
+async def _owners_with_studio_ids(session: AsyncSession) -> set[int]:
+    rows = (await session.execute(select(StudioGeneration.user_id).distinct())).all()
+    return {int(r[0]) for r in rows if r[0] is not None}
+
+
+async def resolve_segment_owner_ids(session: AsyncSession, segment: str) -> list[int]:
+    """Все owner_id сегмента (без лимита) — для email-рассылок."""
+    if segment not in EMAIL_CAMPAIGN_SEGMENTS:
+        raise ValueError(f"unknown or unsupported segment: {segment}")
+
+    now = datetime.now(timezone.utc)
+    since_7 = now - timedelta(days=7)
+    since_30 = now - timedelta(days=30)
+
+    if segment == "active_7d":
+        return sorted(await _active_owner_ids(session, since_7), reverse=True)
+    if segment == "active_30d":
+        return sorted(await _active_owner_ids(session, since_30), reverse=True)
+    if segment == "paid_active":
+        rows = (
+            await session.execute(
+                select(User.id)
+                .join(Subscription, Subscription.user_id == User.id)
+                .where(
+                    User.parent_user_id.is_(None),
+                    Subscription.status == SubscriptionStatus.active,
+                    or_(
+                        Subscription.current_period_end.is_(None),
+                        Subscription.current_period_end >= now,
+                    ),
+                )
+                .order_by(User.created_at.desc())
+            )
+        ).all()
+        return [int(r[0]) for r in rows]
+    if segment == "trialing":
+        rows = (
+            await session.execute(
+                select(User.id)
+                .join(Subscription, Subscription.user_id == User.id)
+                .where(
+                    User.parent_user_id.is_(None),
+                    Subscription.status == SubscriptionStatus.trialing,
+                )
+                .order_by(User.created_at.desc())
+            )
+        ).all()
+        return [int(r[0]) for r in rows]
+    if segment == "past_due":
+        rows = (
+            await session.execute(
+                select(User.id)
+                .join(Subscription, Subscription.user_id == User.id)
+                .where(
+                    User.parent_user_id.is_(None),
+                    Subscription.status == SubscriptionStatus.past_due,
+                )
+                .order_by(User.created_at.desc())
+            )
+        ).all()
+        return [int(r[0]) for r in rows]
+    if segment == "paid_or_trialing":
+        rows = (
+            await session.execute(
+                select(User.id)
+                .join(Subscription, Subscription.user_id == User.id)
+                .where(
+                    User.parent_user_id.is_(None),
+                    Subscription.status.in_(_PAID_SUBSCRIPTION_STATUSES),
+                )
+                .order_by(User.created_at.desc())
+            )
+        ).all()
+        return [int(r[0]) for r in rows]
+    if segment == "zombie":
+        engaged = await _engaged_owner_ids(session)
+        stmt = select(User.id).where(User.parent_user_id.is_(None))
+        if engaged:
+            stmt = stmt.where(~User.id.in_(engaged))
+        rows = (await session.execute(stmt.order_by(User.created_at.desc()))).all()
+        return [int(r[0]) for r in rows]
+    if segment == "engaged_ever":
+        return sorted(await _engaged_owner_ids(session), reverse=True)
+    if segment == "yookassa_credits_buyers":
+        rows = (
+            await session.execute(
+                select(_owner_id_expr().label("oid"))
+                .select_from(UsageEvent)
+                .join(User, User.id == UsageEvent.user_id)
+                .where(UsageEvent.kind == "yookassa_credits_pack")
+                .group_by(_owner_id_expr())
+                .order_by(func.max(UsageEvent.created_at).desc())
+            )
+        ).all()
+        return [int(r[0]) for r in rows]
+    if segment == "owners_with_studio":
+        rows = (
+            await session.execute(
+                select(StudioGeneration.user_id)
+                .distinct()
+                .order_by(StudioGeneration.user_id.desc())
+            )
+        ).all()
+        return [int(r[0]) for r in rows]
+    if segment == "owners_without_studio":
+        studio_ids = await _owners_with_studio_ids(session)
+        stmt = select(User.id).where(User.parent_user_id.is_(None))
+        if studio_ids:
+            stmt = stmt.where(~User.id.in_(studio_ids))
+        rows = (await session.execute(stmt.order_by(User.created_at.desc()))).all()
+        return [int(r[0]) for r in rows]
+    if segment == "owners_with_chat":
+        rows = (
+            await session.execute(
+                select(Conversation.user_id).distinct().order_by(Conversation.user_id.desc())
+            )
+        ).all()
+        return [int(r[0]) for r in rows]
+    if segment == "registered_30d":
+        rows = (
+            await session.execute(
+                select(User.id)
+                .where(
+                    User.parent_user_id.is_(None),
+                    User.created_at >= since_30,
+                )
+                .order_by(User.created_at.desc())
+            )
+        ).all()
+        return [int(r[0]) for r in rows]
+    if segment == "new_paid_active_30d":
+        rows = (
+            await session.execute(
+                select(User.id)
+                .join(Subscription, Subscription.user_id == User.id)
+                .where(
+                    User.parent_user_id.is_(None),
+                    User.created_at >= since_30,
+                    Subscription.status == SubscriptionStatus.active,
+                    or_(
+                        Subscription.current_period_end.is_(None),
+                        Subscription.current_period_end >= now,
+                    ),
+                )
+                .order_by(User.created_at.desc())
+            )
+        ).all()
+        return [int(r[0]) for r in rows]
+    if segment == "referrals":
+        rows = (
+            await session.execute(
+                select(User.id)
+                .where(User.referred_by_user_id.isnot(None))
+                .order_by(User.created_at.desc())
+            )
+        ).all()
+        return [int(r[0]) for r in rows]
+    if segment == "workspace_owners":
+        rows = (
+            await session.execute(
+                select(User.id)
+                .where(User.parent_user_id.is_(None))
+                .order_by(User.created_at.desc())
+            )
+        ).all()
+        return [int(r[0]) for r in rows]
+    raise ValueError(f"unknown segment: {segment}")
+
+
+async def count_email_eligible_recipients(
+    session: AsyncSession,
+    segment: str,
+) -> dict[str, int]:
+    """Сколько получателей в сегменте с учётом opt-out и неактивных."""
+    owner_ids = await resolve_segment_owner_ids(session, segment)
+    if not owner_ids:
+        return {"segment_total": 0, "eligible": 0, "opted_out": 0, "inactive": 0}
+    rows = (
+        await session.execute(
+            select(User.id, User.is_active, User.email_marketing_opt_out).where(
+                User.id.in_(owner_ids)
+            )
+        )
+    ).all()
+    by_id = {int(r[0]): (bool(r[1]), bool(r[2])) for r in rows}
+    opted_out = inactive = 0
+    eligible = 0
+    for oid in owner_ids:
+        info = by_id.get(oid)
+        if not info:
+            continue
+        is_active, opt_out = info
+        if opt_out:
+            opted_out += 1
+        elif not is_active:
+            inactive += 1
+        else:
+            eligible += 1
+    return {
+        "segment_total": len(owner_ids),
+        "eligible": eligible,
+        "opted_out": opted_out,
+        "inactive": inactive,
+    }
+

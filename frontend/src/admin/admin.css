@@ -757,3 +757,56 @@
   font-size: 0.8125rem;
   text-align: right;
 }
+
+.admin-email-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.25rem;
+  align-items: start;
+}
+
+@media (max-width: 960px) {
+  .admin-email-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.admin-email-textarea {
+  width: 100%;
+  padding: 0.5rem 0.65rem;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.3);
+  color: inherit;
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  resize: vertical;
+}
+
+.admin-email-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.admin-page .primary-btn {
+  padding: 0.45rem 0.85rem;
+  border-radius: 8px;
+  border: none;
+  background: linear-gradient(135deg, #7c5cff, #5a8dff);
+  color: #fff;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.admin-page .primary-btn:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.admin-page .primary-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}

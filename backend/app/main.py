@@ -26,6 +26,7 @@ from app.connectors.telegram.state import (
 from app.db.session import init_db
 from app.services.studio_generation_storage import retry_pending_studio_archives
 from app.services.studio_generations_retention import purge_studio_generations_expired
+from app.services.email_campaigns import email_campaign_worker_loop
 
 logging.basicConfig(
     level=logging.INFO,
@@ -98,6 +99,7 @@ async def lifespan(app: FastAPI):
     polling_task: asyncio.Task[None] | None = None
     retention_task: asyncio.Task[None] | None = None
     archive_retry_task: asyncio.Task[None] | None = None
+    email_worker_task: asyncio.Task[None] | None = None
     legacy_tok = settings.legacy_bot_token.strip()
     legacy_uid = settings.legacy_user_id
     if legacy_tok and legacy_uid > 0:
@@ -130,6 +132,11 @@ async def lifespan(app: FastAPI):
         "Studio archive retry loop: every %s s",
         settings.studio_archive_retry_interval_seconds,
     )
+    if settings.smtp_configured:
+        email_worker_task = asyncio.create_task(email_campaign_worker_loop())
+        log.info("Email campaign worker started (SMTP: %s)", settings.smtp_host)
+    else:
+        log.info("Email campaigns disabled: SMTP not configured")
     yield
     if polling_task:
         polling_task.cancel()
@@ -147,6 +154,12 @@ async def lifespan(app: FastAPI):
         archive_retry_task.cancel()
         try:
             await archive_retry_task
+        except asyncio.CancelledError:
+            pass
+    if email_worker_task:
+        email_worker_task.cancel()
+        try:
+            await email_worker_task
         except asyncio.CancelledError:
             pass
     if bot:

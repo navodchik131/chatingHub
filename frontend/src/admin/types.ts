@@ -113,3 +113,50 @@ export interface AdminUserDetail extends AdminUserRow {
   conversations_count: number
   workspace_members_count: number
 }
+
+export interface AdminEmailSegmentOption {
+  id: string
+  title: string
+}
+
+export interface AdminEmailConfig {
+  smtp_configured: boolean
+  from_email: string | null
+  from_name: string | null
+  segments: AdminEmailSegmentOption[]
+}
+
+export interface AdminEmailTemplate {
+  id: string
+  name: string
+  subject: string
+  body_html: string
+  body_text: string
+}
+
+export interface AdminEmailSegmentPreview {
+  segment: string
+  title: string
+  segment_total: number
+  eligible: number
+  opted_out: number
+  inactive: number
+}
+
+export interface AdminEmailCampaign {
+  id: number
+  segment: string
+  segment_title: string
+  subject: string
+  body_html: string
+  body_text: string | null
+  status: string
+  recipient_count: number
+  sent_count: number
+  failed_count: number
+  skipped_count: number
+  error_message: string | null
+  created_at: string
+  started_at: string | null
+  completed_at: string | null
+}

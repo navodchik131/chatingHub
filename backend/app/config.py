@@ -438,5 +438,32 @@ class Settings(BaseSettings):
             and (self.vapid_sub or "").strip()
         )
 
+    # --- Email / SMTP (свой Postfix на VPS или relay: Yandex, Mailgun, SendGrid…) ---
+    smtp_host: str = Field(default="", description="SMTP-сервер, напр. localhost или smtp.yandex.ru")
+    smtp_port: int = Field(default=587, ge=1, le=65535)
+    smtp_user: str = Field(default="")
+    smtp_password: str = Field(default="")
+    smtp_from_email: str = Field(default="", description="From: hello@modelmate.ru")
+    smtp_from_name: str = Field(default="ModelMate")
+    smtp_use_tls: bool = Field(default=True, description="STARTTLS (порт 587)")
+    smtp_use_ssl: bool = Field(default=False, description="SSL с самого начала (порт 465)")
+    email_campaign_batch_size: int = Field(default=25, ge=1, le=200)
+    email_campaign_batch_delay_seconds: float = Field(default=2.0, ge=0.0, le=60.0)
+
+    @field_validator(
+        "smtp_host",
+        "smtp_user",
+        "smtp_password",
+        "smtp_from_email",
+        mode="after",
+    )
+    @classmethod
+    def _strip_smtp_fields(cls, v: str) -> str:
+        return (v or "").strip()
+
+    @property
+    def smtp_configured(self) -> bool:
+        return bool((self.smtp_host or "").strip() and (self.smtp_from_email or "").strip())
+
 
 settings = Settings()
