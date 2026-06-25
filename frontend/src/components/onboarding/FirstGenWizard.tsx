@@ -160,6 +160,7 @@ export function FirstGenWizard({
       setStatus('Анализируем фото модели и собираем профиль…')
       const profileFd = new FormData()
       profileFd.append('images', modelFile)
+      profileFd.append('onboarding_wizard', '1')
       const profileR = await apiFetch('/api/studio/models/generate-profile', {
         method: 'POST',
         body: profileFd,
@@ -195,7 +196,6 @@ export function FirstGenWizard({
 
       setStatus('Генерируем первую картинку…')
       const waveProfile = nsfwEnabled ? 'nsfw' : 'regular'
-      const workflowModel = nsfwEnabled ? 'wan-2.7' : 'nano-banana-2'
       const genFd = new FormData()
       genFd.append('description', '')
       genFd.append('model_id', String(model.id))
@@ -209,8 +209,12 @@ export function FirstGenWizard({
       genFd.append('send_pose_reference_to_wavespeed', '0')
       genFd.append('lock_model_hairstyle', '0')
       genFd.append('exif_camera', 'iphone15')
-      genFd.append('workflow_source', '1')
-      genFd.append('workflow_wave_model', workflowModel)
+      genFd.append('onboarding_wizard', '1')
+      if (nsfwEnabled) {
+        genFd.append('workflow_wave_model', 'wan-2.7')
+      } else {
+        genFd.append('workflow_wave_model', 'nano-banana-2')
+      }
 
       const result = await postStudioJobAndWait<{
         generated_image_url?: string | null

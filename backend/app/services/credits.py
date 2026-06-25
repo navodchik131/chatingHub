@@ -24,7 +24,10 @@ async def ensure_can_consume_credits(
     if bal < cost:
         raise HTTPException(
             status_code=402,
-            detail="Недостаточно кредитов. Пополните баланс (тариф «всё включено») или перейдите на BYOK со своими ключами.",
+            detail=(
+                "Недостаточно кредитов. Пополните баланс в разделе «Тариф и баланс» "
+                "или используйте бесплатные демо-генерации (тариф Credits)."
+            ),
         )
     return billing
 

@@ -43,6 +43,26 @@ def demo_generations_grant() -> int:
     return max(0, int(settings.demo_generations_grant))
 
 
+def onboarding_wizard_profile_free(
+    *,
+    plan: str,
+    demo_remaining: int,
+    onboarding_wizard: bool,
+) -> bool:
+    """Сбор профиля в визарде «первая картинка» — без кредитов, пока есть демо-слоты."""
+    if not onboarding_wizard:
+        return False
+    if not is_credits_plan(plan):
+        return False
+    return demo_remaining > 0
+
+
+def parse_onboarding_wizard_flag(raw: str | bool | None) -> bool:
+    if isinstance(raw, bool):
+        return raw
+    return str(raw or "").strip().lower() in ("1", "true", "yes", "on")
+
+
 def demo_request_eligible_for_free_slot(
     *,
     wave_model_id: str | None,

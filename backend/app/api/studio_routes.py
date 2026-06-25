@@ -66,6 +66,8 @@ from app.services.billing_plan import is_credits_plan, normalize_billing_plan
 from app.services.credits import ensure_can_consume_credits, record_usage
 from app.services.demo_generations import (
     assert_demo_only_user_model_allowed,
+    onboarding_wizard_profile_free,
+    parse_onboarding_wizard_flag,
     prepare_studio_image_billing,
     raise_studio_access_denied,
     record_studio_image_billing,
@@ -1610,6 +1612,7 @@ async def api_list_studio_models(
 @router.post("/studio/models/generate-profile", response_model=StudioModelProfileGenerateOut)
 async def api_generate_model_profile(
     images: list[UploadFile] = File(...),
+    onboarding_wizard: str | None = Form(None),
     session: AsyncSession = Depends(get_session),
     user: User = Depends(get_current_user),
 ) -> StudioModelProfileGenerateOut:
@@ -1650,6 +1653,12 @@ async def api_generate_model_profile(
             detail="Пустые файлы",
         )
     cost = apply_studio_credit_cost(plan, settings.credit_cost_studio_model_profile_generate)
+    if onboarding_wizard_profile_free(
+        plan=plan,
+        demo_remaining=_demo,
+        onboarding_wizard=parse_onboarding_wizard_flag(onboarding_wizard),
+    ):
+        cost = 0
     billing = await ensure_can_consume_credits(session, user, cost)
     try:
         text = await generate_model_profile_json_from_images(
@@ -1663,7 +1672,10 @@ async def api_generate_model_profile(
         billing,
         "studio_model_profile_generate",
         cost,
-        {"image_count": len(image_items)},
+        {
+            "image_count": len(image_items),
+            "onboarding_wizard": parse_onboarding_wizard_flag(onboarding_wizard),
+        },
     )
     await session.commit()
     return StudioModelProfileGenerateOut(profile_text=text)
@@ -2125,6 +2137,9 @@ async def api_studio_refine_prompt(
     lock_model_hairstyle: str | None = Form("1"),
     exif_camera: str = Form("main"),
     inpaint_mask: UploadFile | None = File(None),
+    workflow_source: str | None = Form(None),
+    workflow_wave_model: str | None = Form(None),
+    onboarding_wizard: str | None = Form(None),
     session: AsyncSession = Depends(get_session),
     user: User = Depends(get_current_user),
 ) -> StudioRefinePromptOut | JSONResponse:
@@ -2194,6 +2209,9 @@ async def api_studio_refine_prompt(
         "send_pose_reference_to_wavespeed": send_pose_reference_to_wavespeed,
         "lock_model_hairstyle": lock_model_hairstyle,
         "exif_camera": normalize_exif_camera(exif_camera),
+        "workflow_source": workflow_source,
+        "workflow_wave_model": (workflow_wave_model or "").strip().lower() or None,
+        "onboarding_wizard": onboarding_wizard,
     }
     job = await studio_jobs.create_studio_job(
         session,
