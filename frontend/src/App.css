@@ -3921,8 +3921,9 @@ a.workspace-topnav-item {
 
 .workspace-credits-chip {
   display: inline-flex;
-  align-items: baseline;
-  gap: 0.2rem;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.35rem;
   padding: 0.35rem 0.65rem;
   border-radius: 999px;
   border: 1px solid rgba(124, 92, 255, 0.28);
@@ -3932,6 +3933,44 @@ a.workspace-topnav-item {
   font-size: 0.82rem;
   font-weight: 600;
   cursor: pointer;
+}
+
+.workspace-billing-plan {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+}
+
+.workspace-credits-sep {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.workspace-demo-pill {
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+  background: rgba(216, 255, 61, 0.15);
+  color: var(--accent-lime, #d8ff3d);
+}
+
+.studio-workspace__price-hint {
+  color: var(--text-secondary);
+  font-size: 0.875em;
+}
+
+.workflow-page__billing {
+  color: var(--text-secondary);
+}
+
+.workflow-node__btn-cost {
+  margin-left: 0.35rem;
+  opacity: 0.85;
+  font-size: 0.85em;
+  font-weight: 600;
 }
 
 .workspace-credits-value {

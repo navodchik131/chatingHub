@@ -27,6 +27,7 @@ export interface AppShellProps {
   unreadTotal: number
   creditsBalance: number | null
   billingPlanLabel: string
+  demoGenerationsRemaining?: number
   userTitle: string
   userMeta: string
   onAccountOpen: () => void
@@ -42,6 +43,7 @@ export function AppShell({
   unreadTotal,
   creditsBalance,
   billingPlanLabel,
+  demoGenerationsRemaining = 0,
   userTitle,
   userMeta,
   onAccountOpen,
@@ -195,10 +197,19 @@ export function AppShell({
               type="button"
               className="workspace-credits-chip"
               onClick={onAccountOpen}
-              title={`${creditsBalance ?? '—'} кр. · ${billingPlanLabel}`}
+              title={`${billingPlanLabel} · ${creditsBalance ?? '—'} кр.${
+                demoGenerationsRemaining > 0 ? ` · ${demoGenerationsRemaining} демо` : ''
+              }`}
             >
+              <span className="workspace-billing-plan">{billingPlanLabel}</span>
+              <span className="workspace-credits-sep" aria-hidden>
+                ·
+              </span>
               <span className="workspace-credits-value">{creditsBalance ?? '—'}</span>
               <span className="workspace-credits-label">кр.</span>
+              {demoGenerationsRemaining > 0 ? (
+                <span className="workspace-demo-pill">{demoGenerationsRemaining} демо</span>
+              ) : null}
             </button>
             <div className="workspace-topbar-end-desktop">
               <button type="button" className="ghost-btn workspace-topbar-btn" onClick={onAccountOpen}>

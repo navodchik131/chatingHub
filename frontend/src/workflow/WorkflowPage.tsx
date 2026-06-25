@@ -15,10 +15,12 @@ import { hydrateGraphFromServer } from './graphResolver'
 import { WorkspaceSidebar, type WorkflowWorkspaceItem } from './WorkspaceSidebar'
 import { downloadWorkflowExport, parseWorkflowImport } from './workspaceExport'
 import { WorkflowModelsContext } from './WorkflowModelsContext'
+import { WorkflowBillingProvider, workflowBillingHeaderLine } from './WorkflowBillingContext'
+import type { BillingMeLike } from '../billing/planLabels'
 import type { ProjectGraph, StudioModelOption } from './types'
 import './workflow.css'
 
-interface UserMe {
+interface UserMe extends BillingMeLike {
   permissions_mask?: number
   is_workspace_owner?: boolean
   email?: string
@@ -45,6 +47,7 @@ export function WorkflowPage() {
   const [workspaces, setWorkspaces] = useState<WorkflowWorkspaceItem[]>([])
   const [activeId, setActiveId] = useState<number | null>(null)
   const [graph, setGraph] = useState<ProjectGraph>({ nodes: [], edges: [] })
+  const [me, setMe] = useState<UserMe | null>(null)
   const [busy, setBusy] = useState(false)
   const saveRef = useRef<number | null>(null)
   const graphRef = useRef(graph)
@@ -69,6 +72,7 @@ export function WorkflowPage() {
         return
       }
       const me = (await meR.json()) as UserMe
+      setMe(me)
       const owner = Boolean(me.is_workspace_owner)
       const mask = me.permissions_mask ?? 0
       if (!owner && !hasAllBits(mask, PERM_STUDIO_GENERATE)) {
@@ -279,11 +283,17 @@ export function WorkflowPage() {
 
   return (
     <WorkflowModelsContext.Provider value={models}>
+      <WorkflowBillingProvider me={me}>
       <div className="workflow-page">
         <header className="workflow-page__header">
           <div>
             <h1 className="workflow-page__title">Workflow</h1>
-            <p className="workflow-page__subtitle">Соберите цепочку и сгенерируйте изображение</p>
+            <p className="workflow-page__subtitle">
+              Соберите цепочку и сгенерируйте изображение
+              {me ? (
+                <span className="workflow-page__billing"> · {workflowBillingHeaderLine(me)}</span>
+              ) : null}
+            </p>
           </div>
           <div className="workflow-page__actions">
             <Link className="workflow-page__btn" to="/workspace">
@@ -316,6 +326,7 @@ export function WorkflowPage() {
           </div>
         </div>
       </div>
+      </WorkflowBillingProvider>
     </WorkflowModelsContext.Provider>
   )
 }

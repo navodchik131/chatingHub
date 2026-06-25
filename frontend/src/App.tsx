@@ -95,6 +95,11 @@ import {
   planDisplayShort,
   studioAccessAllowed,
 } from './billing/planLabels'
+import {
+  formatStudioImageCostLabel,
+  quoteStudioImageCredits,
+  studioGenerationUsesDemo,
+} from './studioImagePricing'
 
 type Platform = 'telegram' | 'fanvue'
 
@@ -773,6 +778,42 @@ export default function App() {
   const [studioMode, setStudioMode] = useState<StudioJobMode>('model_scene')
   const [studioWanEditTier, setStudioWanEditTier] = useState<'standard' | 'pro'>('standard')
   const [studioWaveProfile, setStudioWaveProfile] = useState<'regular' | 'nsfw'>('nsfw')
+
+  const studioImageCreditQuote = useMemo(() => {
+    const plan = normalizeBillingPlan(me?.billing_plan)
+    if (plan === 'pro') {
+      return { label: 'Pro', useDemo: false }
+    }
+    const credits = quoteStudioImageCredits({
+      waveProfile: studioWaveProfile,
+      wanEditTier: studioWaveProfile === 'nsfw' ? studioWanEditTier : 'standard',
+      studioMode,
+    })
+    const useDemo = studioGenerationUsesDemo({
+      billingPlan: me?.billing_plan,
+      demoRemaining: me?.demo_generations_remaining ?? 0,
+      creditsBalance: me?.credits_balance ?? 0,
+      waveProfile: studioWaveProfile,
+      wanEditTier: studioWanEditTier,
+      studioMode,
+    })
+    return {
+      credits,
+      label: formatStudioImageCostLabel(credits, {
+        demoRemaining: me?.demo_generations_remaining ?? 0,
+        useDemo,
+      }),
+      useDemo,
+    }
+  }, [
+    me?.billing_plan,
+    me?.credits_balance,
+    me?.demo_generations_remaining,
+    studioMode,
+    studioWaveProfile,
+    studioWanEditTier,
+  ])
+
   const [studioBusy, setStudioBusy] = useState(false)
   const [studioModels, setStudioModels] = useState<UserStudioModel[]>([])
   const [studioSelectedModelId, setStudioSelectedModelId] = useState<number | null>(null)
@@ -5238,6 +5279,7 @@ export default function App() {
           unreadTotal={unreadTotal}
           creditsBalance={me?.credits_balance ?? null}
           billingPlanLabel={planDisplayShort(me)}
+          demoGenerationsRemaining={me?.demo_generations_remaining ?? 0}
           userTitle={
             me?.is_workspace_owner
               ? me.email
@@ -5330,7 +5372,16 @@ export default function App() {
             <div className="studio-workspace__composer" aria-labelledby="studio-heading">
               <header className="studio-workspace__composer-head">
                 <h2 id="studio-heading">Картинки</h2>
-                <p className="studio-workspace__tagline">Модель, референс и описание — результат в истории справа.</p>
+                <p className="studio-workspace__tagline">
+                  Модель, референс и описание — результат в истории справа.
+                  {me && normalizeBillingPlan(me.billing_plan) !== 'pro' ? (
+                    <span className="studio-workspace__price-hint">
+                      {' '}
+                      · ~{studioImageCreditQuote.label} кр. за генерацию
+                      {studioImageCreditQuote.useDemo ? ' (демо)' : ''}
+                    </span>
+                  ) : null}
+                </p>
               </header>
               {!studioPaywalled && studioNeedsUserWsKey ? (
                 <WavespeedSetupBanner
@@ -5937,9 +5988,9 @@ export default function App() {
                       (studioPromptOnlyDev || integ?.wavespeed_configured) ? (
                         <span className="studio-magic-btn__cost">
                           <IconSpark className="studio-slot__icon-svg" />
-                          {(studioInpaintMaskFile != null || studioPaintInpaintMask
-                            ? health?.studio_inpaint_credit_cost
-                            : health?.studio_prompt_credit_cost) ?? '—'}
+                          {studioImageCreditQuote.label === 'Pro'
+                            ? 'Pro'
+                            : `${studioImageCreditQuote.label} кр.`}
                         </span>
                       ) : null}
                     </button>

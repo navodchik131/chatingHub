@@ -72,7 +72,10 @@ from app.services.demo_generations import (
     resolve_image_credit_cost,
 )
 from app.services.entitlements import subscription_active
-from app.services.studio_image_pricing import grok_pipeline_for_studio_mode
+from app.services.studio_image_pricing import (
+    effective_wave_model_for_billing,
+    grok_pipeline_for_studio_mode,
+)
 from app.services.admin_access import user_is_platform_admin
 from app.services.studio_keys import (
     apply_studio_credit_cost,
@@ -2614,6 +2617,11 @@ async def _studio_job_execute_refine_prompt(
 
     usage_kind = "studio_inpaint" if mask_bytes else "studio_prompt_refine"
     grok_pipeline = grok_pipeline_for_studio_mode(mode_n, workflow=workflow_source)
+    billing_wave_model = (
+        workflow_wave_model
+        if workflow_wave_model
+        else effective_wave_model_for_billing(None, wave_profile=wave_profile_n)
+    )
     base_studio_credit = (
         settings.credit_cost_studio_inpaint
         if mask_bytes
@@ -2621,7 +2629,7 @@ async def _studio_job_execute_refine_prompt(
     )
     quoted_cost = resolve_image_credit_cost(
         plan,
-        wave_model_id=workflow_wave_model or None,
+        wave_model_id=billing_wave_model,
         wan_edit_tier=wan_tier_n,
         grok_pipeline=grok_pipeline,
         legacy_base=base_studio_credit,
@@ -2630,7 +2638,7 @@ async def _studio_job_execute_refine_prompt(
         plan=plan,
         demo_remaining=_demo,
         credits_balance=_credits,
-        wave_model_id=workflow_wave_model or None,
+        wave_model_id=billing_wave_model,
         grok_pipeline=grok_pipeline,
         wave_profile=wave_profile_n,
         wan_edit_tier=wan_tier_n,
@@ -2644,7 +2652,7 @@ async def _studio_job_execute_refine_prompt(
         base_cost=base_studio_credit,
         usage_kind=usage_kind,
         quoted_cost=quoted_cost,
-        wave_model_id=workflow_wave_model or None,
+        wave_model_id=billing_wave_model,
         grok_pipeline=grok_pipeline,
         wave_profile=wave_profile_n,
         wan_edit_tier=wan_tier_n,

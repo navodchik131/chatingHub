@@ -105,7 +105,7 @@ def effective_wave_model_for_billing(
     if explicit in _WS_BASE_CREDITS:
         return explicit
     if normalize_studio_wave_profile(wave_profile) == "regular":
-        return demo_allowed_wave_model_id()
+        return "nano-banana-pro"
     return DEMO_WAN_WAVE_MODEL
 
 

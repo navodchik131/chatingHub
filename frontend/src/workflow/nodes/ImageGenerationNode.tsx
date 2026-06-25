@@ -10,6 +10,7 @@ import {
   pickValidModelId,
   type GenerationModelDefinition,
 } from '../wavespeedModels'
+import { useWorkflowBilling } from '../WorkflowBillingContext'
 import { executeWorkflowGeneration } from '../api'
 import { getDownstreamPreviewNodeIds, serializeGraph } from '../graphResolver'
 import { WorkflowImageLightbox } from '../WorkflowImageLightbox'
@@ -37,6 +38,8 @@ function ImageGenerationNodeComponent({ id, data }: NodeProps) {
     () => aspectsForModel(models, waveModelId),
     [models, waveModelId],
   )
+  const { quoteWorkflowImageCredits } = useWorkflowBilling()
+  const costQuote = quoteWorkflowImageCredits(waveModelId || DEFAULT_GENERATION_MODEL_ID, nsfwEnabled)
   const outputAspect = pickValidAspect(aspectOptions, nodeData.outputAspect)
 
   const updateNodeData = useCallback(
@@ -281,6 +284,11 @@ function ImageGenerationNodeComponent({ id, data }: NodeProps) {
           disabled={nodeData.isRunning}
         >
           {nodeData.isRunning ? 'Генерация…' : 'Сгенерировать'}
+          {!nodeData.isRunning ? (
+            <span className="workflow-node__btn-cost">
+              {costQuote.label === 'Pro' ? 'Pro' : `${costQuote.label} кр.`}
+            </span>
+          ) : null}
         </button>
 
         <Handle
