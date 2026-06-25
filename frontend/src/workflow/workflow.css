@@ -28,6 +28,14 @@
   color: #71717a;
 }
 
+.workflow-page__demo-hint {
+  margin: 0.35rem 0 0;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  max-width: 36rem;
+  color: #a1a1aa;
+}
+
 .workflow-page__body {
   flex: 1;
   min-height: 0;

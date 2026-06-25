@@ -24,10 +24,19 @@ from app.services.studio_workflow_resolver import (
     WorkflowResolutionError,
     resolve_workflow_generation_plan,
 )
-from app.services.studio_workflow_defaults import ensure_default_workflow_workspaces
+from app.services.studio_workflow_defaults import (
+    DEMO_WORKFLOW_NAME,
+    provision_full_workflow_workspaces,
+)
+from app.services.workflow_entitlements import (
+    assert_workflow_full_access,
+    assert_workflow_workspace_allowed,
+    is_workflow_demo_limited,
+)
 from app.services.workspace import (
     PERM_STUDIO_GENERATE,
     assert_permission,
+    resolve_billing_user,
     workspace_owner_id,
 )
 
@@ -134,6 +143,11 @@ async def _get_workspace_or_404(
     return row
 
 
+async def _workflow_owner_billing(session: AsyncSession, user: User):
+    billing = await resolve_billing_user(session, user)
+    return billing.subscription, billing.credit_account
+
+
 @router.get("/studio/workflow/model-options")
 async def api_workflow_model_options() -> dict:
     """Модели генерации и поддерживаемые форматы кадра для UI workflow."""
@@ -168,7 +182,9 @@ async def api_workflow_list_workspaces(
 ) -> list[WorkflowWorkspaceListItem]:
     assert_permission(user, PERM_STUDIO_GENERATE)
     oid = workspace_owner_id(user)
-    await ensure_default_workflow_workspaces(session, owner_id=oid)
+    sub, cr = await _workflow_owner_billing(session, user)
+    demo_limited = is_workflow_demo_limited(sub, cr)
+    await provision_full_workflow_workspaces(session, owner_id=oid)
     await session.commit()
     rows = (
         await session.scalars(
@@ -177,6 +193,8 @@ async def api_workflow_list_workspaces(
             .order_by(WorkflowWorkspace.updated_at.desc())
         )
     ).all()
+    if demo_limited:
+        rows = [r for r in rows if (r.name or "").strip() == DEMO_WORKFLOW_NAME]
     return [
         WorkflowWorkspaceListItem(id=r.id, name=r.name, updated_at=r.updated_at)
         for r in rows
@@ -191,6 +209,8 @@ async def api_workflow_create_workspace(
 ) -> WorkflowWorkspaceOut:
     assert_permission(user, PERM_STUDIO_GENERATE)
     oid = workspace_owner_id(user)
+    sub, cr = await _workflow_owner_billing(session, user)
+    assert_workflow_full_access(sub, cr)
     name = (body.name or "Новый проект").strip()[:120] or "Новый проект"
     row = WorkflowWorkspace(
         user_id=oid,
@@ -211,7 +231,9 @@ async def api_workflow_get_workspace(
 ) -> WorkflowWorkspaceOut:
     assert_permission(user, PERM_STUDIO_GENERATE)
     oid = workspace_owner_id(user)
+    sub, cr = await _workflow_owner_billing(session, user)
     row = await _get_workspace_or_404(session, owner_id=oid, workspace_id=workspace_id)
+    assert_workflow_workspace_allowed(row, sub, cr)
     return _workspace_out(row)
 
 
@@ -224,9 +246,13 @@ async def api_workflow_update_workspace(
 ) -> WorkflowWorkspaceOut:
     assert_permission(user, PERM_STUDIO_GENERATE)
     oid = workspace_owner_id(user)
+    sub, cr = await _workflow_owner_billing(session, user)
     row = await _get_workspace_or_404(session, owner_id=oid, workspace_id=workspace_id)
+    assert_workflow_workspace_allowed(row, sub, cr)
 
     if body.name is not None:
+        if is_workflow_demo_limited(sub, cr):
+            raise HTTPException(status_code=403, detail="Переименование недоступно на демо-тарифе.")
         row.name = body.name.strip()[:120] or row.name
     if body.graph is not None:
         nodes = body.graph.get("nodes")
@@ -248,6 +274,8 @@ async def api_workflow_delete_workspace(
 ) -> dict[str, str]:
     assert_permission(user, PERM_STUDIO_GENERATE)
     oid = workspace_owner_id(user)
+    sub, cr = await _workflow_owner_billing(session, user)
+    assert_workflow_full_access(sub, cr)
     row = await _get_workspace_or_404(session, owner_id=oid, workspace_id=workspace_id)
     await session.delete(row)
     await session.commit()
@@ -306,11 +334,21 @@ async def api_workflow_get_reference(
 async def api_workflow_execute(
     graph: str = Form(...),
     target_node_id: str = Form(...),
+    workspace_id: int | None = Form(default=None),
     session: AsyncSession = Depends(get_session),
     user: User = Depends(get_current_user),
 ) -> JSONResponse:
     assert_permission(user, PERM_STUDIO_GENERATE)
     oid = workspace_owner_id(user)
+    sub, cr = await _workflow_owner_billing(session, user)
+    if is_workflow_demo_limited(sub, cr):
+        if workspace_id is None:
+            raise HTTPException(
+                status_code=400,
+                detail="Укажите workspace_id для генерации на демо-тарифе.",
+            )
+        ws_row = await _get_workspace_or_404(session, owner_id=oid, workspace_id=workspace_id)
+        assert_workflow_workspace_allowed(ws_row, sub, cr)
 
     try:
         payload = json.loads(graph)

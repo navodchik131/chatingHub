@@ -24,6 +24,7 @@ from app.db.models import (
     YookassaProcessedPayment,
 )
 from app.services.billing_plan import (
+    is_credits_plan,
     normalize_billing_plan,
     platform_covers_studio_api_costs,
 )
@@ -31,6 +32,7 @@ from app.services.billing_subscription import activate_subscription_product
 from app.services.entitlements import subscription_is_paid_active
 from app.services.plan_catalog import get_plan_spec, resolve_product_id
 from app.services.referral import grant_referrer_reward_if_needed
+from app.services.studio_workflow_defaults import provision_full_workflow_workspaces
 
 log = logging.getLogger(__name__)
 
@@ -108,6 +110,7 @@ async def apply_yookassa_payment_succeeded(
             payment_kind="yookassa",
             payment_amount_rub=amount_rub,
         )
+        await provision_full_workflow_workspaces(session, owner_id=billing_uid)
         await session.commit()
         return {
             "ok": True,
@@ -148,7 +151,10 @@ async def apply_yookassa_payment_succeeded(
             return {"ok": False, "error": "amount_mismatch", "payment_id": pid}
 
         plan_norm = normalize_billing_plan(sub.billing_plan)
-        if not subscription_is_paid_active(sub) or not platform_covers_studio_api_costs(plan_norm):
+        credits_plan_topup = is_credits_plan(plan_norm)
+        if not credits_plan_topup and (
+            not subscription_is_paid_active(sub) or not platform_covers_studio_api_costs(plan_norm)
+        ):
             log.warning(
                 "yookassa: credits_pack rejected — no paid Managed subscription user=%s payment=%s",
                 billing_uid,
@@ -181,6 +187,7 @@ async def apply_yookassa_payment_succeeded(
             trigger_product="credits_pack",
             payment_amount_rub=paid_rub,
         )
+        await provision_full_workflow_workspaces(session, owner_id=billing_uid)
         await session.commit()
         return {"ok": True, "payment_id": pid, "granted": "credits", "amount": n}
 

@@ -118,8 +118,8 @@ def demo_request_eligible_for_free_slot(
 ) -> bool:
     """
     Бесплатная демо-генерация:
-    - regular → nano-banana-2, light/none;
-    - nsfw → wan-2.7 standard tier, light/standard/none.
+    - regular → nano-banana-2, light/none/workflow;
+    - nsfw → wan-2.7 standard tier, light/standard/none/workflow.
     """
     profile = normalize_studio_wave_profile(wave_profile)
     model = effective_wave_model_for_billing(wave_model_id, wave_profile=profile)
@@ -129,14 +129,14 @@ def demo_request_eligible_for_free_slot(
     if model == demo_allowed_wave_model_id():
         if profile != "regular":
             return False
-        return gp in ("light", "none")
+        return gp in ("light", "none", "workflow")
 
     if model == DEMO_WAN_WAVE_MODEL:
         if profile != "nsfw":
             return False
         if tier == "pro":
             return False
-        return gp in ("light", "standard", "none")
+        return gp in ("light", "standard", "none", "workflow")
 
     return False
 

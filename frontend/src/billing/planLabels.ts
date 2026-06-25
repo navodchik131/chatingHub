@@ -15,6 +15,7 @@ export interface BillingMeLike {
   is_platform_admin?: boolean
   billing_require_active_subscription?: boolean
   chat_allowed?: boolean
+  workflow_demo_limited?: boolean
 }
 
 /** Чаты доступны на Standard / Pro (не на Credits без оплаченной подписки). */

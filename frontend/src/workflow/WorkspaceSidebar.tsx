@@ -11,6 +11,7 @@ type Props = {
   activeId: number | null
   activeName: string
   busy: boolean
+  demoLimited?: boolean
   onSelect: (id: number) => void
   onCreate: (name: string) => void
   onRename: (id: number, name: string) => void
@@ -24,6 +25,7 @@ export function WorkspaceSidebar({
   activeId,
   activeName,
   busy,
+  demoLimited = false,
   onSelect,
   onCreate,
   onRename,
@@ -58,15 +60,17 @@ export function WorkspaceSidebar({
     <aside className="workflow-workspaces">
       <div className="workflow-workspaces__head">
         <h2>Проекты</h2>
-        <button
-          type="button"
-          className="workflow-workspaces__add"
-          disabled={busy}
-          onClick={() => setCreating(true)}
-          title="Новый проект"
-        >
-          +
-        </button>
+        {!demoLimited ? (
+          <button
+            type="button"
+            className="workflow-workspaces__add"
+            disabled={busy}
+            onClick={() => setCreating(true)}
+            title="Новый проект"
+          >
+            +
+          </button>
+        ) : null}
       </div>
 
       {creating ? (
@@ -118,6 +122,7 @@ export function WorkspaceSidebar({
                 className={`workflow-workspaces__link${activeId === ws.id ? ' is-active' : ''}`}
                 onClick={() => onSelect(ws.id)}
                 onDoubleClick={() => {
+                  if (demoLimited) return
                   setEditingId(ws.id)
                   setEditName(ws.name)
                 }}
@@ -125,17 +130,19 @@ export function WorkspaceSidebar({
                 {ws.name}
               </button>
             )}
-            <button
-              type="button"
-              className="workflow-workspaces__delete"
-              title="Удалить проект"
-              disabled={busy}
-              onClick={() => {
-                if (window.confirm(`Удалить «${ws.name}»?`)) onDelete(ws.id)
-              }}
-            >
-              ×
-            </button>
+            {!demoLimited ? (
+              <button
+                type="button"
+                className="workflow-workspaces__delete"
+                title="Удалить проект"
+                disabled={busy}
+                onClick={() => {
+                  if (window.confirm(`Удалить «${ws.name}»?`)) onDelete(ws.id)
+                }}
+              >
+                ×
+              </button>
+            ) : null}
           </li>
         ))}
       </ul>
@@ -150,15 +157,17 @@ export function WorkspaceSidebar({
         >
           ↓ JSON
         </button>
-        <button
-          type="button"
-          className="workflow-workspaces__io-btn"
-          disabled={busy}
-          onClick={() => importRef.current?.click()}
-          title="Загрузить проект из JSON"
-        >
-          ↑ JSON
-        </button>
+        {!demoLimited ? (
+          <button
+            type="button"
+            className="workflow-workspaces__io-btn"
+            disabled={busy}
+            onClick={() => importRef.current?.click()}
+            title="Загрузить проект из JSON"
+          >
+            ↑ JSON
+          </button>
+        ) : null}
         <input
           ref={importRef}
           type="file"

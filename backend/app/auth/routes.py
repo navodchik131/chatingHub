@@ -16,10 +16,11 @@ from app.services.admin_access import user_is_platform_admin
 from app.services.billing_plan import BILLING_PLAN_CREDITS, BILLING_PLAN_STANDARD, normalize_billing_plan
 from app.services.plan_catalog import normalize_plan_tier, plan_display_name
 from app.services.plan_entitlements import chat_allowed_for_subscription, plan_usage_snapshot
+from app.services.workflow_entitlements import is_workflow_demo_limited
 from app.services.referral import apply_referral_on_signup, ensure_owner_referral_code
 from app.services.starter_plan import ensure_starter_managed_subscription, starter_managed_effective
 from app.services.funnel_analytics import record_funnel_event_once
-from app.services.studio_workflow_defaults import ensure_default_workflow_workspaces
+from app.services.studio_workflow_defaults import provision_full_workflow_workspaces
 from app.services.workspace import resolve_billing_user, workspace_owner_id
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -58,6 +59,8 @@ async def register(body: RegisterIn, session: AsyncSession = Depends(get_session
         )
     )
     bonus = max(0, settings.signup_bonus_credits)
+    if reg_plan == BILLING_PLAN_CREDITS:
+        bonus = 0
     session.add(
         CreditAccount(
             user_id=user.id,
@@ -71,7 +74,7 @@ async def register(body: RegisterIn, session: AsyncSession = Depends(get_session
     )
     await ensure_owner_referral_code(session, user)
     await record_funnel_event_once(session, user=user, event="signup")
-    await ensure_default_workflow_workspaces(session, owner_id=user.id)
+    await provision_full_workflow_workspaces(session, owner_id=user.id)
     await session.commit()
     token = create_access_token(str(user.id))
     return TokenOut(access_token=token)
@@ -119,6 +122,9 @@ async def me(
     billing = await resolve_billing_user(session, user)
     sub = billing.subscription
     cr = billing.credit_account
+    if not is_workflow_demo_limited(sub, cr):
+        if await provision_full_workflow_workspaces(session, owner_id=oid):
+            await session.commit()
     owner_row = await session.get(User, oid)
     owner_email = owner_row.email if owner_row else user.email
     billing_plan = normalize_billing_plan(sub.billing_plan if sub else None)
@@ -163,4 +169,5 @@ async def me(
         demo_generations_remaining=int(cr.demo_generations_remaining) if cr else 0,
         demo_generations_grant=max(0, int(settings.demo_generations_grant)),
         chat_allowed=chat_allowed_for_subscription(sub),
+        workflow_demo_limited=is_workflow_demo_limited(sub, cr),
     )

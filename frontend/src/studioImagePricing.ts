@@ -86,7 +86,7 @@ export function studioGenerationUsesDemo(params: {
   workflow?: boolean
 }): boolean {
   if (normalizeBillingPlan(params.billingPlan) !== 'credits') return false
-  if (params.demoRemaining <= 0 || params.creditsBalance > 0) return false
+  if (params.demoRemaining <= 0) return false
   const profile = normalizeWaveProfile(params.waveProfile)
   const model = params.waveModelId
     ? normalizeWaveModelId(params.waveModelId)
@@ -97,10 +97,10 @@ export function studioGenerationUsesDemo(params: {
     workflow: params.workflow,
   })
   if (profile === 'regular') {
-    return model === 'nano-banana-2' && (pipeline === 'light' || pipeline === 'none')
+    return model === 'nano-banana-2' && (pipeline === 'light' || pipeline === 'none' || pipeline === 'workflow')
   }
   if (model !== 'wan-2.7' || tier === 'pro') return false
-  return pipeline === 'light' || pipeline === 'standard' || pipeline === 'none'
+  return pipeline === 'light' || pipeline === 'standard' || pipeline === 'none' || pipeline === 'workflow'
 }
 
 export function formatStudioImageCostLabel(

@@ -77,6 +77,14 @@ def test_assert_demo_only_blocks_premium_without_credits():
     assert "wan-2.7" in str(exc.value.detail)
 
 
+def test_demo_wan_nsfw_workflow():
+    assert demo_request_eligible_for_free_slot(
+        wave_model_id="wan-2.7",
+        grok_pipeline="workflow",
+        wave_profile="nsfw",
+    )
+
+
 def test_assert_demo_skipped_when_credits_available():
     assert_demo_only_user_model_allowed(
         plan="credits",

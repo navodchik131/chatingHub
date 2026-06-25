@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { apiFetch } from '../../api'
 import { formatHttpApiError, formatClientFetchError } from '../../apiErrors'
 import { WAVESPEED_REF_URL } from '../../billing/planCatalog'
@@ -20,6 +20,10 @@ type Props = {
   onOpenIntegrations: () => void
 }
 
+function isAbortError(error: unknown): boolean {
+  return error instanceof DOMException && error.name === 'AbortError'
+}
+
 export function FirstGenWizard({
   open,
   ownerId,
@@ -33,12 +37,14 @@ export function FirstGenWizard({
   const [refFile, setRefFile] = useState<File | null>(null)
   const [modelPreview, setModelPreview] = useState<string | null>(null)
   const [refPreview, setRefPreview] = useState<string | null>(null)
+  const [nsfwEnabled, setNsfwEnabled] = useState(false)
   const [wsKey, setWsKey] = useState('')
   const [busy, setBusy] = useState(false)
   const [status, setStatus] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [resultUrl, setResultUrl] = useState<string | null>(null)
   const [resultGenId, setResultGenId] = useState<number | null>(null)
+  const runAbortRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
     if (!modelFile) {
@@ -64,6 +70,7 @@ export function FirstGenWizard({
     if (!open) return
     trackFunnelEvent('onboarding_wizard_opened')
     setPhase('photos')
+    setNsfwEnabled(false)
     setError(null)
     setStatus(null)
     setResultUrl(null)
@@ -79,13 +86,36 @@ export function FirstGenWizard({
     }
   }, [open])
 
+  useEffect(() => {
+    return () => {
+      runAbortRef.current?.abort()
+      runAbortRef.current = null
+    }
+  }, [])
+
   const canProceedPhotos = Boolean(modelFile && refFile)
 
+  const abortRun = useCallback(() => {
+    runAbortRef.current?.abort()
+    runAbortRef.current = null
+  }, [])
+
   const skip = useCallback(() => {
+    abortRun()
+    setBusy(false)
+    setStatus(null)
     trackFunnelEvent('onboarding_wizard_skipped')
     if (ownerId > 0) markFirstGenWizardDoneForUser(ownerId)
     onClose()
-  }, [onClose, ownerId])
+  }, [abortRun, onClose, ownerId])
+
+  const onCancelGeneration = useCallback(() => {
+    abortRun()
+    setBusy(false)
+    setStatus(null)
+    setError(null)
+    setPhase(studioNeedsUserWsKey ? 'wavespeed' : 'photos')
+  }, [abortRun, studioNeedsUserWsKey])
 
   const saveWsKey = async (): Promise<boolean> => {
     const k = wsKey.trim()
@@ -118,6 +148,10 @@ export function FirstGenWizard({
 
   const runPipeline = async () => {
     if (!modelFile || !refFile) return
+    abortRun()
+    const abortController = new AbortController()
+    runAbortRef.current = abortController
+
     setError(null)
     setBusy(true)
     setPhase('generating')
@@ -129,7 +163,10 @@ export function FirstGenWizard({
       const profileR = await apiFetch('/api/studio/models/generate-profile', {
         method: 'POST',
         body: profileFd,
+        signal: abortController.signal,
+        timeoutMs: 120_000,
       })
+      if (abortController.signal.aborted) return
       if (!profileR.ok) {
         const j = await profileR.json().catch(() => ({}))
         throw new Error(formatHttpApiError(profileR, j))
@@ -143,7 +180,13 @@ export function FirstGenWizard({
       modelFd.append('profile_text', profileData.profile_text)
       modelFd.append('images', modelFile)
       modelFd.append('image_kinds', JSON.stringify(['face']))
-      const modelR = await apiFetch('/api/studio/models', { method: 'POST', body: modelFd })
+      const modelR = await apiFetch('/api/studio/models', {
+        method: 'POST',
+        body: modelFd,
+        signal: abortController.signal,
+        timeoutMs: 120_000,
+      })
+      if (abortController.signal.aborted) return
       if (!modelR.ok) {
         const j = await modelR.json().catch(() => ({}))
         throw new Error(formatHttpApiError(modelR, j))
@@ -151,6 +194,8 @@ export function FirstGenWizard({
       const model = (await modelR.json()) as { id: number }
 
       setStatus('Генерируем первую картинку…')
+      const waveProfile = nsfwEnabled ? 'nsfw' : 'regular'
+      const workflowModel = nsfwEnabled ? 'wan-2.7' : 'nano-banana-2'
       const genFd = new FormData()
       genFd.append('description', '')
       genFd.append('model_id', String(model.id))
@@ -158,19 +203,25 @@ export function FirstGenWizard({
       genFd.append('output_aspect', '3:4')
       genFd.append('studio_mode', 'no_face')
       genFd.append('wan_edit_tier', 'standard')
-      genFd.append('studio_wave_profile', 'regular')
+      genFd.append('studio_wave_profile', waveProfile)
       genFd.append('generate_wavespeed', '1')
       genFd.append('wavespeed_single_reference', '1')
       genFd.append('send_pose_reference_to_wavespeed', '0')
       genFd.append('lock_model_hairstyle', '0')
       genFd.append('exif_camera', 'iphone15')
       genFd.append('workflow_source', '1')
-      genFd.append('workflow_wave_model', 'nano-banana-2')
+      genFd.append('workflow_wave_model', workflowModel)
 
       const result = await postStudioJobAndWait<{
         generated_image_url?: string | null
         generation_id?: number | null
-      }>('/api/studio/refine-prompt', { method: 'POST', body: genFd })
+      }>(
+        '/api/studio/refine-prompt',
+        { method: 'POST', body: genFd, timeoutMs: 120_000, signal: abortController.signal },
+        { signal: abortController.signal },
+      )
+
+      if (abortController.signal.aborted) return
 
       const url = result.generated_image_url?.trim() || null
       const gid = typeof result.generation_id === 'number' ? result.generation_id : null
@@ -181,9 +232,16 @@ export function FirstGenWizard({
       trackFunnelEvent('onboarding_wizard_completed')
       if (ownerId > 0) markFirstGenWizardDoneForUser(ownerId)
     } catch (e) {
+      if (isAbortError(e) || abortController.signal.aborted) {
+        setPhase(studioNeedsUserWsKey ? 'wavespeed' : 'photos')
+        return
+      }
       setError(formatClientFetchError(e, true))
       setPhase(studioNeedsUserWsKey ? 'wavespeed' : 'photos')
     } finally {
+      if (runAbortRef.current === abortController) {
+        runAbortRef.current = null
+      }
       setBusy(false)
       setStatus(null)
     }
@@ -222,7 +280,7 @@ export function FirstGenWizard({
               Два фото — модель и референс сцены. Мы соберём профиль по вашему снимку и сгенерируем кадр.
             </p>
           </div>
-          <button type="button" className="ghost-btn first-gen-wizard__skip" onClick={skip} disabled={busy}>
+          <button type="button" className="ghost-btn first-gen-wizard__skip" onClick={skip}>
             Позже
           </button>
         </header>
@@ -265,6 +323,32 @@ export function FirstGenWizard({
                 )}
               </label>
             </div>
+
+            <div className="first-gen-wizard__mode">
+              <span className="first-gen-wizard__mode-label">Тип генерации</span>
+              <div className="first-gen-wizard__mode-toggle" role="group" aria-label="Тип генерации">
+                <button
+                  type="button"
+                  className={`first-gen-wizard__mode-btn${!nsfwEnabled ? ' is-active' : ''}`}
+                  onClick={() => setNsfwEnabled(false)}
+                >
+                  Обычное фото
+                </button>
+                <button
+                  type="button"
+                  className={`first-gen-wizard__mode-btn${nsfwEnabled ? ' is-active' : ''}`}
+                  onClick={() => setNsfwEnabled(true)}
+                >
+                  NSFW
+                </button>
+              </div>
+              <p className="muted small first-gen-wizard__mode-hint">
+                {nsfwEnabled
+                  ? 'Для откровенных референсов — модель WAN. Демо-генерации списываются из бесплатных.'
+                  : 'Для повседневных сцен — Nano Banana. Подходит для большинства референсов.'}
+              </p>
+            </div>
+
             <div className="first-gen-wizard__actions">
               <button type="button" className="send-btn" disabled={!canProceedPhotos || busy} onClick={onPhotosNext}>
                 Далее
@@ -317,7 +401,12 @@ export function FirstGenWizard({
               ◌
             </p>
             <p>{status ?? 'Генерация…'}</p>
-            <p className="muted small">Обычно 1–3 минуты. Не закрывайте окно.</p>
+            <p className="muted small">Обычно 1–3 минуты.</p>
+            <div className="first-gen-wizard__actions first-gen-wizard__actions--center">
+              <button type="button" className="ghost-btn" onClick={onCancelGeneration}>
+                Отменить
+              </button>
+            </div>
           </div>
         ) : null}
 

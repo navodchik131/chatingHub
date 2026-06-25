@@ -125,6 +125,49 @@
   margin-top: 1.25rem;
 }
 
+.first-gen-wizard__actions--center {
+  justify-content: center;
+}
+
+.first-gen-wizard__mode {
+  margin-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.first-gen-wizard__mode-label {
+  font-weight: 600;
+  font-size: 0.875rem;
+}
+
+.first-gen-wizard__mode-toggle {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.first-gen-wizard__mode-btn {
+  padding: 0.45rem 0.85rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.04);
+  color: inherit;
+  font: inherit;
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+
+.first-gen-wizard__mode-btn.is-active {
+  border-color: rgba(124, 92, 255, 0.55);
+  background: rgba(124, 92, 255, 0.18);
+}
+
+.first-gen-wizard__mode-hint {
+  margin: 0;
+  line-height: 1.45;
+}
+
 .first-gen-wizard__ws-field {
   display: flex;
   flex-direction: column;

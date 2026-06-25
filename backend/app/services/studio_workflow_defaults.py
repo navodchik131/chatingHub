@@ -28,6 +28,9 @@ _DEFAULT_TEMPLATE_FILES: tuple[str, ...] = (
     "po-refu.json",
 )
 
+DEMO_WORKFLOW_TEMPLATE_FILE = "po-refu.json"
+DEMO_WORKFLOW_NAME = "По рефу"
+
 
 @dataclass(frozen=True)
 class WorkflowTemplate:
@@ -58,10 +61,17 @@ def _parse_template_file(path: Path) -> WorkflowTemplate | None:
     return WorkflowTemplate(name=name, graph=_sanitize_graph_for_seed(graph_raw))
 
 
-def load_default_workflow_templates() -> list[WorkflowTemplate]:
-    """Загрузить встроенные шаблоны (порядок фиксирован)."""
+def demo_workflow_template_files() -> tuple[str, ...]:
+    return (DEMO_WORKFLOW_TEMPLATE_FILE,)
+
+
+def load_workflow_templates(
+    template_files: tuple[str, ...] | None = None,
+) -> list[WorkflowTemplate]:
+    """Загрузить шаблоны; None — все встроенные по умолчанию."""
+    files = template_files if template_files is not None else _DEFAULT_TEMPLATE_FILES
     out: list[WorkflowTemplate] = []
-    for fname in _DEFAULT_TEMPLATE_FILES:
+    for fname in files:
         path: Path | None = None
         for root in (_TEMPLATES_DIR, _BUNDLED_TEMPLATES_DIR):
             candidate = (root / fname).resolve()
@@ -77,6 +87,11 @@ def load_default_workflow_templates() -> list[WorkflowTemplate]:
     return out
 
 
+def load_default_workflow_templates() -> list[WorkflowTemplate]:
+    """Загрузить все встроенные шаблоны (порядок фиксирован)."""
+    return load_workflow_templates(None)
+
+
 def default_workflow_template_names() -> frozenset[str]:
     return frozenset(t.name for t in load_default_workflow_templates())
 
@@ -85,12 +100,14 @@ async def ensure_default_workflow_workspaces(
     session: AsyncSession,
     *,
     owner_id: int,
+    template_files: tuple[str, ...] | None = None,
 ) -> list[WorkflowWorkspace]:
     """
     Создать недостающие шаблонные рабочие пространства для владельца аккаунта.
     Идемпотентно: если проект с таким именем уже есть — не дублируем.
+    template_files: подмножество шаблонов; None — все по умолчанию.
     """
-    templates = load_default_workflow_templates()
+    templates = load_workflow_templates(template_files)
     if not templates:
         return []
 
@@ -121,3 +138,16 @@ async def ensure_default_workflow_workspaces(
     if created:
         await session.flush()
     return created
+
+
+async def provision_full_workflow_workspaces(
+    session: AsyncSession,
+    *,
+    owner_id: int,
+) -> list[WorkflowWorkspace]:
+    """
+    Все встроенные шаблоны (идемпотентно).
+    Вызывается при регистрации, оплате и когда демо-ограничение снято —
+    недостающие проекты появятся без ручной догрузки.
+    """
+    return await ensure_default_workflow_workspaces(session, owner_id=owner_id, template_files=None)

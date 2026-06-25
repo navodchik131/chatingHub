@@ -14,7 +14,7 @@ import { FlowCanvas } from './FlowCanvas'
 import { hydrateGraphFromServer } from './graphResolver'
 import { WorkspaceSidebar, type WorkflowWorkspaceItem } from './WorkspaceSidebar'
 import { downloadWorkflowExport, parseWorkflowImport } from './workspaceExport'
-import { WorkflowModelsContext } from './WorkflowModelsContext'
+import { WorkflowRunProvider } from './WorkflowRunContext'
 import { WorkflowBillingProvider, workflowBillingHeaderLine } from './WorkflowBillingContext'
 import type { BillingMeLike } from '../billing/planLabels'
 import type { ProjectGraph, StudioModelOption } from './types'
@@ -24,6 +24,7 @@ interface UserMe extends BillingMeLike {
   permissions_mask?: number
   is_workspace_owner?: boolean
   email?: string
+  workflow_demo_limited?: boolean
 }
 
 function loadLegacyGraph(): ProjectGraph | null {
@@ -281,6 +282,8 @@ export function WorkflowPage() {
     )
   }
 
+  const demoLimited = Boolean(me?.workflow_demo_limited)
+
   return (
     <WorkflowModelsContext.Provider value={models}>
       <WorkflowBillingProvider me={me}>
@@ -294,6 +297,12 @@ export function WorkflowPage() {
                 <span className="workflow-page__billing"> · {workflowBillingHeaderLine(me)}</span>
               ) : null}
             </p>
+            {demoLimited ? (
+              <p className="workflow-page__demo-hint muted small">
+                Демо-режим: в списке только «По рефу»; остальные шаблоны откроются после пополнения
+                кредитов или подписки. Генерации списываются из бесплатных демо.
+              </p>
+            ) : null}
           </div>
           <div className="workflow-page__actions">
             <Link className="workflow-page__btn" to="/workspace">
@@ -308,6 +317,7 @@ export function WorkflowPage() {
               activeId={activeId}
               activeName={activeWorkspaceName}
               busy={busy}
+              demoLimited={demoLimited}
               onSelect={(id) => void selectWorkspace(id)}
               onCreate={(name) => void handleCreate(name)}
               onRename={(id, name) => void handleRename(id, name)}
@@ -316,12 +326,14 @@ export function WorkflowPage() {
               onImport={(file) => void handleImport(file)}
             />
             {activeId != null ? (
-              <FlowCanvas
-                key={activeId}
-                workspaceId={activeId}
-                initialGraph={graph}
-                onGraphChange={handleGraphChange}
-              />
+              <WorkflowRunProvider workspaceId={activeId} demoLimited={demoLimited}>
+                <FlowCanvas
+                  key={activeId}
+                  workspaceId={activeId}
+                  initialGraph={graph}
+                  onGraphChange={handleGraphChange}
+                />
+              </WorkflowRunProvider>
             ) : null}
           </div>
         </div>

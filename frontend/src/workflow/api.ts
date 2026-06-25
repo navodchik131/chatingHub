@@ -103,11 +103,15 @@ export async function executeWorkflowGeneration(
     signal?: AbortSignal
     pollMs?: number
     maxWaitMs?: number
+    workspaceId?: number | null
   },
 ): Promise<{ generated_image_url?: string | null; generation_id?: number | null }> {
   const fd = new FormData()
   fd.append('graph', JSON.stringify(graph))
   fd.append('target_node_id', targetNodeId)
+  if (opts?.workspaceId != null) {
+    fd.append('workspace_id', String(opts.workspaceId))
+  }
   return postStudioJobAndWait(
     '/api/studio/workflow/execute',
     { method: 'POST', body: fd, timeoutMs: 120_000, signal: opts?.signal },

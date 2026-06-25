@@ -11,7 +11,7 @@ export interface ReferralPublic {
 
 const FALLBACK: ReferralPublic = {
   friend_referral_credits: 25,
-  signup_base_credits: 100,
+  signup_base_credits: 0,
   referrer_payment_percent: 10,
   credit_unit_price_rub: 3.7,
   referrer_reward_example_rub: 990,

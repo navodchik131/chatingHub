@@ -12,6 +12,7 @@ import {
 } from '../wavespeedModels'
 import { useWorkflowBilling } from '../WorkflowBillingContext'
 import { executeWorkflowGeneration } from '../api'
+import { useWorkflowRun } from '../WorkflowRunContext'
 import { getDownstreamPreviewNodeIds, serializeGraph } from '../graphResolver'
 import { WorkflowImageLightbox } from '../WorkflowImageLightbox'
 import { BaseNode } from './BaseNode'
@@ -23,6 +24,7 @@ function isAbortError(error: unknown): boolean {
 
 function ImageGenerationNodeComponent({ id, data }: NodeProps) {
   const { setNodes, getNodes, getEdges } = useReactFlow()
+  const { workspaceId } = useWorkflowRun()
   const nodeData = data as ImageGenerationNodeData
   const nsfwEnabled = nodeData.nsfwEnabled !== false
   const [models, setModels] = useState<GenerationModelDefinition[]>([])
@@ -104,6 +106,7 @@ function ImageGenerationNodeComponent({ id, data }: NodeProps) {
     try {
       const result = await executeWorkflowGeneration(graph, id, {
         signal: abortController.signal,
+        workspaceId,
       })
       if (abortController.signal.aborted) return
 
