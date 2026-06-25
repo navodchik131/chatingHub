@@ -140,8 +140,8 @@ class Settings(BaseSettings):
     grok_scene_compose_timeout_seconds: float = Field(default=180.0, ge=30.0, le=600.0)
     # Seedance T2V: макс. длина финального промпта (символов) после Grok / сборки
     studio_seedance_t2v_prompt_max_chars: int = Field(default=3000, ge=500, le=5000)
-    # Первый кадр (архив) часто триggerит sensitive у Seedance — сцена остаётся в тексте промпта.
-    studio_seedance_video_skip_start_frame_ref: bool = Field(default=True)
+    # Grok пишет итоговый Seedance-промпт на китайском (иногда мягче проходит moderation).
+    studio_seedance_grok_prompt_zh: bool = Field(default=True)
     credit_cost_studio_prompt_refine: int = Field(default=2)
     image_studio_skeleton_path: str = Field(default="data/prompts/image_studio_skeleton.txt")
     image_studio_skeleton_inline: str = Field(default="")

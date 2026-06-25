@@ -165,9 +165,7 @@ def format_wavespeed_user_error(message: str) -> str:
     ):
         return (
             f"WaveSpeed: {body} "
-            "Модерация Seedance: проверьте первый кадр, motion-видео и turnaround модели — "
-            "откровенный контент в reference_images блокируется. "
-            "Попробуйте нейтральный кадр и промпт в кино-стиле без откровенных слов."
+            "Контент отклонён модерацией — попробуйте другой промпт или референсы."
         )
     if "provider rejected" in low or "check your inputs" in low:
         return (

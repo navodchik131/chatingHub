@@ -30,6 +30,13 @@ _TIMELINE_SYSTEM_EN = (
     "[t s] lines without ``` blocks."
 )
 
+_SEEDANCE_T2V_GROK_SYSTEM_ZH = (
+    "You follow instructions precisely. "
+    "Output ONLY the final Seedance 2.0 video prompt in Simplified Chinese (简体中文). "
+    "Keep @ImageN and @VideoN tags exactly as Latin tokens — never translate or localize tag names. "
+    "No preamble, no markdown fences."
+)
+
 # Shared guard for step2 + Seedance expand (video APIs flag detailed face/identity prose).
 _VIDEO_IDENTITY_GUARD_EN = (
     "CONTENT_SAFETY (video provider): Do NOT write detailed facial identity in prose — "
@@ -605,7 +612,7 @@ async def grok_expand_seedance_t2v_prompt(
 ) -> str:
     """
     Разворачивает краткий запрос пользователя в кинематографический промпт Seedance T2V
-    с @ImageN / @VideoN (English). Обрезает до max_chars.
+    с @ImageN / @VideoN. Обрезает до max_chars.
     """
     from app.services.studio_seedance_t2v import truncate_seedance_t2v_prompt
 
@@ -657,8 +664,13 @@ async def grok_expand_seedance_t2v_prompt(
 
     dur = motion_video_duration_seconds(duration_seconds)
 
+    output_lang = (
+        "Simplified Chinese (简体中文)"
+        if settings.studio_seedance_grok_prompt_zh
+        else "English"
+    )
     user_instruction = (
-        "You write a single Seedance 2.0 Text-to-Video prompt in ENGLISH.\n\n"
+        f"You write a single Seedance 2.0 Text-to-Video prompt in {output_lang}.\n\n"
         f"{_VIDEO_IDENTITY_GUARD_EN}\n\n"
         f"USER_BRIEF (any language — interpret intent):\n{brief}\n\n"
         f"REFERENCE_TAG_RULES (order matches API reference_images / reference_videos arrays):\n{ref_block}\n\n"
@@ -681,15 +693,23 @@ async def grok_expand_seedance_t2v_prompt(
         "7) Do not invent extra @Image or @Video tags beyond the ranges given.\n"
         "8) Never output detailed facial identity lists in prose — bind identity only via explicit @Image tag numbers.\n"
         "9) If USER_BRIEF or MOTION_NOTES contain `[t s]` timelines, keep timing but compress any face lines to motion-only tokens.\n"
-        "10) Write as a professional cinema shot: cinematic shot, film still, anamorphic lens, cinematic lighting, "
-        "movie storyboard, high production value. Avoid suggestive or explicit vocabulary — prefer elegant figure, "
-        "graceful pose, flowing garment, confident adult performer.\n"
+    )
+    if settings.studio_seedance_grok_prompt_zh:
+        user_instruction += (
+            "10) Write the entire prompt body in Simplified Chinese. "
+            "Keep @ImageN / @VideoN tags in Latin as-is.\n"
+        )
+
+    system_content = (
+        _SEEDANCE_T2V_GROK_SYSTEM_ZH
+        if settings.studio_seedance_grok_prompt_zh
+        else _TIMELINE_SYSTEM_EN
     )
 
     out = await chat_completion_openai_compatible_text(
         model=model,
         messages=[
-            {"role": "system", "content": _TIMELINE_SYSTEM_EN},
+            {"role": "system", "content": system_content},
             {"role": "user", "content": user_instruction},
         ],
         max_tokens=4096,

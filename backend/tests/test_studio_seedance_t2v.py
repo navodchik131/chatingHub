@@ -5,11 +5,9 @@ from app.services.studio_seedance_t2v import (
     assemble_seedance_video_edit_prompt,
     filter_model_images_for_seedance_video,
     prepare_motion_notes_for_seedance,
-    sanitize_seedance_user_brief,
     seedance_model_identity_tag_expr,
     soften_seedance_provider_prompt,
     truncate_seedance_t2v_prompt,
-    wrap_seedance_cinematic_framing,
 )
 from app.services.wavespeed_client import (
     wavespeed_is_sensitive_content_error,
@@ -35,7 +33,7 @@ def test_assemble_with_start_frame():
     assert "@Image2" in p
     assert "opening still" in p.lower() or "t=0" in p.lower()
     assert "@Video1" in p
-    assert "consistent character" in p.lower() or "lead performer" in p.lower()
+    assert "consistent character" in p.lower() or "same person" in p.lower()
     assert "facial identity" not in p.lower()
     assert "face/body" not in p.lower()
 
@@ -105,8 +103,7 @@ def test_append_identity_lock_uses_explicit_image_tags():
     )
     assert "@Image2" in out
     assert "@Image3" in out
-    assert "cinematic continuity" in out.lower()
-    assert out.lower().count("cinematic continuity") == 1
+    assert out.count("Same character") >= 2
     assert "@Video1" in out
     assert "model references" not in out.lower()
 
@@ -118,9 +115,10 @@ def test_assemble_includes_identity_lock_with_video():
         n_model_images=2,
         n_motion_videos=1,
     )
-    assert "cinematic continuity" in p.lower()
+    assert "Same character" in p
     assert "@Image2" in p
     assert "@Video1" in p
+    assert "appearance from" in p.lower() or "character look" in p.lower()
 
 
 def test_video_edit_prompt_swap_identity():
@@ -163,6 +161,19 @@ def test_wavespeed_sensitive_detector():
     assert not wavespeed_is_sensitive_content_error("Insufficient credits")
 
 
+def test_append_identity_lock_zh():
+    out = append_seedance_identity_lock(
+        "电影感场景。",
+        n_start_frame=1,
+        n_model_images=2,
+        n_motion_videos=1,
+        language="zh",
+    )
+    assert "@Image2" in out
+    assert "整段视频" in out
+    assert out.count("整段视频") >= 2
+
+
 def test_soften_provider_prompt():
     raw = (
         "Same person — identity via @Image2 (face/body/hair). "
@@ -174,19 +185,3 @@ def test_soften_provider_prompt():
     assert "never adopt" not in out.lower()
     assert "ignore all clothing" not in out.lower()
     assert "character via" in out.lower()
-
-
-def test_sanitize_user_brief_trigger_words():
-    raw = "Sexy curves, barely clothed young girl on the beach."
-    out = sanitize_seedance_user_brief(raw)
-    assert "sexy" not in out.lower()
-    assert "curves" not in out.lower()
-    assert "young girl" not in out.lower()
-    assert "elegant" in out.lower() or "silhouette" in out.lower()
-
-
-def test_wrap_cinematic_framing():
-    out = wrap_seedance_cinematic_framing("She walks in the rain.")
-    assert "cinematic" in out.lower()
-    assert "35mm" in out.lower()
-    assert "She walks in the rain." in out

@@ -39,38 +39,6 @@ _MOTION_NOTE_BANNED_SUBSTRINGS = (
     "identity catalog",
 )
 
-_CINEMATIC_FRAMING_EN = (
-    "Professional cinematic film still, 35mm film grain, anamorphic lens, "
-    "cinematic lighting, movie storyboard frame, director's vision, "
-    "high production value, dramatic atmosphere, tasteful fashion editorial."
-)
-
-# Слова, которые чаще триггерят Seedance/WaveSpeed moderation (intent filter).
-_BRIEF_TRIGGER_REPLACEMENTS: list[tuple[re.Pattern[str], str]] = [
-    (re.compile(r"\bbody curves\b", re.I), "graceful silhouette"),
-    (re.compile(r"\bcurves\b", re.I), "silhouette"),
-    (re.compile(r"\bsexy\b", re.I), "elegant"),
-    (re.compile(r"\bseductive\b", re.I), "confident"),
-    (re.compile(r"\bsensual\b", re.I), "expressive"),
-    (re.compile(r"\bprovocative\b", re.I), "bold"),
-    (re.compile(r"\bbarely clothed\b", re.I), "in flowing garments"),
-    (re.compile(r"\bexposed\b", re.I), "revealing light"),
-    (re.compile(r"\bnude\b", re.I), "artistic figure study"),
-    (re.compile(r"\bnaked\b", re.I), "artistic figure study"),
-    (re.compile(r"\btopless\b", re.I), "shoulders visible"),
-    (re.compile(r"\bnsfw\b", re.I), ""),
-    (re.compile(r"\byoung girl\b", re.I), "adult woman"),
-    (re.compile(r"\bteen\b", re.I), "adult"),
-    (re.compile(r"\bminor\b", re.I), "adult"),
-    (re.compile(r"\blingerie\b", re.I), "elegant dress"),
-    (re.compile(r"\bbikini\b", re.I), "swimwear"),
-    (re.compile(r"\bcleavage\b", re.I), "neckline"),
-    (re.compile(r"\bbreast\b", re.I), "torso"),
-    (re.compile(r"\bbreasts\b", re.I), "torso"),
-    (re.compile(r"\bbutt\b", re.I), "hips"),
-    (re.compile(r"\bass\b", re.I), "posture"),
-]
-
 _PROVIDER_PROMPT_REPLACEMENTS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"\bface/body/hair\b", re.I), "character"),
     (re.compile(r"\bfacial identity\b", re.I), "appearance"),
@@ -84,8 +52,6 @@ _PROVIDER_PROMPT_REPLACEMENTS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"\bIGNORE all clothing[^.]*\.?\s*", re.I), ""),
     (re.compile(r"\bwardrobe authority\b", re.I), "wardrobe"),
     (re.compile(r"\bCONTENT_SAFETY[^.]*\.?\s*", re.I), ""),
-    (re.compile(r"\bidentity lock\b", re.I), "character continuity"),
-    (re.compile(r"\bnever change or morph\b", re.I), "keep consistent"),
 ]
 
 _RU_LABEL = {
@@ -95,53 +61,6 @@ _RU_LABEL = {
     "other": "общий референс",
     "genitals": "интимная анатомия",
 }
-
-
-def sanitize_seedance_user_brief(text: str) -> str:
-    """Смягчает USER_BRIEF перед Seedance (anti-sensitive intent)."""
-    s = (text or "").strip()
-    if not s:
-        return s
-    for pat, repl in _BRIEF_TRIGGER_REPLACEMENTS:
-        s = pat.sub(repl, s)
-    return re.sub(r"\s{2,}", " ", s).strip()
-
-
-def wrap_seedance_cinematic_framing(text: str) -> str:
-    body = sanitize_seedance_user_brief(text)
-    if not body:
-        return _CINEMATIC_FRAMING_EN
-    return f"{_CINEMATIC_FRAMING_EN}\n\n{body}"
-
-
-def translate_seedance_brief_to_zh(text: str) -> str:
-    """Опциональный fallback: китайский промпт иногда проходит moderation."""
-    raw = sanitize_seedance_user_brief(text)
-    if not raw:
-        return raw
-    try:
-        from deep_translator import GoogleTranslator
-
-        return GoogleTranslator(source="auto", target="zh-CN").translate(raw[:2000])
-    except Exception as e:
-        log.warning("seedance brief zh translate failed: %s", e)
-        return raw
-
-
-def prepare_seedance_user_brief(
-    text: str,
-    *,
-    sanitize: bool = False,
-    cinematic: bool = False,
-    translate_zh: bool = False,
-) -> str:
-    if translate_zh:
-        return translate_seedance_brief_to_zh(text)
-    if cinematic:
-        return wrap_seedance_cinematic_framing(text)
-    if sanitize:
-        return sanitize_seedance_user_brief(text)
-    return (text or "").strip()
 
 
 def sort_model_images_for_seedance_t2v(
@@ -280,20 +199,38 @@ def _seedance_identity_lock_block(
     tags: str,
     n_start_frame: int,
     n_motion_videos: int,
+    language: str = "en",
 ) -> str:
+    if language == "zh":
+        lines = [
+            f"整段视频保持同一角色——外观参照 {tags}。",
+        ]
+        if n_start_frame > 0:
+            lines.append(
+                f"@Image1 — t=0 开场画面（姿势、场景、光线、服装）；"
+                f"角色外形来自 {tags}，而非 @Image1。"
+            )
+        if n_motion_videos > 0:
+            vtags = ", ".join(f"@Video{i}" for i in range(1, n_motion_videos + 1))
+            lines.append(
+                f"{vtags} — 动作、节奏与镜头参考；"
+                f"角色外观保持 {tags}。"
+            )
+        return " ".join(lines)
+
     lines = [
-        f"Cinematic continuity: same lead performer from {tags} throughout the clip.",
+        f"Same character for the whole clip — appearance from {tags}.",
     ]
     if n_start_frame > 0:
         lines.append(
-            f"@Image1 = opening composition, pose, lighting, and wardrobe at t=0 only; "
-            f"performer appearance from {tags}."
+            "@Image1 — opening frame at t=0 (pose, scene, lighting, wardrobe); "
+            f"character likeness from {tags}, not from @Image1."
         )
     if n_motion_videos > 0:
         vtags = ", ".join(f"@Video{i}" for i in range(1, n_motion_videos + 1))
         lines.append(
-            f"{vtags} = choreography and camera motion only; "
-            f"performer look stays {tags}."
+            f"{vtags} — motion, timing, and camera reference; "
+            f"character appearance stays on {tags}."
         )
     return " ".join(lines)
 
@@ -305,39 +242,24 @@ def append_seedance_identity_lock(
     n_model_images: int,
     n_motion_videos: int,
     max_chars: int | None = None,
-    duplicate_lock: bool = False,
+    language: str = "en",
 ) -> str:
     """
-    Лёгкий lock в конце промпта (без дубля «face/body/hair» — триggerит moderation).
+    Жёсткий lock до и после тела промпта: Seedance привязывает identity только к явным @ImageN.
     """
     lim = max_chars if max_chars is not None else settings.studio_seedance_t2v_prompt_max_chars
     tags = seedance_model_identity_tag_expr(n_start_frame, n_model_images)
     if not tags:
-        return finalize_seedance_t2v_prompt(prompt, max_chars=lim)
+        return truncate_seedance_t2v_prompt(prompt, max_chars=lim)
     lock = _seedance_identity_lock_block(
         tags=tags,
         n_start_frame=n_start_frame,
         n_motion_videos=n_motion_videos,
+        language=language,
     )
     body = (prompt or "").strip()
-    if duplicate_lock:
-        combined = f"{lock}\n\n{body}\n\n{lock}".strip()
-    else:
-        combined = f"{body}\n\n{lock}".strip()
-    return finalize_seedance_t2v_prompt(combined, max_chars=lim)
-
-
-def finalize_seedance_t2v_prompt(text: str, *, max_chars: int | None = None) -> str:
-    """Финальная полировка перед WaveSpeed: кино-стиль, триgger-слова, soften."""
-    lim = max_chars if max_chars is not None else settings.studio_seedance_t2v_prompt_max_chars
-    s = (text or "").strip()
-    if not s:
-        return s
-    if _CINEMATIC_FRAMING_EN.split(".")[0].lower() not in s.lower()[:120]:
-        s = f"{_CINEMATIC_FRAMING_EN}\n\n{s}"
-    s = sanitize_seedance_user_brief(s)
-    s = soften_seedance_provider_prompt(s)
-    return truncate_seedance_t2v_prompt(s, max_chars=lim)
+    combined = f"{lock}\n\n{body}\n\n{lock}".strip()
+    return truncate_seedance_t2v_prompt(combined, max_chars=lim)
 
 
 def soften_seedance_provider_prompt(text: str) -> str:
@@ -367,13 +289,18 @@ def assemble_seedance_t2v_prompt(
     identity_tags = seedance_model_identity_tag_expr(n_start_frame, n_model_images)
     if identity_tags:
         parts.append(
-            f"One consistent lead performer for the full clip — appearance from {identity_tags}."
+            f"One consistent character — appearance from {identity_tags}."
         )
     if n_start_frame > 0:
-        parts.append(
-            "@Image1: opening frame — composition, pose, scene, lighting, camera, wardrobe at t=0. "
-            f"Performer appearance from {identity_tags or 'model references'}."
-        )
+        if identity_tags:
+            parts.append(
+                "@Image1 — opening frame at t=0 (pose, scene, lighting, camera, wardrobe). "
+                f"Character look from {identity_tags}."
+            )
+        else:
+            parts.append(
+                "@Image1 — opening frame at t=0 (pose, scene, lighting, camera, wardrobe)."
+            )
         if n_outfit_images == 0:
             parts.append("Wardrobe at t=0: match @Image1 and USER_BRIEF.")
     if n_outfit_images > 0:
@@ -385,8 +312,8 @@ def assemble_seedance_t2v_prompt(
         vtags = ", ".join(f"@Video{i}" for i in range(1, n_motion_videos + 1))
         if identity_tags:
             parts.append(
-                f"Motion timing, gestures, and camera from {vtags} only. "
-                f"Performer look locked to {identity_tags}."
+                f"Motion and pacing from {vtags}; "
+                f"character appearance from {identity_tags}."
             )
         else:
             parts.append(f"Motion and pacing from {vtags} only (timing, gestures, camera).")
@@ -408,14 +335,12 @@ def assemble_seedance_t2v_prompt(
             "Natural cinematic motion; smooth camera; expressive performance; same character throughout."
         )
     body = soften_seedance_provider_prompt("\n\n".join(parts))
-    locked = append_seedance_identity_lock(
+    return append_seedance_identity_lock(
         body,
         n_start_frame=n_start_frame,
         n_model_images=n_model_images,
         n_motion_videos=n_motion_videos,
-        duplicate_lock=False,
     )
-    return locked
 
 
 def truncate_seedance_t2v_prompt(text: str, *, max_chars: int | None = None) -> str:
@@ -440,9 +365,6 @@ async def build_seedance_t2v_prompt(
     output_aspect: str | None = None,
     duration_seconds: int = 5,
     force_template: bool = False,
-    sanitize_brief: bool = False,
-    cinematic_framing: bool = False,
-    translate_zh: bool = False,
 ) -> tuple[str, str]:
     """
     Grok (если настроен) → иначе шаблон. Возвращает (prompt, source: grok|template).
@@ -453,19 +375,11 @@ async def build_seedance_t2v_prompt(
     )
 
     lim = settings.studio_seedance_t2v_prompt_max_chars
-    brief = prepare_seedance_user_brief(
-        user_brief,
-        sanitize=True,
-        cinematic=True,
-        translate_zh=translate_zh,
-    )
     safe_motion = prepare_motion_notes_for_seedance(motion_summary)
-    if safe_motion:
-        safe_motion = sanitize_seedance_user_brief(safe_motion)
     if not force_template and grok_motion_api_configured():
         try:
             p = await grok_expand_seedance_t2v_prompt(
-                user_brief=brief,
+                user_brief=user_brief,
                 n_start_frame=n_start_frame,
                 n_model_images=n_model_images,
                 n_outfit_images=n_outfit_images,
@@ -477,6 +391,7 @@ async def build_seedance_t2v_prompt(
                 duration_seconds=duration_seconds,
                 max_chars=lim,
             )
+            lock_lang = "zh" if settings.studio_seedance_grok_prompt_zh else "en"
             return (
                 append_seedance_identity_lock(
                     soften_seedance_provider_prompt(p),
@@ -484,7 +399,7 @@ async def build_seedance_t2v_prompt(
                     n_model_images=n_model_images,
                     n_motion_videos=n_motion_videos,
                     max_chars=lim,
-                    duplicate_lock=False,
+                    language=lock_lang,
                 ),
                 "grok",
             )
@@ -492,7 +407,7 @@ async def build_seedance_t2v_prompt(
             log.warning("grok seedance t2v prompt failed, template fallback: %s", e)
 
     p = assemble_seedance_t2v_prompt(
-        brief,
+        user_brief,
         n_start_frame=n_start_frame,
         n_model_images=n_model_images,
         n_outfit_images=n_outfit_images,
