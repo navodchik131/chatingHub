@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Handle, Position, useReactFlow, type NodeProps } from '@xyflow/react'
 import {
   DEFAULT_GENERATION_MODEL_ID,
@@ -17,12 +17,17 @@ import { WorkflowImageLightbox } from '../WorkflowImageLightbox'
 import { BaseNode } from './BaseNode'
 import { HandleIds, type ImageGenerationNodeData } from '../types'
 
+function isAbortError(error: unknown): boolean {
+  return error instanceof DOMException && error.name === 'AbortError'
+}
+
 function ImageGenerationNodeComponent({ id, data }: NodeProps) {
   const { setNodes, getNodes, getEdges } = useReactFlow()
   const nodeData = data as ImageGenerationNodeData
   const nsfwEnabled = nodeData.nsfwEnabled !== false
   const [models, setModels] = useState<GenerationModelDefinition[]>([])
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
+  const runAbortRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
     void fetchGenerationModelOptions().then(setModels)
@@ -67,7 +72,29 @@ function ImageGenerationNodeComponent({ id, data }: NodeProps) {
     }
   }, [models, nsfwEnabled, nodeData.waveModelId, nodeData.outputAspect, updateNodeData])
 
+  useEffect(() => {
+    if (!nodeData.isRunning || runAbortRef.current) return
+    updateNodeData({ isRunning: false })
+  }, [nodeData.isRunning, updateNodeData])
+
+  useEffect(() => {
+    return () => {
+      runAbortRef.current?.abort()
+      runAbortRef.current = null
+    }
+  }, [])
+
+  const onCancelRun = useCallback(() => {
+    runAbortRef.current?.abort()
+    runAbortRef.current = null
+    updateNodeData({ isRunning: false, error: undefined })
+  }, [updateNodeData])
+
   const onGenerate = useCallback(async () => {
+    runAbortRef.current?.abort()
+    const abortController = new AbortController()
+    runAbortRef.current = abortController
+
     const nodes = getNodes()
     const edges = getEdges()
     const graph = serializeGraph(nodes, edges)
@@ -75,7 +102,11 @@ function ImageGenerationNodeComponent({ id, data }: NodeProps) {
     updateNodeData({ isRunning: true, error: undefined })
 
     try {
-      const result = await executeWorkflowGeneration(graph, id)
+      const result = await executeWorkflowGeneration(graph, id, {
+        signal: abortController.signal,
+      })
+      if (abortController.signal.aborted) return
+
       const imageUrl = result.generated_image_url?.trim() || null
       if (!imageUrl) {
         throw new Error('Задача завершилась без URL изображения')
@@ -109,10 +140,18 @@ function ImageGenerationNodeComponent({ id, data }: NodeProps) {
         }),
       )
     } catch (error) {
+      if (isAbortError(error) || abortController.signal.aborted) {
+        updateNodeData({ isRunning: false, error: undefined })
+        return
+      }
       updateNodeData({
         isRunning: false,
         error: error instanceof Error ? error.message : 'Ошибка генерации',
       })
+    } finally {
+      if (runAbortRef.current === abortController) {
+        runAbortRef.current = null
+      }
     }
   }, [getEdges, getNodes, id, setNodes, updateNodeData])
 
@@ -279,11 +318,14 @@ function ImageGenerationNodeComponent({ id, data }: NodeProps) {
 
         <button
           type="button"
-          className="workflow-node__btn workflow-node__btn--primary nodrag"
-          onClick={() => void onGenerate()}
-          disabled={nodeData.isRunning}
+          className={
+            nodeData.isRunning
+              ? 'workflow-node__btn workflow-node__btn--ghost nodrag'
+              : 'workflow-node__btn workflow-node__btn--primary nodrag'
+          }
+          onClick={() => (nodeData.isRunning ? onCancelRun() : void onGenerate())}
         >
-          {nodeData.isRunning ? 'Генерация…' : 'Сгенерировать'}
+          {nodeData.isRunning ? 'Отменить' : 'Сгенерировать'}
           {!nodeData.isRunning ? (
             <span className="workflow-node__btn-cost">
               {costQuote.label === 'Pro' ? 'Pro' : `${costQuote.label} кр.`}

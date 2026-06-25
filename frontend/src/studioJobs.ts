@@ -39,12 +39,31 @@ export interface StudioJobStatus {
   completed_at?: string | null
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms))
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) {
+    return Promise.reject(new DOMException('Aborted', 'AbortError'))
+  }
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort)
+      resolve()
+    }, ms)
+    const onAbort = () => {
+      clearTimeout(timer)
+      reject(new DOMException('Aborted', 'AbortError'))
+    }
+    signal?.addEventListener('abort', onAbort, { once: true })
+  })
 }
 
-export async function fetchStudioJob(jobId: number): Promise<StudioJobStatus> {
-  const r = await apiFetch(`/api/studio/jobs/${jobId}`)
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) {
+    throw new DOMException('Aborted', 'AbortError')
+  }
+}
+
+export async function fetchStudioJob(jobId: number, signal?: AbortSignal): Promise<StudioJobStatus> {
+  const r = await apiFetch(`/api/studio/jobs/${jobId}`, { signal })
   const data = (await r.json().catch(() => ({}))) as StudioJobStatus & { detail?: unknown }
   if (!r.ok) {
     throw new Error(formatHttpApiError(r, data))
@@ -58,6 +77,7 @@ export async function waitForStudioJobResult<T extends Record<string, unknown>>(
     pollMs?: number
     maxWaitMs?: number
     onStatus?: (status: StudioJobStatus) => void
+    signal?: AbortSignal
   },
 ): Promise<T> {
   const pollMs = opts?.pollMs ?? 2500
@@ -65,7 +85,8 @@ export async function waitForStudioJobResult<T extends Record<string, unknown>>(
   const started = Date.now()
 
   while (Date.now() - started < maxWaitMs) {
-    const status = await fetchStudioJob(jobId)
+    throwIfAborted(opts?.signal)
+    const status = await fetchStudioJob(jobId, opts?.signal)
     opts?.onStatus?.(status)
     if (status.status === 'completed') {
       if (status.result && typeof status.result === 'object') {
@@ -76,7 +97,7 @@ export async function waitForStudioJobResult<T extends Record<string, unknown>>(
     if (status.status === 'failed') {
       throw new Error(status.error_message?.trim() || 'Задача студии не выполнена.')
     }
-    await sleep(pollMs)
+    await sleep(pollMs, opts?.signal)
   }
 
   throw new Error(
@@ -92,7 +113,9 @@ export async function postStudioJobAndWait<T extends Record<string, unknown>>(
   init: RequestInit & { timeoutMs?: number },
   opts?: Parameters<typeof waitForStudioJobResult<T>>[1],
 ): Promise<T> {
+  throwIfAborted(opts?.signal)
   const r = await apiFetch(path, init)
+  throwIfAborted(opts?.signal)
   if (r.status === 202) {
     const accepted = (await r.json().catch(() => ({}))) as StudioJobAccepted & { detail?: unknown }
     if (!accepted.job_id) {

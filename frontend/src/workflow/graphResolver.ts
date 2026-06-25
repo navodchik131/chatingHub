@@ -59,8 +59,9 @@ export function sanitizeNodeDataForPersist(
   type: string | undefined,
   data: Record<string, unknown>,
 ): Record<string, unknown> {
-  if (type !== 'reference') return data
-  const { previewUrl: _preview, ...rest } = data
+  const base = stripRuntimeNodeFields(data)
+  if (type !== 'reference') return base
+  const { previewUrl: _preview, ...rest } = base
   return rest
 }
 

@@ -99,9 +99,18 @@ export async function fetchWorkflowReferencePreviewUrl(refId: string): Promise<s
 export async function executeWorkflowGeneration(
   graph: ProjectGraph,
   targetNodeId: string,
+  opts?: {
+    signal?: AbortSignal
+    pollMs?: number
+    maxWaitMs?: number
+  },
 ): Promise<{ generated_image_url?: string | null; generation_id?: number | null }> {
   const fd = new FormData()
   fd.append('graph', JSON.stringify(graph))
   fd.append('target_node_id', targetNodeId)
-  return postStudioJobAndWait('/api/studio/workflow/execute', { method: 'POST', body: fd })
+  return postStudioJobAndWait(
+    '/api/studio/workflow/execute',
+    { method: 'POST', body: fd, timeoutMs: 120_000, signal: opts?.signal },
+    { pollMs: opts?.pollMs, maxWaitMs: opts?.maxWaitMs, signal: opts?.signal },
+  )
 }
