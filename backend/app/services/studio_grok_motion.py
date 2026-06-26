@@ -598,8 +598,9 @@ _BOARDSTORY_VIDEO_PROMPT_SYSTEM = (
     "From @Video1 copy ONLY choreography, timing, gestures, emotions, and camera — never face/body/hair. "
     "When REFERENCE_TAG_RULES include clothing/environment @Image tags, state explicitly: "
     "'Wardrobe from @ImageN', 'Room and lighting from @ImageM' in separate sentences. "
-    "When no clothing/environment @Image is attached, describe wardrobe and room in exhaustive visual prose. "
-    "Do NOT use @Image1–@Image2 range unless rules explicitly show a range. "
+    "BoardStory fixed mapping: @Image1 = body identity, @Image2 = turnaround proportions, "
+    "@Image3 = clothing, @Image4 = environment — use these indices when rules specify them. "
+    "Do NOT merge @Image1 and @Image2 into a range unless rules explicitly show a range. "
     "No markdown, no bullet lists, no labels like Prompt:."
 )
 
@@ -616,7 +617,9 @@ _BOARDSTORY_VIDEO_PROMPT_SYSTEM_NO_VIDEO_REF = (
     "Use @ImageN tags only as defined in REFERENCE_TAG_RULES — mention each @Image tag at least once. "
     "Never write @Video, @Video1, or refer to a reference clip, source video, or motion reference. "
     "Describe the lead character, wardrobe, environment, gestures, emotions, and camera in maximum detail. "
-    "Do NOT use @Image1–@Image2 range unless rules explicitly show a range. "
+    "BoardStory fixed mapping when present: @Image1 body identity, @Image2 turnaround, "
+    "@Image3 clothing, @Image4 environment. "
+    "Do NOT merge @Image1 and @Image2 into a range unless rules explicitly show a range. "
     "No markdown, no bullet lists, no labels like Prompt:."
 )
 

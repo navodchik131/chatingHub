@@ -10,7 +10,6 @@ from app.services.studio_seedance_t2v import (
     MAX_SEEDANCE_REFERENCE_IMAGES,
     generation_still_public_url,
     model_reference_public_urls,
-    seedance_model_identity_tag_expr,
     sort_model_images_for_seedance_t2v,
 )
 
@@ -66,62 +65,101 @@ class _ExtraRef(Protocol):
 @dataclass(frozen=True)
 class BoardStoryReferenceLayout:
     n_model_images: int
+    n_turnaround_images: int
     n_clothing_images: int
     n_environment_images: int
     n_other_images: int
+    identity_image_index: int | None
+    turnaround_image_index: int | None
     clothing_image_index: int | None
     environment_image_index: int | None
-    identity_tag_expr: str | None
+    identity_tag: str | None
+    turnaround_tag: str | None
     clothing_tag: str | None
     environment_tag: str | None
     other_image_indices: tuple[int, ...]
 
+    @property
+    def identity_tag_expr(self) -> str | None:
+        """Alias для совместимости — только @Image1 (body), не диапазон."""
+        return self.identity_tag
+
 
 def compute_boardstory_layout(
-    n_model: int,
     *,
+    has_identity: bool,
+    has_turnaround: bool,
     has_clothing: bool,
     has_environment: bool,
     n_other: int = 0,
 ) -> BoardStoryReferenceLayout:
-    idx = n_model + 1
+    """
+    Фиксированная раскладка BoardStory:
+    @Image1 body (identity), @Image2 turnaround, @Image3 clothing, @Image4 environment.
+    """
+    idx = 1
+    identity_idx: int | None = None
+    turnaround_idx: int | None = None
     clothing_idx: int | None = None
     environment_idx: int | None = None
+
+    if has_identity:
+        identity_idx = idx
+        idx += 1
+    if has_turnaround:
+        turnaround_idx = idx
+        idx += 1
     if has_clothing:
         clothing_idx = idx
         idx += 1
     if has_environment:
         environment_idx = idx
         idx += 1
+
     other_indices: list[int] = []
     for _ in range(n_other):
         other_indices.append(idx)
         idx += 1
 
-    identity = seedance_model_identity_tag_expr(0, n_model)
     return BoardStoryReferenceLayout(
-        n_model_images=n_model,
+        n_model_images=1 if has_identity else 0,
+        n_turnaround_images=1 if has_turnaround else 0,
         n_clothing_images=1 if has_clothing else 0,
         n_environment_images=1 if has_environment else 0,
         n_other_images=n_other,
+        identity_image_index=identity_idx,
+        turnaround_image_index=turnaround_idx,
         clothing_image_index=clothing_idx,
         environment_image_index=environment_idx,
-        identity_tag_expr=identity,
+        identity_tag=f"@Image{identity_idx}" if identity_idx else None,
+        turnaround_tag=f"@Image{turnaround_idx}" if turnaround_idx else None,
         clothing_tag=f"@Image{clothing_idx}" if clothing_idx else None,
         environment_tag=f"@Image{environment_idx}" if environment_idx else None,
         other_image_indices=tuple(other_indices),
     )
 
 
-def filter_model_images_for_boardstory(
-    imgs: list,
-) -> list:
-    """BoardStory: одно фото «тело целиком» (body) из кабинета модели."""
+def filter_boardstory_identity_image(imgs: list) -> list:
+    """BoardStory @Image1: одно фото «тело целиком» (body) из кабинета модели."""
     sorted_all = sort_model_images_for_seedance_t2v(imgs)
     for im in sorted_all:
         if (im.image_kind or "other").lower() == "body":
             return [im]
     return []
+
+
+def filter_boardstory_turnaround_image(imgs: list) -> list:
+    """BoardStory @Image2: развёртка (turnaround) из настроек модели."""
+    sorted_all = sort_model_images_for_seedance_t2v(imgs)
+    for im in sorted_all:
+        if (im.image_kind or "other").lower() == "turnaround":
+            return [im]
+    return []
+
+
+def filter_model_images_for_boardstory(imgs: list) -> list:
+    """Alias: identity body для @Image1."""
+    return filter_boardstory_identity_image(imgs)
 
 
 def boardstory_video_only_swap_mode(
@@ -145,7 +183,9 @@ def boardstory_video_only_swap_mode(
 _BOARDSTORY_VIDEO_ONLY_SWAP_TEMPLATE = """\
 Use @Video1 exclusively as the motion, clothing, accessories, pose, camera, lighting and environment reference.
 
-Use @Image1 exclusively as the character identity, facial appearance, hairstyle and body proportions reference.
+Use @Image1 exclusively as the character identity, facial appearance, hairstyle and skin tone reference.
+
+Use @Image2 exclusively as the body proportions and full-figure turnaround reference.
 
 Transfer the complete performance from @Video1 onto the person from @Image1 with the closest possible timing.
 
@@ -157,8 +197,9 @@ Preserve the exact:
 – facial structure;
 – eyes, eyebrows, nose, lips, cheeks and jawline;
 – skin tone;
-– hairstyle, hair length and color;
-– body proportions.
+– hairstyle, hair length and color.
+
+Preserve body proportions, silhouette and full-figure anatomy from @Image2 throughout the entire video.
 
 Do not copy the facial identity or physical characteristics of the performer from @Video1.
 
@@ -177,12 +218,14 @@ Adopt from @Video1:
 
 Maintain these elements consistently throughout the video.
 
-Transfer only identity and hair characteristics from @Image1.
+Transfer identity and hair characteristics from @Image1.
+Transfer body proportions from @Image2.
 
 QUALITY
 
 Ultra realistic natural phone video.
 Stable identity across frames.
+Stable body proportions.
 Stable clothing and accessories.
 Consistent environment and lighting.
 Natural motion and temporal consistency.
@@ -191,6 +234,7 @@ STRICT NEGATIVE CONSTRAINTS
 
 Do not copy the identity of the performer from @Video1.
 Do not alter the hairstyle or facial appearance from @Image1.
+Do not alter body proportions from @Image2.
 Do not change the environment, camera or lighting from @Video1.
 Do not add objects or people.
 No identity drift.
@@ -202,18 +246,19 @@ def build_boardstory_video_only_swap_prompt(
     *,
     user_notes: str = "",
     identity_tag: str = "@Image1",
+    turnaround_tag: str = "@Image2",
     video_tag: str = "@Video1",
     max_chars: int | None = None,
 ) -> str:
     """
-    Фиксированный Seedance-промпт: identity из @Image1, всё остальное из @Video1.
-    Движение передаётся через @Video1 — текстовый timeline не добавляется.
+    Фиксированный Seedance-промпт: @Image1 identity, @Image2 turnaround, остальное из @Video1.
     """
     from app.services.studio_seedance_t2v import truncate_seedance_t2v_prompt
 
     template = _apply_boardstory_template_tags(
         _BOARDSTORY_VIDEO_ONLY_SWAP_TEMPLATE,
         identity_tag=identity_tag,
+        turnaround_tag=turnaround_tag,
         video_tag=video_tag,
     )
 
@@ -242,9 +287,13 @@ def boardstory_clothing_env_swap_mode(
 _BOARDSTORY_CLOTHING_ENV_SWAP_TEMPLATE = """\
 Use @Video1 as the primary reference for motion, timing, lighting, camera framing and overall scene structure.
 
-Use @Image1 exclusively as the character identity, facial appearance, hairstyle, hair color, skin tone and body proportions reference.
+Use @Image1 exclusively as the character identity, facial appearance, hairstyle and skin tone reference.
 
-Use @Image2 exclusively as the clothing, accessories and styling reference.
+Use @Image2 exclusively as the body proportions and full-figure turnaround reference.
+
+Use @Image3 exclusively as the clothing, accessories and styling reference.
+
+Use @Image4 for the environment, room, background and lighting reference.
 
 Transfer the performance from @Video1 onto the person from @Image1 while maintaining stable identity throughout the entire video.
 
@@ -256,32 +305,29 @@ Preserve:
 – facial features;
 – eyes, eyebrows, nose, lips, cheeks and jawline;
 – hairstyle and hair color;
-– skin tone;
-– body proportions.
+– skin tone.
+
+Preserve body proportions, silhouette and full-figure anatomy from @Image2 throughout the entire video.
 
 Never copy the identity of the performer from @Video1.
 
-Transfer only motion from @Video1 and only appearance from @Image1.
+Transfer only motion from @Video1 and only appearance from @Image1 and @Image2.
 
 CLOTHING AND STYLING
 
-Adopt clothing, accessories and styling from @Image2.
+Adopt clothing, accessories and styling from @Image3.
 
-Preserve the overall design, colors, textures and appearance of the outfit and accessories from @Image2 while allowing only minor natural variations.
+Preserve the overall design, colors, textures and appearance of the outfit and accessories from @Image3 while allowing only minor natural variations.
 
 Maintain stable clothing and accessory consistency throughout the video.
 
 SCENE AND APPEARANCE
 
-Use @Video1 as inspiration for the overall environment, atmosphere and scene layout rather than as an exact background reference.
+Use @Image4 for the environment, room layout, background, lighting style and overall atmosphere.
 
-Preserve a similar setting, lighting style and camera framing while introducing subtle natural variations in architecture, objects, textures, colors, vegetation, shadows and environmental details.
+Preserve the setting, illumination and spatial mood from @Image4 while allowing only subtle natural variations in minor decorative details.
 
-The generated environment should feel visually related to @Video1 but not identical.
-
-Avoid recreating the background, location or scene elements exactly as shown in the source video.
-
-Allow minor differences in color palette, surface materials, decorative details and surrounding objects while maintaining the same overall mood and composition.
+Do not recreate unrelated backgrounds from @Video1 when @Image4 is provided.
 
 MOTION
 
@@ -301,6 +347,7 @@ QUALITY
 
 Ultra realistic natural phone video.
 Stable identity across frames.
+Stable body proportions.
 Stable clothing and accessories.
 Natural motion.
 Consistent anatomy.
@@ -311,10 +358,9 @@ High facial consistency.
 NEGATIVE CONSTRAINTS
 
 Do not copy the identity of the performer from @Video1.
-Do not recreate the background from @Video1 exactly.
-Avoid one-to-one duplication of environment details.
-Allow subtle scene variations while preserving the overall atmosphere.
-Do not change the clothing style from @Image2.
+Do not change the clothing style from @Image3.
+Do not ignore the environment from @Image4.
+Do not alter body proportions from @Image2.
 No identity drift.
 No clothing drift.
 No temporal flicker.
@@ -330,14 +376,20 @@ def _apply_boardstory_template_tags(
     template: str,
     *,
     identity_tag: str,
+    turnaround_tag: str | None = None,
     clothing_tag: str | None = None,
+    environment_tag: str | None = None,
     video_tag: str = "@Video1",
 ) -> str:
     out = template
     if identity_tag != "@Image1":
         out = out.replace("@Image1", identity_tag)
-    if clothing_tag and clothing_tag != "@Image2":
-        out = out.replace("@Image2", clothing_tag)
+    if turnaround_tag and turnaround_tag != "@Image2":
+        out = out.replace("@Image2", turnaround_tag)
+    if clothing_tag and clothing_tag != "@Image3":
+        out = out.replace("@Image3", clothing_tag)
+    if environment_tag and environment_tag != "@Image4":
+        out = out.replace("@Image4", environment_tag)
     if video_tag != "@Video1":
         out = out.replace("@Video1", video_tag)
     return out
@@ -347,17 +399,21 @@ def build_boardstory_clothing_env_swap_prompt(
     *,
     user_notes: str = "",
     identity_tag: str = "@Image1",
-    clothing_tag: str = "@Image2",
+    turnaround_tag: str = "@Image2",
+    clothing_tag: str = "@Image3",
+    environment_tag: str = "@Image4",
     video_tag: str = "@Video1",
     max_chars: int | None = None,
 ) -> str:
-    """Фиксированный промпт: @Image1 identity, @Image2 clothing, движение/сцена из @Video1."""
+    """Фиксированный промпт: @Image1 identity, @Image2 turnaround, @Image3 clothing, @Image4 env."""
     from app.services.studio_seedance_t2v import truncate_seedance_t2v_prompt
 
     template = _apply_boardstory_template_tags(
         _BOARDSTORY_CLOTHING_ENV_SWAP_TEMPLATE,
         identity_tag=identity_tag,
+        turnaround_tag=turnaround_tag,
         clothing_tag=clothing_tag,
+        environment_tag=environment_tag,
         video_tag=video_tag,
     )
 
@@ -378,7 +434,8 @@ def boardstory_tag_rules_text(
     send_video_reference: bool = True,
 ) -> str:
     lines: list[str] = []
-    id_expr = layout.identity_tag_expr or "@Image1"
+    id_expr = layout.identity_tag or "@Image1"
+    turnaround_expr = layout.turnaround_tag
 
     if send_video_reference and has_motion:
         lines.append(
@@ -388,18 +445,23 @@ def boardstory_tag_rules_text(
         )
     else:
         lines.append(
-            f"{id_expr} = the lead character (face, body, hair, age, ethnicity from model body reference)."
+            f"{id_expr} = the lead character face, hair and skin tone (model body photo)."
         )
 
-    if layout.identity_tag_expr:
+    if layout.identity_tag:
         suffix = (
             "NOT clothing, NOT room, NOT the @Video1 actor)"
             if send_video_reference and has_motion
             else "NOT clothing, NOT room)"
         )
         lines.append(
-            f"{layout.identity_tag_expr} = model identity ONLY (face, body, hair from model body photo — "
+            f"{layout.identity_tag} = model identity ONLY (face, hair, skin from body photo — "
             + suffix
+        )
+    if turnaround_expr:
+        lines.append(
+            f"{turnaround_expr} = body proportions and full-figure turnaround ONLY — "
+            "silhouette, anatomy, height/build reference; NOT clothing, NOT room."
         )
     if layout.clothing_tag:
         lines.append(
@@ -476,7 +538,8 @@ def append_boardstory_prompt_enforcement(
 
     body = (prompt or "").strip()
     extra: list[str] = []
-    id_expr = layout.identity_tag_expr or "@Image1"
+    id_expr = layout.identity_tag or "@Image1"
+    turnaround_expr = layout.turnaround_tag
 
     if send_video_reference:
         low = body.lower()
@@ -485,6 +548,8 @@ def append_boardstory_prompt_enforcement(
                 f"Replace the performer in @Video1 with the lead character from {id_expr} — "
                 "same choreography, different person."
             )
+        if turnaround_expr and turnaround_expr.lower() not in low:
+            extra.append(f"Body proportions from {turnaround_expr}.")
         if layout.clothing_tag and layout.clothing_tag.lower() not in low:
             extra.append(f"Wardrobe from {layout.clothing_tag}.")
         elif clothing_from_video and "wardrobe" not in low:
@@ -504,6 +569,8 @@ def append_boardstory_prompt_enforcement(
         low = body.lower()
         if id_expr.lower() not in low:
             extra.append(f"Lead character from {id_expr}.")
+        if turnaround_expr and turnaround_expr.lower() not in low:
+            extra.append(f"Body proportions from {turnaround_expr}.")
         if layout.clothing_tag and layout.clothing_tag.lower() not in low:
             extra.append(f"Wardrobe from {layout.clothing_tag}.")
         elif clothing_from_video and "wardrobe" not in low:
@@ -525,11 +592,13 @@ def boardstory_model_swap_lock_text(
     layout: BoardStoryReferenceLayout,
 ) -> str:
     """Жёсткая строка для Seedance после compose-промпта (только с @Video1)."""
-    id_expr = layout.identity_tag_expr or "@Image1"
+    id_expr = layout.identity_tag or "@Image1"
     parts: list[str] = [
         f"MODEL SWAP: Replace the person in @Video1 with the character from {id_expr} "
-        "(face, body, hair from model photo — NOT the video actor).",
+        "(face, hair, skin from body photo — NOT the video actor).",
     ]
+    if layout.turnaround_tag:
+        parts.append(f"Body proportions from {layout.turnaround_tag}.")
     if layout.clothing_tag:
         parts.append(f"Outfit from {layout.clothing_tag}.")
     if layout.environment_tag:
@@ -544,7 +613,12 @@ def append_boardstory_video_fallback_lines(
     prompt: str, *, clothing_from_video: bool, environment_from_video: bool
 ) -> str:
     """Deprecated alias — use append_boardstory_prompt_enforcement."""
-    layout = compute_boardstory_layout(1, has_clothing=False, has_environment=False)
+    layout = compute_boardstory_layout(
+        has_identity=True,
+        has_turnaround=False,
+        has_clothing=False,
+        has_environment=False,
+    )
     return append_boardstory_prompt_enforcement(
         prompt,
         layout=layout,
@@ -573,7 +647,8 @@ def build_boardstory_reference_urls(
     *,
     owner_id: int,
     public_app_base: str,
-    model_image_urls: list[str],
+    identity_image_urls: list[str],
+    turnaround_image_urls: list[str],
     clothing_slot: BoardStoryImageSlot | None,
     environment_slot: BoardStoryImageSlot | None,
     extra_refs: tuple[_ExtraRef, ...],
@@ -582,10 +657,13 @@ def build_boardstory_reference_urls(
 ) -> tuple[list[str], BoardStoryReferenceLayout]:
     """
     Порядок reference_images для Seedance BoardStory:
-    model identity → clothing → environment → other refs.
+    @Image1 body → @Image2 turnaround → @Image3 clothing → @Image4 environment → other.
     """
-    urls: list[str] = list(model_image_urls)
-    n_model = len(urls)
+    _ = owner_id
+    _ = public_app_base
+    urls: list[str] = []
+    urls.extend(identity_image_urls)
+    urls.extend(turnaround_image_urls)
 
     clothing_url: str | None = None
     if clothing_slot is not None:
@@ -618,7 +696,8 @@ def build_boardstory_reference_urls(
         urls = urls[:MAX_SEEDANCE_REFERENCE_IMAGES]
 
     layout = compute_boardstory_layout(
-        n_model,
+        has_identity=len(identity_image_urls) > 0,
+        has_turnaround=len(turnaround_image_urls) > 0,
         has_clothing=clothing_url is not None,
         has_environment=environment_url is not None,
         n_other=other_count,
