@@ -7,6 +7,8 @@ import pytest
 from app.services.studio_workflow_resolver import (
     WorkflowReferenceItem,
     WorkflowResolutionError,
+    _generation_id_from_studio_media_url,
+    _normalize_media_url,
     assemble_workflow_grok_notes,
     resolve_workflow_generation_plan,
     resolve_workflow_video_upscale_plan,
@@ -810,3 +812,15 @@ def test_resolve_video_upscale_plan():
     assert plan.source_generation_id == 42
     assert plan.target_resolution == "4k"
     assert plan.output_aspect == "9:16"
+
+
+def test_normalize_media_url_strips_query():
+    assert (
+        _normalize_media_url("https://cdn.example.com/v/a.mp4?token=abc")
+        == "https://cdn.example.com/v/a.mp4"
+    )
+
+
+def test_generation_id_from_studio_media_url_invalid():
+    assert _generation_id_from_studio_media_url("https://cdn.example.com/v.mp4") is None
+    assert _generation_id_from_studio_media_url("") is None

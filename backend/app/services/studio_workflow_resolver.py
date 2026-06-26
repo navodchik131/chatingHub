@@ -1198,30 +1198,83 @@ def resolve_upstream_video_generation_id(
     )
 
 
+def _normalize_media_url(url: str) -> str:
+    from urllib.parse import urlparse, urlunparse
+
+    u = (url or "").strip()
+    if not u:
+        return ""
+    parsed = urlparse(u)
+    return urlunparse((parsed.scheme, parsed.netloc, parsed.path, "", "", ""))
+
+
+def _generation_id_from_studio_media_url(url: str) -> int | None:
+    from urllib.parse import parse_qs, urlparse
+
+    from app.services.studio_image_token import decode_generation_image_access_token
+
+    u = (url or "").strip()
+    if "public-generation-video" not in u and "public-generation-image" not in u:
+        return None
+    parsed = urlparse(u)
+    tok = (parse_qs(parsed.query).get("t") or [""])[0]
+    if not tok:
+        return None
+    try:
+        _uid, gid = decode_generation_image_access_token(tok)
+        return gid if gid > 0 else None
+    except ValueError:
+        return None
+
+
+def _video_generation_row_is_usable(row) -> bool:
+    from app.services.studio_generation_placeholders import generation_media_kind
+    from app.services.studio_generation_storage import generation_has_archive_file
+
+    if generation_media_kind(row) != "video":
+        return False
+    src = (row.source_url or "").strip()
+    if src.startswith("https://"):
+        return True
+    return generation_has_archive_file(row)
+
+
 async def resolve_video_generation_id_for_upstream_node(
     session,
     *,
     owner_id: int,
     node: dict[str, Any],
 ) -> int | None:
-    """Готовое видео upstream-ноды: generationId в data или поиск по videoUrl в архиве."""
+    """Готовое видео upstream-ноды: generationId, archive URL, source_url или motion history."""
     from sqlalchemy import select
 
-    from app.db.models import StudioGeneration
-    from app.services.studio_generation_placeholders import generation_media_kind
-
-    gid = _generation_id_from_node(node)
-    if gid is not None:
-        row = await session.get(StudioGeneration, gid)
-        if row and row.user_id == owner_id and generation_media_kind(row) == "video":
-            src = (row.source_url or "").strip()
-            if src.startswith("https://") or (row.relative_path or "").strip():
-                return gid
+    from app.db.models import StudioGeneration, StudioMotionRender
 
     data = node.get("data") if isinstance(node.get("data"), dict) else {}
     video_url = str(data.get("videoUrl") or "").strip()
+
+    async def _validate_gid(gid: int) -> int | None:
+        row = await session.get(StudioGeneration, gid)
+        if not row or row.user_id != owner_id:
+            return None
+        if not _video_generation_row_is_usable(row):
+            return None
+        return gid
+
+    gid = _generation_id_from_node(node)
+    if gid is not None:
+        ok = await _validate_gid(gid)
+        if ok is not None:
+            return ok
+
     if not video_url:
         return None
+
+    tok_gid = _generation_id_from_studio_media_url(video_url)
+    if tok_gid is not None:
+        ok = await _validate_gid(tok_gid)
+        if ok is not None:
+            return ok
 
     stmt = (
         select(StudioGeneration)
@@ -1234,12 +1287,57 @@ async def resolve_video_generation_id_for_upstream_node(
         .limit(1)
     )
     row = (await session.execute(stmt)).scalar_one_or_none()
-    if row is None:
-        return None
-    src = (row.source_url or "").strip()
-    if not src.startswith("https://") and not (row.relative_path or "").strip():
-        return None
-    return row.id
+    if row is not None and _video_generation_row_is_usable(row):
+        return row.id
+
+    norm = _normalize_media_url(video_url)
+    if norm:
+        recent = (
+            select(StudioGeneration)
+            .where(
+                StudioGeneration.user_id == owner_id,
+                StudioGeneration.content_type.like("video/%"),
+                StudioGeneration.source_url.isnot(None),
+            )
+            .order_by(StudioGeneration.id.desc())
+            .limit(40)
+        )
+        for candidate in (await session.execute(recent)).scalars():
+            if _normalize_media_url(candidate.source_url or "") == norm:
+                if _video_generation_row_is_usable(candidate):
+                    return candidate.id
+
+    mr_stmt = (
+        select(StudioMotionRender)
+        .where(
+            StudioMotionRender.user_id == owner_id,
+            StudioMotionRender.video_url == video_url,
+        )
+        .order_by(StudioMotionRender.id.desc())
+        .limit(1)
+    )
+    motion_row = (await session.execute(mr_stmt)).scalar_one_or_none()
+    if motion_row is not None and motion_row.studio_generation_id:
+        ok = await _validate_gid(int(motion_row.studio_generation_id))
+        if ok is not None:
+            return ok
+
+    if norm:
+        mr_recent = (
+            select(StudioMotionRender)
+            .where(StudioMotionRender.user_id == owner_id)
+            .order_by(StudioMotionRender.id.desc())
+            .limit(40)
+        )
+        for motion_row in (await session.execute(mr_recent)).scalars():
+            if _normalize_media_url(motion_row.video_url or "") != norm:
+                continue
+            if motion_row.studio_generation_id:
+                ok = await _validate_gid(int(motion_row.studio_generation_id))
+                if ok is not None:
+                    return ok
+
+    return None
 
 
 async def resolve_upstream_video_generation_id_validated(

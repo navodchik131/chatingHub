@@ -62,6 +62,15 @@ function throwIfAborted(signal?: AbortSignal): void {
   }
 }
 
+function parseStudioGenerationId(raw: unknown): number | null {
+  if (typeof raw === 'number' && Number.isFinite(raw) && raw > 0) return raw
+  if (typeof raw === 'string' && raw.trim() !== '') {
+    const n = Number(raw)
+    if (Number.isFinite(n) && n > 0) return n
+  }
+  return null
+}
+
 export async function fetchStudioJob(jobId: number, signal?: AbortSignal): Promise<StudioJobStatus> {
   const r = await apiFetch(`/api/studio/jobs/${jobId}`, { signal })
   const data = (await r.json().catch(() => ({}))) as StudioJobStatus & { detail?: unknown }
@@ -121,7 +130,12 @@ export async function postStudioJobAndWait<T extends Record<string, unknown>>(
     if (!accepted.job_id) {
       throw new Error(formatApiErrorDetail(accepted) || 'Не удалось создать задачу студии.')
     }
-    return waitForStudioJobResult<T>(accepted.job_id, opts)
+    const placeholderGenerationId = parseStudioGenerationId(accepted.generation_id)
+    const result = await waitForStudioJobResult<T>(accepted.job_id, opts)
+    if (parseStudioGenerationId(result.generation_id) == null && placeholderGenerationId != null) {
+      return { ...result, generation_id: placeholderGenerationId }
+    }
+    return result
   }
   const data = (await r.json().catch(() => ({}))) as T & { detail?: unknown }
   if (!r.ok) {
