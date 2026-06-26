@@ -669,6 +669,7 @@ async def _accept_workflow_video_job(
     )
     from app.services.studio_workflow_boardstory import boardstory_slot_to_json
     from app.services.studio_motion_video import resolve_motion_video_file
+    from app.services.credits import ensure_can_consume_credits
     from app.services.studio_keys import (
         apply_studio_credit_cost,
         load_owner_studio_billing,
