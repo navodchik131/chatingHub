@@ -1421,6 +1421,67 @@ async def seedance_20_image_to_video_url(
     )
 
 
+def _grok_imagine_video_v15_i2v_post_path() -> str:
+    p = (settings.wavespeed_grok_imagine_video_v15_i2v_path or "").strip()
+    p = p or "/api/v3/x-ai/grok-imagine-video-v1.5/image-to-video"
+    return p if p.startswith("/") else f"/{p}"
+
+
+async def grok_imagine_video_v15_image_to_video_url(
+    *,
+    api_key: str,
+    image_url: str,
+    prompt: str,
+    resolution: str | None = None,
+    duration: int | None = None,
+    timeout_submit: float = 900.0,
+    poll_interval: float = 3.0,
+    max_polls: int = 180,
+) -> str:
+    """
+    xAI Grok Imagine Video v1.5 Image-to-Video: стартовый кадр + prompt → видео.
+    Док: https://wavespeed.ai/models/x-ai/grok-imagine-video-v1.5/image-to-video
+    """
+    from app.services.studio_motion_pricing import (
+        grok_imagine_i2v_duration_seconds,
+        normalize_grok_imagine_i2v_resolution,
+    )
+
+    img = (image_url or "").strip()
+    if not img:
+        raise RuntimeError("image URL required")
+    if not (prompt or "").strip():
+        raise RuntimeError("prompt required for image-to-video")
+    res = normalize_grok_imagine_i2v_resolution(resolution)
+    dur = grok_imagine_i2v_duration_seconds(
+        duration if duration is not None else None,
+        default=6,
+    )
+    path = _grok_imagine_video_v15_i2v_post_path()
+    url = f"{_wavespeed_base()}{path}"
+    body: dict[str, Any] = {
+        "prompt": prompt.strip(),
+        "image": img,
+        "resolution": res,
+        "duration": dur,
+    }
+    _apply_wavespeed_extra_body(body)
+    log.debug(
+        "wavespeed grok imagine video v1.5 i2v path=%s res=%s dur=%s",
+        path,
+        res,
+        dur,
+    )
+    return await _wavespeed_post_json_and_resolve_video_url(
+        api_key=api_key,
+        full_post_url=url,
+        body=body,
+        timeout_submit=timeout_submit,
+        poll_interval=poll_interval,
+        max_polls=max_polls,
+    )
+
+
 def _studio_video_edit_post_path() -> str:
     p = (settings.wavespeed_studio_video_edit_path or "").strip()
     p = p or "/api/v3/bytedance/seedance-2.0-fast/video-edit-turbo"

@@ -267,6 +267,15 @@ class Settings(BaseSettings):
     wavespeed_seedance_20_i2v_resolution: str = Field(default="720p")
     wavespeed_seedance_20_i2v_duration: int = Field(default=5, ge=1, le=15)
     wavespeed_seedance_20_i2v_web_search: bool = Field(default=False)
+    # xAI Grok Imagine Video v1.5 Image-to-Video
+    # https://wavespeed.ai/models/x-ai/grok-imagine-video-v1.5/image-to-video
+    wavespeed_grok_imagine_video_v15_i2v_path: str = Field(
+        default="/api/v3/x-ai/grok-imagine-video-v1.5/image-to-video",
+    )
+    studio_grok_imagine_i2v_usd_per_sec_480p: float = Field(default=0.08, ge=0.0)
+    studio_grok_imagine_i2v_usd_per_sec_720p: float = Field(default=0.14, ge=0.0)
+    studio_grok_imagine_i2v_usd_per_image: float = Field(default=0.01, ge=0.0)
+    studio_grok_imagine_i2v_duration_min: int = Field(default=1, ge=1, le=15)
     # Опционально: ByteDance Seedance Fast Video-Edit (не используется шагом рендера по умолчанию)
     wavespeed_studio_video_edit_path: str = Field(
         default="/api/v3/bytedance/seedance-2.0-fast/video-edit-turbo",

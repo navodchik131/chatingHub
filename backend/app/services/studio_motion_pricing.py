@@ -9,6 +9,8 @@ from app.config import settings
 
 SeedanceT2vVariant = Literal["standard", "mini"]
 SeedanceT2vResolution = Literal["480p", "720p", "1080p"]
+GrokImagineI2vResolution = Literal["480p", "720p"]
+WorkflowVideoProvider = Literal["seedance_t2v", "grok_imagine_i2v"]
 
 _RESOLUTION_MULT_FROM_720P: dict[str, float] = {
     "480p": 0.5,
@@ -29,6 +31,60 @@ def normalize_seedance_t2v_resolution(raw: str | None) -> SeedanceT2vResolution:
     if r in _VALID_RESOLUTIONS:
         return r  # type: ignore[return-value]
     return "720p"
+
+
+def normalize_workflow_video_provider(raw: str | None) -> WorkflowVideoProvider:
+    v = (raw or "seedance_t2v").strip().lower()
+    return "grok_imagine_i2v" if v == "grok_imagine_i2v" else "seedance_t2v"
+
+
+def normalize_grok_imagine_i2v_resolution(raw: str | None) -> GrokImagineI2vResolution:
+    r = (raw or "720p").strip().lower()
+    return "480p" if r == "480p" else "720p"
+
+
+def grok_imagine_i2v_duration_seconds(raw: str | int | None, *, default: int | None = None) -> int:
+    """1–15 с (лимит WaveSpeed Grok Imagine Video I2V)."""
+    lim_min = int(settings.studio_grok_imagine_i2v_duration_min)
+    lim_max = 15
+    fallback = default if default is not None else 6
+    if raw is None or (isinstance(raw, str) and not raw.strip()):
+        return max(lim_min, min(lim_max, int(fallback)))
+    try:
+        ds = int(str(raw).strip())
+    except (TypeError, ValueError):
+        return max(lim_min, min(lim_max, int(fallback)))
+    return max(lim_min, min(lim_max, ds))
+
+
+def grok_imagine_i2v_usd_total(
+    duration_seconds: int,
+    *,
+    resolution: GrokImagineI2vResolution | str = "720p",
+) -> float:
+    dur = grok_imagine_i2v_duration_seconds(duration_seconds)
+    res = normalize_grok_imagine_i2v_resolution(
+        resolution if isinstance(resolution, str) else "720p"
+    )
+    rate = (
+        float(settings.studio_grok_imagine_i2v_usd_per_sec_480p)
+        if res == "480p"
+        else float(settings.studio_grok_imagine_i2v_usd_per_sec_720p)
+    )
+    return max(0.0, rate * dur + float(settings.studio_grok_imagine_i2v_usd_per_image))
+
+
+def grok_imagine_i2v_credit_cost(
+    duration_seconds: int,
+    *,
+    resolution: GrokImagineI2vResolution | str = "720p",
+) -> int:
+    usd = grok_imagine_i2v_usd_total(duration_seconds, resolution=resolution)
+    rub_total = usd * float(settings.studio_motion_rub_per_usd)
+    per_credit = float(settings.studio_motion_rub_per_credit)
+    if per_credit <= 0:
+        return max(1, grok_imagine_i2v_duration_seconds(duration_seconds))
+    return max(1, int(math.ceil(rub_total / per_credit)))
 
 
 def motion_video_duration_seconds(raw: str | int | None, *, default: int | None = None) -> int:
@@ -198,4 +254,15 @@ def motion_video_pricing_public() -> dict[str, float | int | dict | list]:
             "mini": _variant_pricing_block("mini"),
         },
         "mini_t2v_path": (settings.wavespeed_seedance_20_mini_t2v_path or "").strip(),
+        "grok_imagine_i2v": {
+            "usd_per_sec_480p": float(settings.studio_grok_imagine_i2v_usd_per_sec_480p),
+            "usd_per_sec_720p": float(settings.studio_grok_imagine_i2v_usd_per_sec_720p),
+            "usd_per_image": float(settings.studio_grok_imagine_i2v_usd_per_image),
+            "duration_min": int(settings.studio_grok_imagine_i2v_duration_min),
+            "duration_max": 15,
+            "duration_default": 6,
+            "resolutions": ["480p", "720p"],
+            "default_resolution": "720p",
+            "credits_example_6s_720p": grok_imagine_i2v_credit_cost(6, resolution="720p"),
+        },
     }

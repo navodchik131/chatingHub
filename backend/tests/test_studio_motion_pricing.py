@@ -119,3 +119,17 @@ def test_matches_settings_formula() -> None:
                 )
                 == expected
             )
+
+
+def test_grok_imagine_i2v_credit_cost():
+    from app.services.studio_motion_pricing import grok_imagine_i2v_credit_cost
+
+    # 6s @ 720p: 0.14*6 + 0.01 = 0.85 USD
+    expected = max(
+        1,
+        math.ceil(
+            0.85 * settings.studio_motion_rub_per_usd / settings.studio_motion_rub_per_credit
+        ),
+    )
+    assert grok_imagine_i2v_credit_cost(6, resolution="720p") == expected
+    assert grok_imagine_i2v_credit_cost(1, resolution="480p") >= 1

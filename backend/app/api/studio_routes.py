@@ -192,6 +192,7 @@ from app.services.studio_pose_reference import (
     save_pose_reference_bytes,
 )
 from app.services.studio_grok_motion import (
+    build_grok_imagine_i2v_prompt,
     grok_motion_studio_credentials,
     grok_two_step_motion_prompt_for_studio,
 )
@@ -220,6 +221,7 @@ from app.services.studio_model_bootstrap import (
 )
 from app.services.wavespeed_client import (
     gpt_image_2_edit_image_url,
+    grok_imagine_video_v15_image_to_video_url,
     nano_banana_pro_edit_image_url,
     seedance_20_text_to_video_url,
     seedream_v45_bootstrap_edit_image_url,
@@ -4555,6 +4557,9 @@ async def _studio_job_execute_motion_render_video(
         "true",
         "yes",
     )
+    video_provider = str(params.get("video_provider") or "seedance_t2v").strip().lower()
+    if video_provider not in ("seedance_t2v", "grok_imagine_i2v"):
+        video_provider = "seedance_t2v"
 
     if not prompt.strip() and not workflow_source:
         raise RuntimeError("Опишите сцену и движение для видео.")
@@ -4577,7 +4582,7 @@ async def _studio_job_execute_motion_render_video(
     if not sm:
         raise RuntimeError("Модель не найдена")
 
-    if not sort_model_images_for_seedance_t2v(list(sm.images)):
+    if video_provider != "grok_imagine_i2v" and not sort_model_images_for_seedance_t2v(list(sm.images)):
         sheet_gid_check = params.get("sheet_generation_id")
         if sheet_gid_check is None:
             raise RuntimeError(
@@ -4675,27 +4680,39 @@ async def _studio_job_execute_motion_render_video(
 
     ar_t2v = aspect_ratio_for_seedance_i2v(output_aspect)
     from app.services.studio_motion_pricing import (
+        grok_imagine_i2v_credit_cost,
+        grok_imagine_i2v_duration_seconds,
         motion_video_credit_cost,
         motion_video_duration_seconds,
+        normalize_grok_imagine_i2v_resolution,
         normalize_seedance_t2v_resolution,
         normalize_seedance_t2v_variant,
     )
 
-    ds_effective = motion_video_duration_seconds(duration_seconds)
-    seedance_v = normalize_seedance_t2v_variant(seedance_variant)
-    video_res = normalize_seedance_t2v_resolution(
-        video_resolution or settings.wavespeed_seedance_20_t2v_resolution
-    )
+    if video_provider == "grok_imagine_i2v":
+        ds_effective = grok_imagine_i2v_duration_seconds(duration_seconds)
+        video_res = normalize_grok_imagine_i2v_resolution(video_resolution or "720p")
+        cost = apply_studio_credit_cost(
+            plan,
+            grok_imagine_i2v_credit_cost(ds_effective, resolution=video_res),
+        )
+        seedance_v = normalize_seedance_t2v_variant(seedance_variant)
+    else:
+        ds_effective = motion_video_duration_seconds(duration_seconds)
+        seedance_v = normalize_seedance_t2v_variant(seedance_variant)
+        video_res = normalize_seedance_t2v_resolution(
+            video_resolution or settings.wavespeed_seedance_20_t2v_resolution
+        )
+        cost = apply_studio_credit_cost(
+            plan,
+            motion_video_credit_cost(
+                ds_effective,
+                variant=seedance_v,
+                resolution=video_res,
+                has_motion_reference_video=bool(mv_id),
+            ),
+        )
 
-    cost = apply_studio_credit_cost(
-        plan,
-        motion_video_credit_cost(
-            ds_effective,
-            variant=seedance_v,
-            resolution=video_res,
-            has_motion_reference_video=bool(mv_id),
-        ),
-    )
     billing = await ensure_can_consume_credits(session, user, cost)
 
     msg: str | None = None
@@ -4705,113 +4722,143 @@ async def _studio_job_execute_motion_render_video(
     ref_images: list[str] = []
     ref_videos: list[str] = []
 
-    sheet_gen_id: int | None = None
-    if sheet_gid_raw is not None:
+    if video_provider == "grok_imagine_i2v":
+        if not ff_url:
+            raise RuntimeError("Для Grok Imagine Video нужен первый кадр")
+        seed_prompt, prompt_source = await build_grok_imagine_i2v_prompt(
+            user_brief=prompt,
+            duration_seconds=ds_effective,
+        )
         try:
-            sheet_gen_id = int(sheet_gid_raw)
-        except (TypeError, ValueError):
-            sheet_gen_id = None
-
-    model_imgs = filter_model_images_for_seedance_video(
-        list(sm.images),
-        minimal=False,
-        include_body=False,
-    )
-    n_outfit = 0
-    if sheet_gen_id is not None:
-        sheet_url = generation_still_public_url(
-            owner_id=oid,
-            generation_id=sheet_gen_id,
-            public_app_base=pub,
-            token_factory=create_generation_image_access_token,
-        )
-        if not sheet_url:
-            raise RuntimeError("Не удалось подготовить URL развёртки")
-        if ff_url:
-            ref_images.append(ff_url)
-        ref_images.append(sheet_url)
-        n_model = 1
-    elif workflow_source and ff_url:
-        ref_images.append(ff_url)
-        n_start = 1
-        n_model = 0
-    else:
-        if ff_url:
-            ref_images.append(ff_url)
-        ref_images.extend(
-            model_reference_public_urls(
-                owner_id=oid,
-                images=model_imgs,
-                public_app_base=pub,
-                token_factory=create_model_image_access_token,
+            video_url = await grok_imagine_video_v15_image_to_video_url(
+                api_key=ws_key,
+                image_url=ff_url,
+                prompt=seed_prompt,
+                resolution=video_res,
+                duration=ds_effective,
             )
-        )
-        n_model = len(model_imgs)
+            msg = None
+            log.info(
+                "motion_render_video grok i2v ok job=%s prompt=%s",
+                job.id,
+                prompt_source,
+            )
+        except RuntimeError as e:
+            msg = str(e)
+            video_url = None
+            log.warning(
+                "motion_render_video grok i2v failed job=%s: %s",
+                job.id,
+                msg[:240],
+            )
+    else:
+        sheet_gen_id: int | None = None
+        if sheet_gid_raw is not None:
+            try:
+                sheet_gen_id = int(sheet_gid_raw)
+            except (TypeError, ValueError):
+                sheet_gen_id = None
 
-    if outfit_gen_id is not None:
-        outfit_url = generation_still_public_url(
-            owner_id=oid,
-            generation_id=outfit_gen_id,
-            public_app_base=pub,
-            token_factory=create_generation_image_access_token,
+        model_imgs = filter_model_images_for_seedance_video(
+            list(sm.images),
+            minimal=False,
+            include_body=False,
         )
-        if not outfit_url:
-            raise RuntimeError("Не удалось подготовить URL снимка наряда")
-        ref_images.append(outfit_url)
-        n_outfit = 1
+        n_outfit = 0
+        if sheet_gen_id is not None:
+            sheet_url = generation_still_public_url(
+                owner_id=oid,
+                generation_id=sheet_gen_id,
+                public_app_base=pub,
+                token_factory=create_generation_image_access_token,
+            )
+            if not sheet_url:
+                raise RuntimeError("Не удалось подготовить URL развёртки")
+            if ff_url:
+                ref_images.append(ff_url)
+            ref_images.append(sheet_url)
+            n_model = 1
+        elif workflow_source and ff_url:
+            ref_images.append(ff_url)
+            n_start = 1
+            n_model = 0
+        else:
+            if ff_url:
+                ref_images.append(ff_url)
+            ref_images.extend(
+                model_reference_public_urls(
+                    owner_id=oid,
+                    images=model_imgs,
+                    public_app_base=pub,
+                    token_factory=create_model_image_access_token,
+                )
+            )
+            n_model = len(model_imgs)
 
-    if len(ref_images) > MAX_SEEDANCE_REFERENCE_IMAGES:
-        ref_images = ref_images[:MAX_SEEDANCE_REFERENCE_IMAGES]
+        if outfit_gen_id is not None:
+            outfit_url = generation_still_public_url(
+                owner_id=oid,
+                generation_id=outfit_gen_id,
+                public_app_base=pub,
+                token_factory=create_generation_image_access_token,
+            )
+            if not outfit_url:
+                raise RuntimeError("Не удалось подготовить URL снимка наряда")
+            ref_images.append(outfit_url)
+            n_outfit = 1
 
-    ref_videos = [motion_vid_url] if motion_vid_url else []
+        if len(ref_images) > MAX_SEEDANCE_REFERENCE_IMAGES:
+            ref_images = ref_images[:MAX_SEEDANCE_REFERENCE_IMAGES]
 
-    seed_prompt, prompt_source = await build_seedance_t2v_prompt(
-        user_brief=prompt,
-        n_start_frame=n_start,
-        n_model_images=n_model,
-        n_outfit_images=n_outfit,
-        n_motion_videos=len(ref_videos),
-        motion_summary=motion_summary,
-        model_profile_text=None,
-        negative=negative_prompt,
-        output_aspect=ar_t2v or output_aspect,
-        duration_seconds=ds_effective,
-        force_template=False,
-        reference_only=False,
-        remove_face_grid=remove_face_grid,
-        soft_identity=False,
-    )
+        ref_videos = [motion_vid_url] if motion_vid_url else []
 
-    try:
-        video_url = await seedance_20_text_to_video_url(
-            api_key=ws_key,
-            prompt=seed_prompt,
-            reference_images=ref_images or None,
-            reference_videos=ref_videos or None,
-            aspect_ratio=ar_t2v,
-            resolution=video_res,
-            duration=ds_effective,
-            generate_audio=_truthy_wavespeed_flag(generate_audio),
-            variant=seedance_v,
+        seed_prompt, prompt_source = await build_seedance_t2v_prompt(
+            user_brief=prompt,
+            n_start_frame=n_start,
+            n_model_images=n_model,
+            n_outfit_images=n_outfit,
+            n_motion_videos=len(ref_videos),
+            motion_summary=motion_summary,
+            model_profile_text=None,
+            negative=negative_prompt,
+            output_aspect=ar_t2v or output_aspect,
+            duration_seconds=ds_effective,
+            force_template=False,
+            reference_only=False,
+            remove_face_grid=remove_face_grid,
+            soft_identity=False,
         )
-        msg = None
-        log.info(
-            "motion_render_video ok job=%s imgs=%s vids=%s prompt=%s",
-            job.id,
-            len(ref_images),
-            len(ref_videos),
-            prompt_source,
-        )
-    except RuntimeError as e:
-        msg = str(e)
-        video_url = None
-        log.warning(
-            "motion_render_video failed job=%s imgs=%s vids=%s: %s",
-            job.id,
-            len(ref_images),
-            len(ref_videos),
-            msg[:240],
-        )
+
+        try:
+            video_url = await seedance_20_text_to_video_url(
+                api_key=ws_key,
+                prompt=seed_prompt,
+                reference_images=ref_images or None,
+                reference_videos=ref_videos or None,
+                aspect_ratio=ar_t2v,
+                resolution=video_res,
+                duration=ds_effective,
+                generate_audio=_truthy_wavespeed_flag(generate_audio),
+                variant=seedance_v,
+            )
+            msg = None
+            log.info(
+                "motion_render_video ok job=%s imgs=%s vids=%s prompt=%s",
+                job.id,
+                len(ref_images),
+                len(ref_videos),
+                prompt_source,
+            )
+        except RuntimeError as e:
+            msg = str(e)
+            video_url = None
+            log.warning(
+                "motion_render_video failed job=%s imgs=%s vids=%s: %s",
+                job.id,
+                len(ref_images),
+                len(ref_videos),
+                msg[:240],
+            )
 
     gen_placeholder = await find_studio_generation_by_job_id(session, job.id)
     ph_id = params.get("placeholder_generation_id")

@@ -649,10 +649,14 @@ async def _accept_workflow_video_job(
     from app.services.studio_aspect import normalize_aspect_key
     from app.services.studio_image_token import create_generation_image_access_token
     from app.services.studio_motion_pricing import (
+        grok_imagine_i2v_credit_cost,
+        grok_imagine_i2v_duration_seconds,
         motion_video_credit_cost,
         motion_video_duration_seconds,
+        normalize_grok_imagine_i2v_resolution,
         normalize_seedance_t2v_resolution,
         normalize_seedance_t2v_variant,
+        normalize_workflow_video_provider,
     )
     from app.services.studio_motion_video import resolve_motion_video_file
     from app.services.credits import ensure_can_consume_credits
@@ -682,7 +686,13 @@ async def _accept_workflow_video_job(
     except HTTPException:
         raise
 
-    if resolve_motion_video_file(oid, plan.motion_video_file_id) is None:
+    video_provider = normalize_workflow_video_provider(plan.video_provider)
+
+    if (
+        video_provider != "grok_imagine_i2v"
+        and plan.motion_video_file_id
+        and resolve_motion_video_file(oid, plan.motion_video_file_id) is None
+    ):
         raise HTTPException(status_code=404, detail="Motion-видео не найдено. Загрузите снова.")
 
     ff_row = await session.get(StudioGeneration, plan.first_frame_generation_id)
@@ -692,7 +702,7 @@ async def _accept_workflow_video_job(
         raise HTTPException(status_code=400, detail="Первый кадр ещё не сохранён на сервере.")
 
     sheet_row = None
-    if plan.sheet_generation_id is not None:
+    if video_provider != "grok_imagine_i2v" and plan.sheet_generation_id is not None:
         sheet_row = await session.get(StudioGeneration, plan.sheet_generation_id)
         if not sheet_row or sheet_row.user_id != oid:
             raise HTTPException(status_code=404, detail="Развёртка не найдена")
@@ -713,16 +723,22 @@ async def _accept_workflow_video_job(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 
-    ds_effective = motion_video_duration_seconds(plan.duration_seconds)
+    if video_provider == "grok_imagine_i2v":
+        ds_effective = grok_imagine_i2v_duration_seconds(plan.duration_seconds)
+        video_res = normalize_grok_imagine_i2v_resolution(plan.video_resolution)
+        motion_cost = grok_imagine_i2v_credit_cost(ds_effective, resolution=video_res)
+    else:
+        ds_effective = motion_video_duration_seconds(plan.duration_seconds)
+        seedance_v = normalize_seedance_t2v_variant(plan.seedance_variant)
+        video_res = normalize_seedance_t2v_resolution(plan.video_resolution)
+        has_motion_ref = bool(str(plan.motion_video_file_id or "").strip())
+        motion_cost = motion_video_credit_cost(
+            ds_effective,
+            variant=seedance_v,
+            resolution=video_res,
+            has_motion_reference_video=has_motion_ref,
+        )
     seedance_v = normalize_seedance_t2v_variant(plan.seedance_variant)
-    video_res = normalize_seedance_t2v_resolution(plan.video_resolution)
-
-    motion_cost = motion_video_credit_cost(
-        ds_effective,
-        variant=seedance_v,
-        resolution=video_res,
-        has_motion_reference_video=True,
-    )
     motion_cost_billed = apply_studio_credit_cost(billing_plan, motion_cost)
     await ensure_can_consume_credits(session, user, motion_cost_billed)
 
@@ -754,6 +770,7 @@ async def _accept_workflow_video_job(
             "auto_motion_prompt": "1" if plan.auto_motion_prompt else "0",
             "remove_face_grid": "1",
             "workflow_source": "1",
+            "video_provider": video_provider,
         },
         placeholder={
             "studio_model_id": mid,

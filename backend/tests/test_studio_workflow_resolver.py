@@ -366,6 +366,67 @@ def test_resolve_video_plan_without_disabled_sheet():
     assert plan.sheet_generation_id is None
 
 
+def test_resolve_video_plan_without_disabled_motion():
+    from app.services.studio_workflow_resolver import resolve_workflow_video_plan
+
+    g = _motion_pipeline_graph()
+    for n in g["nodes"]:
+        if n["id"] == "mv-1":
+            n["data"] = {**n["data"], "disabled": True}
+    plan = resolve_workflow_video_plan(
+        target_node_id="video-1",
+        nodes=g["nodes"],
+        edges=g["edges"],
+    )
+    assert plan.motion_video_file_id == ""
+    assert plan.first_frame_generation_id == 10
+
+
+def test_resolve_video_plan_grok_imagine_i2v():
+    from app.services.studio_workflow_resolver import resolve_workflow_video_plan
+
+    g = _motion_pipeline_graph()
+    for n in g["nodes"]:
+        if n["id"] == "video-1":
+            n["data"] = {
+                **n["data"],
+                "videoProvider": "grok_imagine_i2v",
+                "durationSeconds": 6,
+                "videoResolution": "720p",
+            }
+    plan = resolve_workflow_video_plan(
+        target_node_id="video-1",
+        nodes=g["nodes"],
+        edges=g["edges"],
+    )
+    assert plan.video_provider == "grok_imagine_i2v"
+    assert plan.motion_video_file_id == ""
+    assert plan.sheet_generation_id is None
+    assert plan.generate_audio is False
+    assert plan.auto_motion_prompt is False
+    assert plan.duration_seconds == 6
+
+
+def test_resolve_video_plan_grok_requires_prompt():
+    from app.services.studio_workflow_resolver import WorkflowResolutionError, resolve_workflow_video_plan
+
+    g = _motion_pipeline_graph()
+    for n in g["nodes"]:
+        if n["id"] == "video-1":
+            n["data"] = {**n["data"], "videoProvider": "grok_imagine_i2v"}
+        if n["id"] == "prompt-1":
+            n["data"] = {"prompt": ""}
+    try:
+        resolve_workflow_video_plan(
+            target_node_id="video-1",
+            nodes=g["nodes"],
+            edges=g["edges"],
+        )
+        assert False, "expected WorkflowResolutionError"
+    except WorkflowResolutionError as e:
+        assert "промпт" in str(e).lower()
+
+
 def test_first_frame_motion_without_reference():
     g = {
         "nodes": [

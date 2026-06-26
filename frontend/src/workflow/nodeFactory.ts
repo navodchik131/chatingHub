@@ -38,6 +38,7 @@ export function createDefaultNodeData(type: NodeType): AppNodeData {
       return {
         outputAspect: '9:16',
         durationSeconds: 5,
+        videoProvider: 'seedance_t2v',
         seedanceVariant: 'standard',
         videoResolution: '720p',
         generateAudio: true,

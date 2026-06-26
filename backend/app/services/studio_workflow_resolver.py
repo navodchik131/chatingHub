@@ -98,6 +98,7 @@ class WorkflowVideoPlan:
     generate_audio: bool
     auto_motion_prompt: bool
     negative_prompt: str
+    video_provider: str = "seedance_t2v"
 
 
 def _parse_model_id_from_node(model_node: dict[str, Any] | None) -> int | None:
@@ -252,6 +253,12 @@ def resolve_workflow_video_plan(
         label="развёртка",
     )
 
+    prompt_nodes = _sources_for_target(target_id, HANDLE["gen_prompt_in"], edges, node_map)
+    prompt_text = ""
+    if prompt_nodes and str(prompt_nodes[0].get("type") or "") == "prompt":
+        pdata = prompt_nodes[0].get("data") if isinstance(prompt_nodes[0].get("data"), dict) else {}
+        prompt_text = str(pdata.get("prompt") or "").strip()
+
     motion_nodes = _sources_for_target(target_id, HANDLE["motion_video_in"], edges, node_map)
     motion_video_file_id = ""
     if motion_nodes:
@@ -264,19 +271,24 @@ def resolve_workflow_video_plan(
         motion_video_file_id = str(mdata.get("motionVideoFileId") or "").strip()
     if not motion_video_file_id:
         motion_video_file_id = str(gen_data.get("motionVideoFileId") or "").strip()
-    if not motion_video_file_id:
+
+    video_provider = str(gen_data.get("videoProvider") or "seedance_t2v").strip().lower()
+    if video_provider not in ("seedance_t2v", "grok_imagine_i2v"):
+        video_provider = "seedance_t2v"
+
+    if video_provider == "grok_imagine_i2v":
+        if not prompt_text.strip():
+            raise WorkflowResolutionError(
+                "Добавьте промпт с описанием движения и сцены"
+            )
+        motion_video_file_id = ""
+    elif not motion_video_file_id and not prompt_text.strip():
         raise WorkflowResolutionError(
-            "Загрузите motion-видео в ноду или подключите ноду «Motion-видео»"
+            "Подключите motion-видео или добавьте промпт с описанием движения и сцены"
         )
 
     model_nodes = _sources_for_target(target_id, HANDLE["gen_model_in"], edges, node_map)
     model_id = _parse_model_id_from_node(model_nodes[0] if model_nodes else None)
-
-    prompt_nodes = _sources_for_target(target_id, HANDLE["gen_prompt_in"], edges, node_map)
-    prompt_text = ""
-    if prompt_nodes and str(prompt_nodes[0].get("type") or "") == "prompt":
-        pdata = prompt_nodes[0].get("data") if isinstance(prompt_nodes[0].get("data"), dict) else {}
-        prompt_text = str(pdata.get("prompt") or "").strip()
 
     output_aspect = str(gen_data.get("outputAspect") or "9:16").strip() or "9:16"
 
@@ -290,17 +302,25 @@ def resolve_workflow_video_plan(
         seedance_variant = "standard"
 
     video_resolution = str(gen_data.get("videoResolution") or "720p").strip().lower()
-    if video_resolution not in ("480p", "720p", "1080p"):
+    if video_provider == "grok_imagine_i2v":
+        if video_resolution not in ("480p", "720p"):
+            video_resolution = "720p"
+        duration_seconds = max(1, min(15, duration_seconds))
+    elif video_resolution not in ("480p", "720p", "1080p"):
         video_resolution = "720p"
 
-    generate_audio = gen_data.get("generateAudio") is not False
-    auto_motion_prompt = gen_data.get("autoMotionPrompt") is not False
+    if video_provider == "grok_imagine_i2v":
+        generate_audio = False
+        auto_motion_prompt = False
+    else:
+        generate_audio = gen_data.get("generateAudio") is not False
+        auto_motion_prompt = gen_data.get("autoMotionPrompt") is not False and bool(motion_video_file_id)
     negative_prompt = str(gen_data.get("negativePrompt") or "").strip()
 
     return WorkflowVideoPlan(
         model_id=model_id,
         first_frame_generation_id=ff_gid,
-        sheet_generation_id=sheet_gid,
+        sheet_generation_id=sheet_gid if video_provider != "grok_imagine_i2v" else None,
         motion_video_file_id=motion_video_file_id,
         prompt=prompt_text,
         output_aspect=output_aspect,
@@ -310,23 +330,8 @@ def resolve_workflow_video_plan(
         generate_audio=generate_audio,
         auto_motion_prompt=auto_motion_prompt,
         negative_prompt=negative_prompt,
+        video_provider=video_provider,
     )
-
-    @property
-    def reference_ref_id(self) -> str:
-        return self.references[0].ref_id if self.references else ""
-
-    @property
-    def reference_role(self) -> str:
-        return self.references[0].role if self.references else ""
-
-    @property
-    def reference_description(self) -> str:
-        return self.references[0].description if self.references else ""
-
-    @property
-    def reference_file_name(self) -> str:
-        return self.references[0].file_name if self.references else ""
 
 
 HANDLE = {

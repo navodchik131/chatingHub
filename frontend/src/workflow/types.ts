@@ -89,12 +89,15 @@ export interface MotionVideoNodeData {
 
 export type SeedanceT2vVariant = 'standard' | 'mini'
 export type SeedanceT2vResolution = '480p' | '720p' | '1080p'
+export type GrokImagineI2vResolution = '480p' | '720p'
+export type WorkflowVideoProvider = 'seedance_t2v' | 'grok_imagine_i2v'
 
 export interface VideoGenerationNodeData {
   outputAspect?: string
   durationSeconds?: number
+  videoProvider?: WorkflowVideoProvider
   seedanceVariant?: SeedanceT2vVariant
-  videoResolution?: SeedanceT2vResolution
+  videoResolution?: SeedanceT2vResolution | GrokImagineI2vResolution
   generateAudio?: boolean
   autoMotionPrompt?: boolean
   negativePrompt?: string

@@ -577,6 +577,53 @@ def grok_motion_api_configured() -> bool:
     return bool((settings.grok_api_key or "").strip() or (settings.openai_api_key or "").strip())
 
 
+_GROK_IMAGINE_I2V_SYSTEM = (
+    "You write image-to-video prompts for xAI Grok Imagine Video v1.5. "
+    "Output ONLY the final prompt in English as plain text. "
+    "Describe subject motion, camera movement, lighting changes, and atmosphere. "
+    "Do not repeat static details already visible in the start frame. "
+    "No markdown, no bullet lists, no @Image tags, no labels like Prompt:."
+)
+
+
+async def build_grok_imagine_i2v_prompt(
+    *,
+    user_brief: str,
+    duration_seconds: int = 6,
+    credentials: StudioOpenAiCredentials | None = None,
+    max_chars: int = 2000,
+) -> tuple[str, str]:
+    """Grok (если настроен) → иначе user brief. Возвращает (prompt, source: grok|template)."""
+    brief = (user_brief or "").strip()
+    if not brief:
+        brief = (
+            "Natural subtle motion aligned with the scene, cinematic camera, "
+            "stable identity, smooth movement, realistic lighting."
+        )
+    if grok_motion_api_configured():
+        try:
+            creds = credentials or grok_motion_studio_credentials()
+            model = _grok_fps_stills_model()
+            dur = max(1, min(15, int(duration_seconds)))
+            user_msg = f"Duration: {dur} seconds.\nUser request:\n{brief}"
+            out = await chat_completion_openai_compatible_text(
+                model=model,
+                messages=[
+                    {"role": "system", "content": _GROK_IMAGINE_I2V_SYSTEM},
+                    {"role": "user", "content": user_msg},
+                ],
+                max_tokens=2048,
+                temperature=0.35,
+                credentials=creds,
+            )
+            p = (out or "").strip()
+            if len(p) >= 20:
+                return (p[:max_chars], "grok")
+        except Exception as e:
+            log.warning("grok imagine i2v prompt failed, template fallback: %s", e)
+    return (brief[:max_chars], "template")
+
+
 def _seedance_image_tag_range(
     n_model: int,
     n_outfit: int,

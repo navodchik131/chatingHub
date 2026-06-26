@@ -57,7 +57,9 @@ function MotionVideoNodeComponent({ id, data }: NodeProps) {
 
   return (
     <BaseNode nodeId={id} type="motionVideo" error={nodeData.error}>
-      <p className="workflow-node__hint">Motion-референс для Seedance (обязателен для видео)</p>
+      <p className="workflow-node__hint">
+        Motion-референс для Seedance (@Video1). Можно отключить ноду — тогда движение из промпта.
+      </p>
 
       <input
         ref={inputRef}

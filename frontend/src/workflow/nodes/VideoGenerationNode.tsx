@@ -2,8 +2,10 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Handle, Position, useReactFlow, type NodeProps } from '@xyflow/react'
 import {
   DEFAULT_MOTION_VIDEO_PRICING,
+  computeGrokImagineI2vCreditCost,
   computeMotionVideoCreditCost,
   mergeMotionVideoPricing,
+  type GrokImagineI2vResolution,
   type StudioMotionVideoPricing,
 } from '../../studioMotionPricing'
 import { executeWorkflowGeneration, fetchWorkflowModelOptions } from '../api'
@@ -16,6 +18,7 @@ import {
   type SeedanceT2vResolution,
   type SeedanceT2vVariant,
   type VideoGenerationNodeData,
+  type WorkflowVideoProvider,
 } from '../types'
 
 function isAbortError(error: unknown): boolean {
@@ -23,6 +26,30 @@ function isAbortError(error: unknown): boolean {
 }
 
 const DEFAULT_ASPECT = '9:16'
+
+type VideoModelKey = 'seedance-standard' | 'seedance-mini' | 'grok-imagine-i2v'
+
+function modelKeyFromNodeData(data: VideoGenerationNodeData): VideoModelKey {
+  if (data.videoProvider === 'grok_imagine_i2v') {
+    return 'grok-imagine-i2v'
+  }
+  return data.seedanceVariant === 'mini' ? 'seedance-mini' : 'seedance-standard'
+}
+
+function patchFromModelKey(key: VideoModelKey): Partial<VideoGenerationNodeData> {
+  if (key === 'grok-imagine-i2v') {
+    return {
+      videoProvider: 'grok_imagine_i2v',
+      seedanceVariant: 'standard',
+      generateAudio: false,
+      autoMotionPrompt: false,
+    }
+  }
+  return {
+    videoProvider: 'seedance_t2v',
+    seedanceVariant: key === 'seedance-mini' ? 'mini' : 'standard',
+  }
+}
 
 function VideoGenerationNodeComponent({ id, data }: NodeProps) {
   const { setNodes, getNodes, getEdges } = useReactFlow()
@@ -38,23 +65,32 @@ function VideoGenerationNodeComponent({ id, data }: NodeProps) {
     })
   }, [])
 
-  const durationSeconds = nodeData.durationSeconds ?? pricing.duration_default ?? 5
+  const videoProvider = (nodeData.videoProvider ?? 'seedance_t2v') as WorkflowVideoProvider
+  const isGrok = videoProvider === 'grok_imagine_i2v'
+  const grokPricing = pricing.grok_imagine_i2v ?? DEFAULT_MOTION_VIDEO_PRICING.grok_imagine_i2v!
+
+  const durationSeconds = nodeData.durationSeconds ?? (isGrok ? grokPricing.duration_default ?? 6 : pricing.duration_default ?? 5)
   const seedanceVariant = (nodeData.seedanceVariant ?? pricing.default_variant ?? 'standard') as SeedanceT2vVariant
   const videoResolution = (nodeData.videoResolution ??
-    pricing.default_resolution ??
-    '720p') as SeedanceT2vResolution
-  const generateAudio = nodeData.generateAudio !== false
-  const autoMotionPrompt = nodeData.autoMotionPrompt !== false
+    (isGrok ? grokPricing.default_resolution ?? '720p' : pricing.default_resolution ?? '720p')) as
+    | SeedanceT2vResolution
+    | GrokImagineI2vResolution
+  const generateAudio = !isGrok && nodeData.generateAudio !== false
+  const autoMotionPrompt = !isGrok && nodeData.autoMotionPrompt !== false
   const outputAspect = nodeData.outputAspect || DEFAULT_ASPECT
+  const modelKey = modelKeyFromNodeData(nodeData)
 
-  const costCredits = useMemo(
-    () =>
-      computeMotionVideoCreditCost(durationSeconds, true, pricing, {
-        variant: seedanceVariant,
-        resolution: videoResolution,
-      }),
-    [pricing, durationSeconds, seedanceVariant, videoResolution],
-  )
+  const costCredits = useMemo(() => {
+    if (isGrok) {
+      return computeGrokImagineI2vCreditCost(durationSeconds, pricing, {
+        resolution: videoResolution as GrokImagineI2vResolution,
+      })
+    }
+    return computeMotionVideoCreditCost(durationSeconds, true, pricing, {
+      variant: seedanceVariant,
+      resolution: videoResolution as SeedanceT2vResolution,
+    })
+  }, [pricing, durationSeconds, seedanceVariant, videoResolution, isGrok])
 
   const updateNodeData = useCallback(
     (patch: Partial<VideoGenerationNodeData>) => {
@@ -152,12 +188,42 @@ function VideoGenerationNodeComponent({ id, data }: NodeProps) {
         runAbortRef.current = null
       }
     }
-  }, [getEdges, getNodes, id, setNodes, updateNodeData, workspaceId])
+  }, [getEdges, getNodes, id, nodeData.disabled, setNodes, updateNodeData, workspaceId])
 
-  const durationMin = pricing.duration_min ?? 4
-  const durationMax = pricing.duration_max ?? 15
-  const resolutions = pricing.resolutions ?? ['480p', '720p', '1080p']
+  const durationMin = isGrok ? (grokPricing.duration_min ?? 1) : (pricing.duration_min ?? 4)
+  const durationMax = isGrok ? (grokPricing.duration_max ?? 15) : (pricing.duration_max ?? 15)
+  const resolutions = isGrok
+    ? (grokPricing.resolutions ?? ['480p', '720p'])
+    : (pricing.resolutions ?? ['480p', '720p', '1080p'])
   const isPro = (me?.billing_plan ?? '').toLowerCase() === 'pro'
+
+  const onModelChange = useCallback(
+    (key: VideoModelKey) => {
+      const patch = patchFromModelKey(key)
+      if (key === 'grok-imagine-i2v') {
+        const grokRes = grokPricing.resolutions ?? ['480p', '720p']
+        const nextRes = grokRes.includes(videoResolution as GrokImagineI2vResolution)
+          ? videoResolution
+          : (grokPricing.default_resolution ?? '720p')
+        const nextDur = Math.max(
+          grokPricing.duration_min ?? 1,
+          Math.min(grokPricing.duration_max ?? 15, durationSeconds),
+        )
+        updateNodeData({ ...patch, videoResolution: nextRes, durationSeconds: nextDur })
+        return
+      }
+      const seedRes = pricing.resolutions ?? ['480p', '720p', '1080p']
+      const nextRes = seedRes.includes(videoResolution as SeedanceT2vResolution)
+        ? videoResolution
+        : (pricing.default_resolution ?? '720p')
+      const nextDur = Math.max(
+        pricing.duration_min ?? 4,
+        Math.min(pricing.duration_max ?? 15, durationSeconds),
+      )
+      updateNodeData({ ...patch, videoResolution: nextRes, durationSeconds: nextDur })
+    },
+    [durationSeconds, grokPricing, pricing, updateNodeData, videoResolution],
+  )
 
   return (
     <BaseNode
@@ -211,36 +277,42 @@ function VideoGenerationNodeComponent({ id, data }: NodeProps) {
         first frame
       </span>
 
-      <Handle
-        id={HandleIds.sheetIn}
-        type="target"
-        position={Position.Left}
-        className="workflow-handle workflow-handle--generation"
-        style={{ top: '56%' }}
-      />
-      <span
-        className="workflow-node__handle-label workflow-node__handle-label--left"
-        style={{ top: '56%' }}
-      >
-        sheet
-      </span>
+      {!isGrok ? (
+        <>
+          <Handle
+            id={HandleIds.sheetIn}
+            type="target"
+            position={Position.Left}
+            className="workflow-handle workflow-handle--generation"
+            style={{ top: '56%' }}
+          />
+          <span
+            className="workflow-node__handle-label workflow-node__handle-label--left"
+            style={{ top: '56%' }}
+          >
+            sheet
+          </span>
 
-      <Handle
-        id={HandleIds.motionVideoIn}
-        type="target"
-        position={Position.Left}
-        className="workflow-handle workflow-handle--reference"
-        style={{ top: '70%' }}
-      />
-      <span
-        className="workflow-node__handle-label workflow-node__handle-label--left"
-        style={{ top: '70%' }}
-      >
-        motion
-      </span>
+          <Handle
+            id={HandleIds.motionVideoIn}
+            type="target"
+            position={Position.Left}
+            className="workflow-handle workflow-handle--reference"
+            style={{ top: '70%' }}
+          />
+          <span
+            className="workflow-node__handle-label workflow-node__handle-label--left"
+            style={{ top: '70%' }}
+          >
+            motion
+          </span>
+        </>
+      ) : null}
 
       <p className="workflow-node__hint">
-        Seedance · @Image1 = первый кадр, @Image2 = развёртка (если включена), @Video1 = motion
+        {isGrok
+          ? 'Grok Imagine Video · первый кадр + промпт с описанием движения'
+          : 'Seedance · @Image1 = первый кадр, @Image2 = развёртка (если включена), @Video1 = motion'}
       </p>
 
       <div className="workflow-gen-form">
@@ -251,14 +323,13 @@ function VideoGenerationNodeComponent({ id, data }: NodeProps) {
           <select
             id={`${id}-variant`}
             className="workflow-gen-form__select nodrag nowheel"
-            value={seedanceVariant}
-            onChange={(e) =>
-              updateNodeData({ seedanceVariant: e.target.value as SeedanceT2vVariant })
-            }
+            value={modelKey}
+            onChange={(e) => onModelChange(e.target.value as VideoModelKey)}
             disabled={nodeData.isRunning}
           >
-            <option value="standard">Seedance 2.0</option>
-            <option value="mini">Seedance 2.0 Mini</option>
+            <option value="seedance-standard">Seedance 2.0</option>
+            <option value="seedance-mini">Seedance 2.0 Mini</option>
+            <option value="grok-imagine-i2v">Grok Imagine Video v1.5</option>
           </select>
         </div>
 
@@ -292,7 +363,9 @@ function VideoGenerationNodeComponent({ id, data }: NodeProps) {
             className="workflow-gen-form__select nodrag nowheel"
             value={videoResolution}
             onChange={(e) =>
-              updateNodeData({ videoResolution: e.target.value as SeedanceT2vResolution })
+              updateNodeData({
+                videoResolution: e.target.value as SeedanceT2vResolution | GrokImagineI2vResolution,
+              })
             }
             disabled={nodeData.isRunning}
           >
@@ -304,44 +377,48 @@ function VideoGenerationNodeComponent({ id, data }: NodeProps) {
           </select>
         </div>
 
-        <div className="workflow-gen-form__row">
-          <label className="workflow-gen-form__label" htmlFor={`${id}-aspect`}>
-            Формат
-          </label>
-          <select
-            id={`${id}-aspect`}
-            className="workflow-gen-form__select nodrag nowheel"
-            value={outputAspect}
-            onChange={(e) => updateNodeData({ outputAspect: e.target.value })}
-            disabled={nodeData.isRunning}
-          >
-            <option value="9:16">9:16</option>
-            <option value="16:9">16:9</option>
-            <option value="1:1">1:1</option>
-            <option value="3:4">3:4</option>
-            <option value="4:3">4:3</option>
-          </select>
-        </div>
+        {!isGrok ? (
+          <>
+            <div className="workflow-gen-form__row">
+              <label className="workflow-gen-form__label" htmlFor={`${id}-aspect`}>
+                Формат
+              </label>
+              <select
+                id={`${id}-aspect`}
+                className="workflow-gen-form__select nodrag nowheel"
+                value={outputAspect}
+                onChange={(e) => updateNodeData({ outputAspect: e.target.value })}
+                disabled={nodeData.isRunning}
+              >
+                <option value="9:16">9:16</option>
+                <option value="16:9">16:9</option>
+                <option value="1:1">1:1</option>
+                <option value="3:4">3:4</option>
+                <option value="4:3">4:3</option>
+              </select>
+            </div>
 
-        <label className="workflow-gen-form__check nodrag">
-          <input
-            type="checkbox"
-            checked={generateAudio}
-            onChange={(e) => updateNodeData({ generateAudio: e.target.checked })}
-            disabled={nodeData.isRunning}
-          />
-          <span>Звук</span>
-        </label>
+            <label className="workflow-gen-form__check nodrag">
+              <input
+                type="checkbox"
+                checked={generateAudio}
+                onChange={(e) => updateNodeData({ generateAudio: e.target.checked })}
+                disabled={nodeData.isRunning}
+              />
+              <span>Звук</span>
+            </label>
 
-        <label className="workflow-gen-form__check nodrag">
-          <input
-            type="checkbox"
-            checked={autoMotionPrompt}
-            onChange={(e) => updateNodeData({ autoMotionPrompt: e.target.checked })}
-            disabled={nodeData.isRunning}
-          />
-          <span>Grok motion timeline</span>
-        </label>
+            <label className="workflow-gen-form__check nodrag">
+              <input
+                type="checkbox"
+                checked={autoMotionPrompt}
+                onChange={(e) => updateNodeData({ autoMotionPrompt: e.target.checked })}
+                disabled={nodeData.isRunning}
+              />
+              <span>Grok motion timeline</span>
+            </label>
+          </>
+        ) : null}
       </div>
 
       {nodeData.videoUrl ? (

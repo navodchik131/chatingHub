@@ -1,5 +1,18 @@
 export type SeedanceT2vVariant = 'standard' | 'mini'
 export type SeedanceT2vResolution = '480p' | '720p' | '1080p'
+export type GrokImagineI2vResolution = '480p' | '720p'
+
+export type GrokImagineI2vPricing = {
+  usd_per_sec_480p: number
+  usd_per_sec_720p: number
+  usd_per_image: number
+  duration_min: number
+  duration_max: number
+  duration_default: number
+  resolutions: GrokImagineI2vResolution[]
+  default_resolution?: GrokImagineI2vResolution
+  credits_example_6s_720p?: number
+}
 
 export type StudioMotionVideoPricing = {
   usd_per_sec_with_reference_video: number
@@ -27,6 +40,7 @@ export type StudioMotionVideoPricing = {
     >
   >
   mini_t2v_path?: string
+  grok_imagine_i2v?: Partial<GrokImagineI2vPricing>
 }
 
 /** Дефолты = .env.example (если /api/health ещё без studio_motion_video_pricing). */
@@ -51,6 +65,16 @@ export const DEFAULT_MOTION_VIDEO_PRICING: StudioMotionVideoPricing = {
       usd_per_sec_720p_with_reference_video: 0.0975,
       usd_per_sec_720p_without_reference_video: 0.15,
     },
+  },
+  grok_imagine_i2v: {
+    usd_per_sec_480p: 0.08,
+    usd_per_sec_720p: 0.14,
+    usd_per_image: 0.01,
+    duration_min: 1,
+    duration_max: 15,
+    duration_default: 6,
+    resolutions: ['480p', '720p'],
+    default_resolution: '720p',
   },
 }
 
@@ -82,6 +106,10 @@ export function mergeMotionVideoPricing(
     resolution_multipliers_from_720p: {
       ...DEFAULT_MOTION_VIDEO_PRICING.resolution_multipliers_from_720p,
       ...(fromHealth.resolution_multipliers_from_720p ?? {}),
+    },
+    grok_imagine_i2v: {
+      ...DEFAULT_MOTION_VIDEO_PRICING.grok_imagine_i2v,
+      ...(fromHealth.grok_imagine_i2v ?? {}),
     },
   }
 }
@@ -150,5 +178,39 @@ export function computeMotionVideoCreditCost(
     return Math.max(1, sec)
   }
   const rub = usd * sec * p.rub_per_usd
+  return Math.max(1, Math.ceil(rub / perCredit))
+}
+
+function mergeGrokImagineI2vPricing(
+  pricing?: Partial<StudioMotionVideoPricing> | null,
+): GrokImagineI2vPricing {
+  const p = mergeMotionVideoPricing(pricing)
+  return {
+    ...DEFAULT_MOTION_VIDEO_PRICING.grok_imagine_i2v!,
+    ...p.grok_imagine_i2v,
+  }
+}
+
+/** Кредиты за Grok Imagine Video v1.5 I2V (USD/с × длительность + фикс. за кадр). */
+export function computeGrokImagineI2vCreditCost(
+  durationSeconds: number,
+  pricing?: Partial<StudioMotionVideoPricing> | null,
+  options?: { resolution?: GrokImagineI2vResolution },
+): number {
+  const p = mergeMotionVideoPricing(pricing)
+  const grok = mergeGrokImagineI2vPricing(p)
+  const perCredit = p.rub_per_credit
+  const sec = Math.max(
+    grok.duration_min,
+    Math.min(grok.duration_max, Math.round(durationSeconds)),
+  )
+  const resolution = options?.resolution ?? grok.default_resolution ?? '720p'
+  const rate =
+    resolution === '480p' ? grok.usd_per_sec_480p : grok.usd_per_sec_720p
+  const usd = Math.max(0, rate * sec + grok.usd_per_image)
+  if (!Number.isFinite(perCredit) || perCredit <= 0) {
+    return Math.max(1, sec)
+  }
+  const rub = usd * p.rub_per_usd
   return Math.max(1, Math.ceil(rub / perCredit))
 }
