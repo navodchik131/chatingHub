@@ -99,6 +99,151 @@ class WorkflowVideoPlan:
     auto_motion_prompt: bool
     negative_prompt: str
     video_provider: str = "seedance_t2v"
+    prompt_from_compose: bool = False
+
+
+@dataclass(frozen=True)
+class WorkflowVideoPromptComposePlan:
+    model_id: int
+    motion_video_file_id: str
+    first_frame_generation_id: int | None
+    sheet_generation_id: int | None
+    references: tuple[WorkflowReferenceItem, ...]
+    user_notes: str
+
+
+_PROMPT_SOURCE_NODE_TYPES = frozenset({"prompt", "videoPromptCompose"})
+
+
+def resolve_upstream_prompt_text(
+    *,
+    target_id: str,
+    target_handle: str,
+    edges: list[dict[str, Any]],
+    node_map: dict[str, dict[str, Any]],
+) -> tuple[str, str | None]:
+    """Текст промпта с upstream-ноды (prompt или videoPromptCompose)."""
+    sources = _sources_for_target(target_id, target_handle, edges, node_map)
+    for src in sources:
+        ntype = str(src.get("type") or "")
+        if ntype not in _PROMPT_SOURCE_NODE_TYPES:
+            raise WorkflowResolutionError(
+                "К входу prompt можно подключить ноду «Промпт» или «Промпт по видео»"
+            )
+        pdata = src.get("data") if isinstance(src.get("data"), dict) else {}
+        text = str(pdata.get("prompt") or "").strip()
+        if text:
+            return text, ntype
+    return "", None
+
+
+def _resolve_workflow_references_for_target(
+    *,
+    target_id: str,
+    edges: list[dict[str, Any]],
+    node_map: dict[str, dict[str, Any]],
+) -> tuple[WorkflowReferenceItem, ...]:
+    ref_nodes = _sources_for_target(target_id, HANDLE["gen_reference_in"], edges, node_map)
+    references: list[WorkflowReferenceItem] = []
+    for ref_node in ref_nodes:
+        if str(ref_node.get("type") or "") != "reference":
+            raise WorkflowResolutionError(
+                "К входу reference можно подключить только ноды «Референс»"
+            )
+        if not _is_node_enabled(ref_node):
+            continue
+        ref_data = ref_node.get("data") if isinstance(ref_node.get("data"), dict) else {}
+        ref_id = str(ref_data.get("refId") or "").strip()
+        if not ref_id:
+            raise WorkflowResolutionError(
+                "Загрузите изображение во все подключённые ноды «Референс»"
+            )
+        ref_role, ref_description = _reference_description_for_node(ref_node, edges, node_map)
+        references.append(
+            WorkflowReferenceItem(
+                ref_id=ref_id,
+                role=ref_role,
+                description=ref_description,
+                file_name=str(ref_data.get("fileName") or "").strip(),
+                node_id=str(ref_node.get("id") or "").strip(),
+            )
+        )
+    return sort_workflow_references(references)
+
+
+def resolve_workflow_video_prompt_compose_plan(
+    *,
+    target_node_id: str,
+    nodes: list[dict[str, Any]],
+    edges: list[dict[str, Any]],
+) -> WorkflowVideoPromptComposePlan:
+    node_map = _node_map(nodes)
+    target_id = (target_node_id or "").strip()
+    target = node_map.get(target_id)
+    if not target:
+        raise WorkflowResolutionError("Целевая нода не найдена в графе")
+    _require_enabled_target(target)
+    if str(target.get("type") or "") != "videoPromptCompose":
+        raise WorkflowResolutionError("Неверный тип ноды для промпта по видео")
+
+    model_nodes = _sources_for_target(target_id, HANDLE["gen_model_in"], edges, node_map)
+    model_id = _parse_model_id_from_node(model_nodes[0] if model_nodes else None)
+    if model_id is None:
+        raise WorkflowResolutionError("Подключите ноду «Модель» и выберите модель")
+
+    motion_nodes = _sources_for_target(target_id, HANDLE["motion_video_in"], edges, node_map)
+    motion_video_file_id = ""
+    if motion_nodes:
+        mnode = motion_nodes[0]
+        if str(mnode.get("type") or "") != "motionVideo":
+            raise WorkflowResolutionError(
+                "К входу motion video можно подключить только ноду «Motion-видео»"
+            )
+        mdata = mnode.get("data") if isinstance(mnode.get("data"), dict) else {}
+        motion_video_file_id = str(mdata.get("motionVideoFileId") or "").strip()
+    if not motion_video_file_id:
+        raise WorkflowResolutionError("Подключите motion-видео с загруженным файлом")
+
+    ff_gid = resolve_upstream_generation_id_optional(
+        target_id=target_id,
+        target_handle=HANDLE["first_frame_in"],
+        edges=edges,
+        node_map=node_map,
+        label="первый кадр",
+    )
+    sheet_gid = resolve_upstream_generation_id_optional(
+        target_id=target_id,
+        target_handle=HANDLE["sheet_in"],
+        edges=edges,
+        node_map=node_map,
+        label="развёртка",
+    )
+
+    user_notes = ""
+    note_nodes = _sources_for_target(target_id, HANDLE["gen_prompt_in"], edges, node_map)
+    if note_nodes:
+        nnode = note_nodes[0]
+        if str(nnode.get("type") or "") != "prompt":
+            raise WorkflowResolutionError(
+                "К входу prompt (доп. указания) можно подключить только ноду «Промпт»"
+            )
+        ndata = nnode.get("data") if isinstance(nnode.get("data"), dict) else {}
+        user_notes = str(ndata.get("prompt") or "").strip()
+
+    references = _resolve_workflow_references_for_target(
+        target_id=target_id,
+        edges=edges,
+        node_map=node_map,
+    )
+
+    return WorkflowVideoPromptComposePlan(
+        model_id=model_id,
+        motion_video_file_id=motion_video_file_id,
+        first_frame_generation_id=ff_gid,
+        sheet_generation_id=sheet_gid,
+        references=references,
+        user_notes=user_notes,
+    )
 
 
 def _parse_model_id_from_node(model_node: dict[str, Any] | None) -> int | None:
@@ -253,11 +398,13 @@ def resolve_workflow_video_plan(
         label="развёртка",
     )
 
-    prompt_nodes = _sources_for_target(target_id, HANDLE["gen_prompt_in"], edges, node_map)
-    prompt_text = ""
-    if prompt_nodes and str(prompt_nodes[0].get("type") or "") == "prompt":
-        pdata = prompt_nodes[0].get("data") if isinstance(prompt_nodes[0].get("data"), dict) else {}
-        prompt_text = str(pdata.get("prompt") or "").strip()
+    prompt_text, prompt_source = resolve_upstream_prompt_text(
+        target_id=target_id,
+        target_handle=HANDLE["gen_prompt_in"],
+        edges=edges,
+        node_map=node_map,
+    )
+    prompt_from_compose = prompt_source == "videoPromptCompose"
 
     motion_nodes = _sources_for_target(target_id, HANDLE["motion_video_in"], edges, node_map)
     motion_video_file_id = ""
@@ -284,7 +431,7 @@ def resolve_workflow_video_plan(
         motion_video_file_id = ""
     elif not motion_video_file_id and not prompt_text.strip():
         raise WorkflowResolutionError(
-            "Подключите motion-видео или добавьте промпт с описанием движения и сцены"
+            "Подключите motion-видео, ноду «Промпт по видео» или добавьте промпт с описанием движения"
         )
 
     model_nodes = _sources_for_target(target_id, HANDLE["gen_model_in"], edges, node_map)
@@ -312,6 +459,9 @@ def resolve_workflow_video_plan(
     if video_provider == "grok_imagine_i2v":
         generate_audio = False
         auto_motion_prompt = False
+    elif prompt_from_compose:
+        generate_audio = gen_data.get("generateAudio") is not False
+        auto_motion_prompt = False
     else:
         generate_audio = gen_data.get("generateAudio") is not False
         auto_motion_prompt = gen_data.get("autoMotionPrompt") is not False and bool(motion_video_file_id)
@@ -331,6 +481,7 @@ def resolve_workflow_video_plan(
         auto_motion_prompt=auto_motion_prompt,
         negative_prompt=negative_prompt,
         video_provider=video_provider,
+        prompt_from_compose=prompt_from_compose,
     )
 
 

@@ -141,6 +141,10 @@ export function sanitizeNodeDataForExport(
     case 'turnaroundSheet':
     case 'videoGeneration':
       return stripGenerationResults(base)
+    case 'videoPromptCompose': {
+      const { composedAt: _at, ...rest } = base
+      return rest
+    }
     case 'motionVideo': {
       const { motionVideoFileId: _id, fileName: _fn, ...rest } = base
       return rest

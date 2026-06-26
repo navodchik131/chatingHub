@@ -427,6 +427,61 @@ def test_resolve_video_plan_grok_requires_prompt():
         assert "промпт" in str(e).lower()
 
 
+def test_resolve_video_prompt_compose_plan():
+    from app.services.studio_workflow_resolver import resolve_workflow_video_prompt_compose_plan
+
+    g = _motion_pipeline_graph()
+    for n in g["nodes"]:
+        if n["id"] == "video-1":
+            n["type"] = "videoPromptCompose"
+            n["data"] = {"prompt": ""}
+    g["edges"].append(
+        {
+            "source": "prompt-1",
+            "target": "video-1",
+            "sourceHandle": "prompt-out",
+            "targetHandle": "prompt-in",
+        }
+    )
+    plan = resolve_workflow_video_prompt_compose_plan(
+        target_node_id="video-1",
+        nodes=g["nodes"],
+        edges=g["edges"],
+    )
+    assert plan.model_id == 1
+    assert plan.motion_video_file_id == "mv1"
+    assert plan.first_frame_generation_id == 10
+    assert plan.sheet_generation_id == 20
+    assert plan.user_notes == "She dances slowly."
+
+
+def test_resolve_video_plan_accepts_compose_prompt():
+    from app.services.studio_workflow_resolver import resolve_workflow_video_plan
+
+    g = _motion_pipeline_graph()
+    g["nodes"].append(
+        {
+            "id": "vp-1",
+            "type": "videoPromptCompose",
+            "data": {"prompt": "Full cinematic motion prompt from Grok."},
+        }
+    )
+    for e in g["edges"]:
+        if e.get("target") == "video-1" and e.get("targetHandle") == "prompt-in":
+            e["source"] = "vp-1"
+    for n in g["nodes"]:
+        if n["id"] == "mv-1":
+            n["data"] = {**n["data"], "disabled": True}
+    plan = resolve_workflow_video_plan(
+        target_node_id="video-1",
+        nodes=g["nodes"],
+        edges=g["edges"],
+    )
+    assert "Grok" in plan.prompt
+    assert plan.auto_motion_prompt is False
+    assert plan.prompt_from_compose is True
+
+
 def test_first_frame_motion_without_reference():
     g = {
         "nodes": [

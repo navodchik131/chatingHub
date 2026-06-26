@@ -141,6 +141,7 @@ export async function executeWorkflowGeneration(
   generation_id?: number | null
   video_url?: string | null
   refined_prompt?: string | null
+  motion_video_prompt_auto?: string | null
 }> {
   const fd = new FormData()
   fd.append('graph', JSON.stringify(graph))

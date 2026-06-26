@@ -4345,6 +4345,95 @@ async def _studio_job_execute_motion_compose_video_prompt(
     ).model_dump()
 
 
+async def _studio_job_execute_workflow_compose_video_prompt(
+    session: AsyncSession,
+    job: StudioJob,
+    user: User,
+) -> dict[str, Any]:
+    from app.services.studio_workflow_resolver import WorkflowReferenceItem
+    from app.services.studio_workflow_video_prompt import compose_workflow_video_generation_prompt
+
+    p = studio_jobs.job_params(job)
+    oid = workspace_owner_id(user)
+    sub_b, llm_row, _ws, plan, _credits, _demo = await load_owner_studio_billing(session, oid)
+    _require_studio_subscription(user, sub_b, credits_balance=_credits, demo_generations_remaining=_demo)
+
+    try:
+        mid = int(str(p.get("model_id") or "").strip())
+    except (TypeError, ValueError):
+        raise RuntimeError("Выберите модель.") from None
+    mv_id = str(p.get("motion_video_file_id") or "").strip()
+    if not mv_id:
+        raise RuntimeError("Motion-видео не указано.")
+
+    ff_gid: int | None = None
+    raw_ff = str(p.get("first_frame_generation_id") or "").strip()
+    if raw_ff:
+        try:
+            ff_gid = int(raw_ff)
+        except ValueError:
+            ff_gid = None
+
+    sheet_gid: int | None = None
+    raw_sheet = str(p.get("sheet_generation_id") or "").strip()
+    if raw_sheet:
+        try:
+            sheet_gid = int(raw_sheet)
+        except ValueError:
+            sheet_gid = None
+
+    references: list[WorkflowReferenceItem] = []
+    try:
+        raw_refs = json.loads(str(p.get("references_json") or "[]"))
+    except json.JSONDecodeError:
+        raw_refs = []
+    if isinstance(raw_refs, list):
+        for item in raw_refs:
+            if not isinstance(item, dict):
+                continue
+            references.append(
+                WorkflowReferenceItem(
+                    ref_id=str(item.get("ref_id") or ""),
+                    role=str(item.get("role") or ""),
+                    description=str(item.get("description") or ""),
+                    file_name=str(item.get("file_name") or ""),
+                    node_id=str(item.get("node_id") or ""),
+                )
+            )
+
+    llm_creds = studio_llm_credentials(plan=plan, llm_row=llm_row)
+    result = await compose_workflow_video_generation_prompt(
+        session,
+        owner_id=oid,
+        actor=user,
+        model_id=mid,
+        motion_video_file_id=mv_id,
+        first_frame_generation_id=ff_gid,
+        sheet_generation_id=sheet_gid,
+        references=references,
+        user_notes=str(p.get("user_notes") or ""),
+        llm_credentials=llm_creds,
+    )
+
+    cost = apply_studio_credit_cost(plan, settings.credit_cost_studio_prompt_refine)
+    billing = await ensure_can_consume_credits(session, user, cost)
+    await record_usage(
+        session,
+        user,
+        billing,
+        "workflow_compose_video_prompt",
+        cost,
+        {
+            "motion_video_file_id": mv_id,
+            "studio_model_id": mid,
+            "first_frame_generation_id": ff_gid,
+            "sheet_generation_id": sheet_gid,
+        },
+    )
+    await session.commit()
+    return result
+
+
 @router.post(
     "/studio/motion/render-video",
     response_model=StudioMotionVideoOut,

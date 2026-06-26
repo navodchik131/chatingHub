@@ -25,6 +25,7 @@ from app.services.studio_workflow_resolver import (
     resolve_workflow_generation_plan,
     resolve_workflow_turnaround_plan,
     resolve_workflow_video_plan,
+    resolve_workflow_video_prompt_compose_plan,
 )
 from app.services.studio_workflow_defaults import (
     DEMO_WORKFLOW_NAME,
@@ -432,6 +433,14 @@ async def api_workflow_execute(
             )
             return await _accept_workflow_video_job(session, user, plan=plan)
 
+        if target_type == "videoPromptCompose":
+            plan = resolve_workflow_video_prompt_compose_plan(
+                target_node_id=target_node_id,
+                nodes=nodes,
+                edges=edges,
+            )
+            return await _accept_workflow_video_prompt_compose_job(session, user, plan=plan)
+
         raise HTTPException(
             status_code=400,
             detail="Неподдерживаемый тип ноды для запуска",
@@ -779,4 +788,81 @@ async def _accept_workflow_video_job(
             "prompt_excerpt": plan.prompt.strip()[:2000] or None,
             "preview_source_url": preview_url,
         },
+    )
+
+
+async def _accept_workflow_video_prompt_compose_job(
+    session: AsyncSession,
+    user: User,
+    *,
+    plan,
+) -> JSONResponse:
+    from dataclasses import asdict
+
+    from app.services.studio_grok_motion import grok_motion_api_configured
+    from app.services.studio_jobs import create_studio_job, schedule_studio_job
+    from app.services.studio_keys import load_owner_studio_billing
+    from app.services.studio_motion_video import resolve_motion_video_file
+
+    assert_permission(user, PERM_STUDIO_GENERATE)
+    if not grok_motion_api_configured():
+        raise HTTPException(
+            status_code=503,
+            detail="Grok не настроен: задайте GROK_API_KEY для генерации промпта по видео.",
+        )
+
+    oid = workspace_owner_id(user)
+    sub_b, _llm, _ws, _billing_plan, credits, demo = await load_owner_studio_billing(session, oid)
+    from app.api.studio_routes import _require_studio_subscription
+
+    _require_studio_subscription(user, sub_b, credits_balance=credits, demo_generations_remaining=demo)
+
+    if resolve_motion_video_file(oid, plan.motion_video_file_id) is None:
+        raise HTTPException(status_code=404, detail="Motion-видео не найдено. Загрузите снова.")
+
+    if plan.first_frame_generation_id is not None:
+        from app.db.models import StudioGeneration
+        from app.services.studio_generation_storage import generation_has_archive_file
+
+        ff_row = await session.get(StudioGeneration, plan.first_frame_generation_id)
+        if not ff_row or ff_row.user_id != oid:
+            raise HTTPException(status_code=404, detail="Первый кадр не найден")
+        if not generation_has_archive_file(ff_row):
+            raise HTTPException(status_code=400, detail="Первый кадр ещё не сохранён на сервере.")
+
+    if plan.sheet_generation_id is not None:
+        from app.db.models import StudioGeneration
+        from app.services.studio_generation_storage import generation_has_archive_file
+
+        sheet_row = await session.get(StudioGeneration, plan.sheet_generation_id)
+        if not sheet_row or sheet_row.user_id != oid:
+            raise HTTPException(status_code=404, detail="Развёртка не найдена")
+        if not generation_has_archive_file(sheet_row):
+            raise HTTPException(status_code=400, detail="Развёртка ещё не сохранена на сервере.")
+
+    refs_payload = [asdict(r) for r in plan.references]
+    params: dict[str, Any] = {
+        "model_id": str(plan.model_id),
+        "motion_video_file_id": plan.motion_video_file_id,
+        "first_frame_generation_id": str(plan.first_frame_generation_id or ""),
+        "sheet_generation_id": str(plan.sheet_generation_id or ""),
+        "user_notes": plan.user_notes,
+        "references_json": json.dumps(refs_payload, ensure_ascii=False),
+        "workflow_source": "1",
+    }
+
+    job = await create_studio_job(
+        session,
+        owner_id=oid,
+        actor_user_id=user.id,
+        job_type="workflow_compose_video_prompt",
+        params=params,
+    )
+    schedule_studio_job(job.id)
+    return JSONResponse(
+        status_code=202,
+        content=StudioJobAcceptedOut(
+            job_id=job.id,
+            job_type="workflow_compose_video_prompt",
+        ).model_dump(),
     )

@@ -15,6 +15,7 @@ export type NodeType =
   | 'firstFrameGeneration'
   | 'turnaroundSheet'
   | 'motionVideo'
+  | 'videoPromptCompose'
   | 'videoGeneration'
   | 'preview'
 
@@ -87,6 +88,15 @@ export interface MotionVideoNodeData {
   [key: string]: unknown
 }
 
+export interface VideoPromptComposeNodeData {
+  prompt?: string
+  composedAt?: string
+  disabled?: boolean
+  isRunning?: boolean
+  error?: string
+  [key: string]: unknown
+}
+
 export type SeedanceT2vVariant = 'standard' | 'mini'
 export type SeedanceT2vResolution = '480p' | '720p' | '1080p'
 export type GrokImagineI2vResolution = '480p' | '720p'
@@ -128,6 +138,7 @@ export type AppNodeData =
   | FirstFrameGenerationNodeData
   | TurnaroundSheetNodeData
   | MotionVideoNodeData
+  | VideoPromptComposeNodeData
   | VideoGenerationNodeData
   | PreviewNodeData
 

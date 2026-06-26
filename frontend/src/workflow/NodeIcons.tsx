@@ -113,6 +113,14 @@ export function NodeIcon({ type, size = 16, className }: Props) {
           <path d="M10 10l5 3-5 3V10z" fill={stroke} />
         </svg>
       )
+    case 'videoPromptCompose':
+      return (
+        <svg {...common}>
+          <rect x="3" y="6" width="18" height="12" rx="2" stroke={stroke} strokeWidth="1.75" />
+          <path d="M10 10l5 3-5 3V10z" fill={stroke} opacity="0.45" />
+          <path d="M6 18h8M6 21h11" stroke={stroke} strokeWidth="1.75" strokeLinecap="round" />
+        </svg>
+      )
     case 'videoGeneration':
       return (
         <svg {...common}>
@@ -139,6 +147,7 @@ export const NODE_ICON_COLORS: Record<NodeType, string> = {
   firstFrameGeneration: '#8b5cf6',
   turnaroundSheet: '#14b8a6',
   motionVideo: '#f97316',
+  videoPromptCompose: '#eab308',
   videoGeneration: '#ef4444',
   preview: '#0ea5e9',
 }

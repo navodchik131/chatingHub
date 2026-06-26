@@ -577,6 +577,87 @@ def grok_motion_api_configured() -> bool:
     return bool((settings.grok_api_key or "").strip() or (settings.openai_api_key or "").strip())
 
 
+_WORKFLOW_VIDEO_PROMPT_SYSTEM = (
+    "You write complete video-generation prompts for AI image-to-video models (Seedance, Grok Imagine Video). "
+    "Output ONLY the final prompt in English as plain text. "
+    "Describe what happens second-by-second: body motion, gestures, gaze, camera, lighting, environment. "
+    "Preserve the chronological structure and timing from MOTION_TIMELINE — do not invent new beats. "
+    "Use REFERENCE_CONTEXT for character identity, wardrobe, and scene continuity — do not paste long "
+    "biometric catalogs; keep face identity implicit via references. "
+    "No markdown, no bullet lists, no @Image/@Video tags, no labels like Prompt:."
+)
+
+
+async def grok_compose_workflow_video_prompt(
+    *,
+    motion_timeline: str,
+    model_profile_text: str,
+    first_frame_jpeg: bytes,
+    first_frame_media: str,
+    first_frame_scene: str | None,
+    reference_blocks: list[str],
+    user_notes: str,
+    credentials: StudioOpenAiCredentials | None = None,
+    max_chars: int = 6000,
+) -> str:
+    """Собирает финальный промпт для video gen из timeline + still-контекста."""
+    import base64
+
+    creds = credentials or grok_motion_studio_credentials()
+    model = _grok_fps_stills_model()
+    mime = (first_frame_media or "image/jpeg").split(";")[0].strip()
+    if mime not in ("image/jpeg", "image/png", "image/gif", "image/webp"):
+        mime = "image/jpeg"
+    b64 = base64.standard_b64encode(first_frame_jpeg).decode("ascii")
+
+    profile = _compact_model_profile_for_video_grok((model_profile_text or "").strip())
+    sections: list[str] = []
+    if profile:
+        sections.append(f"MODEL_PROFILE (context only, do not paste verbatim):\n{profile}")
+    sections.append(
+        "MOTION_TIMELINE (preserve choreography and `[t s]` timing exactly):\n"
+        + (motion_timeline or "").strip()
+    )
+    if first_frame_scene:
+        sections.append(f"OPENING_FRAME_SCENE:\n{first_frame_scene.strip()}")
+    if reference_blocks:
+        sections.append(
+            "REFERENCE_CONTEXT:\n" + "\n\n".join(reference_blocks)
+        )
+    if (user_notes or "").strip():
+        sections.append(f"USER_DIRECTION:\n{user_notes.strip()}")
+
+    user_instruction = (
+        "Synthesize one cinematic video-generation prompt from the inputs below.\n"
+        "Keep the motion timeline structure; merge reference identity and scene details.\n\n"
+        + "\n\n---\n\n".join(sections)
+    )
+
+    content: list[dict] = [
+        {"type": "text", "text": user_instruction},
+        {
+            "type": "image_url",
+            "image_url": {"url": f"data:{mime};base64,{b64}"},
+        },
+    ]
+
+    out = await chat_completion_openai_compatible_text(
+        model=model,
+        messages=[
+            {"role": "system", "content": _WORKFLOW_VIDEO_PROMPT_SYSTEM},
+            {"role": "user", "content": content},
+        ],
+        max_tokens=10240,
+        temperature=0.25,
+        credentials=creds,
+        timeout_seconds=min(600.0, float(settings.studio_archive_download_timeout_seconds) + 180.0),
+    )
+    text = (out or "").strip()
+    if len(text) < 40:
+        raise RuntimeError("Grok вернул слишком короткий промпт.")
+    return text[:max_chars]
+
+
 _GROK_IMAGINE_I2V_SYSTEM = (
     "You write image-to-video prompts for xAI Grok Imagine Video v1.5. "
     "Output ONLY the final prompt in English as plain text. "

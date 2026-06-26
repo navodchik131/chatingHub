@@ -10,6 +10,7 @@ import { RefDescriptionNode } from './RefDescriptionNode'
 import { ReferenceNode } from './ReferenceNode'
 import { TurnaroundSheetNode } from './TurnaroundSheetNode'
 import { VideoGenerationNode } from './VideoGenerationNode'
+import { VideoPromptComposeNode } from './VideoPromptComposeNode'
 
 export const nodeTypes: NodeTypes = {
   model: ModelNode,
@@ -21,6 +22,7 @@ export const nodeTypes: NodeTypes = {
   firstFrameGeneration: FirstFrameGenerationNode,
   turnaroundSheet: TurnaroundSheetNode,
   motionVideo: MotionVideoNode,
+  videoPromptCompose: VideoPromptComposeNode,
   videoGeneration: VideoGenerationNode,
   preview: PreviewNode,
 }

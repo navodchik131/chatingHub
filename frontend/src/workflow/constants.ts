@@ -12,6 +12,7 @@ export const NODE_LABELS: Record<NodeType, string> = {
   firstFrameGeneration: 'Первый кадр',
   turnaroundSheet: 'Развёртка',
   motionVideo: 'Motion-видео',
+  videoPromptCompose: 'Промпт по видео',
   videoGeneration: 'Видео',
   preview: 'Просмотр',
 }
@@ -26,7 +27,9 @@ export const NODE_DESCRIPTIONS: Record<NodeType, string> = {
   firstFrameGeneration: 'Первый кадр сцены для motion-пайплайна',
   turnaroundSheet: 'Character sheet GPT Image 2.0 — сетка на лице (кроме вида сзади)',
   motionVideo: 'Референс движения для Seedance',
-  videoGeneration: 'Seedance 2.0 / Mini — @Image1 кадр, @Image2 модель, @Video1 motion',
+  videoPromptCompose:
+    'Grok: полный промпт из motion-видео + референсов / развёртки → подключите к «Видео»',
+  videoGeneration: 'Seedance 2.0 / Mini / Grok I2V — @Image1 кадр, @Image2 модель, @Video1 motion',
   preview: 'Просмотр и скачивание результата',
 }
 
@@ -39,6 +42,7 @@ export const NODE_PALETTE: NodeType[] = [
   'firstFrameGeneration',
   'turnaroundSheet',
   'motionVideo',
+  'videoPromptCompose',
   'videoGeneration',
   'imageGeneration',
   'preview',
