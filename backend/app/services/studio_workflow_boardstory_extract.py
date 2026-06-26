@@ -16,7 +16,7 @@ from app.services.studio_generation_storage import (
 )
 from app.services.studio_motion_video import extract_video_sample_frames_jpeg
 from app.services.studio_model_bootstrap import wavespeed_image_url_for_bootstrap
-from app.services.wavespeed_client import nano_banana_pro_edit_image_url
+from app.services.wavespeed_client import gpt_image_2_edit_image_url
 
 log = logging.getLogger(__name__)
 
@@ -79,13 +79,14 @@ async def _generate_boardstory_still(
     session.add(gen_row)
     await session.flush()
 
-    ws_res = await nano_banana_pro_edit_image_url(
+    ws_res = await gpt_image_2_edit_image_url(
         api_key=ws_key,
         image_urls=[frame_url],
         prompt=prompt,
         aspect_ratio=aspect_key,
-        wave_profile="regular",
-        reference_scene_description=None,
+        resolution="1k",
+        quality="medium",
+        output_format="png",
     )
     _, preview_url = await studio_finish_image_generation(
         session,
