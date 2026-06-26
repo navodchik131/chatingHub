@@ -162,26 +162,6 @@ def filter_model_images_for_boardstory(imgs: list) -> list:
     return filter_boardstory_identity_image(imgs)
 
 
-def is_boardstory_model_swap_prompt(prompt: str) -> bool:
-    """Compose/fixed BoardStory swap — не ослаблять через soften_seedance_provider_prompt."""
-    p = (prompt or "").strip()
-    if not p:
-        return False
-    return "MODEL REPLACEMENT (mandatory)" in p or (
-        "IDENTITY LOCK" in p and "@Image1" in p and "@Video1" in p
-    )
-
-
-def prepend_boardstory_swap_lock(prompt: str, *, layout: BoardStoryReferenceLayout) -> str:
-    """Дублирует swap-строку в начало, если Grok/compose её опустил."""
-    body = (prompt or "").strip()
-    lock = boardstory_model_swap_lock_text(layout)
-    low = body.lower()
-    if "model swap" in low or "model replacement" in low:
-        return body
-    return f"{lock}\n\n{body}".strip()
-
-
 def boardstory_video_only_swap_mode(
     *,
     clothing_ref: BoardStoryImageSlot | None,
@@ -200,22 +180,14 @@ def boardstory_video_only_swap_mode(
     )
 
 
-_BOARDSTORY_MODEL_SWAP_PREAMBLE = """\
-MODEL REPLACEMENT (mandatory): The person in the output video must NOT be the performer from @Video1.
-The lead character is the model from @Image1 (face, hair, skin tone) with body proportions from @Image2.
-@Video1 is motion/choreography and camera data ONLY — never copy the reference actor's face, body, skin, or hair."""
-
-
 _BOARDSTORY_VIDEO_ONLY_SWAP_TEMPLATE = """\
-MODEL REPLACEMENT (mandatory): The person in the output video must NOT be the performer from @Video1.
-The lead character is the model from @Image1 (face, hair, skin tone) with body proportions from @Image2.
-@Video1 is motion/choreography and camera data ONLY — never copy the reference actor's face, body, skin, or hair.
+Use @Video1 exclusively as the motion, clothing, accessories, pose, camera, lighting and environment reference.
 
-Use @Video1 for motion choreography, timing, camera path, lighting and environment ONLY.
-Use @Image1 for character identity: facial appearance, hairstyle and skin tone ONLY.
-Use @Image2 for body proportions and full-figure turnaround anatomy ONLY.
+Use @Image1 exclusively as the character identity, facial appearance, hairstyle and skin tone reference.
 
-Transfer choreography from @Video1 onto the @Image1/@Image2 character with the closest possible timing.
+Use @Image2 exclusively as the body proportions and full-figure turnaround reference.
+
+Transfer the complete performance from @Video1 onto the person from @Image1 with the closest possible timing.
 
 IDENTITY LOCK
 
@@ -229,23 +201,25 @@ Preserve the exact:
 
 Preserve body proportions, silhouette and full-figure anatomy from @Image2 throughout the entire video.
 
-The output must NOT resemble the reference performer in @Video1 in face, body, skin, or hair.
+Do not copy the facial identity or physical characteristics of the performer from @Video1.
 
-MOTION, WARDROBE AND SCENE (from @Video1 — not identity)
+APPEARANCE, SCENE AND MOTION
 
 Adopt from @Video1:
-– motion choreography and timing;
+– all motion and timing;
 – clothing and accessories;
 – jewelry;
 – manicure and pedicure;
+– pose and body positioning;
 – camera angle and framing;
 – lighting and shadows;
 – background and environment;
 – colors and atmosphere.
 
-Do NOT adopt the reference performer's pose likeness, body shape, face, or skin — only their movement timing and scene layout.
+Maintain these elements consistently throughout the video.
 
-Transfer identity and hair from @Image1. Transfer body proportions from @Image2.
+Transfer identity and hair characteristics from @Image1.
+Transfer body proportions from @Image2.
 
 QUALITY
 
@@ -259,7 +233,6 @@ Natural motion and temporal consistency.
 STRICT NEGATIVE CONSTRAINTS
 
 Do not copy the identity of the performer from @Video1.
-Do not render the reference video actor's face or body.
 Do not alter the hairstyle or facial appearance from @Image1.
 Do not alter body proportions from @Image2.
 Do not change the environment, camera or lighting from @Video1.
@@ -312,17 +285,17 @@ def boardstory_clothing_env_swap_mode(
 
 
 _BOARDSTORY_CLOTHING_ENV_SWAP_TEMPLATE = """\
-MODEL REPLACEMENT (mandatory): The person in the output video must NOT be the performer from @Video1.
-The lead character is the model from @Image1 (face, hair, skin tone) with body proportions from @Image2.
-@Video1 is motion/choreography and camera data ONLY — never copy the reference actor's face, body, skin, or hair.
+Use @Video1 as the primary reference for motion, timing, lighting, camera framing and overall scene structure.
 
-Use @Video1 for motion choreography, timing and camera framing ONLY.
-Use @Image1 for character identity: facial appearance, hairstyle and skin tone ONLY.
-Use @Image2 for body proportions and full-figure turnaround anatomy ONLY.
+Use @Image1 exclusively as the character identity, facial appearance, hairstyle and skin tone reference.
+
+Use @Image2 exclusively as the body proportions and full-figure turnaround reference.
+
 Use @Image3 exclusively as the clothing, accessories and styling reference.
+
 Use @Image4 for the environment, room, background and lighting reference.
 
-Transfer choreography from @Video1 onto the @Image1/@Image2 character while maintaining stable identity.
+Transfer the performance from @Video1 onto the person from @Image1 while maintaining stable identity throughout the entire video.
 
 IDENTITY LOCK
 
@@ -336,11 +309,9 @@ Preserve:
 
 Preserve body proportions, silhouette and full-figure anatomy from @Image2 throughout the entire video.
 
-The output must NOT resemble the reference performer in @Video1 in face, body, skin, or hair.
-
 Never copy the identity of the performer from @Video1.
 
-Transfer only motion kinematics from @Video1 and appearance from @Image1, @Image2, @Image3 and @Image4.
+Transfer only motion from @Video1 and only appearance from @Image1 and @Image2.
 
 CLOTHING AND STYLING
 
@@ -358,17 +329,17 @@ Preserve the setting, illumination and spatial mood from @Image4 while allowing 
 
 Do not recreate unrelated backgrounds from @Video1 when @Image4 is provided.
 
-MOTION (kinematics only — not identity)
+MOTION
 
-Follow the timing, pacing and body kinematics from @Video1 as closely as possible.
+Follow the timing, pacing and movement from @Video1 as closely as possible.
 
-Preserve from @Video1:
-– head movement trajectory;
-– hand and arm movement;
-– body movement and posture transitions;
-– camera motion.
-
-Render all facial expressions on the @Image1 face — do NOT copy the reference performer's face or expressions from @Video1.
+Preserve:
+– head movement;
+– gaze direction;
+– facial expressions;
+– hand movement;
+– body movement;
+– posture transitions.
 
 Maintain smooth temporal consistency and natural motion throughout the entire video.
 
@@ -387,7 +358,6 @@ High facial consistency.
 NEGATIVE CONSTRAINTS
 
 Do not copy the identity of the performer from @Video1.
-Do not render the reference video actor's face or body.
 Do not change the clothing style from @Image3.
 Do not ignore the environment from @Image4.
 Do not alter body proportions from @Image2.
@@ -634,7 +604,7 @@ def boardstory_model_swap_lock_text(
     if layout.environment_tag:
         parts.append(f"Scene from {layout.environment_tag}.")
     parts.append(
-        "@Video1 supplies motion, timing, gestures, and camera ONLY."
+        "@Video1 supplies motion, timing, gestures, emotions, and camera ONLY."
     )
     return " ".join(parts)
 
