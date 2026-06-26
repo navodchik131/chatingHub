@@ -27,6 +27,7 @@ from app.db.session import init_db
 from app.services.studio_generation_storage import retry_pending_studio_archives
 from app.services.studio_generations_retention import purge_studio_generations_expired
 from app.services.email_campaigns import email_campaign_worker_loop
+from app.services.fanvue_inbox_poll import fanvue_inbox_poll_loop
 
 logging.basicConfig(
     level=logging.INFO,
@@ -99,6 +100,7 @@ async def lifespan(app: FastAPI):
     polling_task: asyncio.Task[None] | None = None
     retention_task: asyncio.Task[None] | None = None
     archive_retry_task: asyncio.Task[None] | None = None
+    fanvue_poll_task: asyncio.Task[None] | None = None
     email_worker_task: asyncio.Task[None] | None = None
     legacy_tok = settings.legacy_bot_token.strip()
     legacy_uid = settings.legacy_user_id
@@ -132,6 +134,16 @@ async def lifespan(app: FastAPI):
         "Studio archive retry loop: every %s s",
         settings.studio_archive_retry_interval_seconds,
     )
+    if settings.fanvue_inbox_poll_interval_seconds > 0:
+        fanvue_poll_task = asyncio.create_task(fanvue_inbox_poll_loop())
+        log.info(
+            "Fanvue inbox poll: every %s s (max %s chats × %s msgs)",
+            settings.fanvue_inbox_poll_interval_seconds,
+            settings.fanvue_inbox_poll_max_chats,
+            settings.fanvue_inbox_poll_max_messages_per_chat,
+        )
+    else:
+        fanvue_poll_task = None
     if settings.smtp_configured:
         email_worker_task = asyncio.create_task(email_campaign_worker_loop())
         log.info("Email campaign worker started (SMTP: %s)", settings.smtp_host)
@@ -160,6 +172,12 @@ async def lifespan(app: FastAPI):
         archive_retry_task.cancel()
         try:
             await archive_retry_task
+        except asyncio.CancelledError:
+            pass
+    if fanvue_poll_task:
+        fanvue_poll_task.cancel()
+        try:
+            await fanvue_poll_task
         except asyncio.CancelledError:
             pass
     if email_worker_task:

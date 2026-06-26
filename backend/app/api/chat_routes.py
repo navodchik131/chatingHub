@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from io import BytesIO
 from fastapi import (
     APIRouter,
+    BackgroundTasks,
     Depends,
     HTTPException,
     Query,
@@ -364,6 +365,7 @@ async def api_patch_conversation(
 async def api_reply(
     conv_id: int,
     request: Request,
+    background_tasks: BackgroundTasks,
     session: AsyncSession = Depends(get_session),
     user: User = Depends(get_current_user),
 ) -> MessageOut:
@@ -563,6 +565,15 @@ async def api_reply(
             "message": out.model_dump(mode="json"),
         },
     )
+    if conv.platform == Platform.fanvue:
+        from app.services.fanvue_inbox_poll import background_sync_fanvue_chat
+
+        background_tasks.add_task(
+            background_sync_fanvue_chat,
+            oid,
+            conv.external_chat_id,
+            conv.user_display_name or "",
+        )
     return out
 
 
@@ -607,19 +618,36 @@ async def api_message_reaction(
                 try:
                     cid = int(conv.external_chat_id)
                     tg_mid = int(tg_id_raw)
+                    topic_id = int(conv.external_topic_id)
                 except ValueError:
                     cid = 0
                     tg_mid = 0
+                    topic_id = 0
                 if cid and tg_mid:
+                    owner_has_emoji = any(
+                        r.get("actor") == "owner" and r.get("emoji") == emoji
+                        for r in reactions
+                    )
                     try:
                         await set_telegram_message_reaction(
                             token=token,
                             chat_id=cid,
                             telegram_message_id=tg_mid,
-                            emoji=emoji,
+                            emoji=emoji if owner_has_emoji else None,
+                            topic_id=topic_id or None,
                         )
-                    except Exception:
-                        log.warning("telegram set_message_reaction failed conv=%s msg=%s", conv.id, row.id)
+                    except Exception as e:
+                        log.warning(
+                            "telegram set_message_reaction failed conv=%s msg=%s "
+                            "chat=%s tg_msg=%s topic=%s emoji=%s: %s",
+                            conv.id,
+                            row.id,
+                            cid,
+                            tg_mid,
+                            topic_id,
+                            emoji if owner_has_emoji else None,
+                            e,
+                        )
 
     await session.commit()
     await session.refresh(row, attribute_names=["attachments"])

@@ -439,6 +439,14 @@ class Settings(BaseSettings):
         le=200,
         description="Макс. сообщений на диалог при синхронизации истории Fanvue.",
     )
+    fanvue_inbox_poll_interval_seconds: int = Field(
+        default=45,
+        ge=0,
+        le=600,
+        description="Интервал опроса Fanvue inbox (0 = выключено). Подстраховка, если webhook пропустил сообщение.",
+    )
+    fanvue_inbox_poll_max_chats: int = Field(default=30, ge=1, le=100)
+    fanvue_inbox_poll_max_messages_per_chat: int = Field(default=12, ge=1, le=50)
 
     cors_origins: str = (
         "http://localhost:5173,http://127.0.0.1:5173,"

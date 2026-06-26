@@ -95,6 +95,39 @@ async def persist_inbound_chat_message(
     return conv_id, payload
 
 
+async def broadcast_inbound_after_commit(
+    *,
+    owner_user_id: int,
+    conv_id: int,
+    payload: dict,
+    display: str,
+    conv: Conversation,
+    text_original: str,
+    text_translated: str | None,
+    image_bytes: bytes | None,
+) -> None:
+    """WebSocket + push после commit (webhook / poll)."""
+    await hub.broadcast_user(
+        owner_user_id,
+        {
+            "type": "new_message",
+            "conversation_id": conv_id,
+            "message": payload,
+        },
+    )
+    preview = (text_translated or text_original or "").strip()
+    if not preview and image_bytes:
+        preview = "📷 Изображение"
+    else:
+        preview = preview[:200]
+    await notify_inbound_message(
+        owner_user_id,
+        conversation_id=conv_id,
+        title=f"{display} · {conv.platform.value}",
+        body=preview or "Новое сообщение",
+    )
+
+
 async def broadcast_message_updated(
     session: AsyncSession,
     *,

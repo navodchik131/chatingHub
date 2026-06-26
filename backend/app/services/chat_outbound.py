@@ -136,18 +136,25 @@ async def set_telegram_message_reaction(
     token: str,
     chat_id: int,
     telegram_message_id: int,
-    emoji: str,
+    emoji: str | None,
+    topic_id: int | None = None,
 ) -> None:
+    """emoji=None или пустая строка — снять реакцию бота."""
     from aiogram.types import ReactionTypeEmoji
 
     proxy = (settings.telegram_proxy or "").strip()
     session_aio = AiohttpSession(proxy=proxy) if proxy else None
     bot = Bot(token=token, session=session_aio) if session_aio else Bot(token=token)
+    reaction = [ReactionTypeEmoji(emoji=emoji.strip())] if emoji and emoji.strip() else []
+    kw: dict[str, int] = {}
+    if topic_id is not None and topic_id > 0:
+        kw["direct_messages_topic_id"] = topic_id
     try:
         await bot.set_message_reaction(
             chat_id=chat_id,
             message_id=telegram_message_id,
-            reaction=[ReactionTypeEmoji(emoji=emoji)],
+            reaction=reaction,
+            **kw,
         )
     finally:
         await bot.session.close()

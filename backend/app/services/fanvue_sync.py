@@ -64,6 +64,7 @@ async def sync_fanvue_chat_history(
     max_chats: int | None = None,
     max_messages_per_chat: int | None = None,
     fetch_media: bool = True,
+    silent_imports: bool = True,
 ) -> dict[str, int | list[str]]:
     owner_user_id = conn.user_id
     creator_uuid = (conn.creator_uuid or "").strip()
@@ -152,7 +153,7 @@ async def sync_fanvue_chat_history(
                             msg=msg,
                             access_token=access_token,
                             fetch_media=fetch_media,
-                            silent=True,
+                            silent=silent_imports,
                         )
                     except Exception as e:
                         log.warning("fanvue sync message failed fan=%s: %s", fan_uuid, e)
@@ -181,3 +182,67 @@ async def sync_fanvue_chat_history(
     stats["chats_processed"] = chats_seen
     await session.commit()
     return stats
+
+
+async def poll_fanvue_inbox(session: AsyncSession, *, conn: FanvueConnection) -> dict[str, int | list[str]]:
+    """Подтянуть свежие сообщения через API (webhook может пропустить)."""
+    return await sync_fanvue_chat_history(
+        session,
+        conn=conn,
+        max_chats=settings.fanvue_inbox_poll_max_chats,
+        max_messages_per_chat=settings.fanvue_inbox_poll_max_messages_per_chat,
+        fetch_media=True,
+        silent_imports=False,
+    )
+
+
+async def sync_fanvue_single_chat_recent(
+    session: AsyncSession,
+    *,
+    conn: FanvueConnection,
+    fan_uuid: str,
+    fan_display: str = "",
+    max_messages: int = 12,
+) -> int:
+    """Синхронизировать последние сообщения одного диалога; вернуть число новых."""
+    from app.connectors.fanvue.client import FanvueAPIError, fanvue_api_data_list, list_fanvue_chat_messages
+
+    owner_user_id = conn.user_id
+    creator_uuid = (conn.creator_uuid or "").strip()
+    if not creator_uuid or not fan_uuid.strip():
+        return 0
+    access_token = await ensure_fanvue_access_token(session, conn)
+    imported = 0
+    try:
+        msg_payload = await list_fanvue_chat_messages(
+            access_token, fan_uuid.strip(), page=1, size=min(50, max_messages)
+        )
+    except FanvueAPIError as e:
+        log.warning("fanvue single chat sync failed fan=%s: %s", fan_uuid[:8], e.status)
+        return 0
+    messages = fanvue_api_data_list(msg_payload)
+    ordered = sorted(
+        (m for m in messages if isinstance(m, dict)),
+        key=_message_sort_key,
+    )
+    for msg in ordered[-max_messages:]:
+        try:
+            result = await ingest_fanvue_message_from_api(
+                session,
+                owner_user_id=owner_user_id,
+                creator_uuid=creator_uuid,
+                fan_uuid=fan_uuid.strip(),
+                fan_display=fan_display or fan_uuid,
+                msg=msg,
+                access_token=access_token,
+                fetch_media=True,
+                silent=False,
+            )
+        except Exception as e:
+            log.warning("fanvue single chat message failed: %s", e)
+            continue
+        if result == "imported":
+            imported += 1
+    if imported:
+        await session.commit()
+    return imported

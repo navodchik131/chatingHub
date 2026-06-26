@@ -38,6 +38,10 @@ async def _process_fanvue_webhook(
     except ValueError as e:
         raise HTTPException(status_code=503, detail=str(e)) from e
     if not verify_fanvue_webhook_signature(raw, sig_header, signing):
+        log.warning(
+            "fanvue webhook: invalid signature creator=%s",
+            (conn.creator_uuid or "")[:8],
+        )
         raise HTTPException(status_code=401, detail="invalid fanvue signature")
 
     try:
@@ -136,6 +140,7 @@ async def fanvue_webhook_platform(
         log.info("fanvue webhook: unknown creator %s", recipient[:8])
         return {"ok": True, "skipped": "unknown_creator"}
 
+    log.info("fanvue webhook hit creator=%s", recipient[:8])
     return await _process_fanvue_webhook(
         session, raw=raw, sig_header=sig_header, conn=conn
     )

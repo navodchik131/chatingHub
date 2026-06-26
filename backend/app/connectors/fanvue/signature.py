@@ -12,7 +12,7 @@ def verify_fanvue_webhook_signature(
     signature_header: str | None,
     secret: str,
     *,
-    max_age_seconds: int = 300,
+    max_age_seconds: int = 600,
 ) -> bool:
     """
     Формат заголовка: ``t=<unix_ts>,v0=<hex_hmac>``.

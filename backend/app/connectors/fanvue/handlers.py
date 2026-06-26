@@ -16,7 +16,11 @@ from app.connectors.fanvue.media import (
 )
 from app.db.models import FanvueConnection, Message, Platform
 from app.db.repo import get_or_create_conversation, get_user_with_billing
-from app.services.chat_ingest import persist_inbound_chat_message
+from app.services.chat_ingest import (
+    broadcast_inbound_after_commit,
+    persist_inbound_chat_message,
+)
+from app.services.chat_messages import message_to_out
 from app.services.translation import translate_to_russian
 
 log = logging.getLogger(__name__)
@@ -29,6 +33,19 @@ def _meta_needle_fanvue_message_uuid(message_uuid: str) -> str:
 async def fanvue_message_exists(
     session: AsyncSession, owner_user_id: int, message_uuid: str
 ) -> bool:
+    if not message_uuid:
+        return False
+    by_platform = await session.scalar(
+        select(Message.id)
+        .join(Message.conversation)
+        .where(
+            Message.conversation.has(user_id=owner_user_id),
+            Message.platform_message_id == message_uuid,
+        )
+        .limit(1)
+    )
+    if by_platform:
+        return True
     needle = _meta_needle_fanvue_message_uuid(message_uuid)
     stmt = (
         select(Message.id)
@@ -78,6 +95,9 @@ async def ingest_fanvue_message_received(
         raise ValueError("missing sender.uuid")
 
     creator_uuid = str(recipient_uuid or "").strip() or "default"
+    if fan_uuid == creator_uuid:
+        log.debug("fanvue webhook: skip creator self-message uuid=%s", message_uuid)
+        return {"ok": True, "skipped": "self_message"}
 
     if message_uuid and await fanvue_message_exists(session, owner_user_id, message_uuid):
         log.debug("fanvue duplicate webhook message %s", message_uuid)
@@ -173,7 +193,7 @@ async def ingest_fanvue_message_received(
     }
     meta = json.dumps(meta_obj, ensure_ascii=False)
 
-    await persist_inbound_chat_message(
+    conv_id, payload = await persist_inbound_chat_message(
         session,
         owner_user_id=owner_user_id,
         conv=conv,
@@ -186,6 +206,7 @@ async def ingest_fanvue_message_received(
         image_mime=image_mime,
         reply_to_message_id=reply_to_message_id,
         platform_message_id=message_uuid or None,
+        silent=True,
     )
     if reactions_json:
         last = await session.scalar(
@@ -196,7 +217,24 @@ async def ingest_fanvue_message_received(
         )
         if last:
             last.reactions_json = reactions_json
+            payload = message_to_out(last, owner_id=owner_user_id).model_dump(mode="json")
     await session.commit()
+    await broadcast_inbound_after_commit(
+        owner_user_id=owner_user_id,
+        conv_id=conv_id,
+        payload=payload,
+        display=display,
+        conv=conv,
+        text_original=text_s,
+        text_translated=translated if text_s and not conv.auto_translate_disabled else None,
+        image_bytes=image_bytes,
+    )
+    log.info(
+        "fanvue webhook ingested conv=%s msg_uuid=%s fan=%s",
+        conv_id,
+        message_uuid or "?",
+        fan_uuid[:8],
+    )
 
     return {"ok": True}
 
@@ -322,7 +360,7 @@ async def ingest_fanvue_message_from_api(
                 log.warning("fanvue sync media fetch failed: %s", e)
 
     meta = json.dumps(meta_obj, ensure_ascii=False)
-    await persist_inbound_chat_message(
+    conv_id, payload = await persist_inbound_chat_message(
         session,
         owner_user_id=owner_user_id,
         conv=conv,
@@ -333,8 +371,20 @@ async def ingest_fanvue_message_from_api(
         meta=meta,
         image_bytes=image_bytes,
         image_mime=image_mime,
-        silent=silent,
+        silent=True,
         reply_to_message_id=reply_to_message_id,
         platform_message_id=message_uuid or None,
     )
+    if not silent:
+        await session.commit()
+        await broadcast_inbound_after_commit(
+            owner_user_id=owner_user_id,
+            conv_id=conv_id,
+            payload=payload,
+            display=display,
+            conv=conv,
+            text_original=text_s,
+            text_translated=translated if text_s and not conv.auto_translate_disabled else None,
+            image_bytes=image_bytes,
+        )
     return "imported"
