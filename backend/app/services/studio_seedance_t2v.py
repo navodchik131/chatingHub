@@ -554,7 +554,7 @@ async def build_seedance_t2v_prompt(
         return (truncate_seedance_t2v_prompt(p, max_chars=lim), "reference_template")
 
     safe_motion = prepare_motion_notes_for_seedance(motion_summary)
-    use_soft = soft_identity or remove_face_grid
+    use_soft = soft_identity
     if not force_template and grok_motion_api_configured():
         try:
             p = await grok_expand_seedance_t2v_prompt(

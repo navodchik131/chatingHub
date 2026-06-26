@@ -31,9 +31,10 @@ def test_resolve_model_sheet_prompt_custom():
     assert resolve_model_sheet_prompt(custom) == custom
 
 
-def test_append_workflow_first_frame_face_grid():
+def test_append_workflow_first_frame_film_grain():
     out = append_workflow_first_frame_face_grid("Scene with model.")
-    assert "white guide grid" in out.lower()
+    assert "film grain" in out.lower()
+    assert "grid" not in out.lower() or "do not add grid" in out.lower()
     assert "Scene with model." in out
     again = append_workflow_first_frame_face_grid(out)
     assert again == out

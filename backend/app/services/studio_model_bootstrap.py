@@ -52,24 +52,29 @@ DEFAULT_WORKFLOW_SHEET_PROMPT = (
     f"{_WORKFLOW_FACE_GRID_INSTRUCTION}"
 )
 
-# Один кадр (первый кадр workflow) — та же сетка, что на character sheet.
-WORKFLOW_SINGLE_FRAME_FACE_GRID_INSTRUCTION = (
-    "On the visible face in the output image, overlay the same crisp bright white guide grid "
-    "used on workflow character sheets: clearly visible white lines (~65–75% opacity, 2–3 px stroke) "
-    "as a neutral wireframe on the face only. The grid must NOT hide eyes, nose, mouth, "
-    "or facial structure; keep the same character identity from the model references."
+# Один кадр (первый кадр workflow) — лёгкая зернистость вместо сетки на лице.
+WORKFLOW_SINGLE_FRAME_FILM_GRAIN_INSTRUCTION = (
+    "Apply subtle natural film grain and fine photographic noise across the whole image — "
+    "especially on skin, face, and shadow areas — like a high-ISO candid photo. "
+    "Keep it realistic and unobtrusive. "
+    "Do NOT add grid, mesh, wireframe, or face-tracking overlays."
 )
 
 
-def append_workflow_first_frame_face_grid(prompt: str) -> str:
-    """Добавляет инструкцию сетки на лицо для первого кадра workflow."""
+def append_workflow_first_frame_film_grain(prompt: str) -> str:
+    """Добавляет инструкцию зернистости для первого кадра workflow."""
     body = (prompt or "").strip()
-    marker = "white guide grid"
+    marker = "film grain"
     if marker in body.lower():
         return body
     if body:
-        return f"{body}\n\n{WORKFLOW_SINGLE_FRAME_FACE_GRID_INSTRUCTION}"
-    return WORKFLOW_SINGLE_FRAME_FACE_GRID_INSTRUCTION
+        return f"{body}\n\n{WORKFLOW_SINGLE_FRAME_FILM_GRAIN_INSTRUCTION}"
+    return WORKFLOW_SINGLE_FRAME_FILM_GRAIN_INSTRUCTION
+
+
+def append_workflow_first_frame_face_grid(prompt: str) -> str:
+    """Deprecated alias — первый кадр использует film grain, не сетку."""
+    return append_workflow_first_frame_film_grain(prompt)
 
 
 MODEL_SHEET_ASPECT_KEY = "16:9"

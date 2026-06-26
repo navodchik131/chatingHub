@@ -4731,6 +4731,10 @@ async def _studio_job_execute_motion_render_video(
             ref_images.append(ff_url)
         ref_images.append(sheet_url)
         n_model = 1
+    elif workflow_source and ff_url:
+        ref_images.append(ff_url)
+        n_start = 1
+        n_model = 0
     else:
         if ff_url:
             ref_images.append(ff_url)
@@ -4772,10 +4776,10 @@ async def _studio_job_execute_motion_render_video(
         negative=negative_prompt,
         output_aspect=ar_t2v or output_aspect,
         duration_seconds=ds_effective,
-        force_template=workflow_source,
-        reference_only=workflow_source,
+        force_template=False,
+        reference_only=False,
         remove_face_grid=remove_face_grid,
-        soft_identity=workflow_source or remove_face_grid,
+        soft_identity=False,
     )
 
     try:

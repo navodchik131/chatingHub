@@ -88,7 +88,7 @@ class WorkflowTurnaroundPlan:
 class WorkflowVideoPlan:
     model_id: int | None
     first_frame_generation_id: int
-    sheet_generation_id: int
+    sheet_generation_id: int | None
     motion_video_file_id: str
     prompt: str
     output_aspect: str
@@ -141,6 +141,32 @@ def resolve_upstream_generation_id(
     sources = _sources_for_target(target_id, target_handle, edges, node_map)
     if not sources:
         raise WorkflowResolutionError(f"Подключите вход {label}")
+    for src in sources:
+        ntype = str(src.get("type") or "")
+        if ntype not in _IMAGE_OUTPUT_NODE_TYPES:
+            raise WorkflowResolutionError(
+                f"К входу {label} можно подключить ноду с результатом генерации изображения"
+            )
+        gid = _generation_id_from_node(src)
+        if gid is not None:
+            return gid
+    raise WorkflowResolutionError(
+        f"Сначала выполните генерацию upstream-ноды для {label} (нет generationId)"
+    )
+
+
+def resolve_upstream_generation_id_optional(
+    *,
+    target_id: str,
+    target_handle: str,
+    edges: list[dict[str, Any]],
+    node_map: dict[str, dict[str, Any]],
+    label: str = "изображение",
+) -> int | None:
+    """Как resolve_upstream_generation_id, но None если вход не подключён или нода отключена."""
+    sources = _sources_for_target(target_id, target_handle, edges, node_map)
+    if not sources:
+        return None
     for src in sources:
         ntype = str(src.get("type") or "")
         if ntype not in _IMAGE_OUTPUT_NODE_TYPES:
@@ -218,7 +244,7 @@ def resolve_workflow_video_plan(
         node_map=node_map,
         label="первый кадр",
     )
-    sheet_gid = resolve_upstream_generation_id(
+    sheet_gid = resolve_upstream_generation_id_optional(
         target_id=target_id,
         target_handle=HANDLE["sheet_in"],
         edges=edges,

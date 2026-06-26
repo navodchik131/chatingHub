@@ -270,8 +270,8 @@ function FirstFrameGenerationNodeComponent({ id, data }: NodeProps) {
         </span>
 
         <p className="workflow-node__hint">
-          Как в студии motion: видео → Grok → WaveSpeed. На лице — та же белая сетка, что на
-          развёртке (опц. кадр в «Референс»).
+          Как в студии motion: видео → Grok → WaveSpeed. Лёгкая плёночная зернистость на кадре
+          (без сетки на лице; опц. кадр в «Референс»).
         </p>
 
         <div className="workflow-gen-form">

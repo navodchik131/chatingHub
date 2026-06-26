@@ -691,15 +691,17 @@ async def _accept_workflow_video_job(
     if not generation_has_archive_file(ff_row):
         raise HTTPException(status_code=400, detail="Первый кадр ещё не сохранён на сервере.")
 
-    sheet_row = await session.get(StudioGeneration, plan.sheet_generation_id)
-    if not sheet_row or sheet_row.user_id != oid:
-        raise HTTPException(status_code=404, detail="Развёртка не найдена")
-    if not generation_has_archive_file(sheet_row):
-        raise HTTPException(status_code=400, detail="Развёртка ещё не сохранена на сервере.")
+    sheet_row = None
+    if plan.sheet_generation_id is not None:
+        sheet_row = await session.get(StudioGeneration, plan.sheet_generation_id)
+        if not sheet_row or sheet_row.user_id != oid:
+            raise HTTPException(status_code=404, detail="Развёртка не найдена")
+        if not generation_has_archive_file(sheet_row):
+            raise HTTPException(status_code=400, detail="Развёртка ещё не сохранена на сервере.")
 
     mid = plan.model_id
     if mid is None:
-        mid = ff_row.studio_model_id or sheet_row.studio_model_id
+        mid = ff_row.studio_model_id or (sheet_row.studio_model_id if sheet_row else None)
     if mid is None:
         raise HTTPException(
             status_code=400,

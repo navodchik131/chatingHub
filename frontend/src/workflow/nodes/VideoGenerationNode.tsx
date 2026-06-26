@@ -240,7 +240,7 @@ function VideoGenerationNodeComponent({ id, data }: NodeProps) {
       </span>
 
       <p className="workflow-node__hint">
-        Seedance · @Image1 = первый кадр, @Image2 = развёртка, @Video1 = motion · сетку с лица снимаем
+        Seedance · @Image1 = первый кадр, @Image2 = развёртка (если включена), @Video1 = motion
       </p>
 
       <div className="workflow-gen-form">

@@ -350,6 +350,22 @@ def test_resolve_video_plan():
     assert plan.seedance_variant == "mini"
 
 
+def test_resolve_video_plan_without_disabled_sheet():
+    from app.services.studio_workflow_resolver import resolve_workflow_video_plan
+
+    g = _motion_pipeline_graph()
+    for n in g["nodes"]:
+        if n["id"] == "sheet-1":
+            n["data"] = {**n["data"], "disabled": True}
+    plan = resolve_workflow_video_plan(
+        target_node_id="video-1",
+        nodes=g["nodes"],
+        edges=g["edges"],
+    )
+    assert plan.first_frame_generation_id == 10
+    assert plan.sheet_generation_id is None
+
+
 def test_first_frame_motion_without_reference():
     g = {
         "nodes": [
