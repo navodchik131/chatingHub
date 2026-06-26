@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
-from typing import Any
-
 from datetime import datetime, timedelta, timezone
+from typing import Any
 
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,7 +18,7 @@ from app.connectors.fanvue.client import (
     list_fanvue_chats,
 )
 from app.connectors.fanvue.handlers import ingest_fanvue_message_from_api
-from app.db.models import FanvueConnection
+from app.db.models import Conversation, FanvueConnection, Platform
 from app.services.fanvue_connection import ensure_fanvue_access_token
 
 log = logging.getLogger(__name__)
