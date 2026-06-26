@@ -222,8 +222,7 @@ from app.services.studio_seedance_t2v import (
 from app.services.studio_workflow_boardstory import (
     boardstory_slot_from_json,
     build_boardstory_reference_urls,
-    filter_boardstory_identity_image,
-    filter_boardstory_turnaround_image,
+    filter_model_images_for_boardstory,
     workflow_reference_public_url,
 )
 from app.services.studio_model_bootstrap import (
@@ -5063,27 +5062,16 @@ async def _studio_job_execute_motion_render_video(
             )
     else:
         if boardstory_mode:
-            identity_imgs = filter_boardstory_identity_image(list(sm.images))
-            turnaround_imgs = filter_boardstory_turnaround_image(list(sm.images))
-            identity_urls = model_reference_public_urls(
+            model_imgs = filter_model_images_for_boardstory(list(sm.images))
+            model_urls = model_reference_public_urls(
                 owner_id=oid,
-                images=identity_imgs,
+                images=model_imgs,
                 public_app_base=pub,
                 token_factory=create_model_image_access_token,
             )
-            turnaround_urls = model_reference_public_urls(
-                owner_id=oid,
-                images=turnaround_imgs,
-                public_app_base=pub,
-                token_factory=create_model_image_access_token,
-            )
-            if not identity_urls:
+            if not model_urls:
                 raise RuntimeError(
                     "У модели нет фото «Тело целиком» (body). Добавьте в настройках модели."
-                )
-            if not turnaround_urls:
-                raise RuntimeError(
-                    "У модели нет развёртки (turnaround). Добавьте снимок с тегом «Развёртка» в настройках модели."
                 )
 
             def _gen_url(gid: int) -> str | None:
@@ -5105,8 +5093,7 @@ async def _studio_job_execute_motion_render_video(
             ref_images, layout = build_boardstory_reference_urls(
                 owner_id=oid,
                 public_app_base=pub,
-                identity_image_urls=identity_urls,
-                turnaround_image_urls=turnaround_urls,
+                model_image_urls=model_urls,
                 clothing_slot=clothing_ref,
                 environment_slot=environment_ref,
                 extra_refs=tuple(extra_refs),
@@ -5114,7 +5101,6 @@ async def _studio_job_execute_motion_render_video(
                 workflow_ref_url_factory=_ref_url,
             )
             n_model = layout.n_model_images
-            n_turnaround = layout.n_turnaround_images
             n_clothing = layout.n_clothing_images
             n_environment = layout.n_environment_images
             n_start = 0
@@ -5136,7 +5122,6 @@ async def _studio_job_execute_motion_render_video(
                 seed_prompt = assemble_boardstory_seedance_prompt(
                     prompt,
                     n_model_images=n_model,
-                    n_turnaround_images=n_turnaround,
                     n_clothing_images=n_clothing,
                     n_environment_images=n_environment,
                     n_motion_videos=len(ref_videos),

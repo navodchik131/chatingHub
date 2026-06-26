@@ -508,32 +508,25 @@ def assemble_boardstory_seedance_prompt(
     user_prompt: str,
     *,
     n_model_images: int,
-    n_turnaround_images: int,
     n_clothing_images: int,
     n_environment_images: int,
     n_motion_videos: int = 0,
     motion_summary: str | None = None,
     negative: str | None = None,
 ) -> str:
-    """BoardStory Seedance: @Image1 body, @Image2 turnaround, clothing/env refs, motion @Video1."""
+    """BoardStory Seedance: identity @Image1+, clothing/env refs, motion @Video1, без первого кадра."""
     from app.services.studio_workflow_boardstory import compute_boardstory_layout
 
     layout = compute_boardstory_layout(
-        has_identity=n_model_images > 0,
-        has_turnaround=n_turnaround_images > 0,
+        n_model_images,
         has_clothing=n_clothing_images > 0,
         has_environment=n_environment_images > 0,
     )
     parts: list[str] = []
-    if layout.identity_tag:
+    if layout.identity_tag_expr:
         parts.append(
-            f"Cinematic clip — lead character face and hair from {layout.identity_tag} "
-            "(model body photo)."
-        )
-    if layout.turnaround_tag:
-        parts.append(
-            f"Body proportions and full-figure anatomy from {layout.turnaround_tag} "
-            "(model turnaround sheet)."
+            f"Cinematic clip — lead character appearance from {layout.identity_tag_expr} "
+            "(face, body, hair from model cabinet photos)."
         )
     if layout.clothing_tag:
         parts.append(f"Wardrobe and garments: match {layout.clothing_tag}.")
@@ -547,11 +540,9 @@ def assemble_boardstory_seedance_prompt(
         parts.append("Environment and lighting: derive from @Video1 motion reference.")
     if n_motion_videos > 0:
         vtags = ", ".join(f"@Video{i}" for i in range(1, n_motion_videos + 1))
-        id_ref = layout.identity_tag or "model @Image refs"
         parts.append(
             f"Motion, emotions, gestures, pacing, and camera from {vtags}; "
-            f"character look stays on {id_ref} with proportions from "
-            f"{layout.turnaround_tag or id_ref}."
+            f"character look stays on {layout.identity_tag_expr or 'model @Image refs'}."
         )
     if motion_summary and motion_summary.strip():
         parts.append(f"Motion notes:\n{motion_summary.strip()}")

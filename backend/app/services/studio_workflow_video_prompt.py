@@ -31,8 +31,7 @@ from app.services.studio_workflow_boardstory import (
     build_boardstory_clothing_env_swap_prompt,
     build_boardstory_video_only_swap_prompt,
     compute_boardstory_layout,
-    filter_boardstory_identity_image,
-    filter_boardstory_turnaround_image,
+    filter_model_images_for_boardstory,
 )
 from app.services.studio_workflow_refs import load_workflow_reference
 from app.services.studio_workflow_resolver import WorkflowReferenceItem
@@ -122,14 +121,9 @@ async def _validate_boardstory_model_refs(session: AsyncSession, *, model_id: in
     from app.services.workspace_model_access import require_studio_model_access
 
     sm = await require_studio_model_access(session, actor, model_id, load_images=True)
-    imgs = list(sm.images)
-    if not filter_boardstory_identity_image(imgs):
+    if not filter_model_images_for_boardstory(list(sm.images)):
         raise RuntimeError(
             "У модели нет фото «Тело целиком» в кабинете. Добавьте снимок с тегом body."
-        )
-    if not filter_boardstory_turnaround_image(imgs):
-        raise RuntimeError(
-            "У модели нет развёртки в кабинете. Добавьте снимок с тегом turnaround (развёртка)."
         )
 
 
@@ -137,7 +131,7 @@ async def _estimate_boardstory_model_image_count(session: AsyncSession, *, model
     from app.services.workspace_model_access import require_studio_model_access
 
     sm = await require_studio_model_access(session, actor, model_id, load_images=True)
-    return len(filter_boardstory_identity_image(list(sm.images)))
+    return len(filter_model_images_for_boardstory(list(sm.images)))
 
 
 async def compose_workflow_video_generation_prompt(
@@ -224,8 +218,7 @@ async def compose_workflow_video_generation_prompt(
                 )
 
         layout = compute_boardstory_layout(
-            has_identity=n_model > 0,
-            has_turnaround=True,
+            n_model,
             has_clothing=clothing_ref is not None,
             has_environment=environment_ref is not None,
             n_other=len([r for r in references if (r.ref_id or "").strip()]),
@@ -304,13 +297,11 @@ async def compose_workflow_video_generation_prompt(
                 )
 
         max_prompt_chars = int(settings.studio_seedance_t2v_prompt_max_chars or 6000)
-        id_tag = layout.identity_tag or "@Image1"
-        turnaround_tag = layout.turnaround_tag or "@Image2"
+        id_tag = layout.identity_tag_expr or "@Image1"
         if use_video_only_swap:
             composed = build_boardstory_video_only_swap_prompt(
                 user_notes=(user_notes or "").strip(),
                 identity_tag=id_tag,
-                turnaround_tag=turnaround_tag,
                 max_chars=max_prompt_chars,
             )
             prompt_mode = "video_only_swap"
@@ -318,9 +309,7 @@ async def compose_workflow_video_generation_prompt(
             composed = build_boardstory_clothing_env_swap_prompt(
                 user_notes=(user_notes or "").strip(),
                 identity_tag=id_tag,
-                turnaround_tag=turnaround_tag,
-                clothing_tag=layout.clothing_tag or "@Image3",
-                environment_tag=layout.environment_tag or "@Image4",
+                clothing_tag=layout.clothing_tag or "@Image2",
                 max_chars=max_prompt_chars,
             )
             prompt_mode = "clothing_env_swap"
@@ -355,7 +344,6 @@ async def compose_workflow_video_generation_prompt(
             "send_video_reference": send_video_reference,
             "boardstory_layout": {
                 "n_model_images": layout.n_model_images,
-                "n_turnaround_images": layout.n_turnaround_images,
                 "n_clothing_images": layout.n_clothing_images,
                 "n_environment_images": layout.n_environment_images,
             },
