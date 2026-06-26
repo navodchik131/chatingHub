@@ -315,8 +315,8 @@ async def fanvue_oauth_start(
 
 @router.get("/fanvue/oauth/callback")
 async def fanvue_oauth_callback(
-    session: AsyncSession = Depends(get_session),
     background_tasks: BackgroundTasks,
+    session: AsyncSession = Depends(get_session),
     code: str | None = Query(default=None),
     state: str | None = Query(default=None),
     error: str | None = Query(default=None),
