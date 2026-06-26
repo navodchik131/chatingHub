@@ -21,15 +21,21 @@ from app.services.wavespeed_client import gpt_image_2_edit_image_url
 log = logging.getLogger(__name__)
 
 _ENVIRONMENT_PROMPT = (
-    "Recreate the exact room, background, camera angle, framing, and soft lighting from the "
-    "reference photo with NO person visible. Empty scene plate — same plush textures, ambient "
-    "glow, and interior layout. Photorealistic, no text, no watermark."
+    "Using the reference frame, recreate the EXACT same room and environment from the IDENTICAL "
+    "camera angle, viewpoint, perspective, focal length, framing, and crop as the reference — "
+    "as if the camera was never moved. Preserve the same soft lighting direction, color temperature, "
+    "ambient glow, plush textures, furniture layout, and depth of field. "
+    "Remove the person completely — empty scene plate with NO human, NO body parts. "
+    "Photorealistic interior plate only. No text, no watermark."
 )
 
 _CLOTHING_PROMPT = (
-    "Extract ONLY the outfit/garment visible in the reference photo — same colors, fabric, cut, "
-    "and details (top and pants). Show as a clean product-style flat lay on a neutral background, "
-    "or on a faceless mannequin. NO face, NO room background, NO identity."
+    "From the reference photo, isolate ONLY the visible outfit (top and pants) — same colors, "
+    "fabric, cut, glitter, and garment details. "
+    "Present as a clean e-commerce flat lay on a plain neutral background "
+    "(solid white, light gray, or soft beige — no room, no furniture, no props). "
+    "Optional: faceless ghost mannequin on the same neutral backdrop. "
+    "NO face, NO hands, NO body, NO identity, NO interior, NO shadows from a room."
 )
 
 
