@@ -819,9 +819,7 @@ def _resolve_boardstory_slot_for_handle(
         ref_data = src.get("data") if isinstance(src.get("data"), dict) else {}
         ref_id = str(ref_data.get("refId") or "").strip()
         if not ref_id:
-            raise WorkflowResolutionError(
-                f"Загрузите изображение в ноду «Референс» ({default_kind})"
-            )
+            return None
         return BoardStoryImageSlot(
             kind=kind,
             ref_id=ref_id,

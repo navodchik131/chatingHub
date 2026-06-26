@@ -178,6 +178,32 @@ export function sanitizeGraphForExport(graph: ProjectGraph): ProjectGraph {
   }
 }
 
+/** Есть ли на typed handle реальный реф (загруженный refId или generationId). */
+export function upstreamBoardstoryRefHasContent(
+  targetNodeId: string,
+  targetHandle: string,
+  nodes: Node[],
+  edges: Edge[],
+): boolean {
+  const edge = edges.find(
+    (e) => e.target === targetNodeId && e.targetHandle === targetHandle,
+  )
+  if (!edge?.source) return false
+  const src = nodes.find((n) => n.id === edge.source)
+  if (!src?.type) return false
+  const data = (src.data ?? {}) as Record<string, unknown>
+  if (src.type === 'reference') {
+    return Boolean(String(data.refId ?? '').trim())
+  }
+  if (IMAGE_OUTPUT_NODE_TYPES.has(src.type)) {
+    const raw = data.generationId
+    if (raw == null || String(raw).trim() === '') return false
+    const n = Number(raw)
+    return Number.isFinite(n) && n > 0
+  }
+  return false
+}
+
 export function hydrateGraphFromServer(graph: {
   nodes?: Node[]
   edges?: Edge[]

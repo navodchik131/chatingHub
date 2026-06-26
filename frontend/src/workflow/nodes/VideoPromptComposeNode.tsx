@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Handle, Position, useReactFlow, type NodeProps } from '@xyflow/react'
 import { executeWorkflowGeneration } from '../api'
-import { serializeGraph } from '../graphResolver'
+import { serializeGraph, upstreamBoardstoryRefHasContent } from '../graphResolver'
 import { useWorkflowBilling } from '../WorkflowBillingContext'
 import { useWorkflowRun } from '../WorkflowRunContext'
 import { WorkflowImageLightbox } from '../WorkflowImageLightbox'
@@ -20,19 +20,24 @@ function VideoPromptComposeNodeComponent({ id, data }: NodeProps) {
   const runAbortRef = useRef<AbortController | null>(null)
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
 
+  const nodes = getNodes()
   const edges = getEdges()
-  const clothingConnected = useMemo(
-    () => edges.some((e) => e.target === id && e.targetHandle === HandleIds.clothingIn),
-    [edges, id],
+  const clothingRefLoaded = useMemo(
+    () => upstreamBoardstoryRefHasContent(id, HandleIds.clothingIn, nodes, edges),
+    [edges, id, nodes],
   )
-  const environmentConnected = useMemo(
-    () => edges.some((e) => e.target === id && e.targetHandle === HandleIds.environmentIn),
-    [edges, id],
+  const environmentRefLoaded = useMemo(
+    () => upstreamBoardstoryRefHasContent(id, HandleIds.environmentIn, nodes, edges),
+    [edges, id, nodes],
   )
 
   const generateClothing = nodeData.generateClothingFromVideo === true
   const generateEnvironment = nodeData.generateEnvironmentFromVideo === true
-  const showExtractPreviews = generateClothing || generateEnvironment
+  const showExtractPreviews =
+    generateClothing ||
+    generateEnvironment ||
+    Boolean(nodeData.clothingImageUrl) ||
+    Boolean(nodeData.environmentImageUrl)
 
   const updateNodeData = useCallback(
     (patch: Partial<VideoPromptComposeNodeData>) => {
@@ -245,7 +250,7 @@ function VideoPromptComposeNodeComponent({ id, data }: NodeProps) {
                 ...(e.target.checked ? {} : { clothingGenerationId: null, clothingImageUrl: undefined }),
               })
             }
-            disabled={nodeData.isRunning || clothingConnected}
+            disabled={nodeData.isRunning || clothingRefLoaded}
           />
           <span>Сгенерировать одежду из видео</span>
         </label>
@@ -261,50 +266,55 @@ function VideoPromptComposeNodeComponent({ id, data }: NodeProps) {
                   : { environmentGenerationId: null, environmentImageUrl: undefined }),
               })
             }
-            disabled={nodeData.isRunning || environmentConnected}
+            disabled={nodeData.isRunning || environmentRefLoaded}
           />
           <span>Сгенерировать помещение из видео</span>
         </label>
       </div>
 
       {showExtractPreviews ? (
-        <div className="workflow-node__preview-row nodrag">
-          {generateClothing ? (
-            nodeData.clothingImageUrl ? (
-              <button
-                type="button"
-                className="workflow-node__preview-box workflow-node__preview-box--filled workflow-node__preview-click"
-                onClick={() => setLightboxUrl(nodeData.clothingImageUrl ?? null)}
-              >
-                <img src={nodeData.clothingImageUrl} alt="Одежда из видео" />
-                <span className="workflow-node__preview-caption">Одежда</span>
-              </button>
-            ) : (
-              <div className="workflow-node__preview-box workflow-node__preview-box--compact">
-                <span className="workflow-node__hint">Одежда</span>
-              </div>
-            )
-          ) : null}
-          {generateEnvironment ? (
-            nodeData.environmentImageUrl ? (
-              <button
-                type="button"
-                className="workflow-node__preview-box workflow-node__preview-box--filled workflow-node__preview-click"
-                onClick={() => setLightboxUrl(nodeData.environmentImageUrl ?? null)}
-              >
-                <img src={nodeData.environmentImageUrl} alt="Помещение из видео" />
-                <span className="workflow-node__preview-caption">Помещение</span>
-              </button>
-            ) : (
-              <div className="workflow-node__preview-box workflow-node__preview-box--compact">
-                <span className="workflow-node__hint">Помещение</span>
-              </div>
-            )
-          ) : null}
-        </div>
+        <>
+          <p className="workflow-node__hint workflow-node__hint--muted">
+            Extract из motion — превью внутри этой ноды (подхватится в «Видео» автоматически)
+          </p>
+          <div className="workflow-node__preview-row nodrag">
+            {generateClothing || nodeData.clothingImageUrl ? (
+              nodeData.clothingImageUrl ? (
+                <button
+                  type="button"
+                  className="workflow-node__preview-box workflow-node__preview-box--filled workflow-node__preview-click"
+                  onClick={() => setLightboxUrl(nodeData.clothingImageUrl ?? null)}
+                >
+                  <img src={nodeData.clothingImageUrl} alt="Одежда из видео" />
+                  <span className="workflow-node__preview-caption">Одежда</span>
+                </button>
+              ) : (
+                <div className="workflow-node__preview-box workflow-node__preview-box--compact">
+                  <span className="workflow-node__hint">Одежда — после «Сгенерировать промпт»</span>
+                </div>
+              )
+            ) : null}
+            {generateEnvironment || nodeData.environmentImageUrl ? (
+              nodeData.environmentImageUrl ? (
+                <button
+                  type="button"
+                  className="workflow-node__preview-box workflow-node__preview-box--filled workflow-node__preview-click"
+                  onClick={() => setLightboxUrl(nodeData.environmentImageUrl ?? null)}
+                >
+                  <img src={nodeData.environmentImageUrl} alt="Помещение из видео" />
+                  <span className="workflow-node__preview-caption">Помещение</span>
+                </button>
+              ) : (
+                <div className="workflow-node__preview-box workflow-node__preview-box--compact">
+                  <span className="workflow-node__hint">Помещение — после «Сгенерировать промпт»</span>
+                </div>
+              )
+            ) : null}
+          </div>
+        </>
       ) : null}
 
-      {!clothingConnected && !environmentConnected && !generateClothing && !generateEnvironment ? (
+      {!clothingRefLoaded && !environmentRefLoaded && !generateClothing && !generateEnvironment ? (
         <p className="workflow-node__hint workflow-node__hint--muted">
           Без рефов и без галочек: одежда и помещение берутся из @Video1 в промпте
         </p>

@@ -111,25 +111,11 @@
         "targetHandle": "description-in"
       },
       {
-        "id": "e-cloth-vp",
-        "source": "ref-clothing",
-        "target": "video-prompt",
-        "sourceHandle": "reference-out",
-        "targetHandle": "clothing-in"
-      },
-      {
         "id": "e-desc-env",
         "source": "desc-environment",
         "target": "ref-environment",
         "sourceHandle": "description-out",
         "targetHandle": "description-in"
-      },
-      {
-        "id": "e-env-vp",
-        "source": "ref-environment",
-        "target": "video-prompt",
-        "sourceHandle": "reference-out",
-        "targetHandle": "environment-in"
       },
       {
         "id": "e-vp-video",
