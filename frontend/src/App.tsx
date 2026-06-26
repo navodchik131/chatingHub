@@ -309,40 +309,40 @@ interface HealthInfo {
   billing_price_byok_month_rub?: number
   billing_credit_pack_price_rub?: number
   billing_credit_pack_credits?: number
-  openai_studioconfigured?: boolean
-  studioprompt_credit_cost?: number
-  studioinpaint_credit_cost?: number
-  studioupscale_credit_cost?: number
-  studiowan_edit_tier_switch?: boolean
-  studioallow_prompt_only?: boolean
+  openai_studio_configured?: boolean
+  studio_prompt_credit_cost?: number
+  studio_inpaint_credit_cost?: number
+  studio_upscale_credit_cost?: number
+  studio_wan_edit_tier_switch?: boolean
+  studio_allow_prompt_only?: boolean
   /** true: маска студии → кроп + WAN/Nano + серверная склейка; false на сервере = Z-Image inpaint */
-  studioregional_masked_edit?: boolean
-  studiocarousel_credit_cost?: number
+  studio_regional_masked_edit?: boolean
+  studio_carousel_credit_cost?: number
   /** 0 или отсутствует = без автоудаления (см. бэкенд). */
-  studiogenerations_retention_days?: number
-  studiogenerations_retention_interval_hours?: number
-  studiomotion_control_credit_cost?: number
-  studiomotion_video_pricing?: import('./studioMotionPricing').StudioMotionVideoPricing
+  studio_generations_retention_days?: number
+  studio_generations_retention_interval_hours?: number
+  studio_motion_control_credit_cost?: number
+  studio_motion_video_pricing?: import('./studioMotionPricing').StudioMotionVideoPricing
   /** Всегда seedance_t2v (Seedance 2.0 Text-to-Video). */
-  studiomotion_video_provider?: string
-  studioseedance_t2v_duration_default?: number
-  studioseedance_t2v_duration_min?: number
-  studioseedance_t2v_duration_max?: number
-  studioseedance_t2v_prompt_max_chars?: number
-  studioseedance_t2v_default_resolution?: string
-  studioseedance_t2v_resolutions?: string[]
-  studioseedance_t2v_variants?: string[]
-  studiogrok_motion_timeline_enabled?: boolean
-  studiogrok_motion_configured?: boolean
-  studiogrok_scene_compose_configured?: boolean
-  studioseedance_i2v_duration_default?: number
-  studioseedance_i2v_duration_min?: number
-  studioseedance_i2v_duration_max?: number
+  studio_motion_video_provider?: string
+  studio_seedance_t2v_duration_default?: number
+  studio_seedance_t2v_duration_min?: number
+  studio_seedance_t2v_duration_max?: number
+  studio_seedance_t2v_prompt_max_chars?: number
+  studio_seedance_t2v_default_resolution?: string
+  studio_seedance_t2v_resolutions?: string[]
+  studio_seedance_t2v_variants?: string[]
+  studio_grok_motion_timeline_enabled?: boolean
+  studio_grok_motion_configured?: boolean
+  studio_grok_scene_compose_configured?: boolean
+  studio_seedance_i2v_duration_default?: number
+  studio_seedance_i2v_duration_min?: number
+  studio_seedance_i2v_duration_max?: number
   web_push_configured?: boolean
 }
 
 function studioArchiveRetentionLead(health: HealthInfo | null, kind: 'image' | 'video' = 'image'): ReactNode {
-  const days = health?.studiogenerations_retention_days
+  const days = health?.studio_generations_retention_days
   if (typeof days === 'number' && days > 0) {
     const n100 = days % 100
     const n10 = days % 10
@@ -575,14 +575,14 @@ const SUBSCRIPTION_STATUS_LABELS: Record<string, string> = {
 }
 
 const CREDIT_KIND_LABELS: Record<string, string> = {
-  studioprompt_refine: 'Студия: генерация',
-  studioimage_upscale: 'Студия: апскейл',
-  studiocarousel_shot: 'Студия: карусель',
+  studio_prompt_refine: 'Студия: генерация',
+  studio_image_upscale: 'Студия: апскейл',
+  studio_carousel_shot: 'Студия: карусель',
   studio_model_profile_generate: 'Студия: профиль модели',
   yookassa_credits_pack: 'Пополнение баланса',
   yookassa_managed_subscription_bonus: 'Подписка Standard: бонус кредитов',
   standard_subscription_bonus: 'Подписка Standard: бонус кредитов',
-  demo_studioimage: 'Бесплатная генерация',
+  demo_studio_image: 'Бесплатная генерация',
   admin_credit_adjustment: 'Изменение баланса',
 }
 
@@ -613,7 +613,7 @@ interface StudioAspectPreset {
 interface StudioMotionRenderItem {
   id: number
   created_at: string
-  studiogeneration_id: number | null
+  studio_generation_id: number | null
   studio_model_id?: number | null
   video_url: string
   frame_image_url: string
@@ -628,8 +628,8 @@ interface StudioMotionRendersPage {
 const STUDIO_ARCHIVE_PAGE = 10
 
 function studioGalleryMediaKind(section: WorkspaceSection): StudioArchiveMediaKind | undefined {
-  if (section === 'studio' || section === 'studiobootstrap') return 'image'
-  if (section === 'studiovideo') return 'video'
+  if (section === 'studio' || section === 'studio_bootstrap') return 'image'
+  if (section === 'studio_video') return 'video'
   return undefined
 }
 
@@ -785,7 +785,6 @@ export default function App() {
   const [memberEditPassword, setMemberEditPassword] = useState<Record<number, string>>({})
   const [memberMaskEdits, setMemberMaskEdits] = useState<Record<number, number>>({})
   const [memberModelEdits, setMemberModelEdits] = useState<Record<number, number[]>>({})
-  const [convModelBusy, setConvModelBusy] = useState(false)
   const [integ, setInteg] = useState<IntegrationStatus | null>(null)
   const studioNeedsUserWsKey = useMemo(() => needsUserWavespeedKey(integ), [integ])
   const [modelDrafts, setModelDrafts] = useState<Record<number, StudioModelCabinetDraft>>({})
@@ -795,9 +794,7 @@ export default function App() {
   const [tgDraftLabel, setTgDraftLabel] = useState('')
   const [tgDraftModelId, setTgDraftModelId] = useState<number | ''>('')
   const [tgEditConnectionId, setTgEditConnectionId] = useState<number | null>(null)
-  const [fvDraftLabel, setFvDraftLabel] = useState('')
   const [fvDraftModelId, setFvDraftModelId] = useState<number | ''>('')
-  const [fvEditConnectionId, setFvEditConnectionId] = useState<number | null>(null)
   const [fvBusy, setFvBusy] = useState(false)
   const [fvSyncNote, setFvSyncNote] = useState<string | null>(null)
 
@@ -910,7 +907,7 @@ export default function App() {
     null,
   )
   const [studioImportArchiveBusy, setStudioImportArchiveBusy] = useState(false)
-  /** Только в dev + health.studioallow_prompt_only: без запроса к WaveSpeed */
+  /** Только в dev + health.studio_allow_prompt_only: без запроса к WaveSpeed */
   const [studioDevPromptOnly, setStudioDevPromptOnly] = useState(false)
   const [studioRefinedPromptPreview, setStudioRefinedPromptPreview] = useState<string | null>(null)
   const [studioAspectPresets, setStudioAspectPresets] = useState<StudioAspectPreset[]>([])
@@ -975,20 +972,20 @@ export default function App() {
   const studioPromptOnlyDev = useMemo(
     () =>
       import.meta.env.DEV &&
-      Boolean(health?.studioallow_prompt_only) &&
+      Boolean(health?.studio_allow_prompt_only) &&
       studioDevPromptOnly,
-    [health?.studioallow_prompt_only, studioDevPromptOnly],
+    [health?.studio_allow_prompt_only, studioDevPromptOnly],
   )
 
   const seedanceDurationMin =
-    health?.studioseedance_t2v_duration_min ?? health?.studioseedance_i2v_duration_min ?? 4
+    health?.studio_seedance_t2v_duration_min ?? health?.studio_seedance_i2v_duration_min ?? 4
   const seedanceDurationMax =
-    health?.studioseedance_t2v_duration_max ?? health?.studioseedance_i2v_duration_max ?? 15
+    health?.studio_seedance_t2v_duration_max ?? health?.studio_seedance_i2v_duration_max ?? 15
 
   /** Реф выбран или уже загружен — сразу тариф «с реф-видео» на кнопке. */
   const motionHasReferenceVideo = Boolean(motionVideoFileId || motionVideoFile)
 
-  const motionVideoPricing = mergeMotionVideoPricing(health?.studiomotion_video_pricing)
+  const motionVideoPricing = mergeMotionVideoPricing(health?.studio_motion_video_pricing)
 
   const motionVideoCreditCost = computeMotionVideoCreditCost(
     motionSeedanceDuration,
@@ -1007,17 +1004,17 @@ export default function App() {
   useEffect(() => {
     if (motionSeedanceDurationInitRef.current || !health) return
     const d =
-      health.studioseedance_t2v_duration_default ?? health.studioseedance_i2v_duration_default
+      health.studio_seedance_t2v_duration_default ?? health.studio_seedance_i2v_duration_default
     const mn =
-      health.studioseedance_t2v_duration_min ?? health.studioseedance_i2v_duration_min ?? 4
+      health.studio_seedance_t2v_duration_min ?? health.studio_seedance_i2v_duration_min ?? 4
     const mx =
-      health.studioseedance_t2v_duration_max ?? health.studioseedance_i2v_duration_max ?? 15
+      health.studio_seedance_t2v_duration_max ?? health.studio_seedance_i2v_duration_max ?? 15
     if (typeof d === 'number' && Number.isFinite(d)) {
       setMotionSeedanceDuration(Math.max(mn, Math.min(mx, Math.round(d))))
     } else {
       setMotionSeedanceDuration(Math.max(mn, Math.min(mx, 5)))
     }
-    const res = health.studioseedance_t2v_default_resolution
+    const res = health.studio_seedance_t2v_default_resolution
     if (res === '480p' || res === '720p' || res === '1080p') {
       setMotionVideoResolution(res)
     }
@@ -1285,9 +1282,9 @@ export default function App() {
       return mergeStudioArchiveItems(page.items, optimistic)
     })
     setStudioGenHasMore(page.has_more)
-    if (appSection === 'studio' || appSection === 'studiobootstrap') {
+    if (appSection === 'studio' || appSection === 'studio_bootstrap') {
       setStudioImagePickerArchive(page.items)
-    } else if (appSection === 'studiovideo') {
+    } else if (appSection === 'studio_video') {
       void loadStudioImagePickerArchive()
       void refreshMotionRenders()
     }
@@ -1306,7 +1303,7 @@ export default function App() {
       const kind = studioGalleryMediaKind(appSection)
       const pendingPromise = fetchStudioArchivePending(kind)
       const imagePendingPromise =
-        appSection === 'studiovideo'
+        appSection === 'studio_video'
           ? fetchStudioArchivePending('image')
           : Promise.resolve({ items: [] as StudioArchiveItem[], poll_after_seconds: 12 })
       const [pending, imgPending] = await Promise.all([pendingPromise, imagePendingPromise])
@@ -1349,7 +1346,7 @@ export default function App() {
 
   const studioArchiveHasPending = useMemo(() => {
     if (studioGenerations.some(studioArchiveIsPending)) return true
-    if (appSection === 'studiovideo') {
+    if (appSection === 'studio_video') {
       return studioImagePickerArchive.some(studioArchiveIsPending)
     }
     return false
@@ -1470,16 +1467,16 @@ export default function App() {
     if (appSection === 'chat' && !canChat) setAppSection('overview')
     if (
       (appSection === 'studio' ||
-        appSection === 'studiobootstrap' ||
-        appSection === 'studiovideo') &&
+        appSection === 'studio_bootstrap' ||
+        appSection === 'studio_video') &&
       !canStudioAny &&
       canChat
     )
       setAppSection('chat')
     if (
       (appSection === 'studio' ||
-        appSection === 'studiobootstrap' ||
-        appSection === 'studiovideo') &&
+        appSection === 'studio_bootstrap' ||
+        appSection === 'studio_video') &&
       !canStudioAny &&
       !canChat
     )
@@ -1552,8 +1549,8 @@ export default function App() {
     const needModels =
       ((appSection === 'overview' ||
         appSection === 'studio' ||
-        appSection === 'studiobootstrap' ||
-        appSection === 'studiovideo') &&
+        appSection === 'studio_bootstrap' ||
+        appSection === 'studio_video') &&
         canStudioAny) ||
       (appSection === 'chat' && isOwner) ||
       (accountOpen && accountTab === 'models' && canStudioModels)
@@ -1592,8 +1589,8 @@ export default function App() {
       authed &&
       (appSection === 'overview' ||
         appSection === 'studio' ||
-        appSection === 'studiobootstrap' ||
-        appSection === 'studiovideo')
+        appSection === 'studio_bootstrap' ||
+        appSection === 'studio_video')
     )
       void refreshIntegrations()
   }, [authed, appSection, refreshIntegrations])
@@ -1603,8 +1600,8 @@ export default function App() {
       !authed ||
       (appSection !== 'overview' &&
         appSection !== 'studio' &&
-        appSection !== 'studiobootstrap' &&
-        appSection !== 'studiovideo')
+        appSection !== 'studio_bootstrap' &&
+        appSection !== 'studio_video')
     )
       return
     fetch('/api/studio/output-aspects')
@@ -1622,8 +1619,8 @@ export default function App() {
       !authed ||
       (appSection !== 'overview' &&
         appSection !== 'studio' &&
-        appSection !== 'studiobootstrap' &&
-        appSection !== 'studiovideo') ||
+        appSection !== 'studio_bootstrap' &&
+        appSection !== 'studio_video') ||
       !canStudioGenerate
     )
       return
@@ -1638,12 +1635,12 @@ export default function App() {
   }, [authed, appSection, canStudioGenerate, loadStudioGenerationsReset])
 
   useEffect(() => {
-    if (!authed || (appSection !== 'overview' && appSection !== 'studiovideo')) return
+    if (!authed || (appSection !== 'overview' && appSection !== 'studio_video')) return
     void refreshMotionRenders()
   }, [authed, appSection, refreshMotionRenders])
 
   useEffect(() => {
-    if (appSection !== 'studiovideo') return
+    if (appSection !== 'studio_video') return
     if (motionFrameArchiveId == null) return
     const g = findStudioArchiveItem(motionFrameArchiveId)
     if (g) {
@@ -1739,8 +1736,8 @@ export default function App() {
         studioSendPoseRefToWavespeed,
         studioPaintInpaintMask,
         studioInpaintMaskFile,
-        grokSceneConfigured: health?.studiogrok_scene_compose_configured !== false,
-        openaiStudioConfigured: health?.openai_studioconfigured === true,
+        grokSceneConfigured: health?.studio_grok_scene_compose_configured !== false,
+        openaiStudioConfigured: health?.openai_studio_configured === true,
         wavespeedConfigured: integ?.wavespeed_configured === true,
         studioPromptOnlyDev,
         studioNeedsUserWsKey,
@@ -1756,8 +1753,8 @@ export default function App() {
       studioSendPoseRefToWavespeed,
       studioPaintInpaintMask,
       studioInpaintMaskFile,
-      health?.studiogrok_scene_compose_configured,
-      health?.openai_studioconfigured,
+      health?.studio_grok_scene_compose_configured,
+      health?.openai_studio_configured,
       integ?.wavespeed_configured,
       studioPromptOnlyDev,
       studioNeedsUserWsKey,
@@ -1911,7 +1908,7 @@ export default function App() {
   }, [loadConversations, loadHealth, authed, canChat])
 
   useEffect(() => {
-    if (appSection === 'studiovideo' && authed) {
+    if (appSection === 'studio_video' && authed) {
       void loadHealth()
     }
   }, [appSection, authed, loadHealth])
@@ -1995,11 +1992,11 @@ export default function App() {
           message?: ChatMessage
           status?: string
         }
-        if (payload.type === 'studiogeneration') {
+        if (payload.type === 'studio_generation') {
           void syncStudioArchivePending()
           return
         }
-        if (payload.type === 'studiojob') {
+        if (payload.type === 'studio_job') {
           void syncStudioArchivePending()
           if (payload.status === 'completed' || payload.status === 'failed') {
             void refreshMotionRenders()
@@ -2274,35 +2271,6 @@ export default function App() {
     })
   }, [])
 
-  const saveConversationStudioModel = async (convId: number, raw: string) => {
-    let studioModelId: number | null = null
-    if (raw !== '') {
-      const n = Number(raw)
-      if (!Number.isFinite(n) || n <= 0) return
-      studioModelId = n
-    }
-    setError(null)
-    setConvModelBusy(true)
-    try {
-      const r = await apiFetch(`/api/conversations/${convId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ studio_model_id: studioModelId }),
-      })
-      if (!r.ok) {
-        const err = await r.json().catch(() => ({}))
-        setError(formatHttpApiError(r, err))
-        return
-      }
-      const updated = (await r.json()) as Conversation
-      setConversations((prev) => prev.map((c) => (c.id === convId ? { ...c, ...updated } : c)))
-    } catch {
-      setError('Не удалось назначить модель диалогу')
-    } finally {
-      setConvModelBusy(false)
-    }
-  }
-
   const saveOutboundLang = async (convId: number, raw: string) => {
     const v = raw === '' ? null : raw
     setError(null)
@@ -2454,7 +2422,7 @@ export default function App() {
         if (text) fd.append('text', text)
         if (fileToSend) fd.append('image', fileToSend, fileToSend.name || 'image.jpg')
         if (archiveIdToSend != null && !fileToSend) {
-          fd.append('studiogeneration_id', String(archiveIdToSend))
+          fd.append('studio_generation_id', String(archiveIdToSend))
         }
         if (replyToId != null) fd.append('reply_to_message_id', String(replyToId))
         r = await apiFetch(`/api/conversations/${convId}/reply`, {
@@ -2589,16 +2557,16 @@ export default function App() {
   }
 
   /** Повторно скачивает картинку с CDN провайдера в архив студии (если при генерации файл не сохранился). */
-  const retryImportStudioImageToArchive = async (scope: 'studiophoto' | 'motion_still') => {
+  const retryImportStudioImageToArchive = async (scope: 'studio_photo' | 'motion_still') => {
     const pendingRaw =
-      scope === 'studiophoto' ? studioPendingExternalImageUrl : motionPendingExternalStillUrl
+      scope === 'studio_photo' ? studioPendingExternalImageUrl : motionPendingExternalStillUrl
     const u = pendingRaw?.trim()
     if (!u?.startsWith('https://')) return
     setStudioImportArchiveBusy(true)
     setError(null)
     try {
       const rp =
-        scope === 'studiophoto'
+        scope === 'studio_photo'
           ? (studioRefinedPromptPreview ?? '').trim()
           : (motionFrameNotes ?? '').trim()
       const r = await apiFetch('/api/studio/import-archive-image', {
@@ -2607,10 +2575,10 @@ export default function App() {
         body: JSON.stringify({
           source_url: u,
           generation_id:
-            scope === 'studiophoto'
+            scope === 'studio_photo'
               ? (studioGenGenerationId ?? undefined)
               : (motionPreviewGenId ?? undefined),
-          refined_prompt: rp || (scope === 'studiophoto' ? '[import фото]' : '[import кадр для видео]'),
+          refined_prompt: rp || (scope === 'studio_photo' ? '[import фото]' : '[import кадр для видео]'),
           output_aspect: studioOutputAspect,
           studio_model_id: studioSelectedModelId ?? undefined,
           exif_camera: studioExifCamera,
@@ -2630,7 +2598,7 @@ export default function App() {
       }
       const nu = data.generated_image_url?.trim()
       if (typeof data.generation_id === 'number') {
-        if (scope === 'studiophoto') {
+        if (scope === 'studio_photo') {
           if (nu) setStudioGenImageUrl(nu)
           setStudioGenGenerationId(data.generation_id)
           setStudioPendingExternalImageUrl(null)
@@ -2645,7 +2613,7 @@ export default function App() {
         void loadStudioGenerationsReset()
       } else {
         const m = data.message?.trim()
-        if (scope === 'studiophoto') {
+        if (scope === 'studio_photo') {
           if (nu) setStudioGenImageUrl(nu)
           if (m) setStudioWavespeedMsg(m)
         } else if (m) {
@@ -2738,7 +2706,7 @@ export default function App() {
         return
       }
     } else if (studioMode === 'model_scene') {
-      if (health?.studiogrok_scene_compose_configured === false) {
+      if (health?.studio_grok_scene_compose_configured === false) {
         setError('Режим «Основная» использует Grok — на сервере нужен GROK_API_KEY.')
         return
       }
@@ -2751,7 +2719,7 @@ export default function App() {
         return
       }
     } else if (studioMode === 'model') {
-      if (health?.studiogrok_scene_compose_configured === false) {
+      if (health?.studio_grok_scene_compose_configured === false) {
         setError('Режим «По промту» использует Grok — на сервере нужен GROK_API_KEY.')
         return
       }
@@ -2788,7 +2756,7 @@ export default function App() {
       return
     }
     if (studioMode === 'grok_compose') {
-      if (health?.studiogrok_scene_compose_configured === false) {
+      if (health?.studio_grok_scene_compose_configured === false) {
         setError('Grok не настроен на сервере (нужен GROK_API_KEY в .env).')
         return
       }
@@ -2841,7 +2809,7 @@ export default function App() {
     try {
       const promptOnlyActive =
         import.meta.env.DEV &&
-        Boolean(health?.studioallow_prompt_only) &&
+        Boolean(health?.studio_allow_prompt_only) &&
         studioDevPromptOnly
       const fd = new FormData()
       fd.append('description', studioDesc.trim())
@@ -2858,9 +2826,9 @@ export default function App() {
         fd.append('existing_generation_id', String(studioPhotoEditArchiveId))
       }
       fd.append('output_aspect', studioOutputAspect)
-      fd.append('studiomode', studioMode)
+      fd.append('studio_mode', studioMode)
       fd.append('wan_edit_tier', studioWanEditTier)
-      fd.append('studiowave_profile', studioWaveProfile)
+      fd.append('studio_wave_profile', studioWaveProfile)
       fd.append('generate_wavespeed', promptOnlyActive ? '0' : '1')
       fd.append('wavespeed_single_reference', '1')
       fd.append(
@@ -2970,7 +2938,7 @@ export default function App() {
       'wan_edit_tier',
       motionFirstFrameWaveProfile === 'nsfw' ? studioWanEditTier : 'standard',
     )
-    fd.append('studiowave_profile', motionFirstFrameWaveProfile)
+    fd.append('studio_wave_profile', motionFirstFrameWaveProfile)
     fd.append('auto_motion_prompt', motionAutoPrompt ? '1' : '0')
     fd.append('lock_model_hairstyle', motionLockHairstyle ? '1' : '0')
     fd.append('use_still_as_final', useStillFinalEffective && motionFirstFrameFile ? '1' : '0')
@@ -3266,7 +3234,7 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           count,
-          studiowave_profile: studioWaveProfile,
+          studio_wave_profile: studioWaveProfile,
           wan_edit_tier: studioWanEditTier,
         }),
       })
@@ -3626,10 +3594,7 @@ export default function App() {
     setFvBusy(true)
     try {
       const body: Record<string, unknown> = {}
-      const cid = connectionId ?? fvEditConnectionId
-      if (cid != null) body.connection_id = cid
-      const label = fvDraftLabel.trim()
-      if (label) body.label = label
+      if (connectionId != null) body.connection_id = connectionId
       if (fvDraftModelId !== '') body.studio_model_id = fvDraftModelId
       const r = await apiFetch('/api/integrations/fanvue/oauth/start', {
         method: 'POST',
@@ -4070,7 +4035,7 @@ export default function App() {
           markSetupTourHadGeneration()
           setSetupTourHadGen(true)
           setAppSection('studio')
-          trackFunnelEvent('studioopened')
+          trackFunnelEvent('studio_opened')
           void loadStudioModels()
           void loadStudioGenerationsReset()
           void refreshMe()
@@ -5731,7 +5696,7 @@ export default function App() {
               motionRenders={motionRenders}
               onOpenChat={openWorkspaceChat}
               onOpenStudio={() => setAppSection('studio')}
-              onOpenVideo={() => setAppSection('studiovideo')}
+              onOpenVideo={() => setAppSection('studio_video')}
               onOpenAccount={() => setAccountOpen(true)}
             />
             </>
@@ -5740,8 +5705,8 @@ export default function App() {
       {import.meta.env.DEV &&
         health &&
         appSection !== 'studio' &&
-        appSection !== 'studiobootstrap' &&
-        appSection !== 'studiovideo' && (
+        appSection !== 'studio_bootstrap' &&
+        appSection !== 'studio_video' && (
         <div className="health-strip" title={health.database_file}>
           Режим: {health.mode ?? '—'} · всего в БД: {health.conversations_count ?? 0} диалогов,{' '}
           {health.messages_count ?? 0} сообщений
@@ -5761,10 +5726,10 @@ export default function App() {
             <span className="muted"> · интеграции через личный кабинет (webhook)</span>
           )}
           {health.telegram_proxy_configured ? <span className="ok"> · прокси TG</span> : null}
-          {health.openai_studioconfigured ? (
+          {health.openai_studio_configured ? (
             <span className="ok">
               {' '}
-              · студия: промпт ({health.studioprompt_credit_cost ?? '—'} кр.)
+              · студия: промпт ({health.studio_prompt_credit_cost ?? '—'} кр.)
             </span>
           ) : (
             <span className="warn"> · студия: текстовая модель на сервере недоступна</span>
@@ -5868,7 +5833,7 @@ export default function App() {
               </div>
             </div>
             {studioMode === 'grok_compose' &&
-            health?.studiogrok_scene_compose_configured === false ? (
+            health?.studio_grok_scene_compose_configured === false ? (
               <div className="banner warn">
                 Grok не настроен: на сервере нужен <span className="mono">GROK_API_KEY</span> (или
                 OpenAI-совместимый ключ с vision).
@@ -5893,7 +5858,7 @@ export default function App() {
                 </button>
               </div>
             </div>
-            {import.meta.env.DEV && health?.studioallow_prompt_only ? (
+            {import.meta.env.DEV && health?.studio_allow_prompt_only ? (
               <>
                 <div className="studio-mode-row" role="group" aria-label="Режим вывода студии (отладка)">
                   <span className="studio-mode-label">Вывод</span>
@@ -5927,7 +5892,7 @@ export default function App() {
                 </p>
               </>
             ) : null}
-            {health?.studiowan_edit_tier_switch && studioWaveProfile === 'nsfw' ? (
+            {health?.studio_wan_edit_tier_switch && studioWaveProfile === 'nsfw' ? (
               <>
                 <div className="studio-mode-row" role="group" aria-label="Детализация редактора">
                   <span className="studio-mode-label">Качество</span>
@@ -6216,7 +6181,7 @@ export default function App() {
             </div>
             </div>
             {import.meta.env.DEV &&
-            health?.studioallow_prompt_only &&
+            health?.studio_allow_prompt_only &&
             studioDevPromptOnly &&
             studioRefinedPromptPreview ? (
               <label className="studio-label">
@@ -6242,7 +6207,7 @@ export default function App() {
                   type="button"
                   className="ghost-btn"
                   disabled={studioImportArchiveBusy || !canStudioGenerate}
-                  onClick={() => void retryImportStudioImageToArchive('studiophoto')}
+                  onClick={() => void retryImportStudioImageToArchive('studio_photo')}
                 >
                   {studioImportArchiveBusy ? 'Сохраняем в архив…' : 'Сохранить в архив'}
                 </button>
@@ -6289,9 +6254,9 @@ export default function App() {
                   >
                     {studioUpscaleBusy ? 'Апскейл…' : 'Апскейл'}
                   </button>
-                  {canStudioGenerate && health?.studioupscale_credit_cost != null ? (
+                  {canStudioGenerate && health?.studio_upscale_credit_cost != null ? (
                     <span className="studio-credit-hint">
-                      {health.studioupscale_credit_cost} кр.
+                      {health.studio_upscale_credit_cost} кр.
                     </span>
                   ) : null}
                 </div>
@@ -6334,9 +6299,9 @@ export default function App() {
                   >
                     {studioCarouselBusy ? 'Карусель…' : 'Карусель ×4'}
                   </button>
-                  {canStudioGenerate && health?.studiocarousel_credit_cost != null ? (
+                  {canStudioGenerate && health?.studio_carousel_credit_cost != null ? (
                     <span className="studio-credit-hint">
-                      {health.studiocarousel_credit_cost} кр./кадр
+                      {health.studio_carousel_credit_cost} кр./кадр
                     </span>
                   ) : null}
                 </div>
@@ -6352,7 +6317,7 @@ export default function App() {
                       setMotionFrameArchiveId(studioGenGenerationId)
                       if (g?.studio_model_id != null) setStudioSelectedModelId(g.studio_model_id)
                       setMotionFirstFrameFile(null)
-                      setAppSection('studiovideo')
+                      setAppSection('studio_video')
                     }}
                   >
                     Видео из этого кадра
@@ -6423,7 +6388,7 @@ export default function App() {
                   setMotionFrameArchiveId(g.id)
                   if (g.studio_model_id != null) setStudioSelectedModelId(g.studio_model_id)
                   setMotionFirstFrameFile(null)
-                  setAppSection('studiovideo')
+                  setAppSection('studio_video')
                 }}
               />
             ) : null}
@@ -6431,7 +6396,7 @@ export default function App() {
         </section>
       )}
 
-      {hasAnyMainSection && appSection === 'studiobootstrap' && canStudioAny && (
+      {hasAnyMainSection && appSection === 'studio_bootstrap' && canStudioAny && (
         <section
           className="studio-panel studio-workspace-page"
           aria-labelledby="studio-bootstrap-heading"
@@ -6495,7 +6460,7 @@ export default function App() {
                   setMotionFrameArchiveId(g.id)
                   if (g.studio_model_id != null) setStudioSelectedModelId(g.studio_model_id)
                   setMotionFirstFrameFile(null)
-                  setAppSection('studiovideo')
+                  setAppSection('studio_video')
                 }}
               />
             ) : null}
@@ -6503,7 +6468,7 @@ export default function App() {
         </section>
       )}
 
-      {hasAnyMainSection && appSection === 'studiovideo' && canStudioAny && (
+      {hasAnyMainSection && appSection === 'studio_video' && canStudioAny && (
           <section className="studio-panel studio-workspace-page studio-video-page" aria-labelledby="studio-motion-heading">
             <div className="studio-workspace">
             <div className="studio-workspace__composer">
@@ -6556,7 +6521,7 @@ export default function App() {
                   allowEmpty
                   emptyLabel="Выберите"
                 />
-                {health?.studiogrok_motion_configured === false ? (
+                {health?.studio_grok_motion_configured === false ? (
                   <div className="banner warn">
                     Grok не настроен на сервере.
                   </div>
@@ -6698,7 +6663,7 @@ export default function App() {
                       disabled={
                         motionBusyCompose ||
                         !motionCanComposePrompt ||
-                        health?.studiogrok_scene_compose_configured === false
+                        health?.studio_grok_scene_compose_configured === false
                       }
                       onClick={() => void runMotionComposeVideoPrompt()}
                     >
@@ -6777,7 +6742,7 @@ export default function App() {
                   />
                   <StudioPillField
                     label="Качество"
-                    options={(health?.studioseedance_t2v_resolutions ?? ['480p', '720p', '1080p']).map(
+                    options={(health?.studio_seedance_t2v_resolutions ?? ['480p', '720p', '1080p']).map(
                       (res) => ({
                         value: res,
                         label: res.toUpperCase(),
