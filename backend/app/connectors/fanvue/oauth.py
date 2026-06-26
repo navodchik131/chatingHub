@@ -71,14 +71,22 @@ def build_fanvue_authorize_url(*, state: str, code_challenge: str) -> str:
     return f"{auth_base}?{urlencode(params)}"
 
 
+def _fanvue_client_basic_auth_header() -> dict[str, str]:
+    """Fanvue token endpoint expects client_secret_basic (RFC 6749), not POST body credentials."""
+    cid = settings.fanvue_client_id.strip()
+    secret = settings.fanvue_client_secret.strip()
+    basic = base64.b64encode(f"{cid}:{secret}".encode("utf-8")).decode("ascii")
+    return {"Authorization": f"Basic {basic}"}
+
+
 async def _post_token_form(data: dict[str, str]) -> dict[str, Any]:
     token_url = (settings.fanvue_oauth_token_url or "https://auth.fanvue.com/oauth2/token").strip()
+    headers = {
+        "Content-Type": "application/x-www-form-urlencoded",
+        **_fanvue_client_basic_auth_header(),
+    }
     async with httpx.AsyncClient(timeout=60.0) as client:
-        r = await client.post(
-            token_url,
-            data=data,
-            headers={"Content-Type": "application/x-www-form-urlencoded"},
-        )
+        r = await client.post(token_url, data=data, headers=headers)
     if r.status_code >= 400:
         log.warning("fanvue oauth token failed: %s %s", r.status_code, r.text[:800])
         raise FanvueOAuthError(
@@ -105,8 +113,6 @@ async def exchange_fanvue_authorization_code(
     return await _post_token_form(
         {
             "grant_type": "authorization_code",
-            "client_id": settings.fanvue_client_id.strip(),
-            "client_secret": settings.fanvue_client_secret.strip(),
             "code": code.strip(),
             "redirect_uri": fanvue_oauth_redirect_uri(),
             "code_verifier": code_verifier.strip(),
@@ -120,8 +126,6 @@ async def refresh_fanvue_access_token(*, refresh_token: str) -> dict[str, Any]:
     return await _post_token_form(
         {
             "grant_type": "refresh_token",
-            "client_id": settings.fanvue_client_id.strip(),
-            "client_secret": settings.fanvue_client_secret.strip(),
             "refresh_token": refresh_token.strip(),
         }
     )
