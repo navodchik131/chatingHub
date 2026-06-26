@@ -124,6 +124,260 @@ def filter_model_images_for_boardstory(
     )
 
 
+def boardstory_video_only_swap_mode(
+    *,
+    clothing_ref: BoardStoryImageSlot | None,
+    environment_ref: BoardStoryImageSlot | None,
+    generate_clothing_from_video: bool,
+    generate_environment_from_video: bool,
+    send_video_reference: bool,
+) -> bool:
+    """Нет рефов одежды/комнаты и нет галочек extract — всё кроме identity из @Video1."""
+    return (
+        send_video_reference
+        and clothing_ref is None
+        and environment_ref is None
+        and not generate_clothing_from_video
+        and not generate_environment_from_video
+    )
+
+
+_BOARDSTORY_VIDEO_ONLY_SWAP_TEMPLATE = """\
+Use @Video1 exclusively as the motion, clothing, accessories, pose, camera, lighting and environment reference.
+
+Use @Image1 exclusively as the character identity, facial appearance, hairstyle and body proportions reference.
+
+Transfer the complete performance from @Video1 onto the person from @Image1 with the closest possible timing.
+
+IDENTITY LOCK
+
+The generated person must remain exactly the same individual shown in @Image1 throughout the entire video.
+
+Preserve the exact:
+– facial structure;
+– eyes, eyebrows, nose, lips, cheeks and jawline;
+– skin tone;
+– hairstyle, hair length and color;
+– body proportions.
+
+Do not copy the facial identity or physical characteristics of the performer from @Video1.
+
+APPEARANCE, SCENE AND MOTION
+
+Adopt from @Video1:
+– all motion and timing;
+– clothing and accessories;
+– jewelry;
+– manicure and pedicure;
+– pose and body positioning;
+– camera angle and framing;
+– lighting and shadows;
+– background and environment;
+– colors and atmosphere.
+
+Maintain these elements consistently throughout the video.
+
+Transfer only identity and hair characteristics from @Image1.
+
+QUALITY
+
+Ultra realistic natural phone video.
+Stable identity across frames.
+Stable clothing and accessories.
+Consistent environment and lighting.
+Natural motion and temporal consistency.
+
+STRICT NEGATIVE CONSTRAINTS
+
+Do not copy the identity of the performer from @Video1.
+Do not alter the hairstyle or facial appearance from @Image1.
+Do not change the environment, camera or lighting from @Video1.
+Do not add objects or people.
+No identity drift.
+No temporal flicker.
+No background warping."""
+
+
+def build_boardstory_video_only_swap_prompt(
+    motion_timeline: str,
+    *,
+    user_notes: str = "",
+    identity_tag: str = "@Image1",
+    video_tag: str = "@Video1",
+    max_chars: int | None = None,
+) -> str:
+    """
+    Фиксированный Seedance-промпт: identity из @Image1, всё остальное из @Video1.
+    Хореография из motion timeline добавляется в конец.
+    """
+    from app.services.studio_seedance_t2v import truncate_seedance_t2v_prompt
+
+    template = _BOARDSTORY_VIDEO_ONLY_SWAP_TEMPLATE
+    template = _apply_boardstory_template_tags(
+        template,
+        identity_tag=identity_tag,
+        video_tag=video_tag,
+    )
+
+    parts = [template.strip()]
+    timeline = (motion_timeline or "").strip()
+    if timeline:
+        parts.append(f"MOTION CHOREOGRAPHY AND TIMING:\n{timeline}")
+    notes = (user_notes or "").strip()
+    if notes:
+        parts.append(f"USER_DIRECTION:\n{notes}")
+
+    return truncate_seedance_t2v_prompt("\n\n".join(parts), max_chars=max_chars)
+
+
+def boardstory_clothing_env_swap_mode(
+    *,
+    clothing_ref: BoardStoryImageSlot | None,
+    environment_ref: BoardStoryImageSlot | None,
+    send_video_reference: bool,
+) -> bool:
+    """Одежда и помещение подключены — фиксированный промпт с @Image2 clothing и сценой из @Video1."""
+    return (
+        send_video_reference
+        and clothing_ref is not None
+        and environment_ref is not None
+    )
+
+
+_BOARDSTORY_CLOTHING_ENV_SWAP_TEMPLATE = """\
+Use @Video1 as the primary reference for motion, timing, lighting, camera framing and overall scene structure.
+
+Use @Image1 exclusively as the character identity, facial appearance, hairstyle, hair color, skin tone and body proportions reference.
+
+Use @Image2 exclusively as the clothing, accessories and styling reference.
+
+Transfer the performance from @Video1 onto the person from @Image1 while maintaining stable identity throughout the entire video.
+
+IDENTITY LOCK
+
+The generated person must remain exactly the same individual shown in @Image1 throughout the entire video.
+
+Preserve:
+– facial features;
+– eyes, eyebrows, nose, lips, cheeks and jawline;
+– hairstyle and hair color;
+– skin tone;
+– body proportions.
+
+Never copy the identity of the performer from @Video1.
+
+Transfer only motion from @Video1 and only appearance from @Image1.
+
+CLOTHING AND STYLING
+
+Adopt clothing, accessories and styling from @Image2.
+
+Preserve the overall design, colors, textures and appearance of the outfit and accessories from @Image2 while allowing only minor natural variations.
+
+Maintain stable clothing and accessory consistency throughout the video.
+
+SCENE AND APPEARANCE
+
+Use @Video1 as inspiration for the overall environment, atmosphere and scene layout rather than as an exact background reference.
+
+Preserve a similar setting, lighting style and camera framing while introducing subtle natural variations in architecture, objects, textures, colors, vegetation, shadows and environmental details.
+
+The generated environment should feel visually related to @Video1 but not identical.
+
+Avoid recreating the background, location or scene elements exactly as shown in the source video.
+
+Allow minor differences in color palette, surface materials, decorative details and surrounding objects while maintaining the same overall mood and composition.
+
+MOTION
+
+Follow the timing, pacing and movement from @Video1 as closely as possible.
+
+Preserve:
+– head movement;
+– gaze direction;
+– facial expressions;
+– hand movement;
+– body movement;
+– posture transitions.
+
+Maintain smooth temporal consistency and natural motion throughout the entire video.
+
+QUALITY
+
+Ultra realistic natural phone video.
+Stable identity across frames.
+Stable clothing and accessories.
+Natural motion.
+Consistent anatomy.
+Realistic lighting and textures.
+Smooth frame-to-frame continuity.
+High facial consistency.
+
+NEGATIVE CONSTRAINTS
+
+Do not copy the identity of the performer from @Video1.
+Do not recreate the background from @Video1 exactly.
+Avoid one-to-one duplication of environment details.
+Allow subtle scene variations while preserving the overall atmosphere.
+Do not change the clothing style from @Image2.
+No identity drift.
+No clothing drift.
+No temporal flicker.
+No distorted anatomy.
+No background warping.
+No random objects or people.
+No extra limbs.
+No duplicated body parts.
+No face morphing."""
+
+
+def _apply_boardstory_template_tags(
+    template: str,
+    *,
+    identity_tag: str,
+    clothing_tag: str | None = None,
+    video_tag: str = "@Video1",
+) -> str:
+    out = template
+    if identity_tag != "@Image1":
+        out = out.replace("@Image1", identity_tag)
+    if clothing_tag and clothing_tag != "@Image2":
+        out = out.replace("@Image2", clothing_tag)
+    if video_tag != "@Video1":
+        out = out.replace("@Video1", video_tag)
+    return out
+
+
+def build_boardstory_clothing_env_swap_prompt(
+    motion_timeline: str,
+    *,
+    user_notes: str = "",
+    identity_tag: str = "@Image1",
+    clothing_tag: str = "@Image2",
+    video_tag: str = "@Video1",
+    max_chars: int | None = None,
+) -> str:
+    """Фиксированный промпт: @Image1 identity, @Image2 clothing, сцена/движение из @Video1."""
+    from app.services.studio_seedance_t2v import truncate_seedance_t2v_prompt
+
+    template = _apply_boardstory_template_tags(
+        _BOARDSTORY_CLOTHING_ENV_SWAP_TEMPLATE,
+        identity_tag=identity_tag,
+        clothing_tag=clothing_tag,
+        video_tag=video_tag,
+    )
+
+    parts = [template.strip()]
+    timeline = (motion_timeline or "").strip()
+    if timeline:
+        parts.append(f"MOTION CHOREOGRAPHY AND TIMING:\n{timeline}")
+    notes = (user_notes or "").strip()
+    if notes:
+        parts.append(f"USER_DIRECTION:\n{notes}")
+
+    return truncate_seedance_t2v_prompt("\n\n".join(parts), max_chars=max_chars)
+
+
 def boardstory_tag_rules_text(
     layout: BoardStoryReferenceLayout,
     *,

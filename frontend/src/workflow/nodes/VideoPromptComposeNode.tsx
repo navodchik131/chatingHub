@@ -340,7 +340,7 @@ function VideoPromptComposeNodeComponent({ id, data }: NodeProps) {
 
       {!clothingRefLoaded && !environmentRefLoaded && !generateClothing && !generateEnvironment ? (
         <p className="workflow-node__hint workflow-node__hint--muted">
-          Без рефов и без галочек: одежда и помещение берутся из @Video1 в промпте
+          Без рефов и без галочек: фиксированный промпт — identity из @Image1, одежда/комната/движение из @Video1
         </p>
       ) : null}
 

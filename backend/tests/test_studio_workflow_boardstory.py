@@ -3,10 +3,14 @@
 from app.services.studio_workflow_boardstory import (
     BoardStoryImageSlot,
     append_boardstory_prompt_enforcement,
+    boardstory_clothing_env_swap_mode,
     boardstory_model_swap_lock_text,
     boardstory_slot_from_json,
     boardstory_slot_to_json,
     boardstory_tag_rules_text,
+    boardstory_video_only_swap_mode,
+    build_boardstory_clothing_env_swap_prompt,
+    build_boardstory_video_only_swap_prompt,
     classify_boardstory_ref_role,
     compute_boardstory_layout,
 )
@@ -91,6 +95,72 @@ def test_append_boardstory_prompt_enforcement_adds_replace():
         send_video_reference=True,
     )
     assert "Replace" in out or "Wardrobe" in out
+
+
+def test_boardstory_video_only_swap_mode():
+    assert boardstory_video_only_swap_mode(
+        clothing_ref=None,
+        environment_ref=None,
+        generate_clothing_from_video=False,
+        generate_environment_from_video=False,
+        send_video_reference=True,
+    )
+    assert not boardstory_video_only_swap_mode(
+        clothing_ref=BoardStoryImageSlot(kind="clothing", ref_id="x"),
+        environment_ref=None,
+        generate_clothing_from_video=False,
+        generate_environment_from_video=False,
+        send_video_reference=True,
+    )
+    assert not boardstory_video_only_swap_mode(
+        clothing_ref=None,
+        environment_ref=None,
+        generate_clothing_from_video=True,
+        generate_environment_from_video=False,
+        send_video_reference=True,
+    )
+
+
+def test_build_boardstory_video_only_swap_prompt():
+    out = build_boardstory_video_only_swap_prompt(
+        "She sits at [0 s] and turns page at [2 s].",
+        user_notes="Calm mood.",
+    )
+    assert "Use @Video1 exclusively" in out
+    assert "Use @Image1 exclusively" in out
+    assert "IDENTITY LOCK" in out
+    assert "MOTION CHOREOGRAPHY AND TIMING" in out
+    assert "[0 s]" in out
+    assert "USER_DIRECTION" in out
+    assert "@Video1" in out
+    assert "Do not copy the identity" in out
+
+
+def test_boardstory_clothing_env_swap_mode():
+    clothing = BoardStoryImageSlot(kind="clothing", ref_id="c1")
+    environment = BoardStoryImageSlot(kind="environment", ref_id="e1")
+    assert boardstory_clothing_env_swap_mode(
+        clothing_ref=clothing,
+        environment_ref=environment,
+        send_video_reference=True,
+    )
+    assert not boardstory_clothing_env_swap_mode(
+        clothing_ref=clothing,
+        environment_ref=None,
+        send_video_reference=True,
+    )
+
+
+def test_build_boardstory_clothing_env_swap_prompt():
+    out = build_boardstory_clothing_env_swap_prompt(
+        "She turns at [1 s].",
+        user_notes="Soft light.",
+    )
+    assert "Use @Image2 exclusively as the clothing" in out
+    assert "SCENE AND APPEARANCE" in out
+    assert "Never copy the identity" in out
+    assert "MOTION CHOREOGRAPHY AND TIMING" in out
+    assert "[1 s]" in out
 
 
 def test_boardstory_slot_json_roundtrip():

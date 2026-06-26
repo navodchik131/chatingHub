@@ -25,7 +25,11 @@ from app.services.studio_openai import describe_reference_image_openai
 from app.services.studio_workflow_boardstory import (
     BoardStoryImageSlot,
     append_boardstory_prompt_enforcement,
+    boardstory_clothing_env_swap_mode,
     boardstory_tag_rules_text,
+    boardstory_video_only_swap_mode,
+    build_boardstory_clothing_env_swap_prompt,
+    build_boardstory_video_only_swap_prompt,
     compute_boardstory_layout,
     filter_model_images_for_boardstory,
 )
@@ -214,13 +218,19 @@ async def compose_workflow_video_generation_prompt(
         )
         clothing_from_video = clothing_ref is None
         environment_from_video = environment_ref is None
-        tag_rules = boardstory_tag_rules_text(
-            layout,
-            has_motion=send_video_reference,
-            clothing_from_video=clothing_from_video,
-            environment_from_video=environment_from_video,
+        use_video_only_swap = boardstory_video_only_swap_mode(
+            clothing_ref=clothing_ref,
+            environment_ref=environment_ref,
+            generate_clothing_from_video=generate_clothing_from_video,
+            generate_environment_from_video=generate_environment_from_video,
             send_video_reference=send_video_reference,
         )
+        use_clothing_env_swap = boardstory_clothing_env_swap_mode(
+            clothing_ref=clothing_ref,
+            environment_ref=environment_ref,
+            send_video_reference=send_video_reference,
+        )
+        use_fixed_prompt = use_video_only_swap or use_clothing_env_swap
 
         timeline = await motion_grok_timeline_from_video_path(
             video_path=vpath,
@@ -231,60 +241,91 @@ async def compose_workflow_video_generation_prompt(
         )
 
         reference_blocks: list[str] = []
-        if clothing_ref is not None:
-            reference_blocks.append(
-                await _describe_boardstory_slot(
-                    session,
-                    owner_id=owner_id,
-                    actor=actor,
-                    slot=clothing_ref,
-                    label="CLOTHING_REFERENCE",
-                    llm_credentials=llm_credentials,
-                )
+        tag_rules = ""
+        if not use_fixed_prompt:
+            tag_rules = boardstory_tag_rules_text(
+                layout,
+                has_motion=send_video_reference,
+                clothing_from_video=clothing_from_video,
+                environment_from_video=environment_from_video,
+                send_video_reference=send_video_reference,
             )
-        if environment_ref is not None:
-            reference_blocks.append(
-                await _describe_boardstory_slot(
-                    session,
-                    owner_id=owner_id,
-                    actor=actor,
-                    slot=environment_ref,
-                    label="ENVIRONMENT_REFERENCE",
-                    llm_credentials=llm_credentials,
+            if clothing_ref is not None:
+                reference_blocks.append(
+                    await _describe_boardstory_slot(
+                        session,
+                        owner_id=owner_id,
+                        actor=actor,
+                        slot=clothing_ref,
+                        label="CLOTHING_REFERENCE",
+                        llm_credentials=llm_credentials,
+                    )
                 )
-            )
-        for i, ref in enumerate(references, 1):
-            if not (ref.ref_id or "").strip():
-                continue
-            ref_bytes, ref_mime = load_workflow_reference(owner_id, ref.ref_id)
-            reference_blocks.append(
-                await _describe_reference_block(
-                    label=f"WORKFLOW_REFERENCE_{i}",
-                    image_bytes=ref_bytes,
-                    image_media=ref_mime,
-                    role=ref.role,
-                    notes=ref.description,
-                    credentials=llm_credentials,
+            if environment_ref is not None:
+                reference_blocks.append(
+                    await _describe_boardstory_slot(
+                        session,
+                        owner_id=owner_id,
+                        actor=actor,
+                        slot=environment_ref,
+                        label="ENVIRONMENT_REFERENCE",
+                        llm_credentials=llm_credentials,
+                    )
                 )
-            )
+            for i, ref in enumerate(references, 1):
+                if not (ref.ref_id or "").strip():
+                    continue
+                ref_bytes, ref_mime = load_workflow_reference(owner_id, ref.ref_id)
+                reference_blocks.append(
+                    await _describe_reference_block(
+                        label=f"WORKFLOW_REFERENCE_{i}",
+                        image_bytes=ref_bytes,
+                        image_media=ref_mime,
+                        role=ref.role,
+                        notes=ref.description,
+                        credentials=llm_credentials,
+                    )
+                )
 
-        composed = await grok_compose_boardstory_video_prompt(
-            motion_timeline=timeline.strip(),
-            model_profile_text=profile,
-            reference_tag_rules=tag_rules,
-            reference_blocks=reference_blocks,
-            user_notes=(user_notes or "").strip(),
-            send_video_reference=send_video_reference,
-            credentials=grok_creds,
-            max_chars=int(settings.studio_seedance_t2v_prompt_max_chars or 6000),
-        )
-        composed = append_boardstory_prompt_enforcement(
-            composed,
-            layout=layout,
-            clothing_from_video=clothing_from_video,
-            environment_from_video=environment_from_video,
-            send_video_reference=send_video_reference,
-        )
+        max_prompt_chars = int(settings.studio_seedance_t2v_prompt_max_chars or 6000)
+        id_tag = layout.identity_tag_expr or "@Image1"
+        if use_video_only_swap:
+            composed = build_boardstory_video_only_swap_prompt(
+                timeline.strip(),
+                user_notes=(user_notes or "").strip(),
+                identity_tag=id_tag,
+                max_chars=max_prompt_chars,
+            )
+            prompt_mode = "video_only_swap"
+        elif use_clothing_env_swap:
+            clothing_tag = layout.clothing_tag or "@Image2"
+            composed = build_boardstory_clothing_env_swap_prompt(
+                timeline.strip(),
+                user_notes=(user_notes or "").strip(),
+                identity_tag=id_tag,
+                clothing_tag=clothing_tag,
+                max_chars=max_prompt_chars,
+            )
+            prompt_mode = "clothing_env_swap"
+        else:
+            composed = await grok_compose_boardstory_video_prompt(
+                motion_timeline=timeline.strip(),
+                model_profile_text=profile,
+                reference_tag_rules=tag_rules,
+                reference_blocks=reference_blocks,
+                user_notes=(user_notes or "").strip(),
+                send_video_reference=send_video_reference,
+                credentials=grok_creds,
+                max_chars=max_prompt_chars,
+            )
+            composed = append_boardstory_prompt_enforcement(
+                composed,
+                layout=layout,
+                clothing_from_video=clothing_from_video,
+                environment_from_video=environment_from_video,
+                send_video_reference=send_video_reference,
+            )
+            prompt_mode = "grok_compose"
 
         return {
             "refined_prompt": composed.strip(),
@@ -293,6 +334,7 @@ async def compose_workflow_video_generation_prompt(
             "motion_video_file_id": mv_id,
             "studio_model_id": model_id,
             "boardstory_mode": True,
+            "boardstory_prompt_mode": prompt_mode,
             "send_video_reference": send_video_reference,
             "boardstory_layout": {
                 "n_model_images": layout.n_model_images,
