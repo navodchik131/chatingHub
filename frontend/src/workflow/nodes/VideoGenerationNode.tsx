@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Handle, Position, useReactFlow, type NodeProps } from '@xyflow/react'
 import {
+  DEFAULT_GROK_IMAGINE_I2V_PRICING,
   DEFAULT_MOTION_VIDEO_PRICING,
   computeGrokImagineI2vCreditCost,
   computeMotionVideoCreditCost,
@@ -67,7 +68,7 @@ function VideoGenerationNodeComponent({ id, data }: NodeProps) {
 
   const videoProvider = (nodeData.videoProvider ?? 'seedance_t2v') as WorkflowVideoProvider
   const isGrok = videoProvider === 'grok_imagine_i2v'
-  const grokPricing = pricing.grok_imagine_i2v ?? DEFAULT_MOTION_VIDEO_PRICING.grok_imagine_i2v!
+  const grokPricing = pricing.grok_imagine_i2v ?? DEFAULT_GROK_IMAGINE_I2V_PRICING
 
   const durationSeconds = nodeData.durationSeconds ?? (isGrok ? grokPricing.duration_default ?? 6 : pricing.duration_default ?? 5)
   const seedanceVariant = (nodeData.seedanceVariant ?? pricing.default_variant ?? 'standard') as SeedanceT2vVariant

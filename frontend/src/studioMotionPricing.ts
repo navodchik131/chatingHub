@@ -14,6 +14,17 @@ export type GrokImagineI2vPricing = {
   credits_example_6s_720p?: number
 }
 
+export const DEFAULT_GROK_IMAGINE_I2V_PRICING: GrokImagineI2vPricing = {
+  usd_per_sec_480p: 0.08,
+  usd_per_sec_720p: 0.14,
+  usd_per_image: 0.01,
+  duration_min: 1,
+  duration_max: 15,
+  duration_default: 6,
+  resolutions: ['480p', '720p'],
+  default_resolution: '720p',
+}
+
 export type StudioMotionVideoPricing = {
   usd_per_sec_with_reference_video: number
   usd_per_sec_without_reference_video: number
@@ -66,16 +77,7 @@ export const DEFAULT_MOTION_VIDEO_PRICING: StudioMotionVideoPricing = {
       usd_per_sec_720p_without_reference_video: 0.15,
     },
   },
-  grok_imagine_i2v: {
-    usd_per_sec_480p: 0.08,
-    usd_per_sec_720p: 0.14,
-    usd_per_image: 0.01,
-    duration_min: 1,
-    duration_max: 15,
-    duration_default: 6,
-    resolutions: ['480p', '720p'],
-    default_resolution: '720p',
-  },
+  grok_imagine_i2v: DEFAULT_GROK_IMAGINE_I2V_PRICING,
 }
 
 export function mergeMotionVideoPricing(
@@ -185,9 +187,18 @@ function mergeGrokImagineI2vPricing(
   pricing?: Partial<StudioMotionVideoPricing> | null,
 ): GrokImagineI2vPricing {
   const p = mergeMotionVideoPricing(pricing)
+  const from = p.grok_imagine_i2v ?? {}
+  const base = DEFAULT_GROK_IMAGINE_I2V_PRICING
   return {
-    ...DEFAULT_MOTION_VIDEO_PRICING.grok_imagine_i2v!,
-    ...p.grok_imagine_i2v,
+    usd_per_sec_480p: Number(from.usd_per_sec_480p ?? base.usd_per_sec_480p),
+    usd_per_sec_720p: Number(from.usd_per_sec_720p ?? base.usd_per_sec_720p),
+    usd_per_image: Number(from.usd_per_image ?? base.usd_per_image),
+    duration_min: Number(from.duration_min ?? base.duration_min),
+    duration_max: Number(from.duration_max ?? base.duration_max),
+    duration_default: Number(from.duration_default ?? base.duration_default),
+    resolutions: from.resolutions ?? base.resolutions,
+    default_resolution: from.default_resolution ?? base.default_resolution,
+    credits_example_6s_720p: from.credits_example_6s_720p ?? base.credits_example_6s_720p,
   }
 }
 
