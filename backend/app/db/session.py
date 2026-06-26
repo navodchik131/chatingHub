@@ -369,7 +369,7 @@ def _migrate_fanvue_oauth_columns(sync_conn) -> None:
     insp = inspect(sync_conn)
     if not insp.has_table("fanvue_connections"):
         return
-    cols = {c["name"] for c in insp.get_columns("fanvue_connections")}
+    cols = {c["name"]: c for c in insp.get_columns("fanvue_connections")}
     if "refresh_token_encrypted" not in cols:
         sync_conn.execute(text("ALTER TABLE fanvue_connections ADD COLUMN refresh_token_encrypted TEXT"))
     if "token_expires_at" not in cols:
@@ -380,6 +380,16 @@ def _migrate_fanvue_oauth_columns(sync_conn) -> None:
         sync_conn.execute(
             text("ALTER TABLE fanvue_connections ADD COLUMN oauth_connected_at TIMESTAMP")
         )
+    sign_col = cols.get("webhook_signing_secret_encrypted")
+    if sign_col is not None and not sign_col.get("nullable", True):
+        dialect = sync_conn.dialect.name
+        if dialect != "sqlite":
+            sync_conn.execute(
+                text(
+                    "ALTER TABLE fanvue_connections "
+                    "ALTER COLUMN webhook_signing_secret_encrypted DROP NOT NULL"
+                )
+            )
 
 
 def _migrate_fanvue_oauth_states_table(sync_conn) -> None:
