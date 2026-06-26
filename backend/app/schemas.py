@@ -454,6 +454,14 @@ class FanvueOAuthStartOut(BaseModel):
     authorize_url: str
 
 
+class FanvueSyncOut(BaseModel):
+    chats_processed: int
+    messages_imported: int
+    messages_skipped: int
+    messages_empty: int
+    errors: list[str] = Field(default_factory=list)
+
+
 class IntegrationStatusOut(BaseModel):
     telegram_configured: bool
     telegram_bot_username: str | None = None

@@ -7,7 +7,7 @@ from urllib.parse import urlencode
 
 from aiogram import Bot
 from aiogram.client.session.aiohttp import AiohttpSession
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from fastapi.responses import RedirectResponse
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -33,10 +33,11 @@ from app.db.models import (
     User,
     WavespeedConnection,
 )
-from app.db.session import get_session
+from app.db.session import SessionLocal, get_session
 from app.schemas import (
     FanvueIntegrationIn,
     FanvueOAuthStartOut,
+    FanvueSyncOut,
     IntegrationStatusOut,
     LlmIntegrationIn,
     TelegramIntegrationIn,
@@ -48,12 +49,26 @@ from app.services.fanvue_connection import (
     fanvue_platform_webhook_signing_secret,
     fanvue_platform_webhook_url,
 )
+from app.services.fanvue_sync import sync_fanvue_chat_history
 from app.services.studio_keys import wavespeed_cabinet_flags
 from app.services.workspace import PERM_INTEGRATIONS, assert_permission, workspace_owner_id
 
 log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/integrations", tags=["integrations"])
+
+
+async def _background_fanvue_history_sync(user_id: int) -> None:
+    async with SessionLocal() as session:
+        row = await session.scalar(
+            select(FanvueConnection).where(FanvueConnection.user_id == user_id)
+        )
+        if not row:
+            return
+        try:
+            await sync_fanvue_chat_history(session, conn=row)
+        except Exception:
+            log.exception("background fanvue history sync failed user=%s", user_id)
 
 
 def _telegram_webhook_registered(tg: TelegramConnection | None) -> bool:
@@ -301,6 +316,7 @@ async def fanvue_oauth_start(
 @router.get("/fanvue/oauth/callback")
 async def fanvue_oauth_callback(
     session: AsyncSession = Depends(get_session),
+    background_tasks: BackgroundTasks,
     code: str | None = Query(default=None),
     state: str | None = Query(default=None),
     error: str | None = Query(default=None),
@@ -362,7 +378,36 @@ async def fanvue_oauth_callback(
         q = urlencode({"account": "integrations", "fanvue": "error"})
         return RedirectResponse(url=f"{base}/?{q}", status_code=302)
 
+    background_tasks.add_task(_background_fanvue_history_sync, user_id)
     return RedirectResponse(url=ok, status_code=302)
+
+
+@router.post("/fanvue/sync", response_model=FanvueSyncOut)
+async def fanvue_sync_history(
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> FanvueSyncOut:
+    assert_permission(user, PERM_INTEGRATIONS)
+    oid = workspace_owner_id(user)
+    row = await session.scalar(
+        select(FanvueConnection).where(FanvueConnection.user_id == oid)
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Fanvue is not connected")
+    try:
+        stats = await sync_fanvue_chat_history(session, conn=row)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except Exception as e:
+        log.exception("fanvue sync failed user=%s", oid)
+        raise HTTPException(status_code=500, detail="Fanvue sync failed") from e
+    return FanvueSyncOut(
+        chats_processed=int(stats["chats_processed"]),
+        messages_imported=int(stats["messages_imported"]),
+        messages_skipped=int(stats["messages_skipped"]),
+        messages_empty=int(stats["messages_empty"]),
+        errors=list(stats["errors"]) if isinstance(stats["errors"], list) else [],
+    )
 
 
 @router.delete("/fanvue", response_model=IntegrationStatusOut)

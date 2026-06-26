@@ -30,6 +30,7 @@ async def persist_inbound_chat_message(
     meta: str | None,
     image_bytes: bytes | None = None,
     image_mime: str | None = None,
+    silent: bool = False,
 ) -> tuple[int, dict]:
     if src_lang and not conv.user_lang:
         conv.user_lang = src_lang
@@ -67,23 +68,24 @@ async def persist_inbound_chat_message(
     conv_id = conv.id
     payload = message_to_out(row, owner_id=owner_user_id).model_dump(mode="json")
 
-    await hub.broadcast_user(
-        owner_user_id,
-        {
-            "type": "new_message",
-            "conversation_id": conv_id,
-            "message": payload,
-        },
-    )
-    preview = (text_translated or text_original or "").strip()
-    if not preview and image_bytes:
-        preview = "📷 Изображение"
-    else:
-        preview = preview[:200]
-    await notify_inbound_message(
-        owner_user_id,
-        conversation_id=conv_id,
-        title=f"{display} · {conv.platform.value}",
-        body=preview or "Новое сообщение",
-    )
+    if not silent:
+        await hub.broadcast_user(
+            owner_user_id,
+            {
+                "type": "new_message",
+                "conversation_id": conv_id,
+                "message": payload,
+            },
+        )
+        preview = (text_translated or text_original or "").strip()
+        if not preview and image_bytes:
+            preview = "📷 Изображение"
+        else:
+            preview = preview[:200]
+        await notify_inbound_message(
+            owner_user_id,
+            conversation_id=conv_id,
+            title=f"{display} · {conv.platform.value}",
+            body=preview or "Новое сообщение",
+        )
     return conv_id, payload

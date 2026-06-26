@@ -762,6 +762,7 @@ export default function App() {
   const [modelSavingId, setModelSavingId] = useState<number | null>(null)
   const [tgToken, setTgToken] = useState('')
   const [fvBusy, setFvBusy] = useState(false)
+  const [fvSyncNote, setFvSyncNote] = useState<string | null>(null)
 
   const [appSection, setAppSection] = useState<WorkspaceSection>('overview')
   const [studioDesc, setStudioDesc] = useState('')
@@ -3487,6 +3488,7 @@ export default function App() {
 
   const disconnectFanvue = async () => {
     setError(null)
+    setFvSyncNote(null)
     setFvBusy(true)
     try {
       const r = await apiFetch('/api/integrations/fanvue', { method: 'DELETE' })
@@ -3497,6 +3499,36 @@ export default function App() {
       }
       setInteg((await r.json()) as IntegrationStatus)
       void refreshMe()
+    } finally {
+      setFvBusy(false)
+    }
+  }
+
+  const syncFanvueHistory = async () => {
+    setError(null)
+    setFvSyncNote(null)
+    setFvBusy(true)
+    try {
+      const r = await apiFetch('/api/integrations/fanvue/sync', { method: 'POST' })
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        setError(formatHttpApiError(r, j))
+        return
+      }
+      const j = (await r.json()) as {
+        chats_processed?: number
+        messages_imported?: number
+        messages_skipped?: number
+        errors?: string[]
+      }
+      const imported = j.messages_imported ?? 0
+      const chats = j.chats_processed ?? 0
+      const skipped = j.messages_skipped ?? 0
+      setFvSyncNote(
+        `История загружена: ${imported} сообщений в ${chats} диалогах` +
+          (skipped ? ` (${skipped} уже были в базе)` : '') +
+          (j.errors?.length ? `. Предупреждений: ${j.errors.length}` : ''),
+      )
     } finally {
       setFvBusy(false)
     }
@@ -4459,6 +4491,14 @@ export default function App() {
                           type="button"
                           className="ghost-btn"
                           disabled={!canIntegrations || fvBusy}
+                          onClick={() => void syncFanvueHistory()}
+                        >
+                          {fvBusy ? '…' : 'Загрузить историю'}
+                        </button>
+                        <button
+                          type="button"
+                          className="ghost-btn"
+                          disabled={!canIntegrations || fvBusy}
                           onClick={() => void disconnectFanvue()}
                         >
                           Отключить
@@ -4482,6 +4522,17 @@ export default function App() {
                     </p>
                   )}
                 </div>
+                {fvSyncNote ? (
+                  <p className="muted small" style={{ margin: '0.75rem 0 0' }}>
+                    {fvSyncNote}
+                  </p>
+                ) : null}
+                {integ?.fanvue_configured ? (
+                  <p className="muted small" style={{ margin: '0.5rem 0 0' }}>
+                    После подключения история подтягивается автоматически в фоне. Кнопка «Загрузить историю» —
+                    повторный импорт или догрузка старых диалогов (до 100 чатов × 50 сообщений).
+                  </p>
+                ) : null}
               </section>
 
               {canPlatformAdmin ? (

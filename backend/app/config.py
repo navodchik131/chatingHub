@@ -427,6 +427,18 @@ class Settings(BaseSettings):
     fanvue_oauth_scopes: str = "openid offline_access offline read:self read:chat write:chat"
     fanvue_api_version: str = "2025-06-26"
     fanvue_api_base: str = "https://api.fanvue.com"
+    fanvue_sync_max_chats: int = Field(
+        default=100,
+        ge=1,
+        le=500,
+        description="Макс. диалогов за один запуск синхронизации истории Fanvue.",
+    )
+    fanvue_sync_max_messages_per_chat: int = Field(
+        default=50,
+        ge=1,
+        le=200,
+        description="Макс. сообщений на диалог при синхронизации истории Fanvue.",
+    )
 
     cors_origins: str = (
         "http://localhost:5173,http://127.0.0.1:5173,"

@@ -26,7 +26,7 @@ def _meta_needle_fanvue_message_uuid(message_uuid: str) -> str:
     return f'"fanvue_message_uuid": "{message_uuid}"'
 
 
-async def _fanvue_inbound_exists(
+async def fanvue_message_exists(
     session: AsyncSession, owner_user_id: int, message_uuid: str
 ) -> bool:
     needle = _meta_needle_fanvue_message_uuid(message_uuid)
@@ -79,7 +79,7 @@ async def ingest_fanvue_message_received(
 
     creator_uuid = str(recipient_uuid or "").strip() or "default"
 
-    if message_uuid and await _fanvue_inbound_exists(session, owner_user_id, message_uuid):
+    if message_uuid and await fanvue_message_exists(session, owner_user_id, message_uuid):
         log.debug("fanvue duplicate webhook message %s", message_uuid)
         return {"ok": True, "skipped": "duplicate"}
 
@@ -154,3 +154,121 @@ async def ingest_fanvue_message_received(
     await session.commit()
 
     return {"ok": True}
+
+
+async def ingest_fanvue_message_from_api(
+    session: AsyncSession,
+    *,
+    owner_user_id: int,
+    creator_uuid: str,
+    fan_uuid: str,
+    fan_display: str,
+    msg: dict[str, Any],
+    access_token: str,
+    fetch_media: bool = True,
+    silent: bool = True,
+) -> str:
+    """Импорт одного сообщения из GET /chats/.../messages. Возвращает imported|skipped|empty."""
+    from app.db.models import MessageDirection
+    from app.db.repo import add_message
+    from app.services.fanvue_connection import ensure_fanvue_access_token
+
+    message_uuid = str(msg.get("uuid") or "").strip()
+    text = msg.get("text")
+    text_s = (text if isinstance(text, str) else "") or ""
+    text_s = text_s.strip()
+    has_media = bool(msg.get("hasMedia"))
+    media_uuids = fanvue_message_media_uuids(msg)
+
+    if not text_s and not has_media and not media_uuids:
+        return "empty"
+
+    if message_uuid and await fanvue_message_exists(session, owner_user_id, message_uuid):
+        return "skipped"
+
+    sender = msg.get("sender") or {}
+    sender_uuid = str(sender.get("uuid") or "").strip()
+    if not sender_uuid:
+        return "empty"
+
+    is_outbound = sender_uuid == creator_uuid.strip()
+    if not is_outbound and sender_uuid != fan_uuid.strip():
+        return "empty"
+
+    display = fan_display or fan_uuid
+    if not isinstance(display, str):
+        display = str(display)
+
+    conv = await get_or_create_conversation(
+        session,
+        owner_user_id,
+        Platform.fanvue,
+        fan_uuid,
+        creator_uuid,
+        display,
+    )
+
+    meta_obj: dict[str, Any] = {
+        "fanvue_message_uuid": message_uuid or None,
+        "sender_uuid": sender_uuid,
+        "recipient_uuid": creator_uuid if is_outbound else fan_uuid,
+        "ingest": "fanvue.history.sync",
+        "media_uuids": media_uuids,
+    }
+
+    if is_outbound:
+        meta = json.dumps(meta_obj, ensure_ascii=False)
+        await add_message(
+            session,
+            conv.id,
+            MessageDirection.outbound,
+            text_s,
+            text_s or None,
+            meta=meta,
+        )
+        conv.updated_at = datetime.now(timezone.utc)
+        return "imported"
+
+    user = await get_user_with_billing(session, owner_user_id)
+    if not user:
+        raise ValueError("user not found")
+
+    translated, src_lang = await translate_to_russian(text_s) if text_s else ("", None)
+
+    image_bytes: bytes | None = None
+    image_mime: str | None = None
+    if fetch_media and message_uuid and (has_media or media_uuids):
+        row_fv = await session.scalar(
+            select(FanvueConnection).where(FanvueConnection.user_id == owner_user_id)
+        )
+        if row_fv:
+            try:
+                fv_tok = await ensure_fanvue_access_token(session, row_fv)
+                tok = access_token or fv_tok
+                img = await fanvue_fetch_message_image_bytes(
+                    tok,
+                    fan_user_uuid=fan_uuid,
+                    message_uuid=message_uuid,
+                    media_uuids=media_uuids or [],
+                )
+                if img:
+                    image_bytes, image_mime = img
+                    meta_obj["has_image"] = True
+            except Exception as e:
+                log.warning("fanvue sync media fetch failed: %s", e)
+
+    meta = json.dumps(meta_obj, ensure_ascii=False)
+    await persist_inbound_chat_message(
+        session,
+        owner_user_id=owner_user_id,
+        conv=conv,
+        display=display,
+        text_original=text_s,
+        text_translated=translated if text_s else None,
+        src_lang=src_lang,
+        meta=meta,
+        image_bytes=image_bytes,
+        image_mime=image_mime,
+        silent=silent,
+    )
+    return "imported"
