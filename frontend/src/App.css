@@ -1526,17 +1526,11 @@ select:focus {
   margin-top: 1.5rem;
   min-height: min(76vh, 800px);
   align-items: stretch;
+  min-width: 0;
 }
 
-@media (max-width: 880px) {
-  .layout {
-    grid-template-columns: 1fr;
-    min-height: auto;
-  }
-
-  .sidebar {
-    max-height: 42vh;
-  }
+.layout--chat {
+  min-height: 0;
 }
 
 .sidebar {
@@ -1546,6 +1540,8 @@ select:focus {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  max-height: 100%;
+  overflow: hidden;
   box-shadow: var(--shadow-sm);
   background: linear-gradient(165deg, var(--bg-elevated) 0%, color-mix(in srgb, var(--bg-elevated) 97%, var(--accent-soft)) 100%);
 }
@@ -1557,6 +1553,7 @@ select:focus {
   padding: 0 0.25rem 0.75rem;
   border-bottom: 1px solid var(--border);
   margin-bottom: 0.75rem;
+  flex-shrink: 0;
 }
 
 .sidebar h2 {
@@ -1589,8 +1586,23 @@ select:focus {
   flex-direction: column;
   gap: 0.5rem;
   overflow-y: auto;
-  flex: 1;
+  overflow-x: hidden;
+  flex: 1 1 auto;
+  min-height: 0;
   scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+@media (max-width: 880px) {
+  .layout {
+    grid-template-columns: 1fr;
+    min-height: auto;
+  }
+
+  .layout:not(.mobile) .sidebar {
+    max-height: 42vh;
+  }
 }
 
 .conv {
@@ -1721,6 +1733,32 @@ select:focus {
   overflow: hidden;
   box-shadow: var(--shadow-md);
   background: linear-gradient(180deg, var(--bg-elevated) 0%, color-mix(in srgb, var(--bg-elevated) 98%, var(--accent-faint)) 100%);
+}
+
+.app.app--shell .workspace-content:has(> .layout--chat) {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.app.app--shell .workspace-content > .layout--chat {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin-top: 0;
+  height: auto;
+  max-height: none;
+  align-self: stretch;
+}
+
+.app.app--shell .workspace-content > .layout--chat .sidebar,
+.app.app--shell .workspace-content > .layout--chat .thread {
+  min-height: 0;
+  max-height: none;
+  height: 100%;
+}
+
+.app.app--shell .workspace-content > .layout--chat .thread {
+  min-height: 0;
 }
 
 .empty-thread {
@@ -3373,10 +3411,9 @@ select:focus {
   }
 
   .layout.mobile .sidebar {
-    flex: 1;
+    flex: 1 1 auto;
     min-height: 0;
     max-height: none;
-    min-height: calc(100dvh - 10.5rem);
   }
 
   .layout.mobile .thread {
@@ -4482,6 +4519,9 @@ a.workspace-mobile-nav-item {
 
 .app.app--shell .workspace-content > .layout {
   margin-top: 0;
+}
+
+.app.app--shell .workspace-content > .layout:not(.layout--chat) {
   min-height: min(68vh, calc(100dvh - var(--topbar-height) - 7rem));
 }
 

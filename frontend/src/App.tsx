@@ -3783,6 +3783,7 @@ export default function App() {
 
   const layoutClass = [
     'layout',
+    'layout--chat',
     isMobileLayout ? 'mobile' : '',
     isMobileLayout && selectedId != null ? 'thread-focus' : '',
   ]
