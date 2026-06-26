@@ -1148,15 +1148,19 @@ def resolve_workflow_generation_plan(
     )
 
 
-def resolve_upstream_video_generation_id(
+def _node_has_video_url(node: dict[str, Any]) -> bool:
+    data = node.get("data") if isinstance(node.get("data"), dict) else {}
+    return bool(str(data.get("videoUrl") or "").strip())
+
+
+def _video_upstream_sources(
     *,
     target_id: str,
     target_handle: str,
     edges: list[dict[str, Any]],
     node_map: dict[str, dict[str, Any]],
-    label: str = "видео",
-) -> int:
-    """generationId с upstream videoGeneration / videoUpscale."""
+    label: str,
+) -> list[dict[str, Any]]:
     sources = _sources_for_target(target_id, target_handle, edges, node_map)
     if not sources:
         raise WorkflowResolutionError(f"Подключите вход {label} от ноды «Видео» или «Апскейл видео»")
@@ -1166,6 +1170,26 @@ def resolve_upstream_video_generation_id(
             raise WorkflowResolutionError(
                 f"К входу {label} можно подключить ноду «Видео» или «Апскейл видео»"
             )
+    return sorted(sources, key=lambda node: (0 if _node_has_video_url(node) else 1))
+
+
+def resolve_upstream_video_generation_id(
+    *,
+    target_id: str,
+    target_handle: str,
+    edges: list[dict[str, Any]],
+    node_map: dict[str, dict[str, Any]],
+    label: str = "видео",
+) -> int:
+    """generationId с upstream videoGeneration / videoUpscale (без проверки БД)."""
+    sources = _video_upstream_sources(
+        target_id=target_id,
+        target_handle=target_handle,
+        edges=edges,
+        node_map=node_map,
+        label=label,
+    )
+    for src in sources:
         gid = _generation_id_from_node(src)
         if gid is not None:
             return gid
@@ -1174,29 +1198,100 @@ def resolve_upstream_video_generation_id(
     )
 
 
-def resolve_workflow_video_upscale_plan(
+async def resolve_video_generation_id_for_upstream_node(
+    session,
     *,
-    target_node_id: str,
-    nodes: list[dict[str, Any]],
-    edges: list[dict[str, Any]],
-) -> WorkflowVideoUpscalePlan:
-    node_map = _node_map(nodes)
-    target_id = (target_node_id or "").strip()
-    target = node_map.get(target_id)
-    if not target:
-        raise WorkflowResolutionError("Целевая нода не найдена в графе")
-    _require_enabled_target(target)
-    if str(target.get("type") or "") != "videoUpscale":
-        raise WorkflowResolutionError("Неверный тип ноды для апскейла видео")
+    owner_id: int,
+    node: dict[str, Any],
+) -> int | None:
+    """Готовое видео upstream-ноды: generationId в data или поиск по videoUrl в архиве."""
+    from sqlalchemy import select
 
-    source_gid = resolve_upstream_video_generation_id(
+    from app.db.models import StudioGeneration
+    from app.services.studio_generation_placeholders import generation_media_kind
+
+    gid = _generation_id_from_node(node)
+    if gid is not None:
+        row = await session.get(StudioGeneration, gid)
+        if row and row.user_id == owner_id and generation_media_kind(row) == "video":
+            src = (row.source_url or "").strip()
+            if src.startswith("https://") or (row.relative_path or "").strip():
+                return gid
+
+    data = node.get("data") if isinstance(node.get("data"), dict) else {}
+    video_url = str(data.get("videoUrl") or "").strip()
+    if not video_url:
+        return None
+
+    stmt = (
+        select(StudioGeneration)
+        .where(
+            StudioGeneration.user_id == owner_id,
+            StudioGeneration.content_type.like("video/%"),
+            StudioGeneration.source_url == video_url,
+        )
+        .order_by(StudioGeneration.id.desc())
+        .limit(1)
+    )
+    row = (await session.execute(stmt)).scalar_one_or_none()
+    if row is None:
+        return None
+    src = (row.source_url or "").strip()
+    if not src.startswith("https://") and not (row.relative_path or "").strip():
+        return None
+    return row.id
+
+
+async def resolve_upstream_video_generation_id_validated(
+    session,
+    *,
+    owner_id: int,
+    target_id: str,
+    target_handle: str,
+    edges: list[dict[str, Any]],
+    node_map: dict[str, dict[str, Any]],
+    label: str = "видео",
+) -> int:
+    """generationId готового видео с проверкой content_type в БД."""
+    sources = _video_upstream_sources(
         target_id=target_id,
-        target_handle=HANDLE["video_in"],
+        target_handle=target_handle,
         edges=edges,
         node_map=node_map,
-        label="видео",
+        label=label,
+    )
+    for src in sources:
+        gid = await resolve_video_generation_id_for_upstream_node(
+            session,
+            owner_id=owner_id,
+            node=src,
+        )
+        if gid is not None:
+            return gid
+
+    if any(_node_has_video_url(src) for src in sources):
+        raise WorkflowResolutionError(
+            "Видео отображается, но сервер не нашёл generationId. "
+            "Перегенерируйте ролик на ноде «Видео» и повторите апскейл."
+        )
+    if any(_generation_id_from_node(src) is not None for src in sources):
+        raise WorkflowResolutionError(
+            "Подключён источник изображения, а не видео. "
+            "Подключите выход «video» с ноды «Видео» после генерации ролика."
+        )
+    raise WorkflowResolutionError(
+        f"Сначала выполните генерацию upstream-ноды для {label} (нет generationId)"
     )
 
+
+def _build_workflow_video_upscale_plan(
+    *,
+    target_id: str,
+    target: dict[str, Any],
+    node_map: dict[str, dict[str, Any]],
+    edges: list[dict[str, Any]],
+    source_gid: int,
+) -> WorkflowVideoUpscalePlan:
     gen_data = target.get("data") if isinstance(target.get("data"), dict) else {}
     target_resolution = str(gen_data.get("targetResolution") or "1080p").strip().lower() or "1080p"
 
@@ -1223,32 +1318,6 @@ def resolve_workflow_video_upscale_plan(
     )
 
 
-def resolve_upstream_video_generation_id(
-    *,
-    target_id: str,
-    target_handle: str,
-    edges: list[dict[str, Any]],
-    node_map: dict[str, dict[str, Any]],
-    label: str = "видео",
-) -> int:
-    """generationId с upstream videoGeneration / videoUpscale."""
-    sources = _sources_for_target(target_id, target_handle, edges, node_map)
-    if not sources:
-        raise WorkflowResolutionError(f"Подключите вход {label} от ноды «Видео» или «Апскейл видео»")
-    for src in sources:
-        ntype = str(src.get("type") or "")
-        if ntype not in _VIDEO_OUTPUT_NODE_TYPES:
-            raise WorkflowResolutionError(
-                f"К входу {label} можно подключить ноду «Видео» или «Апскейл видео»"
-            )
-        gid = _generation_id_from_node(src)
-        if gid is not None:
-            return gid
-    raise WorkflowResolutionError(
-        f"Сначала выполните генерацию upstream-ноды для {label} (нет generationId)"
-    )
-
-
 def resolve_workflow_video_upscale_plan(
     *,
     target_node_id: str,
@@ -1271,30 +1340,45 @@ def resolve_workflow_video_upscale_plan(
         node_map=node_map,
         label="видео",
     )
+    return _build_workflow_video_upscale_plan(
+        target_id=target_id,
+        target=target,
+        node_map=node_map,
+        edges=edges,
+        source_gid=source_gid,
+    )
 
-    gen_data = target.get("data") if isinstance(target.get("data"), dict) else {}
-    target_resolution = str(gen_data.get("targetResolution") or "1080p").strip().lower() or "1080p"
 
-    studio_model_id: int | None = None
-    output_aspect: str | None = None
-    for edge in edges:
-        if str(edge.get("target") or "") != target_id:
-            continue
-        if edge.get("targetHandle") is not None and str(edge.get("targetHandle")) != HANDLE["video_in"]:
-            continue
-        src = node_map.get(str(edge.get("source") or "").strip())
-        if not src:
-            continue
-        sdata = src.get("data") if isinstance(src.get("data"), dict) else {}
-        if output_aspect is None:
-            asp = str(sdata.get("outputAspect") or "").strip()
-            if asp:
-                output_aspect = asp
-        break
+async def resolve_workflow_video_upscale_plan_async(
+    session,
+    *,
+    owner_id: int,
+    target_node_id: str,
+    nodes: list[dict[str, Any]],
+    edges: list[dict[str, Any]],
+) -> WorkflowVideoUpscalePlan:
+    node_map = _node_map(nodes)
+    target_id = (target_node_id or "").strip()
+    target = node_map.get(target_id)
+    if not target:
+        raise WorkflowResolutionError("Целевая нода не найдена в графе")
+    _require_enabled_target(target)
+    if str(target.get("type") or "") != "videoUpscale":
+        raise WorkflowResolutionError("Неверный тип ноды для апскейла видео")
 
-    return WorkflowVideoUpscalePlan(
-        source_generation_id=source_gid,
-        target_resolution=target_resolution,
-        studio_model_id=studio_model_id,
-        output_aspect=output_aspect,
+    source_gid = await resolve_upstream_video_generation_id_validated(
+        session,
+        owner_id=owner_id,
+        target_id=target_id,
+        target_handle=HANDLE["video_in"],
+        edges=edges,
+        node_map=node_map,
+        label="видео",
+    )
+    return _build_workflow_video_upscale_plan(
+        target_id=target_id,
+        target=target,
+        node_map=node_map,
+        edges=edges,
+        source_gid=source_gid,
     )

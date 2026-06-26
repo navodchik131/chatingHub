@@ -10,7 +10,7 @@ import {
   type StudioMotionVideoPricing,
 } from '../../studioMotionPricing'
 import { executeWorkflowGeneration, fetchWorkflowModelOptions } from '../api'
-import { getDownstreamPreviewNodeIds, serializeGraph } from '../graphResolver'
+import { getDownstreamPreviewNodeIds, parseWorkflowGenerationId, serializeGraph } from '../graphResolver'
 import { useWorkflowBilling } from '../WorkflowBillingContext'
 import { useWorkflowRun } from '../WorkflowRunContext'
 import { BaseNode } from './BaseNode'
@@ -144,8 +144,7 @@ function VideoGenerationNodeComponent({ id, data }: NodeProps) {
 
       const edges = getEdges()
       const previewTargets = new Set(getDownstreamPreviewNodeIds(id, edges))
-      const generationId =
-        typeof result.generation_id === 'number' ? result.generation_id : null
+      const generationId = parseWorkflowGenerationId(result.generation_id)
 
       setNodes((current) =>
         current.map((node) => {

@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Handle, Position, useReactFlow, type NodeProps } from '@xyflow/react'
+import { Handle, Position, useEdges, useNodes, useReactFlow, type NodeProps } from '@xyflow/react'
 import {
   computeVideoUpscaleCreditCost,
   DEFAULT_VIDEO_UPSCALE_PRICING,
@@ -8,7 +8,7 @@ import {
   type VideoUpscaleResolution,
 } from '../../studioMotionPricing'
 import { executeWorkflowGeneration, fetchWorkflowModelOptions } from '../api'
-import { getDownstreamPreviewNodeIds, serializeGraph } from '../graphResolver'
+import { getDownstreamPreviewNodeIds, parseWorkflowGenerationId, resolveConnectedVideoSource, serializeGraph } from '../graphResolver'
 import { useWorkflowBilling } from '../WorkflowBillingContext'
 import { useWorkflowRun } from '../WorkflowRunContext'
 import { BaseNode } from './BaseNode'
@@ -22,6 +22,8 @@ const RESOLUTIONS: VideoUpscaleResolution[] = ['720p', '1080p', '2k', '4k']
 
 function VideoUpscaleNodeComponent({ id, data }: NodeProps) {
   const { setNodes, getNodes, getEdges } = useReactFlow()
+  const nodes = useNodes()
+  const edges = useEdges()
   const { workspaceId } = useWorkflowRun()
   const { me } = useWorkflowBilling()
   const nodeData = data as VideoUpscaleNodeData
@@ -42,6 +44,13 @@ function VideoUpscaleNodeComponent({ id, data }: NodeProps) {
     () => computeVideoUpscaleCreditCost(targetResolution, pricing),
     [pricing, targetResolution],
   )
+
+  const upstreamVideo = useMemo(
+    () => resolveConnectedVideoSource(id, nodes, edges),
+    [edges, id, nodes],
+  )
+  const previewVideoUrl = upstreamVideo.videoUrl ?? nodeData.videoUrl
+  const hasUpstreamVideo = Boolean(upstreamVideo.videoUrl)
 
   const updateNodeData = useCallback(
     (patch: Partial<VideoUpscaleNodeData>) => {
@@ -92,8 +101,7 @@ function VideoUpscaleNodeComponent({ id, data }: NodeProps) {
       }
 
       const previewTargets = new Set(getDownstreamPreviewNodeIds(id, edges))
-      const generationId =
-        typeof result.generation_id === 'number' ? result.generation_id : null
+      const generationId = parseWorkflowGenerationId(result.generation_id)
 
       setNodes((current) =>
         current.map((node) => {
@@ -144,7 +152,7 @@ function VideoUpscaleNodeComponent({ id, data }: NodeProps) {
       isRunning={nodeData.isRunning}
       error={nodeData.error}
       headerExtra={
-        nodeData.videoUrl ? <span className="workflow-node__badge">готово</span> : null
+        previewVideoUrl ? <span className="workflow-node__badge">готово</span> : null
       }
     >
       <Handle
@@ -185,11 +193,11 @@ function VideoUpscaleNodeComponent({ id, data }: NodeProps) {
         </div>
       </div>
 
-      {nodeData.videoUrl ? (
+      {previewVideoUrl ? (
         <div className="workflow-node__preview-box workflow-node__preview-box--filled nodrag">
           <video
-            key={nodeData.videoUrl}
-            src={nodeData.videoUrl}
+            key={previewVideoUrl}
+            src={previewVideoUrl}
             controls
             playsInline
             className="workflow-node__preview-video"
@@ -200,6 +208,12 @@ function VideoUpscaleNodeComponent({ id, data }: NodeProps) {
           <span className="workflow-node__hint">Подключите «Видео» и запустите апскейл</span>
         </div>
       )}
+
+      {!hasUpstreamVideo && !nodeData.isRunning ? (
+        <p className="workflow-node__hint workflow-node__hint--muted">
+          Подключите выход «video» с ноды «Видео» после генерации ролика
+        </p>
+      ) : null}
 
       <button
         type="button"

@@ -26,7 +26,7 @@ from app.services.studio_workflow_resolver import (
     resolve_workflow_turnaround_plan,
     resolve_workflow_video_plan,
     resolve_workflow_video_prompt_compose_plan,
-    resolve_workflow_video_upscale_plan,
+    resolve_workflow_video_upscale_plan_async,
 )
 from app.services.studio_workflow_defaults import (
     DEMO_WORKFLOW_NAME,
@@ -443,7 +443,9 @@ async def api_workflow_execute(
             return await _accept_workflow_video_prompt_compose_job(session, user, plan=plan)
 
         if target_type == "videoUpscale":
-            plan = resolve_workflow_video_upscale_plan(
+            plan = await resolve_workflow_video_upscale_plan_async(
+                session,
+                owner_id=oid,
                 target_node_id=target_node_id,
                 nodes=nodes,
                 edges=edges,
@@ -972,7 +974,10 @@ async def _accept_workflow_video_upscale_job(
     if not source_row or source_row.user_id != oid:
         raise HTTPException(status_code=404, detail="Исходное видео не найдено")
     if generation_media_kind(source_row) != "video":
-        raise HTTPException(status_code=400, detail="Подключите готовое видео (generationId)")
+        raise HTTPException(
+            status_code=400,
+            detail="Подключён источник изображения, а не видео. Сгенерируйте ролик на ноде «Видео».",
+        )
     src = (source_row.source_url or "").strip()
     if not src.startswith("https://") and not (source_row.relative_path or "").strip():
         raise HTTPException(status_code=400, detail="Исходное видео ещё не готово")

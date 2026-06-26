@@ -4,6 +4,15 @@ import { isWorkflowNodeDisabled } from './workflowNodeState'
 
 const RUNTIME_NODE_DATA_KEYS = ['isRunning', 'error'] as const
 
+export function parseWorkflowGenerationId(raw: unknown): number | null {
+  if (typeof raw === 'number' && Number.isFinite(raw) && raw > 0) return raw
+  if (typeof raw === 'string' && raw.trim() !== '') {
+    const n = Number(raw)
+    if (Number.isFinite(n) && n > 0) return n
+  }
+  return null
+}
+
 const OUTPUT_HANDLES = new Set([
   HandleIds.imageGenOut,
   HandleIds.videoOut,
@@ -60,6 +69,29 @@ export function resolveConnectedPreviewMedia(
     ) {
       const media = mediaFromSourceNode(sourceNode)
       if (media.imageUrl || media.videoUrl) return media
+    }
+  }
+  return {}
+}
+
+export function resolveConnectedVideoSource(
+  nodeId: string,
+  nodes: Node[],
+  edges: Edge[],
+): { videoUrl?: string; generationId?: number | null } {
+  for (const edge of edges) {
+    if (edge.target !== nodeId) continue
+    if (edge.targetHandle !== HandleIds.videoIn) continue
+    const sourceNode = nodes.find((node) => node.id === edge.source)
+    if (!sourceNode || isWorkflowNodeDisabled(sourceNode.data as Record<string, unknown>)) {
+      continue
+    }
+    if (sourceNode.type !== 'videoGeneration' && sourceNode.type !== 'videoUpscale') continue
+    const data = (sourceNode.data ?? {}) as Record<string, unknown>
+    const videoUrl = typeof data.videoUrl === 'string' ? data.videoUrl : undefined
+    return {
+      videoUrl,
+      generationId: parseWorkflowGenerationId(data.generationId),
     }
   }
   return {}
