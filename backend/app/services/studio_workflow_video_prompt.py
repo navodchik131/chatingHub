@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.db.models import User
 from app.services.studio_grok_motion import (
+    grok_compose_boardstory_video_prompt,
     grok_compose_workflow_video_prompt,
     grok_motion_api_configured,
     grok_motion_studio_credentials,
@@ -21,6 +22,11 @@ from app.services.studio_motion_grok_pipeline import (
 )
 from app.services.studio_motion_video import resolve_motion_video_file
 from app.services.studio_openai import describe_reference_image_openai
+from app.services.studio_workflow_boardstory import (
+    BoardStoryImageSlot,
+    boardstory_tag_rules_text,
+    compute_boardstory_layout,
+)
 from app.services.studio_workflow_refs import load_workflow_reference
 from app.services.studio_workflow_resolver import WorkflowReferenceItem
 
@@ -75,6 +81,44 @@ async def _describe_reference_block(
     return "\n".join(parts)
 
 
+async def _describe_boardstory_slot(
+    session: AsyncSession,
+    *,
+    owner_id: int,
+    actor: User,
+    slot: BoardStoryImageSlot,
+    label: str,
+    llm_credentials,
+) -> str:
+    if slot.generation_id is not None:
+        img_bytes, img_mime = await _load_generation_still_bytes(
+            session,
+            owner_id=owner_id,
+            generation_id=slot.generation_id,
+            actor=actor,
+        )
+    elif slot.ref_id:
+        img_bytes, img_mime = load_workflow_reference(owner_id, slot.ref_id)
+    else:
+        return f"{label}: (empty)"
+    return await _describe_reference_block(
+        label=label,
+        image_bytes=img_bytes,
+        image_media=img_mime,
+        role=slot.role,
+        notes=slot.description,
+        credentials=llm_credentials,
+    )
+
+
+async def _estimate_boardstory_model_image_count(session: AsyncSession, *, model_id: int, actor: User) -> int:
+    from app.services.studio_seedance_t2v import filter_model_images_for_seedance_video
+    from app.services.workspace_model_access import require_studio_model_access
+
+    sm = await require_studio_model_access(session, actor, model_id, load_images=True)
+    return len(filter_model_images_for_seedance_video(list(sm.images), minimal=False, include_body=False))
+
+
 async def compose_workflow_video_generation_prompt(
     session: AsyncSession,
     *,
@@ -87,10 +131,13 @@ async def compose_workflow_video_generation_prompt(
     references: list[WorkflowReferenceItem],
     user_notes: str,
     llm_credentials,
+    boardstory_mode: bool = False,
+    clothing_ref: BoardStoryImageSlot | None = None,
+    environment_ref: BoardStoryImageSlot | None = None,
 ) -> dict[str, Any]:
     """
     Анализ motion-видео + still-контекста → полный промпт для video generation.
-    Возвращает dict для job result (refined_prompt, motion_timeline, …).
+    BoardStory: без первого кадра, промпт с @ImageN/@VideoN.
     """
     if not grok_motion_api_configured():
         raise RuntimeError(
@@ -107,6 +154,92 @@ async def compose_workflow_video_generation_prompt(
     sm = await require_studio_model_access(session, actor, model_id, load_images=True)
     profile = (sm.profile_text or "").strip() or ""
 
+    grok_creds = grok_motion_studio_credentials()
+
+    if boardstory_mode:
+        n_model = await _estimate_boardstory_model_image_count(session, model_id=model_id, actor=actor)
+        if n_model <= 0:
+            raise RuntimeError(
+                "У модели нет фото в кабинете. Добавьте turnaround и/или face."
+            )
+        layout = compute_boardstory_layout(
+            n_model,
+            has_clothing=clothing_ref is not None,
+            has_environment=environment_ref is not None,
+            n_other=len([r for r in references if (r.ref_id or "").strip()]),
+        )
+        tag_rules = boardstory_tag_rules_text(layout, has_motion=True)
+
+        timeline = await motion_grok_timeline_from_video_path(
+            video_path=vpath,
+            model_profile_text=profile,
+            first_frame_jpeg=None,
+            first_frame_media="image/jpeg",
+            credentials=grok_creds,
+        )
+
+        reference_blocks: list[str] = []
+        if clothing_ref is not None:
+            reference_blocks.append(
+                await _describe_boardstory_slot(
+                    session,
+                    owner_id=owner_id,
+                    actor=actor,
+                    slot=clothing_ref,
+                    label="CLOTHING_REFERENCE",
+                    llm_credentials=llm_credentials,
+                )
+            )
+        if environment_ref is not None:
+            reference_blocks.append(
+                await _describe_boardstory_slot(
+                    session,
+                    owner_id=owner_id,
+                    actor=actor,
+                    slot=environment_ref,
+                    label="ENVIRONMENT_REFERENCE",
+                    llm_credentials=llm_credentials,
+                )
+            )
+        for i, ref in enumerate(references, 1):
+            if not (ref.ref_id or "").strip():
+                continue
+            ref_bytes, ref_mime = load_workflow_reference(owner_id, ref.ref_id)
+            reference_blocks.append(
+                await _describe_reference_block(
+                    label=f"WORKFLOW_REFERENCE_{i}",
+                    image_bytes=ref_bytes,
+                    image_media=ref_mime,
+                    role=ref.role,
+                    notes=ref.description,
+                    credentials=llm_credentials,
+                )
+            )
+
+        composed = await grok_compose_boardstory_video_prompt(
+            motion_timeline=timeline.strip(),
+            model_profile_text=profile,
+            reference_tag_rules=tag_rules,
+            reference_blocks=reference_blocks,
+            user_notes=(user_notes or "").strip(),
+            credentials=grok_creds,
+            max_chars=int(settings.studio_seedance_t2v_prompt_max_chars or 6000),
+        )
+
+        return {
+            "refined_prompt": composed.strip(),
+            "motion_timeline": timeline.strip(),
+            "reference_scene_description": None,
+            "motion_video_file_id": mv_id,
+            "studio_model_id": model_id,
+            "boardstory_mode": True,
+            "boardstory_layout": {
+                "n_model_images": layout.n_model_images,
+                "n_clothing_images": layout.n_clothing_images,
+                "n_environment_images": layout.n_environment_images,
+            },
+        }
+
     first_frame: bytes
     first_frame_media = "image/jpeg"
     if first_frame_generation_id is not None:
@@ -119,7 +252,6 @@ async def compose_workflow_video_generation_prompt(
     else:
         first_frame, first_frame_media = await extract_video_first_frame_or_raise(vpath)
 
-    grok_creds = grok_motion_studio_credentials()
     timeline = await motion_grok_timeline_from_video_path(
         video_path=vpath,
         model_profile_text=profile,
@@ -141,7 +273,7 @@ async def compose_workflow_video_generation_prompt(
     except RuntimeError as e:
         log.warning("workflow video prompt: first frame scene skipped: %s", e)
 
-    reference_blocks: list[str] = []
+    reference_blocks = []
     if first_frame_scene:
         reference_blocks.append(f"OPENING_FRAME_SCENE:\n{first_frame_scene}")
 
@@ -199,4 +331,5 @@ async def compose_workflow_video_generation_prompt(
         "reference_scene_description": first_frame_scene,
         "motion_video_file_id": mv_id,
         "studio_model_id": model_id,
+        "boardstory_mode": False,
     }

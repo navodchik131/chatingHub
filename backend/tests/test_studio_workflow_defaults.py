@@ -10,8 +10,10 @@ from app.services.studio_workflow_defaults import (
 
 def test_load_default_workflow_templates():
     templates = load_default_workflow_templates()
-    assert len(templates) == 4
+    assert len(templates) == 6
     names = [t.name for t in templates]
+    assert "BoardStory Seedance" in names
+    assert "Motion pipeline" in names
     assert "Развертка" in names
     assert "Создание Лица" in names
     assert "Смена одежды" in names
@@ -23,7 +25,14 @@ def test_load_default_workflow_templates():
 
 def test_default_workflow_template_names():
     names = default_workflow_template_names()
-    assert len(names) == 4
+    assert len(names) == 6
     assert names == frozenset(
-        {"Развертка", "Создание Лица", "Смена одежды", "По рефу"}
+        {
+            "BoardStory Seedance",
+            "Motion pipeline",
+            "Развертка",
+            "Создание Лица",
+            "Смена одежды",
+            "По рефу",
+        }
     )

@@ -28,8 +28,9 @@ export const NODE_DESCRIPTIONS: Record<NodeType, string> = {
   turnaroundSheet: 'Character sheet GPT Image 2.0 — сетка на лице (кроме вида сзади)',
   motionVideo: 'Референс движения для Seedance',
   videoPromptCompose:
-    'Grok: полный промпт из motion-видео + референсов / развёртки → подключите к «Видео»',
-  videoGeneration: 'Seedance 2.0 / Mini / Grok I2V — @Image1 кадр, @Image2 модель, @Video1 motion',
+    'Grok: детальный промпт из motion + BoardStory refs (одежда, окружение, модель)',
+  videoGeneration:
+    'BoardStory Seedance: identity из кабинета модели, одежда/комната отдельными @Image, motion @Video1',
   preview: 'Просмотр и скачивание результата',
 }
 
@@ -39,11 +40,11 @@ export const NODE_PALETTE: NodeType[] = [
   'prompt',
   'refDescription',
   'reference',
-  'firstFrameGeneration',
-  'turnaroundSheet',
   'motionVideo',
   'videoPromptCompose',
   'videoGeneration',
   'imageGeneration',
+  'firstFrameGeneration',
+  'turnaroundSheet',
   'preview',
 ]

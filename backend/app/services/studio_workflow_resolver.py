@@ -5,6 +5,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from app.services.studio_workflow_boardstory import (
+    BoardStoryImageSlot,
+    classify_boardstory_ref_role,
+)
+
 WORKFLOW_WAVE_MODELS = frozenset(
     {"nano-banana-2", "nano-banana-pro", "wan-2.7", "gpt-image-2"}
 )
@@ -87,7 +92,7 @@ class WorkflowTurnaroundPlan:
 @dataclass(frozen=True)
 class WorkflowVideoPlan:
     model_id: int | None
-    first_frame_generation_id: int
+    first_frame_generation_id: int | None
     sheet_generation_id: int | None
     motion_video_file_id: str
     prompt: str
@@ -100,6 +105,10 @@ class WorkflowVideoPlan:
     negative_prompt: str
     video_provider: str = "seedance_t2v"
     prompt_from_compose: bool = False
+    boardstory_mode: bool = False
+    clothing_ref: BoardStoryImageSlot | None = None
+    environment_ref: BoardStoryImageSlot | None = None
+    extra_refs: tuple[WorkflowReferenceItem, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -110,6 +119,9 @@ class WorkflowVideoPromptComposePlan:
     sheet_generation_id: int | None
     references: tuple[WorkflowReferenceItem, ...]
     user_notes: str
+    boardstory_mode: bool = True
+    clothing_ref: BoardStoryImageSlot | None = None
+    environment_ref: BoardStoryImageSlot | None = None
 
 
 _PROMPT_SOURCE_NODE_TYPES = frozenset({"prompt", "videoPromptCompose"})
@@ -236,6 +248,22 @@ def resolve_workflow_video_prompt_compose_plan(
         node_map=node_map,
     )
 
+    clothing_ref = _resolve_boardstory_slot_for_handle(
+        target_id=target_id,
+        target_handle=HANDLE["clothing_in"],
+        default_kind="clothing",
+        edges=edges,
+        node_map=node_map,
+    )
+    environment_ref = _resolve_boardstory_slot_for_handle(
+        target_id=target_id,
+        target_handle=HANDLE["environment_in"],
+        default_kind="environment",
+        edges=edges,
+        node_map=node_map,
+    )
+    boardstory_mode = ff_gid is None and sheet_gid is None
+
     return WorkflowVideoPromptComposePlan(
         model_id=model_id,
         motion_video_file_id=motion_video_file_id,
@@ -243,6 +271,9 @@ def resolve_workflow_video_prompt_compose_plan(
         sheet_generation_id=sheet_gid,
         references=references,
         user_notes=user_notes,
+        boardstory_mode=boardstory_mode,
+        clothing_ref=clothing_ref,
+        environment_ref=environment_ref,
     )
 
 
@@ -383,7 +414,7 @@ def resolve_workflow_video_plan(
 
     gen_data = target.get("data") if isinstance(target.get("data"), dict) else {}
 
-    ff_gid = resolve_upstream_generation_id(
+    ff_gid = resolve_upstream_generation_id_optional(
         target_id=target_id,
         target_handle=HANDLE["first_frame_in"],
         edges=edges,
@@ -423,19 +454,55 @@ def resolve_workflow_video_plan(
     if video_provider not in ("seedance_t2v", "grok_imagine_i2v"):
         video_provider = "seedance_t2v"
 
+    model_nodes = _sources_for_target(target_id, HANDLE["gen_model_in"], edges, node_map)
+    model_id = _parse_model_id_from_node(model_nodes[0] if model_nodes else None)
+
+    boardstory_mode = False
     if video_provider == "grok_imagine_i2v":
+        if ff_gid is None:
+            raise WorkflowResolutionError("Для Grok Imagine Video подключите первый кадр")
         if not prompt_text.strip():
             raise WorkflowResolutionError(
                 "Добавьте промпт с описанием движения и сцены"
             )
         motion_video_file_id = ""
+    elif ff_gid is None:
+        boardstory_mode = True
+        if model_id is None:
+            raise WorkflowResolutionError(
+                "BoardStory: подключите ноду «Модель» с фото из кабинета"
+            )
+        if not motion_video_file_id and not prompt_text.strip():
+            raise WorkflowResolutionError(
+                "Подключите motion-видео, ноду «Промпт по видео» или добавьте промпт с описанием движения"
+            )
     elif not motion_video_file_id and not prompt_text.strip():
         raise WorkflowResolutionError(
             "Подключите motion-видео, ноду «Промпт по видео» или добавьте промпт с описанием движения"
         )
 
-    model_nodes = _sources_for_target(target_id, HANDLE["gen_model_in"], edges, node_map)
-    model_id = _parse_model_id_from_node(model_nodes[0] if model_nodes else None)
+    clothing_ref = _resolve_boardstory_slot_for_handle(
+        target_id=target_id,
+        target_handle=HANDLE["clothing_in"],
+        default_kind="clothing",
+        edges=edges,
+        node_map=node_map,
+    )
+    environment_ref = _resolve_boardstory_slot_for_handle(
+        target_id=target_id,
+        target_handle=HANDLE["environment_in"],
+        default_kind="environment",
+        edges=edges,
+        node_map=node_map,
+    )
+    extra_refs = _resolve_workflow_references_for_target(
+        target_id=target_id,
+        edges=edges,
+        node_map=node_map,
+    )
+
+    if boardstory_mode:
+        sheet_gid = None
 
     output_aspect = str(gen_data.get("outputAspect") or "9:16").strip() or "9:16"
 
@@ -470,7 +537,7 @@ def resolve_workflow_video_plan(
     return WorkflowVideoPlan(
         model_id=model_id,
         first_frame_generation_id=ff_gid,
-        sheet_generation_id=sheet_gid if video_provider != "grok_imagine_i2v" else None,
+        sheet_generation_id=sheet_gid if video_provider != "grok_imagine_i2v" and not boardstory_mode else None,
         motion_video_file_id=motion_video_file_id,
         prompt=prompt_text,
         output_aspect=output_aspect,
@@ -482,6 +549,10 @@ def resolve_workflow_video_plan(
         negative_prompt=negative_prompt,
         video_provider=video_provider,
         prompt_from_compose=prompt_from_compose,
+        boardstory_mode=boardstory_mode,
+        clothing_ref=clothing_ref,
+        environment_ref=environment_ref,
+        extra_refs=extra_refs,
     )
 
 
@@ -500,6 +571,8 @@ HANDLE = {
     "first_frame_in": "first-frame-in",
     "sheet_in": "sheet-in",
     "motion_video_in": "motion-video-in",
+    "clothing_in": "clothing-in",
+    "environment_in": "environment-in",
     "video_out": "video-out",
 }
 
@@ -626,6 +699,57 @@ def _first_frame_motion_video_file_id(
             if mid:
                 return mid
     return ""
+
+
+def _resolve_boardstory_slot_for_handle(
+    *,
+    target_id: str,
+    target_handle: str,
+    default_kind: str,
+    edges: list[dict[str, Any]],
+    node_map: dict[str, dict[str, Any]],
+) -> BoardStoryImageSlot | None:
+    """Первый источник на typed handle: reference (refId) или image generation (generationId)."""
+    sources = _sources_for_target(target_id, target_handle, edges, node_map)
+    if not sources:
+        return None
+    src = sources[0]
+    ntype = str(src.get("type") or "")
+    role, description = _reference_description_for_node(src, edges, node_map)
+    kind = classify_boardstory_ref_role(role) if role else default_kind
+    if kind == "other":
+        kind = default_kind
+
+    if ntype == "reference":
+        ref_data = src.get("data") if isinstance(src.get("data"), dict) else {}
+        ref_id = str(ref_data.get("refId") or "").strip()
+        if not ref_id:
+            raise WorkflowResolutionError(
+                f"Загрузите изображение в ноду «Референс» ({default_kind})"
+            )
+        return BoardStoryImageSlot(
+            kind=kind,
+            ref_id=ref_id,
+            role=role or default_kind,
+            description=description,
+        )
+
+    if ntype in _IMAGE_OUTPUT_NODE_TYPES:
+        gid = _generation_id_from_node(src)
+        if gid is None:
+            raise WorkflowResolutionError(
+                f"Сначала выполните генерацию для входа {default_kind} (нет generationId)"
+            )
+        return BoardStoryImageSlot(
+            kind=kind,
+            generation_id=gid,
+            role=role or default_kind,
+            description=description,
+        )
+
+    raise WorkflowResolutionError(
+        f"К входу {default_kind} можно подключить «Референс» или ноду с результатом генерации"
+    )
 
 
 def _reference_description_for_node(

@@ -482,6 +482,71 @@ def test_resolve_video_plan_accepts_compose_prompt():
     assert plan.prompt_from_compose is True
 
 
+def test_resolve_video_plan_boardstory_without_first_frame():
+    from app.services.studio_workflow_resolver import resolve_workflow_video_plan
+
+    g = {
+        "nodes": [
+            {"id": "model-1", "type": "model", "data": {"modelId": 1}},
+            {"id": "mv-1", "type": "motionVideo", "data": {"motionVideoFileId": "mv1"}},
+            {
+                "id": "ref-cloth",
+                "type": "reference",
+                "data": {"refId": "cloth1", "fileName": "outfit.jpg"},
+            },
+            {
+                "id": "ref-env",
+                "type": "reference",
+                "data": {"refId": "env1", "fileName": "room.jpg"},
+            },
+            {
+                "id": "vp-1",
+                "type": "videoPromptCompose",
+                "data": {"prompt": "Cinematic motion with @Image1 identity."},
+            },
+            {
+                "id": "video-1",
+                "type": "videoGeneration",
+                "data": {"durationSeconds": 5, "autoMotionPrompt": False},
+            },
+        ],
+        "edges": [
+            {"source": "model-1", "target": "video-1", "targetHandle": "model-in"},
+            {"source": "vp-1", "target": "video-1", "sourceHandle": "prompt-out", "targetHandle": "prompt-in"},
+            {
+                "source": "mv-1",
+                "target": "video-1",
+                "sourceHandle": "motion-video-out",
+                "targetHandle": "motion-video-in",
+            },
+            {
+                "source": "ref-cloth",
+                "target": "video-1",
+                "sourceHandle": "reference-out",
+                "targetHandle": "clothing-in",
+            },
+            {
+                "source": "ref-env",
+                "target": "video-1",
+                "sourceHandle": "reference-out",
+                "targetHandle": "environment-in",
+            },
+        ],
+    }
+    plan = resolve_workflow_video_plan(
+        target_node_id="video-1",
+        nodes=g["nodes"],
+        edges=g["edges"],
+    )
+    assert plan.boardstory_mode is True
+    assert plan.first_frame_generation_id is None
+    assert plan.sheet_generation_id is None
+    assert plan.clothing_ref is not None
+    assert plan.clothing_ref.ref_id == "cloth1"
+    assert plan.environment_ref is not None
+    assert plan.prompt_from_compose is True
+
+
 def test_first_frame_motion_without_reference():
     g = {
         "nodes": [

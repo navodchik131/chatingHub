@@ -255,47 +255,61 @@ function VideoGenerationNodeComponent({ id, data }: NodeProps) {
         type="target"
         position={Position.Left}
         className="workflow-handle workflow-handle--prompt"
-        style={{ top: '28%' }}
+        style={{ top: '22%' }}
       />
       <span
         className="workflow-node__handle-label workflow-node__handle-label--left"
-        style={{ top: '28%' }}
+        style={{ top: '22%' }}
       >
         prompt
       </span>
 
       <Handle
-        id={HandleIds.firstFrameIn}
+        id={HandleIds.clothingIn}
         type="target"
         position={Position.Left}
-        className="workflow-handle workflow-handle--generation"
-        style={{ top: '42%' }}
+        className="workflow-handle workflow-handle--reference"
+        style={{ top: '34%' }}
       />
       <span
         className="workflow-node__handle-label workflow-node__handle-label--left"
-        style={{ top: '42%' }}
+        style={{ top: '34%' }}
       >
-        first frame
+        clothing
+      </span>
+
+      <Handle
+        id={HandleIds.environmentIn}
+        type="target"
+        position={Position.Left}
+        className="workflow-handle workflow-handle--reference"
+        style={{ top: '46%' }}
+      />
+      <span
+        className="workflow-node__handle-label workflow-node__handle-label--left"
+        style={{ top: '46%' }}
+      >
+        environment
       </span>
 
       {!isGrok ? (
         <>
           <Handle
-            id={HandleIds.sheetIn}
+            id={HandleIds.motionVideoIn}
             type="target"
             position={Position.Left}
-            className="workflow-handle workflow-handle--generation"
-            style={{ top: '56%' }}
+            className="workflow-handle workflow-handle--reference"
+            style={{ top: '58%' }}
           />
           <span
             className="workflow-node__handle-label workflow-node__handle-label--left"
-            style={{ top: '56%' }}
+            style={{ top: '58%' }}
           >
-            sheet
+            motion
           </span>
 
           <Handle
-            id={HandleIds.motionVideoIn}
+            id={HandleIds.imageGenReferenceIn}
             type="target"
             position={Position.Left}
             className="workflow-handle workflow-handle--reference"
@@ -305,15 +319,46 @@ function VideoGenerationNodeComponent({ id, data }: NodeProps) {
             className="workflow-node__handle-label workflow-node__handle-label--left"
             style={{ top: '70%' }}
           >
-            motion
+            refs
+          </span>
+
+          <Handle
+            id={HandleIds.firstFrameIn}
+            type="target"
+            position={Position.Left}
+            className="workflow-handle workflow-handle--generation workflow-handle--optional"
+            style={{ top: '82%' }}
+          />
+          <span
+            className="workflow-node__handle-label workflow-node__handle-label--left workflow-node__handle-label--muted"
+            style={{ top: '82%' }}
+          >
+            1st frame opt
           </span>
         </>
-      ) : null}
+      ) : (
+        <Handle
+          id={HandleIds.firstFrameIn}
+          type="target"
+          position={Position.Left}
+          className="workflow-handle workflow-handle--generation"
+          style={{ top: '58%' }}
+        />
+      )}
+
+      {!isGrok ? null : (
+        <span
+          className="workflow-node__handle-label workflow-node__handle-label--left"
+          style={{ top: '58%' }}
+        >
+          first frame
+        </span>
+      )}
 
       <p className="workflow-node__hint">
         {isGrok
           ? 'Grok Imagine Video · первый кадр + промпт с описанием движения'
-          : 'Seedance · @Image1 = первый кадр, @Image2 = развёртка (если включена), @Video1 = motion'}
+          : 'BoardStory: @Image1+ = модель из кабинета, clothing/env refs, @Video1 = motion. Без первого кадра.'}
       </p>
 
       <div className="workflow-gen-form">

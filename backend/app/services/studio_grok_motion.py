@@ -587,6 +587,17 @@ _WORKFLOW_VIDEO_PROMPT_SYSTEM = (
     "No markdown, no bullet lists, no @Image/@Video tags, no labels like Prompt:."
 )
 
+_BOARDSTORY_VIDEO_PROMPT_SYSTEM = (
+    "You write Seedance 2.0 Text-to-Video prompts using BoardStory reference mapping. "
+    "Output ONLY the final prompt in English as plain text. "
+    "Describe motion, emotions, gestures, camera, lighting, and environment with director-level detail. "
+    "Preserve MOTION_TIMELINE choreography and `[t s]` timing exactly. "
+    "Use @ImageN and @VideoN tags exactly as defined in REFERENCE_TAG_RULES — mention each tag at least once. "
+    "When wardrobe or environment tags are absent, explicitly state they come from @Video1. "
+    "Identity (face/body/hair) always from model @Image tags, never from @Video1 performer. "
+    "No markdown, no bullet lists, no labels like Prompt:."
+)
+
 
 async def grok_compose_workflow_video_prompt(
     *,
@@ -655,6 +666,58 @@ async def grok_compose_workflow_video_prompt(
     text = (out or "").strip()
     if len(text) < 40:
         raise RuntimeError("Grok вернул слишком короткий промпт.")
+    return text[:max_chars]
+
+
+async def grok_compose_boardstory_video_prompt(
+    *,
+    motion_timeline: str,
+    model_profile_text: str,
+    reference_tag_rules: str,
+    reference_blocks: list[str],
+    user_notes: str,
+    duration_seconds: int = 5,
+    credentials: StudioOpenAiCredentials | None = None,
+    max_chars: int = 6000,
+) -> str:
+    """BoardStory: промпт с @ImageN/@VideoN без первого кадра."""
+    creds = credentials or grok_motion_studio_credentials()
+    model = _grok_fps_stills_model()
+
+    profile = _compact_model_profile_for_video_grok((model_profile_text or "").strip())
+    sections: list[str] = []
+    if profile:
+        sections.append(f"MODEL_PROFILE (context only):\n{profile}")
+    sections.append(
+        "MOTION_TIMELINE (preserve choreography and `[t s]` timing exactly):\n"
+        + (motion_timeline or "").strip()
+    )
+    sections.append(f"REFERENCE_TAG_RULES:\n{reference_tag_rules.strip()}")
+    if reference_blocks:
+        sections.append("REFERENCE_CONTEXT:\n" + "\n\n".join(reference_blocks))
+    if (user_notes or "").strip():
+        sections.append(f"USER_DIRECTION:\n{user_notes.strip()}")
+
+    user_instruction = (
+        f"Synthesize one Seedance BoardStory video prompt ({duration_seconds}s clip).\n"
+        "Include @Image/@Video tags from REFERENCE_TAG_RULES in natural cinematic prose.\n\n"
+        + "\n\n---\n\n".join(sections)
+    )
+
+    out = await chat_completion_openai_compatible_text(
+        model=model,
+        messages=[
+            {"role": "system", "content": _BOARDSTORY_VIDEO_PROMPT_SYSTEM},
+            {"role": "user", "content": user_instruction},
+        ],
+        max_tokens=10240,
+        temperature=0.25,
+        credentials=creds,
+        timeout_seconds=min(600.0, float(settings.studio_archive_download_timeout_seconds) + 180.0),
+    )
+    text = (out or "").strip()
+    if len(text) < 40:
+        raise RuntimeError("Grok вернул слишком короткий BoardStory-промпт.")
     return text[:max_chars]
 
 

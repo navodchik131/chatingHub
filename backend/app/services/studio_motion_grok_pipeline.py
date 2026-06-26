@@ -169,19 +169,23 @@ async def motion_grok_timeline_from_video_path(
     *,
     video_path: Path,
     model_profile_text: str,
-    first_frame_jpeg: bytes,
-    first_frame_media: str,
+    first_frame_jpeg: bytes | None,
+    first_frame_media: str = "image/jpeg",
     credentials: StudioOpenAiCredentials | None = None,
 ) -> str:
     creds = credentials or grok_motion_studio_credentials()
     if settings.studio_grok_motion_timeline_enabled:
-        return await grok_two_step_motion_prompt_for_studio(
-            video_path=video_path,
-            model_profile_text=model_profile_text,
-            first_frame_jpeg=first_frame_jpeg,
-            first_frame_media=first_frame_media,
-            credentials=creds,
-        )
+        if first_frame_jpeg and len(first_frame_jpeg) >= 64:
+            return await grok_two_step_motion_prompt_for_studio(
+                video_path=video_path,
+                model_profile_text=model_profile_text,
+                first_frame_jpeg=first_frame_jpeg,
+                first_frame_media=first_frame_media,
+                credentials=creds,
+            )
+        from app.services.studio_grok_motion import grok_step1_timeline_from_video
+
+        return await grok_step1_timeline_from_video(video_path=video_path, credentials=creds)
     from app.services.studio_motion_video import extract_video_sample_frames_jpeg
     from app.services.studio_openai import describe_motion_video_frames_openai
 

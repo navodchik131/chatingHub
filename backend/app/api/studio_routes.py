@@ -15,7 +15,7 @@ import anyio
 import httpx
 
 from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, Query, Request, UploadFile
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -133,10 +133,12 @@ from app.services.studio_image_token import (
     create_model_image_access_token,
     create_motion_video_access_token,
     create_pose_reference_access_token,
+    create_workflow_ref_access_token,
     decode_generation_image_access_token,
     decode_model_image_access_token,
     decode_motion_video_access_token,
     decode_pose_reference_access_token,
+    decode_workflow_ref_access_token,
 )
 from app.services.studio_openai import (
     MAX_IMAGE_BYTES,
@@ -163,6 +165,7 @@ from app.services.studio_grok_scene_compose import (
     grok_compose_studio_text_scene,
     grok_scene_compose_configured,
 )
+from app.services.studio_workflow_refs import load_workflow_reference
 from app.services.studio_workflow_resolver import WorkflowGenerationPlan, WorkflowReferenceItem
 from app.services.studio_motion_grok_pipeline import (
     assemble_motion_grok_wavespeed_prompt,
@@ -205,11 +208,21 @@ from app.services.studio_motion_video import (
 )
 from app.services.studio_seedance_t2v import (
     MAX_SEEDANCE_REFERENCE_IMAGES,
+    append_seedance_identity_lock,
+    append_workflow_face_grid_removal,
+    assemble_boardstory_seedance_prompt,
     build_seedance_t2v_prompt,
     filter_model_images_for_seedance_video,
     generation_still_public_url,
     model_reference_public_urls,
+    soften_seedance_provider_prompt,
     sort_model_images_for_seedance_t2v,
+    truncate_seedance_t2v_prompt,
+)
+from app.services.studio_workflow_boardstory import (
+    boardstory_slot_from_json,
+    build_boardstory_reference_urls,
+    workflow_reference_public_url,
 )
 from app.services.studio_model_bootstrap import (
     MODEL_SHEET_ASPECT_KEY,
@@ -1014,6 +1027,22 @@ async def public_studio_motion_video(t: str) -> FileResponse:
         raise HTTPException(status_code=404, detail="Не найдено") from None
     mime = mimetypes.guess_type(path.name)[0] or "video/mp4"
     return FileResponse(path, media_type=mime)
+
+
+@router.get("/studio/public-workflow-ref")
+async def public_studio_workflow_ref(t: str) -> Response:
+    """Workflow reference image по JWT — для Seedance reference_images."""
+    try:
+        uid, rid = decode_workflow_ref_access_token(t)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Недействительная ссылка") from None
+    try:
+        raw, mime = load_workflow_reference(uid, rid)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Не найдено") from None
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Недействительная ссылка") from None
+    return Response(content=raw, media_type=mime or "image/jpeg")
 
 
 @router.post(
@@ -4350,6 +4379,7 @@ async def _studio_job_execute_workflow_compose_video_prompt(
     job: StudioJob,
     user: User,
 ) -> dict[str, Any]:
+    from app.services.studio_workflow_boardstory import boardstory_slot_from_json
     from app.services.studio_workflow_resolver import WorkflowReferenceItem
     from app.services.studio_workflow_video_prompt import compose_workflow_video_generation_prompt
 
@@ -4402,6 +4432,22 @@ async def _studio_job_execute_workflow_compose_video_prompt(
             )
 
     llm_creds = studio_llm_credentials(plan=plan, llm_row=llm_row)
+
+    boardstory_mode = str(p.get("boardstory_mode") or "").strip().lower() in ("1", "true", "yes")
+
+    def _slot_from_param(key: str):
+        raw = str(p.get(key) or "").strip()
+        if not raw or raw == "{}":
+            return None
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError:
+            return None
+        return boardstory_slot_from_json(data if isinstance(data, dict) else None)
+
+    clothing_ref = _slot_from_param("boardstory_clothing_json")
+    environment_ref = _slot_from_param("boardstory_environment_json")
+
     result = await compose_workflow_video_generation_prompt(
         session,
         owner_id=oid,
@@ -4413,6 +4459,9 @@ async def _studio_job_execute_workflow_compose_video_prompt(
         references=references,
         user_notes=str(p.get("user_notes") or ""),
         llm_credentials=llm_creds,
+        boardstory_mode=boardstory_mode,
+        clothing_ref=clothing_ref,
+        environment_ref=environment_ref,
     )
 
     cost = apply_studio_credit_cost(plan, settings.credit_cost_studio_prompt_refine)
@@ -4649,6 +4698,36 @@ async def _studio_job_execute_motion_render_video(
     video_provider = str(params.get("video_provider") or "seedance_t2v").strip().lower()
     if video_provider not in ("seedance_t2v", "grok_imagine_i2v"):
         video_provider = "seedance_t2v"
+    boardstory_mode = _truthy_wavespeed_flag(str(params.get("boardstory_mode") or ""))
+    prompt_from_compose = _truthy_wavespeed_flag(str(params.get("prompt_from_compose") or ""))
+
+    clothing_ref = None
+    environment_ref = None
+    extra_refs: list[WorkflowReferenceItem] = []
+    try:
+        clothing_ref = boardstory_slot_from_json(json.loads(str(params.get("boardstory_clothing_json") or "{}")))
+    except json.JSONDecodeError:
+        clothing_ref = None
+    try:
+        environment_ref = boardstory_slot_from_json(json.loads(str(params.get("boardstory_environment_json") or "{}")))
+    except json.JSONDecodeError:
+        environment_ref = None
+    try:
+        raw_extra = json.loads(str(params.get("boardstory_extra_refs_json") or "[]"))
+    except json.JSONDecodeError:
+        raw_extra = []
+    if isinstance(raw_extra, list):
+        for item in raw_extra:
+            if not isinstance(item, dict):
+                continue
+            extra_refs.append(
+                WorkflowReferenceItem(
+                    ref_id=str(item.get("ref_id") or ""),
+                    role=str(item.get("role") or ""),
+                    description=str(item.get("description") or ""),
+                    file_name=str(item.get("file_name") or ""),
+                )
+            )
 
     if not prompt.strip() and not workflow_source:
         raise RuntimeError("Опишите сцену и движение для видео.")
@@ -4671,12 +4750,10 @@ async def _studio_job_execute_motion_render_video(
     if not sm:
         raise RuntimeError("Модель не найдена")
 
-    if video_provider != "grok_imagine_i2v" and not sort_model_images_for_seedance_t2v(list(sm.images)):
-        sheet_gid_check = params.get("sheet_generation_id")
-        if sheet_gid_check is None:
+    if video_provider != "grok_imagine_i2v" and not filter_model_images_for_seedance_video(list(sm.images)):
+        if boardstory_mode or not str(sheet_gid_raw or "").strip():
             raise RuntimeError(
-                "У модели нет фото для reference_images. Добавьте развёртку (turnaround) в кабинете модели "
-                "или укажите sheet_generation_id из workflow."
+                "У модели нет фото для reference_images. Добавьте turnaround и/или face в кабинете модели."
             )
 
     log.info(
@@ -4841,82 +4918,152 @@ async def _studio_job_execute_motion_render_video(
                 msg[:240],
             )
     else:
-        sheet_gen_id: int | None = None
-        if sheet_gid_raw is not None:
-            try:
-                sheet_gen_id = int(sheet_gid_raw)
-            except (TypeError, ValueError):
-                sheet_gen_id = None
-
-        model_imgs = filter_model_images_for_seedance_video(
-            list(sm.images),
-            minimal=False,
-            include_body=False,
-        )
-        n_outfit = 0
-        if sheet_gen_id is not None:
-            sheet_url = generation_still_public_url(
-                owner_id=oid,
-                generation_id=sheet_gen_id,
-                public_app_base=pub,
-                token_factory=create_generation_image_access_token,
+        if boardstory_mode:
+            model_imgs = filter_model_images_for_seedance_video(
+                list(sm.images),
+                minimal=False,
+                include_body=False,
             )
-            if not sheet_url:
-                raise RuntimeError("Не удалось подготовить URL развёртки")
-            if ff_url:
-                ref_images.append(ff_url)
-            ref_images.append(sheet_url)
-            n_model = 1
-        elif workflow_source and ff_url:
-            ref_images.append(ff_url)
-            n_start = 1
-            n_model = 0
-        else:
-            if ff_url:
-                ref_images.append(ff_url)
-            ref_images.extend(
-                model_reference_public_urls(
+            model_urls = model_reference_public_urls(
+                owner_id=oid,
+                images=model_imgs,
+                public_app_base=pub,
+                token_factory=create_model_image_access_token,
+            )
+
+            def _gen_url(gid: int) -> str | None:
+                return generation_still_public_url(
                     owner_id=oid,
-                    images=model_imgs,
+                    generation_id=gid,
                     public_app_base=pub,
-                    token_factory=create_model_image_access_token,
+                    token_factory=create_generation_image_access_token,
                 )
-            )
-            n_model = len(model_imgs)
 
-        if outfit_gen_id is not None:
-            outfit_url = generation_still_public_url(
+            def _ref_url(rid: str) -> str | None:
+                return workflow_reference_public_url(
+                    owner_id=oid,
+                    ref_id=rid,
+                    public_app_base=pub,
+                    token_factory=create_workflow_ref_access_token,
+                )
+
+            ref_images, layout = build_boardstory_reference_urls(
                 owner_id=oid,
-                generation_id=outfit_gen_id,
                 public_app_base=pub,
-                token_factory=create_generation_image_access_token,
+                model_image_urls=model_urls,
+                clothing_slot=clothing_ref,
+                environment_slot=environment_ref,
+                extra_refs=tuple(extra_refs),
+                generation_url_factory=_gen_url,
+                workflow_ref_url_factory=_ref_url,
             )
-            if not outfit_url:
-                raise RuntimeError("Не удалось подготовить URL снимка наряда")
-            ref_images.append(outfit_url)
-            n_outfit = 1
+            n_model = layout.n_model_images
+            n_clothing = layout.n_clothing_images
+            n_environment = layout.n_environment_images
+            n_start = 0
+            ref_videos = [motion_vid_url] if motion_vid_url else []
 
-        if len(ref_images) > MAX_SEEDANCE_REFERENCE_IMAGES:
-            ref_images = ref_images[:MAX_SEEDANCE_REFERENCE_IMAGES]
+            if prompt_from_compose and prompt.strip():
+                lock_lang = "zh" if settings.studio_seedance_grok_prompt_zh else "en"
+                seed_prompt = append_seedance_identity_lock(
+                    soften_seedance_provider_prompt(prompt.strip()),
+                    n_start_frame=0,
+                    n_model_images=n_model,
+                    n_motion_videos=len(ref_videos),
+                    soft=True,
+                )
+                if remove_face_grid:
+                    seed_prompt = append_workflow_face_grid_removal(seed_prompt, language=lock_lang)
+                seed_prompt = truncate_seedance_t2v_prompt(seed_prompt)
+                prompt_source = "boardstory_compose"
+            else:
+                seed_prompt = assemble_boardstory_seedance_prompt(
+                    prompt,
+                    n_model_images=n_model,
+                    n_clothing_images=n_clothing,
+                    n_environment_images=n_environment,
+                    n_motion_videos=len(ref_videos),
+                    motion_summary=motion_summary,
+                    negative=negative_prompt,
+                )
+                prompt_source = "boardstory_template"
+        else:
+            sheet_gen_id: int | None = None
+            if sheet_gid_raw is not None:
+                try:
+                    sheet_gen_id = int(sheet_gid_raw)
+                except (TypeError, ValueError):
+                    sheet_gen_id = None
 
-        ref_videos = [motion_vid_url] if motion_vid_url else []
+            model_imgs = filter_model_images_for_seedance_video(
+                list(sm.images),
+                minimal=False,
+                include_body=False,
+            )
+            n_outfit = 0
+            if sheet_gen_id is not None:
+                sheet_url = generation_still_public_url(
+                    owner_id=oid,
+                    generation_id=sheet_gen_id,
+                    public_app_base=pub,
+                    token_factory=create_generation_image_access_token,
+                )
+                if not sheet_url:
+                    raise RuntimeError("Не удалось подготовить URL развёртки")
+                if ff_url:
+                    ref_images.append(ff_url)
+                ref_images.append(sheet_url)
+                n_model = 1
+            elif workflow_source and ff_url:
+                ref_images.append(ff_url)
+                n_start = 1
+                n_model = 0
+            else:
+                if ff_url:
+                    ref_images.append(ff_url)
+                ref_images.extend(
+                    model_reference_public_urls(
+                        owner_id=oid,
+                        images=model_imgs,
+                        public_app_base=pub,
+                        token_factory=create_model_image_access_token,
+                    )
+                )
+                n_model = len(model_imgs)
 
-        seed_prompt, prompt_source = await build_seedance_t2v_prompt(
-            user_brief=prompt,
-            n_start_frame=n_start,
-            n_model_images=n_model,
-            n_outfit_images=n_outfit,
-            n_motion_videos=len(ref_videos),
-            motion_summary=motion_summary,
-            model_profile_text=None,
-            negative=negative_prompt,
-            output_aspect=ar_t2v or output_aspect,
-            duration_seconds=ds_effective,
-            force_template=False,
-            reference_only=False,
-            remove_face_grid=remove_face_grid,
-            soft_identity=False,
-        )
+            if outfit_gen_id is not None:
+                outfit_url = generation_still_public_url(
+                    owner_id=oid,
+                    generation_id=outfit_gen_id,
+                    public_app_base=pub,
+                    token_factory=create_generation_image_access_token,
+                )
+                if not outfit_url:
+                    raise RuntimeError("Не удалось подготовить URL снимка наряда")
+                ref_images.append(outfit_url)
+                n_outfit = 1
+
+            if len(ref_images) > MAX_SEEDANCE_REFERENCE_IMAGES:
+                ref_images = ref_images[:MAX_SEEDANCE_REFERENCE_IMAGES]
+
+            ref_videos = [motion_vid_url] if motion_vid_url else []
+
+            seed_prompt, prompt_source = await build_seedance_t2v_prompt(
+                user_brief=prompt,
+                n_start_frame=n_start,
+                n_model_images=n_model,
+                n_outfit_images=n_outfit,
+                n_motion_videos=len(ref_videos),
+                motion_summary=motion_summary,
+                model_profile_text=None,
+                negative=negative_prompt,
+                output_aspect=ar_t2v or output_aspect,
+                duration_seconds=ds_effective,
+                force_template=False,
+                reference_only=False,
+                remove_face_grid=remove_face_grid,
+                soft_identity=False,
+            )
 
         try:
             video_url = await seedance_20_text_to_video_url(

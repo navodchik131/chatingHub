@@ -163,6 +163,8 @@ export const HandleIds = {
   imageGenOut: 'image-out',
   firstFrameIn: 'first-frame-in',
   sheetIn: 'sheet-in',
+  clothingIn: 'clothing-in',
+  environmentIn: 'environment-in',
   motionVideoIn: 'motion-video-in',
   motionVideoOut: 'motion-video-out',
   videoOut: 'video-out',

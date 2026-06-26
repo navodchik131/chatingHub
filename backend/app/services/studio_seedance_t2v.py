@@ -500,6 +500,67 @@ def assemble_seedance_t2v_reference_prompt(
     )
 
 
+def assemble_boardstory_seedance_prompt(
+    user_prompt: str,
+    *,
+    n_model_images: int,
+    n_clothing_images: int,
+    n_environment_images: int,
+    n_motion_videos: int = 0,
+    motion_summary: str | None = None,
+    negative: str | None = None,
+) -> str:
+    """BoardStory Seedance: identity @Image1+ , clothing/env refs, motion @Video1, без первого кадра."""
+    from app.services.studio_workflow_boardstory import compute_boardstory_layout
+
+    layout = compute_boardstory_layout(
+        n_model_images,
+        has_clothing=n_clothing_images > 0,
+        has_environment=n_environment_images > 0,
+    )
+    parts: list[str] = []
+    if layout.identity_tag_expr:
+        parts.append(
+            f"Cinematic clip — lead character appearance from {layout.identity_tag_expr} "
+            "(face, body, hair from model cabinet photos)."
+        )
+    if layout.clothing_tag:
+        parts.append(f"Wardrobe and garments: match {layout.clothing_tag}.")
+    elif n_motion_videos > 0:
+        parts.append("Wardrobe and styling: derive from @Video1 motion reference.")
+    if layout.environment_tag:
+        parts.append(
+            f"Room, background, lighting, and atmosphere: match {layout.environment_tag}."
+        )
+    elif n_motion_videos > 0:
+        parts.append("Environment and lighting: derive from @Video1 motion reference.")
+    if n_motion_videos > 0:
+        vtags = ", ".join(f"@Video{i}" for i in range(1, n_motion_videos + 1))
+        parts.append(
+            f"Motion, emotions, gestures, pacing, and camera from {vtags}; "
+            f"character look stays on {layout.identity_tag_expr or 'model @Image refs'}."
+        )
+    if motion_summary and motion_summary.strip():
+        parts.append(f"Motion notes:\n{motion_summary.strip()}")
+    up = (user_prompt or "").strip()
+    if up:
+        parts.append(up)
+    neg_parts: list[str] = [_IDENTITY_NEGATIVE_SOFT]
+    neg = (negative or "").strip()
+    if neg:
+        neg_parts.append(neg)
+    if neg_parts:
+        parts.append(f"Avoid: {'; '.join(neg_parts)}")
+    body = soften_seedance_provider_prompt("\n\n".join(parts))
+    return append_seedance_identity_lock(
+        body,
+        n_start_frame=0,
+        n_model_images=n_model_images,
+        n_motion_videos=n_motion_videos,
+        soft=True,
+    )
+
+
 def truncate_seedance_t2v_prompt(text: str, *, max_chars: int | None = None) -> str:
     lim = max_chars if max_chars is not None else settings.studio_seedance_t2v_prompt_max_chars
     s = (text or "").strip()

@@ -131,3 +131,35 @@ def decode_model_image_access_token(token: str) -> tuple[int, int]:
     if uid is None or iid is None:
         raise ValueError("missing claims")
     return int(uid), int(iid)
+
+
+def create_workflow_ref_access_token(
+    *, user_id: int, ref_id: str, minutes: int = 90
+) -> str:
+    """JWT для workflow reference image — WaveSpeed скачивает по HTTPS."""
+    expire = datetime.now(timezone.utc) + timedelta(minutes=minutes)
+    payload = {
+        "typ": "studio_workflow_ref",
+        "uid": user_id,
+        "rid": str(ref_id)[:80],
+        "exp": expire,
+    }
+    return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
+
+
+def decode_workflow_ref_access_token(token: str) -> tuple[int, str]:
+    try:
+        data = jwt.decode(
+            token,
+            settings.jwt_secret,
+            algorithms=[settings.jwt_algorithm],
+        )
+    except JWTError as e:
+        raise ValueError("invalid token") from e
+    if data.get("typ") != "studio_workflow_ref":
+        raise ValueError("wrong token type")
+    uid = data.get("uid")
+    rid = data.get("rid")
+    if uid is None or rid is None:
+        raise ValueError("missing claims")
+    return int(uid), str(rid)

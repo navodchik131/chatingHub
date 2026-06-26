@@ -667,8 +667,8 @@ async def _accept_workflow_video_job(
         normalize_seedance_t2v_variant,
         normalize_workflow_video_provider,
     )
+    from app.services.studio_workflow_boardstory import boardstory_slot_to_json
     from app.services.studio_motion_video import resolve_motion_video_file
-    from app.services.credits import ensure_can_consume_credits
     from app.services.studio_keys import (
         apply_studio_credit_cost,
         load_owner_studio_billing,
@@ -704,14 +704,22 @@ async def _accept_workflow_video_job(
     ):
         raise HTTPException(status_code=404, detail="Motion-видео не найдено. Загрузите снова.")
 
-    ff_row = await session.get(StudioGeneration, plan.first_frame_generation_id)
-    if not ff_row or ff_row.user_id != oid:
-        raise HTTPException(status_code=404, detail="Первый кадр не найден")
-    if not generation_has_archive_file(ff_row):
-        raise HTTPException(status_code=400, detail="Первый кадр ещё не сохранён на сервере.")
-
+    ff_row = None
     sheet_row = None
-    if video_provider != "grok_imagine_i2v" and plan.sheet_generation_id is not None:
+    if plan.first_frame_generation_id is not None:
+        ff_row = await session.get(StudioGeneration, plan.first_frame_generation_id)
+        if not ff_row or ff_row.user_id != oid:
+            raise HTTPException(status_code=404, detail="Первый кадр не найден")
+        if not generation_has_archive_file(ff_row):
+            raise HTTPException(status_code=400, detail="Первый кадр ещё не сохранён на сервере.")
+    elif not getattr(plan, "boardstory_mode", False):
+        raise HTTPException(status_code=400, detail="Подключите первый кадр или используйте BoardStory (модель + motion)")
+
+    if (
+        video_provider != "grok_imagine_i2v"
+        and not getattr(plan, "boardstory_mode", False)
+        and plan.sheet_generation_id is not None
+    ):
         sheet_row = await session.get(StudioGeneration, plan.sheet_generation_id)
         if not sheet_row or sheet_row.user_id != oid:
             raise HTTPException(status_code=404, detail="Развёртка не найдена")
@@ -720,11 +728,13 @@ async def _accept_workflow_video_job(
 
     mid = plan.model_id
     if mid is None:
-        mid = ff_row.studio_model_id or (sheet_row.studio_model_id if sheet_row else None)
+        mid = (ff_row.studio_model_id if ff_row else None) or (
+            sheet_row.studio_model_id if sheet_row else None
+        )
     if mid is None:
         raise HTTPException(
             status_code=400,
-            detail="Подключите ноду «Модель» или укажите модель при генерации первого кадра.",
+            detail="Подключите ноду «Модель».",
         )
 
     try:
@@ -751,36 +761,62 @@ async def _accept_workflow_video_job(
     motion_cost_billed = apply_studio_credit_cost(billing_plan, motion_cost)
     await ensure_can_consume_credits(session, user, motion_cost_billed)
 
-    preview_url = generation_still_public_url(
-        owner_id=oid,
-        generation_id=plan.first_frame_generation_id,
-        public_app_base=pub,
-        token_factory=create_generation_image_access_token,
-    )
+    preview_url = None
+    if plan.first_frame_generation_id is not None:
+        preview_url = generation_still_public_url(
+            owner_id=oid,
+            generation_id=plan.first_frame_generation_id,
+            public_app_base=pub,
+            token_factory=create_generation_image_access_token,
+        )
+
+    import json as _json
+
+    job_params: dict[str, str] = {
+        "model_id": str(mid),
+        "prompt": plan.prompt.strip(),
+        "output_aspect": aspect_key,
+        "motion_video_file_id": plan.motion_video_file_id,
+        "first_frame_generation_id": str(plan.first_frame_generation_id or ""),
+        "sheet_generation_id": str(plan.sheet_generation_id or ""),
+        "motion_timeline": "",
+        "outfit_generation_id": "",
+        "negative_prompt": plan.negative_prompt,
+        "generate_audio": "1" if plan.generate_audio else "0",
+        "duration_seconds": str(ds_effective),
+        "seedance_variant": seedance_v,
+        "video_resolution": video_res,
+        "auto_motion_prompt": "1" if plan.auto_motion_prompt else "0",
+        "remove_face_grid": "1",
+        "workflow_source": "1",
+        "video_provider": video_provider,
+        "boardstory_mode": "1" if getattr(plan, "boardstory_mode", False) else "0",
+        "boardstory_clothing_json": _json.dumps(
+            boardstory_slot_to_json(getattr(plan, "clothing_ref", None)), ensure_ascii=False
+        ),
+        "boardstory_environment_json": _json.dumps(
+            boardstory_slot_to_json(getattr(plan, "environment_ref", None)), ensure_ascii=False
+        ),
+        "boardstory_extra_refs_json": _json.dumps(
+            [
+                {
+                    "ref_id": r.ref_id,
+                    "role": r.role,
+                    "description": r.description,
+                    "file_name": r.file_name,
+                }
+                for r in (getattr(plan, "extra_refs", None) or ())
+            ],
+            ensure_ascii=False,
+        ),
+        "prompt_from_compose": "1" if plan.prompt_from_compose else "0",
+    }
 
     return await _accept_studio_job(
         session,
         user,
         job_type="motion_render_video",
-        params={
-            "model_id": mid,
-            "prompt": plan.prompt.strip(),
-            "output_aspect": aspect_key,
-            "motion_video_file_id": plan.motion_video_file_id,
-            "first_frame_generation_id": plan.first_frame_generation_id,
-            "sheet_generation_id": plan.sheet_generation_id,
-            "motion_timeline": "",
-            "outfit_generation_id": None,
-            "negative_prompt": plan.negative_prompt,
-            "generate_audio": "1" if plan.generate_audio else "0",
-            "duration_seconds": str(ds_effective),
-            "seedance_variant": seedance_v,
-            "video_resolution": video_res,
-            "auto_motion_prompt": "1" if plan.auto_motion_prompt else "0",
-            "remove_face_grid": "1",
-            "workflow_source": "1",
-            "video_provider": video_provider,
-        },
+        params=job_params,
         placeholder={
             "studio_model_id": mid,
             "output_aspect": aspect_key,
@@ -802,6 +838,7 @@ async def _accept_workflow_video_prompt_compose_job(
     from app.services.studio_grok_motion import grok_motion_api_configured
     from app.services.studio_jobs import create_studio_job, schedule_studio_job
     from app.services.studio_keys import load_owner_studio_billing
+    from app.services.studio_workflow_boardstory import boardstory_slot_to_json
     from app.services.studio_motion_video import resolve_motion_video_file
 
     assert_permission(user, PERM_STUDIO_GENERATE)
@@ -849,6 +886,13 @@ async def _accept_workflow_video_prompt_compose_job(
         "user_notes": plan.user_notes,
         "references_json": json.dumps(refs_payload, ensure_ascii=False),
         "workflow_source": "1",
+        "boardstory_mode": "1" if plan.boardstory_mode else "0",
+        "boardstory_clothing_json": json.dumps(
+            boardstory_slot_to_json(plan.clothing_ref), ensure_ascii=False
+        ),
+        "boardstory_environment_json": json.dumps(
+            boardstory_slot_to_json(plan.environment_ref), ensure_ascii=False
+        ),
     }
 
     job = await create_studio_job(

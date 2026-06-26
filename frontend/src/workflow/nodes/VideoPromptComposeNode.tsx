@@ -117,11 +117,11 @@ function VideoPromptComposeNodeComponent({ id, data }: NodeProps) {
         type="target"
         position={Position.Left}
         className="workflow-handle workflow-handle--model"
-        style={{ top: '12%' }}
+        style={{ top: '10%' }}
       />
       <span
         className="workflow-node__handle-label workflow-node__handle-label--left"
-        style={{ top: '12%' }}
+        style={{ top: '10%' }}
       >
         model
       </span>
@@ -131,41 +131,41 @@ function VideoPromptComposeNodeComponent({ id, data }: NodeProps) {
         type="target"
         position={Position.Left}
         className="workflow-handle workflow-handle--reference"
-        style={{ top: '26%' }}
+        style={{ top: '22%' }}
       />
       <span
         className="workflow-node__handle-label workflow-node__handle-label--left"
-        style={{ top: '26%' }}
+        style={{ top: '22%' }}
       >
         motion
       </span>
 
       <Handle
-        id={HandleIds.firstFrameIn}
+        id={HandleIds.clothingIn}
         type="target"
         position={Position.Left}
-        className="workflow-handle workflow-handle--generation"
-        style={{ top: '40%' }}
+        className="workflow-handle workflow-handle--reference"
+        style={{ top: '34%' }}
       />
       <span
         className="workflow-node__handle-label workflow-node__handle-label--left"
-        style={{ top: '40%' }}
+        style={{ top: '34%' }}
       >
-        first frame
+        clothing
       </span>
 
       <Handle
-        id={HandleIds.sheetIn}
+        id={HandleIds.environmentIn}
         type="target"
         position={Position.Left}
-        className="workflow-handle workflow-handle--generation"
-        style={{ top: '54%' }}
+        className="workflow-handle workflow-handle--reference"
+        style={{ top: '46%' }}
       />
       <span
         className="workflow-node__handle-label workflow-node__handle-label--left"
-        style={{ top: '54%' }}
+        style={{ top: '46%' }}
       >
-        sheet
+        environment
       </span>
 
       <Handle
@@ -173,11 +173,11 @@ function VideoPromptComposeNodeComponent({ id, data }: NodeProps) {
         type="target"
         position={Position.Left}
         className="workflow-handle workflow-handle--reference"
-        style={{ top: '68%' }}
+        style={{ top: '58%' }}
       />
       <span
         className="workflow-node__handle-label workflow-node__handle-label--left"
-        style={{ top: '68%' }}
+        style={{ top: '58%' }}
       >
         refs
       </span>
@@ -187,17 +187,31 @@ function VideoPromptComposeNodeComponent({ id, data }: NodeProps) {
         type="target"
         position={Position.Left}
         className="workflow-handle workflow-handle--prompt"
-        style={{ top: '82%' }}
+        style={{ top: '70%' }}
       />
       <span
         className="workflow-node__handle-label workflow-node__handle-label--left"
-        style={{ top: '82%' }}
+        style={{ top: '70%' }}
       >
         notes
       </span>
 
+      <Handle
+        id={HandleIds.firstFrameIn}
+        type="target"
+        position={Position.Left}
+        className="workflow-handle workflow-handle--generation workflow-handle--optional"
+        style={{ top: '82%' }}
+      />
+      <span
+        className="workflow-node__handle-label workflow-node__handle-label--left workflow-node__handle-label--muted"
+        style={{ top: '82%' }}
+      >
+        1st frame opt
+      </span>
+
       <p className="workflow-node__hint">
-        Grok анализирует motion-видео + референсы и собирает полный промпт для ноды «Видео»
+        Grok разбирает motion-видео детально → промпт с @Image/@Video для BoardStory Seedance
       </p>
 
       <textarea
