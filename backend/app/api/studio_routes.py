@@ -222,6 +222,7 @@ from app.services.studio_seedance_t2v import (
 from app.services.studio_workflow_boardstory import (
     boardstory_slot_from_json,
     build_boardstory_reference_urls,
+    filter_model_images_for_boardstory,
     workflow_reference_public_url,
 )
 from app.services.studio_model_bootstrap import (
@@ -4447,6 +4448,14 @@ async def _studio_job_execute_workflow_compose_video_prompt(
 
     clothing_ref = _slot_from_param("boardstory_clothing_json")
     environment_ref = _slot_from_param("boardstory_environment_json")
+    generate_clothing = str(p.get("generate_clothing_from_video") or "").strip().lower() in ("1", "true", "yes")
+    generate_environment = str(p.get("generate_environment_from_video") or "").strip().lower() in ("1", "true", "yes")
+    output_aspect = str(p.get("output_aspect") or "9:16").strip() or "9:16"
+
+    pub = (settings.public_app_url or "").strip().rstrip("/")
+    ws_key = studio_wavespeed_api_key(
+        plan=plan, ws_row=_ws, owner_subscription=sub_b, demo_generations_remaining=_demo
+    )
 
     result = await compose_workflow_video_generation_prompt(
         session,
@@ -4462,6 +4471,12 @@ async def _studio_job_execute_workflow_compose_video_prompt(
         boardstory_mode=boardstory_mode,
         clothing_ref=clothing_ref,
         environment_ref=environment_ref,
+        generate_clothing_from_video=generate_clothing,
+        generate_environment_from_video=generate_environment,
+        output_aspect=output_aspect,
+        ws_key=ws_key,
+        pub=pub,
+        job_id=job.id,
     )
 
     cost = apply_studio_credit_cost(plan, settings.credit_cost_studio_prompt_refine)
@@ -4919,11 +4934,7 @@ async def _studio_job_execute_motion_render_video(
             )
     else:
         if boardstory_mode:
-            model_imgs = filter_model_images_for_seedance_video(
-                list(sm.images),
-                minimal=False,
-                include_body=False,
-            )
+            model_imgs = filter_model_images_for_boardstory(list(sm.images))
             model_urls = model_reference_public_urls(
                 owner_id=oid,
                 images=model_imgs,

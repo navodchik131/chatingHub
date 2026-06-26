@@ -26,10 +26,17 @@ def test_compute_boardstory_layout():
 
 def test_boardstory_tag_rules_fallback_to_video():
     layout = compute_boardstory_layout(1, has_clothing=False, has_environment=False)
-    rules = boardstory_tag_rules_text(layout, has_motion=True)
+    rules = boardstory_tag_rules_text(
+        layout,
+        has_motion=True,
+        clothing_from_video=True,
+        environment_from_video=True,
+    )
     assert "@Video1" in rules
     assert "Wardrobe" in rules
-    assert "Environment" in rules
+    assert "Room" in rules
+    assert "@Image1" in rules
+    assert "@Image2" not in rules
 
 
 def test_boardstory_slot_json_roundtrip():

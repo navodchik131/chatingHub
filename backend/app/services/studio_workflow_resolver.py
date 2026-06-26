@@ -122,6 +122,9 @@ class WorkflowVideoPromptComposePlan:
     boardstory_mode: bool = True
     clothing_ref: BoardStoryImageSlot | None = None
     environment_ref: BoardStoryImageSlot | None = None
+    generate_clothing_from_video: bool = False
+    generate_environment_from_video: bool = False
+    output_aspect: str = "9:16"
 
 
 _PROMPT_SOURCE_NODE_TYPES = frozenset({"prompt", "videoPromptCompose"})
@@ -263,6 +266,23 @@ def resolve_workflow_video_prompt_compose_plan(
         node_map=node_map,
     )
     boardstory_mode = ff_gid is None and sheet_gid is None
+    compose_data = target.get("data") if isinstance(target.get("data"), dict) else {}
+    generate_clothing = compose_data.get("generateClothingFromVideo") is True
+    generate_environment = compose_data.get("generateEnvironmentFromVideo") is True
+    output_aspect = str(compose_data.get("outputAspect") or "9:16").strip() or "9:16"
+    for edge in edges:
+        if str(edge.get("source") or "") != target_id:
+            continue
+        sh = edge.get("sourceHandle")
+        if sh is not None and str(sh) != HANDLE["prompt_out"]:
+            continue
+        downstream = node_map.get(str(edge.get("target") or "").strip())
+        if downstream and str(downstream.get("type") or "") == "videoGeneration":
+            ddata = downstream.get("data") if isinstance(downstream.get("data"), dict) else {}
+            asp = str(ddata.get("outputAspect") or "").strip()
+            if asp:
+                output_aspect = asp
+            break
 
     return WorkflowVideoPromptComposePlan(
         model_id=model_id,
@@ -274,6 +294,9 @@ def resolve_workflow_video_prompt_compose_plan(
         boardstory_mode=boardstory_mode,
         clothing_ref=clothing_ref,
         environment_ref=environment_ref,
+        generate_clothing_from_video=generate_clothing and clothing_ref is None,
+        generate_environment_from_video=generate_environment and environment_ref is None,
+        output_aspect=output_aspect,
     )
 
 
@@ -481,28 +504,49 @@ def resolve_workflow_video_plan(
             "Подключите motion-видео, ноду «Промпт по видео» или добавьте промпт с описанием движения"
         )
 
-    clothing_ref = _resolve_boardstory_slot_for_handle(
-        target_id=target_id,
-        target_handle=HANDLE["clothing_in"],
-        default_kind="clothing",
-        edges=edges,
-        node_map=node_map,
-    )
-    environment_ref = _resolve_boardstory_slot_for_handle(
-        target_id=target_id,
-        target_handle=HANDLE["environment_in"],
-        default_kind="environment",
-        edges=edges,
-        node_map=node_map,
-    )
     extra_refs = _resolve_workflow_references_for_target(
         target_id=target_id,
         edges=edges,
         node_map=node_map,
     )
 
+    compose_upstream = _upstream_compose_node_for_video(target_id, edges, node_map)
+    clothing_from_compose = _boardstory_slot_from_compose_data(
+        compose_upstream,
+        kind="clothing",
+        gen_key="clothingGenerationId",
+        url_key="clothingImageUrl",
+    )
+    environment_from_compose = _boardstory_slot_from_compose_data(
+        compose_upstream,
+        kind="environment",
+        gen_key="environmentGenerationId",
+        url_key="environmentImageUrl",
+    )
+
     if boardstory_mode:
         sheet_gid = None
+
+    clothing_ref = _merge_boardstory_slot(
+        _resolve_boardstory_slot_for_handle(
+            target_id=target_id,
+            target_handle=HANDLE["clothing_in"],
+            default_kind="clothing",
+            edges=edges,
+            node_map=node_map,
+        ),
+        clothing_from_compose,
+    )
+    environment_ref = _merge_boardstory_slot(
+        _resolve_boardstory_slot_for_handle(
+            target_id=target_id,
+            target_handle=HANDLE["environment_in"],
+            default_kind="environment",
+            edges=edges,
+            node_map=node_map,
+        ),
+        environment_from_compose,
+    )
 
     output_aspect = str(gen_data.get("outputAspect") or "9:16").strip() or "9:16"
 
@@ -699,6 +743,57 @@ def _first_frame_motion_video_file_id(
             if mid:
                 return mid
     return ""
+
+
+def _upstream_compose_node_for_video(
+    target_id: str,
+    edges: list[dict[str, Any]],
+    node_map: dict[str, dict[str, Any]],
+) -> dict[str, Any] | None:
+    for edge in edges:
+        if str(edge.get("target") or "") != target_id:
+            continue
+        if edge.get("targetHandle") is not None and str(edge.get("targetHandle")) != HANDLE["gen_prompt_in"]:
+            continue
+        src_id = str(edge.get("source") or "").strip()
+        node = node_map.get(src_id)
+        if node and str(node.get("type") or "") == "videoPromptCompose" and _is_node_enabled(node):
+            return node
+    return None
+
+
+def _boardstory_slot_from_compose_data(
+    compose_node: dict[str, Any] | None,
+    *,
+    kind: str,
+    gen_key: str,
+    url_key: str,
+) -> BoardStoryImageSlot | None:
+    if compose_node is None:
+        return None
+    data = compose_node.get("data") if isinstance(compose_node.get("data"), dict) else {}
+    raw_gid = data.get(gen_key)
+    gid: int | None = None
+    if raw_gid is not None and str(raw_gid).strip():
+        try:
+            gid = int(raw_gid)
+        except (TypeError, ValueError):
+            gid = None
+    if gid is None or gid <= 0:
+        return None
+    return BoardStoryImageSlot(
+        kind=kind,
+        generation_id=gid,
+        role=kind,
+        description=str(data.get(url_key) or ""),
+    )
+
+
+def _merge_boardstory_slot(
+    handle_slot: BoardStoryImageSlot | None,
+    compose_slot: BoardStoryImageSlot | None,
+) -> BoardStoryImageSlot | None:
+    return handle_slot if handle_slot is not None else compose_slot
 
 
 def _resolve_boardstory_slot_for_handle(

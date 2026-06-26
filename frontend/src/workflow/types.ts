@@ -94,6 +94,13 @@ export interface VideoPromptComposeNodeData {
   disabled?: boolean
   isRunning?: boolean
   error?: string
+  generateClothingFromVideo?: boolean
+  generateEnvironmentFromVideo?: boolean
+  clothingGenerationId?: number | null
+  environmentGenerationId?: number | null
+  clothingImageUrl?: string
+  environmentImageUrl?: string
+  outputAspect?: string
   [key: string]: unknown
 }
 

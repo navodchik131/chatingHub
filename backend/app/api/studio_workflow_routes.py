@@ -894,6 +894,9 @@ async def _accept_workflow_video_prompt_compose_job(
         "boardstory_environment_json": json.dumps(
             boardstory_slot_to_json(plan.environment_ref), ensure_ascii=False
         ),
+        "generate_clothing_from_video": "1" if plan.generate_clothing_from_video else "0",
+        "generate_environment_from_video": "1" if plan.generate_environment_from_video else "0",
+        "output_aspect": plan.output_aspect or "9:16",
     }
 
     job = await create_studio_job(

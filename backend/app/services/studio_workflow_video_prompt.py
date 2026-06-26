@@ -24,8 +24,10 @@ from app.services.studio_motion_video import resolve_motion_video_file
 from app.services.studio_openai import describe_reference_image_openai
 from app.services.studio_workflow_boardstory import (
     BoardStoryImageSlot,
+    append_boardstory_video_fallback_lines,
     boardstory_tag_rules_text,
     compute_boardstory_layout,
+    filter_model_images_for_boardstory,
 )
 from app.services.studio_workflow_refs import load_workflow_reference
 from app.services.studio_workflow_resolver import WorkflowReferenceItem
@@ -112,11 +114,10 @@ async def _describe_boardstory_slot(
 
 
 async def _estimate_boardstory_model_image_count(session: AsyncSession, *, model_id: int, actor: User) -> int:
-    from app.services.studio_seedance_t2v import filter_model_images_for_seedance_video
     from app.services.workspace_model_access import require_studio_model_access
 
     sm = await require_studio_model_access(session, actor, model_id, load_images=True)
-    return len(filter_model_images_for_seedance_video(list(sm.images), minimal=False, include_body=False))
+    return len(filter_model_images_for_boardstory(list(sm.images)))
 
 
 async def compose_workflow_video_generation_prompt(
@@ -134,6 +135,12 @@ async def compose_workflow_video_generation_prompt(
     boardstory_mode: bool = False,
     clothing_ref: BoardStoryImageSlot | None = None,
     environment_ref: BoardStoryImageSlot | None = None,
+    generate_clothing_from_video: bool = False,
+    generate_environment_from_video: bool = False,
+    output_aspect: str = "9:16",
+    ws_key: str | None = None,
+    pub: str | None = None,
+    job_id: int | None = None,
 ) -> dict[str, Any]:
     """
     Анализ motion-видео + still-контекста → полный промпт для video generation.
@@ -160,15 +167,58 @@ async def compose_workflow_video_generation_prompt(
         n_model = await _estimate_boardstory_model_image_count(session, model_id=model_id, actor=actor)
         if n_model <= 0:
             raise RuntimeError(
-                "У модели нет фото в кабинете. Добавьте turnaround и/или face."
+                "У модели нет фото в кабинете. Добавьте turnaround (развёртку)."
             )
+
+        extract_result: dict[str, int | str | None] = {
+            "clothing_generation_id": None,
+            "environment_generation_id": None,
+            "clothing_image_url": None,
+            "environment_image_url": None,
+        }
+        if (generate_clothing_from_video or generate_environment_from_video) and ws_key and pub and job_id:
+            from app.services.studio_workflow_boardstory_extract import extract_boardstory_refs_from_video
+
+            extract_result = await extract_boardstory_refs_from_video(
+                session,
+                owner_id=owner_id,
+                actor=actor,
+                studio_model_id=model_id,
+                video_path=vpath,
+                output_aspect=output_aspect,
+                ws_key=ws_key,
+                pub=pub,
+                job_id=job_id,
+                generate_clothing=generate_clothing_from_video and clothing_ref is None,
+                generate_environment=generate_environment_from_video and environment_ref is None,
+            )
+            if generate_clothing_from_video and extract_result.get("clothing_generation_id"):
+                clothing_ref = BoardStoryImageSlot(
+                    kind="clothing",
+                    generation_id=int(extract_result["clothing_generation_id"]),
+                    role="clothing from video",
+                )
+            if generate_environment_from_video and extract_result.get("environment_generation_id"):
+                environment_ref = BoardStoryImageSlot(
+                    kind="environment",
+                    generation_id=int(extract_result["environment_generation_id"]),
+                    role="environment from video",
+                )
+
         layout = compute_boardstory_layout(
             n_model,
             has_clothing=clothing_ref is not None,
             has_environment=environment_ref is not None,
             n_other=len([r for r in references if (r.ref_id or "").strip()]),
         )
-        tag_rules = boardstory_tag_rules_text(layout, has_motion=True)
+        clothing_from_video = clothing_ref is None
+        environment_from_video = environment_ref is None
+        tag_rules = boardstory_tag_rules_text(
+            layout,
+            has_motion=True,
+            clothing_from_video=clothing_from_video,
+            environment_from_video=environment_from_video,
+        )
 
         timeline = await motion_grok_timeline_from_video_path(
             video_path=vpath,
@@ -225,6 +275,11 @@ async def compose_workflow_video_generation_prompt(
             credentials=grok_creds,
             max_chars=int(settings.studio_seedance_t2v_prompt_max_chars or 6000),
         )
+        composed = append_boardstory_video_fallback_lines(
+            composed,
+            clothing_from_video=clothing_from_video,
+            environment_from_video=environment_from_video,
+        )
 
         return {
             "refined_prompt": composed.strip(),
@@ -238,6 +293,7 @@ async def compose_workflow_video_generation_prompt(
                 "n_clothing_images": layout.n_clothing_images,
                 "n_environment_images": layout.n_environment_images,
             },
+            **extract_result,
         }
 
     first_frame: bytes

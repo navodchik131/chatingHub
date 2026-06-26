@@ -11,6 +11,7 @@ from app.services.studio_seedance_t2v import (
     generation_still_public_url,
     model_reference_public_urls,
     seedance_model_identity_tag_expr,
+    filter_model_images_for_seedance_video,
 )
 
 _CLOTHING_HINTS = (
@@ -112,18 +113,48 @@ def compute_boardstory_layout(
     )
 
 
-def boardstory_tag_rules_text(layout: BoardStoryReferenceLayout, *, has_motion: bool) -> str:
+def filter_model_images_for_boardstory(
+    imgs: list,
+) -> list:
+    """BoardStory: только одна развёртка (turnaround) из кабинета модели."""
+    return filter_model_images_for_seedance_video(
+        imgs,
+        minimal=True,
+        max_identity=1,
+    )
+
+
+def boardstory_tag_rules_text(
+    layout: BoardStoryReferenceLayout,
+    *,
+    has_motion: bool,
+    clothing_from_video: bool = False,
+    environment_from_video: bool = False,
+) -> str:
     lines: list[str] = []
     if layout.identity_tag_expr:
         lines.append(
-            f"{layout.identity_tag_expr} = model identity (face, body, hair from model cabinet photos)"
+            f"{layout.identity_tag_expr} = model identity ONLY (face, body, hair from model turnaround sheet — "
+            "NOT clothing, NOT room)"
         )
     if layout.clothing_tag:
-        lines.append(f"{layout.clothing_tag} = clothing / wardrobe reference")
+        lines.append(f"{layout.clothing_tag} = clothing / wardrobe reference (garments only)")
+    elif clothing_from_video:
+        lines.append(
+            "Wardrobe and outfit: take EXCLUSIVELY from @Video1 motion reference — "
+            "match glittery top, pants, fabric, and colors seen in the video. "
+            "Do NOT describe wardrobe on @Image identity refs."
+        )
     else:
         lines.append("Wardrobe: derive from @Video1 motion reference when no clothing image attached")
     if layout.environment_tag:
-        lines.append(f"{layout.environment_tag} = environment / room / lighting reference")
+        lines.append(f"{layout.environment_tag} = environment / room / lighting reference (scene plate only)")
+    elif environment_from_video:
+        lines.append(
+            "Room, background, lighting, and ambient glow: take EXCLUSIVELY from @Video1 — "
+            "same intimate interior, plush textures, soft illumination as in the video. "
+            "Do NOT invent a different location."
+        )
     else:
         lines.append(
             "Environment and lighting: derive from @Video1 motion reference when no environment image attached"
@@ -133,10 +164,24 @@ def boardstory_tag_rules_text(layout: BoardStoryReferenceLayout, *, has_motion: 
     if has_motion:
         id_expr = layout.identity_tag_expr or ""
         lines.append(
-            "@Video1 = motion, choreography, timing, gestures, emotions, camera movement "
-            f"(appearance stays on {id_expr or 'model @Image refs'})"
+            "@Video1 = motion, choreography, timing, gestures, emotions, camera movement ONLY "
+            f"(character appearance from {id_expr or 'model @Image'}; "
+            "wardrobe/room from rules above — never copy reference video actor face)"
         )
     return "\n".join(lines)
+
+
+def append_boardstory_video_fallback_lines(prompt: str, *, clothing_from_video: bool, environment_from_video: bool) -> str:
+    """Добавляет явные строки про @Video1, если Grok их пропустил."""
+    body = (prompt or "").strip()
+    extra: list[str] = []
+    if clothing_from_video and "wardrobe" not in body.lower() and "@video1" in body.lower():
+        extra.append("Wardrobe and outfit match @Video1.")
+    if environment_from_video and "environment" not in body.lower() and "room" not in body.lower():
+        extra.append("Room, lighting, and background match @Video1.")
+    if not extra:
+        return body
+    return f"{body}\n\n{' '.join(extra)}".strip()
 
 
 def workflow_reference_public_url(

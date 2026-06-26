@@ -142,6 +142,10 @@ export async function executeWorkflowGeneration(
   video_url?: string | null
   refined_prompt?: string | null
   motion_video_prompt_auto?: string | null
+  clothing_generation_id?: number | null
+  environment_generation_id?: number | null
+  clothing_image_url?: string | null
+  environment_image_url?: string | null
 }> {
   const fd = new FormData()
   fd.append('graph', JSON.stringify(graph))

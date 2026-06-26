@@ -590,11 +590,14 @@ _WORKFLOW_VIDEO_PROMPT_SYSTEM = (
 _BOARDSTORY_VIDEO_PROMPT_SYSTEM = (
     "You write Seedance 2.0 Text-to-Video prompts using BoardStory reference mapping. "
     "Output ONLY the final prompt in English as plain text. "
-    "Describe motion, emotions, gestures, camera, lighting, and environment with director-level detail. "
+    "Describe motion, emotions, gestures, camera with director-level detail. "
     "Preserve MOTION_TIMELINE choreography and `[t s]` timing exactly. "
     "Use @ImageN and @VideoN tags exactly as defined in REFERENCE_TAG_RULES — mention each tag at least once. "
-    "When wardrobe or environment tags are absent, explicitly state they come from @Video1. "
-    "Identity (face/body/hair) always from model @Image tags, never from @Video1 performer. "
+    "When rules say wardrobe or environment come from @Video1, state that EXPLICITLY in separate sentences "
+    "(e.g. 'Wardrobe from @Video1', 'Room and lighting from @Video1') — do NOT bundle wardrobe into @Video1 motion lines. "
+    "@Video1 is for motion/choreography/timing; wardrobe and room follow REFERENCE_TAG_RULES only. "
+    "Model identity (face/body/hair) ONLY from the single @Image identity tag — never from @Video1. "
+    "Do NOT use @Image1–@Image2 range unless rules explicitly show a range. "
     "No markdown, no bullet lists, no labels like Prompt:."
 )
 

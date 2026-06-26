@@ -1,9 +1,10 @@
-import { memo, useCallback, useEffect, useRef } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Handle, Position, useReactFlow, type NodeProps } from '@xyflow/react'
 import { executeWorkflowGeneration } from '../api'
 import { serializeGraph } from '../graphResolver'
 import { useWorkflowBilling } from '../WorkflowBillingContext'
 import { useWorkflowRun } from '../WorkflowRunContext'
+import { WorkflowImageLightbox } from '../WorkflowImageLightbox'
 import { BaseNode } from './BaseNode'
 import { HandleIds, type VideoPromptComposeNodeData } from '../types'
 
@@ -17,6 +18,21 @@ function VideoPromptComposeNodeComponent({ id, data }: NodeProps) {
   const { me } = useWorkflowBilling()
   const nodeData = data as VideoPromptComposeNodeData
   const runAbortRef = useRef<AbortController | null>(null)
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
+
+  const edges = getEdges()
+  const clothingConnected = useMemo(
+    () => edges.some((e) => e.target === id && e.targetHandle === HandleIds.clothingIn),
+    [edges, id],
+  )
+  const environmentConnected = useMemo(
+    () => edges.some((e) => e.target === id && e.targetHandle === HandleIds.environmentIn),
+    [edges, id],
+  )
+
+  const generateClothing = nodeData.generateClothingFromVideo === true
+  const generateEnvironment = nodeData.generateEnvironmentFromVideo === true
+  const showExtractPreviews = generateClothing || generateEnvironment
 
   const updateNodeData = useCallback(
     (patch: Partial<VideoPromptComposeNodeData>) => {
@@ -75,6 +91,10 @@ function VideoPromptComposeNodeComponent({ id, data }: NodeProps) {
         isRunning: false,
         error: undefined,
         composedAt: new Date().toISOString(),
+        clothingGenerationId: result.clothing_generation_id ?? null,
+        environmentGenerationId: result.environment_generation_id ?? null,
+        clothingImageUrl: result.clothing_image_url?.trim() || undefined,
+        environmentImageUrl: result.environment_image_url?.trim() || undefined,
       })
     } catch (error) {
       if (isAbortError(error) || abortController.signal.aborted) {
@@ -211,8 +231,84 @@ function VideoPromptComposeNodeComponent({ id, data }: NodeProps) {
       </span>
 
       <p className="workflow-node__hint">
-        Grok разбирает motion-видео детально → промпт с @Image/@Video для BoardStory Seedance
+        Grok разбирает motion-видео → промпт с @Image/@Video для BoardStory Seedance
       </p>
+
+      <div className="workflow-gen-form nodrag">
+        <label className="workflow-gen-form__check">
+          <input
+            type="checkbox"
+            checked={generateClothing}
+            onChange={(e) =>
+              updateNodeData({
+                generateClothingFromVideo: e.target.checked,
+                ...(e.target.checked ? {} : { clothingGenerationId: null, clothingImageUrl: undefined }),
+              })
+            }
+            disabled={nodeData.isRunning || clothingConnected}
+          />
+          <span>Сгенерировать одежду из видео</span>
+        </label>
+        <label className="workflow-gen-form__check">
+          <input
+            type="checkbox"
+            checked={generateEnvironment}
+            onChange={(e) =>
+              updateNodeData({
+                generateEnvironmentFromVideo: e.target.checked,
+                ...(e.target.checked
+                  ? {}
+                  : { environmentGenerationId: null, environmentImageUrl: undefined }),
+              })
+            }
+            disabled={nodeData.isRunning || environmentConnected}
+          />
+          <span>Сгенерировать помещение из видео</span>
+        </label>
+      </div>
+
+      {showExtractPreviews ? (
+        <div className="workflow-node__preview-row nodrag">
+          {generateClothing ? (
+            nodeData.clothingImageUrl ? (
+              <button
+                type="button"
+                className="workflow-node__preview-box workflow-node__preview-box--filled workflow-node__preview-click"
+                onClick={() => setLightboxUrl(nodeData.clothingImageUrl ?? null)}
+              >
+                <img src={nodeData.clothingImageUrl} alt="Одежда из видео" />
+                <span className="workflow-node__preview-caption">Одежда</span>
+              </button>
+            ) : (
+              <div className="workflow-node__preview-box workflow-node__preview-box--compact">
+                <span className="workflow-node__hint">Одежда</span>
+              </div>
+            )
+          ) : null}
+          {generateEnvironment ? (
+            nodeData.environmentImageUrl ? (
+              <button
+                type="button"
+                className="workflow-node__preview-box workflow-node__preview-box--filled workflow-node__preview-click"
+                onClick={() => setLightboxUrl(nodeData.environmentImageUrl ?? null)}
+              >
+                <img src={nodeData.environmentImageUrl} alt="Помещение из видео" />
+                <span className="workflow-node__preview-caption">Помещение</span>
+              </button>
+            ) : (
+              <div className="workflow-node__preview-box workflow-node__preview-box--compact">
+                <span className="workflow-node__hint">Помещение</span>
+              </div>
+            )
+          ) : null}
+        </div>
+      ) : null}
+
+      {!clothingConnected && !environmentConnected && !generateClothing && !generateEnvironment ? (
+        <p className="workflow-node__hint workflow-node__hint--muted">
+          Без рефов и без галочек: одежда и помещение берутся из @Video1 в промпте
+        </p>
+      ) : null}
 
       <textarea
         className="workflow-node__textarea nodrag nowheel"
@@ -249,6 +345,8 @@ function VideoPromptComposeNodeComponent({ id, data }: NodeProps) {
         style={{ top: '50%' }}
       />
       <span className="workflow-node__handle-label workflow-node__handle-label--right">prompt</span>
+
+      <WorkflowImageLightbox imageUrl={lightboxUrl} onClose={() => setLightboxUrl(null)} />
     </BaseNode>
   )
 }
