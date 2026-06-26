@@ -5111,12 +5111,8 @@ async def _studio_job_execute_motion_render_video(
             )
 
             if prompt_from_compose and prompt.strip():
-                lock_lang = "zh" if settings.studio_seedance_grok_prompt_zh else "en"
                 # Промпт из ноды compose — в Seedance без изменений (как показано в UI).
-                seed_prompt = prompt.strip()
-                if remove_face_grid:
-                    seed_prompt = append_workflow_face_grid_removal(seed_prompt, language=lock_lang)
-                seed_prompt = truncate_seedance_t2v_prompt(seed_prompt)
+                seed_prompt = truncate_seedance_t2v_prompt(prompt.strip())
                 prompt_source = "boardstory_compose"
             else:
                 seed_prompt = assemble_boardstory_seedance_prompt(
