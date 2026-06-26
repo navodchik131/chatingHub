@@ -7,8 +7,9 @@ from pathlib import Path
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import StudioGeneration, StudioGenerationStatus, User
+from app.db.models import StudioGeneration, User
 from app.services.studio_aspect import normalize_aspect_key
+from app.services.studio_generation_status import StudioGenerationStatus
 from app.services.studio_generation_storage import (
     generation_has_archive_file,
     studio_finish_image_generation,
@@ -70,7 +71,8 @@ async def _generate_boardstory_still(
         studio_model_id=studio_model_id,
         output_aspect=aspect_key,
         content_type="image/png",
-        status=StudioGenerationStatus.PROVIDER_PENDING,
+        status=StudioGenerationStatus.PROCESSING,
+        relative_path="",
         studio_job_id=job_id,
         prompt_excerpt=prompt[:500],
     )
