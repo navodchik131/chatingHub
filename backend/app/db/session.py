@@ -362,6 +362,198 @@ async def init_db() -> None:
         await conn.run_sync(_migrate_fanvue_oauth_columns)
         await conn.run_sync(_migrate_fanvue_oauth_states_table)
         await conn.run_sync(_migrate_chat_message_features)
+        await conn.run_sync(_migrate_platform_connections_multi)
+
+
+def _migrate_platform_connections_multi(sync_conn) -> None:
+    from sqlalchemy import inspect, text
+
+    insp = inspect(sync_conn)
+    dialect = sync_conn.dialect.name
+
+    def _add_col(table: str, col_sql: str) -> None:
+        if not insp.has_table(table):
+            return
+        cols = {c["name"] for c in insp.get_columns(table)}
+        col_name = col_sql.split()[0]
+        if col_name not in cols:
+            sync_conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col_sql}"))
+
+    for table in ("telegram_connections", "fanvue_connections"):
+        if not insp.has_table(table):
+            continue
+        _add_col(table, "label VARCHAR(128)")
+        _add_col(table, "studio_model_id INTEGER")
+        if dialect == "postgresql":
+            sync_conn.execute(
+                text(
+                    f"""
+                    DO $$ BEGIN
+                      ALTER TABLE {table} DROP CONSTRAINT IF EXISTS {table}_user_id_key;
+                    EXCEPTION WHEN undefined_object THEN NULL;
+                    END $$;
+                    """
+                )
+            )
+            sync_conn.execute(
+                text(
+                    f"CREATE INDEX IF NOT EXISTS ix_{table}_user_id ON {table}(user_id)"
+                )
+            )
+
+    if insp.has_table("conversations"):
+        _add_col("conversations", "telegram_connection_id INTEGER")
+        _add_col("conversations", "fanvue_connection_id INTEGER")
+        sync_conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_conversations_telegram_connection_id "
+                "ON conversations(telegram_connection_id)"
+            )
+        )
+        sync_conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_conversations_fanvue_connection_id "
+                "ON conversations(fanvue_connection_id)"
+            )
+        )
+
+    if insp.has_table("fanvue_oauth_states"):
+        _add_col("fanvue_oauth_states", "connection_id INTEGER")
+        _add_col("fanvue_oauth_states", "label VARCHAR(128)")
+        _add_col("fanvue_oauth_states", "studio_model_id INTEGER")
+
+    # Привязать существующие диалоги к единственному подключению пользователя
+    if insp.has_table("conversations") and insp.has_table("telegram_connections"):
+        sync_conn.execute(
+            text(
+                """
+                UPDATE conversations
+                SET telegram_connection_id = (
+                    SELECT tc.id FROM telegram_connections tc
+                    WHERE tc.user_id = conversations.user_id
+                      AND tc.is_active = 1
+                    ORDER BY tc.id ASC LIMIT 1
+                )
+                WHERE platform = 'telegram'
+                  AND telegram_connection_id IS NULL
+                """
+                if dialect == "sqlite"
+                else """
+                UPDATE conversations c
+                SET telegram_connection_id = sub.id
+                FROM (
+                    SELECT DISTINCT ON (user_id) user_id, id
+                    FROM telegram_connections
+                    WHERE is_active = true
+                    ORDER BY user_id, id ASC
+                ) sub
+                WHERE c.platform = 'telegram'
+                  AND c.user_id = sub.user_id
+                  AND c.telegram_connection_id IS NULL
+                """
+            )
+        )
+    if insp.has_table("conversations") and insp.has_table("fanvue_connections"):
+        sync_conn.execute(
+            text(
+                """
+                UPDATE conversations
+                SET fanvue_connection_id = (
+                    SELECT fc.id FROM fanvue_connections fc
+                    WHERE fc.user_id = conversations.user_id
+                      AND fc.creator_uuid = conversations.external_topic_id
+                    ORDER BY fc.id ASC LIMIT 1
+                )
+                WHERE platform = 'fanvue'
+                  AND fanvue_connection_id IS NULL
+                """
+            )
+        )
+        sync_conn.execute(
+            text(
+                """
+                UPDATE conversations
+                SET fanvue_connection_id = (
+                    SELECT fc.id FROM fanvue_connections fc
+                    WHERE fc.user_id = conversations.user_id
+                    ORDER BY fc.id ASC LIMIT 1
+                )
+                WHERE platform = 'fanvue'
+                  AND fanvue_connection_id IS NULL
+                """
+            )
+        )
+
+    # studio_model_id с диалогов → на подключение (если ещё не задано)
+    if insp.has_table("fanvue_connections") and insp.has_table("conversations"):
+        sync_conn.execute(
+            text(
+                """
+                UPDATE fanvue_connections
+                SET studio_model_id = (
+                    SELECT c.studio_model_id FROM conversations c
+                    WHERE c.fanvue_connection_id = fanvue_connections.id
+                      AND c.studio_model_id IS NOT NULL
+                    ORDER BY c.updated_at DESC LIMIT 1
+                )
+                WHERE studio_model_id IS NULL
+                """
+            )
+        )
+    if insp.has_table("telegram_connections") and insp.has_table("conversations"):
+        sync_conn.execute(
+            text(
+                """
+                UPDATE telegram_connections
+                SET studio_model_id = (
+                    SELECT c.studio_model_id FROM conversations c
+                    WHERE c.telegram_connection_id = telegram_connections.id
+                      AND c.studio_model_id IS NOT NULL
+                    ORDER BY c.updated_at DESC LIMIT 1
+                )
+                WHERE studio_model_id IS NULL
+                """
+            )
+        )
+
+    # Диалоги наследуют модель подключения
+    if insp.has_table("conversations"):
+        sync_conn.execute(
+            text(
+                """
+                UPDATE conversations
+                SET studio_model_id = (
+                    SELECT fc.studio_model_id FROM fanvue_connections fc
+                    WHERE fc.id = conversations.fanvue_connection_id
+                )
+                WHERE platform = 'fanvue'
+                  AND fanvue_connection_id IS NOT NULL
+                  AND EXISTS (
+                    SELECT 1 FROM fanvue_connections fc
+                    WHERE fc.id = conversations.fanvue_connection_id
+                      AND fc.studio_model_id IS NOT NULL
+                  )
+                """
+            )
+        )
+        sync_conn.execute(
+            text(
+                """
+                UPDATE conversations
+                SET studio_model_id = (
+                    SELECT tc.studio_model_id FROM telegram_connections tc
+                    WHERE tc.id = conversations.telegram_connection_id
+                )
+                WHERE platform = 'telegram'
+                  AND telegram_connection_id IS NOT NULL
+                  AND EXISTS (
+                    SELECT 1 FROM telegram_connections tc
+                    WHERE tc.id = conversations.telegram_connection_id
+                      AND tc.studio_model_id IS NOT NULL
+                  )
+                """
+            )
+        )
 
 
 def _migrate_chat_message_features(sync_conn) -> None:

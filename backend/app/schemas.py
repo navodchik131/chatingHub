@@ -451,6 +451,9 @@ class TelegramIntegrationIn(BaseModel):
     """Токен BotFather, формат `числа:строка` (обычно ~45+ символов)."""
 
     bot_token: str = Field(min_length=15, max_length=512)
+    label: str | None = Field(default=None, max_length=128)
+    studio_model_id: int | None = Field(default=None, ge=1)
+    connection_id: int | None = Field(default=None, ge=1)
 
     @field_validator("bot_token", mode="before")
     @classmethod
@@ -466,8 +469,32 @@ class FanvueIntegrationIn(BaseModel):
     webhook_signing_secret: str | None = Field(default=None, max_length=512)
 
 
+class FanvueOAuthStartIn(BaseModel):
+    label: str | None = Field(default=None, max_length=128)
+    studio_model_id: int | None = Field(default=None, ge=1)
+    connection_id: int | None = Field(default=None, ge=1)
+
+
 class FanvueOAuthStartOut(BaseModel):
     authorize_url: str
+
+
+class PlatformConnectionPatchIn(BaseModel):
+    label: str | None = Field(default=None, max_length=128)
+    studio_model_id: int | None = Field(default=None, ge=1)
+
+
+class PlatformConnectionOut(BaseModel):
+    id: int
+    platform: Literal["telegram", "fanvue"]
+    label: str | None = None
+    studio_model_id: int | None = None
+    bot_username: str | None = None
+    webhook_registered: bool = False
+    creator_uuid: str | None = None
+    oauth_connected: bool = False
+    webhook_url: str | None = None
+    is_active: bool = True
 
 
 class FanvueSyncOut(BaseModel):
@@ -493,6 +520,9 @@ class IntegrationStatusOut(BaseModel):
     wavespeed_configured: bool = False
     wavespeed_managed_by_platform: bool = False
     llm_configured: bool = False
+    telegram_connections: list[PlatformConnectionOut] = Field(default_factory=list)
+    fanvue_connections: list[PlatformConnectionOut] = Field(default_factory=list)
+    max_connections_per_platform: int = 1
 
 
 # --- Billing (YooKassa) ---

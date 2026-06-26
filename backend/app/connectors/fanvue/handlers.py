@@ -71,7 +71,7 @@ def is_fanvue_message_read_payload(body: dict[str, Any]) -> bool:
 async def ingest_fanvue_message_received(
     session: AsyncSession,
     body: dict[str, Any],
-    owner_user_id: int,
+    conn: FanvueConnection,
 ) -> dict[str, Any]:
     msg = body.get("message") or {}
     sender = body.get("sender") or {}
@@ -94,7 +94,8 @@ async def ingest_fanvue_message_received(
     if not fan_uuid:
         raise ValueError("missing sender.uuid")
 
-    creator_uuid = str(recipient_uuid or "").strip() or "default"
+    owner_user_id = conn.user_id
+    creator_uuid = (conn.creator_uuid or "").strip() or str(recipient_uuid or "").strip() or "default"
     if fan_uuid == creator_uuid:
         log.debug("fanvue webhook: skip creator self-message uuid=%s", message_uuid)
         return {"ok": True, "skipped": "self_message"}
@@ -114,24 +115,22 @@ async def ingest_fanvue_message_received(
     image_bytes: bytes | None = None
     image_mime: str | None = None
     if message_uuid and (has_media or media_uuids):
-        row_fv = await session.scalar(
-            select(FanvueConnection).where(FanvueConnection.user_id == owner_user_id)
-        )
-        if row_fv:
-            try:
-                from app.services.fanvue_connection import ensure_fanvue_access_token
+        try:
+            from app.services.fanvue_connection import ensure_fanvue_access_token
 
-                fv_tok = await ensure_fanvue_access_token(session, row_fv)
-                img = await fanvue_fetch_message_image_bytes(
-                    fv_tok,
-                    fan_user_uuid=fan_uuid,
-                    message_uuid=message_uuid,
-                    media_uuids=media_uuids or [],
-                )
-                if img:
-                    image_bytes, image_mime = img
-            except Exception as e:
-                log.warning("fanvue inbound media fetch failed: %s", e)
+            fv_tok = await ensure_fanvue_access_token(session, conn)
+            img = await fanvue_fetch_message_image_bytes(
+                fv_tok,
+                fan_user_uuid=fan_uuid,
+                message_uuid=message_uuid,
+                media_uuids=media_uuids or [],
+            )
+            if img:
+                image_bytes, image_mime = img
+        except Exception as e:
+            log.warning("fanvue inbound media fetch failed: %s", e)
+
+    from app.services.platform_connections import connection_studio_model_id
 
     conv = await get_or_create_conversation(
         session,
@@ -140,6 +139,8 @@ async def ingest_fanvue_message_received(
         fan_uuid,
         creator_uuid,
         display,
+        fanvue_connection_id=conn.id,
+        studio_model_id=connection_studio_model_id(conn),
     )
 
     if text_s and not conv.auto_translate_disabled:
@@ -250,6 +251,7 @@ async def ingest_fanvue_message_from_api(
     access_token: str,
     fetch_media: bool = True,
     silent: bool = True,
+    conn: FanvueConnection | None = None,
 ) -> str:
     """Импорт одного сообщения из GET /chats/.../messages. Возвращает imported|skipped|empty."""
     from app.db.models import MessageDirection
@@ -282,6 +284,8 @@ async def ingest_fanvue_message_from_api(
     if not isinstance(display, str):
         display = str(display)
 
+    from app.services.platform_connections import connection_studio_model_id
+
     conv = await get_or_create_conversation(
         session,
         owner_user_id,
@@ -289,6 +293,8 @@ async def ingest_fanvue_message_from_api(
         fan_uuid,
         creator_uuid,
         display,
+        fanvue_connection_id=conn.id if conn else None,
+        studio_model_id=connection_studio_model_id(conn) if conn else None,
     )
 
     meta_obj: dict[str, Any] = {
@@ -340,9 +346,14 @@ async def ingest_fanvue_message_from_api(
     image_bytes: bytes | None = None
     image_mime: str | None = None
     if fetch_media and message_uuid and (has_media or media_uuids):
-        row_fv = await session.scalar(
-            select(FanvueConnection).where(FanvueConnection.user_id == owner_user_id)
-        )
+        row_fv = conn
+        if not row_fv:
+            row_fv = await session.scalar(
+                select(FanvueConnection).where(
+                    FanvueConnection.user_id == owner_user_id,
+                    FanvueConnection.creator_uuid == creator_uuid.strip(),
+                )
+            )
         if row_fv:
             try:
                 fv_tok = await ensure_fanvue_access_token(session, row_fv)

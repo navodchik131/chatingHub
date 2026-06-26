@@ -11,6 +11,7 @@ from app.config import settings
 from app.db.models import FanvueConnection
 from app.db.session import SessionLocal
 from app.services.fanvue_sync import poll_fanvue_inbox
+from app.services.platform_connections import get_fanvue_connection_for_owner
 
 log = logging.getLogger(__name__)
 
@@ -56,9 +57,26 @@ async def background_sync_fanvue_chat(
     from app.services.fanvue_sync import sync_fanvue_single_chat_recent
 
     async with SessionLocal() as session:
-        conn = await session.scalar(
-            select(FanvueConnection).where(FanvueConnection.user_id == owner_user_id)
-        )
+        from app.db.models import Conversation, Platform
+
+        conn = None
+        if fan_uuid.strip():
+            conv = await session.scalar(
+                select(Conversation)
+                .where(
+                    Conversation.user_id == owner_user_id,
+                    Conversation.platform == Platform.fanvue,
+                    Conversation.external_chat_id == fan_uuid.strip(),
+                )
+                .order_by(Conversation.updated_at.desc())
+                .limit(1)
+            )
+            if conv and conv.fanvue_connection_id:
+                conn = await get_fanvue_connection_for_owner(
+                    session, owner_user_id, connection_id=conv.fanvue_connection_id
+                )
+        if not conn:
+            conn = await get_fanvue_connection_for_owner(session, owner_user_id)
         if not conn:
             return
         try:

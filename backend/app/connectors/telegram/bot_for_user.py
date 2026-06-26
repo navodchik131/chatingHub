@@ -19,7 +19,10 @@ log = logging.getLogger(__name__)
 
 
 async def open_telegram_bot_for_owner(
-    session: AsyncSession, owner_user_id: int
+    session: AsyncSession,
+    owner_user_id: int,
+    *,
+    telegram_connection_id: int | None = None,
 ) -> tuple[Bot | None, bool]:
     """
     Возвращает (bot, need_close).
@@ -28,11 +31,10 @@ async def open_telegram_bot_for_owner(
     legacy = get_bot()
     if legacy is not None:
         return legacy, False
-    row = await session.scalar(
-        select(TelegramConnection).where(
-            TelegramConnection.user_id == owner_user_id,
-            TelegramConnection.is_active.is_(True),
-        )
+    from app.services.platform_connections import get_telegram_connection_for_owner
+
+    row = await get_telegram_connection_for_owner(
+        session, owner_user_id, connection_id=telegram_connection_id
     )
     if not row:
         return None, False

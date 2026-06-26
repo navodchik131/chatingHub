@@ -28,6 +28,7 @@ from app.db.models import (
     FanvueConnection,
     FanvueOAuthState,
     LlmConnection,
+    Platform,
     Subscription,
     TelegramConnection,
     User,
@@ -36,10 +37,13 @@ from app.db.models import (
 from app.db.session import SessionLocal, get_session
 from app.schemas import (
     FanvueIntegrationIn,
+    FanvueOAuthStartIn,
     FanvueOAuthStartOut,
     FanvueSyncOut,
     IntegrationStatusOut,
     LlmIntegrationIn,
+    PlatformConnectionOut,
+    PlatformConnectionPatchIn,
     TelegramIntegrationIn,
     WavespeedIntegrationIn,
 )
@@ -50,6 +54,12 @@ from app.services.fanvue_connection import (
     fanvue_platform_webhook_url,
 )
 from app.services.fanvue_sync import sync_fanvue_chat_history
+from app.services.plan_entitlements import plan_limits_for_sub
+from app.services.platform_connections import (
+    assert_can_add_platform_connection,
+    sync_conversations_model_from_connection,
+    validate_connection_studio_model,
+)
 from app.services.studio_keys import wavespeed_cabinet_flags
 from app.services.workspace import PERM_INTEGRATIONS, assert_permission, workspace_owner_id
 
@@ -58,11 +68,26 @@ log = logging.getLogger(__name__)
 router = APIRouter(prefix="/integrations", tags=["integrations"])
 
 
-async def _background_fanvue_history_sync(user_id: int) -> None:
+def _fanvue_oauth_ready() -> bool:
+    return fanvue_oauth_configured() and bool(fanvue_platform_webhook_signing_secret())
+
+
+async def _background_fanvue_history_sync(user_id: int, connection_id: int | None = None) -> None:
     async with SessionLocal() as session:
-        row = await session.scalar(
-            select(FanvueConnection).where(FanvueConnection.user_id == user_id)
-        )
+        if connection_id is not None:
+            row = await session.scalar(
+                select(FanvueConnection).where(
+                    FanvueConnection.id == connection_id,
+                    FanvueConnection.user_id == user_id,
+                )
+            )
+        else:
+            row = await session.scalar(
+                select(FanvueConnection)
+                .where(FanvueConnection.user_id == user_id)
+                .order_by(FanvueConnection.id.asc())
+                .limit(1)
+            )
         if not row:
             return
         try:
@@ -76,7 +101,7 @@ def _telegram_webhook_registered(tg: TelegramConnection | None) -> bool:
     return bool(tg and tg.is_active and tg.webhook_registered)
 
 
-def _fanvue_webhook_url(fv: FanvueConnection | None) -> str | None:
+def _fanvue_webhook_url_for_conn(fv: FanvueConnection | None) -> str | None:
     platform = fanvue_platform_webhook_url()
     if platform:
         return platform
@@ -86,18 +111,56 @@ def _fanvue_webhook_url(fv: FanvueConnection | None) -> str | None:
     return None
 
 
-def _fanvue_oauth_ready() -> bool:
-    return fanvue_oauth_configured() and bool(fanvue_platform_webhook_signing_secret())
+def _telegram_connection_out(
+    tg: TelegramConnection, *, base: str
+) -> PlatformConnectionOut:
+    return PlatformConnectionOut(
+        id=tg.id,
+        platform="telegram",
+        label=tg.label,
+        studio_model_id=tg.studio_model_id,
+        bot_username=tg.bot_username,
+        webhook_registered=_telegram_webhook_registered(tg),
+        webhook_url=f"{base}/api/webhooks/telegram/{tg.webhook_secret}",
+        is_active=bool(tg.is_active),
+    )
+
+
+def _fanvue_connection_out(fv: FanvueConnection) -> PlatformConnectionOut:
+    return PlatformConnectionOut(
+        id=fv.id,
+        platform="fanvue",
+        label=fv.label,
+        studio_model_id=fv.studio_model_id,
+        creator_uuid=fv.creator_uuid,
+        oauth_connected=bool(fv.oauth_connected_at),
+        webhook_url=_fanvue_webhook_url_for_conn(fv),
+        is_active=True,
+    )
 
 
 async def _integration_status(session: AsyncSession, user: User) -> IntegrationStatusOut:
     oid = workspace_owner_id(user)
-    tg = await session.scalar(
-        select(TelegramConnection).where(TelegramConnection.user_id == oid)
+    tg_rows = list(
+        (
+            await session.scalars(
+                select(TelegramConnection)
+                .where(TelegramConnection.user_id == oid)
+                .order_by(TelegramConnection.id.asc())
+            )
+        ).all()
     )
-    fv = await session.scalar(
-        select(FanvueConnection).where(FanvueConnection.user_id == oid)
+    fv_rows = list(
+        (
+            await session.scalars(
+                select(FanvueConnection)
+                .where(FanvueConnection.user_id == oid)
+                .order_by(FanvueConnection.id.asc())
+            )
+        ).all()
     )
+    tg = next((r for r in tg_rows if r.is_active), tg_rows[0] if tg_rows else None)
+    fv = fv_rows[0] if fv_rows else None
     ws = await session.scalar(
         select(WavespeedConnection).where(WavespeedConnection.user_id == oid)
     )
@@ -140,12 +203,13 @@ async def _integration_status(session: AsyncSession, user: User) -> IntegrationS
             )
     if hint_parts:
         hint = "\n\n".join(hint_parts)
+    lim = plan_limits_for_sub(sub)
     return IntegrationStatusOut(
         telegram_configured=bool(tg and tg.is_active),
         telegram_bot_username=tg.bot_username if tg else None,
         fanvue_configured=bool(fv),
         fanvue_creator_uuid=fv.creator_uuid if fv else None,
-        fanvue_webhook_url=_fanvue_webhook_url(fv),
+        fanvue_webhook_url=_fanvue_webhook_url_for_conn(fv),
         fanvue_oauth_available=_fanvue_oauth_ready(),
         fanvue_oauth_connected=bool(fv and fv.oauth_connected_at),
         telegram_webhook_url=(
@@ -156,6 +220,11 @@ async def _integration_status(session: AsyncSession, user: User) -> IntegrationS
         wavespeed_configured=wavespeed_configured,
         wavespeed_managed_by_platform=wavespeed_managed_by_platform,
         llm_configured=llm_configured,
+        telegram_connections=[
+            _telegram_connection_out(r, base=base) for r in tg_rows if r.is_active
+        ],
+        fanvue_connections=[_fanvue_connection_out(r) for r in fv_rows],
+        max_connections_per_platform=lim.max_models,
     )
 
 
@@ -215,18 +284,61 @@ async def put_telegram(
     finally:
         await bot.session.close()
 
-    row = await session.scalar(
-        select(TelegramConnection).where(TelegramConnection.user_id == oid)
-    )
+    sub = await session.scalar(select(Subscription).where(Subscription.user_id == oid))
+    if body.studio_model_id is not None:
+        await validate_connection_studio_model(session, oid, body.studio_model_id)
+
+    row: TelegramConnection | None = None
+    if body.connection_id is not None:
+        row = await session.scalar(
+            select(TelegramConnection).where(
+                TelegramConnection.id == body.connection_id,
+                TelegramConnection.user_id == oid,
+            )
+        )
+        if not row:
+            raise HTTPException(status_code=404, detail="Подключение Telegram не найдено")
+    else:
+        existing = list(
+            (
+                await session.scalars(
+                    select(TelegramConnection).where(TelegramConnection.user_id == oid)
+                )
+            ).all()
+        )
+        if len(existing) == 1:
+            row = existing[0]
+        elif len(existing) == 0:
+            await assert_can_add_platform_connection(
+                session, oid, sub, platform=Platform.telegram
+            )
+        else:
+            await assert_can_add_platform_connection(
+                session, oid, sub, platform=Platform.telegram
+            )
+
+    label = (body.label or "").strip() or None
     if row:
         row.bot_token_encrypted = enc
         row.webhook_secret = webhook_secret
         row.bot_username = me.username
         row.is_active = True
         row.webhook_registered = webhook_registered
+        if label is not None:
+            row.label = label
+        if body.studio_model_id is not None:
+            row.studio_model_id = body.studio_model_id
+            await sync_conversations_model_from_connection(
+                session,
+                platform=Platform.telegram,
+                connection_id=row.id,
+                studio_model_id=body.studio_model_id,
+            )
     else:
         row = TelegramConnection(
             user_id=oid,
+            label=label,
+            studio_model_id=body.studio_model_id,
             bot_token_encrypted=enc,
             webhook_secret=webhook_secret,
             bot_username=me.username,
@@ -245,7 +357,10 @@ async def _save_fanvue_oauth_tokens(
     user_id: int,
     creator_uuid: str,
     token_payload: dict,
-) -> None:
+    connection_id: int | None = None,
+    label: str | None = None,
+    studio_model_id: int | None = None,
+) -> FanvueConnection:
     access = str(token_payload.get("access_token") or "").strip()
     if not access:
         raise FanvueOAuthError("Fanvue token response missing access_token")
@@ -260,9 +375,25 @@ async def _save_fanvue_oauth_tokens(
         except (TypeError, ValueError):
             expires_at = None
 
-    row = await session.scalar(
-        select(FanvueConnection).where(FanvueConnection.user_id == user_id)
-    )
+    row: FanvueConnection | None = None
+    if connection_id is not None:
+        row = await session.scalar(
+            select(FanvueConnection).where(
+                FanvueConnection.id == connection_id,
+                FanvueConnection.user_id == user_id,
+            )
+        )
+    if row is None:
+        existing = list(
+            (
+                await session.scalars(
+                    select(FanvueConnection).where(FanvueConnection.user_id == user_id)
+                )
+            ).all()
+        )
+        if len(existing) == 1 and connection_id is None:
+            row = existing[0]
+
     now = datetime.now(timezone.utc)
     if row:
         row.creator_uuid = creator_uuid
@@ -270,9 +401,29 @@ async def _save_fanvue_oauth_tokens(
         row.refresh_token_encrypted = enc_refresh
         row.token_expires_at = expires_at
         row.oauth_connected_at = now
+        if label is not None:
+            row.label = label
+        if studio_model_id is not None:
+            row.studio_model_id = studio_model_id
+            await sync_conversations_model_from_connection(
+                session,
+                platform=Platform.fanvue,
+                connection_id=row.id,
+                studio_model_id=studio_model_id,
+            )
     else:
+        sub = await session.scalar(
+            select(Subscription).where(Subscription.user_id == user_id)
+        )
+        await assert_can_add_platform_connection(
+            session, user_id, sub, platform=Platform.fanvue
+        )
+        if studio_model_id is not None:
+            await validate_connection_studio_model(session, user_id, studio_model_id)
         row = FanvueConnection(
             user_id=user_id,
+            label=label,
+            studio_model_id=studio_model_id,
             creator_uuid=creator_uuid,
             access_token_encrypted=enc_access,
             refresh_token_encrypted=enc_refresh,
@@ -283,10 +434,13 @@ async def _save_fanvue_oauth_tokens(
         )
         session.add(row)
     await session.commit()
+    await session.refresh(row)
+    return row
 
 
 @router.post("/fanvue/oauth/start", response_model=FanvueOAuthStartOut)
 async def fanvue_oauth_start(
+    body: FanvueOAuthStartIn | None = None,
     session: AsyncSession = Depends(get_session),
     user: User = Depends(get_current_user),
 ) -> FanvueOAuthStartOut:
@@ -300,6 +454,18 @@ async def fanvue_oauth_start(
             ),
         )
     oid = workspace_owner_id(user)
+    payload = body or FanvueOAuthStartIn()
+    if payload.studio_model_id is not None:
+        await validate_connection_studio_model(session, oid, payload.studio_model_id)
+    if payload.connection_id is not None:
+        row = await session.scalar(
+            select(FanvueConnection).where(
+                FanvueConnection.id == payload.connection_id,
+                FanvueConnection.user_id == oid,
+            )
+        )
+        if not row:
+            raise HTTPException(status_code=404, detail="Подключение Fanvue не найдено")
     state = generate_oauth_state()
     code_verifier, code_challenge = generate_pkce_pair()
     session.add(
@@ -307,6 +473,9 @@ async def fanvue_oauth_start(
             state=state,
             user_id=oid,
             code_verifier=code_verifier,
+            connection_id=payload.connection_id,
+            label=(payload.label or "").strip() or None,
+            studio_model_id=payload.studio_model_id,
         )
     )
     await session.commit()
@@ -352,9 +521,13 @@ async def fanvue_oauth_callback(
 
     user_id = pending.user_id
     code_verifier = pending.code_verifier
+    oauth_connection_id = pending.connection_id
+    oauth_label = pending.label
+    oauth_studio_model_id = pending.studio_model_id
     await session.execute(delete(FanvueOAuthState).where(FanvueOAuthState.state == state))
     await session.commit()
 
+    saved_conn_id: int | None = None
     try:
         token_payload = await exchange_fanvue_authorization_code(
             code=code.strip(),
@@ -365,12 +538,16 @@ async def fanvue_oauth_callback(
         creator_uuid = str(me.get("uuid") or me.get("id") or "").strip()
         if not creator_uuid:
             raise FanvueOAuthError("Fanvue /users/me missing uuid")
-        await _save_fanvue_oauth_tokens(
+        saved = await _save_fanvue_oauth_tokens(
             session,
             user_id=user_id,
             creator_uuid=creator_uuid,
             token_payload=token_payload,
+            connection_id=oauth_connection_id,
+            label=oauth_label,
+            studio_model_id=oauth_studio_model_id,
         )
+        saved_conn_id = saved.id
     except FanvueOAuthError as e:
         log.warning("fanvue oauth callback failed user=%s: %s", user_id, e)
         q = urlencode({"account": "integrations", "fanvue": "error"})
@@ -380,20 +557,32 @@ async def fanvue_oauth_callback(
         q = urlencode({"account": "integrations", "fanvue": "error"})
         return RedirectResponse(url=f"{base}/?{q}", status_code=302)
 
-    background_tasks.add_task(_background_fanvue_history_sync, user_id)
+    background_tasks.add_task(_background_fanvue_history_sync, user_id, saved_conn_id)
     return RedirectResponse(url=ok, status_code=302)
 
 
 @router.post("/fanvue/sync", response_model=FanvueSyncOut)
 async def fanvue_sync_history(
+    connection_id: int | None = Query(default=None, ge=1),
     session: AsyncSession = Depends(get_session),
     user: User = Depends(get_current_user),
 ) -> FanvueSyncOut:
     assert_permission(user, PERM_INTEGRATIONS)
     oid = workspace_owner_id(user)
-    row = await session.scalar(
-        select(FanvueConnection).where(FanvueConnection.user_id == oid)
-    )
+    if connection_id is not None:
+        row = await session.scalar(
+            select(FanvueConnection).where(
+                FanvueConnection.id == connection_id,
+                FanvueConnection.user_id == oid,
+            )
+        )
+    else:
+        row = await session.scalar(
+            select(FanvueConnection)
+            .where(FanvueConnection.user_id == oid)
+            .order_by(FanvueConnection.id.asc())
+            .limit(1)
+        )
     if not row:
         raise HTTPException(status_code=404, detail="Fanvue is not connected")
     try:
@@ -414,14 +603,26 @@ async def fanvue_sync_history(
 
 @router.delete("/fanvue", response_model=IntegrationStatusOut)
 async def delete_fanvue(
+    connection_id: int | None = Query(default=None, ge=1),
     session: AsyncSession = Depends(get_session),
     user: User = Depends(get_current_user),
 ) -> IntegrationStatusOut:
     assert_permission(user, PERM_INTEGRATIONS)
     oid = workspace_owner_id(user)
-    row = await session.scalar(
-        select(FanvueConnection).where(FanvueConnection.user_id == oid)
-    )
+    if connection_id is not None:
+        row = await session.scalar(
+            select(FanvueConnection).where(
+                FanvueConnection.id == connection_id,
+                FanvueConnection.user_id == oid,
+            )
+        )
+    else:
+        row = await session.scalar(
+            select(FanvueConnection)
+            .where(FanvueConnection.user_id == oid)
+            .order_by(FanvueConnection.id.asc())
+            .limit(1)
+        )
     if row:
         await session.delete(row)
         await session.commit()
@@ -469,6 +670,91 @@ async def put_fanvue(
             webhook_secret=webhook_secret,
         )
         session.add(row)
+    await session.commit()
+    return await _integration_status(session, user)
+
+
+@router.patch("/telegram/{connection_id}", response_model=IntegrationStatusOut)
+async def patch_telegram_connection(
+    connection_id: int,
+    body: PlatformConnectionPatchIn,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> IntegrationStatusOut:
+    assert_permission(user, PERM_INTEGRATIONS)
+    oid = workspace_owner_id(user)
+    row = await session.scalar(
+        select(TelegramConnection).where(
+            TelegramConnection.id == connection_id,
+            TelegramConnection.user_id == oid,
+        )
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Подключение Telegram не найдено")
+    if "label" in body.model_fields_set:
+        row.label = (body.label or "").strip() or None
+    if "studio_model_id" in body.model_fields_set:
+        await validate_connection_studio_model(session, oid, body.studio_model_id)
+        row.studio_model_id = body.studio_model_id
+        await sync_conversations_model_from_connection(
+            session,
+            platform=Platform.telegram,
+            connection_id=row.id,
+            studio_model_id=body.studio_model_id,
+        )
+    await session.commit()
+    return await _integration_status(session, user)
+
+
+@router.delete("/telegram/{connection_id}", response_model=IntegrationStatusOut)
+async def delete_telegram_connection(
+    connection_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> IntegrationStatusOut:
+    assert_permission(user, PERM_INTEGRATIONS)
+    oid = workspace_owner_id(user)
+    row = await session.scalar(
+        select(TelegramConnection).where(
+            TelegramConnection.id == connection_id,
+            TelegramConnection.user_id == oid,
+        )
+    )
+    if row:
+        row.is_active = False
+        row.webhook_registered = False
+        await session.commit()
+    return await _integration_status(session, user)
+
+
+@router.patch("/fanvue/{connection_id}", response_model=IntegrationStatusOut)
+async def patch_fanvue_connection(
+    connection_id: int,
+    body: PlatformConnectionPatchIn,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> IntegrationStatusOut:
+    assert_permission(user, PERM_INTEGRATIONS)
+    oid = workspace_owner_id(user)
+    row = await session.scalar(
+        select(FanvueConnection).where(
+            FanvueConnection.id == connection_id,
+            FanvueConnection.user_id == oid,
+        )
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Подключение Fanvue не найдено")
+    if "label" in body.model_fields_set:
+        row.label = (body.label or "").strip() or None
+    if "studio_model_id" in body.model_fields_set:
+        await validate_connection_studio_model(session, oid, body.studio_model_id)
+        row.studio_model_id = body.studio_model_id
+        await sync_conversations_model_from_connection(
+            session,
+            platform=Platform.fanvue,
+            connection_id=row.id,
+            studio_model_id=body.studio_model_id,
+        )
     await session.commit()
     return await _integration_status(session, user)
 

@@ -99,11 +99,11 @@ class User(Base):
     conversations: Mapped[list[Conversation]] = relationship(
         "Conversation", back_populates="owner"
     )
-    telegram_connection: Mapped[TelegramConnection | None] = relationship(
-        "TelegramConnection", back_populates="user", uselist=False
+    telegram_connections: Mapped[list[TelegramConnection]] = relationship(
+        "TelegramConnection", back_populates="user"
     )
-    fanvue_connection: Mapped[FanvueConnection | None] = relationship(
-        "FanvueConnection", back_populates="user", uselist=False
+    fanvue_connections: Mapped[list[FanvueConnection]] = relationship(
+        "FanvueConnection", back_populates="user"
     )
     studio_models: Mapped[list[UserStudioModel]] = relationship(
         "UserStudioModel", back_populates="owner", cascade="all, delete-orphan"
@@ -231,7 +231,13 @@ class TelegramConnection(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(
-        ForeignKey("users.id", ondelete="CASCADE"), unique=True, index=True
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    label: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    studio_model_id: Mapped[int | None] = mapped_column(
+        ForeignKey("user_studio_models.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
     )
     bot_token_encrypted: Mapped[str] = mapped_column(Text)
     webhook_secret: Mapped[str] = mapped_column(String(64), unique=True, index=True)
@@ -243,7 +249,8 @@ class TelegramConnection(Base):
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
 
-    user: Mapped[User] = relationship("User", back_populates="telegram_connection")
+    user: Mapped[User] = relationship("User", back_populates="telegram_connections")
+    studio_model: Mapped[UserStudioModel | None] = relationship("UserStudioModel")
 
 
 class FanvueConnection(Base):
@@ -251,7 +258,13 @@ class FanvueConnection(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(
-        ForeignKey("users.id", ondelete="CASCADE"), unique=True, index=True
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    label: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    studio_model_id: Mapped[int | None] = mapped_column(
+        ForeignKey("user_studio_models.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
     )
     creator_uuid: Mapped[str] = mapped_column(String(64), index=True)
     access_token_encrypted: Mapped[str] = mapped_column(Text)
@@ -268,7 +281,8 @@ class FanvueConnection(Base):
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
 
-    user: Mapped[User] = relationship("User", back_populates="fanvue_connection")
+    user: Mapped[User] = relationship("User", back_populates="fanvue_connections")
+    studio_model: Mapped[UserStudioModel | None] = relationship("UserStudioModel")
 
 
 class FanvueOAuthState(Base):
@@ -279,6 +293,10 @@ class FanvueOAuthState(Base):
         ForeignKey("users.id", ondelete="CASCADE"), index=True
     )
     code_verifier: Mapped[str] = mapped_column(String(128))
+    """Если задан — обновить существующее подключение; иначе создать новое."""
+    connection_id: Mapped[int | None] = mapped_column(nullable=True)
+    label: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    studio_model_id: Mapped[int | None] = mapped_column(nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
@@ -302,6 +320,16 @@ class Conversation(Base):
     )
     platform: Mapped[Platform] = mapped_column(
         Enum(Platform, native_enum=False, length=16), index=True
+    )
+    telegram_connection_id: Mapped[int | None] = mapped_column(
+        ForeignKey("telegram_connections.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    fanvue_connection_id: Mapped[int | None] = mapped_column(
+        ForeignKey("fanvue_connections.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
     )
     external_chat_id: Mapped[str] = mapped_column(String(64), index=True)
     external_topic_id: Mapped[str] = mapped_column(String(64), default="0")

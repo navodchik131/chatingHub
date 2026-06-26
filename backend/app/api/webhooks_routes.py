@@ -60,7 +60,7 @@ async def _process_fanvue_webhook(
         if recipient and recipient != conn.creator_uuid:
             raise HTTPException(status_code=400, detail="recipient mismatch")
         try:
-            return await ingest_fanvue_message_received(session, body, conn.user_id)
+            return await ingest_fanvue_message_received(session, body, conn)
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
         except Exception:
@@ -105,7 +105,13 @@ async def telegram_webhook(
 
     if not upd.message:
         return {"ok": True, "skipped": "no_message"}
-    await ingest_telegram_dm(conn.user_id, upd.message, source="webhook")
+    await ingest_telegram_dm(
+        conn.user_id,
+        upd.message,
+        source="webhook",
+        telegram_connection_id=conn.id,
+        studio_model_id=conn.studio_model_id,
+    )
     return {"ok": True}
 
 

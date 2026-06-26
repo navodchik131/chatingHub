@@ -6,6 +6,9 @@ import logging
 from datetime import datetime
 from typing import Any
 
+from datetime import datetime, timedelta, timezone
+
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -154,6 +157,7 @@ async def sync_fanvue_chat_history(
                             access_token=access_token,
                             fetch_media=fetch_media,
                             silent=silent_imports,
+                            conn=conn,
                         )
                     except Exception as e:
                         log.warning("fanvue sync message failed fan=%s: %s", fan_uuid, e)
@@ -185,15 +189,66 @@ async def sync_fanvue_chat_history(
 
 
 async def poll_fanvue_inbox(session: AsyncSession, *, conn: FanvueConnection) -> dict[str, int | list[str]]:
-    """Подтянуть свежие сообщения через API (webhook может пропустить)."""
-    return await sync_fanvue_chat_history(
-        session,
-        conn=conn,
-        max_chats=settings.fanvue_inbox_poll_max_chats,
-        max_messages_per_chat=settings.fanvue_inbox_poll_max_messages_per_chat,
-        fetch_media=True,
-        silent_imports=False,
+    """Подтянуть свежие сообщения только по активным диалогам из БД."""
+    owner_user_id = conn.user_id
+    creator_uuid = (conn.creator_uuid or "").strip()
+    cutoff = datetime.now(timezone.utc) - timedelta(days=settings.fanvue_inbox_poll_active_days)
+    limit = settings.fanvue_inbox_poll_max_chats
+    max_messages = settings.fanvue_inbox_poll_max_messages_per_chat
+
+    conn_filter = Conversation.fanvue_connection_id == conn.id
+    if creator_uuid:
+        legacy_filter = (
+            Conversation.fanvue_connection_id.is_(None),
+            Conversation.external_topic_id == creator_uuid,
+        )
+        where_conn = or_(conn_filter, *legacy_filter)
+    else:
+        where_conn = conn_filter
+
+    stmt = (
+        select(Conversation)
+        .where(
+            Conversation.user_id == owner_user_id,
+            Conversation.platform == Platform.fanvue,
+            Conversation.updated_at >= cutoff,
+            where_conn,
+        )
+        .order_by(Conversation.updated_at.desc())
+        .limit(limit)
     )
+    convs = list((await session.scalars(stmt)).all())
+
+    stats: dict[str, int | list[str]] = {
+        "chats_processed": len(convs),
+        "messages_imported": 0,
+        "messages_skipped": 0,
+        "messages_empty": 0,
+        "errors": [],
+    }
+    if not convs:
+        return stats
+
+    for conv in convs:
+        fan_uuid = (conv.external_chat_id or "").strip()
+        if not fan_uuid:
+            continue
+        try:
+            n = await sync_fanvue_single_chat_recent(
+                session,
+                conn=conn,
+                fan_uuid=fan_uuid,
+                fan_display=conv.user_display_name or fan_uuid,
+                max_messages=max_messages,
+            )
+            stats["messages_imported"] = int(stats["messages_imported"]) + n
+        except Exception as e:
+            log.warning("fanvue active poll failed fan=%s: %s", fan_uuid[:8], e)
+            errors: list[str] = stats["errors"]  # type: ignore[assignment]
+            errors.append(f"fan={fan_uuid[:8]}: {e}")
+
+    await session.commit()
+    return stats
 
 
 async def sync_fanvue_single_chat_recent(
@@ -237,6 +292,7 @@ async def sync_fanvue_single_chat_recent(
                 access_token=access_token,
                 fetch_media=True,
                 silent=False,
+                conn=conn,
             )
         except Exception as e:
             log.warning("fanvue single chat message failed: %s", e)

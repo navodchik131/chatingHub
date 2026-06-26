@@ -37,6 +37,10 @@ async def get_or_create_conversation(
     external_topic_id: str,
     user_display_name: str | None,
     telegram_photo_file_id: str | None = None,
+    *,
+    telegram_connection_id: int | None = None,
+    fanvue_connection_id: int | None = None,
+    studio_model_id: int | None = None,
 ) -> Conversation:
     stmt = select(Conversation).where(
         Conversation.user_id == user_id,
@@ -44,6 +48,10 @@ async def get_or_create_conversation(
         Conversation.external_chat_id == external_chat_id,
         Conversation.external_topic_id == external_topic_id,
     )
+    if platform == Platform.telegram and telegram_connection_id is not None:
+        stmt = stmt.where(Conversation.telegram_connection_id == telegram_connection_id)
+    elif platform == Platform.fanvue and fanvue_connection_id is not None:
+        stmt = stmt.where(Conversation.fanvue_connection_id == fanvue_connection_id)
     r = await session.execute(stmt)
     conv = r.scalar_one_or_none()
     now = datetime.now(timezone.utc)
@@ -56,6 +64,12 @@ async def get_or_create_conversation(
             and conv.telegram_photo_file_id != telegram_photo_file_id
         ):
             conv.telegram_photo_file_id = telegram_photo_file_id
+        if telegram_connection_id and not conv.telegram_connection_id:
+            conv.telegram_connection_id = telegram_connection_id
+        if fanvue_connection_id and not conv.fanvue_connection_id:
+            conv.fanvue_connection_id = fanvue_connection_id
+        if studio_model_id is not None and conv.studio_model_id != studio_model_id:
+            conv.studio_model_id = studio_model_id
         conv.updated_at = now
         return conv
     conv = Conversation(
@@ -67,6 +81,13 @@ async def get_or_create_conversation(
         telegram_photo_file_id=telegram_photo_file_id
         if platform == Platform.telegram
         else None,
+        telegram_connection_id=telegram_connection_id
+        if platform == Platform.telegram
+        else None,
+        fanvue_connection_id=fanvue_connection_id
+        if platform == Platform.fanvue
+        else None,
+        studio_model_id=studio_model_id,
         created_at=now,
         updated_at=now,
     )

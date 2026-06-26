@@ -133,6 +133,8 @@ async def ingest_telegram_dm(
     message: TelegramMessage,
     *,
     source: str,
+    telegram_connection_id: int | None = None,
+    studio_model_id: int | None = None,
 ) -> None:
     text = (message.text or message.caption or "").strip()
     has_photo = bool(message.photo) or (
@@ -173,7 +175,9 @@ async def ingest_telegram_dm(
         photo_fid: str | None = None
         image_bytes: bytes | None = None
         image_mime: str | None = None
-        bot, close_bot = await open_telegram_bot_for_owner(session, owner_user_id)
+        bot, close_bot = await open_telegram_bot_for_owner(
+            session, owner_user_id, telegram_connection_id=telegram_connection_id
+        )
         try:
             if bot and from_user:
                 photo_fid = await telegram_profile_photo_file_id(bot, from_user.id)
@@ -193,6 +197,8 @@ async def ingest_telegram_dm(
             topic_id_str,
             display,
             telegram_photo_file_id=photo_fid,
+            telegram_connection_id=telegram_connection_id,
+            studio_model_id=studio_model_id,
         )
 
         if text and not conv.auto_translate_disabled:

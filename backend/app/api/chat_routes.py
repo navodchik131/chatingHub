@@ -100,10 +100,13 @@ from app.services.workspace import (
     workspace_owner_id,
     resolve_billing_user,
 )
+from app.services.platform_connections import (
+    resolve_fanvue_connection_for_conversation,
+    resolve_telegram_connection_for_conversation,
+)
 from app.services.workspace_model_access import (
     filter_conversations_for_member,
     require_conversation_chat_access,
-    validate_owner_studio_model_id,
 )
 
 log = logging.getLogger(__name__)
@@ -255,7 +258,9 @@ async def api_conversation_avatar(
     if conv.platform != Platform.telegram or not (conv.telegram_photo_file_id or "").strip():
         raise HTTPException(status_code=404, detail="no avatar")
 
-    bot, close_bot = await open_telegram_bot_for_owner(session, oid)
+    bot, close_bot = await open_telegram_bot_for_owner(
+        session, oid, telegram_connection_id=conv.telegram_connection_id
+    )
     if not bot:
         raise HTTPException(
             status_code=503,
@@ -346,13 +351,10 @@ async def api_patch_conversation(
     if "outbound_lang" in body.model_fields_set:
         conv.outbound_lang = body.outbound_lang
     if "studio_model_id" in body.model_fields_set:
-        if not is_workspace_owner(user):
-            raise HTTPException(
-                status_code=403,
-                detail="Назначение модели диалогу доступно только владельцу",
-            )
-        await validate_owner_studio_model_id(session, oid, body.studio_model_id)
-        conv.studio_model_id = body.studio_model_id
+        raise HTTPException(
+            status_code=400,
+            detail="Модель назначается на подключении в кабинете «Интеграции», а не на каждом диалоге.",
+        )
     if "auto_translate_disabled" in body.model_fields_set:
         if body.auto_translate_disabled is not None:
             conv.auto_translate_disabled = bool(body.auto_translate_disabled)
@@ -454,9 +456,7 @@ async def api_reply(
 
     platform_message_id: str | None = None
     if conv.platform == Platform.telegram:
-        row_tg = await session.scalar(
-            select(TelegramConnection).where(TelegramConnection.user_id == oid)
-        )
+        row_tg = await resolve_telegram_connection_for_conversation(session, conv, oid)
         if not row_tg:
             raise HTTPException(
                 status_code=503,
@@ -497,9 +497,7 @@ async def api_reply(
         if sent_id is not None:
             platform_message_id = str(sent_id)
     elif conv.platform == Platform.fanvue:
-        row_fv = await session.scalar(
-            select(FanvueConnection).where(FanvueConnection.user_id == oid)
-        )
+        row_fv = await resolve_fanvue_connection_for_conversation(session, conv, oid)
         if not row_fv:
             raise HTTPException(
                 status_code=503,
@@ -610,9 +608,7 @@ async def api_message_reaction(
     if conv.platform == Platform.telegram:
         tg_id_raw = row.platform_message_id or platform_message_id_from_meta(row.meta)
         if tg_id_raw:
-            row_tg = await session.scalar(
-                select(TelegramConnection).where(TelegramConnection.user_id == oid)
-            )
+            row_tg = await resolve_telegram_connection_for_conversation(session, conv, oid)
             if row_tg:
                 token = decrypt_secret(row_tg.bot_token_encrypted)
                 try:
