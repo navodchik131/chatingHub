@@ -123,22 +123,28 @@ TELEGRAM_PROXY=http://127.0.0.1:7890
 
 Интеграция по [документации Fanvue](https://api.fanvue.com/docs).
 
-### SaaS (личный кабинет)
+### Администратор сервера (один раз)
 
-После входа откройте **Кабинет** и сохраните: access token, UUID создателя (`recipientUuid` в вебхуке), signing secret. В интерфейсе показывается точный URL вебхука вида:
+1. В [Fanvue Developer Area](https://fanvue.com) создайте приложение **ChatingApp**.
+2. **Authentication** → permissions: `read:chat`, `write:chat`, `offline_access`, `read:self`, `openid`.
+3. **Authentication** → **Redirects** → добавьте:
+   `https://<ваш-домен>/api/integrations/fanvue/oauth/callback`
+4. **Events** → **View Signing Secret** → скопируйте в `.env` как `FANVUE_WEBHOOK_SIGNING_SECRET`.
+5. **Events** → **Add Webhook** → URL `https://<ваш-domен>/api/webhooks/fanvue`, событие **Message Received**.
+6. В `backend/.env`:
+   - `FANVUE_CLIENT_ID`, `FANVUE_CLIENT_SECRET` из Authentication
+   - `FANVUE_WEBHOOK_SIGNING_SECRET` из Events
+   - `PUBLIC_APP_URL=https://<ваш-домен>`
 
-`https://<ваш-домен>/api/webhooks/fanvue/<секрет>`
+Nginx: путь `/api/webhooks/fanvue` и `/api/integrations/fanvue/oauth/callback` **без** HTTP Basic Auth.
 
-Его нужно указать в Developer Area → Webhooks. Событие **Message Received** требует scope `read:chat`; для ответов из UI — `write:chat`.
+### Пользователь ModelMate
 
-### Устаревший режим (один глобальный токен в `.env`)
+**Кабинет → Интеграции → Подключить Fanvue** — OAuth от своего creator-аккаунта. Токены и Creator UUID сохраняются автоматически. Webhook URL показывается в кабинете (копировать для проверки; регистрируется администратором один раз в Fanvue Events).
 
-| Переменная | Назначение |
-|------------|------------|
-| `FANVUE_WEBHOOK_SECRET` | Глобальный секрет (не используется в мультитенантном вебхуке) |
-| `FANVUE_ACCESS_TOKEN` | Глобальный токен (не используется, если токен задан в кабинете) |
+### Устаревший режим
 
-Идентификаторы в БД: `external_chat_id` = UUID фана, `external_topic_id` = UUID создателя.
+Ручной `PUT /api/integrations/fanvue` с access token — если OAuth на сервере не настроен.
 
 ## Развёртывание на сервере (Linux, nginx, закрытый UI)
 

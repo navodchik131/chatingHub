@@ -447,7 +447,11 @@ class TelegramIntegrationIn(BaseModel):
 class FanvueIntegrationIn(BaseModel):
     access_token: str = Field(min_length=10)
     creator_uuid: str = Field(min_length=8, max_length=64)
-    webhook_signing_secret: str = Field(min_length=4, max_length=512)
+    webhook_signing_secret: str | None = Field(default=None, max_length=512)
+
+
+class FanvueOAuthStartOut(BaseModel):
+    authorize_url: str
 
 
 class IntegrationStatusOut(BaseModel):
@@ -456,6 +460,8 @@ class IntegrationStatusOut(BaseModel):
     fanvue_configured: bool
     fanvue_creator_uuid: str | None = None
     fanvue_webhook_url: str | None = None
+    fanvue_oauth_available: bool = False
+    fanvue_oauth_connected: bool = False
     telegram_webhook_url: str | None = None
     # True, если webhook реально зарегистрирован у Telegram (нужен HTTPS)
     telegram_webhook_registered: bool = False

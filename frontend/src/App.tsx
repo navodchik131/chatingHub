@@ -428,6 +428,8 @@ interface IntegrationStatus {
   fanvue_configured: boolean
   fanvue_creator_uuid: string | null
   fanvue_webhook_url: string | null
+  fanvue_oauth_available?: boolean
+  fanvue_oauth_connected?: boolean
   telegram_webhook_url: string | null
   telegram_webhook_registered?: boolean
   integration_hint?: string | null
@@ -759,9 +761,7 @@ export default function App() {
   const [studioCameraPresets, setStudioCameraPresets] = useState<StudioCameraPreset[]>([])
   const [modelSavingId, setModelSavingId] = useState<number | null>(null)
   const [tgToken, setTgToken] = useState('')
-  const [fvToken, setFvToken] = useState('')
-  const [fvCreator, setFvCreator] = useState('')
-  const [fvSecret, setFvSecret] = useState('')
+  const [fvBusy, setFvBusy] = useState(false)
 
   const [appSection, setAppSection] = useState<WorkspaceSection>('overview')
   const [studioDesc, setStudioDesc] = useState('')
@@ -1451,6 +1451,33 @@ export default function App() {
   useEffect(() => {
     if (authed && accountOpen) void refreshIntegrations()
   }, [authed, accountOpen, refreshIntegrations])
+
+  useEffect(() => {
+    if (!authed) return
+    const account = searchParams.get('account')
+    const fanvue = searchParams.get('fanvue')
+    if (account === 'integrations' || fanvue) {
+      setAccountOpen(true)
+      setAccountTab('integrations')
+    }
+    if (fanvue === 'connected') {
+      void refreshIntegrations()
+    } else if (fanvue === 'error') {
+      setError('Не удалось подключить Fanvue. Проверьте scopes в Fanvue Developer Area и попробуйте снова.')
+    }
+    if (account || fanvue) {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev)
+          next.delete('account')
+          next.delete('fanvue')
+          next.delete('reason')
+          return next
+        },
+        { replace: true },
+      )
+    }
+  }, [authed, searchParams, refreshIntegrations, setSearchParams])
 
   useEffect(() => {
     if (!authed || !accountOpen || accountTab !== 'billing') return
@@ -3437,25 +3464,52 @@ export default function App() {
     void refreshMe()
   }
 
-  const saveFanvue = async () => {
+  const connectFanvueOAuth = async () => {
     setError(null)
-    const r = await apiFetch('/api/integrations/fanvue', {
-      method: 'PUT',
-      body: JSON.stringify({
-        access_token: fvToken.trim(),
-        creator_uuid: fvCreator.trim(),
-        webhook_signing_secret: fvSecret.trim(),
-      }),
-    })
-    if (!r.ok) {
-      const j = await r.json().catch(() => ({}))
-      setError(formatHttpApiError(r, j))
-      return
+    setFvBusy(true)
+    try {
+      const r = await apiFetch('/api/integrations/fanvue/oauth/start', { method: 'POST' })
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        setError(formatHttpApiError(r, j))
+        return
+      }
+      const j = (await r.json()) as { authorize_url?: string }
+      if (!j.authorize_url) {
+        setError('Fanvue OAuth: пустой authorize_url')
+        return
+      }
+      window.location.href = j.authorize_url
+    } finally {
+      setFvBusy(false)
     }
-    setFvToken('')
-    setFvSecret('')
-    setInteg((await r.json()) as IntegrationStatus)
-    void refreshMe()
+  }
+
+  const disconnectFanvue = async () => {
+    setError(null)
+    setFvBusy(true)
+    try {
+      const r = await apiFetch('/api/integrations/fanvue', { method: 'DELETE' })
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        setError(formatHttpApiError(r, j))
+        return
+      }
+      setInteg((await r.json()) as IntegrationStatus)
+      void refreshMe()
+    } finally {
+      setFvBusy(false)
+    }
+  }
+
+  const copyFanvueWebhookUrl = async () => {
+    const url = integ?.fanvue_webhook_url
+    if (!url) return
+    try {
+      await navigator.clipboard.writeText(url)
+    } catch {
+      setError('Не удалось скопировать URL webhook')
+    }
   }
 
   const createWorkspaceMember = async () => {
@@ -4364,38 +4418,69 @@ export default function App() {
                     {integ?.fanvue_configured ? 'Подключено' : 'Не подключено'}
                   </span>
                 </div>
-                <p className="muted cabinet-module-body">API и вебхуки платформы Fanvue.</p>
-                <div className="cabinet-module-form cabinet-module-form--grid">
-                  <label>
-                    Access token
-                    <input
-                      type="password"
-                      value={fvToken}
-                      onChange={(e) => setFvToken(e.target.value)}
-                      disabled={!canIntegrations}
-                    />
-                  </label>
-                  <label>
-                    Creator UUID
-                    <input value={fvCreator} onChange={(e) => setFvCreator(e.target.value)} disabled={!canIntegrations} />
-                  </label>
-                  <label className="cabinet-field-span2">
-                    Webhook signing secret
-                    <input
-                      type="password"
-                      value={fvSecret}
-                      onChange={(e) => setFvSecret(e.target.value)}
-                      disabled={!canIntegrations}
-                    />
-                  </label>
-                  <button
-                    type="button"
-                    className="send-btn"
-                    disabled={!canIntegrations}
-                    onClick={() => void saveFanvue()}
-                  >
-                    Сохранить
-                  </button>
+                <p className="muted cabinet-module-body">
+                  Подключите свой creator-аккаунт Fanvue через OAuth. Каждый пользователь ModelMate авторизует
+                  только свой аккаунт — токены хранятся отдельно.
+                </p>
+                {integ?.fanvue_configured && integ.fanvue_creator_uuid ? (
+                  <p className="muted small" style={{ margin: '0 0 0.75rem' }}>
+                    Creator UUID: <code>{integ.fanvue_creator_uuid}</code>
+                  </p>
+                ) : null}
+                {integ?.fanvue_webhook_url ? (
+                  <div className="cabinet-module-form" style={{ marginBottom: '0.75rem' }}>
+                    <label className="cabinet-field-span2">
+                      Webhook URL (для Fanvue Events)
+                      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                        <input readOnly value={integ.fanvue_webhook_url} />
+                        <button type="button" className="ghost-btn" onClick={() => void copyFanvueWebhookUrl()}>
+                          Копировать
+                        </button>
+                      </div>
+                    </label>
+                    <p className="muted small" style={{ margin: 0 }}>
+                      Один URL для всего приложения ChatingApp — Fanvue маршрутизирует сообщения по creator UUID.
+                    </p>
+                  </div>
+                ) : null}
+                <div className="cabinet-module-form" style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                  {integ?.fanvue_oauth_available ? (
+                    integ.fanvue_configured ? (
+                      <>
+                        <button
+                          type="button"
+                          className="send-btn"
+                          disabled={!canIntegrations || fvBusy}
+                          onClick={() => void connectFanvueOAuth()}
+                        >
+                          {fvBusy ? '…' : 'Переподключить Fanvue'}
+                        </button>
+                        <button
+                          type="button"
+                          className="ghost-btn"
+                          disabled={!canIntegrations || fvBusy}
+                          onClick={() => void disconnectFanvue()}
+                        >
+                          Отключить
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        className="send-btn"
+                        disabled={!canIntegrations || fvBusy}
+                        onClick={() => void connectFanvueOAuth()}
+                      >
+                        {fvBusy ? '…' : 'Подключить Fanvue'}
+                      </button>
+                    )
+                  ) : (
+                    <p className="muted small" style={{ margin: 0 }}>
+                      OAuth на сервере не настроен. Администратор должен задать{' '}
+                      <code>FANVUE_CLIENT_ID</code>, <code>FANVUE_CLIENT_SECRET</code> и{' '}
+                      <code>FANVUE_WEBHOOK_SIGNING_SECRET</code> в <code>.env</code>.
+                    </p>
+                  )}
                 </div>
               </section>
 

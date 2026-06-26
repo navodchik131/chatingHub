@@ -17,7 +17,6 @@ from app.connectors.fanvue.media import (
 from app.db.models import FanvueConnection, Message, Platform
 from app.db.repo import get_or_create_conversation, get_user_with_billing
 from app.services.chat_ingest import persist_inbound_chat_message
-from app.services.crypto_secret import decrypt_secret
 from app.services.translation import translate_to_russian
 
 log = logging.getLogger(__name__)
@@ -102,7 +101,9 @@ async def ingest_fanvue_message_received(
         )
         if row_fv:
             try:
-                fv_tok = decrypt_secret(row_fv.access_token_encrypted)
+                from app.services.fanvue_connection import ensure_fanvue_access_token
+
+                fv_tok = await ensure_fanvue_access_token(session, row_fv)
                 img = await fanvue_fetch_message_image_bytes(
                     fv_tok,
                     fan_user_uuid=fan_uuid,

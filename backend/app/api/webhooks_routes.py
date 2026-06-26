@@ -16,11 +16,54 @@ from app.connectors.fanvue.signature import verify_fanvue_webhook_signature
 from app.connectors.telegram.ingest import ingest_telegram_dm
 from app.db.models import FanvueConnection, TelegramConnection
 from app.db.session import get_session
-from app.services.crypto_secret import decrypt_secret
+from app.services.fanvue_connection import (
+    fanvue_platform_webhook_signing_secret,
+    resolve_fanvue_webhook_signing_secret,
+)
 
 log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
+
+
+async def _process_fanvue_webhook(
+    session: AsyncSession,
+    *,
+    raw: bytes,
+    sig_header: str | None,
+    conn: FanvueConnection,
+) -> dict:
+    try:
+        signing = resolve_fanvue_webhook_signing_secret(conn)
+    except ValueError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    if not verify_fanvue_webhook_signature(raw, sig_header, signing):
+        raise HTTPException(status_code=401, detail="invalid fanvue signature")
+
+    try:
+        body = json.loads(raw.decode("utf-8"))
+    except json.JSONDecodeError as e:
+        raise HTTPException(status_code=400, detail="invalid json body") from e
+
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="json must be an object")
+
+    if is_fanvue_message_read_payload(body):
+        return {"ok": True, "skipped": "message.read"}
+
+    if "message" in body and "sender" in body:
+        recipient = str(body.get("recipientUuid") or "").strip()
+        if recipient and recipient != conn.creator_uuid:
+            raise HTTPException(status_code=400, detail="recipient mismatch")
+        try:
+            return await ingest_fanvue_message_received(session, body, conn.user_id)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        except Exception:
+            log.exception("fanvue message ingest failed")
+            raise HTTPException(status_code=500, detail="ingest failed") from None
+
+    raise HTTPException(status_code=400, detail="unsupported fanvue webhook payload")
 
 
 @router.post("/telegram/{secret}")
@@ -54,12 +97,49 @@ async def telegram_webhook(
     return {"ok": True}
 
 
+@router.post("/fanvue")
+async def fanvue_webhook_platform(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Единый webhook URL для приложения ChatingApp (маршрутизация по recipientUuid)."""
+    if not fanvue_platform_webhook_signing_secret():
+        raise HTTPException(status_code=404, detail="platform fanvue webhook disabled")
+
+    raw = await request.body()
+    sig_header = request.headers.get("x-fanvue-signature") or request.headers.get(
+        "X-Fanvue-Signature"
+    )
+    try:
+        body = json.loads(raw.decode("utf-8"))
+    except json.JSONDecodeError as e:
+        raise HTTPException(status_code=400, detail="invalid json body") from e
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="json must be an object")
+
+    recipient = str(body.get("recipientUuid") or "").strip()
+    if not recipient:
+        raise HTTPException(status_code=400, detail="missing recipientUuid")
+
+    conn = await session.scalar(
+        select(FanvueConnection).where(FanvueConnection.creator_uuid == recipient)
+    )
+    if not conn:
+        log.info("fanvue webhook: unknown creator %s", recipient[:8])
+        return {"ok": True, "skipped": "unknown_creator"}
+
+    return await _process_fanvue_webhook(
+        session, raw=raw, sig_header=sig_header, conn=conn
+    )
+
+
 @router.post("/fanvue/{secret}")
-async def fanvue_webhook(
+async def fanvue_webhook_legacy(
     secret: str,
     request: Request,
     session: AsyncSession = Depends(get_session),
 ) -> dict:
+    """Legacy: per-user webhook path (до platform webhook)."""
     conn = await session.scalar(
         select(FanvueConnection).where(FanvueConnection.webhook_secret == secret)
     )
@@ -70,31 +150,6 @@ async def fanvue_webhook(
     sig_header = request.headers.get("x-fanvue-signature") or request.headers.get(
         "X-Fanvue-Signature"
     )
-    signing = decrypt_secret(conn.webhook_signing_secret_encrypted)
-    if not verify_fanvue_webhook_signature(raw, sig_header, signing):
-        raise HTTPException(status_code=401, detail="invalid fanvue signature")
-
-    try:
-        body = json.loads(raw.decode("utf-8"))
-    except json.JSONDecodeError as e:
-        raise HTTPException(status_code=400, detail="invalid json body") from e
-
-    if not isinstance(body, dict):
-        raise HTTPException(status_code=400, detail="json must be an object")
-
-    if is_fanvue_message_read_payload(body):
-        return {"ok": True, "skipped": "message.read"}
-
-    if "message" in body and "sender" in body:
-        recipient = str(body.get("recipientUuid") or "").strip()
-        if recipient and recipient != conn.creator_uuid:
-            raise HTTPException(status_code=400, detail="recipient mismatch")
-        try:
-            return await ingest_fanvue_message_received(session, body, conn.user_id)
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e)) from e
-        except Exception:
-            log.exception("fanvue message ingest failed")
-            raise HTTPException(status_code=500, detail="ingest failed") from None
-
-    raise HTTPException(status_code=400, detail="unsupported fanvue webhook payload")
+    return await _process_fanvue_webhook(
+        session, raw=raw, sig_header=sig_header, conn=conn
+    )

@@ -360,6 +360,9 @@ class Settings(BaseSettings):
         "grok_api_key",
         "yookassa_shop_id",
         "yookassa_secret_key",
+        "fanvue_client_id",
+        "fanvue_client_secret",
+        "fanvue_webhook_signing_secret",
         mode="after",
     )
     @classmethod
@@ -412,7 +415,16 @@ class Settings(BaseSettings):
 
     # Глобальный Fanvue (только обратная совместимость; в SaaS токен в БД)
     fanvue_webhook_secret: str = ""
+    fanvue_webhook_signing_secret: str = Field(
+        default="",
+        description="Signing secret из Fanvue Events (View Signing Secret) — один на приложение ChatingApp.",
+    )
     fanvue_access_token: str = ""
+    fanvue_client_id: str = Field(default="", description="OAuth Client ID приложения ChatingApp (Developer Area).")
+    fanvue_client_secret: str = Field(default="", description="OAuth Client Secret приложения ChatingApp.")
+    fanvue_oauth_authorize_url: str = "https://auth.fanvue.com/oauth2/auth"
+    fanvue_oauth_token_url: str = "https://auth.fanvue.com/oauth2/token"
+    fanvue_oauth_scopes: str = "openid offline_access offline read:self read:chat write:chat"
     fanvue_api_version: str = "2025-06-26"
     fanvue_api_base: str = "https://api.fanvue.com"
 

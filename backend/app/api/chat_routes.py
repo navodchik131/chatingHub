@@ -450,7 +450,9 @@ async def api_reply(
                 status_code=503,
                 detail="Подключите Fanvue в настройках интеграций",
             )
-        fv_tok = decrypt_secret(row_fv.access_token_encrypted)
+        from app.services.fanvue_connection import ensure_fanvue_access_token
+
+        fv_tok = await ensure_fanvue_access_token(session, row_fv)
         await send_fanvue_outbound(
             access_token=fv_tok,
             fan_uuid=conv.external_chat_id,

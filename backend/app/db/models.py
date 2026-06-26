@@ -255,13 +255,33 @@ class FanvueConnection(Base):
     )
     creator_uuid: Mapped[str] = mapped_column(String(64), index=True)
     access_token_encrypted: Mapped[str] = mapped_column(Text)
-    webhook_signing_secret_encrypted: Mapped[str] = mapped_column(Text)
+    refresh_token_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    token_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    webhook_signing_secret_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
     webhook_secret: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    oauth_connected_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
 
     user: Mapped[User] = relationship("User", back_populates="fanvue_connection")
+
+
+class FanvueOAuthState(Base):
+    __tablename__ = "fanvue_oauth_states"
+
+    state: Mapped[str] = mapped_column(String(128), primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    code_verifier: Mapped[str] = mapped_column(String(128))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
 
 
 class Conversation(Base):

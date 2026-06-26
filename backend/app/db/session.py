@@ -359,6 +359,50 @@ async def init_db() -> None:
         await conn.run_sync(_migrate_trialing_to_credits_demo)
         await conn.run_sync(_migrate_user_email_marketing_opt_out)
         await conn.run_sync(_migrate_email_campaigns_tables)
+        await conn.run_sync(_migrate_fanvue_oauth_columns)
+        await conn.run_sync(_migrate_fanvue_oauth_states_table)
+
+
+def _migrate_fanvue_oauth_columns(sync_conn) -> None:
+    from sqlalchemy import inspect, text
+
+    insp = inspect(sync_conn)
+    if not insp.has_table("fanvue_connections"):
+        return
+    cols = {c["name"] for c in insp.get_columns("fanvue_connections")}
+    if "refresh_token_encrypted" not in cols:
+        sync_conn.execute(text("ALTER TABLE fanvue_connections ADD COLUMN refresh_token_encrypted TEXT"))
+    if "token_expires_at" not in cols:
+        sync_conn.execute(
+            text("ALTER TABLE fanvue_connections ADD COLUMN token_expires_at TIMESTAMP")
+        )
+    if "oauth_connected_at" not in cols:
+        sync_conn.execute(
+            text("ALTER TABLE fanvue_connections ADD COLUMN oauth_connected_at TIMESTAMP")
+        )
+
+
+def _migrate_fanvue_oauth_states_table(sync_conn) -> None:
+    from sqlalchemy import inspect, text
+
+    insp = inspect(sync_conn)
+    if insp.has_table("fanvue_oauth_states"):
+        return
+    sync_conn.execute(
+        text(
+            """
+            CREATE TABLE fanvue_oauth_states (
+                state VARCHAR(128) PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                code_verifier VARCHAR(128) NOT NULL,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+    )
+    sync_conn.execute(
+        text("CREATE INDEX IF NOT EXISTS ix_fanvue_oauth_states_user_id ON fanvue_oauth_states(user_id)")
+    )
 
 
 def _migrate_credit_account_demo_generations(sync_conn) -> None:
