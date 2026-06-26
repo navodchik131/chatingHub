@@ -224,6 +224,8 @@ from app.services.studio_workflow_boardstory import (
     build_boardstory_reference_urls,
     filter_boardstory_identity_image,
     filter_boardstory_turnaround_image,
+    is_boardstory_model_swap_prompt,
+    prepend_boardstory_swap_lock,
     workflow_reference_public_url,
 )
 from app.services.studio_model_bootstrap import (
@@ -5126,8 +5128,13 @@ async def _studio_job_execute_motion_render_video(
 
             if prompt_from_compose and prompt.strip():
                 lock_lang = "zh" if settings.studio_seedance_grok_prompt_zh else "en"
-                # Compose-промпт уже содержит model swap и @Image/@Video правила — не дублируем lock-строки.
-                seed_prompt = soften_seedance_provider_prompt(prompt.strip())
+                seed_prompt = prompt.strip()
+                if send_video_reference and ref_videos:
+                    seed_prompt = prepend_boardstory_swap_lock(seed_prompt, layout=layout)
+                if not is_boardstory_model_swap_prompt(seed_prompt):
+                    seed_prompt = soften_seedance_provider_prompt(
+                        seed_prompt, boardstory=True
+                    )
                 if remove_face_grid:
                     seed_prompt = append_workflow_face_grid_removal(seed_prompt, language=lock_lang)
                 seed_prompt = truncate_seedance_t2v_prompt(seed_prompt)

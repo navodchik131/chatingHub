@@ -331,10 +331,14 @@ def append_seedance_identity_lock(
     return truncate_seedance_t2v_prompt(combined, max_chars=lim)
 
 
-def soften_seedance_provider_prompt(text: str) -> str:
-    """Финальная чистка промпта перед WaveSpeed/Seedance (anti-sensitive)."""
+def soften_seedance_provider_prompt(text: str, *, boardstory: bool = False) -> str:
+    """Финальная чистка промпта перед WaveSpeed/Seedance (anti-sensitive).
+
+    boardstory=True — не ослаблять swap/identity формулировки (BoardStory model replacement).
+    """
     s = (text or "").strip()
-    for pat, repl in _PROVIDER_PROMPT_REPLACEMENTS:
+    replacements = [] if boardstory else _PROVIDER_PROMPT_REPLACEMENTS
+    for pat, repl in replacements:
         s = pat.sub(repl, s)
     s = re.sub(r"[ \t]{2,}", " ", s)
     return re.sub(r"\n{3,}", "\n\n", s).strip()
@@ -512,7 +516,10 @@ def assemble_boardstory_seedance_prompt(
     negative: str | None = None,
 ) -> str:
     """BoardStory Seedance: @Image1 body, @Image2 turnaround, clothing/env refs, motion @Video1."""
-    from app.services.studio_workflow_boardstory import compute_boardstory_layout
+    from app.services.studio_workflow_boardstory import (
+        boardstory_model_swap_lock_text,
+        compute_boardstory_layout,
+    )
 
     layout = compute_boardstory_layout(
         has_identity=n_model_images > 0,
@@ -521,6 +528,8 @@ def assemble_boardstory_seedance_prompt(
         has_environment=n_environment_images > 0,
     )
     parts: list[str] = []
+    if n_motion_videos > 0:
+        parts.append(boardstory_model_swap_lock_text(layout))
     if layout.identity_tag:
         parts.append(
             f"Cinematic clip — lead character face and hair from {layout.identity_tag} "
@@ -545,9 +554,10 @@ def assemble_boardstory_seedance_prompt(
         vtags = ", ".join(f"@Video{i}" for i in range(1, n_motion_videos + 1))
         id_ref = layout.identity_tag or "model @Image refs"
         parts.append(
-            f"Motion, emotions, gestures, pacing, and camera from {vtags}; "
+            f"Motion choreography, timing, gestures, and camera from {vtags}; "
             f"character look stays on {id_ref} with proportions from "
-            f"{layout.turnaround_tag or id_ref}."
+            f"{layout.turnaround_tag or id_ref}. "
+            f"Do NOT copy the reference performer's face or body from {vtags}."
         )
     if motion_summary and motion_summary.strip():
         parts.append(f"Motion notes:\n{motion_summary.strip()}")
@@ -560,13 +570,13 @@ def assemble_boardstory_seedance_prompt(
         neg_parts.append(neg)
     if neg_parts:
         parts.append(f"Avoid: {'; '.join(neg_parts)}")
-    body = soften_seedance_provider_prompt("\n\n".join(parts))
+    body = soften_seedance_provider_prompt("\n\n".join(parts), boardstory=True)
     return append_seedance_identity_lock(
         body,
         n_start_frame=0,
         n_model_images=n_model_images,
         n_motion_videos=n_motion_videos,
-        soft=True,
+        soft=n_motion_videos == 0,
     )
 
 

@@ -16,6 +16,7 @@ from app.services.studio_workflow_boardstory import (
     filter_boardstory_identity_image,
     filter_boardstory_turnaround_image,
     filter_model_images_for_boardstory,
+    is_boardstory_model_swap_prompt,
 )
 
 
@@ -156,18 +157,27 @@ def test_boardstory_video_only_swap_mode():
 
 def test_build_boardstory_video_only_swap_prompt():
     out = build_boardstory_video_only_swap_prompt(user_notes="Calm mood.")
-    assert "Use @Video1 exclusively" in out
-    assert "Use @Image1 exclusively" in out
-    assert "Use @Image2 exclusively" in out
-    assert "body proportions" in out.lower()
-    assert "MOTION CHOREOGRAPHY AND TIMING" not in out
+    assert "MODEL REPLACEMENT (mandatory)" in out
+    assert "Use @Video1 for motion choreography" in out
+    assert "Use @Image1 for character identity" in out
+    assert "Use @Image2 for body proportions" in out
+    assert "Do not copy the identity of the performer from @Video1" in out
+    assert "pose and body positioning" not in out.lower()
 
 
 def test_build_boardstory_clothing_env_swap_prompt():
     out = build_boardstory_clothing_env_swap_prompt(user_notes="Soft light.")
-    assert "Use @Image2 exclusively as the body proportions" in out
+    assert "MODEL REPLACEMENT (mandatory)" in out
+    assert "Use @Image2 for body proportions" in out
     assert "Use @Image3 exclusively as the clothing" in out
     assert "Use @Image4 for the environment" in out
+    assert "facial expressions" not in out.lower() or "do not copy" in out.lower()
+
+
+def test_is_boardstory_model_swap_prompt():
+    fixed = build_boardstory_video_only_swap_prompt()
+    assert is_boardstory_model_swap_prompt(fixed)
+    assert not is_boardstory_model_swap_prompt("She walks slowly.")
 
 
 def test_filter_boardstory_identity_image_prefers_body():

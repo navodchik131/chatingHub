@@ -221,6 +221,17 @@ def test_soften_provider_prompt():
     assert "character via" in out.lower()
 
 
+def test_soften_provider_prompt_boardstory_preserves_swap():
+    raw = (
+        "MODEL REPLACEMENT (mandatory): Never adopt the reference video actor's face. "
+        "Preserve body proportions from @Image2. model identity from @Image1."
+    )
+    out = soften_seedance_provider_prompt(raw, boardstory=True)
+    assert "Never adopt the reference video actor's face" in out
+    assert "body proportions" in out
+    assert "model identity" in out
+
+
 def test_assemble_reference_prompt_binds_refs_not_invented_scene():
     p = assemble_seedance_t2v_reference_prompt(
         n_start_frame=1,
