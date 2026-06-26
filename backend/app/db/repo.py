@@ -82,6 +82,10 @@ async def add_message(
     text_original: str,
     text_translated: str | None,
     meta: str | None = None,
+    *,
+    reply_to_message_id: int | None = None,
+    platform_message_id: str | None = None,
+    reactions_json: str | None = None,
 ) -> Message:
     msg = Message(
         conversation_id=conversation_id,
@@ -89,6 +93,9 @@ async def add_message(
         text_original=text_original,
         text_translated=text_translated,
         meta=meta,
+        reply_to_message_id=reply_to_message_id,
+        platform_message_id=platform_message_id,
+        reactions_json=reactions_json,
         created_at=datetime.now(timezone.utc),
     )
     session.add(msg)

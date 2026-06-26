@@ -317,6 +317,9 @@ class Conversation(Base):
         nullable=True,
         index=True,
     )
+    auto_translate_disabled: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false"
+    )
     last_read_message_id: Mapped[int | None] = mapped_column(nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
@@ -579,6 +582,13 @@ class Message(Base):
     )
     text_original: Mapped[str] = mapped_column(Text, default="")
     text_translated: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reply_to_message_id: Mapped[int | None] = mapped_column(
+        ForeignKey("messages.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    platform_message_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    reactions_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     meta: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)

@@ -91,8 +91,6 @@ async def ingest_fanvue_message_received(
     if not isinstance(display, str):
         display = str(display)
 
-    translated, src_lang = await translate_to_russian(text_s) if text_s else ("", None)
-
     image_bytes: bytes | None = None
     image_mime: str | None = None
     if message_uuid and (has_media or media_uuids):
@@ -123,6 +121,42 @@ async def ingest_fanvue_message_received(
         creator_uuid,
         display,
     )
+
+    if text_s and not conv.auto_translate_disabled:
+        translated, src_lang = await translate_to_russian(text_s)
+    else:
+        translated, src_lang = "", None
+
+    reply_to_message_id: int | None = None
+    reply_uuid = str(
+        msg.get("replyToMessageUuid") or msg.get("reply_to_message_uuid") or ""
+    ).strip()
+    if reply_uuid:
+        parent = await session.scalar(
+            select(Message).where(
+                Message.conversation_id == conv.id,
+                Message.platform_message_id == reply_uuid,
+            )
+        )
+        if parent:
+            reply_to_message_id = parent.id
+
+    reactions_json: str | None = None
+    raw_reactions = msg.get("reactions")
+    if isinstance(raw_reactions, list) and raw_reactions:
+        parsed: list[dict[str, str]] = []
+        for item in raw_reactions:
+            if isinstance(item, dict):
+                em = str(item.get("emoji") or "").strip()
+                if em:
+                    parsed.append({"emoji": em, "actor": "peer"})
+            elif isinstance(item, str) and item.strip():
+                parsed.append({"emoji": item.strip(), "actor": "peer"})
+        if parsed:
+            from app.services.chat_message_meta import reactions_to_json
+
+            reactions_json = reactions_to_json(parsed)
+
     if not conv.user_lang:
         conv.user_lang = src_lang
     elif src_lang and src_lang != "unknown":
@@ -145,12 +179,23 @@ async def ingest_fanvue_message_received(
         conv=conv,
         display=display,
         text_original=text_s,
-        text_translated=translated if text_s else None,
+        text_translated=translated if text_s and not conv.auto_translate_disabled else None,
         src_lang=src_lang,
         meta=meta,
         image_bytes=image_bytes,
         image_mime=image_mime,
+        reply_to_message_id=reply_to_message_id,
+        platform_message_id=message_uuid or None,
     )
+    if reactions_json:
+        last = await session.scalar(
+            select(Message)
+            .where(Message.conversation_id == conv.id)
+            .order_by(Message.id.desc())
+            .limit(1)
+        )
+        if last:
+            last.reactions_json = reactions_json
     await session.commit()
 
     return {"ok": True}
@@ -216,6 +261,20 @@ async def ingest_fanvue_message_from_api(
         "media_uuids": media_uuids,
     }
 
+    reply_to_message_id: int | None = None
+    reply_uuid = str(
+        msg.get("replyToMessageUuid") or msg.get("reply_to_message_uuid") or ""
+    ).strip()
+    if reply_uuid:
+        parent = await session.scalar(
+            select(Message).where(
+                Message.conversation_id == conv.id,
+                Message.platform_message_id == reply_uuid,
+            )
+        )
+        if parent:
+            reply_to_message_id = parent.id
+
     if is_outbound:
         meta = json.dumps(meta_obj, ensure_ascii=False)
         await add_message(
@@ -225,6 +284,8 @@ async def ingest_fanvue_message_from_api(
             text_s,
             text_s or None,
             meta=meta,
+            reply_to_message_id=reply_to_message_id,
+            platform_message_id=message_uuid or None,
         )
         conv.updated_at = datetime.now(timezone.utc)
         return "imported"
@@ -233,7 +294,10 @@ async def ingest_fanvue_message_from_api(
     if not user:
         raise ValueError("user not found")
 
-    translated, src_lang = await translate_to_russian(text_s) if text_s else ("", None)
+    if text_s and not conv.auto_translate_disabled:
+        translated, src_lang = await translate_to_russian(text_s)
+    else:
+        translated, src_lang = "", None
 
     image_bytes: bytes | None = None
     image_mime: str | None = None
@@ -264,11 +328,13 @@ async def ingest_fanvue_message_from_api(
         conv=conv,
         display=display,
         text_original=text_s,
-        text_translated=translated if text_s else None,
+        text_translated=translated if text_s and not conv.auto_translate_disabled else None,
         src_lang=src_lang,
         meta=meta,
         image_bytes=image_bytes,
         image_mime=image_mime,
         silent=silent,
+        reply_to_message_id=reply_to_message_id,
+        platform_message_id=message_uuid or None,
     )
     return "imported"

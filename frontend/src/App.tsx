@@ -116,6 +116,8 @@ interface Conversation {
   outbound_lang?: string | null
   /** Модель студии для доступа операторов (назначает владелец). */
   studio_model_id?: number | null
+  /** Не переводить входящие/исходящие — только оригинальный текст. */
+  auto_translate_disabled?: boolean
   updated_at: string
   last_message_preview: string | null
   unread_count?: number
@@ -142,6 +144,13 @@ const OUTBOUND_LANG_OPTIONS: { value: string; label: string }[] = [
   { value: 'zh', label: '中文' },
 ]
 
+const CHAT_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🔥'] as const
+
+interface MessageReaction {
+  emoji: string
+  actor: 'owner' | 'peer'
+}
+
 interface ChatMessageAttachment {
   id: number
   kind: string
@@ -160,6 +169,9 @@ interface ChatMessage {
   localPreviewUrl?: string
   /** Локальный черновик до ответа сервера (перевод ещё готовится). */
   pending?: boolean
+  reply_to_message_id?: number | null
+  reply_preview?: string | null
+  reactions?: MessageReaction[]
 }
 
 /** Размер страницы GET /conversations/:id/messages (синхронно с бэкендом default limit). */
@@ -670,6 +682,9 @@ export default function App() {
   const [emojiOpen, setEmojiOpen] = useState(false)
   const [showJumpDown, setShowJumpDown] = useState(false)
   const [outboundLangBusy, setOutboundLangBusy] = useState(false)
+  const [autoTranslateBusy, setAutoTranslateBusy] = useState(false)
+  const [replyToMessage, setReplyToMessage] = useState<ChatMessage | null>(null)
+  const [reactionBusyKey, setReactionBusyKey] = useState<string | null>(null)
 
   const wsRef = useRef<WebSocket | null>(null)
   const selectedIdRef = useRef<number | null>(null)
@@ -1994,6 +2009,17 @@ export default function App() {
             void apiFetch(`/api/conversations/${sid}/read`, { method: 'POST' })
           }
           void loadConversations()
+          return
+        }
+        if (payload.type === 'message_updated') {
+          const sid = selectedIdRef.current
+          if (sid != null && sid === payload.conversation_id && payload.message) {
+            const incoming = payload.message as ChatMessage
+            const mid = Number(incoming.id)
+            setMessages((prev) =>
+              prev.map((m) => (Number(m.id) === mid ? { ...m, ...incoming } : m)),
+            )
+          }
         }
       } catch {
         /* ignore */
@@ -2279,6 +2305,67 @@ export default function App() {
     }
   }
 
+  const saveAutoTranslateDisabled = async (convId: number, disabled: boolean) => {
+    setError(null)
+    setAutoTranslateBusy(true)
+    try {
+      const r = await apiFetch(`/api/conversations/${convId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ auto_translate_disabled: disabled }),
+      })
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}))
+        setError(formatHttpApiError(r, err))
+        return
+      }
+      const updated = (await r.json()) as Conversation
+      setConversations((prev) => prev.map((c) => (c.id === convId ? { ...c, ...updated } : c)))
+    } catch {
+      setError('Не удалось сохранить настройку перевода')
+    } finally {
+      setAutoTranslateBusy(false)
+    }
+  }
+
+  const scrollToMessage = useCallback((messageId: number | null | undefined) => {
+    if (!messageId) return
+    const el = messagesContainerRef.current?.querySelector(
+      `[data-msg-id="${messageId}"]`,
+    )
+    el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, [])
+
+  const toggleReaction = async (msg: ChatMessage, emoji: string) => {
+    if (selectedId == null || msg.pending) return
+    const key = `${msg.id}:${emoji}`
+    setReactionBusyKey(key)
+    setError(null)
+    try {
+      const r = await apiFetch(
+        `/api/conversations/${selectedId}/messages/${msg.id}/reactions`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ emoji }),
+        },
+      )
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}))
+        setError(formatHttpApiError(r, err))
+        return
+      }
+      const updated = (await r.json()) as ChatMessage
+      setMessages((prev) =>
+        prev.map((m) => (Number(m.id) === Number(updated.id) ? { ...m, ...updated } : m)),
+      )
+    } catch {
+      setError('Не удалось поставить реакцию')
+    } finally {
+      setReactionBusyKey(null)
+    }
+  }
+
   const clearChatReplyAttachment = useCallback(() => {
     setChatReplyFile(null)
     setChatReplyArchiveId(null)
@@ -2288,6 +2375,7 @@ export default function App() {
   useEffect(() => {
     setChatArchivePickerOpen(false)
     clearChatReplyAttachment()
+    setReplyToMessage(null)
   }, [selectedId, clearChatReplyAttachment])
 
   const chatReplyHasAttachment = Boolean(chatReplyFile || chatReplyArchiveId)
@@ -2297,6 +2385,9 @@ export default function App() {
     const text = draft.trim()
     if (!text && !chatReplyHasAttachment) return
     const convId = selectedId
+    const replyTarget = replyToMessage
+    const replyToId =
+      replyTarget && !replyTarget.pending && replyTarget.id > 0 ? replyTarget.id : null
     const fileToSend = chatReplyFile
     const archiveIdToSend = chatReplyArchiveId
     let localPreviewUrl: string | undefined
@@ -2317,10 +2408,19 @@ export default function App() {
       created_at: new Date().toISOString(),
       pending: true,
       localPreviewUrl,
+      reply_to_message_id: replyToId,
+      reply_preview: replyTarget
+        ? (
+            replyTarget.text_original ||
+            replyTarget.text_translated ||
+            'Сообщение'
+          ).slice(0, 160)
+        : null,
     }
     setError(null)
     setDraft('')
     setEmojiOpen(false)
+    setReplyToMessage(null)
     clearChatReplyAttachment()
     setChatArchivePickerOpen(false)
     setMessages((prev) => [...prev, optimistic])
@@ -2334,6 +2434,7 @@ export default function App() {
         if (archiveIdToSend != null && !fileToSend) {
           fd.append('studio_generation_id', String(archiveIdToSend))
         }
+        if (replyToId != null) fd.append('reply_to_message_id', String(replyToId))
         r = await apiFetch(`/api/conversations/${convId}/reply`, {
           method: 'POST',
           body: fd,
@@ -2341,7 +2442,10 @@ export default function App() {
       } else {
         r = await apiFetch(`/api/conversations/${convId}/reply`, {
           method: 'POST',
-          body: JSON.stringify({ text }),
+          body: JSON.stringify({
+            text,
+            reply_to_message_id: replyToId,
+          }),
         })
       }
       if (!r.ok) {
@@ -2352,6 +2456,7 @@ export default function App() {
           return prev.filter((m) => m.id !== tempId)
         })
         setDraft((d) => (d.trim() ? `${text}\n\n${d}` : text))
+        if (replyTarget) setReplyToMessage(replyTarget)
         if (fileToSend) setChatReplyFile(fileToSend)
         if (archiveIdToSend != null) setChatReplyArchiveId(archiveIdToSend)
         if (localPreviewUrl && fileToSend) URL.revokeObjectURL(localPreviewUrl)
@@ -2377,6 +2482,7 @@ export default function App() {
         return prev.filter((m) => m.id !== tempId)
       })
       setDraft((d) => (d.trim() ? `${text}\n\n${d}` : text))
+      if (replyTarget) setReplyToMessage(replyTarget)
       if (fileToSend) setChatReplyFile(fileToSend)
       if (archiveIdToSend != null) setChatReplyArchiveId(archiveIdToSend)
       setError('Не удалось отправить сообщение')
@@ -6783,6 +6889,22 @@ export default function App() {
                       ))}
                     </select>
                   </div>
+                  <div
+                    className="outbound-lang-field auto-translate-toggle"
+                    title="Отправлять и показывать сообщения без перевода — на языке оригинала."
+                  >
+                    <label className="auto-translate-label">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(selected.auto_translate_disabled)}
+                        disabled={autoTranslateBusy}
+                        onChange={(e) =>
+                          void saveAutoTranslateDisabled(selected.id, e.target.checked)
+                        }
+                      />
+                      <span>Без перевода</span>
+                    </label>
+                  </div>
                   {isOwner && studioModels.length > 0 ? (
                     <div
                       className="outbound-lang-field"
@@ -6838,15 +6960,33 @@ export default function App() {
                         const hasMedia =
                           Boolean(m.localPreviewUrl) ||
                           Boolean(m.attachments && m.attachments.length > 0)
+                        const noTranslate = Boolean(selected.auto_translate_disabled)
+                        const displayInboundText = noTranslate
+                          ? m.text_original
+                          : m.text_translated ?? m.text_original
                         const hasText = Boolean(
                           (m.direction === 'inbound'
-                            ? m.text_translated ?? m.text_original
+                            ? displayInboundText
                             : m.text_original
                           )?.trim(),
                         )
+                        const reactionCounts = new Map<
+                          string,
+                          { count: number; hasOwner: boolean }
+                        >()
+                        for (const r of m.reactions ?? []) {
+                          const cur = reactionCounts.get(r.emoji) ?? {
+                            count: 0,
+                            hasOwner: false,
+                          }
+                          cur.count += 1
+                          if (r.actor === 'owner') cur.hasOwner = true
+                          reactionCounts.set(r.emoji, cur)
+                        }
                         return (
                       <article
                         key={m.id}
+                        data-msg-id={m.id}
                         className={
                           m.direction === 'inbound'
                             ? 'bubble in msg-enter'
@@ -6855,6 +6995,16 @@ export default function App() {
                               : 'bubble out msg-enter'
                         }
                       >
+                        {m.reply_preview ? (
+                          <button
+                            type="button"
+                            className="bubble-reply-quote"
+                            onClick={() => scrollToMessage(m.reply_to_message_id)}
+                            title="Перейти к сообщению"
+                          >
+                            {m.reply_preview}
+                          </button>
+                        ) : null}
                         {hasMedia ? (
                           <div className="bubble-media">
                             {m.localPreviewUrl ? (
@@ -6876,34 +7026,99 @@ export default function App() {
                           </div>
                         ) : null}
                         {hasText && m.direction === 'inbound' ? (
-                          <>
-                            <div className="ru">{m.text_translated ?? m.text_original}</div>
-                            <div className="orig" title="Оригинал">
-                              {m.text_original}
-                            </div>
-                          </>
-                        ) : hasText ? (
-                          <>
+                          noTranslate ? (
                             <div className="ru">{m.text_original}</div>
-                            <div
-                              className={m.pending ? 'orig bubble-pending-meta' : 'orig'}
-                              title="Ушло пользователю"
-                            >
-                              →{' '}
-                              {m.pending
-                                ? 'перевод и отправка…'
-                                : m.text_translated ?? '—'}
-                            </div>
-                          </>
+                          ) : (
+                            <>
+                              <div className="ru">{displayInboundText}</div>
+                              <div className="orig" title="Оригинал">
+                                {m.text_original}
+                              </div>
+                            </>
+                          )
+                        ) : hasText ? (
+                          noTranslate ? (
+                            <div className="ru">{m.text_original}</div>
+                          ) : (
+                            <>
+                              <div className="ru">{m.text_original}</div>
+                              <div
+                                className={m.pending ? 'orig bubble-pending-meta' : 'orig'}
+                                title="Ушло пользователю"
+                              >
+                                →{' '}
+                                {m.pending
+                                  ? 'перевод и отправка…'
+                                  : m.text_translated ?? '—'}
+                              </div>
+                            </>
+                          )
                         ) : null}
-                        <time>
-                          {new Date(m.created_at).toLocaleString('ru-RU', {
-                            day: '2-digit',
-                            month: '2-digit',
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })}
-                        </time>
+                        {reactionCounts.size > 0 ? (
+                          <div className="bubble-reactions" aria-label="Реакции">
+                            {[...reactionCounts.entries()].map(([emoji, info]) => (
+                              <button
+                                key={emoji}
+                                type="button"
+                                className={
+                                  info.hasOwner
+                                    ? 'bubble-reaction-chip bubble-reaction-chip--mine'
+                                    : 'bubble-reaction-chip'
+                                }
+                                disabled={Boolean(reactionBusyKey?.startsWith(`${m.id}:`))}
+                                onClick={() => void toggleReaction(m, emoji)}
+                                title={info.hasOwner ? 'Убрать реакцию' : 'Поставить реакцию'}
+                              >
+                                <span>{emoji}</span>
+                                {info.count > 1 ? (
+                                  <span className="bubble-reaction-count">{info.count}</span>
+                                ) : null}
+                              </button>
+                            ))}
+                          </div>
+                        ) : null}
+                        <div className="bubble-foot">
+                          <time>
+                            {new Date(m.created_at).toLocaleString('ru-RU', {
+                              day: '2-digit',
+                              month: '2-digit',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </time>
+                          {!m.pending ? (
+                            <div className="bubble-actions">
+                              <button
+                                type="button"
+                                className="bubble-action-btn"
+                                title="Ответить"
+                                onClick={() => setReplyToMessage(m)}
+                              >
+                                ↩
+                              </button>
+                              {CHAT_REACTIONS.map((emoji) => {
+                                const info = reactionCounts.get(emoji)
+                                const busy = reactionBusyKey === `${m.id}:${emoji}`
+                                return (
+                                  <button
+                                    key={emoji}
+                                    type="button"
+                                    className={
+                                      info?.hasOwner
+                                        ? 'bubble-action-btn bubble-action-btn--active'
+                                        : 'bubble-action-btn'
+                                    }
+                                    title="Реакция"
+                                    disabled={busy}
+                                    onClick={() => void toggleReaction(m, emoji)}
+                                  >
+                                    {emoji}
+                                  </button>
+                                )
+                              })}
+                            </div>
+                          ) : null}
+                        </div>
                       </article>
                         )
                       })}
@@ -6924,6 +7139,28 @@ export default function App() {
 
                 <div className="composer-shell" ref={composerRef}>
                   <div className="composer-inner" ref={emojiWrapRef}>
+                    {replyToMessage ? (
+                      <div className="composer-reply-bar">
+                        <div className="composer-reply-bar__main">
+                          <span className="composer-reply-bar__label">Ответ на</span>
+                          <span className="composer-reply-bar__text">
+                            {(
+                              replyToMessage.text_original ||
+                              replyToMessage.text_translated ||
+                              'Сообщение'
+                            ).slice(0, 120)}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          className="composer-reply-bar__clear"
+                          onClick={() => setReplyToMessage(null)}
+                          title="Отменить ответ"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ) : null}
                     {(chatReplyFile || chatReplyArchiveId != null) && (
                       <div className="chat-composer-attach-preview">
                         {chatReplyFile && chatReplyFilePreview ? (

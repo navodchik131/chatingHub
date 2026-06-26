@@ -31,6 +31,8 @@ async def persist_inbound_chat_message(
     image_bytes: bytes | None = None,
     image_mime: str | None = None,
     silent: bool = False,
+    reply_to_message_id: int | None = None,
+    platform_message_id: str | None = None,
 ) -> tuple[int, dict]:
     if src_lang and not conv.user_lang:
         conv.user_lang = src_lang
@@ -45,6 +47,8 @@ async def persist_inbound_chat_message(
         text_original or "",
         text_translated,
         meta=meta,
+        reply_to_message_id=reply_to_message_id,
+        platform_message_id=platform_message_id,
     )
     if image_bytes:
         try:
@@ -89,3 +93,32 @@ async def persist_inbound_chat_message(
             body=preview or "Новое сообщение",
         )
     return conv_id, payload
+
+
+async def broadcast_message_updated(
+    session: AsyncSession,
+    *,
+    owner_user_id: int,
+    conv_id: int,
+    row: Message,
+) -> None:
+    from app.services.chat_message_meta import message_preview_for_reply
+
+    reply_preview = None
+    if row.reply_to_message_id:
+        parent = await session.get(Message, row.reply_to_message_id)
+        if parent:
+            reply_preview = message_preview_for_reply(parent)
+    payload = message_to_out(
+        row,
+        owner_id=owner_user_id,
+        reply_preview=reply_preview,
+    ).model_dump(mode="json")
+    await hub.broadcast_user(
+        owner_user_id,
+        {
+            "type": "message_updated",
+            "conversation_id": conv_id,
+            "message": payload,
+        },
+    )

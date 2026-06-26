@@ -13,7 +13,7 @@ from app.connectors.fanvue.handlers import (
     is_fanvue_message_read_payload,
 )
 from app.connectors.fanvue.signature import verify_fanvue_webhook_signature
-from app.connectors.telegram.ingest import ingest_telegram_dm
+from app.connectors.telegram.ingest import ingest_telegram_dm, ingest_telegram_message_reaction
 from app.db.models import FanvueConnection, TelegramConnection
 from app.db.session import get_session
 from app.services.fanvue_connection import (
@@ -90,6 +90,14 @@ async def telegram_webhook(
         upd = Update.model_validate(body)
     except Exception as e:
         raise HTTPException(status_code=400, detail="invalid telegram update") from e
+
+    if upd.message_reaction:
+        await ingest_telegram_message_reaction(
+            conn.user_id,
+            upd.message_reaction,
+            source="webhook",
+        )
+        return {"ok": True}
 
     if not upd.message:
         return {"ok": True, "skipped": "no_message"}

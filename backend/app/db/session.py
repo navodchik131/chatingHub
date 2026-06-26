@@ -361,6 +361,37 @@ async def init_db() -> None:
         await conn.run_sync(_migrate_email_campaigns_tables)
         await conn.run_sync(_migrate_fanvue_oauth_columns)
         await conn.run_sync(_migrate_fanvue_oauth_states_table)
+        await conn.run_sync(_migrate_chat_message_features)
+
+
+def _migrate_chat_message_features(sync_conn) -> None:
+    from sqlalchemy import inspect, text
+
+    insp = inspect(sync_conn)
+    dialect = sync_conn.dialect.name
+    bool_def = "0" if dialect == "sqlite" else "false"
+    if insp.has_table("conversations"):
+        cols = {c["name"] for c in insp.get_columns("conversations")}
+        if "auto_translate_disabled" not in cols:
+            sync_conn.execute(
+                text(
+                    f"ALTER TABLE conversations "
+                    f"ADD COLUMN auto_translate_disabled BOOLEAN NOT NULL DEFAULT {bool_def}"
+                )
+            )
+    if not insp.has_table("messages"):
+        return
+    cols = {c["name"] for c in insp.get_columns("messages")}
+    if "reply_to_message_id" not in cols:
+        sync_conn.execute(
+            text("ALTER TABLE messages ADD COLUMN reply_to_message_id INTEGER")
+        )
+    if "platform_message_id" not in cols:
+        sync_conn.execute(
+            text("ALTER TABLE messages ADD COLUMN platform_message_id VARCHAR(128)")
+        )
+    if "reactions_json" not in cols:
+        sync_conn.execute(text("ALTER TABLE messages ADD COLUMN reactions_json TEXT"))
 
 
 def _migrate_fanvue_oauth_columns(sync_conn) -> None:

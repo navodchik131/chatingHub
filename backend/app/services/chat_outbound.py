@@ -86,10 +86,14 @@ async def send_telegram_outbound(
     text: str,
     image_bytes: bytes | None,
     image_mime: str | None,
-) -> None:
+    reply_to_telegram_message_id: int | None = None,
+) -> int | None:
     proxy = (settings.telegram_proxy or "").strip()
     session_aio = AiohttpSession(proxy=proxy) if proxy else None
     bot = Bot(token=token, session=session_aio) if session_aio else Bot(token=token)
+    reply_kw: dict[str, int] = {}
+    if reply_to_telegram_message_id is not None and reply_to_telegram_message_id > 0:
+        reply_kw["reply_to_message_id"] = reply_to_telegram_message_id
     try:
         if image_bytes:
             ext = ".jpg"
@@ -99,26 +103,52 @@ async def send_telegram_outbound(
                 ext = ".webp"
             photo = BufferedInputFile(image_bytes, filename=f"image{ext}")
             if (text or "").strip():
-                await bot.send_photo(
+                sent = await bot.send_photo(
                     chat_id=chat_id,
                     photo=photo,
                     caption=text,
                     direct_messages_topic_id=topic_id,
+                    **reply_kw,
                 )
             else:
-                await bot.send_photo(
+                sent = await bot.send_photo(
                     chat_id=chat_id,
                     photo=photo,
                     direct_messages_topic_id=topic_id,
+                    **reply_kw,
                 )
         elif (text or "").strip():
-            await bot.send_message(
+            sent = await bot.send_message(
                 chat_id=chat_id,
                 text=text,
                 direct_messages_topic_id=topic_id,
+                **reply_kw,
             )
         else:
             raise HTTPException(status_code=400, detail="Пустое сообщение")
+        return int(sent.message_id) if sent and sent.message_id else None
+    finally:
+        await bot.session.close()
+
+
+async def set_telegram_message_reaction(
+    *,
+    token: str,
+    chat_id: int,
+    telegram_message_id: int,
+    emoji: str,
+) -> None:
+    from aiogram.types import ReactionTypeEmoji
+
+    proxy = (settings.telegram_proxy or "").strip()
+    session_aio = AiohttpSession(proxy=proxy) if proxy else None
+    bot = Bot(token=token, session=session_aio) if session_aio else Bot(token=token)
+    try:
+        await bot.set_message_reaction(
+            chat_id=chat_id,
+            message_id=telegram_message_id,
+            reaction=[ReactionTypeEmoji(emoji=emoji)],
+        )
     finally:
         await bot.session.close()
 
@@ -130,7 +160,8 @@ async def send_fanvue_outbound(
     text: str,
     image_bytes: bytes | None,
     image_mime: str | None,
-) -> None:
+    reply_to_message_uuid: str | None = None,
+) -> str | None:
     media_uuids: list[str] | None = None
     if image_bytes:
         try:
@@ -147,11 +178,12 @@ async def send_fanvue_outbound(
     if not (text or "").strip() and not media_uuids:
         raise HTTPException(status_code=400, detail="Пустое сообщение")
     try:
-        await send_direct_message(
+        return await send_direct_message(
             access_token,
             fan_uuid,
             text or "",
             media_uuids=media_uuids,
+            reply_to_message_uuid=reply_to_message_uuid,
         )
     except FanvueAPIError as e:
         st = e.status

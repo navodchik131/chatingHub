@@ -24,6 +24,9 @@ class MessageOut(BaseModel):
     text_translated: str | None
     created_at: datetime
     attachments: list[MessageAttachmentOut] = []
+    reply_to_message_id: int | None = None
+    reply_preview: str | None = None
+    reactions: list[MessageReactionOut] = Field(default_factory=list)
 
 
 class ConversationOut(BaseModel):
@@ -39,6 +42,8 @@ class ConversationOut(BaseModel):
     outbound_lang: str | None = None
     """Модель студии для доступа операторов; только владелец назначает."""
     studio_model_id: int | None = None
+    """Не переводить входящие/исходящие — только оригинальный текст."""
+    auto_translate_disabled: bool = False
     updated_at: datetime
     has_avatar: bool = False
 
@@ -50,13 +55,24 @@ class ConversationWithPreview(ConversationOut):
 
 class ReplyIn(BaseModel):
     text: str
+    reply_to_message_id: int | None = None
+
+
+class MessageReactionOut(BaseModel):
+    emoji: str
+    actor: Literal["owner", "peer"]
+
+
+class MessageReactionIn(BaseModel):
+    emoji: str = Field(min_length=1, max_length=32)
 
 
 class ConversationPatchIn(BaseModel):
-    """Частичное обновление диалога. Пустая строка в outbound_lang сбрасывает принудительный язык."""
+    """Частичное обновление диалога (язык исходящих, перевод, модель)."""
 
     outbound_lang: str | None = None
     studio_model_id: int | None = None
+    auto_translate_disabled: bool | None = None
 
     @field_validator("outbound_lang", mode="before")
     @classmethod

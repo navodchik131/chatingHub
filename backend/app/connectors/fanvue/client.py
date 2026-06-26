@@ -112,6 +112,7 @@ async def send_direct_message(
     text: str,
     *,
     media_uuids: list[str] | None = None,
+    reply_to_message_uuid: str | None = None,
 ) -> str:
     token = (access_token or "").strip()
     if not token:
@@ -126,6 +127,8 @@ async def send_direct_message(
     payload: dict[str, Any] = {"text": text or ""}
     if media_uuids:
         payload["mediaUuids"] = [u for u in media_uuids if u]
+    if reply_to_message_uuid:
+        payload["replyToMessageUuid"] = reply_to_message_uuid.strip()
     async with httpx.AsyncClient(timeout=60.0) as client:
         r = await client.post(url, json=payload, headers=headers)
     if r.status_code >= 400:

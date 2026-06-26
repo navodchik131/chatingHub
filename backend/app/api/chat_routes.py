@@ -49,6 +49,7 @@ from app.schemas import (
     ConversationPatchIn,
     ConversationWithPreview,
     MessageOut,
+    MessageReactionIn,
     ReplyIn,
 )
 from app.services.chat_attachment import (
@@ -66,6 +67,16 @@ from app.services.chat_outbound import (
     resolve_outbound_image,
     send_fanvue_outbound,
     send_telegram_outbound,
+    set_telegram_message_reaction,
+)
+from app.services.chat_ingest import broadcast_message_updated
+from app.services.chat_message_meta import (
+    REACTION_EMOJIS,
+    parse_reactions,
+    platform_message_id_from_meta,
+    reactions_to_json,
+    resolve_reply_target,
+    toggle_owner_reaction,
 )
 from app.services.crypto_secret import decrypt_secret
 from app.services.realtime import hub
@@ -341,6 +352,9 @@ async def api_patch_conversation(
             )
         await validate_owner_studio_model_id(session, oid, body.studio_model_id)
         conv.studio_model_id = body.studio_model_id
+    if "auto_translate_disabled" in body.model_fields_set:
+        if body.auto_translate_disabled is not None:
+            conv.auto_translate_disabled = bool(body.auto_translate_disabled)
     await session.commit()
     await session.refresh(conv)
     return ConversationOut.model_validate(conv)
@@ -363,6 +377,7 @@ async def api_reply(
     text_ru = ""
     upload: UploadFile | None = None
     studio_generation_id: int | None = None
+    reply_to_message_id: int | None = None
 
     if "multipart/form-data" in content_type:
         form = await request.form()
@@ -373,6 +388,12 @@ async def api_reply(
                 studio_generation_id = int(str(raw_sg).strip())
             except ValueError as e:
                 raise HTTPException(status_code=400, detail="invalid studio_generation_id") from e
+        raw_reply = form.get("reply_to_message_id")
+        if raw_reply not in (None, ""):
+            try:
+                reply_to_message_id = int(str(raw_reply).strip())
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail="invalid reply_to_message_id") from e
         img_field = form.get("image")
         if img_field is not None and hasattr(img_field, "read"):
             upload = img_field  # type: ignore[assignment]
@@ -383,6 +404,7 @@ async def api_reply(
             raise HTTPException(status_code=400, detail="invalid body") from e
         body = ReplyIn.model_validate(data)
         text_ru = body.text.strip()
+        reply_to_message_id = body.reply_to_message_id
 
     image_pair = await resolve_outbound_image(
         session,
@@ -405,19 +427,30 @@ async def api_reply(
 
     conv = await require_conversation_chat_access(session, user, conv_id, oid)
 
-    forced = (conv.outbound_lang or "").strip().lower()
-    target_lang = forced if forced else (conv.user_lang or "en").strip().lower() or "en"
-    outgoing = ""
-    if text_ru:
+    reply_target = await resolve_reply_target(
+        session, conv_id=conv.id, reply_to_message_id=reply_to_message_id
+    )
+    if reply_to_message_id and not reply_target:
+        raise HTTPException(status_code=400, detail="reply_to_message_id not found in conversation")
+
+    no_translate = bool(conv.auto_translate_disabled)
+    outgoing = text_ru
+    stored_original = text_ru
+    stored_translated: str | None = None
+    if text_ru and not no_translate:
+        forced = (conv.outbound_lang or "").strip().lower()
+        target_lang = forced if forced else (conv.user_lang or "en").strip().lower() or "en"
         outgoing = await translate_from_russian(text_ru, target_lang)
         if not (outgoing or "").strip():
             outgoing = text_ru
+        stored_translated = outgoing or None
 
     image_bytes: bytes | None = None
     image_mime: str | None = None
     if image_pair:
         image_bytes, image_mime = image_pair
 
+    platform_message_id: str | None = None
     if conv.platform == Platform.telegram:
         row_tg = await session.scalar(
             select(TelegramConnection).where(TelegramConnection.user_id == oid)
@@ -433,14 +466,34 @@ async def api_reply(
             cid = int(conv.external_chat_id)
         except ValueError as e:
             raise HTTPException(status_code=500, detail="bad telegram ids") from e
-        await send_telegram_outbound(
+        tg_reply_id: int | None = None
+        if reply_target:
+            tg_reply_id = None
+            if reply_target.platform_message_id:
+                try:
+                    tg_reply_id = int(reply_target.platform_message_id)
+                except ValueError:
+                    tg_reply_id = None
+            if tg_reply_id is None:
+                from app.services.chat_message_meta import platform_message_id_from_meta
+
+                raw = platform_message_id_from_meta(reply_target.meta)
+                if raw:
+                    try:
+                        tg_reply_id = int(raw)
+                    except ValueError:
+                        tg_reply_id = None
+        sent_id = await send_telegram_outbound(
             token=token,
             chat_id=cid,
             topic_id=tid,
             text=outgoing,
             image_bytes=image_bytes,
             image_mime=image_mime,
+            reply_to_telegram_message_id=tg_reply_id,
         )
+        if sent_id is not None:
+            platform_message_id = str(sent_id)
     elif conv.platform == Platform.fanvue:
         row_fv = await session.scalar(
             select(FanvueConnection).where(FanvueConnection.user_id == oid)
@@ -453,12 +506,18 @@ async def api_reply(
         from app.services.fanvue_connection import ensure_fanvue_access_token
 
         fv_tok = await ensure_fanvue_access_token(session, row_fv)
-        await send_fanvue_outbound(
+        fv_reply_uuid = None
+        if reply_target:
+            fv_reply_uuid = reply_target.platform_message_id or platform_message_id_from_meta(
+                reply_target.meta
+            )
+        platform_message_id = await send_fanvue_outbound(
             access_token=fv_tok,
             fan_uuid=conv.external_chat_id,
             text=outgoing,
             image_bytes=image_bytes,
             image_mime=image_mime,
+            reply_to_message_uuid=fv_reply_uuid,
         )
     else:
         raise HTTPException(status_code=400, detail="unknown platform")
@@ -468,9 +527,11 @@ async def api_reply(
         session,
         conv.id,
         MessageDirection.outbound,
-        text_ru,
-        outgoing or None,
+        stored_original,
+        stored_translated,
         meta=None,
+        reply_to_message_id=reply_to_message_id,
+        platform_message_id=platform_message_id,
     )
     if image_bytes:
         try:
@@ -503,6 +564,77 @@ async def api_reply(
         },
     )
     return out
+
+
+@router.post(
+    "/conversations/{conv_id}/messages/{message_id}/reactions",
+    response_model=MessageOut,
+)
+async def api_message_reaction(
+    conv_id: int,
+    message_id: int,
+    body: MessageReactionIn,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> MessageOut:
+    assert_permission(user, PERM_CHAT)
+    await _require_chat_plan(session, user)
+    oid = workspace_owner_id(user)
+    conv = await require_conversation_chat_access(session, user, conv_id, oid)
+    row = await session.scalar(
+        select(Message).where(
+            Message.id == message_id,
+            Message.conversation_id == conv.id,
+        )
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="message not found")
+    emoji = body.emoji.strip()
+    if emoji not in REACTION_EMOJIS:
+        raise HTTPException(status_code=400, detail="unsupported emoji")
+
+    reactions = toggle_owner_reaction(parse_reactions(row.reactions_json), emoji)
+    row.reactions_json = reactions_to_json(reactions)
+
+    if conv.platform == Platform.telegram:
+        tg_id_raw = row.platform_message_id or platform_message_id_from_meta(row.meta)
+        if tg_id_raw:
+            row_tg = await session.scalar(
+                select(TelegramConnection).where(TelegramConnection.user_id == oid)
+            )
+            if row_tg:
+                token = decrypt_secret(row_tg.bot_token_encrypted)
+                try:
+                    cid = int(conv.external_chat_id)
+                    tg_mid = int(tg_id_raw)
+                except ValueError:
+                    cid = 0
+                    tg_mid = 0
+                if cid and tg_mid:
+                    try:
+                        await set_telegram_message_reaction(
+                            token=token,
+                            chat_id=cid,
+                            telegram_message_id=tg_mid,
+                            emoji=emoji,
+                        )
+                    except Exception:
+                        log.warning("telegram set_message_reaction failed conv=%s msg=%s", conv.id, row.id)
+
+    await session.commit()
+    await session.refresh(row, attribute_names=["attachments"])
+    reply_preview = None
+    if row.reply_to_message_id:
+        parent = await session.get(Message, row.reply_to_message_id)
+        if parent:
+            reply_preview = (parent.text_original or parent.text_translated or "")[:160]
+    await broadcast_message_updated(
+        session,
+        owner_user_id=oid,
+        conv_id=conv.id,
+        row=row,
+    )
+    return message_to_out(row, owner_id=oid, reply_preview=reply_preview)
 
 
 @router.websocket("/ws")

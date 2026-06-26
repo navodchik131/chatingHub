@@ -196,7 +196,9 @@ async def put_telegram(
     try:
         me = await bot.get_me()
         if https:
-            await bot.set_webhook(wh_url, drop_pending_updates=True)
+            from app.connectors.telegram.webhook import register_telegram_webhook
+
+            await register_telegram_webhook(bot, wh_url, drop_pending_updates=True)
             webhook_registered = True
         else:
             log.info(

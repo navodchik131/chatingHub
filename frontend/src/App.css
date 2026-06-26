@@ -2124,10 +2124,182 @@ select:focus {
 }
 
 .bubble time {
-  display: block;
-  margin-top: 0.5rem;
   font-size: 0.6875rem;
   color: var(--muted);
+}
+
+.bubble-reply-quote {
+  display: block;
+  width: 100%;
+  margin: 0 0 0.55rem;
+  padding: 0.45rem 0.65rem;
+  border-left: 3px solid var(--accent);
+  border-radius: 0 8px 8px 0;
+  background: color-mix(in srgb, var(--bg-subtle) 70%, transparent);
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+  line-height: 1.35;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bubble-reply-quote:hover {
+  color: var(--text);
+  background: var(--bg-subtle);
+}
+
+.bubble-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  min-height: 1.25rem;
+}
+
+.bubble-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s var(--ease-out);
+}
+
+.bubble:hover .bubble-actions,
+.bubble:focus-within .bubble-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.bubble-action-btn {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 0.15rem 0.25rem;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  line-height: 1;
+  opacity: 0.75;
+  transition:
+    opacity 0.15s,
+    background 0.15s;
+}
+
+.bubble-action-btn:hover {
+  opacity: 1;
+  background: color-mix(in srgb, var(--bg-subtle) 80%, transparent);
+}
+
+.bubble-action-btn--active {
+  opacity: 1;
+  background: var(--accent-soft);
+}
+
+.bubble-reactions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-top: 0.35rem;
+}
+
+.bubble-reaction-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.12rem 0.45rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  font-size: 0.8125rem;
+  cursor: pointer;
+  line-height: 1.2;
+}
+
+.bubble-reaction-chip--mine {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.bubble-reaction-count {
+  font-size: 0.6875rem;
+  color: var(--muted);
+}
+
+.composer-reply-bar {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.55rem 0.65rem;
+  border-left: 3px solid var(--accent);
+  border-radius: 0 10px 10px 0;
+  background: var(--bg-subtle);
+}
+
+.composer-reply-bar__main {
+  flex: 1;
+  min-width: 0;
+}
+
+.composer-reply-bar__label {
+  display: block;
+  font-size: 0.6875rem;
+  color: var(--accent);
+  font-weight: 600;
+  margin-bottom: 0.15rem;
+}
+
+.composer-reply-bar__text {
+  display: block;
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer-reply-bar__clear {
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0.1rem 0.25rem;
+}
+
+.composer-reply-bar__clear:hover {
+  color: var(--text);
+}
+
+.auto-translate-toggle {
+  align-self: center;
+}
+
+.auto-translate-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.auto-translate-label input {
+  accent-color: var(--accent);
+}
+
+@media (pointer: coarse) {
+  .bubble-actions {
+    opacity: 1;
+    pointer-events: auto;
+  }
 }
 
 .composer-shell {

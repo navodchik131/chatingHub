@@ -7,8 +7,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.db.models import Message, MessageAttachment
-from app.schemas import MessageAttachmentOut, MessageOut
+from app.schemas import MessageAttachmentOut, MessageOut, MessageReactionOut
 from app.services.chat_attachment import create_chat_attachment_access_token
+from app.services.chat_message_meta import parse_reactions
 
 
 def attachment_public_url(*, owner_id: int, att: MessageAttachment) -> str:
@@ -16,7 +17,12 @@ def attachment_public_url(*, owner_id: int, att: MessageAttachment) -> str:
     return f"/api/chat/attachment?t={tok}"
 
 
-def message_to_out(msg: Message, *, owner_id: int) -> MessageOut:
+def message_to_out(
+    msg: Message,
+    *,
+    owner_id: int,
+    reply_preview: str | None = None,
+) -> MessageOut:
     atts = [
         MessageAttachmentOut(
             id=a.id,
@@ -26,6 +32,10 @@ def message_to_out(msg: Message, *, owner_id: int) -> MessageOut:
         )
         for a in (msg.attachments or [])
     ]
+    reactions = [
+        MessageReactionOut(emoji=r["emoji"], actor=r["actor"])  # type: ignore[arg-type]
+        for r in parse_reactions(getattr(msg, "reactions_json", None))
+    ]
     return MessageOut(
         id=msg.id,
         direction=msg.direction,
@@ -33,6 +43,9 @@ def message_to_out(msg: Message, *, owner_id: int) -> MessageOut:
         text_translated=msg.text_translated,
         created_at=msg.created_at,
         attachments=atts,
+        reply_to_message_id=getattr(msg, "reply_to_message_id", None),
+        reply_preview=reply_preview,
+        reactions=reactions,
     )
 
 
@@ -53,7 +66,25 @@ async def load_messages_for_api(
     r = await session.execute(stmt)
     by_id = {m.id: m for m in r.scalars().all()}
     ordered = [by_id[i] for i in ids if i in by_id]
-    return [message_to_out(m, owner_id=owner_id) for m in ordered]
+
+    reply_ids = [m.reply_to_message_id for m in ordered if m.reply_to_message_id]
+    reply_previews: dict[int, str] = {}
+    if reply_ids:
+        rr = await session.execute(select(Message).where(Message.id.in_(reply_ids)))
+        for rm in rr.scalars().all():
+            text = (rm.text_original or rm.text_translated or "").strip()
+            reply_previews[rm.id] = text[:160] if text else "📷 Изображение"
+
+    return [
+        message_to_out(
+            m,
+            owner_id=owner_id,
+            reply_preview=reply_previews.get(m.reply_to_message_id)
+            if m.reply_to_message_id
+            else None,
+        )
+        for m in ordered
+    ]
 
 
 def message_preview_text(msg: Message) -> str | None:

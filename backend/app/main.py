@@ -137,6 +137,12 @@ async def lifespan(app: FastAPI):
         log.info("Email campaign worker started (SMTP: %s)", settings.smtp_host)
     else:
         log.info("Email campaigns disabled: SMTP not configured")
+    try:
+        from app.connectors.telegram.webhook import refresh_registered_telegram_webhooks
+
+        await refresh_registered_telegram_webhooks()
+    except Exception:
+        log.exception("Telegram webhook refresh on startup failed")
     yield
     if polling_task:
         polling_task.cancel()
