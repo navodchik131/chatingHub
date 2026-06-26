@@ -172,7 +172,7 @@ async def compose_workflow_video_generation_prompt(
         n_model = await _estimate_boardstory_model_image_count(session, model_id=model_id, actor=actor)
         if n_model <= 0:
             raise RuntimeError(
-                "У модели нет фото в кабинете. Добавьте turnaround (развёртку)."
+                "У модели нет фото «Тело целиком» в кабинете. Добавьте снимок с тегом body."
             )
 
         extract_result: dict[str, int | str | None] = {
@@ -232,13 +232,15 @@ async def compose_workflow_video_generation_prompt(
         )
         use_fixed_prompt = use_video_only_swap or use_clothing_env_swap
 
-        timeline = await motion_grok_timeline_from_video_path(
-            video_path=vpath,
-            model_profile_text=profile,
-            first_frame_jpeg=None,
-            first_frame_media="image/jpeg",
-            credentials=grok_creds,
-        )
+        timeline = ""
+        if not use_fixed_prompt:
+            timeline = await motion_grok_timeline_from_video_path(
+                video_path=vpath,
+                model_profile_text=profile,
+                first_frame_jpeg=None,
+                first_frame_media="image/jpeg",
+                credentials=grok_creds,
+            )
 
         reference_blocks: list[str] = []
         tag_rules = ""
@@ -291,7 +293,6 @@ async def compose_workflow_video_generation_prompt(
         id_tag = layout.identity_tag_expr or "@Image1"
         if use_video_only_swap:
             composed = build_boardstory_video_only_swap_prompt(
-                timeline.strip(),
                 user_notes=(user_notes or "").strip(),
                 identity_tag=id_tag,
                 max_chars=max_prompt_chars,
@@ -300,7 +301,6 @@ async def compose_workflow_video_generation_prompt(
         elif use_clothing_env_swap:
             clothing_tag = layout.clothing_tag or "@Image2"
             composed = build_boardstory_clothing_env_swap_prompt(
-                timeline.strip(),
                 user_notes=(user_notes or "").strip(),
                 identity_tag=id_tag,
                 clothing_tag=clothing_tag,

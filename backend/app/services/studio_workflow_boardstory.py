@@ -11,7 +11,7 @@ from app.services.studio_seedance_t2v import (
     generation_still_public_url,
     model_reference_public_urls,
     seedance_model_identity_tag_expr,
-    filter_model_images_for_seedance_video,
+    sort_model_images_for_seedance_t2v,
 )
 
 _CLOTHING_HINTS = (
@@ -116,12 +116,12 @@ def compute_boardstory_layout(
 def filter_model_images_for_boardstory(
     imgs: list,
 ) -> list:
-    """BoardStory: только одна развёртка (turnaround) из кабинета модели."""
-    return filter_model_images_for_seedance_video(
-        imgs,
-        minimal=True,
-        max_identity=1,
-    )
+    """BoardStory: одно фото «тело целиком» (body) из кабинета модели."""
+    sorted_all = sort_model_images_for_seedance_t2v(imgs)
+    for im in sorted_all:
+        if (im.image_kind or "other").lower() == "body":
+            return [im]
+    return []
 
 
 def boardstory_video_only_swap_mode(
@@ -199,7 +199,6 @@ No background warping."""
 
 
 def build_boardstory_video_only_swap_prompt(
-    motion_timeline: str,
     *,
     user_notes: str = "",
     identity_tag: str = "@Image1",
@@ -208,21 +207,17 @@ def build_boardstory_video_only_swap_prompt(
 ) -> str:
     """
     Фиксированный Seedance-промпт: identity из @Image1, всё остальное из @Video1.
-    Хореография из motion timeline добавляется в конец.
+    Движение передаётся через @Video1 — текстовый timeline не добавляется.
     """
     from app.services.studio_seedance_t2v import truncate_seedance_t2v_prompt
 
-    template = _BOARDSTORY_VIDEO_ONLY_SWAP_TEMPLATE
     template = _apply_boardstory_template_tags(
-        template,
+        _BOARDSTORY_VIDEO_ONLY_SWAP_TEMPLATE,
         identity_tag=identity_tag,
         video_tag=video_tag,
     )
 
     parts = [template.strip()]
-    timeline = (motion_timeline or "").strip()
-    if timeline:
-        parts.append(f"MOTION CHOREOGRAPHY AND TIMING:\n{timeline}")
     notes = (user_notes or "").strip()
     if notes:
         parts.append(f"USER_DIRECTION:\n{notes}")
@@ -349,7 +344,6 @@ def _apply_boardstory_template_tags(
 
 
 def build_boardstory_clothing_env_swap_prompt(
-    motion_timeline: str,
     *,
     user_notes: str = "",
     identity_tag: str = "@Image1",
@@ -357,7 +351,7 @@ def build_boardstory_clothing_env_swap_prompt(
     video_tag: str = "@Video1",
     max_chars: int | None = None,
 ) -> str:
-    """Фиксированный промпт: @Image1 identity, @Image2 clothing, сцена/движение из @Video1."""
+    """Фиксированный промпт: @Image1 identity, @Image2 clothing, движение/сцена из @Video1."""
     from app.services.studio_seedance_t2v import truncate_seedance_t2v_prompt
 
     template = _apply_boardstory_template_tags(
@@ -368,9 +362,6 @@ def build_boardstory_clothing_env_swap_prompt(
     )
 
     parts = [template.strip()]
-    timeline = (motion_timeline or "").strip()
-    if timeline:
-        parts.append(f"MOTION CHOREOGRAPHY AND TIMING:\n{timeline}")
     notes = (user_notes or "").strip()
     if notes:
         parts.append(f"USER_DIRECTION:\n{notes}")
@@ -397,7 +388,7 @@ def boardstory_tag_rules_text(
         )
     else:
         lines.append(
-            f"{id_expr} = the lead character (face, body, hair, age, ethnicity from model turnaround)."
+            f"{id_expr} = the lead character (face, body, hair, age, ethnicity from model body reference)."
         )
 
     if layout.identity_tag_expr:
@@ -407,7 +398,7 @@ def boardstory_tag_rules_text(
             else "NOT clothing, NOT room)"
         )
         lines.append(
-            f"{layout.identity_tag_expr} = model identity ONLY (face, body, hair from model turnaround — "
+            f"{layout.identity_tag_expr} = model identity ONLY (face, body, hair from model body photo — "
             + suffix
         )
     if layout.clothing_tag:

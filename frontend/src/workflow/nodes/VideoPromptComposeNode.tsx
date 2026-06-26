@@ -184,8 +184,8 @@ function VideoPromptComposeNodeComponent({ id, data }: NodeProps) {
         </label>
         <p className="workflow-node__hint workflow-node__hint--muted">
           {sendVideoReference
-            ? 'Промпт с @Video1 — подмена актёра из видео на модель с @Image, движение из видео.'
-            : 'Видео только для анализа промпта — в Seedance не уходит; сцена и движение описаны текстом без @Video.'}
+            ? 'Промпт с @Video1 — подмена актёра; движение из видео-рефа, без текстового timeline.'
+            : 'Видео только для анализа — в Seedance не уходит; Grok пишет подробный промпт с движением и [t s].'}
         </p>
       </div>
 

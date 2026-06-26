@@ -123,17 +123,20 @@ def test_boardstory_video_only_swap_mode():
 
 def test_build_boardstory_video_only_swap_prompt():
     out = build_boardstory_video_only_swap_prompt(
-        "She sits at [0 s] and turns page at [2 s].",
         user_notes="Calm mood.",
     )
     assert "Use @Video1 exclusively" in out
     assert "Use @Image1 exclusively" in out
     assert "IDENTITY LOCK" in out
-    assert "MOTION CHOREOGRAPHY AND TIMING" in out
-    assert "[0 s]" in out
+    assert "MOTION CHOREOGRAPHY AND TIMING" not in out
     assert "USER_DIRECTION" in out
     assert "@Video1" in out
     assert "Do not copy the identity" in out
+
+
+def test_build_boardstory_video_only_swap_prompt_ignores_timeline_in_notes_only():
+    out = build_boardstory_video_only_swap_prompt(user_notes="")
+    assert "[0 s]" not in out
 
 
 def test_boardstory_clothing_env_swap_mode():
@@ -153,14 +156,38 @@ def test_boardstory_clothing_env_swap_mode():
 
 def test_build_boardstory_clothing_env_swap_prompt():
     out = build_boardstory_clothing_env_swap_prompt(
-        "She turns at [1 s].",
         user_notes="Soft light.",
     )
     assert "Use @Image2 exclusively as the clothing" in out
     assert "SCENE AND APPEARANCE" in out
     assert "Never copy the identity" in out
-    assert "MOTION CHOREOGRAPHY AND TIMING" in out
-    assert "[1 s]" in out
+    assert "MOTION CHOREOGRAPHY AND TIMING" not in out
+    assert "[1 s]" not in out
+
+
+def test_filter_model_images_for_boardstory_prefers_body():
+    from app.db.models import UserStudioModelImage
+    from app.services.studio_workflow_boardstory import filter_model_images_for_boardstory
+
+    imgs = [
+        UserStudioModelImage(id=1, image_kind="turnaround"),
+        UserStudioModelImage(id=2, image_kind="body"),
+        UserStudioModelImage(id=3, image_kind="face"),
+    ]
+    out = filter_model_images_for_boardstory(imgs)
+    assert len(out) == 1
+    assert out[0].image_kind == "body"
+
+
+def test_filter_model_images_for_boardstory_empty_without_body():
+    from app.db.models import UserStudioModelImage
+    from app.services.studio_workflow_boardstory import filter_model_images_for_boardstory
+
+    imgs = [
+        UserStudioModelImage(id=1, image_kind="turnaround"),
+        UserStudioModelImage(id=2, image_kind="face"),
+    ]
+    assert filter_model_images_for_boardstory(imgs) == []
 
 
 def test_boardstory_slot_json_roundtrip():

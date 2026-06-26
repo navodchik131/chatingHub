@@ -4896,7 +4896,7 @@ async def _studio_job_execute_motion_render_video(
     if video_provider != "grok_imagine_i2v" and not filter_model_images_for_seedance_video(list(sm.images)):
         if boardstory_mode or not str(sheet_gid_raw or "").strip():
             raise RuntimeError(
-                "У модели нет фото для reference_images. Добавьте turnaround и/или face в кабинете модели."
+                "У модели нет фото для reference_images. Добавьте снимок «Тело целиком» (body) в кабинете модели."
             )
 
     log.info(
