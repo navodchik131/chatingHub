@@ -3793,6 +3793,7 @@ export default function App() {
   const appClass = [
     'app',
     hasAnyMainSection ? 'app--shell' : '',
+    appSection === 'chat' && canChat ? 'app--chat' : '',
     isMobileLayout && selectedId != null && appSection === 'chat' && canChat
       ? 'mobile-chat-open'
       : '',
@@ -6666,6 +6667,7 @@ export default function App() {
           {conversations.length === 0 && (
             <p className="muted empty-hint">Подключите бота к Direct messages канала.</p>
           )}
+          <div className="sidebar-conv-scroll">
           <ul className="conv-list">
             {conversations.map((c) => {
               const unread = c.unread_count ?? 0
@@ -6725,6 +6727,7 @@ export default function App() {
               )
             })}
           </ul>
+          </div>
         </aside>
 
         <main className="thread">
