@@ -21,6 +21,7 @@ export type NodeType =
 export interface ModelNodeData {
   modelId?: number | null
   modelName?: string
+  disabled?: boolean
   isRunning?: boolean
   error?: string
   [key: string]: unknown

@@ -1,5 +1,6 @@
 import type { Edge, Node } from '@xyflow/react'
 import { HandleIds, IMAGE_OUTPUT_NODE_TYPES, type ProjectGraph } from './types'
+import { isWorkflowNodeDisabled } from './workflowNodeState'
 
 const RUNTIME_NODE_DATA_KEYS = ['isRunning', 'error'] as const
 
@@ -48,7 +49,7 @@ export function resolveConnectedPreviewMedia(
     if (edge.target !== nodeId) continue
     if (edge.targetHandle !== HandleIds.previewIn) continue
     const sourceNode = nodes.find((node) => node.id === edge.source)
-    if (!sourceNode) continue
+    if (!sourceNode || isWorkflowNodeDisabled(sourceNode.data as Record<string, unknown>)) continue
     const outHandle = edge.sourceHandle
     if (outHandle && !OUTPUT_HANDLES.has(outHandle as typeof HandleIds.imageGenOut)) continue
     if (

@@ -524,3 +524,57 @@ def test_first_frame_motion_requires_model():
             nodes=g["nodes"],
             edges=g["edges"],
         )
+
+
+def test_resolve_workflow_skips_disabled_model_node():
+    g = _base_graph()
+    for n in g["nodes"]:
+        if n["id"] == "model-1":
+            n["data"] = {"modelId": 42, "disabled": True}
+    plan = resolve_workflow_generation_plan(
+        target_node_id="gen-1",
+        nodes=g["nodes"],
+        edges=g["edges"],
+    )
+    assert plan.model_id is None
+    assert "sunset beach" in plan.description
+
+
+def test_resolve_workflow_skips_disabled_prompt_node():
+    g = _base_graph(prompt="sunset beach")
+    for n in g["nodes"]:
+        if n["id"] == "prompt-1":
+            n["data"] = {"prompt": "sunset beach", "disabled": True}
+    plan = resolve_workflow_generation_plan(
+        target_node_id="gen-1",
+        nodes=g["nodes"],
+        edges=g["edges"],
+    )
+    assert "sunset beach" not in plan.description
+    assert "SCENE_DIRECTION" not in plan.description
+
+
+def test_resolve_workflow_skips_disabled_reference_node():
+    g = _base_graph()
+    for n in g["nodes"]:
+        if n["id"] == "ref-1":
+            n["data"] = {"refId": "abc123", "fileName": "scene.jpg", "disabled": True}
+    with pytest.raises(WorkflowResolutionError, match="Референс"):
+        resolve_workflow_generation_plan(
+            target_node_id="gen-1",
+            nodes=g["nodes"],
+            edges=g["edges"],
+        )
+
+
+def test_resolve_workflow_disabled_target_rejected():
+    g = _base_graph()
+    for n in g["nodes"]:
+        if n["id"] == "gen-1":
+            n["data"] = {**n["data"], "disabled": True}
+    with pytest.raises(WorkflowResolutionError, match="отключена"):
+        resolve_workflow_generation_plan(
+            target_node_id="gen-1",
+            nodes=g["nodes"],
+            edges=g["edges"],
+        )

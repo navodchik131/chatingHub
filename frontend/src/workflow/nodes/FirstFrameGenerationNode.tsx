@@ -98,6 +98,7 @@ function FirstFrameGenerationNodeComponent({ id, data }: NodeProps) {
   }, [updateNodeData])
 
   const onGenerate = useCallback(async () => {
+    if (nodeData.disabled) return
     runAbortRef.current?.abort()
     const abortController = new AbortController()
     runAbortRef.current = abortController
@@ -347,6 +348,7 @@ function FirstFrameGenerationNodeComponent({ id, data }: NodeProps) {
               : 'workflow-node__btn workflow-node__btn--primary nodrag'
           }
           onClick={() => (nodeData.isRunning ? onCancelRun() : void onGenerate())}
+          disabled={nodeData.disabled === true && !nodeData.isRunning}
         >
           {nodeData.isRunning ? 'Отменить' : 'Сгенерировать кадр'}
           {!nodeData.isRunning ? (

@@ -26,6 +26,18 @@ class WorkflowResolutionError(ValueError):
     pass
 
 
+def _is_node_enabled(node: dict[str, Any] | None) -> bool:
+    if node is None:
+        return False
+    data = node.get("data") if isinstance(node.get("data"), dict) else {}
+    return data.get("disabled") is not True
+
+
+def _require_enabled_target(target: dict[str, Any] | None, *, label: str = "Нода") -> None:
+    if target is not None and not _is_node_enabled(target):
+        raise WorkflowResolutionError(f"{label} отключена — включите её для запуска")
+
+
 @dataclass(frozen=True)
 class WorkflowReferenceItem:
     ref_id: str
@@ -154,6 +166,7 @@ def resolve_workflow_turnaround_plan(
     target = node_map.get(target_id)
     if not target:
         raise WorkflowResolutionError("Целевая нода не найдена в графе")
+    _require_enabled_target(target)
     if str(target.get("type") or "") != "turnaroundSheet":
         raise WorkflowResolutionError("Неверный тип ноды для развёртки")
 
@@ -192,6 +205,7 @@ def resolve_workflow_video_plan(
     target = node_map.get(target_id)
     if not target:
         raise WorkflowResolutionError("Целевая нода не найдена в графе")
+    _require_enabled_target(target)
     if str(target.get("type") or "") != "videoGeneration":
         raise WorkflowResolutionError("Неверный тип ноды для видео")
 
@@ -338,7 +352,7 @@ def _sources_for_target(
         if not src_id or src_id in seen:
             continue
         node = node_map.get(src_id)
-        if node is not None:
+        if node is not None and _is_node_enabled(node):
             seen.add(src_id)
             out.append(node)
     return out
@@ -373,6 +387,8 @@ def _first_frame_has_motion_video_wire(
             continue
         video_id = str(edge.get("target") or "").strip()
         video_node = node_map.get(video_id)
+        if not _is_node_enabled(video_node):
+            continue
         if str((video_node or {}).get("type") or "") != "videoGeneration":
             continue
         if _sources_for_target(video_id, HANDLE["motion_video_in"], edges, node_map):
@@ -415,6 +431,8 @@ def _first_frame_motion_video_file_id(
             continue
         video_id = str(edge.get("target") or "").strip()
         video_node = node_map.get(video_id)
+        if not _is_node_enabled(video_node):
+            continue
         if str((video_node or {}).get("type") or "") != "videoGeneration":
             continue
         for mnode in _sources_for_target(video_id, HANDLE["motion_video_in"], edges, node_map):
@@ -446,7 +464,7 @@ def _reference_description_for_node(
         if src_id in node_map:
             desc_node = node_map[src_id]
             break
-    if desc_node and str(desc_node.get("type") or "") == "refDescription":
+    if desc_node and str(desc_node.get("type") or "") == "refDescription" and _is_node_enabled(desc_node):
         ddata = desc_node.get("data") if isinstance(desc_node.get("data"), dict) else {}
         role = str(ddata.get("role") or "").strip()
         description = str(ddata.get("description") or "").strip()
@@ -533,6 +551,7 @@ def resolve_workflow_generation_plan(
     target = node_map.get(target_id)
     if not target:
         raise WorkflowResolutionError("Целевая нода не найдена в графе")
+    _require_enabled_target(target)
     if str(target.get("type") or "") not in ("imageGeneration", "firstFrameGeneration"):
         raise WorkflowResolutionError(
             "Execute поддерживает ноды «Генерация» и «Первый кадр»"
@@ -571,6 +590,8 @@ def resolve_workflow_generation_plan(
     for ref_node in ref_nodes:
         if str(ref_node.get("type") or "") != "reference":
             raise WorkflowResolutionError("К входу reference можно подключить только ноды «Референс»")
+        if not _is_node_enabled(ref_node):
+            continue
         ref_data = ref_node.get("data") if isinstance(ref_node.get("data"), dict) else {}
         ref_id = str(ref_data.get("refId") or "").strip()
         if not ref_id:
