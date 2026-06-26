@@ -200,6 +200,60 @@ def _variant_pricing_block(variant: SeedanceT2vVariant) -> dict[str, float | int
     }
 
 
+VideoUpscaleResolution = Literal["720p", "1080p", "2k", "4k"]
+_VALID_VIDEO_UPSCALE_RESOLUTIONS = frozenset({"720p", "1080p", "2k", "4k"})
+
+
+def normalize_video_upscale_resolution(raw: str | None) -> VideoUpscaleResolution:
+    r = (raw or "1080p").strip().lower()
+    if r in _VALID_VIDEO_UPSCALE_RESOLUTIONS:
+        return r  # type: ignore[return-value]
+    return "1080p"
+
+
+def _video_upscale_usd_per_5s(resolution: VideoUpscaleResolution | str) -> float:
+    res = normalize_video_upscale_resolution(resolution if isinstance(resolution, str) else "1080p")
+    mapping = {
+        "720p": float(settings.studio_video_upscale_usd_per_5s_720p),
+        "1080p": float(settings.studio_video_upscale_usd_per_5s_1080p),
+        "2k": float(settings.studio_video_upscale_usd_per_5s_2k),
+        "4k": float(settings.studio_video_upscale_usd_per_5s_4k),
+    }
+    return max(0.0, mapping.get(res, mapping["1080p"]))
+
+
+def video_upscale_credit_cost(
+    target_resolution: VideoUpscaleResolution | str = "1080p",
+    *,
+    duration_seconds: int | None = None,
+) -> int:
+    """Кредиты за апскейл (минимум 5 с биллинга WaveSpeed, см. docs)."""
+    min_sec = max(1, int(settings.studio_video_upscale_min_billed_seconds))
+    dur = max(min_sec, int(duration_seconds or min_sec))
+    usd = _video_upscale_usd_per_5s(target_resolution) * (dur / 5.0)
+    rub_total = usd * float(settings.studio_motion_rub_per_usd)
+    per_credit = float(settings.studio_motion_rub_per_credit)
+    if per_credit <= 0:
+        return max(1, int(math.ceil(dur / 5.0)))
+    return max(1, int(math.ceil(rub_total / per_credit)))
+
+
+def video_upscale_pricing_public() -> dict[str, float | int | list[str] | dict[str, int]]:
+    res_list: list[VideoUpscaleResolution] = ["720p", "1080p", "2k", "4k"]
+    credits_by_resolution = {r: video_upscale_credit_cost(r) for r in res_list}
+    return {
+        "resolutions": list(res_list),
+        "default_resolution": "1080p",
+        "min_billed_seconds": int(settings.studio_video_upscale_min_billed_seconds),
+        "usd_per_5s_720p": _video_upscale_usd_per_5s("720p"),
+        "usd_per_5s_1080p": _video_upscale_usd_per_5s("1080p"),
+        "usd_per_5s_2k": _video_upscale_usd_per_5s("2k"),
+        "usd_per_5s_4k": _video_upscale_usd_per_5s("4k"),
+        "credits_by_resolution": credits_by_resolution,
+        "credits_example_1080p": credits_by_resolution["1080p"],
+    }
+
+
 def motion_video_pricing_public() -> dict[str, float | int | dict | list]:
     """Поля для /api/health — фронт считает стоимость по длительности, варианту и качеству."""
     dur_default = settings.wavespeed_seedance_20_t2v_duration
@@ -265,4 +319,5 @@ def motion_video_pricing_public() -> dict[str, float | int | dict | list]:
             "default_resolution": "720p",
             "credits_example_6s_720p": grok_imagine_i2v_credit_cost(6, resolution="720p"),
         },
+        "video_upscale": video_upscale_pricing_public(),
     }

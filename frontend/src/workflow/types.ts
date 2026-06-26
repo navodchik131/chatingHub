@@ -17,6 +17,7 @@ export type NodeType =
   | 'motionVideo'
   | 'videoPromptCompose'
   | 'videoGeneration'
+  | 'videoUpscale'
   | 'preview'
 
 export interface ModelNodeData {
@@ -126,6 +127,16 @@ export interface VideoGenerationNodeData {
   [key: string]: unknown
 }
 
+export interface VideoUpscaleNodeData {
+  targetResolution?: string
+  videoUrl?: string
+  generationId?: number | null
+  disabled?: boolean
+  isRunning?: boolean
+  error?: string
+  [key: string]: unknown
+}
+
 export interface PreviewNodeData {
   imageUrl?: string
   videoUrl?: string
@@ -147,6 +158,7 @@ export type AppNodeData =
   | MotionVideoNodeData
   | VideoPromptComposeNodeData
   | VideoGenerationNodeData
+  | VideoUpscaleNodeData
   | PreviewNodeData
 
 export type AppNode = Node<AppNodeData, NodeType>
@@ -174,6 +186,7 @@ export const HandleIds = {
   environmentIn: 'environment-in',
   motionVideoIn: 'motion-video-in',
   motionVideoOut: 'motion-video-out',
+  videoIn: 'video-in',
   videoOut: 'video-out',
   previewIn: 'image-in',
 } as const

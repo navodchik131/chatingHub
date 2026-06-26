@@ -9,6 +9,7 @@ from app.services.studio_workflow_resolver import (
     WorkflowResolutionError,
     assemble_workflow_grok_notes,
     resolve_workflow_generation_plan,
+    resolve_workflow_video_upscale_plan,
 )
 
 
@@ -775,3 +776,37 @@ def test_resolve_workflow_disabled_target_rejected():
             nodes=g["nodes"],
             edges=g["edges"],
         )
+
+
+def test_resolve_video_upscale_plan():
+    g = {
+        "nodes": [
+            {
+                "id": "video-1",
+                "type": "videoGeneration",
+                "data": {"generationId": 42, "outputAspect": "9:16"},
+            },
+            {
+                "id": "up-1",
+                "type": "videoUpscale",
+                "data": {"targetResolution": "4k"},
+            },
+        ],
+        "edges": [
+            {
+                "id": "e1",
+                "source": "video-1",
+                "target": "up-1",
+                "sourceHandle": "video-out",
+                "targetHandle": "video-in",
+            },
+        ],
+    }
+    plan = resolve_workflow_video_upscale_plan(
+        target_node_id="up-1",
+        nodes=g["nodes"],
+        edges=g["edges"],
+    )
+    assert plan.source_generation_id == 42
+    assert plan.target_resolution == "4k"
+    assert plan.output_aspect == "9:16"

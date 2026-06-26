@@ -223,6 +223,15 @@ class Settings(BaseSettings):
     )
     wavespeed_upscale_sync: bool = Field(default=True)
     credit_cost_studio_upscale: int = Field(default=1)
+    # Video Upscaler Pro — https://wavespeed.ai/models/wavespeed-ai/video-upscaler-pro
+    wavespeed_video_upscaler_pro_path: str = Field(
+        default="/api/v3/wavespeed-ai/video-upscaler-pro",
+    )
+    studio_video_upscale_usd_per_5s_720p: float = Field(default=0.10, ge=0.0)
+    studio_video_upscale_usd_per_5s_1080p: float = Field(default=0.15, ge=0.0)
+    studio_video_upscale_usd_per_5s_2k: float = Field(default=0.20, ge=0.0)
+    studio_video_upscale_usd_per_5s_4k: float = Field(default=0.25, ge=0.0)
+    studio_video_upscale_min_billed_seconds: int = Field(default=5, ge=1, le=600)
     # Студия «видео»: только ByteDance Seedance 2.0 Text-to-Video
     # https://wavespeed.ai/models/bytedance/seedance-2.0/text-to-video
     wavespeed_seedance_20_t2v_path: str = Field(

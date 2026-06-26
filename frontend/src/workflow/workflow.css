@@ -652,7 +652,8 @@
 .workflow-node--imageGeneration,
 .workflow-node--firstFrameGeneration,
 .workflow-node--turnaroundSheet,
-.workflow-node--videoGeneration {
+.workflow-node--videoGeneration,
+.workflow-node--videoUpscale {
   border-color: rgba(99, 102, 241, 0.35);
   min-width: 240px;
   max-width: 300px;

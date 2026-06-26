@@ -241,6 +241,7 @@ from app.services.wavespeed_client import (
     seedream_v45_bootstrap_edit_image_url,
     seedream_v45_edit_image_url,
     wavespeed_image_upscale_url,
+    wavespeed_video_upscaler_pro_url,
     z_image_turbo_inpaint_image_url,
 )
 
@@ -1432,6 +1433,120 @@ async def _studio_job_execute_upscale(
         else (None if out_url else "Апскейл не выполнен."),
         target_resolution=tr,
     ).model_dump()
+
+
+async def _studio_job_execute_video_upscale(
+    session: AsyncSession,
+    job: StudioJob,
+    user: User,
+) -> dict[str, Any]:
+    from app.services.studio_motion_pricing import (
+        normalize_video_upscale_resolution,
+        video_upscale_credit_cost,
+    )
+
+    params = studio_jobs.job_params(job)
+    try:
+        source_gid = int(str(params.get("source_generation_id") or "").strip())
+    except (TypeError, ValueError):
+        raise RuntimeError("Исходное видео не указано.") from None
+    tr = normalize_video_upscale_resolution(str(params.get("target_resolution") or "1080p"))
+    oid = workspace_owner_id(user)
+
+    source_row = await session.get(StudioGeneration, source_gid)
+    if not source_row or source_row.user_id != oid:
+        raise RuntimeError("Исходное видео не найдено.")
+    if generation_media_kind(source_row) != "video":
+        raise RuntimeError("К апскейлу можно подключить только готовое видео.")
+
+    pub = (settings.public_app_url or "").strip().rstrip("/")
+    if not pub.lower().startswith("https://"):
+        raise RuntimeError("Нужен PUBLIC_APP_URL=https://…")
+
+    sub_b, _, ws_row, plan, _credits, _demo = await load_owner_studio_billing(session, oid)
+    _require_studio_subscription(user, sub_b, credits_balance=_credits, demo_generations_remaining=_demo)
+
+    ws_key = studio_wavespeed_api_key(
+        plan=plan, ws_row=ws_row, owner_subscription=sub_b, demo_generations_remaining=_demo
+    )
+
+    src_url = (source_row.source_url or "").strip()
+    if src_url.startswith("https://"):
+        video_input_url = src_url
+    else:
+        video_input_url = _studio_archive_video_url(oid, source_gid, pub)
+
+    cost_raw = int(str(params.get("credit_cost") or "").strip() or "0")
+    if cost_raw <= 0:
+        cost_raw = video_upscale_credit_cost(tr)
+    cost = apply_studio_credit_cost(plan, cost_raw)
+    billing = await ensure_can_consume_credits(session, user, cost)
+
+    gen_placeholder = await find_studio_generation_by_job_id(session, job.id)
+    ph_id = params.get("placeholder_generation_id")
+    if gen_placeholder is None and ph_id is not None:
+        try:
+            gen_placeholder = await session.get(StudioGeneration, int(ph_id))
+        except (TypeError, ValueError):
+            gen_placeholder = None
+
+    msg: str | None = None
+    video_url: str | None = None
+    try:
+        video_url = await wavespeed_video_upscaler_pro_url(
+            api_key=ws_key,
+            video_url=video_input_url,
+            target_resolution=tr,
+        )
+    except RuntimeError as e:
+        msg = str(e)
+        video_url = None
+
+    if video_url and gen_placeholder is not None:
+        excerpt = f"[video upscale {tr}]"
+        src_excerpt = (source_row.prompt_excerpt or "").strip()
+        if src_excerpt:
+            excerpt = f"{excerpt} {src_excerpt}"[:2000]
+        await studio_finish_video_generation(
+            session,
+            gen_placeholder,
+            video_url=video_url,
+            prompt_excerpt=excerpt,
+        )
+    elif gen_placeholder is not None:
+        await mark_studio_generation_failed(
+            session,
+            gen_placeholder,
+            message=msg or "WaveSpeed не вернул видео",
+            step="wavespeed",
+        )
+
+    if not video_url:
+        await session.commit()
+        raise RuntimeError(msg or "Апскейл видео не выполнен.")
+
+    await record_usage(
+        session,
+        user,
+        billing,
+        "studio_video_upscale",
+        cost,
+        {
+            "source_generation_id": source_gid,
+            "target_resolution": tr,
+            "generation_id": gen_placeholder.id if gen_placeholder else None,
+        },
+    )
+    await session.commit()
+
+    out: dict[str, Any] = StudioMotionVideoOut(
+        video_url=video_url,
+        message=None,
+        motion_video_prompt_auto=None,
+    ).model_dump()
+    if gen_placeholder is not None:
+        out["generation_id"] = gen_placeholder.id
+    return out
 
 
 @router.post(

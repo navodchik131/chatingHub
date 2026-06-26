@@ -26,7 +26,7 @@ function mediaFromSourceNode(sourceNode: Node): {
   mediaKind?: 'image' | 'video'
 } {
   const data = (sourceNode.data ?? {}) as Record<string, unknown>
-  if (sourceNode.type === 'videoGeneration') {
+  if (sourceNode.type === 'videoGeneration' || sourceNode.type === 'videoUpscale') {
     const videoUrl = data.videoUrl
     if (typeof videoUrl === 'string' && videoUrl) {
       return { videoUrl, mediaKind: 'video' }
@@ -55,7 +55,8 @@ export function resolveConnectedPreviewMedia(
     if (
       sourceNode.type &&
       (IMAGE_OUTPUT_NODE_TYPES.has(sourceNode.type) ||
-        sourceNode.type === 'videoGeneration')
+        sourceNode.type === 'videoGeneration' ||
+        sourceNode.type === 'videoUpscale')
     ) {
       const media = mediaFromSourceNode(sourceNode)
       if (media.imageUrl || media.videoUrl) return media
@@ -140,6 +141,7 @@ export function sanitizeNodeDataForExport(
     case 'firstFrameGeneration':
     case 'turnaroundSheet':
     case 'videoGeneration':
+    case 'videoUpscale':
       return stripGenerationResults(base)
     case 'videoPromptCompose': {
       const { composedAt: _at, ...rest } = base

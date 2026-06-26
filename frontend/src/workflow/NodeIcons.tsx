@@ -132,6 +132,18 @@ export function NodeIcon({ type, size = 16, className }: Props) {
           />
         </svg>
       )
+    case 'videoUpscale':
+      return (
+        <svg {...common}>
+          <path
+            d="M4 7h12v10H4V7zm14 3l4-2v8l-4-2v-4z"
+            stroke={stroke}
+            strokeWidth="1.75"
+            strokeLinejoin="round"
+          />
+          <path d="M8 20h8M12 16v4" stroke={stroke} strokeWidth="1.75" strokeLinecap="round" />
+        </svg>
+      )
     default:
       return null
   }
@@ -149,5 +161,6 @@ export const NODE_ICON_COLORS: Record<NodeType, string> = {
   motionVideo: '#f97316',
   videoPromptCompose: '#eab308',
   videoGeneration: '#ef4444',
+  videoUpscale: '#06b6d4',
   preview: '#0ea5e9',
 }

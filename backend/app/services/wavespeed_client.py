@@ -815,6 +815,50 @@ async def wavespeed_image_upscale_url(
     return res.url
 
 
+def _wavespeed_video_upscaler_pro_post_path() -> str:
+    p = (settings.wavespeed_video_upscaler_pro_path or "").strip()
+    p = p or "/api/v3/wavespeed-ai/video-upscaler-pro"
+    return p if p.startswith("/") else f"/{p}"
+
+
+async def wavespeed_video_upscaler_pro_url(
+    *,
+    api_key: str,
+    video_url: str,
+    target_resolution: str = "1080p",
+    timeout_submit: float = 900.0,
+    poll_interval: float = 3.0,
+    max_polls: int | None = None,
+) -> str:
+    """
+    Video Upscaler Pro: upscale готового mp4 до 720p/1080p/2k/4k.
+    Док: https://wavespeed.ai/models/wavespeed-ai/video-upscaler-pro
+    """
+    vid = (video_url or "").strip()
+    if not vid:
+        raise RuntimeError("video URL required for upscale")
+    tr = (target_resolution or "1080p").strip().lower()
+    if tr not in ("720p", "1080p", "2k", "4k"):
+        tr = "1080p"
+    path = _wavespeed_video_upscaler_pro_post_path()
+    full_url = f"{_wavespeed_base()}{path}"
+    body: dict[str, Any] = {
+        "video": vid,
+        "target_resolution": tr,
+    }
+    _apply_wavespeed_extra_body(body)
+    log.debug("wavespeed video upscaler pro post=%s target=%s", path, tr)
+    polls = max_polls if max_polls is not None else int(settings.wavespeed_video_max_polls)
+    return await _wavespeed_post_json_and_resolve_video_url(
+        api_key=api_key,
+        full_post_url=full_url,
+        body=body,
+        timeout_submit=timeout_submit,
+        poll_interval=poll_interval or settings.wavespeed_video_poll_interval_seconds,
+        max_polls=polls,
+    )
+
+
 def _z_image_inpaint_post_path() -> str:
     p = (settings.wavespeed_z_image_inpaint_path or "").strip() or "/api/v3/wavespeed-ai/z-image/turbo-inpaint"
     return p if p.startswith("/") else f"/{p}"

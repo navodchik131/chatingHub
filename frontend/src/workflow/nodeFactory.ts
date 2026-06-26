@@ -46,6 +46,8 @@ export function createDefaultNodeData(type: NodeType): AppNodeData {
         generateAudio: true,
         autoMotionPrompt: true,
       }
+    case 'videoUpscale':
+      return { targetResolution: '1080p' }
     case 'preview':
       return {}
     default: {

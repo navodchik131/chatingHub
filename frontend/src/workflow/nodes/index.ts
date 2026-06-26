@@ -12,6 +12,8 @@ import { TurnaroundSheetNode } from './TurnaroundSheetNode'
 import { VideoGenerationNode } from './VideoGenerationNode'
 import { VideoPromptComposeNode } from './VideoPromptComposeNode'
 
+import { VideoUpscaleNode } from './VideoUpscaleNode'
+
 export const nodeTypes: NodeTypes = {
   model: ModelNode,
   realism: RealismNode,
@@ -24,5 +26,6 @@ export const nodeTypes: NodeTypes = {
   motionVideo: MotionVideoNode,
   videoPromptCompose: VideoPromptComposeNode,
   videoGeneration: VideoGenerationNode,
+  videoUpscale: VideoUpscaleNode,
   preview: PreviewNode,
 }

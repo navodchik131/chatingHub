@@ -14,6 +14,7 @@ export const NODE_LABELS: Record<NodeType, string> = {
   motionVideo: 'Motion-видео',
   videoPromptCompose: 'Промпт по видео',
   videoGeneration: 'Видео',
+  videoUpscale: 'Апскейл видео',
   preview: 'Просмотр',
 }
 
@@ -31,6 +32,7 @@ export const NODE_DESCRIPTIONS: Record<NodeType, string> = {
     'Grok: детальный промпт из motion + BoardStory refs (одежда, окружение, модель)',
   videoGeneration:
     'BoardStory Seedance: identity из кабинета модели, одежда/комната отдельными @Image, motion @Video1',
+  videoUpscale: 'Video Upscaler Pro — upscale готового ролика (720p–4K)',
   preview: 'Просмотр и скачивание результата',
 }
 
@@ -43,6 +45,7 @@ export const NODE_PALETTE: NodeType[] = [
   'motionVideo',
   'videoPromptCompose',
   'videoGeneration',
+  'videoUpscale',
   'imageGeneration',
   'firstFrameGeneration',
   'turnaroundSheet',

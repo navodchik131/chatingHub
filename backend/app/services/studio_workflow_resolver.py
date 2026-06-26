@@ -127,6 +127,14 @@ class WorkflowVideoPromptComposePlan:
     output_aspect: str = "9:16"
 
 
+@dataclass(frozen=True)
+class WorkflowVideoUpscalePlan:
+    source_generation_id: int
+    target_resolution: str
+    studio_model_id: int | None = None
+    output_aspect: str | None = None
+
+
 _PROMPT_SOURCE_NODE_TYPES = frozenset({"prompt", "videoPromptCompose"})
 
 
@@ -617,8 +625,11 @@ HANDLE = {
     "motion_video_in": "motion-video-in",
     "clothing_in": "clothing-in",
     "environment_in": "environment-in",
+    "video_in": "video-in",
     "video_out": "video-out",
 }
+
+_VIDEO_OUTPUT_NODE_TYPES = frozenset({"videoGeneration", "videoUpscale"})
 
 _IMAGE_OUTPUT_NODE_TYPES = frozenset({"imageGeneration", "firstFrameGeneration", "turnaroundSheet"})
 
@@ -1120,4 +1131,156 @@ def resolve_workflow_generation_plan(
         exif_camera=exif_camera,
         realism_enabled=realism_enabled,
         motion_video_file_id=motion_video_file_id,
+    )
+
+
+def resolve_upstream_video_generation_id(
+    *,
+    target_id: str,
+    target_handle: str,
+    edges: list[dict[str, Any]],
+    node_map: dict[str, dict[str, Any]],
+    label: str = "видео",
+) -> int:
+    """generationId с upstream videoGeneration / videoUpscale."""
+    sources = _sources_for_target(target_id, target_handle, edges, node_map)
+    if not sources:
+        raise WorkflowResolutionError(f"Подключите вход {label} от ноды «Видео» или «Апскейл видео»")
+    for src in sources:
+        ntype = str(src.get("type") or "")
+        if ntype not in _VIDEO_OUTPUT_NODE_TYPES:
+            raise WorkflowResolutionError(
+                f"К входу {label} можно подключить ноду «Видео» или «Апскейл видео»"
+            )
+        gid = _generation_id_from_node(src)
+        if gid is not None:
+            return gid
+    raise WorkflowResolutionError(
+        f"Сначала выполните генерацию upstream-ноды для {label} (нет generationId)"
+    )
+
+
+def resolve_workflow_video_upscale_plan(
+    *,
+    target_node_id: str,
+    nodes: list[dict[str, Any]],
+    edges: list[dict[str, Any]],
+) -> WorkflowVideoUpscalePlan:
+    node_map = _node_map(nodes)
+    target_id = (target_node_id or "").strip()
+    target = node_map.get(target_id)
+    if not target:
+        raise WorkflowResolutionError("Целевая нода не найдена в графе")
+    _require_enabled_target(target)
+    if str(target.get("type") or "") != "videoUpscale":
+        raise WorkflowResolutionError("Неверный тип ноды для апскейла видео")
+
+    source_gid = resolve_upstream_video_generation_id(
+        target_id=target_id,
+        target_handle=HANDLE["video_in"],
+        edges=edges,
+        node_map=node_map,
+        label="видео",
+    )
+
+    gen_data = target.get("data") if isinstance(target.get("data"), dict) else {}
+    target_resolution = str(gen_data.get("targetResolution") or "1080p").strip().lower() or "1080p"
+
+    output_aspect: str | None = None
+    for edge in edges:
+        if str(edge.get("target") or "") != target_id:
+            continue
+        if edge.get("targetHandle") is not None and str(edge.get("targetHandle")) != HANDLE["video_in"]:
+            continue
+        src = node_map.get(str(edge.get("source") or "").strip())
+        if not src:
+            continue
+        sdata = src.get("data") if isinstance(src.get("data"), dict) else {}
+        asp = str(sdata.get("outputAspect") or "").strip()
+        if asp:
+            output_aspect = asp
+        break
+
+    return WorkflowVideoUpscalePlan(
+        source_generation_id=source_gid,
+        target_resolution=target_resolution,
+        studio_model_id=None,
+        output_aspect=output_aspect,
+    )
+
+
+def resolve_upstream_video_generation_id(
+    *,
+    target_id: str,
+    target_handle: str,
+    edges: list[dict[str, Any]],
+    node_map: dict[str, dict[str, Any]],
+    label: str = "видео",
+) -> int:
+    """generationId с upstream videoGeneration / videoUpscale."""
+    sources = _sources_for_target(target_id, target_handle, edges, node_map)
+    if not sources:
+        raise WorkflowResolutionError(f"Подключите вход {label} от ноды «Видео» или «Апскейл видео»")
+    for src in sources:
+        ntype = str(src.get("type") or "")
+        if ntype not in _VIDEO_OUTPUT_NODE_TYPES:
+            raise WorkflowResolutionError(
+                f"К входу {label} можно подключить ноду «Видео» или «Апскейл видео»"
+            )
+        gid = _generation_id_from_node(src)
+        if gid is not None:
+            return gid
+    raise WorkflowResolutionError(
+        f"Сначала выполните генерацию upstream-ноды для {label} (нет generationId)"
+    )
+
+
+def resolve_workflow_video_upscale_plan(
+    *,
+    target_node_id: str,
+    nodes: list[dict[str, Any]],
+    edges: list[dict[str, Any]],
+) -> WorkflowVideoUpscalePlan:
+    node_map = _node_map(nodes)
+    target_id = (target_node_id or "").strip()
+    target = node_map.get(target_id)
+    if not target:
+        raise WorkflowResolutionError("Целевая нода не найдена в графе")
+    _require_enabled_target(target)
+    if str(target.get("type") or "") != "videoUpscale":
+        raise WorkflowResolutionError("Неверный тип ноды для апскейла видео")
+
+    source_gid = resolve_upstream_video_generation_id(
+        target_id=target_id,
+        target_handle=HANDLE["video_in"],
+        edges=edges,
+        node_map=node_map,
+        label="видео",
+    )
+
+    gen_data = target.get("data") if isinstance(target.get("data"), dict) else {}
+    target_resolution = str(gen_data.get("targetResolution") or "1080p").strip().lower() or "1080p"
+
+    studio_model_id: int | None = None
+    output_aspect: str | None = None
+    for edge in edges:
+        if str(edge.get("target") or "") != target_id:
+            continue
+        if edge.get("targetHandle") is not None and str(edge.get("targetHandle")) != HANDLE["video_in"]:
+            continue
+        src = node_map.get(str(edge.get("source") or "").strip())
+        if not src:
+            continue
+        sdata = src.get("data") if isinstance(src.get("data"), dict) else {}
+        if output_aspect is None:
+            asp = str(sdata.get("outputAspect") or "").strip()
+            if asp:
+                output_aspect = asp
+        break
+
+    return WorkflowVideoUpscalePlan(
+        source_generation_id=source_gid,
+        target_resolution=target_resolution,
+        studio_model_id=studio_model_id,
+        output_aspect=output_aspect,
     )

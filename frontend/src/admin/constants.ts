@@ -38,6 +38,7 @@ export function planTierLabel(tier: string | null | undefined): string {
 export const USAGE_KIND_LABELS: Record<string, string> = {
   studio_prompt_refine: 'Студия: генерация',
   studio_image_upscale: 'Студия: апскейл',
+  studio_video_upscale: 'Студия: апскейл видео',
   studio_carousel_shot: 'Студия: карусель',
   studio_model_profile_generate: 'Студия: профиль модели',
   yookassa_credits_pack: 'Пополнение баланса',

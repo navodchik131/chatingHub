@@ -2,6 +2,32 @@ export type SeedanceT2vVariant = 'standard' | 'mini'
 export type SeedanceT2vResolution = '480p' | '720p' | '1080p'
 export type GrokImagineI2vResolution = '480p' | '720p'
 
+export type VideoUpscaleResolution = '720p' | '1080p' | '2k' | '4k'
+
+export type VideoUpscalePricing = {
+  resolutions: VideoUpscaleResolution[]
+  default_resolution: VideoUpscaleResolution
+  min_billed_seconds?: number
+  usd_per_5s_720p?: number
+  usd_per_5s_1080p?: number
+  usd_per_5s_2k?: number
+  usd_per_5s_4k?: number
+  credits_by_resolution?: Partial<Record<VideoUpscaleResolution, number>>
+  credits_example_1080p?: number
+}
+
+export const DEFAULT_VIDEO_UPSCALE_PRICING: VideoUpscalePricing = {
+  resolutions: ['720p', '1080p', '2k', '4k'],
+  default_resolution: '1080p',
+  min_billed_seconds: 5,
+  usd_per_5s_720p: 0.1,
+  usd_per_5s_1080p: 0.15,
+  usd_per_5s_2k: 0.2,
+  usd_per_5s_4k: 0.25,
+  credits_by_resolution: { '720p': 3, '1080p': 4, '2k': 5, '4k': 6 },
+  credits_example_1080p: 4,
+}
+
 export type GrokImagineI2vPricing = {
   usd_per_sec_480p: number
   usd_per_sec_720p: number
@@ -52,6 +78,7 @@ export type StudioMotionVideoPricing = {
   >
   mini_t2v_path?: string
   grok_imagine_i2v?: Partial<GrokImagineI2vPricing>
+  video_upscale?: Partial<VideoUpscalePricing>
 }
 
 /** Дефолты = .env.example (если /api/health ещё без studio_motion_video_pricing). */
@@ -78,6 +105,7 @@ export const DEFAULT_MOTION_VIDEO_PRICING: StudioMotionVideoPricing = {
     },
   },
   grok_imagine_i2v: DEFAULT_GROK_IMAGINE_I2V_PRICING,
+  video_upscale: DEFAULT_VIDEO_UPSCALE_PRICING,
 }
 
 export function mergeMotionVideoPricing(
@@ -112,6 +140,14 @@ export function mergeMotionVideoPricing(
     grok_imagine_i2v: {
       ...DEFAULT_MOTION_VIDEO_PRICING.grok_imagine_i2v,
       ...(fromHealth.grok_imagine_i2v ?? {}),
+    },
+    video_upscale: {
+      ...DEFAULT_VIDEO_UPSCALE_PRICING,
+      ...(fromHealth.video_upscale ?? {}),
+      credits_by_resolution: {
+        ...DEFAULT_VIDEO_UPSCALE_PRICING.credits_by_resolution,
+        ...(fromHealth.video_upscale?.credits_by_resolution ?? {}),
+      },
     },
   }
 }
@@ -221,6 +257,33 @@ export function computeGrokImagineI2vCreditCost(
   const usd = Math.max(0, rate * sec + grok.usd_per_image)
   if (!Number.isFinite(perCredit) || perCredit <= 0) {
     return Math.max(1, sec)
+  }
+  const rub = usd * p.rub_per_usd
+  return Math.max(1, Math.ceil(rub / perCredit))
+}
+
+/** Кредиты за Video Upscaler Pro (мин. 5 с биллинга WaveSpeed). */
+export function computeVideoUpscaleCreditCost(
+  targetResolution: VideoUpscaleResolution | string,
+  pricing?: Partial<StudioMotionVideoPricing> | null,
+): number {
+  const p = mergeMotionVideoPricing(pricing)
+  const up = { ...DEFAULT_VIDEO_UPSCALE_PRICING, ...(p.video_upscale ?? {}) }
+  const res = (targetResolution || up.default_resolution || '1080p').toLowerCase() as VideoUpscaleResolution
+  const fromMap = up.credits_by_resolution?.[res]
+  if (typeof fromMap === 'number' && fromMap > 0) {
+    return fromMap
+  }
+  const usdMap: Record<VideoUpscaleResolution, number> = {
+    '720p': up.usd_per_5s_720p ?? 0.1,
+    '1080p': up.usd_per_5s_1080p ?? 0.15,
+    '2k': up.usd_per_5s_2k ?? 0.2,
+    '4k': up.usd_per_5s_4k ?? 0.25,
+  }
+  const usd = usdMap[res in usdMap ? res : '1080p']
+  const perCredit = p.rub_per_credit
+  if (!Number.isFinite(perCredit) || perCredit <= 0) {
+    return 4
   }
   const rub = usd * p.rub_per_usd
   return Math.max(1, Math.ceil(rub / perCredit))

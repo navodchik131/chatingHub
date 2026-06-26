@@ -26,6 +26,7 @@ from app.services.studio_workflow_resolver import (
     resolve_workflow_turnaround_plan,
     resolve_workflow_video_plan,
     resolve_workflow_video_prompt_compose_plan,
+    resolve_workflow_video_upscale_plan,
 )
 from app.services.studio_workflow_defaults import (
     DEMO_WORKFLOW_NAME,
@@ -440,6 +441,14 @@ async def api_workflow_execute(
                 edges=edges,
             )
             return await _accept_workflow_video_prompt_compose_job(session, user, plan=plan)
+
+        if target_type == "videoUpscale":
+            plan = resolve_workflow_video_upscale_plan(
+                target_node_id=target_node_id,
+                nodes=nodes,
+                edges=edges,
+            )
+            return await _accept_workflow_video_upscale_job(session, user, plan=plan)
 
         raise HTTPException(
             status_code=400,
@@ -913,4 +922,90 @@ async def _accept_workflow_video_prompt_compose_job(
             job_id=job.id,
             job_type="workflow_compose_video_prompt",
         ).model_dump(),
+    )
+
+
+async def _accept_workflow_video_upscale_job(
+    session: AsyncSession,
+    user: User,
+    *,
+    plan,
+) -> JSONResponse:
+    from app.api.studio_routes import _accept_studio_job, _public_https_base_runtime
+    from app.db.models import StudioGeneration
+    from app.services.credits import ensure_can_consume_credits
+    from app.services.studio_aspect import normalize_aspect_key
+    from app.services.studio_generation_placeholders import generation_media_kind
+    from app.services.studio_keys import (
+        apply_studio_credit_cost,
+        load_owner_studio_billing,
+        studio_wavespeed_api_key,
+    )
+    from app.services.studio_motion_pricing import (
+        normalize_video_upscale_resolution,
+        video_upscale_credit_cost,
+    )
+
+    assert_permission(user, PERM_STUDIO_GENERATE)
+    oid = workspace_owner_id(user)
+    pub = _public_https_base_runtime()
+    if not pub.lower().startswith("https://"):
+        raise HTTPException(
+            status_code=400,
+            detail="Нужен публичный HTTPS (PUBLIC_APP_URL) для WaveSpeed.",
+        )
+
+    sub_b, _llm, ws_row, billing_plan, credits, demo = await load_owner_studio_billing(session, oid)
+    from app.api.studio_routes import _require_studio_subscription
+
+    _require_studio_subscription(user, sub_b, credits_balance=credits, demo_generations_remaining=demo)
+    try:
+        studio_wavespeed_api_key(
+            plan=billing_plan, ws_row=ws_row, owner_subscription=sub_b, demo_generations_remaining=demo
+        )
+    except HTTPException:
+        raise
+
+    source_row = await session.get(StudioGeneration, plan.source_generation_id)
+    if not source_row or source_row.user_id != oid:
+        raise HTTPException(status_code=404, detail="Исходное видео не найдено")
+    if generation_media_kind(source_row) != "video":
+        raise HTTPException(status_code=400, detail="Подключите готовое видео (generationId)")
+    src = (source_row.source_url or "").strip()
+    if not src.startswith("https://") and not (source_row.relative_path or "").strip():
+        raise HTTPException(status_code=400, detail="Исходное видео ещё не готово")
+
+    tr = normalize_video_upscale_resolution(plan.target_resolution)
+    upscale_cost = apply_studio_credit_cost(billing_plan, video_upscale_credit_cost(tr))
+    await ensure_can_consume_credits(session, user, upscale_cost)
+
+    aspect_key = "9:16"
+    if plan.output_aspect:
+        try:
+            aspect_key = normalize_aspect_key(plan.output_aspect)
+        except ValueError:
+            aspect_key = "9:16"
+    elif source_row.output_aspect:
+        aspect_key = source_row.output_aspect
+
+    mid = plan.studio_model_id or source_row.studio_model_id
+
+    job_params: dict[str, str] = {
+        "source_generation_id": str(plan.source_generation_id),
+        "target_resolution": tr,
+        "credit_cost": str(upscale_cost),
+        "workflow_source": "1",
+    }
+
+    return await _accept_studio_job(
+        session,
+        user,
+        job_type="video_upscale",
+        params=job_params,
+        placeholder={
+            "studio_model_id": mid,
+            "output_aspect": aspect_key,
+            "content_type": "video/mp4",
+            "prompt_excerpt": f"[video upscale {tr}]"[:2000],
+        },
     )
