@@ -11,12 +11,12 @@ const OUTPUT_HANDLES = new Set([
 
 export function getDownstreamPreviewNodeIds(sourceNodeId: string, edges: Edge[]): string[] {
   return edges
-    .filter(
-      (edge) =>
-        edge.source === sourceNodeId &&
-        (edge.sourceHandle === HandleIds.imageGenOut ||
-          edge.sourceHandle === HandleIds.videoOut),
-    )
+    .filter((edge) => {
+      if (edge.source !== sourceNodeId) return false
+      const handle = edge.sourceHandle
+      if (!handle) return true
+      return handle === HandleIds.imageGenOut || handle === HandleIds.videoOut
+    })
     .map((edge) => edge.target)
 }
 

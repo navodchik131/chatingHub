@@ -187,7 +187,13 @@ function VideoUpscaleNodeComponent({ id, data }: NodeProps) {
 
       {nodeData.videoUrl ? (
         <div className="workflow-node__preview-box workflow-node__preview-box--filled nodrag">
-          <video src={nodeData.videoUrl} controls playsInline className="workflow-node__preview-video" />
+          <video
+            key={nodeData.videoUrl}
+            src={nodeData.videoUrl}
+            controls
+            playsInline
+            className="workflow-node__preview-video"
+          />
         </div>
       ) : (
         <div className="workflow-node__preview-box workflow-node__preview-box--compact">

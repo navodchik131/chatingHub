@@ -16,9 +16,10 @@ function PreviewNodeComponent({ id, data }: NodeProps) {
     [id, nodes, edges],
   )
 
-  const imageUrl = nodeData.imageUrl ?? connected.imageUrl
-  const videoUrl = nodeData.videoUrl ?? connected.videoUrl
-  const mediaKind = nodeData.mediaKind ?? connected.mediaKind ?? (videoUrl ? 'video' : 'image')
+  const imageUrl = connected.imageUrl ?? nodeData.imageUrl
+  const videoUrl = connected.videoUrl ?? nodeData.videoUrl
+  const mediaKind =
+    connected.mediaKind ?? nodeData.mediaKind ?? (videoUrl ? 'video' : 'image')
   const hasMedia = Boolean(imageUrl || videoUrl)
 
   const handleDownload = () => {
@@ -53,7 +54,13 @@ function PreviewNodeComponent({ id, data }: NodeProps) {
         {hasMedia ? (
           mediaKind === 'video' && videoUrl ? (
             <div className="workflow-node__preview-box workflow-node__preview-box--filled nodrag">
-              <video src={videoUrl} controls playsInline className="workflow-node__preview-video" />
+              <video
+                key={videoUrl}
+                src={videoUrl}
+                controls
+                playsInline
+                className="workflow-node__preview-video"
+              />
             </div>
           ) : (
             <button
