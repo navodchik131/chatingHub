@@ -1,12 +1,14 @@
 """Tests for BoardStory reference layout."""
 
 from app.services.studio_workflow_boardstory import (
+    BoardStoryImageSlot,
+    append_boardstory_prompt_enforcement,
+    boardstory_model_swap_lock_text,
     boardstory_slot_from_json,
     boardstory_slot_to_json,
     boardstory_tag_rules_text,
     classify_boardstory_ref_role,
     compute_boardstory_layout,
-    BoardStoryImageSlot,
 )
 
 
@@ -37,6 +39,58 @@ def test_boardstory_tag_rules_fallback_to_video():
     assert "Room" in rules
     assert "@Image1" in rules
     assert "@Image2" not in rules
+
+
+def test_boardstory_tag_rules_model_replacement():
+    layout = compute_boardstory_layout(1, has_clothing=True, has_environment=True)
+    rules = boardstory_tag_rules_text(
+        layout, has_motion=True, send_video_reference=True
+    )
+    assert "MODEL REPLACEMENT" in rules
+    assert "@Video1" in rules
+    assert "@Image2" in rules
+
+
+def test_boardstory_tag_rules_no_video_ref_mode():
+    layout = compute_boardstory_layout(1, has_clothing=True, has_environment=True)
+    rules = boardstory_tag_rules_text(
+        layout, has_motion=False, send_video_reference=False
+    )
+    assert "@Video1" not in rules
+    assert "NO @Video tags" in rules
+    assert "@Image2" in rules
+
+
+def test_boardstory_model_swap_lock():
+    layout = compute_boardstory_layout(1, has_clothing=True, has_environment=True)
+    lock = boardstory_model_swap_lock_text(layout)
+    assert "MODEL SWAP" in lock
+    assert "@Video1" in lock
+
+
+def test_append_boardstory_prompt_enforcement_no_video():
+    layout = compute_boardstory_layout(1, has_clothing=True, has_environment=True)
+    out = append_boardstory_prompt_enforcement(
+        "She reads a book calmly. Wardrobe from @Video1.",
+        layout=layout,
+        clothing_from_video=False,
+        environment_from_video=False,
+        send_video_reference=False,
+    )
+    assert "@Video1" not in out
+    assert "Wardrobe from @Image2" in out
+
+
+def test_append_boardstory_prompt_enforcement_adds_replace():
+    layout = compute_boardstory_layout(1, has_clothing=True, has_environment=True)
+    out = append_boardstory_prompt_enforcement(
+        "She reads a book calmly.",
+        layout=layout,
+        clothing_from_video=False,
+        environment_from_video=False,
+        send_video_reference=True,
+    )
+    assert "Replace" in out or "Wardrobe" in out
 
 
 def test_boardstory_slot_json_roundtrip():

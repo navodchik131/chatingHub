@@ -35,7 +35,7 @@ export function createDefaultNodeData(type: NodeType): AppNodeData {
     case 'motionVideo':
       return {}
     case 'videoPromptCompose':
-      return { prompt: '' }
+      return { prompt: '', sendVideoReference: true }
     case 'videoGeneration':
       return {
         outputAspect: '9:16',

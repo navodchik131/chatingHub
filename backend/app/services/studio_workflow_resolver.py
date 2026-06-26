@@ -109,6 +109,7 @@ class WorkflowVideoPlan:
     clothing_ref: BoardStoryImageSlot | None = None
     environment_ref: BoardStoryImageSlot | None = None
     extra_refs: tuple[WorkflowReferenceItem, ...] = ()
+    send_video_reference: bool = True
 
 
 @dataclass(frozen=True)
@@ -124,6 +125,7 @@ class WorkflowVideoPromptComposePlan:
     environment_ref: BoardStoryImageSlot | None = None
     generate_clothing_from_video: bool = False
     generate_environment_from_video: bool = False
+    send_video_reference: bool = True
     output_aspect: str = "9:16"
 
 
@@ -277,6 +279,9 @@ def resolve_workflow_video_prompt_compose_plan(
     compose_data = target.get("data") if isinstance(target.get("data"), dict) else {}
     generate_clothing = compose_data.get("generateClothingFromVideo") is True
     generate_environment = compose_data.get("generateEnvironmentFromVideo") is True
+    send_video_reference = compose_data.get("sendVideoReference") is not False
+    if compose_data.get("sendReferenceImages") is False:
+        send_video_reference = False
     output_aspect = str(compose_data.get("outputAspect") or "9:16").strip() or "9:16"
     for edge in edges:
         if str(edge.get("source") or "") != target_id:
@@ -304,6 +309,7 @@ def resolve_workflow_video_prompt_compose_plan(
         environment_ref=environment_ref,
         generate_clothing_from_video=generate_clothing and clothing_ref is None,
         generate_environment_from_video=generate_environment and environment_ref is None,
+        send_video_reference=send_video_reference,
         output_aspect=output_aspect,
     )
 
@@ -586,6 +592,13 @@ def resolve_workflow_video_plan(
         auto_motion_prompt = gen_data.get("autoMotionPrompt") is not False and bool(motion_video_file_id)
     negative_prompt = str(gen_data.get("negativePrompt") or "").strip()
 
+    send_video_reference = True
+    if compose_upstream:
+        cdata = compose_upstream.get("data") if isinstance(compose_upstream.get("data"), dict) else {}
+        send_video_reference = cdata.get("sendVideoReference") is not False
+        if cdata.get("sendReferenceImages") is False:
+            send_video_reference = False
+
     return WorkflowVideoPlan(
         model_id=model_id,
         first_frame_generation_id=ff_gid,
@@ -605,6 +618,7 @@ def resolve_workflow_video_plan(
         clothing_ref=clothing_ref,
         environment_ref=environment_ref,
         extra_refs=extra_refs,
+        send_video_reference=send_video_reference,
     )
 
 

@@ -33,6 +33,8 @@ function VideoPromptComposeNodeComponent({ id, data }: NodeProps) {
 
   const generateClothing = nodeData.generateClothingFromVideo === true
   const generateEnvironment = nodeData.generateEnvironmentFromVideo === true
+  const sendVideoReference = nodeData.sendVideoReference !== false
+    && nodeData.sendReferenceImages !== false
   const showExtractPreviews =
     generateClothing ||
     generateEnvironment ||
@@ -164,6 +166,28 @@ function VideoPromptComposeNodeComponent({ id, data }: NodeProps) {
       >
         motion
       </span>
+
+      <div className="workflow-gen-form nodrag" style={{ marginTop: '0.25rem' }}>
+        <label className="workflow-gen-form__check">
+          <input
+            type="checkbox"
+            checked={sendVideoReference}
+            onChange={(e) =>
+              updateNodeData({
+                sendVideoReference: e.target.checked,
+                sendReferenceImages: undefined,
+              })
+            }
+            disabled={nodeData.isRunning}
+          />
+          <span>Отправлять motion-видео в генерацию</span>
+        </label>
+        <p className="workflow-node__hint workflow-node__hint--muted">
+          {sendVideoReference
+            ? 'Промпт с @Video1 — подмена актёра из видео на модель с @Image, движение из видео.'
+            : 'Видео только для анализа промпта — в Seedance не уходит; сцена и движение описаны текстом без @Video.'}
+        </p>
+      </div>
 
       <Handle
         id={HandleIds.clothingIn}

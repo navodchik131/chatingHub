@@ -220,6 +220,7 @@ from app.services.studio_seedance_t2v import (
     truncate_seedance_t2v_prompt,
 )
 from app.services.studio_workflow_boardstory import (
+    boardstory_model_swap_lock_text,
     boardstory_slot_from_json,
     build_boardstory_reference_urls,
     filter_model_images_for_boardstory,
@@ -4565,6 +4566,11 @@ async def _studio_job_execute_workflow_compose_video_prompt(
     environment_ref = _slot_from_param("boardstory_environment_json")
     generate_clothing = str(p.get("generate_clothing_from_video") or "").strip().lower() in ("1", "true", "yes")
     generate_environment = str(p.get("generate_environment_from_video") or "").strip().lower() in ("1", "true", "yes")
+    send_video_reference = str(p.get("send_video_reference") or p.get("send_reference_images") or "1").strip().lower() not in (
+        "0",
+        "false",
+        "no",
+    )
     output_aspect = str(p.get("output_aspect") or "9:16").strip() or "9:16"
 
     pub = (settings.public_app_url or "").strip().rstrip("/")
@@ -4588,6 +4594,7 @@ async def _studio_job_execute_workflow_compose_video_prompt(
         environment_ref=environment_ref,
         generate_clothing_from_video=generate_clothing,
         generate_environment_from_video=generate_environment,
+        send_video_reference=send_video_reference,
         output_aspect=output_aspect,
         ws_key=ws_key,
         pub=pub,
@@ -4830,6 +4837,13 @@ async def _studio_job_execute_motion_render_video(
         video_provider = "seedance_t2v"
     boardstory_mode = _truthy_wavespeed_flag(str(params.get("boardstory_mode") or ""))
     prompt_from_compose = _truthy_wavespeed_flag(str(params.get("prompt_from_compose") or ""))
+    send_video_reference = str(
+        params.get("send_video_reference") or params.get("send_reference_images") or "1"
+    ).strip().lower() not in (
+        "0",
+        "false",
+        "no",
+    )
 
     clothing_ref = None
     environment_ref = None
@@ -5087,16 +5101,24 @@ async def _studio_job_execute_motion_render_video(
             n_clothing = layout.n_clothing_images
             n_environment = layout.n_environment_images
             n_start = 0
-            ref_videos = [motion_vid_url] if motion_vid_url else []
+            ref_videos = (
+                [motion_vid_url]
+                if motion_vid_url and send_video_reference
+                else []
+            )
 
             if prompt_from_compose and prompt.strip():
                 lock_lang = "zh" if settings.studio_seedance_grok_prompt_zh else "en"
+                seed_prompt = soften_seedance_provider_prompt(prompt.strip())
+                if send_video_reference:
+                    swap_lock = boardstory_model_swap_lock_text(layout)
+                    seed_prompt = f"{seed_prompt}\n\n{swap_lock}".strip()
                 seed_prompt = append_seedance_identity_lock(
-                    soften_seedance_provider_prompt(prompt.strip()),
+                    seed_prompt,
                     n_start_frame=0,
                     n_model_images=n_model,
                     n_motion_videos=len(ref_videos),
-                    soft=True,
+                    soft=not send_video_reference,
                 )
                 if remove_face_grid:
                     seed_prompt = append_workflow_face_grid_removal(seed_prompt, language=lock_lang)

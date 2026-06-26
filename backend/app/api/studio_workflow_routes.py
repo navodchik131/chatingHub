@@ -820,6 +820,7 @@ async def _accept_workflow_video_job(
             ensure_ascii=False,
         ),
         "prompt_from_compose": "1" if plan.prompt_from_compose else "0",
+        "send_video_reference": "1" if getattr(plan, "send_video_reference", True) else "0",
     }
 
     return await _accept_studio_job(
@@ -905,6 +906,7 @@ async def _accept_workflow_video_prompt_compose_job(
         ),
         "generate_clothing_from_video": "1" if plan.generate_clothing_from_video else "0",
         "generate_environment_from_video": "1" if plan.generate_environment_from_video else "0",
+        "send_video_reference": "1" if plan.send_video_reference else "0",
         "output_aspect": plan.output_aspect or "9:16",
     }
 

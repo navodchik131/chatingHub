@@ -461,7 +461,7 @@ function VideoGenerationNodeComponent({ id, data }: NodeProps) {
                 onChange={(e) => updateNodeData({ autoMotionPrompt: e.target.checked })}
                 disabled={nodeData.isRunning}
               />
-              <span>Grok motion timeline</span>
+              <span>Grok motion timeline (авто-описание движения)</span>
             </label>
           </>
         ) : null}

@@ -593,10 +593,29 @@ _BOARDSTORY_VIDEO_PROMPT_SYSTEM = (
     "Describe motion, emotions, gestures, camera with director-level detail. "
     "Preserve MOTION_TIMELINE choreography and `[t s]` timing exactly. "
     "Use @ImageN and @VideoN tags exactly as defined in REFERENCE_TAG_RULES — mention each tag at least once. "
-    "When rules say wardrobe or environment come from @Video1, state that EXPLICITLY in separate sentences "
-    "(e.g. 'Wardrobe from @Video1', 'Room and lighting from @Video1') — do NOT bundle wardrobe into @Video1 motion lines. "
-    "@Video1 is for motion/choreography/timing; wardrobe and room follow REFERENCE_TAG_RULES only. "
-    "Model identity (face/body/hair) ONLY from the single @Image identity tag — never from @Video1. "
+    "CRITICAL: @Video1 is a motion-reference clip with a DIFFERENT actor — you must instruct model REPLACEMENT: "
+    "the lead character comes from the model @Image identity tag, NOT from @Video1. "
+    "From @Video1 copy ONLY choreography, timing, gestures, emotions, and camera — never face/body/hair. "
+    "When REFERENCE_TAG_RULES include clothing/environment @Image tags, state explicitly: "
+    "'Wardrobe from @ImageN', 'Room and lighting from @ImageM' in separate sentences. "
+    "When no clothing/environment @Image is attached, describe wardrobe and room in exhaustive visual prose. "
+    "Do NOT use @Image1–@Image2 range unless rules explicitly show a range. "
+    "No markdown, no bullet lists, no labels like Prompt:."
+)
+
+_BOARDSTORY_VIDEO_PROMPT_SYSTEM_VIDEO_REF_MODE = (
+    _BOARDSTORY_VIDEO_PROMPT_SYSTEM
+    + " VIDEO_REFERENCE_MODE: @Video1 is attached to Seedance — "
+    "prompt must emphasize swapping the @Video1 actor for the @Image model while keeping @Video1 motion."
+)
+
+_BOARDSTORY_VIDEO_PROMPT_SYSTEM_NO_VIDEO_REF = (
+    "You write Seedance 2.0 Text-to-Video prompts for BoardStory WITHOUT any motion video reference. "
+    "Output ONLY the final prompt in English as plain text. "
+    "Convert MOTION_TIMELINE into rich cinematic prose — preserve `[t s]` timing markers exactly. "
+    "Use @ImageN tags only as defined in REFERENCE_TAG_RULES — mention each @Image tag at least once. "
+    "Never write @Video, @Video1, or refer to a reference clip, source video, or motion reference. "
+    "Describe the lead character, wardrobe, environment, gestures, emotions, and camera in maximum detail. "
     "Do NOT use @Image1–@Image2 range unless rules explicitly show a range. "
     "No markdown, no bullet lists, no labels like Prompt:."
 )
@@ -680,6 +699,7 @@ async def grok_compose_boardstory_video_prompt(
     reference_blocks: list[str],
     user_notes: str,
     duration_seconds: int = 5,
+    send_video_reference: bool = True,
     credentials: StudioOpenAiCredentials | None = None,
     max_chars: int = 6000,
 ) -> str:
@@ -703,14 +723,28 @@ async def grok_compose_boardstory_video_prompt(
 
     user_instruction = (
         f"Synthesize one Seedance BoardStory video prompt ({duration_seconds}s clip).\n"
-        "Include @Image/@Video tags from REFERENCE_TAG_RULES in natural cinematic prose.\n\n"
+        + (
+            "Include @Image and @Video tags from REFERENCE_TAG_RULES in natural cinematic prose.\n"
+            "Goal: replace the actor in @Video1 with the model from the identity @Image — "
+            "same motion, different person.\n"
+            if send_video_reference
+            else "Use @Image tags from REFERENCE_TAG_RULES only — NO @Video tags anywhere.\n"
+            "Goal: embed all choreography from MOTION_TIMELINE as detailed plain-English prose "
+            "with `[t s]` timing; never mention video.\n"
+        )
         + "\n\n---\n\n".join(sections)
+    )
+
+    system = (
+        _BOARDSTORY_VIDEO_PROMPT_SYSTEM_VIDEO_REF_MODE
+        if send_video_reference
+        else _BOARDSTORY_VIDEO_PROMPT_SYSTEM_NO_VIDEO_REF
     )
 
     out = await chat_completion_openai_compatible_text(
         model=model,
         messages=[
-            {"role": "system", "content": _BOARDSTORY_VIDEO_PROMPT_SYSTEM},
+            {"role": "system", "content": system},
             {"role": "user", "content": user_instruction},
         ],
         max_tokens=10240,

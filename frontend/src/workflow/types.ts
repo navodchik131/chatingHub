@@ -101,6 +101,8 @@ export interface VideoPromptComposeNodeData {
   environmentGenerationId?: number | null
   clothingImageUrl?: string
   environmentImageUrl?: string
+  /** true = @Video1 уходит в Seedance (model swap); false = только текст, без @Video */
+  sendVideoReference?: boolean
   outputAspect?: string
   [key: string]: unknown
 }

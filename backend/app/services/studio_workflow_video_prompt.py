@@ -24,7 +24,7 @@ from app.services.studio_motion_video import resolve_motion_video_file
 from app.services.studio_openai import describe_reference_image_openai
 from app.services.studio_workflow_boardstory import (
     BoardStoryImageSlot,
-    append_boardstory_video_fallback_lines,
+    append_boardstory_prompt_enforcement,
     boardstory_tag_rules_text,
     compute_boardstory_layout,
     filter_model_images_for_boardstory,
@@ -137,6 +137,7 @@ async def compose_workflow_video_generation_prompt(
     environment_ref: BoardStoryImageSlot | None = None,
     generate_clothing_from_video: bool = False,
     generate_environment_from_video: bool = False,
+    send_video_reference: bool = True,
     output_aspect: str = "9:16",
     ws_key: str | None = None,
     pub: str | None = None,
@@ -215,9 +216,10 @@ async def compose_workflow_video_generation_prompt(
         environment_from_video = environment_ref is None
         tag_rules = boardstory_tag_rules_text(
             layout,
-            has_motion=True,
+            has_motion=send_video_reference,
             clothing_from_video=clothing_from_video,
             environment_from_video=environment_from_video,
+            send_video_reference=send_video_reference,
         )
 
         timeline = await motion_grok_timeline_from_video_path(
@@ -272,13 +274,16 @@ async def compose_workflow_video_generation_prompt(
             reference_tag_rules=tag_rules,
             reference_blocks=reference_blocks,
             user_notes=(user_notes or "").strip(),
+            send_video_reference=send_video_reference,
             credentials=grok_creds,
             max_chars=int(settings.studio_seedance_t2v_prompt_max_chars or 6000),
         )
-        composed = append_boardstory_video_fallback_lines(
+        composed = append_boardstory_prompt_enforcement(
             composed,
+            layout=layout,
             clothing_from_video=clothing_from_video,
             environment_from_video=environment_from_video,
+            send_video_reference=send_video_reference,
         )
 
         return {
@@ -288,6 +293,7 @@ async def compose_workflow_video_generation_prompt(
             "motion_video_file_id": mv_id,
             "studio_model_id": model_id,
             "boardstory_mode": True,
+            "send_video_reference": send_video_reference,
             "boardstory_layout": {
                 "n_model_images": layout.n_model_images,
                 "n_clothing_images": layout.n_clothing_images,
