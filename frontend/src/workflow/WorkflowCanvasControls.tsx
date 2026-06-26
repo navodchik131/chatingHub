@@ -2,6 +2,8 @@ import { Panel } from '@xyflow/react'
 
 type Props = {
   locked: boolean
+  hasSelectedEdges: boolean
+  onDisconnectEdges: () => void
   onZoomIn: () => void
   onZoomOut: () => void
   onFitView: () => void
@@ -10,6 +12,8 @@ type Props = {
 
 export function WorkflowCanvasControls({
   locked,
+  hasSelectedEdges,
+  onDisconnectEdges,
   onZoomIn,
   onZoomOut,
   onFitView,
@@ -18,6 +22,17 @@ export function WorkflowCanvasControls({
   return (
     <Panel position="bottom-left" className="workflow-canvas-controls-panel">
       <div className="workflow-canvas-controls" role="toolbar" aria-label="Масштаб холста">
+        {hasSelectedEdges && !locked ? (
+          <button
+            type="button"
+            className="workflow-canvas-controls__btn workflow-canvas-controls__btn--disconnect"
+            title="Отсоединить выбранные связи"
+            aria-label="Отсоединить выбранные связи"
+            onClick={onDisconnectEdges}
+          >
+            Отсоед.
+          </button>
+        ) : null}
         <span className="workflow-canvas-controls__label">Масштаб</span>
         <button
           type="button"

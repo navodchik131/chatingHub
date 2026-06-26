@@ -18,6 +18,7 @@ import { WorkflowCanvasControls } from './WorkflowCanvasControls'
 import { serializeGraph } from './graphResolver'
 import { createNode, REACT_FLOW_DRAG_TYPE } from './nodeFactory'
 import { nodeTypes } from './nodes'
+import { edgeTypes } from './edges'
 import { useWorkflowMobile } from './useWorkflowMobile'
 import type { AppNode, NodeType, ProjectGraph } from './types'
 
@@ -97,6 +98,12 @@ function FlowCanvasInner({ workspaceId, initialGraph, onGraphChange }: Props) {
     [screenToFlowPosition, setNodes],
   )
 
+  const hasSelectedEdges = edges.some((edge) => edge.selected)
+
+  const disconnectSelectedEdges = useCallback(() => {
+    setEdges((current) => current.filter((edge) => !edge.selected))
+  }, [setEdges])
+
   return (
     <div className="workflow-layout">
       <div className="workflow-canvas-wrap">
@@ -113,9 +120,12 @@ function FlowCanvasInner({ workspaceId, initialGraph, onGraphChange }: Props) {
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
             nodeTypes={nodeTypes}
+            edgeTypes={edgeTypes}
             nodesDraggable={!nodesLocked}
             nodesConnectable={!nodesLocked}
             elementsSelectable={!nodesLocked}
+            edgesFocusable={!nodesLocked}
+            edgesReconnectable={!nodesLocked}
             fitView
             fitViewOptions={{ padding: 0.2 }}
             minZoom={0.1}
@@ -125,14 +135,15 @@ function FlowCanvasInner({ workspaceId, initialGraph, onGraphChange }: Props) {
             zoomOnPinch
             panOnScroll={!isMobile}
             preventScrolling={isMobile}
-            edgesFocusable={false}
             deleteKeyCode={nodesLocked ? null : ['Backspace', 'Delete']}
-            defaultEdgeOptions={{ animated: false }}
+            defaultEdgeOptions={{ animated: false, type: 'default' }}
             style={{ width: '100%', height: '100%' }}
           >
             <Background variant={BackgroundVariant.Lines} gap={24} size={1} color="#27272a" />
             <WorkflowCanvasControls
               locked={nodesLocked}
+              hasSelectedEdges={hasSelectedEdges}
+              onDisconnectEdges={disconnectSelectedEdges}
               onZoomIn={() => zoomIn({ duration: 150 })}
               onZoomOut={() => zoomOut({ duration: 150 })}
               onFitView={() => {
