@@ -24,7 +24,6 @@ from app.services.studio_motion_video import resolve_motion_video_file
 from app.services.studio_openai import describe_reference_image_openai
 from app.services.studio_workflow_boardstory import (
     BoardStoryImageSlot,
-    append_boardstory_prompt_enforcement,
     boardstory_clothing_env_swap_mode,
     boardstory_tag_rules_text,
     boardstory_video_only_swap_mode,
@@ -32,6 +31,7 @@ from app.services.studio_workflow_boardstory import (
     build_boardstory_video_only_swap_prompt,
     compute_boardstory_layout,
     filter_model_images_for_boardstory,
+    finalize_boardstory_t2v_prompt,
 )
 from app.services.studio_workflow_refs import load_workflow_reference
 from app.services.studio_workflow_resolver import WorkflowReferenceItem
@@ -123,7 +123,8 @@ async def _validate_boardstory_model_refs(session: AsyncSession, *, model_id: in
     sm = await require_studio_model_access(session, actor, model_id, load_images=True)
     if not filter_model_images_for_boardstory(list(sm.images)):
         raise RuntimeError(
-            "У модели нет фото «Тело целиком» в кабинете. Добавьте снимок с тегом body."
+            "У модели нет фото для BoardStory (лицо, развёртка или тело). "
+            "Добавьте снимки в кабинете модели."
         )
 
 
@@ -310,6 +311,7 @@ async def compose_workflow_video_generation_prompt(
                 user_notes=(user_notes or "").strip(),
                 identity_tag=id_tag,
                 clothing_tag=layout.clothing_tag or "@Image2",
+                environment_tag=layout.environment_tag or "@Image3",
                 max_chars=max_prompt_chars,
             )
             prompt_mode = "clothing_env_swap"
@@ -324,12 +326,11 @@ async def compose_workflow_video_generation_prompt(
                 credentials=grok_creds,
                 max_chars=max_prompt_chars,
             )
-            composed = append_boardstory_prompt_enforcement(
+            composed = finalize_boardstory_t2v_prompt(
                 composed,
                 layout=layout,
-                clothing_from_video=clothing_from_video,
-                environment_from_video=environment_from_video,
-                send_video_reference=send_video_reference,
+                n_motion_videos=1 if send_video_reference else 0,
+                max_chars=max_prompt_chars,
             )
             prompt_mode = "grok_compose"
 

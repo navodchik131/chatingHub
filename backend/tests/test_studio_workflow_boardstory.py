@@ -68,7 +68,7 @@ def test_boardstory_tag_rules_no_video_ref_mode():
 def test_boardstory_model_swap_lock():
     layout = compute_boardstory_layout(1, has_clothing=True, has_environment=True)
     lock = boardstory_model_swap_lock_text(layout)
-    assert "MODEL SWAP" in lock
+    assert "MODEL REPLACEMENT" in lock
     assert "@Video1" in lock
 
 
@@ -125,13 +125,13 @@ def test_build_boardstory_video_only_swap_prompt():
     out = build_boardstory_video_only_swap_prompt(
         user_notes="Calm mood.",
     )
-    assert "Use @Video1 exclusively" in out
-    assert "Use @Image1 exclusively" in out
-    assert "IDENTITY LOCK" in out
-    assert "MOTION CHOREOGRAPHY AND TIMING" not in out
+    assert "MODEL REPLACEMENT" in out
+    assert "MOTION ONLY (@Video1)" in out
+    assert "IDENTITY (@Image1)" in out
     assert "USER_DIRECTION" in out
     assert "@Video1" in out
-    assert "Do not copy the identity" in out
+    assert "Do not copy the @Video1 performer identity" in out
+    assert "Use @Video1 exclusively" not in out
 
 
 def test_build_boardstory_video_only_swap_prompt_ignores_timeline_in_notes_only():
@@ -158,14 +158,14 @@ def test_build_boardstory_clothing_env_swap_prompt():
     out = build_boardstory_clothing_env_swap_prompt(
         user_notes="Soft light.",
     )
-    assert "Use @Image2 exclusively as the clothing" in out
-    assert "SCENE AND APPEARANCE" in out
-    assert "Never copy the identity" in out
-    assert "MOTION CHOREOGRAPHY AND TIMING" not in out
+    assert "MODEL REPLACEMENT" in out
+    assert "CLOTHING (@Image2)" in out
+    assert "MOTION ONLY (@Video1)" in out
+    assert "Do not copy the @Video1 performer identity" in out
     assert "[1 s]" not in out
 
 
-def test_filter_model_images_for_boardstory_prefers_body():
+def test_filter_model_images_for_boardstory_identity_refs():
     from app.db.models import UserStudioModelImage
     from app.services.studio_workflow_boardstory import filter_model_images_for_boardstory
 
@@ -175,11 +175,12 @@ def test_filter_model_images_for_boardstory_prefers_body():
         UserStudioModelImage(id=3, image_kind="face"),
     ]
     out = filter_model_images_for_boardstory(imgs)
-    assert len(out) == 1
-    assert out[0].image_kind == "body"
+    assert len(out) == 3
+    kinds = [im.image_kind for im in out]
+    assert kinds == ["turnaround", "face", "body"]
 
 
-def test_filter_model_images_for_boardstory_empty_without_body():
+def test_filter_model_images_for_boardstory_fallback_without_body():
     from app.db.models import UserStudioModelImage
     from app.services.studio_workflow_boardstory import filter_model_images_for_boardstory
 
@@ -187,7 +188,9 @@ def test_filter_model_images_for_boardstory_empty_without_body():
         UserStudioModelImage(id=1, image_kind="turnaround"),
         UserStudioModelImage(id=2, image_kind="face"),
     ]
-    assert filter_model_images_for_boardstory(imgs) == []
+    out = filter_model_images_for_boardstory(imgs)
+    assert len(out) == 2
+    assert {im.image_kind for im in out} == {"turnaround", "face"}
 
 
 def test_boardstory_slot_json_roundtrip():

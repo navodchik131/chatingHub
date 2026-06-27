@@ -116,12 +116,17 @@ def compute_boardstory_layout(
 def filter_model_images_for_boardstory(
     imgs: list,
 ) -> list:
-    """BoardStory: одно фото «тело целиком» (body) из кабинета модели."""
+    """BoardStory: turnaround + face + body (до 3 identity refs), как в render-video."""
+    from app.services.studio_seedance_t2v import filter_model_images_for_seedance_video
+
+    picked = filter_model_images_for_seedance_video(imgs, include_body=True)
+    if picked:
+        return picked
     sorted_all = sort_model_images_for_seedance_t2v(imgs)
     for im in sorted_all:
         if (im.image_kind or "other").lower() == "body":
             return [im]
-    return []
+    return sorted_all[:1] if sorted_all else []
 
 
 def boardstory_video_only_swap_mode(
@@ -143,59 +148,28 @@ def boardstory_video_only_swap_mode(
 
 
 _BOARDSTORY_VIDEO_ONLY_SWAP_TEMPLATE = """\
-Use @Video1 exclusively as the motion, clothing, accessories, pose, camera, lighting and environment reference.
+MODEL REPLACEMENT — PRIMARY TASK
+Replace the reference performer in @Video1 with the lead character from @Image1.
+The visible person in every frame must be @Image1 — never the original @Video1 actor.
 
-Use @Image1 exclusively as the character identity, facial appearance, hairstyle and body proportions reference.
+IDENTITY (@Image1)
+@Image1 is the ONLY approved character identity for the full clip.
+Lock facial features, eyes, eyebrows, nose, lips, jawline, hairstyle, hair color, skin tone, and body proportions to @Image1.
+If multiple model refs are attached, @Image1 is the primary face anchor.
 
-Transfer the complete performance from @Video1 onto the person from @Image1 with the closest possible timing.
+MOTION ONLY (@Video1)
+From @Video1 copy ONLY: choreography, timing, pacing, gestures, head movement, gaze shifts, hand and body movement, posture transitions, camera movement, and framing changes.
+Do NOT take from @Video1: face, skin, hair, body shape, or any biometric trait of the reference performer.
 
-IDENTITY LOCK
-
-The generated person must remain exactly the same individual shown in @Image1 throughout the entire video.
-
-Preserve the exact:
-– facial structure;
-– eyes, eyebrows, nose, lips, cheeks and jawline;
-– skin tone;
-– hairstyle, hair length and color;
-– body proportions.
-
-Do not copy the facial identity or physical characteristics of the performer from @Video1.
-
-APPEARANCE, SCENE AND MOTION
-
-Adopt from @Video1:
-– all motion and timing;
-– clothing and accessories;
-– jewelry;
-– manicure and pedicure;
-– pose and body positioning;
-– camera angle and framing;
-– lighting and shadows;
-– background and environment;
-– colors and atmosphere.
-
-Maintain these elements consistently throughout the video.
-
-Transfer only identity and hair characteristics from @Image1.
+WARDROBE AND SCENE (@Video1 → on @Image1)
+Dress @Image1 in the same outfit style, accessories, and styling seen in @Video1 — worn by the NEW person, not the original actor.
+Match lighting mood, background layout, camera angle, and atmosphere from @Video1 while keeping @Image1's identity unchanged.
 
 QUALITY
+Ultra realistic natural phone video. Stable @Image1 identity in every frame. Smooth motion. No temporal flicker.
 
-Ultra realistic natural phone video.
-Stable identity across frames.
-Stable clothing and accessories.
-Consistent environment and lighting.
-Natural motion and temporal consistency.
-
-STRICT NEGATIVE CONSTRAINTS
-
-Do not copy the identity of the performer from @Video1.
-Do not alter the hairstyle or facial appearance from @Image1.
-Do not change the environment, camera or lighting from @Video1.
-Do not add objects or people.
-No identity drift.
-No temporal flicker.
-No background warping."""
+NEGATIVE
+Do not copy the @Video1 performer identity. No reference-actor face. No face morphing. No identity drift. No extra people."""
 
 
 def build_boardstory_video_only_swap_prompt(
@@ -240,90 +214,31 @@ def boardstory_clothing_env_swap_mode(
 
 
 _BOARDSTORY_CLOTHING_ENV_SWAP_TEMPLATE = """\
-Use @Video1 as the primary reference for motion, timing, lighting, camera framing and overall scene structure.
+MODEL REPLACEMENT — PRIMARY TASK
+Replace the reference performer in @Video1 with the lead character from @Image1.
+The visible person in every frame must be @Image1 — never the original @Video1 actor.
 
-Use @Image1 exclusively as the character identity, facial appearance, hairstyle, hair color, skin tone and body proportions reference.
+IDENTITY (@Image1)
+@Image1 is the ONLY approved character identity for the full clip.
+Lock facial features, eyes, eyebrows, nose, lips, jawline, hairstyle, hair color, skin tone, and body proportions to @Image1.
 
-Use @Image2 exclusively as the clothing, accessories and styling reference.
+CLOTHING (@Image2)
+Dress @Image1 in the exact clothing, accessories, and styling from @Image2.
+Stable outfit consistency throughout the video.
 
-Transfer the performance from @Video1 onto the person from @Image1 while maintaining stable identity throughout the entire video.
+MOTION ONLY (@Video1)
+From @Video1 copy ONLY: choreography, timing, pacing, gestures, head movement, gaze shifts, hand and body movement, posture transitions, camera movement, and framing changes.
+Do NOT take from @Video1: face, skin, hair, body shape, or any biometric trait of the reference performer.
 
-IDENTITY LOCK
-
-The generated person must remain exactly the same individual shown in @Image1 throughout the entire video.
-
-Preserve:
-– facial features;
-– eyes, eyebrows, nose, lips, cheeks and jawline;
-– hairstyle and hair color;
-– skin tone;
-– body proportions.
-
-Never copy the identity of the performer from @Video1.
-
-Transfer only motion from @Video1 and only appearance from @Image1.
-
-CLOTHING AND STYLING
-
-Adopt clothing, accessories and styling from @Image2.
-
-Preserve the overall design, colors, textures and appearance of the outfit and accessories from @Image2 while allowing only minor natural variations.
-
-Maintain stable clothing and accessory consistency throughout the video.
-
-SCENE AND APPEARANCE
-
-Use @Video1 as inspiration for the overall environment, atmosphere and scene layout rather than as an exact background reference.
-
-Preserve a similar setting, lighting style and camera framing while introducing subtle natural variations in architecture, objects, textures, colors, vegetation, shadows and environmental details.
-
-The generated environment should feel visually related to @Video1 but not identical.
-
-Avoid recreating the background, location or scene elements exactly as shown in the source video.
-
-Allow minor differences in color palette, surface materials, decorative details and surrounding objects while maintaining the same overall mood and composition.
-
-MOTION
-
-Follow the timing, pacing and movement from @Video1 as closely as possible.
-
-Preserve:
-– head movement;
-– gaze direction;
-– facial expressions;
-– hand movement;
-– body movement;
-– posture transitions.
-
-Maintain smooth temporal consistency and natural motion throughout the entire video.
+SCENE
+Room, background, lighting, and atmosphere: match @Image3.
+Follow motion and camera work from @Video1 without cloning the reference actor.
 
 QUALITY
+Ultra realistic natural phone video. Stable @Image1 identity. Stable @Image2 wardrobe. Smooth motion.
 
-Ultra realistic natural phone video.
-Stable identity across frames.
-Stable clothing and accessories.
-Natural motion.
-Consistent anatomy.
-Realistic lighting and textures.
-Smooth frame-to-frame continuity.
-High facial consistency.
-
-NEGATIVE CONSTRAINTS
-
-Do not copy the identity of the performer from @Video1.
-Do not recreate the background from @Video1 exactly.
-Avoid one-to-one duplication of environment details.
-Allow subtle scene variations while preserving the overall atmosphere.
-Do not change the clothing style from @Image2.
-No identity drift.
-No clothing drift.
-No temporal flicker.
-No distorted anatomy.
-No background warping.
-No random objects or people.
-No extra limbs.
-No duplicated body parts.
-No face morphing."""
+NEGATIVE
+Do not copy the @Video1 performer identity. No reference-actor face. No face morphing. No identity drift. No clothing drift from @Image2."""
 
 
 def _apply_boardstory_template_tags(
@@ -331,6 +246,7 @@ def _apply_boardstory_template_tags(
     *,
     identity_tag: str,
     clothing_tag: str | None = None,
+    environment_tag: str | None = None,
     video_tag: str = "@Video1",
 ) -> str:
     out = template
@@ -338,6 +254,8 @@ def _apply_boardstory_template_tags(
         out = out.replace("@Image1", identity_tag)
     if clothing_tag and clothing_tag != "@Image2":
         out = out.replace("@Image2", clothing_tag)
+    if environment_tag and environment_tag != "@Image3":
+        out = out.replace("@Image3", environment_tag)
     if video_tag != "@Video1":
         out = out.replace("@Video1", video_tag)
     return out
@@ -348,16 +266,18 @@ def build_boardstory_clothing_env_swap_prompt(
     user_notes: str = "",
     identity_tag: str = "@Image1",
     clothing_tag: str = "@Image2",
+    environment_tag: str = "@Image3",
     video_tag: str = "@Video1",
     max_chars: int | None = None,
 ) -> str:
-    """Фиксированный промпт: @Image1 identity, @Image2 clothing, движение/сцена из @Video1."""
+    """Фиксированный промпт: model identity, @ImageN clothing/env, motion из @Video1."""
     from app.services.studio_seedance_t2v import truncate_seedance_t2v_prompt
 
     template = _apply_boardstory_template_tags(
         _BOARDSTORY_CLOTHING_ENV_SWAP_TEMPLATE,
         identity_tag=identity_tag,
         clothing_tag=clothing_tag,
+        environment_tag=environment_tag,
         video_tag=video_tag,
     )
 
@@ -524,20 +444,69 @@ def append_boardstory_prompt_enforcement(
 def boardstory_model_swap_lock_text(
     layout: BoardStoryReferenceLayout,
 ) -> str:
-    """Жёсткая строка для Seedance после compose-промпта (только с @Video1)."""
+    """Жёсткая строка swap для Seedance T2V (prepend к grok/ручным промптам)."""
     id_expr = layout.identity_tag_expr or "@Image1"
     parts: list[str] = [
-        f"MODEL SWAP: Replace the person in @Video1 with the character from {id_expr} "
-        "(face, body, hair from model photo — NOT the video actor).",
+        f"MODEL REPLACEMENT: Replace the person in @Video1 with {id_expr} "
+        "(face, body, hair from model photos — NOT the video actor).",
     ]
     if layout.clothing_tag:
         parts.append(f"Outfit from {layout.clothing_tag}.")
     if layout.environment_tag:
         parts.append(f"Scene from {layout.environment_tag}.")
     parts.append(
-        "@Video1 supplies motion, timing, gestures, emotions, and camera ONLY."
+        "@Video1 supplies motion, timing, gestures, emotions, and camera ONLY — "
+        "never the reference actor's face or body."
     )
     return " ".join(parts)
+
+
+def finalize_boardstory_t2v_prompt(
+    prompt: str,
+    *,
+    layout: BoardStoryReferenceLayout | None = None,
+    n_motion_videos: int = 0,
+    max_chars: int | None = None,
+) -> str:
+    """Финализация BoardStory-промпта перед Seedance T2V: swap-lead + motion lock."""
+    from app.services.studio_seedance_t2v import truncate_seedance_t2v_prompt
+
+    body = (prompt or "").strip()
+    if not body:
+        return ""
+
+    if layout is not None and n_motion_videos > 0:
+        body = append_boardstory_prompt_enforcement(
+            body,
+            layout=layout,
+            clothing_from_video=layout.n_clothing_images == 0,
+            environment_from_video=layout.n_environment_images == 0,
+            send_video_reference=True,
+        )
+
+    low = body.lower()
+    parts: list[str] = []
+    if n_motion_videos > 0 and "model replacement" not in low:
+        if layout is not None:
+            parts.append(boardstory_model_swap_lock_text(layout))
+        else:
+            parts.append(
+                "MODEL REPLACEMENT: Replace the person in @Video1 with @Image1 "
+                "(face, body, hair from model photos — NOT the video actor). "
+                "@Video1 supplies motion, timing, gestures, and camera ONLY."
+            )
+
+    parts.append(body)
+
+    if n_motion_videos > 0 and "motion only" not in low and "only motion" not in low:
+        id_expr = (layout.identity_tag_expr if layout else None) or "@Image1"
+        parts.append(
+            f"MOTION LOCK: @Video1 — choreography and camera ONLY; "
+            f"on-screen person is {id_expr} in every frame."
+        )
+
+    lim = max_chars if max_chars is not None else None
+    return truncate_seedance_t2v_prompt("\n\n".join(parts).strip(), max_chars=lim)
 
 
 def append_boardstory_video_fallback_lines(

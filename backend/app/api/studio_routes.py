@@ -104,7 +104,6 @@ from app.services.crypto_secret import decrypt_secret
 from app.services.studio_aspect import (
     aspect_presets_public,
     aspect_ratio_for_seedance_i2v,
-    aspect_ratio_for_seedance_video_edit,
     normalize_aspect_key,
     wavespeed_size_string,
 )
@@ -224,6 +223,7 @@ from app.services.studio_workflow_boardstory import (
     boardstory_slot_from_json,
     build_boardstory_reference_urls,
     filter_model_images_for_boardstory,
+    finalize_boardstory_t2v_prompt,
     workflow_reference_public_url,
 )
 from app.services.studio_model_bootstrap import (
@@ -239,7 +239,6 @@ from app.services.wavespeed_client import (
     grok_imagine_video_v15_image_to_video_url,
     nano_banana_pro_edit_image_url,
     seedance_20_text_to_video_url,
-    seedance_studio_video_edit_video_url,
     seedream_v45_bootstrap_edit_image_url,
     seedream_v45_edit_image_url,
     wavespeed_image_upscale_url,
@@ -4895,10 +4894,19 @@ async def _studio_job_execute_motion_render_video(
     if not sm:
         raise RuntimeError("Модель не найдена")
 
-    if video_provider != "grok_imagine_i2v" and not filter_model_images_for_seedance_video(list(sm.images)):
-        if boardstory_mode or not str(sheet_gid_raw or "").strip():
+    if video_provider != "grok_imagine_i2v":
+        model_ref_ok = (
+            filter_model_images_for_boardstory(list(sm.images))
+            if boardstory_mode
+            else filter_model_images_for_seedance_video(list(sm.images))
+        )
+        if not model_ref_ok and (boardstory_mode or not str(sheet_gid_raw or "").strip()):
             raise RuntimeError(
-                "У модели нет фото для reference_images. Добавьте снимок «Тело целиком» (body) в кабинете модели."
+                "У модели нет фото для BoardStory (лицо, развёртка или тело). "
+                "Добавьте снимки в кабинете модели."
+                if boardstory_mode
+                else "У модели нет фото для reference_images. "
+                "Добавьте снимок «Тело целиком» (body) в кабинете модели."
             )
 
     log.info(
@@ -5073,7 +5081,8 @@ async def _studio_job_execute_motion_render_video(
             )
             if not model_urls:
                 raise RuntimeError(
-                    "У модели нет фото «Тело целиком» (body). Добавьте в настройках модели."
+                    "У модели нет фото для BoardStory (лицо, развёртка или тело). "
+                    "Добавьте в настройках модели."
                 )
 
             def _gen_url(gid: int) -> str | None:
@@ -5113,8 +5122,11 @@ async def _studio_job_execute_motion_render_video(
             )
 
             if prompt_from_compose and prompt.strip():
-                # Промпт из ноды compose — в Seedance без изменений (как показано в UI).
-                seed_prompt = truncate_seedance_t2v_prompt(prompt.strip())
+                seed_prompt = finalize_boardstory_t2v_prompt(
+                    prompt.strip(),
+                    layout=layout,
+                    n_motion_videos=len(ref_videos),
+                )
                 prompt_source = "boardstory_compose"
             else:
                 seed_prompt = assemble_boardstory_seedance_prompt(
@@ -5205,41 +5217,19 @@ async def _studio_job_execute_motion_render_video(
                 soft_identity=False,
             )
 
-        use_boardstory_video_edit = (
-            boardstory_mode
-            and bool(motion_vid_url)
-            and send_video_reference
-            and bool(ref_videos)
-        )
-
         try:
-            if use_boardstory_video_edit:
-                ar_edit = aspect_ratio_for_seedance_video_edit(output_aspect)
-                video_url = await seedance_studio_video_edit_video_url(
-                    api_key=ws_key,
-                    video_url=motion_vid_url,
-                    reference_image_urls=ref_images,
-                    prompt=seed_prompt,
-                    aspect_ratio=ar_edit,
-                    resolution=video_res,
-                    duration=ds_effective,
-                    keep_original_sound=not _truthy_wavespeed_flag(generate_audio),
-                    variant=seedance_v,
-                )
-                motion_provider = "seedance_video_edit"
-            else:
-                video_url = await seedance_20_text_to_video_url(
-                    api_key=ws_key,
-                    prompt=seed_prompt,
-                    reference_images=ref_images or None,
-                    reference_videos=ref_videos or None,
-                    aspect_ratio=ar_t2v,
-                    resolution=video_res,
-                    duration=ds_effective,
-                    generate_audio=_truthy_wavespeed_flag(generate_audio),
-                    variant=seedance_v,
-                )
-                motion_provider = "seedance_t2v"
+            video_url = await seedance_20_text_to_video_url(
+                api_key=ws_key,
+                prompt=seed_prompt,
+                reference_images=ref_images or None,
+                reference_videos=ref_videos or None,
+                aspect_ratio=ar_t2v,
+                resolution=video_res,
+                duration=ds_effective,
+                generate_audio=_truthy_wavespeed_flag(generate_audio),
+                variant=seedance_v,
+            )
+            motion_provider = "seedance_t2v"
             msg = None
             log.info(
                 "motion_render_video ok job=%s provider=%s imgs=%s vids=%s prompt=%s",
@@ -5253,9 +5243,9 @@ async def _studio_job_execute_motion_render_video(
             msg = str(e)
             video_url = None
             log.warning(
-                "motion_render_video failed job=%s boardstory_edit=%s imgs=%s vids=%s: %s",
+                "motion_render_video failed job=%s boardstory=%s imgs=%s vids=%s: %s",
                 job.id,
-                use_boardstory_video_edit,
+                boardstory_mode,
                 len(ref_images),
                 len(ref_videos),
                 msg[:240],

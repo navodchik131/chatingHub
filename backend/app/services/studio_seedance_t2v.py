@@ -514,54 +514,80 @@ def assemble_boardstory_seedance_prompt(
     motion_summary: str | None = None,
     negative: str | None = None,
 ) -> str:
-    """BoardStory Seedance: identity @Image1+, clothing/env refs, motion @Video1, без первого кадра."""
-    from app.services.studio_workflow_boardstory import compute_boardstory_layout
+    """BoardStory Seedance T2V: swap identity из @ImageN, motion из @Video1."""
+    from app.services.studio_workflow_boardstory import (
+        compute_boardstory_layout,
+        finalize_boardstory_t2v_prompt,
+    )
 
     layout = compute_boardstory_layout(
         n_model_images,
         has_clothing=n_clothing_images > 0,
         has_environment=n_environment_images > 0,
     )
+    id_expr = layout.identity_tag_expr or "@Image1"
     parts: list[str] = []
-    if layout.identity_tag_expr:
+
+    if n_motion_videos > 0:
         parts.append(
-            f"Cinematic clip — lead character appearance from {layout.identity_tag_expr} "
+            f"MODEL REPLACEMENT: Replace the performer in @Video1 with {id_expr}. "
+            f"The on-screen person in every frame must be {id_expr}, never the @Video1 actor."
+        )
+        parts.append(
+            f"IDENTITY ({id_expr}): face, body, hair, skin tone, and proportions from model photos only."
+        )
+        vtags = ", ".join(f"@Video{i}" for i in range(1, n_motion_videos + 1))
+        parts.append(
+            f"MOTION ONLY ({vtags}): choreography, timing, gestures, camera movement, and framing — "
+            f"never face, skin, hair, or body shape of the reference performer."
+        )
+    elif id_expr:
+        parts.append(
+            f"Cinematic clip — lead character appearance from {id_expr} "
             "(face, body, hair from model cabinet photos)."
         )
+
     if layout.clothing_tag:
         parts.append(f"Wardrobe and garments: match {layout.clothing_tag}.")
     elif n_motion_videos > 0:
-        parts.append("Wardrobe and styling: derive from @Video1 motion reference.")
+        parts.append(
+            f"Wardrobe on {id_expr}: same outfit style as seen in @Video1, worn by the NEW person."
+        )
     if layout.environment_tag:
         parts.append(
             f"Room, background, lighting, and atmosphere: match {layout.environment_tag}."
         )
     elif n_motion_videos > 0:
-        parts.append("Environment and lighting: derive from @Video1 motion reference.")
-    if n_motion_videos > 0:
-        vtags = ", ".join(f"@Video{i}" for i in range(1, n_motion_videos + 1))
         parts.append(
-            f"Motion, emotions, gestures, pacing, and camera from {vtags}; "
-            f"character look stays on {layout.identity_tag_expr or 'model @Image refs'}."
+            "Environment and lighting: follow mood and camera work from @Video1 without cloning the actor."
         )
-    if motion_summary and motion_summary.strip():
-        parts.append(f"Motion notes:\n{motion_summary.strip()}")
+
+    safe_motion = prepare_motion_notes_for_seedance(motion_summary)
+    if safe_motion:
+        parts.append(f"Motion notes:\n{safe_motion}")
     up = (user_prompt or "").strip()
     if up:
         parts.append(up)
-    neg_parts: list[str] = [_IDENTITY_NEGATIVE_SOFT]
+
+    neg_parts: list[str] = [_IDENTITY_NEGATIVE_DEFAULTS]
     neg = (negative or "").strip()
     if neg:
         neg_parts.append(neg)
     if neg_parts:
         parts.append(f"Avoid: {'; '.join(neg_parts)}")
-    body = soften_seedance_provider_prompt("\n\n".join(parts))
-    return append_seedance_identity_lock(
+
+    body = soften_seedance_provider_prompt("\n\n".join(parts), boardstory=True)
+    locked = append_seedance_identity_lock(
         body,
         n_start_frame=0,
         n_model_images=n_model_images,
         n_motion_videos=n_motion_videos,
-        soft=True,
+        soft=False,
+    )
+    return finalize_boardstory_t2v_prompt(
+        locked,
+        layout=layout,
+        n_motion_videos=n_motion_videos,
     )
 
 
