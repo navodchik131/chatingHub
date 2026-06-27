@@ -2838,6 +2838,7 @@ select:focus {
   -webkit-backdrop-filter: blur(14px) saturate(1.1);
   border-bottom: 1px solid var(--border);
   box-shadow: var(--shadow-sm);
+  --thread-mobile-dock-height: 3.75rem;
 }
 
 .thread-mobile-dock-inner {
@@ -4015,7 +4016,7 @@ select:focus {
   }
 
   .app.with-thread-dock {
-    padding-top: calc(3.35rem + env(safe-area-inset-top, 0px));
+    padding-top: calc(var(--thread-mobile-dock-height, 3.75rem) + env(safe-area-inset-top, 0px));
   }
 
   .app.with-thread-dock .section-nav {
@@ -5181,7 +5182,7 @@ a.workspace-mobile-nav-item {
 /* ── Фаза 4: чат / студия / кабинет внутри workspace shell ── */
 
 .app.app--shell.with-thread-dock {
-  padding-top: 0;
+  padding-top: calc(var(--thread-mobile-dock-height, 3.75rem) + env(safe-area-inset-top, 0px));
 }
 
 .app.app--shell.mobile-chat-open .workspace-topbar {
@@ -5252,7 +5253,9 @@ a.workspace-mobile-nav-item {
   }
 
   .app.app--shell .layout.mobile.mobile-chat-open {
-    min-height: calc(100dvh - 3.5rem - env(safe-area-inset-top, 0px));
+    min-height: calc(
+      100dvh - var(--thread-mobile-dock-height, 3.75rem) - env(safe-area-inset-top, 0px)
+    );
   }
 
   .app.app--shell .layout.mobile .sidebar,
@@ -5261,7 +5264,9 @@ a.workspace-mobile-nav-item {
   }
 
   .app.app--shell.with-thread-dock .layout.mobile.mobile-chat-open .thread {
-    min-height: calc(100dvh - 3.75rem - env(safe-area-inset-top, 0px));
+    min-height: calc(
+      100dvh - var(--thread-mobile-dock-height, 3.75rem) - env(safe-area-inset-top, 0px)
+    );
   }
 
   .app.app--shell > .account-panel {
