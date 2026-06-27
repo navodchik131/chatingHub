@@ -139,8 +139,12 @@ def test_video_edit_prompt_swap_identity():
 def test_seedance_video_edit_post_path_variant():
     from app.services.wavespeed_client import _seedance_20_video_edit_post_path
 
-    assert "mini" in _seedance_20_video_edit_post_path(variant="mini")
-    assert "video-edit" in _seedance_20_video_edit_post_path(variant="standard")
+    assert _seedance_20_video_edit_post_path(variant="mini") == (
+        "/api/v3/bytedance/seedance-2.0-mini/video-edit-turbo"
+    )
+    assert _seedance_20_video_edit_post_path(variant="standard") == (
+        "/api/v3/bytedance/seedance-2.0/video-edit-turbo"
+    )
 
 
 def test_filter_model_images_for_video_excludes_body():

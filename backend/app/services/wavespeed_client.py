@@ -1532,7 +1532,7 @@ def _seedance_20_video_edit_post_path(*, variant: str = "standard") -> str:
     v = normalize_seedance_t2v_variant(variant)
     if v == "mini":
         p = (settings.wavespeed_seedance_20_mini_video_edit_path or "").strip()
-        p = p or "/api/v3/bytedance/seedance-2.0-mini/video-edit"
+        p = p or "/api/v3/bytedance/seedance-2.0-mini/video-edit-turbo"
     else:
         legacy = (settings.wavespeed_studio_video_edit_path or "").strip()
         if legacy:
@@ -1575,8 +1575,8 @@ async def seedance_studio_video_edit_video_url(
     """
     ByteDance Seedance Video-Edit: входное video + prompt + reference_images.
     variant=standard → …/seedance-2.0/video-edit-turbo (или legacy env)
-    variant=mini → …/seedance-2.0-mini/video-edit
-    Док: https://wavespeed.ai/docs/docs-api/bytedance/bytedance-seedance-2.0-mini-video-edit
+    variant=mini → …/seedance-2.0-mini/video-edit-turbo
+    Док: https://wavespeed.ai/docs/docs-api/bytedance/bytedance-seedance-2.0-mini-video-edit-turbo
     """
     vid = (video_url or "").strip()
     ptxt = (prompt or "").strip()

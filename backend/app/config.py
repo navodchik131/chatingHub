@@ -290,7 +290,7 @@ class Settings(BaseSettings):
         default="/api/v3/bytedance/seedance-2.0/video-edit-turbo",
     )
     wavespeed_seedance_20_mini_video_edit_path: str = Field(
-        default="/api/v3/bytedance/seedance-2.0-mini/video-edit",
+        default="/api/v3/bytedance/seedance-2.0-mini/video-edit-turbo",
     )
     # Legacy override для standard video-edit (пусто = seedance-2.0/video-edit-turbo)
     wavespeed_studio_video_edit_path: str = Field(
