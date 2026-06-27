@@ -731,6 +731,7 @@ export default function App() {
   const [convNoteDraft, setConvNoteDraft] = useState('')
   const [convNotesBusy, setConvNotesBusy] = useState(false)
   const [convNotesAnalyzeBusy, setConvNotesAnalyzeBusy] = useState(false)
+  const [threadSettingsOpen, setThreadSettingsOpen] = useState(false)
 
   const wsRef = useRef<WebSocket | null>(null)
   const selectedIdRef = useRef<number | null>(null)
@@ -1978,6 +1979,7 @@ export default function App() {
     setShowJumpDown(false)
     setConvNotesOpen(false)
     setConvNoteDraft('')
+    setThreadSettingsOpen(false)
   }, [selectedId])
 
   const loadConvNotes = useCallback(async (convId: number) => {
@@ -7119,85 +7121,131 @@ export default function App() {
           )}
           {selected && (
             <>
-              <div className="thread-head">
-                {isMobileLayout && !showThreadDock ? (
-                  <button
-                    type="button"
-                    className="back-btn"
-                    onClick={() => setSelectedId(null)}
-                    aria-label="Назад к списку диалогов"
-                  >
-                    <span className="back-btn-icon" aria-hidden>
-                      ‹
-                    </span>
-                  </button>
-                ) : null}
-                <ThreadAvatar conv={selected} />
-                <div className="thread-head-main">
+              <div
+                className={[
+                  'thread-head',
+                  isMobileLayout ? 'thread-head--mobile' : '',
+                  isMobileLayout && threadSettingsOpen ? 'thread-head--settings-open' : '',
+                ]
+                  .filter(Boolean)
+                  .join(' ')}
+              >
+                <div className="thread-head-row">
+                  {isMobileLayout && !showThreadDock ? (
+                    <button
+                      type="button"
+                      className="back-btn"
+                      onClick={() => setSelectedId(null)}
+                      aria-label="Назад к списку диалогов"
+                    >
+                      <span className="back-btn-icon" aria-hidden>
+                        ‹
+                      </span>
+                    </button>
+                  ) : null}
+                  <ThreadAvatar conv={selected} />
                   <div className="thread-head-text">
                     <h3>{selected.user_display_name ?? 'Диалог'}</h3>
                     <span className="meta">
-                      {platformLabel(selected.platform)} · topic {selected.external_topic_id}
+                      {platformLabel(selected.platform)}
+                      {!isMobileLayout ? ` · topic ${selected.external_topic_id}` : null}
+                      {isMobileLayout &&
+                      isOwner &&
+                      selected.studio_model_id != null &&
+                      studioModels.length > 0 ? (
+                        <>
+                          {' · '}
+                          {studioModels.find((m) => m.id === selected.studio_model_id)?.name ??
+                            `#${selected.studio_model_id}`}
+                        </>
+                      ) : null}
                     </span>
                   </div>
-                  <div
-                    className="outbound-lang-field"
-                    title="На какой язык переводить ваши ответы. «Авто» — по последним входящим (поле user_lang)."
-                  >
-                    <label className="outbound-lang-label" htmlFor="outbound-lang-select">
-                      Язык ответа
-                    </label>
-                    <select
-                      id="outbound-lang-select"
-                      className="outbound-lang-select"
-                      value={selected.outbound_lang ?? ''}
-                      disabled={outboundLangBusy}
-                      onChange={(e) => void saveOutboundLang(selected.id, e.target.value)}
-                    >
-                      {OUTBOUND_LANG_OPTIONS.map((o) => (
-                        <option key={o.value || 'auto'} value={o.value}>
-                          {o.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div
-                    className="outbound-lang-field auto-translate-toggle"
-                    title="Отправлять и показывать сообщения без перевода — на языке оригинала."
-                  >
-                    <label className="auto-translate-label">
-                      <input
-                        type="checkbox"
-                        checked={Boolean(selected.auto_translate_disabled)}
-                        disabled={autoTranslateBusy}
-                        onChange={(e) =>
-                          void saveAutoTranslateDisabled(selected.id, e.target.checked)
-                        }
-                      />
-                      <span>Без перевода</span>
-                    </label>
-                  </div>
-                  {isOwner && selected.studio_model_id != null && studioModels.length > 0 ? (
-                    <div
-                      className="outbound-lang-field"
-                      title="Модель задаётся на подключении в «Интеграции»."
-                    >
-                      <span className="outbound-lang-label muted">
-                        Модель:{' '}
-                        {studioModels.find((m) => m.id === selected.studio_model_id)?.name ??
-                          `#${selected.studio_model_id}`}
-                      </span>
+                  {isMobileLayout ? (
+                    <div className="thread-head-actions">
+                      <button
+                        type="button"
+                        className="thread-head-icon-btn"
+                        title="Заметки о пользователе"
+                        onClick={() => setConvNotesOpen(true)}
+                      >
+                        <span aria-hidden>📝</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="thread-head-icon-btn"
+                        title="Настройки чата"
+                        aria-expanded={threadSettingsOpen}
+                        onClick={() => setThreadSettingsOpen((o) => !o)}
+                      >
+                        <span aria-hidden>⚙</span>
+                      </button>
                     </div>
                   ) : null}
-                  {isMobileLayout ? (
-                    <button
-                      type="button"
-                      className="conv-notes-open-btn"
-                      onClick={() => setConvNotesOpen(true)}
+                  <div
+                    className={[
+                      'thread-head-toolbar',
+                      isMobileLayout && !threadSettingsOpen ? 'thread-head-toolbar--collapsed' : '',
+                    ]
+                      .filter(Boolean)
+                      .join(' ')}
+                  >
+                    <div
+                      className="outbound-lang-field thread-head-lang"
+                      title="На какой язык переводить ваши ответы. «Авто» — по последним входящим (поле user_lang)."
                     >
-                      Заметки
-                    </button>
-                  ) : null}
+                      {!isMobileLayout ? (
+                        <label className="outbound-lang-label" htmlFor="outbound-lang-select">
+                          Язык ответа
+                        </label>
+                      ) : null}
+                      <select
+                        id="outbound-lang-select"
+                        className="outbound-lang-select"
+                        aria-label="Язык ответа"
+                        value={selected.outbound_lang ?? ''}
+                        disabled={outboundLangBusy}
+                        onChange={(e) => void saveOutboundLang(selected.id, e.target.value)}
+                      >
+                        {OUTBOUND_LANG_OPTIONS.map((o) => (
+                          <option key={o.value || 'auto'} value={o.value}>
+                            {o.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div
+                      className="outbound-lang-field auto-translate-toggle"
+                      title="Отправлять и показывать сообщения без перевода — на языке оригинала."
+                    >
+                      <label className="auto-translate-label">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(selected.auto_translate_disabled)}
+                          disabled={autoTranslateBusy}
+                          onChange={(e) =>
+                            void saveAutoTranslateDisabled(selected.id, e.target.checked)
+                          }
+                        />
+                        <span>Без перевода</span>
+                      </label>
+                    </div>
+                    {!isMobileLayout &&
+                    isOwner &&
+                    selected.studio_model_id != null &&
+                    studioModels.length > 0 ? (
+                      <div
+                        className="outbound-lang-field"
+                        title="Модель задаётся на подключении в «Интеграции»."
+                      >
+                        <span className="outbound-lang-label muted">
+                          Модель:{' '}
+                          {studioModels.find((m) => m.id === selected.studio_model_id)?.name ??
+                            `#${selected.studio_model_id}`}
+                        </span>
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
               </div>
 

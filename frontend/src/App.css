@@ -2132,9 +2132,163 @@ select:focus {
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
   background: var(--bg-elevated);
-  flex-wrap: wrap;
 }
 
+.thread-head-row {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem 1.25rem;
+}
+
+.thread-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.thread-head-icon-btn {
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.thread-head-icon-btn:hover {
+  border-color: var(--border-hover);
+  color: var(--text);
+}
+
+.thread-head-icon-btn[aria-expanded='true'] {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.thread-head-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem 1rem;
+}
+
+.thread-head-toolbar--collapsed {
+  display: none;
+}
+
+.thread-head--mobile {
+  padding: 0.5rem 0.625rem;
+  gap: 0;
+}
+
+.thread-head--mobile .thread-head-row {
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.thread-head--mobile .thread-head-toolbar:not(.thread-head-toolbar--collapsed) {
+  flex: 1 0 100%;
+}
+
+.thread-head--mobile .thread-head-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.thread-head--mobile .thread-head-text h3 {
+  margin: 0;
+  font-size: 0.9375rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.thread-head--mobile .thread-head-text .meta {
+  font-size: 0.6875rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+}
+
+.thread-head--mobile .thread-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
+  font-size: 0.875rem;
+}
+
+.thread-head--mobile .back-btn {
+  width: 36px;
+  height: 36px;
+  margin: 0;
+  border-radius: 10px;
+}
+
+.thread-head--mobile .thread-head-toolbar {
+  width: 100%;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding-top: 0.5rem;
+  margin-top: 0.5rem;
+  border-top: 1px solid var(--border);
+}
+
+.thread-head--mobile .thread-head-lang {
+  flex: 1;
+  min-width: 0;
+  flex-direction: row;
+  align-items: center;
+  gap: 0;
+}
+
+.thread-head--mobile .outbound-lang-select {
+  min-height: 2rem;
+  width: 100%;
+  max-width: none;
+  font-size: 0.8125rem;
+  padding: 0 0.5rem;
+}
+
+.thread-head--mobile .auto-translate-toggle {
+  align-self: center;
+  flex-shrink: 0;
+}
+
+.thread-head--mobile .auto-translate-label {
+  font-size: 0.6875rem;
+  gap: 0.3rem;
+}
+
+.thread-head--mobile .auto-translate-label span {
+  display: none;
+}
+
+.thread-head--mobile .auto-translate-label::after {
+  content: 'Без перев.';
+  font-size: 0.6875rem;
+  color: var(--text-secondary);
+}
+
+/* legacy alias — desktop used thread-head-main before refactor */
 .thread-head-main {
   flex: 1;
   min-width: 0;
@@ -2222,11 +2376,6 @@ select:focus {
   .outbound-lang-select {
     max-width: none;
     width: 100%;
-  }
-
-  .thread-head-main {
-    flex-direction: column;
-    align-items: stretch;
   }
 }
 
@@ -3928,6 +4077,18 @@ select:focus {
     flex: 1;
     min-height: 0;
     max-height: 100%;
+  }
+
+  .thread-head--mobile {
+    padding: 0.4rem 0.5rem;
+  }
+
+  .composer-shell {
+    padding: 0.625rem 0.625rem max(0.75rem, env(safe-area-inset-bottom, 0px));
+  }
+
+  .composer-actions .hint {
+    display: none;
   }
 
   .composer-inner textarea {
