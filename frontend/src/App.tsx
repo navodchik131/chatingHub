@@ -2002,6 +2002,21 @@ export default function App() {
     void loadConvNotes(selectedId)
   }, [convNotesOpen, selectedId, loadConvNotes])
 
+  const convNotesPinned = useMemo(
+    () =>
+      convNotes.filter(
+        (n) => n.kind === 'ai_profile' || n.kind === 'ai_daily' || n.is_pinned,
+      ),
+    [convNotes],
+  )
+  const convNotesScroll = useMemo(
+    () =>
+      convNotes.filter(
+        (n) => n.kind !== 'ai_profile' && n.kind !== 'ai_daily' && !n.is_pinned,
+      ),
+    [convNotes],
+  )
+
   useEffect(() => {
     if (selectedId == null) {
       setMessages([])
@@ -4043,21 +4058,6 @@ export default function App() {
   }
 
   const selected = conversations.find((c) => c.id === selectedId)
-
-  const convNotesPinned = useMemo(
-    () =>
-      convNotes.filter(
-        (n) => n.kind === 'ai_profile' || n.kind === 'ai_daily' || n.is_pinned,
-      ),
-    [convNotes],
-  )
-  const convNotesScroll = useMemo(
-    () =>
-      convNotes.filter(
-        (n) => n.kind !== 'ai_profile' && n.kind !== 'ai_daily' && !n.is_pinned,
-      ),
-    [convNotes],
-  )
 
   const showThreadDock = Boolean(
     isMobileLayout && selectedId != null && appSection === 'chat' && canChat,
