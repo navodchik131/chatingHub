@@ -598,7 +598,8 @@ _BOARDSTORY_VIDEO_PROMPT_SYSTEM = (
     "From @Video1 copy ONLY choreography, timing, gestures, emotions, and camera — never face, skin, hair, or body shape. "
     "When REFERENCE_TAG_RULES include clothing/environment @Image tags, state explicitly: "
     "'Wardrobe from @ImageN', 'Room and lighting from @ImageM' in separate sentences. "
-    "Model identity refs may span @Image1–@Image3 (turnaround, face, body) — @Image1 is the primary face anchor. "
+    "Model identity refs: @Image1 = primary face anchor; @Image2 = character sheet if present; "
+    "@Image3 = body proportions if present. Never merge identity refs into a @Image1–@ImageN range. "
     "Do NOT merge @Image1 and @Image2 into a range unless rules explicitly show a range. "
     "No markdown, no bullet lists, no labels like Prompt:."
 )

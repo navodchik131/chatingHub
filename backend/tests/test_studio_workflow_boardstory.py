@@ -124,14 +124,32 @@ def test_boardstory_video_only_swap_mode():
 def test_build_boardstory_video_only_swap_prompt():
     out = build_boardstory_video_only_swap_prompt(
         user_notes="Calm mood.",
+        n_model_images=3,
     )
     assert "MODEL REPLACEMENT" in out
     assert "MOTION ONLY (@Video1)" in out
-    assert "IDENTITY (@Image1)" in out
+    assert "@Image1 = primary face" in out
+    assert "@Image2 = character sheet" in out
+    assert "@Image3 = body silhouette" in out
     assert "USER_DIRECTION" in out
     assert "@Video1" in out
     assert "Do not copy the @Video1 performer identity" in out
-    assert "Use @Video1 exclusively" not in out
+    assert "@Image1–@Image" not in out
+
+
+def test_build_boardstory_clothing_env_swap_prompt_three_model_refs():
+    layout = compute_boardstory_layout(3, has_clothing=True, has_environment=True)
+    out = build_boardstory_clothing_env_swap_prompt(
+        n_model_images=3,
+        clothing_tag=layout.clothing_tag or "@Image4",
+        environment_tag=layout.environment_tag or "@Image5",
+    )
+    assert "MODEL REPLACEMENT" in out
+    assert "CLOTHING (@Image4)" in out
+    assert "match @Image5" in out
+    assert "@Image1 = primary face" in out
+    assert "@Image1–@Image5" not in out
+    assert "@Image1–@Image3" not in out
 
 
 def test_build_boardstory_video_only_swap_prompt_ignores_timeline_in_notes_only():
@@ -157,6 +175,7 @@ def test_boardstory_clothing_env_swap_mode():
 def test_build_boardstory_clothing_env_swap_prompt():
     out = build_boardstory_clothing_env_swap_prompt(
         user_notes="Soft light.",
+        n_model_images=1,
     )
     assert "MODEL REPLACEMENT" in out
     assert "CLOTHING (@Image2)" in out
@@ -177,7 +196,7 @@ def test_filter_model_images_for_boardstory_identity_refs():
     out = filter_model_images_for_boardstory(imgs)
     assert len(out) == 3
     kinds = [im.image_kind for im in out]
-    assert kinds == ["turnaround", "face", "body"]
+    assert kinds == ["face", "turnaround", "body"]
 
 
 def test_filter_model_images_for_boardstory_fallback_without_body():
@@ -190,7 +209,7 @@ def test_filter_model_images_for_boardstory_fallback_without_body():
     ]
     out = filter_model_images_for_boardstory(imgs)
     assert len(out) == 2
-    assert {im.image_kind for im in out} == {"turnaround", "face"}
+    assert [im.image_kind for im in out] == ["face", "turnaround"]
 
 
 def test_boardstory_slot_json_roundtrip():

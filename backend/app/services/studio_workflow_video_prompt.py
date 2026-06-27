@@ -298,18 +298,17 @@ async def compose_workflow_video_generation_prompt(
                 )
 
         max_prompt_chars = int(settings.studio_seedance_t2v_prompt_max_chars or 6000)
-        id_tag = layout.identity_tag_expr or "@Image1"
         if use_video_only_swap:
             composed = build_boardstory_video_only_swap_prompt(
                 user_notes=(user_notes or "").strip(),
-                identity_tag=id_tag,
+                n_model_images=layout.n_model_images,
                 max_chars=max_prompt_chars,
             )
             prompt_mode = "video_only_swap"
         elif use_clothing_env_swap:
             composed = build_boardstory_clothing_env_swap_prompt(
                 user_notes=(user_notes or "").strip(),
-                identity_tag=id_tag,
+                n_model_images=layout.n_model_images,
                 clothing_tag=layout.clothing_tag or "@Image2",
                 environment_tag=layout.environment_tag or "@Image3",
                 max_chars=max_prompt_chars,

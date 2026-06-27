@@ -516,6 +516,7 @@ def assemble_boardstory_seedance_prompt(
 ) -> str:
     """BoardStory Seedance T2V: swap identity из @ImageN, motion из @Video1."""
     from app.services.studio_workflow_boardstory import (
+        boardstory_identity_role_lines,
         compute_boardstory_layout,
         finalize_boardstory_t2v_prompt,
     )
@@ -530,12 +531,11 @@ def assemble_boardstory_seedance_prompt(
 
     if n_motion_videos > 0:
         parts.append(
-            f"MODEL REPLACEMENT: Replace the performer in @Video1 with {id_expr}. "
-            f"The on-screen person in every frame must be {id_expr}, never the @Video1 actor."
+            "MODEL REPLACEMENT: Replace the performer in @Video1 with @Image1 "
+            "(primary face anchor). The on-screen person in every frame must be @Image1, "
+            "never the @Video1 actor."
         )
-        parts.append(
-            f"IDENTITY ({id_expr}): face, body, hair, skin tone, and proportions from model photos only."
-        )
+        parts.append(boardstory_identity_role_lines(n_model_images))
         vtags = ", ".join(f"@Video{i}" for i in range(1, n_motion_videos + 1))
         parts.append(
             f"MOTION ONLY ({vtags}): choreography, timing, gestures, camera movement, and framing — "
@@ -543,7 +543,7 @@ def assemble_boardstory_seedance_prompt(
         )
     elif id_expr:
         parts.append(
-            f"Cinematic clip — lead character appearance from {id_expr} "
+            f"Cinematic clip — lead character appearance from @Image1 "
             "(face, body, hair from model cabinet photos)."
         )
 
@@ -551,7 +551,7 @@ def assemble_boardstory_seedance_prompt(
         parts.append(f"Wardrobe and garments: match {layout.clothing_tag}.")
     elif n_motion_videos > 0:
         parts.append(
-            f"Wardrobe on {id_expr}: same outfit style as seen in @Video1, worn by the NEW person."
+            "Wardrobe on @Image1: same outfit style as seen in @Video1, worn by the NEW person."
         )
     if layout.environment_tag:
         parts.append(
