@@ -46,6 +46,9 @@ from app.db.repo import (
 )
 from app.db.session import SessionLocal, get_session
 from app.schemas import (
+    ConversationNoteCreateIn,
+    ConversationNoteOut,
+    ConversationNotePatchIn,
     ConversationOut,
     ConversationPatchIn,
     ConversationWithPreview,
@@ -99,6 +102,13 @@ from app.services.workspace import (
     is_workspace_owner,
     workspace_owner_id,
     resolve_billing_user,
+)
+from app.services.conversation_notes import (
+    analyze_conversation_notes,
+    create_manual_note,
+    delete_note,
+    list_conversation_notes,
+    update_manual_note,
 )
 from app.services.platform_connections import (
     resolve_fanvue_connection_for_conversation,
@@ -659,6 +669,95 @@ async def api_message_reaction(
         row=row,
     )
     return message_to_out(row, owner_id=oid, reply_preview=reply_preview)
+
+
+@router.get("/conversations/{conv_id}/notes", response_model=list[ConversationNoteOut])
+async def api_list_conversation_notes(
+    conv_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> list[ConversationNoteOut]:
+    assert_permission(user, PERM_CHAT)
+    await _require_chat_plan(session, user)
+    oid = workspace_owner_id(user)
+    conv = await require_conversation_chat_access(session, user, conv_id, oid)
+    items = await list_conversation_notes(session, conv=conv, viewer=user)
+    return [ConversationNoteOut.model_validate(x) for x in items]
+
+
+@router.post("/conversations/{conv_id}/notes", response_model=ConversationNoteOut)
+async def api_create_conversation_note(
+    conv_id: int,
+    body: ConversationNoteCreateIn,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> ConversationNoteOut:
+    assert_permission(user, PERM_CHAT)
+    await _require_chat_plan(session, user)
+    oid = workspace_owner_id(user)
+    conv = await require_conversation_chat_access(session, user, conv_id, oid)
+    item = await create_manual_note(
+        session,
+        conv=conv,
+        author=user,
+        content=body.content,
+        is_pinned=body.is_pinned,
+    )
+    return ConversationNoteOut.model_validate(item)
+
+
+@router.patch("/conversations/{conv_id}/notes/{note_id}", response_model=ConversationNoteOut)
+async def api_patch_conversation_note(
+    conv_id: int,
+    note_id: int,
+    body: ConversationNotePatchIn,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> ConversationNoteOut:
+    assert_permission(user, PERM_CHAT)
+    await _require_chat_plan(session, user)
+    oid = workspace_owner_id(user)
+    conv = await require_conversation_chat_access(session, user, conv_id, oid)
+    item = await update_manual_note(
+        session,
+        conv=conv,
+        note_id=note_id,
+        actor=user,
+        owner_id=oid,
+        content=body.content if "content" in body.model_fields_set else None,
+        is_pinned=body.is_pinned if "is_pinned" in body.model_fields_set else None,
+    )
+    return ConversationNoteOut.model_validate(item)
+
+
+@router.delete("/conversations/{conv_id}/notes/{note_id}", status_code=204)
+async def api_delete_conversation_note(
+    conv_id: int,
+    note_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> None:
+    assert_permission(user, PERM_CHAT)
+    await _require_chat_plan(session, user)
+    oid = workspace_owner_id(user)
+    conv = await require_conversation_chat_access(session, user, conv_id, oid)
+    await delete_note(session, conv=conv, note_id=note_id, actor=user, owner_id=oid)
+
+
+@router.post("/conversations/{conv_id}/notes/analyze", response_model=list[ConversationNoteOut])
+async def api_analyze_conversation_notes(
+    conv_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> list[ConversationNoteOut]:
+    assert_permission(user, PERM_CHAT)
+    await _require_chat_plan(session, user)
+    oid = workspace_owner_id(user)
+    conv = await require_conversation_chat_access(session, user, conv_id, oid)
+    items = await analyze_conversation_notes(
+        session, conv=conv, viewer=user, owner_id=oid
+    )
+    return [ConversationNoteOut.model_validate(x) for x in items]
 
 
 @router.websocket("/ws")

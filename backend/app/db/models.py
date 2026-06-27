@@ -31,6 +31,13 @@ class MessageDirection(str, enum.Enum):
     outbound = "outbound"
 
 
+class ConversationNoteKind(str, enum.Enum):
+    manual = "manual"
+    ai_profile = "ai_profile"
+    ai_daily = "ai_daily"
+    ai_insight = "ai_insight"
+
+
 class MessageAttachmentKind(str, enum.Enum):
     image = "image"
 
@@ -362,10 +369,44 @@ class Conversation(Base):
     messages: Mapped[list[Message]] = relationship(
         "Message", back_populates="conversation", order_by="Message.id"
     )
+    notes: Mapped[list[ConversationNote]] = relationship(
+        "ConversationNote",
+        back_populates="conversation",
+        order_by="ConversationNote.id",
+        cascade="all, delete-orphan",
+    )
 
     @property
     def has_avatar(self) -> bool:
         return bool(self.telegram_photo_file_id)
+
+
+class ConversationNote(Base):
+    __tablename__ = "conversation_notes"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    conversation_id: Mapped[int] = mapped_column(
+        ForeignKey("conversations.id", ondelete="CASCADE"), index=True
+    )
+    author_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    kind: Mapped[ConversationNoteKind] = mapped_column(
+        Enum(ConversationNoteKind, native_enum=False, length=16), index=True
+    )
+    content: Mapped[str] = mapped_column(Text)
+    is_pinned: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    conversation: Mapped[Conversation] = relationship("Conversation", back_populates="notes")
+    author: Mapped[User | None] = relationship("User")
 
 
 class WavespeedConnection(Base):

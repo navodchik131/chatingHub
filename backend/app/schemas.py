@@ -85,6 +85,27 @@ class ConversationPatchIn(BaseModel):
         return s if s else None
 
 
+class ConversationNoteOut(BaseModel):
+    id: int
+    kind: Literal["manual", "ai_profile", "ai_daily", "ai_insight"]
+    content: str
+    is_pinned: bool
+    author_user_id: int | None = None
+    author_label: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class ConversationNoteCreateIn(BaseModel):
+    content: str = Field(min_length=1, max_length=8000)
+    is_pinned: bool = False
+
+
+class ConversationNotePatchIn(BaseModel):
+    content: str | None = Field(default=None, min_length=1, max_length=8000)
+    is_pinned: bool | None = None
+
+
 class RegisterIn(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8, max_length=128)

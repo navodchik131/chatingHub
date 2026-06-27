@@ -363,6 +363,64 @@ async def init_db() -> None:
         await conn.run_sync(_migrate_fanvue_oauth_states_table)
         await conn.run_sync(_migrate_chat_message_features)
         await conn.run_sync(_migrate_platform_connections_multi)
+        await conn.run_sync(_migrate_conversation_notes)
+
+
+def _migrate_conversation_notes(sync_conn) -> None:
+    from sqlalchemy import inspect, text
+
+    insp = inspect(sync_conn)
+    if insp.has_table("conversation_notes"):
+        return
+    dialect = sync_conn.dialect.name
+    if dialect == "sqlite":
+        sync_conn.execute(
+            text(
+                """
+                CREATE TABLE conversation_notes (
+                    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                    conversation_id INTEGER NOT NULL,
+                    author_user_id INTEGER,
+                    kind VARCHAR(16) NOT NULL,
+                    content TEXT NOT NULL,
+                    is_pinned BOOLEAN NOT NULL DEFAULT 0,
+                    created_at DATETIME,
+                    updated_at DATETIME,
+                    FOREIGN KEY(conversation_id) REFERENCES conversations (id) ON DELETE CASCADE,
+                    FOREIGN KEY(author_user_id) REFERENCES users (id) ON DELETE SET NULL
+                )
+                """
+            )
+        )
+    else:
+        sync_conn.execute(
+            text(
+                """
+                CREATE TABLE conversation_notes (
+                    id SERIAL PRIMARY KEY,
+                    conversation_id INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+                    author_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+                    kind VARCHAR(16) NOT NULL,
+                    content TEXT NOT NULL,
+                    is_pinned BOOLEAN NOT NULL DEFAULT false,
+                    created_at TIMESTAMP WITH TIME ZONE,
+                    updated_at TIMESTAMP WITH TIME ZONE
+                )
+                """
+            )
+        )
+    sync_conn.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS ix_conversation_notes_conversation_id "
+            "ON conversation_notes(conversation_id)"
+        )
+    )
+    sync_conn.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS ix_conversation_notes_kind "
+            "ON conversation_notes(kind)"
+        )
+    )
 
 
 def _migrate_platform_connections_multi(sync_conn) -> None:

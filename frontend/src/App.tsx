@@ -124,6 +124,30 @@ interface Conversation {
   has_avatar?: boolean
 }
 
+interface ConversationNote {
+  id: number
+  kind: 'manual' | 'ai_profile' | 'ai_daily' | 'ai_insight'
+  content: string
+  is_pinned: boolean
+  author_user_id: number | null
+  author_label: string
+  created_at: string
+  updated_at: string
+}
+
+function conversationNoteKindLabel(kind: ConversationNote['kind']): string {
+  switch (kind) {
+    case 'ai_profile':
+      return 'Профиль'
+    case 'ai_daily':
+      return 'Сегодня'
+    case 'ai_insight':
+      return 'AI'
+    default:
+      return 'Заметка'
+  }
+}
+
 /** Языки для перевода исходящих (совпадают с типичными целями DeepL/Google). */
 const OUTBOUND_LANG_OPTIONS: { value: string; label: string }[] = [
   { value: '', label: 'Авто (по переписке)' },
@@ -701,6 +725,12 @@ export default function App() {
   const [autoTranslateBusy, setAutoTranslateBusy] = useState(false)
   const [replyToMessage, setReplyToMessage] = useState<ChatMessage | null>(null)
   const [reactionBusyKey, setReactionBusyKey] = useState<string | null>(null)
+  const [convNotesOpen, setConvNotesOpen] = useState(false)
+  const [convNotes, setConvNotes] = useState<ConversationNote[]>([])
+  const [convNotesLoading, setConvNotesLoading] = useState(false)
+  const [convNoteDraft, setConvNoteDraft] = useState('')
+  const [convNotesBusy, setConvNotesBusy] = useState(false)
+  const [convNotesAnalyzeBusy, setConvNotesAnalyzeBusy] = useState(false)
 
   const wsRef = useRef<WebSocket | null>(null)
   const selectedIdRef = useRef<number | null>(null)
@@ -1946,7 +1976,31 @@ export default function App() {
   useEffect(() => {
     prevMsgLenRef.current = 0
     setShowJumpDown(false)
+    setConvNotesOpen(false)
+    setConvNoteDraft('')
   }, [selectedId])
+
+  const loadConvNotes = useCallback(async (convId: number) => {
+    setConvNotesLoading(true)
+    try {
+      const r = await apiFetch(`/api/conversations/${convId}/notes`)
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        setError(formatHttpApiError(r, j))
+        return
+      }
+      setConvNotes((await r.json()) as ConversationNote[])
+    } catch (e) {
+      setError(String(e))
+    } finally {
+      setConvNotesLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!convNotesOpen || selectedId == null) return
+    void loadConvNotes(selectedId)
+  }, [convNotesOpen, selectedId, loadConvNotes])
 
   useEffect(() => {
     if (selectedId == null) {
@@ -2292,6 +2346,85 @@ export default function App() {
       setError('Не удалось сохранить язык ответа')
     } finally {
       setOutboundLangBusy(false)
+    }
+  }
+
+  const addConvNote = async () => {
+    if (selectedId == null) return
+    const text = convNoteDraft.trim()
+    if (!text) return
+    setConvNotesBusy(true)
+    setError(null)
+    try {
+      const r = await apiFetch(`/api/conversations/${selectedId}/notes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: text }),
+      })
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        setError(formatHttpApiError(r, j))
+        return
+      }
+      setConvNoteDraft('')
+      await loadConvNotes(selectedId)
+    } finally {
+      setConvNotesBusy(false)
+    }
+  }
+
+  const analyzeConvNotes = async () => {
+    if (selectedId == null) return
+    setConvNotesAnalyzeBusy(true)
+    setError(null)
+    try {
+      const r = await apiFetch(`/api/conversations/${selectedId}/notes/analyze`, { method: 'POST' })
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        setError(formatHttpApiError(r, j))
+        return
+      }
+      setConvNotes((await r.json()) as ConversationNote[])
+    } finally {
+      setConvNotesAnalyzeBusy(false)
+    }
+  }
+
+  const deleteConvNote = async (noteId: number) => {
+    if (selectedId == null) return
+    setConvNotesBusy(true)
+    try {
+      const r = await apiFetch(`/api/conversations/${selectedId}/notes/${noteId}`, {
+        method: 'DELETE',
+      })
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        setError(formatHttpApiError(r, j))
+        return
+      }
+      await loadConvNotes(selectedId)
+    } finally {
+      setConvNotesBusy(false)
+    }
+  }
+
+  const toggleConvNotePin = async (note: ConversationNote) => {
+    if (selectedId == null || note.kind !== 'manual') return
+    setConvNotesBusy(true)
+    try {
+      const r = await apiFetch(`/api/conversations/${selectedId}/notes/${note.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_pinned: !note.is_pinned }),
+      })
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        setError(formatHttpApiError(r, j))
+        return
+      }
+      await loadConvNotes(selectedId)
+    } finally {
+      setConvNotesBusy(false)
     }
   }
 
@@ -3910,6 +4043,21 @@ export default function App() {
   }
 
   const selected = conversations.find((c) => c.id === selectedId)
+
+  const convNotesPinned = useMemo(
+    () =>
+      convNotes.filter(
+        (n) => n.kind === 'ai_profile' || n.kind === 'ai_daily' || n.is_pinned,
+      ),
+    [convNotes],
+  )
+  const convNotesScroll = useMemo(
+    () =>
+      convNotes.filter(
+        (n) => n.kind !== 'ai_profile' && n.kind !== 'ai_daily' && !n.is_pinned,
+      ),
+    [convNotes],
+  )
 
   const showThreadDock = Boolean(
     isMobileLayout && selectedId != null && appSection === 'chat' && canChat,
@@ -6952,6 +7100,14 @@ export default function App() {
           </div>
         </aside>
 
+        <div
+          className={[
+            'chat-thread-wrap',
+            convNotesOpen ? 'chat-thread-wrap--notes-open' : '',
+          ]
+            .filter(Boolean)
+            .join(' ')}
+        >
         <main className="thread">
           {!selected && (
             <div className="empty-thread">
@@ -7032,6 +7188,15 @@ export default function App() {
                           `#${selected.studio_model_id}`}
                       </span>
                     </div>
+                  ) : null}
+                  {isMobileLayout ? (
+                    <button
+                      type="button"
+                      className="conv-notes-open-btn"
+                      onClick={() => setConvNotesOpen(true)}
+                    >
+                      Заметки
+                    </button>
                   ) : null}
                 </div>
               </div>
@@ -7414,6 +7579,164 @@ export default function App() {
             </>
           )}
         </main>
+
+        {selected ? (
+          <>
+            {convNotesOpen && isMobileLayout ? (
+              <button
+                type="button"
+                className="conv-notes-backdrop"
+                aria-label="Закрыть заметки"
+                onClick={() => setConvNotesOpen(false)}
+              />
+            ) : null}
+            <aside
+              className={['conv-notes-panel', convNotesOpen ? 'open' : ''].filter(Boolean).join(' ')}
+              aria-label="Заметки о пользователе"
+            >
+              <button
+                type="button"
+                className="conv-notes-tab"
+                aria-expanded={convNotesOpen}
+                title={convNotesOpen ? 'Скрыть заметки' : 'Заметки о пользователе'}
+                onClick={() => setConvNotesOpen((o) => !o)}
+              >
+                <span className="conv-notes-tab-label" aria-hidden>
+                  Заметки
+                </span>
+              </button>
+              <div className="conv-notes-panel-inner">
+                <div className="conv-notes-head">
+                  <h4>Заметки</h4>
+                  <span className="muted conv-notes-sub">
+                    {selected.user_display_name ?? 'Пользователь'}
+                  </span>
+                  {isMobileLayout ? (
+                    <button
+                      type="button"
+                      className="conv-notes-close"
+                      aria-label="Закрыть"
+                      onClick={() => setConvNotesOpen(false)}
+                    >
+                      ×
+                    </button>
+                  ) : null}
+                </div>
+
+                {convNotesLoading ? (
+                  <div className="conv-notes-loading">
+                    <span className="skeleton-line" />
+                    <span className="skeleton-line short" />
+                  </div>
+                ) : (
+                  <>
+                    {convNotesPinned.length > 0 ? (
+                      <div className="conv-notes-pinned">
+                        {convNotesPinned.map((n) => (
+                          <article
+                            key={n.id}
+                            className={`conv-note conv-note--${n.kind}${n.is_pinned ? ' conv-note--pinned' : ''}`}
+                          >
+                            <div className="conv-note-meta">
+                              <span className={`conv-note-badge conv-note-badge--${n.kind}`}>
+                                {conversationNoteKindLabel(n.kind)}
+                              </span>
+                              <time className="muted" dateTime={n.updated_at}>
+                                {formatDateTimeRu(n.updated_at)}
+                              </time>
+                            </div>
+                            <p className="conv-note-body">{n.content}</p>
+                          </article>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="conv-notes-empty muted">
+                        Профиль пока пуст — нажмите «AI-анализ» или добавьте заметку вручную.
+                      </p>
+                    )}
+
+                    <div className="conv-notes-scroll">
+                      {convNotesScroll.map((n) => (
+                        <article
+                          key={n.id}
+                          className={`conv-note conv-note--${n.kind}${n.is_pinned ? ' conv-note--pinned' : ''}`}
+                        >
+                          <div className="conv-note-meta">
+                            <span className={`conv-note-badge conv-note-badge--${n.kind}`}>
+                              {conversationNoteKindLabel(n.kind)}
+                            </span>
+                            <span className="muted">{n.author_label}</span>
+                            <time className="muted" dateTime={n.updated_at}>
+                              {formatDateTimeRu(n.updated_at)}
+                            </time>
+                          </div>
+                          <p className="conv-note-body">{n.content}</p>
+                          {n.kind === 'manual' ? (
+                            <div className="conv-note-actions">
+                              <button
+                                type="button"
+                                className="conv-note-action"
+                                disabled={convNotesBusy}
+                                title={n.is_pinned ? 'Открепить' : 'Закрепить'}
+                                onClick={() => void toggleConvNotePin(n)}
+                              >
+                                {n.is_pinned ? 'Открепить' : 'Закрепить'}
+                              </button>
+                              <button
+                                type="button"
+                                className="conv-note-action conv-note-action--danger"
+                                disabled={convNotesBusy}
+                                onClick={() => void deleteConvNote(n.id)}
+                              >
+                                Удалить
+                              </button>
+                            </div>
+                          ) : null}
+                        </article>
+                      ))}
+                    </div>
+                  </>
+                )}
+
+                <div className="conv-notes-compose">
+                  <textarea
+                    rows={3}
+                    className="conv-notes-draft"
+                    placeholder="Ваша заметка о пользователе…"
+                    value={convNoteDraft}
+                    disabled={convNotesBusy}
+                    onChange={(e) => setConvNoteDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                        e.preventDefault()
+                        void addConvNote()
+                      }
+                    }}
+                  />
+                  <div className="conv-notes-compose-actions">
+                    <button
+                      type="button"
+                      className="conv-notes-analyze-btn"
+                      disabled={convNotesAnalyzeBusy || convNotesLoading}
+                      onClick={() => void analyzeConvNotes()}
+                    >
+                      {convNotesAnalyzeBusy ? 'Анализ…' : 'AI-анализ'}
+                    </button>
+                    <button
+                      type="button"
+                      className="send-btn conv-notes-add-btn"
+                      disabled={convNotesBusy || !convNoteDraft.trim()}
+                      onClick={() => void addConvNote()}
+                    >
+                      Добавить
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </aside>
+          </>
+        ) : null}
+        </div>
       </div>
       )}
         </AppShell>
