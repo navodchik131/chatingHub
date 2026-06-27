@@ -272,20 +272,6 @@ export function WorkflowPage() {
     )
   }
 
-  if (!models.length) {
-    return (
-      <div className="workflow-gate">
-        <div className="workflow-gate__card">
-          <h1>Нет моделей</h1>
-          <p>Сначала создайте модель в студии.</p>
-          <Link className="workflow-gate__link" to="/workspace">
-            Открыть студию
-          </Link>
-        </div>
-      </div>
-    )
-  }
-
   const demoLimited = Boolean(me?.workflow_demo_limited)
 
   return (
