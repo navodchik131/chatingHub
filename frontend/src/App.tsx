@@ -54,6 +54,12 @@ import { IconModel, IconSpark } from './components/studio/studioIcons'
 import { AuthPanel } from './AuthPanel'
 import { AppShell, type WorkspaceSection } from './components/AppShell'
 import { WorkspaceOverview } from './components/WorkspaceOverview'
+import { ConversationPlatformTabs } from './components/ConversationPlatformTabs'
+import {
+  chatPlatformLabel,
+  type ChatPlatform,
+  visibleChatPlatforms,
+} from './chatPlatforms'
 import {
   SetupTour,
   dismissSetupTour,
@@ -103,7 +109,7 @@ import {
   studioGenerationUsesDemo,
 } from './studioImagePricing'
 
-type Platform = 'telegram' | 'fanvue'
+type Platform = ChatPlatform
 
 interface Conversation {
   id: number
@@ -219,8 +225,7 @@ function preferNativeShareOnMobile(): boolean {
 }
 
 function platformLabel(p: Platform): string {
-  if (p === 'telegram') return 'Telegram'
-  return 'Fanvue'
+  return chatPlatformLabel(p)
 }
 
 function studioIntegrationsHint(): string {
@@ -698,6 +703,7 @@ export default function App() {
     )
   }, [setSearchParams])
   const [conversations, setConversations] = useState<Conversation[]>([])
+  const [chatPlatformTab, setChatPlatformTab] = useState<ChatPlatform>('telegram')
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [draft, setDraft] = useState('')
@@ -818,6 +824,16 @@ export default function App() {
   const [memberModelEdits, setMemberModelEdits] = useState<Record<number, number[]>>({})
   const [integ, setInteg] = useState<IntegrationStatus | null>(null)
   const studioNeedsUserWsKey = useMemo(() => needsUserWavespeedKey(integ), [integ])
+
+  const chatVisiblePlatforms = useMemo(
+    () => visibleChatPlatforms(conversations, integ),
+    [conversations, integ],
+  )
+
+  const filteredConversations = useMemo(
+    () => conversations.filter((c) => c.platform === chatPlatformTab),
+    [conversations, chatPlatformTab],
+  )
   const [modelDrafts, setModelDrafts] = useState<Record<number, StudioModelCabinetDraft>>({})
   const [studioCameraPresets, setStudioCameraPresets] = useState<StudioCameraPreset[]>([])
   const [modelSavingId, setModelSavingId] = useState<number | null>(null)
@@ -1949,10 +1965,26 @@ export default function App() {
     if (!q) return
     const id = parseInt(q, 10)
     if (Number.isNaN(id)) return
-    if (conversations.some((c) => c.id === id)) {
+    const conv = conversations.find((c) => c.id === id)
+    if (conv) {
+      setChatPlatformTab(conv.platform)
       setSelectedId(id)
     }
   }, [conversations])
+
+  useEffect(() => {
+    if (chatVisiblePlatforms.length === 0) return
+    if (!chatVisiblePlatforms.includes(chatPlatformTab)) {
+      setChatPlatformTab(chatVisiblePlatforms[0])
+    }
+  }, [chatVisiblePlatforms, chatPlatformTab])
+
+  useEffect(() => {
+    if (selectedId == null) return
+    if (!filteredConversations.some((c) => c.id === selectedId)) {
+      setSelectedId(null)
+    }
+  }, [filteredConversations, selectedId])
 
   useEffect(() => {
     if (!accountOpen || accountTab !== 'integrations' || !authed || !canChat) return
@@ -4152,7 +4184,7 @@ export default function App() {
               role="tablist"
               aria-label="Другие диалоги"
             >
-              {conversations.map((c) => (
+              {filteredConversations.map((c) => (
                 <ChatStripItem
                   key={c.id}
                   conv={c}
@@ -7038,14 +7070,24 @@ export default function App() {
         <aside className="sidebar">
           <div className="sidebar-head">
             <h2>Диалоги</h2>
-            <span className="sidebar-hint">{conversations.length}</span>
+            <span className="sidebar-hint">{filteredConversations.length}</span>
           </div>
-          {conversations.length === 0 && (
-            <p className="muted empty-hint">Подключите бота к Direct messages канала.</p>
+          <ConversationPlatformTabs
+            platforms={chatVisiblePlatforms}
+            active={chatPlatformTab}
+            conversations={conversations}
+            onChange={setChatPlatformTab}
+          />
+          {filteredConversations.length === 0 && (
+            <p className="muted empty-hint">
+              {conversations.length === 0
+                ? 'Подключите бота или Fanvue в кабинете → Подключения.'
+                : `Нет диалогов в ${platformLabel(chatPlatformTab)}.`}
+            </p>
           )}
           <div className="sidebar-conv-scroll">
           <ul className="conv-list">
-            {conversations.map((c) => {
+            {filteredConversations.map((c) => {
               const unread = c.unread_count ?? 0
               const hasUnread = unread > 0 && c.id !== selectedId
               return (
@@ -7064,7 +7106,11 @@ export default function App() {
                     <ConvAvatarThumb conv={c} />
                     <span className="conv-main">
                     <span className="conv-row-top">
-                      <span className="plat">{platformLabel(c.platform)}</span>
+                      {chatVisiblePlatforms.length <= 1 ? (
+                        <span className="plat">{platformLabel(c.platform)}</span>
+                      ) : (
+                        <span className="conv-row-spacer" aria-hidden />
+                      )}
                       {unread > 0 ? (
                         <span className="unread-badge" title="Непрочитанных">
                           {unread > 99 ? '99+' : unread}
