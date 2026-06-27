@@ -104,6 +104,7 @@ from app.services.crypto_secret import decrypt_secret
 from app.services.studio_aspect import (
     aspect_presets_public,
     aspect_ratio_for_seedance_i2v,
+    aspect_ratio_for_seedance_video_edit,
     normalize_aspect_key,
     wavespeed_size_string,
 )
@@ -238,6 +239,7 @@ from app.services.wavespeed_client import (
     grok_imagine_video_v15_image_to_video_url,
     nano_banana_pro_edit_image_url,
     seedance_20_text_to_video_url,
+    seedance_studio_video_edit_video_url,
     seedream_v45_bootstrap_edit_image_url,
     seedream_v45_edit_image_url,
     wavespeed_image_upscale_url,
@@ -5203,22 +5205,46 @@ async def _studio_job_execute_motion_render_video(
                 soft_identity=False,
             )
 
+        use_boardstory_video_edit = (
+            boardstory_mode
+            and bool(motion_vid_url)
+            and send_video_reference
+            and bool(ref_videos)
+        )
+
         try:
-            video_url = await seedance_20_text_to_video_url(
-                api_key=ws_key,
-                prompt=seed_prompt,
-                reference_images=ref_images or None,
-                reference_videos=ref_videos or None,
-                aspect_ratio=ar_t2v,
-                resolution=video_res,
-                duration=ds_effective,
-                generate_audio=_truthy_wavespeed_flag(generate_audio),
-                variant=seedance_v,
-            )
+            if use_boardstory_video_edit:
+                ar_edit = aspect_ratio_for_seedance_video_edit(output_aspect)
+                video_url = await seedance_studio_video_edit_video_url(
+                    api_key=ws_key,
+                    video_url=motion_vid_url,
+                    reference_image_urls=ref_images,
+                    prompt=seed_prompt,
+                    aspect_ratio=ar_edit,
+                    resolution=video_res,
+                    duration=ds_effective,
+                    keep_original_sound=not _truthy_wavespeed_flag(generate_audio),
+                    variant=seedance_v,
+                )
+                motion_provider = "seedance_video_edit"
+            else:
+                video_url = await seedance_20_text_to_video_url(
+                    api_key=ws_key,
+                    prompt=seed_prompt,
+                    reference_images=ref_images or None,
+                    reference_videos=ref_videos or None,
+                    aspect_ratio=ar_t2v,
+                    resolution=video_res,
+                    duration=ds_effective,
+                    generate_audio=_truthy_wavespeed_flag(generate_audio),
+                    variant=seedance_v,
+                )
+                motion_provider = "seedance_t2v"
             msg = None
             log.info(
-                "motion_render_video ok job=%s imgs=%s vids=%s prompt=%s",
+                "motion_render_video ok job=%s provider=%s imgs=%s vids=%s prompt=%s",
                 job.id,
+                motion_provider,
                 len(ref_images),
                 len(ref_videos),
                 prompt_source,
@@ -5227,8 +5253,9 @@ async def _studio_job_execute_motion_render_video(
             msg = str(e)
             video_url = None
             log.warning(
-                "motion_render_video failed job=%s imgs=%s vids=%s: %s",
+                "motion_render_video failed job=%s boardstory_edit=%s imgs=%s vids=%s: %s",
                 job.id,
+                use_boardstory_video_edit,
                 len(ref_images),
                 len(ref_videos),
                 msg[:240],
@@ -5285,7 +5312,11 @@ async def _studio_job_execute_motion_render_video(
                 "first_frame_generation_id": first_frame_gen_id,
                 "outfit_generation_id": outfit_gen_id,
                 "motion_video_file_id": mv_id or None,
-                "motion_video_provider": "seedance_t2v",
+                "motion_video_provider": (
+                    "seedance_video_edit"
+                    if boardstory_mode and bool(motion_vid_url) and send_video_reference
+                    else "seedance_t2v"
+                ),
                 "seedance_t2v_variant": seedance_v,
                 "seedance_20_t2v_path": (
                     settings.wavespeed_seedance_20_mini_t2v_path

@@ -136,6 +136,13 @@ def test_video_edit_prompt_swap_identity():
     assert "city promenade" in p.lower()
 
 
+def test_seedance_video_edit_post_path_variant():
+    from app.services.wavespeed_client import _seedance_20_video_edit_post_path
+
+    assert "mini" in _seedance_20_video_edit_post_path(variant="mini")
+    assert "video-edit" in _seedance_20_video_edit_post_path(variant="standard")
+
+
 def test_filter_model_images_for_video_excludes_body():
     imgs = [
         UserStudioModelImage(id=1, image_kind="body"),

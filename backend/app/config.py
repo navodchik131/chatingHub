@@ -285,7 +285,14 @@ class Settings(BaseSettings):
     studio_grok_imagine_i2v_usd_per_sec_720p: float = Field(default=0.14, ge=0.0)
     studio_grok_imagine_i2v_usd_per_image: float = Field(default=0.01, ge=0.0)
     studio_grok_imagine_i2v_duration_min: int = Field(default=1, ge=1, le=15)
-    # Опционально: ByteDance Seedance Fast Video-Edit (не используется шагом рендера по умолчанию)
+    # ByteDance Seedance 2.0 / Mini Video Edit (BoardStory + motion ref)
+    wavespeed_seedance_20_video_edit_path: str = Field(
+        default="/api/v3/bytedance/seedance-2.0/video-edit-turbo",
+    )
+    wavespeed_seedance_20_mini_video_edit_path: str = Field(
+        default="/api/v3/bytedance/seedance-2.0-mini/video-edit",
+    )
+    # Legacy override для standard video-edit (если задан — имеет приоритет над wavespeed_seedance_20_video_edit_path)
     wavespeed_studio_video_edit_path: str = Field(
         default="/api/v3/bytedance/seedance-2.0-fast/video-edit-turbo",
     )

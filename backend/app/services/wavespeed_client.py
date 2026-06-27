@@ -1526,10 +1526,34 @@ async def grok_imagine_video_v15_image_to_video_url(
     )
 
 
-def _studio_video_edit_post_path() -> str:
-    p = (settings.wavespeed_studio_video_edit_path or "").strip()
-    p = p or "/api/v3/bytedance/seedance-2.0-fast/video-edit-turbo"
+def _seedance_20_video_edit_post_path(*, variant: str = "standard") -> str:
+    from app.services.studio_motion_pricing import normalize_seedance_t2v_variant
+
+    v = normalize_seedance_t2v_variant(variant)
+    if v == "mini":
+        p = (settings.wavespeed_seedance_20_mini_video_edit_path or "").strip()
+        p = p or "/api/v3/bytedance/seedance-2.0-mini/video-edit"
+    else:
+        legacy = (settings.wavespeed_studio_video_edit_path or "").strip()
+        if legacy:
+            p = legacy
+        else:
+            p = (settings.wavespeed_seedance_20_video_edit_path or "").strip()
+            p = p or "/api/v3/bytedance/seedance-2.0/video-edit-turbo"
     return p if p.startswith("/") else f"/{p}"
+
+
+def _studio_video_edit_post_path(*, variant: str = "standard") -> str:
+    return _seedance_20_video_edit_post_path(variant=variant)
+
+
+def _normalize_video_edit_resolution(res: str, *, path: str) -> str:
+    r = (res or "720p").strip().lower()
+    if "turbo" in path.lower() and r not in ("720p", "1080p"):
+        return "720p"
+    if r in ("480p", "720p", "1080p", "4k"):
+        return r
+    return "720p"
 
 
 async def seedance_studio_video_edit_video_url(
@@ -1543,13 +1567,16 @@ async def seedance_studio_video_edit_video_url(
     resolution: str | None = None,
     duration: int | None = None,
     keep_original_sound: bool = True,
+    variant: str = "standard",
     timeout_submit: float = 900.0,
     poll_interval: float = 3.0,
     max_polls: int = 180,
 ) -> str:
     """
-    ByteDance Seedance (Fast) Video-Edit Turbo: входное видео + промпт + reference_images.
-    Док: https://wavespeed.ai/docs/docs-api/bytedance/bytedance-seedance-2.0-video-edit-turbo
+    ByteDance Seedance Video-Edit: входное video + prompt + reference_images.
+    variant=standard → …/seedance-2.0/video-edit-turbo (или legacy env)
+    variant=mini → …/seedance-2.0-mini/video-edit
+    Док: https://wavespeed.ai/docs/docs-api/bytedance/bytedance-seedance-2.0-mini-video-edit
     """
     vid = (video_url or "").strip()
     ptxt = (prompt or "").strip()
@@ -1564,9 +1591,12 @@ async def seedance_studio_video_edit_video_url(
         imgs = [(reference_image_url or "").strip()]
     if not imgs:
         raise RuntimeError("reference image URLs required for video edit")
-    path = _studio_video_edit_post_path()
+    path = _seedance_20_video_edit_post_path(variant=variant)
     url = f"{_wavespeed_base()}{path}"
-    res = (resolution or settings.wavespeed_studio_video_edit_resolution or "720p").strip()
+    res = _normalize_video_edit_resolution(
+        resolution or settings.wavespeed_studio_video_edit_resolution or "720p",
+        path=path,
+    )
     body: dict[str, Any] = {
         "prompt": ptxt,
         "video": vid,
@@ -1585,7 +1615,8 @@ async def seedance_studio_video_edit_video_url(
         body["aspect_ratio"] = ar
     _apply_wavespeed_extra_body(body)
     log.debug(
-        "wavespeed studio video edit path=%s resolution=%s imgs=%s dur=%s",
+        "wavespeed seedance video edit variant=%s path=%s resolution=%s imgs=%s dur=%s",
+        variant,
         path,
         res,
         len(body["reference_images"]),
