@@ -10,6 +10,8 @@ from app.services.studio_workflow_boardstory import (
     boardstory_tag_rules_text,
     boardstory_video_only_swap_mode,
     build_boardstory_clothing_env_swap_prompt,
+    build_boardstory_opening_frame_t2v_prompt,
+    build_boardstory_video_edit_swap_prompt,
     build_boardstory_video_only_swap_prompt,
     classify_boardstory_ref_role,
     compute_boardstory_layout,
@@ -210,6 +212,40 @@ def test_filter_model_images_for_boardstory_fallback_without_body():
     out = filter_model_images_for_boardstory(imgs)
     assert len(out) == 2
     assert [im.image_kind for im in out] == ["face", "turnaround"]
+
+
+def test_compute_boardstory_layout_with_opening_still():
+    layout = compute_boardstory_layout(
+        3, has_clothing=True, has_environment=True, n_start_frame=1
+    )
+    assert layout.identity_tag_expr == "@Image2–@Image4"
+    assert layout.clothing_tag == "@Image5"
+    assert layout.environment_tag == "@Image6"
+
+
+def test_build_boardstory_opening_frame_prompt():
+    layout = compute_boardstory_layout(
+        3, has_clothing=True, has_environment=True, n_start_frame=1
+    )
+    out = build_boardstory_opening_frame_t2v_prompt(layout=layout, n_motion_videos=1)
+    assert "@Image1 — opening still" in out
+    assert "@Image2–@Image4" in out
+    assert "CLOTHING" not in out
+    assert "Wardrobe from @Image5" in out
+    assert "@Image6" in out
+    assert "@Video1" in out
+
+
+def test_build_boardstory_video_edit_swap_prompt():
+    out = build_boardstory_video_edit_swap_prompt(
+        has_clothing=True,
+        has_environment=True,
+    )
+    assert "Replace the person in the video with the person from reference image 1" in out
+    assert "reference image 2" in out
+    assert "reference image 3" in out
+    assert "@Video1" not in out
+    assert "@Image1" not in out
 
 
 def test_boardstory_slot_json_roundtrip():

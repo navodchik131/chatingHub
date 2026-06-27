@@ -292,14 +292,18 @@ class Settings(BaseSettings):
     wavespeed_seedance_20_mini_video_edit_path: str = Field(
         default="/api/v3/bytedance/seedance-2.0-mini/video-edit",
     )
-    # Legacy override для standard video-edit (если задан — имеет приоритет над wavespeed_seedance_20_video_edit_path)
+    # Legacy override для standard video-edit (пусто = seedance-2.0/video-edit-turbo)
     wavespeed_studio_video_edit_path: str = Field(
-        default="/api/v3/bytedance/seedance-2.0-fast/video-edit-turbo",
+        default="",
     )
     # 720p | 1080p (см. доки turbo)
     wavespeed_studio_video_edit_resolution: str = Field(default="720p")
     # Максимальный размер загружаемого driving video (MP4/WebM/MOV) для студии «видео по референсу»
     studio_motion_max_upload_mb: int = Field(default=64, ge=1, le=200)
+    # BoardStory: перед T2V генерировать opening still (модель в позе из @Video1) как @Image1
+    studio_boardstory_auto_opening_frame: bool = Field(default=True)
+    # BoardStory + motion: Seedance Video-Edit Turbo (replace person in video)
+    studio_boardstory_use_video_edit: bool = Field(default=True)
     # Имя или абсолютный путь к ffmpeg (в официальном Docker-образе — /usr/bin/ffmpeg)
     ffmpeg_binary: str = Field(default="ffmpeg")
     # exiftool для метаданных видео (в Docker: libimage-exiftool-perl → /usr/bin/exiftool)

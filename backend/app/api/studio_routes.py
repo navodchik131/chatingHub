@@ -104,6 +104,7 @@ from app.services.crypto_secret import decrypt_secret
 from app.services.studio_aspect import (
     aspect_presets_public,
     aspect_ratio_for_seedance_i2v,
+    aspect_ratio_for_seedance_video_edit,
     normalize_aspect_key,
     wavespeed_size_string,
 )
@@ -221,11 +222,16 @@ from app.services.studio_seedance_t2v import (
 )
 from app.services.studio_workflow_boardstory import (
     boardstory_slot_from_json,
+    build_boardstory_opening_frame_t2v_prompt,
     build_boardstory_reference_urls,
+    build_boardstory_video_edit_reference_urls,
+    build_boardstory_video_edit_swap_prompt,
     filter_model_images_for_boardstory,
+    filter_model_images_for_boardstory_video_edit,
     finalize_boardstory_t2v_prompt,
     workflow_reference_public_url,
 )
+from app.services.studio_boardstory_opening_frame import generate_boardstory_opening_still_url
 from app.services.studio_model_bootstrap import (
     MODEL_SHEET_ASPECT_KEY,
     humanize_wavespeed_provider_error,
@@ -239,6 +245,7 @@ from app.services.wavespeed_client import (
     grok_imagine_video_v15_image_to_video_url,
     nano_banana_pro_edit_image_url,
     seedance_20_text_to_video_url,
+    seedance_studio_video_edit_video_url,
     seedream_v45_bootstrap_edit_image_url,
     seedream_v45_edit_image_url,
     wavespeed_image_upscale_url,
@@ -5031,6 +5038,17 @@ async def _studio_job_execute_motion_render_video(
                 has_motion_reference_video=bool(mv_id),
             ),
         )
+        if (
+            boardstory_mode
+            and mv_id
+            and send_video_reference
+            and settings.studio_boardstory_auto_opening_frame
+            and not settings.studio_boardstory_use_video_edit
+            and grok_scene_compose_configured()
+        ):
+            cost += apply_studio_credit_cost(
+                plan, settings.credit_cost_studio_prompt_refine
+            )
 
     billing = await ensure_can_consume_credits(session, user, cost)
 
@@ -5040,6 +5058,8 @@ async def _studio_job_execute_motion_render_video(
     prompt_source = "template"
     ref_images: list[str] = []
     ref_videos: list[str] = []
+    use_boardstory_video_edit = False
+    motion_provider = "seedance_t2v"
 
     if video_provider == "grok_imagine_i2v":
         if not ff_url:
@@ -5071,74 +5091,178 @@ async def _studio_job_execute_motion_render_video(
                 msg[:240],
             )
     else:
+        use_boardstory_video_edit = (
+            boardstory_mode
+            and bool(motion_vid_url)
+            and send_video_reference
+            and settings.studio_boardstory_use_video_edit
+        )
+
         if boardstory_mode:
-            model_imgs = filter_model_images_for_boardstory(list(sm.images))
-            model_urls = model_reference_public_urls(
-                owner_id=oid,
-                images=model_imgs,
-                public_app_base=pub,
-                token_factory=create_model_image_access_token,
-            )
-            if not model_urls:
-                raise RuntimeError(
-                    "У модели нет фото для BoardStory (лицо, развёртка или тело). "
-                    "Добавьте в настройках модели."
-                )
-
-            def _gen_url(gid: int) -> str | None:
-                return generation_still_public_url(
+            if use_boardstory_video_edit:
+                model_imgs = filter_model_images_for_boardstory_video_edit(list(sm.images))
+                model_urls = model_reference_public_urls(
                     owner_id=oid,
-                    generation_id=gid,
+                    images=model_imgs,
                     public_app_base=pub,
-                    token_factory=create_generation_image_access_token,
+                    token_factory=create_model_image_access_token,
                 )
+                if not model_urls:
+                    raise RuntimeError(
+                        "У модели нет фото лица для Video-Edit swap. "
+                        "Добавьте снимок face в кабинете модели."
+                    )
 
-            def _ref_url(rid: str) -> str | None:
-                return workflow_reference_public_url(
-                    owner_id=oid,
-                    ref_id=rid,
-                    public_app_base=pub,
-                    token_factory=create_workflow_ref_access_token,
+                def _gen_url_edit(gid: int) -> str | None:
+                    return generation_still_public_url(
+                        owner_id=oid,
+                        generation_id=gid,
+                        public_app_base=pub,
+                        token_factory=create_generation_image_access_token,
+                    )
+
+                def _ref_url_edit(rid: str) -> str | None:
+                    return workflow_reference_public_url(
+                        owner_id=oid,
+                        ref_id=rid,
+                        public_app_base=pub,
+                        token_factory=create_workflow_ref_access_token,
+                    )
+
+                ref_images, has_clothing, has_environment = (
+                    build_boardstory_video_edit_reference_urls(
+                        identity_image_urls=model_urls,
+                        clothing_slot=clothing_ref,
+                        environment_slot=environment_ref,
+                        generation_url_factory=_gen_url_edit,
+                        workflow_ref_url_factory=_ref_url_edit,
+                    )
                 )
+                if not ref_images:
+                    raise RuntimeError("Не удалось подготовить reference_images для Video-Edit")
 
-            ref_images, layout = build_boardstory_reference_urls(
-                owner_id=oid,
-                public_app_base=pub,
-                model_image_urls=model_urls,
-                clothing_slot=clothing_ref,
-                environment_slot=environment_ref,
-                extra_refs=tuple(extra_refs),
-                generation_url_factory=_gen_url,
-                workflow_ref_url_factory=_ref_url,
-            )
-            n_model = layout.n_model_images
-            n_clothing = layout.n_clothing_images
-            n_environment = layout.n_environment_images
-            n_start = 0
-            ref_videos = (
-                [motion_vid_url]
-                if motion_vid_url and send_video_reference
-                else []
-            )
-
-            if prompt_from_compose and prompt.strip():
-                seed_prompt = finalize_boardstory_t2v_prompt(
-                    prompt.strip(),
-                    layout=layout,
-                    n_motion_videos=len(ref_videos),
-                )
-                prompt_source = "boardstory_compose"
-            else:
-                seed_prompt = assemble_boardstory_seedance_prompt(
-                    prompt,
-                    n_model_images=n_model,
-                    n_clothing_images=n_clothing,
-                    n_environment_images=n_environment,
-                    n_motion_videos=len(ref_videos),
-                    motion_summary=motion_summary,
+                seed_prompt = build_boardstory_video_edit_swap_prompt(
+                    n_identity_refs=len(model_urls),
+                    has_clothing=has_clothing,
+                    has_environment=has_environment,
+                    user_notes=prompt.strip(),
                     negative=negative_prompt,
                 )
-                prompt_source = "boardstory_template"
+                prompt_source = "boardstory_video_edit"
+                ref_videos = []
+                n_model = len(model_urls)
+                n_clothing = 1 if has_clothing else 0
+                n_environment = 1 if has_environment else 0
+                n_start = 0
+            else:
+                model_imgs = filter_model_images_for_boardstory(list(sm.images))
+                model_urls = model_reference_public_urls(
+                    owner_id=oid,
+                    images=model_imgs,
+                    public_app_base=pub,
+                    token_factory=create_model_image_access_token,
+                )
+                if not model_urls:
+                    raise RuntimeError(
+                        "У модели нет фото для BoardStory (лицо, развёртка или тело). "
+                        "Добавьте в настройках модели."
+                    )
+
+                def _gen_url(gid: int) -> str | None:
+                    return generation_still_public_url(
+                        owner_id=oid,
+                        generation_id=gid,
+                        public_app_base=pub,
+                        token_factory=create_generation_image_access_token,
+                    )
+
+                def _ref_url(rid: str) -> str | None:
+                    return workflow_reference_public_url(
+                        owner_id=oid,
+                        ref_id=rid,
+                        public_app_base=pub,
+                        token_factory=create_workflow_ref_access_token,
+                    )
+
+                opening_still_url: str | None = None
+                if (
+                    send_video_reference
+                    and vpath is not None
+                    and settings.studio_boardstory_auto_opening_frame
+                    and grok_scene_compose_configured()
+                ):
+                    from app.services.plan_entitlements import record_grok_usage
+
+                    try:
+                        await record_grok_usage(session, oid, source="boardstory_opening_frame")
+                    except Exception as e:
+                        log.warning("boardstory opening frame grok quota: %s", e)
+                    opening_still_url = await generate_boardstory_opening_still_url(
+                        video_path=vpath,
+                        sm=sm,
+                        owner_id=oid,
+                        pub=pub,
+                        ws_key=ws_key,
+                        output_aspect=output_aspect,
+                    )
+                    if opening_still_url:
+                        log.info(
+                            "motion_render_video job=%s boardstory opening still ok",
+                            job.id,
+                        )
+                    else:
+                        log.warning(
+                            "motion_render_video job=%s boardstory opening still failed, fallback",
+                            job.id,
+                        )
+
+                ref_images, layout = build_boardstory_reference_urls(
+                    owner_id=oid,
+                    public_app_base=pub,
+                    model_image_urls=model_urls,
+                    clothing_slot=clothing_ref,
+                    environment_slot=environment_ref,
+                    extra_refs=tuple(extra_refs),
+                    generation_url_factory=_gen_url,
+                    workflow_ref_url_factory=_ref_url,
+                    opening_still_url=opening_still_url,
+                )
+                n_model = layout.n_model_images
+                n_clothing = layout.n_clothing_images
+                n_environment = layout.n_environment_images
+                n_start = 0
+                ref_videos = (
+                    [motion_vid_url]
+                    if motion_vid_url and send_video_reference
+                    else []
+                )
+
+                if opening_still_url:
+                    seed_prompt = build_boardstory_opening_frame_t2v_prompt(
+                        layout=layout,
+                        n_motion_videos=len(ref_videos),
+                        user_notes=prompt.strip(),
+                        negative=negative_prompt,
+                    )
+                    prompt_source = "boardstory_opening_frame"
+                elif prompt_from_compose and prompt.strip():
+                    seed_prompt = finalize_boardstory_t2v_prompt(
+                        prompt.strip(),
+                        layout=layout,
+                        n_motion_videos=len(ref_videos),
+                    )
+                    prompt_source = "boardstory_compose"
+                else:
+                    seed_prompt = assemble_boardstory_seedance_prompt(
+                        prompt,
+                        n_model_images=n_model,
+                        n_clothing_images=n_clothing,
+                        n_environment_images=n_environment,
+                        n_motion_videos=len(ref_videos),
+                        motion_summary=motion_summary,
+                        negative=negative_prompt,
+                    )
+                    prompt_source = "boardstory_template"
         else:
             sheet_gen_id: int | None = None
             if sheet_gid_raw is not None:
@@ -5218,18 +5342,38 @@ async def _studio_job_execute_motion_render_video(
             )
 
         try:
-            video_url = await seedance_20_text_to_video_url(
-                api_key=ws_key,
-                prompt=seed_prompt,
-                reference_images=ref_images or None,
-                reference_videos=ref_videos or None,
-                aspect_ratio=ar_t2v,
-                resolution=video_res,
-                duration=ds_effective,
-                generate_audio=_truthy_wavespeed_flag(generate_audio),
-                variant=seedance_v,
-            )
-            motion_provider = "seedance_t2v"
+            if use_boardstory_video_edit:
+                ar_edit = aspect_ratio_for_seedance_video_edit(output_aspect)
+                video_res_edit = (
+                    video_res
+                    if video_res in ("720p", "1080p")
+                    else settings.wavespeed_studio_video_edit_resolution or "720p"
+                )
+                video_url = await seedance_studio_video_edit_video_url(
+                    api_key=ws_key,
+                    video_url=motion_vid_url,
+                    reference_image_urls=ref_images,
+                    prompt=seed_prompt,
+                    aspect_ratio=ar_edit,
+                    resolution=video_res_edit,
+                    duration=ds_effective,
+                    keep_original_sound=not _truthy_wavespeed_flag(generate_audio),
+                    variant=seedance_v,
+                )
+                motion_provider = "seedance_video_edit"
+            else:
+                video_url = await seedance_20_text_to_video_url(
+                    api_key=ws_key,
+                    prompt=seed_prompt,
+                    reference_images=ref_images or None,
+                    reference_videos=ref_videos or None,
+                    aspect_ratio=ar_t2v,
+                    resolution=video_res,
+                    duration=ds_effective,
+                    generate_audio=_truthy_wavespeed_flag(generate_audio),
+                    variant=seedance_v,
+                )
+                motion_provider = "seedance_t2v"
             msg = None
             log.info(
                 "motion_render_video ok job=%s provider=%s imgs=%s vids=%s prompt=%s",
@@ -5302,11 +5446,7 @@ async def _studio_job_execute_motion_render_video(
                 "first_frame_generation_id": first_frame_gen_id,
                 "outfit_generation_id": outfit_gen_id,
                 "motion_video_file_id": mv_id or None,
-                "motion_video_provider": (
-                    "seedance_video_edit"
-                    if boardstory_mode and bool(motion_vid_url) and send_video_reference
-                    else "seedance_t2v"
-                ),
+                "motion_video_provider": motion_provider,
                 "seedance_t2v_variant": seedance_v,
                 "seedance_20_t2v_path": (
                     settings.wavespeed_seedance_20_mini_t2v_path

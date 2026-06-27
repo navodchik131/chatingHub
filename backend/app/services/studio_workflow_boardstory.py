@@ -83,8 +83,9 @@ def compute_boardstory_layout(
     has_clothing: bool,
     has_environment: bool,
     n_other: int = 0,
+    n_start_frame: int = 0,
 ) -> BoardStoryReferenceLayout:
-    idx = n_model + 1
+    idx = n_start_frame + n_model + 1
     clothing_idx: int | None = None
     environment_idx: int | None = None
     if has_clothing:
@@ -98,7 +99,7 @@ def compute_boardstory_layout(
         other_indices.append(idx)
         idx += 1
 
-    identity = seedance_model_identity_tag_expr(0, n_model)
+    identity = seedance_model_identity_tag_expr(n_start_frame, n_model)
     return BoardStoryReferenceLayout(
         n_model_images=n_model,
         n_clothing_images=1 if has_clothing else 0,
@@ -131,6 +132,94 @@ def filter_model_images_for_boardstory(
         if (im.image_kind or "other").lower() == "body":
             return [im]
     return sorted_all[:1] if sorted_all else []
+
+
+def filter_model_images_for_boardstory_video_edit(
+    imgs: list,
+) -> list:
+    """Video-Edit swap: одно фото лица (как в playground WaveSpeed)."""
+    for im in filter_model_images_for_boardstory(imgs):
+        if (im.image_kind or "other").lower() == "face":
+            return [im]
+    picked = filter_model_images_for_boardstory(imgs)
+    return picked[:1] if picked else []
+
+
+def build_boardstory_video_edit_swap_prompt(
+    *,
+    n_identity_refs: int = 1,
+    has_clothing: bool = False,
+    has_environment: bool = False,
+    user_notes: str = "",
+    negative: str | None = None,
+    max_chars: int | None = None,
+) -> str:
+    """
+    Промпт для Seedance Video-Edit Turbo — как в playground WaveSpeed.
+    Без @Video1/@ImageN: video = input clip, reference_images = модель.
+    https://wavespeed.ai/models/bytedance/seedance-2.0/video-edit-turbo
+    """
+    from app.services.studio_seedance_t2v import truncate_seedance_t2v_prompt
+
+    parts = [
+        "Replace the person in the video with the person from reference image 1, "
+        "keeping the same actions, expressions, and camera movement.",
+        "Face, body, and hair must match reference image 1 in every frame — "
+        "never keep the original video actor.",
+    ]
+    idx = 1 + max(0, n_identity_refs)
+    if has_clothing:
+        parts.append(
+            f"Dress the person in the exact clothing and accessories from reference image {idx}."
+        )
+        idx += 1
+    if has_environment:
+        parts.append(
+            f"Match room, background, lighting, and atmosphere from reference image {idx}."
+        )
+    notes = (user_notes or "").strip()
+    if notes:
+        parts.append(notes)
+    neg = (negative or "").strip()
+    if neg:
+        parts.append(f"Avoid: {neg}")
+    return truncate_seedance_t2v_prompt("\n\n".join(parts), max_chars=max_chars)
+
+
+def build_boardstory_video_edit_reference_urls(
+    *,
+    identity_image_urls: list[str],
+    clothing_slot: BoardStoryImageSlot | None,
+    environment_slot: BoardStoryImageSlot | None,
+    generation_url_factory,
+    workflow_ref_url_factory,
+) -> tuple[list[str], bool, bool]:
+    """reference_images для Video-Edit: face → clothing → environment."""
+    refs: list[str] = [u for u in identity_image_urls if (u or "").strip()][:1]
+    if not refs:
+        return [], False, False
+
+    clothing_url: str | None = None
+    if clothing_slot is not None:
+        if clothing_slot.generation_id is not None:
+            clothing_url = generation_url_factory(clothing_slot.generation_id)
+        elif clothing_slot.ref_id:
+            clothing_url = workflow_ref_url_factory(clothing_slot.ref_id)
+        if clothing_url:
+            refs.append(clothing_url)
+
+    environment_url: str | None = None
+    if environment_slot is not None:
+        if environment_slot.generation_id is not None:
+            environment_url = generation_url_factory(environment_slot.generation_id)
+        elif environment_slot.ref_id:
+            environment_url = workflow_ref_url_factory(environment_slot.ref_id)
+        if environment_url:
+            refs.append(environment_url)
+
+    if len(refs) > MAX_SEEDANCE_REFERENCE_IMAGES:
+        refs = refs[:MAX_SEEDANCE_REFERENCE_IMAGES]
+    return refs, clothing_url is not None, environment_url is not None
 
 
 def boardstory_identity_role_lines(n_model_images: int) -> str:
@@ -540,6 +629,49 @@ def workflow_reference_public_url(
     return f"{base}/api/studio/public-workflow-ref?t={quote(tok, safe='')}"
 
 
+def build_boardstory_opening_frame_t2v_prompt(
+    *,
+    layout: BoardStoryReferenceLayout,
+    n_motion_videos: int = 1,
+    user_notes: str = "",
+    negative: str | None = None,
+    max_chars: int | None = None,
+) -> str:
+    """Seedance T2V с @Image1 = swapped opening still, @Image2+ = model refs, @Video1 = motion."""
+    from app.services.studio_seedance_t2v import (
+        _IDENTITY_NEGATIVE_DEFAULTS,
+        truncate_seedance_t2v_prompt,
+    )
+
+    identity_tags = layout.identity_tag_expr or "@Image2"
+    parts: list[str] = [
+        "MODEL REPLACEMENT: Replace the performer in @Video1 with the model character. "
+        "The on-screen person in every frame must match the model — never the original @Video1 actor.",
+        (
+            "@Image1 — opening still at t=0: exact pose, framing, lighting, and wardrobe from the "
+            "motion reference, with the MODEL's face and body (not the video actor)."
+        ),
+        f"Reinforce character identity from {identity_tags}.",
+    ]
+    if layout.clothing_tag:
+        parts.append(f"Wardrobe from {layout.clothing_tag}.")
+    if layout.environment_tag:
+        parts.append(f"Room, background, and lighting from {layout.environment_tag}.")
+    if n_motion_videos > 0:
+        parts.append(
+            "@Video1 — motion, timing, gestures, emotions, and camera movement ONLY. "
+            "Never copy the reference actor's face, skin, hair, or body from @Video1."
+        )
+    notes = (user_notes or "").strip()
+    if notes:
+        parts.append(f"USER_DIRECTION:\n{notes}")
+    neg_parts = [_IDENTITY_NEGATIVE_DEFAULTS]
+    if (negative or "").strip():
+        neg_parts.append(negative.strip())
+    parts.append(f"Avoid: {'; '.join(neg_parts)}")
+    return truncate_seedance_t2v_prompt("\n\n".join(parts), max_chars=max_chars)
+
+
 def build_boardstory_reference_urls(
     *,
     owner_id: int,
@@ -550,13 +682,15 @@ def build_boardstory_reference_urls(
     extra_refs: tuple[_ExtraRef, ...],
     generation_url_factory,
     workflow_ref_url_factory,
+    opening_still_url: str | None = None,
 ) -> tuple[list[str], BoardStoryReferenceLayout]:
     """
     Порядок reference_images для Seedance BoardStory:
-    model identity → clothing → environment → other refs.
+    [opening still] → model identity → clothing → environment → other refs.
     """
     urls: list[str] = list(model_image_urls)
     n_model = len(urls)
+    n_start = 0
 
     clothing_url: str | None = None
     if clothing_slot is not None:
@@ -585,6 +719,10 @@ def build_boardstory_reference_urls(
             urls.append(u)
             other_count += 1
 
+    if opening_still_url:
+        urls.insert(0, opening_still_url.strip())
+        n_start = 1
+
     if len(urls) > MAX_SEEDANCE_REFERENCE_IMAGES:
         urls = urls[:MAX_SEEDANCE_REFERENCE_IMAGES]
 
@@ -593,6 +731,7 @@ def build_boardstory_reference_urls(
         has_clothing=clothing_url is not None,
         has_environment=environment_url is not None,
         n_other=other_count,
+        n_start_frame=n_start,
     )
     return urls, layout
 
