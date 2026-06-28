@@ -2564,7 +2564,8 @@ async def _accept_studio_refine_job_from_workflow(
     _ = primary_bytes, primary_mime
 
     if reference_images:
-        studio_mode = "model_scene" if plan.model_id is not None else "no_face"
+        # Без модели из кабинета — «model»; vision-анализ уточнит no_face только для headless-кропов
+        studio_mode = "model_scene" if plan.model_id is not None else "model"
     else:
         studio_mode = "model"
 
@@ -2777,8 +2778,7 @@ async def _studio_job_execute_refine_prompt(
     reference_analysis_for_out: dict[str, Any] | None = None
     use_reference_analysis = bool(
         image_bytes
-        and mode_n in ("model", "no_face")
-        and not workflow_source
+        and mode_n in ("model", "no_face", "model_scene")
     )
     if use_reference_analysis:
         from app.services.studio_reference_analysis import (
