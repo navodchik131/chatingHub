@@ -2845,6 +2845,28 @@ select:focus {
   font-weight: 500;
 }
 
+.studio-ref-analysis-block {
+  margin-top: 0.65rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: 0.55rem;
+  border: 1px solid color-mix(in srgb, var(--border) 85%, transparent);
+  background: color-mix(in srgb, var(--bg-subtle) 75%, transparent);
+}
+
+.studio-ref-analysis-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.45rem;
+}
+
+.studio-ref-analysis-summary {
+  margin: 0;
+  font-size: 0.88rem;
+  color: #16a34a;
+  font-weight: 500;
+}
+
 .companion-draft-bubble {
   border: 1px dashed var(--accent);
   background: color-mix(in srgb, var(--accent-soft) 40%, var(--bg-elevated));

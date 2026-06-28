@@ -1,0 +1,25 @@
+Analyze the attached reference photo for image-edit generation. Output ONLY valid JSON (no markdown, no commentary).
+
+Schema:
+{
+  "face_in_frame": boolean,
+  "hair_in_frame": boolean,
+  "head_partial": boolean,
+  "visible_regions": ["FACE"|"HAIR"|"NECK"|"CHEST"|"TORSO"|"HANDS"|"ARMS"|"LEGS"|"FEET"|"BUTT"|"FULL_BODY"],
+  "framing_crop": "string — what enters/leaves frame at each edge; subject scale",
+  "pose_summary": "string — limb angles, weight, hands, gaze if face visible",
+  "clothing_summary": "string — garments or nudity zones visible in this crop only",
+  "background_summary": "string",
+  "lighting_summary": "string — direction, hardness, how light wraps visible body",
+  "camera_summary": "string — distance, height, angle, lens feel, capture type",
+  "capture_type": "string — e.g. friend shot, mirror selfie, tripod, gym snapshot",
+  "wardrobe_coverage": "string — nude | topless | clothed | partial — match visible crop",
+  "scene_notes": "string — 4-8 sentences English prose for downstream prompt; state explicitly when face/head are NOT in frame"
+}
+
+Rules:
+- Be literal about crop: if forehead/chin/eyes are cut off, face_in_frame=false (head_partial=true only if a sliver of head skin/hair edge is visible).
+- visible_regions lists ONLY body parts actually visible in this bitmap.
+- Do NOT invent off-frame anatomy.
+- Do NOT describe donor identity (skin tone, ethnicity, face likeness) — geometry and scene only.
+- scene_notes must include a clear FRAMING line matching framing_crop.

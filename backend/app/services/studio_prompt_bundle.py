@@ -537,6 +537,7 @@ def coerce_compact_pose_positive(
     *,
     model_profile_text: str | None,
     reference_scene_description: str | None = None,
+    visibility: "IdentityVisibility | None" = None,
 ) -> dict[str, Any]:
     """
     Жёстко собирает compact JSON: сцена — image 1 + краткие pose_reference_notes;
@@ -550,6 +551,13 @@ def coerce_compact_pose_positive(
         k: _pick_identity_field(k, profile=prof_id, llm=llm_id)
         for k in ("subject", "face", "hair", "body_proportions")
     }
+    if visibility is not None:
+        from app.services.studio_reference_analysis import filter_identity_reference_dict
+
+        identity = filter_identity_reference_dict(
+            {k: v for k, v in identity.items() if v},
+            visibility,
+        )
     if not any(identity.values()):
         log.warning("compact pose coerce: empty identity_reference, keeping minimal placeholder")
         identity["subject"] = identity["subject"] or "studio model identity from reference photos"
@@ -787,6 +795,7 @@ def prepare_positive_prompt_json(
     output_aspect_key: str = "3:4",
     wavespeed_identity_legend: str | None = None,
     include_realism_engine: bool = True,
+    visibility: "IdentityVisibility | None" = None,
 ) -> tuple[str, str]:
     """
     Возвращает (positive_for_wavespeed, negative_prompt_line).
@@ -853,6 +862,7 @@ def prepare_positive_prompt_json(
             data,
             model_profile_text=model_profile_text,
             reference_scene_description=reference_scene_description,
+            visibility=visibility,
         )
 
     re_obj = load_canonical_realism_engine()

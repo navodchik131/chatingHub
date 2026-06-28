@@ -229,6 +229,7 @@ def finalize_wavespeed_studio_prompt(
     user_image_first: bool,
     lock_model_hairstyle: bool = True,
     prompt_brief_mode: str = "full",
+    skip_no_face_suffix: bool = False,
 ) -> str:
     """Сборка финального текстового промпта для WaveSpeed в зависимости от режима студии."""
     mode = (studio_mode or "model").strip().lower()
@@ -274,7 +275,7 @@ def finalize_wavespeed_studio_prompt(
         out = _GROK_MAIN_PROSE_WAN_PREFIX.strip() if not p else _GROK_MAIN_PROSE_WAN_PREFIX + p
     else:
         out = p
-    if mode == "no_face" and brief != "compact_pose_image":
+    if mode == "no_face" and brief != "compact_pose_image" and not skip_no_face_suffix:
         out = (out or "").rstrip() + _WAVESPEED_NO_FACE_SUFFIX
     return out
 
@@ -1213,6 +1214,7 @@ def _build_refiner_user_message(
     studio_mode: str = "model",
     lock_model_hairstyle: bool = True,
     prompt_brief_mode: str = "full",
+    visibility_plan_block: str | None = None,
 ) -> str:
     has_ref = bool((reference_scene_description or "").strip())
     photo_edit_mode = (studio_mode or "").strip().lower() == "photo_edit"
@@ -1263,6 +1265,9 @@ def _build_refiner_user_message(
     blocks: list[str] = []
     if brief_mode_line:
         blocks.append(f"## PROMPT_BRIEF_MODE\n{brief_mode_line}")
+    vis = (visibility_plan_block or "").strip()
+    if vis:
+        blocks.append(vis)
     blocks.extend(
         [
             "## HAIRSTYLE_MODE\n" + mode_line,
@@ -1399,6 +1404,7 @@ async def refine_prompt_via_openai(
     studio_mode: str = "model",
     lock_model_hairstyle: bool = True,
     prompt_brief_mode: str = "full",
+    visibility_plan_block: str | None = None,
     credentials: StudioOpenAiCredentials | None = None,
 ) -> str:
     """Шаг 2: одна сессия чата — system = инструкция, user = шаблон + данные; ответ: JSON-строка."""
@@ -1420,6 +1426,7 @@ async def refine_prompt_via_openai(
         studio_mode=studio_mode,
         lock_model_hairstyle=lock_model_hairstyle,
         prompt_brief_mode=prompt_brief_mode,
+        visibility_plan_block=visibility_plan_block,
     )
     raw = await _chat_completion_text(
         model=model,
@@ -1470,12 +1477,15 @@ def assemble_wavespeed_image_edit_prompt(
     output_aspect_key: str = "3:4",
     wavespeed_identity_legend: str | None = None,
     include_realism_engine: bool = True,
+    skip_no_face_suffix: bool = False,
+    visibility: "IdentityVisibility | None" = None,
 ) -> str:
     """Позитивный промпт для WaveSpeed; negative в JSON (text scene) или суффикс [NEGATIVE_PROMPT] (prose)."""
     from app.services.studio_prompt_bundle import (
         append_negative_to_wavespeed_prompt,
         prepare_positive_prompt_json,
     )
+    from app.services.studio_reference_analysis import IdentityVisibility
 
     positive, negative = prepare_positive_prompt_json(
         refined_raw,
@@ -1486,6 +1496,7 @@ def assemble_wavespeed_image_edit_prompt(
         output_aspect_key=output_aspect_key,
         wavespeed_identity_legend=wavespeed_identity_legend,
         include_realism_engine=include_realism_engine,
+        visibility=visibility,
     )
     mode = (studio_mode or "model").strip().lower()
     brief = (prompt_brief_mode or "full").strip().lower()
@@ -1505,6 +1516,7 @@ def assemble_wavespeed_image_edit_prompt(
             user_image_first=user_pose_in_api,
             lock_model_hairstyle=lock_model_hairstyle,
             prompt_brief_mode=brief,
+            skip_no_face_suffix=skip_no_face_suffix,
         )
     return append_negative_to_wavespeed_prompt(
         prompt, negative, brief_mode=brief

@@ -775,6 +775,20 @@ function studioModeUsesTextOnlyPrompt(mode: StudioJobMode): boolean {
   return STUDIO_TEXT_ONLY_MODES.includes(mode)
 }
 
+interface StudioReferenceAnalysisResponse {
+  analysis: Record<string, unknown>
+  summary_ru: string
+  effective_studio_mode: string
+  visibility: {
+    include_face?: boolean
+    include_hair?: boolean
+    crop_locked_no_face?: boolean
+    allowed_image_kinds?: string[]
+  }
+}
+
+const STUDIO_REFERENCE_ANALYSIS_MODES: StudioJobMode[] = ['model', 'no_face']
+
 const STUDIO_IMAGE_MODE_OPTIONS: { id: StudioJobMode; label: string }[] = [
   { id: 'model_scene', label: 'Основная' },
   { id: 'grok_compose', label: 'Face swap' },
@@ -963,6 +977,9 @@ export default function App() {
   const [studioPaintInpaintMask, setStudioPaintInpaintMask] = useState(false)
   const [studioMaskBrushPreset, setStudioMaskBrushPreset] = useState<'s' | 'm' | 'l'>('m')
   const [studioReferenceObjectUrl, setStudioReferenceObjectUrl] = useState<string | null>(null)
+  const [studioReferenceAnalysis, setStudioReferenceAnalysis] =
+    useState<StudioReferenceAnalysisResponse | null>(null)
+  const [studioReferenceAnalyzing, setStudioReferenceAnalyzing] = useState(false)
   const studioMaskPainterRef = useRef<StudioInpaintMaskPainterRef | null>(null)
   /** Снимок из архива как база для режима «Доработать фото» (альтернатива файлу). */
   const [studioPhotoEditArchiveId, setStudioPhotoEditArchiveId] = useState<number | null>(null)
@@ -1201,6 +1218,10 @@ export default function App() {
       return url
     })
   }, [studioFile])
+
+  useEffect(() => {
+    setStudioReferenceAnalysis(null)
+  }, [studioFile, studioMode, studioSelectedModelId])
 
   /** Превью референса для маски: локальный файл или снимок из архива («Доработать фото»). */
   const studioInpaintBaseImageSrc =
@@ -3159,6 +3180,39 @@ export default function App() {
     }
   }
 
+  const analyzeStudioReference = async () => {
+    if (!studioFile) return
+    setStudioReferenceAnalyzing(true)
+    setError(null)
+    try {
+      const fd = new FormData()
+      fd.append('image', studioFile)
+      fd.append('studio_mode', studioMode)
+      fd.append('studio_wave_profile', studioWaveProfile)
+      if (studioSelectedModelId != null) {
+        fd.append('model_id', String(studioSelectedModelId))
+      }
+      const r = await apiFetch('/api/studio/reference/analyze', { method: 'POST', body: fd })
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        setError(formatHttpApiError(r, j))
+        return
+      }
+      const data = (await r.json()) as StudioReferenceAnalysisResponse
+      setStudioReferenceAnalysis(data)
+      if (
+        data.effective_studio_mode === 'no_face' &&
+        (studioMode === 'model' || studioMode === 'no_face')
+      ) {
+        setStudioMode('no_face')
+      }
+    } catch (e) {
+      setError(String(e))
+    } finally {
+      setStudioReferenceAnalyzing(false)
+    }
+  }
+
   const refineStudioPrompt = async () => {
     if (studioImageGenInFlightRef.current || studioBusy) return
     setError(null)
@@ -3303,6 +3357,9 @@ export default function App() {
       )
       fd.append('lock_model_hairstyle', studioLockModelHairstyle ? '1' : '0')
       fd.append('exif_camera', studioExifCamera)
+      if (studioReferenceAnalysis?.analysis) {
+        fd.append('reference_analysis_json', JSON.stringify(studioReferenceAnalysis.analysis))
+      }
       const accepted = await postStudioJobStart('/api/studio/refine-prompt', {
         method: 'POST',
         body: fd,
@@ -7040,9 +7097,15 @@ export default function App() {
                 accept="image/jpeg,image/png,image/webp,image/gif"
                 onFile={(f) => {
                   setStudioFile(f)
-                  if (f) setStudioPhotoEditArchiveId(null)
+                  if (f) {
+                    setStudioPhotoEditArchiveId(null)
+                    setStudioReferenceAnalysis(null)
+                  }
                 }}
-                onClear={() => setStudioFile(null)}
+                onClear={() => {
+                  setStudioFile(null)
+                  setStudioReferenceAnalysis(null)
+                }}
                 emptyLabel="JPG, PNG, WebP"
               />
             ) : (
@@ -7050,6 +7113,51 @@ export default function App() {
                 Режим «По промту»: сцена только из текста промпта, без референс-фото.
               </p>
             )}
+            {studioFile &&
+            STUDIO_REFERENCE_ANALYSIS_MODES.includes(studioMode) ? (
+              <div className="studio-ref-analysis-block">
+                <p className="muted small" style={{ margin: '0 0 0.5rem' }}>
+                  Анализ референса определяет, какие части тела в кадре — промпт и фото модели
+                  подстроятся автоматически (без лишних инструкций про лицо/волосы).
+                </p>
+                <div className="studio-ref-analysis-actions">
+                  <button
+                    type="button"
+                    className="ghost-btn"
+                    disabled={studioReferenceAnalyzing || studioBusy}
+                    onClick={() => void analyzeStudioReference()}
+                  >
+                    {studioReferenceAnalyzing
+                      ? 'Анализ…'
+                      : studioReferenceAnalysis
+                        ? 'Переанализировать'
+                        : 'Анализировать референс'}
+                  </button>
+                </div>
+                {studioReferenceAnalysis ? (
+                  <div className="studio-ref-analysis-result">
+                    <p className="studio-ref-analysis-summary">
+                      ✓ {studioReferenceAnalysis.summary_ru}
+                    </p>
+                    {studioReferenceAnalysis.visibility.crop_locked_no_face ? (
+                      <p className="muted small">
+                        Режим: кроп без лица — face-референсы модели не пойдут в генерацию.
+                      </p>
+                    ) : null}
+                    {studioReferenceAnalysis.visibility.allowed_image_kinds?.length ? (
+                      <p className="muted small">
+                        Референсы модели:{' '}
+                        {studioReferenceAnalysis.visibility.allowed_image_kinds.join(', ')}
+                      </p>
+                    ) : null}
+                  </div>
+                ) : (
+                  <p className="muted small">
+                    Можно сразу «Сгенерировать» — анализ выполнится на сервере автоматически.
+                  </p>
+                )}
+              </div>
+            ) : null}
             {studioMode === 'model_scene' ? (
               <p className="studio-mode-hint">
                 Референс анализирует Grok (поза, свет, кадр — без внешности с рефа). В WaveSpeed

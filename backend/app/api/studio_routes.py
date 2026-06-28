@@ -56,6 +56,7 @@ from app.schemas import (
     StudioModelBootstrapOut,
     StudioMotionVideoOut,
     StudioRefinePromptOut,
+    StudioReferenceAnalysisOut,
     StudioUpscaleGenerationIn,
     StudioUpscaleGenerationOut,
     PhoneExifReferenceOut,
@@ -2288,6 +2289,85 @@ async def api_import_studio_archive_image(
     )
 
 
+@router.post("/studio/reference/analyze", response_model=StudioReferenceAnalysisOut)
+async def api_studio_reference_analyze(
+    image: UploadFile = File(...),
+    studio_mode: str = Form("model"),
+    studio_wave_profile: str = Form("nsfw"),
+    model_id: str | None = Form(None),
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> StudioReferenceAnalysisOut:
+    """Vision-анализ референса: видимые части тела, кроп, сцена — для сборки промпта на сервере."""
+    assert_permission(user, PERM_STUDIO_GENERATE)
+    oid = workspace_owner_id(user)
+    sub_b, llm_row, _, plan, _credits, _demo = await load_owner_studio_billing(session, oid)
+    _require_studio_subscription(user, sub_b, credits_balance=_credits, demo_generations_remaining=_demo)
+    llm_creds = studio_llm_credentials(plan=plan, llm_row=llm_row)
+
+    if not (image.filename or "").strip():
+        raise HTTPException(status_code=400, detail="Загрузите изображение")
+    image_bytes = await image.read()
+    if len(image_bytes) > MAX_IMAGE_BYTES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Референс слишком большой (макс. {MAX_IMAGE_BYTES // (1024 * 1024)} МБ)",
+        )
+    if not image_bytes:
+        raise HTTPException(status_code=400, detail="Пустой файл изображения")
+
+    from app.services.studio_reference_analysis import (
+        analysis_summary_ru,
+        analyze_reference_image,
+        build_studio_prompt_plan,
+    )
+
+    mode_n = _normalize_studio_mode(studio_mode)
+    wave_profile_n = _normalize_studio_wave_profile(studio_wave_profile)
+    model_profile_text: str | None = None
+    parsed_mid = _parse_optional_model_id(model_id)
+    if parsed_mid is not None:
+        sm = await require_studio_model_access(session, user, parsed_mid, load_images=False)
+        model_profile_text = (sm.profile_text or "").strip() or None
+
+    skeleton = prepare_studio_prompt_skeleton()
+    if not skeleton:
+        raise HTTPException(status_code=503, detail="Шаблон промпта студии не настроен")
+
+    try:
+        analysis = await analyze_reference_image(
+            image_bytes=image_bytes,
+            image_media_type=(image.content_type or "").strip() or None,
+            credentials=llm_creds,
+        )
+    except Exception as e:
+        log.warning("reference analyze API failed: %s", e)
+        raise HTTPException(status_code=502, detail="Не удалось проанализировать референс") from e
+
+    plan = build_studio_prompt_plan(
+        analysis=analysis,
+        skeleton=skeleton,
+        model_profile_text=model_profile_text,
+        requested_studio_mode=mode_n,
+        wave_profile=wave_profile_n,
+    )
+    vis = plan.visibility
+    return StudioReferenceAnalysisOut(
+        analysis=analysis.model_dump(),
+        summary_ru=analysis_summary_ru(analysis),
+        effective_studio_mode=plan.effective_studio_mode,
+        visibility={
+            "include_face": vis.include_face,
+            "include_hair": vis.include_hair,
+            "include_expression": vis.include_expression,
+            "include_body_proportions": vis.include_body_proportions,
+            "include_hands_detail": vis.include_hands_detail,
+            "crop_locked_no_face": vis.crop_locked_no_face,
+            "allowed_image_kinds": sorted(vis.allowed_image_kinds),
+        },
+    )
+
+
 @router.post(
     "/studio/refine-prompt",
     response_model=StudioRefinePromptOut,
@@ -2312,6 +2392,7 @@ async def api_studio_refine_prompt(
     workflow_source: str | None = Form(None),
     workflow_wave_model: str | None = Form(None),
     onboarding_wizard: str | None = Form(None),
+    reference_analysis_json: str | None = Form(None),
     session: AsyncSession = Depends(get_session),
     user: User = Depends(get_current_user),
 ) -> StudioRefinePromptOut | JSONResponse:
@@ -2384,6 +2465,7 @@ async def api_studio_refine_prompt(
         "workflow_source": workflow_source,
         "workflow_wave_model": (workflow_wave_model or "").strip().lower() or None,
         "onboarding_wizard": onboarding_wizard,
+        "reference_analysis_json": (reference_analysis_json or "").strip() or None,
     }
     job = await studio_jobs.create_studio_job(
         session,
@@ -2687,6 +2769,52 @@ async def _studio_job_execute_refine_prompt(
         )
         model_profile_text = (sm_loaded.profile_text or "").strip() or None
 
+    prompt_plan = None
+    visibility_block: str | None = None
+    skip_no_face_suffix = False
+    reference_analysis_for_out: dict[str, Any] | None = None
+    use_reference_analysis = bool(
+        image_bytes
+        and mode_n in ("model", "no_face")
+        and not workflow_source
+    )
+    if use_reference_analysis:
+        from app.services.studio_reference_analysis import (
+            analyze_reference_image,
+            build_studio_prompt_plan,
+            build_visibility_plan_block,
+            filter_model_images_for_visibility,
+            parse_reference_analysis_json,
+        )
+
+        analysis = parse_reference_analysis_json(str(p.get("reference_analysis_json") or ""))
+        if analysis is None:
+            try:
+                analysis = await analyze_reference_image(
+                    image_bytes=image_bytes,
+                    image_media_type=image_mime,
+                    credentials=llm_creds,
+                )
+            except Exception as e:
+                log.warning("reference analysis failed conv=%s: %s", job.id, e)
+                analysis = None
+        if analysis is not None:
+            skeleton_full = prepare_studio_prompt_skeleton()
+            if skeleton_full:
+                prompt_plan = build_studio_prompt_plan(
+                    analysis=analysis,
+                    skeleton=skeleton_full,
+                    model_profile_text=model_profile_text,
+                    requested_studio_mode=mode_n,
+                    wave_profile=wave_profile_n,
+                )
+                mode_n = prompt_plan.effective_studio_mode
+                visibility_block = build_visibility_plan_block(prompt_plan.visibility)
+                skip_no_face_suffix = prompt_plan.skip_no_face_suffix
+                if prompt_plan.filtered_model_profile_text is not None:
+                    model_profile_text = prompt_plan.filtered_model_profile_text
+                reference_analysis_for_out = analysis.model_dump()
+
     if mode_n == "photo_edit" and not image_bytes:
         raise HTTPException(
             status_code=400,
@@ -2783,6 +2911,11 @@ async def _studio_job_execute_refine_prompt(
     if sm_loaded is not None:
         imgs_model = sort_model_images_for_studio(list(sm_loaded.images))
     imgs_for_ws = model_images_for_wavespeed_profile(imgs_model, wave_profile_n)
+    if prompt_plan is not None:
+        from app.services.studio_reference_analysis import filter_model_images_for_visibility
+
+        imgs_for_ws = filter_model_images_for_visibility(imgs_for_ws, prompt_plan.visibility)
+        imgs_model = filter_model_images_for_visibility(imgs_model, prompt_plan.visibility)
 
     if (
         mode_n == "face_swap"
@@ -3012,7 +3145,9 @@ async def _studio_job_execute_refine_prompt(
                 session.add(gen_row)
                 await session.flush()
         else:
-            if image_bytes:
+            if prompt_plan is not None:
+                reference_scene = prompt_plan.reference_scene_description
+            elif image_bytes:
                 reference_scene = await describe_reference_image_openai(
                     image_bytes=image_bytes,
                     image_media_type=image_mime,
@@ -3032,6 +3167,8 @@ async def _studio_job_execute_refine_prompt(
                 send_pose_reference_to_wavespeed=send_pose_to_ws,
             )
             skeleton = prepare_studio_prompt_skeleton_for_brief(prompt_brief_mode)
+            if prompt_plan is not None:
+                skeleton = prompt_plan.pruned_skeleton
             if not skeleton:
                 raise RuntimeError(
                     "Шаблон промпта пуст: заполните backend/data/prompts/image_studio_skeleton.txt "
@@ -3052,6 +3189,7 @@ async def _studio_job_execute_refine_prompt(
                 studio_mode=mode_n,
                 lock_model_hairstyle=effective_lock_hairstyle,
                 prompt_brief_mode=prompt_brief_mode,
+                visibility_plan_block=visibility_block,
                 credentials=llm_creds,
             )
             if gen_row is not None:
@@ -3532,6 +3670,8 @@ async def _studio_job_execute_refine_prompt(
                     output_aspect_key=aspect_key,
                     wavespeed_identity_legend=ws_identity_legend,
                     include_realism_engine=include_realism_engine,
+                    skip_no_face_suffix=skip_no_face_suffix,
+                    visibility=prompt_plan.visibility if prompt_plan else None,
                 )
                 if workflow_first_frame:
                     from app.services.studio_model_bootstrap import append_workflow_first_frame_face_grid
@@ -3708,6 +3848,7 @@ async def _studio_job_execute_refine_prompt(
     return StudioRefinePromptOut(
         refined_prompt=refined,
         reference_scene_description=reference_scene,
+        reference_analysis=reference_analysis_for_out,
         generated_image_url=generated_image_url,
         wavespeed_message=wavespeed_message,
         generation_id=generation_id,

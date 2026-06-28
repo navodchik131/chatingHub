@@ -258,9 +258,17 @@ class StudioRefinePromptOut(BaseModel):
 
     refined_prompt: str
     reference_scene_description: str | None = None
+    reference_analysis: dict[str, Any] | None = None
     generated_image_url: str | None = None
     wavespeed_message: str | None = None
     generation_id: int | None = None
+
+
+class StudioReferenceAnalysisOut(BaseModel):
+    analysis: dict[str, Any]
+    summary_ru: str
+    effective_studio_mode: str
+    visibility: dict[str, Any]
 
 
 class StudioImportArchiveImageIn(BaseModel):
