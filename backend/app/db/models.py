@@ -659,6 +659,8 @@ class UserStudioModel(Base):
     )
     name: Mapped[str] = mapped_column(String(128))
     profile_text: Mapped[str] = mapped_column(Text, default="")
+    """JSON персоны для AI-компаньона: возраст, город, хобби и т.д."""
+    companion_persona_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     """Пресет «экспорт как с телефона» — id из /api/studio/camera-presets; пусто = без постобработки."""
     camera_preset_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     export_lat: Mapped[float | None] = mapped_column(Float, nullable=True)

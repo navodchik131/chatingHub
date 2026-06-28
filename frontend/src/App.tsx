@@ -599,10 +599,24 @@ function normalizeStudioImageKind(raw: string | undefined): StudioModelImageKind
   return 'other'
 }
 
+interface CompanionPersona {
+  age?: string | null
+  city?: string | null
+  country?: string | null
+  timezone?: string | null
+  personality?: string | null
+  hobbies?: string | null
+  interests?: string | null
+  lifestyle?: string | null
+  speaking_style?: string | null
+  backstory?: string | null
+}
+
 interface UserStudioModel {
   id: number
   name: string
   profile_text: string
+  companion_persona?: CompanionPersona
   image_count: number
   images?: StudioModelImage[]
   camera_preset_id?: string | null
@@ -617,15 +631,51 @@ interface UserStudioModel {
 type StudioModelCabinetDraft = {
   name: string
   profile_text: string
+  companion_persona: CompanionPersona
   camera_preset_id: string
   export_lat: string
   export_lon: string
+}
+
+function companionPersonaFromModel(m: UserStudioModel): CompanionPersona {
+  const p = m.companion_persona ?? {}
+  return {
+    age: p.age ?? '',
+    city: p.city ?? '',
+    country: p.country ?? '',
+    timezone: p.timezone ?? '',
+    personality: p.personality ?? '',
+    hobbies: p.hobbies ?? '',
+    interests: p.interests ?? '',
+    lifestyle: p.lifestyle ?? '',
+    speaking_style: p.speaking_style ?? '',
+    backstory: p.backstory ?? '',
+  }
+}
+
+function companionPersonaToApi(p: CompanionPersona): CompanionPersona {
+  const trim = (v?: string | null) => (v ?? '').trim()
+  const out: CompanionPersona = {
+    age: trim(p.age) || null,
+    city: trim(p.city) || null,
+    country: trim(p.country) || null,
+    timezone: trim(p.timezone) || null,
+    personality: trim(p.personality) || null,
+    hobbies: trim(p.hobbies) || null,
+    interests: trim(p.interests) || null,
+    lifestyle: trim(p.lifestyle) || null,
+    speaking_style: trim(p.speaking_style) || null,
+    backstory: trim(p.backstory) || null,
+  }
+  const hasAny = Object.values(out).some((v) => v != null && v !== '')
+  return hasAny ? out : {}
 }
 
 function defaultStudioModelCabinetDraft(m: UserStudioModel): StudioModelCabinetDraft {
   return {
     name: m.name,
     profile_text: m.profile_text,
+    companion_persona: companionPersonaFromModel(m),
     camera_preset_id: (m.camera_preset_id ?? '').trim(),
     export_lat:
       m.export_lat != null && !Number.isNaN(Number(m.export_lat)) ? String(m.export_lat) : '',
@@ -3844,6 +3894,7 @@ export default function App() {
         body: JSON.stringify({
           name: d.name.trim(),
           profile_text: d.profile_text,
+          companion_persona: companionPersonaToApi(d.companion_persona),
           camera_preset_id: d.camera_preset_id.trim() || null,
           export_lat,
           export_lon,
@@ -5965,7 +6016,7 @@ export default function App() {
                           />
                         </label>
                         <label className="model-card-field">
-                          Описание
+                          Описание (внешность для студии)
                           <textarea
                             rows={4}
                             value={draft.profile_text}
@@ -5981,6 +6032,231 @@ export default function App() {
                             }
                           />
                         </label>
+                        <div className="studio-model-export-block account-grid" style={{ gridColumn: '1 / -1' }}>
+                          <h4 className="account-sub" style={{ margin: 0 }}>
+                            AI-компаньон
+                          </h4>
+                          <p className="muted small" style={{ margin: 0 }}>
+                            Личность для чат-бота: где живёт, интересы, стиль общения. Бот использует это вместе с
+                            описанием внешности.
+                          </p>
+                          <label>
+                            Возраст
+                            <input
+                              value={draft.companion_persona.age ?? ''}
+                              disabled={busy || studioPaywalled}
+                              placeholder="например 23"
+                              onChange={(e) =>
+                                setModelDrafts((prev) => ({
+                                  ...prev,
+                                  [m.id]: {
+                                    ...(prev[m.id] ?? defaultStudioModelCabinetDraft(m)),
+                                    companion_persona: {
+                                      ...(prev[m.id]?.companion_persona ??
+                                        companionPersonaFromModel(m)),
+                                      age: e.target.value,
+                                    },
+                                  },
+                                }))
+                              }
+                            />
+                          </label>
+                          <label>
+                            Город
+                            <input
+                              value={draft.companion_persona.city ?? ''}
+                              disabled={busy || studioPaywalled}
+                              placeholder="Барселона"
+                              onChange={(e) =>
+                                setModelDrafts((prev) => ({
+                                  ...prev,
+                                  [m.id]: {
+                                    ...(prev[m.id] ?? defaultStudioModelCabinetDraft(m)),
+                                    companion_persona: {
+                                      ...(prev[m.id]?.companion_persona ??
+                                        companionPersonaFromModel(m)),
+                                      city: e.target.value,
+                                    },
+                                  },
+                                }))
+                              }
+                            />
+                          </label>
+                          <label>
+                            Страна
+                            <input
+                              value={draft.companion_persona.country ?? ''}
+                              disabled={busy || studioPaywalled}
+                              placeholder="Испания"
+                              onChange={(e) =>
+                                setModelDrafts((prev) => ({
+                                  ...prev,
+                                  [m.id]: {
+                                    ...(prev[m.id] ?? defaultStudioModelCabinetDraft(m)),
+                                    companion_persona: {
+                                      ...(prev[m.id]?.companion_persona ??
+                                        companionPersonaFromModel(m)),
+                                      country: e.target.value,
+                                    },
+                                  },
+                                }))
+                              }
+                            />
+                          </label>
+                          <label>
+                            Часовой пояс
+                            <input
+                              value={draft.companion_persona.timezone ?? ''}
+                              disabled={busy || studioPaywalled}
+                              placeholder="Europe/Madrid"
+                              onChange={(e) =>
+                                setModelDrafts((prev) => ({
+                                  ...prev,
+                                  [m.id]: {
+                                    ...(prev[m.id] ?? defaultStudioModelCabinetDraft(m)),
+                                    companion_persona: {
+                                      ...(prev[m.id]?.companion_persona ??
+                                        companionPersonaFromModel(m)),
+                                      timezone: e.target.value,
+                                    },
+                                  },
+                                }))
+                              }
+                            />
+                          </label>
+                          <label style={{ gridColumn: '1 / -1' }}>
+                            Характер
+                            <textarea
+                              rows={2}
+                              value={draft.companion_persona.personality ?? ''}
+                              disabled={busy || studioPaywalled}
+                              placeholder="теплая, игривая, немного застенчивая…"
+                              onChange={(e) =>
+                                setModelDrafts((prev) => ({
+                                  ...prev,
+                                  [m.id]: {
+                                    ...(prev[m.id] ?? defaultStudioModelCabinetDraft(m)),
+                                    companion_persona: {
+                                      ...(prev[m.id]?.companion_persona ??
+                                        companionPersonaFromModel(m)),
+                                      personality: e.target.value,
+                                    },
+                                  },
+                                }))
+                              }
+                            />
+                          </label>
+                          <label style={{ gridColumn: '1 / -1' }}>
+                            Хобби и увлечения
+                            <textarea
+                              rows={2}
+                              value={draft.companion_persona.hobbies ?? ''}
+                              disabled={busy || studioPaywalled}
+                              placeholder="йога, кофе, путешествия…"
+                              onChange={(e) =>
+                                setModelDrafts((prev) => ({
+                                  ...prev,
+                                  [m.id]: {
+                                    ...(prev[m.id] ?? defaultStudioModelCabinetDraft(m)),
+                                    companion_persona: {
+                                      ...(prev[m.id]?.companion_persona ??
+                                        companionPersonaFromModel(m)),
+                                      hobbies: e.target.value,
+                                    },
+                                  },
+                                }))
+                              }
+                            />
+                          </label>
+                          <label style={{ gridColumn: '1 / -1' }}>
+                            Интересы / темы для разговора
+                            <textarea
+                              rows={2}
+                              value={draft.companion_persona.interests ?? ''}
+                              disabled={busy || studioPaywalled}
+                              placeholder="музыка, мода, спорт…"
+                              onChange={(e) =>
+                                setModelDrafts((prev) => ({
+                                  ...prev,
+                                  [m.id]: {
+                                    ...(prev[m.id] ?? defaultStudioModelCabinetDraft(m)),
+                                    companion_persona: {
+                                      ...(prev[m.id]?.companion_persona ??
+                                        companionPersonaFromModel(m)),
+                                      interests: e.target.value,
+                                    },
+                                  },
+                                }))
+                              }
+                            />
+                          </label>
+                          <label style={{ gridColumn: '1 / -1' }}>
+                            Образ жизни
+                            <textarea
+                              rows={2}
+                              value={draft.companion_persona.lifestyle ?? ''}
+                              disabled={busy || studioPaywalled}
+                              placeholder="учится, работает фрилансером, любит вечерние прогулки…"
+                              onChange={(e) =>
+                                setModelDrafts((prev) => ({
+                                  ...prev,
+                                  [m.id]: {
+                                    ...(prev[m.id] ?? defaultStudioModelCabinetDraft(m)),
+                                    companion_persona: {
+                                      ...(prev[m.id]?.companion_persona ??
+                                        companionPersonaFromModel(m)),
+                                      lifestyle: e.target.value,
+                                    },
+                                  },
+                                }))
+                              }
+                            />
+                          </label>
+                          <label style={{ gridColumn: '1 / -1' }}>
+                            Стиль переписки
+                            <textarea
+                              rows={2}
+                              value={draft.companion_persona.speaking_style ?? ''}
+                              disabled={busy || studioPaywalled}
+                              placeholder="короткие сообщения, эмодзи, без формальностей…"
+                              onChange={(e) =>
+                                setModelDrafts((prev) => ({
+                                  ...prev,
+                                  [m.id]: {
+                                    ...(prev[m.id] ?? defaultStudioModelCabinetDraft(m)),
+                                    companion_persona: {
+                                      ...(prev[m.id]?.companion_persona ??
+                                        companionPersonaFromModel(m)),
+                                      speaking_style: e.target.value,
+                                    },
+                                  },
+                                }))
+                              }
+                            />
+                          </label>
+                          <label style={{ gridColumn: '1 / -1' }}>
+                            Предыстория
+                            <textarea
+                              rows={3}
+                              value={draft.companion_persona.backstory ?? ''}
+                              disabled={busy || studioPaywalled}
+                              placeholder="откуда она, чем занимается, что важно в жизни…"
+                              onChange={(e) =>
+                                setModelDrafts((prev) => ({
+                                  ...prev,
+                                  [m.id]: {
+                                    ...(prev[m.id] ?? defaultStudioModelCabinetDraft(m)),
+                                    companion_persona: {
+                                      ...(prev[m.id]?.companion_persona ??
+                                        companionPersonaFromModel(m)),
+                                      backstory: e.target.value,
+                                    },
+                                  },
+                                }))
+                              }
+                            />
+                          </label>
+                        </div>
                         <div className="studio-model-export-block account-grid" style={{ gridColumn: '1 / -1' }}>
                           <h4 className="account-sub" style={{ margin: 0 }}>
                             Экспорт «как с телефона»

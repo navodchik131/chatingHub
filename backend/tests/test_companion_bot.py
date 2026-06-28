@@ -53,3 +53,40 @@ def test_parse_companion_meta():
     )
     assert ok is True
     assert eid == 42
+
+
+def test_companion_persona_format():
+    from app.services.companion_bot.persona import (
+        CompanionPersona,
+        format_companion_persona_block,
+        parse_companion_persona,
+    )
+
+    raw = '{"age": "24", "city": "Barcelona", "hobbies": "yoga"}'
+    p = parse_companion_persona(raw)
+    assert p.age == "24"
+    assert p.city == "Barcelona"
+    block = format_companion_persona_block(name="Luna", profile_text="blonde", persona=p)
+    assert "Age: 24" in block
+    assert "Lives in: Barcelona" in block
+    assert "Hobbies: yoga" in block
+
+
+def test_companion_prompt_initiative():
+    from app.services.companion_bot.persona import CompanionPersona
+    from app.services.companion_bot.prompt import PROMPT_VERSION, build_companion_system_prompt
+
+    assert PROMPT_VERSION == "v2"
+    sys = build_companion_system_prompt(
+        persona_name="Luna",
+        persona_profile="",
+        persona=CompanionPersona(city="Madrid"),
+        target_lang="en",
+        relationship_score=40,
+        mood="playful",
+        notes=[],
+        followup=True,
+    )
+    assert "FOLLOW-UP" in sys
+    assert "ENGAGEMENT" in sys
+    assert "Madrid" in sys

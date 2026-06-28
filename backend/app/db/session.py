@@ -422,6 +422,13 @@ def _migrate_companion_bot(sync_conn) -> None:
                 text("ALTER TABLE conversations ADD COLUMN companion_mode_override VARCHAR(16)")
             )
 
+    if insp.has_table("user_studio_models"):
+        cols = {c["name"] for c in insp.get_columns("user_studio_models")}
+        if "companion_persona_json" not in cols:
+            sync_conn.execute(
+                text("ALTER TABLE user_studio_models ADD COLUMN companion_persona_json TEXT")
+            )
+
 
 def _migrate_conversation_notes(sync_conn) -> None:
     from sqlalchemy import inspect, text

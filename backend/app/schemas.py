@@ -483,10 +483,37 @@ class PhoneExifReferenceOut(BaseModel):
     summary: str | None = None
 
 
+class CompanionPersonaOut(BaseModel):
+    age: str | None = None
+    city: str | None = None
+    country: str | None = None
+    timezone: str | None = None
+    personality: str | None = None
+    hobbies: str | None = None
+    interests: str | None = None
+    lifestyle: str | None = None
+    speaking_style: str | None = None
+    backstory: str | None = None
+
+
+class CompanionPersonaIn(BaseModel):
+    age: str | None = Field(default=None, max_length=32)
+    city: str | None = Field(default=None, max_length=128)
+    country: str | None = Field(default=None, max_length=128)
+    timezone: str | None = Field(default=None, max_length=64)
+    personality: str | None = Field(default=None, max_length=2000)
+    hobbies: str | None = Field(default=None, max_length=2000)
+    interests: str | None = Field(default=None, max_length=2000)
+    lifestyle: str | None = Field(default=None, max_length=2000)
+    speaking_style: str | None = Field(default=None, max_length=1000)
+    backstory: str | None = Field(default=None, max_length=4000)
+
+
 class UserStudioModelOut(BaseModel):
     id: int
     name: str
     profile_text: str
+    companion_persona: CompanionPersonaOut = Field(default_factory=CompanionPersonaOut)
     image_count: int = 0
     images: list[StudioModelImageOut] = Field(default_factory=list)
     camera_preset_id: str | None = None
@@ -501,6 +528,7 @@ class UserStudioModelOut(BaseModel):
 class UserStudioModelPatchIn(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=128)
     profile_text: str | None = None
+    companion_persona: CompanionPersonaIn | None = None
     camera_preset_id: str | None = Field(default=None, max_length=64)
     export_lat: float | None = None
     export_lon: float | None = None

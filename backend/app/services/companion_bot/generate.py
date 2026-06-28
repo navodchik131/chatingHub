@@ -16,6 +16,7 @@ from app.db.models import (
     Message,
     UserStudioModel,
 )
+from app.services.companion_bot.persona import parse_companion_persona
 from app.services.companion_bot.prompt import (
     PROMPT_VERSION,
     build_companion_system_prompt,
@@ -47,6 +48,7 @@ async def generate_companion_reply(
     conv: Conversation,
     messages: list[Message],
     studio_model_id: int,
+    followup: bool = False,
 ) -> tuple[str, str, str, int, dict]:
     """
     Возвращает (reply_text, target_lang, model_name, relationship_score, state_snapshot).
@@ -73,15 +75,18 @@ async def generate_companion_reply(
     )
 
     target_lang = resolve_target_lang(conv)
+    persona = parse_companion_persona(model_row.companion_persona_json)
     system = build_companion_system_prompt(
         persona_name=model_row.name,
         persona_profile=model_row.profile_text,
+        persona=persona,
         target_lang=target_lang,
         relationship_score=state.relationship_score,
         mood=state.mood,
         notes=notes,
+        followup=followup,
     )
-    user_msg = build_companion_user_prompt(conv=conv, messages=messages)
+    user_msg = build_companion_user_prompt(conv=conv, messages=messages, followup=followup)
 
     sub, llm_row, _, plan, _, _ = await load_owner_studio_billing(session, owner_id)
     cred = studio_llm_credentials(plan=plan, llm_row=llm_row)
@@ -107,5 +112,6 @@ async def generate_companion_reply(
         "mood": state.mood,
         "target_lang": target_lang,
         "prompt_version": PROMPT_VERSION,
+        "followup": followup,
     }
     return reply, target_lang, model, state.relationship_score, snapshot

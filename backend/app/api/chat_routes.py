@@ -886,6 +886,15 @@ async def api_approve_companion_draft(
     await session.commit()
     await session.refresh(row, attribute_names=["attachments"])
     await broadcast_companion_message(owner_id=oid, conv_id=conv.id, row=row)
+    trigger = await session.get(Message, event.trigger_message_id)
+    if trigger and trigger.direction == MessageDirection.inbound:
+        from app.services.companion_bot.schedule import schedule_companion_followup
+
+        schedule_companion_followup(
+            owner_user_id=oid,
+            conv_id=conv.id,
+            after_outbound_message_id=row.id,
+        )
     return message_to_out(row, owner_id=oid)
 
 

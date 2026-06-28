@@ -887,10 +887,15 @@ def _studio_model_to_out(user_id: int, m: UserStudioModel) -> UserStudioModelOut
     ]
     selfie_prof = phone_exif_profile_from_json(m.phone_exif_selfie_json)
     main_prof = phone_exif_profile_from_json(m.phone_exif_main_json)
+    from app.services.companion_bot.persona import parse_companion_persona
+    from app.schemas import CompanionPersonaOut
+
+    persona = parse_companion_persona(m.companion_persona_json)
     return UserStudioModelOut(
         id=m.id,
         name=m.name,
         profile_text=m.profile_text or "",
+        companion_persona=CompanionPersonaOut.model_validate(persona.model_dump()),
         image_count=len(ordered),
         images=images,
         camera_preset_id=(m.camera_preset_id or "").strip() or None,
@@ -1936,6 +1941,18 @@ async def api_patch_studio_model(
         m.name = str(data["name"]).strip()
     if "profile_text" in data:
         m.profile_text = (data["profile_text"] or "").strip()
+    if "companion_persona" in data:
+        from app.services.companion_bot.persona import (
+            CompanionPersona,
+            companion_persona_to_json,
+        )
+
+        raw = data["companion_persona"]
+        if raw is None:
+            m.companion_persona_json = None
+        else:
+            persona = CompanionPersona.model_validate(raw)
+            m.companion_persona_json = companion_persona_to_json(persona)
     if "camera_preset_id" in data:
         raw_c = data["camera_preset_id"]
         if raw_c is None or (isinstance(raw_c, str) and not str(raw_c).strip()):
