@@ -237,6 +237,10 @@ class Settings(BaseSettings):
     wavespeed_seedance_20_t2v_path: str = Field(
         default="/api/v3/bytedance/seedance-2.0/text-to-video",
     )
+    # Seedance 2.0 Fast T2V — swap по reference_videos (standard, не mini)
+    wavespeed_seedance_20_fast_t2v_path: str = Field(
+        default="/api/v3/bytedance/seedance-2.0-fast/text-to-video",
+    )
     # Seedance 2.0 Mini T2V (легче/дешевле; см. wavespeed.ai/docs …/seedance-2.0-mini-text-to-video)
     wavespeed_seedance_20_mini_t2v_path: str = Field(
         default="/api/v3/bytedance/seedance-2.0-mini/text-to-video",

@@ -154,36 +154,11 @@ def build_boardstory_video_edit_swap_prompt(
     negative: str | None = None,
     max_chars: int | None = None,
 ) -> str:
-    """
-    Промпт для Seedance Video-Edit Turbo — как в playground WaveSpeed.
-    Без @Video1/@ImageN: video = input clip, reference_images = модель.
-    https://wavespeed.ai/models/bytedance/seedance-2.0/video-edit-turbo
-    """
-    from app.services.studio_seedance_t2v import truncate_seedance_t2v_prompt
+    """Промпт для swap по референс-видео (Video-Edit или T2V + reference_videos)."""
+    from app.services.studio_seedance_t2v import build_seedance_motion_video_swap_prompt
 
-    parts = [
-        "Replace the person in the video with the person from reference image 1, "
-        "keeping the same actions, expressions, and camera movement.",
-        "Face, body, and hair must match reference image 1 in every frame — "
-        "never keep the original video actor.",
-    ]
-    idx = 1 + max(0, n_identity_refs)
-    if has_clothing:
-        parts.append(
-            f"Dress the person in the exact clothing and accessories from reference image {idx}."
-        )
-        idx += 1
-    if has_environment:
-        parts.append(
-            f"Match room, background, lighting, and atmosphere from reference image {idx}."
-        )
-    notes = (user_notes or "").strip()
-    if notes:
-        parts.append(notes)
-    neg = (negative or "").strip()
-    if neg:
-        parts.append(f"Avoid: {neg}")
-    return truncate_seedance_t2v_prompt("\n\n".join(parts), max_chars=max_chars)
+    _ = (n_identity_refs, has_clothing, has_environment, negative)
+    return build_seedance_motion_video_swap_prompt(user_notes, max_chars=max_chars)
 
 
 def build_boardstory_video_edit_reference_urls(
@@ -288,22 +263,11 @@ def build_boardstory_video_only_swap_prompt(
     video_tag: str = "@Video1",
     max_chars: int | None = None,
 ) -> str:
-    """
-    Фиксированный Seedance-промпт: identity из @Image1 (+ @Image2/@Image3), motion из @Video1.
-    """
-    from app.services.studio_seedance_t2v import truncate_seedance_t2v_prompt
+    """Короткий Seedance-промпт: swap персонажа по @Video1 + face @Image1."""
+    from app.services.studio_seedance_t2v import build_seedance_motion_video_swap_prompt
 
-    template = _BOARDSTORY_VIDEO_ONLY_SWAP_TEMPLATE.format(
-        video_tag=video_tag,
-        identity_role_lines=boardstory_identity_role_lines(n_model_images),
-    )
-
-    parts = [template.strip()]
-    notes = (user_notes or "").strip()
-    if notes:
-        parts.append(f"USER_DIRECTION:\n{notes}")
-
-    return truncate_seedance_t2v_prompt("\n\n".join(parts), max_chars=max_chars)
+    _ = (n_model_images, video_tag)
+    return build_seedance_motion_video_swap_prompt(user_notes, max_chars=max_chars)
 
 
 def boardstory_clothing_env_swap_mode(
@@ -356,22 +320,11 @@ def build_boardstory_clothing_env_swap_prompt(
     video_tag: str = "@Video1",
     max_chars: int | None = None,
 ) -> str:
-    """Фиксированный промпт: @Image1 identity, отдельные clothing/env теги, motion из @Video1."""
-    from app.services.studio_seedance_t2v import truncate_seedance_t2v_prompt
+    """Короткий Seedance-промпт: swap персонажа по @Video1 + face @Image1."""
+    from app.services.studio_seedance_t2v import build_seedance_motion_video_swap_prompt
 
-    template = _BOARDSTORY_CLOTHING_ENV_SWAP_TEMPLATE.format(
-        video_tag=video_tag,
-        clothing_tag=clothing_tag,
-        environment_tag=environment_tag,
-        identity_role_lines=boardstory_identity_role_lines(n_model_images),
-    )
-
-    parts = [template.strip()]
-    notes = (user_notes or "").strip()
-    if notes:
-        parts.append(f"USER_DIRECTION:\n{notes}")
-
-    return truncate_seedance_t2v_prompt("\n\n".join(parts), max_chars=max_chars)
+    _ = (n_model_images, clothing_tag, environment_tag, video_tag)
+    return build_seedance_motion_video_swap_prompt(user_notes, max_chars=max_chars)
 
 
 def boardstory_tag_rules_text(
@@ -560,44 +513,21 @@ def finalize_boardstory_t2v_prompt(
     n_motion_videos: int = 0,
     max_chars: int | None = None,
 ) -> str:
-    """Финализация BoardStory-промпта перед Seedance T2V: swap-lead + motion lock."""
-    from app.services.studio_seedance_t2v import truncate_seedance_t2v_prompt
+    """Финализация BoardStory-промпта перед Seedance T2V."""
+    from app.services.studio_seedance_t2v import (
+        build_seedance_motion_video_swap_prompt,
+        truncate_seedance_t2v_prompt,
+    )
+
+    if n_motion_videos > 0:
+        return build_seedance_motion_video_swap_prompt(max_chars=max_chars)
 
     body = (prompt or "").strip()
     if not body:
         return ""
 
-    if layout is not None and n_motion_videos > 0:
-        body = append_boardstory_prompt_enforcement(
-            body,
-            layout=layout,
-            clothing_from_video=layout.n_clothing_images == 0,
-            environment_from_video=layout.n_environment_images == 0,
-            send_video_reference=True,
-        )
-
-    low = body.lower()
-    parts: list[str] = []
-    if n_motion_videos > 0 and "model replacement" not in low:
-        if layout is not None:
-            parts.append(boardstory_model_swap_lock_text(layout))
-        else:
-            parts.append(
-                "MODEL REPLACEMENT: Replace the person in @Video1 with @Image1 "
-                "(face, body, hair from model photos — NOT the video actor). "
-                "@Video1 supplies motion, timing, gestures, and camera ONLY."
-            )
-
-    parts.append(body)
-
-    if n_motion_videos > 0 and "motion only" not in low and "only motion" not in low:
-        parts.append(
-            "MOTION LOCK: @Video1 — choreography and camera ONLY; "
-            "on-screen person is @Image1 in every frame."
-        )
-
     lim = max_chars if max_chars is not None else None
-    return truncate_seedance_t2v_prompt("\n\n".join(parts).strip(), max_chars=lim)
+    return truncate_seedance_t2v_prompt(body, max_chars=lim)
 
 
 def append_boardstory_video_fallback_lines(
@@ -637,39 +567,11 @@ def build_boardstory_opening_frame_t2v_prompt(
     negative: str | None = None,
     max_chars: int | None = None,
 ) -> str:
-    """Seedance T2V с @Image1 = swapped opening still, @Image2+ = model refs, @Video1 = motion."""
-    from app.services.studio_seedance_t2v import (
-        _IDENTITY_NEGATIVE_DEFAULTS,
-        truncate_seedance_t2v_prompt,
-    )
+    """Seedance T2V с opening still + motion ref — короткий swap-промпт."""
+    from app.services.studio_seedance_t2v import build_seedance_motion_video_swap_prompt
 
-    identity_tags = layout.identity_tag_expr or "@Image2"
-    parts: list[str] = [
-        "MODEL REPLACEMENT: Replace the performer in @Video1 with the model character. "
-        "The on-screen person in every frame must match the model — never the original @Video1 actor.",
-        (
-            "@Image1 — opening still at t=0: exact pose, framing, lighting, and wardrobe from the "
-            "motion reference, with the MODEL's face and body (not the video actor)."
-        ),
-        f"Reinforce character identity from {identity_tags}.",
-    ]
-    if layout.clothing_tag:
-        parts.append(f"Wardrobe from {layout.clothing_tag}.")
-    if layout.environment_tag:
-        parts.append(f"Room, background, and lighting from {layout.environment_tag}.")
-    if n_motion_videos > 0:
-        parts.append(
-            "@Video1 — motion, timing, gestures, emotions, and camera movement ONLY. "
-            "Never copy the reference actor's face, skin, hair, or body from @Video1."
-        )
-    notes = (user_notes or "").strip()
-    if notes:
-        parts.append(f"USER_DIRECTION:\n{notes}")
-    neg_parts = [_IDENTITY_NEGATIVE_DEFAULTS]
-    if (negative or "").strip():
-        neg_parts.append(negative.strip())
-    parts.append(f"Avoid: {'; '.join(neg_parts)}")
-    return truncate_seedance_t2v_prompt("\n\n".join(parts), max_chars=max_chars)
+    _ = (layout, n_motion_videos, negative)
+    return build_seedance_motion_video_swap_prompt(user_notes, max_chars=max_chars)
 
 
 def build_boardstory_reference_urls(

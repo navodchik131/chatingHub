@@ -128,10 +128,19 @@ async def _validate_boardstory_model_refs(session: AsyncSession, *, model_id: in
         )
 
 
-async def _estimate_boardstory_model_image_count(session: AsyncSession, *, model_id: int, actor: User) -> int:
+async def _estimate_boardstory_model_image_count(
+    session: AsyncSession,
+    *,
+    model_id: int,
+    actor: User,
+    send_video_reference: bool = True,
+) -> int:
+    from app.services.studio_seedance_t2v import filter_model_images_for_seedance_video_face_only
     from app.services.workspace_model_access import require_studio_model_access
 
     sm = await require_studio_model_access(session, actor, model_id, load_images=True)
+    if send_video_reference:
+        return len(filter_model_images_for_seedance_video_face_only(list(sm.images)))
     return len(filter_model_images_for_boardstory(list(sm.images)))
 
 
@@ -181,7 +190,12 @@ async def compose_workflow_video_generation_prompt(
 
     if boardstory_mode:
         await _validate_boardstory_model_refs(session, model_id=model_id, actor=actor)
-        n_model = await _estimate_boardstory_model_image_count(session, model_id=model_id, actor=actor)
+        n_model = await _estimate_boardstory_model_image_count(
+            session,
+            model_id=model_id,
+            actor=actor,
+            send_video_reference=send_video_reference,
+        )
 
         extract_result: dict[str, int | str | None] = {
             "clothing_generation_id": None,

@@ -21,6 +21,8 @@ MAX_SEEDANCE_VIDEO_MODEL_IDENTITY_IMAGES = 2
 MAX_SEEDANCE_VIDEO_MODEL_IDENTITY_WITH_BODY = 3
 SEEDANCE_T2V_PROMPT_MAX_CHARS = 3000
 
+SEEDANCE_MOTION_VIDEO_SWAP_PROMPT = "замени персонажа на видео на персонажа с фото"
+
 _T2V_KIND_ORDER = {"turnaround": 0, "face": 1, "body": 2, "other": 3, "genitals": 99}
 _VIDEO_IDENTITY_KINDS = frozenset({"turnaround", "face"})
 _VIDEO_IDENTITY_KINDS_WITH_BODY = frozenset({"turnaround", "face", "body"})
@@ -136,6 +138,29 @@ def filter_model_images_for_seedance_video(
     if not picked:
         picked = sorted_all[:cap]
     return picked
+
+
+def filter_model_images_for_seedance_video_face_only(
+    imgs: list[UserStudioModelImage],
+) -> list[UserStudioModelImage]:
+    """Swap по @Video: одно фото «лицо / идентичность» из кабинета модели."""
+    for im in sort_model_images_for_seedance_t2v(imgs):
+        if (im.image_kind or "other").lower() == "face":
+            return [im]
+    return []
+
+
+def build_seedance_motion_video_swap_prompt(
+    user_notes: str | None = None,
+    *,
+    max_chars: int | None = None,
+) -> str:
+    """Короткий промпт для Seedance T2V с reference_videos + face reference."""
+    parts = [SEEDANCE_MOTION_VIDEO_SWAP_PROMPT]
+    notes = seedance_optional_user_notes(user_notes)
+    if notes:
+        parts.append(notes)
+    return truncate_seedance_t2v_prompt("\n".join(parts), max_chars=max_chars)
 
 
 def model_reference_public_urls(
@@ -450,6 +475,12 @@ def assemble_seedance_t2v_reference_prompt(
     Фиксированный Seedance T2V промпт только по @Image/@Video — без выдуманной сцены.
     @Image1 = первый кадр (среда, поза, свет, одежда); model @Image = развёртка; @Video = motion.
     """
+    if n_motion_videos > 0:
+        return build_seedance_motion_video_swap_prompt(
+            user_notes,
+            max_chars=settings.studio_seedance_t2v_prompt_max_chars,
+        )
+
     aspect = (output_aspect or "9:16").strip() or "9:16"
     dur = max(4, int(duration_seconds or 5))
     identity_tags = seedance_model_identity_tag_expr(n_start_frame, n_model_images)
@@ -526,6 +557,12 @@ def assemble_boardstory_seedance_prompt(
         has_clothing=n_clothing_images > 0,
         has_environment=n_environment_images > 0,
     )
+    if n_motion_videos > 0:
+        return build_seedance_motion_video_swap_prompt(
+            user_prompt,
+            max_chars=settings.studio_seedance_t2v_prompt_max_chars,
+        )
+
     id_expr = layout.identity_tag_expr or "@Image1"
     parts: list[str] = []
 
@@ -628,6 +665,12 @@ async def build_seedance_t2v_prompt(
 
     lim = settings.studio_seedance_t2v_prompt_max_chars
     lock_lang = "zh" if settings.studio_seedance_grok_prompt_zh else "en"
+
+    if n_motion_videos > 0:
+        p = build_seedance_motion_video_swap_prompt(user_brief, max_chars=lim)
+        if remove_face_grid:
+            p = append_workflow_face_grid_removal(p, language=lock_lang)
+        return (p, "motion_video_swap")
 
     if reference_only:
         p = assemble_seedance_t2v_reference_prompt(

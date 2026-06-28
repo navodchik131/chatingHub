@@ -247,20 +247,51 @@ def test_assemble_reference_prompt_binds_refs_not_invented_scene():
     p = assemble_seedance_t2v_reference_prompt(
         n_start_frame=1,
         n_model_images=1,
-        n_motion_videos=1,
+        n_motion_videos=0,
         output_aspect="9:16",
         duration_seconds=5,
     )
     assert "@Image1" in p
     assert "@Image2" in p
-    assert "@Video1" in p
     assert "match @Image1 exactly" in p
     assert "appearance from @Image2" in p
-    assert "from @Video1 only" in p
     assert "urban street" in p.lower()
     assert "rain" in p.lower()
     assert "invented environment" in p.lower()
     assert "She walks in the rain." not in p
+
+
+def test_assemble_reference_prompt_motion_video_swap_short():
+    p = assemble_seedance_t2v_reference_prompt(
+        n_start_frame=1,
+        n_model_images=1,
+        n_motion_videos=1,
+    )
+    assert p == "замени персонажа на видео на персонажа с фото"
+
+
+def test_filter_model_images_for_seedance_video_face_only():
+    from app.services.studio_seedance_t2v import filter_model_images_for_seedance_video_face_only
+
+    imgs = [
+        UserStudioModelImage(id=1, image_kind="turnaround"),
+        UserStudioModelImage(id=2, image_kind="face"),
+        UserStudioModelImage(id=3, image_kind="body"),
+    ]
+    out = filter_model_images_for_seedance_video_face_only(imgs)
+    assert len(out) == 1
+    assert out[0].image_kind == "face"
+
+
+def test_seedance_t2v_post_path_fast_with_reference_videos():
+    from app.services.wavespeed_client import _seedance_20_t2v_post_path
+
+    assert _seedance_20_t2v_post_path(variant="standard", use_fast=True) == (
+        "/api/v3/bytedance/seedance-2.0-fast/text-to-video"
+    )
+    assert _seedance_20_t2v_post_path(variant="mini", use_fast=False) == (
+        "/api/v3/bytedance/seedance-2.0-mini/text-to-video"
+    )
 
 
 def test_seedance_optional_user_notes_skips_placeholder():

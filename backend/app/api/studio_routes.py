@@ -214,7 +214,9 @@ from app.services.studio_seedance_t2v import (
     append_workflow_face_grid_removal,
     assemble_boardstory_seedance_prompt,
     build_seedance_t2v_prompt,
+    build_seedance_motion_video_swap_prompt,
     filter_model_images_for_seedance_video,
+    filter_model_images_for_seedance_video_face_only,
     generation_still_public_url,
     model_reference_public_urls,
     soften_seedance_provider_prompt,
@@ -5060,19 +5062,27 @@ async def _studio_job_execute_motion_render_video(
         raise RuntimeError("Модель не найдена")
 
     if video_provider != "grok_imagine_i2v":
-        model_ref_ok = (
-            filter_model_images_for_boardstory(list(sm.images))
-            if boardstory_mode
-            else filter_model_images_for_seedance_video(list(sm.images))
-        )
-        if not model_ref_ok and (boardstory_mode or not str(sheet_gid_raw or "").strip()):
-            raise RuntimeError(
-                "У модели нет фото для BoardStory (лицо, развёртка или тело). "
-                "Добавьте снимки в кабинете модели."
+        if mv_id and send_video_reference:
+            model_ref_ok = filter_model_images_for_seedance_video_face_only(list(sm.images))
+            if not model_ref_ok:
+                raise RuntimeError(
+                    "У модели нет фото лица для swap по видео. "
+                    "Добавьте снимок «Лицо / идентичность» в кабинете модели."
+                )
+        else:
+            model_ref_ok = (
+                filter_model_images_for_boardstory(list(sm.images))
                 if boardstory_mode
-                else "У модели нет фото для reference_images. "
-                "Добавьте снимок «Тело целиком» (body) в кабинете модели."
+                else filter_model_images_for_seedance_video(list(sm.images))
             )
+            if not model_ref_ok and (boardstory_mode or not str(sheet_gid_raw or "").strip()):
+                raise RuntimeError(
+                    "У модели нет фото для BoardStory (лицо, развёртка или тело). "
+                    "Добавьте снимки в кабинете модели."
+                    if boardstory_mode
+                    else "У модели нет фото для reference_images. "
+                    "Добавьте снимок «Тело целиком» (body) в кабинете модели."
+                )
 
     log.info(
         "motion_render_video job=%s model=%s ff=%s mv=%s outfit=%s",
@@ -5249,12 +5259,8 @@ async def _studio_job_execute_motion_render_video(
                 msg[:240],
             )
     else:
-        use_boardstory_video_edit = (
-            boardstory_mode
-            and bool(motion_vid_url)
-            and send_video_reference
-            and settings.studio_boardstory_use_video_edit
-        )
+        # Swap по референс-видео: Seedance T2V + reference_videos (standard → fast API, mini → mini T2V)
+        use_boardstory_video_edit = False
 
         if boardstory_mode:
             if use_boardstory_video_edit:
@@ -5313,7 +5319,15 @@ async def _studio_job_execute_motion_render_video(
                 n_environment = 1 if has_environment else 0
                 n_start = 0
             else:
-                model_imgs = filter_model_images_for_boardstory(list(sm.images))
+                if motion_vid_url and send_video_reference:
+                    model_imgs = filter_model_images_for_seedance_video_face_only(list(sm.images))
+                    if not model_imgs:
+                        raise RuntimeError(
+                            "У модели нет фото лица для swap по видео. "
+                            "Добавьте снимок «Лицо / идентичность» в кабинете модели."
+                        )
+                else:
+                    model_imgs = filter_model_images_for_boardstory(list(sm.images))
                 model_urls = model_reference_public_urls(
                     owner_id=oid,
                     images=model_imgs,
@@ -5395,7 +5409,12 @@ async def _studio_job_execute_motion_render_video(
                     else []
                 )
 
-                if opening_still_url:
+                if ref_videos:
+                    seed_prompt = build_seedance_motion_video_swap_prompt(
+                        prompt.strip(),
+                    )
+                    prompt_source = "motion_video_swap"
+                elif opening_still_url:
                     seed_prompt = build_boardstory_opening_frame_t2v_prompt(
                         layout=layout,
                         n_motion_videos=len(ref_videos),
@@ -5429,11 +5448,20 @@ async def _studio_job_execute_motion_render_video(
                 except (TypeError, ValueError):
                     sheet_gen_id = None
 
-            model_imgs = filter_model_images_for_seedance_video(
-                list(sm.images),
-                minimal=False,
-                include_body=False,
+            model_imgs = (
+                filter_model_images_for_seedance_video_face_only(list(sm.images))
+                if motion_vid_url and send_video_reference
+                else filter_model_images_for_seedance_video(
+                    list(sm.images),
+                    minimal=False,
+                    include_body=False,
+                )
             )
+            if motion_vid_url and send_video_reference and not model_imgs:
+                raise RuntimeError(
+                    "У модели нет фото лица для swap по видео. "
+                    "Добавьте снимок «Лицо / идентичность» в кабинете модели."
+                )
             n_outfit = 0
             if sheet_gen_id is not None:
                 sheet_url = generation_still_public_url(
@@ -5480,7 +5508,9 @@ async def _studio_job_execute_motion_render_video(
             if len(ref_images) > MAX_SEEDANCE_REFERENCE_IMAGES:
                 ref_images = ref_images[:MAX_SEEDANCE_REFERENCE_IMAGES]
 
-            ref_videos = [motion_vid_url] if motion_vid_url else []
+            ref_videos = (
+                [motion_vid_url] if motion_vid_url and send_video_reference else []
+            )
 
             seed_prompt, prompt_source = await build_seedance_t2v_prompt(
                 user_brief=prompt,

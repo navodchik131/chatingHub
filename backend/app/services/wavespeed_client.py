@@ -1302,13 +1302,16 @@ async def wan_22_animate_video_url(
     )
 
 
-def _seedance_20_t2v_post_path(*, variant: str = "standard") -> str:
+def _seedance_20_t2v_post_path(*, variant: str = "standard", use_fast: bool = False) -> str:
     from app.services.studio_motion_pricing import normalize_seedance_t2v_variant
 
     v = normalize_seedance_t2v_variant(variant)
     if v == "mini":
         p = (settings.wavespeed_seedance_20_mini_t2v_path or "").strip()
         p = p or "/api/v3/bytedance/seedance-2.0-mini/text-to-video"
+    elif use_fast:
+        p = (settings.wavespeed_seedance_20_fast_t2v_path or "").strip()
+        p = p or "/api/v3/bytedance/seedance-2.0-fast/text-to-video"
     else:
         p = (settings.wavespeed_seedance_20_t2v_path or "").strip()
         p = p or "/api/v3/bytedance/seedance-2.0/text-to-video"
@@ -1334,7 +1337,7 @@ async def seedance_20_text_to_video_url(
 ) -> str:
     """
     ByteDance Seedance 2.0 Text-to-Video: prompt + reference_images (@ImageN в тексте).
-    variant=standard → …/seedance-2.0/text-to-video
+    variant=standard → …/seedance-2.0/text-to-video (или …/seedance-2.0-fast при reference_videos)
     variant=mini → …/seedance-2.0-mini/text-to-video
     Док: https://wavespeed.ai/docs/docs-api/bytedance/bytedance-seedance-2.0-text-to-video
     """
@@ -1351,7 +1354,11 @@ async def seedance_20_text_to_video_url(
         duration if duration is not None else None,
         default=settings.wavespeed_seedance_20_t2v_duration,
     )
-    path = _seedance_20_t2v_post_path(variant=variant)
+    vids = [u.strip() for u in (reference_videos or []) if (u or "").strip()]
+    from app.services.studio_motion_pricing import normalize_seedance_t2v_variant
+
+    use_fast = normalize_seedance_t2v_variant(variant) != "mini" and bool(vids)
+    path = _seedance_20_t2v_post_path(variant=variant, use_fast=use_fast)
     url = f"{_wavespeed_base()}{path}"
     body: dict[str, Any] = {
         "prompt": prompt.strip(),
@@ -1370,7 +1377,6 @@ async def seedance_20_text_to_video_url(
     imgs = [u.strip() for u in (reference_images or []) if (u or "").strip()]
     if imgs:
         body["reference_images"] = imgs[:9]
-    vids = [u.strip() for u in (reference_videos or []) if (u or "").strip()]
     if vids:
         body["reference_videos"] = vids[:3]
     auds = [u.strip() for u in (reference_audios or []) if (u or "").strip()]
