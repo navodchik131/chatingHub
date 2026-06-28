@@ -21,6 +21,7 @@ from app.services.companion_bot.prompt import (
     PROMPT_VERSION,
     build_companion_system_prompt,
     build_companion_user_prompt,
+    last_fan_message_text,
     resolve_target_lang,
 )
 from app.services.studio_keys import load_owner_studio_billing, studio_llm_credentials
@@ -74,7 +75,7 @@ async def generate_companion_reply(
         ).all()
     )
 
-    target_lang = resolve_target_lang(conv)
+    target_lang = resolve_target_lang(conv, last_fan_text=last_fan_message_text(messages))
     persona = parse_companion_persona(model_row.companion_persona_json)
     system = build_companion_system_prompt(
         persona_name=model_row.name,
@@ -84,6 +85,7 @@ async def generate_companion_reply(
         relationship_score=state.relationship_score,
         mood=state.mood,
         notes=notes,
+        messages=messages,
         followup=followup,
     )
     user_msg = build_companion_user_prompt(conv=conv, messages=messages, followup=followup)
@@ -99,7 +101,7 @@ async def generate_companion_reply(
             {"role": "user", "content": user_msg},
         ],
         max_tokens=500,
-        temperature=0.85,
+        temperature=0.72,
         credentials=cred,
         timeout_seconds=90.0,
     )

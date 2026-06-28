@@ -73,20 +73,75 @@ def test_companion_persona_format():
 
 
 def test_companion_prompt_initiative():
-    from app.services.companion_bot.persona import CompanionPersona
-    from app.services.companion_bot.prompt import PROMPT_VERSION, build_companion_system_prompt
+    from datetime import datetime, timezone
 
-    assert PROMPT_VERSION == "v2"
+    from app.services.companion_bot.persona import CompanionPersona
+    from app.services.companion_bot.prompt import (
+        PROMPT_VERSION,
+        _message_text_for_transcript,
+        build_companion_system_prompt,
+        build_companion_user_prompt,
+    )
+
+    assert PROMPT_VERSION == "v3"
+
+    out_msg = Message(
+        id=2,
+        conversation_id=1,
+        direction=MessageDirection.outbound,
+        text_original="Лежу в кровати",
+        text_translated="Just chilling in bed",
+    )
+    assert _message_text_for_transcript(out_msg) == "Just chilling in bed"
+
+    in_msg = Message(
+        id=1,
+        conversation_id=1,
+        direction=MessageDirection.inbound,
+        text_original="Hello Mia",
+        text_translated="Привет Мия",
+    )
+    assert _message_text_for_transcript(in_msg) == "Hello Mia"
+
+    now = datetime.now(timezone.utc)
+    messages = [
+        Message(
+            id=1,
+            conversation_id=1,
+            direction=MessageDirection.inbound,
+            text_original="бесишь",
+            created_at=now,
+        ),
+        Message(
+            id=2,
+            conversation_id=1,
+            direction=MessageDirection.outbound,
+            text_original="ок",
+            text_translated="sorry!",
+            created_at=now,
+        ),
+        Message(
+            id=3,
+            conversation_id=1,
+            direction=MessageDirection.inbound,
+            text_original="Hello Mia",
+            created_at=now,
+        ),
+    ]
+    conv = SimpleNamespace(user_display_name="Renat")
     sys = build_companion_system_prompt(
-        persona_name="Luna",
+        persona_name="Mia",
         persona_profile="",
         persona=CompanionPersona(city="Madrid"),
         target_lang="en",
         relationship_score=40,
         mood="playful",
         notes=[],
-        followup=True,
+        messages=messages,
     )
-    assert "FOLLOW-UP" in sys
-    assert "ENGAGEMENT" in sys
-    assert "Madrid" in sys
+    assert "MID-CONVERSATION" in sys
+    assert "hello again" in sys.lower() or "ALREADY chatting" in sys
+
+    user = build_companion_user_prompt(conv=conv, messages=messages)
+    assert "Hello Mia" in user
+    assert "no reset" in user.lower() or "Continue" in user

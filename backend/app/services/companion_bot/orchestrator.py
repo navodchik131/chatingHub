@@ -24,7 +24,7 @@ from app.db.repo import list_messages
 from app.db.session import SessionLocal
 from app.services.companion_bot.config import CompanionConnectionConfig, get_companion_config_for_conversation
 from app.services.companion_bot.generate import generate_companion_reply
-from app.services.companion_bot.prompt import PROMPT_VERSION, resolve_target_lang
+from app.services.companion_bot.prompt import PROMPT_VERSION, last_fan_message_text, resolve_target_lang
 from app.services.companion_bot.send import broadcast_companion_message, send_companion_outbound
 from app.services.realtime import hub
 
@@ -155,8 +155,8 @@ async def create_companion_followup_event(
     ):
         return None
 
-    history = await list_messages(session, conv.id, owner_user_id, limit=50)
-    target_lang = resolve_target_lang(conv)
+    history = await list_messages(session, conv.id, owner_user_id, limit=60)
+    target_lang = resolve_target_lang(conv, last_fan_text=last_fan_message_text(history))
     try:
         reply, lang, model_name, _, snapshot = await generate_companion_reply(
             session,
@@ -326,8 +326,10 @@ async def create_companion_reply_event(
     if not text_in:
         return None
 
-    history = await list_messages(session, conv.id, owner_user_id, limit=50)
-    target_lang = resolve_target_lang(conv)
+    history = await list_messages(session, conv.id, owner_user_id, limit=60)
+    target_lang = resolve_target_lang(
+        conv, last_fan_text=(trigger.text_original or "").strip() or None
+    )
     try:
         reply, lang, model_name, _, snapshot = await generate_companion_reply(
             session,

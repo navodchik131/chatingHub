@@ -2,19 +2,119 @@
 
 from __future__ import annotations
 
+import re
 from datetime import datetime, timezone
 
 from app.db.models import Conversation, ConversationNote, ConversationNoteKind, Message, MessageDirection
 from app.services.companion_bot.persona import CompanionPersona, format_companion_persona_block
+from app.services.translation import detect_lang
 
-PROMPT_VERSION = "v2"
+PROMPT_VERSION = "v3"
+
+_GREETING_ONLY_RE = re.compile(
+    r"^[\s\W]*("
+    r"hi|hello|hey|yo|sup|hiya|howdy|"
+    r"ciao|salut|bonjour|hola|"
+    r"привет|здаров|здравствуй|хай|"
+    r"how are you|how's it going|how is your day|what's up|whats up|"
+    r"как дела|как ты|привет мия|hello mia|hi mia"
+    r")[\s\W\d]*$",
+    re.IGNORECASE,
+)
+
+_COMPLAINT_HINTS = (
+    "бесишь",
+    "бесит",
+    "annoy",
+    "annoying",
+    "repeat",
+    "повтор",
+    "boring",
+    "скучно",
+    "уже говорил",
+    "already said",
+    "stop saying",
+)
 
 
-def resolve_target_lang(conv: Conversation) -> str:
+def resolve_target_lang(conv: Conversation, *, last_fan_text: str | None = None) -> str:
     forced = (conv.outbound_lang or "").strip().lower()
     if forced:
         return forced
+    if last_fan_text and last_fan_text.strip():
+        detected = detect_lang(last_fan_text).lower().strip()
+        if detected and detected != "unknown":
+            return detected[:2] if len(detected) > 2 else detected
     return (conv.user_lang or "en").strip().lower() or "en"
+
+
+def last_fan_message_text(messages: list[Message]) -> str | None:
+    for m in reversed(messages):
+        if m.direction == MessageDirection.inbound:
+            text = _message_text_for_transcript(m)
+            if text:
+                return text
+    return None
+
+
+def _message_text_for_transcript(m: Message) -> str:
+    """Текст так, как его видел фан: входящие — оригинал, исходящие — то, что ушло на платформу."""
+    if m.direction == MessageDirection.inbound:
+        return (m.text_original or m.text_translated or "").strip()
+    return (m.text_translated or m.text_original or "").strip()
+
+
+def _is_casual_greeting(text: str) -> bool:
+    t = (text or "").strip()
+    if not t or len(t) > 120:
+        return False
+    return bool(_GREETING_ONLY_RE.match(t))
+
+
+def _fan_recently_complained(text: str) -> bool:
+    low = (text or "").lower()
+    return any(h in low for h in _COMPLAINT_HINTS)
+
+
+def _continuity_rules(*, mid_conversation: bool, fan_greeting_reset: bool, fan_complaint: bool) -> str:
+    lines = [
+        "CONVERSATION CONTINUITY (critical):\n",
+        "- Read the FULL transcript with timestamps. You are in an ongoing chat, not a first DM.",
+        "- NEVER open with a fresh greeting (hi, hey, ciao, hello, привет) if messages were exchanged recently.",
+        "- Do NOT repeat the same scene beat from your last 2–3 replies (e.g. in bed, just finished work, chilling at home).",
+        "- Answer what the fan actually asked; do not deflect with generic small talk.",
+        "- If you already described your mood or activity, evolve it or switch topic — do not copy-paste vibes.",
+    ]
+    if mid_conversation:
+        lines.append(
+            "- MID-CONVERSATION: you and the fan were just talking minutes ago — continue the thread naturally."
+        )
+    if fan_greeting_reset:
+        lines.append(
+            "- The fan sent hello/hi again but you're ALREADY chatting — tease lightly or pick up where you left off; "
+            "do NOT act like this is a new conversation."
+        )
+    if fan_complaint:
+        lines.append(
+            "- The fan recently expressed annoyance or boredom — acknowledge it, adjust tone, avoid repeating what upset them."
+        )
+    return "\n".join(lines) + "\n"
+
+
+def _initiative_rules(*, followup: bool) -> str:
+    base = (
+        "ENGAGEMENT:\n"
+        "- Leave a hook when it fits: question, playful tease, or invitation to continue.\n"
+        "- Match their energy; react emotionally before changing topic.\n"
+        "- Reference your life naturally when relevant; don't info-dump.\n"
+    )
+    if followup:
+        return (
+            base
+            + "- FOLLOW-UP: fan has not answered your last message. ONE short natural nudge — not needy, "
+            "not a repeat of your previous text.\n"
+        )
+    return base + "- Move the conversation forward; don't just acknowledge with a dead one-liner.\n"
 
 
 def _format_transcript(messages: list[Message], fan_name: str | None) -> str:
@@ -23,35 +123,36 @@ def _format_transcript(messages: list[Message], fan_name: str | None) -> str:
         lines.append(f"Fan display name: {fan_name}")
     for m in messages:
         who = "Fan" if m.direction == MessageDirection.inbound else "You"
-        text = (m.text_original or m.text_translated or "").strip()
+        text = _message_text_for_transcript(m)
         if not text:
             continue
-        lines.append(f"{who}: {text}")
+        ts = ""
+        if m.created_at:
+            ts = m.created_at.strftime("%H:%M")
+            lines.append(f"[{ts}] {who}: {text}")
+        else:
+            lines.append(f"{who}: {text}")
     return "\n".join(lines)
 
 
-def _initiative_rules(*, followup: bool) -> str:
-    base = (
-        "ENGAGEMENT (critical):\n"
-        "- Never end with a dead one-liner if the fan is chatting. Leave a hook: a question, "
-        "playful tease, small story beat, or invitation to continue.\n"
-        "- Match their energy but add warmth — you are a real girl who enjoys talking, not a helpdesk.\n"
-        "- Reference your life (city, hobbies, mood) naturally when it fits; don't info-dump.\n"
-        "- If they flirt, flirt back proportionally to relationship warmth.\n"
-        "- If they share something personal, react emotionally before changing topic.\n"
+def _analyze_thread(messages: list[Message]) -> tuple[bool, bool, bool, str | None]:
+    """mid_conversation, fan_greeting_reset, fan_complaint, last_fan_text."""
+    inbound = [m for m in messages if m.direction == MessageDirection.inbound]
+    outbound = [m for m in messages if m.direction == MessageDirection.outbound]
+    last_fan_text = _message_text_for_transcript(inbound[-1]) if inbound else None
+
+    mid = len(inbound) >= 2 and len(outbound) >= 1
+    greeting_reset = bool(
+        last_fan_text and mid and _is_casual_greeting(last_fan_text)
     )
-    if followup:
-        return (
-            base
-            + "- This is a FOLLOW-UP: fan has not answered your last message (or thread went cold). "
-            "Send ONE short natural nudge — curious, caring, or playful — not needy or spammy. "
-            "Do not repeat your previous message verbatim.\n"
-        )
-    return (
-        base
-        + "- If the fan's last message is open-ended or emotional, your reply should move the story forward, "
-        "not just acknowledge.\n"
-    )
+    complaint = False
+    for m in reversed(inbound[-5:]):
+        t = _message_text_for_transcript(m)
+        if t and _fan_recently_complained(t):
+            complaint = True
+            break
+
+    return mid, greeting_reset, complaint, last_fan_text
 
 
 def build_companion_system_prompt(
@@ -63,8 +164,11 @@ def build_companion_system_prompt(
     relationship_score: int,
     mood: str | None,
     notes: list[ConversationNote],
+    messages: list[Message],
     followup: bool = False,
 ) -> str:
+    mid, greeting_reset, complaint, _ = _analyze_thread(messages)
+
     profile_block = format_companion_persona_block(
         name=persona_name,
         profile_text=persona_profile,
@@ -86,12 +190,11 @@ def build_companion_system_prompt(
         f"Relationship warmth: {relationship_score}/100 (higher = more open, personal, flirty).\n"
         f"Current mood: {mood_line}.\n"
         f"Time reference (UTC): {now}.\n\n"
-        f"Reply ONLY in language code '{target_lang}'. Use natural casual speech, emojis when fitting, "
-        f"local slang and texting style for that language and region. Match the fan's message length "
-        f"and energy unless you intentionally send a follow-up ping.\n"
-        f"{_initiative_rules(followup=followup)}\n"
-        "Stay in character. Remember prior context. Do not repeat yourself. "
-        "One message only — no markdown headers, no quotes, no role labels.\n"
+        f"Reply ONLY in language code '{target_lang}' — match the fan's latest message language.\n"
+        f"Use natural casual speech, emojis when fitting. Match message length and energy.\n"
+        f"{_continuity_rules(mid_conversation=mid, fan_greeting_reset=greeting_reset, fan_complaint=complaint)}"
+        f"{_initiative_rules(followup=followup)}"
+        "Stay in character. One message only — no markdown, no quotes, no role labels.\n"
         + ("\n".join(note_lines) + "\n" if note_lines else "")
     )
 
@@ -103,12 +206,25 @@ def build_companion_user_prompt(
     followup: bool = False,
 ) -> str:
     transcript = _format_transcript(messages, conv.user_display_name)
+    _, greeting_reset, _, last_fan_text = _analyze_thread(messages)
+
+    tail = transcript[-14000:]
+    focus = ""
+    if last_fan_text and not followup:
+        focus = f"\n\nFan's latest message (reply to THIS):\n{last_fan_text}\n"
+        if greeting_reset:
+            focus += (
+                "They said hello again mid-chat — do NOT greet back like it's new; continue naturally.\n"
+            )
+
     if followup:
         return (
-            f"Conversation so far:\n\n{transcript[-14000:]}\n\n"
-            "Write ONE follow-up message as the persona (fan has not replied to your last text)."
+            f"Conversation so far:\n\n{tail}\n"
+            f"{focus}"
+            "Write ONE follow-up as the persona (fan has not replied to your last text)."
         )
     return (
-        f"Conversation so far:\n\n{transcript[-14000:]}\n\n"
-        "Write your next reply as the persona. Keep the conversation alive."
+        f"Conversation so far:\n\n{tail}\n"
+        f"{focus}"
+        "Write your next reply. Continue the existing conversation — no reset, no repeated beats."
     )
