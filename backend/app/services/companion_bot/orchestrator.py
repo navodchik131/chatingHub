@@ -11,6 +11,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.db.models import (
     BotResponseEvent,
     BotResponseEventStatus,
@@ -121,6 +122,44 @@ async def _existing_followup_for_outbound(
     )
 
 
+async def _should_skip_followup(
+    session: AsyncSession,
+    conv_id: int,
+) -> bool:
+    active_min = int(settings.companion_followup_skip_if_fan_active_minutes)
+    if active_min > 0:
+        since = datetime.now(timezone.utc) - timedelta(minutes=active_min)
+        recent_inbound = await session.scalar(
+            select(Message.id)
+            .where(
+                Message.conversation_id == conv_id,
+                Message.direction == MessageDirection.inbound,
+                Message.created_at >= since,
+            )
+            .limit(1)
+        )
+        if recent_inbound:
+            return True
+
+    recent = list(
+        (
+            await session.scalars(
+                select(Message)
+                .where(Message.conversation_id == conv_id)
+                .order_by(Message.id.desc())
+                .limit(8)
+            )
+        ).all()
+    )
+    outbound_since_fan = 0
+    for m in recent:
+        if m.direction == MessageDirection.inbound:
+            break
+        if m.direction == MessageDirection.outbound:
+            outbound_since_fan += 1
+    return outbound_since_fan >= 2
+
+
 async def create_companion_followup_event(
     session: AsyncSession,
     *,
@@ -192,7 +231,10 @@ async def run_companion_followup_pipeline(
     conv_id: int,
     after_outbound_message_id: int,
 ) -> None:
-    followup_delay = random.uniform(50, 100)
+    followup_delay = random.uniform(
+        settings.companion_followup_delay_min_sec,
+        settings.companion_followup_delay_max_sec,
+    )
     await asyncio.sleep(followup_delay)
 
     async with SessionLocal() as session:
@@ -204,6 +246,10 @@ async def run_companion_followup_pipeline(
             return
 
         if await _fan_replied_after(session, conv_id, after_outbound_message_id):
+            return
+
+        if await _should_skip_followup(session, conv_id):
+            log.info("companion followup skipped conv=%s (fan active or outbound streak)", conv_id)
             return
 
         event = await create_companion_followup_event(

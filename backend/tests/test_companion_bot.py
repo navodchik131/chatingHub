@@ -72,7 +72,7 @@ def test_companion_persona_format():
     assert "Hobbies: yoga" in block
 
 
-def test_companion_prompt_initiative():
+def test_companion_prompt_v4_chatter():
     from datetime import datetime, timezone
 
     from app.services.companion_bot.persona import CompanionPersona
@@ -81,9 +81,11 @@ def test_companion_prompt_initiative():
         _message_text_for_transcript,
         build_companion_system_prompt,
         build_companion_user_prompt,
+        recent_outbound_texts,
+        reply_too_similar_to_recent,
     )
 
-    assert PROMPT_VERSION == "v3"
+    assert PROMPT_VERSION == "v4-chatter"
 
     out_msg = Message(
         id=2,
@@ -139,9 +141,15 @@ def test_companion_prompt_initiative():
         notes=[],
         messages=messages,
     )
-    assert "MID-CONVERSATION" in sys
-    assert "hello again" in sys.lower() or "ALREADY chatting" in sys
+    assert "senior" in sys.lower() or "chatter" in sys.lower()
+    assert "ACTIVE THREAD" in sys
+    assert "mid-chat" in sys.lower()
 
     user = build_companion_user_prompt(conv=conv, messages=messages)
     assert "Hello Mia" in user
-    assert "no reset" in user.lower() or "Continue" in user
+    assert "no reset" in user.lower() or "repeated beats" in user.lower()
+
+    recent = recent_outbound_texts(messages, limit=4)
+    assert recent == ["sorry!"]
+    assert reply_too_similar_to_recent("sorry!", recent) is True
+    assert reply_too_similar_to_recent("totally different topic here", recent) is False

@@ -9,7 +9,7 @@ from app.db.models import Conversation, ConversationNote, ConversationNoteKind, 
 from app.services.companion_bot.persona import CompanionPersona, format_companion_persona_block
 from app.services.translation import detect_lang
 
-PROMPT_VERSION = "v3"
+PROMPT_VERSION = "v4-chatter"
 
 _GREETING_ONLY_RE = re.compile(
     r"^[\s\W]*("
@@ -34,7 +34,58 @@ _COMPLAINT_HINTS = (
     "уже говорил",
     "already said",
     "stop saying",
+    "same thing",
+    "одно и то же",
 )
+
+
+def recent_outbound_texts(messages: list[Message], *, limit: int = 4) -> list[str]:
+    out: list[str] = []
+    for m in reversed(messages):
+        if m.direction != MessageDirection.outbound:
+            continue
+        text = _message_text_for_transcript(m)
+        if text:
+            out.append(text)
+        if len(out) >= limit:
+            break
+    return out
+
+
+def _token_set(text: str) -> set[str]:
+    return {w for w in re.findall(r"[a-zа-яё0-9']+", (text or "").lower()) if len(w) > 2}
+
+
+def reply_too_similar_to_recent(candidate: str, recent_outbound: list[str]) -> bool:
+    """Грубая проверка зацикливания на последних исходящих."""
+    cand = (candidate or "").strip()
+    if not cand or not recent_outbound:
+        return False
+    cand_low = cand.lower()
+    cand_tokens = _token_set(cand)
+    for prev in recent_outbound[:3]:
+        prev = (prev or "").strip()
+        if not prev:
+            continue
+        if cand_low == prev.lower():
+            return True
+        if len(cand) > 40 and cand_low[:40] == prev.lower()[:40]:
+            return True
+        prev_tokens = _token_set(prev)
+        if cand_tokens and prev_tokens:
+            overlap = len(cand_tokens & prev_tokens) / max(len(cand_tokens), 1)
+            if overlap >= 0.62 and len(cand) > 30:
+                return True
+    return False
+
+
+def _chatter_role_block(*, persona_name: str) -> str:
+    return (
+        "ROLE: You are a senior OnlyFans/Fanvue chatter with years of experience.\n"
+        f"You write ONE outbound message as {persona_name} in first person — warm, human, concise.\n"
+        "The fan must not suspect a bot: never mention AI, scripts, policies, or being a chatter.\n"
+        "Your job: react to their LAST message first, keep continuity, build rapport — not a persona monologue.\n"
+    )
 
 
 def resolve_target_lang(conv: Conversation, *, last_fan_text: str | None = None) -> str:
@@ -78,43 +129,55 @@ def _fan_recently_complained(text: str) -> bool:
 
 def _continuity_rules(*, mid_conversation: bool, fan_greeting_reset: bool, fan_complaint: bool) -> str:
     lines = [
-        "CONVERSATION CONTINUITY (critical):\n",
-        "- Read the FULL transcript with timestamps. You are in an ongoing chat, not a first DM.",
-        "- NEVER open with a fresh greeting (hi, hey, ciao, hello, привет) if messages were exchanged recently.",
-        "- Do NOT repeat the same scene beat from your last 2–3 replies (e.g. in bed, just finished work, chilling at home).",
-        "- Answer what the fan actually asked; do not deflect with generic small talk.",
-        "- If you already described your mood or activity, evolve it or switch topic — do not copy-paste vibes.",
+        "CONVERSATION DISCIPLINE (critical):\n",
+        "- Read the FULL transcript with timestamps — ongoing chat, not a cold open.",
+        "- Reply to what they JUST said before adding anything new.",
+        "- NEVER reuse opening greetings (hi, hey, hello, привет) mid-thread.",
+        "- Do NOT repeat themes/phrases from your last 3 outbound messages (check the ban list below).",
+        "- One clear emotional beat per message — not a checklist of small talk.",
+        "- Avoid template fillers: «how's your day», «hope you're…», «safe drive», «text me when» unless truly new.",
+        "- If they answered your question, do NOT ask the same question again in other words.",
     ]
     if mid_conversation:
-        lines.append(
-            "- MID-CONVERSATION: you and the fan were just talking minutes ago — continue the thread naturally."
-        )
+        lines.append("- ACTIVE THREAD: you were talking minutes ago — continue, don't reset.")
     if fan_greeting_reset:
         lines.append(
-            "- The fan sent hello/hi again but you're ALREADY chatting — tease lightly or pick up where you left off; "
-            "do NOT act like this is a new conversation."
+            "- Fan said hello again mid-chat — light tease or continue the thread; not a fresh intro."
         )
     if fan_complaint:
         lines.append(
-            "- The fan recently expressed annoyance or boredom — acknowledge it, adjust tone, avoid repeating what upset them."
+            "- Fan showed annoyance or boredom — acknowledge briefly, change angle, zero repetition."
         )
     return "\n".join(lines) + "\n"
 
 
 def _initiative_rules(*, followup: bool) -> str:
     base = (
-        "ENGAGEMENT:\n"
-        "- Leave a hook when it fits: question, playful tease, or invitation to continue.\n"
-        "- Match their energy; react emotionally before changing topic.\n"
-        "- Reference your life naturally when relevant; don't info-dump.\n"
+        "CHATTER CRAFT:\n"
+        "- Mirror their energy and length; emojis only if they use them or persona style allows.\n"
+        "- Show a specific reaction (surprise, warmth, playful envy) before any new topic.\n"
+        "- At most ONE hook per message — question OR tease, not both stacked.\n"
+        "- Use memory notes about the fan when relevant; don't invent facts not in transcript/notes.\n"
     )
     if followup:
         return (
             base
-            + "- FOLLOW-UP: fan has not answered your last message. ONE short natural nudge — not needy, "
-            "not a repeat of your previous text.\n"
+            + "- FOLLOW-UP ONLY: fan silent after your last text. ONE short line — new angle or gentle bump, "
+            "NOT a paraphrase of your previous message. Never needy. Skip if they said they're busy.\n"
         )
-    return base + "- Move the conversation forward; don't just acknowledge with a dead one-liner.\n"
+    return base + "- End naturally; don't force engagement bait every time.\n"
+
+
+def _format_recent_outbound_ban(recent: list[str]) -> str:
+    if not recent:
+        return ""
+    lines = ["YOUR RECENT OUTBOUND (do NOT repeat phrases, questions, or topics from these):"]
+    for i, text in enumerate(recent[:4], 1):
+        snippet = text.replace("\n", " ").strip()
+        if len(snippet) > 220:
+            snippet = snippet[:219].rstrip() + "…"
+        lines.append(f"{i}. {snippet}")
+    return "\n".join(lines) + "\n\n"
 
 
 def _format_transcript(messages: list[Message], fan_name: str | None) -> str:
@@ -177,24 +240,25 @@ def build_companion_system_prompt(
     note_lines: list[str] = []
     for n in notes:
         if n.kind == ConversationNoteKind.ai_profile:
-            note_lines.append(f"Known about fan:\n{n.content}")
+            note_lines.append(f"Memory — fan profile:\n{n.content}")
         elif n.kind == ConversationNoteKind.ai_daily:
-            note_lines.append(f"Recent context:\n{n.content}")
+            note_lines.append(f"Memory — recent context:\n{n.content}")
+        elif n.kind == ConversationNoteKind.ai_insight:
+            note_lines.append(f"Chatter hint:\n{n.content}")
 
-    mood_line = mood or "neutral, slightly flirty"
+    mood_line = mood or "warm, playful, grounded"
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
     return (
-        f"You are {persona_name}, a real woman chatting with a fan. Never say you are AI or a bot.\n"
-        f"Your identity:\n{profile_block}\n\n"
-        f"Relationship warmth: {relationship_score}/100 (higher = more open, personal, flirty).\n"
-        f"Current mood: {mood_line}.\n"
-        f"Time reference (UTC): {now}.\n\n"
-        f"Reply ONLY in language code '{target_lang}' — match the fan's latest message language.\n"
-        f"Use natural casual speech, emojis when fitting. Match message length and energy.\n"
+        _chatter_role_block(persona_name=persona_name)
+        + f"Character sheet (voice & facts for {persona_name}):\n{profile_block}\n\n"
+        f"Relationship warmth: {relationship_score}/100.\n"
+        f"Mood subtext: {mood_line}.\n"
+        f"Time (UTC): {now}.\n\n"
+        f"Language: reply ONLY in '{target_lang}' — match the fan's latest message language.\n"
         f"{_continuity_rules(mid_conversation=mid, fan_greeting_reset=greeting_reset, fan_complaint=complaint)}"
         f"{_initiative_rules(followup=followup)}"
-        "Stay in character. One message only — no markdown, no quotes, no role labels.\n"
+        "Output: single chat message only — no markdown, no quotes, no labels.\n"
         + ("\n".join(note_lines) + "\n" if note_lines else "")
     )
 
@@ -204,27 +268,36 @@ def build_companion_user_prompt(
     conv: Conversation,
     messages: list[Message],
     followup: bool = False,
+    extra_avoid: str | None = None,
 ) -> str:
     transcript = _format_transcript(messages, conv.user_display_name)
     _, greeting_reset, _, last_fan_text = _analyze_thread(messages)
+    recent = recent_outbound_texts(messages, limit=4)
 
     tail = transcript[-14000:]
     focus = ""
     if last_fan_text and not followup:
-        focus = f"\n\nFan's latest message (reply to THIS):\n{last_fan_text}\n"
+        focus = f"\n\nFan's latest message (answer THIS first):\n{last_fan_text}\n"
         if greeting_reset:
             focus += (
-                "They said hello again mid-chat — do NOT greet back like it's new; continue naturally.\n"
+                "They greeted again mid-chat — do NOT greet back like a new conversation.\n"
             )
+
+    ban_block = _format_recent_outbound_ban(recent)
+    avoid = (extra_avoid or "").strip()
+    if avoid:
+        ban_block += f"REGENERATION: your previous draft was too repetitive. Write differently.\n{avoid}\n\n"
 
     if followup:
         return (
             f"Conversation so far:\n\n{tail}\n"
+            f"{ban_block}"
             f"{focus}"
-            "Write ONE follow-up as the persona (fan has not replied to your last text)."
+            "Write ONE follow-up as the character (fan has not replied to your last message)."
         )
     return (
         f"Conversation so far:\n\n{tail}\n"
+        f"{ban_block}"
         f"{focus}"
-        "Write your next reply. Continue the existing conversation — no reset, no repeated beats."
+        "Write the next reply. No reset, no repeated beats from your recent messages."
     )

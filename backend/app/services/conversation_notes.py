@@ -163,6 +163,95 @@ async def delete_note(
     await session.commit()
 
 
+def format_messages_transcript_ru(messages: list[Message], display_name: str | None) -> str:
+    """Транскрипт для AI-анализа (русские подписи ролей)."""
+    return _format_messages_for_ai(messages, display_name)
+
+
+async def extract_conversation_memory_from_transcript(
+    transcript: str,
+    *,
+    credentials=None,
+) -> dict:
+    """Извлекает profile / today / insights из текста переписки."""
+    model = (settings.openai_studio_model or "").strip() or "gpt-4o-mini"
+    system = (
+        "Ты аналитик переписки creator ↔ fan. Ответь только JSON без markdown.\n"
+        "Поля:\n"
+        '- profile: string, markdown-список известного о фане (имя/ник, возраст если есть, '
+        "локация, семья, интересы, важные факты из диалога). Только факты из переписки.\n"
+        '- today: string, о чём говорили недавно и что сейчас актуально (2-4 предложения).\n'
+        '- open_threads: string[], незакрытые темы/вопросы фана (0-5).\n'
+        '- insights: string[], подсказки чатеру как отвечать (0-3).\n'
+        "Язык: русский."
+    )
+    user_msg = f"Переписка:\n\n{transcript}"
+    raw = await _chat_completion_text(
+        model=model,
+        messages=[
+            {"role": "system", "content": system},
+            {"role": "user", "content": user_msg},
+        ],
+        max_tokens=1200,
+        temperature=0.3,
+        credentials=credentials,
+        timeout_seconds=90.0,
+    )
+    try:
+        data = json.loads((raw or "").strip())
+    except json.JSONDecodeError:
+        data = {"profile": (raw or "").strip(), "today": "", "insights": []}
+    if not isinstance(data, dict):
+        data = {"profile": str(raw), "today": "", "insights": []}
+    return data
+
+
+async def upsert_ai_conversation_notes(
+    session: AsyncSession,
+    *,
+    conv_id: int,
+    profile: str | None,
+    today: str | None,
+    insights: list[str] | None = None,
+) -> None:
+    if profile:
+        await _upsert_ai_note(
+            session,
+            conv_id=conv_id,
+            kind=ConversationNoteKind.ai_profile,
+            content=profile.strip(),
+            pinned=True,
+        )
+    if today:
+        await _upsert_ai_note(
+            session,
+            conv_id=conv_id,
+            kind=ConversationNoteKind.ai_daily,
+            content=today.strip(),
+            pinned=True,
+        )
+    if insights:
+        await session.execute(
+            delete(ConversationNote).where(
+                ConversationNote.conversation_id == conv_id,
+                ConversationNote.kind == ConversationNoteKind.ai_insight,
+            )
+        )
+        now = datetime.now(timezone.utc)
+        for item in insights[:5]:
+            session.add(
+                ConversationNote(
+                    conversation_id=conv_id,
+                    author_user_id=None,
+                    kind=ConversationNoteKind.ai_insight,
+                    content=item,
+                    is_pinned=False,
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+
+
 def _format_messages_for_ai(messages: list[Message], display_name: str | None) -> str:
     lines: list[str] = []
     if display_name:
@@ -222,86 +311,36 @@ async def analyze_conversation_notes(
             detail="AI-анализ недоступен: на сервере не настроен OPENAI_API_KEY",
         )
     messages = await list_messages(session, conv.id, owner_id, limit=80)
-    transcript = _format_messages_for_ai(messages, conv.user_display_name)
+    transcript = format_messages_transcript_ru(messages, conv.user_display_name)
     if not transcript.strip():
         raise HTTPException(status_code=400, detail="Нет текста сообщений для анализа")
 
-    model = (settings.openai_studio_model or "").strip() or "gpt-4o-mini"
-    system = (
-        "Ты аналитик переписки creator ↔ fan. Ответь только JSON без markdown.\n"
-        "Поля:\n"
-        '- profile: string, markdown-список известного о фане (имя/ник, возраст если есть, '
-        "локация, интересы, стиль, предпочтения). Только факты из переписки, без выдумок.\n"
-        '- today: string, кратко о чём говорили в последних сообщениях (1-3 предложения).\n'
-        '- insights: string[], дополнительные наблюдения для оператора (0-5 пунктов).\n'
-        "Язык: русский."
-    )
-    user_msg = f"Переписка:\n\n{transcript[-12000:]}"
     try:
-        raw = await _chat_completion_text(
-            model=model,
-            messages=[
-                {"role": "system", "content": system},
-                {"role": "user", "content": user_msg},
-            ],
-            max_tokens=1200,
-            temperature=0.3,
-            timeout_seconds=90.0,
-        )
+        data = await extract_conversation_memory_from_transcript(transcript[-12000:])
     except Exception as e:
         log.warning("conversation notes AI failed conv=%s: %s", conv.id, e)
         raise HTTPException(status_code=502, detail="AI-анализ не удался") from e
 
-    try:
-        data = json.loads(raw.strip())
-    except json.JSONDecodeError:
-        data = {"profile": raw.strip(), "today": "", "insights": []}
-    if not isinstance(data, dict):
-        data = {"profile": str(raw), "today": "", "insights": []}
-
     profile = str(data.get("profile") or "").strip()
     today = str(data.get("today") or "").strip()
     insights_raw = data.get("insights")
+    open_threads = data.get("open_threads")
     insights: list[str] = []
     if isinstance(insights_raw, list):
         insights = [str(x).strip() for x in insights_raw if str(x).strip()]
+    if isinstance(open_threads, list):
+        for t in open_threads[:5]:
+            s = str(t).strip()
+            if s:
+                insights.append(f"Open thread: {s}")
 
-    if profile:
-        await _upsert_ai_note(
-            session,
-            conv_id=conv.id,
-            kind=ConversationNoteKind.ai_profile,
-            content=profile,
-            pinned=True,
-        )
-    if today:
-        await _upsert_ai_note(
-            session,
-            conv_id=conv.id,
-            kind=ConversationNoteKind.ai_daily,
-            content=today,
-            pinned=True,
-        )
-    if insights:
-        await session.execute(
-            delete(ConversationNote).where(
-                ConversationNote.conversation_id == conv.id,
-                ConversationNote.kind == ConversationNoteKind.ai_insight,
-            )
-        )
-        now = datetime.now(timezone.utc)
-        for item in insights[:5]:
-            session.add(
-                ConversationNote(
-                    conversation_id=conv.id,
-                    author_user_id=None,
-                    kind=ConversationNoteKind.ai_insight,
-                    content=item,
-                    is_pinned=False,
-                    created_at=now,
-                    updated_at=now,
-                )
-            )
+    await upsert_ai_conversation_notes(
+        session,
+        conv_id=conv.id,
+        profile=profile or None,
+        today=today or None,
+        insights=insights or None,
+    )
 
     await session.commit()
     return await list_conversation_notes(session, conv=conv, viewer=viewer)

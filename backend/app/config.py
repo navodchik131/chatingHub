@@ -463,6 +463,40 @@ class Settings(BaseSettings):
         le=168.0,
         description="Интервал nightly-агрегации оценок AI-компаньона (часы).",
     )
+    companion_memory_auto_enabled: bool = Field(
+        default=True,
+        description="Авто-обновление ai_profile/ai_daily перед ответом компаньона.",
+    )
+    companion_memory_refresh_every_n_inbound: int = Field(
+        default=3,
+        ge=1,
+        le=50,
+        description="Обновить память после N новых входящих с момента последнего обновления.",
+    )
+    companion_memory_daily_max_age_minutes: int = Field(
+        default=90,
+        ge=15,
+        le=1440,
+        description="Макс. возраст ai-заметок до принудительного обновления (минуты).",
+    )
+    companion_followup_delay_min_sec: float = Field(
+        default=900.0,
+        ge=60.0,
+        le=7200.0,
+        description="Мин. задержка перед follow-up после исходящего (сек).",
+    )
+    companion_followup_delay_max_sec: float = Field(
+        default=1800.0,
+        ge=120.0,
+        le=14400.0,
+        description="Макс. задержка перед follow-up после исходящего (сек).",
+    )
+    companion_followup_skip_if_fan_active_minutes: int = Field(
+        default=12,
+        ge=0,
+        le=120,
+        description="Не слать follow-up, если фан писал в последние N минут (0 = не проверять).",
+    )
     fanvue_inbox_poll_interval_seconds: int = Field(
         default=10,
         ge=0,
