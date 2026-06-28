@@ -527,6 +527,7 @@ def _studio_refine_wavespeed_preflight(
     imgs_model: list[UserStudioModelImage],
     image_bytes: bytes | None,
     wave_profile: str,
+    workflow_source: bool = False,
 ) -> str:
     """Перед списанием кредитов: ключ WaveSpeed и условия вызова API (иначе HTTPException)."""
     if not do_wavespeed:
@@ -556,13 +557,14 @@ def _studio_refine_wavespeed_preflight(
                 ),
             )
     if mode_n in ("model", "model_scene"):
-        if mid is None or sm_loaded is None:
+        workflow_ref_only = workflow_source and bool(image_bytes)
+        if (mid is None or sm_loaded is None) and not workflow_ref_only:
             label = "«Модель + промпт»" if mode_n == "model_scene" else "«По промту»"
             raise HTTPException(
                 status_code=400,
                 detail=f"В режиме {label} выберите сохранённую модель с фотографиями.",
             )
-        if not imgs_model:
+        if not imgs_model and not workflow_ref_only:
             raise HTTPException(
                 status_code=400,
                 detail="У выбранной модели нет загруженных фото — добавьте снимки к модели.",
@@ -622,12 +624,13 @@ def _studio_refine_wavespeed_preflight(
             )
     elif mode_n in ("grok_compose", "model_scene"):
         label = "«Модель + промпт»" if mode_n == "model_scene" else "«Grok: сцена»"
-        if mid is None or sm_loaded is None:
+        workflow_ref_only = workflow_source and bool(image_bytes)
+        if (mid is None or sm_loaded is None) and not workflow_ref_only:
             raise HTTPException(
                 status_code=400,
                 detail=f"В режиме {label} выберите сохранённую модель с фотографиями.",
             )
-        if not imgs_model:
+        if not imgs_model and not workflow_ref_only:
             raise HTTPException(
                 status_code=400,
                 detail="У модели нет снимков — добавьте развёртку или лицо/тело в кабинете.",
@@ -637,28 +640,29 @@ def _studio_refine_wavespeed_preflight(
                 status_code=400,
                 detail=f"В режиме {label} загрузите референс сцены (поза, свет, кадр) — для Grok.",
             )
-        if mode_n == "model_scene":
-            id_for_ws = select_model_scene_wavespeed_identity_images(
-                imgs_model, wave_profile=wp
-            )
-            if not id_for_ws:
-                raise HTTPException(
-                    status_code=400,
-                    detail=(
-                        "В режиме «Модель + промпт» у модели нужны снимки: развёртка (turnaround) "
-                        "и/или лицо/тело."
-                    ),
+        if not workflow_ref_only:
+            if mode_n == "model_scene":
+                id_for_ws = select_model_scene_wavespeed_identity_images(
+                    imgs_model, wave_profile=wp
                 )
-        else:
-            id_for_ws = select_grok_compose_wavespeed_identity_images(imgs_model)
-            if not id_for_ws:
-                raise HTTPException(
-                    status_code=400,
-                    detail=(
-                        "В режиме «Grok: сцена» у модели нужен снимок тела (body) и/или лица (face) — "
-                        "для переноса фигуры и внешности в WaveSpeed."
-                    ),
-                )
+                if not id_for_ws:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=(
+                            "В режиме «Модель + промпт» у модели нужны снимки: развёртка (turnaround) "
+                            "и/или лицо/тело."
+                        ),
+                    )
+            else:
+                id_for_ws = select_grok_compose_wavespeed_identity_images(imgs_model)
+                if not id_for_ws:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=(
+                            "В режиме «Grok: сцена» у модели нужен снимок тела (body) и/или лица (face) — "
+                            "для переноса фигуры и внешности в WaveSpeed."
+                        ),
+                    )
     return ws_key
 
 
@@ -2564,8 +2568,11 @@ async def _accept_studio_refine_job_from_workflow(
     _ = primary_bytes, primary_mime
 
     if reference_images:
-        # Без модели из кабинета — «model»; vision-анализ уточнит no_face только для headless-кропов
-        studio_mode = "model_scene" if plan.model_id is not None else "model"
+        if plan.model_id is not None:
+            studio_mode = "model_scene"
+        else:
+            # Референс + промпт без модели из кабинета — identity из загруженного фото
+            studio_mode = "grok_compose"
     else:
         studio_mode = "model"
 
@@ -2778,7 +2785,7 @@ async def _studio_job_execute_refine_prompt(
     reference_analysis_for_out: dict[str, Any] | None = None
     use_reference_analysis = bool(
         image_bytes
-        and mode_n in ("model", "no_face", "model_scene")
+        and mode_n in ("model", "no_face", "model_scene", "grok_compose")
     )
     if use_reference_analysis:
         from app.services.studio_reference_analysis import (
@@ -2880,7 +2887,7 @@ async def _studio_job_execute_refine_prompt(
                 status_code=503,
                 detail="Grok не настроен: задайте GROK_API_KEY в .env на сервере.",
             )
-        if mid is None:
+        if mid is None and not (workflow_source and image_bytes):
             raise HTTPException(
                 status_code=400,
                 detail="В режиме «Grok: сцена» выберите сохранённую модель.",
@@ -2953,6 +2960,7 @@ async def _studio_job_execute_refine_prompt(
         imgs_model=imgs_model,
         image_bytes=image_bytes,
         wave_profile=wave_profile_n,
+        workflow_source=workflow_source,
     )
 
     usage_kind = "studio_inpaint" if mask_bytes else "studio_prompt_refine"
