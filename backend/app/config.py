@@ -374,6 +374,9 @@ class Settings(BaseSettings):
         "fanvue_client_id",
         "fanvue_client_secret",
         "fanvue_webhook_signing_secret",
+        "instagram_app_id",
+        "instagram_app_secret",
+        "instagram_webhook_verify_token",
         mode="after",
     )
     @classmethod
@@ -450,6 +453,12 @@ class Settings(BaseSettings):
         le=200,
         description="Макс. сообщений на диалог при синхронизации истории Fanvue.",
     )
+    companion_feedback_interval_hours: float = Field(
+        default=24.0,
+        ge=1.0,
+        le=168.0,
+        description="Интервал nightly-агрегации оценок AI-компаньона (часы).",
+    )
     fanvue_inbox_poll_interval_seconds: int = Field(
         default=10,
         ge=0,
@@ -463,6 +472,20 @@ class Settings(BaseSettings):
         ge=1,
         le=90,
         description="Опрос только диалогов, обновлённых за последние N дней.",
+    )
+
+    instagram_app_id: str = Field(
+        default="",
+        description="Instagram App ID (App Dashboard → Instagram → Business login).",
+    )
+    instagram_app_secret: str = Field(default="", description="Instagram App Secret.")
+    instagram_oauth_scopes: str = Field(
+        default="instagram_business_basic,instagram_business_manage_messages",
+    )
+    instagram_graph_api_version: str = Field(default="v21.0")
+    instagram_webhook_verify_token: str = Field(
+        default="",
+        description="Verify token для Meta webhook (GET hub.verify_token).",
     )
 
     cors_origins: str = (

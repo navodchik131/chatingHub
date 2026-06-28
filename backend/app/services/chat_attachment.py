@@ -89,3 +89,42 @@ def decode_chat_attachment_access_token(token: str) -> tuple[int, int]:
     if uid is None or aid is None:
         raise ValueError("missing claims")
     return int(uid), int(aid)
+
+
+def create_chat_media_public_token(
+    *, owner_id: int, relative_path: str, hours: int = 24
+) -> str:
+    expire = datetime.now(timezone.utc) + timedelta(hours=hours)
+    payload = {
+        "typ": "chat_media_pub",
+        "uid": owner_id,
+        "rel": relative_path,
+        "exp": expire,
+    }
+    return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
+
+
+def decode_chat_media_public_token(token: str) -> tuple[int, str]:
+    try:
+        data = jwt.decode(
+            token,
+            settings.jwt_secret,
+            algorithms=[settings.jwt_algorithm],
+        )
+    except JWTError as e:
+        raise ValueError("invalid token") from e
+    if data.get("typ") != "chat_media_pub":
+        raise ValueError("wrong token type")
+    uid = data.get("uid")
+    rel = data.get("rel")
+    if uid is None or not rel:
+        raise ValueError("missing claims")
+    return int(uid), str(rel)
+
+
+def chat_media_public_absolute_url(*, owner_id: int, relative_path: str) -> str:
+    from app.config import settings
+
+    tok = create_chat_media_public_token(owner_id=owner_id, relative_path=relative_path)
+    base = (settings.public_app_url or "").strip().rstrip("/")
+    return f"{base}/api/chat/media-public?t={tok}"

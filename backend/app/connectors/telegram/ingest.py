@@ -26,6 +26,7 @@ from app.services.chat_message_meta import (
     sync_actor_reactions,
 )
 from app.services.translation import translate_to_russian
+from app.services.companion_bot.schedule import schedule_companion_reply
 
 log = logging.getLogger(__name__)
 
@@ -226,7 +227,7 @@ async def ingest_telegram_dm(
             },
             ensure_ascii=False,
         )
-        conv_id, _ = await persist_inbound_chat_message(
+        conv_id, payload = await persist_inbound_chat_message(
             session,
             owner_user_id=owner_user_id,
             conv=conv,
@@ -240,7 +241,14 @@ async def ingest_telegram_dm(
             reply_to_message_id=reply_to_message_id,
             platform_message_id=str(message.message_id),
         )
+        trigger_message_id = int(payload["id"])
         await session.commit()
+
+    schedule_companion_reply(
+        owner_user_id=owner_user_id,
+        conv_id=conv_id,
+        trigger_message_id=trigger_message_id,
+    )
 
     log.info(
         "ingested telegram DM user=%s conv=%s topic=%s source=%s image=%s",

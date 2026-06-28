@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import (
     Conversation,
     FanvueConnection,
+    InstagramConnection,
     Platform,
     Subscription,
     TelegramConnection,
@@ -44,6 +45,17 @@ async def count_fanvue_connections(session: AsyncSession, owner_id: int) -> int:
     )
 
 
+async def count_instagram_connections(session: AsyncSession, owner_id: int) -> int:
+    return int(
+        await session.scalar(
+            select(func.count())
+            .select_from(InstagramConnection)
+            .where(InstagramConnection.user_id == owner_id)
+        )
+        or 0
+    )
+
+
 async def assert_can_add_platform_connection(
     session: AsyncSession,
     owner_id: int,
@@ -69,10 +81,16 @@ async def assert_can_add_platform_connection(
 
     if platform == Platform.telegram:
         n = await count_telegram_connections(session, owner_id)
+    elif platform == Platform.instagram:
+        n = await count_instagram_connections(session, owner_id)
     else:
         n = await count_fanvue_connections(session, owner_id)
     if n >= lim.max_models:
-        plat = "Telegram" if platform == Platform.telegram else "Fanvue"
+        plat = {
+            Platform.telegram: "Telegram",
+            Platform.fanvue: "Fanvue",
+            Platform.instagram: "Instagram",
+        }.get(platform, str(platform.value))
         raise HTTPException(
             status_code=402,
             detail=(
@@ -90,7 +108,7 @@ async def validate_connection_studio_model(
 
 
 def connection_studio_model_id(
-    conn: TelegramConnection | FanvueConnection | None,
+    conn: TelegramConnection | FanvueConnection | InstagramConnection | None,
 ) -> int | None:
     if conn is None:
         return None
@@ -108,6 +126,12 @@ async def sync_conversations_model_from_connection(
         stmt = (
             update(Conversation)
             .where(Conversation.telegram_connection_id == connection_id)
+            .values(studio_model_id=studio_model_id)
+        )
+    elif platform == Platform.instagram:
+        stmt = (
+            update(Conversation)
+            .where(Conversation.instagram_connection_id == connection_id)
             .values(studio_model_id=studio_model_id)
         )
     else:
@@ -197,3 +221,46 @@ async def resolve_telegram_connection_for_conversation(
             session, owner_id, connection_id=conv.telegram_connection_id
         )
     return await get_telegram_connection_for_owner(session, owner_id)
+
+
+async def get_instagram_connection_for_owner(
+    session: AsyncSession,
+    owner_id: int,
+    *,
+    connection_id: int | None = None,
+) -> InstagramConnection | None:
+    if connection_id is not None:
+        return await session.scalar(
+            select(InstagramConnection).where(
+                InstagramConnection.id == connection_id,
+                InstagramConnection.user_id == owner_id,
+            )
+        )
+    return await session.scalar(
+        select(InstagramConnection)
+        .where(InstagramConnection.user_id == owner_id)
+        .order_by(InstagramConnection.id.asc())
+        .limit(1)
+    )
+
+
+async def resolve_instagram_connection_for_conversation(
+    session: AsyncSession,
+    conv: Conversation,
+    owner_id: int,
+) -> InstagramConnection | None:
+    if conv.instagram_connection_id:
+        return await get_instagram_connection_for_owner(
+            session, owner_id, connection_id=conv.instagram_connection_id
+        )
+    ig_account = (conv.external_topic_id or "").strip()
+    if ig_account:
+        row = await session.scalar(
+            select(InstagramConnection).where(
+                InstagramConnection.user_id == owner_id,
+                InstagramConnection.instagram_user_id == ig_account,
+            )
+        )
+        if row:
+            return row
+    return await get_instagram_connection_for_owner(session, owner_id)

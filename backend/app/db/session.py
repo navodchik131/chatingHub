@@ -363,7 +363,64 @@ async def init_db() -> None:
         await conn.run_sync(_migrate_fanvue_oauth_states_table)
         await conn.run_sync(_migrate_chat_message_features)
         await conn.run_sync(_migrate_platform_connections_multi)
+        await conn.run_sync(_migrate_instagram_connections)
         await conn.run_sync(_migrate_conversation_notes)
+        await conn.run_sync(_migrate_companion_bot)
+
+
+def _migrate_companion_bot(sync_conn) -> None:
+    from sqlalchemy import inspect, text
+
+    from app.db.models import BotResponseEvent, CompanionConversationState
+
+    insp = inspect(sync_conn)
+    dialect = sync_conn.dialect.name
+    int_def = "INTEGER"
+
+    for table in ("telegram_connections", "fanvue_connections"):
+        if not insp.has_table(table):
+            continue
+        cols = {c["name"] for c in insp.get_columns(table)}
+        if "companion_mode" not in cols:
+            sync_conn.execute(
+                text(f"ALTER TABLE {table} ADD COLUMN companion_mode VARCHAR(16) DEFAULT 'off'")
+            )
+        if "companion_delay_min_sec" not in cols:
+            sync_conn.execute(
+                text(
+                    f"ALTER TABLE {table} ADD COLUMN companion_delay_min_sec {int_def} DEFAULT 5"
+                )
+            )
+        if "companion_delay_max_sec" not in cols:
+            sync_conn.execute(
+                text(
+                    f"ALTER TABLE {table} ADD COLUMN companion_delay_max_sec {int_def} DEFAULT 45"
+                )
+            )
+        if "companion_max_replies_per_hour" not in cols:
+            sync_conn.execute(
+                text(
+                    f"ALTER TABLE {table} ADD COLUMN companion_max_replies_per_hour "
+                    f"{int_def} DEFAULT 60"
+                )
+            )
+
+    if not insp.has_table("companion_conversation_states"):
+        CompanionConversationState.__table__.create(sync_conn, checkfirst=True)
+    if not insp.has_table("bot_response_events"):
+        BotResponseEvent.__table__.create(sync_conn, checkfirst=True)
+
+    from app.db.models import CompanionFeedbackReport
+
+    if not insp.has_table("companion_feedback_reports"):
+        CompanionFeedbackReport.__table__.create(sync_conn, checkfirst=True)
+
+    if insp.has_table("conversations"):
+        cols = {c["name"] for c in insp.get_columns("conversations")}
+        if "companion_mode_override" not in cols:
+            sync_conn.execute(
+                text("ALTER TABLE conversations ADD COLUMN companion_mode_override VARCHAR(16)")
+            )
 
 
 def _migrate_conversation_notes(sync_conn) -> None:
@@ -612,6 +669,119 @@ def _migrate_platform_connections_multi(sync_conn) -> None:
                 """
             )
         )
+
+
+def _migrate_instagram_connections(sync_conn) -> None:
+    from sqlalchemy import inspect, text
+
+    insp = inspect(sync_conn)
+    dialect = sync_conn.dialect.name
+
+    if not insp.has_table("instagram_connections"):
+        if dialect == "sqlite":
+            sync_conn.execute(
+                text(
+                    """
+                    CREATE TABLE instagram_connections (
+                        id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                        user_id INTEGER NOT NULL,
+                        label VARCHAR(128),
+                        studio_model_id INTEGER,
+                        instagram_user_id VARCHAR(64) NOT NULL,
+                        instagram_username VARCHAR(128),
+                        access_token_encrypted TEXT NOT NULL,
+                        token_expires_at DATETIME,
+                        oauth_connected_at DATETIME,
+                        created_at DATETIME,
+                        FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE,
+                        FOREIGN KEY(studio_model_id) REFERENCES user_studio_models (id) ON DELETE SET NULL
+                    )
+                    """
+                )
+            )
+        else:
+            sync_conn.execute(
+                text(
+                    """
+                    CREATE TABLE instagram_connections (
+                        id SERIAL PRIMARY KEY,
+                        user_id INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+                        label VARCHAR(128),
+                        studio_model_id INTEGER REFERENCES user_studio_models (id) ON DELETE SET NULL,
+                        instagram_user_id VARCHAR(64) NOT NULL,
+                        instagram_username VARCHAR(128),
+                        access_token_encrypted TEXT NOT NULL,
+                        token_expires_at TIMESTAMPTZ,
+                        oauth_connected_at TIMESTAMPTZ,
+                        created_at TIMESTAMPTZ
+                    )
+                    """
+                )
+            )
+        sync_conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_instagram_connections_user_id "
+                "ON instagram_connections(user_id)"
+            )
+        )
+        sync_conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_instagram_connections_instagram_user_id "
+                "ON instagram_connections(instagram_user_id)"
+            )
+        )
+
+    if not insp.has_table("instagram_oauth_states"):
+        if dialect == "sqlite":
+            sync_conn.execute(
+                text(
+                    """
+                    CREATE TABLE instagram_oauth_states (
+                        state VARCHAR(128) NOT NULL PRIMARY KEY,
+                        user_id INTEGER NOT NULL,
+                        connection_id INTEGER,
+                        label VARCHAR(128),
+                        studio_model_id INTEGER,
+                        created_at DATETIME,
+                        FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE
+                    )
+                    """
+                )
+            )
+        else:
+            sync_conn.execute(
+                text(
+                    """
+                    CREATE TABLE instagram_oauth_states (
+                        state VARCHAR(128) PRIMARY KEY,
+                        user_id INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+                        connection_id INTEGER,
+                        label VARCHAR(128),
+                        studio_model_id INTEGER,
+                        created_at TIMESTAMPTZ
+                    )
+                    """
+                )
+            )
+        sync_conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_instagram_oauth_states_user_id "
+                "ON instagram_oauth_states(user_id)"
+            )
+        )
+
+    if insp.has_table("conversations"):
+        cols = {c["name"] for c in insp.get_columns("conversations")}
+        if "instagram_connection_id" not in cols:
+            sync_conn.execute(
+                text("ALTER TABLE conversations ADD COLUMN instagram_connection_id INTEGER")
+            )
+            sync_conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_conversations_instagram_connection_id "
+                    "ON conversations(instagram_connection_id)"
+                )
+            )
 
 
 def _migrate_chat_message_features(sync_conn) -> None:

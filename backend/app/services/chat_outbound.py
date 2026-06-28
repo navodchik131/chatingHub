@@ -1,10 +1,9 @@
-"""Исходящие сообщения чата с изображениями (Telegram / Fanvue)."""
+"""Исходящие сообщения чата с изображениями (Telegram / Fanvue / Instagram)."""
 
 from __future__ import annotations
 
 import logging
 import mimetypes
-from io import BytesIO
 
 import anyio
 from aiogram import Bot
@@ -16,7 +15,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import BACKEND_DIR, settings
 from app.connectors.fanvue.client import FanvueAPIError, send_direct_message
 from app.connectors.fanvue.media import fanvue_upload_image_bytes
-from app.db.models import Platform, StudioGeneration
+from app.connectors.instagram.client import InstagramAPIError, send_instagram_message
+from app.db.models import StudioGeneration
+from app.services.chat_attachment import chat_media_public_absolute_url, save_chat_image_bytes
 from app.services.studio_generation_storage import generation_has_archive_file
 
 log = logging.getLogger(__name__)
@@ -202,3 +203,50 @@ async def send_fanvue_outbound(
             status_code=st,
             detail=(e.body or str(e))[:2000],
         ) from e
+
+
+async def send_instagram_outbound(
+    *,
+    access_token: str,
+    ig_user_id: str,
+    recipient_id: str,
+    owner_id: int,
+    text: str,
+    image_bytes: bytes | None,
+    image_mime: str | None,
+) -> str | None:
+    image_url: str | None = None
+    if image_bytes:
+        base = (settings.public_app_url or "").strip().rstrip("/")
+        if not base.lower().startswith("https://"):
+            raise HTTPException(
+                status_code=503,
+                detail="Для отправки фото в Instagram нужен HTTPS PUBLIC_APP_URL",
+            )
+        rel, _mime = save_chat_image_bytes(
+            owner_id=owner_id,
+            raw=image_bytes,
+            content_type=image_mime,
+        )
+        image_url = chat_media_public_absolute_url(owner_id=owner_id, relative_path=rel)
+
+    if not (text or "").strip() and not image_url:
+        raise HTTPException(status_code=400, detail="Пустое сообщение")
+
+    try:
+        return await send_instagram_message(
+            access_token=access_token,
+            ig_user_id=ig_user_id,
+            recipient_id=recipient_id,
+            text=text or "",
+            image_url=image_url,
+        )
+    except InstagramAPIError as e:
+        st = e.status if e.status >= 400 else 502
+        detail = (e.body or str(e))[:2000]
+        if "outside" in detail.lower() or "24 hour" in detail.lower():
+            detail = (
+                "Instagram: окно ответа 24 часа закрыто. "
+                "Ответьте из приложения Instagram или дождитесь нового сообщения от пользователя."
+            )
+        raise HTTPException(status_code=st, detail=detail) from e

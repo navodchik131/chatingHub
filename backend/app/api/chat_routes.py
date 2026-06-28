@@ -26,6 +26,8 @@ from app.config import BACKEND_DIR, settings
 from app.connectors.telegram.bot_for_user import open_telegram_bot_for_owner
 from app.connectors.telegram.state import get_telegram_api_status
 from app.db.models import (
+    BotResponseEvent,
+    BotResponseEventStatus,
     FanvueConnection,
     Message,
     MessageAttachment,
@@ -46,6 +48,9 @@ from app.db.repo import (
 )
 from app.db.session import SessionLocal, get_session
 from app.schemas import (
+    CompanionDraftApproveIn,
+    CompanionDraftOut,
+    CompanionRatingIn,
     ConversationNoteCreateIn,
     ConversationNoteOut,
     ConversationNotePatchIn,
@@ -58,6 +63,7 @@ from app.schemas import (
 )
 from app.services.chat_attachment import (
     decode_chat_attachment_access_token,
+    decode_chat_media_public_token,
     resolve_chat_attachment_file,
     save_chat_image_bytes,
 )
@@ -70,6 +76,7 @@ from app.services.chat_messages import (
 from app.services.chat_outbound import (
     resolve_outbound_image,
     send_fanvue_outbound,
+    send_instagram_outbound,
     send_telegram_outbound,
     set_telegram_message_reaction,
 )
@@ -110,8 +117,11 @@ from app.services.conversation_notes import (
     list_conversation_notes,
     update_manual_note,
 )
+from app.services.companion_bot.orchestrator import approve_and_send_companion_draft
+from app.services.companion_bot.send import broadcast_companion_message
 from app.services.platform_connections import (
     resolve_fanvue_connection_for_conversation,
+    resolve_instagram_connection_for_conversation,
     resolve_telegram_connection_for_conversation,
 )
 from app.services.workspace_model_access import (
@@ -345,6 +355,22 @@ async def api_chat_attachment(
     return FileResponse(path, media_type=media)
 
 
+@router.get("/chat/media-public")
+async def api_chat_media_public(
+    t: str = Query(..., min_length=10),
+) -> FileResponse:
+    """Публичная раздача медиа для Instagram outbound (Meta fetch по URL)."""
+    try:
+        uid, rel = decode_chat_media_public_token(t)
+    except ValueError:
+        raise HTTPException(status_code=401, detail="invalid token") from None
+    path = resolve_chat_attachment_file(uid, rel)
+    if not path:
+        raise HTTPException(status_code=404, detail="file missing")
+    media = mimetypes.guess_type(path.name)[0] or "image/jpeg"
+    return FileResponse(path, media_type=media)
+
+
 @router.patch("/conversations/{conv_id}", response_model=ConversationOut)
 async def api_patch_conversation(
     conv_id: int,
@@ -368,6 +394,8 @@ async def api_patch_conversation(
     if "auto_translate_disabled" in body.model_fields_set:
         if body.auto_translate_disabled is not None:
             conv.auto_translate_disabled = bool(body.auto_translate_disabled)
+    if "companion_mode_override" in body.model_fields_set:
+        conv.companion_mode_override = body.companion_mode_override
     await session.commit()
     await session.refresh(conv)
     return ConversationOut.model_validate(conv)
@@ -528,6 +556,25 @@ async def api_reply(
             image_bytes=image_bytes,
             image_mime=image_mime,
             reply_to_message_uuid=fv_reply_uuid,
+        )
+    elif conv.platform == Platform.instagram:
+        row_ig = await resolve_instagram_connection_for_conversation(session, conv, oid)
+        if not row_ig:
+            raise HTTPException(
+                status_code=503,
+                detail="Подключите Instagram в настройках интеграций",
+            )
+        from app.services.instagram_connection import ensure_instagram_access_token
+
+        ig_tok = await ensure_instagram_access_token(session, row_ig)
+        platform_message_id = await send_instagram_outbound(
+            access_token=ig_tok,
+            ig_user_id=row_ig.instagram_user_id,
+            recipient_id=conv.external_chat_id,
+            owner_id=oid,
+            text=outgoing,
+            image_bytes=image_bytes,
+            image_mime=image_mime,
         )
     else:
         raise HTTPException(status_code=400, detail="unknown platform")
@@ -758,6 +805,147 @@ async def api_analyze_conversation_notes(
         session, conv=conv, viewer=user, owner_id=oid
     )
     return [ConversationNoteOut.model_validate(x) for x in items]
+
+
+@router.get(
+    "/conversations/{conv_id}/companion-drafts",
+    response_model=list[CompanionDraftOut],
+)
+async def api_list_companion_drafts(
+    conv_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> list[CompanionDraftOut]:
+    assert_permission(user, PERM_CHAT)
+    await _require_chat_plan(session, user)
+    oid = workspace_owner_id(user)
+    conv = await require_conversation_chat_access(session, user, conv_id, oid)
+    rows = list(
+        (
+            await session.scalars(
+                select(BotResponseEvent)
+                .where(
+                    BotResponseEvent.conversation_id == conv.id,
+                    BotResponseEvent.status == BotResponseEventStatus.draft,
+                )
+                .order_by(BotResponseEvent.id.asc())
+            )
+        ).all()
+    )
+    return [
+        CompanionDraftOut(
+            id=r.id,
+            conversation_id=r.conversation_id,
+            trigger_message_id=r.trigger_message_id,
+            draft_text=r.draft_text,
+            target_lang=r.target_lang,
+            created_at=r.created_at,
+        )
+        for r in rows
+    ]
+
+
+@router.post(
+    "/conversations/{conv_id}/companion-drafts/{event_id}/approve",
+    response_model=MessageOut,
+)
+async def api_approve_companion_draft(
+    conv_id: int,
+    event_id: int,
+    body: CompanionDraftApproveIn,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> MessageOut:
+    assert_permission(user, PERM_CHAT)
+    await _require_chat_plan(session, user)
+    oid = workspace_owner_id(user)
+    conv = await require_conversation_chat_access(session, user, conv_id, oid)
+    event = await session.scalar(
+        select(BotResponseEvent).where(
+            BotResponseEvent.id == event_id,
+            BotResponseEvent.conversation_id == conv.id,
+        )
+    )
+    if not event or event.status != BotResponseEventStatus.draft:
+        raise HTTPException(status_code=404, detail="Черновик не найден")
+    try:
+        row = await approve_and_send_companion_draft(
+            session,
+            owner_user_id=oid,
+            conv=conv,
+            event=event,
+            text_override=body.text,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except Exception as e:
+        log.warning("companion draft approve failed: %s", e)
+        event.status = BotResponseEventStatus.failed
+        await session.commit()
+        raise HTTPException(status_code=502, detail="Не удалось отправить ответ") from e
+    await session.commit()
+    await session.refresh(row, attribute_names=["attachments"])
+    await broadcast_companion_message(owner_id=oid, conv_id=conv.id, row=row)
+    return message_to_out(row, owner_id=oid)
+
+
+@router.post(
+    "/conversations/{conv_id}/companion-drafts/{event_id}/reject",
+    status_code=204,
+)
+async def api_reject_companion_draft(
+    conv_id: int,
+    event_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> None:
+    assert_permission(user, PERM_CHAT)
+    await _require_chat_plan(session, user)
+    oid = workspace_owner_id(user)
+    conv = await require_conversation_chat_access(session, user, conv_id, oid)
+    event = await session.scalar(
+        select(BotResponseEvent).where(
+            BotResponseEvent.id == event_id,
+            BotResponseEvent.conversation_id == conv.id,
+        )
+    )
+    if not event or event.status != BotResponseEventStatus.draft:
+        raise HTTPException(status_code=404, detail="Черновик не найден")
+    event.status = BotResponseEventStatus.rejected
+    await session.commit()
+
+
+@router.post(
+    "/conversations/{conv_id}/messages/{message_id}/companion-rating",
+    response_model=MessageOut,
+)
+async def api_companion_message_rating(
+    conv_id: int,
+    message_id: int,
+    body: CompanionRatingIn,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> MessageOut:
+    assert_permission(user, PERM_CHAT)
+    await _require_chat_plan(session, user)
+    oid = workspace_owner_id(user)
+    conv = await require_conversation_chat_access(session, user, conv_id, oid)
+    row = await session.scalar(
+        select(Message).where(
+            Message.id == message_id,
+            Message.conversation_id == conv.id,
+        )
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="message not found")
+    event = await session.scalar(
+        select(BotResponseEvent).where(BotResponseEvent.outbound_message_id == row.id)
+    )
+    if not event:
+        raise HTTPException(status_code=404, detail="Ответ бота не найден")
+    event.operator_rating = int(body.rating)
+    await session.commit()
+    return message_to_out(row, owner_id=oid, operator_rating=event.operator_rating)
 
 
 @router.websocket("/ws")

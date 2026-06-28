@@ -21,6 +21,7 @@ from app.services.chat_ingest import (
     persist_inbound_chat_message,
 )
 from app.services.chat_messages import message_to_out
+from app.services.companion_bot.schedule import schedule_companion_reply
 from app.services.translation import translate_to_russian
 
 log = logging.getLogger(__name__)
@@ -229,6 +230,12 @@ async def ingest_fanvue_message_received(
         text_original=text_s,
         text_translated=translated if text_s and not conv.auto_translate_disabled else None,
         image_bytes=image_bytes,
+    )
+    trigger_message_id = int(payload["id"])
+    schedule_companion_reply(
+        owner_user_id=owner_user_id,
+        conv_id=conv_id,
+        trigger_message_id=trigger_message_id,
     )
     log.info(
         "fanvue webhook ingested conv=%s msg_uuid=%s fan=%s",

@@ -2734,6 +2734,66 @@ select:focus {
   background: var(--accent-soft);
 }
 
+.companion-draft-bubble {
+  border: 1px dashed var(--accent);
+  background: color-mix(in srgb, var(--accent-soft) 40%, var(--bg-elevated));
+}
+
+.companion-draft-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+  margin-bottom: 0.35rem;
+}
+
+.companion-draft-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.65rem;
+  flex-wrap: wrap;
+}
+
+.companion-timing-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.65rem;
+  margin: 0.5rem 0 0.75rem;
+}
+
+.companion-timing-grid input {
+  width: 100%;
+}
+
+.companion-feedback-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.companion-feedback-item summary {
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.companion-feedback-body {
+  white-space: pre-wrap;
+  font-family: inherit;
+  font-size: 0.85rem;
+  margin: 0.5rem 0 0;
+  padding: 0.65rem;
+  background: var(--bg-subtle);
+  border-radius: 8px;
+  max-height: 280px;
+  overflow: auto;
+}
+
+.companion-feedback-stats {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
 .bubble-reactions {
   display: flex;
   flex-wrap: wrap;

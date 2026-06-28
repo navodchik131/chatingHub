@@ -40,6 +40,7 @@ async def get_or_create_conversation(
     *,
     telegram_connection_id: int | None = None,
     fanvue_connection_id: int | None = None,
+    instagram_connection_id: int | None = None,
     studio_model_id: int | None = None,
 ) -> Conversation:
     stmt = select(Conversation).where(
@@ -52,6 +53,8 @@ async def get_or_create_conversation(
         stmt = stmt.where(Conversation.telegram_connection_id == telegram_connection_id)
     elif platform == Platform.fanvue and fanvue_connection_id is not None:
         stmt = stmt.where(Conversation.fanvue_connection_id == fanvue_connection_id)
+    elif platform == Platform.instagram and instagram_connection_id is not None:
+        stmt = stmt.where(Conversation.instagram_connection_id == instagram_connection_id)
     r = await session.execute(stmt)
     conv = r.scalar_one_or_none()
     now = datetime.now(timezone.utc)
@@ -68,6 +71,8 @@ async def get_or_create_conversation(
             conv.telegram_connection_id = telegram_connection_id
         if fanvue_connection_id and not conv.fanvue_connection_id:
             conv.fanvue_connection_id = fanvue_connection_id
+        if instagram_connection_id and not conv.instagram_connection_id:
+            conv.instagram_connection_id = instagram_connection_id
         if studio_model_id is not None and conv.studio_model_id != studio_model_id:
             conv.studio_model_id = studio_model_id
         conv.updated_at = now
@@ -86,6 +91,9 @@ async def get_or_create_conversation(
         else None,
         fanvue_connection_id=fanvue_connection_id
         if platform == Platform.fanvue
+        else None,
+        instagram_connection_id=instagram_connection_id
+        if platform == Platform.instagram
         else None,
         studio_model_id=studio_model_id,
         created_at=now,

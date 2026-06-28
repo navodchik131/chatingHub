@@ -23,6 +23,7 @@ interface ConversationLike {
 interface IntegrationLike {
   telegram_connections?: unknown[] | null
   fanvue_connections?: unknown[] | null
+  instagram_connections?: unknown[] | null
 }
 
 export function visibleChatPlatforms(
@@ -32,7 +33,8 @@ export function visibleChatPlatforms(
   const has = (p: ChatPlatform) =>
     conversations.some((c) => c.platform === p) ||
     (p === 'telegram' ? (integ?.telegram_connections?.length ?? 0) > 0 : false) ||
-    (p === 'fanvue' ? (integ?.fanvue_connections?.length ?? 0) > 0 : false)
+    (p === 'fanvue' ? (integ?.fanvue_connections?.length ?? 0) > 0 : false) ||
+    (p === 'instagram' ? (integ?.instagram_connections?.length ?? 0) > 0 : false)
 
   return CHAT_PLATFORM_ORDER.filter(has)
 }

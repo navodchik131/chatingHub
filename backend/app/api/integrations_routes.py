@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import secrets
 from datetime import datetime, timedelta, timezone
@@ -23,10 +24,20 @@ from app.connectors.fanvue.oauth import (
     generate_oauth_state,
     generate_pkce_pair,
 )
+from app.connectors.instagram.oauth import (
+    InstagramOAuthError,
+    build_instagram_authorize_url,
+    exchange_instagram_authorization_code,
+    fetch_instagram_profile,
+    generate_oauth_state as generate_instagram_oauth_state,
+    instagram_oauth_configured,
+)
 from app.db.models import (
     CreditAccount,
     FanvueConnection,
     FanvueOAuthState,
+    InstagramConnection,
+    InstagramOAuthState,
     LlmConnection,
     Platform,
     Subscription,
@@ -36,10 +47,13 @@ from app.db.models import (
 )
 from app.db.session import SessionLocal, get_session
 from app.schemas import (
+    CompanionFeedbackReportOut,
     FanvueIntegrationIn,
     FanvueOAuthStartIn,
     FanvueOAuthStartOut,
     FanvueSyncOut,
+    InstagramOAuthStartIn,
+    InstagramOAuthStartOut,
     IntegrationStatusOut,
     LlmIntegrationIn,
     PlatformConnectionOut,
@@ -53,6 +67,11 @@ from app.services.fanvue_connection import (
     fanvue_platform_webhook_signing_secret,
     fanvue_platform_webhook_url,
 )
+from app.services.instagram_connection import (
+    instagram_platform_webhook_url,
+    instagram_webhook_configured,
+)
+from app.services.companion_bot.feedback import list_feedback_reports
 from app.services.fanvue_sync import sync_fanvue_chat_history
 from app.services.plan_entitlements import plan_limits_for_sub
 from app.services.platform_connections import (
@@ -68,8 +87,33 @@ log = logging.getLogger(__name__)
 router = APIRouter(prefix="/integrations", tags=["integrations"])
 
 
+def _apply_companion_connection_patch(
+    row: TelegramConnection | FanvueConnection,
+    body: PlatformConnectionPatchIn,
+) -> None:
+    if "companion_mode" in body.model_fields_set and body.companion_mode is not None:
+        row.companion_mode = body.companion_mode
+    if "companion_delay_min_sec" in body.model_fields_set and body.companion_delay_min_sec is not None:
+        row.companion_delay_min_sec = int(body.companion_delay_min_sec)
+    if "companion_delay_max_sec" in body.model_fields_set and body.companion_delay_max_sec is not None:
+        row.companion_delay_max_sec = int(body.companion_delay_max_sec)
+    if (
+        "companion_max_replies_per_hour" in body.model_fields_set
+        and body.companion_max_replies_per_hour is not None
+    ):
+        row.companion_max_replies_per_hour = int(body.companion_max_replies_per_hour)
+    delay_min = int(row.companion_delay_min_sec or 0)
+    delay_max = int(row.companion_delay_max_sec or delay_min)
+    if delay_max < delay_min:
+        row.companion_delay_max_sec = delay_min
+
+
 def _fanvue_oauth_ready() -> bool:
     return fanvue_oauth_configured() and bool(fanvue_platform_webhook_signing_secret())
+
+
+def _instagram_oauth_ready() -> bool:
+    return instagram_oauth_configured() and instagram_webhook_configured()
 
 
 async def _background_fanvue_history_sync(user_id: int, connection_id: int | None = None) -> None:
@@ -123,6 +167,10 @@ def _telegram_connection_out(
         webhook_registered=_telegram_webhook_registered(tg),
         webhook_url=f"{base}/api/webhooks/telegram/{tg.webhook_secret}",
         is_active=bool(tg.is_active),
+        companion_mode=tg.companion_mode or "off",
+        companion_delay_min_sec=int(tg.companion_delay_min_sec or 5),
+        companion_delay_max_sec=int(tg.companion_delay_max_sec or 45),
+        companion_max_replies_per_hour=int(tg.companion_max_replies_per_hour or 60),
     )
 
 
@@ -135,6 +183,24 @@ def _fanvue_connection_out(fv: FanvueConnection) -> PlatformConnectionOut:
         creator_uuid=fv.creator_uuid,
         oauth_connected=bool(fv.oauth_connected_at),
         webhook_url=_fanvue_webhook_url_for_conn(fv),
+        is_active=True,
+        companion_mode=fv.companion_mode or "off",
+        companion_delay_min_sec=int(fv.companion_delay_min_sec or 5),
+        companion_delay_max_sec=int(fv.companion_delay_max_sec or 45),
+        companion_max_replies_per_hour=int(fv.companion_max_replies_per_hour or 60),
+    )
+
+
+def _instagram_connection_out(ig: InstagramConnection) -> PlatformConnectionOut:
+    return PlatformConnectionOut(
+        id=ig.id,
+        platform="instagram",
+        label=ig.label,
+        studio_model_id=ig.studio_model_id,
+        instagram_user_id=ig.instagram_user_id,
+        instagram_username=ig.instagram_username,
+        oauth_connected=bool(ig.oauth_connected_at),
+        webhook_url=instagram_platform_webhook_url(),
         is_active=True,
     )
 
@@ -159,8 +225,18 @@ async def _integration_status(session: AsyncSession, user: User) -> IntegrationS
             )
         ).all()
     )
+    ig_rows = list(
+        (
+            await session.scalars(
+                select(InstagramConnection)
+                .where(InstagramConnection.user_id == oid)
+                .order_by(InstagramConnection.id.asc())
+            )
+        ).all()
+    )
     tg = next((r for r in tg_rows if r.is_active), tg_rows[0] if tg_rows else None)
     fv = fv_rows[0] if fv_rows else None
+    ig = ig_rows[0] if ig_rows else None
     ws = await session.scalar(
         select(WavespeedConnection).where(WavespeedConnection.user_id == oid)
     )
@@ -212,6 +288,9 @@ async def _integration_status(session: AsyncSession, user: User) -> IntegrationS
         fanvue_webhook_url=_fanvue_webhook_url_for_conn(fv),
         fanvue_oauth_available=_fanvue_oauth_ready(),
         fanvue_oauth_connected=bool(fv and fv.oauth_connected_at),
+        instagram_configured=bool(ig),
+        instagram_oauth_available=_instagram_oauth_ready(),
+        instagram_webhook_url=instagram_platform_webhook_url(),
         telegram_webhook_url=(
             f"{base}/api/webhooks/telegram/{tg.webhook_secret}" if tg else None
         ),
@@ -224,6 +303,7 @@ async def _integration_status(session: AsyncSession, user: User) -> IntegrationS
             _telegram_connection_out(r, base=base) for r in tg_rows if r.is_active
         ],
         fanvue_connections=[_fanvue_connection_out(r) for r in fv_rows],
+        instagram_connections=[_instagram_connection_out(r) for r in ig_rows],
         max_connections_per_platform=lim.max_models,
     )
 
@@ -234,6 +314,36 @@ async def integration_status(
     user: User = Depends(get_current_user),
 ) -> IntegrationStatusOut:
     return await _integration_status(session, user)
+
+
+@router.get("/companion-feedback", response_model=list[CompanionFeedbackReportOut])
+async def api_companion_feedback_reports(
+    limit: int = Query(default=14, ge=1, le=60),
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> list[CompanionFeedbackReportOut]:
+    assert_permission(user, PERM_INTEGRATIONS)
+    oid = workspace_owner_id(user)
+    rows = await list_feedback_reports(session, owner_id=oid, limit=limit)
+    out: list[CompanionFeedbackReportOut] = []
+    for r in rows:
+        stats: dict = {}
+        if r.stats_json:
+            try:
+                stats = json.loads(r.stats_json)
+            except json.JSONDecodeError:
+                stats = {}
+        out.append(
+            CompanionFeedbackReportOut(
+                id=r.id,
+                report_date=r.report_date,
+                content=r.content,
+                stats=stats,
+                created_at=r.created_at,
+                updated_at=r.updated_at,
+            )
+        )
+    return out
 
 
 @router.put("/telegram", response_model=IntegrationStatusOut)
@@ -702,6 +812,7 @@ async def patch_telegram_connection(
             connection_id=row.id,
             studio_model_id=body.studio_model_id,
         )
+    _apply_companion_connection_patch(row, body)
     await session.commit()
     return await _integration_status(session, user)
 
@@ -755,7 +866,265 @@ async def patch_fanvue_connection(
             connection_id=row.id,
             studio_model_id=body.studio_model_id,
         )
+    _apply_companion_connection_patch(row, body)
     await session.commit()
+    return await _integration_status(session, user)
+
+
+async def _save_instagram_oauth_tokens(
+    session: AsyncSession,
+    *,
+    user_id: int,
+    instagram_user_id: str,
+    instagram_username: str | None,
+    token_payload: dict,
+    connection_id: int | None = None,
+    label: str | None = None,
+    studio_model_id: int | None = None,
+) -> InstagramConnection:
+    access = str(token_payload.get("access_token") or "").strip()
+    if not access:
+        raise InstagramOAuthError("Instagram token response missing access_token")
+    enc_access = encrypt_secret(access)
+    expires_at: datetime | None = None
+    expires_in = token_payload.get("expires_in")
+    if expires_in is not None:
+        try:
+            expires_at = datetime.now(timezone.utc) + timedelta(seconds=int(expires_in))
+        except (TypeError, ValueError):
+            expires_at = None
+
+    row: InstagramConnection | None = None
+    if connection_id is not None:
+        row = await session.scalar(
+            select(InstagramConnection).where(
+                InstagramConnection.id == connection_id,
+                InstagramConnection.user_id == user_id,
+            )
+        )
+    if row is None:
+        existing = list(
+            (
+                await session.scalars(
+                    select(InstagramConnection).where(InstagramConnection.user_id == user_id)
+                )
+            ).all()
+        )
+        if len(existing) == 1 and connection_id is None:
+            row = existing[0]
+
+    now = datetime.now(timezone.utc)
+    if row:
+        row.instagram_user_id = instagram_user_id
+        row.instagram_username = instagram_username
+        row.access_token_encrypted = enc_access
+        row.token_expires_at = expires_at
+        row.oauth_connected_at = now
+        if label is not None:
+            row.label = label
+        if studio_model_id is not None:
+            row.studio_model_id = studio_model_id
+            await sync_conversations_model_from_connection(
+                session,
+                platform=Platform.instagram,
+                connection_id=row.id,
+                studio_model_id=studio_model_id,
+            )
+    else:
+        sub = await session.scalar(
+            select(Subscription).where(Subscription.user_id == user_id)
+        )
+        await assert_can_add_platform_connection(
+            session, user_id, sub, platform=Platform.instagram
+        )
+        if studio_model_id is not None:
+            await validate_connection_studio_model(session, user_id, studio_model_id)
+        row = InstagramConnection(
+            user_id=user_id,
+            label=label,
+            studio_model_id=studio_model_id,
+            instagram_user_id=instagram_user_id,
+            instagram_username=instagram_username,
+            access_token_encrypted=enc_access,
+            token_expires_at=expires_at,
+            oauth_connected_at=now,
+        )
+        session.add(row)
+    await session.commit()
+    await session.refresh(row)
+    return row
+
+
+@router.post("/instagram/oauth/start", response_model=InstagramOAuthStartOut)
+async def instagram_oauth_start(
+    body: InstagramOAuthStartIn | None = None,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> InstagramOAuthStartOut:
+    assert_permission(user, PERM_INTEGRATIONS)
+    if not _instagram_oauth_ready():
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Instagram OAuth не настроен на сервере. "
+                "Нужны INSTAGRAM_APP_ID, INSTAGRAM_APP_SECRET и INSTAGRAM_WEBHOOK_VERIFY_TOKEN."
+            ),
+        )
+    oid = workspace_owner_id(user)
+    payload = body or InstagramOAuthStartIn()
+    if payload.studio_model_id is not None:
+        await validate_connection_studio_model(session, oid, payload.studio_model_id)
+    if payload.connection_id is not None:
+        row = await session.scalar(
+            select(InstagramConnection).where(
+                InstagramConnection.id == payload.connection_id,
+                InstagramConnection.user_id == oid,
+            )
+        )
+        if not row:
+            raise HTTPException(status_code=404, detail="Подключение Instagram не найдено")
+    state = generate_instagram_oauth_state()
+    session.add(
+        InstagramOAuthState(
+            state=state,
+            user_id=oid,
+            connection_id=payload.connection_id,
+            label=(payload.label or "").strip() or None,
+            studio_model_id=payload.studio_model_id,
+        )
+    )
+    await session.commit()
+    return InstagramOAuthStartOut(
+        authorize_url=build_instagram_authorize_url(state=state)
+    )
+
+
+@router.get("/instagram/oauth/callback")
+async def instagram_oauth_callback(
+    session: AsyncSession = Depends(get_session),
+    code: str | None = Query(default=None),
+    state: str | None = Query(default=None),
+    error: str | None = Query(default=None),
+    error_description: str | None = Query(default=None),
+) -> RedirectResponse:
+    base = settings.public_app_url.rstrip("/")
+    fail = f"{base}/?account=integrations&instagram=error"
+    ok = f"{base}/?account=integrations&instagram=connected"
+
+    if error:
+        log.warning("instagram oauth denied: %s %s", error, error_description or "")
+        q = urlencode({"account": "integrations", "instagram": "error", "reason": error})
+        return RedirectResponse(url=f"{base}/?{q}", status_code=302)
+
+    if not code or not state:
+        return RedirectResponse(url=fail, status_code=302)
+
+    pending = await session.scalar(
+        select(InstagramOAuthState).where(InstagramOAuthState.state == state.strip())
+    )
+    if not pending:
+        return RedirectResponse(url=fail, status_code=302)
+
+    created = pending.created_at
+    if created.tzinfo is None:
+        created = created.replace(tzinfo=timezone.utc)
+    if datetime.now(timezone.utc) - created > timedelta(minutes=15):
+        await session.execute(delete(InstagramOAuthState).where(InstagramOAuthState.state == state))
+        await session.commit()
+        return RedirectResponse(url=fail, status_code=302)
+
+    user_id = pending.user_id
+    oauth_connection_id = pending.connection_id
+    oauth_label = pending.label
+    oauth_studio_model_id = pending.studio_model_id
+    await session.execute(delete(InstagramOAuthState).where(InstagramOAuthState.state == state))
+    await session.commit()
+
+    try:
+        token_payload = await exchange_instagram_authorization_code(code=code.strip())
+        access = str(token_payload.get("access_token") or "").strip()
+        profile = await fetch_instagram_profile(access)
+        ig_user_id = str(profile.get("id") or profile.get("user_id") or token_payload.get("user_id") or "").strip()
+        if not ig_user_id:
+            raise InstagramOAuthError("Instagram profile missing id")
+        username = str(profile.get("username") or "").strip() or None
+        await _save_instagram_oauth_tokens(
+            session,
+            user_id=user_id,
+            instagram_user_id=ig_user_id,
+            instagram_username=username,
+            token_payload=token_payload,
+            connection_id=oauth_connection_id,
+            label=oauth_label,
+            studio_model_id=oauth_studio_model_id,
+        )
+    except InstagramOAuthError as e:
+        log.warning("instagram oauth callback failed user=%s: %s", user_id, e)
+        return RedirectResponse(url=fail, status_code=302)
+    except Exception:
+        log.exception("instagram oauth callback failed user=%s", user_id)
+        return RedirectResponse(url=fail, status_code=302)
+
+    return RedirectResponse(url=ok, status_code=302)
+
+
+@router.patch("/instagram/{connection_id}", response_model=IntegrationStatusOut)
+async def patch_instagram_connection(
+    connection_id: int,
+    body: PlatformConnectionPatchIn,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> IntegrationStatusOut:
+    assert_permission(user, PERM_INTEGRATIONS)
+    oid = workspace_owner_id(user)
+    row = await session.scalar(
+        select(InstagramConnection).where(
+            InstagramConnection.id == connection_id,
+            InstagramConnection.user_id == oid,
+        )
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Подключение Instagram не найдено")
+    if "label" in body.model_fields_set:
+        row.label = (body.label or "").strip() or None
+    if "studio_model_id" in body.model_fields_set:
+        await validate_connection_studio_model(session, oid, body.studio_model_id)
+        row.studio_model_id = body.studio_model_id
+        await sync_conversations_model_from_connection(
+            session,
+            platform=Platform.instagram,
+            connection_id=row.id,
+            studio_model_id=body.studio_model_id,
+        )
+    await session.commit()
+    return await _integration_status(session, user)
+
+
+@router.delete("/instagram", response_model=IntegrationStatusOut)
+async def delete_instagram(
+    connection_id: int | None = Query(default=None, ge=1),
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> IntegrationStatusOut:
+    assert_permission(user, PERM_INTEGRATIONS)
+    oid = workspace_owner_id(user)
+    if connection_id is not None:
+        row = await session.scalar(
+            select(InstagramConnection).where(
+                InstagramConnection.id == connection_id,
+                InstagramConnection.user_id == oid,
+            )
+        )
+    else:
+        row = await session.scalar(
+            select(InstagramConnection)
+            .where(InstagramConnection.user_id == oid)
+            .order_by(InstagramConnection.id.asc())
+            .limit(1)
+        )
+    if row:
+        await session.delete(row)
+        await session.commit()
     return await _integration_status(session, user)
 
 

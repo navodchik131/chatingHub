@@ -124,6 +124,8 @@ interface Conversation {
   studio_model_id?: number | null
   /** Не переводить входящие/исходящие — только оригинальный текст. */
   auto_translate_disabled?: boolean
+  /** NULL = с подключения; off/draft/semi_auto/auto — переопределение в диалоге. */
+  companion_mode_override?: string | null
   updated_at: string
   last_message_preview: string | null
   unread_count?: number
@@ -202,6 +204,42 @@ interface ChatMessage {
   reply_to_message_id?: number | null
   reply_preview?: string | null
   reactions?: MessageReaction[]
+  companion_bot?: boolean
+  bot_response_event_id?: number | null
+  operator_rating?: number | null
+}
+
+interface CompanionDraft {
+  id: number
+  conversation_id: number
+  trigger_message_id: number
+  draft_text: string
+  target_lang: string | null
+  created_at: string
+}
+
+const COMPANION_MODE_OPTIONS = [
+  { value: 'off', label: 'Выключен (оператор)' },
+  { value: 'draft', label: 'Черновик — оператор подтверждает' },
+  { value: 'semi_auto', label: 'Полуавто — короткие сообщения' },
+  { value: 'auto', label: 'Автопилот' },
+] as const
+
+const COMPANION_CONVERSATION_MODE_OPTIONS = [
+  { value: '', label: 'Как на подключении' },
+  { value: 'off', label: 'Выключен в этом диалоге' },
+  { value: 'draft', label: 'Черновик' },
+  { value: 'semi_auto', label: 'Полуавто' },
+  { value: 'auto', label: 'Автопилот' },
+] as const
+
+interface CompanionFeedbackReport {
+  id: number
+  report_date: string
+  content: string
+  stats: Record<string, number>
+  created_at: string
+  updated_at: string
 }
 
 /** Размер страницы GET /conversations/:id/messages (синхронно с бэкендом default limit). */
@@ -465,15 +503,21 @@ interface WorkspaceMemberRow {
 
 interface PlatformConnection {
   id: number
-  platform: 'telegram' | 'fanvue'
+  platform: 'telegram' | 'fanvue' | 'instagram'
   label: string | null
   studio_model_id: number | null
   bot_username?: string | null
   webhook_registered?: boolean
   creator_uuid?: string | null
+  instagram_user_id?: string | null
+  instagram_username?: string | null
   oauth_connected?: boolean
   webhook_url?: string | null
   is_active?: boolean
+  companion_mode?: string
+  companion_delay_min_sec?: number
+  companion_delay_max_sec?: number
+  companion_max_replies_per_hour?: number
 }
 
 interface IntegrationStatus {
@@ -484,6 +528,9 @@ interface IntegrationStatus {
   fanvue_webhook_url: string | null
   fanvue_oauth_available?: boolean
   fanvue_oauth_connected?: boolean
+  instagram_configured?: boolean
+  instagram_oauth_available?: boolean
+  instagram_webhook_url?: string | null
   telegram_webhook_url: string | null
   telegram_webhook_registered?: boolean
   integration_hint?: string | null
@@ -492,6 +539,7 @@ interface IntegrationStatus {
   llm_configured?: boolean
   telegram_connections?: PlatformConnection[]
   fanvue_connections?: PlatformConnection[]
+  instagram_connections?: PlatformConnection[]
   max_connections_per_platform?: number
 }
 
@@ -738,6 +786,14 @@ export default function App() {
   const [convNotesBusy, setConvNotesBusy] = useState(false)
   const [convNotesAnalyzeBusy, setConvNotesAnalyzeBusy] = useState(false)
   const [threadSettingsOpen, setThreadSettingsOpen] = useState(false)
+  const [companionDrafts, setCompanionDrafts] = useState<CompanionDraft[]>([])
+  const [companionDraftBusy, setCompanionDraftBusy] = useState<number | null>(null)
+  const [companionRatingBusy, setCompanionRatingBusy] = useState<number | null>(null)
+  const [companionModeBusy, setCompanionModeBusy] = useState(false)
+  const [companionFeedbackReports, setCompanionFeedbackReports] = useState<
+    CompanionFeedbackReport[]
+  >([])
+  const [companionFeedbackLoading, setCompanionFeedbackLoading] = useState(false)
 
   const wsRef = useRef<WebSocket | null>(null)
   const selectedIdRef = useRef<number | null>(null)
@@ -844,6 +900,8 @@ export default function App() {
   const [fvDraftModelId, setFvDraftModelId] = useState<number | ''>('')
   const [fvBusy, setFvBusy] = useState(false)
   const [fvSyncNote, setFvSyncNote] = useState<string | null>(null)
+  const [igDraftModelId, setIgDraftModelId] = useState<number | ''>('')
+  const [igBusy, setIgBusy] = useState(false)
 
   const [appSection, setAppSection] = useState<WorkspaceSection>('overview')
   const [studioDesc, setStudioDesc] = useState('')
@@ -1219,6 +1277,18 @@ export default function App() {
     if (r.ok) setInteg((await r.json()) as IntegrationStatus)
   }, [])
 
+  const refreshCompanionFeedback = useCallback(async () => {
+    setCompanionFeedbackLoading(true)
+    try {
+      const r = await apiFetch('/api/integrations/companion-feedback?limit=7')
+      if (r.ok) {
+        setCompanionFeedbackReports((await r.json()) as CompanionFeedbackReport[])
+      }
+    } finally {
+      setCompanionFeedbackLoading(false)
+    }
+  }, [])
+
   const refreshBillingPlans = useCallback(async () => {
     const [r, h] = await Promise.all([apiFetch('/api/billing/plans'), apiFetch('/api/health')])
     if (h.ok) {
@@ -1538,7 +1608,8 @@ export default function App() {
     if (!authed) return
     const account = searchParams.get('account')
     const fanvue = searchParams.get('fanvue')
-    if (account === 'integrations' || fanvue) {
+    const instagram = searchParams.get('instagram')
+    if (account === 'integrations' || fanvue || instagram) {
       setAccountOpen(true)
       setAccountTab('integrations')
     }
@@ -1547,12 +1618,20 @@ export default function App() {
     } else if (fanvue === 'error') {
       setError('Не удалось подключить Fanvue. Проверьте scopes в Fanvue Developer Area и попробуйте снова.')
     }
-    if (account || fanvue) {
+    if (instagram === 'connected') {
+      void refreshIntegrations()
+    } else if (instagram === 'error') {
+      setError(
+        'Не удалось подключить Instagram. Проверьте Business/Creator аккаунт, scopes и настройки Meta App.',
+      )
+    }
+    if (account || fanvue || instagram) {
       setSearchParams(
         (prev) => {
           const next = new URLSearchParams(prev)
           next.delete('account')
           next.delete('fanvue')
+          next.delete('instagram')
           next.delete('reason')
           return next
         },
@@ -1891,9 +1970,89 @@ export default function App() {
       const data = await fetchMessagesPage(id)
       setMessages(data)
       setHasMoreOlder(data.length >= CHAT_MESSAGES_PAGE)
+      const dr = await apiFetch(`/api/conversations/${id}/companion-drafts`)
+      if (dr.ok) {
+        setCompanionDrafts((await dr.json()) as CompanionDraft[])
+      } else {
+        setCompanionDrafts([])
+      }
     },
     [fetchMessagesPage],
   )
+
+  const approveCompanionDraft = async (draft: CompanionDraft, text?: string) => {
+    if (selectedId == null) return
+    setCompanionDraftBusy(draft.id)
+    setError(null)
+    try {
+      const r = await apiFetch(
+        `/api/conversations/${selectedId}/companion-drafts/${draft.id}/approve`,
+        {
+          method: 'POST',
+          body: JSON.stringify(text != null ? { text } : {}),
+        },
+      )
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        setError(formatHttpApiError(r, j))
+        return
+      }
+      const msg = (await r.json()) as ChatMessage
+      setCompanionDrafts((prev) => prev.filter((d) => d.id !== draft.id))
+      setMessages((prev) => {
+        if (prev.some((m) => Number(m.id) === Number(msg.id))) return prev
+        return [...prev, msg]
+      })
+    } finally {
+      setCompanionDraftBusy(null)
+    }
+  }
+
+  const rejectCompanionDraft = async (draftId: number) => {
+    if (selectedId == null) return
+    setCompanionDraftBusy(draftId)
+    setError(null)
+    try {
+      const r = await apiFetch(
+        `/api/conversations/${selectedId}/companion-drafts/${draftId}/reject`,
+        { method: 'POST' },
+      )
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        setError(formatHttpApiError(r, j))
+        return
+      }
+      setCompanionDrafts((prev) => prev.filter((d) => d.id !== draftId))
+    } finally {
+      setCompanionDraftBusy(null)
+    }
+  }
+
+  const rateCompanionMessage = async (messageId: number, rating: -1 | 0 | 1) => {
+    if (selectedId == null) return
+    setCompanionRatingBusy(messageId)
+    setError(null)
+    try {
+      const r = await apiFetch(
+        `/api/conversations/${selectedId}/messages/${messageId}/companion-rating`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ rating }),
+        },
+      )
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        setError(formatHttpApiError(r, j))
+        return
+      }
+      const msg = (await r.json()) as ChatMessage
+      setMessages((prev) =>
+        prev.map((m) => (Number(m.id) === Number(msg.id) ? { ...m, ...msg } : m)),
+      )
+    } finally {
+      setCompanionRatingBusy(null)
+    }
+  }
 
   const loadOlderMessages = useCallback(async () => {
     const sid = selectedIdRef.current
@@ -2007,6 +2166,11 @@ export default function App() {
   }, [accountOpen, accountTab, authed, canChat, health?.web_push_configured])
 
   useEffect(() => {
+    if (!accountOpen || accountTab !== 'integrations' || !authed) return
+    void refreshCompanionFeedback()
+  }, [accountOpen, accountTab, authed, refreshCompanionFeedback])
+
+  useEffect(() => {
     prevMsgLenRef.current = 0
     setShowJumpDown(false)
     setConvNotesOpen(false)
@@ -2105,6 +2269,21 @@ export default function App() {
             void refreshMotionRenders()
             void loadStudioGenerationsReset()
             void refreshMe()
+          }
+          return
+        }
+        if (payload.type === 'companion_draft') {
+          const sid = selectedIdRef.current
+          const raw = payload as {
+            conversation_id?: number
+            event?: CompanionDraft
+          }
+          if (sid != null && sid === raw.conversation_id && raw.event?.id) {
+            const ev = raw.event
+            setCompanionDrafts((prev) => {
+              if (prev.some((d) => d.id === ev.id)) return prev
+              return [...prev, ev]
+            })
           }
           return
         }
@@ -2497,6 +2676,30 @@ export default function App() {
       setError('Не удалось сохранить настройку перевода')
     } finally {
       setAutoTranslateBusy(false)
+    }
+  }
+
+  const saveCompanionModeOverride = async (convId: number, raw: string) => {
+    const v = raw === '' ? null : raw
+    setError(null)
+    setCompanionModeBusy(true)
+    try {
+      const r = await apiFetch(`/api/conversations/${convId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ companion_mode_override: v }),
+      })
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}))
+        setError(formatHttpApiError(r, err))
+        return
+      }
+      const updated = (await r.json()) as Conversation
+      setConversations((prev) => prev.map((c) => (c.id === convId ? { ...c, ...updated } : c)))
+    } catch {
+      setError('Не удалось сохранить режим AI-компаньона')
+    } finally {
+      setCompanionModeBusy(false)
     }
   }
 
@@ -3723,9 +3926,16 @@ export default function App() {
   }
 
   const patchPlatformConnection = async (
-    platform: 'telegram' | 'fanvue',
+    platform: 'telegram' | 'fanvue' | 'instagram',
     connectionId: number,
-    patch: { label?: string | null; studio_model_id?: number | null },
+    patch: {
+      label?: string | null
+      studio_model_id?: number | null
+      companion_mode?: string
+      companion_delay_min_sec?: number
+      companion_delay_max_sec?: number
+      companion_max_replies_per_hour?: number
+    },
   ) => {
     setError(null)
     const r = await apiFetch(`/api/integrations/${platform}/${connectionId}`, {
@@ -3852,6 +4062,62 @@ export default function App() {
 
   const copyFanvueWebhookUrl = async () => {
     const url = integ?.fanvue_webhook_url
+    if (!url) return
+    try {
+      await navigator.clipboard.writeText(url)
+    } catch {
+      setError('Не удалось скопировать URL webhook')
+    }
+  }
+
+  const connectInstagramOAuth = async (connectionId?: number | null) => {
+    setError(null)
+    setIgBusy(true)
+    try {
+      const body: Record<string, unknown> = {}
+      if (connectionId != null) body.connection_id = connectionId
+      if (igDraftModelId !== '') body.studio_model_id = igDraftModelId
+      const r = await apiFetch('/api/integrations/instagram/oauth/start', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      })
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        setError(formatHttpApiError(r, j))
+        return
+      }
+      const j = (await r.json()) as { authorize_url?: string }
+      if (!j.authorize_url) {
+        setError('Instagram OAuth: пустой authorize_url')
+        return
+      }
+      window.location.href = j.authorize_url
+    } finally {
+      setIgBusy(false)
+    }
+  }
+
+  const disconnectInstagram = async (connectionId: number) => {
+    setError(null)
+    setIgBusy(true)
+    try {
+      const r = await apiFetch(`/api/integrations/instagram?connection_id=${connectionId}`, {
+        method: 'DELETE',
+      })
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        setError(formatHttpApiError(r, j))
+        return
+      }
+      setInteg((await r.json()) as IntegrationStatus)
+      void refreshMe()
+    } finally {
+      setIgBusy(false)
+    }
+  }
+
+  const copyInstagramWebhookUrl = async () => {
+    const url = integ?.instagram_webhook_url
     if (!url) return
     try {
       await navigator.clipboard.writeText(url)
@@ -4761,6 +5027,81 @@ export default function App() {
                         </select>
                       </label>
                     ) : null}
+                    <label>
+                      AI-компаньон
+                      <select
+                        value={conn.companion_mode ?? 'off'}
+                        disabled={!canIntegrations}
+                        onChange={(e) => {
+                          void patchPlatformConnection('telegram', conn.id, {
+                            companion_mode: e.target.value,
+                          })
+                        }}
+                      >
+                        {COMPANION_MODE_OPTIONS.map((o) => (
+                          <option key={o.value} value={o.value}>
+                            {o.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <p className="small muted">
+                      Базовый режим для всех диалогов. В каждом чате можно переопределить в шапке диалога.
+                      Перевод для оператора сохраняется.
+                    </p>
+                    <div className="companion-timing-grid">
+                      <label>
+                        Задержка мин (с)
+                        <input
+                          type="number"
+                          min={0}
+                          max={300}
+                          defaultValue={conn.companion_delay_min_sec ?? 5}
+                          disabled={!canIntegrations}
+                          onBlur={(e) => {
+                            const v = Number(e.target.value)
+                            if (!Number.isFinite(v)) return
+                            void patchPlatformConnection('telegram', conn.id, {
+                              companion_delay_min_sec: v,
+                            })
+                          }}
+                        />
+                      </label>
+                      <label>
+                        Задержка макс (с)
+                        <input
+                          type="number"
+                          min={0}
+                          max={600}
+                          defaultValue={conn.companion_delay_max_sec ?? 45}
+                          disabled={!canIntegrations}
+                          onBlur={(e) => {
+                            const v = Number(e.target.value)
+                            if (!Number.isFinite(v)) return
+                            void patchPlatformConnection('telegram', conn.id, {
+                              companion_delay_max_sec: v,
+                            })
+                          }}
+                        />
+                      </label>
+                      <label>
+                        Авто/час
+                        <input
+                          type="number"
+                          min={1}
+                          max={500}
+                          defaultValue={conn.companion_max_replies_per_hour ?? 60}
+                          disabled={!canIntegrations}
+                          onBlur={(e) => {
+                            const v = Number(e.target.value)
+                            if (!Number.isFinite(v)) return
+                            void patchPlatformConnection('telegram', conn.id, {
+                              companion_max_replies_per_hour: v,
+                            })
+                          }}
+                        />
+                      </label>
+                    </div>
                     <button
                       type="button"
                       className="ghost-btn"
@@ -4861,6 +5202,80 @@ export default function App() {
                         </select>
                       </label>
                     ) : null}
+                    <label>
+                      AI-компаньон
+                      <select
+                        value={conn.companion_mode ?? 'off'}
+                        disabled={!canIntegrations}
+                        onChange={(e) => {
+                          void patchPlatformConnection('fanvue', conn.id, {
+                            companion_mode: e.target.value,
+                          })
+                        }}
+                      >
+                        {COMPANION_MODE_OPTIONS.map((o) => (
+                          <option key={o.value} value={o.value}>
+                            {o.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <p className="small muted">
+                      Базовый режим для всех диалогов. В каждом чате можно переопределить в шапке диалога.
+                    </p>
+                    <div className="companion-timing-grid">
+                      <label>
+                        Задержка мин (с)
+                        <input
+                          type="number"
+                          min={0}
+                          max={300}
+                          defaultValue={conn.companion_delay_min_sec ?? 5}
+                          disabled={!canIntegrations}
+                          onBlur={(e) => {
+                            const v = Number(e.target.value)
+                            if (!Number.isFinite(v)) return
+                            void patchPlatformConnection('fanvue', conn.id, {
+                              companion_delay_min_sec: v,
+                            })
+                          }}
+                        />
+                      </label>
+                      <label>
+                        Задержка макс (с)
+                        <input
+                          type="number"
+                          min={0}
+                          max={600}
+                          defaultValue={conn.companion_delay_max_sec ?? 45}
+                          disabled={!canIntegrations}
+                          onBlur={(e) => {
+                            const v = Number(e.target.value)
+                            if (!Number.isFinite(v)) return
+                            void patchPlatformConnection('fanvue', conn.id, {
+                              companion_delay_max_sec: v,
+                            })
+                          }}
+                        />
+                      </label>
+                      <label>
+                        Авто/час
+                        <input
+                          type="number"
+                          min={1}
+                          max={500}
+                          defaultValue={conn.companion_max_replies_per_hour ?? 60}
+                          disabled={!canIntegrations}
+                          onBlur={(e) => {
+                            const v = Number(e.target.value)
+                            if (!Number.isFinite(v)) return
+                            void patchPlatformConnection('fanvue', conn.id, {
+                              companion_max_replies_per_hour: v,
+                            })
+                          }}
+                        />
+                      </label>
+                    </div>
                     {integ?.fanvue_oauth_available ? (
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
                         <button
@@ -4945,6 +5360,124 @@ export default function App() {
                 ) : null}
               </section>
 
+              <section className="cabinet-module">
+                <div className="cabinet-module-head">
+                  <h4 className="cabinet-module-title">Instagram</h4>
+                  <span
+                    className={`cabinet-module-badge ${integ?.instagram_configured ? 'is-ok' : 'is-warn'}`}
+                  >
+                    {(integ?.instagram_connections?.length ?? 0) > 0
+                      ? `${integ?.instagram_connections?.length} подключ.`
+                      : 'Не подключено'}
+                  </span>
+                </div>
+                <p className="muted cabinet-module-body">
+                  Business или Creator аккаунт через Meta OAuth. Модель на подключении наследуется
+                  диалогами. Ответы возможны в течение 24 часов после сообщения пользователя.
+                </p>
+                {(integ?.instagram_connections ?? []).map((conn) => (
+                  <div key={conn.id} className="cabinet-module-form">
+                    <p className="small mono">
+                      {conn.label ? `${conn.label} · ` : ''}
+                      {conn.instagram_username
+                        ? `@${conn.instagram_username}`
+                        : conn.instagram_user_id
+                          ? `${conn.instagram_user_id.slice(0, 8)}…`
+                          : '—'}
+                    </p>
+                    {studioModels.length > 0 ? (
+                      <label>
+                        Модель
+                        <select
+                          value={conn.studio_model_id != null ? String(conn.studio_model_id) : ''}
+                          disabled={!canIntegrations}
+                          onChange={(e) => {
+                            const raw = e.target.value
+                            void patchPlatformConnection('instagram', conn.id, {
+                              studio_model_id: raw ? Number(raw) : null,
+                            })
+                          }}
+                        >
+                          <option value="">Не назначена</option>
+                          {studioModels.map((m) => (
+                            <option key={m.id} value={String(m.id)}>
+                              {m.name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    ) : null}
+                    {integ?.instagram_oauth_available ? (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                        <button
+                          type="button"
+                          className="ghost-btn"
+                          disabled={!canIntegrations || igBusy}
+                          onClick={() => void connectInstagramOAuth(conn.id)}
+                        >
+                          Переподключить
+                        </button>
+                        <button
+                          type="button"
+                          className="ghost-btn"
+                          disabled={!canIntegrations || igBusy}
+                          onClick={() => void disconnectInstagram(conn.id)}
+                        >
+                          Отключить
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                ))}
+                {integ?.instagram_webhook_url ? (
+                  <div className="cabinet-module-form" style={{ marginBottom: '0.75rem' }}>
+                    <label className="cabinet-field-span2">
+                      Webhook URL (Meta App Dashboard)
+                      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                        <input readOnly value={integ.instagram_webhook_url} />
+                        <button type="button" className="ghost-btn" onClick={() => void copyInstagramWebhookUrl()}>
+                          Копировать
+                        </button>
+                      </div>
+                    </label>
+                  </div>
+                ) : null}
+                {(integ?.instagram_connections?.length ?? 0) <
+                  (integ?.max_connections_per_platform ?? 1) &&
+                integ?.instagram_oauth_available ? (
+                  <div className="cabinet-module-form">
+                    {studioModels.length > 0 ? (
+                      <label>
+                        Модель (новое подключение)
+                        <select
+                          value={igDraftModelId === '' ? '' : String(igDraftModelId)}
+                          onChange={(e) => {
+                            const v = e.target.value
+                            setIgDraftModelId(v ? Number(v) : '')
+                          }}
+                          disabled={!canIntegrations}
+                        >
+                          <option value="">Не назначена</option>
+                          {studioModels.map((m) => (
+                            <option key={m.id} value={String(m.id)}>
+                              {m.name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    ) : null}
+                    <button
+                      type="button"
+                      className="send-btn"
+                      disabled={!canIntegrations || igBusy}
+                      onClick={() => void connectInstagramOAuth(null)}
+                    >
+                      {igBusy ? '…' : 'Добавить Instagram (OAuth)'}
+                    </button>
+                  </div>
+                ) : null}
+              </section>
+
               {canPlatformAdmin ? (
               <section className="cabinet-module">
                 <div className="cabinet-module-head">
@@ -4990,6 +5523,40 @@ export default function App() {
                 </div>
               </section>
               ) : null}
+
+              <section className="cabinet-module">
+                <div className="cabinet-module-head">
+                  <h4 className="cabinet-module-title">AI-компаньон · обратная связь</h4>
+                  <span className="cabinet-module-badge is-ok">
+                    {companionFeedbackLoading ? '…' : `${companionFeedbackReports.length} отч.`}
+                  </span>
+                </div>
+                <p className="muted cabinet-module-body">
+                  Nightly-сводка по 👍/👎 на ответах бота. Оценивайте сообщения в чате — отчёт обновляется автоматически.
+                </p>
+                {companionFeedbackLoading ? (
+                  <p className="muted">Загрузка…</p>
+                ) : companionFeedbackReports.length === 0 ? (
+                  <p className="muted small">Отчётов пока нет — появятся после первых оценок и ночного прогона.</p>
+                ) : (
+                  <div className="companion-feedback-list">
+                    {companionFeedbackReports.map((rep) => (
+                      <details key={rep.id} className="companion-feedback-item">
+                        <summary>
+                          {new Date(rep.report_date).toLocaleDateString('ru-RU')}
+                          {rep.stats?.rating_positive != null ? (
+                            <span className="companion-feedback-stats">
+                              {' '}
+                              · 👍 {rep.stats.rating_positive} · 👎 {rep.stats.rating_negative ?? 0}
+                            </span>
+                          ) : null}
+                        </summary>
+                        <pre className="companion-feedback-body">{rep.content}</pre>
+                      </details>
+                    ))}
+                  </div>
+                )}
+              </section>
 
               <section className="cabinet-module">
                 <div className="cabinet-module-head">
@@ -7262,7 +7829,7 @@ export default function App() {
                     </div>
                     <div
                       className="outbound-lang-field auto-translate-toggle"
-                      title="Отправлять и показывать сообщения без перевода — на языке оригинала."
+                      title="Отключить автоперевод входящих и исходящих в этом диалоге."
                     >
                       <label className="auto-translate-label">
                         <input
@@ -7275,6 +7842,26 @@ export default function App() {
                         />
                         <span>Без перевода</span>
                       </label>
+                    </div>
+                    <div className="outbound-lang-field thread-head-lang">
+                      <label className="outbound-lang-label" htmlFor="companion-mode-select">
+                        AI-компаньон
+                      </label>
+                      <select
+                        id="companion-mode-select"
+                        className="outbound-lang-select"
+                        value={selected.companion_mode_override ?? ''}
+                        disabled={companionModeBusy}
+                        onChange={(e) =>
+                          void saveCompanionModeOverride(selected.id, e.target.value)
+                        }
+                      >
+                        {COMPANION_CONVERSATION_MODE_OPTIONS.map((o) => (
+                          <option key={o.value || 'inherit'} value={o.value}>
+                            {o.label}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                     {!isMobileLayout &&
                     isOwner &&
@@ -7455,6 +8042,36 @@ export default function App() {
                               >
                                 ↩
                               </button>
+                              {m.companion_bot && m.direction === 'outbound' ? (
+                                <>
+                                  <button
+                                    type="button"
+                                    className={
+                                      m.operator_rating === 1
+                                        ? 'bubble-action-btn bubble-action-btn--active'
+                                        : 'bubble-action-btn'
+                                    }
+                                    title="Хороший ответ AI"
+                                    disabled={companionRatingBusy === m.id}
+                                    onClick={() => void rateCompanionMessage(m.id, 1)}
+                                  >
+                                    👍
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className={
+                                      m.operator_rating === -1
+                                        ? 'bubble-action-btn bubble-action-btn--active'
+                                        : 'bubble-action-btn'
+                                    }
+                                    title="Плохой ответ AI"
+                                    disabled={companionRatingBusy === m.id}
+                                    onClick={() => void rateCompanionMessage(m.id, -1)}
+                                  >
+                                    👎
+                                  </button>
+                                </>
+                              ) : null}
                               {CHAT_REACTIONS.map((emoji) => {
                                 const info = reactionCounts.get(emoji)
                                 const busy = reactionBusyKey === `${m.id}:${emoji}`
@@ -7481,6 +8098,36 @@ export default function App() {
                       </article>
                         )
                       })}
+                      {companionDrafts.map((draft) => (
+                        <article
+                          key={`draft-${draft.id}`}
+                          className="bubble out msg-enter companion-draft-bubble"
+                        >
+                          <div className="companion-draft-label">Черновик AI</div>
+                          <div className="ru">{draft.draft_text}</div>
+                          {draft.target_lang ? (
+                            <div className="orig">→ {draft.target_lang}</div>
+                          ) : null}
+                          <div className="companion-draft-actions">
+                            <button
+                              type="button"
+                              className="send-btn"
+                              disabled={companionDraftBusy === draft.id}
+                              onClick={() => void approveCompanionDraft(draft)}
+                            >
+                              Отправить
+                            </button>
+                            <button
+                              type="button"
+                              className="ghost-btn"
+                              disabled={companionDraftBusy === draft.id}
+                              onClick={() => void rejectCompanionDraft(draft.id)}
+                            >
+                              Отклонить
+                            </button>
+                          </div>
+                        </article>
+                      ))}
                       <div className="messages-end" aria-hidden />
                     </>
                   )}

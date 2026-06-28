@@ -27,6 +27,35 @@ class MessageOut(BaseModel):
     reply_to_message_id: int | None = None
     reply_preview: str | None = None
     reactions: list[MessageReactionOut] = Field(default_factory=list)
+    companion_bot: bool = False
+    bot_response_event_id: int | None = None
+    operator_rating: int | None = None
+
+
+class CompanionDraftOut(BaseModel):
+    id: int
+    conversation_id: int
+    trigger_message_id: int
+    draft_text: str
+    target_lang: str | None = None
+    created_at: datetime
+
+
+class CompanionDraftApproveIn(BaseModel):
+    text: str | None = None
+
+
+class CompanionRatingIn(BaseModel):
+    rating: Literal[-1, 0, 1]
+
+
+class CompanionFeedbackReportOut(BaseModel):
+    id: int
+    report_date: datetime
+    content: str
+    stats: dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime
+    updated_at: datetime
 
 
 class ConversationOut(BaseModel):
@@ -44,6 +73,8 @@ class ConversationOut(BaseModel):
     studio_model_id: int | None = None
     """Не переводить входящие/исходящие — только оригинальный текст."""
     auto_translate_disabled: bool = False
+    """NULL = режим с подключения; off/draft/semi_auto/auto — переопределение."""
+    companion_mode_override: str | None = None
     updated_at: datetime
     has_avatar: bool = False
 
@@ -73,6 +104,19 @@ class ConversationPatchIn(BaseModel):
     outbound_lang: str | None = None
     studio_model_id: int | None = None
     auto_translate_disabled: bool | None = None
+    companion_mode_override: Literal["off", "draft", "semi_auto", "auto"] | None = None
+
+    @field_validator("companion_mode_override", mode="before")
+    @classmethod
+    def _strip_companion_override(cls, v: object) -> str | None:
+        if v is None:
+            return None
+        if not isinstance(v, str):
+            return None
+        s = v.strip().lower()
+        if not s or s == "inherit":
+            return None
+        return s
 
     @field_validator("outbound_lang", mode="before")
     @classmethod
@@ -500,22 +544,42 @@ class FanvueOAuthStartOut(BaseModel):
     authorize_url: str
 
 
+class InstagramOAuthStartIn(BaseModel):
+    label: str | None = Field(default=None, max_length=128)
+    studio_model_id: int | None = Field(default=None, ge=1)
+    connection_id: int | None = Field(default=None, ge=1)
+
+
+class InstagramOAuthStartOut(BaseModel):
+    authorize_url: str
+
+
 class PlatformConnectionPatchIn(BaseModel):
     label: str | None = Field(default=None, max_length=128)
     studio_model_id: int | None = Field(default=None, ge=1)
+    companion_mode: Literal["off", "draft", "semi_auto", "auto"] | None = None
+    companion_delay_min_sec: int | None = Field(default=None, ge=0, le=300)
+    companion_delay_max_sec: int | None = Field(default=None, ge=0, le=600)
+    companion_max_replies_per_hour: int | None = Field(default=None, ge=1, le=500)
 
 
 class PlatformConnectionOut(BaseModel):
     id: int
-    platform: Literal["telegram", "fanvue"]
+    platform: Literal["telegram", "fanvue", "instagram"]
     label: str | None = None
     studio_model_id: int | None = None
     bot_username: str | None = None
     webhook_registered: bool = False
     creator_uuid: str | None = None
+    instagram_user_id: str | None = None
+    instagram_username: str | None = None
     oauth_connected: bool = False
     webhook_url: str | None = None
     is_active: bool = True
+    companion_mode: str = "off"
+    companion_delay_min_sec: int = 5
+    companion_delay_max_sec: int = 45
+    companion_max_replies_per_hour: int = 60
 
 
 class FanvueSyncOut(BaseModel):
@@ -534,6 +598,9 @@ class IntegrationStatusOut(BaseModel):
     fanvue_webhook_url: str | None = None
     fanvue_oauth_available: bool = False
     fanvue_oauth_connected: bool = False
+    instagram_configured: bool = False
+    instagram_oauth_available: bool = False
+    instagram_webhook_url: str | None = None
     telegram_webhook_url: str | None = None
     # True, если webhook реально зарегистрирован у Telegram (нужен HTTPS)
     telegram_webhook_registered: bool = False
@@ -543,6 +610,7 @@ class IntegrationStatusOut(BaseModel):
     llm_configured: bool = False
     telegram_connections: list[PlatformConnectionOut] = Field(default_factory=list)
     fanvue_connections: list[PlatformConnectionOut] = Field(default_factory=list)
+    instagram_connections: list[PlatformConnectionOut] = Field(default_factory=list)
     max_connections_per_platform: int = 1
 
 

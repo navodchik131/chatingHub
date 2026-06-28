@@ -24,6 +24,7 @@ class Base(DeclarativeBase):
 class Platform(str, enum.Enum):
     telegram = "telegram"
     fanvue = "fanvue"
+    instagram = "instagram"
 
 
 class MessageDirection(str, enum.Enum):
@@ -40,6 +41,20 @@ class ConversationNoteKind(str, enum.Enum):
 
 class MessageAttachmentKind(str, enum.Enum):
     image = "image"
+
+
+class CompanionBotMode(str, enum.Enum):
+    off = "off"
+    draft = "draft"
+    semi_auto = "semi_auto"
+    auto = "auto"
+
+
+class BotResponseEventStatus(str, enum.Enum):
+    draft = "draft"
+    sent = "sent"
+    rejected = "rejected"
+    failed = "failed"
 
 
 class SubscriptionStatus(str, enum.Enum):
@@ -111,6 +126,9 @@ class User(Base):
     )
     fanvue_connections: Mapped[list[FanvueConnection]] = relationship(
         "FanvueConnection", back_populates="user"
+    )
+    instagram_connections: Mapped[list["InstagramConnection"]] = relationship(
+        "InstagramConnection", back_populates="user"
     )
     studio_models: Mapped[list[UserStudioModel]] = relationship(
         "UserStudioModel", back_populates="owner", cascade="all, delete-orphan"
@@ -252,6 +270,14 @@ class TelegramConnection(Base):
     # Установлено в True после успешного setWebhook (только HTTPS)
     webhook_registered: Mapped[bool] = mapped_column(Boolean, default=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    companion_mode: Mapped[str] = mapped_column(
+        String(16), default=CompanionBotMode.off.value, server_default="off"
+    )
+    companion_delay_min_sec: Mapped[int] = mapped_column(Integer, default=5, server_default="5")
+    companion_delay_max_sec: Mapped[int] = mapped_column(Integer, default=45, server_default="45")
+    companion_max_replies_per_hour: Mapped[int] = mapped_column(
+        Integer, default=60, server_default="60"
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
@@ -284,12 +310,65 @@ class FanvueConnection(Base):
     oauth_connected_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    companion_mode: Mapped[str] = mapped_column(
+        String(16), default=CompanionBotMode.off.value, server_default="off"
+    )
+    companion_delay_min_sec: Mapped[int] = mapped_column(Integer, default=5, server_default="5")
+    companion_delay_max_sec: Mapped[int] = mapped_column(Integer, default=45, server_default="45")
+    companion_max_replies_per_hour: Mapped[int] = mapped_column(
+        Integer, default=60, server_default="60"
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
 
     user: Mapped[User] = relationship("User", back_populates="fanvue_connections")
     studio_model: Mapped[UserStudioModel | None] = relationship("UserStudioModel")
+
+
+class InstagramConnection(Base):
+    __tablename__ = "instagram_connections"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    label: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    studio_model_id: Mapped[int | None] = mapped_column(
+        ForeignKey("user_studio_models.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    instagram_user_id: Mapped[str] = mapped_column(String(64), index=True)
+    instagram_username: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    access_token_encrypted: Mapped[str] = mapped_column(Text)
+    token_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    oauth_connected_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+    user: Mapped[User] = relationship("User", back_populates="instagram_connections")
+    studio_model: Mapped[UserStudioModel | None] = relationship("UserStudioModel")
+
+
+class InstagramOAuthState(Base):
+    __tablename__ = "instagram_oauth_states"
+
+    state: Mapped[str] = mapped_column(String(128), primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    connection_id: Mapped[int | None] = mapped_column(nullable=True)
+    label: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    studio_model_id: Mapped[int | None] = mapped_column(nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
 
 
 class FanvueOAuthState(Base):
@@ -338,6 +417,11 @@ class Conversation(Base):
         nullable=True,
         index=True,
     )
+    instagram_connection_id: Mapped[int | None] = mapped_column(
+        ForeignKey("instagram_connections.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     external_chat_id: Mapped[str] = mapped_column(String(64), index=True)
     external_topic_id: Mapped[str] = mapped_column(String(64), default="0")
     user_display_name: Mapped[str | None] = mapped_column(String(512), nullable=True)
@@ -355,6 +439,8 @@ class Conversation(Base):
     auto_translate_disabled: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="false"
     )
+    """Переопределение режима AI-компаньона: NULL = как на подключении."""
+    companion_mode_override: Mapped[str | None] = mapped_column(String(16), nullable=True)
     last_read_message_id: Mapped[int | None] = mapped_column(nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
@@ -407,6 +493,87 @@ class ConversationNote(Base):
 
     conversation: Mapped[Conversation] = relationship("Conversation", back_populates="notes")
     author: Mapped[User | None] = relationship("User")
+
+
+class CompanionConversationState(Base):
+    """Динамическое состояние компаньона в диалоге (привязанность, настроение)."""
+
+    __tablename__ = "companion_conversation_states"
+
+    conversation_id: Mapped[int] = mapped_column(
+        ForeignKey("conversations.id", ondelete="CASCADE"), primary_key=True
+    )
+    relationship_score: Mapped[int] = mapped_column(Integer, default=25, server_default="25")
+    mood: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    daily_state_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    conversation: Mapped[Conversation] = relationship("Conversation")
+
+
+class BotResponseEvent(Base):
+    """Журнал ответов AI-компаньона для feedback loop и черновиков."""
+
+    __tablename__ = "bot_response_events"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    conversation_id: Mapped[int] = mapped_column(
+        ForeignKey("conversations.id", ondelete="CASCADE"), index=True
+    )
+    trigger_message_id: Mapped[int] = mapped_column(
+        ForeignKey("messages.id", ondelete="CASCADE"), index=True
+    )
+    outbound_message_id: Mapped[int | None] = mapped_column(
+        ForeignKey("messages.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    draft_text: Mapped[str] = mapped_column(Text, default="")
+    sent_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[BotResponseEventStatus] = mapped_column(
+        Enum(BotResponseEventStatus, native_enum=False, length=16),
+        default=BotResponseEventStatus.draft,
+        index=True,
+    )
+    operator_rating: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    was_edited: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    prompt_version: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    persona_model_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    target_lang: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    model_name: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    tokens_used: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    state_snapshot_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class CompanionFeedbackReport(Base):
+    """Nightly-сводка по оценкам ответов AI-компаньона (на workspace)."""
+
+    __tablename__ = "companion_feedback_reports"
+    __table_args__ = (
+        UniqueConstraint("user_id", "report_date", name="uq_companion_feedback_user_date"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    report_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    content: Mapped[str] = mapped_column(Text, default="")
+    stats_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
 
 
 class WavespeedConnection(Base):

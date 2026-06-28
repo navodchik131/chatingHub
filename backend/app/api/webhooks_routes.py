@@ -4,15 +4,19 @@ import json
 import logging
 
 from aiogram.types import Update
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import PlainTextResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.connectors.fanvue.handlers import (
     ingest_fanvue_message_received,
     is_fanvue_message_read_payload,
 )
 from app.connectors.fanvue.signature import verify_fanvue_webhook_signature
+from app.connectors.instagram.handlers import ingest_instagram_webhook_body
+from app.connectors.instagram.signature import verify_meta_webhook_signature
 from app.connectors.telegram.ingest import ingest_telegram_dm, ingest_telegram_message_reaction
 from app.db.models import FanvueConnection, TelegramConnection
 from app.db.session import get_session
@@ -172,3 +176,46 @@ async def fanvue_webhook_legacy(
     return await _process_fanvue_webhook(
         session, raw=raw, sig_header=sig_header, conn=conn
     )
+
+
+@router.get("/instagram")
+async def instagram_webhook_verify(
+    hub_mode: str | None = Query(default=None, alias="hub.mode"),
+    hub_verify_token: str | None = Query(default=None, alias="hub.verify_token"),
+    hub_challenge: str | None = Query(default=None, alias="hub.challenge"),
+) -> PlainTextResponse:
+    expected = (settings.instagram_webhook_verify_token or "").strip()
+    if hub_mode == "subscribe" and hub_verify_token == expected and hub_challenge:
+        return PlainTextResponse(content=hub_challenge)
+    raise HTTPException(status_code=403, detail="verification failed")
+
+
+@router.post("/instagram")
+async def instagram_webhook(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    secret = (settings.instagram_app_secret or "").strip()
+    if not secret:
+        raise HTTPException(status_code=404, detail="instagram webhook disabled")
+
+    raw = await request.body()
+    sig = request.headers.get("x-hub-signature-256") or request.headers.get(
+        "X-Hub-Signature-256"
+    )
+    if not verify_meta_webhook_signature(raw, sig, secret):
+        log.warning("instagram webhook: invalid signature")
+        raise HTTPException(status_code=401, detail="invalid signature")
+
+    try:
+        body = json.loads(raw.decode("utf-8"))
+    except json.JSONDecodeError as e:
+        raise HTTPException(status_code=400, detail="invalid json body") from e
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="json must be an object")
+
+    try:
+        return await ingest_instagram_webhook_body(session, body)
+    except Exception:
+        log.exception("instagram webhook ingest failed")
+        raise HTTPException(status_code=500, detail="ingest failed") from None
