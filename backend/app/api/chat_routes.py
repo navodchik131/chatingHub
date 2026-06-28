@@ -945,7 +945,13 @@ async def api_companion_message_rating(
         raise HTTPException(status_code=404, detail="Ответ бота не найден")
     event.operator_rating = int(body.rating)
     await session.commit()
-    return message_to_out(row, owner_id=oid, operator_rating=event.operator_rating)
+    await session.refresh(row, attribute_names=["attachments"])
+    return message_to_out(
+        row,
+        owner_id=oid,
+        operator_rating=event.operator_rating,
+        bot_response_event_id=event.id,
+    )
 
 
 @router.websocket("/ws")
