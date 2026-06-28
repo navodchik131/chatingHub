@@ -2734,6 +2734,117 @@ select:focus {
   background: var(--accent-soft);
 }
 
+.bubble-companion-rate {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem 0.65rem;
+  margin-top: 0.45rem;
+  padding: 0.45rem 0.55rem;
+  border-radius: 0.55rem;
+  background: color-mix(in srgb, var(--bg-subtle) 70%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+}
+
+.bubble-companion-rate--rated-up {
+  border-color: color-mix(in srgb, #22c55e 35%, var(--border));
+  background: color-mix(in srgb, #22c55e 8%, var(--bg-subtle));
+}
+
+.bubble-companion-rate--rated-down {
+  border-color: color-mix(in srgb, #ef4444 30%, var(--border));
+  background: color-mix(in srgb, #ef4444 7%, var(--bg-subtle));
+}
+
+.bubble-companion-rate-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+}
+
+.bubble-companion-rate-actions {
+  display: inline-flex;
+  gap: 0.25rem;
+}
+
+.bubble-companion-rate-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2rem;
+  height: 2rem;
+  padding: 0 0.35rem;
+  border: 1px solid transparent;
+  border-radius: 0.45rem;
+  background: transparent;
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  opacity: 0.8;
+  transition:
+    opacity 0.15s,
+    background 0.15s,
+    border-color 0.15s,
+    transform 0.1s;
+}
+
+.bubble-companion-rate-btn:hover:not(:disabled) {
+  opacity: 1;
+  background: color-mix(in srgb, var(--bg-elevated) 90%, transparent);
+}
+
+.bubble-companion-rate-btn:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.bubble-companion-rate-btn--selected {
+  opacity: 1;
+  transform: scale(1.05);
+}
+
+.bubble-companion-rate-btn--up.bubble-companion-rate-btn--selected {
+  border-color: color-mix(in srgb, #22c55e 50%, transparent);
+  background: color-mix(in srgb, #22c55e 18%, transparent);
+}
+
+.bubble-companion-rate-btn--down.bubble-companion-rate-btn--selected {
+  border-color: color-mix(in srgb, #ef4444 45%, transparent);
+  background: color-mix(in srgb, #ef4444 15%, transparent);
+}
+
+.bubble-companion-rate-status {
+  font-size: 0.78rem;
+  line-height: 1.2;
+  margin-left: auto;
+}
+
+.bubble-companion-rate-status--hint {
+  color: var(--text-muted);
+}
+
+.bubble-companion-rate-status--busy {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.bubble-companion-rate-status--saved {
+  color: #16a34a;
+  font-weight: 600;
+}
+
+.bubble-companion-rate-status--up {
+  color: #16a34a;
+  font-weight: 500;
+}
+
+.bubble-companion-rate-status--down {
+  color: #dc2626;
+  font-weight: 500;
+}
+
 .companion-draft-bubble {
   border: 1px dashed var(--accent);
   background: color-mix(in srgb, var(--accent-soft) 40%, var(--bg-elevated));

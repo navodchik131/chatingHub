@@ -839,6 +839,7 @@ export default function App() {
   const [companionDrafts, setCompanionDrafts] = useState<CompanionDraft[]>([])
   const [companionDraftBusy, setCompanionDraftBusy] = useState<number | null>(null)
   const [companionRatingBusy, setCompanionRatingBusy] = useState<number | null>(null)
+  const [companionRatingSavedId, setCompanionRatingSavedId] = useState<number | null>(null)
   const [companionModeBusy, setCompanionModeBusy] = useState(false)
   const [companionFeedbackReports, setCompanionFeedbackReports] = useState<
     CompanionFeedbackReport[]
@@ -2078,27 +2079,55 @@ export default function App() {
     }
   }
 
-  const rateCompanionMessage = async (messageId: number, rating: -1 | 0 | 1) => {
+  const rateCompanionMessage = async (messageId: number, rating: -1 | 1) => {
     if (selectedId == null) return
+    const snapshot = messages.find((m) => Number(m.id) === Number(messageId))
+    const current = snapshot?.operator_rating
+    const nextRating: -1 | 0 | 1 = current === rating ? 0 : rating
+    const optimisticRating = nextRating === 0 ? null : nextRating
+
     setCompanionRatingBusy(messageId)
+    setCompanionRatingSavedId(null)
     setError(null)
+    setMessages((prev) =>
+      prev.map((m) =>
+        Number(m.id) === Number(messageId) ? { ...m, operator_rating: optimisticRating } : m,
+      ),
+    )
+
     try {
       const r = await apiFetch(
         `/api/conversations/${selectedId}/messages/${messageId}/companion-rating`,
         {
           method: 'POST',
-          body: JSON.stringify({ rating }),
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ rating: nextRating }),
         },
       )
       if (!r.ok) {
         const j = await r.json().catch(() => ({}))
         setError(formatHttpApiError(r, j))
+        if (snapshot) {
+          setMessages((prev) =>
+            prev.map((m) =>
+              Number(m.id) === Number(messageId)
+                ? { ...m, operator_rating: snapshot.operator_rating ?? null }
+                : m,
+            ),
+          )
+        }
         return
       }
       const msg = (await r.json()) as ChatMessage
       setMessages((prev) =>
         prev.map((m) => (Number(m.id) === Number(msg.id) ? { ...m, ...msg } : m)),
       )
+      if (nextRating !== 0) {
+        setCompanionRatingSavedId(messageId)
+        window.setTimeout(() => {
+          setCompanionRatingSavedId((id) => (id === messageId ? null : id))
+        }, 2500)
+      }
     } finally {
       setCompanionRatingBusy(null)
     }
@@ -2269,10 +2298,12 @@ export default function App() {
     if (selectedId == null) {
       setMessages([])
       setHasMoreOlder(false)
+      setCompanionRatingSavedId(null)
       return
     }
     setMessages([])
     setHasMoreOlder(false)
+    setCompanionRatingSavedId(null)
     let cancelled = false
     setLoading(true)
     setError(null)
@@ -8318,36 +8349,6 @@ export default function App() {
                               >
                                 ↩
                               </button>
-                              {m.companion_bot && m.direction === 'outbound' ? (
-                                <>
-                                  <button
-                                    type="button"
-                                    className={
-                                      m.operator_rating === 1
-                                        ? 'bubble-action-btn bubble-action-btn--active'
-                                        : 'bubble-action-btn'
-                                    }
-                                    title="Хороший ответ AI"
-                                    disabled={companionRatingBusy === m.id}
-                                    onClick={() => void rateCompanionMessage(m.id, 1)}
-                                  >
-                                    👍
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className={
-                                      m.operator_rating === -1
-                                        ? 'bubble-action-btn bubble-action-btn--active'
-                                        : 'bubble-action-btn'
-                                    }
-                                    title="Плохой ответ AI"
-                                    disabled={companionRatingBusy === m.id}
-                                    onClick={() => void rateCompanionMessage(m.id, -1)}
-                                  >
-                                    👎
-                                  </button>
-                                </>
-                              ) : null}
                               {CHAT_REACTIONS.map((emoji) => {
                                 const info = reactionCounts.get(emoji)
                                 const busy = reactionBusyKey === `${m.id}:${emoji}`
@@ -8371,6 +8372,80 @@ export default function App() {
                             </div>
                           ) : null}
                         </div>
+                        {m.companion_bot && m.direction === 'outbound' && !m.pending ? (
+                          <div
+                            className={
+                              m.operator_rating === 1
+                                ? 'bubble-companion-rate bubble-companion-rate--rated-up'
+                                : m.operator_rating === -1
+                                  ? 'bubble-companion-rate bubble-companion-rate--rated-down'
+                                  : 'bubble-companion-rate'
+                            }
+                            aria-label="Оценка ответа AI"
+                          >
+                            <span className="bubble-companion-rate-label">Оценка AI</span>
+                            <div className="bubble-companion-rate-actions">
+                              <button
+                                type="button"
+                                className={
+                                  m.operator_rating === 1
+                                    ? 'bubble-companion-rate-btn bubble-companion-rate-btn--up bubble-companion-rate-btn--selected'
+                                    : 'bubble-companion-rate-btn bubble-companion-rate-btn--up'
+                                }
+                                title={
+                                  m.operator_rating === 1
+                                    ? 'Снять оценку «хорошо»'
+                                    : 'Хороший ответ AI'
+                                }
+                                disabled={companionRatingBusy === m.id}
+                                onClick={() => void rateCompanionMessage(m.id, 1)}
+                              >
+                                👍
+                              </button>
+                              <button
+                                type="button"
+                                className={
+                                  m.operator_rating === -1
+                                    ? 'bubble-companion-rate-btn bubble-companion-rate-btn--down bubble-companion-rate-btn--selected'
+                                    : 'bubble-companion-rate-btn bubble-companion-rate-btn--down'
+                                }
+                                title={
+                                  m.operator_rating === -1
+                                    ? 'Снять оценку «плохо»'
+                                    : 'Плохой ответ AI'
+                                }
+                                disabled={companionRatingBusy === m.id}
+                                onClick={() => void rateCompanionMessage(m.id, -1)}
+                              >
+                                👎
+                              </button>
+                            </div>
+                            <span
+                              className={
+                                companionRatingBusy === m.id
+                                  ? 'bubble-companion-rate-status bubble-companion-rate-status--busy'
+                                  : companionRatingSavedId === m.id
+                                    ? 'bubble-companion-rate-status bubble-companion-rate-status--saved'
+                                    : m.operator_rating === 1
+                                      ? 'bubble-companion-rate-status bubble-companion-rate-status--up'
+                                      : m.operator_rating === -1
+                                        ? 'bubble-companion-rate-status bubble-companion-rate-status--down'
+                                        : 'bubble-companion-rate-status bubble-companion-rate-status--hint'
+                              }
+                              aria-live="polite"
+                            >
+                              {companionRatingBusy === m.id
+                                ? 'Сохранение…'
+                                : companionRatingSavedId === m.id
+                                  ? '✓ Сохранено'
+                                  : m.operator_rating === 1
+                                    ? 'Оценено: хорошо'
+                                    : m.operator_rating === -1
+                                      ? 'Оценено: плохо'
+                                      : 'Помогите боту учиться'}
+                            </span>
+                          </div>
+                        ) : null}
                       </article>
                         )
                       })}
