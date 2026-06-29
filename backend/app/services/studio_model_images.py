@@ -92,34 +92,18 @@ def select_wan_identity_images_with_pose_ref(
     """
     При pose ref = image 1 не отправляем все фото модели (развёртка + face + body…),
     иначе WAN копирует нейтральный character sheet и одежду с листа.
-    Если референс nude — только face (без body/turnaround в одежде).
+    Если референс nude — body + face + genitals (без turnaround в одежде); body задаёт силуэт.
     """
     if max_count <= 0:
         return []
     cap = max(1, min(5, int(max_count)))
-    if pose_reference_nude:
-        cap = min(cap, 2)
-        by_kind: dict[str, list[UserStudioModelImage]] = {}
-        for im in imgs:
-            k = (im.image_kind or "other").lower()
-            by_kind.setdefault(k, []).append(im)
-        picked: list[UserStudioModelImage] = []
-        for im in by_kind.get("face", []):
-            if len(picked) >= cap:
-                break
-            picked.append(im)
-        if not picked:
-            for im in imgs[:cap]:
-                if (im.image_kind or "").lower() != "genitals":
-                    picked.append(im)
-        return picked[:cap]
 
     by_kind: dict[str, list[UserStudioModelImage]] = {}
     for im in imgs:
         k = (im.image_kind or "other").lower()
         by_kind.setdefault(k, []).append(im)
 
-    picked = []
+    picked: list[UserStudioModelImage] = []
 
     def take(kind: str) -> None:
         if len(picked) >= cap:
@@ -128,6 +112,18 @@ def select_wan_identity_images_with_pose_ref(
             if im not in picked:
                 picked.append(im)
                 return
+
+    if pose_reference_nude:
+        cap = min(cap, 4)
+        take("body")
+        take("face")
+        take("genitals")
+        if not picked:
+            for im in imgs[:cap]:
+                k = (im.image_kind or "").lower()
+                if k not in ("turnaround", "other"):
+                    picked.append(im)
+        return sort_model_images_for_wan_identity(picked)[:cap]
 
     take("face")
     if len(picked) < cap:
@@ -251,8 +247,8 @@ def select_grok_compose_wavespeed_identity_images(
     """
     Режим «Grok: сцена» — identity URL после pose ref (WAN) или до pose (Nano reorder).
 
-    Nude pose ref: только face + genitals — без body/turnaround (полный body ref + pose bitmap
-    дают силуэт донора; face отдельно → «приклеенная голова»).
+    Nude pose ref: body + face + genitals — без turnaround (лист в одежде). Body ref задаёт
+    bust/waist/hip mass; image 1 только articulation/camera/coverage.
 
     Clothed pose ref: body + face, без turnaround (лист тянет студийный outfit/фон).
     """
@@ -276,14 +272,15 @@ def select_grok_compose_wavespeed_identity_images(
                 return
 
     if pose_reference_nude:
-        cap = min(cap, 3)
+        cap = min(cap, 4)
+        take("body")
         take("face")
         take("genitals")
         if not picked:
             for im in imgs[:cap]:
-                if (im.image_kind or "").lower() != "body":
+                if (im.image_kind or "").lower() != "turnaround":
                     picked.append(im)
-        return picked[:cap]
+        return sort_model_images_for_wan_identity(picked)[:cap]
 
     take("body")
     take("face")

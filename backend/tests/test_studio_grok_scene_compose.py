@@ -88,12 +88,20 @@ def test_wavespeed_identity_body_without_face() -> None:
     assert picked[0].image_kind == "body"
 
 
-def test_wavespeed_identity_nude_pose_face_and_genitals_only() -> None:
+def test_wan_identity_nude_pose_includes_body_face_genitals() -> None:
+    from app.services.studio_model_images import select_wan_identity_images_with_pose_ref
+
+    imgs = [_im("body", 1), _im("genitals", 2), _im("face", 3), _im("turnaround", 4)]
+    picked = select_wan_identity_images_with_pose_ref(imgs, pose_reference_nude=True)
+    kinds = [(im.image_kind or "") for im in picked]
+    assert kinds == ["body", "face", "genitals"]
+
+
+def test_wavespeed_identity_nude_pose_includes_body_face_genitals() -> None:
     imgs = [_im("body", 1), _im("genitals", 2), _im("face", 3), _im("turnaround", 4)]
     picked = select_grok_compose_wavespeed_identity_images(imgs, pose_reference_nude=True)
     kinds = [(im.image_kind or "") for im in picked]
-    assert kinds == ["face", "genitals"]
-    assert "body" not in kinds
+    assert kinds == ["body", "face", "genitals"]
     assert "turnaround" not in kinds
 
 
