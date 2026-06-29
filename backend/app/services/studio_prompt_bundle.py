@@ -839,6 +839,15 @@ def prepare_positive_prompt_json(
         leg = (wavespeed_identity_legend or "").strip()
         if leg:
             prose = f"Attached model reference photos — {leg}\n\n{prose}"
+        anchor = grok_figure_anchor_from_profile(
+            model_profile_text,
+            visibility=visibility,
+        ).strip()
+        if anchor:
+            prose = (
+                f"MODEL_IDENTITY (saved model — override any donor traits in the scene text): {anchor}\n\n"
+                f"{prose}"
+            )
         if re_prose:
             prose = f"{prose}\n\n{re_prose}".strip()
         negative = _merge_grok_scene_negative(

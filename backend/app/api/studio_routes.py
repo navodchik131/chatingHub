@@ -3620,7 +3620,6 @@ async def _studio_job_execute_refine_prompt(
                         imgs_ws_order = select_model_scene_wavespeed_identity_images(
                             imgs_for_ws, wave_profile=wave_profile_n
                         )
-                        ws_identity_legend = wavespeed_identity_image_legend(imgs_ws_order)
                     elif mode_n == "model" and not image_bytes:
                         imgs_ws_order = select_prompt_only_wavespeed_identity_images(
                             imgs_for_ws, wave_profile=wave_profile_n
@@ -3645,6 +3644,12 @@ async def _studio_job_execute_refine_prompt(
                         )
                         image_urls.append(
                             f"{pub}/api/studio/public-model-image?t={quote(tok, safe='')}"
+                        )
+                    if imgs_ws_order:
+                        legend_offset = 1 if user_pose_ref_prepended else 0
+                        ws_identity_legend = wavespeed_identity_image_legend(
+                            imgs_ws_order,
+                            image_index_offset=legend_offset,
                         )
 
                 if not image_urls:

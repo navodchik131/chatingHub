@@ -296,6 +296,9 @@ def finalize_wavespeed_studio_prompt(
                 else _WAN_COMPACT_POSE_PREFIX
             )
             out = prefix.strip() if not p else prefix + p
+        elif brief == "grok_main_prose":
+            # Workflow / pose bitmap + Grok prose: need strong MODEL identity lock, not generic REFERENCE_IMAGE_ORDER.
+            out = _GROK_MODEL_SCENE_WAN_PREFIX.strip() if not p else _GROK_MODEL_SCENE_WAN_PREFIX + p
         else:
             out = wavespeed_prompt_with_user_pose_reference_first(
                 p,

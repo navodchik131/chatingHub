@@ -195,15 +195,20 @@ _WAVESPEED_KIND_LEGEND: dict[str, str] = {
 }
 
 
-def wavespeed_identity_image_legend(imgs: list[UserStudioModelImage]) -> str:
+def wavespeed_identity_image_legend(
+    imgs: list[UserStudioModelImage],
+    *,
+    image_index_offset: int = 0,
+) -> str:
     """Краткая подпись порядка identity-фото для prose-промпта WaveSpeed."""
     if not imgs:
         return ""
+    offset = max(0, int(image_index_offset))
     parts: list[str] = []
     for i, im in enumerate(imgs, 1):
         k = (im.image_kind or "other").lower()
         desc = _WAVESPEED_KIND_LEGEND.get(k, "model reference")
-        parts.append(f"Image {i}: {desc}")
+        parts.append(f"Image {i + offset}: {desc}")
     return "; ".join(parts)
 
 

@@ -183,10 +183,11 @@ def test_grok_main_system_prefers_photo_brief_not_catalog() -> None:
         brief_mode="grok_main_prose",
         model_profile_text='{"model_profile":{"body_type":"athletic"}}',
         extra_negative="wrong person",
-        wavespeed_identity_legend="Image 1: character sheet; Image 2: body",
+        wavespeed_identity_legend="Image 2: character sheet; Image 3: body",
     )
     assert not positive.strip().startswith("{")
-    assert "Image 1: character sheet" in positive
+    assert "Image 2: character sheet" in positive
+    assert "MODEL_IDENTITY" in positive
     assert "Seated on sofa" in positive
     assert "Capture realism:" in positive
     assert "catchlights" in positive.lower() or "pores" in positive.lower()
@@ -229,6 +230,37 @@ def test_model_scene_wan_prefix_differs_from_grok_compose() -> None:
     assert "MODEL_SCENE" in main
     assert "MODEL_SCENE" not in grok
     assert "GROK_SCENE_COMPOSE" in grok
+
+
+def test_grok_main_prose_with_pose_uses_model_scene_prefix_not_reference_order() -> None:
+    from app.services.studio_openai import finalize_wavespeed_studio_prompt
+
+    out = finalize_wavespeed_studio_prompt(
+        "Attached model reference photos — Image 2: face likeness\n\nMirror selfie at night.",
+        studio_mode="model_scene",
+        user_image_first=True,
+        prompt_brief_mode="grok_main_prose",
+    )
+    assert "MODEL_SCENE" in out
+    assert "REFERENCE_IMAGE_ORDER" not in out
+    assert "Never donor identity from image 1" in out or "Never" in out
+
+
+def test_wavespeed_identity_legend_offsets_pose_image() -> None:
+    from types import SimpleNamespace
+
+    from app.services.studio_model_images import wavespeed_identity_image_legend
+
+    imgs = [
+        SimpleNamespace(image_kind="face"),
+        SimpleNamespace(image_kind="turnaround"),
+    ]
+    assert wavespeed_identity_image_legend(imgs) == (
+        "Image 1: face likeness and skin tone; Image 2: character sheet — face, hair, clothed silhouette"
+    )
+    assert wavespeed_identity_image_legend(imgs, image_index_offset=1) == (
+        "Image 2: face likeness and skin tone; Image 3: character sheet — face, hair, clothed silhouette"
+    )
 
 
 def test_grok_compose_pose_ref_json_has_realism_engine_and_no_suffix_negative() -> None:

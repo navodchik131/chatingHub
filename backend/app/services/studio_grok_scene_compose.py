@@ -382,6 +382,7 @@ async def grok_compose_studio_main_scene(
         reference_scene_description=reference_scene_description,
     )
 
+    figure_anchor = grok_figure_anchor_from_profile(model_profile_text, visibility=visibility)
     user_parts: list[dict] = [
         {
             "type": "text",
@@ -389,6 +390,11 @@ async def grok_compose_studio_main_scene(
                 f"WAVE_PROFILE: {wp}\n"
                 f"HAIRSTYLE: {hair_rule}\n"
                 f"MAX_PROMPT_CHARS: {max_out}\n\n"
+                "BODY_FIGURE_RULE: USER_SCENE_REFERENCE supplies pose/camera/light/wardrobe coverage ONLY. "
+                "Face, hair color, skin tone, and body proportions in ---PROMPT--- must come from "
+                "MODEL_PROFILE_JSON + attached model images — never the sitter on USER_SCENE_REFERENCE.\n\n"
+                f"FIGURE_LOCK_ANCHOR (mandatory — weave into ---PROMPT---, do not paste as a label block):\n"
+                f"{figure_anchor}\n\n"
                 f"MODEL_PROFILE_JSON:\n{profile}\n\n"
                 f"USER_NOTES:\n{notes or '(none)'}\n\n"
                 "Attached model images are labeled. USER_SCENE_REFERENCE is last."
