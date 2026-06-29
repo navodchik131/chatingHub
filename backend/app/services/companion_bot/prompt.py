@@ -11,7 +11,7 @@ from app.services.companion_bot.persona import CompanionPersona, format_companio
 from app.services.chat_message_meta import parse_reactions
 from app.services.translation import detect_lang
 
-PROMPT_VERSION = "v5-chatter-canon-direct-2"
+PROMPT_VERSION = "v5-chatter-canon-direct-3"
 
 _GREETING_ONLY_RE = re.compile(
     r"^[\s\W]*("
@@ -161,6 +161,37 @@ def reply_too_similar_to_recent(candidate: str, recent_outbound: list[str]) -> b
     return False
 
 
+_CHECKIN_REPORT_TERMS = (
+    "график",
+    "опазд",
+    "опозд",
+    "9 до 6",
+    "с 9 до",
+    "до 6",
+    "не бот",
+    "not a bot",
+    "обычно",
+    "задержал",
+    "schedule",
+    "work hours",
+)
+
+_TIME_IN_TEXT_RE = re.compile(r"\b\d{1,2}:\d{2}\b")
+
+
+def reply_over_reports_on_checkin(candidate: str, *, casual_checkin: bool) -> bool:
+    """На «что делаешь?» — ответ-отчёт про время/график вместо активности."""
+    if not casual_checkin:
+        return False
+    text = (candidate or "").strip()
+    if not text:
+        return False
+    low = text.lower()
+    if _TIME_IN_TEXT_RE.search(text):
+        return True
+    return any(term in low for term in _CHECKIN_REPORT_TERMS)
+
+
 def _trailing_hook_too_similar(candidate: str, previous: str) -> bool:
     """Ловит один и тот же «крючок» в конце (зал / напряжение / тренировка)."""
     cand_tail = _last_sentence((candidate or "").strip()).lower()
@@ -292,6 +323,8 @@ def _canon_facts_block(persona: CompanionPersona) -> str:
         return ""
     lines.extend(
         [
+            "- Use work/time/schedule canon ONLY when the fan asks about work, hours, or what time it is — "
+            "NOT when they ask «what are you doing?» / «что делаешь?».",
             "- If your earlier message conflicted with CANON, admit briefly (late, still home, mixed up) — "
             "do NOT invent new hours like «с 11 до 7» or «график сдвинулся» unless memory notes say so.",
             "- Work schedule in CANON is fixed unless notes explicitly say otherwise today.",
@@ -452,8 +485,8 @@ def _continuity_rules(
         )
     if signals.casual_checkin:
         lines.append(
-            "- Casual «what are you doing?» — one short line about your moment; "
-            "don't dump work schedule or say «не бот»."
+            "- Casual «what are you doing?» / «что делаешь?»: answer ONLY what you're doing right now "
+            "(activity + mood). Do NOT mention clock time, schedule, being late, or work hours unless they asked."
         )
     if signals.factual_pressure:
         lines.append(
@@ -482,7 +515,9 @@ def _initiative_rules(*, followup: bool, signals: ThreadSignals) -> str:
             "NOT a paraphrase of your previous message. Never needy. Skip if they said they're busy.\n"
         )
     if signals.casual_checkin:
-        return base + "- Keep it light — statement is enough, no interrogation at the end.\n"
+        return base + (
+            "- CHECK-IN: one line about activity/mood — no report, no clock time, no schedule.\n"
+        )
     if signals.direct_factual or signals.trust_repair:
         return base + "- End on the answer — question optional only if genuinely new, not a recycled flirt hook.\n"
     return base + "- End naturally; questions are optional, not mandatory every time.\n"
@@ -576,10 +611,17 @@ def build_companion_system_prompt(
 
     mood_line = mood or "warm, playful, grounded"
     now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    checkin_note = ""
+    if signals.casual_checkin:
+        checkin_note = (
+            "CHECK-IN MODE: fan asked what you're doing — activity only; "
+            "do not mention time or work schedule in this reply.\n\n"
+        )
 
     return (
         _chatter_role_block(persona_name=persona_name)
         + canon
+        + checkin_note
         + f"Character sheet (voice & facts for {persona_name}):\n{profile_block}\n\n"
         f"Relationship warmth: {relationship_score}/100.\n"
         f"Mood subtext: {mood_line}.\n"
@@ -628,9 +670,10 @@ def build_companion_user_prompt(
             )
         if signals.casual_checkin:
             focus += (
-                "\nCASUAL CHECK-IN: fan asked what you're doing — one short human line "
-                "(e.g. дома, собираюсь на работу, кофе). No schedule dump, no «не бот», "
-                "no defending yourself unless they accused you in THIS message.\n"
+                "\nCASUAL CHECK-IN — answer ONLY what you're doing NOW (activity/mood). "
+                "Good: «дома, кофе пью», «сериал смотрю», «ничего, туплю». "
+                "FORBIDDEN unless they asked: clock time (12:22), график, 9–6, опаздываю, «не бот», "
+                "work schedule, explaining yourself.\n"
             )
         elif signals.direct_factual or signals.factual_pressure:
             focus += (

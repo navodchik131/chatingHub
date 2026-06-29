@@ -21,10 +21,12 @@ from app.services.companion_bot.vision import maybe_describe_fan_image_for_compa
 from app.services.companion_bot.persona import parse_companion_persona
 from app.services.companion_bot.prompt import (
     PROMPT_VERSION,
+    analyze_thread_signals,
     build_companion_system_prompt,
     build_companion_user_prompt,
     last_fan_message_text,
     recent_outbound_texts,
+    reply_over_reports_on_checkin,
     reply_too_similar_to_recent,
     resolve_target_lang,
 )
@@ -123,6 +125,7 @@ async def generate_companion_reply(
 
     model = (settings.openai_studio_model or "").strip() or "gpt-4o-mini"
     recent = recent_outbound_texts(messages, limit=4)
+    signals = analyze_thread_signals(messages)
     extra_avoid: str | None = None
     reply = ""
 
@@ -150,21 +153,38 @@ async def generate_companion_reply(
         reply = (raw or "").strip()
         if not reply:
             raise RuntimeError("empty companion reply")
-        if not reply_too_similar_to_recent(reply, recent):
+        too_similar = reply_too_similar_to_recent(reply, recent)
+        over_reports = reply_over_reports_on_checkin(
+            reply,
+            casual_checkin=signals.casual_checkin,
+        )
+        if not too_similar and not over_reports:
             break
         if attempt < 2:
-            snippets = " | ".join(
-                t.replace("\n", " ").strip()[:120] for t in recent[:3] if t.strip()
-            )
-            extra_avoid = (
-                "Do NOT reuse these themes, questions, or phrases: "
-                f"{snippets or 'your last few messages'}"
-            )
-            log.info(
-                "companion reply too similar conv=%s attempt=%s",
-                conv.id,
-                attempt + 1,
-            )
+            if over_reports:
+                extra_avoid = (
+                    "Your draft sounded like a work/time report. "
+                    "Answer ONLY what you're doing right now — activity and mood. "
+                    "No clock time, schedule, lateness, or «не бот»."
+                )
+                log.info(
+                    "companion reply over-reports on check-in conv=%s attempt=%s",
+                    conv.id,
+                    attempt + 1,
+                )
+            elif too_similar:
+                snippets = " | ".join(
+                    t.replace("\n", " ").strip()[:120] for t in recent[:3] if t.strip()
+                )
+                extra_avoid = (
+                    "Do NOT reuse these themes, questions, or phrases: "
+                    f"{snippets or 'your last few messages'}"
+                )
+                log.info(
+                    "companion reply too similar conv=%s attempt=%s",
+                    conv.id,
+                    attempt + 1,
+                )
 
     snapshot = {
         "relationship_score": state.relationship_score,

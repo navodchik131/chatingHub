@@ -85,7 +85,7 @@ def test_companion_prompt_v4_chatter():
         reply_too_similar_to_recent,
     )
 
-    assert PROMPT_VERSION == "v5-chatter-canon-direct-2"
+    assert PROMPT_VERSION == "v5-chatter-canon-direct-3"
 
     out_msg = Message(
         id=2,
@@ -258,6 +258,27 @@ def test_casual_checkin_skips_direct_mode_and_trust_repair():
     assert "CASUAL CHECK-IN" in user
     assert "TRUST REPAIR" not in user
     assert "DIRECT ANSWER REQUIRED" not in user
+
+
+def test_reply_over_reports_on_checkin():
+    from app.services.companion_bot.prompt import reply_over_reports_on_checkin
+
+    assert reply_over_reports_on_checkin(
+        "Сейчас 12:22, опаздываю на работу, график с 9 до 6",
+        casual_checkin=True,
+    )
+    assert reply_over_reports_on_checkin(
+        "Я не бот, просто работаю по графику",
+        casual_checkin=True,
+    )
+    assert not reply_over_reports_on_checkin(
+        "Дома, кофе пью 😌",
+        casual_checkin=True,
+    )
+    assert not reply_over_reports_on_checkin(
+        "Сейчас 12:22, опаздываю на работу",
+        casual_checkin=False,
+    )
 
 
 def test_transcript_uses_persona_local_time():
