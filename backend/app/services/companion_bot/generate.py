@@ -134,6 +134,7 @@ async def generate_companion_reply(
             extra_avoid=extra_avoid,
             fan_image_description=fan_image_description,
             trigger_message=trigger_message,
+            persona=persona,
         )
         raw = await _chat_completion_text(
             model=model,

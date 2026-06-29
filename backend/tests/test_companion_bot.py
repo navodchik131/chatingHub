@@ -85,7 +85,7 @@ def test_companion_prompt_v4_chatter():
         reply_too_similar_to_recent,
     )
 
-    assert PROMPT_VERSION == "v5-chatter-canon-direct"
+    assert PROMPT_VERSION == "v5-chatter-canon-direct-2"
 
     out_msg = Message(
         id=2,
@@ -209,11 +209,77 @@ def test_direct_factual_and_complaint_signals():
     ]
     sig = analyze_thread_signals(messages)
     assert sig.fan_complaint is True
+    assert sig.trust_repair is True
     assert sig.direct_factual is True
     conv = SimpleNamespace(user_display_name="Renat")
     user = build_companion_user_prompt(conv=conv, messages=messages)
     assert "DIRECT ANSWER REQUIRED" in user
     assert "TRUST REPAIR" in user
+
+
+def test_casual_checkin_skips_direct_mode_and_trust_repair():
+    from datetime import datetime, timezone
+
+    from app.services.companion_bot.prompt import (
+        analyze_thread_signals,
+        build_companion_user_prompt,
+    )
+
+    now = datetime.now(timezone.utc)
+    messages = [
+        Message(
+            id=1,
+            conversation_id=1,
+            direction=MessageDirection.inbound,
+            text_original="Ты щас как бот общаешься",
+            created_at=now,
+        ),
+        Message(
+            id=2,
+            conversation_id=1,
+            direction=MessageDirection.outbound,
+            text_original="Renat, с 9 работаю, извини",
+            created_at=now,
+        ),
+        Message(
+            id=3,
+            conversation_id=1,
+            direction=MessageDirection.inbound,
+            text_original="что делаешь?",
+            created_at=now,
+        ),
+    ]
+    sig = analyze_thread_signals(messages)
+    assert sig.casual_checkin is True
+    assert sig.trust_repair is False
+    assert sig.direct_factual is False
+    conv = SimpleNamespace(user_display_name="Renat")
+    user = build_companion_user_prompt(conv=conv, messages=messages)
+    assert "CASUAL CHECK-IN" in user
+    assert "TRUST REPAIR" not in user
+    assert "DIRECT ANSWER REQUIRED" not in user
+
+
+def test_transcript_uses_persona_local_time():
+    from datetime import datetime, timezone
+
+    from app.services.companion_bot.persona import CompanionPersona
+    from app.services.companion_bot.prompt import _format_transcript
+
+    msg = Message(
+        id=1,
+        conversation_id=1,
+        direction=MessageDirection.inbound,
+        text_original="привет",
+        created_at=datetime(2026, 6, 29, 11, 22, tzinfo=timezone.utc),
+    )
+    text = _format_transcript(
+        [msg],
+        "Renat",
+        persona=CompanionPersona(timezone="UTC+3"),
+    )
+    assert "14:22" in text
+    assert "character-local" in text.lower()
 
 
 def test_canon_block_in_system_prompt():
