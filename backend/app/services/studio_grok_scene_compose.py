@@ -29,6 +29,39 @@ from app.services.studio_openai import (
     chat_completion_openai_compatible_text,
 )
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from app.services.studio_reference_analysis import IdentityVisibility
+
+
+def _grok_visibility_user_block(
+    *,
+    visibility: "IdentityVisibility | None",
+    reference_scene_description: str | None,
+) -> str:
+    from app.services.studio_reference_analysis import build_grok_visibility_context
+
+    ctx = build_grok_visibility_context(
+        visibility=visibility,
+        reference_scene_description=reference_scene_description,
+    )
+    return f"\n\n{ctx}" if ctx.strip() else ""
+
+
+def _model_images_for_grok_compose(
+    model_images: list[UserStudioModelImage],
+    *,
+    wave_profile: str,
+    visibility: "IdentityVisibility | None" = None,
+) -> list[tuple[str, UserStudioModelImage]]:
+    imgs = list(model_images)
+    if visibility is not None and imgs:
+        from app.services.studio_reference_analysis import filter_model_images_for_visibility
+
+        imgs = filter_model_images_for_visibility(imgs, visibility)
+    return collect_model_images_for_grok_compose(imgs, wave_profile=wave_profile)
+
 log = logging.getLogger(__name__)
 
 _GROK_SCENE_LABELS: dict[str, str] = {
@@ -299,13 +332,17 @@ async def grok_compose_studio_main_scene(
     user_notes: str,
     lock_hairstyle: bool,
     credentials: StudioOpenAiCredentials | None = None,
+    visibility: "IdentityVisibility | None" = None,
+    reference_scene_description: str | None = None,
 ) -> GrokSceneComposeResult:
     """
     Режим «Основная»: Grok → plain prose (без JSON), референс только для анализа сцены.
     WaveSpeed получает prose + фото модели, без реф-кадра пользователя.
     """
     creds = credentials or grok_motion_studio_credentials()
-    labeled = collect_model_images_for_grok_compose(model_images, wave_profile=wave_profile)
+    labeled = _model_images_for_grok_compose(
+        model_images, wave_profile=wave_profile, visibility=visibility
+    )
     if not labeled:
         raise RuntimeError(
             "Для режима «Основная» у модели нужны снимки: развёртка (turnaround) "
@@ -322,6 +359,10 @@ async def grok_compose_studio_main_scene(
         else "Hairstyle may follow USER_SCENE_REFERENCE when USER_NOTES request it."
     )
     max_out = int(settings.grok_scene_compose_output_max_chars)
+    vis_block = _grok_visibility_user_block(
+        visibility=visibility,
+        reference_scene_description=reference_scene_description,
+    )
 
     user_parts: list[dict] = [
         {
@@ -333,6 +374,7 @@ async def grok_compose_studio_main_scene(
                 f"MODEL_PROFILE_JSON:\n{profile}\n\n"
                 f"USER_NOTES:\n{notes or '(none)'}\n\n"
                 "Attached model images are labeled. USER_SCENE_REFERENCE is last."
+                f"{vis_block}"
             ),
         },
     ]
@@ -396,9 +438,13 @@ async def grok_compose_studio_scene(
     lock_hairstyle: bool,
     credentials: StudioOpenAiCredentials | None = None,
     standalone_scene_prompt: bool = False,
+    visibility: "IdentityVisibility | None" = None,
+    reference_scene_description: str | None = None,
 ) -> GrokSceneComposeResult:
     creds = credentials or grok_motion_studio_credentials()
-    labeled = collect_model_images_for_grok_compose(model_images, wave_profile=wave_profile)
+    labeled = _model_images_for_grok_compose(
+        model_images, wave_profile=wave_profile, visibility=visibility
+    )
     if not labeled:
         raise RuntimeError(
             "Для режима «Grok: сцена» у модели нужны снимки: развёртка (turnaround) "
@@ -428,6 +474,10 @@ async def grok_compose_studio_scene(
             "wardrobe/nudity coverage, expression — distilled from USER_SCENE_REFERENCE + USER_NOTES. "
             "FIGURE_LOCK (bust/waist/hips/build) stays from MODEL only — never the sitter's body mass.\n"
         )
+    vis_block = _grok_visibility_user_block(
+        visibility=visibility,
+        reference_scene_description=reference_scene_description,
+    )
     user_parts: list[dict] = [
         {
             "type": "text",
@@ -443,6 +493,7 @@ async def grok_compose_studio_scene(
                 f"USER_NOTES:\n{notes or '(none)'}"
                 f"{output_rule}\n\n"
                 "Attached images follow. Labels in captions are authoritative."
+                f"{vis_block}"
             ),
         },
     ]
@@ -724,6 +775,8 @@ async def grok_compose_studio_workflow_multi_ref(
     user_notes: str,
     lock_hairstyle: bool,
     credentials: StudioOpenAiCredentials | None = None,
+    visibility: "IdentityVisibility | None" = None,
+    reference_scene_description: str | None = None,
 ) -> GrokSceneComposeResult:
     """Workflow: несколько референсов с ролями + опционально фото модели из кабинета."""
     if not user_refs:
@@ -741,9 +794,15 @@ async def grok_compose_studio_workflow_multi_ref(
 
     labeled: list[tuple[str, UserStudioModelImage]] = []
     if model_images:
-        labeled = collect_model_images_for_grok_compose(model_images, wave_profile=wave_profile)
+        labeled = _model_images_for_grok_compose(
+            model_images, wave_profile=wave_profile, visibility=visibility
+        )
 
     system = load_grok_scene_compose_main_system() + _WORKFLOW_MULTI_REF_SYSTEM_ADDON
+    vis_block = _grok_visibility_user_block(
+        visibility=visibility,
+        reference_scene_description=reference_scene_description,
+    )
 
     model_rule = ""
     if labeled:
@@ -768,6 +827,7 @@ async def grok_compose_studio_workflow_multi_ref(
                 f"MODEL_PROFILE_JSON:\n{profile}\n\n"
                 f"USER_NOTES:\n{notes or '(none)'}\n\n"
                 "Attached images: MODEL studio photos first (if any), then USER_WORKFLOW_REFERENCE images in order."
+                f"{vis_block}"
             ),
         },
     ]

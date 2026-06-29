@@ -2368,7 +2368,9 @@ async def api_studio_reference_analyze(
             "include_expression": vis.include_expression,
             "include_body_proportions": vis.include_body_proportions,
             "include_hands_detail": vis.include_hands_detail,
-            "crop_locked_no_face": vis.crop_locked_no_face,
+            "head_in_reference": vis.head_in_reference,
+            "headless_crop": vis.headless_crop,
+            "crop_locked_no_face": vis.headless_crop,
             "allowed_image_kinds": sorted(vis.allowed_image_kinds),
         },
     )
@@ -2817,7 +2819,6 @@ async def _studio_job_execute_refine_prompt(
                     requested_studio_mode=mode_n,
                     wave_profile=wave_profile_n,
                 )
-                mode_n = prompt_plan.effective_studio_mode
                 visibility_block = build_visibility_plan_block(prompt_plan.visibility)
                 skip_no_face_suffix = prompt_plan.skip_no_face_suffix
                 if prompt_plan.filtered_model_profile_text is not None:
@@ -3069,6 +3070,10 @@ async def _studio_job_execute_refine_prompt(
                 user_notes=desc,
                 lock_hairstyle=effective_lock_hairstyle,
                 credentials=grok_creds,
+                visibility=prompt_plan.visibility if prompt_plan else None,
+                reference_scene_description=(
+                    prompt_plan.reference_scene_description if prompt_plan else None
+                ),
             )
             refined = composed.wavespeed_scene_prompt
             reference_scene = composed.reference_scene_lock or None
@@ -3095,6 +3100,10 @@ async def _studio_job_execute_refine_prompt(
                 user_notes=desc,
                 lock_hairstyle=effective_lock_hairstyle,
                 credentials=grok_creds,
+                visibility=prompt_plan.visibility if prompt_plan else None,
+                reference_scene_description=(
+                    prompt_plan.reference_scene_description if prompt_plan else None
+                ),
             )
             refined = composed.wavespeed_scene_prompt
             reference_scene = composed.reference_scene_lock or None
@@ -3122,6 +3131,10 @@ async def _studio_job_execute_refine_prompt(
                 lock_hairstyle=effective_lock_hairstyle,
                 credentials=grok_creds,
                 standalone_scene_prompt=False,
+                visibility=prompt_plan.visibility if prompt_plan else None,
+                reference_scene_description=(
+                    prompt_plan.reference_scene_description if prompt_plan else None
+                ),
             )
             refined = composed.wavespeed_scene_prompt
             reference_scene = composed.reference_scene_lock or None
@@ -3162,7 +3175,11 @@ async def _studio_job_execute_refine_prompt(
                     image_bytes=image_bytes,
                     image_media_type=image_mime,
                     hairstyle_from_pose_reference=not effective_lock_hairstyle,
-                    no_face_framing=(mode_n == "no_face"),
+                    no_face_framing=(
+                        prompt_plan.visibility.headless_crop
+                        if prompt_plan is not None
+                        else mode_n == "no_face"
+                    ),
                     credentials=llm_creds,
                 )
             ref_photo_block = (

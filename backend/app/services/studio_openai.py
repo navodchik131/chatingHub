@@ -93,15 +93,41 @@ def wavespeed_prompt_with_face_swap_first(
     return prefix + p
 
 
+def _wavespeed_pose_ref_prefix_face_hidden(*, lock_model_hairstyle: bool) -> str:
+    hair_clause = (
+        "**Visible hair mass** (back/side) follows the pose reference crop; color/texture from MODEL only if hair appears. "
+        if lock_model_hairstyle
+        else "Hair visible in the pose reference may keep that layout; color from MODEL when applicable. "
+    )
+    return (
+        "[REFERENCE_IMAGE_ORDER — FACE NOT VISIBLE] The **first** image is the pose/scene reference. "
+        "**Match its exact crop and scale** — including any visible back of head, hair, neck, or shoulders as shown. "
+        "Do **not** zoom out, widen framing, or paste/invent **facial features** (eyes, nose, mouth, front face) "
+        "from model identity images. "
+        "Take from the first image: visible limb articulation, joint angles, camera angle/height/distance, "
+        "exact crop edges, lens feel, light wrap on visible volumes, "
+        f"{hair_clause}"
+        "background and environmental lighting quality. Garments/coverage only from the first image. "
+        "**Later** image(s): body identity (proportions, skin tone on visible anatomy) — "
+        "**never** pose, framing, outfit, or synthesized face from those images.\n\n"
+    )
+
+
 def wavespeed_prompt_with_user_pose_reference_first(
     refined_prompt: str,
     *,
     lock_model_hairstyle: bool = True,
     no_face_framing: bool = False,
+    pose_prefix_kind: str | None = None,
 ) -> str:
     """Префикс к финальному промпту WaveSpeed, когда первый URL — загруженный пользователем референс."""
-    if no_face_framing:
+    kind = (pose_prefix_kind or "").strip().lower()
+    if not kind:
+        kind = "headless" if no_face_framing else "face_visible"
+    if kind == "headless":
         prefix = _wavespeed_pose_ref_prefix_no_face(lock_model_hairstyle=lock_model_hairstyle)
+    elif kind == "face_hidden":
+        prefix = _wavespeed_pose_ref_prefix_face_hidden(lock_model_hairstyle=lock_model_hairstyle)
     else:
         prefix = _wavespeed_pose_ref_prefix(lock_model_hairstyle=lock_model_hairstyle)
     p = (refined_prompt or "").strip()
@@ -230,11 +256,20 @@ def finalize_wavespeed_studio_prompt(
     lock_model_hairstyle: bool = True,
     prompt_brief_mode: str = "full",
     skip_no_face_suffix: bool = False,
+    visibility: "IdentityVisibility | None" = None,
 ) -> str:
     """Сборка финального текстового промпта для WaveSpeed в зависимости от режима студии."""
+    from app.services.studio_reference_analysis import (
+        IdentityVisibility,
+        visibility_pose_prefix_kind,
+    )
+
     mode = (studio_mode or "model").strip().lower()
     brief = (prompt_brief_mode or "full").strip().lower()
     p = (refined_prompt or "").strip()
+    vis: IdentityVisibility | None = visibility
+    prefix_kind = visibility_pose_prefix_kind(vis)
+    headless = vis.headless_crop if vis is not None else mode == "no_face"
     if user_image_first:
         if mode == "photo_edit":
             out = (
@@ -257,7 +292,7 @@ def finalize_wavespeed_studio_prompt(
         elif brief == "compact_pose_image":
             prefix = (
                 _WAN_COMPACT_NO_FACE_PREFIX
-                if mode == "no_face"
+                if headless
                 else _WAN_COMPACT_POSE_PREFIX
             )
             out = prefix.strip() if not p else prefix + p
@@ -265,7 +300,8 @@ def finalize_wavespeed_studio_prompt(
             out = wavespeed_prompt_with_user_pose_reference_first(
                 p,
                 lock_model_hairstyle=lock_model_hairstyle,
-                no_face_framing=(mode == "no_face"),
+                no_face_framing=headless,
+                pose_prefix_kind=prefix_kind,
             )
     elif brief == "text_scene":
         out = (_NANO_TEXT_SCENE_PREFIX.strip() if not p else _NANO_TEXT_SCENE_PREFIX + p)
@@ -275,7 +311,7 @@ def finalize_wavespeed_studio_prompt(
         out = _GROK_MAIN_PROSE_WAN_PREFIX.strip() if not p else _GROK_MAIN_PROSE_WAN_PREFIX + p
     else:
         out = p
-    if mode == "no_face" and brief != "compact_pose_image" and not skip_no_face_suffix:
+    if headless and brief != "compact_pose_image" and not skip_no_face_suffix:
         out = (out or "").rstrip() + _WAVESPEED_NO_FACE_SUFFIX
     return out
 
@@ -352,15 +388,25 @@ def finalize_nano_banana_studio_prompt(
     user_pose_reference_is_last: bool,
     lock_model_hairstyle: bool = True,
     prompt_brief_mode: str = "full",
+    skip_no_face_suffix: bool = False,
+    visibility: "IdentityVisibility | None" = None,
 ) -> str:
     """
     Nano Banana Pro: порядок URL другой, чем у WAN (сначала лицо модели, поза пользователя — в конце).
     user_photo_edit_first: «Доработать фото» — первое фото = база для правок (порядок не меняли).
     user_pose_reference_is_last: после reorder загруженный референс позы — последний кадр в списке.
     """
+    from app.services.studio_reference_analysis import IdentityVisibility
+
     mode = (studio_mode or "model").strip().lower()
     brief = (prompt_brief_mode or "full").strip().lower()
     p = (refined_prompt or "").strip()
+    vis: IdentityVisibility | None = visibility
+    headless = vis.headless_crop if vis is not None else mode == "no_face"
+    face_hidden = (
+        vis is not None and not vis.include_face and vis.head_in_reference and not vis.headless_crop
+    )
+    use_no_face_nano = headless or face_hidden or (vis is None and mode == "no_face")
 
     if user_photo_edit_first and mode == "photo_edit":
         out = (
@@ -391,7 +437,7 @@ def finalize_nano_banana_studio_prompt(
         if brief == "compact_pose_image" and mode not in ("face_swap", "photo_edit"):
             head = (
                 _NANO_BANANA_NO_FACE_IDENTITY_PREFIX
-                if mode == "no_face"
+                if use_no_face_nano
                 else _NANO_COMPACT_IDENTITY_PREFIX
             )
         else:
@@ -399,7 +445,7 @@ def finalize_nano_banana_studio_prompt(
                 _NANO_BANANA_FACE_SWAP_IDENTITY_PREFIX
                 if mode == "face_swap"
                 else _NANO_BANANA_NO_FACE_IDENTITY_PREFIX
-                if mode == "no_face"
+                if use_no_face_nano
                 else _NANO_BANANA_IDENTITY_LOCK_PREFIX
             )
         out = head.strip() if not p else head + p
@@ -407,7 +453,7 @@ def finalize_nano_banana_studio_prompt(
             if brief == "compact_pose_image":
                 out = out.rstrip() + (
                     _NANO_COMPACT_NO_FACE_LAST_SUFFIX
-                    if mode == "no_face"
+                    if headless
                     else _NANO_COMPACT_POSE_LAST_SUFFIX
                 )
             else:
@@ -415,11 +461,11 @@ def finalize_nano_banana_studio_prompt(
                     _nano_banana_pose_last_suffix_no_face(
                         lock_model_hairstyle=lock_model_hairstyle
                     )
-                    if mode == "no_face"
+                    if use_no_face_nano
                     else _nano_banana_pose_last_suffix(lock_model_hairstyle=lock_model_hairstyle)
                 )
 
-    if mode == "no_face" and brief != "compact_pose_image":
+    if headless and brief != "compact_pose_image" and not skip_no_face_suffix:
         out = (out or "").rstrip() + _WAVESPEED_NO_FACE_SUFFIX
     return out
 
@@ -1508,6 +1554,8 @@ def assemble_wavespeed_image_edit_prompt(
             user_pose_reference_is_last=user_pose_is_last,
             lock_model_hairstyle=lock_model_hairstyle,
             prompt_brief_mode=brief,
+            skip_no_face_suffix=skip_no_face_suffix,
+            visibility=visibility,
         )
     else:
         prompt = finalize_wavespeed_studio_prompt(
@@ -1517,6 +1565,7 @@ def assemble_wavespeed_image_edit_prompt(
             lock_model_hairstyle=lock_model_hairstyle,
             prompt_brief_mode=brief,
             skip_no_face_suffix=skip_no_face_suffix,
+            visibility=visibility,
         )
     return append_negative_to_wavespeed_prompt(
         prompt, negative, brief_mode=brief

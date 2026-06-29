@@ -78,8 +78,16 @@ class IdentityVisibility:
     include_expression: bool
     include_body_proportions: bool
     include_hands_detail: bool
-    crop_locked_no_face: bool
+    """True when reference shows back/side of head or hair without visible face."""
+    head_in_reference: bool
+    """True when reference has no face AND no partial head — legs-only crop, etc."""
+    headless_crop: bool
     allowed_image_kinds: frozenset[str]
+
+    @property
+    def crop_locked_no_face(self) -> bool:
+        """API alias — same as headless_crop."""
+        return self.headless_crop
 
 
 @dataclass(frozen=True)
@@ -118,17 +126,18 @@ def build_identity_visibility(
         & {"TORSO", "CHEST", "NECK", "LEGS", "FEET", "BUTT", "FULL_BODY", "ARMS", "HANDS"}
     )
     hands = bool(regions & {"HANDS", "ARMS"})
-    crop_locked = not face and not analysis.head_partial
+    head_partial = bool(analysis.head_partial)
+    headless_crop = not face and not head_partial
+    head_in_reference = face or head_partial or hair
 
-    allowed: set[str] = {"body", "other"}
+    allowed: set[str] = {"body", "other", "turnaround"}
     if face:
-        allowed.update({"face", "turnaround"})
+        allowed.add("face")
     if body_visible and (wave_profile or "").strip().lower() == "nsfw":
         if regions & {"LEGS", "FEET", "BUTT", "TORSO", "CHEST", "FULL_BODY"}:
             allowed.add("genitals")
-    if crop_locked:
+    if not face:
         allowed.discard("face")
-        allowed.discard("turnaround")
 
     return IdentityVisibility(
         include_face=face,
@@ -136,7 +145,8 @@ def build_identity_visibility(
         include_expression=face,
         include_body_proportions=body_visible,
         include_hands_detail=hands,
-        crop_locked_no_face=crop_locked,
+        head_in_reference=head_in_reference,
+        headless_crop=headless_crop,
         allowed_image_kinds=frozenset(allowed),
     )
 
@@ -154,7 +164,15 @@ def format_reference_scene_from_analysis(analysis: ReferenceAnalysis) -> str:
         f"VISIBLE_REGIONS: {', '.join(sorted(analysis.normalized_regions())) or 'none listed'}",
     ]
     if not analysis.face_in_frame:
-        lines.append("FACE_IN_FRAME: false — do not widen crop or synthesize a face/head.")
+        if analysis.head_partial:
+            lines.append(
+                "FACE_IN_FRAME: false — back/side of head or hair may be visible; "
+                "preserve that mass exactly; do NOT synthesize eyes/nose/mouth from model photos."
+            )
+        else:
+            lines.append(
+                "FACE_IN_FRAME: false — no head in crop; do not widen framing or add a head."
+            )
     if analysis.hair_in_frame:
         lines.append("HAIR_IN_FRAME: true — hair extent in crop only; color/style from MODEL_PROFILE.")
     elif not analysis.face_in_frame:
@@ -181,8 +199,12 @@ def build_visibility_plan_block(visibility: IdentityVisibility) -> str:
         include.append("body_type / skin tone on visible anatomy from MODEL_PROFILE")
     if visibility.include_hands_detail:
         include.append("hands detail in pose.hands")
-    if visibility.crop_locked_no_face:
+    if visibility.headless_crop:
         exclude.append("widening shot, adding headroom, inventing head/face from identity photos")
+    elif not visibility.include_face and visibility.head_in_reference:
+        exclude.append(
+            "facial features from model photos — preserve visible head/back/hair from pose reference only"
+        )
     lines = ["## VISIBILITY_PLAN (server — obey strictly)"]
     if include:
         lines.append("INCLUDE in JSON: " + "; ".join(include))
@@ -388,13 +410,61 @@ def filter_model_images_for_visibility(
     ]
 
 
+def visibility_pose_prefix_kind(visibility: IdentityVisibility | None) -> str:
+    """WAN pose-ref prefix: face_visible | face_hidden | headless."""
+    if visibility is None:
+        return "face_visible"
+    if visibility.include_face:
+        return "face_visible"
+    if visibility.headless_crop:
+        return "headless"
+    return "face_hidden"
+
+
+def build_grok_identity_instruction(visibility: IdentityVisibility) -> str:
+    if visibility.include_face:
+        return (
+            "IDENTITY_CLOSING: end ---PROMPT--- with one short sentence naming which attached "
+            "model photos carry identity (face, body, character sheet as attached)."
+        )
+    if visibility.head_in_reference:
+        return (
+            "IDENTITY_CLOSING: face is NOT visible in the pose reference (back/side of head or hair only). "
+            "Preserve visible head/hair mass from USER_SCENE_REFERENCE. "
+            "Do NOT describe eyes, nose, mouth, or front-facing face from model photos. "
+            "End ---PROMPT--- with: match body proportions and skin tone from body reference "
+            "and character sheet only — no face matching."
+        )
+    return (
+        "IDENTITY_CLOSING: reference crop is headless — describe only visible body parts. "
+        "Do NOT invent or paste a face. "
+        "End ---PROMPT--- with: match body proportions from body reference and character sheet only."
+    )
+
+
+def build_grok_visibility_context(
+    *,
+    visibility: IdentityVisibility | None,
+    reference_scene_description: str | None = None,
+) -> str:
+    blocks: list[str] = []
+    if reference_scene_description and reference_scene_description.strip():
+        blocks.append(
+            "REFERENCE_ANALYSIS (authoritative geometry/framing — not donor identity):\n"
+            + reference_scene_description.strip()
+        )
+    if visibility is not None:
+        blocks.append(build_grok_identity_instruction(visibility))
+        blocks.append(build_visibility_plan_block(visibility))
+    return "\n\n".join(blocks)
+
+
 def resolve_effective_studio_mode(
     requested_mode: str,
     visibility: IdentityVisibility,
 ) -> str:
+    """Visibility drives prompts/images; only correct manual no_face when face is visible."""
     mode = (requested_mode or "model").strip().lower()
-    if visibility.crop_locked_no_face and mode in ("model", "model_scene"):
-        return "no_face"
     if mode == "no_face" and visibility.include_face:
         return "model"
     return mode
@@ -419,7 +489,7 @@ def build_studio_prompt_plan(
             model_profile_text, visibility
         ),
         effective_studio_mode=effective_mode,
-        skip_no_face_suffix=visibility.crop_locked_no_face,
+        skip_no_face_suffix=visibility.headless_crop,
     )
 
 
