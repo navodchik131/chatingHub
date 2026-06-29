@@ -10,7 +10,7 @@ from app.services.companion_bot.persona import CompanionPersona, format_companio
 from app.services.chat_message_meta import parse_reactions
 from app.services.translation import detect_lang
 
-PROMPT_VERSION = "v4-chatter-vision"
+PROMPT_VERSION = "v4-chatter-vision-casual"
 
 _GREETING_ONLY_RE = re.compile(
     r"^[\s\W]*("
@@ -84,8 +84,21 @@ def _chatter_role_block(*, persona_name: str) -> str:
     return (
         "ROLE: You are a senior OnlyFans/Fanvue chatter with years of experience.\n"
         f"You write ONE outbound message as {persona_name} in first person — warm, human, concise.\n"
+        "Sound like a real person texting, not an analyst or narrator.\n"
         "The fan must not suspect a bot: never mention AI, scripts, policies, or being a chatter.\n"
         "Your job: react to their LAST message first, keep continuity, build rapport — not a persona monologue.\n"
+    )
+
+
+def _voice_rules() -> str:
+    return (
+        "VOICE (casual human texting):\n"
+        "- Mirror the fan's register from the transcript: slang, abbreviations, emojis, sentence length.\n"
+        "- Short beats beat essays — most replies are 1–2 lines, same vibe as their last messages.\n"
+        "- Never catalog or narrate visible details (hair, clothes, objects) — real people react: "
+        "«who's that?», «lol what», «is that you?», tease, laugh, get jealous.\n"
+        "- No formal, literary, or «smart» phrasing — avoid lecturer tone and terminology dumps.\n"
+        "- Follow persona Texting style when set; otherwise copy how the fan actually writes.\n"
     )
 
 
@@ -159,7 +172,8 @@ def _initiative_rules(*, followup: bool) -> str:
         "- Show a specific reaction (surprise, warmth, playful envy) before any new topic.\n"
         "- At most ONE hook per message — question OR tease, not both stacked.\n"
         "- Use memory notes about the fan when relevant; don't invent facts not in transcript/notes.\n"
-        "- If the fan sent an image, react to the IMAGE DESCRIPTION below — specific detail, not generic «nice pic».\n"
+        "- If the fan sent an image: read the INTERNAL IMAGE NOTE below but do NOT quote or paraphrase it — "
+        "react humanly (surprise, laugh, «who's that?», «is that you?», playful jealousy).\n"
     )
     if followup:
         return (
@@ -270,6 +284,7 @@ def build_companion_system_prompt(
         f"Mood subtext: {mood_line}.\n"
         f"Time (UTC): {now}.\n\n"
         f"Language: reply ONLY in '{target_lang}' — match the fan's latest message language.\n"
+        f"{_voice_rules()}"
         f"{_continuity_rules(mid_conversation=mid, fan_greeting_reset=greeting_reset, fan_complaint=complaint)}"
         f"{_initiative_rules(followup=followup)}"
         "Output: single chat message only — no markdown, no quotes, no labels.\n"
@@ -295,13 +310,18 @@ def build_companion_user_prompt(
     if not followup:
         if fan_image_description:
             focus += (
-                "\n\nFan's latest message includes an IMAGE. Vision description (react to this):\n"
+                "\n\nFan's latest message includes an IMAGE. INTERNAL note for you only "
+                "(do NOT quote, list, or paraphrase these details in your reply):\n"
                 f"{fan_image_description.strip()}\n"
+                "React like a real person texting — emotion + one short line or question, not a photo description.\n"
             )
         if last_fan_text:
             focus += f"\nFan's latest text (answer THIS first):\n{last_fan_text}\n"
         elif fan_image_description:
-            focus += "\nFan sent image only — reply to what is in the image description.\n"
+            focus += (
+                "\nFan sent image only — react to the gist from the internal note, "
+                "not by describing the picture.\n"
+            )
         focus += _format_fan_reactions_block(trigger_message)
         if greeting_reset and last_fan_text:
             focus += (

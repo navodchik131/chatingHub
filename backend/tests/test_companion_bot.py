@@ -85,7 +85,7 @@ def test_companion_prompt_v4_chatter():
         reply_too_similar_to_recent,
     )
 
-    assert PROMPT_VERSION == "v4-chatter-vision"
+    assert PROMPT_VERSION == "v4-chatter-vision-casual"
 
     out_msg = Message(
         id=2,
@@ -144,6 +144,8 @@ def test_companion_prompt_v4_chatter():
     assert "senior" in sys.lower() or "chatter" in sys.lower()
     assert "ACTIVE THREAD" in sys
     assert "mid-chat" in sys.lower()
+    assert "casual human texting" in sys.lower()
+    assert "mirror the fan" in sys.lower()
 
     user = build_companion_user_prompt(conv=conv, messages=messages)
     assert "Hello Mia" in user
@@ -174,7 +176,8 @@ def test_companion_prompt_image_description_block():
         fan_image_description="Fan selfie at the beach, sunset, casual smile.",
         trigger_message=trigger,
     )
-    assert "IMAGE. Vision description" in user
+    assert "INTERNAL note for you only" in user
+    assert "do not quote" in user.lower()
     assert "beach" in user
     assert "look at this" in user
 
