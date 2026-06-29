@@ -35,6 +35,24 @@ if TYPE_CHECKING:
     from app.services.studio_reference_analysis import IdentityVisibility
 
 
+def _finalize_grok_compose_result(
+    result: GrokSceneComposeResult,
+    visibility: "IdentityVisibility | None",
+) -> GrokSceneComposeResult:
+    from app.services.studio_reference_analysis import sanitize_wavespeed_prose_for_visibility
+
+    prompt = sanitize_wavespeed_prose_for_visibility(
+        result.wavespeed_scene_prompt, visibility
+    )
+    if prompt == result.wavespeed_scene_prompt:
+        return result
+    return GrokSceneComposeResult(
+        wavespeed_scene_prompt=prompt,
+        reference_scene_lock=result.reference_scene_lock,
+        negative_prompt=result.negative_prompt,
+    )
+
+
 def _grok_visibility_user_block(
     *,
     visibility: "IdentityVisibility | None",
@@ -424,7 +442,7 @@ async def grok_compose_studio_main_scene(
         credentials=creds,
         timeout_seconds=float(settings.grok_scene_compose_timeout_seconds),
     )
-    return _parse_grok_main_prose_output(raw_out)
+    return _finalize_grok_compose_result(_parse_grok_main_prose_output(raw_out), visibility)
 
 
 async def grok_compose_studio_scene(
@@ -461,7 +479,7 @@ async def grok_compose_studio_scene(
         else "Hairstyle may follow USER_SCENE_REFERENCE when USER_NOTES request it."
     )
 
-    figure_anchor = grok_figure_anchor_from_profile(model_profile_text)
+    figure_anchor = grok_figure_anchor_from_profile(model_profile_text, visibility=visibility)
     output_rule = ""
     if standalone_scene_prompt:
         output_rule = (
@@ -485,9 +503,9 @@ async def grok_compose_studio_scene(
                 f"WAVE_PROFILE: {wp}\n"
                 f"HAIRSTYLE_RULE: {hair_rule}\n\n"
                 "BODY_FIGURE_RULE: USER_SCENE_REFERENCE supplies pose/camera/light/wardrobe coverage ONLY. "
-                "Bust, waist, hip width, glute volume, torso/leg proportions MUST come from MODEL_PROFILE_JSON "
-                "+ BODY_REFERENCE / ANATOMY_REFERENCE_NUDE / CHARACTER_SHEET — never from the pose-reference sitter. "
-                "Start wavespeed_scene_prompt with a FIGURE_LOCK sentence using the anchor below.\n\n"
+                "Apply MODEL proportions and skin tone ONLY on PROMPT_MENTION regions from REFERENCE_ANALYSIS — "
+                "never on anatomy listed under PROMPT_OMIT. "
+                "Open wavespeed_scene_prompt using the FIGURE_LOCK anchor below.\n\n"
                 f"FIGURE_LOCK_ANCHOR (mandatory in prose):\n{figure_anchor}\n\n"
                 f"MODEL_PROFILE_JSON:\n{profile}\n\n"
                 f"USER_NOTES:\n{notes or '(none)'}"
@@ -544,16 +562,19 @@ async def grok_compose_studio_scene(
         timeout_seconds=float(settings.grok_scene_compose_timeout_seconds),
     )
     try:
-        return _parse_grok_compose_json(raw_out)
+        return _finalize_grok_compose_result(_parse_grok_compose_json(raw_out), visibility)
     except RuntimeError:
         log.warning("grok scene compose: JSON parse failed, using raw prose fallback")
         prose = _strip_code_fences(raw_out).strip()
         if len(prose) < 80:
             raise RuntimeError("Grok вернул слишком короткий ответ без JSON")
-        return GrokSceneComposeResult(
-            wavespeed_scene_prompt=prose,
-            reference_scene_lock="",
-            negative_prompt="",
+        return _finalize_grok_compose_result(
+            GrokSceneComposeResult(
+                wavespeed_scene_prompt=prose,
+                reference_scene_lock="",
+                negative_prompt="",
+            ),
+            visibility,
         )
 
 
@@ -870,4 +891,4 @@ async def grok_compose_studio_workflow_multi_ref(
         credentials=creds,
         timeout_seconds=float(settings.grok_scene_compose_timeout_seconds),
     )
-    return _parse_grok_main_prose_output(raw_out)
+    return _finalize_grok_compose_result(_parse_grok_main_prose_output(raw_out), visibility)

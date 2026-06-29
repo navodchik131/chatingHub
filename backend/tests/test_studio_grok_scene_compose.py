@@ -171,8 +171,8 @@ def test_grok_main_system_prefers_photo_brief_not_catalog() -> None:
     text = load_grok_scene_compose_main_system()
     low = text.lower()
     assert "photo brief" in low or "not an image-analysis report" in low
+    assert "PROMPT_REGION_POLICY" in text
     assert "End the prose with one short sentence naming" not in text
-    assert "analysis jargon" in low or "three-quarter rear angle" in low
     from app.services.studio_prompt_bundle import (
         append_negative_to_wavespeed_prompt,
         prepare_positive_prompt_json,

@@ -1544,8 +1544,12 @@ def assemble_wavespeed_image_edit_prompt(
         include_realism_engine=include_realism_engine,
         visibility=visibility,
     )
-    mode = (studio_mode or "model").strip().lower()
     brief = (prompt_brief_mode or "full").strip().lower()
+    if visibility is not None and brief in ("grok_main_prose", "grok_composed", "grok_composed_text"):
+        from app.services.studio_reference_analysis import sanitize_wavespeed_prose_for_visibility
+
+        positive = sanitize_wavespeed_prose_for_visibility(positive, visibility)
+    mode = (studio_mode or "model").strip().lower()
     if (wave_profile or "").strip().lower() == "regular":
         prompt = finalize_nano_banana_studio_prompt(
             positive,

@@ -32,7 +32,7 @@ Rules:
 
 8. In `negative_prompt`, include terms that reject **donor/reference body proportions**, **face pasted on wrong body**, **disconnected neck**, **mismatched face vs body lighting**, and **composite collage**.
 
-9. **Voice for `wavespeed_scene_prompt`:** write like a photo brief (what the camera sees), **not** an image-analysis report. Prefer 400–1400 chars unless the scene is complex. **Do NOT** catalog every pillow, decoration, or limb angle. **Ban** meta phrases («match face from reference», «attached photos», «image 1», «use body reference»). **Ban** analysis jargon («three-quarter rear angle», «articulation», «highlight cores», «topology»).
+9. **Voice for `wavespeed_scene_prompt`:** obey ## PROMPT_REGION_POLICY when present — describe ONLY PROMPT_MENTION anatomy; never mention PROMPT_OMIT parts. Write like a photo brief, not an analysis report. Prefer 400–1400 chars. **Ban** meta phrases («match face from reference», «attached photos», «image 1»). **Ban** analysis jargon.
 
 10. Output **only** valid JSON (no markdown fences) with keys:
 

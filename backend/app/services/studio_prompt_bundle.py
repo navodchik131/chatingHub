@@ -330,21 +330,36 @@ def nano_banana_preflight_error(
     return None
 
 
-def grok_figure_anchor_from_profile(model_profile_text: str | None) -> str:
-    """Короткий FIGURE_LOCK для Grok compose — явные объёмы из профиля модели."""
+def grok_figure_anchor_from_profile(
+    model_profile_text: str | None,
+    visibility: "IdentityVisibility | None" = None,
+) -> str:
+    """Короткий FIGURE_LOCK для Grok compose — объёмы из профиля только для видимых регионов."""
+    from app.services.studio_reference_analysis import IdentityVisibility, prompt_regions_to_mention
+
+    vis: IdentityVisibility | None = visibility
+    regions = vis.visible_regions if vis is not None else frozenset()
+
+    def scoped_default() -> str:
+        if vis is None:
+            return (
+                "FIGURE_LOCK: use BODY_REFERENCE and MODEL_PROFILE body_type for bust, waist, hip width, "
+                "glute volume, shoulder width — explicitly contradict any donor silhouette on USER_SCENE_REFERENCE."
+            )
+        mention = prompt_regions_to_mention(vis)
+        return (
+            "FIGURE_LOCK: apply MODEL body proportions and skin tone ONLY on visible crop regions "
+            f"({'; '.join(mention)}). Never copy donor silhouette from USER_SCENE_REFERENCE. "
+            "Do not mention anatomy outside PROMPT_MENTION."
+        )
+
     raw = (model_profile_text or "").strip()
     if not raw:
-        return (
-            "FIGURE_LOCK: use BODY_REFERENCE and MODEL_PROFILE body_type for bust, waist, hip width, "
-            "glute volume, shoulder width — explicitly contradict any donor silhouette on USER_SCENE_REFERENCE."
-        )
+        return scoped_default()
     try:
         data = json.loads(raw)
     except (json.JSONDecodeError, TypeError):
-        return (
-            "FIGURE_LOCK: extract body proportions from MODEL_PROFILE_JSON text; "
-            "never copy bust/waist/hips from USER_SCENE_REFERENCE sitter."
-        )
+        return scoped_default()
     prof: dict[str, Any] | None = None
     if isinstance(data, dict):
         mp = data.get("model_profile")
@@ -353,6 +368,13 @@ def grok_figure_anchor_from_profile(model_profile_text: str | None) -> str:
     body = (fields.get("body_proportions") or "").strip()
     subj = (fields.get("subject") or "").strip()
     bits = [b for b in (body, subj) if b]
+    if bits and vis is not None and regions:
+        joined = "; ".join(bits)[:520]
+        region_hint = ", ".join(sorted(regions))
+        return (
+            f"FIGURE_LOCK: for visible regions [{region_hint}] only, model proportions are {joined}. "
+            "Do not apply off-crop anatomy words (face/legs/etc.) when PROMPT_OMIT lists them."
+        )
     if bits:
         joined = "; ".join(bits)[:520]
         return (
@@ -360,10 +382,7 @@ def grok_figure_anchor_from_profile(model_profile_text: str | None) -> str:
             f"Model body proportions are {joined} — "
             "do not use pose-reference sitter bust, waist, hip width, or muscle definition."
         )
-    return (
-        "FIGURE_LOCK: state bust, waist, hip width, and glute volume from BODY_REFERENCE / profile; "
-        "forbid copying donor body mass from USER_SCENE_REFERENCE."
-    )
+    return scoped_default()
 
 
 def reference_pose_is_nude_or_minimal_coverage(description: str | None) -> bool:

@@ -83,6 +83,7 @@ class IdentityVisibility:
     """True when reference has no face AND no partial head — legs-only crop, etc."""
     headless_crop: bool
     allowed_image_kinds: frozenset[str]
+    visible_regions: frozenset[str] = frozenset()
 
     @property
     def crop_locked_no_face(self) -> bool:
@@ -148,6 +149,7 @@ def build_identity_visibility(
         head_in_reference=head_in_reference,
         headless_crop=headless_crop,
         allowed_image_kinds=frozenset(allowed),
+        visible_regions=frozenset(regions),
     )
 
 
@@ -214,6 +216,176 @@ def build_visibility_plan_block(visibility: IdentityVisibility) -> str:
         f"Allowed model reference photo kinds for this crop: {', '.join(sorted(visibility.allowed_image_kinds))}"
     )
     return "\n".join(lines)
+
+
+_REGION_PROMPT_LABELS: dict[str, str] = {
+    "FACE": "face / expression / gaze",
+    "HAIR": "hair (color/style from MODEL for visible hair mass only)",
+    "NECK": "neck",
+    "CHEST": "chest / bust",
+    "TORSO": "torso / waist / midsection",
+    "HANDS": "hands / fingers",
+    "ARMS": "arms",
+    "LEGS": "legs / thighs / knees",
+    "FEET": "feet / ankles",
+    "BUTT": "hips / buttocks",
+    "FULL_BODY": "full-body proportions",
+}
+
+_ALL_REGION_KEYS = frozenset(_REGION_PROMPT_LABELS)
+
+
+def prompt_regions_to_mention(visibility: IdentityVisibility) -> list[str]:
+    """Human labels for anatomy the final prompt MAY describe."""
+    regions = visibility.visible_regions
+    if not regions:
+        if visibility.include_body_proportions:
+            return ["visible body anatomy in crop"]
+        return ["scene and pose only"]
+    out: list[str] = []
+    for key in sorted(regions):
+        label = _REGION_PROMPT_LABELS.get(key)
+        if label:
+            out.append(label)
+    if not visibility.include_face and "face / expression / gaze" in out:
+        out.remove("face / expression / gaze")
+    if not visibility.include_hair and any("hair" in x for x in out):
+        out = [x for x in out if "hair" not in x]
+    return out or ["scene and pose only"]
+
+
+def prompt_regions_to_omit(visibility: IdentityVisibility) -> list[str]:
+    """Human labels for anatomy that must NOT appear in the final prompt."""
+    present = visibility.visible_regions
+    omit_keys = _ALL_REGION_KEYS - present
+    out: list[str] = []
+    for key in sorted(omit_keys):
+        label = _REGION_PROMPT_LABELS.get(key)
+        if label:
+            out.append(label)
+    if not visibility.include_face:
+        out.append("face, eyes, expression, gaze, smile, lips")
+    if not visibility.include_hair and not visibility.head_in_reference:
+        out.append("hair color/style from MODEL")
+    out.append(
+        "meta instructions about reference photos (match face from, body reference, character sheet, image 1)"
+    )
+    # dedupe while preserving order
+    seen: set[str] = set()
+    deduped: list[str] = []
+    for item in out:
+        low = item.lower()
+        if low in seen:
+            continue
+        seen.add(low)
+        deduped.append(item)
+    return deduped
+
+
+def build_prompt_region_policy_block(visibility: IdentityVisibility) -> str:
+    mention = prompt_regions_to_mention(visibility)
+    omit = prompt_regions_to_omit(visibility)
+    lines = [
+        "## PROMPT_REGION_POLICY (server — mandatory for ---PROMPT--- / wavespeed_scene_prompt)",
+        "PROMPT_MENTION (describe ONLY these — scene + MODEL identity on visible parts): "
+        + "; ".join(mention),
+        "PROMPT_OMIT (must NOT appear anywhere in output prose): " + "; ".join(omit),
+    ]
+    if visibility.headless_crop:
+        lines.append(
+            "CROP_LOCK: no head/face in output — do not widen framing or invent a face from model photos."
+        )
+    elif not visibility.include_face and visibility.head_in_reference:
+        lines.append(
+            "HEAD_LOCK: back/side of head or hair mass from reference only — "
+            "no eyes, nose, mouth, or front face from model photos."
+        )
+    return "\n".join(lines)
+
+
+_META_PROSE_RE = re.compile(
+    r"\b("
+    r"match\s+(face|hair|body|likeness)|"
+    r"(face|body|character)\s+reference\s+photo|"
+    r"attached\s+model\s+reference|"
+    r"use\s+(the\s+)?(face|body)\s+reference|"
+    r"from\s+the\s+(face|body)\s+reference|"
+    r"character\s+sheet"
+    r")\b",
+    re.IGNORECASE,
+)
+
+_FORBIDDEN_TERM_GROUPS: dict[str, tuple[str, ...]] = {
+    "face": (
+        "face",
+        "facial",
+        "eyes",
+        "eye contact",
+        "gaze",
+        "expression",
+        "smile",
+        "lips",
+        "nose",
+        "mouth",
+        "jawline",
+        "cheek",
+        "forehead",
+        "chin",
+        "looking at",
+        "portrait likeness",
+    ),
+    "hair_model": ("hairstyle", "hair color", "hair texture", "blonde hair", "brunette hair"),
+    "legs": (" legs", " leg ", "thigh", "thighs", "calf", "calves", "knee", "knees"),
+    "feet": (" feet", " foot ", "ankle", "ankles", "toes"),
+    "hands": (" hands", " hand ", "fingers", "fingernails", " palms"),
+    "arms": (" arms", " arm ", "forearm", "forearms", "elbow", "elbows"),
+    "chest": (" bust", " chest", " breasts", " nipple", " nipples", " décolleté", " decollete"),
+    "butt": (" buttocks", " butt ", " glute", " glutes", " hip width"),
+    "torso": (" waist", " midsection", " abs", " torso", " stomach", " belly"),
+}
+
+
+def sanitize_wavespeed_prose_for_visibility(
+    prose: str,
+    visibility: IdentityVisibility | None,
+) -> str:
+    """Post-filter: drop sentences that mention anatomy absent from the reference crop."""
+    text = (prose or "").strip()
+    if not text or visibility is None:
+        return text
+
+    regions = visibility.visible_regions
+    forbidden: list[str] = []
+    if not visibility.include_face:
+        forbidden.extend(_FORBIDDEN_TERM_GROUPS["face"])
+    if not visibility.include_hair and "HAIR" not in regions:
+        forbidden.extend(_FORBIDDEN_TERM_GROUPS["hair_model"])
+    for group, keys in (
+        ("legs", {"LEGS", "FULL_BODY"}),
+        ("feet", {"FEET", "FULL_BODY"}),
+        ("hands", {"HANDS", "FULL_BODY"}),
+        ("arms", {"ARMS", "FULL_BODY"}),
+        ("chest", {"CHEST", "FULL_BODY"}),
+        ("butt", {"BUTT", "FULL_BODY"}),
+        ("torso", {"TORSO", "FULL_BODY"}),
+    ):
+        if not (regions & keys):
+            forbidden.extend(_FORBIDDEN_TERM_GROUPS[group])
+
+    parts = re.split(r"(?<=[.!?])\s+", text)
+    kept: list[str] = []
+    for sentence in parts:
+        s = sentence.strip()
+        if not s:
+            continue
+        low = s.lower()
+        if _META_PROSE_RE.search(s):
+            continue
+        if any(term in low for term in forbidden):
+            continue
+        kept.append(s)
+    out = " ".join(kept).strip()
+    return out or text
 
 
 def _parse_analysis_json(raw: str) -> ReferenceAnalysis:
@@ -424,21 +596,18 @@ def visibility_pose_prefix_kind(visibility: IdentityVisibility | None) -> str:
 def build_grok_identity_instruction(visibility: IdentityVisibility) -> str:
     if visibility.include_face:
         return (
-            "IDENTITY_CLOSING: end ---PROMPT--- with one short sentence naming which attached "
-            "model photos carry identity (face, body, character sheet as attached)."
+            "IDENTITY_RULE: face, hair, and body traits from MODEL apply only where PROMPT_MENTION allows. "
+            "Do not mention anatomy listed under PROMPT_OMIT."
         )
     if visibility.head_in_reference:
         return (
-            "IDENTITY_CLOSING: face is NOT visible in the pose reference (back/side of head or hair only). "
-            "Preserve visible head/hair mass from USER_SCENE_REFERENCE. "
-            "Do NOT describe eyes, nose, mouth, or front-facing face from model photos. "
-            "End ---PROMPT--- with: match body proportions and skin tone from body reference "
-            "and character sheet only — no face matching."
+            "IDENTITY_RULE: face is NOT visible — preserve back/side of head or hair mass from the reference crop. "
+            "Apply MODEL hair color only to visible hair; apply MODEL body proportions only to PROMPT_MENTION regions. "
+            "Never describe eyes, nose, mouth, smile, or front-facing face."
         )
     return (
-        "IDENTITY_CLOSING: reference crop is headless — describe only visible body parts. "
-        "Do NOT invent or paste a face. "
-        "End ---PROMPT--- with: match body proportions from body reference and character sheet only."
+        "IDENTITY_RULE: headless crop — describe ONLY PROMPT_MENTION body parts plus scene/pose/light. "
+        "Do not invent or paste a face. Never mention face, hair from MODEL, or off-crop anatomy."
     )
 
 
@@ -454,6 +623,7 @@ def build_grok_visibility_context(
             + reference_scene_description.strip()
         )
     if visibility is not None:
+        blocks.append(build_prompt_region_policy_block(visibility))
         blocks.append(build_grok_identity_instruction(visibility))
         blocks.append(build_visibility_plan_block(visibility))
     return "\n\n".join(blocks)

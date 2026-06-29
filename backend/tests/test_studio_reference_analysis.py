@@ -8,12 +8,15 @@ from app.services.studio_reference_analysis import (
     ReferenceAnalysis,
     build_grok_identity_instruction,
     build_identity_visibility,
+    build_prompt_region_policy_block,
     build_studio_prompt_plan,
     filter_identity_reference_dict,
     filter_model_images_for_visibility,
     format_reference_scene_from_analysis,
     parse_reference_analysis_json,
+    prompt_regions_to_omit,
     prune_skeleton_for_visibility,
+    sanitize_wavespeed_prose_for_visibility,
     visibility_pose_prefix_kind,
 )
 
@@ -146,7 +149,7 @@ def test_build_prompt_plan_head_partial_keeps_mode():
     assert "back/side of head" in plan.reference_scene_description
 
 
-def test_grok_instruction_no_face_match_when_head_partial():
+def test_grok_instruction_no_face_when_head_partial():
     vis = build_identity_visibility(
         ReferenceAnalysis(
             face_in_frame=False,
@@ -156,8 +159,50 @@ def test_grok_instruction_no_face_match_when_head_partial():
         )
     )
     text = build_grok_identity_instruction(vis)
-    assert "no face matching" in text.lower() or "no face matching" in text
+    assert "PROMPT_MENTION" in text or "PROMPT_OMIT" in build_prompt_region_policy_block(vis)
     assert "Match face" not in text
+    assert "end ---" not in text.lower()
+
+
+def test_prompt_region_policy_rear_view():
+    vis = build_identity_visibility(
+        ReferenceAnalysis(
+            face_in_frame=False,
+            head_partial=True,
+            hair_in_frame=True,
+            visible_regions=["BUTT", "TORSO", "HAIR", "ARMS"],
+        )
+    )
+    block = build_prompt_region_policy_block(vis)
+    assert "PROMPT_MENTION" in block
+    assert "face" in block.lower()
+    assert "PROMPT_OMIT" in block
+    omit = prompt_regions_to_omit(vis)
+    assert any("face" in x for x in omit)
+
+
+def test_sanitize_drops_face_and_meta_when_headless():
+    vis = build_identity_visibility(
+        ReferenceAnalysis(
+            face_in_frame=False,
+            head_partial=True,
+            hair_in_frame=True,
+            visible_regions=["BUTT", "TORSO", "HAIR"],
+        )
+    )
+    raw = (
+        "A blonde model on all fours on white bedding, rear view, soft daylight. "
+        "She has a playful smile and green eyes. "
+        "Match face and hair from the face reference photo. "
+        "Long lean legs crossed at the ankles."
+    )
+    out = sanitize_wavespeed_prose_for_visibility(raw, vis)
+    low = out.lower()
+    assert "match face" not in low
+    assert "green eyes" not in low
+    assert "smile" not in low
+    assert "legs" not in low
+    assert "all fours" in low or "bedding" in low
 
 
 def test_format_reference_scene():
