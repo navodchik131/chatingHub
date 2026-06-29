@@ -108,3 +108,26 @@ def test_build_studio_prompt_plan_enables_deterministic_path():
     )
     assert plan.visibility.include_face is True
     assert "POSE:" in plan.reference_scene_description
+
+
+def test_grok_figure_anchor_truncates_on_word_boundary():
+    from app.services.studio_prompt_bundle import grok_figure_anchor_from_profile
+
+    long_body = " ".join(["wide rounded hips with natural curve"] * 40)
+    profile = f'{{"model_profile": {{"body_proportions": "{long_body}"}}}}'
+    anchor = grok_figure_anchor_from_profile(profile)
+    assert "wide rounde —" not in anchor
+    assert anchor.endswith("…") or len(anchor) < 900
+    assert "FIGURE_LOCK" in anchor
+
+
+def test_build_studio_prompt_plan_works_with_empty_skeleton():
+    plan = build_studio_prompt_plan(
+        analysis=_analysis_mirror_selfie(),
+        skeleton="",
+        model_profile_text='{"model_profile":{"body_type":"athletic"}}',
+        requested_studio_mode="model_scene",
+        wave_profile="nsfw",
+    )
+    assert plan.reference_scene_description
+    assert plan.visibility.include_body_proportions

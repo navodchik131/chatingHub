@@ -330,6 +330,16 @@ def nano_banana_preflight_error(
     return None
 
 
+def _truncate_profile_clause(text: str, max_len: int = 520) -> str:
+    t = (text or "").strip()
+    if len(t) <= max_len:
+        return t
+    cut = t[: max_len + 1].rsplit(" ", 1)[0].rstrip(",;—- ")
+    if not cut:
+        return t[: max_len - 1].rstrip() + "…"
+    return cut + "…"
+
+
 def grok_figure_anchor_from_profile(
     model_profile_text: str | None,
     visibility: "IdentityVisibility | None" = None,
@@ -369,14 +379,14 @@ def grok_figure_anchor_from_profile(
     subj = (fields.get("subject") or "").strip()
     bits = [b for b in (body, subj) if b]
     if bits and vis is not None and regions:
-        joined = "; ".join(bits)[:520]
+        joined = _truncate_profile_clause("; ".join(bits))
         region_hint = ", ".join(sorted(regions))
         return (
             f"FIGURE_LOCK: for visible regions [{region_hint}] only, model proportions are {joined}. "
             "Do not apply off-crop anatomy words (face/legs/etc.) when PROMPT_OMIT lists them."
         )
     if bits:
-        joined = "; ".join(bits)[:520]
+        joined = _truncate_profile_clause("; ".join(bits))
         return (
             f"FIGURE_LOCK (mandatory first sentence in wavespeed_scene_prompt): "
             f"Model body proportions are {joined} — "

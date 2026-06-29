@@ -2588,7 +2588,11 @@ async def _accept_studio_refine_job_from_workflow(
         "studio_wave_profile": plan.studio_wave_profile,
         "generate_wavespeed": "1",
         "wavespeed_single_reference": "1" if reference_images else "0",
-        "send_pose_reference_to_wavespeed": "1" if reference_images else "0",
+        "send_pose_reference_to_wavespeed": (
+            "0"
+            if reference_images and plan.model_id is not None
+            else ("1" if reference_images else "0")
+        ),
         "lock_model_hairstyle": "0",
         "exif_camera": normalize_exif_camera(plan.exif_camera),
         "include_realism_engine": "1" if plan.realism_enabled else "0",
@@ -2811,19 +2815,18 @@ async def _studio_job_execute_refine_prompt(
                 analysis = None
         if analysis is not None:
             skeleton_full = prepare_studio_prompt_skeleton()
-            if skeleton_full:
-                prompt_plan = build_studio_prompt_plan(
-                    analysis=analysis,
-                    skeleton=skeleton_full,
-                    model_profile_text=model_profile_text,
-                    requested_studio_mode=mode_n,
-                    wave_profile=wave_profile_n,
-                )
-                visibility_block = build_visibility_plan_block(prompt_plan.visibility)
-                skip_no_face_suffix = prompt_plan.skip_no_face_suffix
-                if prompt_plan.filtered_model_profile_text is not None:
-                    model_profile_text = prompt_plan.filtered_model_profile_text
-                reference_analysis_for_out = analysis.model_dump()
+            prompt_plan = build_studio_prompt_plan(
+                analysis=analysis,
+                skeleton=skeleton_full or "{}",
+                model_profile_text=model_profile_text,
+                requested_studio_mode=mode_n,
+                wave_profile=wave_profile_n,
+            )
+            visibility_block = build_visibility_plan_block(prompt_plan.visibility)
+            skip_no_face_suffix = prompt_plan.skip_no_face_suffix
+            if prompt_plan.filtered_model_profile_text is not None:
+                model_profile_text = prompt_plan.filtered_model_profile_text
+            reference_analysis_for_out = analysis.model_dump()
 
     if mode_n == "photo_edit" and not image_bytes:
         raise HTTPException(
@@ -3028,7 +3031,9 @@ async def _studio_job_execute_refine_prompt(
     lock_hair_req = _truthy_lock_model_hairstyle(lock_model_hairstyle)
     effective_lock_hairstyle = bool(lock_hair_req) if image_bytes else True
     if workflow_source and workflow_ref_loaded:
-        send_pose_to_ws = True
+        # model_scene + saved model: pose только для analysis/prompt (как вкладка «Основная»),
+        # не bitmap Image 1 в WAN — иначе силуэт донора перебивает FIGURE_LOCK.
+        send_pose_to_ws = not (mode_n == "model_scene" and not workflow_first_frame)
     elif mode_n == "model_scene":
         send_pose_to_ws = False
     elif mode_n == "grok_compose":
