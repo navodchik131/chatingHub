@@ -165,7 +165,14 @@ def test_parse_grok_main_prose_output() -> None:
     assert "face visible" in out.reference_scene_lock
 
 
-def test_grok_main_prose_prepare_is_plain_text_not_json() -> None:
+def test_grok_main_system_prefers_photo_brief_not_catalog() -> None:
+    from app.services.studio_grok_scene_compose import load_grok_scene_compose_main_system
+
+    text = load_grok_scene_compose_main_system()
+    low = text.lower()
+    assert "photo brief" in low or "not an image-analysis report" in low
+    assert "End the prose with one short sentence naming" not in text
+    assert "analysis jargon" in low or "three-quarter rear angle" in low
     from app.services.studio_prompt_bundle import (
         append_negative_to_wavespeed_prompt,
         prepare_positive_prompt_json,

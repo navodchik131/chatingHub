@@ -6,22 +6,24 @@ The user attached:
 
 Your task (think in two steps, output only step 2):
 
-STEP A (internal): From USER_SCENE_REFERENCE note — visible body parts in frame (face/head/torso/legs/feet/hands), exact pose geometry, camera height and distance, lens feel, crop edges, gaze direction, light direction and quality, background, clothing or nudity zones. No identity words (no ethnicity, no «beautiful», no skin tone of the sitter).
+STEP A (internal): From USER_SCENE_REFERENCE note pose, crop, camera feel, light direction, background, clothing/nudity zones. No identity words, no itemized catalog.
 
 STEP B (output): Write one cohesive **visual description** of the same shot with OUR MODEL instead of the sitter. Same pose, crop, light, room, clothes/nudity coverage — MODEL's face (if visible), hair, skin tone, and body shape from MODEL photos and profile.
 
 Rules for ---PROMPT---:
 - Plain descriptive English only — what the camera sees. No JSON, no bullet lists, no agent instructions («never», «do not», «must», «lock», «override»).
-- No compositing vocabulary (no face-swap, collage, paste, composite, donor, reference image, image 1).
+- No compositing vocabulary (no face-swap, collage, paste, composite, donor, reference image, image 1, attached photos, match face from, use body reference).
 - No FIGURE_LOCK blocks or meta labels.
 - Do NOT paste realism keyword lists (pores, film grain, Portra, CFG, etc.) — the server appends a Capture realism block after your prose.
-- Weave at most **one or two** scene-specific imperfections naturally (e.g. wrinkled shirt, catchlights in eyes, messy background corner) — only if they fit the reference light and pose.
+- **Write like a photo brief, not an image-analysis report.** Prefer 2–5 short sentences (~400–1200 chars). Hard max 2800.
+- **Lead with the shot** (pose + framing + light), then weave MODEL identity in **one natural clause** (hair, general build from profile) — not a body-measurement paragraph.
+- **Do NOT catalog** every object, pillow, wall decoration, or anatomical detail. One mood/setting line is enough unless USER_NOTES demand specifics.
+- **Ban analysis jargon:** no «three-quarter rear angle», «hips raised and back arched», «articulation», «gaze vs lens», «highlight cores», «topology», «falloff».
+- Weave at most **one or two** scene-specific imperfections naturally (e.g. wrinkled sheets, catchlights) — only if they fit the reference light and pose.
 - Match gaze and expression to the reference pose; do not force «looking off-camera» if the reference looks at the lens.
 - One expression only — never combine conflicting cues (e.g. closed mouth AND soft smile).
 - If face is not in the reference crop, describe headless / face-out-of-frame explicitly; do not invent a face.
-- Include MODEL body traits naturally (build, bust/waist/hip wording from profile) woven into the scene description, not as a separate instruction block.
-- End the prose with one short sentence naming which attached model photos carry identity (e.g. «Match face and hair from the face reference photo; match body proportions from the body reference and character sheet.»).
-- Maximum 2800 characters in ---PROMPT---.
+- **Never** end with instructions about which reference photo to use — the API already receives model images separately.
 
 Rules for ---NEGATIVE---:
 - Comma-separated scene-specific avoid terms only (wrong person, extra limbs, watermark, identity drift). Skip generic anti-plastic lists — server merges canonical negatives. Max 400 characters.
