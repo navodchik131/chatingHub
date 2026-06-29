@@ -3043,7 +3043,6 @@ async def _studio_job_execute_refine_prompt(
     grok_negative_extra: str | None = None
     try:
         if workflow_source and workflow_ref_loaded:
-            from app.config import settings
             from app.services.studio_deterministic_compose import compose_studio_scene_deterministic
 
             if settings.studio_deterministic_compose_enabled and prompt_plan is not None:
@@ -3100,7 +3099,6 @@ async def _studio_job_execute_refine_prompt(
                 await session.flush()
         elif mode_n == "model_scene":
             assert image_bytes is not None
-            from app.config import settings
             from app.services.studio_deterministic_compose import compose_studio_scene_deterministic
 
             if settings.studio_deterministic_compose_enabled and prompt_plan is not None:
@@ -3144,7 +3142,6 @@ async def _studio_job_execute_refine_prompt(
                 await session.flush()
         elif mode_n == "grok_compose":
             assert image_bytes is not None
-            from app.config import settings
             from app.services.studio_deterministic_compose import compose_studio_scene_deterministic
 
             if settings.studio_deterministic_compose_enabled and prompt_plan is not None:
