@@ -385,6 +385,64 @@ def grok_figure_anchor_from_profile(
     return scoped_default()
 
 
+_IDENTITY_OPENER_RE = re.compile(
+    r"^(?:A|An|The)\s+.+?(?=\s+(?:takes|stands|sits|lies|holds|wears|poses|leans|kneels|"
+    r"walks|selfies|selfie|mirror|films|captures|is\s+standing|is\s+sitting|is\s+holding)\b)",
+    re.I | re.DOTALL,
+)
+
+_IDENTITY_CLAUSE_RES = (
+    re.compile(r"\b\d{1,2}[- ]year[- ]old\b", re.I),
+    re.compile(
+        r"\b(?:Eurasian|Asian|Caucasian|Latina|Slavic|European|African|mixed[- ]race)\b",
+        re.I,
+    ),
+    re.compile(
+        r"\b(?:long|short|shoulder[- ]length)\s+(?:golden\s+)?(?:blonde|blond|brunette|black|brown|auburn|red)\s+(?:wavy|straight|curly)?\s*hair\b",
+        re.I,
+    ),
+    re.compile(
+        r"\b(?:warm\s+)?(?:golden|tan|pale|fair|dark|olive|bronze|caramel|medium[- ]brown)\s+(?:tan\s+)?skin\b",
+        re.I,
+    ),
+    re.compile(
+        r"\b(?:large|small|natural|full|perky|prominent)\s+(?:natural\s+)?(?:C[- ]cup|D[- ]cup|B[- ]cup|A[- ]cup|size\s+\d\s+)?(?:breasts|bust)\b",
+        re.I,
+    ),
+    re.compile(r"\b(?:very\s+)?(?:toned|defined|flat|visible)\s+(?:midsection|abs|stomach|six[- ]pack)\b", re.I),
+    re.compile(r"\b(?:narrow|wide|slim|tiny|snatched)\s+waist\b", re.I),
+    re.compile(r"\b(?:bright|blue|brown|green|hazel|medium[- ]brown)\s+eyes\b", re.I),
+    re.compile(r"\boval\s+face\b", re.I),
+    re.compile(r"\b(?:hourglass|petite|curvy|athletic|slender)\s+(?:figure|build|body)\b", re.I),
+)
+
+
+def strip_donor_identity_from_scene_prose(prose: str) -> str:
+    """
+    Убирает из Grok scene prose описание донора (возраст, этничность, волосы, кожа, грудь…).
+    Identity задаётся MODEL_IDENTITY + ref images; prose — только shot/pose/light/room/одежда.
+    """
+    text = (prose or "").strip()
+    if not text:
+        return text
+
+    m = _IDENTITY_OPENER_RE.match(text)
+    if m and len(m.group(0)) > 35:
+        tail = text[m.end() :].lstrip()
+        if tail:
+            text = tail if re.match(r"^(She|He|The|They)\b", tail, re.I) else f"She {tail}"
+
+    for pat in _IDENTITY_CLAUSE_RES:
+        text = pat.sub("", text)
+
+    text = re.sub(r"\bwith\s+,", "", text, flags=re.I)
+    text = re.sub(r",\s*,+", ", ", text)
+    text = re.sub(r"\s{2,}", " ", text)
+    text = re.sub(r"^\s*,\s*", "", text)
+    text = re.sub(r"\s+\.", ".", text)
+    return text.strip()
+
+
 def reference_pose_is_nude_or_minimal_coverage(description: str | None) -> bool:
     return extract_wardrobe_from_reference(description)[1]
 
@@ -822,7 +880,7 @@ def prepare_positive_prompt_json(
     """
     mode = (brief_mode or "full").strip().lower()
     if mode == "grok_main_prose":
-        prose = (refined_text or "").strip()
+        prose = strip_donor_identity_from_scene_prose((refined_text or "").strip())
         lim = int(settings.grok_scene_compose_output_max_chars)
         scene_ctx = " ".join(
             x for x in ((refined_text or "").strip(), (reference_scene_description or "").strip()) if x
@@ -847,6 +905,46 @@ def prepare_positive_prompt_json(
             prose = (
                 f"MODEL_IDENTITY (saved model — override any donor traits in the scene text): {anchor}\n\n"
                 f"{prose}"
+            )
+        if re_prose:
+            prose = f"{prose}\n\n{re_prose}".strip()
+        negative = _merge_grok_scene_negative(
+            model_profile_text=model_profile_text,
+            extra_negative=extra_negative,
+            reference_scene_description=reference_scene_description,
+        )
+        return prose, negative
+    if mode == "deterministic_compose":
+        from app.services.studio_deterministic_compose import build_deterministic_identity_line
+
+        prose = (refined_text or "").strip()
+        lim = int(settings.grok_scene_compose_output_max_chars)
+        scene_ctx = " ".join(
+            x for x in (prose, (reference_scene_description or "").strip()) if x
+        )
+        re_prose = (
+            format_realism_engine_for_prose_prompt(scene_text=scene_ctx or None)
+            if include_realism_engine
+            else ""
+        )
+        reserve = len(re_prose) + 2 if re_prose else 0
+        scene_budget = max(400, lim - reserve)
+        if len(prose) > scene_budget:
+            prose = prose[: scene_budget - 1].rstrip() + "…"
+        leg = (wavespeed_identity_legend or "").strip()
+        if leg:
+            prose = f"Attached model reference photos — {leg}\n\n{prose}"
+        if visibility is not None:
+            identity_line = build_deterministic_identity_line(
+                model_profile_text,
+                visibility,
+            ).strip()
+        else:
+            identity_line = grok_figure_anchor_from_profile(model_profile_text, visibility=visibility).strip()
+        if identity_line:
+            prose = (
+                "MODEL_IDENTITY (saved model — scene text below is pose, light, room, and wardrobe only): "
+                f"{identity_line}\n\n{prose}"
             )
         if re_prose:
             prose = f"{prose}\n\n{re_prose}".strip()

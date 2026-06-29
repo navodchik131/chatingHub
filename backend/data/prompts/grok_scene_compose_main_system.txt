@@ -14,6 +14,8 @@ STEP B (output): Write one cohesive **visual description** of the same shot with
 
 Rules for ---PROMPT---:
 - Plain descriptive English only — what the camera sees. No JSON, no bullet lists, no agent instructions («never», «do not», «must», «lock», «override»).
+- **Scene-only prose:** describe pose action, camera/framing, room, light, and wardrobe/coverage. **Do NOT write** age, ethnicity, hair color, skin tone, eye color, bust/cup size, waist, hips, body type, or muscle wording — MODEL identity is supplied separately by the server and reference photos.
+- Start with the action or setting (e.g. «Mirror selfie in a hotel room at night» / «She holds a phone at chest height») — **not** «A 23-year-old woman with blonde hair…».
 - No compositing vocabulary (no face-swap, collage, paste, composite, donor, reference image, image 1, attached photos, match face from, use body reference).
 - No FIGURE_LOCK blocks or meta labels.
 - Do NOT paste realism keyword lists (pores, film grain, Portra, CFG, etc.) — the server appends a Capture realism block after your prose.

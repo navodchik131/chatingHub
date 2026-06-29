@@ -138,6 +138,10 @@ class Settings(BaseSettings):
     grok_scene_compose_max_tokens: int = Field(default=8192, ge=1024, le=16384)
     grok_scene_compose_temperature: float = Field(default=0.45, ge=0.0, le=1.5)
     grok_scene_compose_timeout_seconds: float = Field(default=180.0, ge=30.0, le=600.0)
+    studio_deterministic_compose_enabled: bool = Field(
+        default=True,
+        description="Собирать WAN-промпт из reference analysis + model profile без Grok freestyle",
+    )
     # Seedance T2V: макс. длина финального промпта (символов) после Grok / сборки
     studio_seedance_t2v_prompt_max_chars: int = Field(default=3000, ge=500, le=5000)
     # Grok: итоговый Seedance-промпт на китайском (true) или английском (false, по умолчанию).

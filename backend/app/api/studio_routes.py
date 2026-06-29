@@ -3043,42 +3043,56 @@ async def _studio_job_execute_refine_prompt(
     grok_negative_extra: str | None = None
     try:
         if workflow_source and workflow_ref_loaded:
-            from app.services.plan_entitlements import assert_grok_allowed, record_grok_usage
-            from app.services.studio_grok_scene_compose import (
-                WorkflowGrokUserRef,
-                grok_compose_studio_workflow_multi_ref,
-            )
+            from app.config import settings
+            from app.services.studio_deterministic_compose import compose_studio_scene_deterministic
 
-            await assert_grok_allowed(session, oid, sub_b)
-            await record_grok_usage(session, oid, source="workflow_multi_ref")
-            grok_creds = grok_motion_studio_credentials()
-            user_refs = [
-                WorkflowGrokUserRef(
-                    data=ref_bytes,
-                    mime=ref_mime,
-                    role=str(meta.get("role") or ""),
-                    description=str(meta.get("description") or ""),
-                    file_name=str(meta.get("file_name") or ""),
+            if settings.studio_deterministic_compose_enabled and prompt_plan is not None:
+                composed = compose_studio_scene_deterministic(
+                    prompt_plan=prompt_plan,
+                    model_profile_text=model_profile_text,
+                    user_notes=desc,
                 )
-                for ref_bytes, ref_mime, meta in workflow_ref_loaded
-            ]
-            composed = await grok_compose_studio_workflow_multi_ref(
-                user_refs=user_refs,
-                model_images=imgs_model if mid is not None else [],
-                model_profile_text=model_profile_text,
-                wave_profile=wave_profile_n,
-                user_notes=desc,
-                lock_hairstyle=effective_lock_hairstyle,
-                credentials=grok_creds,
-                visibility=prompt_plan.visibility if prompt_plan else None,
-                reference_scene_description=(
-                    prompt_plan.reference_scene_description if prompt_plan else None
-                ),
-            )
-            refined = composed.wavespeed_scene_prompt
-            reference_scene = composed.reference_scene_lock or None
-            grok_negative_extra = composed.negative_prompt or None
-            prompt_brief_mode = "grok_main_prose"
+                refined = composed.wavespeed_scene_prompt
+                reference_scene = prompt_plan.reference_scene_description
+                grok_negative_extra = composed.negative_prompt or None
+                prompt_brief_mode = "deterministic_compose"
+            else:
+                from app.services.plan_entitlements import assert_grok_allowed, record_grok_usage
+                from app.services.studio_grok_scene_compose import (
+                    WorkflowGrokUserRef,
+                    grok_compose_studio_workflow_multi_ref,
+                )
+
+                await assert_grok_allowed(session, oid, sub_b)
+                await record_grok_usage(session, oid, source="workflow_multi_ref")
+                grok_creds = grok_motion_studio_credentials()
+                user_refs = [
+                    WorkflowGrokUserRef(
+                        data=ref_bytes,
+                        mime=ref_mime,
+                        role=str(meta.get("role") or ""),
+                        description=str(meta.get("description") or ""),
+                        file_name=str(meta.get("file_name") or ""),
+                    )
+                    for ref_bytes, ref_mime, meta in workflow_ref_loaded
+                ]
+                composed = await grok_compose_studio_workflow_multi_ref(
+                    user_refs=user_refs,
+                    model_images=imgs_model if mid is not None else [],
+                    model_profile_text=model_profile_text,
+                    wave_profile=wave_profile_n,
+                    user_notes=desc,
+                    lock_hairstyle=effective_lock_hairstyle,
+                    credentials=grok_creds,
+                    visibility=prompt_plan.visibility if prompt_plan else None,
+                    reference_scene_description=(
+                        prompt_plan.reference_scene_description if prompt_plan else None
+                    ),
+                )
+                refined = composed.wavespeed_scene_prompt
+                reference_scene = composed.reference_scene_lock or None
+                grok_negative_extra = composed.negative_prompt or None
+                prompt_brief_mode = "grok_main_prose"
             if gen_row is not None:
                 gen_row.refined_prompt = refined
                 gen_row.prompt_excerpt = (refined[:2000] if refined else None) or None
@@ -3086,29 +3100,43 @@ async def _studio_job_execute_refine_prompt(
                 await session.flush()
         elif mode_n == "model_scene":
             assert image_bytes is not None
-            from app.services.plan_entitlements import assert_grok_allowed, record_grok_usage
+            from app.config import settings
+            from app.services.studio_deterministic_compose import compose_studio_scene_deterministic
 
-            await assert_grok_allowed(session, oid, sub_b)
-            await record_grok_usage(session, oid, source="model_scene")
-            grok_creds = grok_motion_studio_credentials()
-            composed = await grok_compose_studio_main_scene(
-                user_ref_bytes=image_bytes,
-                user_ref_mime=image_mime,
-                model_images=imgs_model,
-                model_profile_text=model_profile_text,
-                wave_profile=wave_profile_n,
-                user_notes=desc,
-                lock_hairstyle=effective_lock_hairstyle,
-                credentials=grok_creds,
-                visibility=prompt_plan.visibility if prompt_plan else None,
-                reference_scene_description=(
-                    prompt_plan.reference_scene_description if prompt_plan else None
-                ),
-            )
-            refined = composed.wavespeed_scene_prompt
-            reference_scene = composed.reference_scene_lock or None
-            grok_negative_extra = composed.negative_prompt or None
-            prompt_brief_mode = "grok_main_prose"
+            if settings.studio_deterministic_compose_enabled and prompt_plan is not None:
+                composed = compose_studio_scene_deterministic(
+                    prompt_plan=prompt_plan,
+                    model_profile_text=model_profile_text,
+                    user_notes=desc,
+                )
+                refined = composed.wavespeed_scene_prompt
+                reference_scene = prompt_plan.reference_scene_description
+                grok_negative_extra = composed.negative_prompt or None
+                prompt_brief_mode = "deterministic_compose"
+            else:
+                from app.services.plan_entitlements import assert_grok_allowed, record_grok_usage
+
+                await assert_grok_allowed(session, oid, sub_b)
+                await record_grok_usage(session, oid, source="model_scene")
+                grok_creds = grok_motion_studio_credentials()
+                composed = await grok_compose_studio_main_scene(
+                    user_ref_bytes=image_bytes,
+                    user_ref_mime=image_mime,
+                    model_images=imgs_model,
+                    model_profile_text=model_profile_text,
+                    wave_profile=wave_profile_n,
+                    user_notes=desc,
+                    lock_hairstyle=effective_lock_hairstyle,
+                    credentials=grok_creds,
+                    visibility=prompt_plan.visibility if prompt_plan else None,
+                    reference_scene_description=(
+                        prompt_plan.reference_scene_description if prompt_plan else None
+                    ),
+                )
+                refined = composed.wavespeed_scene_prompt
+                reference_scene = composed.reference_scene_lock or None
+                grok_negative_extra = composed.negative_prompt or None
+                prompt_brief_mode = "grok_main_prose"
             if gen_row is not None:
                 gen_row.refined_prompt = refined
                 gen_row.prompt_excerpt = (refined[:2000] if refined else None) or None
@@ -3116,30 +3144,44 @@ async def _studio_job_execute_refine_prompt(
                 await session.flush()
         elif mode_n == "grok_compose":
             assert image_bytes is not None
-            from app.services.plan_entitlements import assert_grok_allowed, record_grok_usage
+            from app.config import settings
+            from app.services.studio_deterministic_compose import compose_studio_scene_deterministic
 
-            await assert_grok_allowed(session, oid, sub_b)
-            await record_grok_usage(session, oid, source="grok_compose")
-            grok_creds = grok_motion_studio_credentials()
-            composed = await grok_compose_studio_scene(
-                user_ref_bytes=image_bytes,
-                user_ref_mime=image_mime,
-                model_images=imgs_model,
-                model_profile_text=model_profile_text,
-                wave_profile=wave_profile_n,
-                user_notes=desc,
-                lock_hairstyle=effective_lock_hairstyle,
-                credentials=grok_creds,
-                standalone_scene_prompt=False,
-                visibility=prompt_plan.visibility if prompt_plan else None,
-                reference_scene_description=(
-                    prompt_plan.reference_scene_description if prompt_plan else None
-                ),
-            )
-            refined = composed.wavespeed_scene_prompt
-            reference_scene = composed.reference_scene_lock or None
-            grok_negative_extra = composed.negative_prompt or None
-            prompt_brief_mode = "grok_composed"
+            if settings.studio_deterministic_compose_enabled and prompt_plan is not None:
+                composed = compose_studio_scene_deterministic(
+                    prompt_plan=prompt_plan,
+                    model_profile_text=model_profile_text,
+                    user_notes=desc,
+                )
+                refined = composed.wavespeed_scene_prompt
+                reference_scene = prompt_plan.reference_scene_description
+                grok_negative_extra = composed.negative_prompt or None
+                prompt_brief_mode = "deterministic_compose"
+            else:
+                from app.services.plan_entitlements import assert_grok_allowed, record_grok_usage
+
+                await assert_grok_allowed(session, oid, sub_b)
+                await record_grok_usage(session, oid, source="grok_compose")
+                grok_creds = grok_motion_studio_credentials()
+                composed = await grok_compose_studio_scene(
+                    user_ref_bytes=image_bytes,
+                    user_ref_mime=image_mime,
+                    model_images=imgs_model,
+                    model_profile_text=model_profile_text,
+                    wave_profile=wave_profile_n,
+                    user_notes=desc,
+                    lock_hairstyle=effective_lock_hairstyle,
+                    credentials=grok_creds,
+                    standalone_scene_prompt=False,
+                    visibility=prompt_plan.visibility if prompt_plan else None,
+                    reference_scene_description=(
+                        prompt_plan.reference_scene_description if prompt_plan else None
+                    ),
+                )
+                refined = composed.wavespeed_scene_prompt
+                reference_scene = composed.reference_scene_lock or None
+                grok_negative_extra = composed.negative_prompt or None
+                prompt_brief_mode = "grok_composed"
             if gen_row is not None:
                 gen_row.refined_prompt = refined
                 gen_row.prompt_excerpt = (refined[:2000] if refined else None) or None
@@ -3617,9 +3659,17 @@ async def _studio_job_execute_refine_prompt(
                     if mode_n == "grok_compose":
                         imgs_ws_order = grok_ws_identity
                     elif mode_n == "model_scene":
-                        imgs_ws_order = select_model_scene_wavespeed_identity_images(
-                            imgs_for_ws, wave_profile=wave_profile_n
-                        )
+                        if user_pose_ref_prepended:
+                            imgs_ws_order = select_grok_compose_wavespeed_identity_images(
+                                imgs_for_ws,
+                                pose_reference_nude=reference_pose_is_nude_or_minimal_coverage(
+                                    reference_scene
+                                ),
+                            )
+                        else:
+                            imgs_ws_order = select_model_scene_wavespeed_identity_images(
+                                imgs_for_ws, wave_profile=wave_profile_n
+                            )
                     elif mode_n == "model" and not image_bytes:
                         imgs_ws_order = select_prompt_only_wavespeed_identity_images(
                             imgs_for_ws, wave_profile=wave_profile_n

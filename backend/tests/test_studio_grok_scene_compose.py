@@ -88,6 +88,41 @@ def test_wavespeed_identity_body_without_face() -> None:
     assert picked[0].image_kind == "body"
 
 
+def test_strip_donor_identity_from_scene_prose() -> None:
+    from app.services.studio_prompt_bundle import strip_donor_identity_from_scene_prose
+
+    raw = (
+        "A 23-year-old Eurasian woman with long golden blonde wavy hair, warm golden tan skin, "
+        "large natural C-cup breasts, very toned flat abs and narrow waist takes a mirror selfie "
+        "in a luxury high-rise hotel room at night. She stands in front of a large mirror wearing "
+        "only a tight white mini skirt and black sheer thigh-high stockings."
+    )
+    out = strip_donor_identity_from_scene_prose(raw)
+    low = out.lower()
+    assert "blonde" not in low
+    assert "c-cup" not in low
+    assert "eurasian" not in low
+    assert "golden tan skin" not in low
+    assert "mirror selfie" in low
+    assert "white mini skirt" in low
+
+
+def test_grok_main_prose_prepare_strips_donor_identity() -> None:
+    from app.services.studio_prompt_bundle import prepare_positive_prompt_json
+
+    donor = (
+        "A 23-year-old Eurasian woman with long golden blonde hair takes a mirror selfie at night."
+    )
+    positive, _ = prepare_positive_prompt_json(
+        donor,
+        brief_mode="grok_main_prose",
+        model_profile_text='{"model_profile":{"body_type":"hourglass"}}',
+    )
+    assert "blonde" not in positive.lower()
+    assert "MODEL_IDENTITY" in positive
+    assert "mirror selfie" in positive.lower()
+
+
 def test_wan_identity_nude_pose_includes_body_face_genitals() -> None:
     from app.services.studio_model_images import select_wan_identity_images_with_pose_ref
 

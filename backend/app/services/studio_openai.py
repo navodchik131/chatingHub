@@ -306,6 +306,8 @@ def finalize_wavespeed_studio_prompt(
         elif brief == "grok_main_prose":
             # Workflow / pose bitmap + Grok prose: need strong MODEL identity lock, not generic REFERENCE_IMAGE_ORDER.
             out = _GROK_MODEL_SCENE_WAN_PREFIX.strip() if not p else _GROK_MODEL_SCENE_WAN_PREFIX + p
+        elif brief == "deterministic_compose":
+            out = _GROK_MODEL_SCENE_WAN_PREFIX.strip() if not p else _GROK_MODEL_SCENE_WAN_PREFIX + p
         else:
             out = wavespeed_prompt_with_user_pose_reference_first(
                 p,
@@ -318,6 +320,8 @@ def finalize_wavespeed_studio_prompt(
     elif brief == "grok_composed_text":
         out = _GROK_TEXT_SCENE_WAN_PREFIX.strip() if not p else _GROK_TEXT_SCENE_WAN_PREFIX + p
     elif brief == "grok_main_prose":
+        out = _GROK_MAIN_PROSE_WAN_PREFIX.strip() if not p else _GROK_MAIN_PROSE_WAN_PREFIX + p
+    elif brief == "deterministic_compose":
         out = _GROK_MAIN_PROSE_WAN_PREFIX.strip() if not p else _GROK_MAIN_PROSE_WAN_PREFIX + p
     else:
         out = p
@@ -1555,7 +1559,12 @@ def assemble_wavespeed_image_edit_prompt(
         visibility=visibility,
     )
     brief = (prompt_brief_mode or "full").strip().lower()
-    if visibility is not None and brief in ("grok_main_prose", "grok_composed", "grok_composed_text"):
+    if visibility is not None and brief in (
+        "grok_main_prose",
+        "deterministic_compose",
+        "grok_composed",
+        "grok_composed_text",
+    ):
         from app.services.studio_reference_analysis import sanitize_wavespeed_prose_for_visibility
 
         positive = sanitize_wavespeed_prose_for_visibility(positive, visibility)

@@ -39,11 +39,11 @@ def _finalize_grok_compose_result(
     result: GrokSceneComposeResult,
     visibility: "IdentityVisibility | None",
 ) -> GrokSceneComposeResult:
+    from app.services.studio_prompt_bundle import strip_donor_identity_from_scene_prose
     from app.services.studio_reference_analysis import sanitize_wavespeed_prose_for_visibility
 
-    prompt = sanitize_wavespeed_prose_for_visibility(
-        result.wavespeed_scene_prompt, visibility
-    )
+    prompt = strip_donor_identity_from_scene_prose(result.wavespeed_scene_prompt)
+    prompt = sanitize_wavespeed_prose_for_visibility(prompt, visibility)
     if prompt == result.wavespeed_scene_prompt:
         return result
     return GrokSceneComposeResult(
