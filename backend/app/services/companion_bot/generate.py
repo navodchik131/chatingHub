@@ -17,6 +17,7 @@ from app.db.models import (
     UserStudioModel,
 )
 from app.services.companion_bot.memory import maybe_refresh_companion_memory
+from app.services.companion_bot.vision import maybe_describe_fan_image_for_companion
 from app.services.companion_bot.persona import parse_companion_persona
 from app.services.companion_bot.prompt import (
     PROMPT_VERSION,
@@ -72,6 +73,7 @@ async def generate_companion_reply(
     messages: list[Message],
     studio_model_id: int,
     followup: bool = False,
+    trigger_message: Message | None = None,
 ) -> tuple[str, str, str, int, dict]:
     """
     Возвращает (reply_text, target_lang, model_name, relationship_score, state_snapshot).
@@ -92,6 +94,18 @@ async def generate_companion_reply(
         credentials=cred,
     )
     notes = await _load_notes(session, conv.id)
+
+    fan_image_description: str | None = None
+    if trigger_message and not followup:
+        await session.refresh(trigger_message, attribute_names=["attachments"])
+        fan_image_description = await maybe_describe_fan_image_for_companion(
+            session,
+            owner_id=owner_id,
+            conv=conv,
+            trigger=trigger_message,
+            messages=messages,
+            credentials=cred,
+        )
 
     target_lang = resolve_target_lang(conv, last_fan_text=last_fan_message_text(messages))
     persona = parse_companion_persona(model_row.companion_persona_json)
@@ -118,6 +132,8 @@ async def generate_companion_reply(
             messages=messages,
             followup=followup,
             extra_avoid=extra_avoid,
+            fan_image_description=fan_image_description,
+            trigger_message=trigger_message,
         )
         raw = await _chat_completion_text(
             model=model,
@@ -156,5 +172,6 @@ async def generate_companion_reply(
         "prompt_version": PROMPT_VERSION,
         "followup": followup,
         "memory_refreshed": memory_refreshed,
+        "vision_used": bool(fan_image_description),
     }
     return reply, target_lang, model, state.relationship_score, snapshot

@@ -34,9 +34,13 @@ log = logging.getLogger(__name__)
 
 def _semi_auto_allowed(*, trigger: Message, has_image: bool) -> bool:
     if has_image:
-        return False
+        if not settings.companion_vision_enabled:
+            return False
+        text = (trigger.text_original or "").strip()
+        if not text:
+            return False
     text = (trigger.text_original or "").strip()
-    if not text:
+    if not text and not has_image:
         return False
     return len(text) <= 320
 
@@ -367,14 +371,14 @@ async def create_companion_reply_event(
         return None
 
     text_in = (trigger.text_original or "").strip()
-    if not text_in and has_image:
+    if not text_in and not has_image:
         return None
-    if not text_in:
+    if not text_in and has_image and not settings.companion_vision_enabled:
         return None
 
     history = await list_messages(session, conv.id, owner_user_id, limit=60)
     target_lang = resolve_target_lang(
-        conv, last_fan_text=(trigger.text_original or "").strip() or None
+        conv, last_fan_text=text_in or None
     )
     try:
         reply, lang, model_name, _, snapshot = await generate_companion_reply(
@@ -383,6 +387,7 @@ async def create_companion_reply_event(
             conv=conv,
             messages=history,
             studio_model_id=cfg.studio_model_id,
+            trigger_message=trigger,
         )
     except Exception as e:
         log.warning("companion generate failed conv=%s: %s", conv.id, e)

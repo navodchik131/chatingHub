@@ -85,7 +85,7 @@ def test_companion_prompt_v4_chatter():
         reply_too_similar_to_recent,
     )
 
-    assert PROMPT_VERSION == "v4-chatter"
+    assert PROMPT_VERSION == "v4-chatter-vision"
 
     out_msg = Message(
         id=2,
@@ -153,3 +153,37 @@ def test_companion_prompt_v4_chatter():
     assert recent == ["sorry!"]
     assert reply_too_similar_to_recent("sorry!", recent) is True
     assert reply_too_similar_to_recent("totally different topic here", recent) is False
+
+
+def test_companion_prompt_image_description_block():
+    from app.services.companion_bot.prompt import build_companion_user_prompt
+
+    conv = SimpleNamespace(user_display_name="Renat")
+    messages = [
+        Message(
+            id=1,
+            conversation_id=1,
+            direction=MessageDirection.inbound,
+            text_original="look at this",
+        ),
+    ]
+    trigger = messages[0]
+    user = build_companion_user_prompt(
+        conv=conv,
+        messages=messages,
+        fan_image_description="Fan selfie at the beach, sunset, casual smile.",
+        trigger_message=trigger,
+    )
+    assert "IMAGE. Vision description" in user
+    assert "beach" in user
+    assert "look at this" in user
+
+
+def test_read_vision_description_from_meta():
+    import json
+
+    from app.services.companion_bot.vision import VISION_META_KEY, read_vision_description
+
+    meta = json.dumps({VISION_META_KEY: "A dog on a sofa"})
+    assert read_vision_description(meta) == "A dog on a sofa"
+    assert read_vision_description(None) is None

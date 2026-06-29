@@ -497,6 +497,10 @@ class Settings(BaseSettings):
         le=120,
         description="Не слать follow-up, если фан писал в последние N минут (0 = не проверять).",
     )
+    companion_vision_enabled: bool = Field(
+        default=True,
+        description="Описывать входящие фото через vision перед ответом компаньона.",
+    )
     fanvue_inbox_poll_interval_seconds: int = Field(
         default=10,
         ge=0,

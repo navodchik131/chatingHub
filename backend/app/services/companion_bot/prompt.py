@@ -7,9 +7,10 @@ from datetime import datetime, timezone
 
 from app.db.models import Conversation, ConversationNote, ConversationNoteKind, Message, MessageDirection
 from app.services.companion_bot.persona import CompanionPersona, format_companion_persona_block
+from app.services.chat_message_meta import parse_reactions
 from app.services.translation import detect_lang
 
-PROMPT_VERSION = "v4-chatter"
+PROMPT_VERSION = "v4-chatter-vision"
 
 _GREETING_ONLY_RE = re.compile(
     r"^[\s\W]*("
@@ -158,6 +159,7 @@ def _initiative_rules(*, followup: bool) -> str:
         "- Show a specific reaction (surprise, warmth, playful envy) before any new topic.\n"
         "- At most ONE hook per message — question OR tease, not both stacked.\n"
         "- Use memory notes about the fan when relevant; don't invent facts not in transcript/notes.\n"
+        "- If the fan sent an image, react to the IMAGE DESCRIPTION below — specific detail, not generic «nice pic».\n"
     )
     if followup:
         return (
@@ -187,6 +189,8 @@ def _format_transcript(messages: list[Message], fan_name: str | None) -> str:
     for m in messages:
         who = "Fan" if m.direction == MessageDirection.inbound else "You"
         text = _message_text_for_transcript(m)
+        if not text and m.direction == MessageDirection.inbound and getattr(m, "attachments", None):
+            text = "[sent an image]"
         if not text:
             continue
         ts = ""
@@ -196,6 +200,16 @@ def _format_transcript(messages: list[Message], fan_name: str | None) -> str:
         else:
             lines.append(f"{who}: {text}")
     return "\n".join(lines)
+
+
+def _format_fan_reactions_block(message: Message | None) -> str:
+    if not message:
+        return ""
+    reactions = parse_reactions(getattr(message, "reactions_json", None))
+    peer = [r["emoji"] for r in reactions if r.get("actor") == "peer" and r.get("emoji")]
+    if not peer:
+        return ""
+    return f"Fan reacted to this message: {' '.join(peer)}\n"
 
 
 def _analyze_thread(messages: list[Message]) -> tuple[bool, bool, bool, str | None]:
@@ -269,6 +283,8 @@ def build_companion_user_prompt(
     messages: list[Message],
     followup: bool = False,
     extra_avoid: str | None = None,
+    fan_image_description: str | None = None,
+    trigger_message: Message | None = None,
 ) -> str:
     transcript = _format_transcript(messages, conv.user_display_name)
     _, greeting_reset, _, last_fan_text = _analyze_thread(messages)
@@ -276,9 +292,18 @@ def build_companion_user_prompt(
 
     tail = transcript[-14000:]
     focus = ""
-    if last_fan_text and not followup:
-        focus = f"\n\nFan's latest message (answer THIS first):\n{last_fan_text}\n"
-        if greeting_reset:
+    if not followup:
+        if fan_image_description:
+            focus += (
+                "\n\nFan's latest message includes an IMAGE. Vision description (react to this):\n"
+                f"{fan_image_description.strip()}\n"
+            )
+        if last_fan_text:
+            focus += f"\nFan's latest text (answer THIS first):\n{last_fan_text}\n"
+        elif fan_image_description:
+            focus += "\nFan sent image only — reply to what is in the image description.\n"
+        focus += _format_fan_reactions_block(trigger_message)
+        if greeting_reset and last_fan_text:
             focus += (
                 "They greeted again mid-chat — do NOT greet back like a new conversation.\n"
             )
