@@ -85,7 +85,7 @@ def test_companion_prompt_v4_chatter():
         reply_too_similar_to_recent,
     )
 
-    assert PROMPT_VERSION == "v4-chatter-vision-casual"
+    assert PROMPT_VERSION == "v5-chatter-canon-direct"
 
     out_msg = Message(
         id=2,
@@ -155,6 +155,97 @@ def test_companion_prompt_v4_chatter():
     assert recent == ["sorry!"]
     assert reply_too_similar_to_recent("sorry!", recent) is True
     assert reply_too_similar_to_recent("totally different topic here", recent) is False
+
+
+def test_persona_local_time_utc_plus_3():
+    from datetime import datetime, timedelta, timezone
+
+    from app.services.companion_bot.persona import CompanionPersona
+    from app.services.companion_bot.prompt import parse_persona_utc_offset, persona_local_time_block
+
+    assert parse_persona_utc_offset("UTC+3") == timezone(timedelta(hours=3))
+    block = persona_local_time_block(
+        CompanionPersona(timezone="UTC+3"),
+        now=datetime(2026, 6, 29, 9, 30, tzinfo=timezone.utc),
+    )
+    assert "12:30" in block
+    assert "never UTC" in block.lower() or "never utc" in block.lower()
+
+
+def test_direct_factual_and_complaint_signals():
+    from datetime import datetime, timezone
+
+    from app.services.companion_bot.prompt import (
+        analyze_thread_signals,
+        build_companion_user_prompt,
+        fan_asks_direct_factual,
+    )
+
+    assert fan_asks_direct_factual("А время сколько у тебя сейчас?")
+    assert fan_asks_direct_factual("со скольки ты работаешь в итоге")
+    now = datetime.now(timezone.utc)
+    messages = [
+        Message(
+            id=1,
+            conversation_id=1,
+            direction=MessageDirection.inbound,
+            text_original="со скольки ты работаешь?",
+            created_at=now,
+        ),
+        Message(
+            id=2,
+            conversation_id=1,
+            direction=MessageDirection.outbound,
+            text_original="с 11 до 7 сегодня",
+            created_at=now,
+        ),
+        Message(
+            id=3,
+            conversation_id=1,
+            direction=MessageDirection.inbound,
+            text_original="Ты щас как бот общаешься",
+            created_at=now,
+        ),
+    ]
+    sig = analyze_thread_signals(messages)
+    assert sig.fan_complaint is True
+    assert sig.direct_factual is True
+    conv = SimpleNamespace(user_display_name="Renat")
+    user = build_companion_user_prompt(conv=conv, messages=messages)
+    assert "DIRECT ANSWER REQUIRED" in user
+    assert "TRUST REPAIR" in user
+
+
+def test_canon_block_in_system_prompt():
+    from app.services.companion_bot.persona import CompanionPersona
+    from app.services.companion_bot.prompt import build_companion_system_prompt
+
+    sys = build_companion_system_prompt(
+        persona_name="Mia",
+        persona_profile="",
+        persona=CompanionPersona(
+            city="Кишинев",
+            timezone="UTC+3",
+            lifestyle="Работает программистом, офис, с 9 до 18.",
+        ),
+        target_lang="ru",
+        relationship_score=50,
+        mood="playful",
+        notes=[],
+        messages=[],
+    )
+    assert "CANON FACTS" in sys
+    assert "9" in sys and "18" in sys
+    assert "Character local time" in sys
+    assert "график сдвинулся" in sys
+
+
+def test_trailing_hook_similarity():
+    from app.services.companion_bot.prompt import reply_too_similar_to_recent
+
+    recent = ["Ха, ладно. А ты в зале уже разогрелся?"]
+    cand = "Renat, с 9 работаю. А с напряжением в зале что?"
+    assert reply_too_similar_to_recent(cand, recent) is True
 
 
 def test_companion_prompt_image_description_block():

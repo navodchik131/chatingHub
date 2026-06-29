@@ -3,14 +3,15 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime, timezone
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 
 from app.db.models import Conversation, ConversationNote, ConversationNoteKind, Message, MessageDirection
 from app.services.companion_bot.persona import CompanionPersona, format_companion_persona_block
 from app.services.chat_message_meta import parse_reactions
 from app.services.translation import detect_lang
 
-PROMPT_VERSION = "v4-chatter-vision-casual"
+PROMPT_VERSION = "v5-chatter-canon-direct"
 
 _GREETING_ONLY_RE = re.compile(
     r"^[\s\W]*("
@@ -37,7 +38,83 @@ _COMPLAINT_HINTS = (
     "stop saying",
     "same thing",
     "одно и то же",
+    "как бот",
+    "ты бот",
+    "you're a bot",
+    "you are a bot",
+    "talking like a bot",
+    "sound like a bot",
+    "обманул",
+    "обманула",
+    "не уходи от тем",
+    "не уходишь от тем",
+    "от темы не уход",
+    "stop dodging",
+    "avoiding the question",
 )
+
+_FACTUAL_TOPIC_HINTS = (
+    "врем",
+    "который час",
+    "what time",
+    "сколько сейчас",
+    "со скольк",
+    "до скольк",
+    "график",
+    "на работ",
+    "на работе",
+    "дома",
+    "приед",
+    "придёш",
+    "придеш",
+    "когда вы",
+    "when do you work",
+    "work hours",
+    "опозд",
+)
+
+_DIRECT_QUESTION_RE = re.compile(
+    r"("
+    r"сколько\s+(у\s+тебя\s+)?врем|"
+    r"который\s+час|"
+    r"what\s+time|"
+    r"со\s+скольк|"
+    r"до\s+скольк|"
+    r"когда\s+(ты\s+)?(приед|прид|выез|на\s+работ)|"
+    r"ты\s+(на\s+)?работ|"
+    r"почему\s+(.{0,40})?(дома|не\s+на\s+работ)|"
+    r"ты\s+меня\s+обман|"
+    r"не\s+уходи\s+от\s+тем|"
+    r"в\s+смысле|"
+    r"в\s+итоге"
+    r")",
+    re.IGNORECASE,
+)
+
+_STALE_HOOK_HINTS = (
+    "зал",
+    "gym",
+    "трениров",
+    "workout",
+    "размин",
+    "напряжен",
+    "tension",
+    "разогрел",
+    "втянул",
+)
+
+_TZ_OFFSET_RE = re.compile(r"(?:UTC|GMT)\s*([+-]\d{1,2})", re.IGNORECASE)
+_TZ_PLAIN_OFFSET_RE = re.compile(r"^[+-]\d{1,2}(?::\d{2})?$")
+
+
+@dataclass(frozen=True)
+class ThreadSignals:
+    mid_conversation: bool
+    greeting_reset: bool
+    fan_complaint: bool
+    direct_factual: bool
+    factual_pressure: bool
+    last_fan_text: str | None
 
 
 def recent_outbound_texts(messages: list[Message], *, limit: int = 4) -> list[str]:
@@ -77,7 +154,110 @@ def reply_too_similar_to_recent(candidate: str, recent_outbound: list[str]) -> b
             overlap = len(cand_tokens & prev_tokens) / max(len(cand_tokens), 1)
             if overlap >= 0.62 and len(cand) > 30:
                 return True
+        if _trailing_hook_too_similar(cand, prev):
+            return True
     return False
+
+
+def _trailing_hook_too_similar(candidate: str, previous: str) -> bool:
+    """Ловит один и тот же «крючок» в конце (зал / напряжение / тренировка)."""
+    cand_tail = _last_sentence((candidate or "").strip()).lower()
+    prev_tail = _last_sentence((previous or "").strip()).lower()
+    if not cand_tail or not prev_tail:
+        return False
+    if not (cand_tail.endswith("?") and prev_tail.endswith("?")):
+        return False
+    cand_hooks = {h for h in _STALE_HOOK_HINTS if h in cand_tail}
+    prev_hooks = {h for h in _STALE_HOOK_HINTS if h in prev_tail}
+    if not cand_hooks or not prev_hooks:
+        return False
+    return bool(cand_hooks & prev_hooks)
+
+
+def _last_sentence(text: str) -> str:
+    parts = re.split(r"(?<=[.!?])\s+", text.strip())
+    return parts[-1] if parts else text
+
+
+def parse_persona_utc_offset(tz_str: str | None) -> timezone | None:
+    raw = (tz_str or "").strip()
+    if not raw:
+        return None
+    m = _TZ_OFFSET_RE.search(raw)
+    if m:
+        hours = int(m.group(1))
+        return timezone(timedelta(hours=hours))
+    if _TZ_PLAIN_OFFSET_RE.match(raw):
+        sign = 1 if raw.startswith("+") else -1
+        hours = int(raw[1:].split(":")[0])
+        return timezone(timedelta(hours=sign * hours))
+    return None
+
+
+def persona_local_time_block(
+    persona: CompanionPersona,
+    *,
+    now: datetime | None = None,
+) -> str:
+    utc_now = now or datetime.now(timezone.utc)
+    if utc_now.tzinfo is None:
+        utc_now = utc_now.replace(tzinfo=timezone.utc)
+    tz = parse_persona_utc_offset(persona.timezone)
+    label = (persona.timezone or "").strip() or "UTC"
+    if tz is None:
+        return f"Character local time: unknown offset — use Time (UTC) below only.\n"
+    local = utc_now.astimezone(tz)
+    return (
+        f"Character local time ({label}): {local.strftime('%Y-%m-%d %H:%M')} "
+        f"(weekday: {local.strftime('%A')}).\n"
+        "When the fan asks what time it is for you, answer in THIS local time — never UTC.\n"
+    )
+
+
+def fan_asks_direct_factual(text: str | None) -> bool:
+    t = (text or "").strip()
+    if not t:
+        return False
+    if "?" in t:
+        return True
+    return bool(_DIRECT_QUESTION_RE.search(t))
+
+
+def _fan_factual_pressure(messages: list[Message]) -> bool:
+    inbound = [
+        _message_text_for_transcript(m)
+        for m in messages
+        if m.direction == MessageDirection.inbound
+    ][-4:]
+    hits = sum(
+        1
+        for t in inbound
+        if t and (fan_asks_direct_factual(t) or any(h in t.lower() for h in _FACTUAL_TOPIC_HINTS))
+    )
+    return hits >= 2
+
+
+def _canon_facts_block(persona: CompanionPersona) -> str:
+    lines = [
+        "CANON FACTS (from character sheet — law; never contradict in one thread):",
+    ]
+    if persona.lifestyle and persona.lifestyle.strip():
+        lines.append(f"- Daily life / work: {persona.lifestyle.strip()}")
+    loc = ", ".join(p for p in (persona.city, persona.country) if p and p.strip())
+    if loc:
+        lines.append(f"- Location: {loc}")
+    if persona.backstory and persona.backstory.strip():
+        lines.append(f"- Backstory anchors: {persona.backstory.strip()[:600]}")
+    if len(lines) == 1:
+        return ""
+    lines.extend(
+        [
+            "- If your earlier message conflicted with CANON, admit briefly (late, still home, mixed up) — "
+            "do NOT invent new hours like «с 11 до 7» or «график сдвинулся» unless memory notes say so.",
+            "- Work schedule in CANON is fixed unless notes explicitly say otherwise today.",
+        ]
+    )
+    return "\n".join(lines) + "\n\n"
 
 
 def _chatter_role_block(*, persona_name: str) -> str:
@@ -99,6 +279,7 @@ def _voice_rules() -> str:
         "«who's that?», «lol what», «is that you?», tease, laugh, get jealous.\n"
         "- No formal, literary, or «smart» phrasing — avoid lecturer tone and terminology dumps.\n"
         "- Follow persona Texting style when set; otherwise copy how the fan actually writes.\n"
+        "- Many real texts end on a statement — do NOT tack on a question every single time.\n"
     )
 
 
@@ -141,7 +322,52 @@ def _fan_recently_complained(text: str) -> bool:
     return any(h in low for h in _COMPLAINT_HINTS)
 
 
-def _continuity_rules(*, mid_conversation: bool, fan_greeting_reset: bool, fan_complaint: bool) -> str:
+def analyze_thread_signals(messages: list[Message]) -> ThreadSignals:
+    inbound = [m for m in messages if m.direction == MessageDirection.inbound]
+    outbound = [m for m in messages if m.direction == MessageDirection.outbound]
+    last_fan_text = _message_text_for_transcript(inbound[-1]) if inbound else None
+
+    mid = len(inbound) >= 2 and len(outbound) >= 1
+    greeting_reset = bool(last_fan_text and mid and _is_casual_greeting(last_fan_text))
+    complaint = False
+    for m in reversed(inbound[-6:]):
+        t = _message_text_for_transcript(m)
+        if t and _fan_recently_complained(t):
+            complaint = True
+            break
+
+    direct = fan_asks_direct_factual(last_fan_text) or _fan_factual_pressure(messages)
+    if not direct and complaint:
+        for m in reversed(inbound[-6:]):
+            t = _message_text_for_transcript(m)
+            if not t:
+                continue
+            low = t.lower()
+            if fan_asks_direct_factual(t) or any(h in low for h in _FACTUAL_TOPIC_HINTS):
+                direct = True
+                break
+
+    pressure = _fan_factual_pressure(messages) or (complaint and direct)
+
+    return ThreadSignals(
+        mid_conversation=mid,
+        greeting_reset=greeting_reset,
+        fan_complaint=complaint,
+        direct_factual=direct or pressure,
+        factual_pressure=pressure,
+        last_fan_text=last_fan_text,
+    )
+
+
+def _analyze_thread(messages: list[Message]) -> tuple[bool, bool, bool, str | None]:
+    sig = analyze_thread_signals(messages)
+    return sig.mid_conversation, sig.greeting_reset, sig.fan_complaint, sig.last_fan_text
+
+
+def _continuity_rules(
+    *,
+    signals: ThreadSignals,
+) -> str:
     lines = [
         "CONVERSATION DISCIPLINE (critical):\n",
         "- Read the FULL transcript with timestamps — ongoing chat, not a cold open.",
@@ -151,29 +377,44 @@ def _continuity_rules(*, mid_conversation: bool, fan_greeting_reset: bool, fan_c
         "- One clear emotional beat per message — not a checklist of small talk.",
         "- Avoid template fillers: «how's your day», «hope you're…», «safe drive», «text me when» unless truly new.",
         "- If they answered your question, do NOT ask the same question again in other words.",
+        "- Do NOT end every reply with a question — statements and short acknowledgments are human too.",
     ]
-    if mid_conversation:
+    if signals.mid_conversation:
         lines.append("- ACTIVE THREAD: you were talking minutes ago — continue, don't reset.")
-    if fan_greeting_reset:
+    if signals.greeting_reset:
         lines.append(
             "- Fan said hello again mid-chat — light tease or continue the thread; not a fresh intro."
         )
-    if fan_complaint:
+    if signals.fan_complaint:
         lines.append(
-            "- Fan showed annoyance or boredom — acknowledge briefly, change angle, zero repetition."
+            "- Fan is frustrated, bored, or called you a bot — acknowledge without defensiveness, "
+            "fix the fact error, zero repetition, NO pivot back to flirt/gym hooks."
+        )
+    if signals.direct_factual or signals.factual_pressure:
+        lines.append(
+            "- FACTUAL THREAD: fan wants a straight answer (time, work, schedule, location). "
+            "First sentence = direct answer using CANON FACTS and character local time. "
+            "Do NOT redirect to gym/training/tension/flirt until they change topic."
+        )
+    if signals.factual_pressure:
+        lines.append(
+            "- They asked similar factual questions several times — answer plainly again, shorter; "
+            "do NOT append another rephrased closing question."
         )
     return "\n".join(lines) + "\n"
 
 
-def _initiative_rules(*, followup: bool) -> str:
+def _initiative_rules(*, followup: bool, signals: ThreadSignals) -> str:
     base = (
         "CHATTER CRAFT:\n"
         "- Mirror their energy and length; emojis only if they use them or persona style allows.\n"
-        "- Show a specific reaction (surprise, warmth, playful envy) before any new topic.\n"
-        "- At most ONE hook per message — question OR tease, not both stacked.\n"
-        "- Use memory notes about the fan when relevant; don't invent facts not in transcript/notes.\n"
+        "- React to their point first — surprise, warmth, tease — only when it fits; skip if they need facts.\n"
+        "- At most ONE optional hook — and skip the hook entirely if they are upset or asking concrete questions.\n"
+        "- Use memory notes about the fan when relevant; don't invent facts not in transcript/notes/CANON.\n"
         "- If the fan sent an image: read the INTERNAL IMAGE NOTE below but do NOT quote or paraphrase it — "
         "react humanly (surprise, laugh, «who's that?», «is that you?», playful jealousy).\n"
+        "- Banned stale hooks when fan moved on: do NOT keep asking about gym, workout, разминка, «напряжение», "
+        "«разогрелся» if those already appear in YOUR RECENT OUTBOUND or fan switched to work/time topic.\n"
     )
     if followup:
         return (
@@ -181,7 +422,9 @@ def _initiative_rules(*, followup: bool) -> str:
             + "- FOLLOW-UP ONLY: fan silent after your last text. ONE short line — new angle or gentle bump, "
             "NOT a paraphrase of your previous message. Never needy. Skip if they said they're busy.\n"
         )
-    return base + "- End naturally; don't force engagement bait every time.\n"
+    if signals.direct_factual or signals.fan_complaint:
+        return base + "- End on the answer — question optional only if genuinely new, not a recycled flirt hook.\n"
+    return base + "- End naturally; questions are optional, not mandatory every time.\n"
 
 
 def _format_recent_outbound_ban(recent: list[str]) -> str:
@@ -193,6 +436,12 @@ def _format_recent_outbound_ban(recent: list[str]) -> str:
         if len(snippet) > 220:
             snippet = snippet[:219].rstrip() + "…"
         lines.append(f"{i}. {snippet}")
+    tails = [_last_sentence(t) for t in recent[:3] if t.strip()]
+    if tails:
+        lines.append(
+            "Do NOT reuse these closing hooks (especially trailing questions): "
+            + " | ".join(t.replace("\n", " ")[:100] for t in tails)
+        )
     return "\n".join(lines) + "\n\n"
 
 
@@ -226,26 +475,6 @@ def _format_fan_reactions_block(message: Message | None) -> str:
     return f"Fan reacted to this message: {' '.join(peer)}\n"
 
 
-def _analyze_thread(messages: list[Message]) -> tuple[bool, bool, bool, str | None]:
-    """mid_conversation, fan_greeting_reset, fan_complaint, last_fan_text."""
-    inbound = [m for m in messages if m.direction == MessageDirection.inbound]
-    outbound = [m for m in messages if m.direction == MessageDirection.outbound]
-    last_fan_text = _message_text_for_transcript(inbound[-1]) if inbound else None
-
-    mid = len(inbound) >= 2 and len(outbound) >= 1
-    greeting_reset = bool(
-        last_fan_text and mid and _is_casual_greeting(last_fan_text)
-    )
-    complaint = False
-    for m in reversed(inbound[-5:]):
-        t = _message_text_for_transcript(m)
-        if t and _fan_recently_complained(t):
-            complaint = True
-            break
-
-    return mid, greeting_reset, complaint, last_fan_text
-
-
 def build_companion_system_prompt(
     *,
     persona_name: str,
@@ -258,13 +487,15 @@ def build_companion_system_prompt(
     messages: list[Message],
     followup: bool = False,
 ) -> str:
-    mid, greeting_reset, complaint, _ = _analyze_thread(messages)
+    signals = analyze_thread_signals(messages)
 
     profile_block = format_companion_persona_block(
         name=persona_name,
         profile_text=persona_profile,
         persona=persona,
     )
+    canon = _canon_facts_block(persona)
+    local_time = persona_local_time_block(persona)
     note_lines: list[str] = []
     for n in notes:
         if n.kind == ConversationNoteKind.ai_profile:
@@ -275,18 +506,21 @@ def build_companion_system_prompt(
             note_lines.append(f"Chatter hint:\n{n.content}")
 
     mood_line = mood or "warm, playful, grounded"
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
     return (
         _chatter_role_block(persona_name=persona_name)
+        + canon
         + f"Character sheet (voice & facts for {persona_name}):\n{profile_block}\n\n"
         f"Relationship warmth: {relationship_score}/100.\n"
         f"Mood subtext: {mood_line}.\n"
-        f"Time (UTC): {now}.\n\n"
+        f"Time (UTC): {now_utc}.\n"
+        + local_time
+        + "\n"
         f"Language: reply ONLY in '{target_lang}' — match the fan's latest message language.\n"
         f"{_voice_rules()}"
-        f"{_continuity_rules(mid_conversation=mid, fan_greeting_reset=greeting_reset, fan_complaint=complaint)}"
-        f"{_initiative_rules(followup=followup)}"
+        f"{_continuity_rules(signals=signals)}"
+        f"{_initiative_rules(followup=followup, signals=signals)}"
         "Output: single chat message only — no markdown, no quotes, no labels.\n"
         + ("\n".join(note_lines) + "\n" if note_lines else "")
     )
@@ -302,7 +536,7 @@ def build_companion_user_prompt(
     trigger_message: Message | None = None,
 ) -> str:
     transcript = _format_transcript(messages, conv.user_display_name)
-    _, greeting_reset, _, last_fan_text = _analyze_thread(messages)
+    signals = analyze_thread_signals(messages)
     recent = recent_outbound_texts(messages, limit=4)
 
     tail = transcript[-14000:]
@@ -315,15 +549,26 @@ def build_companion_user_prompt(
                 f"{fan_image_description.strip()}\n"
                 "React like a real person texting — emotion + one short line or question, not a photo description.\n"
             )
-        if last_fan_text:
-            focus += f"\nFan's latest text (answer THIS first):\n{last_fan_text}\n"
+        if signals.last_fan_text:
+            focus += f"\nFan's latest text (answer THIS first):\n{signals.last_fan_text}\n"
         elif fan_image_description:
             focus += (
                 "\nFan sent image only — react to the gist from the internal note, "
                 "not by describing the picture.\n"
             )
+        if signals.direct_factual or signals.factual_pressure:
+            focus += (
+                "\nDIRECT ANSWER REQUIRED: concrete question about time, work, schedule, or trust. "
+                "Sentence 1 = plain answer from CANON FACTS + character local time. "
+                "No gym/tension/flirt redirect. No recycled closing question from recent outbound.\n"
+            )
+        if signals.fan_complaint:
+            focus += (
+                "\nTRUST REPAIR: fan is unhappy or said you sound like a bot — "
+                "acknowledge, answer the fact, do not dodge with a tease.\n"
+            )
         focus += _format_fan_reactions_block(trigger_message)
-        if greeting_reset and last_fan_text:
+        if signals.greeting_reset and signals.last_fan_text:
             focus += (
                 "They greeted again mid-chat — do NOT greet back like a new conversation.\n"
             )
