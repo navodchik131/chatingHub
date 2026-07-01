@@ -9,7 +9,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Conversation, Message, MessageDirection
 from app.db.repo import add_message
-from app.schemas import MessageOut
 from app.services.chat_attachment import save_chat_image_bytes
 from app.services.chat_messages import add_message_attachment, message_to_out
 from app.services.realtime import hub
@@ -33,7 +32,11 @@ async def persist_inbound_chat_message(
     silent: bool = False,
     reply_to_message_id: int | None = None,
     platform_message_id: str | None = None,
-) -> tuple[int, dict]:
+) -> tuple[int, dict | None]:
+    if conv.is_blocked:
+        log.info("inbound ignored: conversation %s is blocked", conv.id)
+        return conv.id, None
+
     if src_lang and not conv.user_lang:
         conv.user_lang = src_lang
     elif src_lang and src_lang != "unknown":

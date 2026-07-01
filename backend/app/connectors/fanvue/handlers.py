@@ -210,6 +210,8 @@ async def ingest_fanvue_message_received(
         platform_message_id=message_uuid or None,
         silent=True,
     )
+    if payload is None:
+        return {"ok": True, "skipped": "blocked"}
     if reactions_json:
         last = await session.scalar(
             select(Message)
@@ -393,6 +395,8 @@ async def ingest_fanvue_message_from_api(
         reply_to_message_id=reply_to_message_id,
         platform_message_id=message_uuid or None,
     )
+    if payload is None:
+        return "blocked"
     if not silent:
         await session.commit()
         await broadcast_inbound_after_commit(

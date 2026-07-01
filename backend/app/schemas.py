@@ -75,6 +75,9 @@ class ConversationOut(BaseModel):
     auto_translate_disabled: bool = False
     """NULL = режим с подключения; off/draft/semi_auto/auto — переопределение."""
     companion_mode_override: str | None = None
+    """Ручная категория: vip, bomzh или NULL."""
+    manual_category: Literal["vip", "bomzh"] | None = None
+    is_blocked: bool = False
     updated_at: datetime
     has_avatar: bool = False
 
@@ -82,6 +85,8 @@ class ConversationOut(BaseModel):
 class ConversationWithPreview(ConversationOut):
     last_message_preview: str | None = None
     unread_count: int = 0
+    is_no_response: bool = False
+    is_new: bool = False
 
 
 class ReplyIn(BaseModel):
@@ -99,12 +104,26 @@ class MessageReactionIn(BaseModel):
 
 
 class ConversationPatchIn(BaseModel):
-    """Частичное обновление диалога (язык исходящих, перевод, модель)."""
+    """Частичное обновление диалога (язык исходящих, перевод, модель, категория)."""
 
     outbound_lang: str | None = None
     studio_model_id: int | None = None
     auto_translate_disabled: bool | None = None
     companion_mode_override: Literal["off", "draft", "semi_auto", "auto"] | None = None
+    manual_category: Literal["vip", "bomzh"] | None = None
+    is_blocked: bool | None = None
+
+    @field_validator("manual_category", mode="before")
+    @classmethod
+    def _strip_manual_category(cls, v: object) -> str | None:
+        if v is None:
+            return None
+        if not isinstance(v, str):
+            return None
+        s = v.strip().lower()
+        if not s or s in ("none", "null", ""):
+            return None
+        return s
 
     @field_validator("companion_mode_override", mode="before")
     @classmethod

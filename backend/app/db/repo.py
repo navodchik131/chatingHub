@@ -142,6 +142,23 @@ async def list_conversations(session: AsyncSession, user_id: int) -> list[Conver
     return list(r.scalars().all())
 
 
+async def conversation_ids_with_outbound(
+    session: AsyncSession, conv_ids: list[int]
+) -> set[int]:
+    if not conv_ids:
+        return set()
+    stmt = (
+        select(Message.conversation_id)
+        .where(
+            Message.conversation_id.in_(conv_ids),
+            Message.direction == MessageDirection.outbound,
+        )
+        .distinct()
+    )
+    r = await session.execute(stmt)
+    return {int(x) for x in r.scalars().all()}
+
+
 async def get_last_message(
     session: AsyncSession, conv_id: int, user_id: int
 ) -> Message | None:

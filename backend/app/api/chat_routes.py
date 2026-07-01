@@ -38,6 +38,7 @@ from app.db.models import (
 )
 from app.db.repo import (
     add_message,
+    conversation_ids_with_outbound,
     count_rows,
     get_conversation,
     get_last_message,
@@ -81,6 +82,7 @@ from app.services.chat_outbound import (
     set_telegram_message_reaction,
 )
 from app.services.chat_ingest import broadcast_message_updated
+from app.services.conversation_categories import conversation_category_flags
 from app.services.chat_message_meta import (
     REACTION_EMOJIS,
     parse_reactions,
@@ -231,11 +233,19 @@ async def api_list_conversations(
     oid = workspace_owner_id(user)
     convs = await list_conversations(session, oid)
     convs = await filter_conversations_for_member(session, user, convs)
+    outbound_ids = await conversation_ids_with_outbound(session, [c.id for c in convs])
+    now = datetime.now(timezone.utc)
     out: list[ConversationWithPreview] = []
     for c in convs:
         last = await get_last_message(session, c.id, oid)
         preview = message_preview_text(last) if last else None
         unread = await unread_inbound_count(session, c.id, oid)
+        flags = conversation_category_flags(
+            c,
+            last_message=last,
+            has_outbound=c.id in outbound_ids,
+            now=now,
+        )
         base = ConversationOut.model_validate(c)
         out.append(
             ConversationWithPreview.model_validate(
@@ -243,6 +253,7 @@ async def api_list_conversations(
                     **base.model_dump(),
                     "last_message_preview": preview,
                     "unread_count": unread,
+                    **flags,
                 }
             )
         )
@@ -396,6 +407,11 @@ async def api_patch_conversation(
             conv.auto_translate_disabled = bool(body.auto_translate_disabled)
     if "companion_mode_override" in body.model_fields_set:
         conv.companion_mode_override = body.companion_mode_override
+    if "manual_category" in body.model_fields_set:
+        conv.manual_category = body.manual_category
+    if "is_blocked" in body.model_fields_set:
+        if body.is_blocked is not None:
+            conv.is_blocked = bool(body.is_blocked)
     await session.commit()
     await session.refresh(conv)
     return ConversationOut.model_validate(conv)

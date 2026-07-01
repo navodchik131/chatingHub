@@ -441,6 +441,10 @@ class Conversation(Base):
     )
     """Переопределение режима AI-компаньона: NULL = как на подключении."""
     companion_mode_override: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    """Ручная категория оператора: vip, bomzh или NULL."""
+    manual_category: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    """Заблокирован — входящие сообщения не сохраняются и не уведомляют."""
+    is_blocked: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     last_read_message_id: Mapped[int | None] = mapped_column(nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)

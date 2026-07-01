@@ -140,6 +140,8 @@ async def ingest_instagram_messaging_event(
         silent=True,
         platform_message_id=mid or None,
     )
+    if payload is None:
+        return {"ok": True, "skipped": "blocked"}
     await session.commit()
     await broadcast_inbound_after_commit(
         owner_user_id=conn.user_id,

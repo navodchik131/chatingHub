@@ -241,6 +241,8 @@ async def ingest_telegram_dm(
             reply_to_message_id=reply_to_message_id,
             platform_message_id=str(message.message_id),
         )
+        if payload is None:
+            return
         trigger_message_id = int(payload["id"])
         await session.commit()
 

@@ -1638,6 +1638,100 @@ select:focus {
   pointer-events: none;
 }
 
+.conv-category-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 0.75rem;
+  flex-shrink: 0;
+}
+
+.conv-category-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.35rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  cursor: pointer;
+  font-family: var(--font);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  transition:
+    background 0.18s var(--ease-out),
+    border-color 0.18s var(--ease-out);
+}
+
+.conv-category-tab:hover {
+  background: color-mix(in srgb, var(--bg-elevated) 70%, transparent);
+}
+
+.conv-category-tab.active {
+  background: var(--bg-elevated);
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+  color: var(--text);
+}
+
+.conv-category-tab.has-items:not(.active) {
+  border-color: color-mix(in srgb, var(--accent) 25%, var(--border));
+}
+
+.conv-category-tab__count {
+  min-width: 1rem;
+  padding: 0.05rem 0.3rem;
+  font-size: 0.5625rem;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--text);
+  background: var(--bg-subtle);
+  border-radius: 999px;
+}
+
+.conv-category-tab.active .conv-category-tab__count {
+  background: color-mix(in srgb, var(--accent) 18%, var(--bg-subtle));
+}
+
+.conv-cat-badge {
+  font-size: 0.5625rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.1rem 0.35rem;
+  border-radius: 999px;
+  line-height: 1.2;
+}
+
+.conv-cat-badge--vip {
+  color: #7c5c00;
+  background: rgba(234, 179, 8, 0.22);
+}
+
+.conv-cat-badge--bomzh {
+  color: var(--muted);
+  background: var(--bg-subtle);
+}
+
+.conv-cat-badge--no_response {
+  color: #9a3412;
+  background: rgba(249, 115, 22, 0.18);
+}
+
+.conv-cat-badge--new {
+  color: #166534;
+  background: rgba(34, 197, 94, 0.18);
+}
+
+.conv-cat-badge--blocked {
+  color: #991b1b;
+  background: rgba(239, 68, 68, 0.16);
+}
+
+.conv.is-blocked {
+  opacity: 0.72;
+}
+
 .conv-row-spacer {
   flex: 1;
   min-width: 0;

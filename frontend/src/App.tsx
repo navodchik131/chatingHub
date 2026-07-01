@@ -55,6 +55,14 @@ import { AuthPanel } from './AuthPanel'
 import { AppShell, type WorkspaceSection } from './components/AppShell'
 import { WorkspaceOverview } from './components/WorkspaceOverview'
 import { ConversationPlatformTabs } from './components/ConversationPlatformTabs'
+import { ConversationCategoryTabs } from './components/ConversationCategoryTabs'
+import {
+  conversationCategoryBadge,
+  CONVERSATION_CATEGORY_META,
+  matchesConversationCategory,
+  MANUAL_CATEGORY_OPTIONS,
+  type ConversationCategory,
+} from './conversationCategories'
 import {
   chatPlatformLabel,
   type ChatPlatform,
@@ -126,6 +134,10 @@ interface Conversation {
   auto_translate_disabled?: boolean
   /** NULL = с подключения; off/draft/semi_auto/auto — переопределение в диалоге. */
   companion_mode_override?: string | null
+  manual_category?: 'vip' | 'bomzh' | null
+  is_blocked?: boolean
+  is_no_response?: boolean
+  is_new?: boolean
   updated_at: string
   last_message_preview: string | null
   unread_count?: number
@@ -816,6 +828,7 @@ export default function App() {
   }, [setSearchParams])
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [chatPlatformTab, setChatPlatformTab] = useState<ChatPlatform>('telegram')
+  const [chatCategoryTab, setChatCategoryTab] = useState<ConversationCategory>('all')
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [draft, setDraft] = useState('')
@@ -855,6 +868,8 @@ export default function App() {
   const [companionRatingBusy, setCompanionRatingBusy] = useState<number | null>(null)
   const [companionRatingSavedId, setCompanionRatingSavedId] = useState<number | null>(null)
   const [companionModeBusy, setCompanionModeBusy] = useState(false)
+  const [convCategoryBusy, setConvCategoryBusy] = useState(false)
+  const [convBlockedBusy, setConvBlockedBusy] = useState(false)
   const [companionFeedbackReports, setCompanionFeedbackReports] = useState<
     CompanionFeedbackReport[]
   >([])
@@ -951,9 +966,17 @@ export default function App() {
     [conversations, integ],
   )
 
-  const filteredConversations = useMemo(
+  const platformFilteredConversations = useMemo(
     () => conversations.filter((c) => c.platform === chatPlatformTab),
     [conversations, chatPlatformTab],
+  )
+
+  const filteredConversations = useMemo(
+    () =>
+      platformFilteredConversations.filter((c) =>
+        matchesConversationCategory(c, chatCategoryTab),
+      ),
+    [platformFilteredConversations, chatCategoryTab],
   )
   const [modelDrafts, setModelDrafts] = useState<Record<number, StudioModelCabinetDraft>>({})
   const [studioCameraPresets, setStudioCameraPresets] = useState<StudioCameraPreset[]>([])
@@ -2802,6 +2825,79 @@ export default function App() {
       setError('Не удалось сохранить режим AI-компаньона')
     } finally {
       setCompanionModeBusy(false)
+    }
+  }
+
+  const saveManualCategory = async (convId: number, raw: string) => {
+    const v = raw === '' ? null : raw
+    setError(null)
+    setConvCategoryBusy(true)
+    try {
+      const r = await apiFetch(`/api/conversations/${convId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ manual_category: v }),
+      })
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}))
+        setError(formatHttpApiError(r, err))
+        return
+      }
+      const updated = (await r.json()) as Conversation
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.id === convId
+            ? {
+                ...c,
+                ...updated,
+                last_message_preview: c.last_message_preview,
+                unread_count: c.unread_count,
+                is_no_response: c.is_no_response,
+                is_new: c.is_new,
+              }
+            : c,
+        ),
+      )
+    } catch {
+      setError('Не удалось сохранить категорию')
+    } finally {
+      setConvCategoryBusy(false)
+    }
+  }
+
+  const saveConversationBlocked = async (convId: number, blocked: boolean) => {
+    setError(null)
+    setConvBlockedBusy(true)
+    try {
+      const r = await apiFetch(`/api/conversations/${convId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_blocked: blocked }),
+      })
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}))
+        setError(formatHttpApiError(r, err))
+        return
+      }
+      const updated = (await r.json()) as Conversation
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.id === convId
+            ? {
+                ...c,
+                ...updated,
+                last_message_preview: c.last_message_preview,
+                unread_count: c.unread_count,
+                is_no_response: c.is_no_response,
+                is_new: c.is_new,
+              }
+            : c,
+        ),
+      )
+    } catch {
+      setError('Не удалось изменить блокировку')
+    } finally {
+      setConvBlockedBusy(false)
     }
   }
 
@@ -8060,11 +8156,18 @@ export default function App() {
             conversations={conversations}
             onChange={setChatPlatformTab}
           />
+          <ConversationCategoryTabs
+            active={chatCategoryTab}
+            conversations={platformFilteredConversations}
+            onChange={setChatCategoryTab}
+          />
           {filteredConversations.length === 0 && (
             <p className="muted empty-hint">
               {conversations.length === 0
                 ? 'Подключите бота или Fanvue в кабинете → Подключения.'
-                : `Нет диалогов в ${platformLabel(chatPlatformTab)}.`}
+                : chatCategoryTab !== 'all'
+                  ? `Нет диалогов в категории «${CONVERSATION_CATEGORY_META[chatCategoryTab].label}».`
+                  : `Нет диалогов в ${platformLabel(chatPlatformTab)}.`}
             </p>
           )}
           <div className="sidebar-conv-scroll">
@@ -8072,6 +8175,7 @@ export default function App() {
             {filteredConversations.map((c) => {
               const unread = c.unread_count ?? 0
               const hasUnread = unread > 0 && c.id !== selectedId
+              const catBadge = conversationCategoryBadge(c)
               return (
                 <li key={c.id}>
                   <button
@@ -8081,14 +8185,20 @@ export default function App() {
                         ? 'conv active'
                         : hasUnread
                           ? 'conv has-unread'
-                          : 'conv'
+                          : c.is_blocked
+                            ? 'conv is-blocked'
+                            : 'conv'
                     }
                     onClick={() => setSelectedId(c.id)}
                   >
                     <ConvAvatarThumb conv={c} />
                     <span className="conv-main">
                     <span className="conv-row-top">
-                      {chatVisiblePlatforms.length <= 1 ? (
+                      {catBadge ? (
+                        <span className={`conv-cat-badge conv-cat-badge--${catBadge.key}`}>
+                          {catBadge.label}
+                        </span>
+                      ) : chatVisiblePlatforms.length <= 1 ? (
                         <span className="plat">{platformLabel(c.platform)}</span>
                       ) : (
                         <span className="conv-row-spacer" aria-hidden />
@@ -8277,6 +8387,42 @@ export default function App() {
                           </option>
                         ))}
                       </select>
+                    </div>
+                    <div className="outbound-lang-field thread-head-lang">
+                      <label className="outbound-lang-label" htmlFor="conv-category-select">
+                        Категория
+                      </label>
+                      <select
+                        id="conv-category-select"
+                        className="outbound-lang-select"
+                        value={selected.manual_category ?? ''}
+                        disabled={convCategoryBusy}
+                        onChange={(e) =>
+                          void saveManualCategory(selected.id, e.target.value)
+                        }
+                      >
+                        {MANUAL_CATEGORY_OPTIONS.map((o) => (
+                          <option key={o.value || 'none'} value={o.value}>
+                            {o.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div
+                      className="outbound-lang-field auto-translate-toggle"
+                      title="Заблокированный пользователь не сможет отправлять сообщения в этот диалог."
+                    >
+                      <label className="auto-translate-label">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(selected.is_blocked)}
+                          disabled={convBlockedBusy}
+                          onChange={(e) =>
+                            void saveConversationBlocked(selected.id, e.target.checked)
+                          }
+                        />
+                        <span>Заблокировать</span>
+                      </label>
                     </div>
                     {!isMobileLayout &&
                     isOwner &&

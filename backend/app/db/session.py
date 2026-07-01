@@ -366,6 +366,34 @@ async def init_db() -> None:
         await conn.run_sync(_migrate_instagram_connections)
         await conn.run_sync(_migrate_conversation_notes)
         await conn.run_sync(_migrate_companion_bot)
+        await conn.run_sync(_migrate_conversation_categories)
+
+
+def _migrate_conversation_categories(sync_conn) -> None:
+    from sqlalchemy import inspect, text
+
+    insp = inspect(sync_conn)
+    if not insp.has_table("conversations"):
+        return
+    cols = {c["name"] for c in insp.get_columns("conversations")}
+    dialect = sync_conn.dialect.name
+    if "manual_category" not in cols:
+        sync_conn.execute(
+            text("ALTER TABLE conversations ADD COLUMN manual_category VARCHAR(16)")
+        )
+    if "is_blocked" not in cols:
+        if dialect == "sqlite":
+            sync_conn.execute(
+                text(
+                    "ALTER TABLE conversations ADD COLUMN is_blocked BOOLEAN NOT NULL DEFAULT 0"
+                )
+            )
+        else:
+            sync_conn.execute(
+                text(
+                    "ALTER TABLE conversations ADD COLUMN is_blocked BOOLEAN NOT NULL DEFAULT false"
+                )
+            )
 
 
 def _migrate_companion_bot(sync_conn) -> None:
