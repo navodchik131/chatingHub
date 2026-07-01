@@ -596,6 +596,8 @@ _BOARDSTORY_VIDEO_PROMPT_SYSTEM = (
     "CRITICAL: @Video1 is a motion-reference clip with a DIFFERENT actor — start the prompt with MODEL REPLACEMENT: "
     "replace the @Video1 performer with the lead character from the model @Image identity tag(s). "
     "From @Video1 copy ONLY choreography, timing, gestures, emotions, and camera — never face, skin, hair, or body shape. "
+    "Include explicit camera language (medium shot, slow push-in, tracking, orbit) when copying @Video1. "
+    "End with quality constraints: stable face without deformation, smooth fluid motion, cinematic quality, no flickering. "
     "When REFERENCE_TAG_RULES include clothing/environment @Image tags, state explicitly: "
     "'Wardrobe from @ImageN', 'Room and lighting from @ImageM' in separate sentences. "
     "Model identity refs: @Image1 = primary face anchor; @Image2 = character sheet if present; "

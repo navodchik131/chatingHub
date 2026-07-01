@@ -1,6 +1,7 @@
 import { memo, useCallback, useRef, useState } from 'react'
 import { Handle, Position, useReactFlow, type NodeProps } from '@xyflow/react'
 import { uploadWorkflowMotionVideo } from '../api'
+import { SeedanceReferenceGuide } from '../SeedanceReferenceGuide'
 import { BaseNode } from './BaseNode'
 import { HandleIds, type MotionVideoNodeData } from '../types'
 
@@ -57,8 +58,9 @@ function MotionVideoNodeComponent({ id, data }: NodeProps) {
 
   return (
     <BaseNode nodeId={id} type="motionVideo" error={nodeData.error}>
+      <SeedanceReferenceGuide variant="motion" />
       <p className="workflow-node__hint">
-        Motion-референс для Seedance (@Video1). Можно отключить ноду — тогда движение из промпта.
+        Motion-референс → @Video1 в Seedance. Без ноды движение задаётся только текстом промпта.
       </p>
 
       <input

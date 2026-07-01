@@ -267,7 +267,31 @@ def test_assemble_reference_prompt_motion_video_swap_short():
         n_model_images=1,
         n_motion_videos=1,
     )
-    assert p == "замени персонажа на видео на персонажа с фото"
+    assert "MODEL REPLACEMENT" in p
+    assert "@Image1" in p
+    assert "@Video1" in p
+    assert "camera" in p.lower()
+    assert "cinematic quality" in p.lower()
+    assert "замени персонажа" not in p.lower()
+
+
+def test_build_seedance_motion_video_swap_prompt_includes_guide_blocks():
+    from app.services.studio_seedance_t2v import build_seedance_motion_video_swap_prompt
+
+    p = build_seedance_motion_video_swap_prompt("Slow turn toward camera.")
+    assert "MODEL REPLACEMENT" in p
+    assert "@Video1" in p
+    assert "Camera:" in p
+    assert "Cinematic quality" in p
+    assert "Slow turn toward camera." in p
+
+
+def test_append_seedance_quality_lock_dedupes():
+    from app.services.studio_seedance_t2v import append_seedance_quality_lock, _SEEDANCE_QUALITY_LOCK
+
+    body = f"Scene.\n\n{_SEEDANCE_QUALITY_LOCK}"
+    out = append_seedance_quality_lock(body)
+    assert out.count("no flickering or ghosting") == 1
 
 
 def test_filter_model_images_for_seedance_video_face_only():

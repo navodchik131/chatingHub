@@ -21,7 +21,21 @@ MAX_SEEDANCE_VIDEO_MODEL_IDENTITY_IMAGES = 2
 MAX_SEEDANCE_VIDEO_MODEL_IDENTITY_WITH_BODY = 3
 SEEDANCE_T2V_PROMPT_MAX_CHARS = 3000
 
-SEEDANCE_MOTION_VIDEO_SWAP_PROMPT = "замени персонажа на видео на персонажа с фото"
+SEEDANCE_MOTION_VIDEO_SWAP_PROMPT = (
+    "MODEL REPLACEMENT: @Image1 is the lead character for the full clip — face, hair, and identity. "
+    "Fully replicate @Video1's choreography, timing, gestures, body dynamics, and camera movement. "
+    "Do not copy the reference performer's face, skin, hair, or body shape from @Video1."
+)
+
+_SEEDANCE_MOTION_CAMERA_LINE = (
+    "Camera: fully replicate @Video1 for all camera movement, framing, push-in, pull-out, "
+    "tracking, and orbit — smooth and stable, no jitter."
+)
+
+_SEEDANCE_QUALITY_LOCK = (
+    "Cinematic quality, stable face without deformation, normal body proportions, "
+    "smooth and fluid motion, sharp details, no flickering or ghosting."
+)
 
 _T2V_KIND_ORDER = {"turnaround": 0, "face": 1, "body": 2, "other": 3, "genitals": 99}
 _VIDEO_IDENTITY_KINDS = frozenset({"turnaround", "face"})
@@ -150,17 +164,46 @@ def filter_model_images_for_seedance_video_face_only(
     return []
 
 
+def seedance_motion_camera_line(*, n_motion_videos: int = 1) -> str:
+    if n_motion_videos <= 0:
+        return ""
+    if n_motion_videos == 1:
+        return _SEEDANCE_MOTION_CAMERA_LINE
+    vtags = ", ".join(f"@Video{i}" for i in range(1, n_motion_videos + 1))
+    return (
+        f"Camera: fully replicate {vtags} for all camera movement, framing, push-in, pull-out, "
+        f"tracking, and orbit — smooth and stable, no jitter."
+    )
+
+
+def append_seedance_quality_lock(
+    prompt: str,
+    *,
+    max_chars: int | None = None,
+) -> str:
+    body = (prompt or "").strip()
+    lock = _SEEDANCE_QUALITY_LOCK
+    if "no flickering or ghosting" in body.lower():
+        return truncate_seedance_t2v_prompt(body, max_chars=max_chars)
+    combined = f"{body}\n\n{lock}".strip() if body else lock
+    return truncate_seedance_t2v_prompt(combined, max_chars=max_chars)
+
+
 def build_seedance_motion_video_swap_prompt(
     user_notes: str | None = None,
     *,
     max_chars: int | None = None,
 ) -> str:
-    """Короткий промпт для Seedance T2V с reference_videos + face reference."""
-    parts = [SEEDANCE_MOTION_VIDEO_SWAP_PROMPT]
+    """Промпт для Seedance T2V: @Image1 = identity, @Video1 = motion + camera (Seedance 2.0 guide)."""
+    parts = [
+        SEEDANCE_MOTION_VIDEO_SWAP_PROMPT,
+        _SEEDANCE_MOTION_CAMERA_LINE,
+        _SEEDANCE_QUALITY_LOCK,
+    ]
     notes = seedance_optional_user_notes(user_notes)
     if notes:
         parts.append(notes)
-    return truncate_seedance_t2v_prompt("\n".join(parts), max_chars=max_chars)
+    return truncate_seedance_t2v_prompt("\n\n".join(parts), max_chars=max_chars)
 
 
 def model_reference_public_urls(
@@ -433,6 +476,9 @@ def assemble_seedance_t2v_prompt(
                 )
         else:
             parts.append(f"Motion and pacing from {vtags} only (timing, gestures, camera).")
+        cam = seedance_motion_camera_line(n_motion_videos=n_motion_videos)
+        if cam:
+            parts.append(cam)
     if motion_summary and motion_summary.strip():
         parts.append(f"Motion notes:\n{motion_summary.strip()}")
     up = (user_prompt or "").strip()
@@ -451,13 +497,14 @@ def assemble_seedance_t2v_prompt(
             "Natural cinematic motion; smooth camera; expressive performance; same character throughout."
         )
     body = soften_seedance_provider_prompt("\n\n".join(parts))
-    return append_seedance_identity_lock(
+    locked = append_seedance_identity_lock(
         body,
         n_start_frame=n_start_frame,
         n_model_images=n_model_images,
         n_motion_videos=n_motion_videos,
         soft=soft_identity,
     )
+    return append_seedance_quality_lock(locked)
 
 
 def assemble_seedance_t2v_reference_prompt(
@@ -511,6 +558,9 @@ def assemble_seedance_t2v_reference_prompt(
             f"Motion, pacing, gestures, body dynamics, and camera movement from {vtags} only. "
             f"Audio rhythm and ambient sound follow {vtags}."
         )
+        cam = seedance_motion_camera_line(n_motion_videos=n_motion_videos)
+        if cam:
+            parts.append(cam)
     notes = (user_notes or "").strip()
     if notes:
         parts.append(f"Additional notes: {notes}")
@@ -526,13 +576,14 @@ def assemble_seedance_t2v_reference_prompt(
     parts.append(f"Avoid: {'; '.join(neg_parts)}")
 
     body = soften_seedance_provider_prompt("\n\n".join(parts))
-    return append_seedance_identity_lock(
+    locked = append_seedance_identity_lock(
         body,
         n_start_frame=n_start_frame,
         n_model_images=n_model_images,
         n_motion_videos=n_motion_videos,
         soft=True,
     )
+    return append_seedance_quality_lock(locked)
 
 
 def assemble_boardstory_seedance_prompt(
@@ -578,6 +629,9 @@ def assemble_boardstory_seedance_prompt(
             f"MOTION ONLY ({vtags}): choreography, timing, gestures, camera movement, and framing — "
             f"never face, skin, hair, or body shape of the reference performer."
         )
+        cam = seedance_motion_camera_line(n_motion_videos=n_motion_videos)
+        if cam:
+            parts.append(cam)
     elif id_expr:
         parts.append(
             f"Cinematic clip — lead character appearance from @Image1 "
@@ -621,11 +675,14 @@ def assemble_boardstory_seedance_prompt(
         n_motion_videos=n_motion_videos,
         soft=False,
     )
-    return finalize_boardstory_t2v_prompt(
+    finalized = finalize_boardstory_t2v_prompt(
         locked,
         layout=layout,
         n_motion_videos=n_motion_videos,
     )
+    if n_motion_videos > 0:
+        return finalized
+    return append_seedance_quality_lock(finalized)
 
 
 def truncate_seedance_t2v_prompt(text: str, *, max_chars: int | None = None) -> str:
@@ -768,6 +825,7 @@ def assemble_seedance_video_edit_prompt(
     neg = (negative or "").strip()
     if neg:
         parts.append(f"Avoid: {neg}")
+    parts.append(_SEEDANCE_QUALITY_LOCK)
     return "\n\n".join(parts)
 
 

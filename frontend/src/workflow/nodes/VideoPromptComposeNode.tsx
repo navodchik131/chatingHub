@@ -5,6 +5,7 @@ import { serializeGraph, upstreamBoardstoryRefHasContent } from '../graphResolve
 import { useWorkflowBilling } from '../WorkflowBillingContext'
 import { useWorkflowRun } from '../WorkflowRunContext'
 import { WorkflowImageLightbox } from '../WorkflowImageLightbox'
+import { SeedanceReferenceGuide } from '../SeedanceReferenceGuide'
 import { BaseNode } from './BaseNode'
 import { HandleIds, type VideoPromptComposeNodeData } from '../types'
 
@@ -258,6 +259,8 @@ function VideoPromptComposeNodeComponent({ id, data }: NodeProps) {
       >
         1st frame opt
       </span>
+
+      <SeedanceReferenceGuide variant="compose" />
 
       <p className="workflow-node__hint">
         Grok разбирает motion-видео → промпт с @Image/@Video для BoardStory Seedance

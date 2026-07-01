@@ -14,6 +14,7 @@ import { getDownstreamPreviewNodeIds, parseWorkflowGenerationId, serializeGraph 
 import { useWorkflowBilling } from '../WorkflowBillingContext'
 import { useWorkflowRun } from '../WorkflowRunContext'
 import { BaseNode } from './BaseNode'
+import { SeedanceReferenceGuide } from '../SeedanceReferenceGuide'
 import {
   HandleIds,
   type SeedanceT2vResolution,
@@ -354,10 +355,12 @@ function VideoGenerationNodeComponent({ id, data }: NodeProps) {
         </span>
       )}
 
+      {!isGrok ? <SeedanceReferenceGuide variant="video" /> : null}
+
       <p className="workflow-node__hint">
         {isGrok
           ? 'Grok Imagine Video · первый кадр + промпт с описанием движения'
-          : 'BoardStory: @Image1+ = модель из кабинета, clothing/env refs, @Video1 = motion. Без первого кадра.'}
+          : 'BoardStory Seedance: identity @Image, motion/camera @Video. Первый кадр — опционально.'}
       </p>
 
       <div className="workflow-gen-form">
