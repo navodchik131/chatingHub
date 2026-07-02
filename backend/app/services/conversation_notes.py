@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -21,7 +21,7 @@ from app.db.models import (
     User,
 )
 from app.db.repo import list_messages
-from app.services.studio_openai import _chat_completion_text
+from app.services.studio_openai import StudioOpenAiCredentials, _chat_completion_text
 
 log = logging.getLogger(__name__)
 
@@ -63,7 +63,17 @@ async def list_conversation_notes(
     *,
     conv: Conversation,
     viewer: User,
+    owner_id: int | None = None,
+    auto_refresh: bool = False,
 ) -> list[dict]:
+    if auto_refresh and owner_id is not None:
+        refreshed = await maybe_refresh_ai_conversation_notes(
+            session,
+            conv=conv,
+            owner_id=owner_id,
+        )
+        if refreshed:
+            await session.commit()
     stmt = (
         select(ConversationNote)
         .where(ConversationNote.conversation_id == conv.id)
@@ -180,7 +190,9 @@ async def extract_conversation_memory_from_transcript(
         "Поля:\n"
         '- profile: string, markdown-список известного о фане (имя/ник, возраст если есть, '
         "локация, семья, интересы, важные факты из диалога). Только факты из переписки.\n"
-        '- today: string, о чём говорили недавно и что сейчас актуально (2-4 предложения).\n'
+        '- today: string, актуальный контекст диалога: о чём говорили в последних сообщениях, '
+        "на чём остановились, что фан ждёт или просил (2-4 предложения). "
+        "Если переписка давно не обновлялась — кратко напомни последний смысл общения.\n"
         '- open_threads: string[], незакрытые темы/вопросы фана (0-5).\n'
         '- insights: string[], подсказки чатеру как отвечать (0-3).\n'
         "Язык: русский."
@@ -204,6 +216,162 @@ async def extract_conversation_memory_from_transcript(
     if not isinstance(data, dict):
         data = {"profile": str(raw), "today": "", "insights": []}
     return data
+
+
+def _as_utc(dt: datetime) -> datetime:
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
+async def _latest_ai_note_updated(
+    session: AsyncSession, conv_id: int
+) -> datetime | None:
+    row = await session.scalar(
+        select(func.max(ConversationNote.updated_at)).where(
+            ConversationNote.conversation_id == conv_id,
+            ConversationNote.kind.in_(
+                [ConversationNoteKind.ai_profile, ConversationNoteKind.ai_daily]
+            ),
+        )
+    )
+    return row
+
+
+async def _inbound_count_since(
+    session: AsyncSession, conv_id: int, since: datetime | None
+) -> int:
+    q = select(func.count()).select_from(Message).where(
+        Message.conversation_id == conv_id,
+        Message.direction == MessageDirection.inbound,
+    )
+    if since is not None:
+        q = q.where(Message.created_at > since)
+    return int(await session.scalar(q) or 0)
+
+
+async def _message_count_since(
+    session: AsyncSession, conv_id: int, since: datetime | None
+) -> int:
+    q = select(func.count()).select_from(Message).where(
+        Message.conversation_id == conv_id,
+    )
+    if since is not None:
+        q = q.where(Message.created_at > since)
+    return int(await session.scalar(q) or 0)
+
+
+def _ai_notes_need_refresh(
+    *,
+    last_updated: datetime | None,
+    has_profile: bool,
+    activity_since: int,
+    inbound_since: int,
+) -> bool:
+    if not has_profile:
+        return True
+    if inbound_since >= int(settings.companion_memory_refresh_every_n_inbound):
+        return True
+    if activity_since <= 0:
+        return False
+
+    now = datetime.now(timezone.utc)
+    if last_updated is None:
+        return True
+
+    updated = _as_utc(last_updated)
+    max_age = timedelta(minutes=int(settings.companion_memory_daily_max_age_minutes))
+    age_stale = (now - updated) > max_age
+    day_stale = updated.date() < now.date()
+    return age_stale or day_stale
+
+
+async def maybe_refresh_ai_conversation_notes(
+    session: AsyncSession,
+    *,
+    conv: Conversation,
+    owner_id: int,
+    messages: list[Message] | None = None,
+    credentials: StudioOpenAiCredentials | None = None,
+) -> bool:
+    """
+    Обновляет ai_profile / ai_daily, если заметки устарели или в диалоге появились новые сообщения.
+    Возвращает True, если заметки были обновлены (commit — на вызывающей стороне).
+    """
+    if credentials is None:
+        key = (settings.openai_api_key or "").strip()
+        if not key:
+            return False
+        base = (settings.openai_base_url or "").strip().rstrip("/") or "https://api.openai.com/v1"
+        org = (settings.openai_organization or "").strip()
+        credentials = StudioOpenAiCredentials(api_key=key, base_url=base, organization=org)
+    elif not (credentials.api_key or "").strip():
+        return False
+
+    if messages is None:
+        messages = await list_messages(session, conv.id, owner_id, limit=80)
+
+    transcript = format_messages_transcript_ru(messages, conv.user_display_name)
+    if not transcript.strip():
+        return False
+
+    last_updated = await _latest_ai_note_updated(session, conv.id)
+    profile_note = await session.scalar(
+        select(ConversationNote).where(
+            ConversationNote.conversation_id == conv.id,
+            ConversationNote.kind == ConversationNoteKind.ai_profile,
+        )
+    )
+    activity_since = await _message_count_since(session, conv.id, last_updated)
+    inbound_since = await _inbound_count_since(session, conv.id, last_updated)
+
+    if not _ai_notes_need_refresh(
+        last_updated=last_updated,
+        has_profile=profile_note is not None,
+        activity_since=activity_since,
+        inbound_since=inbound_since,
+    ):
+        return False
+
+    try:
+        data = await extract_conversation_memory_from_transcript(
+            transcript[-12000:],
+            credentials=credentials,
+        )
+    except Exception as e:
+        log.warning("conversation notes auto-refresh failed conv=%s: %s", conv.id, e)
+        return False
+
+    profile = str(data.get("profile") or "").strip()
+    today = str(data.get("today") or "").strip()
+    insights_raw = data.get("insights")
+    open_threads = data.get("open_threads")
+    insights: list[str] = []
+    if isinstance(insights_raw, list):
+        insights = [str(x).strip() for x in insights_raw if str(x).strip()]
+    if isinstance(open_threads, list):
+        for t in open_threads[:5]:
+            s = str(t).strip()
+            if s:
+                insights.append(f"Open thread: {s}")
+
+    if not profile and not today:
+        return False
+
+    await upsert_ai_conversation_notes(
+        session,
+        conv_id=conv.id,
+        profile=profile or None,
+        today=today or None,
+        insights=insights or None,
+    )
+    log.info(
+        "conversation notes auto-refreshed conv=%s activity_since=%s inbound_since=%s",
+        conv.id,
+        activity_since,
+        inbound_since,
+    )
+    return True
 
 
 async def upsert_ai_conversation_notes(

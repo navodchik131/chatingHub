@@ -94,6 +94,7 @@ async def generate_companion_reply(
         conv=conv,
         messages=messages,
         credentials=cred,
+        owner_id=owner_id,
     )
     notes = await _load_notes(session, conv.id)
 

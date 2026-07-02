@@ -481,7 +481,8 @@ class Settings(BaseSettings):
         default=90,
         ge=15,
         le=1440,
-        description="Макс. возраст ai-заметок до принудительного обновления (минуты).",
+        description="Макс. возраст ai-заметок до принудительного обновления (минуты). "
+        "Также обновляются при смене календарного дня, если были новые сообщения.",
     )
     companion_followup_delay_min_sec: float = Field(
         default=900.0,

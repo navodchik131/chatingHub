@@ -161,7 +161,7 @@ function conversationNoteKindLabel(kind: ConversationNote['kind']): string {
     case 'ai_profile':
       return 'Профиль'
     case 'ai_daily':
-      return 'Сегодня'
+      return 'Контекст'
     case 'ai_insight':
       return 'AI'
     default:
@@ -739,6 +739,30 @@ function formatDateTimeRu(iso: string | undefined | null): string {
   if (!iso) return '—'
   try {
     return new Date(iso).toLocaleString('ru-RU', { dateStyle: 'medium', timeStyle: 'short' })
+  } catch {
+    return String(iso)
+  }
+}
+
+function formatNoteUpdatedAt(iso: string | undefined | null): string {
+  if (!iso) return '—'
+  try {
+    const updated = new Date(iso)
+    const now = new Date()
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    const startOfUpdated = new Date(
+      updated.getFullYear(),
+      updated.getMonth(),
+      updated.getDate(),
+    )
+    const dayDiff = Math.round(
+      (startOfToday.getTime() - startOfUpdated.getTime()) / 86_400_000,
+    )
+    const time = updated.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
+    if (dayDiff === 0) return `сегодня, ${time}`
+    if (dayDiff === 1) return `вчера, ${time}`
+    if (dayDiff > 1 && dayDiff < 7) return `${dayDiff} дн. назад`
+    return formatDateTimeRu(iso)
   } catch {
     return String(iso)
   }
@@ -2435,6 +2459,7 @@ export default function App() {
               return [...next, incoming]
             })
             void apiFetch(`/api/conversations/${sid}/read`, { method: 'POST' })
+            void loadConvNotes(sid)
           }
           void loadConversations()
           return
@@ -8999,7 +9024,7 @@ export default function App() {
                                 {conversationNoteKindLabel(n.kind)}
                               </span>
                               <time className="muted" dateTime={n.updated_at}>
-                                {formatDateTimeRu(n.updated_at)}
+                                {formatNoteUpdatedAt(n.updated_at)}
                               </time>
                             </div>
                             <p className="conv-note-body">{n.content}</p>
@@ -9024,7 +9049,7 @@ export default function App() {
                             </span>
                             <span className="muted">{n.author_label}</span>
                             <time className="muted" dateTime={n.updated_at}>
-                              {formatDateTimeRu(n.updated_at)}
+                              {formatNoteUpdatedAt(n.updated_at)}
                             </time>
                           </div>
                           <p className="conv-note-body">{n.content}</p>

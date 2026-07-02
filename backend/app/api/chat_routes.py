@@ -744,7 +744,9 @@ async def api_list_conversation_notes(
     await _require_chat_plan(session, user)
     oid = workspace_owner_id(user)
     conv = await require_conversation_chat_access(session, user, conv_id, oid)
-    items = await list_conversation_notes(session, conv=conv, viewer=user)
+    items = await list_conversation_notes(
+        session, conv=conv, viewer=user, owner_id=oid, auto_refresh=True
+    )
     return [ConversationNoteOut.model_validate(x) for x in items]
 
 
