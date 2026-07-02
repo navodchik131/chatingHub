@@ -512,6 +512,7 @@ interface WorkspaceMemberRow {
   permissions_mask: number
   is_active: boolean
   allowed_studio_model_ids: number[]
+  tribute_share_percent: number
 }
 
 interface PlatformConnection {
@@ -1007,9 +1008,11 @@ export default function App() {
   const [newTeamPassword, setNewTeamPassword] = useState('')
   const [newTeamMask, setNewTeamMask] = useState(DEFAULT_MEMBER_PERMISSIONS)
   const [newTeamModelIds, setNewTeamModelIds] = useState<number[]>([])
+  const [newTeamTributeShare, setNewTeamTributeShare] = useState('20')
   const [memberEditPassword, setMemberEditPassword] = useState<Record<number, string>>({})
   const [memberMaskEdits, setMemberMaskEdits] = useState<Record<number, number>>({})
   const [memberModelEdits, setMemberModelEdits] = useState<Record<number, number[]>>({})
+  const [memberTributeEdits, setMemberTributeEdits] = useState<Record<number, string>>({})
   const [integ, setInteg] = useState<IntegrationStatus | null>(null)
   const studioNeedsUserWsKey = useMemo(() => needsUserWavespeedKey(integ), [integ])
 
@@ -4513,6 +4516,16 @@ export default function App() {
     }
     setTeamBusy(true)
     try {
+      const shareRaw = newTeamTributeShare.trim()
+      let tributeSharePercent: number | undefined
+      if (shareRaw !== '') {
+        const n = Number(shareRaw)
+        if (!Number.isFinite(n) || n < 0 || n > 100) {
+          setError('Доля Tribute: число от 0 до 100.')
+          return
+        }
+        tributeSharePercent = Math.round(n)
+      }
       const r = await apiFetch('/api/workspace/members', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -4521,6 +4534,7 @@ export default function App() {
           password: newTeamPassword,
           permissions_mask: newTeamMask,
           allowed_studio_model_ids: newTeamModelIds,
+          ...(tributeSharePercent !== undefined ? { tribute_share_percent: tributeSharePercent } : {}),
         }),
       })
       if (!r.ok) {
@@ -4532,6 +4546,7 @@ export default function App() {
       setNewTeamPassword('')
       setNewTeamMask(DEFAULT_MEMBER_PERMISSIONS)
       setNewTeamModelIds([])
+      setNewTeamTributeShare('20')
       void refreshWorkspaceMembers()
     } finally {
       setTeamBusy(false)
@@ -4549,11 +4564,22 @@ export default function App() {
     setTeamBusy(true)
     try {
       const modelIds = memberModelEdits[row.id] ?? row.allowed_studio_model_ids ?? []
+      const shareRaw = (memberTributeEdits[row.id] ?? String(row.tribute_share_percent)).trim()
+      const n = Number(shareRaw)
+      if (!Number.isFinite(n) || n < 0 || n > 100) {
+        setError('Доля Tribute: число от 0 до 100.')
+        return
+      }
       const body: {
         permissions_mask: number
         password?: string
         allowed_studio_model_ids: number[]
-      } = { permissions_mask: mask, allowed_studio_model_ids: modelIds }
+        tribute_share_percent: number
+      } = {
+        permissions_mask: mask,
+        allowed_studio_model_ids: modelIds,
+        tribute_share_percent: Math.round(n),
+      }
       if (pwd.length >= 8) body.password = pwd
       const r = await apiFetch(`/api/workspace/members/${row.id}`, {
         method: 'PATCH',
@@ -5869,9 +5895,23 @@ export default function App() {
                   <a href="https://wiki.tribute.tg/ru/api-dokumentaciya" target="_blank" rel="noopener noreferrer">
                     Tribute API
                   </a>
-                  . Укажите API-ключ и webhook URL в панели Tribute. Модель на подключении определяет, к какому
-                  профилю относится доход. Чатеры видят 20% от суммы по своим моделям.
+                  . Ниже — пошаговая настройка. Доля чатера в KPI задаётся в разделе «Команда» для каждого участника.
                 </p>
+                <ol className="muted cabinet-module-body" style={{ margin: '0 0 1rem', paddingLeft: '1.25rem' }}>
+                  <li>
+                    В панели автора Tribute: <strong>⋯ → Настройки → API Keys → Generate API Key</strong> — скопируйте
+                    ключ.
+                  </li>
+                  <li>
+                    Здесь: выберите <strong>модель</strong> (к какому профилю относится доход), вставьте API-ключ и
+                    нажмите «Добавить Tribute».
+                  </li>
+                  <li>
+                    После сохранения скопируйте <strong>Webhook URL</strong> из карточки подключения и вставьте в
+                    Tribute: <strong>Настройки → API → Webhooks</strong>.
+                  </li>
+                  <li>Новые платежи приходят webhook-ом, пишутся в БД и попадают в KPI на «Обзоре».</li>
+                </ol>
                 {(integ?.tribute_connections ?? []).map((conn) => (
                   <div key={conn.id} className="cabinet-module-form">
                     <p className="small mono">{conn.label ? conn.label : `Подключение #${conn.id}`}</p>
@@ -5975,7 +6015,7 @@ export default function App() {
                         autoComplete="off"
                         value={tributeApiKey}
                         onChange={(e) => setTributeApiKey(e.target.value)}
-                        placeholder="Api-Key из панели автора Tribute"
+                        placeholder="Api-Key из Tribute → Настройки → API Keys"
                         disabled={!canIntegrations}
                       />
                     </label>
@@ -6943,7 +6983,7 @@ export default function App() {
               <p className="cabinet-lead muted">
                 Сотрудники входят с email владельца (ваш), отдельным логином команды и паролем. Кредиты и
                 подписка — на владельце; права ниже ограничивают разделы. Модели студии и чаты назначаются
-                вручную — без галочки участник их не видит.
+                вручную — без галочки участник их не видит. Доля Tribute в KPI — индивидуально для каждого чатера.
               </p>
               <h4 className="account-sub">Новый участник</h4>
               <div className="account-grid cabinet-keys-form">
@@ -7010,6 +7050,23 @@ export default function App() {
                     Сначала создайте модели в студии — затем назначьте их участникам.
                   </p>
                 )}
+                <label>
+                  Доля Tribute в KPI, %
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    step={1}
+                    value={newTeamTributeShare}
+                    onChange={(e) => setNewTeamTributeShare(e.target.value)}
+                    placeholder="20"
+                    disabled={teamBusy}
+                  />
+                </label>
+                <p className="muted small" style={{ gridColumn: '1 / -1', margin: 0 }}>
+                  Сколько процентов от gross по назначенным моделям чатер видит на «Обзоре». Пустое поле — значение
+                  по умолчанию с сервера (обычно 20%).
+                </p>
                 <button
                   type="button"
                   className="send-btn"
@@ -7029,6 +7086,8 @@ export default function App() {
                     const mask = memberMaskEdits[row.id] ?? row.permissions_mask
                     const modelIds = memberModelEdits[row.id] ?? row.allowed_studio_model_ids ?? []
                     const pwd = memberEditPassword[row.id] ?? ''
+                    const tributeShare =
+                      memberTributeEdits[row.id] ?? String(row.tribute_share_percent)
                     return (
                       <li key={row.id} className="team-member-card">
                         <div className="team-member-head">
@@ -7089,6 +7148,20 @@ export default function App() {
                           </div>
                         ) : null}
                         <label>
+                          Доля Tribute в KPI, %
+                          <input
+                            type="number"
+                            min={0}
+                            max={100}
+                            step={1}
+                            value={tributeShare}
+                            disabled={teamBusy}
+                            onChange={(e) =>
+                              setMemberTributeEdits((p) => ({ ...p, [row.id]: e.target.value }))
+                            }
+                          />
+                        </label>
+                        <label>
                           Новый пароль (необязательно)
                           <input
                             type="password"
@@ -7107,7 +7180,7 @@ export default function App() {
                             disabled={teamBusy}
                             onClick={() => void saveWorkspaceMemberRow(row)}
                           >
-                            Сохранить права, модели и пароль
+                            Сохранить права, модели, долю Tribute и пароль
                           </button>
                           <button
                             type="button"

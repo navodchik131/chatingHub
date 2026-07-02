@@ -87,6 +87,8 @@ class User(Base):
     member_login: Mapped[str | None] = mapped_column(String(64), nullable=True)
     """Битовая маска прав (см. app.services.workspace); у владельца не используется."""
     permissions_mask: Mapped[int] = mapped_column(Integer, default=0)
+    """Доля дохода Tribute для чатера (0–100 %). NULL — значение по умолчанию с сервера."""
+    tribute_share_percent: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

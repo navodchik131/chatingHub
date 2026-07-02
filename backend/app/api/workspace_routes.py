@@ -27,6 +27,7 @@ from app.services.workspace_model_access import (
     load_member_studio_model_ids,
     replace_member_studio_models,
 )
+from app.services.tribute_member_share import resolve_member_tribute_share_percent
 
 router = APIRouter(prefix="/workspace", tags=["workspace"])
 
@@ -71,6 +72,7 @@ async def _member_out(session: AsyncSession, m: User) -> WorkspaceMemberOut:
         permissions_mask=m.permissions_mask,
         is_active=m.is_active,
         allowed_studio_model_ids=model_ids,
+        tribute_share_percent=resolve_member_tribute_share_percent(m),
     )
 
 
@@ -128,6 +130,7 @@ async def create_workspace_member(
         member_login=login,
         permissions_mask=int(mask),
         is_active=True,
+        tribute_share_percent=body.tribute_share_percent,
     )
     session.add(member)
     await session.flush()
@@ -166,6 +169,8 @@ async def patch_workspace_member(
             m,
             data["allowed_studio_model_ids"] or [],
         )
+    if "tribute_share_percent" in data:
+        m.tribute_share_percent = data["tribute_share_percent"]
     await session.commit()
     await session.refresh(m)
     return await _member_out(session, m)

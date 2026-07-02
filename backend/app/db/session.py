@@ -62,6 +62,8 @@ def _migrate_user_workspace_columns(sync_conn) -> None:
         sync_conn.execute(
             text("ALTER TABLE users ADD COLUMN permissions_mask INTEGER NOT NULL DEFAULT 0")
         )
+    if "tribute_share_percent" not in cols:
+        sync_conn.execute(text("ALTER TABLE users ADD COLUMN tribute_share_percent INTEGER"))
     # уникальность логина внутри пространства (SQLite)
     sync_conn.execute(
         text(

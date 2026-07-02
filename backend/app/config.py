@@ -488,7 +488,7 @@ class Settings(BaseSettings):
         default=20,
         ge=0,
         le=100,
-        description="Доля дохода Tribute, которую видит чатер (в % от gross).",
+        description="Доля Tribute по умолчанию для новых чатеров (%, если у участника не задано своё значение).",
     )
     companion_followup_delay_min_sec: float = Field(
         default=900.0,

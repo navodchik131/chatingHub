@@ -241,6 +241,7 @@ class WorkspaceMemberCreateIn(BaseModel):
     permissions_mask: int | None = None
     """Пустой список — участник без моделей, пока владелец не назначит."""
     allowed_studio_model_ids: list[int] = Field(default_factory=list)
+    tribute_share_percent: int | None = Field(default=None, ge=0, le=100)
 
 
 class WorkspaceMemberPatchIn(BaseModel):
@@ -248,6 +249,7 @@ class WorkspaceMemberPatchIn(BaseModel):
     password: str | None = Field(default=None, min_length=8, max_length=128)
     is_active: bool | None = None
     allowed_studio_model_ids: list[int] | None = None
+    tribute_share_percent: int | None = Field(default=None, ge=0, le=100)
 
 
 class WorkspaceMemberOut(BaseModel):
@@ -256,6 +258,7 @@ class WorkspaceMemberOut(BaseModel):
     permissions_mask: int
     is_active: bool
     allowed_studio_model_ids: list[int] = Field(default_factory=list)
+    tribute_share_percent: int
 
 
 class CreditHistoryItemOut(BaseModel):

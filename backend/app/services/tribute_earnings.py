@@ -1,4 +1,4 @@
-"""Агрегация дохода Tribute для владельца и чатеров (доля 20%)."""
+"""Агрегация дохода Tribute для владельца и чатеров."""
 
 from __future__ import annotations
 
@@ -7,15 +7,13 @@ from datetime import date, datetime, time, timezone
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import settings
 from app.db.models import TributeEarningEvent, User
+from app.services.tribute_member_share import (
+    member_tribute_share_ratio,
+    resolve_member_tribute_share_percent,
+)
 from app.services.workspace import is_workspace_owner, workspace_owner_id
 from app.services.workspace_model_access import member_allowed_studio_model_ids
-
-
-def chatter_share_ratio() -> float:
-    pct = int(settings.tribute_chatter_share_percent)
-    return max(0.0, min(100.0, float(pct))) / 100.0
 
 
 def _period_bounds(from_date: date, to_date: date) -> tuple[datetime, datetime]:
@@ -67,7 +65,7 @@ async def aggregate_tribute_earnings(
         by_currency[cur] = by_currency.get(cur, 0) + minor
         gross_total += minor
 
-    ratio = 1.0 if is_workspace_owner(viewer) else chatter_share_ratio()
+    ratio = member_tribute_share_ratio(viewer)
     display_by_currency = {
         cur: int(round(amount * ratio)) for cur, amount in by_currency.items()
     }
@@ -85,12 +83,13 @@ async def aggregate_tribute_earnings(
     event_count = int(await session.scalar(count_stmt) or 0)
 
     primary_currency = max(by_currency.items(), key=lambda x: abs(x[1]))[0]
+    share_pct = resolve_member_tribute_share_percent(viewer)
 
     return {
         "from_date": from_date,
         "to_date": to_date,
         "is_owner": is_workspace_owner(viewer),
-        "chatter_share_percent": int(settings.tribute_chatter_share_percent),
+        "chatter_share_percent": share_pct,
         "gross_minor": gross_total,
         "display_minor": display_total,
         "currency": primary_currency,
@@ -105,7 +104,7 @@ def _empty_summary(from_date: date, to_date: date, viewer: User) -> dict:
         "from_date": from_date,
         "to_date": to_date,
         "is_owner": is_workspace_owner(viewer),
-        "chatter_share_percent": int(settings.tribute_chatter_share_percent),
+        "chatter_share_percent": resolve_member_tribute_share_percent(viewer),
         "gross_minor": 0,
         "display_minor": 0,
         "currency": "USD",
