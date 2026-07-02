@@ -1,6 +1,7 @@
 @import './styles/tokens.css';
 @import './styles/shell-ui.css';
 @import './styles/overview-ui.css';
+@import './styles/cabinet-ui.css';
 
 * {
   box-sizing: border-box;
@@ -5367,6 +5368,12 @@ a.workspace-mobile-nav-item {
   max-height: none;
   overflow-y: auto;
   box-shadow: var(--shadow-float);
+}
+
+.app.app--shell > .account-panel--mm {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 @media (max-width: 900px) {

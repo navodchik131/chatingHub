@@ -4785,6 +4785,16 @@ export default function App() {
     .filter(Boolean)
     .join(' ')
 
+  const cabinetAccountMeta = useMemo(() => {
+    if (!me) return { emailLine: '', roleLine: '', initial: '?' }
+    const emailLine = isOwner
+      ? me.email
+      : `${me.owner_email}${me.member_login ? ` · ${me.member_login}` : ''}`
+    const roleLine = isOwner ? 'владелец' : me.member_login ? `оператор · ${me.member_login}` : 'оператор'
+    const seed = (isOwner ? me.email : me.member_login || me.email) || '?'
+    return { emailLine, roleLine, initial: seed.charAt(0).toUpperCase() }
+  }, [me, isOwner])
+
   const handleLogout = () => {
     setToken(null)
     setAuthed(false)
@@ -4903,72 +4913,126 @@ export default function App() {
       ) : null}
 
       {accountOpen && (
-        <div className="account-panel">
-          <div className="account-panel-header">
-            <h3>Личный кабинет</h3>
-            <button type="button" className="ghost-btn account-panel-close" onClick={() => setAccountOpen(false)}>
-              Закрыть
+        <div className="account-panel account-panel--mm">
+          <header className="mm-cabinet-header">
+            <button
+              type="button"
+              className="mm-cabinet-header-back"
+              onClick={() => setAccountOpen(false)}
+              aria-label="Закрыть кабинет"
+            >
+              ‹
             </button>
-          </div>
-          {error ? (
-            <div className="account-panel-error banner error" role="alert">
-              {error}
+            <div className="mm-cabinet-header-brand">
+              <div className="mm-cabinet-header-logo" aria-hidden>
+                M
+              </div>
+              <div>
+                <div className="mm-cabinet-header-title">Личный кабинет</div>
+                <div className="mm-cabinet-header-meta">
+                  {cabinetAccountMeta.emailLine} · {cabinetAccountMeta.roleLine}
+                </div>
+              </div>
             </div>
-          ) : null}
-          <div className="account-cabinet-tabs" role="tablist" aria-label="Разделы кабинета">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={accountTab === 'overview'}
-              className={accountTab === 'overview' ? 'account-cabinet-tab active' : 'account-cabinet-tab'}
-              onClick={() => setAccountTab('overview')}
-            >
-              Обзор
-            </button>
-            {isOwner ? (
-              <button
-                type="button"
-                role="tab"
-                aria-selected={accountTab === 'billing'}
-                className={accountTab === 'billing' ? 'account-cabinet-tab active' : 'account-cabinet-tab'}
-                onClick={() => setAccountTab('billing')}
-              >
-                Тариф и баланс
-              </button>
-            ) : null}
-            <button
-              type="button"
-              role="tab"
-              aria-selected={accountTab === 'integrations'}
-              className={accountTab === 'integrations' ? 'account-cabinet-tab active' : 'account-cabinet-tab'}
-              onClick={() => setAccountTab('integrations')}
-            >
-              Подключения
-            </button>
-            {canStudioModels ? (
-              <button
-                type="button"
-                role="tab"
-                aria-selected={accountTab === 'models'}
-                className={accountTab === 'models' ? 'account-cabinet-tab active' : 'account-cabinet-tab'}
-                onClick={() => setAccountTab('models')}
-              >
-                Модели
-              </button>
-            ) : null}
-            {isOwner ? (
-              <button
-                type="button"
-                role="tab"
-                aria-selected={accountTab === 'team'}
-                className={accountTab === 'team' ? 'account-cabinet-tab active' : 'account-cabinet-tab'}
-                onClick={() => setAccountTab('team')}
-              >
-                Команда
-              </button>
-            ) : null}
-          </div>
+            <div className="mm-cabinet-header-spacer" />
+            <div className="mm-cabinet-header-credits">
+              <span className="mm-cabinet-header-credits-icon" aria-hidden>
+                ◆
+              </span>
+              <span className="mm-cabinet-header-credits-value">
+                {(me?.credits_balance ?? 0).toLocaleString('ru-RU')}
+              </span>
+              <span className="mm-cabinet-header-credits-unit">кр.</span>
+            </div>
+            <div className="mm-cabinet-header-avatar" aria-hidden>
+              {cabinetAccountMeta.initial}
+            </div>
+          </header>
 
+          <div className="mm-cabinet-body">
+            <div className="mm-cabinet-page-head">
+              <div className="mm-cabinet-page-kicker">Аккаунт</div>
+              <h1 className="mm-cabinet-page-title">Личный кабинет</h1>
+            </div>
+
+            {error ? (
+              <div className="account-panel-error banner error" role="alert">
+                {error}
+              </div>
+            ) : null}
+
+            <div className="mm-cabinet-tabs-wrap">
+              <div className="account-cabinet-tabs" role="tablist" aria-label="Разделы кабинета">
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={accountTab === 'overview'}
+                  className={accountTab === 'overview' ? 'account-cabinet-tab active' : 'account-cabinet-tab'}
+                  onClick={() => setAccountTab('overview')}
+                >
+                  <span className="account-cabinet-tab__icon" aria-hidden>
+                    ▦
+                  </span>
+                  <span>Обзор</span>
+                </button>
+                {isOwner ? (
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={accountTab === 'billing'}
+                    className={accountTab === 'billing' ? 'account-cabinet-tab active' : 'account-cabinet-tab'}
+                    onClick={() => setAccountTab('billing')}
+                  >
+                    <span className="account-cabinet-tab__icon" aria-hidden>
+                      ◈
+                    </span>
+                    <span>Тариф и баланс</span>
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={accountTab === 'integrations'}
+                  className={accountTab === 'integrations' ? 'account-cabinet-tab active' : 'account-cabinet-tab'}
+                  onClick={() => setAccountTab('integrations')}
+                >
+                  <span className="account-cabinet-tab__icon" aria-hidden>
+                    ⎔
+                  </span>
+                  <span>Подключения</span>
+                </button>
+                {canStudioModels ? (
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={accountTab === 'models'}
+                    className={accountTab === 'models' ? 'account-cabinet-tab active' : 'account-cabinet-tab'}
+                    onClick={() => setAccountTab('models')}
+                  >
+                    <span className="account-cabinet-tab__icon" aria-hidden>
+                      ◉
+                    </span>
+                    <span>Модели</span>
+                  </button>
+                ) : null}
+                {isOwner ? (
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={accountTab === 'team'}
+                    className={accountTab === 'team' ? 'account-cabinet-tab active' : 'account-cabinet-tab'}
+                    onClick={() => setAccountTab('team')}
+                  >
+                    <span className="account-cabinet-tab__icon" aria-hidden>
+                      ⚇
+                    </span>
+                    <span>Команда</span>
+                  </button>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="mm-cabinet-content">
           {accountTab === 'overview' && (
             <div className="account-cabinet-pane cabinet-overview" role="tabpanel">
               <p className="cabinet-lead muted">
@@ -7198,6 +7262,8 @@ export default function App() {
               )}
             </div>
           )}
+            </div>
+          </div>
         </div>
       )}
 
@@ -7253,7 +7319,6 @@ export default function App() {
               canStudioAny={canStudioAny}
               conversations={conversations}
               generations={studioGenerations}
-              motionRenders={motionRenders}
               tributeEarningsLabel={tributeEarningsDisplay.label}
               tributeEarningsHint={tributeEarningsDisplay.hint}
               onOpenChat={openWorkspaceChat}

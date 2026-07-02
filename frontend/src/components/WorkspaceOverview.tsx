@@ -14,12 +14,6 @@ interface GenerationPreview {
   prompt_excerpt: string | null
 }
 
-interface MotionPreview {
-  id: number
-  video_url: string
-  frame_image_url: string
-}
-
 export interface WorkspaceOverviewProps {
   creditsBalance: number
   billingPlanLabel: string
@@ -31,7 +25,6 @@ export interface WorkspaceOverviewProps {
   canStudioAny: boolean
   conversations: ConversationPreview[]
   generations: GenerationPreview[]
-  motionRenders: MotionPreview[]
   tributeEarningsLabel?: string | null
   tributeEarningsHint?: string | null
   onOpenChat: (convId?: number) => void
@@ -87,7 +80,6 @@ export function WorkspaceOverview({
   canStudioAny,
   conversations,
   generations,
-  motionRenders,
   tributeEarningsLabel,
   tributeEarningsHint,
   onOpenChat,
@@ -97,7 +89,6 @@ export function WorkspaceOverview({
 }: WorkspaceOverviewProps) {
   const recentChats = conversations.slice(0, 5)
   const recentGens = generations.slice(0, 4)
-  const recentVideos = motionRenders.slice(0, 3)
 
   return (
     <div className="dash">
@@ -237,38 +228,6 @@ export function WorkspaceOverview({
                   >
                     <img src={g.image_url} alt="" loading="lazy" />
                   </button>
-                ))}
-              </div>
-            )}
-          </section>
-        ) : null}
-
-        {canStudioAny ? (
-          <section className="dash-panel dash-panel--wide">
-            <div className="dash-panel-head">
-              <h2 className="dash-block-title">Последние видео</h2>
-              <button type="button" className="dash-link-btn" onClick={onOpenVideo}>
-                Motion
-              </button>
-            </div>
-            {recentVideos.length === 0 ? (
-              <p className="muted dash-empty">Ролики появятся после шага «Сделать видео».</p>
-            ) : (
-              <div className="dash-video-row">
-                {recentVideos.map((v) => (
-                  <a
-                    key={v.id}
-                    className="dash-video-card"
-                    href={v.video_url}
-                    target="_blank"
-                    rel="noreferrer noopener"
-                  >
-                    <img src={v.frame_image_url} alt="" loading="lazy" />
-                    <span className="dash-video-play" aria-hidden>
-                      ▶
-                    </span>
-                    <span>Видео #{v.id}</span>
-                  </a>
                 ))}
               </div>
             )}
