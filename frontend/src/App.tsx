@@ -997,6 +997,17 @@ export default function App() {
     return !studioAccessAllowed(me)
   }, [me, health])
 
+  const cabinetAccountMeta = useMemo(() => {
+    if (!me) return { emailLine: '', roleLine: '', initial: '?' }
+    const owner = me.is_workspace_owner
+    const emailLine = owner
+      ? me.email
+      : `${me.owner_email}${me.member_login ? ` · ${me.member_login}` : ''}`
+    const roleLine = owner ? 'владелец' : me.member_login ? `оператор · ${me.member_login}` : 'оператор'
+    const seed = (owner ? me.email : me.member_login || me.email) || '?'
+    return { emailLine, roleLine, initial: seed.charAt(0).toUpperCase() }
+  }, [me])
+
   const canPlatformAdmin = Boolean(me?.is_platform_admin)
 
   const [accountOpen, setAccountOpen] = useState(false)
@@ -4784,16 +4795,6 @@ export default function App() {
   ]
     .filter(Boolean)
     .join(' ')
-
-  const cabinetAccountMeta = useMemo(() => {
-    if (!me) return { emailLine: '', roleLine: '', initial: '?' }
-    const emailLine = isOwner
-      ? me.email
-      : `${me.owner_email}${me.member_login ? ` · ${me.member_login}` : ''}`
-    const roleLine = isOwner ? 'владелец' : me.member_login ? `оператор · ${me.member_login}` : 'оператор'
-    const seed = (isOwner ? me.email : me.member_login || me.email) || '?'
-    return { emailLine, roleLine, initial: seed.charAt(0).toUpperCase() }
-  }, [me, isOwner])
 
   const handleLogout = () => {
     setToken(null)
