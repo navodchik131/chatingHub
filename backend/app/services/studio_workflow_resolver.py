@@ -9,6 +9,13 @@ from app.services.studio_workflow_boardstory import (
     BoardStoryImageSlot,
     classify_boardstory_ref_role,
 )
+from app.services.studio_workflow_scenarios import (
+    enrich_description_for_first_frame,
+    enrich_description_for_outfit_change,
+    resolve_plan_target_id,
+    scenario_data,
+    scenario_type_of,
+)
 
 WORKFLOW_WAVE_MODELS = frozenset(
     {"nano-banana-2", "nano-banana-pro", "wan-2.7", "gpt-image-2"}
@@ -64,6 +71,7 @@ class WorkflowGenerationPlan:
     exif_camera: str
     realism_enabled: bool
     motion_video_file_id: str = ""
+    scenario_type: str | None = None
 
     @property
     def reference_ref_id(self) -> str:
@@ -110,6 +118,7 @@ class WorkflowVideoPlan:
     environment_ref: BoardStoryImageSlot | None = None
     extra_refs: tuple[WorkflowReferenceItem, ...] = ()
     send_video_reference: bool = True
+    scenario_type: str | None = None
 
 
 @dataclass(frozen=True)
@@ -137,7 +146,25 @@ class WorkflowVideoUpscalePlan:
     output_aspect: str | None = None
 
 
-_PROMPT_SOURCE_NODE_TYPES = frozenset({"prompt", "videoPromptCompose"})
+_PROMPT_SOURCE_NODE_TYPES = frozenset({"prompt", "videoPromptCompose", "scenarioMotionVideo"})
+
+
+def _plan_input_target(
+    target_id: str,
+    edges: list[dict[str, Any]],
+    node_map: dict[str, dict[str, Any]],
+) -> tuple[str, dict[str, Any] | None]:
+    return resolve_plan_target_id(target_id, edges, node_map)
+
+
+def _sources_for_plan_target(
+    target_id: str,
+    target_handle: str,
+    edges: list[dict[str, Any]],
+    node_map: dict[str, dict[str, Any]],
+) -> list[dict[str, Any]]:
+    plan_target, _scenario = _plan_input_target(target_id, edges, node_map)
+    return _sources_for_target(plan_target, target_handle, edges, node_map)
 
 
 def resolve_upstream_prompt_text(
@@ -147,13 +174,13 @@ def resolve_upstream_prompt_text(
     edges: list[dict[str, Any]],
     node_map: dict[str, dict[str, Any]],
 ) -> tuple[str, str | None]:
-    """Текст промпта с upstream-ноды (prompt или videoPromptCompose)."""
-    sources = _sources_for_target(target_id, target_handle, edges, node_map)
+    """Текст промпта с upstream-ноды (prompt, videoPromptCompose или scenario)."""
+    sources = _sources_for_plan_target(target_id, target_handle, edges, node_map)
     for src in sources:
         ntype = str(src.get("type") or "")
         if ntype not in _PROMPT_SOURCE_NODE_TYPES:
             raise WorkflowResolutionError(
-                "К входу prompt можно подключить ноду «Промпт» или «Промпт по видео»"
+                "К входу prompt можно подключить «Промпт», «Промпт по видео» или сценарий motion"
             )
         pdata = src.get("data") if isinstance(src.get("data"), dict) else {}
         text = str(pdata.get("prompt") or "").strip()
@@ -168,7 +195,7 @@ def _resolve_workflow_references_for_target(
     edges: list[dict[str, Any]],
     node_map: dict[str, dict[str, Any]],
 ) -> tuple[WorkflowReferenceItem, ...]:
-    ref_nodes = _sources_for_target(target_id, HANDLE["gen_reference_in"], edges, node_map)
+    ref_nodes = _sources_for_plan_target(target_id, HANDLE["gen_reference_in"], edges, node_map)
     references: list[WorkflowReferenceItem] = []
     for ref_node in ref_nodes:
         if str(ref_node.get("type") or "") != "reference":
@@ -208,15 +235,15 @@ def resolve_workflow_video_prompt_compose_plan(
     if not target:
         raise WorkflowResolutionError("Целевая нода не найдена в графе")
     _require_enabled_target(target)
-    if str(target.get("type") or "") != "videoPromptCompose":
+    if str(target.get("type") or "") not in ("videoPromptCompose", "scenarioMotionVideo"):
         raise WorkflowResolutionError("Неверный тип ноды для промпта по видео")
 
-    model_nodes = _sources_for_target(target_id, HANDLE["gen_model_in"], edges, node_map)
+    model_nodes = _sources_for_plan_target(target_id, HANDLE["gen_model_in"], edges, node_map)
     model_id = _parse_model_id_from_node(model_nodes[0] if model_nodes else None)
     if model_id is None:
         raise WorkflowResolutionError("Подключите ноду «Модель» и выберите модель")
 
-    motion_nodes = _sources_for_target(target_id, HANDLE["motion_video_in"], edges, node_map)
+    motion_nodes = _sources_for_plan_target(target_id, HANDLE["motion_video_in"], edges, node_map)
     motion_video_file_id = ""
     if motion_nodes:
         mnode = motion_nodes[0]
@@ -245,7 +272,7 @@ def resolve_workflow_video_prompt_compose_plan(
     )
 
     user_notes = ""
-    note_nodes = _sources_for_target(target_id, HANDLE["gen_prompt_in"], edges, node_map)
+    note_nodes = _sources_for_plan_target(target_id, HANDLE["gen_prompt_in"], edges, node_map)
     if note_nodes:
         nnode = note_nodes[0]
         if str(nnode.get("type") or "") != "prompt":
@@ -296,6 +323,21 @@ def resolve_workflow_video_prompt_compose_plan(
             if asp:
                 output_aspect = asp
             break
+    if str(target.get("type") or "") == "scenarioMotionVideo":
+        for edge in edges:
+            if str(edge.get("source") or "") != target_id:
+                continue
+            if edge.get("sourceHandle") is not None and str(edge.get("sourceHandle")) != HANDLE[
+                "pipeline_out"
+            ]:
+                continue
+            downstream = node_map.get(str(edge.get("target") or "").strip())
+            if downstream and str(downstream.get("type") or "") == "videoGeneration":
+                ddata = downstream.get("data") if isinstance(downstream.get("data"), dict) else {}
+                asp = str(ddata.get("outputAspect") or "").strip()
+                if asp:
+                    output_aspect = asp
+                break
 
     return WorkflowVideoPromptComposePlan(
         model_id=model_id,
@@ -352,7 +394,7 @@ def resolve_upstream_generation_id(
     node_map: dict[str, dict[str, Any]],
     label: str = "изображение",
 ) -> int:
-    sources = _sources_for_target(target_id, target_handle, edges, node_map)
+    sources = _sources_for_plan_target(target_id, target_handle, edges, node_map)
     if not sources:
         raise WorkflowResolutionError(f"Подключите вход {label}")
     for src in sources:
@@ -378,7 +420,7 @@ def resolve_upstream_generation_id_optional(
     label: str = "изображение",
 ) -> int | None:
     """Как resolve_upstream_generation_id, но None если вход не подключён или нода отключена."""
-    sources = _sources_for_target(target_id, target_handle, edges, node_map)
+    sources = _sources_for_plan_target(target_id, target_handle, edges, node_map)
     if not sources:
         return None
     for src in sources:
@@ -472,9 +514,18 @@ def resolve_workflow_video_plan(
         edges=edges,
         node_map=node_map,
     )
-    prompt_from_compose = prompt_source == "videoPromptCompose"
+    prompt_from_compose = prompt_source in ("videoPromptCompose", "scenarioMotionVideo")
 
-    motion_nodes = _sources_for_target(target_id, HANDLE["motion_video_in"], edges, node_map)
+    _, scenario = _plan_input_target(target_id, edges, node_map)
+    scenario_type = scenario_type_of(scenario)
+    sdata = scenario_data(scenario)
+    if scenario_type == "scenarioMotionVideo":
+        scenario_prompt = str(sdata.get("prompt") or "").strip()
+        if scenario_prompt:
+            prompt_text = scenario_prompt
+            prompt_from_compose = True
+
+    motion_nodes = _sources_for_plan_target(target_id, HANDLE["motion_video_in"], edges, node_map)
     motion_video_file_id = ""
     if motion_nodes:
         mnode = motion_nodes[0]
@@ -491,7 +542,7 @@ def resolve_workflow_video_plan(
     if video_provider not in ("seedance_t2v", "grok_imagine_i2v"):
         video_provider = "seedance_t2v"
 
-    model_nodes = _sources_for_target(target_id, HANDLE["gen_model_in"], edges, node_map)
+    model_nodes = _sources_for_plan_target(target_id, HANDLE["gen_model_in"], edges, node_map)
     model_id = _parse_model_id_from_node(model_nodes[0] if model_nodes else None)
 
     boardstory_mode = False
@@ -584,6 +635,11 @@ def resolve_workflow_video_plan(
     if video_provider == "grok_imagine_i2v":
         generate_audio = False
         auto_motion_prompt = False
+    elif scenario_type == "scenarioMotionVideo":
+        generate_audio = sdata.get("generateAudio") is not False
+        auto_motion_prompt = (
+            sdata.get("autoMotionPrompt") is not False and bool(motion_video_file_id)
+        )
     elif prompt_from_compose:
         generate_audio = gen_data.get("generateAudio") is not False
         auto_motion_prompt = False
@@ -591,6 +647,8 @@ def resolve_workflow_video_plan(
         generate_audio = gen_data.get("generateAudio") is not False
         auto_motion_prompt = gen_data.get("autoMotionPrompt") is not False and bool(motion_video_file_id)
     negative_prompt = str(gen_data.get("negativePrompt") or "").strip()
+    if scenario_type == "scenarioMotionVideo":
+        negative_prompt = str(sdata.get("negativePrompt") or negative_prompt).strip()
 
     send_video_reference = True
     if compose_upstream:
@@ -619,6 +677,7 @@ def resolve_workflow_video_plan(
         environment_ref=environment_ref,
         extra_refs=extra_refs,
         send_video_reference=send_video_reference,
+        scenario_type=scenario_type,
     )
 
 
@@ -628,6 +687,8 @@ HANDLE = {
     "description_out": "description-out",
     "model_out": "model-out",
     "realism_out": "realism-out",
+    "pipeline_in": "pipeline-in",
+    "pipeline_out": "pipeline-out",
     "ref_description_in": "description-in",
     "gen_prompt_in": "prompt-in",
     "gen_reference_in": "reference-in",
@@ -696,7 +757,7 @@ def _first_frame_has_motion_video_wire(
     edges: list[dict[str, Any]],
     node_map: dict[str, dict[str, Any]],
 ) -> bool:
-    if _sources_for_target(target_id, HANDLE["motion_video_in"], edges, node_map):
+    if _sources_for_plan_target(target_id, HANDLE["motion_video_in"], edges, node_map):
         return True
     for edge in edges:
         if str(edge.get("source") or "") != target_id:
@@ -727,7 +788,7 @@ def _first_frame_motion_video_file_id(
     node_map: dict[str, dict[str, Any]],
 ) -> str:
     """Motion-видео: прямой вход на «Первый кадр» или та же нода, что и у «Видео» downstream."""
-    motion_nodes = _sources_for_target(target_id, HANDLE["motion_video_in"], edges, node_map)
+    motion_nodes = _sources_for_plan_target(target_id, HANDLE["motion_video_in"], edges, node_map)
     if motion_nodes:
         mnode = motion_nodes[0]
         if str(mnode.get("type") or "") != "motionVideo":
@@ -775,6 +836,11 @@ def _upstream_compose_node_for_video(
     edges: list[dict[str, Any]],
     node_map: dict[str, dict[str, Any]],
 ) -> dict[str, Any] | None:
+    from app.services.studio_workflow_scenarios import find_upstream_scenario_for_target
+
+    scenario = find_upstream_scenario_for_target(target_id, edges, node_map)
+    if scenario and scenario_type_of(scenario) == "scenarioMotionVideo":
+        return scenario
     for edge in edges:
         if str(edge.get("target") or "") != target_id:
             continue
@@ -782,7 +848,10 @@ def _upstream_compose_node_for_video(
             continue
         src_id = str(edge.get("source") or "").strip()
         node = node_map.get(src_id)
-        if node and str(node.get("type") or "") == "videoPromptCompose" and _is_node_enabled(node):
+        if node and str(node.get("type") or "") in (
+            "videoPromptCompose",
+            "scenarioMotionVideo",
+        ) and _is_node_enabled(node):
             return node
     return None
 
@@ -830,7 +899,7 @@ def _resolve_boardstory_slot_for_handle(
     node_map: dict[str, dict[str, Any]],
 ) -> BoardStoryImageSlot | None:
     """Первый источник на typed handle: reference (refId) или image generation (generationId)."""
-    sources = _sources_for_target(target_id, target_handle, edges, node_map)
+    sources = _sources_for_plan_target(target_id, target_handle, edges, node_map)
     if not sources:
         return None
     src = sources[0]
@@ -990,7 +1059,7 @@ def resolve_workflow_generation_plan(
                 "Для первого кадра используйте Wan / Nano Banana — GPT Image 2 только для развёртки"
             )
 
-    model_node = _sources_for_target(target_id, HANDLE["gen_model_in"], edges, node_map)
+    model_node = _sources_for_plan_target(target_id, HANDLE["gen_model_in"], edges, node_map)
     model_node = model_node[0] if model_node else None
     model_id: int | None = None
     if model_node is not None:
@@ -1007,7 +1076,7 @@ def resolve_workflow_generation_plan(
         if model_id <= 0:
             raise WorkflowResolutionError("Выберите модель в ноде «Модель»")
 
-    ref_nodes = _sources_for_target(target_id, HANDLE["gen_reference_in"], edges, node_map)
+    ref_nodes = _sources_for_plan_target(target_id, HANDLE["gen_reference_in"], edges, node_map)
     is_first_frame = str(target.get("type") or "") == "firstFrameGeneration"
 
     references: list[WorkflowReferenceItem] = []
@@ -1049,7 +1118,7 @@ def resolve_workflow_generation_plan(
 
     sorted_refs = sort_workflow_references(references)
 
-    prompt_node = _sources_for_target(target_id, HANDLE["gen_prompt_in"], edges, node_map)
+    prompt_node = _sources_for_plan_target(target_id, HANDLE["gen_prompt_in"], edges, node_map)
     prompt_node = prompt_node[0] if prompt_node else None
     prompt_text = ""
     if prompt_node and str(prompt_node.get("type") or "") == "prompt":
@@ -1098,7 +1167,7 @@ def resolve_workflow_generation_plan(
     )
 
     realism_enabled = True
-    realism_nodes = _sources_for_target(target_id, HANDLE["gen_realism_in"], edges, node_map)
+    realism_nodes = _sources_for_plan_target(target_id, HANDLE["gen_realism_in"], edges, node_map)
     realism_node = realism_nodes[0] if realism_nodes else None
     if realism_node and str(realism_node.get("type") or "") == "realism":
         rdata = realism_node.get("data") if isinstance(realism_node.get("data"), dict) else {}
@@ -1134,6 +1203,13 @@ def resolve_workflow_generation_plan(
     if wave_profile == "regular" and wan_tier != "standard":
         wan_tier = "standard"
 
+    _, scenario = _plan_input_target(target_id, edges, node_map)
+    scenario_type = scenario_type_of(scenario)
+    if scenario_type == "scenarioOutfitChange":
+        description = enrich_description_for_outfit_change(description)
+    elif scenario_type == "scenarioFirstFrame":
+        description = enrich_description_for_first_frame(description)
+
     return WorkflowGenerationPlan(
         model_id=model_id,
         description=description,
@@ -1145,6 +1221,7 @@ def resolve_workflow_generation_plan(
         exif_camera=exif_camera,
         realism_enabled=realism_enabled,
         motion_video_file_id=motion_video_file_id,
+        scenario_type=scenario_type,
     )
 
 

@@ -10,7 +10,7 @@ import {
   type StudioMotionVideoPricing,
 } from '../../studioMotionPricing'
 import { executeWorkflowGeneration, fetchWorkflowModelOptions } from '../api'
-import { getDownstreamPreviewNodeIds, parseWorkflowGenerationId, serializeGraph } from '../graphResolver'
+import { getDownstreamPreviewNodeIds, hasPipelineInput, parseWorkflowGenerationId, serializeGraph } from '../graphResolver'
 import { useWorkflowBilling } from '../WorkflowBillingContext'
 import { useWorkflowRun } from '../WorkflowRunContext'
 import { BaseNode } from './BaseNode'
@@ -58,6 +58,8 @@ function VideoGenerationNodeComponent({ id, data }: NodeProps) {
   const { workspaceId } = useWorkflowRun()
   const { me } = useWorkflowBilling()
   const nodeData = data as VideoGenerationNodeData
+  const edges = getEdges()
+  const scenarioMode = useMemo(() => hasPipelineInput(id, edges), [edges, id])
   const [pricing, setPricing] = useState<StudioMotionVideoPricing>(DEFAULT_MOTION_VIDEO_PRICING)
   const runAbortRef = useRef<AbortController | null>(null)
 
@@ -77,8 +79,8 @@ function VideoGenerationNodeComponent({ id, data }: NodeProps) {
     (isGrok ? grokPricing.default_resolution ?? '720p' : pricing.default_resolution ?? '720p')) as
     | SeedanceT2vResolution
     | GrokImagineI2vResolution
-  const generateAudio = !isGrok && nodeData.generateAudio !== false
-  const autoMotionPrompt = !isGrok && nodeData.autoMotionPrompt !== false
+  const generateAudio = !isGrok && !scenarioMode && nodeData.generateAudio !== false
+  const autoMotionPrompt = !isGrok && !scenarioMode && nodeData.autoMotionPrompt !== false
   const outputAspect = nodeData.outputAspect || DEFAULT_ASPECT
   const modelKey = modelKeyFromNodeData(nodeData)
 
@@ -237,6 +239,22 @@ function VideoGenerationNodeComponent({ id, data }: NodeProps) {
       }
     >
       <Handle
+        id={HandleIds.pipelineIn}
+        type="target"
+        position={Position.Left}
+        className="workflow-handle workflow-handle--generation"
+        style={{ top: '6%' }}
+      />
+      <span
+        className="workflow-node__handle-label workflow-node__handle-label--left"
+        style={{ top: '6%' }}
+      >
+        pipeline
+      </span>
+
+      {!scenarioMode ? (
+        <>
+      <Handle
         id={HandleIds.imageGenModelIn}
         type="target"
         position={Position.Left}
@@ -346,7 +364,14 @@ function VideoGenerationNodeComponent({ id, data }: NodeProps) {
         />
       )}
 
-      {!isGrok ? null : (
+        </>
+      ) : (
+        <p className="workflow-node__hint workflow-node__hint--muted">
+          Сценарий подключён — промпт, motion и BoardStory refs настраиваются в scenario-ноде.
+        </p>
+      )}
+
+      {!scenarioMode && !isGrok ? null : (
         <span
           className="workflow-node__handle-label workflow-node__handle-label--left"
           style={{ top: '58%' }}
@@ -446,6 +471,8 @@ function VideoGenerationNodeComponent({ id, data }: NodeProps) {
               </select>
             </div>
 
+            {!scenarioMode ? (
+              <>
             <label className="workflow-gen-form__check nodrag">
               <input
                 type="checkbox"
@@ -465,6 +492,8 @@ function VideoGenerationNodeComponent({ id, data }: NodeProps) {
               />
               <span>Grok motion timeline (авто-описание движения)</span>
             </label>
+              </>
+            ) : null}
           </>
         ) : null}
       </div>

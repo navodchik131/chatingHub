@@ -13,7 +13,7 @@ import {
 import { useWorkflowBilling } from '../WorkflowBillingContext'
 import { executeWorkflowGeneration } from '../api'
 import { useWorkflowRun } from '../WorkflowRunContext'
-import { getDownstreamPreviewNodeIds, serializeGraph } from '../graphResolver'
+import { getDownstreamPreviewNodeIds, hasPipelineInput, serializeGraph } from '../graphResolver'
 import { WorkflowImageLightbox } from '../WorkflowImageLightbox'
 import { BaseNode } from './BaseNode'
 import { HandleIds, type ImageGenerationNodeData } from '../types'
@@ -26,6 +26,8 @@ function ImageGenerationNodeComponent({ id, data }: NodeProps) {
   const { setNodes, getNodes, getEdges } = useReactFlow()
   const { workspaceId } = useWorkflowRun()
   const nodeData = data as ImageGenerationNodeData
+  const edges = getEdges()
+  const scenarioMode = useMemo(() => hasPipelineInput(id, edges), [edges, id])
   const nsfwEnabled = nodeData.nsfwEnabled !== false
   const [models, setModels] = useState<GenerationModelDefinition[]>([])
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
@@ -195,6 +197,22 @@ function ImageGenerationNodeComponent({ id, data }: NodeProps) {
         }
       >
         <Handle
+          id={HandleIds.pipelineIn}
+          type="target"
+          position={Position.Left}
+          className="workflow-handle workflow-handle--generation"
+          style={{ top: '6%' }}
+        />
+        <span
+          className="workflow-node__handle-label workflow-node__handle-label--left"
+          style={{ top: '6%' }}
+        >
+          pipeline
+        </span>
+
+        {!scenarioMode ? (
+          <>
+        <Handle
           id={HandleIds.imageGenModelIn}
           type="target"
           position={Position.Left}
@@ -253,6 +271,12 @@ function ImageGenerationNodeComponent({ id, data }: NodeProps) {
         <p className="workflow-node__hint">
           К inputs references можно подключить несколько нод «Референс» — у каждой своя роль в «Описание».
         </p>
+          </>
+        ) : (
+          <p className="workflow-node__hint workflow-node__hint--muted">
+            Входы подключены через сценарий — настройте refs/prompt в scenario-ноде.
+          </p>
+        )}
 
         <div className="workflow-gen-form">
           <div className="workflow-gen-form__row">

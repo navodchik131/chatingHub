@@ -4,6 +4,14 @@ import { isWorkflowNodeDisabled } from './workflowNodeState'
 
 const RUNTIME_NODE_DATA_KEYS = ['isRunning', 'error'] as const
 
+export function hasPipelineInput(nodeId: string, edges: Edge[]): boolean {
+  return edges.some(
+    (edge) =>
+      edge.target === nodeId &&
+      (!edge.targetHandle || edge.targetHandle === HandleIds.pipelineIn),
+  )
+}
+
 export function parseWorkflowGenerationId(raw: unknown): number | null {
   if (typeof raw === 'number' && Number.isFinite(raw) && raw > 0) return raw
   if (typeof raw === 'string' && raw.trim() !== '') {

@@ -824,3 +824,98 @@ def test_normalize_media_url_strips_query():
 def test_generation_id_from_studio_media_url_invalid():
     assert _generation_id_from_studio_media_url("https://cdn.example.com/v.mp4") is None
     assert _generation_id_from_studio_media_url("") is None
+
+
+def test_scenario_outfit_change_enriches_description():
+    g = {
+        "nodes": [
+            {"id": "model-1", "type": "model", "data": {"modelId": 1}},
+            {"id": "ref-base", "type": "reference", "data": {"refId": "base1"}},
+            {"id": "ref-cloth", "type": "reference", "data": {"refId": "cloth1"}},
+            {"id": "prompt-1", "type": "prompt", "data": {"prompt": "swap outfit"}},
+            {
+                "id": "scenario-1",
+                "type": "scenarioOutfitChange",
+                "data": {},
+            },
+            {
+                "id": "gen-1",
+                "type": "imageGeneration",
+                "data": {"waveModelId": "wan-2.7", "nsfwEnabled": True},
+            },
+        ],
+        "edges": [
+            {"source": "model-1", "target": "scenario-1", "targetHandle": "model-in"},
+            {"source": "ref-base", "target": "scenario-1", "targetHandle": "reference-in"},
+            {"source": "ref-cloth", "target": "scenario-1", "targetHandle": "reference-in"},
+            {"source": "prompt-1", "target": "scenario-1", "targetHandle": "prompt-in"},
+            {
+                "source": "scenario-1",
+                "target": "gen-1",
+                "sourceHandle": "pipeline-out",
+                "targetHandle": "pipeline-in",
+            },
+        ],
+    }
+    plan = resolve_workflow_generation_plan(
+        target_node_id="gen-1",
+        nodes=g["nodes"],
+        edges=g["edges"],
+    )
+    assert plan.scenario_type == "scenarioOutfitChange"
+    assert "outfit change" in plan.description.lower()
+    assert len(plan.references) == 2
+
+
+def test_scenario_motion_video_pipeline_reads_scenario_settings():
+    from app.services.studio_workflow_resolver import resolve_workflow_video_plan
+
+    g = {
+        "nodes": [
+            {"id": "model-1", "type": "model", "data": {"modelId": 5}},
+            {"id": "motion-1", "type": "motionVideo", "data": {"motionVideoFileId": "mv123"}},
+            {
+                "id": "scenario-1",
+                "type": "scenarioMotionVideo",
+                "data": {
+                    "prompt": "composed prompt @Video1",
+                    "generateAudio": False,
+                    "autoMotionPrompt": True,
+                    "negativePrompt": "blur",
+                    "sendVideoReference": True,
+                },
+            },
+            {
+                "id": "video-1",
+                "type": "videoGeneration",
+                "data": {
+                    "durationSeconds": 5,
+                    "generateAudio": True,
+                    "autoMotionPrompt": False,
+                },
+            },
+        ],
+        "edges": [
+            {"source": "model-1", "target": "scenario-1", "targetHandle": "model-in"},
+            {"source": "motion-1", "target": "scenario-1", "targetHandle": "motion-video-in"},
+            {
+                "source": "scenario-1",
+                "target": "video-1",
+                "sourceHandle": "pipeline-out",
+                "targetHandle": "pipeline-in",
+            },
+        ],
+    }
+    plan = resolve_workflow_video_plan(
+        target_node_id="video-1",
+        nodes=g["nodes"],
+        edges=g["edges"],
+    )
+    assert plan.scenario_type == "scenarioMotionVideo"
+    assert plan.prompt == "composed prompt @Video1"
+    assert plan.motion_video_file_id == "mv123"
+    assert plan.model_id == 5
+    assert plan.generate_audio is False
+    assert plan.auto_motion_prompt is True
+    assert plan.negative_prompt == "blur"
+    assert plan.prompt_from_compose is True

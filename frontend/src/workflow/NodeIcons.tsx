@@ -121,6 +121,33 @@ export function NodeIcon({ type, size = 16, className }: Props) {
           <path d="M6 18h8M6 21h11" stroke={stroke} strokeWidth="1.75" strokeLinecap="round" />
         </svg>
       )
+    case 'scenarioOutfitChange':
+      return (
+        <svg {...common}>
+          <path
+            d="M8 6h8l2 4v10H6V10l2-4z"
+            stroke={stroke}
+            strokeWidth="1.75"
+            strokeLinejoin="round"
+          />
+          <path d="M8 10h8M10 14h4" stroke={stroke} strokeWidth="1.75" strokeLinecap="round" />
+        </svg>
+      )
+    case 'scenarioMotionVideo':
+      return (
+        <svg {...common}>
+          <rect x="2" y="5" width="13" height="10" rx="1.5" stroke={stroke} strokeWidth="1.75" />
+          <path d="M6 8l4 2.5-4 2.5V8z" fill={stroke} />
+          <path d="M17 8h5M17 12h5M17 16h3" stroke={stroke} strokeWidth="1.75" strokeLinecap="round" />
+        </svg>
+      )
+    case 'scenarioFirstFrame':
+      return (
+        <svg {...common}>
+          <rect x="6" y="4" width="12" height="16" rx="2" stroke={stroke} strokeWidth="1.75" />
+          <circle cx="12" cy="11" r="2.5" stroke={stroke} strokeWidth="1.75" />
+        </svg>
+      )
     case 'videoGeneration':
       return (
         <svg {...common}>
@@ -160,6 +187,9 @@ export const NODE_ICON_COLORS: Record<NodeType, string> = {
   turnaroundSheet: '#14b8a6',
   motionVideo: '#f97316',
   videoPromptCompose: '#eab308',
+  scenarioOutfitChange: '#f472b6',
+  scenarioMotionVideo: '#fb923c',
+  scenarioFirstFrame: '#a78bfa',
   videoGeneration: '#ef4444',
   videoUpscale: '#06b6d4',
   preview: '#0ea5e9',

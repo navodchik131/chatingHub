@@ -13,7 +13,7 @@ import {
 import { useWorkflowBilling } from '../WorkflowBillingContext'
 import { executeWorkflowGeneration } from '../api'
 import { useWorkflowRun } from '../WorkflowRunContext'
-import { getDownstreamPreviewNodeIds, serializeGraph } from '../graphResolver'
+import { getDownstreamPreviewNodeIds, hasPipelineInput, serializeGraph } from '../graphResolver'
 import { WorkflowImageLightbox } from '../WorkflowImageLightbox'
 import { BaseNode } from './BaseNode'
 import { HandleIds, type FirstFrameGenerationNodeData } from '../types'
@@ -26,6 +26,8 @@ function FirstFrameGenerationNodeComponent({ id, data }: NodeProps) {
   const { setNodes, getNodes, getEdges } = useReactFlow()
   const { workspaceId } = useWorkflowRun()
   const nodeData = data as FirstFrameGenerationNodeData
+  const edges = getEdges()
+  const scenarioMode = useMemo(() => hasPipelineInput(id, edges), [edges, id])
   const nsfwEnabled = nodeData.nsfwEnabled !== false
   const [models, setModels] = useState<GenerationModelDefinition[]>([])
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
@@ -200,6 +202,22 @@ function FirstFrameGenerationNodeComponent({ id, data }: NodeProps) {
         }
       >
         <Handle
+          id={HandleIds.pipelineIn}
+          type="target"
+          position={Position.Left}
+          className="workflow-handle workflow-handle--generation"
+          style={{ top: '6%' }}
+        />
+        <span
+          className="workflow-node__handle-label workflow-node__handle-label--left"
+          style={{ top: '6%' }}
+        >
+          pipeline
+        </span>
+
+        {!scenarioMode ? (
+          <>
+        <Handle
           id={HandleIds.imageGenModelIn}
           type="target"
           position={Position.Left}
@@ -273,6 +291,12 @@ function FirstFrameGenerationNodeComponent({ id, data }: NodeProps) {
           Как в студии motion: видео → Grok → WaveSpeed. Лёгкая плёночная зернистость на кадре
           (без сетки на лице; опц. кадр в «Референс»).
         </p>
+          </>
+        ) : (
+          <p className="workflow-node__hint workflow-node__hint--muted">
+            Входы через сценарий «Первый кадр» — подключите model/motion/refs к scenario-ноде.
+          </p>
+        )}
 
         <div className="workflow-gen-form">
           <div className="workflow-gen-form__row">

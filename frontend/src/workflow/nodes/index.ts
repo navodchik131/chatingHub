@@ -11,6 +11,9 @@ import { ReferenceNode } from './ReferenceNode'
 import { TurnaroundSheetNode } from './TurnaroundSheetNode'
 import { VideoGenerationNode } from './VideoGenerationNode'
 import { VideoPromptComposeNode } from './VideoPromptComposeNode'
+import { ScenarioOutfitChangeNode } from './ScenarioOutfitChangeNode'
+import { ScenarioFirstFrameNode } from './ScenarioFirstFrameNode'
+import { ScenarioMotionVideoNode } from './ScenarioMotionVideoNode'
 
 import { VideoUpscaleNode } from './VideoUpscaleNode'
 
@@ -25,6 +28,9 @@ export const nodeTypes: NodeTypes = {
   turnaroundSheet: TurnaroundSheetNode,
   motionVideo: MotionVideoNode,
   videoPromptCompose: VideoPromptComposeNode,
+  scenarioOutfitChange: ScenarioOutfitChangeNode,
+  scenarioMotionVideo: ScenarioMotionVideoNode,
+  scenarioFirstFrame: ScenarioFirstFrameNode,
   videoGeneration: VideoGenerationNode,
   videoUpscale: VideoUpscaleNode,
   preview: PreviewNode,

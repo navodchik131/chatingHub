@@ -59,10 +59,19 @@
         }
       },
       {
+        "id": "scenario-outfit",
+        "type": "scenarioOutfitChange",
+        "position": {
+          "x": 1580,
+          "y": 825
+        },
+        "data": {}
+      },
+      {
         "id": "imageGeneration-8",
         "type": "imageGeneration",
         "position": {
-          "x": 1886.6766865544964,
+          "x": 1986.6766865544964,
           "y": 825.8779296350721
         },
         "data": {
@@ -86,7 +95,7 @@
         "id": "preview-10",
         "type": "preview",
         "position": {
-          "x": 2206.1687432841745,
+          "x": 2306.1687432841745,
           "y": 821.5251768185911
         },
         "data": {}
@@ -108,32 +117,39 @@
         "targetHandle": "description-in"
       },
       {
-        "id": "xy-edge__reference-5reference-out-imageGeneration-8reference-in",
-        "source": "reference-5",
-        "target": "imageGeneration-8",
-        "sourceHandle": "reference-out",
-        "targetHandle": "reference-in"
-      },
-      {
-        "id": "xy-edge__reference-6reference-out-imageGeneration-8reference-in",
-        "source": "reference-6",
-        "target": "imageGeneration-8",
-        "sourceHandle": "reference-out",
-        "targetHandle": "reference-in"
-      },
-      {
-        "id": "xy-edge__realism-3realism-out-imageGeneration-8realism-in",
+        "id": "e-realism-scenario",
         "source": "realism-3",
-        "target": "imageGeneration-8",
+        "target": "scenario-outfit",
         "sourceHandle": "realism-out",
         "targetHandle": "realism-in"
       },
       {
-        "id": "xy-edge__prompt-9prompt-out-imageGeneration-8prompt-in",
+        "id": "e-ref5-scenario",
+        "source": "reference-5",
+        "target": "scenario-outfit",
+        "sourceHandle": "reference-out",
+        "targetHandle": "reference-in"
+      },
+      {
+        "id": "e-ref6-scenario",
+        "source": "reference-6",
+        "target": "scenario-outfit",
+        "sourceHandle": "reference-out",
+        "targetHandle": "reference-in"
+      },
+      {
+        "id": "e-prompt-scenario",
         "source": "prompt-9",
-        "target": "imageGeneration-8",
+        "target": "scenario-outfit",
         "sourceHandle": "prompt-out",
         "targetHandle": "prompt-in"
+      },
+      {
+        "id": "e-scenario-gen",
+        "source": "scenario-outfit",
+        "target": "imageGeneration-8",
+        "sourceHandle": "pipeline-out",
+        "targetHandle": "pipeline-in"
       },
       {
         "id": "xy-edge__imageGeneration-8image-out-preview-10image-in",

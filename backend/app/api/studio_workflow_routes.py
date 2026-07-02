@@ -434,7 +434,7 @@ async def api_workflow_execute(
             )
             return await _accept_workflow_video_job(session, user, plan=plan)
 
-        if target_type == "videoPromptCompose":
+        if target_type == "videoPromptCompose" or target_type == "scenarioMotionVideo":
             plan = resolve_workflow_video_prompt_compose_plan(
                 target_node_id=target_node_id,
                 nodes=nodes,

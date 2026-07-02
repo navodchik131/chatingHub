@@ -16,6 +16,9 @@ export type NodeType =
   | 'turnaroundSheet'
   | 'motionVideo'
   | 'videoPromptCompose'
+  | 'scenarioOutfitChange'
+  | 'scenarioMotionVideo'
+  | 'scenarioFirstFrame'
   | 'videoGeneration'
   | 'videoUpscale'
   | 'preview'
@@ -107,6 +110,22 @@ export interface VideoPromptComposeNodeData {
   [key: string]: unknown
 }
 
+export type ScenarioMotionVideoNodeData = VideoPromptComposeNodeData & {
+  generateAudio?: boolean
+  autoMotionPrompt?: boolean
+  negativePrompt?: string
+}
+
+export interface ScenarioOutfitChangeNodeData {
+  disabled?: boolean
+  [key: string]: unknown
+}
+
+export interface ScenarioFirstFrameNodeData {
+  disabled?: boolean
+  [key: string]: unknown
+}
+
 export type SeedanceT2vVariant = 'standard' | 'mini'
 export type SeedanceT2vResolution = '480p' | '720p' | '1080p'
 export type GrokImagineI2vResolution = '480p' | '720p'
@@ -159,6 +178,9 @@ export type AppNodeData =
   | TurnaroundSheetNodeData
   | MotionVideoNodeData
   | VideoPromptComposeNodeData
+  | ScenarioMotionVideoNodeData
+  | ScenarioOutfitChangeNodeData
+  | ScenarioFirstFrameNodeData
   | VideoGenerationNodeData
   | VideoUpscaleNodeData
   | PreviewNodeData
@@ -191,6 +213,8 @@ export const HandleIds = {
   videoIn: 'video-in',
   videoOut: 'video-out',
   previewIn: 'image-in',
+  pipelineIn: 'pipeline-in',
+  pipelineOut: 'pipeline-out',
 } as const
 
 export const IMAGE_OUTPUT_NODE_TYPES = new Set([

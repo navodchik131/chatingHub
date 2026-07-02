@@ -54,28 +54,30 @@
         "data": {}
       },
       {
-        "id": "video-prompt",
-        "type": "videoPromptCompose",
+        "id": "scenario-motion",
+        "type": "scenarioMotionVideo",
         "position": { "x": 80, "y": 820 },
-        "data": { "prompt": "" }
-      },
-      {
-        "id": "video-gen",
-        "type": "videoGeneration",
-        "position": { "x": 420, "y": 820 },
         "data": {
-          "outputAspect": "9:16",
-          "durationSeconds": 5,
-          "seedanceVariant": "standard",
-          "videoResolution": "720p",
+          "prompt": "",
           "generateAudio": true,
           "autoMotionPrompt": false
         }
       },
       {
+        "id": "video-gen",
+        "type": "videoGeneration",
+        "position": { "x": 460, "y": 820 },
+        "data": {
+          "outputAspect": "9:16",
+          "durationSeconds": 5,
+          "seedanceVariant": "standard",
+          "videoResolution": "720p"
+        }
+      },
+      {
         "id": "preview-video",
         "type": "preview",
-        "position": { "x": 820, "y": 820 },
+        "position": { "x": 860, "y": 820 },
         "data": {}
       }
     ],
@@ -130,74 +132,46 @@
         "targetHandle": "image-in"
       },
       {
-        "id": "e-model-video",
+        "id": "e-model-scenario",
         "source": "model-1",
-        "target": "video-gen",
+        "target": "scenario-motion",
         "sourceHandle": "model-out",
         "targetHandle": "model-in"
       },
       {
-        "id": "e-prompt-video",
-        "source": "video-prompt",
-        "target": "video-gen",
-        "sourceHandle": "prompt-out",
-        "targetHandle": "prompt-in"
-      },
-      {
-        "id": "e-notes-vp",
+        "id": "e-notes-scenario",
         "source": "prompt-scene",
-        "target": "video-prompt",
+        "target": "scenario-motion",
         "sourceHandle": "prompt-out",
         "targetHandle": "prompt-in"
       },
       {
-        "id": "e-model-vp",
-        "source": "model-1",
-        "target": "video-prompt",
-        "sourceHandle": "model-out",
-        "targetHandle": "model-in"
-      },
-      {
-        "id": "e-motion-vp",
+        "id": "e-motion-scenario",
         "source": "motion-ref",
-        "target": "video-prompt",
+        "target": "scenario-motion",
         "sourceHandle": "motion-video-out",
         "targetHandle": "motion-video-in"
       },
       {
-        "id": "e-ff-vp",
+        "id": "e-ff-scenario",
         "source": "first-frame",
-        "target": "video-prompt",
+        "target": "scenario-motion",
         "sourceHandle": "image-out",
         "targetHandle": "first-frame-in"
       },
       {
-        "id": "e-sheet-vp",
+        "id": "e-sheet-scenario",
         "source": "turnaround",
-        "target": "video-prompt",
+        "target": "scenario-motion",
         "sourceHandle": "image-out",
         "targetHandle": "sheet-in"
       },
       {
-        "id": "e-ff-video",
-        "source": "first-frame",
+        "id": "e-scenario-video",
+        "source": "scenario-motion",
         "target": "video-gen",
-        "sourceHandle": "image-out",
-        "targetHandle": "first-frame-in"
-      },
-      {
-        "id": "e-sheet-video",
-        "source": "turnaround",
-        "target": "video-gen",
-        "sourceHandle": "image-out",
-        "targetHandle": "sheet-in"
-      },
-      {
-        "id": "e-motion-video",
-        "source": "motion-ref",
-        "target": "video-gen",
-        "sourceHandle": "motion-video-out",
-        "targetHandle": "motion-video-in"
+        "sourceHandle": "pipeline-out",
+        "targetHandle": "pipeline-in"
       },
       {
         "id": "e-video-preview",
