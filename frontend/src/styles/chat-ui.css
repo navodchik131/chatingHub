@@ -366,7 +366,21 @@
 
 .thread-head-toolbar {
   width: 100%;
+  align-items: flex-end;
   gap: 12px;
+}
+
+.outbound-lang-field.thread-head-lang {
+  min-width: 0;
+}
+
+.thread-head-toolbar .auto-translate-toggle {
+  display: flex;
+  flex-direction: row;
+  align-self: flex-end;
+  flex-shrink: 0;
+  padding-bottom: 9px;
+  gap: 0;
 }
 
 .outbound-lang-label {
@@ -400,15 +414,56 @@
 }
 
 .auto-translate-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   font-size: 13px;
   color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
 }
 
-.auto-translate-label input {
+.auto-translate-label input[type='checkbox'] {
+  appearance: none;
+  -webkit-appearance: none;
   width: 18px;
   height: 18px;
+  margin: 0;
+  flex-shrink: 0;
   border-radius: 5px;
-  accent-color: var(--accent);
+  border: 1px solid var(--border-hover);
+  background: var(--bg-subtle);
+  cursor: pointer;
+  display: inline-grid;
+  place-content: center;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
+}
+
+.auto-translate-label input[type='checkbox']:hover {
+  border-color: var(--border-hover);
+  background: var(--bg-raised);
+}
+
+.auto-translate-label input[type='checkbox']:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.auto-translate-label input[type='checkbox']:checked::after {
+  content: '';
+  width: 5px;
+  height: 9px;
+  border: solid var(--fg-on-accent);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg) translate(-1px, -1px);
+}
+
+.auto-translate-label input[type='checkbox']:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  outline-offset: 2px;
 }
 
 .thread-avatar {
