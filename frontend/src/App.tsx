@@ -91,7 +91,6 @@ import {
   trackFunnelEvent,
 } from './analytics/funnel'
 import './App.css'
-import './styles/chat-ui.css'
 import { StudioInpaintMaskPainter, type StudioInpaintMaskPainterRef } from './StudioInpaintMaskPainter'
 import {
   DEFAULT_MEMBER_PERMISSIONS,

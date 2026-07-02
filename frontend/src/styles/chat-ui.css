@@ -753,3 +753,38 @@
     min-width: 140px;
   }
 }
+
+/* Перебиваем legacy-правила App.css для чата внутри shell */
+.app.app--shell .layout--chat .sidebar,
+.app.app--shell .layout--chat .thread {
+  background: var(--bg-elevated);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border-color: var(--border);
+  box-shadow: var(--shadow-xs);
+}
+
+.app.app--shell .layout--chat .bubble .ru {
+  color: var(--text);
+}
+
+.app.app--shell .layout--chat .bubble .orig {
+  color: var(--text-secondary);
+}
+
+.app.app--shell .layout--chat .conv .name {
+  color: var(--text);
+}
+
+.app.app--shell .layout--chat .conv .preview {
+  color: var(--text-secondary);
+}
+
+.app.app--shell .layout--chat .empty-title {
+  color: var(--text);
+}
+
+.app.app--shell .layout--chat .empty-sub {
+  color: var(--text-secondary);
+}
+
