@@ -17,6 +17,7 @@ from app.db.models import (
 from app.services.billing_plan import is_credits_plan
 from app.services.entitlements import subscription_is_paid_active
 from app.services.plan_catalog import CREDITS_PLAN_LIMITS, plan_display_name
+from app.services.plan_entitlements import plan_limits_for_sub
 from app.services.workspace_model_access import validate_owner_studio_model_id
 
 
