@@ -1,7 +1,6 @@
 @import './styles/tokens.css';
 @import './styles/shell-ui.css';
 @import './styles/overview-ui.css';
-@import './styles/chat-ui.css';
 
 * {
   box-sizing: border-box;
