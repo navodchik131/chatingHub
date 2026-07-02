@@ -42,17 +42,21 @@ function KpiCard({
   label,
   value,
   hint,
-  accent,
+  valueTone,
 }: {
   label: string
   value: ReactNode
   hint?: string
-  accent?: boolean
+  valueTone?: 'default' | 'success'
 }) {
   return (
-    <article className={`dash-kpi${accent ? ' dash-kpi--accent' : ''}`}>
+    <article className="dash-kpi">
       <span className="dash-kpi-label">{label}</span>
-      <strong className="dash-kpi-value">{value}</strong>
+      <strong
+        className={`dash-kpi-value${valueTone === 'success' ? ' dash-kpi-value--success' : ''}`}
+      >
+        {value}
+      </strong>
       {hint ? <span className="dash-kpi-hint">{hint}</span> : null}
     </article>
   )
@@ -61,7 +65,13 @@ function KpiCard({
 function platformLabel(p: string): string {
   if (p === 'telegram') return 'Telegram'
   if (p === 'fanvue') return 'Fanvue'
+  if (p === 'instagram') return 'Instagram'
   return p
+}
+
+function subscriptionLooksActive(label: string): boolean {
+  const lower = label.toLowerCase()
+  return lower.includes('актив') || lower.includes('active') || lower.includes('trial')
 }
 
 export function WorkspaceOverview({
@@ -88,8 +98,13 @@ export function WorkspaceOverview({
   return (
     <div className="dash">
       <div className="dash-kpi-row">
-        <KpiCard label="Кредиты" value={creditsBalance.toLocaleString('ru-RU')} hint={billingPlanLabel} accent />
-        <KpiCard label="Подписка" value={subscriptionLabel} hint="Статус доступа" />
+        <KpiCard label="Кредиты" value={creditsBalance.toLocaleString('ru-RU')} hint={billingPlanLabel} />
+        <KpiCard
+          label="Подписка"
+          value={subscriptionLabel}
+          hint="Статус доступа"
+          valueTone={subscriptionLooksActive(subscriptionLabel) ? 'success' : 'default'}
+        />
         {canChat ? (
           <KpiCard
             label="Диалоги"
@@ -102,25 +117,53 @@ export function WorkspaceOverview({
         ) : null}
       </div>
 
-      <div className="dash-quick panel-glass">
+      <div className="dash-quick">
         <h2 className="dash-block-title">Быстрые действия</h2>
         <div className="dash-quick-actions">
           {canChat ? (
-            <button type="button" className="send-btn" onClick={() => onOpenChat()}>
+            <button
+              type="button"
+              className="dash-action-btn dash-action-btn--primary"
+              onClick={() => onOpenChat()}
+            >
+              <span className="dash-action-btn__icon" aria-hidden>
+                💬
+              </span>
               Открыть диалоги
             </button>
           ) : null}
           {canStudioAny ? (
             <>
-              <button type="button" className="ghost-btn" onClick={onOpenStudio}>
+              <button
+                type="button"
+                className="dash-action-btn dash-action-btn--secondary"
+                onClick={onOpenStudio}
+              >
+                <span className="dash-action-btn__icon dash-action-btn__icon--photo" aria-hidden>
+                  🖼
+                </span>
                 Новая картинка
               </button>
-              <button type="button" className="ghost-btn" onClick={onOpenVideo}>
+              <button
+                type="button"
+                className="dash-action-btn dash-action-btn--secondary"
+                onClick={onOpenVideo}
+              >
+                <span className="dash-action-btn__icon dash-action-btn__icon--video" aria-hidden>
+                  🎬
+                </span>
                 Motion / видео
               </button>
             </>
           ) : null}
-          <button type="button" className="ghost-btn" onClick={onOpenAccount}>
+          <button
+            type="button"
+            className="dash-action-btn dash-action-btn--secondary"
+            onClick={onOpenAccount}
+          >
+            <span className="dash-action-btn__icon dash-action-btn__icon--muted" aria-hidden>
+              ⚙
+            </span>
             Кабинет и интеграции
           </button>
         </div>
@@ -128,11 +171,11 @@ export function WorkspaceOverview({
 
       <div className="dash-grid">
         {canChat ? (
-          <section className="dash-panel panel-glass">
+          <section className="dash-panel">
             <div className="dash-panel-head">
               <h2 className="dash-block-title">Недавние диалоги</h2>
               <button type="button" className="dash-link-btn" onClick={() => onOpenChat()}>
-                Все →
+                Все
               </button>
             </div>
             {recentChats.length === 0 ? (
@@ -144,13 +187,13 @@ export function WorkspaceOverview({
                     <button type="button" className="dash-list-item" onClick={() => onOpenChat(c.id)}>
                       <span className="dash-list-main">
                         <strong>{c.user_display_name ?? 'Без имени'}</strong>
-                        <span className="muted">{platformLabel(c.platform)}</span>
+                        <span className="dash-list-platform">{platformLabel(c.platform)}</span>
+                        {(c.unread_count ?? 0) > 0 ? (
+                          <span className="dash-list-badge">{c.unread_count}</span>
+                        ) : null}
                       </span>
                       {c.last_message_preview ? (
                         <span className="dash-list-preview">{c.last_message_preview}</span>
-                      ) : null}
-                      {(c.unread_count ?? 0) > 0 ? (
-                        <span className="dash-list-badge">{c.unread_count}</span>
                       ) : null}
                     </button>
                   </li>
@@ -161,11 +204,11 @@ export function WorkspaceOverview({
         ) : null}
 
         {canStudioAny ? (
-          <section className="dash-panel panel-glass">
+          <section className="dash-panel">
             <div className="dash-panel-head">
               <h2 className="dash-block-title">Последние кадры</h2>
               <button type="button" className="dash-link-btn" onClick={onOpenStudio}>
-                Студия →
+                Студия
               </button>
             </div>
             {recentGens.length === 0 ? (
@@ -189,11 +232,11 @@ export function WorkspaceOverview({
         ) : null}
 
         {canStudioAny ? (
-          <section className="dash-panel panel-glass dash-panel--wide">
+          <section className="dash-panel dash-panel--wide">
             <div className="dash-panel-head">
               <h2 className="dash-block-title">Последние видео</h2>
               <button type="button" className="dash-link-btn" onClick={onOpenVideo}>
-                Motion →
+                Motion
               </button>
             </div>
             {recentVideos.length === 0 ? (
@@ -209,6 +252,9 @@ export function WorkspaceOverview({
                     rel="noreferrer noopener"
                   >
                     <img src={v.frame_image_url} alt="" loading="lazy" />
+                    <span className="dash-video-play" aria-hidden>
+                      ▶
+                    </span>
                     <span>Видео #{v.id}</span>
                   </a>
                 ))}

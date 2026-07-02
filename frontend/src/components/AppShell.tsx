@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { TelegramChannelBanner } from './TelegramChannelBanner'
+import { WorkspaceNavIcon, type NavIconName } from './WorkspaceNavIcon'
 
 export type WorkspaceSection =
   | 'overview'
@@ -13,7 +14,7 @@ type NavItem = {
   id?: WorkspaceSection
   href?: string
   label: string
-  icon: string
+  icon: NavIconName
   show: boolean
   badge?: number
   beta?: boolean
@@ -53,20 +54,20 @@ export function AppShell({
   const location = useLocation()
 
   const nav: NavItem[] = [
-    { id: 'overview', label: 'Обзор', icon: '◆', show: true },
-    { id: 'chat', label: 'Диалоги', icon: '💬', show: canChat, badge: unreadTotal },
-    { id: 'studio', label: 'Картинки', icon: '🎨', show: canStudioAny },
+    { id: 'overview', label: 'Обзор', icon: 'overview', show: true },
+    { id: 'chat', label: 'Диалоги', icon: 'chat', show: canChat, badge: unreadTotal },
+    { id: 'studio', label: 'Картинки', icon: 'studio', show: canStudioAny },
     {
       id: 'studio_bootstrap',
       label: 'База модели',
-      icon: '✨',
+      icon: 'model',
       show: canStudioAny,
     },
-    { id: 'studio_video', label: 'Видео', icon: '🎬', show: canStudioAny },
+    { id: 'studio_video', label: 'Видео', icon: 'video', show: canStudioAny },
     {
       href: '/workspace/workflow',
       label: 'Workflow',
-      icon: '🧩',
+      icon: 'workflow',
       show: canStudioAny,
       beta: true,
     },
@@ -88,7 +89,7 @@ export function AppShell({
     const content = (
       <>
         <span className="workspace-topnav-icon" aria-hidden>
-          {item.icon}
+          <WorkspaceNavIcon name={item.icon} />
         </span>
         <span className="workspace-topnav-label">{item.label}</span>
         {item.beta ? <span className="workspace-topnav-beta">beta</span> : null}
@@ -132,7 +133,9 @@ export function AppShell({
       : 'workspace-mobile-nav-item'
     const content = (
       <>
-        <span aria-hidden>{item.icon}</span>
+        <span className="workspace-mobile-nav-icon" aria-hidden>
+          <WorkspaceNavIcon name={item.icon} />
+        </span>
         <span>{item.label}</span>
         {item.beta ? <span className="workspace-mobile-nav-beta">beta</span> : null}
         {item.badge != null && item.badge > 0 ? (

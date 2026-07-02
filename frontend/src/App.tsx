@@ -91,6 +91,7 @@ import {
   trackFunnelEvent,
 } from './analytics/funnel'
 import './App.css'
+import './styles/chat-ui.css'
 import { StudioInpaintMaskPainter, type StudioInpaintMaskPainterRef } from './StudioInpaintMaskPainter'
 import {
   DEFAULT_MEMBER_PERMISSIONS,
@@ -2319,9 +2320,10 @@ export default function App() {
   }, [])
 
   useEffect(() => {
-    if (!convNotesOpen || selectedId == null) return
+    if (selectedId == null) return
+    if (isMobileLayout && !convNotesOpen) return
     void loadConvNotes(selectedId)
-  }, [convNotesOpen, selectedId, loadConvNotes])
+  }, [convNotesOpen, selectedId, isMobileLayout, loadConvNotes])
 
   const convNotesPinned = useMemo(
     () =>
@@ -4603,6 +4605,7 @@ export default function App() {
     'layout--chat',
     isMobileLayout ? 'mobile' : '',
     isMobileLayout && selectedId != null ? 'thread-focus' : '',
+    selected && !isMobileLayout ? 'layout--chat-with-notes' : '',
   ]
     .filter(Boolean)
     .join(' ')
@@ -8191,17 +8194,28 @@ export default function App() {
                     }
                     onClick={() => setSelectedId(c.id)}
                   >
-                    <ConvAvatarThumb conv={c} />
-                    <span className="conv-main">
-                    <span className="conv-row-top">
+                    <span className="conv-avatar-wrap">
+                      <ConvAvatarThumb conv={c} />
                       {catBadge ? (
-                        <span className={`conv-cat-badge conv-cat-badge--${catBadge.key}`}>
+                        <span className={`conv-avatar-badge conv-cat-badge conv-cat-badge--${catBadge.key}`}>
                           {catBadge.label}
                         </span>
-                      ) : chatVisiblePlatforms.length <= 1 ? (
-                        <span className="plat">{platformLabel(c.platform)}</span>
-                      ) : (
-                        <span className="conv-row-spacer" aria-hidden />
+                      ) : null}
+                    </span>
+                    <span className="conv-main">
+                    <span className="conv-row-top">
+                      <span className="name">{c.user_display_name ?? 'Без имени'}</span>
+                      {(c.outbound_lang || c.user_lang) && (
+                        <span
+                          className="lang"
+                          title={
+                            c.outbound_lang
+                              ? `Ответ: ${c.outbound_lang} (принудительно)`
+                              : `Язык переписки: ${c.user_lang ?? '—'}`
+                          }
+                        >
+                          {c.outbound_lang ? `${c.outbound_lang}*` : c.user_lang}
+                        </span>
                       )}
                       {unread > 0 ? (
                         <span className="unread-badge" title="Непрочитанных">
@@ -8209,25 +8223,17 @@ export default function App() {
                         </span>
                       ) : null}
                     </span>
-                    <span className="name">{c.user_display_name ?? 'Без имени'}</span>
                     {c.studio_model_id != null ? (
-                      <span className="lang" title="Модель подключения">
-                        {studioModels.find((m) => m.id === c.studio_model_id)?.name ??
-                          `модель #${c.studio_model_id}`}
+                      <span className="conv-model-line">
+                        Модель ·{' '}
+                        <strong>
+                          {studioModels.find((m) => m.id === c.studio_model_id)?.name ??
+                            `#${c.studio_model_id}`}
+                        </strong>
                       </span>
+                    ) : chatVisiblePlatforms.length <= 1 ? (
+                      <span className="conv-model-line">{platformLabel(c.platform)}</span>
                     ) : null}
-                    {(c.outbound_lang || c.user_lang) && (
-                      <span
-                        className="lang"
-                        title={
-                          c.outbound_lang
-                            ? `Ответ: ${c.outbound_lang} (принудительно)`
-                            : `Язык переписки: ${c.user_lang ?? '—'}`
-                        }
-                      >
-                        {c.outbound_lang ? `${c.outbound_lang}*` : c.user_lang}
-                      </span>
-                    )}
                     {c.last_message_preview && (
                       <span className="preview">{c.last_message_preview}</span>
                     )}
@@ -8240,14 +8246,7 @@ export default function App() {
           </div>
         </aside>
 
-        <div
-          className={[
-            'chat-thread-wrap',
-            convNotesOpen ? 'chat-thread-wrap--notes-open' : '',
-          ]
-            .filter(Boolean)
-            .join(' ')}
-        >
+        <div className="chat-thread-wrap">
         <main className="thread">
           {!selected && (
             <div className="empty-thread">
@@ -8268,7 +8267,7 @@ export default function App() {
                   .filter(Boolean)
                   .join(' ')}
               >
-                <div className="thread-head-row">
+                <div className="thread-head-identity">
                   {isMobileLayout && !showThreadDock ? (
                     <button
                       type="button"
@@ -8283,7 +8282,19 @@ export default function App() {
                   ) : null}
                   <ThreadAvatar conv={selected} />
                   <div className="thread-head-text">
-                    <h3>{selected.user_display_name ?? 'Диалог'}</h3>
+                    <h3>
+                      {selected.user_display_name ?? 'Диалог'}
+                      {(() => {
+                        const headBadge = conversationCategoryBadge(selected)
+                        return headBadge ? (
+                          <span
+                            className={`thread-head-cat-badge conv-cat-badge conv-cat-badge--${headBadge.key}`}
+                          >
+                            {headBadge.label}
+                          </span>
+                        ) : null
+                      })()}
+                    </h3>
                     <span className="meta">
                       {platformLabel(selected.platform)}
                       {!isMobileLayout ? ` · topic ${selected.external_topic_id}` : null}
@@ -8299,6 +8310,18 @@ export default function App() {
                       ) : null}
                     </span>
                   </div>
+                  {!isMobileLayout &&
+                  isOwner &&
+                  selected.studio_model_id != null &&
+                  studioModels.length > 0 ? (
+                    <div className="thread-head-model-chip">
+                      <span className="thread-head-model-chip__label">Модель</span>
+                      <span className="thread-head-model-chip__value">
+                        {studioModels.find((m) => m.id === selected.studio_model_id)?.name ??
+                          `#${selected.studio_model_id}`}
+                      </span>
+                    </div>
+                  ) : null}
                   {isMobileLayout ? (
                     <div className="thread-head-actions">
                       <button
@@ -8320,14 +8343,15 @@ export default function App() {
                       </button>
                     </div>
                   ) : null}
-                  <div
-                    className={[
-                      'thread-head-toolbar',
-                      isMobileLayout && !threadSettingsOpen ? 'thread-head-toolbar--collapsed' : '',
-                    ]
-                      .filter(Boolean)
-                      .join(' ')}
-                  >
+                </div>
+                <div
+                  className={[
+                    'thread-head-toolbar',
+                    isMobileLayout && !threadSettingsOpen ? 'thread-head-toolbar--collapsed' : '',
+                  ]
+                    .filter(Boolean)
+                    .join(' ')}
+                >
                     <div
                       className="outbound-lang-field thread-head-lang"
                       title="На какой язык переводить ваши ответы. «Авто» — по последним входящим (поле user_lang)."
@@ -8424,22 +8448,6 @@ export default function App() {
                         <span>Заблокировать</span>
                       </label>
                     </div>
-                    {!isMobileLayout &&
-                    isOwner &&
-                    selected.studio_model_id != null &&
-                    studioModels.length > 0 ? (
-                      <div
-                        className="outbound-lang-field"
-                        title="Модель задаётся на подключении в «Интеграции»."
-                      >
-                        <span className="outbound-lang-label muted">
-                          Модель:{' '}
-                          {studioModels.find((m) => m.id === selected.studio_model_id)?.name ??
-                            `#${selected.studio_model_id}`}
-                        </span>
-                      </div>
-                    ) : null}
-                  </div>
                 </div>
               </div>
 
@@ -8880,6 +8888,7 @@ export default function App() {
                         </div>
                       )}
                     </div>
+                    <div className="composer-field">
                     <textarea
                       ref={textareaRef}
                       rows={3}
@@ -8919,12 +8928,14 @@ export default function App() {
                         Отправить
                       </button>
                     </div>
+                    </div>
                   </div>
                 </div>
               </div>
             </>
           )}
         </main>
+        </div>
 
         {selected ? (
           <>
@@ -9082,7 +9093,6 @@ export default function App() {
             </aside>
           </>
         ) : null}
-        </div>
       </div>
       )}
         </AppShell>

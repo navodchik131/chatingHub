@@ -1,66 +1,75 @@
-/* ModelMate — общие токены (кабинет + маркетинг + index.html) */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+/* ModelMate Creator OS — design tokens */
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700;800;900&family=Geist+Mono:wght@400;500;600&display=swap');
 
 :root {
-  --font: 'Inter', 'Plus Jakarta Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font: 'Geist', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, Menlo, monospace;
   --control-height: 2.75rem;
   --control-radius: 12px;
   --control-radius-sm: 10px;
 
-  --bg: #0a0a0f;
-  --bg-elevated: #12121a;
-  --bg-subtle: #1a1a24;
-  --bg-input: #14141c;
-  --bg-glass: rgba(18, 18, 26, 0.72);
-  --bg-mesh:
-    radial-gradient(ellipse 100% 80% at 0% -20%, rgba(124, 92, 255, 0.18), transparent 50%),
-    radial-gradient(ellipse 70% 50% at 100% 0%, rgba(255, 107, 157, 0.1), transparent 45%),
-    radial-gradient(ellipse 60% 40% at 50% 100%, rgba(124, 92, 255, 0.06), transparent 55%);
+  --bg: #08080a;
+  --bg-elevated: #121215;
+  --bg-subtle: #16161b;
+  --bg-input: #050507;
+  --bg-glass: rgba(8, 8, 10, 0.72);
+  --bg-mesh: none;
 
-  --border: rgba(255, 255, 255, 0.08);
-  --border-strong: rgba(255, 255, 255, 0.12);
-  --border-hover: rgba(124, 92, 255, 0.45);
+  --border: #26262c;
+  --border-strong: #4a4a52;
+  --border-hover: #34343b;
 
-  --text: #f0f0f5;
-  --text-secondary: #b8b8c6;
-  --muted: #8e8e9c;
+  --text: #f5f5f7;
+  --text-secondary: #9a9aa3;
+  --muted: #5f5f68;
+  --fg-on-accent: #08080a;
 
-  --accent: #7c5cff;
-  --accent-2: #ff6b9d;
-  --accent-hover: #6b4fe6;
-  --accent-soft: rgba(124, 92, 255, 0.14);
-  --accent-ring: rgba(124, 92, 255, 0.45);
-  --accent-faint: rgba(124, 92, 255, 0.06);
-  --accent-glow: rgba(124, 92, 255, 0.35);
-  --gradient-accent: linear-gradient(135deg, var(--accent), var(--accent-2));
+  --accent: #d8ff3d;
+  --accent-2: #5bd4ff;
+  --accent-hover: #e4ff66;
+  --accent-press: #bfe830;
+  --accent-soft: rgba(216, 255, 61, 0.1);
+  --accent-ring: rgba(216, 255, 61, 0.35);
+  --accent-faint: rgba(216, 255, 61, 0.04);
+  --accent-glow: rgba(216, 255, 61, 0.25);
+  --gradient-accent: linear-gradient(135deg, #ff7a4d, #c58cff 55%, #5bd4ff);
 
-  --in-bg: linear-gradient(165deg, #1a1a22 0%, #16161e 100%);
-  --in-border: rgba(124, 92, 255, 0.16);
-  --out-bg: linear-gradient(165deg, #1a1528 0%, #14101f 100%);
-  --out-border: rgba(124, 92, 255, 0.28);
+  --cat-photo: #ff7a4d;
+  --cat-video: #5bd4ff;
+  --cat-i2v: #c58cff;
 
-  --success: #34d399;
-  --warn: #fbbf24;
-  --danger-bg: rgba(127, 29, 29, 0.25);
-  --danger-border: rgba(248, 113, 113, 0.35);
-  --danger-text: #fecaca;
-  --info-bg: rgba(124, 92, 255, 0.1);
-  --info-border: rgba(124, 92, 255, 0.25);
-  --info-text: #c4b5fd;
+  --in-bg: #16161b;
+  --in-border: #26262c;
+  --out-bg: linear-gradient(180deg, rgba(216, 255, 61, 0.09), rgba(216, 255, 61, 0.04));
+  --out-border: rgba(216, 255, 61, 0.22);
 
-  --radius-lg: 20px;
-  --radius-md: 16px;
+  --success: #7ce38b;
+  --warn: #f5c443;
+  --danger-bg: rgba(255, 90, 110, 0.12);
+  --danger-border: rgba(255, 90, 110, 0.35);
+  --danger-text: #ff8a98;
+  --info-bg: rgba(91, 212, 255, 0.1);
+  --info-border: rgba(91, 212, 255, 0.25);
+  --info-text: #9ee8ff;
+
+  --radius-lg: 16px;
+  --radius-md: 13px;
   --radius-sm: 10px;
-  --panel-blur: blur(16px);
+  --panel-blur: blur(20px);
 
-  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.35);
-  --shadow-sm: 0 2px 16px rgba(0, 0, 0, 0.35);
-  --shadow-md: 0 12px 48px rgba(0, 0, 0, 0.45);
+  --shadow-xs: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 8px 32px rgba(0, 0, 0, 0.45);
   --shadow-float: 0 24px 64px rgba(0, 0, 0, 0.55);
   --shadow-glow: 0 8px 32px var(--accent-glow);
 
-  --sidebar-width: 248px;
+  --sidebar-width: 320px;
   --topbar-height: 64px;
 
-  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+::selection {
+  background: var(--accent);
+  color: var(--fg-on-accent);
 }

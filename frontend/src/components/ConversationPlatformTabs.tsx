@@ -42,6 +42,7 @@ export function ConversationPlatformTabs({
             onClick={() => onChange(platform)}
           >
             <img src={meta.icon} alt="" className="conv-platform-tab__icon" decoding="async" />
+            <span className="conv-platform-tab__label">{meta.label}</span>
             {unread > 0 ? (
               <span className="conv-platform-tab__badge" aria-hidden>
                 {unread > 99 ? '99+' : unread}
