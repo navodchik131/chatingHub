@@ -130,6 +130,9 @@ class User(Base):
     instagram_connections: Mapped[list["InstagramConnection"]] = relationship(
         "InstagramConnection", back_populates="user"
     )
+    tribute_connections: Mapped[list["TributeConnection"]] = relationship(
+        "TributeConnection", back_populates="user"
+    )
     studio_models: Mapped[list[UserStudioModel]] = relationship(
         "UserStudioModel", back_populates="owner", cascade="all, delete-orphan"
     )
@@ -354,6 +357,67 @@ class InstagramConnection(Base):
 
     user: Mapped[User] = relationship("User", back_populates="instagram_connections")
     studio_model: Mapped[UserStudioModel | None] = relationship("UserStudioModel")
+
+
+class TributeConnection(Base):
+    __tablename__ = "tribute_connections"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    label: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    studio_model_id: Mapped[int | None] = mapped_column(
+        ForeignKey("user_studio_models.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    api_key_encrypted: Mapped[str] = mapped_column(Text)
+    webhook_secret: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+    user: Mapped[User] = relationship("User", back_populates="tribute_connections")
+    studio_model: Mapped[UserStudioModel | None] = relationship("UserStudioModel")
+    earning_events: Mapped[list["TributeEarningEvent"]] = relationship(
+        "TributeEarningEvent",
+        back_populates="connection",
+        cascade="all, delete-orphan",
+    )
+
+
+class TributeEarningEvent(Base):
+    """Платёж или возврат из webhook Tribute."""
+
+    __tablename__ = "tribute_earning_events"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    tribute_connection_id: Mapped[int] = mapped_column(
+        ForeignKey("tribute_connections.id", ondelete="CASCADE"), index=True
+    )
+    studio_model_id: Mapped[int | None] = mapped_column(
+        ForeignKey("user_studio_models.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    external_event_id: Mapped[str] = mapped_column(String(128), unique=True, index=True)
+    event_name: Mapped[str] = mapped_column(String(64), index=True)
+    amount_minor: Mapped[int] = mapped_column(Integer)
+    currency: Mapped[str] = mapped_column(String(8))
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    raw_meta: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+    connection: Mapped[TributeConnection] = relationship(
+        "TributeConnection", back_populates="earning_events"
+    )
 
 
 class InstagramOAuthState(Base):

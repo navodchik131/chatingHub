@@ -56,6 +56,55 @@ async def count_instagram_connections(session: AsyncSession, owner_id: int) -> i
     )
 
 
+async def count_tribute_connections(session: AsyncSession, owner_id: int) -> int:
+    from app.db.models import TributeConnection
+
+    return int(
+        await session.scalar(
+            select(func.count())
+            .select_from(TributeConnection)
+            .where(
+                TributeConnection.user_id == owner_id,
+                TributeConnection.is_active.is_(True),
+            )
+        )
+        or 0
+    )
+
+
+async def assert_can_add_tribute_connection(
+    session: AsyncSession,
+    owner_id: int,
+    sub: Subscription | None,
+) -> None:
+    """Лимит подключений Tribute = лимит моделей на тарифе."""
+    lim = plan_limits_for_sub(sub)
+    limits_on = True
+    if sub is not None and is_credits_plan(sub.billing_plan) and not subscription_is_paid_active(sub):
+        lim = CREDITS_PLAN_LIMITS
+    elif sub is not None and subscription_is_paid_active(sub):
+        limits_on = True
+    elif sub is None or not subscription_is_paid_active(sub):
+        if not (sub is not None and is_credits_plan(sub.billing_plan)):
+            return
+
+    if not limits_on and not (
+        sub is not None and is_credits_plan(sub.billing_plan) and not subscription_is_paid_active(sub)
+    ):
+        return
+
+    n = await count_tribute_connections(session, owner_id)
+    if n >= lim.max_models:
+        raise HTTPException(
+            status_code=402,
+            detail=(
+                f"Достигнут лимит подключений Tribute ({lim.max_models}) для тарифа "
+                f"{plan_display_name(sub.billing_plan if sub else None, sub.plan_tier if sub else None)}. "
+                "Удалите лишнее подключение или повысьте план."
+            ),
+        )
+
+
 async def assert_can_add_platform_connection(
     session: AsyncSession,
     owner_id: int,

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
@@ -620,7 +620,7 @@ class PlatformConnectionPatchIn(BaseModel):
 
 class PlatformConnectionOut(BaseModel):
     id: int
-    platform: Literal["telegram", "fanvue", "instagram"]
+    platform: Literal["telegram", "fanvue", "instagram", "tribute"]
     label: str | None = None
     studio_model_id: int | None = None
     bot_username: str | None = None
@@ -635,6 +635,26 @@ class PlatformConnectionOut(BaseModel):
     companion_delay_min_sec: int = 5
     companion_delay_max_sec: int = 45
     companion_max_replies_per_hour: int = 60
+
+
+class TributeIntegrationIn(BaseModel):
+    api_key: str = Field(min_length=8, max_length=512)
+    label: str | None = Field(default=None, max_length=128)
+    studio_model_id: int | None = Field(default=None, ge=1)
+    connection_id: int | None = Field(default=None, ge=1)
+
+
+class TributeEarningsSummaryOut(BaseModel):
+    from_date: date
+    to_date: date
+    is_owner: bool
+    chatter_share_percent: int
+    gross_minor: int
+    display_minor: int
+    currency: str
+    by_currency: dict[str, int] = Field(default_factory=dict)
+    gross_by_currency: dict[str, int] = Field(default_factory=dict)
+    event_count: int = 0
 
 
 class FanvueSyncOut(BaseModel):
@@ -666,6 +686,8 @@ class IntegrationStatusOut(BaseModel):
     telegram_connections: list[PlatformConnectionOut] = Field(default_factory=list)
     fanvue_connections: list[PlatformConnectionOut] = Field(default_factory=list)
     instagram_connections: list[PlatformConnectionOut] = Field(default_factory=list)
+    tribute_configured: bool = False
+    tribute_connections: list[PlatformConnectionOut] = Field(default_factory=list)
     max_connections_per_platform: int = 1
 
 

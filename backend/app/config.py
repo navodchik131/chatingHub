@@ -484,6 +484,12 @@ class Settings(BaseSettings):
         description="Макс. возраст ai-заметок до принудительного обновления (минуты). "
         "Также обновляются при смене календарного дня, если были новые сообщения.",
     )
+    tribute_chatter_share_percent: int = Field(
+        default=20,
+        ge=0,
+        le=100,
+        description="Доля дохода Tribute, которую видит чатер (в % от gross).",
+    )
     companion_followup_delay_min_sec: float = Field(
         default=900.0,
         ge=60.0,

@@ -18,8 +18,11 @@ from app.connectors.fanvue.signature import verify_fanvue_webhook_signature
 from app.connectors.instagram.handlers import ingest_instagram_webhook_body
 from app.connectors.instagram.signature import verify_meta_webhook_signature
 from app.connectors.telegram.ingest import ingest_telegram_dm, ingest_telegram_message_reaction
-from app.db.models import FanvueConnection, TelegramConnection
+from app.connectors.tribute.handlers import ingest_tribute_webhook
+from app.connectors.tribute.signature import verify_tribute_webhook_signature
+from app.db.models import FanvueConnection, TelegramConnection, TributeConnection
 from app.db.session import get_session
+from app.services.crypto_secret import decrypt_secret
 from app.services.fanvue_connection import (
     fanvue_platform_webhook_signing_secret,
     resolve_fanvue_webhook_signing_secret,
@@ -218,4 +221,47 @@ async def instagram_webhook(
         return await ingest_instagram_webhook_body(session, body)
     except Exception:
         log.exception("instagram webhook ingest failed")
+        raise HTTPException(status_code=500, detail="ingest failed") from None
+
+
+@router.post("/tribute/{secret}")
+async def tribute_webhook(
+    secret: str,
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    conn = await session.scalar(
+        select(TributeConnection).where(
+            TributeConnection.webhook_secret == secret,
+            TributeConnection.is_active.is_(True),
+        )
+    )
+    if not conn:
+        raise HTTPException(status_code=404, detail="unknown webhook")
+
+    raw = await request.body()
+    sig_header = request.headers.get("trbt-signature") or request.headers.get(
+        "Trbt-Signature"
+    )
+    try:
+        api_key = decrypt_secret(conn.api_key_encrypted)
+    except Exception as e:
+        log.warning("tribute webhook: decrypt failed conn=%s: %s", conn.id, e)
+        raise HTTPException(status_code=503, detail="connection misconfigured") from e
+
+    if not verify_tribute_webhook_signature(raw, sig_header, api_key):
+        log.warning("tribute webhook: invalid signature conn=%s", conn.id)
+        raise HTTPException(status_code=401, detail="invalid tribute signature")
+
+    try:
+        body = json.loads(raw.decode("utf-8"))
+    except json.JSONDecodeError as e:
+        raise HTTPException(status_code=400, detail="invalid json body") from e
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="json must be an object")
+
+    try:
+        return await ingest_tribute_webhook(session, conn=conn, body=body)
+    except Exception:
+        log.exception("tribute webhook ingest failed conn=%s", conn.id)
         raise HTTPException(status_code=500, detail="ingest failed") from None

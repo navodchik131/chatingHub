@@ -516,7 +516,7 @@ interface WorkspaceMemberRow {
 
 interface PlatformConnection {
   id: number
-  platform: 'telegram' | 'fanvue' | 'instagram'
+  platform: 'telegram' | 'fanvue' | 'instagram' | 'tribute'
   label: string | null
   studio_model_id: number | null
   bot_username?: string | null
@@ -553,7 +553,21 @@ interface IntegrationStatus {
   telegram_connections?: PlatformConnection[]
   fanvue_connections?: PlatformConnection[]
   instagram_connections?: PlatformConnection[]
+  tribute_configured?: boolean
+  tribute_connections?: PlatformConnection[]
   max_connections_per_platform?: number
+}
+
+interface TributeEarningsSummary {
+  from_date: string
+  to_date: string
+  is_owner: boolean
+  chatter_share_percent: number
+  gross_minor: number
+  display_minor: number
+  currency: string
+  by_currency: Record<string, number>
+  event_count: number
 }
 
 interface BillingCreditsPricing {
@@ -765,6 +779,19 @@ function formatNoteUpdatedAt(iso: string | undefined | null): string {
     return formatDateTimeRu(iso)
   } catch {
     return String(iso)
+  }
+}
+
+function formatTributeMinor(amountMinor: number, currency: string): string {
+  const cur = (currency || 'USD').toUpperCase()
+  try {
+    return new Intl.NumberFormat('ru-RU', {
+      style: 'currency',
+      currency: cur,
+      maximumFractionDigits: 2,
+    }).format(amountMinor / 100)
+  } catch {
+    return `${(amountMinor / 100).toFixed(2)} ${cur}`
   }
 }
 
@@ -1015,6 +1042,24 @@ export default function App() {
   const [fvSyncNote, setFvSyncNote] = useState<string | null>(null)
   const [igDraftModelId, setIgDraftModelId] = useState<number | ''>('')
   const [igBusy, setIgBusy] = useState(false)
+  const [tributeApiKey, setTributeApiKey] = useState('')
+  const [tributeDraftLabel, setTributeDraftLabel] = useState('')
+  const [tributeDraftModelId, setTributeDraftModelId] = useState<number | ''>('')
+  const [tributeEditConnectionId, setTributeEditConnectionId] = useState<number | null>(null)
+  const [tributeEarnings, setTributeEarnings] = useState<TributeEarningsSummary | null>(null)
+
+  const tributeEarningsDisplay = useMemo(() => {
+    if (!tributeEarnings) return { label: null as string | null, hint: null as string | null }
+    const cur = tributeEarnings.currency || 'USD'
+    const label = formatTributeMinor(tributeEarnings.display_minor, cur)
+    const from = tributeEarnings.from_date
+    const to = tributeEarnings.to_date
+    const period = from === to ? from : `${from} — ${to}`
+    const hint = tributeEarnings.is_owner
+      ? `Полная сумма · ${period}${tributeEarnings.event_count ? ` · ${tributeEarnings.event_count} событий` : ''}`
+      : `${tributeEarnings.chatter_share_percent}% от дохода ваших моделей · ${period}`
+    return { label, hint }
+  }, [tributeEarnings])
 
   const [appSection, setAppSection] = useState<WorkspaceSection>('overview')
   const [studioDesc, setStudioDesc] = useState('')
@@ -1397,6 +1442,15 @@ export default function App() {
     if (r.ok) setInteg((await r.json()) as IntegrationStatus)
   }, [])
 
+  const refreshTributeEarnings = useCallback(async () => {
+    const r = await apiFetch('/api/tribute/earnings/summary')
+    if (r.ok) {
+      setTributeEarnings((await r.json()) as TributeEarningsSummary)
+    } else {
+      setTributeEarnings(null)
+    }
+  }, [])
+
   const refreshCompanionFeedback = useCallback(async () => {
     setCompanionFeedbackLoading(true)
     try {
@@ -1723,6 +1777,12 @@ export default function App() {
   useEffect(() => {
     if (authed && accountOpen) void refreshIntegrations()
   }, [authed, accountOpen, refreshIntegrations])
+
+  useEffect(() => {
+    if (!authed || !canChat) return
+    if (appSection !== 'overview') return
+    void refreshTributeEarnings()
+  }, [authed, canChat, appSection, refreshTributeEarnings])
 
   useEffect(() => {
     if (!authed) return
@@ -4188,7 +4248,7 @@ export default function App() {
   }
 
   const patchPlatformConnection = async (
-    platform: 'telegram' | 'fanvue' | 'instagram',
+    platform: 'telegram' | 'fanvue' | 'instagram' | 'tribute',
     connectionId: number,
     patch: {
       label?: string | null
@@ -4381,6 +4441,58 @@ export default function App() {
   const copyInstagramWebhookUrl = async () => {
     const url = integ?.instagram_webhook_url
     if (!url) return
+    try {
+      await navigator.clipboard.writeText(url)
+    } catch {
+      setError('Не удалось скопировать URL webhook')
+    }
+  }
+
+  const saveTribute = async (connectionId?: number | null) => {
+    setError(null)
+    const key = tributeApiKey.trim()
+    if (key.length < 8) {
+      setError('Вставьте API-ключ Tribute из панели автора (Настройки → API Keys).')
+      return
+    }
+    const body: Record<string, unknown> = { api_key: key }
+    const cid = connectionId ?? tributeEditConnectionId
+    if (cid != null) body.connection_id = cid
+    const label = tributeDraftLabel.trim()
+    if (label) body.label = label
+    if (tributeDraftModelId !== '') body.studio_model_id = tributeDraftModelId
+    const r = await apiFetch('/api/integrations/tribute', {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    })
+    if (!r.ok) {
+      const j = await r.json().catch(() => ({}))
+      setError(formatHttpApiError(r, j))
+      return
+    }
+    setTributeApiKey('')
+    setTributeDraftLabel('')
+    setTributeDraftModelId('')
+    setTributeEditConnectionId(null)
+    setInteg((await r.json()) as IntegrationStatus)
+    void refreshTributeEarnings()
+  }
+
+  const disconnectTribute = async (connectionId: number) => {
+    setError(null)
+    const r = await apiFetch(`/api/integrations/tribute?connection_id=${connectionId}`, {
+      method: 'DELETE',
+    })
+    if (!r.ok) {
+      const j = await r.json().catch(() => ({}))
+      setError(formatHttpApiError(r, j))
+      return
+    }
+    setInteg((await r.json()) as IntegrationStatus)
+    void refreshTributeEarnings()
+  }
+
+  const copyTributeWebhookUrl = async (url: string) => {
     try {
       await navigator.clipboard.writeText(url)
     } catch {
@@ -5741,6 +5853,144 @@ export default function App() {
                 ) : null}
               </section>
 
+              <section className="cabinet-module">
+                <div className="cabinet-module-head">
+                  <h4 className="cabinet-module-title">Tribute</h4>
+                  <span
+                    className={`cabinet-module-badge ${integ?.tribute_configured ? 'is-ok' : 'is-warn'}`}
+                  >
+                    {(integ?.tribute_connections?.length ?? 0) > 0
+                      ? `${integ?.tribute_connections?.length} подключ.`
+                      : 'Не подключено'}
+                  </span>
+                </div>
+                <p className="muted cabinet-module-body">
+                  Донаты и подписки через{' '}
+                  <a href="https://wiki.tribute.tg/ru/api-dokumentaciya" target="_blank" rel="noopener noreferrer">
+                    Tribute API
+                  </a>
+                  . Укажите API-ключ и webhook URL в панели Tribute. Модель на подключении определяет, к какому
+                  профилю относится доход. Чатеры видят 20% от суммы по своим моделям.
+                </p>
+                {(integ?.tribute_connections ?? []).map((conn) => (
+                  <div key={conn.id} className="cabinet-module-form">
+                    <p className="small mono">{conn.label ? conn.label : `Подключение #${conn.id}`}</p>
+                    {studioModels.length > 0 ? (
+                      <label>
+                        Модель
+                        <select
+                          value={conn.studio_model_id != null ? String(conn.studio_model_id) : ''}
+                          disabled={!canIntegrations}
+                          onChange={(e) => {
+                            const raw = e.target.value
+                            void patchPlatformConnection('tribute', conn.id, {
+                              studio_model_id: raw ? Number(raw) : null,
+                            })
+                          }}
+                        >
+                          <option value="">Не назначена</option>
+                          {studioModels.map((m) => (
+                            <option key={m.id} value={String(m.id)}>
+                              {m.name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    ) : null}
+                    {conn.webhook_url ? (
+                      <label className="cabinet-field-span2">
+                        Webhook URL (Tribute → Настройки → Webhooks)
+                        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                          <input readOnly value={conn.webhook_url} />
+                          <button
+                            type="button"
+                            className="ghost-btn"
+                            onClick={() => void copyTributeWebhookUrl(conn.webhook_url!)}
+                          >
+                            Копировать
+                          </button>
+                        </div>
+                      </label>
+                    ) : null}
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                      <button
+                        type="button"
+                        className="ghost-btn"
+                        disabled={!canIntegrations}
+                        onClick={() => {
+                          setTributeEditConnectionId(conn.id)
+                          setTributeDraftLabel(conn.label ?? '')
+                          setTributeDraftModelId(conn.studio_model_id ?? '')
+                        }}
+                      >
+                        Обновить ключ
+                      </button>
+                      <button
+                        type="button"
+                        className="ghost-btn"
+                        disabled={!canIntegrations}
+                        onClick={() => void disconnectTribute(conn.id)}
+                      >
+                        Отключить
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                {(integ?.tribute_connections?.length ?? 0) <
+                (integ?.max_connections_per_platform ?? 1) ? (
+                  <div className="cabinet-module-form">
+                    <label>
+                      Метка (необязательно)
+                      <input
+                        value={tributeDraftLabel}
+                        onChange={(e) => setTributeDraftLabel(e.target.value)}
+                        disabled={!canIntegrations}
+                        placeholder="Например: Mia Tribute"
+                      />
+                    </label>
+                    {studioModels.length > 0 ? (
+                      <label>
+                        Модель
+                        <select
+                          value={tributeDraftModelId === '' ? '' : String(tributeDraftModelId)}
+                          onChange={(e) => {
+                            const v = e.target.value
+                            setTributeDraftModelId(v ? Number(v) : '')
+                          }}
+                          disabled={!canIntegrations}
+                        >
+                          <option value="">Не назначена</option>
+                          {studioModels.map((m) => (
+                            <option key={m.id} value={String(m.id)}>
+                              {m.name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    ) : null}
+                    <label>
+                      API-ключ Tribute
+                      <input
+                        type="password"
+                        autoComplete="off"
+                        value={tributeApiKey}
+                        onChange={(e) => setTributeApiKey(e.target.value)}
+                        placeholder="Api-Key из панели автора Tribute"
+                        disabled={!canIntegrations}
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      className="send-btn"
+                      disabled={!canIntegrations}
+                      onClick={() => void saveTribute(tributeEditConnectionId)}
+                    >
+                      {tributeEditConnectionId != null ? 'Сохранить ключ' : 'Добавить Tribute'}
+                    </button>
+                  </div>
+                ) : null}
+              </section>
+
               {canPlatformAdmin ? (
               <section className="cabinet-module">
                 <div className="cabinet-module-head">
@@ -6931,6 +7181,8 @@ export default function App() {
               conversations={conversations}
               generations={studioGenerations}
               motionRenders={motionRenders}
+              tributeEarningsLabel={tributeEarningsDisplay.label}
+              tributeEarningsHint={tributeEarningsDisplay.hint}
               onOpenChat={openWorkspaceChat}
               onOpenStudio={() => setAppSection('studio')}
               onOpenVideo={() => setAppSection('studio_video')}

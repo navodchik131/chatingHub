@@ -14,6 +14,7 @@ from app.api.integrations_routes import router as integrations_router
 from app.api.push_routes import router as push_router
 from app.api.studio_routes import router as studio_router
 from app.api.studio_workflow_routes import router as studio_workflow_router
+from app.api.tribute_routes import router as tribute_router
 from app.api.webhooks_routes import router as webhooks_router
 from app.api.workspace_routes import router as workspace_router
 from app.auth.routes import router as auth_router
@@ -24,6 +25,7 @@ router.include_router(workspace_router)
 router.include_router(chat_router)
 router.include_router(push_router)
 router.include_router(webhooks_router)
+router.include_router(tribute_router)
 router.include_router(integrations_router)
 router.include_router(billing_router)
 router.include_router(referral_router)

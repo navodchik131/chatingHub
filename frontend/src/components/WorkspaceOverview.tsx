@@ -32,6 +32,8 @@ export interface WorkspaceOverviewProps {
   conversations: ConversationPreview[]
   generations: GenerationPreview[]
   motionRenders: MotionPreview[]
+  tributeEarningsLabel?: string | null
+  tributeEarningsHint?: string | null
   onOpenChat: (convId?: number) => void
   onOpenStudio: () => void
   onOpenVideo: () => void
@@ -86,6 +88,8 @@ export function WorkspaceOverview({
   conversations,
   generations,
   motionRenders,
+  tributeEarningsLabel,
+  tributeEarningsHint,
   onOpenChat,
   onOpenStudio,
   onOpenVideo,
@@ -110,6 +114,14 @@ export function WorkspaceOverview({
             label="Диалоги"
             value={conversationsTotal}
             hint={unreadTotal > 0 ? `${unreadTotal} непрочитанных` : 'Все прочитаны'}
+          />
+        ) : null}
+        {canChat && tributeEarningsLabel ? (
+          <KpiCard
+            label="Tribute"
+            value={tributeEarningsLabel}
+            hint={tributeEarningsHint ?? 'Донаты и подписки'}
+            valueTone="success"
           />
         ) : null}
         {canStudioAny ? (

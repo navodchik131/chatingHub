@@ -42,6 +42,7 @@ from app.db.models import (
     Platform,
     Subscription,
     TelegramConnection,
+    TributeConnection,
     User,
     WavespeedConnection,
 )
@@ -59,6 +60,7 @@ from app.schemas import (
     PlatformConnectionOut,
     PlatformConnectionPatchIn,
     TelegramIntegrationIn,
+    TributeIntegrationIn,
     WavespeedIntegrationIn,
 )
 from app.services.billing_plan import is_credits_plan, normalize_billing_plan
@@ -76,9 +78,11 @@ from app.services.fanvue_sync import sync_fanvue_chat_history
 from app.services.plan_entitlements import plan_limits_for_sub
 from app.services.platform_connections import (
     assert_can_add_platform_connection,
+    assert_can_add_tribute_connection,
     sync_conversations_model_from_connection,
     validate_connection_studio_model,
 )
+from app.services.tribute_connection import tribute_webhook_url_for_connection
 from app.services.studio_keys import wavespeed_cabinet_flags
 from app.services.workspace import PERM_INTEGRATIONS, assert_permission, workspace_owner_id
 
@@ -205,6 +209,17 @@ def _instagram_connection_out(ig: InstagramConnection) -> PlatformConnectionOut:
     )
 
 
+def _tribute_connection_out(tr: TributeConnection) -> PlatformConnectionOut:
+    return PlatformConnectionOut(
+        id=tr.id,
+        platform="tribute",
+        label=tr.label,
+        studio_model_id=tr.studio_model_id,
+        webhook_url=tribute_webhook_url_for_connection(tr),
+        is_active=bool(tr.is_active),
+    )
+
+
 async def _integration_status(session: AsyncSession, user: User) -> IntegrationStatusOut:
     oid = workspace_owner_id(user)
     tg_rows = list(
@@ -234,9 +249,19 @@ async def _integration_status(session: AsyncSession, user: User) -> IntegrationS
             )
         ).all()
     )
+    tr_rows = list(
+        (
+            await session.scalars(
+                select(TributeConnection)
+                .where(TributeConnection.user_id == oid)
+                .order_by(TributeConnection.id.asc())
+            )
+        ).all()
+    )
     tg = next((r for r in tg_rows if r.is_active), tg_rows[0] if tg_rows else None)
     fv = fv_rows[0] if fv_rows else None
     ig = ig_rows[0] if ig_rows else None
+    tr = next((r for r in tr_rows if r.is_active), tr_rows[0] if tr_rows else None)
     ws = await session.scalar(
         select(WavespeedConnection).where(WavespeedConnection.user_id == oid)
     )
@@ -304,6 +329,8 @@ async def _integration_status(session: AsyncSession, user: User) -> IntegrationS
         ],
         fanvue_connections=[_fanvue_connection_out(r) for r in fv_rows],
         instagram_connections=[_instagram_connection_out(r) for r in ig_rows],
+        tribute_configured=bool(tr and tr.is_active),
+        tribute_connections=[_tribute_connection_out(r) for r in tr_rows if r.is_active],
         max_connections_per_platform=lim.max_models,
     )
 
@@ -1120,6 +1147,127 @@ async def delete_instagram(
             select(InstagramConnection)
             .where(InstagramConnection.user_id == oid)
             .order_by(InstagramConnection.id.asc())
+            .limit(1)
+        )
+    if row:
+        await session.delete(row)
+        await session.commit()
+    return await _integration_status(session, user)
+
+
+@router.put("/tribute", response_model=IntegrationStatusOut)
+async def put_tribute(
+    body: TributeIntegrationIn,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> IntegrationStatusOut:
+    assert_permission(user, PERM_INTEGRATIONS)
+    oid = workspace_owner_id(user)
+    sub = await session.scalar(select(Subscription).where(Subscription.user_id == oid))
+    raw_key = body.api_key.strip()
+    if len(raw_key) < 8:
+        raise HTTPException(status_code=400, detail="empty api key")
+    try:
+        enc = encrypt_secret(raw_key)
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+
+    if body.studio_model_id is not None:
+        await validate_connection_studio_model(session, oid, body.studio_model_id)
+
+    row: TributeConnection | None = None
+    if body.connection_id is not None:
+        row = await session.scalar(
+            select(TributeConnection).where(
+                TributeConnection.id == body.connection_id,
+                TributeConnection.user_id == oid,
+            )
+        )
+        if not row:
+            raise HTTPException(status_code=404, detail="Подключение Tribute не найдено")
+    else:
+        existing = list(
+            (
+                await session.scalars(
+                    select(TributeConnection).where(TributeConnection.user_id == oid)
+                )
+            ).all()
+        )
+        if len(existing) == 1:
+            row = existing[0]
+        elif len(existing) == 0:
+            await assert_can_add_tribute_connection(session, oid, sub)
+        else:
+            await assert_can_add_tribute_connection(session, oid, sub)
+
+    label = (body.label or "").strip() or None
+    if row:
+        row.api_key_encrypted = enc
+        row.is_active = True
+        if label is not None:
+            row.label = label
+        if body.studio_model_id is not None:
+            row.studio_model_id = body.studio_model_id
+    else:
+        row = TributeConnection(
+            user_id=oid,
+            label=label,
+            studio_model_id=body.studio_model_id,
+            api_key_encrypted=enc,
+            webhook_secret=secrets.token_urlsafe(32),
+            is_active=True,
+        )
+        session.add(row)
+    await session.commit()
+    return await _integration_status(session, user)
+
+
+@router.patch("/tribute/{connection_id}", response_model=IntegrationStatusOut)
+async def patch_tribute_connection(
+    connection_id: int,
+    body: PlatformConnectionPatchIn,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> IntegrationStatusOut:
+    assert_permission(user, PERM_INTEGRATIONS)
+    oid = workspace_owner_id(user)
+    row = await session.scalar(
+        select(TributeConnection).where(
+            TributeConnection.id == connection_id,
+            TributeConnection.user_id == oid,
+        )
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Подключение Tribute не найдено")
+    if "label" in body.model_fields_set:
+        row.label = (body.label or "").strip() or None
+    if "studio_model_id" in body.model_fields_set:
+        await validate_connection_studio_model(session, oid, body.studio_model_id)
+        row.studio_model_id = body.studio_model_id
+    await session.commit()
+    return await _integration_status(session, user)
+
+
+@router.delete("/tribute", response_model=IntegrationStatusOut)
+async def delete_tribute(
+    connection_id: int | None = Query(default=None, ge=1),
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> IntegrationStatusOut:
+    assert_permission(user, PERM_INTEGRATIONS)
+    oid = workspace_owner_id(user)
+    if connection_id is not None:
+        row = await session.scalar(
+            select(TributeConnection).where(
+                TributeConnection.id == connection_id,
+                TributeConnection.user_id == oid,
+            )
+        )
+    else:
+        row = await session.scalar(
+            select(TributeConnection)
+            .where(TributeConnection.user_id == oid)
+            .order_by(TributeConnection.id.asc())
             .limit(1)
         )
     if row:

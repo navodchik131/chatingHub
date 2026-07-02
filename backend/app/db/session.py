@@ -364,6 +364,7 @@ async def init_db() -> None:
         await conn.run_sync(_migrate_chat_message_features)
         await conn.run_sync(_migrate_platform_connections_multi)
         await conn.run_sync(_migrate_instagram_connections)
+        await conn.run_sync(_migrate_tribute_connections)
         await conn.run_sync(_migrate_conversation_notes)
         await conn.run_sync(_migrate_companion_bot)
         await conn.run_sync(_migrate_conversation_categories)
@@ -817,6 +818,126 @@ def _migrate_instagram_connections(sync_conn) -> None:
                     "ON conversations(instagram_connection_id)"
                 )
             )
+
+
+def _migrate_tribute_connections(sync_conn) -> None:
+    from sqlalchemy import inspect, text
+
+    insp = inspect(sync_conn)
+    dialect = sync_conn.dialect.name
+
+    if not insp.has_table("tribute_connections"):
+        if dialect == "sqlite":
+            sync_conn.execute(
+                text(
+                    """
+                    CREATE TABLE tribute_connections (
+                        id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                        user_id INTEGER NOT NULL,
+                        label VARCHAR(128),
+                        studio_model_id INTEGER,
+                        api_key_encrypted TEXT NOT NULL,
+                        webhook_secret VARCHAR(64) NOT NULL UNIQUE,
+                        is_active BOOLEAN NOT NULL DEFAULT 1,
+                        created_at DATETIME,
+                        FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE,
+                        FOREIGN KEY(studio_model_id) REFERENCES user_studio_models (id) ON DELETE SET NULL
+                    )
+                    """
+                )
+            )
+        else:
+            sync_conn.execute(
+                text(
+                    """
+                    CREATE TABLE tribute_connections (
+                        id SERIAL PRIMARY KEY,
+                        user_id INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+                        label VARCHAR(128),
+                        studio_model_id INTEGER REFERENCES user_studio_models (id) ON DELETE SET NULL,
+                        api_key_encrypted TEXT NOT NULL,
+                        webhook_secret VARCHAR(64) NOT NULL UNIQUE,
+                        is_active BOOLEAN NOT NULL DEFAULT true,
+                        created_at TIMESTAMPTZ
+                    )
+                    """
+                )
+            )
+        sync_conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_tribute_connections_user_id "
+                "ON tribute_connections(user_id)"
+            )
+        )
+        sync_conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_tribute_connections_studio_model_id "
+                "ON tribute_connections(studio_model_id)"
+            )
+        )
+
+    if not insp.has_table("tribute_earning_events"):
+        if dialect == "sqlite":
+            sync_conn.execute(
+                text(
+                    """
+                    CREATE TABLE tribute_earning_events (
+                        id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                        user_id INTEGER NOT NULL,
+                        tribute_connection_id INTEGER NOT NULL,
+                        studio_model_id INTEGER,
+                        external_event_id VARCHAR(128) NOT NULL UNIQUE,
+                        event_name VARCHAR(64) NOT NULL,
+                        amount_minor INTEGER NOT NULL,
+                        currency VARCHAR(8) NOT NULL,
+                        occurred_at DATETIME NOT NULL,
+                        raw_meta TEXT,
+                        created_at DATETIME,
+                        FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE,
+                        FOREIGN KEY(tribute_connection_id) REFERENCES tribute_connections (id) ON DELETE CASCADE,
+                        FOREIGN KEY(studio_model_id) REFERENCES user_studio_models (id) ON DELETE SET NULL
+                    )
+                    """
+                )
+            )
+        else:
+            sync_conn.execute(
+                text(
+                    """
+                    CREATE TABLE tribute_earning_events (
+                        id SERIAL PRIMARY KEY,
+                        user_id INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+                        tribute_connection_id INTEGER NOT NULL REFERENCES tribute_connections (id) ON DELETE CASCADE,
+                        studio_model_id INTEGER REFERENCES user_studio_models (id) ON DELETE SET NULL,
+                        external_event_id VARCHAR(128) NOT NULL UNIQUE,
+                        event_name VARCHAR(64) NOT NULL,
+                        amount_minor INTEGER NOT NULL,
+                        currency VARCHAR(8) NOT NULL,
+                        occurred_at TIMESTAMPTZ NOT NULL,
+                        raw_meta TEXT,
+                        created_at TIMESTAMPTZ
+                    )
+                    """
+                )
+            )
+        sync_conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_tribute_earning_events_user_id "
+                "ON tribute_earning_events(user_id)"
+            )
+        )
+        sync_conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_tribute_earning_events_occurred_at "
+                "ON tribute_earning_events(occurred_at)"
+            )
+        )
+        sync_conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_tribute_earning_events_studio_model_id "
+                "ON tribute_earning_events(studio_model_id)"
+            )
+        )
 
 
 def _migrate_chat_message_features(sync_conn) -> None:
