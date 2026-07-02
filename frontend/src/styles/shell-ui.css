@@ -1,7 +1,19 @@
 /* ModelMate Creator OS — global workspace shell */
 
+.app.app--shell > .app-bg {
+  display: none;
+}
+
+.workspace-shell {
+  position: relative;
+  z-index: 1;
+  isolation: isolate;
+}
+
 .workspace-main {
   background: var(--bg);
+  position: relative;
+  z-index: 1;
 }
 
 .workspace-tg-banner {
@@ -227,6 +239,10 @@
 }
 
 .workspace-content {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  min-height: 0;
   padding: 28px 24px 60px;
 }
 

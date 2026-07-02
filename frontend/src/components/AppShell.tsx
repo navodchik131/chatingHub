@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { useEffect, useRef } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { TelegramChannelBanner } from './TelegramChannelBanner'
 import { WorkspaceNavIcon, type NavIconName } from './WorkspaceNavIcon'
@@ -52,6 +53,11 @@ export function AppShell({
   children,
 }: AppShellProps) {
   const location = useLocation()
+  const contentRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    contentRef.current?.scrollTo({ top: 0, left: 0 })
+  }, [appSection, location.pathname])
 
   const nav: NavItem[] = [
     { id: 'overview', label: 'Обзор', icon: 'overview', show: true },
@@ -240,7 +246,9 @@ export function AppShell({
           </div>
         </header>
 
-        <div className="workspace-content">{children}</div>
+        <div className="workspace-content" ref={contentRef}>
+          {children}
+        </div>
 
         <nav className="workspace-mobile-nav" aria-label="Разделы приложения">
           {visibleNav.map((item) => mobileNavButton(item))}

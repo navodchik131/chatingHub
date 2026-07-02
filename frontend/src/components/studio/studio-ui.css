@@ -960,7 +960,7 @@
   }
 }
 
-.app.app--shell .workspace-content:has(.studio-workspace-page) {
+.app.app--shell .workspace-content:has(> .studio-workspace-page) {
   overflow: hidden;
   display: flex;
   flex-direction: column;
