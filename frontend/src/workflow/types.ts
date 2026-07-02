@@ -118,11 +118,13 @@ export type ScenarioMotionVideoNodeData = VideoPromptComposeNodeData & {
 
 export interface ScenarioOutfitChangeNodeData {
   disabled?: boolean
+  error?: string
   [key: string]: unknown
 }
 
 export interface ScenarioFirstFrameNodeData {
   disabled?: boolean
+  error?: string
   [key: string]: unknown
 }
 
