@@ -123,6 +123,8 @@ async def generate_companion_reply(
         notes=notes,
         messages=messages,
         followup=followup,
+        manual_category=conv.manual_category,
+        daily_state_json=state.daily_state_json,
     )
     style_block = await format_style_examples_block(
         session,

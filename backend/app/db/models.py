@@ -57,6 +57,20 @@ class BotResponseEventStatus(str, enum.Enum):
     failed = "failed"
 
 
+class CompanionJobKind(str, enum.Enum):
+    reply = "reply"
+    followup = "followup"
+    send = "send"
+
+
+class CompanionJobStatus(str, enum.Enum):
+    pending = "pending"
+    running = "running"
+    done = "done"
+    failed = "failed"
+    cancelled = "cancelled"
+
+
 class SubscriptionStatus(str, enum.Enum):
     none = "none"
     incomplete = "incomplete"
@@ -121,7 +135,9 @@ class User(Base):
         "CreditAccount", back_populates="user", uselist=False
     )
     conversations: Mapped[list[Conversation]] = relationship(
-        "Conversation", back_populates="owner"
+        "Conversation",
+        back_populates="owner",
+        foreign_keys="Conversation.user_id",
     )
     telegram_connections: Mapped[list[TelegramConnection]] = relationship(
         "TelegramConnection", back_populates="user"
@@ -511,6 +527,10 @@ class Conversation(Base):
     manual_category: Mapped[str | None] = mapped_column(String(16), nullable=True)
     """Заблокирован — входящие сообщения не сохраняются и не уведомляют."""
     is_blocked: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    """Назначенный чатер workspace (NULL = любой с доступом к модели)."""
+    assigned_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     last_read_message_id: Mapped[int | None] = mapped_column(nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
@@ -521,7 +541,11 @@ class Conversation(Base):
         onupdate=lambda: datetime.now(timezone.utc),
     )
 
-    owner: Mapped[User] = relationship("User", back_populates="conversations")
+    owner: Mapped[User] = relationship(
+        "User",
+        back_populates="conversations",
+        foreign_keys="Conversation.user_id",
+    )
     messages: Mapped[list[Message]] = relationship(
         "Message", back_populates="conversation", order_by="Message.id"
     )
@@ -682,6 +706,66 @@ class CompanionStyleExample(Base):
     quality_score: Mapped[float] = mapped_column(default=1.0, server_default="1.0")
     is_human: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
     embedding_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+
+class CompanionJob(Base):
+    """Персистентная очередь задач companion bot (переживает рестарт API)."""
+
+    __tablename__ = "companion_jobs"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    owner_user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    conversation_id: Mapped[int] = mapped_column(
+        ForeignKey("conversations.id", ondelete="CASCADE"), index=True
+    )
+    kind: Mapped[CompanionJobKind] = mapped_column(
+        Enum(CompanionJobKind, native_enum=False, length=16), index=True
+    )
+    trigger_message_id: Mapped[int] = mapped_column(Integer, index=True)
+    payload_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    run_after: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    status: Mapped[CompanionJobStatus] = mapped_column(
+        Enum(CompanionJobStatus, native_enum=False, length=16),
+        default=CompanionJobStatus.pending,
+        index=True,
+    )
+    attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class ChatterSnippet(Base):
+    """Быстрые шаблоны ответов чатера для workspace."""
+
+    __tablename__ = "chatter_snippets"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    title: Mapped[str] = mapped_column(String(120), default="")
+    body: Mapped[str] = mapped_column(Text, default="")
+    lang: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

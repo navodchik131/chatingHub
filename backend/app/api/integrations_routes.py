@@ -10,7 +10,7 @@ from aiogram import Bot
 from aiogram.client.session.aiohttp import AiohttpSession
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from fastapi.responses import RedirectResponse
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.deps import get_current_user
@@ -33,6 +33,10 @@ from app.connectors.instagram.oauth import (
     instagram_oauth_configured,
 )
 from app.db.models import (
+    CompanionJob,
+    CompanionJobStatus,
+    CompanionStyleExample,
+    Conversation,
     CreditAccount,
     FanvueConnection,
     FanvueOAuthState,
@@ -56,6 +60,7 @@ from app.schemas import (
     FanvueSyncOut,
     InstagramOAuthStartIn,
     InstagramOAuthStartOut,
+    IntegrationHealthOut,
     IntegrationStatusOut,
     LlmIntegrationIn,
     PlatformConnectionOut,
@@ -342,6 +347,74 @@ async def integration_status(
     user: User = Depends(get_current_user),
 ) -> IntegrationStatusOut:
     return await _integration_status(session, user)
+
+
+@router.get("/health", response_model=IntegrationHealthOut)
+async def integration_health(
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> IntegrationHealthOut:
+    assert_permission(user, PERM_INTEGRATIONS)
+    oid = workspace_owner_id(user)
+    since = datetime.now(timezone.utc) - timedelta(hours=24)
+
+    pending_jobs = int(
+        await session.scalar(
+            select(func.count())
+            .select_from(CompanionJob)
+            .join(Conversation, CompanionJob.conversation_id == Conversation.id)
+            .where(
+                Conversation.user_id == oid,
+                CompanionJob.status.in_(
+                    [CompanionJobStatus.pending, CompanionJobStatus.running]
+                ),
+            )
+        )
+        or 0
+    )
+    failed_jobs = int(
+        await session.scalar(
+            select(func.count())
+            .select_from(CompanionJob)
+            .join(Conversation, CompanionJob.conversation_id == Conversation.id)
+            .where(
+                Conversation.user_id == oid,
+                CompanionJob.status == CompanionJobStatus.failed,
+                CompanionJob.updated_at >= since,
+            )
+        )
+        or 0
+    )
+    style_count = int(
+        await session.scalar(
+            select(func.count())
+            .select_from(CompanionStyleExample)
+            .where(CompanionStyleExample.user_id == oid)
+        )
+        or 0
+    )
+
+    status = await _integration_status(session, user)
+    issues: list[str] = []
+    if pending_jobs > 50:
+        issues.append(f"Большая очередь companion: {pending_jobs} задач")
+    if failed_jobs > 0:
+        issues.append(f"Companion jobs failed за 24ч: {failed_jobs}")
+    if style_count < 10:
+        issues.append("Мало примеров style RAG — переиндексируйте из чатов")
+    if status.telegram_configured and not status.telegram_webhook_registered:
+        issues.append("Telegram webhook не зарегистрирован")
+
+    return IntegrationHealthOut(
+        companion_pending_jobs=pending_jobs,
+        companion_failed_jobs_24h=failed_jobs,
+        companion_style_examples=style_count,
+        telegram_webhook_ok=bool(
+            status.telegram_configured and status.telegram_webhook_registered
+        ),
+        fanvue_oauth_ok=bool(status.fanvue_oauth_connected),
+        issues=issues,
+    )
 
 
 @router.get("/companion-feedback", response_model=list[CompanionFeedbackReportOut])

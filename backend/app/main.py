@@ -104,6 +104,7 @@ async def lifespan(app: FastAPI):
     email_worker_task: asyncio.Task[None] | None = None
     companion_feedback_task: asyncio.Task[None] | None = None
     companion_style_index_task: asyncio.Task[None] | None = None
+    companion_job_worker_task: asyncio.Task[None] | None = None
     legacy_tok = settings.legacy_bot_token.strip()
     legacy_uid = settings.legacy_user_id
     if legacy_tok and legacy_uid > 0:
@@ -160,6 +161,10 @@ async def lifespan(app: FastAPI):
         "Companion style index loop: every %s h",
         settings.companion_style_index_interval_hours,
     )
+    from app.services.companion_bot.job_queue import companion_job_worker_loop
+
+    companion_job_worker_task = asyncio.create_task(companion_job_worker_loop())
+    log.info("Companion job worker started")
     if settings.smtp_configured:
         email_worker_task = asyncio.create_task(email_campaign_worker_loop())
         log.info("Email campaign worker started (SMTP: %s)", settings.smtp_host)
@@ -212,6 +217,12 @@ async def lifespan(app: FastAPI):
         companion_style_index_task.cancel()
         try:
             await companion_style_index_task
+        except asyncio.CancelledError:
+            pass
+    if companion_job_worker_task:
+        companion_job_worker_task.cancel()
+        try:
+            await companion_job_worker_task
         except asyncio.CancelledError:
             pass
     if bot:

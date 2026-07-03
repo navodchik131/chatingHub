@@ -523,3 +523,26 @@ def test_style_rag_static_fallback():
         limit=2,
     )
     assert len(picked) >= 1
+
+
+def test_fan_tier_block_vip():
+    from app.services.companion_bot.prompt import _fan_tier_block
+
+    assert "VIP" in _fan_tier_block("vip")
+    assert "low spender" in _fan_tier_block("bomzh")
+    assert _fan_tier_block(None) == ""
+
+
+def test_median_sla():
+    from app.services.chatter_stats import _median
+
+    assert _median([10, 20, 30]) == 20
+    assert _median([10, 20]) == 15
+    assert _median([]) is None
+
+
+def test_state_update_mood():
+    from app.services.companion_bot.state_update import _infer_mood
+
+    assert _infer_mood("miss you ❤") == "warm"
+    assert _infer_mood("just chilling") is None

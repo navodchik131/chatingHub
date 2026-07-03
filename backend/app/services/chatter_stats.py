@@ -1,4 +1,4 @@
-"""KPI чатеров: исходящие сообщения, диалоги, рейтинги AI, Tribute."""
+"""KPI чатеров: исходящие сообщения, диалоги, рейтинги AI, Tribute, SLA."""
 
 from __future__ import annotations
 
@@ -18,6 +18,75 @@ from app.db.models import (
 from app.services.tribute_earnings import aggregate_tribute_earnings
 from app.services.workspace import is_workspace_owner, workspace_owner_id
 from app.services.workspace_model_access import member_allowed_studio_model_ids
+
+
+def _median(values: list[int]) -> int | None:
+    if not values:
+        return None
+    s = sorted(values)
+    mid = len(s) // 2
+    if len(s) % 2:
+        return int(s[mid])
+    return int((s[mid - 1] + s[mid]) / 2)
+
+
+async def _sla_for_actor(
+    session: AsyncSession,
+    *,
+    owner_id: int,
+    actor_id: int,
+    allowed_models: set[int] | None,
+    start: datetime,
+    end: datetime,
+) -> tuple[int | None, int | None]:
+    """Median reply seconds + avg first response seconds in period."""
+    stmt = (
+        select(Message.id, Message.conversation_id, Message.created_at)
+        .join(Conversation, Message.conversation_id == Conversation.id)
+        .where(
+            Conversation.user_id == owner_id,
+            Message.direction == MessageDirection.outbound,
+            Message.sender_user_id == actor_id,
+            Message.created_at >= start,
+            Message.created_at <= end,
+        )
+        .order_by(Message.conversation_id.asc(), Message.id.asc())
+    )
+    stmt = _apply_model_filter(stmt, allowed_models)
+    outbound_rows = list((await session.execute(stmt)).all())
+    if not outbound_rows:
+        return None, None
+
+    reply_deltas: list[int] = []
+    first_deltas: list[int] = []
+    seen_convs: set[int] = set()
+
+    for msg_id, conv_id, out_at in outbound_rows:
+        if out_at is None:
+            continue
+        prev_inbound_at = await session.scalar(
+            select(Message.created_at)
+            .where(
+                Message.conversation_id == conv_id,
+                Message.direction == MessageDirection.inbound,
+                Message.id < msg_id,
+            )
+            .order_by(Message.id.desc())
+            .limit(1)
+        )
+        if prev_inbound_at is None:
+            continue
+        delta = max(0, int((out_at - prev_inbound_at).total_seconds()))
+        reply_deltas.append(delta)
+        if conv_id not in seen_convs:
+            seen_convs.add(conv_id)
+            first_deltas.append(delta)
+
+    median_reply = _median(reply_deltas)
+    avg_first: int | None = None
+    if first_deltas:
+        avg_first = int(sum(first_deltas) / len(first_deltas))
+    return median_reply, avg_first
 
 
 def _period_bounds(from_date: date, to_date: date) -> tuple[datetime, datetime]:
@@ -117,6 +186,14 @@ async def stats_row_for_user(
         start=start,
         end=end,
     )
+    median_reply, avg_first = await _sla_for_actor(
+        session,
+        owner_id=owner_id,
+        actor_id=actor.id,
+        allowed_models=allowed,
+        start=start,
+        end=end,
+    )
     tribute = await aggregate_tribute_earnings(
         session,
         viewer=actor,
@@ -131,6 +208,8 @@ async def stats_row_for_user(
         "conversations_replied": convs,
         "companion_ratings_positive": pos,
         "companion_ratings_negative": neg,
+        "median_reply_seconds": median_reply,
+        "avg_first_response_seconds": avg_first,
         "tribute_display_minor": int(tribute.get("display_minor") or 0),
         "tribute_gross_minor": int(tribute.get("gross_minor") or 0),
         "tribute_currency": str(tribute.get("currency") or "USD"),

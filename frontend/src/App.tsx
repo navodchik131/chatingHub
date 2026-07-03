@@ -139,6 +139,8 @@ interface Conversation {
   effective_companion_mode?: string | null
   manual_category?: 'vip' | 'bomzh' | null
   is_blocked?: boolean
+  assigned_user_id?: number | null
+  assigned_member_login?: string | null
   is_no_response?: boolean
   is_new?: boolean
   updated_at: string
@@ -595,6 +597,8 @@ interface ChatterStatsRow {
   conversations_replied: number
   companion_ratings_positive: number
   companion_ratings_negative: number
+  median_reply_seconds?: number | null
+  avg_first_response_seconds?: number | null
   tribute_display_minor: number
   tribute_gross_minor: number
   tribute_currency: string
@@ -608,6 +612,32 @@ interface ChatterStatsSummary {
   is_owner: boolean
   self: ChatterStatsRow
   members: ChatterStatsRow[] | null
+}
+
+interface CompanionHealth {
+  active: boolean
+  effective_mode: string | null
+  status: string
+  reasons: string[]
+  pending_jobs: number
+  pending_drafts: number
+  relationship_score: number | null
+  mood: string | null
+}
+
+interface ChatterSnippet {
+  id: number
+  title: string
+  body: string
+  lang: string | null
+  sort_order: number
+}
+
+function formatSlaSeconds(sec: number | null | undefined): string {
+  if (sec == null || sec <= 0) return '—'
+  if (sec < 60) return `${sec}с`
+  if (sec < 3600) return `${Math.round(sec / 60)}м`
+  return `${(sec / 3600).toFixed(1)}ч`
 }
 
 interface BillingCreditsPricing {
@@ -960,6 +990,12 @@ export default function App() {
   const [companionRatingBusy, setCompanionRatingBusy] = useState<number | null>(null)
   const [companionRatingSavedId, setCompanionRatingSavedId] = useState<number | null>(null)
   const [companionModeBusy, setCompanionModeBusy] = useState(false)
+  const [companionHealth, setCompanionHealth] = useState<CompanionHealth | null>(null)
+  const [assigneeBusy, setAssigneeBusy] = useState(false)
+  const [chatterSnippets, setChatterSnippets] = useState<ChatterSnippet[]>([])
+  const [newSnippetTitle, setNewSnippetTitle] = useState('')
+  const [newSnippetBody, setNewSnippetBody] = useState('')
+  const [snippetBusy, setSnippetBusy] = useState(false)
   const [convCategoryBusy, setConvCategoryBusy] = useState(false)
   const [convBlockedBusy, setConvBlockedBusy] = useState(false)
   const [companionFeedbackReports, setCompanionFeedbackReports] = useState<
@@ -1541,6 +1577,22 @@ export default function App() {
     }
   }, [])
 
+  const refreshChatterSnippets = useCallback(async () => {
+    const r = await apiFetch('/api/workspace/snippets')
+    if (r.ok) {
+      setChatterSnippets((await r.json()) as ChatterSnippet[])
+    }
+  }, [])
+
+  const refreshCompanionHealth = useCallback(async (convId: number) => {
+    const r = await apiFetch(`/api/conversations/${convId}/companion-health`)
+    if (r.ok) {
+      setCompanionHealth((await r.json()) as CompanionHealth)
+    } else {
+      setCompanionHealth(null)
+    }
+  }, [])
+
   const refreshCompanionFeedback = useCallback(async () => {
     setCompanionFeedbackLoading(true)
     try {
@@ -1878,8 +1930,9 @@ export default function App() {
   useEffect(() => {
     if (authed && accountOpen && accountTab === 'team' && isOwner) {
       void refreshChatterStats()
+      void refreshChatterSnippets()
     }
-  }, [authed, accountOpen, accountTab, isOwner, refreshChatterStats])
+  }, [authed, accountOpen, accountTab, isOwner, refreshChatterStats, refreshChatterSnippets])
 
   useEffect(() => {
     if (!authed) return
@@ -2451,6 +2504,19 @@ export default function App() {
   }, [filteredConversations, selectedId])
 
   useEffect(() => {
+    if (selectedId == null) {
+      setCompanionHealth(null)
+      return
+    }
+    void refreshCompanionHealth(selectedId)
+  }, [selectedId, refreshCompanionHealth])
+
+  useEffect(() => {
+    if (!authed || !canChat) return
+    void refreshChatterSnippets()
+  }, [authed, canChat, refreshChatterSnippets])
+
+  useEffect(() => {
     if (!accountOpen || accountTab !== 'integrations' || !authed || !canChat) return
     if (!health?.web_push_configured) {
       setWebPushState('no_vapid')
@@ -3012,10 +3078,72 @@ export default function App() {
       }
       const updated = (await r.json()) as Conversation
       setConversations((prev) => prev.map((c) => (c.id === convId ? { ...c, ...updated } : c)))
+      void refreshCompanionHealth(convId)
     } catch {
       setError('Не удалось сохранить режим AI-компаньона')
     } finally {
       setCompanionModeBusy(false)
+    }
+  }
+
+  const saveAssignedUser = async (convId: number, raw: string) => {
+    const v = raw === '' ? null : parseInt(raw, 10)
+    setAssigneeBusy(true)
+    setError(null)
+    try {
+      const r = await apiFetch(`/api/conversations/${convId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assigned_user_id: v }),
+      })
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}))
+        setError(formatHttpApiError(r, err))
+        return
+      }
+      const updated = (await r.json()) as Conversation
+      setConversations((prev) => prev.map((c) => (c.id === convId ? { ...c, ...updated } : c)))
+    } catch {
+      setError('Не удалось назначить чатера')
+    } finally {
+      setAssigneeBusy(false)
+    }
+  }
+
+  const insertChatterSnippet = (body: string) => {
+    setDraft((prev) => (prev.trim() ? `${prev.trim()}\n${body}` : body))
+  }
+
+  const createChatterSnippet = async () => {
+    const title = newSnippetTitle.trim()
+    const body = newSnippetBody.trim()
+    if (!title || !body) return
+    setSnippetBusy(true)
+    try {
+      const r = await apiFetch('/api/workspace/snippets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title, body }),
+      })
+      if (!r.ok) {
+        setError('Не удалось создать шаблон')
+        return
+      }
+      setNewSnippetTitle('')
+      setNewSnippetBody('')
+      await refreshChatterSnippets()
+    } finally {
+      setSnippetBusy(false)
+    }
+  }
+
+  const deleteChatterSnippet = async (id: number) => {
+    setSnippetBusy(true)
+    try {
+      await apiFetch(`/api/workspace/snippets/${id}`, { method: 'DELETE' })
+      await refreshChatterSnippets()
+    } finally {
+      setSnippetBusy(false)
     }
   }
 
@@ -7243,6 +7371,8 @@ export default function App() {
                         <th>Участник</th>
                         <th>Ответов</th>
                         <th>Диалогов</th>
+                        <th>SLA мед.</th>
+                        <th>1-й ответ</th>
                         <th>AI 👍/👎</th>
                         <th>Tribute</th>
                       </tr>
@@ -7253,6 +7383,10 @@ export default function App() {
                           <td className="mono">{row.member_login || `#${row.user_id}`}</td>
                           <td>{row.outbound_messages}</td>
                           <td>{row.conversations_replied}</td>
+                          <td className="mono">{formatSlaSeconds(row.median_reply_seconds)}</td>
+                          <td className="mono">
+                            {formatSlaSeconds(row.avg_first_response_seconds)}
+                          </td>
                           <td>
                             {row.companion_ratings_positive}/{row.companion_ratings_negative}
                           </td>
@@ -7271,6 +7405,58 @@ export default function App() {
               ) : (
                 <p className="muted" style={{ marginBottom: '1rem' }}>
                   KPI появятся после первых ответов чатеров в периоде.
+                </p>
+              )}
+
+              <h4 className="account-sub">Шаблоны ответов</h4>
+              <p className="muted small" style={{ marginTop: 0 }}>
+                Кнопки появляются над полем ввода в чате — быстрая вставка текста.
+              </p>
+              <div className="team-create-grid" style={{ marginBottom: '0.75rem' }}>
+                <input
+                  placeholder="Название кнопки"
+                  value={newSnippetTitle}
+                  onChange={(e) => setNewSnippetTitle(e.target.value)}
+                  disabled={snippetBusy}
+                />
+                <input
+                  placeholder="Текст шаблона"
+                  value={newSnippetBody}
+                  onChange={(e) => setNewSnippetBody(e.target.value)}
+                  disabled={snippetBusy}
+                />
+                <button
+                  type="button"
+                  className="send-btn"
+                  disabled={snippetBusy || !newSnippetTitle.trim() || !newSnippetBody.trim()}
+                  onClick={() => void createChatterSnippet()}
+                >
+                  Добавить
+                </button>
+              </div>
+              {chatterSnippets.length > 0 ? (
+                <ul className="team-member-list" style={{ marginBottom: '1.25rem' }}>
+                  {chatterSnippets.map((sn) => (
+                    <li key={sn.id} className="team-member-row">
+                      <strong>{sn.title}</strong>
+                      <span className="muted small" style={{ display: 'block' }}>
+                        {sn.body.slice(0, 120)}
+                        {sn.body.length > 120 ? '…' : ''}
+                      </span>
+                      <button
+                        type="button"
+                        className="link-btn"
+                        disabled={snippetBusy}
+                        onClick={() => void deleteChatterSnippet(sn.id)}
+                      >
+                        Удалить
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="muted" style={{ marginBottom: '1.25rem' }}>
+                  Пока нет шаблонов.
                 </p>
               )}
 
@@ -8985,6 +9171,29 @@ export default function App() {
                         ))}
                       </select>
                     </div>
+                    {isOwner ? (
+                      <div className="outbound-lang-field thread-head-lang">
+                        <label className="outbound-lang-label" htmlFor="conv-assignee-select">
+                          Чатер
+                        </label>
+                        <select
+                          id="conv-assignee-select"
+                          className="outbound-lang-select"
+                          value={selected.assigned_user_id ?? ''}
+                          disabled={assigneeBusy}
+                          onChange={(e) =>
+                            void saveAssignedUser(selected.id, e.target.value)
+                          }
+                        >
+                          <option value="">Любой</option>
+                          {workspaceMembers.map((m) => (
+                            <option key={m.id} value={m.id}>
+                              {m.member_login || `#${m.id}`}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    ) : null}
                     <div
                       className="outbound-lang-field auto-translate-toggle"
                       title="Заблокированный пользователь не сможет отправлять сообщения в этот диалог."
@@ -9001,6 +9210,23 @@ export default function App() {
                         <span>Заблокировать</span>
                       </label>
                     </div>
+                    {companionHealth &&
+                    (companionHealth.reasons.length > 0 ||
+                      companionHealth.status !== 'ok') ? (
+                      <div
+                        className="companion-health-hint muted small"
+                        title={companionHealth.reasons.join(' · ')}
+                        style={{ gridColumn: '1 / -1' }}
+                      >
+                        AI: {companionHealth.status}
+                        {companionHealth.pending_jobs > 0
+                          ? ` · очередь ${companionHealth.pending_jobs}`
+                          : ''}
+                        {companionHealth.reasons[0]
+                          ? ` · ${companionHealth.reasons[0]}`
+                          : ''}
+                      </div>
+                    ) : null}
                 </div>
               </div>
 
@@ -9390,6 +9616,21 @@ export default function App() {
                       </div>
                     ) : null}
                     <div className="composer-toolbar">
+                      {chatterSnippets.length > 0 ? (
+                        <div className="chatter-snippets-row">
+                          {chatterSnippets.slice(0, 8).map((sn) => (
+                            <button
+                              key={sn.id}
+                              type="button"
+                              className="chatter-snippet-btn"
+                              title={sn.body}
+                              onClick={() => insertChatterSnippet(sn.body)}
+                            >
+                              {sn.title}
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
                       <input
                         ref={chatReplyFileInputRef}
                         type="file"

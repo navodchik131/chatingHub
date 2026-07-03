@@ -3057,6 +3057,35 @@ select:focus {
   font-weight: 400;
 }
 
+.chatter-snippets-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  width: 100%;
+  margin-bottom: 0.35rem;
+}
+
+.chatter-snippet-btn {
+  font-size: 0.75rem;
+  padding: 0.2rem 0.45rem;
+  border-radius: 999px;
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.12));
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.chatter-snippet-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.companion-health-hint {
+  padding: 0.35rem 0.5rem;
+  border-radius: 6px;
+  background: rgba(255, 193, 7, 0.08);
+  border: 1px solid rgba(255, 193, 7, 0.2);
+}
+
 .bubble-reactions {
   display: flex;
   flex-wrap: wrap;

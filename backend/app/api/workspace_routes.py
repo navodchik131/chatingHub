@@ -10,9 +10,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.deps import get_current_user
 from app.auth.passwords import hash_password
-from app.db.models import Subscription, UsageEvent, User
+from app.db.models import ChatterSnippet, Subscription, UsageEvent, User
 from app.db.session import get_session
 from app.schemas import (
+    ChatterSnippetIn,
+    ChatterSnippetOut,
+    ChatterSnippetPatchIn,
     ChatterStatsSummaryOut,
     CreditHistoryItemOut,
     CreditHistoryPageOut,
@@ -34,8 +37,93 @@ from app.services.workspace_model_access import (
     replace_member_studio_models,
 )
 from app.services.tribute_member_share import resolve_member_tribute_share_percent
+from app.services.workspace import workspace_owner_id
 
 router = APIRouter(prefix="/workspace", tags=["workspace"])
+
+
+@router.get("/snippets", response_model=list[ChatterSnippetOut])
+async def list_chatter_snippets(
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> list[ChatterSnippetOut]:
+    assert_permission(user, PERM_CHAT)
+    oid = workspace_owner_id(user)
+    rows = list(
+        (
+            await session.scalars(
+                select(ChatterSnippet)
+                .where(ChatterSnippet.user_id == oid)
+                .order_by(
+                    ChatterSnippet.sort_order.asc(),
+                    ChatterSnippet.id.asc(),
+                )
+            )
+        ).all()
+    )
+    return [ChatterSnippetOut.model_validate(r) for r in rows]
+
+
+@router.post("/snippets", response_model=ChatterSnippetOut)
+async def create_chatter_snippet(
+    body: ChatterSnippetIn,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> ChatterSnippetOut:
+    assert_permission(user, PERM_CHAT)
+    oid = workspace_owner_id(user)
+    row = ChatterSnippet(
+        user_id=oid,
+        title=body.title.strip(),
+        body=body.body.strip(),
+        lang=(body.lang or "").strip() or None,
+        sort_order=int(body.sort_order or 0),
+    )
+    session.add(row)
+    await session.commit()
+    await session.refresh(row)
+    return ChatterSnippetOut.model_validate(row)
+
+
+@router.patch("/snippets/{snippet_id}", response_model=ChatterSnippetOut)
+async def patch_chatter_snippet(
+    snippet_id: int,
+    body: ChatterSnippetPatchIn,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> ChatterSnippetOut:
+    assert_permission(user, PERM_CHAT)
+    oid = workspace_owner_id(user)
+    row = await session.get(ChatterSnippet, snippet_id)
+    if not row or row.user_id != oid:
+        raise HTTPException(status_code=404, detail="Snippet not found")
+    if body.title is not None:
+        row.title = body.title.strip()
+    if body.body is not None:
+        row.body = body.body.strip()
+    if body.lang is not None:
+        row.lang = body.lang.strip() or None
+    if body.sort_order is not None:
+        row.sort_order = int(body.sort_order)
+    await session.commit()
+    await session.refresh(row)
+    return ChatterSnippetOut.model_validate(row)
+
+
+@router.delete("/snippets/{snippet_id}")
+async def delete_chatter_snippet(
+    snippet_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> dict:
+    assert_permission(user, PERM_CHAT)
+    oid = workspace_owner_id(user)
+    row = await session.get(ChatterSnippet, snippet_id)
+    if not row or row.user_id != oid:
+        raise HTTPException(status_code=404, detail="Snippet not found")
+    await session.delete(row)
+    await session.commit()
+    return {"ok": True}
 
 
 @router.get("/chatter-stats/summary", response_model=ChatterStatsSummaryOut)

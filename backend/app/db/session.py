@@ -370,6 +370,7 @@ async def init_db() -> None:
         await conn.run_sync(_migrate_conversation_notes)
         await conn.run_sync(_migrate_companion_bot)
         await conn.run_sync(_migrate_conversation_categories)
+        await conn.run_sync(_migrate_roadmap_v1)
 
 
 def _migrate_conversation_categories(sync_conn) -> None:
@@ -464,6 +465,33 @@ def _migrate_companion_bot(sync_conn) -> None:
             sync_conn.execute(
                 text("ALTER TABLE user_studio_models ADD COLUMN companion_persona_json TEXT")
             )
+
+
+def _migrate_roadmap_v1(sync_conn) -> None:
+    from sqlalchemy import inspect, text
+
+    from app.db.models import ChatterSnippet, CompanionJob
+
+    insp = inspect(sync_conn)
+    dialect = sync_conn.dialect.name
+
+    if insp.has_table("conversations"):
+        cols = {c["name"] for c in insp.get_columns("conversations")}
+        if "assigned_user_id" not in cols:
+            sync_conn.execute(
+                text("ALTER TABLE conversations ADD COLUMN assigned_user_id INTEGER")
+            )
+            sync_conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_conversations_assigned_user_id "
+                    "ON conversations(assigned_user_id)"
+                )
+            )
+
+    if not insp.has_table("companion_jobs"):
+        CompanionJob.__table__.create(sync_conn, checkfirst=True)
+    if not insp.has_table("chatter_snippets"):
+        ChatterSnippet.__table__.create(sync_conn, checkfirst=True)
 
 
 def _migrate_conversation_notes(sync_conn) -> None:

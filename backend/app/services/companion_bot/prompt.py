@@ -589,6 +589,41 @@ def _format_fan_reactions_block(message: Message | None) -> str:
     return f"Fan reacted to this message: {' '.join(peer)}\n"
 
 
+def _fan_tier_block(manual_category: str | None) -> str:
+    cat = (manual_category or "").strip().lower()
+    if cat == "vip":
+        return (
+            "FAN TIER: VIP — extra warmth, priority attention, remember details, "
+            "slightly longer replies ok; never sound transactional.\n"
+        )
+    if cat == "bomzh":
+        return (
+            "FAN TIER: low spender — keep replies shorter, friendly but not overly invested; "
+            "light retention, no free premium content promises.\n"
+        )
+    return ""
+
+
+def _daily_lore_block(daily_state_json: str | None) -> str:
+    if not daily_state_json:
+        return ""
+    import json
+
+    try:
+        daily = json.loads(daily_state_json)
+    except json.JSONDecodeError:
+        return ""
+    if not isinstance(daily, dict):
+        return ""
+    topics = daily.get("topics") or []
+    if not topics:
+        return ""
+    hooks = "; ".join(str(t) for t in topics[-4:])
+    return (
+        f"Today's thread hooks (stay consistent, don't contradict): {hooks}.\n"
+    )
+
+
 def build_companion_system_prompt(
     *,
     persona_name: str,
@@ -600,6 +635,8 @@ def build_companion_system_prompt(
     notes: list[ConversationNote],
     messages: list[Message],
     followup: bool = False,
+    manual_category: str | None = None,
+    daily_state_json: str | None = None,
 ) -> str:
     signals = analyze_thread_signals(messages)
 
@@ -631,6 +668,8 @@ def build_companion_system_prompt(
     return (
         _chatter_role_block(persona_name=persona_name)
         + canon
+        + _fan_tier_block(manual_category)
+        + _daily_lore_block(daily_state_json)
         + checkin_note
         + f"Character sheet (voice & facts for {persona_name}):\n{profile_block}\n\n"
         f"Relationship warmth: {relationship_score}/100.\n"

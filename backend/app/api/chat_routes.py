@@ -53,6 +53,7 @@ from app.db.session import SessionLocal, get_session
 from app.schemas import (
     CompanionDraftApproveIn,
     CompanionDraftOut,
+    CompanionHealthOut,
     CompanionRatingIn,
     ConversationNoteCreateIn,
     ConversationNoteOut,
@@ -78,6 +79,7 @@ from app.services.chat_messages import (
 )
 from app.services.chat_outbound import (
     resolve_outbound_image,
+    resolve_outbound_video,
     send_fanvue_outbound,
     send_instagram_outbound,
     send_telegram_outbound,
@@ -147,8 +149,16 @@ async def _conversation_out(
 ) -> ConversationOut:
     mode = await effective_companion_bot_mode(session, conv, owner_id=owner_id)
     base = ConversationOut.model_validate(conv)
+    assignee_login: str | None = None
+    if conv.assigned_user_id:
+        u = await session.get(User, conv.assigned_user_id)
+        if u:
+            assignee_login = u.member_login or None
     return base.model_copy(
-        update={"effective_companion_mode": mode.value if mode else None}
+        update={
+            "effective_companion_mode": mode.value if mode else None,
+            "assigned_member_login": assignee_login,
+        }
     )
 
 
@@ -428,9 +438,40 @@ async def api_patch_conversation(
     if "is_blocked" in body.model_fields_set:
         if body.is_blocked is not None:
             conv.is_blocked = bool(body.is_blocked)
+    if "assigned_user_id" in body.model_fields_set:
+        if body.assigned_user_id is None:
+            conv.assigned_user_id = None
+        else:
+            member = await session.get(User, body.assigned_user_id)
+            if (
+                not member
+                or member.parent_user_id != oid
+                or member.id == oid
+            ):
+                raise HTTPException(status_code=400, detail="invalid assignee")
+            conv.assigned_user_id = member.id
     await session.commit()
     await session.refresh(conv)
     return await _conversation_out(session, conv, owner_id=oid)
+
+
+@router.get(
+    "/conversations/{conv_id}/companion-health",
+    response_model=CompanionHealthOut,
+)
+async def api_companion_health(
+    conv_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> CompanionHealthOut:
+    assert_permission(user, PERM_CHAT)
+    await _require_chat_plan(session, user)
+    oid = workspace_owner_id(user)
+    conv = await require_conversation_chat_access(session, user, conv_id, oid)
+    from app.services.companion_bot.health import diagnose_companion_health
+
+    data = await diagnose_companion_health(session, conv=conv, owner_id=oid)
+    return CompanionHealthOut.model_validate(data)
 
 
 @router.post("/conversations/{conv_id}/reply", response_model=MessageOut)
@@ -451,6 +492,7 @@ async def api_reply(
     text_ru = ""
     upload: UploadFile | None = None
     studio_generation_id: int | None = None
+    studio_motion_render_id: int | None = None
     reply_to_message_id: int | None = None
 
     if "multipart/form-data" in content_type:
@@ -462,6 +504,12 @@ async def api_reply(
                 studio_generation_id = int(str(raw_sg).strip())
             except ValueError as e:
                 raise HTTPException(status_code=400, detail="invalid studio_generation_id") from e
+        raw_mr = form.get("studio_motion_render_id")
+        if raw_mr not in (None, ""):
+            try:
+                studio_motion_render_id = int(str(raw_mr).strip())
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail="invalid studio_motion_render_id") from e
         raw_reply = form.get("reply_to_message_id")
         if raw_reply not in (None, ""):
             try:
@@ -486,7 +534,14 @@ async def api_reply(
         upload=upload,
         studio_generation_id=studio_generation_id,
     )
-    if not text_ru and not image_pair:
+    video_pair = await resolve_outbound_video(
+        session,
+        owner_id=oid,
+        studio_motion_render_id=studio_motion_render_id,
+    )
+    if video_pair and image_pair:
+        raise HTTPException(status_code=400, detail="image and video conflict")
+    if not text_ru and not image_pair and not video_pair:
         raise HTTPException(status_code=400, detail="empty message")
 
     start = month_start_utc()
@@ -521,8 +576,12 @@ async def api_reply(
 
     image_bytes: bytes | None = None
     image_mime: str | None = None
+    video_bytes: bytes | None = None
+    video_mime: str | None = None
     if image_pair:
         image_bytes, image_mime = image_pair
+    if video_pair:
+        video_bytes, video_mime = video_pair
 
     platform_message_id: str | None = None
     if conv.platform == Platform.telegram:
@@ -562,10 +621,17 @@ async def api_reply(
             text=outgoing,
             image_bytes=image_bytes,
             image_mime=image_mime,
+            video_bytes=video_bytes,
+            video_mime=video_mime,
             reply_to_telegram_message_id=tg_reply_id,
         )
         if sent_id is not None:
             platform_message_id = str(sent_id)
+    elif video_bytes:
+        raise HTTPException(
+            status_code=400,
+            detail="Видео из студии пока поддерживается только для Telegram",
+        )
     elif conv.platform == Platform.fanvue:
         row_fv = await resolve_fanvue_connection_for_conversation(session, conv, oid)
         if not row_fv:
@@ -1003,6 +1069,12 @@ async def api_companion_message_rating(
     if not event:
         raise HTTPException(status_code=404, detail="Ответ бота не найден")
     event.operator_rating = int(body.rating)
+    if event.operator_rating < 0:
+        from app.services.companion_bot.style_feedback import (
+            downrank_style_example_for_negative_rating,
+        )
+
+        await downrank_style_example_for_negative_rating(session, event=event)
     await session.commit()
     await session.refresh(row, attribute_names=["attachments"])
     return message_to_out(

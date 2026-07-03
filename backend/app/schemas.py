@@ -90,6 +90,8 @@ class ConversationOut(BaseModel):
     """Ручная категория: vip, bomzh или NULL."""
     manual_category: Literal["vip", "bomzh"] | None = None
     is_blocked: bool = False
+    assigned_user_id: int | None = None
+    assigned_member_login: str | None = None
     updated_at: datetime
     has_avatar: bool = False
 
@@ -124,6 +126,7 @@ class ConversationPatchIn(BaseModel):
     companion_mode_override: Literal["off", "draft", "semi_auto", "auto"] | None = None
     manual_category: Literal["vip", "bomzh"] | None = None
     is_blocked: bool | None = None
+    assigned_user_id: int | None = None
 
     @field_validator("manual_category", mode="before")
     @classmethod
@@ -680,6 +683,8 @@ class ChatterStatsRowOut(BaseModel):
     conversations_replied: int
     companion_ratings_positive: int
     companion_ratings_negative: int
+    median_reply_seconds: int | None = None
+    avg_first_response_seconds: int | None = None
     tribute_display_minor: int
     tribute_gross_minor: int
     tribute_currency: str
@@ -695,6 +700,52 @@ class ChatterStatsSummaryOut(BaseModel):
     is_owner: bool
     self_row: ChatterStatsRowOut = Field(alias="self")
     members: list[ChatterStatsRowOut] | None = None
+
+
+class CompanionHealthOut(BaseModel):
+    active: bool
+    effective_mode: str | None = None
+    status: str
+    reasons: list[str] = Field(default_factory=list)
+    pending_jobs: int = 0
+    pending_drafts: int = 0
+    relationship_score: int | None = None
+    mood: str | None = None
+    last_inbound_at: datetime | None = None
+    last_sent_at: datetime | None = None
+
+
+class ChatterSnippetOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    title: str
+    body: str
+    lang: str | None = None
+    sort_order: int = 0
+
+
+class ChatterSnippetIn(BaseModel):
+    title: str = Field(min_length=1, max_length=120)
+    body: str = Field(min_length=1, max_length=4000)
+    lang: str | None = Field(default=None, max_length=8)
+    sort_order: int | None = None
+
+
+class ChatterSnippetPatchIn(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=120)
+    body: str | None = Field(default=None, min_length=1, max_length=4000)
+    lang: str | None = Field(default=None, max_length=8)
+    sort_order: int | None = None
+
+
+class IntegrationHealthOut(BaseModel):
+    companion_pending_jobs: int = 0
+    companion_failed_jobs_24h: int = 0
+    companion_style_examples: int = 0
+    telegram_webhook_ok: bool = False
+    fanvue_oauth_ok: bool = False
+    issues: list[str] = Field(default_factory=list)
 
 
 class FanvueSyncOut(BaseModel):

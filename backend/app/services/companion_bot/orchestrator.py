@@ -308,135 +308,11 @@ async def run_companion_followup_pipeline(
     conv_id: int,
     after_outbound_message_id: int,
 ) -> None:
-    followup_delay = random.uniform(
-        settings.companion_followup_delay_min_sec,
-        settings.companion_followup_delay_max_sec,
+    await run_companion_followup_job(
+        owner_user_id=owner_user_id,
+        conv_id=conv_id,
+        after_outbound_message_id=after_outbound_message_id,
     )
-    await asyncio.sleep(followup_delay)
-
-    async with SessionLocal() as session:
-        conv = await session.get(Conversation, conv_id)
-        if not conv or conv.user_id != owner_user_id:
-            return
-        cfg = await get_companion_config_for_conversation(session, conv)
-        if not cfg:
-            return
-
-        if await _fan_replied_after(session, conv_id, after_outbound_message_id):
-            _log_companion_skip(conv_id, "followup_fan_replied_during_delay")
-            return
-
-        skip, skip_reason = await _should_skip_followup(session, conv_id)
-        if skip:
-            _log_companion_skip(conv_id, f"followup_{skip_reason}")
-            return
-
-        event = await create_companion_followup_event(
-            session,
-            owner_user_id=owner_user_id,
-            conv=conv,
-            after_outbound_message_id=after_outbound_message_id,
-            cfg=cfg,
-        )
-        if not event:
-            await session.commit()
-            return
-
-        event_id = event.id
-        mode = cfg.mode
-        delay = random.uniform(cfg.delay_min_sec, cfg.delay_max_sec)
-        draft_text = event.draft_text
-        target_lang = event.target_lang
-        await session.commit()
-
-    if mode == CompanionBotMode.draft:
-        await _broadcast_companion_draft(
-            owner_user_id=owner_user_id,
-            conv_id=conv_id,
-            event_id=event_id,
-            trigger_message_id=after_outbound_message_id,
-            draft_text=draft_text,
-            target_lang=target_lang,
-        )
-        return
-
-    if delay > 0:
-        await asyncio.sleep(delay)
-
-    async with SessionLocal() as session:
-        conv = await session.get(Conversation, conv_id)
-        if not conv:
-            return
-        cfg = await get_companion_config_for_conversation(session, conv)
-        if not cfg or cfg.mode == CompanionBotMode.off:
-            ev = await session.get(BotResponseEvent, event_id)
-            if ev and ev.status == BotResponseEventStatus.draft:
-                ev.status = BotResponseEventStatus.rejected
-                await session.commit()
-            return
-        if cfg.mode == CompanionBotMode.draft:
-            ev = await session.get(BotResponseEvent, event_id)
-            if ev and ev.status == BotResponseEventStatus.draft:
-                await session.commit()
-                await _broadcast_companion_draft(
-                    owner_user_id=owner_user_id,
-                    conv_id=conv_id,
-                    event_id=event_id,
-                    trigger_message_id=after_outbound_message_id,
-                    draft_text=ev.draft_text,
-                    target_lang=ev.target_lang,
-                )
-            return
-        if await _fan_replied_after(session, conv_id, after_outbound_message_id):
-            ev = await session.get(BotResponseEvent, event_id)
-            if ev and ev.status == BotResponseEventStatus.draft:
-                ev.status = BotResponseEventStatus.rejected
-                await session.commit()
-            return
-
-        ev = await session.get(BotResponseEvent, event_id)
-        if not ev or ev.status != BotResponseEventStatus.draft:
-            return
-
-        try:
-            row = await approve_and_send_companion_draft(
-                session,
-                owner_user_id=owner_user_id,
-                conv=conv,
-                event=ev,
-            )
-            await session.commit()
-            await session.refresh(row, attribute_names=["attachments"])
-            log.info(
-                "companion sent conv=%s event=%s msg=%s reply_to=%s",
-                conv_id,
-                event_id,
-                row.id,
-                row.reply_to_message_id,
-            )
-            await broadcast_companion_message(
-                owner_id=owner_user_id, conv_id=conv_id, row=row
-            )
-        except Exception as e:
-            log.warning(
-                "companion followup send failed conv=%s event=%s: %s",
-                conv_id,
-                event_id,
-                e,
-            )
-            if cfg.mode in (CompanionBotMode.auto, CompanionBotMode.semi_auto):
-                await session.commit()
-                await _notify_companion_draft_fallback(
-                    owner_user_id=owner_user_id,
-                    conv_id=conv_id,
-                    event_id=event_id,
-                    trigger_message_id=after_outbound_message_id,
-                    draft_text=ev.draft_text,
-                    target_lang=ev.target_lang,
-                )
-            else:
-                ev.status = BotResponseEventStatus.failed
-                await session.commit()
 
 
 async def create_companion_reply_event(
@@ -572,6 +448,27 @@ async def approve_and_send_companion_draft(
     event.sent_text = final_text
     event.outbound_message_id = row.id
     event.sent_at = datetime.now(timezone.utc)
+
+    snapshot: dict = {}
+    if event.state_snapshot_json:
+        try:
+            import json as _json
+
+            parsed = _json.loads(event.state_snapshot_json)
+            if isinstance(parsed, dict):
+                snapshot = parsed
+        except Exception:
+            snapshot = {}
+    followup = bool(trigger and trigger.direction == MessageDirection.outbound)
+    from app.services.companion_bot.state_update import update_companion_state_after_send
+
+    await update_companion_state_after_send(
+        session,
+        conv_id=conv.id,
+        reply_text=final_text,
+        followup=followup,
+        state_snapshot=snapshot,
+    )
     return row
 
 
@@ -581,8 +478,21 @@ async def run_companion_pipeline(
     conv_id: int,
     trigger_message_id: int,
 ) -> None:
+    await run_companion_reply_job(
+        owner_user_id=owner_user_id,
+        conv_id=conv_id,
+        trigger_message_id=trigger_message_id,
+    )
+
+
+async def run_companion_reply_job(
+    *,
+    owner_user_id: int,
+    conv_id: int,
+    trigger_message_id: int,
+) -> None:
     log.info(
-        "companion pipeline start conv=%s trigger=%s owner=%s",
+        "companion reply job conv=%s trigger=%s owner=%s",
         conv_id,
         trigger_message_id,
         owner_user_id,
@@ -600,13 +510,6 @@ async def run_companion_pipeline(
             _log_companion_skip(conv_id, "mode_off")
             return
 
-        log.info(
-            "companion pipeline mode=%s conv=%s trigger=%s",
-            cfg.mode.value,
-            conv_id,
-            trigger_message_id,
-        )
-
         event = await create_companion_reply_event(
             session,
             owner_user_id=owner_user_id,
@@ -617,13 +520,6 @@ async def run_companion_pipeline(
         if not event:
             await session.commit()
             return
-
-        log.info(
-            "companion draft ready conv=%s event=%s mode=%s",
-            conv_id,
-            event.id,
-            cfg.mode.value,
-        )
 
         event_id = event.id
         mode = cfg.mode
@@ -643,9 +539,29 @@ async def run_companion_pipeline(
         )
         return
 
-    if delay > 0:
-        await asyncio.sleep(delay)
+    from app.services.companion_bot.job_queue import enqueue_companion_send
 
+    async with SessionLocal() as session:
+        await enqueue_companion_send(
+            session,
+            owner_user_id=owner_user_id,
+            conv_id=conv_id,
+            trigger_message_id=trigger_message_id,
+            event_id=event_id,
+            delay_sec=delay,
+            followup=False,
+        )
+        await session.commit()
+
+
+async def run_companion_send_job(
+    *,
+    owner_user_id: int,
+    conv_id: int,
+    trigger_message_id: int,
+    event_id: int,
+    followup: bool = False,
+) -> None:
     async with SessionLocal() as session:
         conv = await session.get(Conversation, conv_id)
         if not conv:
@@ -670,12 +586,21 @@ async def run_companion_pipeline(
                     target_lang=ev.target_lang,
                 )
             return
-        if await _is_stale_trigger(session, conv_id, trigger_message_id):
+
+        if not followup and await _is_stale_trigger(session, conv_id, trigger_message_id):
             ev = await session.get(BotResponseEvent, event_id)
             if ev and ev.status == BotResponseEventStatus.draft:
                 ev.status = BotResponseEventStatus.rejected
                 await session.commit()
             _log_companion_skip(conv_id, "stale_trigger", trigger_message_id=trigger_message_id)
+            return
+
+        if followup and await _fan_replied_after(session, conv_id, trigger_message_id):
+            ev = await session.get(BotResponseEvent, event_id)
+            if ev and ev.status == BotResponseEventStatus.draft:
+                ev.status = BotResponseEventStatus.rejected
+                await session.commit()
+            _log_companion_skip(conv_id, "followup_fan_replied_before_send")
             return
 
         ev = await session.get(BotResponseEvent, event_id)
@@ -701,13 +626,16 @@ async def run_companion_pipeline(
             await broadcast_companion_message(
                 owner_id=owner_user_id, conv_id=conv_id, row=row
             )
-            from app.services.companion_bot.schedule import schedule_companion_followup
+            from app.services.companion_bot.job_queue import enqueue_companion_followup
 
-            schedule_companion_followup(
-                owner_user_id=owner_user_id,
-                conv_id=conv_id,
-                after_outbound_message_id=row.id,
-            )
+            async with SessionLocal() as s2:
+                await enqueue_companion_followup(
+                    s2,
+                    owner_user_id=owner_user_id,
+                    conv_id=conv_id,
+                    after_outbound_message_id=row.id,
+                )
+                await s2.commit()
         except Exception as e:
             log.warning("companion send failed conv=%s event=%s: %s", conv_id, event_id, e)
             if cfg.mode in (CompanionBotMode.auto, CompanionBotMode.semi_auto):
@@ -723,3 +651,70 @@ async def run_companion_pipeline(
             else:
                 ev.status = BotResponseEventStatus.failed
                 await session.commit()
+
+
+async def run_companion_followup_job(
+    *,
+    owner_user_id: int,
+    conv_id: int,
+    after_outbound_message_id: int,
+) -> None:
+    async with SessionLocal() as session:
+        conv = await session.get(Conversation, conv_id)
+        if not conv or conv.user_id != owner_user_id:
+            return
+        cfg = await get_companion_config_for_conversation(session, conv)
+        if not cfg:
+            return
+
+        if await _fan_replied_after(session, conv_id, after_outbound_message_id):
+            _log_companion_skip(conv_id, "followup_fan_replied_during_delay")
+            return
+
+        skip, skip_reason = await _should_skip_followup(session, conv_id)
+        if skip:
+            _log_companion_skip(conv_id, f"followup_{skip_reason}")
+            return
+
+        event = await create_companion_followup_event(
+            session,
+            owner_user_id=owner_user_id,
+            conv=conv,
+            after_outbound_message_id=after_outbound_message_id,
+            cfg=cfg,
+        )
+        if not event:
+            await session.commit()
+            return
+
+        event_id = event.id
+        mode = cfg.mode
+        delay = random.uniform(cfg.delay_min_sec, cfg.delay_max_sec)
+        draft_text = event.draft_text
+        target_lang = event.target_lang
+        await session.commit()
+
+    if mode == CompanionBotMode.draft:
+        await _broadcast_companion_draft(
+            owner_user_id=owner_user_id,
+            conv_id=conv_id,
+            event_id=event_id,
+            trigger_message_id=after_outbound_message_id,
+            draft_text=draft_text,
+            target_lang=target_lang,
+        )
+        return
+
+    from app.services.companion_bot.job_queue import enqueue_companion_send
+
+    async with SessionLocal() as session:
+        await enqueue_companion_send(
+            session,
+            owner_user_id=owner_user_id,
+            conv_id=conv_id,
+            trigger_message_id=after_outbound_message_id,
+            event_id=event_id,
+            delay_sec=delay,
+            followup=True,
+        )
+        await session.commit()

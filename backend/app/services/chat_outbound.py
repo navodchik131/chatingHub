@@ -16,7 +16,7 @@ from app.config import BACKEND_DIR, settings
 from app.connectors.fanvue.client import FanvueAPIError, send_direct_message
 from app.connectors.fanvue.media import fanvue_upload_image_bytes
 from app.connectors.instagram.client import InstagramAPIError, send_instagram_message
-from app.db.models import StudioGeneration
+from app.db.models import StudioGeneration, StudioMotionRender
 from app.services.chat_attachment import chat_media_public_absolute_url, save_chat_image_bytes
 from app.services.studio_generation_storage import generation_has_archive_file
 
@@ -63,6 +63,30 @@ async def load_studio_generation_image_bytes(
     return data, ct
 
 
+async def load_studio_motion_render_bytes(
+    session: AsyncSession,
+    *,
+    owner_id: int,
+    render_id: int,
+) -> tuple[bytes, str]:
+    import httpx
+
+    row = await session.get(StudioMotionRender, render_id)
+    if not row or row.user_id != owner_id:
+        raise HTTPException(status_code=404, detail="Видео не найдено")
+    url = (row.video_url or "").strip()
+    if not url:
+        raise HTTPException(status_code=404, detail="URL видео отсутствует")
+    async with httpx.AsyncClient(timeout=120.0, follow_redirects=True) as client:
+        r = await client.get(url)
+    if r.status_code >= 400:
+        raise HTTPException(status_code=502, detail="Не удалось загрузить видео")
+    ct = (r.headers.get("content-type") or "video/mp4").split(";")[0].strip()
+    if not ct.startswith("video/"):
+        ct = "video/mp4"
+    return r.content, ct
+
+
 async def resolve_outbound_image(
     session: AsyncSession,
     *,
@@ -73,10 +97,29 @@ async def resolve_outbound_image(
     if upload is not None:
         return await read_upload_image(upload)
     if studio_generation_id is not None and studio_generation_id > 0:
+        row = await session.get(StudioGeneration, studio_generation_id)
+        if row and (row.content_type or "").startswith("video/"):
+            raise HTTPException(
+                status_code=400,
+                detail="Для видео из архива используйте studio_motion_render_id",
+            )
         return await load_studio_generation_image_bytes(
             session, owner_id=owner_id, generation_id=studio_generation_id
         )
     return None
+
+
+async def resolve_outbound_video(
+    session: AsyncSession,
+    *,
+    owner_id: int,
+    studio_motion_render_id: int | None,
+) -> tuple[bytes, str] | None:
+    if studio_motion_render_id is None or studio_motion_render_id <= 0:
+        return None
+    return await load_studio_motion_render_bytes(
+        session, owner_id=owner_id, render_id=studio_motion_render_id
+    )
 
 
 async def send_telegram_outbound(
@@ -87,6 +130,8 @@ async def send_telegram_outbound(
     text: str,
     image_bytes: bytes | None,
     image_mime: str | None,
+    video_bytes: bytes | None = None,
+    video_mime: str | None = None,
     reply_to_telegram_message_id: int | None = None,
 ) -> int | None:
     proxy = (settings.telegram_proxy or "").strip()
@@ -96,7 +141,27 @@ async def send_telegram_outbound(
     if reply_to_telegram_message_id is not None and reply_to_telegram_message_id > 0:
         reply_kw["reply_to_message_id"] = reply_to_telegram_message_id
     try:
-        if image_bytes:
+        if video_bytes:
+            ext = ".mp4"
+            if video_mime and "webm" in video_mime:
+                ext = ".webm"
+            vid = BufferedInputFile(video_bytes, filename=f"video{ext}")
+            if (text or "").strip():
+                sent = await bot.send_video(
+                    chat_id=chat_id,
+                    video=vid,
+                    caption=text,
+                    direct_messages_topic_id=topic_id,
+                    **reply_kw,
+                )
+            else:
+                sent = await bot.send_video(
+                    chat_id=chat_id,
+                    video=vid,
+                    direct_messages_topic_id=topic_id,
+                    **reply_kw,
+                )
+        elif image_bytes:
             ext = ".jpg"
             if image_mime and "png" in image_mime:
                 ext = ".png"
