@@ -30,6 +30,8 @@ class MessageOut(BaseModel):
     companion_bot: bool = False
     bot_response_event_id: int | None = None
     operator_rating: int | None = None
+    """False если реакция сохранена локально, но Telegram не принял sync."""
+    platform_sync_ok: bool | None = None
 
 
 class CompanionDraftOut(BaseModel):

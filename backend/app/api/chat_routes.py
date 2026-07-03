@@ -694,6 +694,7 @@ async def api_message_reaction(
 
     reactions = toggle_owner_reaction(parse_reactions(row.reactions_json), emoji)
     row.reactions_json = reactions_to_json(reactions)
+    telegram_synced: bool | None = None
 
     if conv.platform == Platform.telegram:
         tg_id_raw = row.platform_message_id or platform_message_id_from_meta(row.meta)
@@ -714,26 +715,31 @@ async def api_message_reaction(
                         r.get("actor") == "owner" and r.get("emoji") == emoji
                         for r in reactions
                     )
-                    try:
-                        await set_telegram_message_reaction(
-                            token=token,
-                            chat_id=cid,
-                            telegram_message_id=tg_mid,
-                            emoji=emoji if owner_has_emoji else None,
-                            topic_id=topic_id or None,
-                        )
-                    except Exception as e:
+                    telegram_synced = await set_telegram_message_reaction(
+                        token=token,
+                        chat_id=cid,
+                        telegram_message_id=tg_mid,
+                        emoji=emoji if owner_has_emoji else None,
+                        topic_id=topic_id or None,
+                    )
+                    if not telegram_synced:
                         log.warning(
-                            "telegram set_message_reaction failed conv=%s msg=%s "
-                            "chat=%s tg_msg=%s topic=%s emoji=%s: %s",
+                            "telegram reaction saved locally only conv=%s msg=%s "
+                            "chat=%s tg_msg=%s topic=%s emoji=%s",
                             conv.id,
                             row.id,
                             cid,
                             tg_mid,
                             topic_id,
                             emoji if owner_has_emoji else None,
-                            e,
                         )
+        else:
+            telegram_synced = False
+            log.warning(
+                "telegram reaction skipped: no platform_message_id conv=%s msg=%s",
+                conv.id,
+                row.id,
+            )
 
     await session.commit()
     await session.refresh(row, attribute_names=["attachments"])
@@ -748,7 +754,12 @@ async def api_message_reaction(
         conv_id=conv.id,
         row=row,
     )
-    return message_to_out(row, owner_id=oid, reply_preview=reply_preview)
+    return message_to_out(
+        row,
+        owner_id=oid,
+        reply_preview=reply_preview,
+        platform_sync_ok=telegram_synced,
+    )
 
 
 @router.get("/conversations/{conv_id}/notes", response_model=list[ConversationNoteOut])

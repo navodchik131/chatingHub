@@ -132,6 +132,35 @@ async def send_telegram_outbound(
         await bot.session.close()
 
 
+async def _raw_telegram_set_message_reaction(
+    *,
+    token: str,
+    chat_id: int,
+    telegram_message_id: int,
+    emoji: str | None,
+    extra: dict[str, int],
+) -> None:
+    import httpx
+
+    reaction_payload: list[dict[str, str]] = []
+    if emoji and emoji.strip():
+        reaction_payload = [{"type": "emoji", "emoji": emoji.strip()}]
+    payload: dict = {
+        "chat_id": chat_id,
+        "message_id": telegram_message_id,
+        "reaction": reaction_payload,
+        **extra,
+    }
+    proxy = (settings.telegram_proxy or "").strip()
+    async with httpx.AsyncClient(timeout=30.0, proxy=proxy or None) as client:
+        r = await client.post(
+            f"https://api.telegram.org/bot{token}/setMessageReaction",
+            json=payload,
+        )
+    if r.status_code >= 400:
+        raise RuntimeError(f"setMessageReaction {r.status_code}: {(r.text or '')[:300]}")
+
+
 async def set_telegram_message_reaction(
     *,
     token: str,
@@ -139,26 +168,60 @@ async def set_telegram_message_reaction(
     telegram_message_id: int,
     emoji: str | None,
     topic_id: int | None = None,
-) -> None:
-    """emoji=None или пустая строка — снять реакцию бота."""
+) -> bool:
+    """emoji=None или пустая строка — снять реакцию бота. True если Telegram принял."""
     from aiogram.types import ReactionTypeEmoji
 
     proxy = (settings.telegram_proxy or "").strip()
     session_aio = AiohttpSession(proxy=proxy) if proxy else None
     bot = Bot(token=token, session=session_aio) if session_aio else Bot(token=token)
     reaction = [ReactionTypeEmoji(emoji=emoji.strip())] if emoji and emoji.strip() else []
-    kw: dict[str, int] = {}
-    if topic_id is not None and topic_id > 0:
-        kw["direct_messages_topic_id"] = topic_id
     try:
         await bot.set_message_reaction(
             chat_id=chat_id,
             message_id=telegram_message_id,
             reaction=reaction,
-            **kw,
+        )
+        return True
+    except Exception as e:
+        log.info(
+            "setMessageReaction default failed chat=%s msg=%s: %s",
+            chat_id,
+            telegram_message_id,
+            e,
         )
     finally:
         await bot.session.close()
+
+    tid = int(topic_id or 0)
+    if tid <= 0:
+        return False
+
+    for extra in ({"direct_messages_topic_id": tid}, {"message_thread_id": tid}):
+        try:
+            await _raw_telegram_set_message_reaction(
+                token=token,
+                chat_id=chat_id,
+                telegram_message_id=telegram_message_id,
+                emoji=emoji,
+                extra=extra,
+            )
+            log.info(
+                "setMessageReaction fallback ok chat=%s msg=%s extra=%s",
+                chat_id,
+                telegram_message_id,
+                extra,
+            )
+            return True
+        except Exception as e:
+            log.info(
+                "setMessageReaction fallback failed chat=%s msg=%s extra=%s: %s",
+                chat_id,
+                telegram_message_id,
+                extra,
+                e,
+            )
+    return False
 
 
 async def send_fanvue_outbound(

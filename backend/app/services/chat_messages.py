@@ -45,6 +45,7 @@ def message_to_out(
     reply_preview: str | None = None,
     operator_rating: int | None = None,
     bot_response_event_id: int | None = None,
+    platform_sync_ok: bool | None = None,
 ) -> MessageOut:
     atts = [
         MessageAttachmentOut(
@@ -74,6 +75,7 @@ def message_to_out(
         companion_bot=companion_bot,
         bot_response_event_id=event_id,
         operator_rating=operator_rating,
+        platform_sync_ok=platform_sync_ok,
     )
 
 

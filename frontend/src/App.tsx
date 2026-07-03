@@ -222,6 +222,7 @@ interface ChatMessage {
   companion_bot?: boolean
   bot_response_event_id?: number | null
   operator_rating?: number | null
+  platform_sync_ok?: boolean | null
 }
 
 interface CompanionDraft {
@@ -3122,6 +3123,9 @@ export default function App() {
       setMessages((prev) =>
         prev.map((m) => (Number(m.id) === Number(updated.id) ? { ...m, ...updated } : m)),
       )
+      if (updated.platform_sync_ok === false) {
+        setError('Реакция сохранена в чате, но Telegram не принял её — проверьте логи API.')
+      }
     } catch {
       setError('Не удалось поставить реакцию')
     } finally {
