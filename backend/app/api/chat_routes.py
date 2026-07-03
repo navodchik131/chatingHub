@@ -28,6 +28,8 @@ from app.connectors.telegram.state import get_telegram_api_status
 from app.db.models import (
     BotResponseEvent,
     BotResponseEventStatus,
+    CompanionBotMode,
+    Conversation,
     FanvueConnection,
     Message,
     MessageAttachment,
@@ -119,6 +121,7 @@ from app.services.conversation_notes import (
     list_conversation_notes,
     update_manual_note,
 )
+from app.services.companion_bot.config import effective_companion_bot_mode
 from app.services.companion_bot.orchestrator import approve_and_send_companion_draft
 from app.services.companion_bot.send import broadcast_companion_message
 from app.services.platform_connections import (
@@ -134,6 +137,19 @@ from app.services.workspace_model_access import (
 log = logging.getLogger(__name__)
 
 router = APIRouter(tags=["chat"])
+
+
+async def _conversation_out(
+    session: AsyncSession,
+    conv: Conversation,
+    *,
+    owner_id: int,
+) -> ConversationOut:
+    mode = await effective_companion_bot_mode(session, conv, owner_id=owner_id)
+    base = ConversationOut.model_validate(conv)
+    return base.model_copy(
+        update={"effective_companion_mode": mode.value if mode else None}
+    )
 
 
 async def _require_chat_plan(session: AsyncSession, user: User) -> None:
@@ -246,7 +262,7 @@ async def api_list_conversations(
             has_outbound=c.id in outbound_ids,
             now=now,
         )
-        base = ConversationOut.model_validate(c)
+        base = await _conversation_out(session, c, owner_id=oid)
         out.append(
             ConversationWithPreview.model_validate(
                 {
@@ -414,7 +430,7 @@ async def api_patch_conversation(
             conv.is_blocked = bool(body.is_blocked)
     await session.commit()
     await session.refresh(conv)
-    return ConversationOut.model_validate(conv)
+    return await _conversation_out(session, conv, owner_id=oid)
 
 
 @router.post("/conversations/{conv_id}/reply", response_model=MessageOut)
@@ -839,6 +855,9 @@ async def api_list_companion_drafts(
     await _require_chat_plan(session, user)
     oid = workspace_owner_id(user)
     conv = await require_conversation_chat_access(session, user, conv_id, oid)
+    mode = await effective_companion_bot_mode(session, conv, owner_id=oid)
+    if mode != CompanionBotMode.draft:
+        return []
     rows = list(
         (
             await session.scalars(

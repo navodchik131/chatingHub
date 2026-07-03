@@ -113,3 +113,13 @@ async def companion_bot_active_for_conversation(
     return await get_companion_config_for_conversation(
         session, conv, owner_id=owner_id
     ) is not None
+
+
+async def effective_companion_bot_mode(
+    session: AsyncSession,
+    conv: Conversation,
+    *,
+    owner_id: int | None = None,
+) -> CompanionBotMode | None:
+    cfg = await get_companion_config_for_conversation(session, conv, owner_id=owner_id)
+    return cfg.mode if cfg else None

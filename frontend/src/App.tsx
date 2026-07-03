@@ -135,6 +135,8 @@ interface Conversation {
   auto_translate_disabled?: boolean
   /** NULL = с подключения; off/draft/semi_auto/auto — переопределение в диалоге. */
   companion_mode_override?: string | null
+  /** Фактический режим с учётом подключения. */
+  effective_companion_mode?: string | null
   manual_category?: 'vip' | 'bomzh' | null
   is_blocked?: boolean
   is_no_response?: boolean
@@ -245,6 +247,16 @@ const COMPANION_CONVERSATION_MODE_OPTIONS = [
   { value: 'semi_auto', label: 'Полуавто' },
   { value: 'auto', label: 'Автопилот' },
 ] as const
+
+function resolveEffectiveCompanionMode(conv: Conversation): string | null {
+  if (conv.effective_companion_mode) return conv.effective_companion_mode
+  const override = (conv.companion_mode_override ?? '').trim()
+  return override || null
+}
+
+function isCompanionManualDraftMode(mode: string | null | undefined): boolean {
+  return mode === 'draft'
+}
 
 interface CompanionFeedbackReport {
   id: number
@@ -2588,6 +2600,13 @@ export default function App() {
           if (sid != null && sid === payload.conversation_id && payload.message) {
             const mid = Number(payload.message.id)
             const incoming = payload.message as ChatMessage
+            if (
+              incoming.direction === 'outbound' &&
+              incoming.bot_response_event_id != null
+            ) {
+              const eventId = Number(incoming.bot_response_event_id)
+              setCompanionDrafts((prev) => prev.filter((d) => d.id !== eventId))
+            }
             setMessages((prev) => {
               if (prev.some((m) => Number(m.id) === mid)) return prev
               let next = prev
@@ -9241,12 +9260,19 @@ export default function App() {
                       </article>
                         )
                       })}
-                      {companionDrafts.map((draft) => (
+                      {companionDrafts.map((draft) => {
+                        const effectiveMode = selected
+                          ? resolveEffectiveCompanionMode(selected)
+                          : null
+                        const manualDraft = isCompanionManualDraftMode(effectiveMode)
+                        return (
                         <article
                           key={`draft-${draft.id}`}
                           className="bubble out msg-enter companion-draft-bubble"
                         >
-                          <div className="companion-draft-label">Черновик AI</div>
+                          <div className="companion-draft-label">
+                            {manualDraft ? 'Черновик AI' : 'AI не отправил — проверьте'}
+                          </div>
                           <div className="ru">{draft.draft_text}</div>
                           {draft.target_lang ? (
                             <div className="orig">→ {draft.target_lang}</div>
@@ -9270,7 +9296,8 @@ export default function App() {
                             </button>
                           </div>
                         </article>
-                      ))}
+                        )
+                      })}
                       <div className="messages-end" aria-hidden />
                     </>
                   )}

@@ -32,6 +32,51 @@ from app.services.realtime import hub
 log = logging.getLogger(__name__)
 
 
+async def _broadcast_companion_draft(
+    *,
+    owner_user_id: int,
+    conv_id: int,
+    event_id: int,
+    trigger_message_id: int,
+    draft_text: str,
+    target_lang: str | None,
+) -> None:
+    await hub.broadcast_user(
+        owner_user_id,
+        {
+            "type": "companion_draft",
+            "conversation_id": conv_id,
+            "event": {
+                "id": event_id,
+                "conversation_id": conv_id,
+                "trigger_message_id": trigger_message_id,
+                "draft_text": draft_text,
+                "target_lang": target_lang,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            },
+        },
+    )
+
+
+async def _notify_companion_draft_fallback(
+    *,
+    owner_user_id: int,
+    conv_id: int,
+    event_id: int,
+    trigger_message_id: int,
+    draft_text: str,
+    target_lang: str | None,
+) -> None:
+    await _broadcast_companion_draft(
+        owner_user_id=owner_user_id,
+        conv_id=conv_id,
+        event_id=event_id,
+        trigger_message_id=trigger_message_id,
+        draft_text=draft_text,
+        target_lang=target_lang,
+    )
+
+
 def _semi_auto_allowed(*, trigger: Message, has_image: bool) -> bool:
     if has_image:
         if not settings.companion_vision_enabled:
@@ -275,20 +320,13 @@ async def run_companion_followup_pipeline(
         await session.commit()
 
     if mode == CompanionBotMode.draft:
-        await hub.broadcast_user(
-            owner_user_id,
-            {
-                "type": "companion_draft",
-                "conversation_id": conv_id,
-                "event": {
-                    "id": event_id,
-                    "conversation_id": conv_id,
-                    "trigger_message_id": after_outbound_message_id,
-                    "draft_text": draft_text,
-                    "target_lang": target_lang,
-                    "created_at": datetime.now(timezone.utc).isoformat(),
-                },
-            },
+        await _broadcast_companion_draft(
+            owner_user_id=owner_user_id,
+            conv_id=conv_id,
+            event_id=event_id,
+            trigger_message_id=after_outbound_message_id,
+            draft_text=draft_text,
+            target_lang=target_lang,
         )
         return
 
@@ -298,6 +336,26 @@ async def run_companion_followup_pipeline(
     async with SessionLocal() as session:
         conv = await session.get(Conversation, conv_id)
         if not conv:
+            return
+        cfg = await get_companion_config_for_conversation(session, conv)
+        if not cfg or cfg.mode == CompanionBotMode.off:
+            ev = await session.get(BotResponseEvent, event_id)
+            if ev and ev.status == BotResponseEventStatus.draft:
+                ev.status = BotResponseEventStatus.rejected
+                await session.commit()
+            return
+        if cfg.mode == CompanionBotMode.draft:
+            ev = await session.get(BotResponseEvent, event_id)
+            if ev and ev.status == BotResponseEventStatus.draft:
+                await session.commit()
+                await _broadcast_companion_draft(
+                    owner_user_id=owner_user_id,
+                    conv_id=conv_id,
+                    event_id=event_id,
+                    trigger_message_id=after_outbound_message_id,
+                    draft_text=ev.draft_text,
+                    target_lang=ev.target_lang,
+                )
             return
         if await _fan_replied_after(session, conv_id, after_outbound_message_id):
             ev = await session.get(BotResponseEvent, event_id)
@@ -329,8 +387,19 @@ async def run_companion_followup_pipeline(
                 event_id,
                 e,
             )
-            ev.status = BotResponseEventStatus.failed
-            await session.commit()
+            if cfg.mode in (CompanionBotMode.auto, CompanionBotMode.semi_auto):
+                await session.commit()
+                await _notify_companion_draft_fallback(
+                    owner_user_id=owner_user_id,
+                    conv_id=conv_id,
+                    event_id=event_id,
+                    trigger_message_id=after_outbound_message_id,
+                    draft_text=ev.draft_text,
+                    target_lang=ev.target_lang,
+                )
+            else:
+                ev.status = BotResponseEventStatus.failed
+                await session.commit()
 
 
 async def create_companion_reply_event(
@@ -502,20 +571,13 @@ async def run_companion_pipeline(
         await session.commit()
 
     if mode == CompanionBotMode.draft:
-        await hub.broadcast_user(
-            owner_user_id,
-            {
-                "type": "companion_draft",
-                "conversation_id": conv_id,
-                "event": {
-                    "id": event_id,
-                    "conversation_id": conv_id,
-                    "trigger_message_id": trigger_message_id,
-                    "draft_text": draft_text,
-                    "target_lang": target_lang,
-                    "created_at": datetime.now(timezone.utc).isoformat(),
-                },
-            },
+        await _broadcast_companion_draft(
+            owner_user_id=owner_user_id,
+            conv_id=conv_id,
+            event_id=event_id,
+            trigger_message_id=trigger_message_id,
+            draft_text=draft_text,
+            target_lang=target_lang,
         )
         return
 
@@ -525,6 +587,26 @@ async def run_companion_pipeline(
     async with SessionLocal() as session:
         conv = await session.get(Conversation, conv_id)
         if not conv:
+            return
+        cfg = await get_companion_config_for_conversation(session, conv)
+        if not cfg or cfg.mode == CompanionBotMode.off:
+            ev = await session.get(BotResponseEvent, event_id)
+            if ev and ev.status == BotResponseEventStatus.draft:
+                ev.status = BotResponseEventStatus.rejected
+                await session.commit()
+            return
+        if cfg.mode == CompanionBotMode.draft:
+            ev = await session.get(BotResponseEvent, event_id)
+            if ev and ev.status == BotResponseEventStatus.draft:
+                await session.commit()
+                await _broadcast_companion_draft(
+                    owner_user_id=owner_user_id,
+                    conv_id=conv_id,
+                    event_id=event_id,
+                    trigger_message_id=trigger_message_id,
+                    draft_text=ev.draft_text,
+                    target_lang=ev.target_lang,
+                )
             return
         if await _is_stale_trigger(session, conv_id, trigger_message_id):
             ev = await session.get(BotResponseEvent, event_id)
@@ -558,5 +640,16 @@ async def run_companion_pipeline(
             )
         except Exception as e:
             log.warning("companion send failed conv=%s event=%s: %s", conv_id, event_id, e)
-            ev.status = BotResponseEventStatus.failed
-            await session.commit()
+            if cfg.mode in (CompanionBotMode.auto, CompanionBotMode.semi_auto):
+                await session.commit()
+                await _notify_companion_draft_fallback(
+                    owner_user_id=owner_user_id,
+                    conv_id=conv_id,
+                    event_id=event_id,
+                    trigger_message_id=trigger_message_id,
+                    draft_text=ev.draft_text,
+                    target_lang=ev.target_lang,
+                )
+            else:
+                ev.status = BotResponseEventStatus.failed
+                await session.commit()

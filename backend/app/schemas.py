@@ -75,6 +75,8 @@ class ConversationOut(BaseModel):
     auto_translate_disabled: bool = False
     """NULL = режим с подключения; off/draft/semi_auto/auto — переопределение."""
     companion_mode_override: str | None = None
+    """Фактический режим с учётом подключения (off/draft/semi_auto/auto)."""
+    effective_companion_mode: str | None = None
     """Ручная категория: vip, bomzh или NULL."""
     manual_category: Literal["vip", "bomzh"] | None = None
     is_blocked: bool = False
