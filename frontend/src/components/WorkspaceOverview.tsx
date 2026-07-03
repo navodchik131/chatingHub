@@ -27,6 +27,11 @@ export interface WorkspaceOverviewProps {
   generations: GenerationPreview[]
   tributeEarningsLabel?: string | null
   tributeEarningsHint?: string | null
+  chatterOutboundCount?: number | null
+  chatterConversationsCount?: number | null
+  chatterRatingsHint?: string | null
+  chatterStatsPeriod?: string | null
+  isOwner?: boolean
   onOpenChat: (convId?: number) => void
   onOpenStudio: () => void
   onOpenVideo: () => void
@@ -82,6 +87,11 @@ export function WorkspaceOverview({
   generations,
   tributeEarningsLabel,
   tributeEarningsHint,
+  chatterOutboundCount,
+  chatterConversationsCount,
+  chatterRatingsHint,
+  chatterStatsPeriod,
+  isOwner,
   onOpenChat,
   onOpenStudio,
   onOpenVideo,
@@ -114,6 +124,20 @@ export function WorkspaceOverview({
             hint={tributeEarningsHint ?? 'Донаты и подписки'}
             valueTone="success"
           />
+        ) : null}
+        {canChat && chatterOutboundCount != null ? (
+          <KpiCard
+            label={isOwner ? 'Ответов команды' : 'Мои ответы'}
+            value={chatterOutboundCount}
+            hint={
+              chatterStatsPeriod
+                ? `${chatterConversationsCount ?? 0} диалогов · ${chatterStatsPeriod}`
+                : `${chatterConversationsCount ?? 0} диалогов`
+            }
+          />
+        ) : null}
+        {canChat && chatterRatingsHint ? (
+          <KpiCard label="AI-ответы" value={chatterRatingsHint} hint="Оценки 👍 / 👎 за период" />
         ) : null}
         {canStudioAny ? (
           <KpiCard label="В архиве" value={generationsTotal} hint="Сохранённые кадры" />

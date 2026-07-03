@@ -660,6 +660,31 @@ class TributeEarningsSummaryOut(BaseModel):
     event_count: int = 0
 
 
+class ChatterStatsRowOut(BaseModel):
+    user_id: int
+    member_login: str
+    is_active: bool
+    outbound_messages: int
+    conversations_replied: int
+    companion_ratings_positive: int
+    companion_ratings_negative: int
+    tribute_display_minor: int
+    tribute_gross_minor: int
+    tribute_currency: str
+    tribute_share_percent: int
+    tribute_event_count: int
+
+
+class ChatterStatsSummaryOut(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    from_date: date
+    to_date: date
+    is_owner: bool
+    self_row: ChatterStatsRowOut = Field(alias="self")
+    members: list[ChatterStatsRowOut] | None = None
+
+
 class FanvueSyncOut(BaseModel):
     chats_processed: int
     messages_imported: int

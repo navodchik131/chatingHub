@@ -605,6 +605,7 @@ async def api_reply(
         meta=None,
         reply_to_message_id=reply_to_message_id,
         platform_message_id=platform_message_id,
+        sender_user_id=user.id,
     )
     if image_bytes:
         try:
@@ -893,6 +894,7 @@ async def api_approve_companion_draft(
             conv=conv,
             event=event,
             text_override=body.text,
+            sender_user_id=user.id,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e

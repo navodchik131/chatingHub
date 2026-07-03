@@ -32,6 +32,7 @@ async def send_companion_outbound(
     text: str,
     reply_to_message_id: int | None,
     bot_response_event_id: int,
+    sender_user_id: int | None = None,
 ) -> Message:
     outgoing = (text or "").strip()
     if not outgoing:
@@ -123,6 +124,7 @@ async def send_companion_outbound(
         meta=meta,
         reply_to_message_id=reply_to_message_id,
         platform_message_id=platform_message_id,
+        sender_user_id=sender_user_id,
     )
     await mark_conversation_read(session, conv.id, owner_id)
     await session.flush()

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from datetime import date
+
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,14 +13,18 @@ from app.auth.passwords import hash_password
 from app.db.models import Subscription, UsageEvent, User
 from app.db.session import get_session
 from app.schemas import (
+    ChatterStatsSummaryOut,
     CreditHistoryItemOut,
     CreditHistoryPageOut,
     WorkspaceMemberCreateIn,
     WorkspaceMemberOut,
     WorkspaceMemberPatchIn,
 )
+from app.services.chatter_stats import aggregate_chatter_stats_summary
 from app.services.workspace import (
     DEFAULT_MEMBER_PERMISSIONS,
+    PERM_CHAT,
+    assert_permission,
     is_workspace_owner,
     normalize_member_login,
     synthetic_member_email,
@@ -30,6 +36,31 @@ from app.services.workspace_model_access import (
 from app.services.tribute_member_share import resolve_member_tribute_share_percent
 
 router = APIRouter(prefix="/workspace", tags=["workspace"])
+
+
+@router.get("/chatter-stats/summary", response_model=ChatterStatsSummaryOut)
+async def chatter_stats_summary(
+    from_date: date | None = Query(default=None, alias="from"),
+    to_date: date | None = Query(default=None, alias="to"),
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> ChatterStatsSummaryOut:
+    assert_permission(user, PERM_CHAT)
+    today = date.today()
+    if from_date is None and to_date is None:
+        from_date = today.replace(day=1)
+        to_date = today
+    elif from_date is None:
+        from_date = to_date or today
+    elif to_date is None:
+        to_date = today
+    data = await aggregate_chatter_stats_summary(
+        session,
+        viewer=user,
+        from_date=from_date,
+        to_date=to_date,
+    )
+    return ChatterStatsSummaryOut.model_validate(data)
 
 
 @router.get("/credit-history", response_model=CreditHistoryPageOut)

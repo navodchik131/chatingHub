@@ -898,6 +898,10 @@ class Message(Base):
     platform_message_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
     reactions_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     meta: Mapped[str | None] = mapped_column(Text, nullable=True)
+    """Кто отправил исходящее (участник workspace или владелец). NULL — бот/система."""
+    sender_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

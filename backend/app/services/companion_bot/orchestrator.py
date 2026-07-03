@@ -427,6 +427,7 @@ async def approve_and_send_companion_draft(
     conv: Conversation,
     event: BotResponseEvent,
     text_override: str | None = None,
+    sender_user_id: int | None = None,
 ) -> Message:
     if event.status != BotResponseEventStatus.draft:
         raise ValueError("event not in draft status")
@@ -459,6 +460,7 @@ async def approve_and_send_companion_draft(
         text=final_text,
         reply_to_message_id=reply_to_id,
         bot_response_event_id=event.id,
+        sender_user_id=sender_user_id,
     )
     event.status = BotResponseEventStatus.sent
     event.sent_text = final_text

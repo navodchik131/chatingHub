@@ -970,6 +970,8 @@ def _migrate_chat_message_features(sync_conn) -> None:
         )
     if "reactions_json" not in cols:
         sync_conn.execute(text("ALTER TABLE messages ADD COLUMN reactions_json TEXT"))
+    if "sender_user_id" not in cols:
+        sync_conn.execute(text("ALTER TABLE messages ADD COLUMN sender_user_id INTEGER"))
 
 
 def _migrate_fanvue_oauth_columns(sync_conn) -> None:

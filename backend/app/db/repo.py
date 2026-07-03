@@ -115,6 +115,7 @@ async def add_message(
     reply_to_message_id: int | None = None,
     platform_message_id: str | None = None,
     reactions_json: str | None = None,
+    sender_user_id: int | None = None,
 ) -> Message:
     msg = Message(
         conversation_id=conversation_id,
@@ -125,6 +126,7 @@ async def add_message(
         reply_to_message_id=reply_to_message_id,
         platform_message_id=platform_message_id,
         reactions_json=reactions_json,
+        sender_user_id=sender_user_id,
         created_at=datetime.now(timezone.utc),
     )
     session.add(msg)

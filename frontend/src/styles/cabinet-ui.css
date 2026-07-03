@@ -191,10 +191,15 @@
 
 .mm-cabinet-tabs-wrap {
   position: sticky;
-  top: 63px;
+  top: 0;
   z-index: 30;
-  background: var(--bg);
-  padding: 6px 0 14px;
+  margin-left: -20px;
+  margin-right: -20px;
+  padding: 6px 20px 14px;
+  background: color-mix(in srgb, var(--bg) 94%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border);
 }
 
 .account-panel--mm .account-cabinet-tabs {
@@ -818,6 +823,13 @@
   }
 
   .mm-cabinet-body {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  .mm-cabinet-tabs-wrap {
+    margin-left: -14px;
+    margin-right: -14px;
     padding-left: 14px;
     padding-right: 14px;
   }

@@ -795,6 +795,15 @@
 
   .app--chat .workspace-content {
     padding: 0;
+    padding-bottom: calc(4.75rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  .app--chat.mobile-chat-open .workspace-content {
+    padding-bottom: 0;
+  }
+
+  .layout--chat.mobile:not(.thread-focus) .conv-list {
+    padding-bottom: calc(4.75rem + env(safe-area-inset-bottom, 0px) + 0.75rem);
   }
 }
 
@@ -1196,3 +1205,60 @@
   background: var(--bg-raised);
 }
 
+/* ── Mobile PWA fixes (последний слой) ── */
+
+.layout--chat .thread-head {
+  flex-shrink: 0;
+  position: relative;
+}
+
+.layout--chat .thread-head--mobile.thread-head--settings-open {
+  z-index: 35;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
+}
+
+.layout--chat .thread-head--mobile.thread-head--settings-open .thread-head-toolbar {
+  display: flex;
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  margin-top: 0.5rem;
+  padding-top: 0.625rem;
+  border-top: 1px solid var(--border);
+  background: var(--bg-elevated);
+}
+
+.layout--chat .thread-head--mobile .thread-head-identity {
+  flex-wrap: nowrap;
+  width: 100%;
+  min-width: 0;
+}
+
+@media (max-width: 720px) {
+  .layout--chat .conv-notes-panel.open {
+    z-index: 210;
+    width: 100%;
+    max-width: none;
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+
+  .layout--chat .conv-notes-head {
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 0.625rem;
+  }
+
+  .layout--chat .conv-notes-close {
+    margin-left: auto;
+    flex-shrink: 0;
+    min-height: 2.25rem;
+    padding: 0.35rem 0.85rem;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--bg-subtle);
+    color: var(--text);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    line-height: 1.2;
+  }
+}

@@ -571,6 +571,29 @@ interface TributeEarningsSummary {
   event_count: number
 }
 
+interface ChatterStatsRow {
+  user_id: number
+  member_login: string
+  is_active: boolean
+  outbound_messages: number
+  conversations_replied: number
+  companion_ratings_positive: number
+  companion_ratings_negative: number
+  tribute_display_minor: number
+  tribute_gross_minor: number
+  tribute_currency: string
+  tribute_share_percent: number
+  tribute_event_count: number
+}
+
+interface ChatterStatsSummary {
+  from_date: string
+  to_date: string
+  is_owner: boolean
+  self: ChatterStatsRow
+  members: ChatterStatsRow[] | null
+}
+
 interface BillingCreditsPricing {
   min_quantity: number
   bulk_from: number
@@ -1061,6 +1084,7 @@ export default function App() {
   const [tributeDraftModelId, setTributeDraftModelId] = useState<number | ''>('')
   const [tributeEditConnectionId, setTributeEditConnectionId] = useState<number | null>(null)
   const [tributeEarnings, setTributeEarnings] = useState<TributeEarningsSummary | null>(null)
+  const [chatterStats, setChatterStats] = useState<ChatterStatsSummary | null>(null)
 
   const tributeEarningsDisplay = useMemo(() => {
     if (!tributeEarnings) return { label: null as string | null, hint: null as string | null }
@@ -1074,6 +1098,33 @@ export default function App() {
       : `${tributeEarnings.chatter_share_percent}% от дохода ваших моделей · ${period}`
     return { label, hint }
   }, [tributeEarnings])
+
+  const chatterStatsDisplay = useMemo(() => {
+    if (!chatterStats) {
+      return {
+        outbound: null as number | null,
+        conversations: null as number | null,
+        ratingsHint: null as string | null,
+        period: null as string | null,
+      }
+    }
+    const from = chatterStats.from_date
+    const to = chatterStats.to_date
+    const period = from === to ? from : `${from} — ${to}`
+    let outbound = chatterStats.self.outbound_messages
+    let conversations = chatterStats.self.conversations_replied
+    let pos = chatterStats.self.companion_ratings_positive
+    let neg = chatterStats.self.companion_ratings_negative
+    if (chatterStats.is_owner && chatterStats.members && chatterStats.members.length > 0) {
+      outbound = chatterStats.members.reduce((s, m) => s + m.outbound_messages, 0)
+      conversations = chatterStats.members.reduce((s, m) => s + m.conversations_replied, 0)
+      pos = chatterStats.members.reduce((s, m) => s + m.companion_ratings_positive, 0)
+      neg = chatterStats.members.reduce((s, m) => s + m.companion_ratings_negative, 0)
+    }
+    const ratingsHint =
+      pos + neg > 0 ? `${pos} / ${neg}` : null
+    return { outbound, conversations, ratingsHint, period }
+  }, [chatterStats])
 
   const [appSection, setAppSection] = useState<WorkspaceSection>('overview')
   const [studioDesc, setStudioDesc] = useState('')
@@ -1465,6 +1516,15 @@ export default function App() {
     }
   }, [])
 
+  const refreshChatterStats = useCallback(async () => {
+    const r = await apiFetch('/api/workspace/chatter-stats/summary')
+    if (r.ok) {
+      setChatterStats((await r.json()) as ChatterStatsSummary)
+    } else {
+      setChatterStats(null)
+    }
+  }, [])
+
   const refreshCompanionFeedback = useCallback(async () => {
     setCompanionFeedbackLoading(true)
     try {
@@ -1796,7 +1856,14 @@ export default function App() {
     if (!authed || !canChat) return
     if (appSection !== 'overview') return
     void refreshTributeEarnings()
-  }, [authed, canChat, appSection, refreshTributeEarnings])
+    void refreshChatterStats()
+  }, [authed, canChat, appSection, refreshTributeEarnings, refreshChatterStats])
+
+  useEffect(() => {
+    if (authed && accountOpen && accountTab === 'team' && isOwner) {
+      void refreshChatterStats()
+    }
+  }, [authed, accountOpen, accountTab, isOwner, refreshChatterStats])
 
   useEffect(() => {
     if (!authed) return
@@ -5838,9 +5905,30 @@ export default function App() {
                   </span>
                 </div>
                 <p className="muted cabinet-module-body">
-                  Business или Creator аккаунт через Meta OAuth. Модель на подключении наследуется
-                  диалогами. Ответы возможны в течение 24 часов после сообщения пользователя.
+                  Direct-сообщения Instagram Business / Creator через Meta. Окно ответа — 24 часа после
+                  последнего сообщения фана.
                 </p>
+                {!integ?.instagram_oauth_available ? (
+                  <p className="banner info cabinet-module-body" style={{ marginBottom: '0.75rem' }}>
+                    OAuth Instagram на сервере не настроен. Администратору нужны{' '}
+                    <code>INSTAGRAM_APP_ID</code>, <code>INSTAGRAM_APP_SECRET</code>,{' '}
+                    <code>INSTAGRAM_WEBHOOK_VERIFY_TOKEN</code> и HTTPS <code>PUBLIC_APP_URL</code> — см.
+                    .env.example.
+                  </p>
+                ) : null}
+                <ol className="muted cabinet-module-body" style={{ margin: '0 0 1rem', paddingLeft: '1.25rem' }}>
+                  <li>
+                    <strong>Администратор сервиса (один раз):</strong> Meta App → Instagram → OAuth redirect{' '}
+                    <code>{'{PUBLIC_APP_URL}'}/api/integrations/instagram/oauth/callback</code>, webhook ниже,
+                    scopes <code>instagram_business_basic</code>,{' '}
+                    <code>instagram_business_manage_messages</code>.
+                  </li>
+                  <li>
+                    <strong>Вы (пользователь):</strong> выберите модель → «Добавить Instagram (OAuth)» → войдите
+                    в Business/Creator аккаунт.
+                  </li>
+                  <li>Новые DM приходят в раздел «Диалоги» → Instagram. Отвечайте в течение 24 ч.</li>
+                </ol>
                 {(integ?.instagram_connections ?? []).map((conn) => (
                   <div key={conn.id} className="cabinet-module-form">
                     <p className="small mono">
@@ -7142,6 +7230,46 @@ export default function App() {
                 </button>
               </div>
 
+              <h4 className="account-sub">KPI команды {chatterStatsDisplay.period ? `· ${chatterStatsDisplay.period}` : ''}</h4>
+              {(chatterStats?.members?.length ?? 0) > 0 ? (
+                <div className="cabinet-table-wrap" style={{ marginBottom: '1.25rem' }}>
+                  <table className="cabinet-table">
+                    <thead>
+                      <tr>
+                        <th>Участник</th>
+                        <th>Ответов</th>
+                        <th>Диалогов</th>
+                        <th>AI 👍/👎</th>
+                        <th>Tribute</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {chatterStats!.members!.map((row) => (
+                        <tr key={row.user_id}>
+                          <td className="mono">{row.member_login || `#${row.user_id}`}</td>
+                          <td>{row.outbound_messages}</td>
+                          <td>{row.conversations_replied}</td>
+                          <td>
+                            {row.companion_ratings_positive}/{row.companion_ratings_negative}
+                          </td>
+                          <td className="mono">
+                            {formatTributeMinor(row.tribute_display_minor, row.tribute_currency)}
+                            <span className="muted small" style={{ display: 'block' }}>
+                              {row.tribute_share_percent}% · gross{' '}
+                              {formatTributeMinor(row.tribute_gross_minor, row.tribute_currency)}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="muted" style={{ marginBottom: '1rem' }}>
+                  KPI появятся после первых ответов чатеров в периоде.
+                </p>
+              )}
+
               <h4 className="account-sub">Участники</h4>
               {workspaceMembers.length === 0 ? (
                 <p className="muted">Пока никого нет — добавьте первого выше.</p>
@@ -7322,6 +7450,11 @@ export default function App() {
               generations={studioGenerations}
               tributeEarningsLabel={tributeEarningsDisplay.label}
               tributeEarningsHint={tributeEarningsDisplay.hint}
+              chatterOutboundCount={chatterStatsDisplay.outbound}
+              chatterConversationsCount={chatterStatsDisplay.conversations}
+              chatterRatingsHint={chatterStatsDisplay.ratingsHint}
+              chatterStatsPeriod={chatterStatsDisplay.period}
+              isOwner={isOwner}
               onOpenChat={openWorkspaceChat}
               onOpenStudio={() => setAppSection('studio')}
               onOpenVideo={() => setAppSection('studio_video')}
@@ -9388,10 +9521,10 @@ export default function App() {
                     <button
                       type="button"
                       className="conv-notes-close"
-                      aria-label="Закрыть"
+                      aria-label="Закрыть заметки"
                       onClick={() => setConvNotesOpen(false)}
                     >
-                      ×
+                      Закрыть
                     </button>
                   ) : null}
                 </div>
