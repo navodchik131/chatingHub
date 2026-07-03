@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import Conversation, Message, MessageDirection
+from app.db.models import Conversation, Message, MessageAttachment, MessageDirection
 from app.db.repo import list_messages
 from app.services.companion_bot.prompt import (
     ThreadSignals,
@@ -29,6 +29,7 @@ def should_use_reply_to(
     trigger: Message | None,
     followup: bool,
     signals: ThreadSignals,
+    has_image: bool = False,
     now: datetime | None = None,
 ) -> bool:
     if followup:
@@ -37,7 +38,6 @@ def should_use_reply_to(
         return False
 
     text = (trigger.text_original or trigger.text_translated or "").strip()
-    has_image = bool(getattr(trigger, "attachments", None))
 
     if signals.trust_repair or signals.direct_factual or signals.factual_pressure:
         return True
@@ -65,6 +65,15 @@ def should_use_reply_to(
     return False
 
 
+async def _message_has_image(session: AsyncSession, message_id: int) -> bool:
+    att_id = await session.scalar(
+        select(MessageAttachment.id)
+        .where(MessageAttachment.message_id == message_id)
+        .limit(1)
+    )
+    return att_id is not None
+
+
 async def resolve_reply_to_message_id(
     session: AsyncSession,
     *,
@@ -82,6 +91,12 @@ async def resolve_reply_to_message_id(
 
     history = await list_messages(session, conv.id, owner_user_id, limit=30)
     signals = analyze_thread_signals(history)
-    if should_use_reply_to(trigger=trigger, followup=followup, signals=signals):
+    has_image = await _message_has_image(session, trigger.id)
+    if should_use_reply_to(
+        trigger=trigger,
+        followup=followup,
+        signals=signals,
+        has_image=has_image,
+    ):
         return trigger_message_id
     return None
