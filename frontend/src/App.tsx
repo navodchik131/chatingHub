@@ -258,6 +258,9 @@ interface CompanionFeedbackReport {
 /** Размер страницы GET /conversations/:id/messages (синхронно с бэкендом default limit). */
 const CHAT_MESSAGES_PAGE = 40
 
+/** Instagram Direct: скрыть админ-инструкции и отключить OAuth до релиза интеграции. */
+const INSTAGRAM_INTEGRATION_IN_DEVELOPMENT = true
+
 /**
  * Web Share API с передачей File на десктопе (Chrome/Edge) даёт системное окно «Поделиться»
  * вместо нормального скачивания. Оставляем share для установленной PWA и типичных тач-сценариев.
@@ -4519,16 +4522,6 @@ export default function App() {
     }
   }
 
-  const copyInstagramWebhookUrl = async () => {
-    const url = integ?.instagram_webhook_url
-    if (!url) return
-    try {
-      await navigator.clipboard.writeText(url)
-    } catch {
-      setError('Не удалось скопировать URL webhook')
-    }
-  }
-
   const saveTribute = async (connectionId?: number | null) => {
     setError(null)
     const key = tributeApiKey.trim()
@@ -5897,37 +5890,37 @@ export default function App() {
                 <div className="cabinet-module-head">
                   <h4 className="cabinet-module-title">Instagram</h4>
                   <span
-                    className={`cabinet-module-badge ${integ?.instagram_configured ? 'is-ok' : 'is-warn'}`}
+                    className={`cabinet-module-badge ${
+                      INSTAGRAM_INTEGRATION_IN_DEVELOPMENT
+                        ? 'is-warn'
+                        : integ?.instagram_configured
+                          ? 'is-ok'
+                          : 'is-warn'
+                    }`}
                   >
-                    {(integ?.instagram_connections?.length ?? 0) > 0
-                      ? `${integ?.instagram_connections?.length} подключ.`
-                      : 'Не подключено'}
+                    {INSTAGRAM_INTEGRATION_IN_DEVELOPMENT
+                      ? 'В разработке'
+                      : (integ?.instagram_connections?.length ?? 0) > 0
+                        ? `${integ?.instagram_connections?.length} подключ.`
+                        : 'Не подключено'}
                   </span>
                 </div>
                 <p className="muted cabinet-module-body">
-                  Direct-сообщения Instagram Business / Creator через Meta. Окно ответа — 24 часа после
+                  Direct-сообщения Instagram Business / Creator. Окно ответа — 24 часа после
                   последнего сообщения фана.
                 </p>
-                {!integ?.instagram_oauth_available ? (
+                {INSTAGRAM_INTEGRATION_IN_DEVELOPMENT ? (
                   <p className="banner info cabinet-module-body" style={{ marginBottom: '0.75rem' }}>
-                    OAuth Instagram на сервере не настроен. Администратору нужны{' '}
-                    <code>INSTAGRAM_APP_ID</code>, <code>INSTAGRAM_APP_SECRET</code>,{' '}
-                    <code>INSTAGRAM_WEBHOOK_VERIFY_TOKEN</code> и HTTPS <code>PUBLIC_APP_URL</code> — см.
-                    .env.example.
+                    Интеграция Instagram Direct пока в разработке. Подключение аккаунта временно
+                    недоступно — мы сообщим, когда функция будет готова.
                   </p>
                 ) : null}
                 <ol className="muted cabinet-module-body" style={{ margin: '0 0 1rem', paddingLeft: '1.25rem' }}>
                   <li>
-                    <strong>Администратор сервиса (один раз):</strong> Meta App → Instagram → OAuth redirect{' '}
-                    <code>{'{PUBLIC_APP_URL}'}/api/integrations/instagram/oauth/callback</code>, webhook ниже,
-                    scopes <code>instagram_business_basic</code>,{' '}
-                    <code>instagram_business_manage_messages</code>.
+                    Выберите модель и нажмите «Добавить Instagram» — войдите в Business или Creator
+                    аккаунт.
                   </li>
-                  <li>
-                    <strong>Вы (пользователь):</strong> выберите модель → «Добавить Instagram (OAuth)» → войдите
-                    в Business/Creator аккаунт.
-                  </li>
-                  <li>Новые DM приходят в раздел «Диалоги» → Instagram. Отвечайте в течение 24 ч.</li>
+                  <li>Новые DM появятся в разделе «Диалоги» → Instagram. Отвечайте в течение 24 ч.</li>
                 </ol>
                 {(integ?.instagram_connections ?? []).map((conn) => (
                   <div key={conn.id} className="cabinet-module-form">
@@ -5944,7 +5937,7 @@ export default function App() {
                         Модель
                         <select
                           value={conn.studio_model_id != null ? String(conn.studio_model_id) : ''}
-                          disabled={!canIntegrations}
+                          disabled={!canIntegrations || INSTAGRAM_INTEGRATION_IN_DEVELOPMENT}
                           onChange={(e) => {
                             const raw = e.target.value
                             void patchPlatformConnection('instagram', conn.id, {
@@ -5961,7 +5954,7 @@ export default function App() {
                         </select>
                       </label>
                     ) : null}
-                    {integ?.instagram_oauth_available ? (
+                    {!INSTAGRAM_INTEGRATION_IN_DEVELOPMENT && integ?.instagram_oauth_available ? (
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
                         <button
                           type="button"
@@ -5983,20 +5976,8 @@ export default function App() {
                     ) : null}
                   </div>
                 ))}
-                {integ?.instagram_webhook_url ? (
-                  <div className="cabinet-module-form" style={{ marginBottom: '0.75rem' }}>
-                    <label className="cabinet-field-span2">
-                      Webhook URL (Meta App Dashboard)
-                      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
-                        <input readOnly value={integ.instagram_webhook_url} />
-                        <button type="button" className="ghost-btn" onClick={() => void copyInstagramWebhookUrl()}>
-                          Копировать
-                        </button>
-                      </div>
-                    </label>
-                  </div>
-                ) : null}
-                {(integ?.instagram_connections?.length ?? 0) <
+                {!INSTAGRAM_INTEGRATION_IN_DEVELOPMENT &&
+                (integ?.instagram_connections?.length ?? 0) <
                   (integ?.max_connections_per_platform ?? 1) &&
                 integ?.instagram_oauth_available ? (
                   <div className="cabinet-module-form">
