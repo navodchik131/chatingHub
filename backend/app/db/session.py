@@ -446,6 +446,11 @@ def _migrate_companion_bot(sync_conn) -> None:
     if not insp.has_table("companion_feedback_reports"):
         CompanionFeedbackReport.__table__.create(sync_conn, checkfirst=True)
 
+    from app.db.models import CompanionStyleExample
+
+    if not insp.has_table("companion_style_examples"):
+        CompanionStyleExample.__table__.create(sync_conn, checkfirst=True)
+
     if insp.has_table("conversations"):
         cols = {c["name"] for c in insp.get_columns("conversations")}
         if "companion_mode_override" not in cols:

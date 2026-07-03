@@ -491,13 +491,13 @@ class Settings(BaseSettings):
         description="Доля Tribute по умолчанию для новых чатеров (%, если у участника не задано своё значение).",
     )
     companion_followup_delay_min_sec: float = Field(
-        default=900.0,
+        default=180.0,
         ge=60.0,
         le=7200.0,
         description="Мин. задержка перед follow-up после исходящего (сек).",
     )
     companion_followup_delay_max_sec: float = Field(
-        default=1800.0,
+        default=480.0,
         ge=120.0,
         le=14400.0,
         description="Макс. задержка перед follow-up после исходящего (сек).",
@@ -507,6 +507,54 @@ class Settings(BaseSettings):
         ge=0,
         le=120,
         description="Не слать follow-up, если фан писал в последние N минут (0 = не проверять).",
+    )
+    companion_followup_max_unanswered_outbound: int = Field(
+        default=4,
+        ge=3,
+        le=5,
+        description="Не слать follow-up, если фан не ответил на столько последних исходящих подряд.",
+    )
+    companion_style_rag_enabled: bool = Field(
+        default=True,
+        description="Подмешивать примеры стиля чаттера в промпт компаньона.",
+    )
+    companion_style_rag_top_k: int = Field(
+        default=3,
+        ge=1,
+        le=5,
+        description="Сколько style-примеров подмешивать в промпт.",
+    )
+    companion_style_index_interval_hours: float = Field(
+        default=6.0,
+        ge=1.0,
+        le=168.0,
+        description="Интервал переиндексации style RAG из реальных чатов (часы).",
+    )
+    companion_style_index_lookback_days: int = Field(
+        default=120,
+        ge=7,
+        le=365,
+        description="Сколько дней истории чатов сканировать при индексации.",
+    )
+    companion_style_index_max_pairs_per_owner: int = Field(
+        default=3000,
+        ge=100,
+        le=20000,
+        description="Макс. пар fan→reply на workspace в индексе.",
+    )
+    companion_style_index_max_conversations_per_run: int = Field(
+        default=800,
+        ge=50,
+        le=5000,
+        description="Сколько диалогов обрабатывать за один прогон индексации.",
+    )
+    companion_style_embed_model: str = Field(
+        default="text-embedding-3-small",
+        description="Модель embeddings для style RAG.",
+    )
+    companion_style_index_on_startup: bool = Field(
+        default=True,
+        description="Запускать индексацию style RAG при старте, если индекс пуст.",
     )
     companion_vision_enabled: bool = Field(
         default=True,

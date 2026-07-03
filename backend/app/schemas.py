@@ -58,6 +58,14 @@ class CompanionFeedbackReportOut(BaseModel):
     updated_at: datetime
 
 
+class CompanionStyleIndexStatsOut(BaseModel):
+    owners: int = 0
+    conversations_scanned: int = 0
+    pairs_found: int = 0
+    pairs_added: int = 0
+    pairs_trimmed: int = 0
+
+
 class ConversationOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

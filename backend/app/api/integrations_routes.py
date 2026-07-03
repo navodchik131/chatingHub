@@ -49,6 +49,7 @@ from app.db.models import (
 from app.db.session import SessionLocal, get_session
 from app.schemas import (
     CompanionFeedbackReportOut,
+    CompanionStyleIndexStatsOut,
     FanvueIntegrationIn,
     FanvueOAuthStartIn,
     FanvueOAuthStartOut,
@@ -371,6 +372,20 @@ async def api_companion_feedback_reports(
             )
         )
     return out
+
+
+@router.post("/companion/rebuild-style-index", response_model=CompanionStyleIndexStatsOut)
+async def api_rebuild_companion_style_index(
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> CompanionStyleIndexStatsOut:
+    """Переиндексировать style RAG из реальных чатов workspace (ручной запуск)."""
+    assert_permission(user, PERM_INTEGRATIONS)
+    oid = workspace_owner_id(user)
+    from app.services.companion_bot.style_index import rebuild_style_index
+
+    stats = await rebuild_style_index(owner_id=oid)
+    return CompanionStyleIndexStatsOut(**stats)
 
 
 @router.put("/telegram", response_model=IntegrationStatusOut)

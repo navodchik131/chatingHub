@@ -19,6 +19,12 @@ def schedule_companion_reply(
     conv_id: int,
     trigger_message_id: int,
 ) -> None:
+    log.info(
+        "companion scheduled conv=%s trigger=%s owner=%s",
+        conv_id,
+        trigger_message_id,
+        owner_user_id,
+    )
     async def _run() -> None:
         try:
             await run_companion_pipeline(

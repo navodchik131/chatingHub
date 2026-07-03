@@ -85,7 +85,7 @@ def test_companion_prompt_v4_chatter():
         reply_too_similar_to_recent,
     )
 
-    assert PROMPT_VERSION == "v5-chatter-canon-direct-3"
+    assert PROMPT_VERSION == "v6-chatter-goals-rag-1"
 
     out_msg = Message(
         id=2,
@@ -142,6 +142,8 @@ def test_companion_prompt_v4_chatter():
         messages=messages,
     )
     assert "senior" in sys.lower() or "chatter" in sys.lower()
+    assert "CHATTER GOALS" in sys
+    assert "RETENTION" in sys
     assert "ACTIVE THREAD" in sys
     assert "mid-chat" in sys.lower()
     assert "casual human texting" in sys.lower()
@@ -368,3 +370,156 @@ def test_read_vision_description_from_meta():
     meta = json.dumps({VISION_META_KEY: "A dog on a sofa"})
     assert read_vision_description(meta) == "A dog on a sofa"
     assert read_vision_description(None) is None
+
+
+def test_reply_target_direct_question():
+    from datetime import datetime, timezone
+
+    from app.db.models import Message, MessageDirection
+    from app.services.companion_bot.prompt import analyze_thread_signals
+    from app.services.companion_bot.reply_target import should_use_reply_to
+
+    now = datetime.now(timezone.utc)
+    trigger = Message(
+        id=1,
+        conversation_id=1,
+        direction=MessageDirection.inbound,
+        text_original="который час у тебя?",
+        created_at=now,
+    )
+    messages = [trigger]
+    signals = analyze_thread_signals(messages)
+    assert should_use_reply_to(trigger=trigger, followup=False, signals=signals, now=now) is True
+
+
+def test_reply_target_followup_never_replies():
+    from app.db.models import Message, MessageDirection
+    from app.services.companion_bot.prompt import analyze_thread_signals
+    from app.services.companion_bot.reply_target import should_use_reply_to
+
+    trigger = Message(
+        id=1,
+        conversation_id=1,
+        direction=MessageDirection.outbound,
+        text_original="hey",
+    )
+    signals = analyze_thread_signals([])
+    assert should_use_reply_to(trigger=trigger, followup=True, signals=signals) is False
+
+
+def test_followup_unanswered_outbound_limit():
+    import asyncio
+    from datetime import datetime, timezone
+
+    from app.db.models import Message, MessageDirection
+    from app.services.companion_bot.orchestrator import _count_outbound_since_last_fan
+
+    now = datetime.now(timezone.utc)
+    messages = [
+        Message(id=5, conversation_id=1, direction=MessageDirection.outbound, created_at=now),
+        Message(id=4, conversation_id=1, direction=MessageDirection.outbound, created_at=now),
+        Message(id=3, conversation_id=1, direction=MessageDirection.outbound, created_at=now),
+        Message(id=2, conversation_id=1, direction=MessageDirection.outbound, created_at=now),
+        Message(id=1, conversation_id=1, direction=MessageDirection.inbound, created_at=now),
+    ]
+
+    class _FakeSession:
+        async def scalars(self, _q):
+            class _R:
+                def all(self_inner):
+                    return messages
+
+            return _R()
+
+    count = asyncio.run(_count_outbound_since_last_fan(_FakeSession(), 1))
+    assert count == 4
+
+
+def test_style_extract_human_pair():
+    from datetime import datetime, timezone
+
+    from app.db.models import Conversation, Message, MessageDirection, Platform
+    from app.services.companion_bot.style_extract import extract_pairs_from_messages
+
+    now = datetime.now(timezone.utc)
+    conv = Conversation(
+        id=1,
+        user_id=1,
+        platform=Platform.telegram,
+        external_chat_id="1",
+        external_topic_id="0",
+    )
+    messages = [
+        Message(
+            id=1,
+            conversation_id=1,
+            direction=MessageDirection.inbound,
+            text_original="привет, как дела?",
+            created_at=now,
+        ),
+        Message(
+            id=2,
+            conversation_id=1,
+            direction=MessageDirection.outbound,
+            text_original="RU",
+            text_translated="hey babe im good wbu",
+            sender_user_id=42,
+            created_at=now,
+        ),
+    ]
+    pairs = extract_pairs_from_messages(messages, conv=conv, bot_ratings={})
+    assert len(pairs) == 1
+    assert pairs[0].fan_message == "привет, как дела?"
+    assert pairs[0].model_reply == "hey babe im good wbu"
+    assert pairs[0].is_human is True
+    assert pairs[0].quality_score >= 2.0
+
+
+def test_style_extract_skips_negative_bot():
+    from datetime import datetime, timezone
+
+    from app.db.models import Conversation, Message, MessageDirection, Platform
+    from app.services.companion_bot.style_extract import extract_pairs_from_messages
+
+    now = datetime.now(timezone.utc)
+    conv = Conversation(
+        id=1,
+        user_id=1,
+        platform=Platform.telegram,
+        external_chat_id="1",
+        external_topic_id="0",
+    )
+    messages = [
+        Message(
+            id=1,
+            conversation_id=1,
+            direction=MessageDirection.inbound,
+            text_original="hello",
+            created_at=now,
+        ),
+        Message(
+            id=2,
+            conversation_id=1,
+            direction=MessageDirection.outbound,
+            text_translated="bot reply",
+            meta='{"companion_bot": true, "bot_response_event_id": 1}',
+            created_at=now,
+        ),
+    ]
+    pairs = extract_pairs_from_messages(messages, conv=conv, bot_ratings={2: -1})
+    assert pairs == []
+
+
+def test_style_rag_static_fallback():
+    from app.services.companion_bot.style_rag import _load_static_examples, _pick_top
+
+    static = list(_load_static_examples())
+    assert static
+    picked = _pick_top(
+        fan_text="привет как дела",
+        lang="ru",
+        followup=False,
+        candidates=static,
+        limit=2,
+    )
+    assert len(picked) >= 1

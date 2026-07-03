@@ -646,6 +646,52 @@ class CompanionFeedbackReport(Base):
     )
 
 
+class CompanionStyleExample(Base):
+    """Пара fan→reply из реальных чатов для style RAG компаньона."""
+
+    __tablename__ = "companion_style_examples"
+    __table_args__ = (
+        UniqueConstraint(
+            "source_outbound_message_id",
+            name="uq_companion_style_source_outbound",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    studio_model_id: Mapped[int | None] = mapped_column(
+        ForeignKey("user_studio_models.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    fan_message: Mapped[str] = mapped_column(Text)
+    model_reply: Mapped[str] = mapped_column(Text)
+    lang: Mapped[str] = mapped_column(String(8), default="en", index=True)
+    tags_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source_conversation_id: Mapped[int | None] = mapped_column(
+        ForeignKey("conversations.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    source_inbound_message_id: Mapped[int | None] = mapped_column(
+        ForeignKey("messages.id", ondelete="SET NULL"), nullable=True
+    )
+    source_outbound_message_id: Mapped[int | None] = mapped_column(
+        ForeignKey("messages.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    quality_score: Mapped[float] = mapped_column(default=1.0, server_default="1.0")
+    is_human: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    embedding_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+
 class WavespeedConnection(Base):
     __tablename__ = "wavespeed_connections"
 

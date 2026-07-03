@@ -26,10 +26,43 @@ from app.db.session import SessionLocal
 from app.services.companion_bot.config import CompanionConnectionConfig, get_companion_config_for_conversation
 from app.services.companion_bot.generate import generate_companion_reply
 from app.services.companion_bot.prompt import PROMPT_VERSION, last_fan_message_text, resolve_target_lang
+from app.services.companion_bot.reply_target import resolve_reply_to_message_id
 from app.services.companion_bot.send import broadcast_companion_message, send_companion_outbound
 from app.services.realtime import hub
 
 log = logging.getLogger(__name__)
+
+
+def _log_companion_skip(conv_id: int, reason: str, **extra: object) -> None:
+    if extra:
+        log.info("companion skip conv=%s reason=%s extra=%s", conv_id, reason, extra)
+    else:
+        log.info("companion skip conv=%s reason=%s", conv_id, reason)
+
+
+async def _count_outbound_since_last_fan(
+    session: AsyncSession,
+    conv_id: int,
+    *,
+    scan_limit: int = 12,
+) -> int:
+    recent = list(
+        (
+            await session.scalars(
+                select(Message)
+                .where(Message.conversation_id == conv_id)
+                .order_by(Message.id.desc())
+                .limit(scan_limit)
+            )
+        ).all()
+    )
+    outbound_since_fan = 0
+    for m in recent:
+        if m.direction == MessageDirection.inbound:
+            break
+        if m.direction == MessageDirection.outbound:
+            outbound_since_fan += 1
+    return outbound_since_fan
 
 
 async def _broadcast_companion_draft(
@@ -174,7 +207,7 @@ async def _existing_followup_for_outbound(
 async def _should_skip_followup(
     session: AsyncSession,
     conv_id: int,
-) -> bool:
+) -> tuple[bool, str]:
     active_min = int(settings.companion_followup_skip_if_fan_active_minutes)
     if active_min > 0:
         since = datetime.now(timezone.utc) - timedelta(minutes=active_min)
@@ -188,25 +221,13 @@ async def _should_skip_followup(
             .limit(1)
         )
         if recent_inbound:
-            return True
+            return True, "fan_active_recently"
 
-    recent = list(
-        (
-            await session.scalars(
-                select(Message)
-                .where(Message.conversation_id == conv_id)
-                .order_by(Message.id.desc())
-                .limit(8)
-            )
-        ).all()
-    )
-    outbound_since_fan = 0
-    for m in recent:
-        if m.direction == MessageDirection.inbound:
-            break
-        if m.direction == MessageDirection.outbound:
-            outbound_since_fan += 1
-    return outbound_since_fan >= 2
+    outbound_since_fan = await _count_outbound_since_last_fan(session, conv_id)
+    max_unanswered = int(settings.companion_followup_max_unanswered_outbound)
+    if outbound_since_fan >= max_unanswered:
+        return True, f"unanswered_outbound_streak={outbound_since_fan}"
+    return False, ""
 
 
 async def create_companion_followup_event(
@@ -218,21 +239,27 @@ async def create_companion_followup_event(
     cfg: CompanionConnectionConfig,
 ) -> BotResponseEvent | None:
     if cfg.mode not in (CompanionBotMode.auto, CompanionBotMode.semi_auto):
+        _log_companion_skip(conv.id, "followup_mode_off", mode=cfg.mode.value)
         return None
 
     outbound = await session.get(Message, after_outbound_message_id)
     if not outbound or outbound.conversation_id != conv.id:
+        _log_companion_skip(conv.id, "followup_outbound_missing")
         return None
     if outbound.direction != MessageDirection.outbound:
+        _log_companion_skip(conv.id, "followup_trigger_not_outbound")
         return None
 
     if await _fan_replied_after(session, conv.id, after_outbound_message_id):
+        _log_companion_skip(conv.id, "followup_fan_already_replied")
         return None
 
     if await _existing_followup_for_outbound(session, after_outbound_message_id):
+        _log_companion_skip(conv.id, "followup_already_scheduled")
         return None
 
     if not cfg.studio_model_id:
+        _log_companion_skip(conv.id, "followup_no_studio_model")
         return None
 
     if not await _count_recent_sends(
@@ -241,6 +268,7 @@ async def create_companion_followup_event(
         platform=cfg.platform,
         max_per_hour=cfg.max_replies_per_hour,
     ):
+        _log_companion_skip(conv.id, "followup_rate_limit", connection_id=cfg.connection_id)
         return None
 
     history = await list_messages(session, conv.id, owner_user_id, limit=60)
@@ -295,10 +323,12 @@ async def run_companion_followup_pipeline(
             return
 
         if await _fan_replied_after(session, conv_id, after_outbound_message_id):
+            _log_companion_skip(conv_id, "followup_fan_replied_during_delay")
             return
 
-        if await _should_skip_followup(session, conv_id):
-            log.info("companion followup skipped conv=%s (fan active or outbound streak)", conv_id)
+        skip, skip_reason = await _should_skip_followup(session, conv_id)
+        if skip:
+            _log_companion_skip(conv_id, f"followup_{skip_reason}")
             return
 
         event = await create_companion_followup_event(
@@ -377,6 +407,13 @@ async def run_companion_followup_pipeline(
             )
             await session.commit()
             await session.refresh(row, attribute_names=["attachments"])
+            log.info(
+                "companion sent conv=%s event=%s msg=%s reply_to=%s",
+                conv_id,
+                event_id,
+                row.id,
+                row.reply_to_message_id,
+            )
             await broadcast_companion_message(
                 owner_id=owner_user_id, conv_id=conv_id, row=row
             )
@@ -412,11 +449,14 @@ async def create_companion_reply_event(
 ) -> BotResponseEvent | None:
     trigger = await session.get(Message, trigger_message_id)
     if not trigger or trigger.conversation_id != conv.id:
+        _log_companion_skip(conv.id, "trigger_missing", trigger_message_id=trigger_message_id)
         return None
     if trigger.direction != MessageDirection.inbound:
+        _log_companion_skip(conv.id, "trigger_not_inbound", trigger_message_id=trigger_message_id)
         return None
 
     if await _existing_event_for_trigger(session, trigger_message_id):
+        _log_companion_skip(conv.id, "duplicate_event", trigger_message_id=trigger_message_id)
         return None
 
     await session.refresh(trigger, attribute_names=["attachments"])
@@ -424,10 +464,11 @@ async def create_companion_reply_event(
     if cfg.mode == CompanionBotMode.semi_auto and not _semi_auto_allowed(
         trigger=trigger, has_image=has_image
     ):
+        _log_companion_skip(conv.id, "semi_auto_not_allowed", text_len=len((trigger.text_original or "")))
         return None
 
     if not cfg.studio_model_id:
-        log.warning("companion bot: no studio_model on connection conv=%s", conv.id)
+        _log_companion_skip(conv.id, "no_studio_model")
         return None
 
     if not await _count_recent_sends(
@@ -436,13 +477,15 @@ async def create_companion_reply_event(
         platform=cfg.platform,
         max_per_hour=cfg.max_replies_per_hour,
     ):
-        log.info("companion bot: rate limit connection=%s", cfg.connection_id)
+        _log_companion_skip(conv.id, "rate_limit", connection_id=cfg.connection_id)
         return None
 
     text_in = (trigger.text_original or "").strip()
     if not text_in and not has_image:
+        _log_companion_skip(conv.id, "empty_inbound")
         return None
     if not text_in and has_image and not settings.companion_vision_enabled:
+        _log_companion_skip(conv.id, "image_only_vision_disabled")
         return None
 
     history = await list_messages(session, conv.id, owner_user_id, limit=60)
@@ -507,20 +550,14 @@ async def approve_and_send_companion_draft(
         event.was_edited = True
         event.draft_text = final_text
 
-    reply_to_id = event.trigger_message_id
     trigger = await session.get(Message, event.trigger_message_id)
-    if trigger and trigger.direction == MessageDirection.outbound:
-        last_inbound = await session.scalar(
-            select(Message.id)
-            .where(
-                Message.conversation_id == conv.id,
-                Message.direction == MessageDirection.inbound,
-            )
-            .order_by(Message.id.desc())
-            .limit(1)
-        )
-        if last_inbound:
-            reply_to_id = last_inbound
+    reply_to_id = await resolve_reply_to_message_id(
+        session,
+        owner_user_id=owner_user_id,
+        conv=conv,
+        trigger_message_id=event.trigger_message_id,
+        followup=bool(trigger and trigger.direction == MessageDirection.outbound),
+    )
 
     row = await send_companion_outbound(
         session,
@@ -544,13 +581,31 @@ async def run_companion_pipeline(
     conv_id: int,
     trigger_message_id: int,
 ) -> None:
+    log.info(
+        "companion pipeline start conv=%s trigger=%s owner=%s",
+        conv_id,
+        trigger_message_id,
+        owner_user_id,
+    )
     async with SessionLocal() as session:
         conv = await session.get(Conversation, conv_id)
         if not conv or conv.user_id != owner_user_id:
+            _log_companion_skip(conv_id, "conv_not_found_or_owner_mismatch")
             return
         cfg = await get_companion_config_for_conversation(session, conv)
         if not cfg:
+            _log_companion_skip(conv_id, "companion_off_or_no_config")
             return
+        if cfg.mode == CompanionBotMode.off:
+            _log_companion_skip(conv_id, "mode_off")
+            return
+
+        log.info(
+            "companion pipeline mode=%s conv=%s trigger=%s",
+            cfg.mode.value,
+            conv_id,
+            trigger_message_id,
+        )
 
         event = await create_companion_reply_event(
             session,
@@ -562,6 +617,13 @@ async def run_companion_pipeline(
         if not event:
             await session.commit()
             return
+
+        log.info(
+            "companion draft ready conv=%s event=%s mode=%s",
+            conv_id,
+            event.id,
+            cfg.mode.value,
+        )
 
         event_id = event.id
         mode = cfg.mode
@@ -613,6 +675,7 @@ async def run_companion_pipeline(
             if ev and ev.status == BotResponseEventStatus.draft:
                 ev.status = BotResponseEventStatus.rejected
                 await session.commit()
+            _log_companion_skip(conv_id, "stale_trigger", trigger_message_id=trigger_message_id)
             return
 
         ev = await session.get(BotResponseEvent, event_id)
@@ -628,6 +691,13 @@ async def run_companion_pipeline(
             )
             await session.commit()
             await session.refresh(row, attribute_names=["attachments"])
+            log.info(
+                "companion sent conv=%s event=%s msg=%s reply_to=%s",
+                conv_id,
+                event_id,
+                row.id,
+                row.reply_to_message_id,
+            )
             await broadcast_companion_message(
                 owner_id=owner_user_id, conv_id=conv_id, row=row
             )

@@ -30,6 +30,7 @@ from app.services.companion_bot.prompt import (
     reply_too_similar_to_recent,
     resolve_target_lang,
 )
+from app.services.companion_bot.style_rag import format_style_examples_block
 from app.services.studio_keys import load_owner_studio_billing, studio_llm_credentials
 from app.services.studio_openai import _chat_completion_text
 
@@ -123,6 +124,17 @@ async def generate_companion_reply(
         messages=messages,
         followup=followup,
     )
+    style_block = await format_style_examples_block(
+        session,
+        owner_id=owner_id,
+        studio_model_id=studio_model_id,
+        fan_text=last_fan_message_text(messages) if not followup else None,
+        lang=target_lang,
+        followup=followup,
+        credentials=cred,
+    )
+    if style_block:
+        system += "\n" + style_block
 
     model = (settings.openai_studio_model or "").strip() or "gpt-4o-mini"
     recent = recent_outbound_texts(messages, limit=4)
@@ -195,5 +207,7 @@ async def generate_companion_reply(
         "followup": followup,
         "memory_refreshed": memory_refreshed,
         "vision_used": bool(fan_image_description),
+        "style_rag": bool(style_block),
+        "style_rag_source": "db" if "team's real chats" in style_block else ("static" if style_block else "none"),
     }
     return reply, target_lang, model, state.relationship_score, snapshot

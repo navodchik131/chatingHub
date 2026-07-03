@@ -103,6 +103,7 @@ async def lifespan(app: FastAPI):
     fanvue_poll_task: asyncio.Task[None] | None = None
     email_worker_task: asyncio.Task[None] | None = None
     companion_feedback_task: asyncio.Task[None] | None = None
+    companion_style_index_task: asyncio.Task[None] | None = None
     legacy_tok = settings.legacy_bot_token.strip()
     legacy_uid = settings.legacy_user_id
     if legacy_tok and legacy_uid > 0:
@@ -152,6 +153,13 @@ async def lifespan(app: FastAPI):
         "Companion feedback loop: every %s h",
         settings.companion_feedback_interval_hours,
     )
+    from app.services.companion_bot.style_index import companion_style_index_loop
+
+    companion_style_index_task = asyncio.create_task(companion_style_index_loop())
+    log.info(
+        "Companion style index loop: every %s h",
+        settings.companion_style_index_interval_hours,
+    )
     if settings.smtp_configured:
         email_worker_task = asyncio.create_task(email_campaign_worker_loop())
         log.info("Email campaign worker started (SMTP: %s)", settings.smtp_host)
@@ -198,6 +206,12 @@ async def lifespan(app: FastAPI):
         companion_feedback_task.cancel()
         try:
             await companion_feedback_task
+        except asyncio.CancelledError:
+            pass
+    if companion_style_index_task:
+        companion_style_index_task.cancel()
+        try:
+            await companion_style_index_task
         except asyncio.CancelledError:
             pass
     if bot:
