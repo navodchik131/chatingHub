@@ -7,8 +7,10 @@ services:
       POSTGRES_DB: chating
     volumes:
       - chating_pg:/var/lib/postgresql/data
+    # Только localhost на хосте — api ходит в db:5432 по внутренней сети Docker.
+    # Без этого 5432:5432 торчит в интернет и логи забивают сканеры (postgres/root/wog…).
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U chating -d chating"]
       interval: 5s
