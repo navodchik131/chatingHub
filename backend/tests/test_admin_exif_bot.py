@@ -40,15 +40,16 @@ def test_row_from_user_daily_count_only_for_today():
         language_code="ru",
         daily_process_count=7,
         daily_process_day=_utc_today(),
-        total_process_count=42,
+        total_process_count=1,
         created_at=datetime.now(timezone.utc),
         updated_at=datetime.now(timezone.utc),
     )
     row = _row_from_user(u, profiles_count=2)
     assert row.daily_process_count == 7
-    assert row.total_process_count == 42
+    assert row.total_process_count == 7
     assert row.profiles_count == 2
 
     u.daily_process_day = "2020-01-01"
     row_old = _row_from_user(u, profiles_count=2)
     assert row_old.daily_process_count == 0
+    assert row_old.total_process_count == 1

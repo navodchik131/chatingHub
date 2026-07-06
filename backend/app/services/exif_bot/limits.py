@@ -72,6 +72,12 @@ def _normalize_used(user: ExifBotUser) -> int:
     return max(0, int(user.daily_process_count or 0))
 
 
+def effective_total_process_count(user: ExifBotUser) -> int:
+    """Lifetime counter; не меньше сегодняшнего (на случай рассинхрона до backfill)."""
+    total = max(0, int(user.total_process_count or 0))
+    return max(total, _normalize_used(user))
+
+
 async def is_channel_subscriber(bot: Bot, telegram_user_id: int) -> bool:
     """Проверка подписки через getChatMember (бот должен быть админом канала)."""
     channel = (settings.exif_bot_subscribe_channel or "").strip()
@@ -194,12 +200,15 @@ async def record_successful_process(session: AsyncSession, *, user_id: int) -> i
         user.daily_process_count = 0
     user.daily_process_count = int(user.daily_process_count or 0) + 1
     user.total_process_count = int(user.total_process_count or 0) + 1
+    if user.total_process_count < user.daily_process_count:
+        user.total_process_count = user.daily_process_count
     session.add(user)
     await session.flush()
     log.info(
-        "exif bot daily use user=%s count=%s day=%s",
+        "exif bot daily use user=%s daily=%s total=%s day=%s",
         user.telegram_id,
         user.daily_process_count,
+        user.total_process_count,
         user.daily_process_day,
     )
     return int(user.daily_process_count)

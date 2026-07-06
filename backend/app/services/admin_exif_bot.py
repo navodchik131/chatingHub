@@ -10,7 +10,7 @@ from sqlalchemy.orm import selectinload
 
 from app.db.models import ExifBotProfile, ExifBotUser
 from app.schemas import AdminExifBotStatsOut, AdminExifBotUserDetailOut, AdminExifBotUserRow, AdminExifBotProfileRow
-from app.services.exif_bot.limits import _utc_today
+from app.services.exif_bot.limits import _utc_today, effective_total_process_count
 from app.services.exif_bot.process import profile_is_ready
 
 
@@ -40,7 +40,7 @@ def _row_from_user(u: ExifBotUser, *, profiles_count: int) -> AdminExifBotUserRo
         telegram_link=_telegram_link(u),
         language_code=u.language_code,
         profiles_count=profiles_count,
-        total_process_count=int(u.total_process_count or 0),
+        total_process_count=effective_total_process_count(u),
         daily_process_count=used_today,
         daily_process_day=u.daily_process_day,
         created_at=u.created_at,

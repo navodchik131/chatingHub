@@ -79,6 +79,20 @@ def test_record_successful_process_increments():
     assert user.total_process_count == 1
 
 
+def test_effective_total_process_count_at_least_daily():
+    from app.services.exif_bot.limits import _utc_today, effective_total_process_count
+
+    u = SimpleNamespace(
+        daily_process_day=_utc_today(),
+        daily_process_count=2,
+        total_process_count=1,
+    )
+    assert effective_total_process_count(u) == 2
+
+    u.total_process_count = 5
+    assert effective_total_process_count(u) == 5
+
+
 def test_list_iphone_presets_from_11():
     from app.services.studio_camera_presets import get_camera_preset_by_id, list_camera_presets
 

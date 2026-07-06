@@ -507,6 +507,7 @@ def _migrate_exif_bot_tables(sync_conn) -> None:
         ExifBotProfile.__table__.create(sync_conn, checkfirst=True)
     _migrate_exif_bot_user_daily_limits(sync_conn)
     _migrate_exif_bot_total_process_count(sync_conn)
+    _sync_exif_bot_total_process_counts(sync_conn)
     _migrate_exif_bot_telegram_id_bigint(sync_conn)
 
 
@@ -593,6 +594,30 @@ def _migrate_exif_bot_total_process_count(sync_conn) -> None:
         )
     )
     log.info("exif_bot_users: total_process_count column added")
+
+
+def _sync_exif_bot_total_process_counts(sync_conn) -> None:
+    """Подтянуть lifetime-счётчик, если дневной ушёл вперёд (до поля total_process_count)."""
+    import logging
+
+    from sqlalchemy import inspect, text
+
+    log = logging.getLogger(__name__)
+    insp = inspect(sync_conn)
+    if not insp.has_table("exif_bot_users"):
+        return
+    cols = {c["name"] for c in insp.get_columns("exif_bot_users")}
+    if "total_process_count" not in cols or "daily_process_count" not in cols:
+        return
+    result = sync_conn.execute(
+        text(
+            "UPDATE exif_bot_users SET total_process_count = daily_process_count "
+            "WHERE daily_process_count > COALESCE(total_process_count, 0)"
+        )
+    )
+    fixed = getattr(result, "rowcount", None)
+    if fixed:
+        log.info("exif_bot_users: synced total_process_count for %s row(s)", fixed)
 
 
 def _migrate_conversation_notes(sync_conn) -> None:

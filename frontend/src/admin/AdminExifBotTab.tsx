@@ -72,7 +72,6 @@ export function AdminExifBotTab({
             <div className="admin-kpi">
               <span className="admin-kpi__label">Обработок всего</span>
               <strong className="admin-kpi__value">{stats.total_processes}</strong>
-              <span className="admin-kpi__hint">счётчик с момента включения total</span>
             </div>
             <div className="admin-kpi">
               <span className="admin-kpi__label">Сегодня (UTC)</span>
