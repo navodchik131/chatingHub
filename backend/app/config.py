@@ -430,6 +430,14 @@ class Settings(BaseSettings):
     legacy_user_id: int = Field(default=0, validation_alias=AliasChoices("LEGACY_USER_ID"))
     telegram_proxy: str | None = None
 
+    # --- EXIF Telegram bot (отдельный бот, не SaaS-чат) ---
+    exif_bot_token: str = Field(
+        default="",
+        validation_alias=AliasChoices("EXIF_BOT_TOKEN"),
+    )
+    exif_bot_max_profiles_per_user: int = Field(default=10, ge=1, le=50)
+    exif_bot_max_image_bytes: int = Field(default=12 * 1024 * 1024, ge=1024 * 1024)
+
     # --- Translation ---
     deepl_api_key: str | None = None
     deepl_use_free: bool = True

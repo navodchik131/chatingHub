@@ -371,6 +371,7 @@ async def init_db() -> None:
         await conn.run_sync(_migrate_companion_bot)
         await conn.run_sync(_migrate_conversation_categories)
         await conn.run_sync(_migrate_roadmap_v1)
+        await conn.run_sync(_migrate_exif_bot_tables)
 
 
 def _migrate_conversation_categories(sync_conn) -> None:
@@ -492,6 +493,18 @@ def _migrate_roadmap_v1(sync_conn) -> None:
         CompanionJob.__table__.create(sync_conn, checkfirst=True)
     if not insp.has_table("chatter_snippets"):
         ChatterSnippet.__table__.create(sync_conn, checkfirst=True)
+
+
+def _migrate_exif_bot_tables(sync_conn) -> None:
+    from sqlalchemy import inspect
+
+    from app.db.models import ExifBotProfile, ExifBotUser
+
+    insp = inspect(sync_conn)
+    if not insp.has_table("exif_bot_users"):
+        ExifBotUser.__table__.create(sync_conn, checkfirst=True)
+    if not insp.has_table("exif_bot_profiles"):
+        ExifBotProfile.__table__.create(sync_conn, checkfirst=True)
 
 
 def _migrate_conversation_notes(sync_conn) -> None:

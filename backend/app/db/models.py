@@ -776,6 +776,61 @@ class ChatterSnippet(Base):
     )
 
 
+class ExifBotUser(Base):
+    """Пользователь Telegram-бота EXIF-чистки (отдельно от SaaS users)."""
+
+    __tablename__ = "exif_bot_users"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    telegram_id: Mapped[int] = mapped_column(unique=True, index=True)
+    username: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    first_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    last_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    language_code: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    profiles: Mapped[list["ExifBotProfile"]] = relationship(
+        "ExifBotProfile",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        order_by="ExifBotProfile.id",
+    )
+
+
+class ExifBotProfile(Base):
+    """Профиль телефона для подстановки EXIF в боте."""
+
+    __tablename__ = "exif_bot_profiles"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("exif_bot_users.id", ondelete="CASCADE"), index=True
+    )
+    title: Mapped[str] = mapped_column(String(120), default="")
+    camera_preset_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    phone_exif_selfie_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    phone_exif_main_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    export_lat: Mapped[float | None] = mapped_column(Float, nullable=True)
+    export_lon: Mapped[float | None] = mapped_column(Float, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    user: Mapped[ExifBotUser] = relationship("ExifBotUser", back_populates="profiles")
+
+
 class WavespeedConnection(Base):
     __tablename__ = "wavespeed_connections"
 

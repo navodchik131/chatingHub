@@ -1,0 +1,1 @@
+"""Telegram EXIF bot package."""

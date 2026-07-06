@@ -105,6 +105,7 @@ async def lifespan(app: FastAPI):
     companion_feedback_task: asyncio.Task[None] | None = None
     companion_style_index_task: asyncio.Task[None] | None = None
     companion_job_worker_task: asyncio.Task[None] | None = None
+    exif_bot_polling_task: asyncio.Task[None] | None = None
     legacy_tok = settings.legacy_bot_token.strip()
     legacy_uid = settings.legacy_user_id
     if legacy_tok and legacy_uid > 0:
@@ -165,6 +166,14 @@ async def lifespan(app: FastAPI):
 
     companion_job_worker_task = asyncio.create_task(companion_job_worker_loop())
     log.info("Companion job worker started")
+    if settings.exif_bot_token.strip():
+        from app.connectors.telegram.exif_bot.bot import run_exif_bot_polling
+
+        exif_bot_polling_task = asyncio.create_task(run_exif_bot_polling())
+        log.info("EXIF Telegram bot polling enabled")
+    else:
+        exif_bot_polling_task = None
+        log.info("EXIF bot disabled (set EXIF_BOT_TOKEN to enable)")
     if settings.smtp_configured:
         email_worker_task = asyncio.create_task(email_campaign_worker_loop())
         log.info("Email campaign worker started (SMTP: %s)", settings.smtp_host)
@@ -223,6 +232,12 @@ async def lifespan(app: FastAPI):
         companion_job_worker_task.cancel()
         try:
             await companion_job_worker_task
+        except asyncio.CancelledError:
+            pass
+    if exif_bot_polling_task:
+        exif_bot_polling_task.cancel()
+        try:
+            await exif_bot_polling_task
         except asyncio.CancelledError:
             pass
     if bot:
