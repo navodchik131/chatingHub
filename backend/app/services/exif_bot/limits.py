@@ -79,7 +79,12 @@ async def is_channel_subscriber(bot: Bot, telegram_user_id: int) -> bool:
     try:
         member = await bot.get_chat_member(chat_id=channel, user_id=telegram_user_id)
     except TelegramBadRequest as e:
-        log.debug("exif bot channel check failed user=%s: %s", telegram_user_id, e)
+        log.warning(
+            "exif bot channel check failed user=%s channel=%s: %s",
+            telegram_user_id,
+            channel,
+            e,
+        )
         return False
     except Exception:
         log.warning("exif bot channel check error user=%s", telegram_user_id, exc_info=True)
@@ -150,6 +155,13 @@ async def ensure_can_process(
 ) -> ExifBotUsageStatus:
     status = await get_usage_status(session, user, bot)
     if status.remaining <= 0:
+        log.info(
+            "exif bot daily limit blocked user=%s used=%s limit=%s subscribed=%s",
+            user.telegram_id,
+            status.used,
+            status.limit,
+            status.subscribed,
+        )
         raise ExifBotDailyLimitExceeded(
             used=status.used,
             limit=status.limit,
@@ -158,8 +170,15 @@ async def ensure_can_process(
     return status
 
 
-async def record_successful_process(session: AsyncSession, user: ExifBotUser) -> int:
+async def record_successful_process(session: AsyncSession, *, user_id: int) -> int:
     """Увеличивает счётчик после успешной обработки. Возвращает новое значение used."""
+    from sqlalchemy import select
+
+    user = await session.scalar(
+        select(ExifBotUser).where(ExifBotUser.id == user_id).with_for_update()
+    )
+    if user is None:
+        raise ValueError("Пользователь EXIF-бота не найден.")
     today = _utc_today()
     if (user.daily_process_day or "") != today:
         user.daily_process_day = today
@@ -167,4 +186,10 @@ async def record_successful_process(session: AsyncSession, user: ExifBotUser) ->
     user.daily_process_count = int(user.daily_process_count or 0) + 1
     session.add(user)
     await session.flush()
+    log.info(
+        "exif bot daily use user=%s count=%s day=%s",
+        user.telegram_id,
+        user.daily_process_count,
+        user.daily_process_day,
+    )
     return int(user.daily_process_count)

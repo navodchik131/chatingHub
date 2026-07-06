@@ -58,13 +58,20 @@ def test_ensure_can_process_raises_when_exhausted():
 
 def test_record_successful_process_increments():
     user = SimpleNamespace(
+        id=42,
+        telegram_id=1,
         daily_process_day=None,
         daily_process_count=0,
     )
     session = AsyncMock()
+
+    async def _scalar(stmt):
+        return user
+
+    session.scalar = AsyncMock(side_effect=_scalar)
     session.add = MagicMock()
     session.flush = AsyncMock()
-    used = asyncio.run(record_successful_process(session, user))
+    used = asyncio.run(record_successful_process(session, user_id=42))
     assert used == 1
     assert user.daily_process_day == _utc_today()
     assert user.daily_process_count == 1

@@ -580,13 +580,6 @@ async def cb_pick_camera(callback: CallbackQuery, state: FSMContext, bot: Bot) -
 
     async with SessionLocal() as session:
         user = await get_or_create_exif_bot_user(session, callback.from_user)
-        profile = await get_profile_for_user(
-            session, user_id=user.id, profile_id=profile_id
-        )
-        if not profile:
-            await session.commit()
-            await callback.answer("Профиль не найден", show_alert=True)
-            return
         try:
             await ensure_can_process(session, user, bot)
         except ExifBotDailyLimitExceeded:
@@ -598,6 +591,14 @@ async def cb_pick_camera(callback: CallbackQuery, state: FSMContext, bot: Bot) -
                 parse_mode="Markdown",
                 reply_markup=limit_exceeded_kb(channel_url=status.channel_url),
             )
+            return
+        user_id = user.id
+        profile = await get_profile_for_user(
+            session, user_id=user_id, profile_id=profile_id
+        )
+        if not profile:
+            await session.commit()
+            await callback.answer("Профиль не найден", show_alert=True)
             return
         await session.commit()
 
@@ -619,11 +620,16 @@ async def cb_pick_camera(callback: CallbackQuery, state: FSMContext, bot: Bot) -
         await progress.edit_text("❌ Ошибка обработки. Попробуйте другой файл.")
         return
 
-    async with SessionLocal() as session:
-        user = await get_or_create_exif_bot_user(session, callback.from_user)
-        used = await record_successful_process(session, user)
-        usage = await get_usage_status(session, user, bot)
-        await session.commit()
+    try:
+        async with SessionLocal() as session:
+            used = await record_successful_process(session, user_id=user_id)
+            user = await get_or_create_exif_bot_user(session, callback.from_user)
+            usage = await get_usage_status(session, user, bot)
+            await session.commit()
+    except Exception:
+        log.exception("exif bot failed to record daily limit user_id=%s", user_id)
+        usage = SimpleNamespace(limit="?")
+        used = "?"
 
     cam_label = "selfie" if selfie else "main"
     fname = re.sub(r"[^\w\-]+", "_", profile.title or "photo")[:40] + "_exif.jpg"

@@ -509,8 +509,11 @@ def _migrate_exif_bot_tables(sync_conn) -> None:
 
 
 def _migrate_exif_bot_user_daily_limits(sync_conn) -> None:
+    import logging
+
     from sqlalchemy import inspect, text
 
+    log = logging.getLogger(__name__)
     insp = inspect(sync_conn)
     if not insp.has_table("exif_bot_users"):
         return
@@ -533,6 +536,14 @@ def _migrate_exif_bot_user_daily_limits(sync_conn) -> None:
         sync_conn.execute(
             text("ALTER TABLE exif_bot_users ADD COLUMN daily_process_day VARCHAR(10)")
         )
+    cols_after = {c["name"] for c in insp.get_columns("exif_bot_users")}
+    if "daily_process_count" not in cols_after or "daily_process_day" not in cols_after:
+        log.error(
+            "exif_bot_users: daily limit columns missing after migration (have %s)",
+            sorted(cols_after),
+        )
+    else:
+        log.info("exif_bot_users: daily limit columns OK")
 
 
 def _migrate_conversation_notes(sync_conn) -> None:
