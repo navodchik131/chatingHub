@@ -52,7 +52,7 @@ _WELCOME = (
 
 _HELP = (
     "**Как пользоваться**\n\n"
-    "• Эталоны — только **файлом** из галереи телефона (не пересылка из чата).\n"
+    "• Эталоны — только **файлом** из галереи телефона (JPEG/HEIC, не пересылка из чата).\n"
     "• Сначала селфи с **фронталки**, потом с **основной** камеры.\n"
     "• Гео — кнопка «Отправить геолокацию» или `широта, долгота`.\n"
     "• Обработка: файл → выбор профиля → камера → готовый JPEG.\n\n"
@@ -238,17 +238,23 @@ async def cb_pick_preset(callback: CallbackQuery, state: FSMContext) -> None:
         await callback.message.answer(
             "Шаг 1/3 — **эталон с фронталки**.\n\n"
             + file_hint_markdown()
-            + "\n\nОтправьте JPEG **файлом** с фронтальной камеры.",
+            + "\n\nОтправьте JPEG или HEIC **файлом** с фронтальной камеры.",
             parse_mode="Markdown",
             reply_markup=cancel_kb(),
         )
+
+
+def _reference_filename(message: Message) -> str | None:
+    if message.document and message.document.file_name:
+        return message.document.file_name.strip() or None
+    return None
 
 
 @router.message(ExifBotStates.create_selfie, F.document | F.photo)
 async def create_selfie_ref(message: Message, state: FSMContext, bot: Bot) -> None:
     try:
         data, is_doc = await download_image_from_message(message, bot)
-        blob, summary = extract_reference_profile(data)
+        blob, summary = extract_reference_profile(data, filename=_reference_filename(message))
     except ValueError as e:
         await message.answer(str(e), parse_mode="Markdown")
         return
@@ -287,7 +293,7 @@ async def skip_main_ref(callback: CallbackQuery, state: FSMContext) -> None:
 async def create_main_ref(message: Message, state: FSMContext, bot: Bot) -> None:
     try:
         data, is_doc = await download_image_from_message(message, bot)
-        blob, summary = extract_reference_profile(data)
+        blob, summary = extract_reference_profile(data, filename=_reference_filename(message))
     except ValueError as e:
         await message.answer(str(e), parse_mode="Markdown")
         return

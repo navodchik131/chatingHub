@@ -2023,7 +2023,7 @@ async def api_upload_studio_model_phone_exif_reference(
     )
 
     try:
-        profile = extract_phone_exif_profile(raw)
+        profile = extract_phone_exif_profile(raw, filename=(image.filename or None))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 

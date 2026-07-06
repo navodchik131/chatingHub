@@ -4,6 +4,7 @@ from io import BytesIO
 
 from app.services.studio_model_images import exif_camera_is_selfie, normalize_exif_camera
 from app.services.studio_exif_profile import (
+    _extract_via_exiftool,
     extract_phone_exif_profile,
     phone_exif_profile_from_json,
     phone_exif_profile_summary,
@@ -68,7 +69,34 @@ def test_extract_rejects_empty_exif():
     buf = BytesIO()
     im.save(buf, format="PNG")
     try:
-        extract_phone_exif_profile(buf.getvalue())
+        extract_phone_exif_profile(buf.getvalue(), filename="screenshot.png")
         assert False, "expected ValueError"
     except ValueError as e:
-        assert "EXIF" in str(e) or "камер" in str(e).lower()
+        assert "PNG" in str(e) or "EXIF" in str(e)
+
+
+def test_extract_rejects_instagram_filename():
+    im = Image.new("RGB", (8, 8), color=(0, 0, 0))
+    buf = BytesIO()
+    im.save(buf, format="JPEG", quality=90)
+    try:
+        extract_phone_exif_profile(buf.getvalue(), filename="instagram_1783070233663.jpg")
+        assert False, "expected ValueError"
+    except ValueError as e:
+        assert "Instagram" in str(e) or "камер" in str(e).lower()
+
+
+def test_extract_via_exiftool_same_as_piexif():
+    import shutil
+
+    if shutil.which("exiftool") is None:
+        return
+    raw = _jpeg_with_exif(
+        make="Apple",
+        model="iPhone 15 Pro",
+        lens="iPhone 15 Pro back triple camera 6.765mm f/1.78",
+    )
+    profile = _extract_via_exiftool(raw, suffix=".jpg")
+    assert profile is not None
+    assert profile["make"] == "Apple"
+    assert profile["model"] == "iPhone 15 Pro"

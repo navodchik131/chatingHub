@@ -14,7 +14,7 @@ log = logging.getLogger(__name__)
 
 _FILE_HINT = (
     "Отправьте изображение **файлом** (📎 → Файл), не как сжатое «Фото» — "
-    "иначе Telegram удалит EXIF."
+    "иначе Telegram удалит EXIF. Подходят JPEG и HEIC из галереи телефона."
 )
 
 

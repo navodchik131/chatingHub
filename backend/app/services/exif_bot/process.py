@@ -24,11 +24,15 @@ from app.services.studio_phone_export import apply_phone_export_to_jpeg
 log = logging.getLogger(__name__)
 
 
-def extract_reference_profile(image_bytes: bytes) -> tuple[str, str]:
+def extract_reference_profile(
+    image_bytes: bytes,
+    *,
+    filename: str | None = None,
+) -> tuple[str, str]:
     """Парсит EXIF эталона; возвращает (json_blob, summary)."""
     from app.services.studio_exif_profile import phone_exif_profile_summary
 
-    profile = extract_phone_exif_profile(image_bytes)
+    profile = extract_phone_exif_profile(image_bytes, filename=filename)
     blob = phone_exif_profile_to_json(profile)
     summary = phone_exif_profile_summary(profile) or "OK"
     return blob, summary
