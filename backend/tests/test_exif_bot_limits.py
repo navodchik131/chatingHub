@@ -102,3 +102,24 @@ def test_format_usage_message_contains_limits():
         )
     )
     assert "2" in msg and "10" in msg and "ModelMate" in msg
+    assert "<a href=" in msg
+    assert "@ModelMate_app" in msg
+    assert "**" not in msg
+
+
+def test_format_usage_message_subscribed_escapes_channel_label():
+    from app.services.exif_bot.limits import ExifBotUsageStatus
+
+    msg = format_usage_message(
+        ExifBotUsageStatus(
+            used=1,
+            limit=50,
+            remaining=49,
+            subscribed=True,
+            channel_url="https://t.me/ModelMate_app",
+            channel_label="@ModelMate_app",
+        )
+    )
+    assert "@ModelMate_app" in msg
+    assert "<b>50</b>" in msg
+    assert "**" not in msg

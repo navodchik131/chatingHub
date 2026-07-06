@@ -124,7 +124,7 @@ async def _send_limits(message: Message, bot: Bot) -> None:
         await session.commit()
     await message.answer(
         format_usage_message(status),
-        parse_mode="Markdown",
+        parse_mode="HTML",
         reply_markup=limits_kb(channel_url=status.channel_url),
     )
 
@@ -165,7 +165,7 @@ async def cb_check_subscription(callback: CallbackQuery, bot: Bot) -> None:
         text += "\n\n❌ Подписка не найдена. Подпишитесь на канал и нажмите снова."
     await callback.message.answer(
         text,
-        parse_mode="Markdown",
+        parse_mode="HTML",
         reply_markup=limits_kb(channel_url=status.channel_url),
     )
 
@@ -510,7 +510,7 @@ async def cb_menu_process(callback: CallbackQuery, state: FSMContext) -> None:
             await session.commit()
             await callback.message.answer(
                 format_limit_exceeded_message(status),
-                parse_mode="Markdown",
+                parse_mode="HTML",
                 reply_markup=limit_exceeded_kb(channel_url=status.channel_url),
             )
             return
@@ -595,7 +595,7 @@ async def cb_pick_camera(callback: CallbackQuery, state: FSMContext, bot: Bot) -
             await callback.answer("Лимит на сегодня исчерпан", show_alert=True)
             await callback.message.answer(
                 format_limit_exceeded_message(status),
-                parse_mode="Markdown",
+                parse_mode="HTML",
                 reply_markup=limit_exceeded_kb(channel_url=status.channel_url),
             )
             return

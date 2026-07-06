@@ -153,7 +153,8 @@ select:focus {
   inset: 0;
   background: var(--bg) var(--bg-mesh);
   pointer-events: none;
-  z-index: 0;
+  /* Ниже контента .app: иначе fixed-слой с z-index:0 перекрывает форму входа и «Загрузка…» */
+  z-index: -1;
 }
 
 .top {

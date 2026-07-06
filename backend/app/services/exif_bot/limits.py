@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 import logging
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
@@ -115,20 +116,28 @@ async def get_usage_status(
     )
 
 
+def _html_channel_link(label: str, url: str) -> str:
+    safe_label = html.escape(label, quote=False)
+    safe_url = html.escape(url, quote=True)
+    return f'<a href="{safe_url}">{safe_label}</a>'
+
+
 def format_usage_message(status: ExifBotUsageStatus) -> str:
+    """HTML для parse_mode=HTML (@ModelMate_app ломает legacy Markdown из‑за _)."""
     sub_line = (
-        f"✅ Подписка на {status.channel_label} — лимит **{status.limit}** фото/сутки."
+        f"✅ Подписка на {html.escape(status.channel_label, quote=False)} — "
+        f"лимит <b>{status.limit}</b> фото/сутки."
         if status.subscribed
         else (
-            f"Подпишитесь на [{status.channel_label}]({status.channel_url}) — "
-            f"**{settings.exif_bot_daily_limit_subscribed}** фото/сутки "
-            f"(сейчас **{settings.exif_bot_daily_limit_default}**)."
+            f"Подпишитесь на {_html_channel_link(status.channel_label, status.channel_url)} — "
+            f"<b>{settings.exif_bot_daily_limit_subscribed}</b> фото/сутки "
+            f"(сейчас <b>{settings.exif_bot_daily_limit_default}</b>)."
         )
     )
     return (
-        "**Лимит обработок (UTC, сброс в полночь)**\n\n"
-        f"Сегодня: **{status.used}** / **{status.limit}** "
-        f"(осталось **{status.remaining}**)\n\n"
+        "<b>Лимит обработок (UTC, сброс в полночь)</b>\n\n"
+        f"Сегодня: <b>{status.used}</b> / <b>{status.limit}</b> "
+        f"(осталось <b>{status.remaining}</b>)\n\n"
         f"{sub_line}\n\n"
         "Считается каждая успешная обработка фото."
     )
@@ -137,13 +146,13 @@ def format_usage_message(status: ExifBotUsageStatus) -> str:
 def format_limit_exceeded_message(status: ExifBotUsageStatus) -> str:
     if status.subscribed:
         return (
-            f"Дневной лимит исчерпан: **{status.used}** / **{status.limit}**.\n\n"
+            f"Дневной лимит исчерпан: <b>{status.used}</b> / <b>{status.limit}</b>.\n\n"
             "Новые обработки — завтра (UTC)."
         )
     return (
-        f"Дневной лимит исчерпан: **{status.used}** / **{status.limit}**.\n\n"
-        f"Подпишитесь на [{status.channel_label}]({status.channel_url}) — "
-        f"получите **{settings.exif_bot_daily_limit_subscribed}** фото в сутки.\n\n"
+        f"Дневной лимит исчерпан: <b>{status.used}</b> / <b>{status.limit}</b>.\n\n"
+        f"Подпишитесь на {_html_channel_link(status.channel_label, status.channel_url)} — "
+        f"получите <b>{settings.exif_bot_daily_limit_subscribed}</b> фото в сутки.\n\n"
         "После подписки нажмите «Проверить подписку»."
     )
 
