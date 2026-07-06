@@ -5,6 +5,7 @@ import { AdminBarChart, AdminHBarChart } from './AdminBarChart'
 import { AdminDrillableKpi, AdminDrillLink } from './AdminDrillableKpi'
 import { AdminSegmentDrill } from './AdminSegmentDrill'
 import { AdminEmailTab } from './AdminEmailTab'
+import { AdminExifBotTab } from './AdminExifBotTab'
 import { AdminUserPanel } from './AdminUserPanel'
 import {
   SUBSCRIPTION_STATUS_LABELS,
@@ -24,7 +25,7 @@ interface UserMe {
 export function AdminPage() {
   const [gate, setGate] = useState<'loading' | 'ok' | 'denied' | 'anon'>('loading')
   const [meEmail, setMeEmail] = useState('')
-  const [tab, setTab] = useState<'overview' | 'users' | 'email'>('overview')
+  const [tab, setTab] = useState<'overview' | 'users' | 'email' | 'exif_bot'>('overview')
   const [stats, setStats] = useState<AdminStats | null>(null)
   const [users, setUsers] = useState<AdminUserRow[]>([])
   const [userSearch, setUserSearch] = useState('')
@@ -198,6 +199,15 @@ export function AdminPage() {
           onClick={() => setTab('email')}
         >
           Рассылки
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === 'exif_bot'}
+          className={tab === 'exif_bot' ? 'admin-tabs__btn active' : 'admin-tabs__btn'}
+          onClick={() => setTab('exif_bot')}
+        >
+          EXIF-бот
         </button>
       </nav>
 
@@ -579,6 +589,8 @@ export function AdminPage() {
       {tab === 'email' ? (
         <AdminEmailTab meEmail={meEmail} onError={setError} />
       ) : null}
+
+      {tab === 'exif_bot' ? <AdminExifBotTab onError={setError} /> : null}
 
       <AdminSegmentDrill
         segment={drillSegment}

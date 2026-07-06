@@ -62,6 +62,7 @@ def test_record_successful_process_increments():
         telegram_id=1,
         daily_process_day=None,
         daily_process_count=0,
+        total_process_count=0,
     )
     session = AsyncMock()
 
@@ -75,6 +76,7 @@ def test_record_successful_process_increments():
     assert used == 1
     assert user.daily_process_day == _utc_today()
     assert user.daily_process_count == 1
+    assert user.total_process_count == 1
 
 
 def test_list_iphone_presets_from_11():

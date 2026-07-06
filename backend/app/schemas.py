@@ -1119,3 +1119,45 @@ class AdminEmailSendTestIn(BaseModel):
     subject: str = Field(..., max_length=500)
     body_html: str
     body_text: str | None = None
+
+
+class AdminExifBotStatsOut(BaseModel):
+    total_users: int
+    total_profiles: int
+    total_processes: int
+    processes_today: int
+    active_users_7d: int
+    active_users_30d: int
+    users_with_profiles: int
+    utc_day: str
+
+
+class AdminExifBotUserRow(BaseModel):
+    id: int
+    telegram_id: int
+    username: str | None = None
+    display_name: str
+    telegram_link: str | None = None
+    language_code: str | None = None
+    profiles_count: int
+    total_process_count: int
+    daily_process_count: int
+    daily_process_day: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class AdminExifBotProfileRow(BaseModel):
+    id: int
+    title: str
+    camera_preset_id: str | None = None
+    has_selfie_ref: bool
+    has_main_ref: bool
+    has_gps: bool
+    is_ready: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class AdminExifBotUserDetailOut(AdminExifBotUserRow):
+    profiles: list[AdminExifBotProfileRow] = []

@@ -160,3 +160,45 @@ export interface AdminEmailCampaign {
   started_at: string | null
   completed_at: string | null
 }
+
+export interface AdminExifBotStats {
+  total_users: number
+  total_profiles: number
+  total_processes: number
+  processes_today: number
+  active_users_7d: number
+  active_users_30d: number
+  users_with_profiles: number
+  utc_day: string
+}
+
+export interface AdminExifBotUserRow {
+  id: number
+  telegram_id: number
+  username: string | null
+  display_name: string
+  telegram_link: string | null
+  language_code: string | null
+  profiles_count: number
+  total_process_count: number
+  daily_process_count: number
+  daily_process_day: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface AdminExifBotProfileRow {
+  id: number
+  title: string
+  camera_preset_id: string | null
+  has_selfie_ref: boolean
+  has_main_ref: boolean
+  has_gps: boolean
+  is_ready: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface AdminExifBotUserDetail extends AdminExifBotUserRow {
+  profiles: AdminExifBotProfileRow[]
+}

@@ -790,6 +790,7 @@ class ExifBotUser(Base):
     language_code: Mapped[str | None] = mapped_column(String(16), nullable=True)
     daily_process_count: Mapped[int] = mapped_column(default=0, server_default="0")
     daily_process_day: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    total_process_count: Mapped[int] = mapped_column(default=0, server_default="0")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

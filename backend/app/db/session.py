@@ -506,6 +506,7 @@ def _migrate_exif_bot_tables(sync_conn) -> None:
     if not insp.has_table("exif_bot_profiles"):
         ExifBotProfile.__table__.create(sync_conn, checkfirst=True)
     _migrate_exif_bot_user_daily_limits(sync_conn)
+    _migrate_exif_bot_total_process_count(sync_conn)
     _migrate_exif_bot_telegram_id_bigint(sync_conn)
 
 
@@ -572,6 +573,26 @@ def _migrate_exif_bot_user_daily_limits(sync_conn) -> None:
         )
     else:
         log.info("exif_bot_users: daily limit columns OK")
+
+
+def _migrate_exif_bot_total_process_count(sync_conn) -> None:
+    import logging
+
+    from sqlalchemy import inspect, text
+
+    log = logging.getLogger(__name__)
+    insp = inspect(sync_conn)
+    if not insp.has_table("exif_bot_users"):
+        return
+    cols = {c["name"] for c in insp.get_columns("exif_bot_users")}
+    if "total_process_count" in cols:
+        return
+    sync_conn.execute(
+        text(
+            "ALTER TABLE exif_bot_users ADD COLUMN total_process_count INTEGER NOT NULL DEFAULT 0"
+        )
+    )
+    log.info("exif_bot_users: total_process_count column added")
 
 
 def _migrate_conversation_notes(sync_conn) -> None:

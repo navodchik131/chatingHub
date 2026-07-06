@@ -193,6 +193,7 @@ async def record_successful_process(session: AsyncSession, *, user_id: int) -> i
         user.daily_process_day = today
         user.daily_process_count = 0
     user.daily_process_count = int(user.daily_process_count or 0) + 1
+    user.total_process_count = int(user.total_process_count or 0) + 1
     session.add(user)
     await session.flush()
     log.info(
