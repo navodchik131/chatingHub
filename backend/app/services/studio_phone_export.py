@@ -54,6 +54,16 @@ def _add_grain_sharpen(rgb: Image.Image, sigma: float) -> Image.Image:
     return im.filter(ImageFilter.UnsharpMask(radius=0.8, percent=100, threshold=3))
 
 
+def _float_to_exif_rational(val: float) -> tuple[int, int]:
+    if val <= 0:
+        return (1, 100)
+    if val >= 1:
+        num = int(round(val * 1000))
+        return (num, 1000)
+    den = max(1, int(round(1.0 / val)))
+    return (1, den)
+
+
 def apply_phone_export_to_jpeg(
     image_bytes: bytes,
     *,
@@ -113,16 +123,26 @@ def apply_phone_export_to_jpeg(
     zeroth: dict[int, Any] = {
         piexif.ImageIFD.Make: _b(make),
         piexif.ImageIFD.Model: _b(model),
+        piexif.ImageIFD.DateTime: _dt_exif(when),
     }
     exif_ifd: dict[int, Any] = {
         piexif.ExifIFD.DateTimeOriginal: _dt_exif(when),
         piexif.ExifIFD.DateTimeDigitized: _dt_exif(when),
         piexif.ExifIFD.LensModel: _b(lens),
         piexif.ExifIFD.FocalLengthIn35mmFilm: focal,
+        piexif.ExifIFD.ColorSpace: 1,
     }
     software = str(preset.get("software") or "").strip()
     if software:
         zeroth[piexif.ImageIFD.Software] = _b(software)
+    host_computer = str(preset.get("host_computer") or "").strip()
+    if not host_computer and make.lower() == "apple":
+        host_computer = model
+    if host_computer:
+        zeroth[piexif.ImageIFD.HostComputer] = _b(host_computer)
+    lens_make = str(preset.get("lens_make") or "").strip() or make
+    if lens_make:
+        exif_ifd[piexif.ExifIFD.LensMake] = _b(lens_make)
     iso = preset.get("iso")
     if iso is not None:
         try:
@@ -136,6 +156,29 @@ def apply_phone_export_to_jpeg(
             exif_ifd[piexif.ExifIFD.FNumber] = (int(fv * 100), 100)
         except (TypeError, ValueError):
             pass
+    focal_len = preset.get("focal_length")
+    if focal_len is not None:
+        try:
+            fl = float(focal_len)
+            exif_ifd[piexif.ExifIFD.FocalLength] = _float_to_exif_rational(fl)
+        except (TypeError, ValueError):
+            pass
+    exposure = preset.get("exposure_time")
+    if exposure is not None:
+        try:
+            ev = float(exposure)
+            exif_ifd[piexif.ExifIFD.ExposureTime] = _float_to_exif_rational(ev)
+        except (TypeError, ValueError):
+            pass
+    try:
+        w, h = processed.size
+        zeroth[piexif.ImageIFD.XResolution] = (72, 1)
+        zeroth[piexif.ImageIFD.YResolution] = (72, 1)
+        zeroth[piexif.ImageIFD.ResolutionUnit] = 2
+        exif_ifd[piexif.ExifIFD.ExifImageWidth] = w
+        exif_ifd[piexif.ExifIFD.ExifImageHeight] = h
+    except Exception:
+        pass
 
     gps_ifd: dict[int, Any] = {}
     if export_lat is not None and export_lon is not None:

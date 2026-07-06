@@ -73,10 +73,13 @@ def _build_profile(
     focal_len: float | None = None,
     f_number: float | None = None,
     iso_int: int | None = None,
+    lens_make: str = "",
+    host_computer: str = "",
+    exposure_time: float | None = None,
 ) -> dict[str, Any] | None:
     if not make and not model and not lens:
         return None
-    return {
+    profile: dict[str, Any] = {
         "make": make or "Unknown",
         "model": model or "Phone",
         "lens_model": lens,
@@ -87,6 +90,13 @@ def _build_profile(
         "software": software,
         "grain_sigma": DEFAULT_GRAIN_SIGMA,
     }
+    if lens_make:
+        profile["lens_make"] = lens_make
+    if host_computer:
+        profile["host_computer"] = host_computer
+    if exposure_time is not None and exposure_time > 0:
+        profile["exposure_time"] = exposure_time
+    return profile
 
 
 def _profile_from_piexif_dict(exif_raw: dict) -> dict[str, Any] | None:
@@ -97,6 +107,8 @@ def _profile_from_piexif_dict(exif_raw: dict) -> dict[str, Any] | None:
     model = _decode_exif_value(zeroth.get(piexif.ImageIFD.Model))
     lens = _decode_exif_value(exif_ifd.get(piexif.ExifIFD.LensModel))
     software = _decode_exif_value(zeroth.get(piexif.ImageIFD.Software))
+    lens_make = _decode_exif_value(exif_ifd.get(piexif.ExifIFD.LensMake))
+    host_computer = _decode_exif_value(zeroth.get(piexif.ImageIFD.HostComputer))
 
     focal_35 = exif_ifd.get(piexif.ExifIFD.FocalLengthIn35mmFilm)
     focal_35_int: int | None = None
@@ -108,6 +120,7 @@ def _profile_from_piexif_dict(exif_raw: dict) -> dict[str, Any] | None:
 
     focal_len = _rational_to_float(exif_ifd.get(piexif.ExifIFD.FocalLength))
     f_number = _rational_to_float(exif_ifd.get(piexif.ExifIFD.FNumber))
+    exposure_time = _rational_to_float(exif_ifd.get(piexif.ExifIFD.ExposureTime))
     iso = exif_ifd.get(piexif.ExifIFD.ISOSpeedRatings)
     iso_int: int | None = None
     if iso is not None:
@@ -125,6 +138,9 @@ def _profile_from_piexif_dict(exif_raw: dict) -> dict[str, Any] | None:
         focal_len=focal_len,
         f_number=f_number,
         iso_int=iso_int,
+        lens_make=lens_make,
+        host_computer=host_computer,
+        exposure_time=exposure_time,
     )
 
 
@@ -155,8 +171,10 @@ def _extract_via_pillow(image_bytes: bytes) -> dict[str, Any] | None:
         make = _decode_exif_value(exif.get(piexif.ImageIFD.Make))
         model = _decode_exif_value(exif.get(piexif.ImageIFD.Model))
         software = _decode_exif_value(exif.get(piexif.ImageIFD.Software))
+        host_computer = _decode_exif_value(exif.get(piexif.ImageIFD.HostComputer))
         exif_ifd = exif.get_ifd(piexif.ImageIFD.ExifTag) if hasattr(exif, "get_ifd") else {}
         lens = _decode_exif_value(exif_ifd.get(piexif.ExifIFD.LensModel))
+        lens_make = _decode_exif_value(exif_ifd.get(piexif.ExifIFD.LensMake))
         focal_35 = exif_ifd.get(piexif.ExifIFD.FocalLengthIn35mmFilm)
         focal_35_int: int | None = None
         if focal_35 is not None:
@@ -166,6 +184,7 @@ def _extract_via_pillow(image_bytes: bytes) -> dict[str, Any] | None:
                 focal_35_int = None
         focal_len = _rational_to_float(exif_ifd.get(piexif.ExifIFD.FocalLength))
         f_number = _rational_to_float(exif_ifd.get(piexif.ExifIFD.FNumber))
+        exposure_time = _rational_to_float(exif_ifd.get(piexif.ExifIFD.ExposureTime))
         iso = exif_ifd.get(piexif.ExifIFD.ISOSpeedRatings)
         iso_int: int | None = None
         if iso is not None:
@@ -182,6 +201,9 @@ def _extract_via_pillow(image_bytes: bytes) -> dict[str, Any] | None:
             focal_len=focal_len,
             f_number=f_number,
             iso_int=iso_int,
+            lens_make=lens_make,
+            host_computer=host_computer,
+            exposure_time=exposure_time,
         )
     except Exception:
         return None
@@ -192,6 +214,8 @@ def _profile_from_exiftool_tags(tags: dict[str, Any]) -> dict[str, Any] | None:
     model = str(tags.get("Model") or "").strip()
     lens = str(tags.get("LensModel") or "").strip()
     software = str(tags.get("Software") or "").strip()
+    lens_make = str(tags.get("LensMake") or "").strip()
+    host_computer = str(tags.get("HostComputer") or "").strip()
 
     focal_35_int: int | None = None
     focal_raw = tags.get("FocalLengthIn35mmFormat")
@@ -203,6 +227,7 @@ def _profile_from_exiftool_tags(tags: dict[str, Any]) -> dict[str, Any] | None:
 
     focal_len = _rational_to_float(tags.get("FocalLength"))
     f_number = _rational_to_float(tags.get("FNumber"))
+    exposure_time = _rational_to_float(tags.get("ExposureTime"))
     iso_int: int | None = None
     iso_raw = tags.get("ISO")
     if iso_raw is not None:
@@ -220,6 +245,9 @@ def _profile_from_exiftool_tags(tags: dict[str, Any]) -> dict[str, Any] | None:
         focal_len=focal_len,
         f_number=f_number,
         iso_int=iso_int,
+        lens_make=lens_make,
+        host_computer=host_computer,
+        exposure_time=exposure_time,
     )
 
 
@@ -246,6 +274,9 @@ def _extract_via_exiftool(image_bytes: bytes, *, suffix: str) -> dict[str, Any] 
                 "-FNumber",
                 "-ISO",
                 "-Software",
+                "-LensMake",
+                "-HostComputer",
+                "-ExposureTime",
                 tmp_path,
             ],
             capture_output=True,
@@ -378,7 +409,7 @@ def profile_for_phone_export(
         focal_i = int(focal) if focal is not None else (23 if selfie else 24)
     except (TypeError, ValueError):
         focal_i = 23 if selfie else 24
-    return {
+    export: dict[str, Any] = {
         "make": str(profile.get("make") or "Unknown").strip(),
         "model": str(profile.get("model") or "Phone").strip(),
         "lens_selfie": lens if selfie else "",
@@ -389,4 +420,75 @@ def profile_for_phone_export(
         "iso": profile.get("iso"),
         "f_number": profile.get("f_number"),
         "software": str(profile.get("software") or "").strip(),
+        "focal_length": profile.get("focal_length"),
+        "lens_make": str(profile.get("lens_make") or "").strip(),
+        "host_computer": str(profile.get("host_computer") or "").strip(),
+        "exposure_time": profile.get("exposure_time"),
     }
+    return export
+
+
+def _merge_export_with_camera_preset(
+    export: dict[str, Any],
+    preset: dict[str, Any],
+    *,
+    selfie: bool,
+) -> dict[str, Any]:
+    """Дополняет эталон с телефона полями из каталога камер (объектив, grain и т.д.)."""
+    out = dict(export)
+    lens_key = "lens_selfie" if selfie else "lens_main"
+    focal_key = "focal_35_selfie" if selfie else "focal_35_main"
+    other_lens = "lens_main" if selfie else "lens_selfie"
+    other_focal = "focal_35_main" if selfie else "focal_35_selfie"
+
+    if not str(out.get(lens_key) or "").strip():
+        out[lens_key] = str(preset.get(lens_key) or "")
+    if not str(out.get(other_lens) or "").strip():
+        out[other_lens] = str(preset.get(other_lens) or "")
+
+    try:
+        cur_focal = int(out.get(focal_key) or 0)
+    except (TypeError, ValueError):
+        cur_focal = 0
+    default_focal = int(preset.get(focal_key) or (23 if selfie else 24))
+    if cur_focal <= 0:
+        out[focal_key] = default_focal
+    if not out.get(other_focal):
+        out[other_focal] = int(preset.get(other_focal) or (24 if selfie else 23))
+
+    if not out.get("make") or out.get("make") == "Unknown":
+        out["make"] = str(preset.get("make") or "Unknown").strip()
+    if not out.get("model") or out.get("model") == "Phone":
+        out["model"] = str(preset.get("model") or "Phone").strip()
+    ref_grain = float(out.get("grain_sigma") or DEFAULT_GRAIN_SIGMA)
+    preset_grain = float(preset.get("grain_sigma") or DEFAULT_GRAIN_SIGMA)
+    if abs(ref_grain - DEFAULT_GRAIN_SIGMA) < 0.01:
+        out["grain_sigma"] = preset_grain
+    else:
+        out["grain_sigma"] = ref_grain
+    return out
+
+
+def resolve_phone_export_preset(
+    *,
+    phone_exif_selfie_json: str | None,
+    phone_exif_main_json: str | None,
+    camera_preset_id: str | None,
+    selfie: bool,
+) -> dict[str, Any] | None:
+    """Эталон с камеры + пресет модели → полный набор для phone export (как в студии)."""
+    from app.services.studio_camera_presets import get_camera_preset_by_id
+
+    raw = phone_exif_selfie_json if selfie else phone_exif_main_json
+    parsed = phone_exif_profile_from_json(raw)
+    preset_id = (camera_preset_id or "").strip()
+    builtin = get_camera_preset_by_id(preset_id) if preset_id else None
+
+    if parsed:
+        export = profile_for_phone_export(parsed, selfie=selfie)
+        if builtin:
+            return _merge_export_with_camera_preset(export, builtin, selfie=selfie)
+        return export
+    if builtin:
+        return builtin
+    return None

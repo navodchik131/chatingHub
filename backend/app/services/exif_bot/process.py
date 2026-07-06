@@ -11,13 +11,14 @@ import anyio
 from PIL import Image
 
 from app.db.models import ExifBotProfile
-from app.services.studio_ai_metadata_strip import strip_ai_metadata_from_image_bytes
-from app.services.studio_camera_presets import get_camera_preset_by_id
+from app.services.studio_ai_metadata_strip import (
+    apply_analog_humanize_to_image_bytes,
+    strip_ai_metadata_from_image_bytes,
+)
 from app.services.studio_exif_profile import (
     extract_phone_exif_profile,
-    phone_exif_profile_from_json,
     phone_exif_profile_to_json,
-    profile_for_phone_export,
+    resolve_phone_export_preset,
 )
 from app.services.studio_phone_export import apply_phone_export_to_jpeg
 
@@ -52,18 +53,12 @@ def _ensure_jpeg_bytes(data: bytes) -> bytes:
 
 
 def _resolve_preset(profile: ExifBotProfile, *, selfie: bool) -> dict[str, Any] | None:
-    raw = (
-        profile.phone_exif_selfie_json
-        if selfie
-        else profile.phone_exif_main_json
+    return resolve_phone_export_preset(
+        phone_exif_selfie_json=profile.phone_exif_selfie_json,
+        phone_exif_main_json=profile.phone_exif_main_json,
+        camera_preset_id=profile.camera_preset_id,
+        selfie=selfie,
     )
-    parsed = phone_exif_profile_from_json(raw)
-    if parsed:
-        return profile_for_phone_export(parsed, selfie=selfie)
-    preset_id = (profile.camera_preset_id or "").strip()
-    if preset_id:
-        return get_camera_preset_by_id(preset_id)
-    return None
 
 
 def profile_is_ready(profile: ExifBotProfile) -> bool:
@@ -90,12 +85,17 @@ def process_image_sync(
     stripped, _ = strip_ai_metadata_from_image_bytes(data, ext=ext)
     data = stripped
 
+    humanized, applied = apply_analog_humanize_to_image_bytes(data, ext=ext)
+    if applied:
+        data = humanized
+
     out = apply_phone_export_to_jpeg(
         data,
         preset=preset,
         selfie=selfie,
         export_lat=profile.export_lat,
         export_lon=profile.export_lon,
+        skip_grain=applied,
     )
     if out is None:
         raise ValueError("Не удалось записать EXIF в файл.")

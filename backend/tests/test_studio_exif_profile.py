@@ -64,6 +64,38 @@ def test_normalize_exif_camera():
     assert exif_camera_is_selfie("main") is False
 
 
+def test_merge_export_with_camera_preset_fills_lens():
+    from app.services.studio_exif_profile import (
+        _merge_export_with_camera_preset,
+        profile_for_phone_export,
+        resolve_phone_export_preset,
+    )
+
+    ref = {"make": "Apple", "model": "iPhone 15 Pro", "lens_model": "", "focal_35mm": 24}
+    export = profile_for_phone_export(ref, selfie=False)
+    preset = {
+        "make": "Apple",
+        "model": "iPhone 15 Pro",
+        "lens_selfie": "front",
+        "lens_main": "iPhone 15 Pro back triple camera 6.765mm f/1.78",
+        "focal_35_selfie": 23,
+        "focal_35_main": 24,
+        "grain_sigma": 3.8,
+    }
+    merged = _merge_export_with_camera_preset(export, preset, selfie=False)
+    assert "back triple" in merged["lens_main"]
+    assert merged["grain_sigma"] == 3.8
+
+    resolved = resolve_phone_export_preset(
+        phone_exif_selfie_json=None,
+        phone_exif_main_json='{"make":"Apple","model":"iPhone 15 Pro","lens_model":""}',
+        camera_preset_id="iphone_15_pro",
+        selfie=False,
+    )
+    assert resolved is not None
+    assert "back triple" in resolved["lens_main"]
+
+
 def test_extract_rejects_empty_exif():
     im = Image.new("RGB", (8, 8), color=(0, 0, 0))
     buf = BytesIO()

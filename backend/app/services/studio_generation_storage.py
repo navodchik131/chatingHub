@@ -241,25 +241,16 @@ async def _apply_phone_export_if_needed(
     model_row = (await session.execute(stmt)).scalar_one_or_none()
     if model_row is None:
         return data, ext, media
-    from app.services.studio_camera_presets import get_camera_preset_by_id
-    from app.services.studio_exif_profile import (
-        phone_exif_profile_from_json,
-        profile_for_phone_export,
-    )
+    from app.services.studio_exif_profile import resolve_phone_export_preset
     from app.services.studio_phone_export import apply_phone_export_to_jpeg
 
     selfie_for_exif = exif_camera_is_selfie(exif_camera)
-    profile_raw = (
-        model_row.phone_exif_selfie_json
-        if selfie_for_exif
-        else model_row.phone_exif_main_json
+    preset = resolve_phone_export_preset(
+        phone_exif_selfie_json=model_row.phone_exif_selfie_json,
+        phone_exif_main_json=model_row.phone_exif_main_json,
+        camera_preset_id=model_row.camera_preset_id,
+        selfie=selfie_for_exif,
     )
-    profile = phone_exif_profile_from_json(profile_raw)
-    preset: dict[str, Any] | None = None
-    if profile:
-        preset = profile_for_phone_export(profile, selfie=selfie_for_exif)
-    elif (model_row.camera_preset_id or "").strip():
-        preset = get_camera_preset_by_id(model_row.camera_preset_id.strip())
     if not preset:
         return data, ext, media
     export_bytes = await anyio.to_thread.run_sync(
@@ -289,11 +280,7 @@ async def _apply_video_metadata_if_needed(
 ) -> tuple[bytes, str, str]:
     if not (media or "").startswith("video/"):
         return data, ext, media
-    from app.services.studio_camera_presets import get_camera_preset_by_id
-    from app.services.studio_exif_profile import (
-        phone_exif_profile_from_json,
-        profile_for_phone_export,
-    )
+    from app.services.studio_exif_profile import resolve_phone_export_preset
     from app.services.studio_video_metadata import process_video_archive_bytes
 
     selfie_for_exif = exif_camera_is_selfie(exif_camera)
@@ -311,16 +298,12 @@ async def _apply_video_metadata_if_needed(
         if model_row is not None:
             export_lat = model_row.export_lat
             export_lon = model_row.export_lon
-            profile_raw = (
-                model_row.phone_exif_selfie_json
-                if selfie_for_exif
-                else model_row.phone_exif_main_json
+            preset = resolve_phone_export_preset(
+                phone_exif_selfie_json=model_row.phone_exif_selfie_json,
+                phone_exif_main_json=model_row.phone_exif_main_json,
+                camera_preset_id=model_row.camera_preset_id,
+                selfie=selfie_for_exif,
             )
-            profile = phone_exif_profile_from_json(profile_raw)
-            if profile:
-                preset = profile_for_phone_export(profile, selfie=selfie_for_exif)
-            elif (model_row.camera_preset_id or "").strip():
-                preset = get_camera_preset_by_id(model_row.camera_preset_id.strip())
 
     out_bytes, changed = await anyio.to_thread.run_sync(
         partial(
