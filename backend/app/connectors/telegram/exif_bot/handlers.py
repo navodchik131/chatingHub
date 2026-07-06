@@ -14,8 +14,12 @@ from app.connectors.telegram.exif_bot.keyboards import (
     camera_pick_kb,
     cancel_kb,
     geo_kb,
+    limit_exceeded_kb,
+    limits_hint_short,
+    limits_kb,
     location_reply_kb,
     main_menu_kb,
+    preset_brand_kb,
     preset_picker_kb,
     profiles_list_kb,
     remove_reply_kb,
@@ -24,6 +28,14 @@ from app.connectors.telegram.exif_bot.keyboards import (
 from app.connectors.telegram.exif_bot.media import download_image_from_message, file_hint_markdown
 from app.connectors.telegram.exif_bot.states import ExifBotStates
 from app.db.session import SessionLocal
+from app.services.exif_bot.limits import (
+    ExifBotDailyLimitExceeded,
+    ensure_can_process,
+    format_limit_exceeded_message,
+    format_usage_message,
+    get_usage_status,
+    record_successful_process,
+)
 from app.services.exif_bot.process import (
     extract_reference_profile,
     guess_selfie_from_image,
@@ -48,6 +60,8 @@ _WELCOME = (
     "1️⃣ Создайте **профиль** (модель телефона + эталоны с камеры + GPS)\n"
     "2️⃣ Отправьте фото **файлом** — получите обработанный JPEG\n\n"
     + file_hint_markdown()
+    + "\n\n"
+    + limits_hint_short()
 )
 
 _HELP = (
@@ -56,7 +70,9 @@ _HELP = (
     "• Сначала селфи с **фронталки**, потом с **основной** камеры.\n"
     "• Гео — кнопка «Отправить геолокацию» или `широта, долгота`.\n"
     "• Обработка: файл → выбор профиля → камера → готовый JPEG.\n\n"
-    "Команды: /start /profiles /help /cancel"
+    + limits_hint_short()
+    + "\n\n"
+    "Команды: /start /profiles /limits /help /cancel"
 )
 
 
@@ -90,6 +106,61 @@ async def cmd_start(message: Message, state: FSMContext) -> None:
     name = message.from_user.first_name or "друг"
     await message.answer(f"Привет, {name}!\n\n{_WELCOME}", parse_mode="Markdown")
     await _send_main_menu(message)
+
+
+async def _send_limits(message: Message, bot: Bot) -> None:
+    if not message.from_user:
+        return
+    async with SessionLocal() as session:
+        user = await get_or_create_exif_bot_user(session, message.from_user)
+        status = await get_usage_status(session, user, bot)
+        await session.commit()
+    await message.answer(
+        format_usage_message(status),
+        parse_mode="Markdown",
+        reply_markup=limits_kb(channel_url=status.channel_url),
+    )
+
+
+def _preset_brand_from_tag(tag: str) -> bool | None:
+    if tag == "iphone":
+        return True
+    if tag == "other":
+        return False
+    return True
+
+
+@router.message(Command("limits"))
+async def cmd_limits(message: Message, bot: Bot) -> None:
+    await _send_limits(message, bot)
+
+
+@router.callback_query(F.data == "exif:menu:limits")
+async def cb_menu_limits(callback: CallbackQuery, bot: Bot) -> None:
+    await callback.answer()
+    if callback.message:
+        await _send_limits(callback.message, bot)
+
+
+@router.callback_query(F.data == "exif:check_sub")
+async def cb_check_subscription(callback: CallbackQuery, bot: Bot) -> None:
+    if not callback.from_user or not callback.message:
+        return
+    async with SessionLocal() as session:
+        user = await get_or_create_exif_bot_user(session, callback.from_user)
+        status = await get_usage_status(session, user, bot)
+        await session.commit()
+    await callback.answer("Проверено")
+    text = format_usage_message(status)
+    if status.subscribed:
+        text += "\n\n✅ Подписка подтверждена — повышенный лимит активен."
+    else:
+        text += "\n\n❌ Подписка не найдена. Подпишитесь на канал и нажмите снова."
+    await callback.message.answer(
+        text,
+        parse_mode="Markdown",
+        reply_markup=limits_kb(channel_url=status.channel_url),
+    )
 
 
 @router.message(Command("help"))
@@ -215,17 +286,43 @@ async def create_name(message: Message, state: FSMContext) -> None:
     await state.update_data(draft_title=title)
     await state.set_state(ExifBotStates.create_preset)
     await message.answer(
-        f"Профиль «{title}». Выберите модель телефона (базовый пресет):",
-        reply_markup=preset_picker_kb(0),
+        f"Профиль «{title}». Выберите категорию телефона:",
+        reply_markup=preset_brand_kb(),
+    )
+
+
+@router.callback_query(ExifBotStates.create_preset, F.data.startswith("exif:preset_brand:"))
+async def cb_preset_brand(callback: CallbackQuery, state: FSMContext) -> None:
+    tag = callback.data.split(":")[-1]
+    await callback.answer()
+    if not callback.message:
+        return
+    if tag == "back":
+        await callback.message.edit_text(
+            "Выберите категорию телефона:",
+            reply_markup=preset_brand_kb(),
+        )
+        return
+    iphone_only = _preset_brand_from_tag(tag)
+    await state.update_data(preset_brand=tag)
+    title = "🍎 iPhone" if iphone_only else "📱 Другие модели"
+    await callback.message.edit_text(
+        f"{title} — выберите модель:",
+        reply_markup=preset_picker_kb(0, iphone_only=iphone_only),
     )
 
 
 @router.callback_query(F.data.startswith("exif:preset_page:"))
 async def cb_preset_page(callback: CallbackQuery, state: FSMContext) -> None:
-    page = int(callback.data.split(":")[-1])
+    parts = callback.data.split(":")
+    page = int(parts[2])
+    brand_tag = parts[3] if len(parts) > 3 else "iphone"
+    iphone_only = _preset_brand_from_tag(brand_tag)
     await callback.answer()
     if callback.message:
-        await callback.message.edit_reply_markup(reply_markup=preset_picker_kb(page))
+        await callback.message.edit_reply_markup(
+            reply_markup=preset_picker_kb(page, iphone_only=iphone_only)
+        )
 
 
 @router.callback_query(ExifBotStates.create_preset, F.data.startswith("exif:preset:"))
@@ -397,9 +494,25 @@ async def cb_menu_process(callback: CallbackQuery, state: FSMContext) -> None:
             reply_markup=main_menu_kb(),
         )
         return
+    async with SessionLocal() as session:
+        user = await get_or_create_exif_bot_user(session, callback.from_user)
+        try:
+            status = await ensure_can_process(session, user, callback.bot)
+        except ExifBotDailyLimitExceeded:
+            status = await get_usage_status(session, user, callback.bot)
+            await session.commit()
+            await callback.message.answer(
+                format_limit_exceeded_message(status),
+                parse_mode="Markdown",
+                reply_markup=limit_exceeded_kb(channel_url=status.channel_url),
+            )
+            return
+        await session.commit()
     await state.set_state(ExifBotStates.waiting_photo)
     await callback.message.answer(
-        "Отправьте изображение **файлом** для обработки.\n\n" + file_hint_markdown(),
+        f"Осталось сегодня: **{status.remaining}** / {status.limit}.\n\n"
+        "Отправьте изображение **файлом** для обработки.\n\n"
+        + file_hint_markdown(),
         parse_mode="Markdown",
         reply_markup=cancel_kb(),
     )
@@ -470,11 +583,23 @@ async def cb_pick_camera(callback: CallbackQuery, state: FSMContext, bot: Bot) -
         profile = await get_profile_for_user(
             session, user_id=user.id, profile_id=profile_id
         )
+        if not profile:
+            await session.commit()
+            await callback.answer("Профиль не найден", show_alert=True)
+            return
+        try:
+            await ensure_can_process(session, user, bot)
+        except ExifBotDailyLimitExceeded:
+            status = await get_usage_status(session, user, bot)
+            await session.commit()
+            await callback.answer("Лимит на сегодня исчерпан", show_alert=True)
+            await callback.message.answer(
+                format_limit_exceeded_message(status),
+                parse_mode="Markdown",
+                reply_markup=limit_exceeded_kb(channel_url=status.channel_url),
+            )
+            return
         await session.commit()
-
-    if not profile:
-        await callback.answer("Профиль не найден", show_alert=True)
-        return
 
     if mode == "auto":
         selfie = guess_selfie_from_image(image_bytes)
@@ -482,25 +607,31 @@ async def cb_pick_camera(callback: CallbackQuery, state: FSMContext, bot: Bot) -
         selfie = mode == "selfie"
 
     await callback.answer("Обрабатываю…")
-    status = await callback.message.answer("⏳ Обработка…")
+    progress = await callback.message.answer("⏳ Обработка…")
 
     try:
         out = await process_image(image_bytes, profile, selfie=selfie)
     except ValueError as e:
-        await status.edit_text(f"❌ {e}")
+        await progress.edit_text(f"❌ {e}")
         return
     except Exception:
         log.exception("exif bot process failed profile=%s", profile_id)
-        await status.edit_text("❌ Ошибка обработки. Попробуйте другой файл.")
+        await progress.edit_text("❌ Ошибка обработки. Попробуйте другой файл.")
         return
+
+    async with SessionLocal() as session:
+        user = await get_or_create_exif_bot_user(session, callback.from_user)
+        used = await record_successful_process(session, user)
+        usage = await get_usage_status(session, user, bot)
+        await session.commit()
 
     cam_label = "selfie" if selfie else "main"
     fname = re.sub(r"[^\w\-]+", "_", profile.title or "photo")[:40] + "_exif.jpg"
     doc = BufferedInputFile(out, filename=fname)
-    await status.delete()
+    await progress.delete()
     await callback.message.answer_document(
         doc,
-        caption=f"✅ {profile.title} · {cam_label}",
+        caption=f"✅ {profile.title} · {cam_label}\nСегодня: {used}/{usage.limit}",
     )
     await state.clear()
     await callback.message.answer("Готово!", reply_markup=main_menu_kb())

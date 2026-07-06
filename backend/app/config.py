@@ -437,6 +437,21 @@ class Settings(BaseSettings):
     )
     exif_bot_max_profiles_per_user: int = Field(default=10, ge=1, le=50)
     exif_bot_max_image_bytes: int = Field(default=12 * 1024 * 1024, ge=1024 * 1024)
+    exif_bot_daily_limit_default: int = Field(default=10, ge=1, le=500)
+    exif_bot_daily_limit_subscribed: int = Field(default=50, ge=1, le=1000)
+    exif_bot_subscribe_channel: str = Field(
+        default="@ModelMate_app",
+        validation_alias=AliasChoices("EXIF_BOT_SUBSCRIBE_CHANNEL"),
+        description="@username или -100… id канала для getChatMember",
+    )
+    exif_bot_subscribe_channel_url: str = Field(
+        default="https://t.me/ModelMate_app",
+        validation_alias=AliasChoices("EXIF_BOT_SUBSCRIBE_CHANNEL_URL"),
+    )
+    exif_bot_subscribe_channel_label: str = Field(
+        default="@ModelMate_app",
+        validation_alias=AliasChoices("EXIF_BOT_SUBSCRIBE_CHANNEL_LABEL"),
+    )
 
     # --- Translation ---
     deepl_api_key: str | None = None

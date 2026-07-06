@@ -1,12 +1,56 @@
 {
   "presets": [
     {
+      "id": "iphone_16_pro_max",
+      "label": "Apple iPhone 16 Pro Max",
+      "make": "Apple",
+      "model": "iPhone 16 Pro Max",
+      "lens_selfie": "iPhone 16 Pro Max front camera 4.23mm f/1.9",
+      "lens_main": "iPhone 16 Pro Max back triple camera 6.765mm f/1.78",
+      "focal_35_selfie": 23,
+      "focal_35_main": 24,
+      "grain_sigma": 3.8
+    },
+    {
       "id": "iphone_16_pro",
       "label": "Apple iPhone 16 Pro",
       "make": "Apple",
       "model": "iPhone 16 Pro",
       "lens_selfie": "iPhone 16 Pro front camera 4.23mm f/1.9",
       "lens_main": "iPhone 16 Pro back triple camera 6.765mm f/1.78",
+      "focal_35_selfie": 23,
+      "focal_35_main": 24,
+      "grain_sigma": 3.8
+    },
+    {
+      "id": "iphone_16_plus",
+      "label": "Apple iPhone 16 Plus",
+      "make": "Apple",
+      "model": "iPhone 16 Plus",
+      "lens_selfie": "iPhone 16 Plus front camera 4.23mm f/1.9",
+      "lens_main": "iPhone 16 Plus back dual wide camera 6.765mm f/1.6",
+      "focal_35_selfie": 23,
+      "focal_35_main": 26,
+      "grain_sigma": 3.7
+    },
+    {
+      "id": "iphone_16",
+      "label": "Apple iPhone 16",
+      "make": "Apple",
+      "model": "iPhone 16",
+      "lens_selfie": "iPhone 16 front camera 4.23mm f/1.9",
+      "lens_main": "iPhone 16 back dual wide camera 6.765mm f/1.6",
+      "focal_35_selfie": 23,
+      "focal_35_main": 26,
+      "grain_sigma": 3.7
+    },
+    {
+      "id": "iphone_15_pro_max",
+      "label": "Apple iPhone 15 Pro Max",
+      "make": "Apple",
+      "model": "iPhone 15 Pro Max",
+      "lens_selfie": "iPhone 15 Pro Max front camera 3.99mm f/1.9",
+      "lens_main": "iPhone 15 Pro Max back triple camera 6.765mm f/1.78",
       "focal_35_selfie": 23,
       "focal_35_main": 24,
       "grain_sigma": 3.8
@@ -23,12 +67,188 @@
       "grain_sigma": 3.8
     },
     {
+      "id": "iphone_15_plus",
+      "label": "Apple iPhone 15 Plus",
+      "make": "Apple",
+      "model": "iPhone 15 Plus",
+      "lens_selfie": "iPhone 15 Plus front camera 3.99mm f/1.9",
+      "lens_main": "iPhone 15 Plus back dual wide camera 5.7mm f/1.6",
+      "focal_35_selfie": 23,
+      "focal_35_main": 26,
+      "grain_sigma": 3.7
+    },
+    {
+      "id": "iphone_15",
+      "label": "Apple iPhone 15",
+      "make": "Apple",
+      "model": "iPhone 15",
+      "lens_selfie": "iPhone 15 front camera 3.99mm f/1.9",
+      "lens_main": "iPhone 15 back dual wide camera 5.7mm f/1.6",
+      "focal_35_selfie": 23,
+      "focal_35_main": 26,
+      "grain_sigma": 3.7
+    },
+    {
+      "id": "iphone_14_pro_max",
+      "label": "Apple iPhone 14 Pro Max",
+      "make": "Apple",
+      "model": "iPhone 14 Pro Max",
+      "lens_selfie": "iPhone 14 Pro Max front camera 3.99mm f/1.9",
+      "lens_main": "iPhone 14 Pro Max back triple camera 6.86mm f/1.78",
+      "focal_35_selfie": 23,
+      "focal_35_main": 24,
+      "grain_sigma": 3.8
+    },
+    {
+      "id": "iphone_14_pro",
+      "label": "Apple iPhone 14 Pro",
+      "make": "Apple",
+      "model": "iPhone 14 Pro",
+      "lens_selfie": "iPhone 14 Pro front camera 3.99mm f/1.9",
+      "lens_main": "iPhone 14 Pro back triple camera 6.86mm f/1.78",
+      "focal_35_selfie": 23,
+      "focal_35_main": 24,
+      "grain_sigma": 3.8
+    },
+    {
+      "id": "iphone_14_plus",
+      "label": "Apple iPhone 14 Plus",
+      "make": "Apple",
+      "model": "iPhone 14 Plus",
+      "lens_selfie": "iPhone 14 Plus front camera 3.99mm f/1.9",
+      "lens_main": "iPhone 14 Plus back dual wide camera 5.7mm f/1.5",
+      "focal_35_selfie": 23,
+      "focal_35_main": 26,
+      "grain_sigma": 3.6
+    },
+    {
       "id": "iphone_14",
       "label": "Apple iPhone 14",
       "make": "Apple",
       "model": "iPhone 14",
       "lens_selfie": "iPhone 14 front camera 3.99mm f/1.9",
       "lens_main": "iPhone 14 back dual wide camera 5.7mm f/1.5",
+      "focal_35_selfie": 23,
+      "focal_35_main": 26,
+      "grain_sigma": 3.6
+    },
+    {
+      "id": "iphone_13_pro_max",
+      "label": "Apple iPhone 13 Pro Max",
+      "make": "Apple",
+      "model": "iPhone 13 Pro Max",
+      "lens_selfie": "iPhone 13 Pro Max front camera 3.99mm f/2.2",
+      "lens_main": "iPhone 13 Pro Max back triple camera 5.7mm f/1.5",
+      "focal_35_selfie": 23,
+      "focal_35_main": 26,
+      "grain_sigma": 3.7
+    },
+    {
+      "id": "iphone_13_pro",
+      "label": "Apple iPhone 13 Pro",
+      "make": "Apple",
+      "model": "iPhone 13 Pro",
+      "lens_selfie": "iPhone 13 Pro front camera 3.99mm f/2.2",
+      "lens_main": "iPhone 13 Pro back triple camera 5.7mm f/1.5",
+      "focal_35_selfie": 23,
+      "focal_35_main": 26,
+      "grain_sigma": 3.7
+    },
+    {
+      "id": "iphone_13_mini",
+      "label": "Apple iPhone 13 mini",
+      "make": "Apple",
+      "model": "iPhone 13 mini",
+      "lens_selfie": "iPhone 13 mini front camera 3.99mm f/2.2",
+      "lens_main": "iPhone 13 mini back dual wide camera 5.1mm f/1.6",
+      "focal_35_selfie": 23,
+      "focal_35_main": 26,
+      "grain_sigma": 3.6
+    },
+    {
+      "id": "iphone_13",
+      "label": "Apple iPhone 13",
+      "make": "Apple",
+      "model": "iPhone 13",
+      "lens_selfie": "iPhone 13 front camera 3.99mm f/2.2",
+      "lens_main": "iPhone 13 back dual wide camera 5.1mm f/1.6",
+      "focal_35_selfie": 23,
+      "focal_35_main": 26,
+      "grain_sigma": 3.6
+    },
+    {
+      "id": "iphone_12_pro_max",
+      "label": "Apple iPhone 12 Pro Max",
+      "make": "Apple",
+      "model": "iPhone 12 Pro Max",
+      "lens_selfie": "iPhone 12 Pro Max front camera 2.87mm f/2.2",
+      "lens_main": "iPhone 12 Pro Max back triple camera 5.1mm f/1.6",
+      "focal_35_selfie": 23,
+      "focal_35_main": 26,
+      "grain_sigma": 3.7
+    },
+    {
+      "id": "iphone_12_pro",
+      "label": "Apple iPhone 12 Pro",
+      "make": "Apple",
+      "model": "iPhone 12 Pro",
+      "lens_selfie": "iPhone 12 Pro front camera 2.87mm f/2.2",
+      "lens_main": "iPhone 12 Pro back triple camera 5.1mm f/1.6",
+      "focal_35_selfie": 23,
+      "focal_35_main": 26,
+      "grain_sigma": 3.7
+    },
+    {
+      "id": "iphone_12_mini",
+      "label": "Apple iPhone 12 mini",
+      "make": "Apple",
+      "model": "iPhone 12 mini",
+      "lens_selfie": "iPhone 12 mini front camera 2.99mm f/2.2",
+      "lens_main": "iPhone 12 mini back dual wide camera 4.2mm f/1.6",
+      "focal_35_selfie": 23,
+      "focal_35_main": 26,
+      "grain_sigma": 3.6
+    },
+    {
+      "id": "iphone_12",
+      "label": "Apple iPhone 12",
+      "make": "Apple",
+      "model": "iPhone 12",
+      "lens_selfie": "iPhone 12 front camera 2.87mm f/2.2",
+      "lens_main": "iPhone 12 back dual wide camera 4.2mm f/1.6",
+      "focal_35_selfie": 23,
+      "focal_35_main": 26,
+      "grain_sigma": 3.6
+    },
+    {
+      "id": "iphone_11_pro_max",
+      "label": "Apple iPhone 11 Pro Max",
+      "make": "Apple",
+      "model": "iPhone 11 Pro Max",
+      "lens_selfie": "iPhone 11 Pro Max front camera 2.87mm f/2.2",
+      "lens_main": "iPhone 11 Pro Max back triple camera 4mm f/1.8",
+      "focal_35_selfie": 23,
+      "focal_35_main": 26,
+      "grain_sigma": 3.6
+    },
+    {
+      "id": "iphone_11_pro",
+      "label": "Apple iPhone 11 Pro",
+      "make": "Apple",
+      "model": "iPhone 11 Pro",
+      "lens_selfie": "iPhone 11 Pro front camera 2.87mm f/2.2",
+      "lens_main": "iPhone 11 Pro back triple camera 4mm f/1.8",
+      "focal_35_selfie": 23,
+      "focal_35_main": 26,
+      "grain_sigma": 3.6
+    },
+    {
+      "id": "iphone_11",
+      "label": "Apple iPhone 11",
+      "make": "Apple",
+      "model": "iPhone 11",
+      "lens_selfie": "iPhone 11 front camera 2.87mm f/2.2",
+      "lens_main": "iPhone 11 back dual wide camera 4.25mm f/1.8",
       "focal_35_selfie": 23,
       "focal_35_main": 26,
       "grain_sigma": 3.6

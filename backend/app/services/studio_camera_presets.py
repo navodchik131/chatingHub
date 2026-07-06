@@ -202,7 +202,7 @@ def _raw_presets() -> dict[str, Any]:
     return {"presets": list(_BUILTIN_PRESETS)}
 
 
-def list_camera_presets() -> list[dict[str, Any]]:
+def list_camera_presets(*, iphone_only: bool | None = None) -> list[dict[str, Any]]:
     items = _raw_presets().get("presets") or []
     out: list[dict[str, Any]] = []
     for p in items:
@@ -210,8 +210,14 @@ def list_camera_presets() -> list[dict[str, Any]]:
             continue
         pid = str(p.get("id") or "").strip()
         label = str(p.get("label") or pid or "").strip()
-        if pid:
-            out.append({"id": pid, "label": label})
+        if not pid:
+            continue
+        is_iphone = pid.startswith("iphone_")
+        if iphone_only is True and not is_iphone:
+            continue
+        if iphone_only is False and is_iphone:
+            continue
+        out.append({"id": pid, "label": label})
     return out
 
 
