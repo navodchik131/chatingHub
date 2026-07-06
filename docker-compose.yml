@@ -42,6 +42,7 @@ services:
     volumes:
       # Иначе после пересборки контейнера фото моделей пропадают, а строки в Postgres остаются → 404 на /public-model-image
       # Промпты из git лежат в образе в _bundled_prompts/ (том перекрывает data/prompts).
+      # Пресеты камер — в _bundled_studio_camera_presets.json (том перекрывает data/studio_camera_presets.json).
       - chating_app_data:/app/backend/data
 
 volumes:

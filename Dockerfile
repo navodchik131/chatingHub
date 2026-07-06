@@ -44,6 +44,7 @@ COPY backend/ ./
 # Промпты вне тома data/ (compose монтирует chating_app_data на /app/backend/data).
 COPY backend/data/prompts/ ./_bundled_prompts/
 COPY backend/data/workflow_templates/ ./_bundled_workflow_templates/
+COPY backend/data/studio_camera_presets.json ./_bundled_studio_camera_presets.json
 COPY --from=frontend-build /app/frontend/dist ../frontend/dist
 
 EXPOSE 8080

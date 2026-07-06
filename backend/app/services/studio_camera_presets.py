@@ -10,6 +10,7 @@ from app.config import BACKEND_DIR
 log = logging.getLogger(__name__)
 
 _PRESETS_REL = Path("data") / "studio_camera_presets.json"
+_BUNDLED_PRESETS_REL = Path("_bundled_studio_camera_presets.json")
 
 # Запасной каталог (если JSON на диске недоступен —(volume, первый запуск до копирования и т.д.))
 _BUILTIN_PRESETS: list[dict[str, Any]] = [
@@ -171,12 +172,12 @@ _BUILTIN_PRESETS: list[dict[str, Any]] = [
 
 
 def _preset_paths() -> list[Path]:
-    """Возможные расположения JSON (корень backend + относительно этого модуля)."""
+    """JSON на диске: data/ (может перекрыт томом Docker) → _bundled_* из образа."""
     backend_via_config = (BACKEND_DIR / _PRESETS_REL).resolve()
-    # app/services -> parents[2] == backend
     backend_via_file = (Path(__file__).resolve().parents[2] / _PRESETS_REL).resolve()
+    bundled = (BACKEND_DIR / _BUNDLED_PRESETS_REL).resolve()
     out: list[Path] = []
-    for p in (backend_via_config, backend_via_file):
+    for p in (backend_via_config, backend_via_file, bundled):
         if p not in out:
             out.append(p)
     return out
