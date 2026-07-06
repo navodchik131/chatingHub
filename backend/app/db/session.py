@@ -506,6 +506,34 @@ def _migrate_exif_bot_tables(sync_conn) -> None:
     if not insp.has_table("exif_bot_profiles"):
         ExifBotProfile.__table__.create(sync_conn, checkfirst=True)
     _migrate_exif_bot_user_daily_limits(sync_conn)
+    _migrate_exif_bot_telegram_id_bigint(sync_conn)
+
+
+def _migrate_exif_bot_telegram_id_bigint(sync_conn) -> None:
+    import logging
+
+    from sqlalchemy import inspect, text
+
+    log = logging.getLogger(__name__)
+    insp = inspect(sync_conn)
+    if not insp.has_table("exif_bot_users"):
+        return
+    for col in insp.get_columns("exif_bot_users"):
+        if col["name"] != "telegram_id":
+            continue
+        type_str = str(col.get("type", "")).upper()
+        if "BIGINT" in type_str or "INT8" in type_str:
+            return
+        break
+    dialect = sync_conn.dialect.name
+    if dialect == "postgresql":
+        sync_conn.execute(
+            text(
+                "ALTER TABLE exif_bot_users "
+                "ALTER COLUMN telegram_id TYPE BIGINT USING telegram_id::bigint"
+            )
+        )
+        log.info("exif_bot_users: telegram_id migrated to BIGINT")
 
 
 def _migrate_exif_bot_user_daily_limits(sync_conn) -> None:

@@ -200,6 +200,6 @@ def skip_main_kb() -> InlineKeyboardMarkup:
 def limits_hint_short() -> str:
     return (
         f"Лимит: **{settings.exif_bot_daily_limit_default}** фото/сутки, "
-        f"с подпиской на @ModelMate_app — **{settings.exif_bot_daily_limit_subscribed}** "
+        f"с подпиской на канал ModelMate — **{settings.exif_bot_daily_limit_subscribed}** "
         f"(команда /limits)."
     )

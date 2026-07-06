@@ -100,9 +100,16 @@ async def cmd_start(message: Message, state: FSMContext) -> None:
     await state.clear()
     if not message.from_user:
         return
-    async with SessionLocal() as session:
-        await get_or_create_exif_bot_user(session, message.from_user)
-        await session.commit()
+    try:
+        async with SessionLocal() as session:
+            await get_or_create_exif_bot_user(session, message.from_user)
+            await session.commit()
+    except Exception:
+        log.exception("exif bot /start failed telegram_id=%s", message.from_user.id)
+        await message.answer(
+            "Не удалось зарегистрировать вас. Попробуйте через минуту или напишите в поддержку."
+        )
+        return
     name = message.from_user.first_name or "друг"
     await message.answer(f"Привет, {name}!\n\n{_WELCOME}", parse_mode="Markdown")
     await _send_main_menu(message)
