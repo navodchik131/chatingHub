@@ -808,6 +808,30 @@ class ExifBotUser(Base):
     )
 
 
+class IgBotUser(Base):
+    """Пользователь Telegram-бота скачивания Instagram."""
+
+    __tablename__ = "ig_bot_users"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    telegram_id: Mapped[int] = mapped_column(BigInteger, unique=True, index=True)
+    username: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    first_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    last_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    language_code: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    daily_process_count: Mapped[int] = mapped_column(default=0, server_default="0")
+    daily_process_day: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    total_process_count: Mapped[int] = mapped_column(default=0, server_default="0")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+
 class ExifBotProfile(Base):
     """Профиль телефона для подстановки EXIF в боте."""
 

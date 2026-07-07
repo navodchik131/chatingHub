@@ -372,6 +372,17 @@ async def init_db() -> None:
         await conn.run_sync(_migrate_conversation_categories)
         await conn.run_sync(_migrate_roadmap_v1)
         await conn.run_sync(_migrate_exif_bot_tables)
+        await conn.run_sync(_migrate_ig_bot_tables)
+
+
+def _migrate_ig_bot_tables(sync_conn) -> None:
+    from sqlalchemy import inspect
+
+    from app.db.models import IgBotUser
+
+    insp = inspect(sync_conn)
+    if not insp.has_table("ig_bot_users"):
+        IgBotUser.__table__.create(sync_conn, checkfirst=True)
 
 
 def _migrate_conversation_categories(sync_conn) -> None:

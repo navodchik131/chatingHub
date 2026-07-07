@@ -456,6 +456,32 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("EXIF_BOT_SUBSCRIBE_CHANNEL_LABEL"),
     )
 
+    # --- Instagram download Telegram bot ---
+    ig_bot_token: str = Field(
+        default="",
+        validation_alias=AliasChoices("IG_BOT_TOKEN"),
+    )
+    ig_bot_cookies_path: str = Field(
+        default="",
+        validation_alias=AliasChoices("IG_BOT_COOKIES_PATH"),
+        description="Netscape cookies.txt администратора (sessionid и др.)",
+    )
+    ig_bot_daily_limit_default: int = Field(default=5, ge=1, le=500)
+    ig_bot_daily_limit_subscribed: int = Field(default=20, ge=1, le=1000)
+    ig_bot_max_video_bytes: int = Field(default=48 * 1024 * 1024, ge=1024 * 1024)
+    ig_bot_subscribe_channel: str = Field(
+        default="@ModelMate_app",
+        validation_alias=AliasChoices("IG_BOT_SUBSCRIBE_CHANNEL"),
+    )
+    ig_bot_subscribe_channel_url: str = Field(
+        default="https://t.me/ModelMate_app",
+        validation_alias=AliasChoices("IG_BOT_SUBSCRIBE_CHANNEL_URL"),
+    )
+    ig_bot_subscribe_channel_label: str = Field(
+        default="@ModelMate_app",
+        validation_alias=AliasChoices("IG_BOT_SUBSCRIBE_CHANNEL_LABEL"),
+    )
+
     # --- Translation ---
     deepl_api_key: str | None = None
     deepl_use_free: bool = True

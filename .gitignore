@@ -40,3 +40,9 @@ Thumbs.db
 #Прочее
 wf/
 modelMate Design System/
+ig-downloader/
+
+# Instagram download bot — cookies администратора (секреты)
+backend/ig-bot/cookies.txt
+backend/data/ig_bot/cookies.txt
+backend/data/ig_bot/cookies.active.txt

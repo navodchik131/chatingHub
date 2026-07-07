@@ -106,6 +106,7 @@ async def lifespan(app: FastAPI):
     companion_style_index_task: asyncio.Task[None] | None = None
     companion_job_worker_task: asyncio.Task[None] | None = None
     exif_bot_polling_task: asyncio.Task[None] | None = None
+    ig_bot_polling_task: asyncio.Task[None] | None = None
     legacy_tok = settings.legacy_bot_token.strip()
     legacy_uid = settings.legacy_user_id
     if legacy_tok and legacy_uid > 0:
@@ -174,6 +175,14 @@ async def lifespan(app: FastAPI):
     else:
         exif_bot_polling_task = None
         log.info("EXIF bot disabled (set EXIF_BOT_TOKEN to enable)")
+    if settings.ig_bot_token.strip():
+        from app.connectors.telegram.ig_bot.bot import run_ig_bot_polling
+
+        ig_bot_polling_task = asyncio.create_task(run_ig_bot_polling())
+        log.info("Instagram download Telegram bot polling enabled")
+    else:
+        ig_bot_polling_task = None
+        log.info("IG download bot disabled (set IG_BOT_TOKEN to enable)")
     if settings.smtp_configured:
         email_worker_task = asyncio.create_task(email_campaign_worker_loop())
         log.info("Email campaign worker started (SMTP: %s)", settings.smtp_host)
@@ -238,6 +247,12 @@ async def lifespan(app: FastAPI):
         exif_bot_polling_task.cancel()
         try:
             await exif_bot_polling_task
+        except asyncio.CancelledError:
+            pass
+    if ig_bot_polling_task:
+        ig_bot_polling_task.cancel()
+        try:
+            await ig_bot_polling_task
         except asyncio.CancelledError:
             pass
     if bot:
