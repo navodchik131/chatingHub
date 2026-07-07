@@ -59,27 +59,9 @@ def _amount_minor_from_payload(payload: dict[str, Any], *, event_name: str) -> i
     if not isinstance(payload, dict):
         return 0
 
-    for key in (
-        "amount",
-        "total",
-        "price",
-        "sum",
-        "donated_amount",
-        "donatedAmount",
-        "payment_amount",
-        "paymentAmount",
-        "amountInMinor",
-        "amount_in_minor",
-    ):
+    for key in ("amount", "total", "price", "sum"):
         if key in payload and payload[key] is not None:
             return _to_minor(payload[key], payload.get("currency"))
-
-    for nested_key in ("donation", "payment", "transaction", "product"):
-        nested = payload.get(nested_key)
-        if isinstance(nested, dict):
-            minor = _amount_minor_from_payload(nested, event_name=event_name)
-            if minor:
-                return minor
 
     items = payload.get("items")
     if isinstance(items, list) and items:
@@ -101,15 +83,7 @@ def _to_minor(value: Any, currency: Any = None, *, major_units: bool = False) ->
         num = float(value)
     except (TypeError, ValueError):
         return 0
-    if major_units:
-        return int(round(num * 100))
-    # Tribute API: целые значения — уже minor units (копейки/центы).
-    if isinstance(value, int):
-        return int(value)
-    s = str(value).strip()
-    if isinstance(value, float) and num == int(num):
-        return int(num)
-    if "." in s and not s.endswith(".0"):
+    if major_units or isinstance(value, float) or ("." in str(value) and abs(num) < 10_000):
         return int(round(num * 100))
     return int(round(num))
 
@@ -147,7 +121,6 @@ async def ingest_tribute_webhook(
 
     norm = _norm_event_name(name_raw)
     if norm not in _REVENUE_EVENTS and norm not in _REFUND_EVENTS:
-        log.info("tribute webhook skipped unsupported event=%s conn=%s", name_raw, conn.id)
         return {"ok": True, "skipped": norm or name_raw}
 
     payload = body.get("payload") if isinstance(body.get("payload"), dict) else {}
@@ -156,12 +129,6 @@ async def ingest_tribute_webhook(
         amount_minor = abs(_amount_minor_from_payload(payload, event_name=norm))
 
     if amount_minor == 0:
-        log.warning(
-            "tribute webhook skipped zero_amount event=%s conn=%s payload_keys=%s",
-            name_raw,
-            conn.id,
-            sorted(payload.keys()) if isinstance(payload, dict) else [],
-        )
         return {"ok": True, "skipped": "zero_amount", "event": name_raw}
 
     if norm in _REFUND_EVENTS:

@@ -18,7 +18,6 @@ def test_pct_zero_total() -> None:
 def test_valid_segments_match_titles() -> None:
     assert VALID_ADMIN_SEGMENTS == frozenset(SEGMENT_TITLES.keys())
     assert "yookassa_payments" in VALID_ADMIN_SEGMENTS
-    assert "tribute_events" in VALID_ADMIN_SEGMENTS
     assert "zombie" in VALID_ADMIN_SEGMENTS
 
 

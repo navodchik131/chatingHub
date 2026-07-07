@@ -78,8 +78,6 @@ export interface AdminStats {
   conversations_total: number
   referrals_total: number
   yookassa_payments_total: number
-  tribute_events_total: number
-  tribute_events_today: number
   subscriptions_by_status: AdminLabelCount[]
   subscriptions_by_plan: AdminLabelCount[]
   registrations_by_day: AdminDayCount[]

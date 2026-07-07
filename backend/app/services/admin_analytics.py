@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import datetime, timedelta, time, timezone
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import func, or_, select, union_all
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,7 +16,6 @@ from app.db.models import (
     StudioMotionRender,
     Subscription,
     SubscriptionStatus,
-    TributeEarningEvent,
     UsageEvent,
     User,
     UserStudioModel,
@@ -305,21 +304,6 @@ async def build_admin_dashboard(session: AsyncSession, *, chart_days: int = 30) 
     yookassa_payments_total = int(
         await session.scalar(select(func.count(YookassaProcessedPayment.payment_id))) or 0
     )
-    tribute_events_total = int(
-        await session.scalar(select(func.count(TributeEarningEvent.id))) or 0
-    )
-    today_utc = datetime.now(timezone.utc).date()
-    tribute_day_start = datetime.combine(today_utc, time.min, tzinfo=timezone.utc)
-    tribute_day_end = datetime.combine(today_utc, time.max, tzinfo=timezone.utc)
-    tribute_events_today = int(
-        await session.scalar(
-            select(func.count(TributeEarningEvent.id)).where(
-                TributeEarningEvent.occurred_at >= tribute_day_start,
-                TributeEarningEvent.occurred_at <= tribute_day_end,
-            )
-        )
-        or 0
-    )
 
     kind_rows = (
         await session.execute(
@@ -412,8 +396,6 @@ async def build_admin_dashboard(session: AsyncSession, *, chart_days: int = 30) 
         "conversations_total": conversations_total,
         "referrals_total": referrals_total,
         "yookassa_payments_total": yookassa_payments_total,
-        "tribute_events_total": tribute_events_total,
-        "tribute_events_today": tribute_events_today,
         "subscriptions_by_status": subscriptions_by_status,
         "subscriptions_by_plan": subscriptions_by_plan,
         "registrations_by_day": _series_last_days(reg_counts, days),

@@ -23,7 +23,7 @@ async def tribute_earnings_summary(
     user: User = Depends(get_current_user),
 ) -> TributeEarningsSummaryOut:
     assert_permission(user, PERM_CHAT)
-    today = datetime.now(timezone.utc).date()
+    today = date.today()
     if from_date is None and to_date is None:
         from_date = today.replace(day=1)
         to_date = today
