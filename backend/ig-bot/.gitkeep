@@ -1,0 +1,2 @@
+# Netscape cookies.txt для IG-бота (не коммитить — см. .gitignore).
+# На сервере: IG_BOT_COOKIES_PATH=ig-bot/cookies.txt (относительно backend/)
