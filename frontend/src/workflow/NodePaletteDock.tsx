@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { NODE_DESCRIPTIONS, NODE_LABELS, NODE_PALETTE_SECTIONS } from './constants'
 import { NODE_ICON_COLORS, NodeIcon } from './NodeIcons'
 import { REACT_FLOW_DRAG_TYPE } from './nodeFactory'
@@ -14,6 +15,7 @@ type PaletteTooltip = {
   description: string
   x: number
   y: number
+  placement: 'top' | 'bottom'
 }
 
 function PaletteItem({
@@ -56,6 +58,17 @@ function PaletteItem({
   )
 }
 
+function paletteTooltipPlacement(rect: DOMRect): Pick<PaletteTooltip, 'x' | 'y' | 'placement'> {
+  const x = rect.left + rect.width / 2
+  const spaceAbove = rect.top
+  const placement = spaceAbove >= 88 ? 'top' : 'bottom'
+  return {
+    x,
+    y: placement === 'top' ? rect.top - 8 : rect.bottom + 8,
+    placement,
+  }
+}
+
 export function NodePaletteDock({ onTapAdd }: Props) {
   const [tooltip, setTooltip] = useState<PaletteTooltip | null>(null)
 
@@ -67,20 +80,15 @@ export function NodePaletteDock({ onTapAdd }: Props) {
     setTooltip({
       title: NODE_LABELS[type],
       description: NODE_DESCRIPTIONS[type],
-      x: rect.left + rect.width / 2,
-      y: rect.top,
+      ...paletteTooltipPlacement(rect),
     })
   }, [])
 
   useEffect(() => {
     if (!tooltip) return
-    const onScroll = () => hideTooltip()
-    window.addEventListener('scroll', onScroll, true)
-    window.addEventListener('resize', onScroll)
-    return () => {
-      window.removeEventListener('scroll', onScroll, true)
-      window.removeEventListener('resize', onScroll)
-    }
+    const onViewportChange = () => hideTooltip()
+    window.addEventListener('resize', onViewportChange)
+    return () => window.removeEventListener('resize', onViewportChange)
   }, [tooltip, hideTooltip])
 
   const onDragStart = (event: React.DragEvent<HTMLButtonElement>, nodeType: NodeType) => {
@@ -96,41 +104,46 @@ export function NodePaletteDock({ onTapAdd }: Props) {
   }
 
   return (
-    <div className="workflow-palette-dock" aria-label="Палитра нод">
-      {NODE_PALETTE_SECTIONS.map((section) => (
-        <div key={section.id} className="workflow-palette-dock__row">
-          <div className="workflow-palette-dock__row-head">
-            {section.badge ? (
-              <span className="workflow-palette-dock__badge" aria-hidden>
-                {section.badge}
-              </span>
-            ) : null}
-            <span className="workflow-palette-dock__row-title">{section.title}</span>
+    <>
+      <div className="workflow-palette-dock" aria-label="Палитра нод">
+        {NODE_PALETTE_SECTIONS.map((section) => (
+          <div key={section.id} className="workflow-palette-dock__row">
+            <div className="workflow-palette-dock__row-head">
+              {section.badge ? (
+                <span className="workflow-palette-dock__badge" aria-hidden>
+                  {section.badge}
+                </span>
+              ) : null}
+              <span className="workflow-palette-dock__row-title">{section.title}</span>
+            </div>
+            <div className="workflow-palette-dock__items">
+              {section.types.map((type) => (
+                <PaletteItem
+                  key={type}
+                  type={type}
+                  onDragStart={onDragStart}
+                  onItemClick={onItemClick}
+                  onShowTooltip={showTooltip}
+                  onHideTooltip={hideTooltip}
+                />
+              ))}
+            </div>
           </div>
-          <div className="workflow-palette-dock__items">
-            {section.types.map((type) => (
-              <PaletteItem
-                key={type}
-                type={type}
-                onDragStart={onDragStart}
-                onItemClick={onItemClick}
-                onShowTooltip={showTooltip}
-                onHideTooltip={hideTooltip}
-              />
-            ))}
-          </div>
-        </div>
-      ))}
-      {tooltip ? (
-        <div
-          className="workflow-palette-dock__tooltip"
-          role="tooltip"
-          style={{ left: tooltip.x, top: tooltip.y }}
-        >
-          <strong>{tooltip.title}</strong>
-          <span>{tooltip.description}</span>
-        </div>
-      ) : null}
-    </div>
+        ))}
+      </div>
+      {tooltip && typeof document !== 'undefined'
+        ? createPortal(
+            <div
+              className={`workflow-palette-dock__tooltip workflow-palette-dock__tooltip--${tooltip.placement}`}
+              role="tooltip"
+              style={{ left: tooltip.x, top: tooltip.y }}
+            >
+              <strong>{tooltip.title}</strong>
+              <span>{tooltip.description}</span>
+            </div>,
+            document.body,
+          )
+        : null}
+    </>
   )
 }
