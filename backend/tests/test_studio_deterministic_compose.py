@@ -60,7 +60,8 @@ def test_compose_studio_scene_deterministic_from_plan():
     assert "mirror" in out.wavespeed_scene_prompt.lower()
     assert "23-year-old" not in out.wavespeed_scene_prompt.lower()
     assert out.reference_scene_lock
-    assert "donor" in out.negative_prompt.lower() or "reference sitter" in out.negative_prompt.lower()
+    assert "donor" not in out.negative_prompt.lower()
+    assert "reference sitter" not in out.negative_prompt.lower()
 
 
 def test_deterministic_compose_wavespeed_pipeline():
@@ -77,7 +78,8 @@ def test_deterministic_compose_wavespeed_pipeline():
         visibility=vis,
         include_realism_engine=False,
     )
-    assert "MODEL_IDENTITY" in positive
+    assert "MODEL_IDENTITY" not in positive
+    assert "Model identity" in positive or "model identity" in positive.lower()
     assert "hourglass" in positive.lower() or "curvy" in positive.lower()
     assert "23-year-old" not in positive.lower()
     assert "Attached model reference photos" in positive
@@ -118,7 +120,7 @@ def test_grok_figure_anchor_truncates_on_word_boundary():
     anchor = grok_figure_anchor_from_profile(profile)
     assert "wide rounde —" not in anchor
     assert anchor.endswith("…") or len(anchor) < 900
-    assert "FIGURE_LOCK" in anchor
+    assert "FIGURE_LOCK" not in anchor or "Model body" in anchor
 
 
 def test_build_studio_prompt_plan_works_with_empty_skeleton():

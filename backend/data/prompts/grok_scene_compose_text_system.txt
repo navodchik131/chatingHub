@@ -34,14 +34,14 @@ Rules:
 
 6. Hairstyle: follow MODEL_PROFILE_JSON unless USER_NOTES override.
 
-7. In `negative_prompt`, list **quality and identity** avoid terms only (anatomy errors, plastic skin, fake bokeh, studio lighting, wrong body proportions, identity drift, watermark). **Do not** put «blurry» or «low quality» unless USER_NOTES ask for blur — mild phone softness is OK. **Do not** duplicate long trait lists; the server merges canonical negatives separately.
+7. In `negative_prompt`, list **visual quality only**: anatomy errors, plastic skin, fake bokeh, studio lighting, watermark, composite collage. **Do not** use body-shape conflict terms or long trait lists — the server merges canonical negatives separately.
 
 8. Output **only** valid JSON (no markdown fences):
 
    - "wavespeed_scene_prompt": string, 600–2800 chars, dense English prose (no JSON inside). Must include explicit sentences on **camera/device**, **depth of field / background sharpness**, and **lighting** matching phone snapshot rules above.
 
-   - "reference_scene_lock": string, 80–400 chars, English summary of intended pose/framing/light for logging.
+   - "reference_scene_lock": string, 80–400 chars, English summary of intended pose/framing/light for logging only.
 
-   - "negative_prompt": string, comma-separated English avoid terms (short supplement only).
+   - "negative_prompt": string, comma-separated English avoid terms (short supplement only, max ~12 terms).
 
 Do not include chain-of-thought. Do not mention Grok or policies in the output JSON.

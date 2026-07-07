@@ -157,78 +157,42 @@ _WAVESPEED_NO_FACE_SUFFIX = (
 )
 
 
-_WAN_COMPACT_POSE_PREFIX = (
-    "[POSE_REF=image 1 — PRIMARY] Match pose geometry (head yaw, gaze, limb angles, hands), crop, camera, "
-    "background, lighting, and wardrobe/body coverage EXACTLY from image 1 and JSON wardrobe_coverage. "
-    "Image 1 = joint angles and camera only — NOT donor bust/waist/hip mass or limb thickness. "
-    "MODEL body reference (image 2 when present) defines volumetric silhouette. "
-    "[IDENTITY=images 2+ and JSON] Face, skin tone, hair, body proportions only — "
-    "NEVER copy clothing, sportswear, lingerie, or neutral studio outfit from images 2+ or profile default_style. "
-    "If image 1 is nude/topless, output the same bare coverage; do not dress the subject.\n\n"
+_IMAGE_EDIT_ROLE_PREFIX = (
+    "Image 1: pose, crop, camera, background, light, wardrobe only — not donor body shape. "
+    "Other images: model identity (face, skin, body shape). "
+    "If body shape conflicts, model identity wins.\n\n"
 )
 
-_GROK_COMPOSED_WAN_PREFIX = (
-    "[GROK_SCENE_COMPOSE — NOT face-swap] **Image 1** = pose/scene bitmap: pose geometry, camera, framing, "
-    "background, environmental light, and wardrobe/nudity zones ONLY. "
-    "Do **not** copy donor face, skin tone, bust/waist/hip mass, muscle definition, or limb thickness from image 1. "
-    "**Images 2+** = MODEL identity (face likeness, nude anatomy when present, clothed body ref when present). "
-    "Rebuild **one continuous person**: unified skin undertone and grain from face through neck, chest, and limbs; "
-    "**no** pasted head, **no** composite collage. "
-    "Figure volumes (bust, waist, hips) = JSON FIGURE_LOCK / scene_brief + identity images — not image 1.\n\n"
+_NANO_EDIT_ROLE_PREFIX = (
+    "Earlier images: one model's identity (face, skin, body shape). "
+    "Last image: pose, crop, camera, background, light, wardrobe only. "
+    "If body shape conflicts, identity wins.\n\n"
 )
 
-_GROK_MODEL_SCENE_WAN_PREFIX = (
-    "[MODEL_SCENE — identity-first compose] **Image 1** = POSE_LOCK bitmap only: match pose articulation, head yaw/gaze, "
-    "camera angle/height/distance, crop edges, background, environmental light topology, and wardrobe/nudity **coverage** "
-    "from image 1 with **minimal deviation** (target: indistinguishable framing vs source). "
-    "**Do NOT copy donor bust/waist/hip width, glute volume, limb thickness, muscle definition, or torso length from image 1** — "
-    "those volumes come only from MODEL body reference (typically image 2 when body ref is attached). "
-    "**Images 2+** = OUR saved MODEL (body reference first for silhouette, then face, anatomy when NSFW): "
-    "**WHO** — face likeness, skin undertone/grain, bust/waist/hip width, glute volume, limb build, shoulder width. "
-    "**Never** keep donor face, skin tone, or body mass from image 1 — reshape silhouette to MODEL + JSON FIGURE_LOCK. "
-    "One cohesive person: seamless neck, unified complexion head→torso→limbs under **image 1's** light direction; "
-    "**no** floating head, **no** face-swap paste, **no** composite collage.\n\n"
-)
+_WAN_COMPACT_POSE_PREFIX = _IMAGE_EDIT_ROLE_PREFIX
 
-_GROK_COMPOSED_NANO_PREFIX = (
-    "[GROK_SCENE_COMPOSE — NOT face-swap] **Earlier image(s)** = MODEL identity (face, optional anatomy/body ref). "
-    "Apply **one** skin/light model on all visible skin — seamless neck and shoulders, no pasted face. "
-    "**Last** image = pose/framing/light/wardrobe only — never donor body volumes or identity from last image. "
-    "JSON brief (scene_brief + realism_engine) defines bust/waist/hip wording — overrides silhouette on last image.\n\n"
-)
+_GROK_COMPOSED_WAN_PREFIX = _IMAGE_EDIT_ROLE_PREFIX
 
-_GROK_COMPOSED_POSE_LAST_SUFFIX = (
-    "\n\n[LAST_INPUT_IMAGE — POSE_REF] The **last** image locks pose geometry, crop, gaze, garments/nudity zones, "
-    "and how light falls on the scene — **not** donor face or body proportions. "
-    "Reshape visible body mass to match identity images + JSON FIGURE_LOCK; "
-    "illuminate MODEL face/skin with the same light direction as this last image (no floating head)."
-)
+_GROK_MODEL_SCENE_WAN_PREFIX = _IMAGE_EDIT_ROLE_PREFIX
+
+_GROK_COMPOSED_NANO_PREFIX = _NANO_EDIT_ROLE_PREFIX
+
+_GROK_COMPOSED_POSE_LAST_SUFFIX = ""
 
 _GROK_TEXT_SCENE_WAN_PREFIX = (
-    "[TEXT_SCENE — identity refs only] Attached images are ONE model: **body** (silhouette), **face** (likeness), "
-    "optional **anatomy** (NSFW). Scene, pose, camera, background, and light come **only** from the JSON brief below "
-    "(scene_brief + photography + realism_engine). "
-    "Do **not** copy studio-sheet backdrop, catalog lighting, or portrait-mode bokeh from reference photos. "
-    "Background must stay **natural-phone sharp/readable** unless the brief says otherwise. "
-    "Face and body proportions must match references and MODEL_PROFILE — not a generic glamour model.\n\n"
+    "Attached images = one model identity. Scene pose, room, camera, and light come only from the JSON brief below.\n\n"
 )
 
 _GROK_TEXT_SCENE_NANO_PREFIX = (
-    "[TEXT_SCENE — identity refs] Earlier images = same model (**body**, **face**, optional anatomy). "
-    "JSON brief below defines pose, room, camera, and light — **not** the reference photos. "
-    "No heavy fake bokeh; mundane smartphone snapshot; preserve identity on all visible skin.\n\n"
+    "Earlier images = model identity. JSON brief below defines pose, room, camera, and light.\n\n"
 )
 
 _GROK_MAIN_PROSE_WAN_PREFIX = (
-    "[MODEL_SCENE] One person — identity from attached model reference photos only. "
-    "Recreate the scene exactly as described below (pose, crop, light, wardrobe). "
-    "Plain phone snapshot look; natural skin texture.\n\n"
+    "One model from attached reference photos. Recreate the scene described below.\n\n"
 )
 
 _GROK_MAIN_PROSE_NANO_PREFIX = (
-    "[MODEL_SCENE] Attached images = one saved model (identity). "
-    "Generate the scene described below — same pose, framing, and lighting. "
-    "Mundane smartphone photo; no studio glamour.\n\n"
+    "Attached images = one saved model. Generate the scene described below.\n\n"
 )
 
 _WAN_COMPACT_NO_FACE_PREFIX = (
@@ -432,17 +396,10 @@ def finalize_nano_banana_studio_prompt(
         out = _NANO_TEXT_SCENE_PREFIX.strip() if not p else _NANO_TEXT_SCENE_PREFIX + p
     elif brief == "grok_composed":
         if mode == "model_scene":
-            head = (
-                "[MODEL_SCENE — identity refs first] **Earlier images** = MODEL (turnaround, body, face, anatomy): "
-                "face, skin, hair, bust/waist/hip proportions — FIGURE_LOCK from JSON. "
-                "**Last image** = POSE_LOCK: match pose geometry, crop, camera, background, light, wardrobe zones "
-                "with **minimal deviation** from source. Never donor identity from last image.\n\n"
-            )
+            head = _NANO_EDIT_ROLE_PREFIX
             out = head.strip() if not p else head + p
         else:
             out = _GROK_COMPOSED_NANO_PREFIX.strip() if not p else _GROK_COMPOSED_NANO_PREFIX + p
-        if user_pose_reference_is_last:
-            out = out.rstrip() + _GROK_COMPOSED_POSE_LAST_SUFFIX
     elif brief == "grok_composed_text":
         out = _GROK_TEXT_SCENE_NANO_PREFIX.strip() if not p else _GROK_TEXT_SCENE_NANO_PREFIX + p
     elif brief == "grok_main_prose":

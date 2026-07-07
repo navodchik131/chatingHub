@@ -144,8 +144,8 @@ def build_deterministic_identity_line(
     if parts:
         mention = ", ".join(parts)[:680]
         return (
-            f"MODEL identity on visible anatomy only: {mention}. "
-            "Same person head-to-toe on all visible skin; never the reference sitter's face or body mass."
+            f"Model identity on visible anatomy: {mention}. "
+            "Same person on all visible skin."
         )
     return grok_figure_anchor_from_profile(model_profile_text, visibility=visibility)
 

@@ -18,6 +18,7 @@ from app.services.studio_model_images import (
     select_prompt_only_wavespeed_identity_images,
 )
 from app.services.studio_prompt_bundle import (
+    PRIORITY_IDENTITY_OVER_POSE,
     append_negative_to_wavespeed_prompt,
     build_grok_scene_positive_json,
     build_grok_text_scene_positive_json,
@@ -119,7 +120,8 @@ def test_grok_main_prose_prepare_strips_donor_identity() -> None:
         model_profile_text='{"model_profile":{"body_type":"hourglass"}}',
     )
     assert "blonde" not in positive.lower()
-    assert "MODEL_IDENTITY" in positive
+    assert "Model identity" in positive
+    assert PRIORITY_IDENTITY_OVER_POSE in positive
     assert "mirror selfie" in positive.lower()
 
 
@@ -172,7 +174,7 @@ def test_grok_figure_anchor_from_profile() -> None:
     anchor = grok_figure_anchor_from_profile(
         '{"model_profile":{"body_type":"curvy hourglass, full bust, narrow waist"}}'
     )
-    assert "FIGURE_LOCK" in anchor
+    assert "FIGURE_LOCK" not in anchor or "Model body" in anchor
     assert "hourglass" in anchor.lower() or "curvy" in anchor.lower()
 
 
@@ -185,7 +187,7 @@ def test_model_scene_wan_prefix_uses_main_prose() -> None:
         user_image_first=False,
         prompt_brief_mode="grok_main_prose",
     )
-    assert "MODEL_SCENE" in main
+    assert "One model from attached reference photos" in main
     assert "JSON" not in main
     assert "face-swap" not in main.lower()
 
@@ -230,7 +232,8 @@ def test_grok_main_system_prefers_photo_brief_not_catalog() -> None:
     )
     assert not positive.strip().startswith("{")
     assert "Image 2: character sheet" in positive
-    assert "MODEL_IDENTITY" in positive
+    assert "Model identity" in positive
+    assert PRIORITY_IDENTITY_OVER_POSE in positive
     assert "Seated on sofa" in positive
     assert "Capture realism:" in positive
     assert "catchlights" in positive.lower() or "pores" in positive.lower()
@@ -270,9 +273,9 @@ def test_model_scene_wan_prefix_differs_from_grok_compose() -> None:
         user_image_first=False,
         prompt_brief_mode="grok_main_prose",
     )
-    assert "MODEL_SCENE" in main
-    assert "MODEL_SCENE" not in grok
-    assert "GROK_SCENE_COMPOSE" in grok
+    assert "Image 1:" in grok
+    assert "One model from attached reference photos" in main
+    assert grok != main
 
 
 def test_grok_main_prose_with_pose_uses_model_scene_prefix_not_reference_order() -> None:
@@ -284,9 +287,9 @@ def test_grok_main_prose_with_pose_uses_model_scene_prefix_not_reference_order()
         user_image_first=True,
         prompt_brief_mode="grok_main_prose",
     )
-    assert "MODEL_SCENE" in out
+    assert "Image 1:" in out
+    assert "model identity wins" in out.lower()
     assert "REFERENCE_IMAGE_ORDER" not in out
-    assert "Never donor identity from image 1" in out or "Never" in out
 
 
 def test_wavespeed_identity_legend_offsets_pose_image() -> None:
@@ -310,18 +313,21 @@ def test_grok_compose_pose_ref_json_has_realism_engine_and_no_suffix_negative() 
     positive, neg = build_grok_scene_positive_json(
         "Mirror selfie, nude on bed edge, same pose as reference.",
         model_profile_text='{"model_profile":{"identity_lock_keywords":"test"}}',
-        extra_negative="reference sitter body, wrong bust size",
+        extra_negative="reference sitter body, wrong bust size, deformed hands",
         reference_scene_description="seated nude, mirror selfie, window side light",
         with_pose_reference=True,
     )
     data = json.loads(positive)
-    assert data.get("reference_scene_lock", "").startswith("seated")
+    assert "reference_scene_lock" not in data
     assert data.get("realism_engine") is not None
-    assert data["photography"].get("pose_lock")
+    assert data["photography"].get("pose_from_image_1")
+    assert PRIORITY_IDENTITY_OVER_POSE.lower() in data["scene_brief"].lower()
     ws = append_negative_to_wavespeed_prompt(positive, neg, brief_mode="grok_composed")
     assert "[NEGATIVE_PROMPT]" not in ws
     assert "realism_engine" in ws
-    assert "reference sitter body" in data["negative_prompt"]
+    assert "reference sitter body" not in data["negative_prompt"].lower()
+    assert "wrong bust" not in data["negative_prompt"].lower()
+    assert "deformed" in data["negative_prompt"].lower()
 
 
 def test_grok_text_scene_json_has_realism_engine_and_no_suffix_negative() -> None:

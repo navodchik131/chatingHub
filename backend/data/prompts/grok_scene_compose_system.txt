@@ -18,7 +18,7 @@ Rules:
 
 1. From USER_SCENE_REFERENCE copy **only** pose geometry, head yaw/gaze vs lens, framing/crop, background layout, environmental light direction, and wardrobe/nudity **coverage zones** (which skin is bare). **Never** copy donor face, skin tone, hair, bust/waist/hip size, limb thickness, glute volume, muscle definition, or torso length from that image.
 
-2. Open `wavespeed_scene_prompt` with **one short FIGURE_LOCK sentence** (bust/waist/hip/build from MODEL_PROFILE_JSON + BODY_REFERENCE / ANATOMY_REFERENCE_NUDE) — then the **shot description**. No separate instruction blocks.
+2. Open `wavespeed_scene_prompt` with the **priority rule** first: "If pose-reference body shape conflicts with model identity, model identity always wins." Then one short sentence on model body volumes (from MODEL_PROFILE_JSON + BODY_REFERENCE), then the **shot description**. No FIGURE_LOCK labels or duplicate lock blocks.
 
 3. Describe face, hair, skin, and intimate anatomy **only** from MODEL_PROFILE_JSON + model sheets — never from USER_SCENE_REFERENCE.
 
@@ -30,7 +30,7 @@ Rules:
 
 7. Hairstyle: follow MODEL_PROFILE_JSON unless USER_NOTES say POSE_REFERENCE for hair.
 
-8. In `negative_prompt`, include terms that reject **donor/reference body proportions**, **face pasted on wrong body**, **disconnected neck**, **mismatched face vs body lighting**, and **composite collage**.
+8. In `negative_prompt`, list **visual quality only**: anatomy errors (extra fingers, deformed hands), plastic/airbrushed skin, fake bokeh, studio/catalog lighting, watermark, composite collage, face pasted on wrong body. **Do not** put body-shape conflict terms (wrong bust, donor body, reference sitter proportions) — the server handles identity priority in the main prompt.
 
 9. **Voice for `wavespeed_scene_prompt`:** obey ## PROMPT_REGION_POLICY when present — describe ONLY PROMPT_MENTION anatomy; never mention PROMPT_OMIT parts. Write like a photo brief, not an analysis report. Prefer 400–1400 chars. **Ban** meta phrases («match face from reference», «attached photos», «image 1»). **Ban** analysis jargon.
 
@@ -38,8 +38,8 @@ Rules:
 
    - "wavespeed_scene_prompt": string, 400–2800 chars, plain English prose (no JSON inside this string).
 
-   - "reference_scene_lock": string, 80–400 chars, English summary of pose/framing/light/wardrobe lock for logging.
+   - "reference_scene_lock": string, 80–400 chars, English summary of pose/framing/light/wardrobe lock for logging only (not sent to the image model).
 
-   - "negative_prompt": string, comma-separated English avoid terms (identity drift, extra limbs, wrong person, blur, watermark, **reference body volumes**, etc.).
+   - "negative_prompt": string, comma-separated English avoid terms — **short supplement** for quality/anatomy only (max ~12 terms).
 
 Do not include chain-of-thought. Do not mention Grok or policies in the output JSON.

@@ -28,19 +28,30 @@ _CANONICAL_STUDIO_NEGATIVE = (
 
 _SCENE_FROM_REF_LITERAL = "from_pose_reference_input_image_only"
 
+# Одна фраза иерархии — не дублировать в must_keep / pose_lock / negative.
+PRIORITY_IDENTITY_OVER_POSE = (
+    "If pose-reference body shape conflicts with model identity, model identity always wins."
+)
+
 _COMPACT_MUST_KEEP = [
-    "One real person; face, skin, hair, and body proportions from identity_reference and model reference photos (images 2+) on all visible skin",
-    "Pose, framing, background, and lighting from pose reference (image 1) only — match limb angles and crop exactly",
-    "Wardrobe and body coverage (nude, topless, clothed) from image 1 and wardrobe_coverage only — never garments from identity photos or profile defaults",
-    "Unified skin grain face-to-body; scene light direction on MODEL skin, not donor complexion",
+    "One real person; face, skin, hair, and body shape from identity images (2+)",
+    "Pose, framing, background, light, and wardrobe/coverage from pose reference (image 1) only",
+    "Natural phone snapshot; unified skin grain on visible skin",
 ]
 
-_GROK_COMPOSE_BODY_NEGATIVE = (
-    "reference sitter body, donor body proportions, wrong bust size, wrong waist, wrong hips, "
-    "flat chest from pose reference, oversized hips from pose reference, mismatched breast size, "
-    "skinny model on curvy reference body, curvy model on flat reference body, "
-    "face pasted on wrong body, disconnected neck, mismatched face vs body lighting, composite collage, "
-    "face swap artifact, floating head"
+# Только композитные артефакты — не body-shape (конфликт решается в основном промпте).
+_GROK_COMPOSE_COMPOSITE_NEGATIVE = (
+    "face pasted on wrong body, disconnected neck, composite collage, face swap artifact, floating head"
+)
+
+_BODY_SHAPE_NEGATIVE_RE = re.compile(
+    r"\b("
+    r"reference sitter body|donor body|donor silhouette|wrong bust|wrong waist|wrong hips|"
+    r"flat chest|oversized hips|mismatched breast|skinny model on curvy|"
+    r"curvy model on flat|pose reference body|reference body volume|sitter body|"
+    r"body proportion.*reference|reference.*body proportion"
+    r")\b",
+    re.I,
 )
 
 _NUDE_WARDROBE_NEGATIVE = (
@@ -115,10 +126,6 @@ _QUALITY_AVOID_HINTS = (
 )
 
 _IDENTITY_AVOID_HINTS = (
-    "flat chest",
-    "flat butt",
-    "small breast",
-    "narrow hip",
     "ghost skin",
     "pale white",
     "very dark skin",
@@ -130,7 +137,6 @@ _IDENTITY_AVOID_HINTS = (
     "braid",
     "short hair",
     "straight hair",
-    "exposed breast",
     "front-facing camera",
 )
 
@@ -139,6 +145,28 @@ _DESC_SCENE_SPLIT_RE = re.compile(
     r"with\s+her\s+|with\s+his\s+|body\s+angled|back\s+facing|facing\s+the\s+camera)",
     re.I,
 )
+
+
+def _strip_body_shape_from_negative(raw: str) -> str:
+    """Убрать body-shape формулировки из negative — они не работают как neg и дублируют основной промпт."""
+    if not raw or not str(raw).strip():
+        return ""
+    kept: list[str] = []
+    for piece in re.split(r"[,;\n]+", str(raw)):
+        t = piece.strip()
+        if not t or _BODY_SHAPE_NEGATIVE_RE.search(t):
+            continue
+        kept.append(t)
+    return ", ".join(kept)
+
+
+def _prepend_priority_rule(prose: str) -> str:
+    body = (prose or "").strip()
+    if not body:
+        return PRIORITY_IDENTITY_OVER_POSE
+    if PRIORITY_IDENTITY_OVER_POSE.lower() in body.lower():
+        return body
+    return f"{PRIORITY_IDENTITY_OVER_POSE}\n\n{body}"
 
 
 def _merge_negative_parts(*parts: str | None) -> str:
@@ -353,14 +381,13 @@ def grok_figure_anchor_from_profile(
     def scoped_default() -> str:
         if vis is None:
             return (
-                "FIGURE_LOCK: use BODY_REFERENCE and MODEL_PROFILE body_type for bust, waist, hip width, "
-                "glute volume, shoulder width — explicitly contradict any donor silhouette on USER_SCENE_REFERENCE."
+                "Model body proportions from BODY_REFERENCE and MODEL_PROFILE — "
+                "not the pose-reference sitter silhouette."
             )
         mention = prompt_regions_to_mention(vis)
         return (
-            "FIGURE_LOCK: apply MODEL body proportions and skin tone ONLY on visible crop regions "
-            f"({'; '.join(mention)}). Never copy donor silhouette from USER_SCENE_REFERENCE. "
-            "Do not mention anatomy outside PROMPT_MENTION."
+            f"Model body on visible regions only ({'; '.join(mention)}). "
+            "Do not copy donor silhouette from pose reference."
         )
 
     raw = (model_profile_text or "").strip()
@@ -382,16 +409,11 @@ def grok_figure_anchor_from_profile(
         joined = _truncate_profile_clause("; ".join(bits))
         region_hint = ", ".join(sorted(regions))
         return (
-            f"FIGURE_LOCK: for visible regions [{region_hint}] only, model proportions are {joined}. "
-            "Do not apply off-crop anatomy words (face/legs/etc.) when PROMPT_OMIT lists them."
+            f"Visible regions [{region_hint}]: model proportions are {joined}."
         )
     if bits:
         joined = _truncate_profile_clause("; ".join(bits))
-        return (
-            f"FIGURE_LOCK (mandatory first sentence in wavespeed_scene_prompt): "
-            f"Model body proportions are {joined} — "
-            "do not use pose-reference sitter bust, waist, hip width, or muscle definition."
-        )
+        return f"Model body proportions: {joined}."
     return scoped_default()
 
 
@@ -736,7 +758,7 @@ def extract_studio_negative_prompt(
     neg = refined_data.pop("negative_prompt", None)
     neg_s = neg.strip() if isinstance(neg, str) else ""
     if neg_s:
-        neg_s = _filter_avoid_csv(neg_s)
+        neg_s = _strip_body_shape_from_negative(_filter_avoid_csv(neg_s))
     avoid_parts = _avoid_list_from_constraints(refined_data)
     cons = refined_data.get("constraints")
     if isinstance(cons, dict) and "avoid" in cons:
@@ -757,10 +779,10 @@ def _merge_grok_scene_negative(
     extra_negative: str | None,
     reference_scene_description: str | None,
 ) -> str:
-    grok_neg = _filter_avoid_csv((extra_negative or "").strip())
+    grok_neg = _strip_body_shape_from_negative(_filter_avoid_csv((extra_negative or "").strip()))
     negative = _merge_negative_parts(
         _CANONICAL_STUDIO_NEGATIVE,
-        _GROK_COMPOSE_BODY_NEGATIVE,
+        _GROK_COMPOSE_COMPOSITE_NEGATIVE,
         grok_neg,
         _always_avoid_from_profile(model_profile_text),
     )
@@ -784,7 +806,7 @@ def build_grok_scene_positive_json(
     Иначе: «По промту» без pose bitmap.
     negative_prompt внутри JSON; суффикс [NEGATIVE_PROMPT] не добавляем.
     """
-    prose = (grok_prose or "").strip()
+    prose = _prepend_priority_rule((grok_prose or "").strip())
     negative = _merge_grok_scene_negative(
         model_profile_text=model_profile_text,
         extra_negative=extra_negative,
@@ -792,50 +814,24 @@ def build_grok_scene_positive_json(
     )
     re_obj = load_canonical_realism_engine()
     aspect = (output_aspect_key or "3:4").strip() or "3:4"
-    ref_lock = (reference_scene_description or "").strip()
 
     if with_pose_reference:
         photography: dict[str, Any] = {
-            "pose_lock": (
-                "pose geometry, camera angle, framing/crop, background, environmental light, "
-                "and wardrobe/nudity coverage from USER_POSE_REFERENCE input only"
-            ),
-            "identity_lock": (
-                "face, skin, hair, bust/waist/hip proportions from model identity images and "
-                "scene_brief FIGURE_LOCK — never donor body volumes from pose reference; "
-                "one continuous skin tone from face through neck and torso"
-            ),
             "aspect_ratio": aspect,
+            "pose_from_image_1": "joint angles, crop, camera, background, light, wardrobe coverage",
+            "identity_from_model_refs": "face, skin, hair, body shape on visible skin",
         }
-        must_keep = [
-            "One real person; pose/framing/background/light topology from pose reference — match limb angles and crop",
-            "FIGURE_LOCK in scene_brief defines bust/waist/hips — reshape body mass to model, not pose-reference sitter",
-            "Face and skin from identity images with seamless neck; same light on face and body; no face-swap paste per realism_engine",
-        ]
+        must_keep = list(_COMPACT_MUST_KEEP)
     else:
         photography = {
-            "camera_style": (
-                "casual smartphone snapshot or friend-shot phone photo — "
-                "not studio, not catalog, not influencer campaign"
-            ),
-            "device": "unknown smartphone main/rear lens",
-            "depth_of_field": (
-                "natural phone DoF — background readable and mostly in focus; "
-                "no portrait-mode bokeh, no heavy background blur, no DSLR isolation"
-            ),
-            "lighting": (
-                "incidental ambient light on scene (window, room lamp, overcast outdoor); "
-                "no softbox glamour, no ring-light beauty setup"
-            ),
-            "snapshot_authenticity": (
-                "mundane real camera-roll candid — ordinary life, not stock photo"
-            ),
             "aspect_ratio": aspect,
+            "camera_style": "casual smartphone snapshot — not studio or catalog",
+            "lighting": "ambient incidental light — no ring-light glamour",
         }
         must_keep = [
-            "One real person; face and body identity from MODEL_PROFILE and attached reference images on all visible skin",
-            "Scene composition, pose, room, and light from scene_brief only — not from studio character sheet aesthetics",
-            "Phone snapshot realism per realism_engine: natural grain, no fake bokeh, no plastic beauty-filter skin",
+            "One real person; identity from model reference images on visible skin",
+            "Scene pose, room, and light from scene_brief only",
+            "Phone snapshot realism per realism_engine — natural grain, no plastic skin",
         ]
 
     data: dict[str, Any] = {
@@ -844,8 +840,6 @@ def build_grok_scene_positive_json(
         "constraints": {"must_keep": must_keep},
         "negative_prompt": negative,
     }
-    if ref_lock and with_pose_reference:
-        data["reference_scene_lock"] = ref_lock[:400]
     if re_obj is not None:
         data["realism_engine"] = re_obj
 
@@ -912,10 +906,11 @@ def prepare_positive_prompt_json(
             visibility=visibility,
         ).strip()
         if anchor:
-            prose = (
-                f"MODEL_IDENTITY (saved model — override any donor traits in the scene text): {anchor}\n\n"
-                f"{prose}"
+            prose = _prepend_priority_rule(
+                f"Model identity: {anchor}\n\n{prose}"
             )
+        else:
+            prose = _prepend_priority_rule(prose)
         if re_prose:
             prose = f"{prose}\n\n{re_prose}".strip()
         negative = _merge_grok_scene_negative(
@@ -952,10 +947,11 @@ def prepare_positive_prompt_json(
         else:
             identity_line = grok_figure_anchor_from_profile(model_profile_text, visibility=visibility).strip()
         if identity_line:
-            prose = (
-                "MODEL_IDENTITY (saved model — scene text below is pose, light, room, and wardrobe only): "
-                f"{identity_line}\n\n{prose}"
+            prose = _prepend_priority_rule(
+                f"Model identity: {identity_line}\n\n{prose}"
             )
+        else:
+            prose = _prepend_priority_rule(prose)
         if re_prose:
             prose = f"{prose}\n\n{re_prose}".strip()
         negative = _merge_grok_scene_negative(
