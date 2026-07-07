@@ -2596,6 +2596,7 @@ async def _accept_studio_refine_job_from_workflow(
         "lock_model_hairstyle": "0",
         "exif_camera": normalize_exif_camera(plan.exif_camera),
         "include_realism_engine": "1" if plan.realism_enabled else "0",
+        "workflow_selfie_capture": "1" if plan.selfie_capture_enabled else "0",
         "workflow_source": "1",
         "workflow_wave_model": plan.workflow_wave_model,
     }
@@ -2676,6 +2677,11 @@ async def _studio_job_execute_refine_prompt(
         "0",
         "false",
         "no",
+    )
+    workflow_selfie_capture = str(p.get("workflow_selfie_capture") or "0").strip().lower() in (
+        "1",
+        "true",
+        "yes",
     )
     workflow_source = str(p.get("workflow_source") or "").strip().lower() in (
         "1",
@@ -3754,6 +3760,7 @@ async def _studio_job_execute_refine_prompt(
                     output_aspect_key=aspect_key,
                     wavespeed_identity_legend=ws_identity_legend,
                     include_realism_engine=include_realism_engine,
+                    selfie_capture=workflow_selfie_capture,
                     skip_no_face_suffix=skip_no_face_suffix,
                     visibility=prompt_plan.visibility if prompt_plan else None,
                 )

@@ -799,6 +799,7 @@ def build_grok_scene_positive_json(
     extra_negative: str | None = None,
     reference_scene_description: str | None = None,
     with_pose_reference: bool = False,
+    selfie_capture: bool = False,
 ) -> tuple[str, str]:
     """
     Grok prose → JSON с realism_engine.
@@ -815,7 +816,17 @@ def build_grok_scene_positive_json(
     re_obj = load_canonical_realism_engine()
     aspect = (output_aspect_key or "3:4").strip() or "3:4"
 
-    if with_pose_reference:
+    if selfie_capture:
+        from app.services.studio_workflow_selfie import (
+            must_keep_for_selfie,
+            photography_json_for_selfie,
+            selfie_negative_extras,
+        )
+
+        negative = _merge_negative_parts(negative, selfie_negative_extras())
+        photography = photography_json_for_selfie(aspect, with_pose_reference=with_pose_reference)
+        must_keep = must_keep_for_selfie(with_pose_reference=with_pose_reference)
+    elif with_pose_reference:
         photography: dict[str, Any] = {
             "aspect_ratio": aspect,
             "pose_from_image_1": "joint angles, crop, camera, background, light, wardrobe coverage",
@@ -854,6 +865,7 @@ def build_grok_text_scene_positive_json(
     output_aspect_key: str = "3:4",
     extra_negative: str | None = None,
     reference_scene_description: str | None = None,
+    selfie_capture: bool = False,
 ) -> tuple[str, str]:
     """«По промту» без pose reference."""
     return build_grok_scene_positive_json(
@@ -863,6 +875,7 @@ def build_grok_text_scene_positive_json(
         extra_negative=extra_negative,
         reference_scene_description=reference_scene_description,
         with_pose_reference=False,
+        selfie_capture=selfie_capture,
     )
 
 
@@ -876,6 +889,7 @@ def prepare_positive_prompt_json(
     output_aspect_key: str = "3:4",
     wavespeed_identity_legend: str | None = None,
     include_realism_engine: bool = True,
+    selfie_capture: bool = False,
     visibility: "IdentityVisibility | None" = None,
 ) -> tuple[str, str]:
     """
@@ -967,6 +981,7 @@ def prepare_positive_prompt_json(
             output_aspect_key=output_aspect_key,
             extra_negative=extra_negative,
             reference_scene_description=reference_scene_description,
+            selfie_capture=selfie_capture,
         )
     if mode == "grok_composed":
         return build_grok_scene_positive_json(
@@ -976,6 +991,7 @@ def prepare_positive_prompt_json(
             extra_negative=extra_negative,
             reference_scene_description=reference_scene_description,
             with_pose_reference=True,
+            selfie_capture=selfie_capture,
         )
 
     raw = _strip_code_fences(refined_text)

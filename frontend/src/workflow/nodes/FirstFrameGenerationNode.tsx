@@ -247,15 +247,29 @@ function FirstFrameGenerationNodeComponent({ id, data }: NodeProps) {
         </span>
 
         <Handle
+          id={HandleIds.imageGenSelfieIn}
+          type="target"
+          position={Position.Left}
+          className="workflow-handle workflow-handle--selfie"
+          style={{ top: '39%' }}
+        />
+        <span
+          className="workflow-node__handle-label workflow-node__handle-label--left"
+          style={{ top: '39%' }}
+        >
+          selfie
+        </span>
+
+        <Handle
           id={HandleIds.imageGenPromptIn}
           type="target"
           position={Position.Left}
           className="workflow-handle workflow-handle--prompt"
-          style={{ top: '46%' }}
+          style={{ top: '52%' }}
         />
         <span
           className="workflow-node__handle-label workflow-node__handle-label--left"
-          style={{ top: '46%' }}
+          style={{ top: '52%' }}
         >
           prompt
         </span>
@@ -265,11 +279,11 @@ function FirstFrameGenerationNodeComponent({ id, data }: NodeProps) {
           type="target"
           position={Position.Left}
           className="workflow-handle workflow-handle--reference"
-          style={{ top: '60%' }}
+          style={{ top: '66%' }}
         />
         <span
           className="workflow-node__handle-label workflow-node__handle-label--left"
-          style={{ top: '60%' }}
+          style={{ top: '66%' }}
         >
           ref (опц.)
         </span>

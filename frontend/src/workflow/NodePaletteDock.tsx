@@ -1,9 +1,14 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { NODE_DESCRIPTIONS, NODE_LABELS, NODE_PALETTE_SECTIONS } from './constants'
+import {
+  NODE_DESCRIPTIONS,
+  NODE_LABELS,
+  NODE_PALETTE_SECTIONS,
+  WORKFLOW_PALETTE_COLLAPSED_KEY,
+} from './constants'
 import { NODE_ICON_COLORS, NodeIcon } from './NodeIcons'
 import { REACT_FLOW_DRAG_TYPE } from './nodeFactory'
-import { isCoarsePointer } from './useWorkflowMobile'
+import { isCoarsePointer, useWorkflowMobile } from './useWorkflowMobile'
 import type { NodeType } from './types'
 
 type Props = {
@@ -16,6 +21,17 @@ type PaletteTooltip = {
   x: number
   y: number
   placement: 'top' | 'bottom'
+}
+
+function readPaletteCollapsedPreference(isMobile: boolean): boolean {
+  try {
+    const raw = localStorage.getItem(WORKFLOW_PALETTE_COLLAPSED_KEY)
+    if (raw === '1') return true
+    if (raw === '0') return false
+  } catch {
+    /* ignore */
+  }
+  return isMobile
 }
 
 function PaletteItem({
@@ -70,19 +86,22 @@ function paletteTooltipPlacement(rect: DOMRect): Pick<PaletteTooltip, 'x' | 'y' 
 }
 
 export function NodePaletteDock({ onTapAdd }: Props) {
+  const isMobile = useWorkflowMobile()
+  const dockRef = useRef<HTMLDivElement>(null)
+  const [collapsed, setCollapsed] = useState(() => readPaletteCollapsedPreference(isMobile))
   const [tooltip, setTooltip] = useState<PaletteTooltip | null>(null)
 
   const hideTooltip = useCallback(() => setTooltip(null), [])
 
   const showTooltip = useCallback((el: HTMLElement, type: NodeType) => {
-    if (isCoarsePointer()) return
+    if (isCoarsePointer() || collapsed) return
     const rect = el.getBoundingClientRect()
     setTooltip({
       title: NODE_LABELS[type],
       description: NODE_DESCRIPTIONS[type],
       ...paletteTooltipPlacement(rect),
     })
-  }, [])
+  }, [collapsed])
 
   useEffect(() => {
     if (!tooltip) return
@@ -90,6 +109,26 @@ export function NodePaletteDock({ onTapAdd }: Props) {
     window.addEventListener('resize', onViewportChange)
     return () => window.removeEventListener('resize', onViewportChange)
   }, [tooltip, hideTooltip])
+
+  useEffect(() => {
+    const layout = dockRef.current?.closest('.workflow-layout')
+    if (!layout) return
+    layout.classList.toggle('workflow-layout--palette-collapsed', collapsed)
+    return () => layout.classList.remove('workflow-layout--palette-collapsed')
+  }, [collapsed])
+
+  const toggleCollapsed = useCallback(() => {
+    hideTooltip()
+    setCollapsed((prev) => {
+      const next = !prev
+      try {
+        localStorage.setItem(WORKFLOW_PALETTE_COLLAPSED_KEY, next ? '1' : '0')
+      } catch {
+        /* ignore */
+      }
+      return next
+    })
+  }, [hideTooltip])
 
   const onDragStart = (event: React.DragEvent<HTMLButtonElement>, nodeType: NodeType) => {
     hideTooltip()
@@ -105,31 +144,57 @@ export function NodePaletteDock({ onTapAdd }: Props) {
 
   return (
     <>
-      <div className="workflow-palette-dock" aria-label="Палитра нод">
-        {NODE_PALETTE_SECTIONS.map((section) => (
-          <div key={section.id} className="workflow-palette-dock__row">
-            <div className="workflow-palette-dock__row-head">
-              {section.badge ? (
-                <span className="workflow-palette-dock__badge" aria-hidden>
-                  {section.badge}
-                </span>
-              ) : null}
-              <span className="workflow-palette-dock__row-title">{section.title}</span>
-            </div>
-            <div className="workflow-palette-dock__items">
-              {section.types.map((type) => (
-                <PaletteItem
-                  key={type}
-                  type={type}
-                  onDragStart={onDragStart}
-                  onItemClick={onItemClick}
-                  onShowTooltip={showTooltip}
-                  onHideTooltip={hideTooltip}
-                />
-              ))}
-            </div>
+      <div
+        ref={dockRef}
+        className={`workflow-palette-dock${collapsed ? ' is-collapsed' : ''}`}
+        aria-label="Палитра нод"
+      >
+        <div className="workflow-palette-dock__toolbar">
+          <span className="workflow-palette-dock__toolbar-title">Ноды</span>
+          <button
+            type="button"
+            className="workflow-palette-dock__toggle"
+            onClick={toggleCollapsed}
+            aria-expanded={!collapsed}
+            aria-controls="workflow-palette-dock-body"
+            title={collapsed ? 'Развернуть палитру' : 'Свернуть палитру'}
+          >
+            <span className="workflow-palette-dock__toggle-icon" aria-hidden>
+              {collapsed ? '▲' : '▼'}
+            </span>
+            <span className="workflow-palette-dock__toggle-label">
+              {collapsed ? 'Развернуть' : 'Свернуть'}
+            </span>
+          </button>
+        </div>
+        {!collapsed ? (
+          <div id="workflow-palette-dock-body" className="workflow-palette-dock__body">
+            {NODE_PALETTE_SECTIONS.map((section) => (
+              <div key={section.id} className="workflow-palette-dock__row">
+                <div className="workflow-palette-dock__row-head">
+                  {section.badge ? (
+                    <span className="workflow-palette-dock__badge" aria-hidden>
+                      {section.badge}
+                    </span>
+                  ) : null}
+                  <span className="workflow-palette-dock__row-title">{section.title}</span>
+                </div>
+                <div className="workflow-palette-dock__items">
+                  {section.types.map((type) => (
+                    <PaletteItem
+                      key={type}
+                      type={type}
+                      onDragStart={onDragStart}
+                      onItemClick={onItemClick}
+                      onShowTooltip={showTooltip}
+                      onHideTooltip={hideTooltip}
+                    />
+                  ))}
+                </div>
+              </div>
+            ))}
           </div>
-        ))}
+        ) : null}
       </div>
       {tooltip && typeof document !== 'undefined'
         ? createPortal(

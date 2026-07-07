@@ -216,6 +216,75 @@ def test_resolve_workflow_realism_disabled():
     assert plan.realism_enabled is False
 
 
+def test_resolve_workflow_selfie_enabled():
+    g = _base_graph()
+    g["nodes"].append(
+        {
+            "id": "selfie-1",
+            "type": "selfie",
+            "data": {"enabled": True},
+        }
+    )
+    g["edges"].append(
+        {
+            "source": "selfie-1",
+            "target": "gen-1",
+            "targetHandle": "selfie-in",
+        }
+    )
+    plan = resolve_workflow_generation_plan(
+        target_node_id="gen-1",
+        nodes=g["nodes"],
+        edges=g["edges"],
+    )
+    assert plan.selfie_capture_enabled is True
+    assert "ARM-LENGTH FRONT-CAMERA SELFIE" in plan.description
+    assert plan.exif_camera == "selfie"
+
+
+def test_resolve_workflow_selfie_disabled():
+    g = _base_graph()
+    g["nodes"].append(
+        {
+            "id": "selfie-1",
+            "type": "selfie",
+            "data": {"enabled": False},
+        }
+    )
+    g["edges"].append(
+        {
+            "source": "selfie-1",
+            "target": "gen-1",
+            "targetHandle": "selfie-in",
+        }
+    )
+    plan = resolve_workflow_generation_plan(
+        target_node_id="gen-1",
+        nodes=g["nodes"],
+        edges=g["edges"],
+    )
+    assert plan.selfie_capture_enabled is False
+    assert "ARM-LENGTH FRONT-CAMERA SELFIE" not in plan.description
+
+
+def test_build_grok_json_selfie_photography():
+    import json
+
+    from app.services.studio_prompt_bundle import build_grok_text_scene_positive_json
+
+    positive, negative = build_grok_text_scene_positive_json(
+        "She holds phone, friend took photo from across room with rear camera.",
+        model_profile_text=None,
+        selfie_capture=True,
+    )
+    data = json.loads(positive)
+    photo = data["photography"]
+    assert "selfie" in photo["capture_type"].lower()
+    assert "front" in photo["camera_style"].lower()
+    assert any("selfie" in line.lower() for line in data["constraints"]["must_keep"])
+    assert "friend photographing" in negative.lower()
+
+
 def test_resolve_workflow_without_model_ok():
     g = _base_graph()
     g["edges"] = [e for e in g["edges"] if e.get("targetHandle") != "model-in"]

@@ -40,6 +40,14 @@ export function NodeIcon({ type, size = 16, className }: Props) {
           <path d="M9 7l1.2-2h3.6L15 7" stroke={stroke} strokeWidth="1.75" strokeLinecap="round" />
         </svg>
       )
+    case 'selfie':
+      return (
+        <svg {...common}>
+          <rect x="7" y="5" width="10" height="16" rx="2" stroke={stroke} strokeWidth="1.75" />
+          <circle cx="12" cy="10" r="2" stroke={stroke} strokeWidth="1.75" />
+          <path d="M5 14c2-2 4-3 7-3s5 1 7 3" stroke={stroke} strokeWidth="1.75" strokeLinecap="round" />
+        </svg>
+      )
     case 'prompt':
       return (
         <svg {...common}>
@@ -179,6 +187,7 @@ export function NodeIcon({ type, size = 16, className }: Props) {
 export const NODE_ICON_COLORS: Record<NodeType, string> = {
   model: '#ec4899',
   realism: '#22c55e',
+  selfie: '#38bdf8',
   prompt: '#10b981',
   refDescription: '#a855f7',
   reference: '#f59e0b',

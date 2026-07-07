@@ -12,6 +12,8 @@ export function createDefaultNodeData(type: NodeType): AppNodeData {
       return { modelId: null }
     case 'realism':
       return { enabled: true }
+    case 'selfie':
+      return { enabled: true }
     case 'prompt':
       return { prompt: '' }
     case 'refDescription':

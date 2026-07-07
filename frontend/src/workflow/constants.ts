@@ -1,10 +1,12 @@
 import type { NodeType } from './types'
 
 export const WORKFLOW_GRAPH_STORAGE_KEY = 'mm_workflow_graph_v2'
+export const WORKFLOW_PALETTE_COLLAPSED_KEY = 'mm_workflow_palette_collapsed'
 
 export const NODE_LABELS: Record<NodeType, string> = {
   model: 'Модель',
   realism: 'Реализм',
+  selfie: 'Селфи',
   prompt: 'Промпт',
   refDescription: 'Описание референса',
   reference: 'Images ref',
@@ -24,6 +26,7 @@ export const NODE_LABELS: Record<NodeType, string> = {
 export const NODE_DESCRIPTIONS: Record<NodeType, string> = {
   model: 'Модель из кабинета студии',
   realism: 'Реалистичный вид снимка',
+  selfie: 'Селфи с вытянутой руки — фронталка, перебивает противоречия в промпте',
   prompt: 'Доп. указания (опционально; сцена берётся из первого кадра)',
   refDescription: 'Роль и назначение референса (photo base, clothes, pose…)',
   reference: 'Фото-референс — к генерации можно подключить несколько',
@@ -58,7 +61,7 @@ export const NODE_PALETTE_SECTIONS: NodePaletteSection[] = [
   {
     id: 'common',
     title: 'Общие',
-    types: ['model', 'realism', 'prompt', 'refDescription', 'reference', 'preview'],
+    types: ['model', 'realism', 'selfie', 'prompt', 'refDescription', 'reference', 'preview'],
   },
   {
     id: 'image',

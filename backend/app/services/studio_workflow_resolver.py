@@ -71,6 +71,7 @@ class WorkflowGenerationPlan:
     wan_edit_tier: str
     exif_camera: str
     realism_enabled: bool
+    selfie_capture_enabled: bool = False
     motion_video_file_id: str = ""
     scenario_type: str | None = None
 
@@ -690,6 +691,8 @@ HANDLE = {
     "gen_reference_in": "reference-in",
     "gen_model_in": "model-in",
     "gen_realism_in": "realism-in",
+    "gen_selfie_in": "selfie-in",
+    "selfie_out": "selfie-out",
     "image_out": "image-out",
     "first_frame_in": "first-frame-in",
     "sheet_in": "sheet-in",
@@ -1279,6 +1282,17 @@ def resolve_workflow_generation_plan(
         if rdata.get("enabled") is False:
             realism_enabled = False
 
+    selfie_capture_enabled = False
+    selfie_nodes = _sources_for_plan_target(target_id, HANDLE["gen_selfie_in"], edges, node_map)
+    selfie_node = selfie_nodes[0] if selfie_nodes else None
+    if selfie_node and str(selfie_node.get("type") or "") == "selfie":
+        sdata = selfie_node.get("data") if isinstance(selfie_node.get("data"), dict) else {}
+        if sdata.get("enabled") is not False:
+            from app.services.studio_workflow_selfie import append_selfie_capture_grok_notes
+
+            selfie_capture_enabled = True
+            description = append_selfie_capture_grok_notes(description)
+
     output_aspect = str(gen_data.get("outputAspect") or "3:4").strip() or "3:4"
 
     wave_model_raw = str(gen_data.get("waveModelId") or "wan-2.7").strip().lower()
@@ -1311,6 +1325,8 @@ def resolve_workflow_generation_plan(
     if wan_tier not in ("standard", "pro"):
         wan_tier = "standard"
     exif_camera = str(gen_data.get("exifCamera") or "main").strip() or "main"
+    if selfie_capture_enabled:
+        exif_camera = "selfie"
 
     if wave_profile == "regular":
         wan_tier = "standard"
@@ -1332,6 +1348,7 @@ def resolve_workflow_generation_plan(
         wan_edit_tier=wan_tier,
         exif_camera=exif_camera,
         realism_enabled=realism_enabled,
+        selfie_capture_enabled=selfie_capture_enabled,
         motion_video_file_id=motion_video_file_id,
         scenario_type=scenario_type,
     )

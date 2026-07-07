@@ -1495,6 +1495,7 @@ def assemble_wavespeed_image_edit_prompt(
     wavespeed_identity_legend: str | None = None,
     include_realism_engine: bool = True,
     skip_no_face_suffix: bool = False,
+    selfie_capture: bool = False,
     visibility: "IdentityVisibility | None" = None,
 ) -> str:
     """Позитивный промпт для WaveSpeed; negative в JSON (text scene) или суффикс [NEGATIVE_PROMPT] (prose)."""
@@ -1513,6 +1514,7 @@ def assemble_wavespeed_image_edit_prompt(
         output_aspect_key=output_aspect_key,
         wavespeed_identity_legend=wavespeed_identity_legend,
         include_realism_engine=include_realism_engine,
+        selfie_capture=selfie_capture,
         visibility=visibility,
     )
     brief = (prompt_brief_mode or "full").strip().lower()

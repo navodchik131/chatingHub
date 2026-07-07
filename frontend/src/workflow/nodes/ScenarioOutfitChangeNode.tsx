@@ -37,15 +37,29 @@ function ScenarioOutfitChangeNodeComponent({ id, data }: NodeProps) {
       </span>
 
       <Handle
+        id={HandleIds.imageGenSelfieIn}
+        type="target"
+        position={Position.Left}
+        className="workflow-handle workflow-handle--selfie"
+        style={{ top: '40%' }}
+      />
+      <span
+        className="workflow-node__handle-label workflow-node__handle-label--left"
+        style={{ top: '40%' }}
+      >
+        selfie
+      </span>
+
+      <Handle
         id={HandleIds.imageGenPromptIn}
         type="target"
         position={Position.Left}
         className="workflow-handle workflow-handle--prompt"
-        style={{ top: '48%' }}
+        style={{ top: '52%' }}
       />
       <span
         className="workflow-node__handle-label workflow-node__handle-label--left"
-        style={{ top: '48%' }}
+        style={{ top: '52%' }}
       >
         prompt
       </span>
@@ -55,11 +69,11 @@ function ScenarioOutfitChangeNodeComponent({ id, data }: NodeProps) {
         type="target"
         position={Position.Left}
         className="workflow-handle workflow-handle--reference"
-        style={{ top: '64%' }}
+        style={{ top: '68%' }}
       />
       <span
         className="workflow-node__handle-label workflow-node__handle-label--left"
-        style={{ top: '64%' }}
+        style={{ top: '68%' }}
       >
         references
       </span>

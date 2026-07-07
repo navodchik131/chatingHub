@@ -8,6 +8,7 @@ export interface ProjectGraph {
 export type NodeType =
   | 'model'
   | 'realism'
+  | 'selfie'
   | 'prompt'
   | 'refDescription'
   | 'reference'
@@ -33,6 +34,13 @@ export interface ModelNodeData {
 }
 
 export interface RealismNodeData {
+  enabled?: boolean
+  isRunning?: boolean
+  error?: string
+  [key: string]: unknown
+}
+
+export interface SelfieNodeData {
   enabled?: boolean
   isRunning?: boolean
   error?: string
@@ -173,6 +181,7 @@ export interface PreviewNodeData {
 export type AppNodeData =
   | ModelNodeData
   | RealismNodeData
+  | SelfieNodeData
   | PromptNodeData
   | RefDescriptionNodeData
   | ReferenceNodeData
@@ -198,12 +207,14 @@ export interface StudioModelOption {
 export const HandleIds = {
   modelOut: 'model-out',
   realismOut: 'realism-out',
+  selfieOut: 'selfie-out',
   promptOut: 'prompt-out',
   descriptionOut: 'description-out',
   referenceOut: 'reference-out',
   referenceDescriptionIn: 'description-in',
   imageGenModelIn: 'model-in',
   imageGenRealismIn: 'realism-in',
+  imageGenSelfieIn: 'selfie-in',
   imageGenPromptIn: 'prompt-in',
   imageGenReferenceIn: 'reference-in',
   imageGenOut: 'image-out',

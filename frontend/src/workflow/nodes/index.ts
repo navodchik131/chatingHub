@@ -6,6 +6,7 @@ import { MotionVideoNode } from './MotionVideoNode'
 import { PreviewNode } from './PreviewNode'
 import { PromptNode } from './PromptNode'
 import { RealismNode } from './RealismNode'
+import { SelfieNode } from './SelfieNode'
 import { RefDescriptionNode } from './RefDescriptionNode'
 import { ReferenceNode } from './ReferenceNode'
 import { TurnaroundSheetNode } from './TurnaroundSheetNode'
@@ -20,6 +21,7 @@ import { VideoUpscaleNode } from './VideoUpscaleNode'
 export const nodeTypes: NodeTypes = {
   model: ModelNode,
   realism: RealismNode,
+  selfie: SelfieNode,
   prompt: PromptNode,
   refDescription: RefDescriptionNode,
   reference: ReferenceNode,
