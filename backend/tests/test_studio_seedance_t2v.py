@@ -168,6 +168,13 @@ def test_wavespeed_poll_timeout_detector():
     assert not wavespeed_is_video_poll_timeout_error("WaveSpeed task failed")
 
 
+def test_wavespeed_image_poll_timeout_detector():
+    from app.services.wavespeed_client import wavespeed_is_image_poll_timeout_error
+
+    assert wavespeed_is_image_poll_timeout_error("WaveSpeed: timeout waiting for result")
+    assert not wavespeed_is_image_poll_timeout_error("WaveSpeed task failed")
+
+
 def test_wavespeed_sensitive_detector():
     assert wavespeed_is_sensitive_content_error(
         "Content flagged as potentially sensitive. Please try different prompts or images."

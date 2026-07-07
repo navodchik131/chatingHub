@@ -205,6 +205,9 @@ class Settings(BaseSettings):
     # Опрос Seedance / video на бэкенде: 800 × 3 с ≈ 40 мин (клиент не долбит API).
     wavespeed_video_max_polls: int = Field(default=800, ge=60, le=1200)
     wavespeed_video_poll_interval_seconds: float = Field(default=3.0, ge=1.0, le=15.0)
+    # Опрос image-edit на бэкенде: 300 × 2.5 с ≈ 12.5 мин (Wan / Nano Banana async).
+    wavespeed_image_max_polls: int = Field(default=300, ge=60, le=1200)
+    wavespeed_image_poll_interval_seconds: float = Field(default=2.5, ge=1.0, le=15.0)
 
     wavespeed_api_base: str = Field(default="https://api.wavespeed.ai")
     # POST image-edit: WAN 2.7 по умолчанию; Pro / Seedream — см. .env.example

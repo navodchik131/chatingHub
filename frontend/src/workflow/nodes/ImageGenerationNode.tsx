@@ -12,6 +12,7 @@ import {
 } from '../wavespeedModels'
 import { useWorkflowBilling } from '../WorkflowBillingContext'
 import { executeWorkflowGeneration } from '../api'
+import { waitForStudioGenerationImage } from '../../studioArchive'
 import { useWorkflowRun } from '../WorkflowRunContext'
 import { getDownstreamPreviewNodeIds, hasPipelineInput, serializeGraph } from '../graphResolver'
 import { WorkflowImageLightbox } from '../WorkflowImageLightbox'
@@ -113,14 +114,19 @@ function ImageGenerationNodeComponent({ id, data }: NodeProps) {
       })
       if (abortController.signal.aborted) return
 
-      const imageUrl = result.generated_image_url?.trim() || null
+      const generationId =
+        typeof result.generation_id === 'number' ? result.generation_id : null
+      let imageUrl = result.generated_image_url?.trim() || null
+      if (!imageUrl && generationId) {
+        imageUrl = await waitForStudioGenerationImage(generationId, {
+          signal: abortController.signal,
+        })
+      }
       if (!imageUrl) {
         throw new Error('Задача завершилась без URL изображения')
       }
 
       const previewTargets = new Set(getDownstreamPreviewNodeIds(id, edges))
-      const generationId =
-        typeof result.generation_id === 'number' ? result.generation_id : null
 
       setNodes((current) =>
         current.map((node) => {

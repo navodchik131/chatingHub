@@ -668,6 +668,48 @@ async def try_recover_studio_generation_from_wavespeed(
     return False
 
 
+async def resolve_wavespeed_image_job_after_error(
+    session: AsyncSession,
+    gen_row: StudioGeneration | None,
+    *,
+    api_key: str,
+    refined_prompt: str | None,
+    error_message: str,
+) -> tuple[str | None, bool]:
+    """
+    После ошибки WaveSpeed image-edit: попытка догрузить результат или отложить (processing).
+    Returns (recovered_image_url, deferred_pending).
+    """
+    from app.services.wavespeed_client import wavespeed_is_image_poll_timeout_error
+
+    if gen_row is None or not (gen_row.wavespeed_task_id or "").strip():
+        return None, False
+    if await try_recover_studio_generation_from_wavespeed(
+        session,
+        gen_row,
+        api_key=api_key,
+        refined_prompt=refined_prompt,
+    ):
+        url = (gen_row.source_url or "").strip()
+        if url.startswith("https://"):
+            return url, False
+        if generation_has_archive_file(gen_row):
+            return url or "ready", False
+    if wavespeed_is_image_poll_timeout_error(error_message):
+        gen_row.status = StudioGenerationStatus.PROCESSING
+        gen_row.error_message = None
+        gen_row.error_step = None
+        session.add(gen_row)
+        await session.flush()
+        log.info(
+            "studio wavespeed image deferred gen=%s task=%s",
+            gen_row.id,
+            gen_row.wavespeed_task_id,
+        )
+        return None, True
+    return None, False
+
+
 async def recover_recent_failed_studio_generations(
     session: AsyncSession,
     owner_id: int,
@@ -775,6 +817,36 @@ async def retry_pending_studio_archives() -> int:
                 done += 1
                 continue
             if await archive_studio_generation_from_url(session, row):
+                done += 1
+        await session.commit()
+
+    processing_cutoff = datetime.now(timezone.utc) - timedelta(minutes=3)
+    async with SessionLocal() as session:
+        from app.services.studio_keys import load_owner_studio_billing, studio_wavespeed_api_key
+
+        processing_stmt = (
+            select(StudioGeneration)
+            .where(StudioGeneration.wavespeed_task_id.isnot(None))
+            .where(StudioGeneration.status == StudioGenerationStatus.PROCESSING)
+            .where(StudioGeneration.created_at < processing_cutoff)
+            .order_by(StudioGeneration.created_at.asc())
+            .limit(batch)
+        )
+        for row in (await session.execute(processing_stmt)).scalars().all():
+            sub_b, _, ws_row, plan, _credits, _demo = await load_owner_studio_billing(
+                session, row.user_id
+            )
+            ws_key = studio_wavespeed_api_key(
+                plan=plan,
+                ws_row=ws_row,
+                owner_subscription=sub_b,
+                demo_generations_remaining=_demo,
+            )
+            if not (ws_key or "").strip():
+                continue
+            if await try_recover_studio_generation_from_wavespeed(
+                session, row, api_key=ws_key
+            ):
                 done += 1
         await session.commit()
 

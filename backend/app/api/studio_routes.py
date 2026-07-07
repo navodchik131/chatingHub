@@ -127,6 +127,7 @@ from app.services.studio_generation_storage import (
     safe_delete_generation_file,
     studio_finish_image_generation,
     try_recover_studio_generation_from_wavespeed,
+    resolve_wavespeed_image_job_after_error,
     studio_finish_video_generation,
     user_message_when_archive_download_failed,
 )
@@ -3034,6 +3035,13 @@ async def _studio_job_execute_refine_prompt(
             session.add(gen_row)
             await session.flush()
 
+    async def _on_wavespeed_task_submitted(task_id: str) -> None:
+        if gen_row is not None:
+            await attach_studio_generation_wavespeed_task(
+                session, gen_row, task_id=task_id
+            )
+            await session.commit()
+
     lock_hair_req = _truthy_lock_model_hairstyle(lock_model_hairstyle)
     effective_lock_hairstyle = bool(lock_hair_req) if image_bytes else True
     if workflow_source and workflow_ref_loaded:
@@ -3283,6 +3291,7 @@ async def _studio_job_execute_refine_prompt(
 
     generated_image_url: str | None = None
     wavespeed_message: str | None = None
+    wavespeed_deferred_pending = False
     regional_composed_png: bytes | None = None
     if do_wavespeed:
         pub = (settings.public_app_url or "").strip().rstrip("/")
@@ -3787,6 +3796,7 @@ async def _studio_job_execute_refine_prompt(
                             wave_profile=wave_profile_n,
                             reference_scene_description=reference_scene,
                             size=size_for_ws,
+                            on_task_submitted=_on_wavespeed_task_submitted,
                         )
                     elif wave_profile_n == "regular":
                         ws_res = await nano_banana_pro_edit_image_url(
@@ -3796,6 +3806,7 @@ async def _studio_job_execute_refine_prompt(
                             aspect_ratio=aspect_key,
                             wave_profile=wave_profile_n,
                             reference_scene_description=reference_scene,
+                            on_task_submitted=_on_wavespeed_task_submitted,
                         )
                     else:
                         ws_res = await seedream_v45_edit_image_url(
@@ -3804,6 +3815,7 @@ async def _studio_job_execute_refine_prompt(
                             prompt=wavespeed_prompt,
                             size=size_for_ws,
                             wan_edit_tier=wan_tier_n,
+                            on_task_submitted=_on_wavespeed_task_submitted,
                         )
                     generated_image_url = ws_res.url
                     wavespeed_task_id = ws_res.task_id or wavespeed_task_id
@@ -3850,6 +3862,28 @@ async def _studio_job_execute_refine_prompt(
                         user.id,
                         wavespeed_message,
                     )
+                    recovered_url, deferred = await resolve_wavespeed_image_job_after_error(
+                        session,
+                        gen_row,
+                        api_key=ws_key,
+                        refined_prompt=refined,
+                        error_message=wavespeed_message or str(e),
+                    )
+                    if recovered_url and recovered_url != "ready":
+                        generated_image_url = recovered_url
+                        wavespeed_message = None
+                    elif recovered_url == "ready" and gen_row is not None:
+                        arch_base = _public_app_base(None)
+                        generated_image_url = _studio_archive_image_url(
+                            oid, gen_row.id, arch_base
+                        )
+                        wavespeed_message = None
+                    elif deferred:
+                        wavespeed_deferred_pending = True
+                        wavespeed_message = (
+                            "Генерация на WaveSpeed ещё идёт — результат подтянется автоматически "
+                            "в «Сохранённые» и в workflow через минуту."
+                        )
 
     generation_id: int | None = None
     gen_mid = mid
@@ -3885,7 +3919,7 @@ async def _studio_job_execute_refine_prompt(
                     wavespeed_message
                 )
 
-    if do_wavespeed and not (generated_image_url or "").strip():
+    if do_wavespeed and not (generated_image_url or "").strip() and not wavespeed_deferred_pending:
         if gen_row is not None:
             await mark_studio_generation_failed(
                 session,
@@ -3896,6 +3930,9 @@ async def _studio_job_execute_refine_prompt(
         raise RuntimeError(
             wavespeed_message or "WaveSpeed не вернул изображение"
         )
+
+    if wavespeed_deferred_pending and gen_row is not None:
+        generation_id = gen_row.id
 
     await record_studio_image_billing(
         session,

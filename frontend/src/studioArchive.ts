@@ -236,3 +236,60 @@ export function mergeStudioArchiveItems(
   }
   return dedupeStudioArchiveById(merged)
 }
+
+function sleepMs(ms: number, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) {
+    return Promise.reject(new DOMException('Aborted', 'AbortError'))
+  }
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort)
+      resolve()
+    }, ms)
+    const onAbort = () => {
+      clearTimeout(timer)
+      reject(new DOMException('Aborted', 'AbortError'))
+    }
+    signal?.addEventListener('abort', onAbort, { once: true })
+  })
+}
+
+/** Ждёт готовности картинки в архиве (после отложенного WaveSpeed). */
+export async function waitForStudioGenerationImage(
+  generationId: number,
+  opts?: { maxWaitMs?: number; pollMs?: number; signal?: AbortSignal },
+): Promise<string> {
+  const maxWaitMs = opts?.maxWaitMs ?? 20 * 60 * 1000
+  const started = Date.now()
+
+  while (Date.now() - started < maxWaitMs) {
+    if (opts?.signal?.aborted) {
+      throw new DOMException('Aborted', 'AbortError')
+    }
+    const pending = await fetchStudioArchivePending('image')
+    const pollMs = (pending.poll_after_seconds ?? 12) * 1000
+    const fromPending = pending.items.find((g) => g.id === generationId)
+    if (fromPending) {
+      if (fromPending.status === 'failed') {
+        throw new Error(fromPending.error_message?.trim() || 'Генерация не выполнена')
+      }
+      const url = (fromPending.image_url || '').trim()
+      if (url && !studioArchiveIsPending(fromPending)) return url
+    } else {
+      const page = await fetchStudioArchivePage(0, 40, 'image')
+      const ready = page.items.find((g) => g.id === generationId)
+      if (ready) {
+        if (ready.status === 'failed') {
+          throw new Error(ready.error_message?.trim() || 'Генерация не выполнена')
+        }
+        const url = (ready.image_url || '').trim()
+        if (url && !studioArchiveIsPending(ready)) return url
+      }
+    }
+    await sleepMs(Math.min(pollMs, maxWaitMs - (Date.now() - started)), opts?.signal)
+  }
+
+  throw new Error(
+    'Превышено время ожидания WaveSpeed. Результат может появиться в «Сохранённые» через минуту.',
+  )
+}

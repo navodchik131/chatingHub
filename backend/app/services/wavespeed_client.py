@@ -189,6 +189,12 @@ def wavespeed_is_video_poll_timeout_error(message: str | None) -> bool:
     return "timeout waiting for video" in (message or "").lower()
 
 
+def wavespeed_is_image_poll_timeout_error(message: str | None) -> bool:
+    """Локальный таймаут опроса картинки — задача на WaveSpeed может ещё быть в processing."""
+    low = (message or "").lower()
+    return "timeout waiting for result" in low or "timeout waiting for image" in low
+
+
 def _wavespeed_raise_from_response(resp_json: dict[str, Any], *, context: str) -> None:
     task_err = _wavespeed_task_failed_error(resp_json)
     if task_err:
@@ -524,24 +530,33 @@ async def _wavespeed_post_json_and_resolve_image_url(
     full_post_url: str,
     body: dict[str, Any],
     timeout_submit: float = 300.0,
-    poll_interval: float = 2.0,
-    max_polls: int = 120,
+    poll_interval: float | None = None,
+    max_polls: int | None = None,
+    on_task_submitted: Callable[[str], Awaitable[None]] | None = None,
 ) -> WaveSpeedImageResult:
     """Общий POST + разбор ответа / опрос prediction до появления URL картинки."""
+    polls = max_polls if max_polls is not None else int(settings.wavespeed_image_max_polls)
+    interval = (
+        poll_interval
+        if poll_interval is not None
+        else float(settings.wavespeed_image_poll_interval_seconds)
+    )
     submitted = await _wavespeed_submit_image_prediction(
         api_key=api_key,
         full_post_url=full_post_url,
         body=body,
         timeout_submit=timeout_submit,
     )
+    if on_task_submitted and submitted.task_id:
+        await on_task_submitted(submitted.task_id)
     if submitted.immediate_url:
         return WaveSpeedImageResult(url=submitted.immediate_url, task_id=submitted.task_id)
     return await wavespeed_poll_image_by_task_id(
         api_key=api_key,
         task_id=submitted.task_id or "",
         timeout_submit=timeout_submit,
-        poll_interval=poll_interval,
-        max_polls=max_polls,
+        poll_interval=interval,
+        max_polls=polls,
     )
 
 
@@ -553,8 +568,9 @@ async def seedream_v45_edit_image_url(
     size: str | None = None,
     wan_edit_tier: str | None = None,
     timeout_submit: float = 300.0,
-    poll_interval: float = 2.0,
-    max_polls: int = 120,
+    poll_interval: float | None = None,
+    max_polls: int | None = None,
+    on_task_submitted: Callable[[str], Awaitable[None]] | None = None,
 ) -> WaveSpeedImageResult:
     """
     Image edit через WaveSpeed: путь из `resolve_studio_image_edit_post_path`
@@ -609,6 +625,7 @@ async def seedream_v45_edit_image_url(
         timeout_submit=timeout_submit,
         poll_interval=poll_interval,
         max_polls=max_polls,
+        on_task_submitted=on_task_submitted,
     )
 
 
@@ -929,8 +946,9 @@ async def nano_banana_pro_edit_image_url(
     wave_profile: str | None = None,
     reference_scene_description: str | None = None,
     timeout_submit: float = 300.0,
-    poll_interval: float = 2.0,
-    max_polls: int = 180,
+    poll_interval: float | None = None,
+    max_polls: int | None = None,
+    on_task_submitted: Callable[[str], Awaitable[None]] | None = None,
 ) -> WaveSpeedImageResult:
     """
     Google Nano Banana Pro Edit: images + prompt + aspect_ratio + resolution.
@@ -1014,6 +1032,7 @@ async def nano_banana_pro_edit_image_url(
         timeout_submit=timeout_submit,
         poll_interval=poll_interval,
         max_polls=max_polls,
+        on_task_submitted=on_task_submitted,
     )
 
 
@@ -1027,8 +1046,9 @@ async def nano_banana_2_edit_image_url(
     prompt: str,
     aspect_ratio: str = "3:4",
     timeout_submit: float = 300.0,
-    poll_interval: float = 2.0,
-    max_polls: int = 180,
+    poll_interval: float | None = None,
+    max_polls: int | None = None,
+    on_task_submitted: Callable[[str], Awaitable[None]] | None = None,
 ) -> WaveSpeedImageResult:
     """Google Nano Banana 2 Edit."""
     if not image_urls:
@@ -1055,6 +1075,7 @@ async def nano_banana_2_edit_image_url(
         timeout_submit=timeout_submit,
         poll_interval=poll_interval,
         max_polls=max_polls,
+        on_task_submitted=on_task_submitted,
     )
 
 
@@ -1069,6 +1090,7 @@ async def workflow_edit_image_url(
     wave_profile: str | None = None,
     reference_scene_description: str | None = None,
     size: str | None = None,
+    on_task_submitted: Callable[[str], Awaitable[None]] | None = None,
 ) -> WaveSpeedImageResult:
     """WaveSpeed edit по выбору модели в workflow-редакторе."""
     model = (wave_model_id or "wan-2.7").strip().lower()
@@ -1080,6 +1102,7 @@ async def workflow_edit_image_url(
             aspect_ratio=aspect_ratio,
             wave_profile=wave_profile,
             reference_scene_description=reference_scene_description,
+            on_task_submitted=on_task_submitted,
         )
     if model == "nano-banana-2":
         return await nano_banana_2_edit_image_url(
@@ -1087,6 +1110,7 @@ async def workflow_edit_image_url(
             image_urls=image_urls,
             prompt=prompt,
             aspect_ratio=aspect_ratio,
+            on_task_submitted=on_task_submitted,
         )
     if model == "gpt-image-2":
         return await gpt_image_2_edit_image_url(
@@ -1094,6 +1118,7 @@ async def workflow_edit_image_url(
             image_urls=image_urls,
             prompt=prompt,
             aspect_ratio=aspect_ratio,
+            on_task_submitted=on_task_submitted,
         )
     if model == "wan-2.7":
         return await seedream_v45_edit_image_url(
@@ -1102,6 +1127,7 @@ async def workflow_edit_image_url(
             prompt=prompt,
             size=size,
             wan_edit_tier=wan_edit_tier,
+            on_task_submitted=on_task_submitted,
         )
     raise RuntimeError(
         f"Неизвестная модель workflow: {wave_model_id}. "
