@@ -1143,7 +1143,7 @@ export default function App() {
       if (integ?.tribute_configured) {
         return {
           label: '—',
-          hint: 'Донаты за текущий месяц (UTC)',
+          hint: 'Донаты за текущий месяц (UTC). Если долго «—» — проверьте webhook URL в Tribute.',
         }
       }
       return { label: null as string | null, hint: null as string | null }
@@ -1153,6 +1153,12 @@ export default function App() {
     const from = tributeEarnings.from_date
     const to = tributeEarnings.to_date
     const period = from === to ? from : `${from} — ${to}`
+    if (tributeEarnings.event_count === 0) {
+      return {
+        label,
+        hint: `Нет webhook-событий за ${period}. В Tribute → Настройки → Webhooks укажите URL из раздела «Интеграции».`,
+      }
+    }
     const hint = tributeEarnings.is_owner
       ? `Полная сумма · ${period}${tributeEarnings.event_count ? ` · ${tributeEarnings.event_count} событий` : ''}`
       : `${tributeEarnings.chatter_share_percent}% от дохода ваших моделей · ${period}`
@@ -1946,6 +1952,12 @@ export default function App() {
       window.clearInterval(timer)
     }
   }, [authed, canChat, appSection, refreshTributeEarnings, refreshChatterStats])
+
+  useEffect(() => {
+    if (!authed || !canChat || appSection !== 'overview') return
+    if (!integ?.tribute_configured) return
+    void refreshTributeEarnings()
+  }, [authed, canChat, appSection, integ?.tribute_configured, refreshTributeEarnings])
 
   useEffect(() => {
     if (authed && accountOpen && accountTab === 'team' && isOwner) {
@@ -7660,6 +7672,7 @@ export default function App() {
               generations={studioGenerations}
               tributeEarningsLabel={tributeEarningsDisplay.label}
               tributeEarningsHint={tributeEarningsDisplay.hint}
+              tributeConfigured={Boolean(integ?.tribute_configured)}
               chatterOutboundCount={chatterStatsDisplay.outbound}
               chatterConversationsCount={chatterStatsDisplay.conversations}
               chatterRatingsHint={chatterStatsDisplay.ratingsHint}

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, time, timezone
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import TributeEarningEvent, User
@@ -51,7 +51,12 @@ async def aggregate_tribute_earnings(
     if allowed_models is not None:
         if not allowed_models:
             return _empty_summary(from_date, to_date, viewer)
-        stmt = stmt.where(TributeEarningEvent.studio_model_id.in_(allowed_models))
+        stmt = stmt.where(
+            or_(
+                TributeEarningEvent.studio_model_id.is_(None),
+                TributeEarningEvent.studio_model_id.in_(allowed_models),
+            )
+        )
 
     rows = list((await session.execute(stmt)).all())
     if not rows:
@@ -78,7 +83,10 @@ async def aggregate_tribute_earnings(
     )
     if allowed_models is not None:
         count_stmt = count_stmt.where(
-            TributeEarningEvent.studio_model_id.in_(allowed_models)
+            or_(
+                TributeEarningEvent.studio_model_id.is_(None),
+                TributeEarningEvent.studio_model_id.in_(allowed_models),
+            )
         )
     event_count = int(await session.scalar(count_stmt) or 0)
 

@@ -35,6 +35,40 @@ _REFUND_EVENTS = frozenset(
     }
 )
 
+_AMOUNT_KEYS = (
+    "amount",
+    "total",
+    "price",
+    "sum",
+    "value",
+    "donated_amount",
+    "donatedAmount",
+    "payment_amount",
+    "paymentAmount",
+    "amount_minor",
+    "amountMinor",
+    "total_amount",
+    "totalAmount",
+    "net_amount",
+    "netAmount",
+    "gross_amount",
+    "grossAmount",
+)
+
+_NESTED_AMOUNT_KEYS = (
+    "donation",
+    "payment",
+    "transaction",
+    "product",
+    "purchase",
+    "order",
+    "goal",
+    "contribution",
+    "data",
+)
+
+_CURRENCY_KEYS = ("currency", "Currency", "currency_code", "currencyCode")
+
 
 def _norm_event_name(name: str) -> str:
     return "".join(ch for ch in name.lower() if ch.isalnum())
@@ -55,49 +89,12 @@ def _parse_dt(raw: Any) -> datetime:
         return datetime.now(timezone.utc)
 
 
-def _amount_minor_from_payload(payload: dict[str, Any], *, event_name: str) -> int:
-    if not isinstance(payload, dict):
-        return 0
-
-    for key in (
-        "amount",
-        "total",
-        "price",
-        "sum",
-        "donated_amount",
-        "donatedAmount",
-        "payment_amount",
-        "paymentAmount",
-    ):
-        if key in payload and payload[key] is not None:
-            return _to_minor(payload[key], payload.get("currency"))
-
-    for nested_key in ("donation", "payment", "transaction", "product"):
-        nested = payload.get(nested_key)
-        if isinstance(nested, dict):
-            minor = _amount_minor_from_payload(nested, event_name=event_name)
-            if minor:
-                return minor
-
-    items = payload.get("items")
-    if isinstance(items, list) and items:
-        total = 0.0
-        for item in items:
-            if not isinstance(item, dict):
-                continue
-            price = float(item.get("price") or 0)
-            qty = int(item.get("quantity") or 1)
-            total += price * qty
-        delivery = float(payload.get("deliveryCost") or payload.get("delivery_cost") or 0)
-        return _to_minor(total + delivery, payload.get("currency"), major_units=True)
-
-    return 0
-
-
 def _to_minor(value: Any, currency: Any = None, *, major_units: bool = False) -> int:
     try:
         num = float(value)
     except (TypeError, ValueError):
+        return 0
+    if num <= 0:
         return 0
     if major_units:
         return int(round(num * 100))
@@ -112,17 +109,83 @@ def _to_minor(value: Any, currency: Any = None, *, major_units: bool = False) ->
     return int(round(num))
 
 
+def _currency_from_payload(payload: dict[str, Any]) -> str | None:
+    for key in _CURRENCY_KEYS:
+        raw = payload.get(key)
+        if raw is not None and str(raw).strip():
+            return str(raw).strip().upper()[:8]
+    for nested_key in _NESTED_AMOUNT_KEYS:
+        nested = payload.get(nested_key)
+        if isinstance(nested, dict):
+            cur = _currency_from_payload(nested)
+            if cur:
+                return cur
+    return None
+
+
+def _amount_minor_from_payload(payload: dict[str, Any], *, event_name: str) -> int:
+    if not isinstance(payload, dict):
+        return 0
+
+    currency = _currency_from_payload(payload)
+
+    for key in _AMOUNT_KEYS:
+        if key in payload and payload[key] is not None:
+            minor = _to_minor(payload[key], payload.get("currency") or currency)
+            if minor:
+                return minor
+
+    for nested_key in _NESTED_AMOUNT_KEYS:
+        nested = payload.get(nested_key)
+        if isinstance(nested, dict):
+            minor = _amount_minor_from_payload(nested, event_name=event_name)
+            if minor:
+                return minor
+
+    items = payload.get("items")
+    if isinstance(items, list) and items:
+        total = 0.0
+        item_currency = currency
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            price = float(item.get("price") or item.get("amount") or 0)
+            qty = int(item.get("quantity") or 1)
+            total += price * qty
+            if not item_currency:
+                item_currency = _currency_from_payload(item)
+        delivery = float(payload.get("deliveryCost") or payload.get("delivery_cost") or 0)
+        return _to_minor(total + delivery, item_currency or currency, major_units=True)
+
+    return 0
+
+
+def _event_kind(norm: str, payload: dict[str, Any]) -> str | None:
+    if norm in _REVENUE_EVENTS:
+        return "revenue"
+    if norm in _REFUND_EVENTS:
+        return "refund"
+    # Цели и некоторые донаты могут приходить под новым именем — если есть сумма и «donat» в имени.
+    if "donat" in norm and _amount_minor_from_payload(payload, event_name=norm):
+        return "revenue"
+    return None
+
+
 def _external_event_id(conn_id: int, body: dict[str, Any]) -> str:
     name = str(body.get("name") or "")
     payload = body.get("payload") if isinstance(body.get("payload"), dict) else {}
     for key in (
         "id",
         "donation_id",
+        "donation_request_id",
+        "donationRequestId",
         "subscription_id",
         "order_id",
         "purchase_id",
         "product_id",
         "payment_id",
+        "transaction_id",
+        "transactionId",
     ):
         if payload.get(key) is not None:
             return f"{conn_id}:{name}:{payload[key]}"
@@ -144,27 +207,35 @@ async def ingest_tribute_webhook(
         return {"ok": True, "skipped": "no_event_name"}
 
     norm = _norm_event_name(name_raw)
-    if norm not in _REVENUE_EVENTS and norm not in _REFUND_EVENTS:
-        return {"ok": True, "skipped": norm or name_raw}
-
     payload = body.get("payload") if isinstance(body.get("payload"), dict) else {}
-    amount_minor = _amount_minor_from_payload(payload, event_name=norm)
-    if amount_minor == 0 and norm in _REFUND_EVENTS:
-        amount_minor = abs(_amount_minor_from_payload(payload, event_name=norm))
-
-    if amount_minor == 0:
-        log.warning(
-            "tribute webhook skipped zero_amount event=%s conn=%s keys=%s",
+    kind = _event_kind(norm, payload)
+    if kind is None:
+        log.info(
+            "tribute webhook skipped unknown event=%s conn=%s keys=%s",
             name_raw,
             conn.id,
             sorted(payload.keys()) if isinstance(payload, dict) else [],
         )
+        return {"ok": True, "skipped": norm or name_raw}
+
+    amount_minor = _amount_minor_from_payload(payload, event_name=norm)
+    if amount_minor == 0 and kind == "refund":
+        amount_minor = abs(_amount_minor_from_payload(payload, event_name=norm))
+
+    if amount_minor == 0:
+        log.warning(
+            "tribute webhook skipped zero_amount event=%s conn=%s keys=%s payload=%s",
+            name_raw,
+            conn.id,
+            sorted(payload.keys()) if isinstance(payload, dict) else [],
+            json.dumps(payload, ensure_ascii=False)[:500],
+        )
         return {"ok": True, "skipped": "zero_amount", "event": name_raw}
 
-    if norm in _REFUND_EVENTS:
+    if kind == "refund":
         amount_minor = -abs(amount_minor)
 
-    currency = str(payload.get("currency") or "USD").upper()[:8]
+    currency = _currency_from_payload(payload) or "USD"
     occurred_at = _parse_dt(body.get("created_at") or body.get("sent_at"))
     external_id = _external_event_id(conn.id, body)
 

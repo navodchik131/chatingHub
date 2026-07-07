@@ -27,6 +27,7 @@ export interface WorkspaceOverviewProps {
   generations: GenerationPreview[]
   tributeEarningsLabel?: string | null
   tributeEarningsHint?: string | null
+  tributeConfigured?: boolean
   chatterOutboundCount?: number | null
   chatterConversationsCount?: number | null
   chatterRatingsHint?: string | null
@@ -87,6 +88,7 @@ export function WorkspaceOverview({
   generations,
   tributeEarningsLabel,
   tributeEarningsHint,
+  tributeConfigured,
   chatterOutboundCount,
   chatterConversationsCount,
   chatterRatingsHint,
@@ -117,10 +119,10 @@ export function WorkspaceOverview({
             hint={unreadTotal > 0 ? `${unreadTotal} непрочитанных` : 'Все прочитаны'}
           />
         ) : null}
-        {canChat && tributeEarningsLabel ? (
+        {canChat && (tributeEarningsLabel || tributeConfigured) ? (
           <KpiCard
             label="Tribute"
-            value={tributeEarningsLabel}
+            value={tributeEarningsLabel ?? '—'}
             hint={tributeEarningsHint ?? 'Донаты и подписки'}
             valueTone="success"
           />
