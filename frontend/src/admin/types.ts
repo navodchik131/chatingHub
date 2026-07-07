@@ -202,3 +202,31 @@ export interface AdminExifBotProfileRow {
 export interface AdminExifBotUserDetail extends AdminExifBotUserRow {
   profiles: AdminExifBotProfileRow[]
 }
+
+export interface AdminIgBotStats {
+  total_users: number
+  total_downloads: number
+  downloads_today: number
+  active_users_7d: number
+  active_users_30d: number
+  users_downloaded_today: number
+  daily_limit_default: number
+  daily_limit_subscribed: number
+  utc_day: string
+}
+
+export interface AdminIgBotUserRow {
+  id: number
+  telegram_id: number
+  username: string | null
+  display_name: string
+  telegram_link: string | null
+  language_code: string | null
+  total_process_count: number
+  daily_process_count: number
+  daily_process_day: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface AdminIgBotUserDetail extends AdminIgBotUserRow {}

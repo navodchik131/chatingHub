@@ -1161,3 +1161,33 @@ class AdminExifBotProfileRow(BaseModel):
 
 class AdminExifBotUserDetailOut(AdminExifBotUserRow):
     profiles: list[AdminExifBotProfileRow] = []
+
+
+class AdminIgBotStatsOut(BaseModel):
+    total_users: int
+    total_downloads: int
+    downloads_today: int
+    active_users_7d: int
+    active_users_30d: int
+    users_downloaded_today: int
+    daily_limit_default: int
+    daily_limit_subscribed: int
+    utc_day: str
+
+
+class AdminIgBotUserRow(BaseModel):
+    id: int
+    telegram_id: int
+    username: str | None = None
+    display_name: str
+    telegram_link: str | None = None
+    language_code: str | None = None
+    total_process_count: int
+    daily_process_count: int
+    daily_process_day: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class AdminIgBotUserDetailOut(AdminIgBotUserRow):
+    pass

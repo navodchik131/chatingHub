@@ -8,6 +8,7 @@ from app.api.analytics_routes import router as analytics_router
 from app.api.admin_routes import router as admin_router
 from app.api.admin_email_routes import router as admin_email_router
 from app.api.admin_exif_bot_routes import router as admin_exif_bot_router
+from app.api.admin_ig_bot_routes import router as admin_ig_bot_router
 from app.api.billing_routes import router as billing_router
 from app.api.referral_routes import router as referral_router
 from app.api.chat_routes import router as chat_router
@@ -36,3 +37,4 @@ router.include_router(analytics_router)
 router.include_router(admin_router)
 router.include_router(admin_email_router)
 router.include_router(admin_exif_bot_router)
+router.include_router(admin_ig_bot_router)

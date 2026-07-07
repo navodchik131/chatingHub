@@ -72,6 +72,12 @@ def _normalize_used(user: IgBotUser) -> int:
     return max(0, int(user.daily_process_count or 0))
 
 
+def effective_total_process_count(user: IgBotUser) -> int:
+    daily = _normalize_used(user)
+    total = max(0, int(user.total_process_count or 0))
+    return max(total, daily)
+
+
 async def is_channel_subscriber(bot: Bot, telegram_user_id: int) -> bool:
     channel = (settings.ig_bot_subscribe_channel or "").strip()
     if not channel:
