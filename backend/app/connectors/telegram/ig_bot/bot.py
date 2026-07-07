@@ -9,6 +9,7 @@ from aiogram.client.session.aiohttp import AiohttpSession
 
 from app.config import settings
 from app.connectors.telegram.ig_bot.setup import ig_dp
+from app.services.ig_bot.download import resolve_cookies_path
 
 log = logging.getLogger(__name__)
 
@@ -57,6 +58,11 @@ async def run_ig_bot_polling() -> None:
     cookies = (settings.ig_bot_cookies_path or "").strip()
     if not cookies:
         log.warning("IG bot: IG_BOT_COOKIES_PATH not set — downloads will fail")
+    elif resolve_cookies_path() is None:
+        log.warning(
+            "IG bot: cookies file missing at %s — downloads will fail",
+            cookies,
+        )
     bot = create_ig_bot()
     try:
         me = await bot.get_me()
@@ -66,7 +72,7 @@ async def run_ig_bot_polling() -> None:
             settings.ig_bot_daily_limit_default,
             settings.ig_bot_daily_limit_subscribed,
             settings.ig_bot_subscribe_channel,
-            "yes" if cookies else "no",
+            "yes" if resolve_cookies_path() else "no",
         )
         await verify_ig_bot_channel_access(bot)
         await ig_dp.start_polling(bot)

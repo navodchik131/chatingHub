@@ -24,7 +24,10 @@ def resolve_cookies_path() -> Path | None:
     if not raw:
         return None
     src = Path(raw)
+    if not src.is_absolute():
+        src = APP_DIR / src
     if not src.is_file():
+        log.warning("IG bot cookies file not found: %s", src)
         return None
     src_str = str(src).replace("\\", "/")
     if "/data/ig_bot/" in src_str or src_str.endswith("ig_bot_cookies.active.txt"):

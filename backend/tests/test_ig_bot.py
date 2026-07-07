@@ -32,6 +32,36 @@ def test_validate_single_media():
         validate_instagram_media_url("https://www.instagram.com/user/")
 
 
+def test_resolve_cookies_path_relative(tmp_path, monkeypatch):
+    from app.services.ig_bot import download as ig_download
+
+    cookies = tmp_path / "ig-bot" / "cookies.txt"
+    cookies.parent.mkdir(parents=True)
+    cookies.write_text("# Netscape HTTP Cookie File\n", encoding="utf-8")
+
+    monkeypatch.setattr(ig_download, "APP_DIR", tmp_path)
+    monkeypatch.setattr(
+        "app.services.ig_bot.download.settings.ig_bot_cookies_path",
+        "ig-bot/cookies.txt",
+    )
+
+    resolved = ig_download.resolve_cookies_path()
+    assert resolved is not None
+    assert resolved.is_file()
+
+
+def test_resolve_cookies_path_missing(tmp_path, monkeypatch):
+    from app.services.ig_bot import download as ig_download
+
+    monkeypatch.setattr(ig_download, "APP_DIR", tmp_path)
+    monkeypatch.setattr(
+        "app.services.ig_bot.download.settings.ig_bot_cookies_path",
+        "ig-bot/cookies.txt",
+    )
+
+    assert ig_download.resolve_cookies_path() is None
+
+
 def test_ig_bot_daily_limit():
     import asyncio
     from unittest.mock import AsyncMock, patch

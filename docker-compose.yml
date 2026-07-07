@@ -44,6 +44,8 @@ services:
       # Промпты из git лежат в образе в _bundled_prompts/ (том перекрывает data/prompts).
       # Пресеты камер — в _bundled_studio_camera_presets.json (том перекрывает data/studio_camera_presets.json).
       - chating_app_data:/app/backend/data
+      # Cookies IG-бота на хосте (не в git) — без bind mount контейнер их не видит.
+      - ./backend/ig-bot:/app/backend/ig-bot:ro
 
 volumes:
   chating_pg:
