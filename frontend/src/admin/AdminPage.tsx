@@ -263,6 +263,18 @@ export function AdminPage() {
               <span className="admin-kpi__hint">клик — кто оплатил и что</span>
             </AdminDrillableKpi>
             <AdminDrillableKpi
+              segment="tribute_events"
+              title="Донаты Tribute"
+              count={stats.tribute_events_total}
+              onDrill={openDrill}
+            >
+              <span className="admin-kpi__label">Tribute</span>
+              <strong className="admin-kpi__value">{stats.tribute_events_total}</strong>
+              <span className="admin-kpi__hint">
+                сегодня UTC: {stats.tribute_events_today} · клик — список
+              </span>
+            </AdminDrillableKpi>
+            <AdminDrillableKpi
               segment="referrals"
               title="Регистрации по рефералке"
               count={stats.referrals_total}

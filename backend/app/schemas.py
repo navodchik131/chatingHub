@@ -970,6 +970,8 @@ class AdminStatsOut(BaseModel):
     conversations_total: int = 0
     referrals_total: int = 0
     yookassa_payments_total: int = 0
+    tribute_events_total: int = 0
+    tribute_events_today: int = 0
     subscriptions_by_status: list[AdminLabelCount] = []
     subscriptions_by_plan: list[AdminLabelCount] = []
     registrations_by_day: list[AdminDayCount] = []

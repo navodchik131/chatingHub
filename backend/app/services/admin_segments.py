@@ -15,6 +15,7 @@ from app.db.models import (
     StudioGeneration,
     Subscription,
     SubscriptionStatus,
+    TributeEarningEvent,
     UsageEvent,
     User,
     YookassaProcessedPayment,
@@ -41,6 +42,7 @@ SEGMENT_TITLES: dict[str, str] = {
     "registered_30d": "Регистрации за 30 дней",
     "new_paid_active_30d": "Новые с paid active за 30 дней",
     "yookassa_payments": "Оплаты ЮKassa",
+    "tribute_events": "Донаты и платежи Tribute",
     "referrals": "Регистрации по рефералке",
     "workspace_owners": "Владельцы пространств",
 }
@@ -49,7 +51,7 @@ VALID_ADMIN_SEGMENTS = frozenset(SEGMENT_TITLES.keys())
 
 # Сегменты для email-рассылок (без платёжных строк и служебных списков)
 EMAIL_CAMPAIGN_SEGMENTS = frozenset(
-    VALID_ADMIN_SEGMENTS - {"yookassa_payments"}
+    VALID_ADMIN_SEGMENTS - {"yookassa_payments", "tribute_events"}
 )
 
 
@@ -252,6 +254,63 @@ async def list_admin_segment(
                     "payment_id": pid,
                 }
             )
+        return {"segment": segment, "title": title, "total": len(items), "items": items}
+
+    if segment == "tribute_events":
+        events = (
+            (
+                await session.execute(
+                    select(TributeEarningEvent)
+                    .order_by(TributeEarningEvent.occurred_at.desc())
+                    .limit(limit)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        owner_ids = list({int(ev.user_id) for ev in events})
+        users_by_id = {
+            u.id: u
+            for u in (
+                await session.execute(
+                    select(User)
+                    .where(User.id.in_(owner_ids))
+                    .options(selectinload(User.subscription))
+                )
+            )
+            .scalars()
+            .all()
+        }
+        items = []
+        for ev in events:
+            u = users_by_id.get(int(ev.user_id))
+            amount = int(ev.amount_minor or 0)
+            sign = "+" if amount >= 0 else ""
+            cur = str(ev.currency or "USD").upper()
+            detail = f"{ev.event_name}: {sign}{amount / 100:.2f} {cur}"
+            if u:
+                items.append(
+                    _row_from_user(
+                        u,
+                        detail=detail,
+                        occurred_at=ev.occurred_at,
+                        payment_id=ev.external_event_id,
+                    )
+                )
+            else:
+                items.append(
+                    {
+                        "user_id": int(ev.user_id),
+                        "email": None,
+                        "user_created_at": None,
+                        "subscription_status": None,
+                        "billing_plan": None,
+                        "plan_tier": None,
+                        "detail": detail,
+                        "occurred_at": ev.occurred_at,
+                        "payment_id": ev.external_event_id,
+                    }
+                )
         return {"segment": segment, "title": title, "total": len(items), "items": items}
 
     if segment == "referrals":
