@@ -763,6 +763,39 @@ def test_first_frame_model_prompt_without_reference():
     assert "Sunset beach walk" in plan.description
 
 
+def test_first_frame_gpt_image_model_prompt_without_reference():
+    g = {
+        "nodes": [
+            {"id": "model-1", "type": "model", "data": {"modelId": 3}},
+            {"id": "prompt-1", "type": "prompt", "data": {"prompt": "Sunset beach walk"}},
+            {
+                "id": "ff-1",
+                "type": "firstFrameGeneration",
+                "data": {
+                    "waveModelId": "gpt-image-2",
+                    "nsfwEnabled": False,
+                    "outputAspect": "9:16",
+                },
+            },
+        ],
+        "edges": [
+            {"source": "model-1", "target": "ff-1", "targetHandle": "model-in"},
+            {"source": "prompt-1", "target": "ff-1", "targetHandle": "prompt-in"},
+        ],
+    }
+    plan = resolve_workflow_generation_plan(
+        target_node_id="ff-1",
+        nodes=g["nodes"],
+        edges=g["edges"],
+    )
+    assert plan.motion_video_file_id == ""
+    assert plan.references == ()
+    assert plan.model_id == 3
+    assert plan.studio_wave_profile == "regular"
+    assert plan.workflow_wave_model == "gpt-image-2"
+    assert "Sunset beach walk" in plan.description
+
+
 def test_first_frame_motion_model_without_prompt():
     g = {
         "nodes": [

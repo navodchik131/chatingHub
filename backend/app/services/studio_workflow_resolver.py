@@ -1156,13 +1156,6 @@ def resolve_workflow_generation_plan(
 
     gen_data = target.get("data") if isinstance(target.get("data"), dict) else {}
 
-    if str(target.get("type") or "") == "firstFrameGeneration":
-        wave_model = str(gen_data.get("waveModelId") or "nano-banana-pro").strip().lower()
-        if wave_model == "gpt-image-2":
-            raise WorkflowResolutionError(
-                "Для первого кадра используйте Wan / Nano Banana — GPT Image 2 только для развёртки"
-            )
-
     model_node = _sources_for_plan_target(target_id, HANDLE["gen_model_in"], edges, node_map)
     model_node = model_node[0] if model_node else None
     model_id: int | None = None
