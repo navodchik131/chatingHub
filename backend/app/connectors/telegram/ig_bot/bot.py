@@ -6,6 +6,7 @@ import logging
 
 from aiogram import Bot
 from aiogram.client.session.aiohttp import AiohttpSession
+from aiogram.types import BotCommand
 
 from app.config import settings
 from app.connectors.telegram.ig_bot.setup import ig_dp
@@ -51,6 +52,17 @@ async def verify_ig_bot_channel_access(bot: Bot) -> None:
         log.warning("IG bot cannot access subscribe channel %s: %s", channel, e)
 
 
+async def setup_ig_bot_commands(bot: Bot) -> None:
+    await bot.set_my_commands(
+        [
+            BotCommand(command="start", description="Запуск и меню"),
+            BotCommand(command="menu", description="Главное меню"),
+            BotCommand(command="limits", description="Лимит скачиваний"),
+            BotCommand(command="help", description="Как пользоваться"),
+        ]
+    )
+
+
 async def run_ig_bot_polling() -> None:
     token = settings.ig_bot_token.strip()
     if not token:
@@ -75,6 +87,7 @@ async def run_ig_bot_polling() -> None:
             "yes" if resolve_cookies_path() else "no",
         )
         await verify_ig_bot_channel_access(bot)
+        await setup_ig_bot_commands(bot)
         await ig_dp.start_polling(bot)
     finally:
         await bot.session.close()

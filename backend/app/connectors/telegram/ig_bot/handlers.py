@@ -12,10 +12,16 @@ from aiogram.types import CallbackQuery, FSInputFile, Message
 
 from app.config import settings
 from app.connectors.telegram.ig_bot.keyboards import (
+    BTN_DOWNLOAD,
+    BTN_HELP,
+    BTN_LIMITS,
+    BTN_MENU,
+    MENU_BUTTONS,
     limit_exceeded_kb,
     limits_hint_short,
     limits_kb,
     main_menu_kb,
+    reply_menu_kb,
 )
 from app.db.session import SessionLocal
 from app.services.ig_bot.download import download_instagram_video
@@ -50,12 +56,30 @@ _HELP = (
     "Пачки и профили — в веб-приложении.\n\n"
     + limits_hint_short()
     + "\n\n"
-    "Команды: /start /limits /help"
+    "Команды: /start /menu /limits /help"
+)
+
+_DOWNLOAD_HINT = (
+    "Отправьте **ссылку** на Reels или пост с видео.\n\n"
+    "Примеры:\n"
+    "• `https://www.instagram.com/reel/ABC123/`\n"
+    "• `https://www.instagram.com/p/XYZ789/`\n\n"
+    "Поддерживаются только одиночные ссылки — не профили и не пачки."
 )
 
 
-async def _send_main_menu(message: Message, *, text: str | None = None) -> None:
-    await message.answer(text or "Главное меню:", reply_markup=main_menu_kb())
+async def _send_main_menu(
+    message: Message,
+    *,
+    text: str | None = None,
+    parse_mode: str | None = None,
+) -> None:
+    await message.answer(
+        text or "Выберите действие в меню или отправьте ссылку на Instagram:",
+        parse_mode=parse_mode,
+        reply_markup=reply_menu_kb(),
+    )
+    await message.answer("Быстрые кнопки:", reply_markup=main_menu_kb())
 
 
 @router.message(CommandStart())
@@ -71,8 +95,11 @@ async def cmd_start(message: Message) -> None:
         await message.answer("Не удалось зарегистрировать вас. Попробуйте позже.")
         return
     name = message.from_user.first_name or "друг"
-    await message.answer(f"Привет, {name}!\n\n{_WELCOME}", parse_mode="Markdown")
-    await _send_main_menu(message)
+    await _send_main_menu(
+        message,
+        text=f"Привет, {name}!\n\n{_WELCOME}",
+        parse_mode="Markdown",
+    )
 
 
 async def _send_limits(message: Message, bot: Bot) -> None:
@@ -87,6 +114,11 @@ async def _send_limits(message: Message, bot: Bot) -> None:
         parse_mode="HTML",
         reply_markup=limits_kb(channel_url=status.channel_url),
     )
+
+
+@router.message(Command("menu"))
+async def cmd_menu(message: Message) -> None:
+    await _send_main_menu(message)
 
 
 @router.message(Command("limits"))
@@ -133,6 +165,17 @@ async def cmd_help(event: Message | CallbackQuery) -> None:
     await event.answer(_HELP, parse_mode="Markdown")
 
 
+@router.callback_query(F.data == "ig:menu:download")
+async def cb_menu_download(callback: CallbackQuery) -> None:
+    await callback.answer()
+    if callback.message:
+        await callback.message.answer(
+            _DOWNLOAD_HINT,
+            parse_mode="Markdown",
+            reply_markup=reply_menu_kb(),
+        )
+
+
 @router.callback_query(F.data == "ig:menu:main")
 async def cb_menu_main(callback: CallbackQuery) -> None:
     await callback.answer()
@@ -144,14 +187,30 @@ async def cb_menu_main(callback: CallbackQuery) -> None:
 async def on_text(message: Message, bot: Bot) -> None:
     if not message.from_user or not message.text:
         return
-    url = extract_instagram_url(message.text)
+    text = message.text.strip()
+    if text in MENU_BUTTONS:
+        if text == BTN_DOWNLOAD:
+            await message.answer(_DOWNLOAD_HINT, parse_mode="Markdown", reply_markup=reply_menu_kb())
+            return
+        if text == BTN_LIMITS:
+            await _send_limits(message, bot)
+            return
+        if text == BTN_HELP:
+            await message.answer(_HELP, parse_mode="Markdown", reply_markup=reply_menu_kb())
+            return
+        if text == BTN_MENU:
+            await _send_main_menu(message)
+            return
+
+    url = extract_instagram_url(text)
     if not url:
-        if message.text.strip().startswith("/"):
+        if text.startswith("/"):
             return
         await message.answer(
             "Отправьте ссылку на Instagram Reels или пост с видео.\n"
-            "Пример: https://www.instagram.com/reel/ABC123/",
-            reply_markup=main_menu_kb(),
+            "Пример: https://www.instagram.com/reel/ABC123/\n\n"
+            "Или нажмите «📥 Скачать видео» в меню.",
+            reply_markup=reply_menu_kb(),
         )
         return
 
@@ -161,7 +220,7 @@ async def on_text(message: Message, bot: Bot) -> None:
         async with SessionLocal() as session:
             user = await get_or_create_ig_bot_user(session, message.from_user)
             try:
-                status = await ensure_can_download(session, user, bot)
+                await ensure_can_download(session, user, bot)
             except IgBotDailyLimitExceeded:
                 status = await get_usage_status(session, user, bot)
                 await session.commit()
@@ -171,6 +230,7 @@ async def on_text(message: Message, bot: Bot) -> None:
                     reply_markup=limit_exceeded_kb(channel_url=status.channel_url),
                 )
                 return
+            user_id = user.id
             await session.commit()
 
         file_path, tmp_dir, filename = await anyio.to_thread.run_sync(
@@ -190,12 +250,22 @@ async def on_text(message: Message, bot: Bot) -> None:
 
             await status_msg.edit_text("📤 Отправляю видео…")
             video = FSInputFile(str(file_path), filename=filename)
-            await message.answer_video(video, caption=url)
+            usage_note = ""
+            try:
+                async with SessionLocal() as session:
+                    used = await record_successful_download(session, user_id=user_id)
+                    user = await get_or_create_ig_bot_user(session, message.from_user)
+                    usage = await get_usage_status(session, user, bot)
+                    await session.commit()
+                usage_note = f"\n\nСегодня: {used}/{usage.limit}"
+            except Exception:
+                log.exception(
+                    "ig bot failed to record daily limit user_id=%s telegram_id=%s",
+                    user_id,
+                    message.from_user.id,
+                )
 
-            async with SessionLocal() as session:
-                user = await get_or_create_ig_bot_user(session, message.from_user)
-                await record_successful_download(session, user_id=user.id)
-                await session.commit()
+            await message.answer_video(video, caption=f"{url}{usage_note}")
 
             await status_msg.delete()
         finally:

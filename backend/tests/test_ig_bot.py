@@ -93,3 +93,41 @@ def test_ig_bot_daily_limit():
                 await ensure_can_download(None, user, FakeBot())  # type: ignore[arg-type]
 
     asyncio.run(_run())
+
+
+def test_ig_bot_reply_menu_buttons():
+    from app.connectors.telegram.ig_bot.keyboards import MENU_BUTTONS, reply_menu_kb
+
+    kb = reply_menu_kb()
+    labels = {btn.text for row in kb.keyboard for btn in row}
+    assert MENU_BUTTONS.issubset(labels)
+    assert kb.input_field_placeholder
+
+
+def test_record_successful_download_increments():
+    import asyncio
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock, MagicMock
+
+    from app.services.ig_bot.limits import _utc_today, record_successful_download
+
+    user = SimpleNamespace(
+        id=42,
+        telegram_id=1,
+        daily_process_day=None,
+        daily_process_count=0,
+        total_process_count=0,
+    )
+    session = AsyncMock()
+
+    async def _scalar(stmt):
+        return user
+
+    session.scalar = AsyncMock(side_effect=_scalar)
+    session.add = MagicMock()
+    session.flush = AsyncMock()
+    used = asyncio.run(record_successful_download(session, user_id=42))
+    assert used == 1
+    assert user.daily_process_day == _utc_today()
+    assert user.daily_process_count == 1
+    assert user.total_process_count == 1

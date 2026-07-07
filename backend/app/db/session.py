@@ -383,6 +383,86 @@ def _migrate_ig_bot_tables(sync_conn) -> None:
     insp = inspect(sync_conn)
     if not insp.has_table("ig_bot_users"):
         IgBotUser.__table__.create(sync_conn, checkfirst=True)
+    _migrate_ig_bot_user_daily_limits(sync_conn)
+    _migrate_ig_bot_total_process_count(sync_conn)
+    _migrate_ig_bot_telegram_id_bigint(sync_conn)
+
+
+def _migrate_ig_bot_user_daily_limits(sync_conn) -> None:
+    import logging
+
+    from sqlalchemy import inspect, text
+
+    log = logging.getLogger(__name__)
+    insp = inspect(sync_conn)
+    if not insp.has_table("ig_bot_users"):
+        return
+    cols = {c["name"] for c in insp.get_columns("ig_bot_users")}
+    dialect = sync_conn.dialect.name
+    if "daily_process_count" not in cols:
+        sync_conn.execute(
+            text(
+                "ALTER TABLE ig_bot_users ADD COLUMN daily_process_count INTEGER NOT NULL DEFAULT 0"
+            )
+        )
+    if "daily_process_day" not in cols:
+        sync_conn.execute(
+            text("ALTER TABLE ig_bot_users ADD COLUMN daily_process_day VARCHAR(10)")
+        )
+    cols_after = {c["name"] for c in insp.get_columns("ig_bot_users")}
+    if "daily_process_count" not in cols_after or "daily_process_day" not in cols_after:
+        log.error(
+            "ig_bot_users: daily limit columns missing after migration (have %s)",
+            sorted(cols_after),
+        )
+    else:
+        log.info("ig_bot_users: daily limit columns OK")
+
+
+def _migrate_ig_bot_total_process_count(sync_conn) -> None:
+    import logging
+
+    from sqlalchemy import inspect, text
+
+    log = logging.getLogger(__name__)
+    insp = inspect(sync_conn)
+    if not insp.has_table("ig_bot_users"):
+        return
+    cols = {c["name"] for c in insp.get_columns("ig_bot_users")}
+    if "total_process_count" in cols:
+        return
+    sync_conn.execute(
+        text(
+            "ALTER TABLE ig_bot_users ADD COLUMN total_process_count INTEGER NOT NULL DEFAULT 0"
+        )
+    )
+    log.info("ig_bot_users: total_process_count column added")
+
+
+def _migrate_ig_bot_telegram_id_bigint(sync_conn) -> None:
+    import logging
+
+    from sqlalchemy import inspect, text
+
+    log = logging.getLogger(__name__)
+    insp = inspect(sync_conn)
+    if not insp.has_table("ig_bot_users"):
+        return
+    for col in insp.get_columns("ig_bot_users"):
+        if col["name"] != "telegram_id":
+            continue
+        type_str = str(col.get("type", "")).upper()
+        if "BIGINT" in type_str or "INT8" in type_str:
+            return
+        break
+    if sync_conn.dialect.name == "postgresql":
+        sync_conn.execute(
+            text(
+                "ALTER TABLE ig_bot_users "
+                "ALTER COLUMN telegram_id TYPE BIGINT USING telegram_id::bigint"
+            )
+        )
+        log.info("ig_bot_users: telegram_id migrated to BIGINT")
 
 
 def _migrate_conversation_categories(sync_conn) -> None:

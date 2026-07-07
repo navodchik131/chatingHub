@@ -101,6 +101,12 @@ async def get_usage_status(
     user: IgBotUser,
     bot: Bot,
 ) -> IgBotUsageStatus:
+    from sqlalchemy import select
+
+    if session is not None and user.id is not None:
+        fresh = await session.scalar(select(IgBotUser).where(IgBotUser.id == user.id))
+        if fresh is not None:
+            user = fresh
     subscribed = await is_channel_subscriber(bot, user.telegram_id)
     limit = _daily_limit_for_subscriber(subscribed)
     used = _normalize_used(user)
@@ -195,4 +201,11 @@ async def record_successful_download(session: AsyncSession, *, user_id: int) -> 
         user.total_process_count = user.daily_process_count
     session.add(user)
     await session.flush()
+    log.info(
+        "ig bot daily use user=%s daily=%s total=%s day=%s",
+        user.telegram_id,
+        user.daily_process_count,
+        user.total_process_count,
+        user.daily_process_day,
+    )
     return int(user.daily_process_count)
