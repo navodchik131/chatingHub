@@ -18,7 +18,7 @@ from app.services.studio_workflow_scenarios import (
 )
 
 WORKFLOW_WAVE_MODELS = frozenset(
-    {"nano-banana-2", "nano-banana-pro", "wan-2.7", "gpt-image-2"}
+    {"nano-banana-2", "nano-banana-pro", "wan-2.7", "wan-2.7-pro", "gpt-image-2"}
 )
 
 _PRIMARY_REF_ROLE_HINTS = (
@@ -1118,6 +1118,22 @@ def assemble_workflow_grok_notes(
     return "\n\n".join(sections).strip()
 
 
+def _normalize_workflow_wave_selection(
+    wave_model: str,
+    wan_tier: str,
+) -> tuple[str, str]:
+    """UI id wan-2.7-pro → API wan-2.7 + tier pro."""
+    mid = (wave_model or "wan-2.7").strip().lower()
+    tier = (wan_tier or "standard").strip().lower()
+    if mid == "wan-2.7-pro":
+        return "wan-2.7", "pro"
+    if mid == "wan-2.7":
+        return "wan-2.7", "pro" if tier == "pro" else "standard"
+    if mid in WORKFLOW_WAVE_MODELS:
+        return mid, "standard"
+    return "wan-2.7", "standard"
+
+
 def resolve_workflow_generation_plan(
     *,
     target_node_id: str,
@@ -1191,10 +1207,10 @@ def resolve_workflow_generation_plan(
             raise WorkflowResolutionError(
                 "Загрузите видео в ноду «Motion-видео» — по нему Grok соберёт первый кадр"
             )
-    elif not ref_nodes:
-        raise WorkflowResolutionError("Подключите хотя бы одну ноду «Референс» к входу reference")
-    elif not references:
-        raise WorkflowResolutionError("Загрузите изображение во все подключённые ноды «Референс»")
+    elif ref_nodes and not references:
+        raise WorkflowResolutionError(
+            "Загрузите изображение во все подключённые ноды «Референс»"
+        )
 
     sorted_refs = sort_workflow_references(references)
 
@@ -1236,6 +1252,15 @@ def resolve_workflow_generation_plan(
             raise WorkflowResolutionError(
                 "Добавьте промпт для генерации первого кадра по модели (без motion-видео)"
             )
+    elif not references:
+        if model_id is None:
+            if not prompt_text.strip():
+                raise WorkflowResolutionError(
+                    "Добавьте промпт, подключите референс или выберите модель в ноде «Модель»"
+                )
+            raise WorkflowResolutionError(
+                "Выберите модель в ноде «Модель» или подключите референс"
+            )
     elif model_id is None and not (prompt_text.strip() or has_ref_context):
         raise WorkflowResolutionError(
             "Без модели из кабинета добавьте промпт или описание референса"
@@ -1256,9 +1281,9 @@ def resolve_workflow_generation_plan(
 
     output_aspect = str(gen_data.get("outputAspect") or "3:4").strip() or "3:4"
 
-    wave_model = str(gen_data.get("waveModelId") or "wan-2.7").strip().lower()
-    if wave_model not in WORKFLOW_WAVE_MODELS:
-        wave_model = "wan-2.7"
+    wave_model_raw = str(gen_data.get("waveModelId") or "wan-2.7").strip().lower()
+    wan_tier_raw = str(gen_data.get("wanEditTier") or "standard").strip().lower()
+    wave_model, wan_tier = _normalize_workflow_wave_selection(wave_model_raw, wan_tier_raw)
 
     nsfw_enabled = gen_data.get("nsfwEnabled")
     if nsfw_enabled is False:
@@ -1266,21 +1291,28 @@ def resolve_workflow_generation_plan(
     else:
         wave_profile = "nsfw"
 
-    if wave_profile == "nsfw" and wave_model != "wan-2.7":
+    if wave_profile == "nsfw" and wave_model_raw not in ("wan-2.7", "wan-2.7-pro"):
         raise WorkflowResolutionError(
-            "В режиме NSFW доступна только модель Wan 2.7"
+            "В режиме NSFW доступны только Wan 2.7 и Wan 2.7 Pro"
         )
-    if wave_profile == "regular" and wave_model == "wan-2.7":
+    if wave_profile == "regular" and wave_model_raw in ("wan-2.7", "wan-2.7-pro"):
         raise WorkflowResolutionError(
             "Wan 2.7 доступна только в режиме NSFW — отключите Regular или выберите другую модель"
         )
+    if wave_profile == "regular" and wave_model not in (
+        "nano-banana-2",
+        "nano-banana-pro",
+        "gpt-image-2",
+    ):
+        raise WorkflowResolutionError(
+            "В обычном режиме доступны Nano Banana, Nano Banana Pro и GPT Image"
+        )
 
-    wan_tier = str(gen_data.get("wanEditTier") or "standard").strip().lower()
-    if wan_tier not in ("standard", "mini"):
+    if wan_tier not in ("standard", "pro"):
         wan_tier = "standard"
     exif_camera = str(gen_data.get("exifCamera") or "main").strip() or "main"
 
-    if wave_profile == "regular" and wan_tier != "standard":
+    if wave_profile == "regular":
         wan_tier = "standard"
 
     _, scenario = _plan_input_target(target_id, edges, node_map)

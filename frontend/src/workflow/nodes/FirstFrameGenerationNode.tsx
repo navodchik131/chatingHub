@@ -38,16 +38,11 @@ function FirstFrameGenerationNodeComponent({ id, data }: NodeProps) {
   }, [])
 
   const availableModels = useMemo(
-    () => modelsForNsfwMode(models, nsfwEnabled).filter((m) => m.id !== 'gpt-image-2'),
+    () => modelsForNsfwMode(models, nsfwEnabled),
     [models, nsfwEnabled],
   )
 
-  const waveModelId = useMemo(() => {
-    if (availableModels.some((m) => m.id === nodeData.waveModelId)) {
-      return nodeData.waveModelId || availableModels[0]?.id || 'nano-banana-pro'
-    }
-    return availableModels[0]?.id || 'nano-banana-pro'
-  }, [availableModels, nodeData.waveModelId])
+  const waveModelId = pickValidModelId(models, nsfwEnabled, nodeData.waveModelId)
   const aspectOptions = useMemo(
     () => aspectsForModel(models, waveModelId),
     [models, waveModelId],

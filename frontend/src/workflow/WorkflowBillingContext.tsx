@@ -5,6 +5,8 @@ import {
   formatStudioImageCostLabel,
   quoteStudioImageCredits,
   studioGenerationUsesDemo,
+  normalizeWaveModelId,
+  wanEditTierFromUiModelId,
   type WaveProfile,
 } from '../studioImagePricing'
 
@@ -35,18 +37,21 @@ export function WorkflowBillingProvider({
       return { credits: null, label: 'Pro' }
     }
     const waveProfile: WaveProfile = nsfwEnabled ? 'nsfw' : 'regular'
+    const apiModel = normalizeWaveModelId(waveModelId)
+    const wanEditTier = wanEditTierFromUiModelId(waveModelId)
     const credits = quoteStudioImageCredits({
-      waveModelId,
+      waveModelId: apiModel,
       waveProfile,
       grokPipeline: 'workflow',
       workflow: true,
+      wanEditTier,
     })
     const useDemo = studioGenerationUsesDemo({
       billingPlan: me?.billing_plan,
       demoRemaining,
       creditsBalance,
       waveProfile,
-      waveModelId,
+      waveModelId: apiModel,
       studioMode: 'model_scene',
       workflow: true,
     })

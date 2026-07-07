@@ -178,6 +178,34 @@ def test_resolve_workflow_nsfw_only_wan():
         )
 
 
+def test_resolve_workflow_wan_pro_ui_id():
+    g = _base_graph()
+    for n in g["nodes"]:
+        if n["id"] == "gen-1":
+            n["data"]["waveModelId"] = "wan-2.7-pro"
+    plan = resolve_workflow_generation_plan(
+        target_node_id="gen-1",
+        nodes=g["nodes"],
+        edges=g["edges"],
+    )
+    assert plan.workflow_wave_model == "wan-2.7"
+    assert plan.wan_edit_tier == "pro"
+
+
+def test_resolve_workflow_regular_rejects_wan():
+    g = _base_graph()
+    for n in g["nodes"]:
+        if n["id"] == "gen-1":
+            n["data"]["nsfwEnabled"] = False
+            n["data"]["waveModelId"] = "wan-2.7-pro"
+    with pytest.raises(WorkflowResolutionError, match="Wan 2.7"):
+        resolve_workflow_generation_plan(
+            target_node_id="gen-1",
+            nodes=g["nodes"],
+            edges=g["edges"],
+        )
+
+
 def test_resolve_workflow_realism_disabled():
     g = _base_graph(realism_enabled=False)
     plan = resolve_workflow_generation_plan(
@@ -583,6 +611,60 @@ def test_first_frame_motion_without_reference():
     assert plan.motion_video_file_id == "mv-workflow"
     assert plan.references == ()
     assert plan.model_id == 7
+
+
+def test_image_generation_model_prompt_without_reference():
+    g = {
+        "nodes": [
+            {"id": "model-1", "type": "model", "data": {"modelId": 42}},
+            {
+                "id": "prompt-1",
+                "type": "prompt",
+                "data": {"prompt": "Сидит на диване, листает телефон"},
+            },
+            {
+                "id": "gen-1",
+                "type": "imageGeneration",
+                "data": {
+                    "waveModelId": "gpt-image-2",
+                    "nsfwEnabled": False,
+                    "outputAspect": "9:16",
+                },
+            },
+        ],
+        "edges": [
+            {"source": "model-1", "target": "gen-1", "targetHandle": "model-in"},
+            {"source": "prompt-1", "target": "gen-1", "targetHandle": "prompt-in"},
+        ],
+    }
+    plan = resolve_workflow_generation_plan(
+        target_node_id="gen-1",
+        nodes=g["nodes"],
+        edges=g["edges"],
+    )
+    assert plan.model_id == 42
+    assert plan.references == ()
+    assert plan.studio_wave_profile == "regular"
+    assert plan.workflow_wave_model == "gpt-image-2"
+    assert "диване" in plan.description
+
+
+def test_image_generation_prompt_only_without_model_or_reference():
+    g = {
+        "nodes": [
+            {"id": "prompt-1", "type": "prompt", "data": {"prompt": "Sunset beach"}},
+            {"id": "gen-1", "type": "imageGeneration", "data": {}},
+        ],
+        "edges": [
+            {"source": "prompt-1", "target": "gen-1", "targetHandle": "prompt-in"},
+        ],
+    }
+    with pytest.raises(WorkflowResolutionError, match="модель"):
+        resolve_workflow_generation_plan(
+            target_node_id="gen-1",
+            nodes=g["nodes"],
+            edges=g["edges"],
+        )
 
 
 def test_first_frame_model_prompt_without_reference():

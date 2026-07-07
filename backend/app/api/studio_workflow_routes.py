@@ -60,7 +60,7 @@ _GPT_IMAGE_ASPECTS = _NANO_BANANA_ASPECTS
 
 _MODEL_UI: dict[str, dict[str, Any]] = {
     "nano-banana-2": {
-        "label": "Nano Banana 2",
+        "label": "Nano Banana",
         "nsfw_only": False,
         "aspect_keys": sorted(_NANO_BANANA_ASPECTS),
     },
@@ -70,12 +70,17 @@ _MODEL_UI: dict[str, dict[str, Any]] = {
         "aspect_keys": sorted(_NANO_BANANA_ASPECTS),
     },
     "gpt-image-2": {
-        "label": "GPT Image 2",
+        "label": "GPT Image",
         "nsfw_only": False,
         "aspect_keys": sorted(_GPT_IMAGE_ASPECTS),
     },
     "wan-2.7": {
         "label": "Wan 2.7",
+        "nsfw_only": True,
+        "aspect_keys": sorted(_WAN_ASPECTS),
+    },
+    "wan-2.7-pro": {
+        "label": "Wan 2.7 Pro",
         "nsfw_only": True,
         "aspect_keys": sorted(_WAN_ASPECTS),
     },

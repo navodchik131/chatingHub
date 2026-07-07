@@ -23,7 +23,12 @@ const WAN_PRO_EXTRA = 2
 
 export function normalizeWaveModelId(raw: string | null | undefined): string {
   const m = (raw || 'wan-2.7').trim().toLowerCase()
+  if (m === 'wan-2.7-pro') return 'wan-2.7'
   return m in WS_BASE_CREDITS ? m : 'wan-2.7'
+}
+
+export function wanEditTierFromUiModelId(raw: string | null | undefined): WanEditTier {
+  return (raw || '').trim().toLowerCase() === 'wan-2.7-pro' ? 'pro' : 'standard'
 }
 
 export function normalizeWaveProfile(raw: string | null | undefined): WaveProfile {
