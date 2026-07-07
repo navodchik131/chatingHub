@@ -1224,26 +1224,27 @@
 
 .workflow-palette-dock {
   position: absolute;
-  left: 50%;
+  left: max(1rem, env(safe-area-inset-left, 0px));
+  right: max(1rem, env(safe-area-inset-right, 0px));
   bottom: 1.25rem;
-  transform: translateX(-50%);
-  max-width: min(calc(100% - 1rem), 920px);
-  padding: 0.55rem 0.65rem;
+  padding: 0.65rem 0.85rem;
   border-radius: 1rem;
   border: 1px solid rgba(63, 63, 70, 0.9);
   background: rgba(24, 24, 27, 0.92);
   backdrop-filter: blur(12px);
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
   z-index: 10;
-  display: flex;
-  flex-direction: column;
-  gap: 0.45rem;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.55rem 0.85rem;
+  overflow: visible;
 }
 
 .workflow-palette-dock__row {
   display: flex;
-  align-items: center;
-  gap: 0.5rem;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.35rem;
   min-width: 0;
 }
 
@@ -1252,9 +1253,8 @@
   display: flex;
   align-items: center;
   gap: 0.25rem;
-  width: 5.75rem;
-  padding-right: 0.35rem;
-  border-right: 1px solid rgba(63, 63, 70, 0.75);
+  padding-bottom: 0.25rem;
+  border-bottom: 1px solid rgba(63, 63, 70, 0.75);
 }
 
 .workflow-palette-dock__badge {
@@ -1273,12 +1273,13 @@
 
 .workflow-palette-dock__items {
   display: flex;
-  align-items: center;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  align-content: flex-start;
   gap: 0.35rem;
   flex: 1 1 auto;
   min-width: 0;
-  overflow-x: auto;
-  scrollbar-width: none;
+  overflow: visible;
 }
 
 .workflow-palette-dock__items::-webkit-scrollbar {
@@ -1287,6 +1288,7 @@
 
 .workflow-palette-dock__scroll {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.35rem;
 }
@@ -1327,27 +1329,30 @@
   line-height: 1;
 }
 
-.workflow-palette-dock__item::after {
-  content: attr(data-tooltip);
-  position: absolute;
-  bottom: calc(100% + 0.45rem);
-  left: 50%;
-  transform: translateX(-50%) scale(0.95);
-  opacity: 0;
-  pointer-events: none;
-  white-space: nowrap;
-  font-size: 0.6875rem;
-  color: #fafafa;
-  background: #27272a;
+.workflow-palette-dock__tooltip {
+  position: fixed;
+  z-index: 10050;
+  transform: translate(-50%, calc(-100% - 0.5rem));
+  max-width: min(18rem, calc(100vw - 1.5rem));
+  padding: 0.4rem 0.55rem;
+  border-radius: 0.5rem;
   border: 1px solid #3f3f46;
-  border-radius: 0.375rem;
-  padding: 0.25rem 0.45rem;
-  transition: opacity 0.12s, transform 0.12s;
+  background: #27272a;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  font-size: 0.6875rem;
+  line-height: 1.35;
+  color: #d4d4d8;
+  text-align: center;
 }
 
-.workflow-palette-dock__item:hover::after {
-  opacity: 1;
-  transform: translateX(-50%) scale(1);
+.workflow-palette-dock__tooltip strong {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #fafafa;
 }
 
 .workflow-node__preview-click {
@@ -1455,6 +1460,12 @@
   display: none !important;
 }
 
+@media (max-width: 1080px) {
+  .workflow-palette-dock {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 720px) {
   .workflow-page {
     height: 100dvh;
@@ -1527,30 +1538,28 @@
     left: max(0.5rem, env(safe-area-inset-left, 0px));
     right: max(0.5rem, env(safe-area-inset-right, 0px));
     bottom: max(0.65rem, env(safe-area-inset-bottom, 0px));
-    transform: none;
     border-radius: 1rem;
     padding: 0.4rem 0.45rem;
-    max-width: none;
+    grid-template-columns: 1fr;
+    gap: 0.4rem;
   }
 
   .workflow-palette-dock__row {
-    flex-direction: column;
-    align-items: stretch;
     gap: 0.25rem;
   }
 
   .workflow-palette-dock__row-head {
-    width: auto;
-    border-right: none;
-    padding-right: 0;
+    padding-bottom: 0.15rem;
     padding-left: 0.15rem;
   }
 
   .workflow-palette-dock__items {
     overflow-x: auto;
+    flex-wrap: nowrap;
     max-width: 100%;
     padding-bottom: 0.1rem;
     -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
   }
 
   .workflow-palette-dock__scroll {
@@ -1587,7 +1596,7 @@
     color: #a1a1aa;
   }
 
-  .workflow-palette-dock__item::after {
+  .workflow-palette-dock__tooltip {
     display: none;
   }
 
