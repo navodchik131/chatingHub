@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
@@ -134,7 +134,7 @@ async def chatter_stats_summary(
     user: User = Depends(get_current_user),
 ) -> ChatterStatsSummaryOut:
     assert_permission(user, PERM_CHAT)
-    today = date.today()
+    today = datetime.now(timezone.utc).date()
     if from_date is None and to_date is None:
         from_date = today.replace(day=1)
         to_date = today

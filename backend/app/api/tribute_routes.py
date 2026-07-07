@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,7 +23,7 @@ async def tribute_earnings_summary(
     user: User = Depends(get_current_user),
 ) -> TributeEarningsSummaryOut:
     assert_permission(user, PERM_CHAT)
-    today = date.today()
+    today = datetime.now(timezone.utc).date()
     if from_date is None and to_date is None:
         from_date = today.replace(day=1)
         to_date = today

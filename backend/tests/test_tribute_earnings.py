@@ -21,6 +21,14 @@ def test_norm_event_name() -> None:
 def test_amount_minor_from_payload() -> None:
     assert _amount_minor_from_payload({"amount": 500, "currency": "usd"}, event_name="newdonation") == 500
     assert _amount_minor_from_payload({"amount": 9.99, "currency": "eur"}, event_name="x") == 999
+    assert _amount_minor_from_payload({"amount": 500.0, "currency": "usd"}, event_name="x") == 500
+    assert (
+        _amount_minor_from_payload(
+            {"donation": {"amount": 1200, "currency": "rub"}},
+            event_name="newdonation",
+        )
+        == 1200
+    )
 
 
 def test_default_tribute_share_percent() -> None:

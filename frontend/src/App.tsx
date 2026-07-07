@@ -1139,7 +1139,15 @@ export default function App() {
   const [chatterStats, setChatterStats] = useState<ChatterStatsSummary | null>(null)
 
   const tributeEarningsDisplay = useMemo(() => {
-    if (!tributeEarnings) return { label: null as string | null, hint: null as string | null }
+    if (!tributeEarnings) {
+      if (integ?.tribute_configured) {
+        return {
+          label: '—',
+          hint: 'Донаты за текущий месяц (UTC)',
+        }
+      }
+      return { label: null as string | null, hint: null as string | null }
+    }
     const cur = tributeEarnings.currency || 'USD'
     const label = formatTributeMinor(tributeEarnings.display_minor, cur)
     const from = tributeEarnings.from_date
@@ -1149,7 +1157,7 @@ export default function App() {
       ? `Полная сумма · ${period}${tributeEarnings.event_count ? ` · ${tributeEarnings.event_count} событий` : ''}`
       : `${tributeEarnings.chatter_share_percent}% от дохода ваших моделей · ${period}`
     return { label, hint }
-  }, [tributeEarnings])
+  }, [tributeEarnings, integ?.tribute_configured])
 
   const chatterStatsDisplay = useMemo(() => {
     if (!chatterStats) {
@@ -1923,8 +1931,20 @@ export default function App() {
   useEffect(() => {
     if (!authed || !canChat) return
     if (appSection !== 'overview') return
-    void refreshTributeEarnings()
-    void refreshChatterStats()
+    const refresh = () => {
+      void refreshTributeEarnings()
+      void refreshChatterStats()
+    }
+    refresh()
+    const onVis = () => {
+      if (document.visibilityState === 'visible') refresh()
+    }
+    document.addEventListener('visibilitychange', onVis)
+    const timer = window.setInterval(refresh, 60_000)
+    return () => {
+      document.removeEventListener('visibilitychange', onVis)
+      window.clearInterval(timer)
+    }
   }, [authed, canChat, appSection, refreshTributeEarnings, refreshChatterStats])
 
   useEffect(() => {
