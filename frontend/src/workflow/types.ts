@@ -164,6 +164,7 @@ export interface PreviewNodeData {
   imageUrl?: string
   videoUrl?: string
   mediaKind?: 'image' | 'video'
+  generationId?: number | null
   isRunning?: boolean
   error?: string
   [key: string]: unknown

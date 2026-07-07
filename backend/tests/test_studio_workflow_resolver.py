@@ -919,3 +919,42 @@ def test_scenario_motion_video_pipeline_reads_scenario_settings():
     assert plan.auto_motion_prompt is True
     assert plan.negative_prompt == "blur"
     assert plan.prompt_from_compose is True
+
+
+def test_preview_node_as_reference_via_generation_id():
+    g = {
+        "nodes": [
+            {"id": "model-1", "type": "model", "data": {"modelId": 42}},
+            {
+                "id": "gen-src",
+                "type": "imageGeneration",
+                "data": {"generationId": 9001, "imageUrl": "https://x/a.png"},
+            },
+            {
+                "id": "preview-1",
+                "type": "preview",
+                "data": {"imageUrl": "https://x/a.png", "generationId": 9001},
+            },
+            {
+                "id": "desc-1",
+                "type": "refDescription",
+                "data": {"role": "clothes", "description": "red dress"},
+            },
+            {"id": "gen-1", "type": "imageGeneration", "data": {}},
+        ],
+        "edges": [
+            {"source": "gen-src", "target": "preview-1", "targetHandle": "image-in"},
+            {"source": "desc-1", "target": "preview-1", "targetHandle": "description-in"},
+            {"source": "preview-1", "target": "gen-1", "targetHandle": "reference-in", "sourceHandle": "reference-out"},
+            {"source": "model-1", "target": "gen-1", "targetHandle": "model-in"},
+        ],
+    }
+    plan = resolve_workflow_generation_plan(
+        target_node_id="gen-1",
+        nodes=g["nodes"],
+        edges=g["edges"],
+    )
+    assert len(plan.references) == 1
+    assert plan.references[0].generation_id == 9001
+    assert plan.references[0].role == "clothes"
+    assert plan.references[0].ref_id == ""

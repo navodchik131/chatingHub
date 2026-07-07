@@ -24,6 +24,13 @@ export function parseWorkflowGenerationId(raw: unknown): number | null {
 const OUTPUT_HANDLES = new Set([
   HandleIds.imageGenOut,
   HandleIds.videoOut,
+  HandleIds.referenceOut,
+])
+
+export const REFERENCE_IMAGE_SOURCE_TYPES = new Set([
+  'reference',
+  'preview',
+  ...IMAGE_OUTPUT_NODE_TYPES,
 ])
 
 export function getDownstreamPreviewNodeIds(sourceNodeId: string, edges: Edge[]): string[] {
@@ -41,20 +48,63 @@ function mediaFromSourceNode(sourceNode: Node): {
   imageUrl?: string
   videoUrl?: string
   mediaKind?: 'image' | 'video'
+  generationId?: number | null
 } {
   const data = (sourceNode.data ?? {}) as Record<string, unknown>
+  const generationId = parseWorkflowGenerationId(data.generationId)
   if (sourceNode.type === 'videoGeneration' || sourceNode.type === 'videoUpscale') {
     const videoUrl = data.videoUrl
     if (typeof videoUrl === 'string' && videoUrl) {
-      return { videoUrl, mediaKind: 'video' }
+      return { videoUrl, mediaKind: 'video', generationId }
+    }
+    return {}
+  }
+  if (sourceNode.type === 'preview') {
+    const imageUrl = data.imageUrl
+    if (typeof imageUrl === 'string' && imageUrl) {
+      return { imageUrl, mediaKind: 'image', generationId }
     }
     return {}
   }
   const imageUrl = data.imageUrl
   if (typeof imageUrl === 'string' && imageUrl) {
-    return { imageUrl, mediaKind: 'image' }
+    return { imageUrl, mediaKind: 'image', generationId }
   }
   return {}
+}
+
+export function resolvePreviewGenerationId(
+  nodeId: string,
+  nodes: Node[],
+  edges: Edge[],
+): number | null {
+  const preview = nodes.find((node) => node.id === nodeId)
+  if (!preview || preview.type !== 'preview') return null
+  const own = parseWorkflowGenerationId((preview.data as Record<string, unknown>).generationId)
+  if (own) return own
+
+  for (const edge of edges) {
+    if (edge.target !== nodeId) continue
+    if (edge.targetHandle !== HandleIds.previewIn) continue
+    const sourceNode = nodes.find((node) => node.id === edge.source)
+    if (!sourceNode || isWorkflowNodeDisabled(sourceNode.data as Record<string, unknown>)) {
+      continue
+    }
+    if (
+      sourceNode.type &&
+      (IMAGE_OUTPUT_NODE_TYPES.has(sourceNode.type) || sourceNode.type === 'preview')
+    ) {
+      const gid = parseWorkflowGenerationId(
+        (sourceNode.data as Record<string, unknown>).generationId,
+      )
+      if (gid) return gid
+      if (sourceNode.type === 'preview') {
+        const nested = resolvePreviewGenerationId(sourceNode.id, nodes, edges)
+        if (nested) return nested
+      }
+    }
+  }
+  return null
 }
 
 export function resolveConnectedPreviewMedia(
@@ -73,7 +123,8 @@ export function resolveConnectedPreviewMedia(
       sourceNode.type &&
       (IMAGE_OUTPUT_NODE_TYPES.has(sourceNode.type) ||
         sourceNode.type === 'videoGeneration' ||
-        sourceNode.type === 'videoUpscale')
+        sourceNode.type === 'videoUpscale' ||
+        sourceNode.type === 'preview')
     ) {
       const media = mediaFromSourceNode(sourceNode)
       if (media.imageUrl || media.videoUrl) return media
@@ -192,7 +243,7 @@ export function sanitizeNodeDataForExport(
       return rest
     }
     case 'preview': {
-      const { imageUrl: _imageUrl, videoUrl: _videoUrl, mediaKind: _mk, ...rest } = base
+      const { imageUrl: _imageUrl, videoUrl: _videoUrl, mediaKind: _mk, generationId: _gid, ...rest } = base
       return rest
     }
     default:
@@ -236,6 +287,9 @@ export function upstreamBoardstoryRefHasContent(
   const data = (src.data ?? {}) as Record<string, unknown>
   if (src.type === 'reference') {
     return Boolean(String(data.refId ?? '').trim())
+  }
+  if (src.type === 'preview') {
+    return Boolean(resolvePreviewGenerationId(src.id, nodes, edges))
   }
   if (IMAGE_OUTPUT_NODE_TYPES.has(src.type)) {
     const raw = data.generationId

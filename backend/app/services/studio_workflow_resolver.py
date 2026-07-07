@@ -57,6 +57,7 @@ class WorkflowReferenceItem:
     description: str
     file_name: str
     node_id: str = ""
+    generation_id: int | None = None
 
 
 @dataclass(frozen=True)
@@ -198,28 +199,19 @@ def _resolve_workflow_references_for_target(
     ref_nodes = _sources_for_plan_target(target_id, HANDLE["gen_reference_in"], edges, node_map)
     references: list[WorkflowReferenceItem] = []
     for ref_node in ref_nodes:
-        if str(ref_node.get("type") or "") != "reference":
+        ntype = str(ref_node.get("type") or "")
+        if ntype not in _REFERENCE_IMAGE_SOURCE_TYPES:
             raise WorkflowResolutionError(
-                "К входу reference можно подключить только ноды «Референс»"
+                "К входу reference можно подключить «Images ref», «Просмотр» или ноду с результатом генерации"
             )
         if not _is_node_enabled(ref_node):
             continue
-        ref_data = ref_node.get("data") if isinstance(ref_node.get("data"), dict) else {}
-        ref_id = str(ref_data.get("refId") or "").strip()
-        if not ref_id:
+        item = _reference_item_from_source_node(ref_node, edges, node_map)
+        if item is None:
             raise WorkflowResolutionError(
-                "Загрузите изображение во все подключённые ноды «Референс»"
+                "Загрузите изображение во все подключённые референсы или выполните upstream-генерацию"
             )
-        ref_role, ref_description = _reference_description_for_node(ref_node, edges, node_map)
-        references.append(
-            WorkflowReferenceItem(
-                ref_id=ref_id,
-                role=ref_role,
-                description=ref_description,
-                file_name=str(ref_data.get("fileName") or "").strip(),
-                node_id=str(ref_node.get("id") or "").strip(),
-            )
-        )
+        references.append(item)
     return sort_workflow_references(references)
 
 
@@ -399,11 +391,13 @@ def resolve_upstream_generation_id(
         raise WorkflowResolutionError(f"Подключите вход {label}")
     for src in sources:
         ntype = str(src.get("type") or "")
-        if ntype not in _IMAGE_OUTPUT_NODE_TYPES:
+        if ntype not in _IMAGE_OUTPUT_NODE_TYPES and ntype != "preview":
             raise WorkflowResolutionError(
-                f"К входу {label} можно подключить ноду с результатом генерации изображения"
+                f"К входу {label} можно подключить ноду с результатом генерации или «Просмотр»"
             )
         gid = _generation_id_from_node(src)
+        if gid is None and ntype == "preview":
+            gid = _generation_id_from_preview_upstream(src, edges, node_map)
         if gid is not None:
             return gid
     raise WorkflowResolutionError(
@@ -425,11 +419,13 @@ def resolve_upstream_generation_id_optional(
         return None
     for src in sources:
         ntype = str(src.get("type") or "")
-        if ntype not in _IMAGE_OUTPUT_NODE_TYPES:
+        if ntype not in _IMAGE_OUTPUT_NODE_TYPES and ntype != "preview":
             raise WorkflowResolutionError(
-                f"К входу {label} можно подключить ноду с результатом генерации изображения"
+                f"К входу {label} можно подключить ноду с результатом генерации или «Просмотр»"
             )
         gid = _generation_id_from_node(src)
+        if gid is None and ntype == "preview":
+            gid = _generation_id_from_preview_upstream(src, edges, node_map)
         if gid is not None:
             return gid
     raise WorkflowResolutionError(
@@ -708,6 +704,12 @@ _VIDEO_OUTPUT_NODE_TYPES = frozenset({"videoGeneration", "videoUpscale"})
 
 _IMAGE_OUTPUT_NODE_TYPES = frozenset({"imageGeneration", "firstFrameGeneration", "turnaroundSheet"})
 
+_REFERENCE_IMAGE_SOURCE_TYPES = frozenset(
+    {"reference", "preview", *_IMAGE_OUTPUT_NODE_TYPES}
+)
+
+_UPSTREAM_IMAGE_SOURCE_TYPES = frozenset({*_IMAGE_OUTPUT_NODE_TYPES, "preview"})
+
 
 def _node_map(nodes: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     out: dict[str, dict[str, Any]] = {}
@@ -716,6 +718,76 @@ def _node_map(nodes: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
         if nid:
             out[nid] = n
     return out
+
+
+def _generation_id_from_preview_upstream(
+    preview_node: dict[str, Any],
+    edges: list[dict[str, Any]],
+    node_map: dict[str, dict[str, Any]],
+) -> int | None:
+    preview_id = str(preview_node.get("id") or "").strip()
+    for edge in edges:
+        if str(edge.get("target") or "") != preview_id:
+            continue
+        if edge.get("targetHandle") is not None and str(edge.get("targetHandle")) != "image-in":
+            continue
+        src_id = str(edge.get("source") or "").strip()
+        src = node_map.get(src_id)
+        if src is None or not _is_node_enabled(src):
+            continue
+        ntype = str(src.get("type") or "")
+        if ntype in _IMAGE_OUTPUT_NODE_TYPES:
+            gid = _generation_id_from_node(src)
+            if gid is not None:
+                return gid
+        if ntype == "preview":
+            pdata = src.get("data") if isinstance(src.get("data"), dict) else {}
+            gid = _generation_id_from_node(src)
+            if gid is not None:
+                return gid
+            nested = _generation_id_from_preview_upstream(src, edges, node_map)
+            if nested is not None:
+                return nested
+    return None
+
+
+def _reference_item_from_source_node(
+    src: dict[str, Any],
+    edges: list[dict[str, Any]],
+    node_map: dict[str, dict[str, Any]],
+) -> WorkflowReferenceItem | None:
+    ntype = str(src.get("type") or "")
+    if ntype not in _REFERENCE_IMAGE_SOURCE_TYPES:
+        return None
+    ref_role, ref_description = _reference_description_for_node(src, edges, node_map)
+    data = src.get("data") if isinstance(src.get("data"), dict) else {}
+    node_id = str(src.get("id") or "").strip()
+
+    if ntype == "reference":
+        ref_id = str(data.get("refId") or "").strip()
+        if not ref_id:
+            return None
+        return WorkflowReferenceItem(
+            ref_id=ref_id,
+            role=ref_role,
+            description=ref_description,
+            file_name=str(data.get("fileName") or "").strip(),
+            node_id=node_id,
+        )
+
+    gid = _generation_id_from_node(src)
+    if ntype == "preview" and gid is None:
+        gid = _generation_id_from_preview_upstream(src, edges, node_map)
+    if gid is None:
+        return None
+    return WorkflowReferenceItem(
+        ref_id="",
+        role=ref_role,
+        description=ref_description,
+        file_name="",
+        node_id=node_id,
+        generation_id=gid,
+    )
 
 
 def _sources_for_target(
@@ -921,6 +993,19 @@ def _resolve_boardstory_slot_for_handle(
             description=description,
         )
 
+    if ntype == "preview":
+        gid = _generation_id_from_node(src)
+        if gid is None:
+            gid = _generation_id_from_preview_upstream(src, edges, node_map)
+        if gid is None:
+            return None
+        return BoardStoryImageSlot(
+            kind=kind,
+            generation_id=gid,
+            role=role or default_kind,
+            description=description,
+        )
+
     if ntype in _IMAGE_OUTPUT_NODE_TYPES:
         gid = _generation_id_from_node(src)
         if gid is None:
@@ -935,7 +1020,7 @@ def _resolve_boardstory_slot_for_handle(
         )
 
     raise WorkflowResolutionError(
-        f"К входу {default_kind} можно подключить «Референс» или ноду с результатом генерации"
+        f"К входу {default_kind} можно подключить «Images ref», «Просмотр» или ноду с результатом генерации"
     )
 
 
@@ -1081,26 +1166,21 @@ def resolve_workflow_generation_plan(
 
     references: list[WorkflowReferenceItem] = []
     for ref_node in ref_nodes:
-        if str(ref_node.get("type") or "") != "reference":
-            raise WorkflowResolutionError("К входу reference можно подключить только ноды «Референс»")
+        ntype = str(ref_node.get("type") or "")
+        if ntype not in _REFERENCE_IMAGE_SOURCE_TYPES:
+            raise WorkflowResolutionError(
+                "К входу reference можно подключить «Images ref», «Просмотр» или ноду с результатом генерации"
+            )
         if not _is_node_enabled(ref_node):
             continue
-        ref_data = ref_node.get("data") if isinstance(ref_node.get("data"), dict) else {}
-        ref_id = str(ref_data.get("refId") or "").strip()
-        if not ref_id:
+        item = _reference_item_from_source_node(ref_node, edges, node_map)
+        if item is None:
             if is_first_frame:
                 continue
-            raise WorkflowResolutionError("Загрузите изображение во все подключённые ноды «Референс»")
-        ref_role, ref_description = _reference_description_for_node(ref_node, edges, node_map)
-        references.append(
-            WorkflowReferenceItem(
-                ref_id=ref_id,
-                role=ref_role,
-                description=ref_description,
-                file_name=str(ref_data.get("fileName") or "").strip(),
-                node_id=str(ref_node.get("id") or "").strip(),
+            raise WorkflowResolutionError(
+                "Загрузите изображение во все подключённые референсы или выполните upstream-генерацию"
             )
-        )
+        references.append(item)
 
     motion_video_file_id = ""
     if is_first_frame:

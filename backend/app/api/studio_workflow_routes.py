@@ -388,7 +388,16 @@ async def api_workflow_execute(
             loaded_refs: list[tuple[bytes, str, Any]] = []
             for ref_item in plan.references:
                 try:
-                    ref_bytes, ref_mime = load_workflow_reference(oid, ref_item.ref_id)
+                    if ref_item.generation_id is not None:
+                        from app.services.chat_outbound import load_studio_generation_image_bytes
+
+                        ref_bytes, ref_mime = await load_studio_generation_image_bytes(
+                            session,
+                            owner_id=oid,
+                            generation_id=ref_item.generation_id,
+                        )
+                    else:
+                        ref_bytes, ref_mime = load_workflow_reference(oid, ref_item.ref_id)
                 except FileNotFoundError as e:
                     raise HTTPException(
                         status_code=400,

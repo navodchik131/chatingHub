@@ -144,7 +144,13 @@ function FirstFrameGenerationNodeComponent({ id, data }: NodeProps) {
           if (previewTargets.has(node.id) && node.type === 'preview') {
             return {
               ...node,
-              data: { ...node.data, imageUrl, videoUrl: undefined, mediaKind: 'image' },
+              data: {
+                ...node.data,
+                imageUrl,
+                generationId,
+                videoUrl: undefined,
+                mediaKind: 'image',
+              },
             }
           }
           return node

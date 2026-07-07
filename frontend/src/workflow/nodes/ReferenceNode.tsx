@@ -196,7 +196,7 @@ function ReferenceNodeComponent({ id, data }: NodeProps) {
             Роль: <strong>{assignedRole}</strong> — подключите к «Генерация» → references
           </>
         ) : (
-          <>Загрузите фото и задайте роль в ноде «Описание» слева</>
+          <>Загрузите фото и задайте роль в «Описание референса» слева</>
         )}
       </p>
       <input

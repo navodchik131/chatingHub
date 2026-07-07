@@ -139,7 +139,13 @@ function ImageGenerationNodeComponent({ id, data }: NodeProps) {
           if (previewTargets.has(node.id) && node.type === 'preview') {
             return {
               ...node,
-              data: { ...node.data, imageUrl },
+              data: {
+                ...node.data,
+                imageUrl,
+                generationId,
+                mediaKind: 'image',
+                videoUrl: undefined,
+              },
             }
           }
           return node

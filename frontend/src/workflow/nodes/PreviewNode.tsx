@@ -1,9 +1,9 @@
 import { memo, useMemo, useState } from 'react'
 import { Handle, Position, useEdges, useNodes, type NodeProps } from '@xyflow/react'
-import { resolveConnectedPreviewMedia } from '../graphResolver'
+import { resolveConnectedPreviewMedia, resolvePreviewGenerationId } from '../graphResolver'
 import { WorkflowImageLightbox } from '../WorkflowImageLightbox'
 import { BaseNode } from './BaseNode'
-import { HandleIds, type PreviewNodeData } from '../types'
+import { HandleIds, type PreviewNodeData, type RefDescriptionNodeData } from '../types'
 
 function PreviewNodeComponent({ id, data }: NodeProps) {
   const nodes = useNodes()
@@ -21,6 +21,23 @@ function PreviewNodeComponent({ id, data }: NodeProps) {
   const mediaKind =
     connected.mediaKind ?? nodeData.mediaKind ?? (videoUrl ? 'video' : 'image')
   const hasMedia = Boolean(imageUrl || videoUrl)
+  const hasImageRef = mediaKind === 'image' && Boolean(imageUrl)
+  const generationId = useMemo(
+    () => resolvePreviewGenerationId(id, nodes, edges) ?? nodeData.generationId ?? null,
+    [id, nodes, edges, nodeData.generationId],
+  )
+  const canUseAsRef = hasImageRef && Boolean(generationId)
+
+  const assignedRole = useMemo(() => {
+    for (const edge of edges) {
+      if (edge.target !== id || edge.targetHandle !== HandleIds.referenceDescriptionIn) continue
+      const source = nodes.find((node) => node.id === edge.source)
+      if (source?.type !== 'refDescription') continue
+      const role = String((source.data as RefDescriptionNodeData).role ?? '').trim()
+      if (role) return role
+    }
+    return ''
+  }, [edges, id, nodes])
 
   const handleDownload = () => {
     const url = videoUrl || imageUrl
@@ -37,18 +54,63 @@ function PreviewNodeComponent({ id, data }: NodeProps) {
     <>
       <BaseNode nodeId={id} type="preview" isRunning={nodeData.isRunning} error={nodeData.error}>
         <Handle
+          id={HandleIds.referenceDescriptionIn}
+          type="target"
+          position={Position.Left}
+          className="workflow-handle workflow-handle--description"
+          style={{ top: '22%' }}
+        />
+        <span
+          className="workflow-node__handle-label workflow-node__handle-label--left"
+          style={{ top: '22%' }}
+        >
+          desc
+        </span>
+
+        <Handle
           id={HandleIds.previewIn}
           type="target"
           position={Position.Left}
           className="workflow-handle workflow-handle--preview"
-          style={{ top: '50%' }}
+          style={{ top: '58%' }}
         />
-        <span className="workflow-node__handle-label workflow-node__handle-label--left">
+        <span
+          className="workflow-node__handle-label workflow-node__handle-label--left"
+          style={{ top: '58%' }}
+        >
           {mediaKind === 'video' ? 'video' : 'image'}
         </span>
 
+        {canUseAsRef ? (
+          <>
+            <Handle
+              id={HandleIds.referenceOut}
+              type="source"
+              position={Position.Right}
+              className="workflow-handle workflow-handle--reference"
+              style={{ top: '58%' }}
+            />
+            <span
+              className="workflow-node__handle-label workflow-node__handle-label--right"
+              style={{ top: '58%' }}
+            >
+              ref
+            </span>
+          </>
+        ) : null}
+
         <p className="workflow-node__hint">
-          {mediaKind === 'video' ? 'Итоговое видео' : 'Итоговое изображение'}
+          {mediaKind === 'video' ? (
+            'Итоговое видео'
+          ) : assignedRole ? (
+            <>
+              Роль: <strong>{assignedRole}</strong> — выход ref → references
+            </>
+          ) : canUseAsRef ? (
+            <>Подключите «Описание референса» слева и ref → references</>
+          ) : (
+            'Подключите выход генерации или дождитесь результата'
+          )}
         </p>
 
         {hasMedia ? (
