@@ -40,6 +40,8 @@ export function createDefaultNodeData(type: NodeType): AppNodeData {
       return { prompt: '', sendVideoReference: true }
     case 'scenarioOutfitChange':
       return {}
+    case 'scenarioLocationChange':
+      return {}
     case 'scenarioMotionVideo':
       return {
         prompt: '',

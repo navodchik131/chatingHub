@@ -1,0 +1,214 @@
+{
+  "format": "modelmate-workflow",
+  "version": 1,
+  "name": "Смена локации",
+  "exported_at": "2026-07-08T12:00:00.000Z",
+  "graph": {
+    "nodes": [
+      {
+        "id": "realism-1",
+        "type": "realism",
+        "position": {
+          "x": 1456,
+          "y": 567
+        },
+        "data": {
+          "enabled": true
+        }
+      },
+      {
+        "id": "model-1",
+        "type": "model",
+        "position": {
+          "x": 200,
+          "y": 420
+        },
+        "data": {}
+      },
+      {
+        "id": "refDescription-base",
+        "type": "refDescription",
+        "position": {
+          "x": 502,
+          "y": 597
+        },
+        "data": {
+          "role": "photo base / model",
+          "description": "Кого переносим — identity + pose + camera + crop. Фон и локацию НЕ копировать."
+        }
+      },
+      {
+        "id": "reference-base",
+        "type": "reference",
+        "position": {
+          "x": 973,
+          "y": 603
+        },
+        "data": {}
+      },
+      {
+        "id": "refDescription-loc1",
+        "type": "refDescription",
+        "position": {
+          "x": 522,
+          "y": 1027
+        },
+        "data": {
+          "role": "location / environment",
+          "description": "Целевая локация — фон, окружение, атмосфера и освещение сцены. Без человека."
+        }
+      },
+      {
+        "id": "reference-loc1",
+        "type": "reference",
+        "position": {
+          "x": 1003,
+          "y": 1031
+        },
+        "data": {}
+      },
+      {
+        "id": "refDescription-loc2",
+        "type": "refDescription",
+        "position": {
+          "x": 522,
+          "y": 1450
+        },
+        "data": {
+          "role": "location / environment",
+          "description": "Доп. реф локации (опционально) — детали интерьера, ракурс комнаты, время суток."
+        }
+      },
+      {
+        "id": "reference-loc2",
+        "type": "reference",
+        "position": {
+          "x": 1003,
+          "y": 1454
+        },
+        "data": {}
+      },
+      {
+        "id": "scenario-location",
+        "type": "scenarioLocationChange",
+        "position": {
+          "x": 1580,
+          "y": 900
+        },
+        "data": {}
+      },
+      {
+        "id": "imageGeneration-1",
+        "type": "imageGeneration",
+        "position": {
+          "x": 1986,
+          "y": 900
+        },
+        "data": {
+          "waveModelId": "wan-2.7",
+          "nsfwEnabled": true,
+          "outputAspect": "3:4"
+        }
+      },
+      {
+        "id": "prompt-1",
+        "type": "prompt",
+        "position": {
+          "x": 1427,
+          "y": 1303
+        },
+        "data": {
+          "prompt": "Replace background and environment with location reference(s).\nKeep same person, identity, pose, wardrobe, camera angle, framing, and crop as photo-base reference.\nAdapt scene lighting to the new location while preserving subject geometry."
+        }
+      },
+      {
+        "id": "preview-1",
+        "type": "preview",
+        "position": {
+          "x": 2306,
+          "y": 896
+        },
+        "data": {}
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-desc-base-ref",
+        "source": "refDescription-base",
+        "target": "reference-base",
+        "sourceHandle": "description-out",
+        "targetHandle": "description-in"
+      },
+      {
+        "id": "e-desc-loc1-ref",
+        "source": "refDescription-loc1",
+        "target": "reference-loc1",
+        "sourceHandle": "description-out",
+        "targetHandle": "description-in"
+      },
+      {
+        "id": "e-desc-loc2-ref",
+        "source": "refDescription-loc2",
+        "target": "reference-loc2",
+        "sourceHandle": "description-out",
+        "targetHandle": "description-in"
+      },
+      {
+        "id": "e-realism-scenario",
+        "source": "realism-1",
+        "target": "scenario-location",
+        "sourceHandle": "realism-out",
+        "targetHandle": "realism-in"
+      },
+      {
+        "id": "e-model-scenario",
+        "source": "model-1",
+        "target": "scenario-location",
+        "sourceHandle": "model-out",
+        "targetHandle": "model-in"
+      },
+      {
+        "id": "e-ref-base-scenario",
+        "source": "reference-base",
+        "target": "scenario-location",
+        "sourceHandle": "reference-out",
+        "targetHandle": "reference-in"
+      },
+      {
+        "id": "e-ref-loc1-scenario",
+        "source": "reference-loc1",
+        "target": "scenario-location",
+        "sourceHandle": "reference-out",
+        "targetHandle": "reference-in"
+      },
+      {
+        "id": "e-ref-loc2-scenario",
+        "source": "reference-loc2",
+        "target": "scenario-location",
+        "sourceHandle": "reference-out",
+        "targetHandle": "reference-in"
+      },
+      {
+        "id": "e-prompt-scenario",
+        "source": "prompt-1",
+        "target": "scenario-location",
+        "sourceHandle": "prompt-out",
+        "targetHandle": "prompt-in"
+      },
+      {
+        "id": "e-scenario-gen",
+        "source": "scenario-location",
+        "target": "imageGeneration-1",
+        "sourceHandle": "pipeline-out",
+        "targetHandle": "pipeline-in"
+      },
+      {
+        "id": "e-gen-preview",
+        "source": "imageGeneration-1",
+        "target": "preview-1",
+        "sourceHandle": "image-out",
+        "targetHandle": "image-in"
+      }
+    ]
+  }
+}

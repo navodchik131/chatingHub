@@ -1051,6 +1051,49 @@ def test_scenario_outfit_change_enriches_description():
     assert len(plan.references) == 2
 
 
+def test_scenario_location_change_enriches_description():
+    g = {
+        "nodes": [
+            {"id": "model-1", "type": "model", "data": {"modelId": 1}},
+            {"id": "ref-base", "type": "reference", "data": {"refId": "base1"}},
+            {"id": "ref-loc1", "type": "reference", "data": {"refId": "loc1"}},
+            {"id": "ref-loc2", "type": "reference", "data": {"refId": "loc2"}},
+            {"id": "prompt-1", "type": "prompt", "data": {"prompt": "swap location"}},
+            {
+                "id": "scenario-1",
+                "type": "scenarioLocationChange",
+                "data": {},
+            },
+            {
+                "id": "gen-1",
+                "type": "imageGeneration",
+                "data": {"waveModelId": "wan-2.7", "nsfwEnabled": True},
+            },
+        ],
+        "edges": [
+            {"source": "model-1", "target": "scenario-1", "targetHandle": "model-in"},
+            {"source": "ref-base", "target": "scenario-1", "targetHandle": "reference-in"},
+            {"source": "ref-loc1", "target": "scenario-1", "targetHandle": "reference-in"},
+            {"source": "ref-loc2", "target": "scenario-1", "targetHandle": "reference-in"},
+            {"source": "prompt-1", "target": "scenario-1", "targetHandle": "prompt-in"},
+            {
+                "source": "scenario-1",
+                "target": "gen-1",
+                "sourceHandle": "pipeline-out",
+                "targetHandle": "pipeline-in",
+            },
+        ],
+    }
+    plan = resolve_workflow_generation_plan(
+        target_node_id="gen-1",
+        nodes=g["nodes"],
+        edges=g["edges"],
+    )
+    assert plan.scenario_type == "scenarioLocationChange"
+    assert "location change" in plan.description.lower()
+    assert len(plan.references) == 3
+
+
 def test_scenario_motion_video_pipeline_reads_scenario_settings():
     from app.services.studio_workflow_resolver import resolve_workflow_video_plan
 

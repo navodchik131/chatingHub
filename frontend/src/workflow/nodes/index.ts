@@ -13,6 +13,7 @@ import { TurnaroundSheetNode } from './TurnaroundSheetNode'
 import { VideoGenerationNode } from './VideoGenerationNode'
 import { VideoPromptComposeNode } from './VideoPromptComposeNode'
 import { ScenarioOutfitChangeNode } from './ScenarioOutfitChangeNode'
+import { ScenarioLocationChangeNode } from './ScenarioLocationChangeNode'
 import { ScenarioFirstFrameNode } from './ScenarioFirstFrameNode'
 import { ScenarioMotionVideoNode } from './ScenarioMotionVideoNode'
 
@@ -31,6 +32,7 @@ export const nodeTypes: NodeTypes = {
   motionVideo: MotionVideoNode,
   videoPromptCompose: VideoPromptComposeNode,
   scenarioOutfitChange: ScenarioOutfitChangeNode,
+  scenarioLocationChange: ScenarioLocationChangeNode,
   scenarioMotionVideo: ScenarioMotionVideoNode,
   scenarioFirstFrame: ScenarioFirstFrameNode,
   videoGeneration: VideoGenerationNode,

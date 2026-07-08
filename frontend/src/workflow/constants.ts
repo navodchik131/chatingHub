@@ -16,6 +16,7 @@ export const NODE_LABELS: Record<NodeType, string> = {
   motionVideo: 'Реф. видео',
   videoPromptCompose: 'Промпт из видео',
   scenarioOutfitChange: 'Сценарий: одежда',
+  scenarioLocationChange: 'Сценарий: локация',
   scenarioMotionVideo: 'Сценарий: motion',
   scenarioFirstFrame: 'Сценарий: 1-й кадр',
   videoGeneration: 'Генерация видео',
@@ -38,6 +39,8 @@ export const NODE_DESCRIPTIONS: Record<NodeType, string> = {
     'Grok: детальный промпт из motion + BoardStory refs (одежда, окружение, модель)',
   scenarioOutfitChange:
     'Сценарий: photo base + outfit refs → pipeline → генерация изображения',
+  scenarioLocationChange:
+    'Сценарий: photo base / модель + refs локаций → pipeline → генерация изображения',
   scenarioMotionVideo:
     'Сценарий: motion + BoardStory → Grok-промпт, звук и Seedance → pipeline → видео',
   scenarioFirstFrame:
@@ -79,7 +82,7 @@ export const NODE_PALETTE_SECTIONS: NodePaletteSection[] = [
     id: 'scenarios',
     title: 'Сценарии',
     badge: '⚡',
-    types: ['scenarioOutfitChange', 'scenarioFirstFrame', 'scenarioMotionVideo'],
+    types: ['scenarioOutfitChange', 'scenarioLocationChange', 'scenarioFirstFrame', 'scenarioMotionVideo'],
   },
 ]
 

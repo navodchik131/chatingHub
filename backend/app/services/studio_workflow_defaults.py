@@ -27,6 +27,7 @@ _DEFAULT_TEMPLATE_FILES: tuple[str, ...] = (
     "razvertka.json",
     "sozdanie-litsa.json",
     "smena-odezhdy.json",
+    "smena-lokacii.json",
     "po-refu.json",
 )
 

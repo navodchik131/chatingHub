@@ -7,12 +7,15 @@ from typing import Any
 SCENARIO_NODE_TYPES = frozenset(
     {
         "scenarioOutfitChange",
+        "scenarioLocationChange",
         "scenarioMotionVideo",
         "scenarioFirstFrame",
     }
 )
 
-SCENARIO_IMAGE_TYPES = frozenset({"scenarioOutfitChange", "scenarioFirstFrame"})
+SCENARIO_IMAGE_TYPES = frozenset(
+    {"scenarioOutfitChange", "scenarioLocationChange", "scenarioFirstFrame"}
+)
 SCENARIO_VIDEO_TYPES = frozenset({"scenarioMotionVideo"})
 
 HANDLE_PIPELINE_IN = "pipeline-in"
@@ -102,4 +105,28 @@ def outfit_change_role_hints() -> dict[str, str]:
         "clothes": "target outfit to apply",
         "clothing": "target outfit to apply",
         "outfit": "target outfit to apply",
+    }
+
+
+def enrich_description_for_location_change(description: str) -> str:
+    base = (description or "").strip()
+    hint = (
+        "SCENARIO — location change: keep subject identity, face, body, wardrobe, pose, "
+        "camera angle, framing, and crop EXACTLY from MODEL_PROFILE and/or photo-base reference. "
+        "Replace ONLY background, environment, surroundings, and scene lighting with location "
+        "reference(s). Do NOT alter the person's appearance, proportions, or camera geometry."
+    )
+    if not base:
+        return hint
+    return f"{base}\n\n{hint}"
+
+
+def location_change_role_hints() -> dict[str, str]:
+    return {
+        "photo base": "subject identity, pose, camera, and framing anchor",
+        "photo_base": "subject identity, pose, camera, and framing anchor",
+        "model": "subject identity from studio profile",
+        "location": "target environment / background to apply",
+        "environment": "target environment / background to apply",
+        "scene": "target environment / background to apply",
     }

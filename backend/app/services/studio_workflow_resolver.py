@@ -11,6 +11,7 @@ from app.services.studio_workflow_boardstory import (
 )
 from app.services.studio_workflow_scenarios import (
     enrich_description_for_first_frame,
+    enrich_description_for_location_change,
     enrich_description_for_outfit_change,
     resolve_plan_target_id,
     scenario_data,
@@ -1328,6 +1329,8 @@ def resolve_workflow_generation_plan(
     scenario_type = scenario_type_of(scenario)
     if scenario_type == "scenarioOutfitChange":
         description = enrich_description_for_outfit_change(description)
+    elif scenario_type == "scenarioLocationChange":
+        description = enrich_description_for_location_change(description)
     elif scenario_type == "scenarioFirstFrame":
         description = enrich_description_for_first_frame(description)
 
