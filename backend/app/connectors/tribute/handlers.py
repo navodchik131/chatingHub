@@ -204,6 +204,10 @@ async def ingest_tribute_webhook(
 ) -> dict[str, Any]:
     name_raw = str(body.get("name") or "").strip()
     if not name_raw:
+        log.info(
+            "tribute webhook skipped no_event_name conn=%s (тест Tribute часто шлёт пустой ping — это нормально, в БД не пишется)",
+            conn.id,
+        )
         return {"ok": True, "skipped": "no_event_name"}
 
     norm = _norm_event_name(name_raw)

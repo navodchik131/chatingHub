@@ -237,11 +237,18 @@ async def tribute_webhook(
         )
     )
     if not conn:
+        log.warning("tribute webhook: unknown secret=%s…", (secret or "")[:8])
         raise HTTPException(status_code=404, detail="unknown webhook")
 
     raw = await request.body()
     sig_header = request.headers.get("trbt-signature") or request.headers.get(
         "Trbt-Signature"
+    )
+    log.info(
+        "tribute webhook hit conn=%s bytes=%s has_signature=%s",
+        conn.id,
+        len(raw),
+        bool(sig_header),
     )
     try:
         api_key = decrypt_secret(conn.api_key_encrypted)
@@ -250,7 +257,10 @@ async def tribute_webhook(
         raise HTTPException(status_code=503, detail="connection misconfigured") from e
 
     if not verify_tribute_webhook_signature(raw, sig_header, api_key):
-        log.warning("tribute webhook: invalid signature conn=%s", conn.id)
+        log.warning(
+            "tribute webhook: invalid signature conn=%s (пересохраните API-ключ из Tribute в кабинете)",
+            conn.id,
+        )
         raise HTTPException(status_code=401, detail="invalid tribute signature")
 
     try:
@@ -261,7 +271,14 @@ async def tribute_webhook(
         raise HTTPException(status_code=400, detail="json must be an object")
 
     try:
-        return await ingest_tribute_webhook(session, conn=conn, body=body)
+        result = await ingest_tribute_webhook(session, conn=conn, body=body)
+        log.info(
+            "tribute webhook done conn=%s event=%s result=%s",
+            conn.id,
+            body.get("name"),
+            result,
+        )
+        return result
     except Exception:
         log.exception("tribute webhook ingest failed conn=%s", conn.id)
         raise HTTPException(status_code=500, detail="ingest failed") from None
