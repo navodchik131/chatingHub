@@ -2,7 +2,15 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { apiFetch } from '../../api'
 import { formatHttpApiError, formatClientFetchError } from '../../apiErrors'
 import { WAVESPEED_REF_URL } from '../../billing/planCatalog'
-import { postStudioJobAndWait } from '../../studioJobs'
+import {
+  buildFaceSwapDualRefGraph,
+  pickWaveModelId,
+} from '../../studio/studioScenarioPresets'
+import {
+  resolveWorkflowWorkspaceIdForExecute,
+  runStudioScenarioAndWait,
+} from '../../studio/runStudioScenario'
+import { uploadWorkflowReference } from '../../workflow/api'
 import {
   markFirstGenWizardDoneForUser,
   trackFunnelEvent,
@@ -15,8 +23,10 @@ type Props = {
   open: boolean
   ownerId: number
   studioNeedsUserWsKey: boolean
+  workflowDemoLimited?: boolean
   onClose: () => void
   onComplete: (generationId: number | null) => void
+  onModelSaved?: () => void
   onOpenIntegrations: () => void
 }
 
@@ -28,8 +38,10 @@ export function FirstGenWizard({
   open,
   ownerId,
   studioNeedsUserWsKey,
+  workflowDemoLimited = false,
   onClose,
   onComplete,
+  onModelSaved,
   onOpenIntegrations,
 }: Props) {
   const [phase, setPhase] = useState<Phase>('photos')
@@ -44,6 +56,8 @@ export function FirstGenWizard({
   const [error, setError] = useState<string | null>(null)
   const [resultUrl, setResultUrl] = useState<string | null>(null)
   const [resultGenId, setResultGenId] = useState<number | null>(null)
+  const [modelSaved, setModelSaved] = useState(false)
+  const [modelSaveBusy, setModelSaveBusy] = useState(false)
   const runAbortRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
@@ -75,6 +89,8 @@ export function FirstGenWizard({
     setStatus(null)
     setResultUrl(null)
     setResultGenId(null)
+    setModelSaved(false)
+    setModelSaveBusy(false)
   }, [open])
 
   useEffect(() => {
@@ -157,73 +173,36 @@ export function FirstGenWizard({
     setPhase('generating')
     trackFunnelEvent('onboarding_generate_clicked')
     try {
-      setStatus('Анализируем фото модели и собираем профиль…')
-      const profileFd = new FormData()
-      profileFd.append('images', modelFile)
-      profileFd.append('onboarding_wizard', '1')
-      const profileR = await apiFetch('/api/studio/models/generate-profile', {
-        method: 'POST',
-        body: profileFd,
-        signal: abortController.signal,
-        timeoutMs: 120_000,
-      })
+      setStatus('Загружаем фото…')
+      const waveProfile = nsfwEnabled ? 'nsfw' : 'regular'
+      const [identityRef, sceneRef] = await Promise.all([
+        uploadWorkflowReference(modelFile),
+        uploadWorkflowReference(refFile),
+      ])
       if (abortController.signal.aborted) return
-      if (!profileR.ok) {
-        const j = await profileR.json().catch(() => ({}))
-        throw new Error(formatHttpApiError(profileR, j))
-      }
-      const profileData = (await profileR.json()) as { profile_text: string }
-      trackFunnelEvent('onboarding_profile_generated')
-
-      setStatus('Сохраняем модель в кабинете…')
-      const modelFd = new FormData()
-      modelFd.append('name', 'Моя модель')
-      modelFd.append('profile_text', profileData.profile_text)
-      modelFd.append('images', modelFile)
-      modelFd.append('image_kinds', JSON.stringify(['face']))
-      const modelR = await apiFetch('/api/studio/models', {
-        method: 'POST',
-        body: modelFd,
-        signal: abortController.signal,
-        timeoutMs: 120_000,
-      })
-      if (abortController.signal.aborted) return
-      if (!modelR.ok) {
-        const j = await modelR.json().catch(() => ({}))
-        throw new Error(formatHttpApiError(modelR, j))
-      }
-      const model = (await modelR.json()) as { id: number }
 
       setStatus('Генерируем первую картинку…')
-      const waveProfile = nsfwEnabled ? 'nsfw' : 'regular'
-      const genFd = new FormData()
-      genFd.append('description', '')
-      genFd.append('model_id', String(model.id))
-      genFd.append('image', refFile)
-      genFd.append('output_aspect', '3:4')
-      genFd.append('studio_mode', 'no_face')
-      genFd.append('wan_edit_tier', 'standard')
-      genFd.append('studio_wave_profile', waveProfile)
-      genFd.append('generate_wavespeed', '1')
-      genFd.append('wavespeed_single_reference', '1')
-      genFd.append('send_pose_reference_to_wavespeed', '0')
-      genFd.append('lock_model_hairstyle', '0')
-      genFd.append('exif_camera', 'iphone15')
-      genFd.append('onboarding_wizard', '1')
-      if (nsfwEnabled) {
-        genFd.append('workflow_wave_model', 'wan-2.7')
-      } else {
-        genFd.append('workflow_wave_model', 'nano-banana-2')
-      }
+      const built = buildFaceSwapDualRefGraph(identityRef.ref_id, sceneRef.ref_id, {
+        outputAspect: '3:4',
+        waveProfile,
+        waveModelId: pickWaveModelId({
+          outputAspect: '3:4',
+          waveProfile,
+          waveModelId: nsfwEnabled ? 'wan-2.7' : 'nano-banana-2',
+        }),
+        exifCamera: 'iphone15',
+        realismEnabled: true,
+      })
+      const workspaceId = await resolveWorkflowWorkspaceIdForExecute(workflowDemoLimited)
+      if (abortController.signal.aborted) return
 
-      const result = await postStudioJobAndWait<{
+      const result = await runStudioScenarioAndWait<{
         generated_image_url?: string | null
         generation_id?: number | null
-      }>(
-        '/api/studio/refine-prompt',
-        { method: 'POST', body: genFd, timeoutMs: 120_000, signal: abortController.signal },
-        { signal: abortController.signal },
-      )
+      }>(built, {
+        workspaceId,
+        signal: abortController.signal,
+      })
 
       if (abortController.signal.aborted) return
 
@@ -271,6 +250,59 @@ export function FirstGenWizard({
     if (ok) void runPipeline()
   }
 
+  const saveModelToCabinet = async () => {
+    if (!modelFile || modelSaved || modelSaveBusy) return
+    setError(null)
+    setModelSaveBusy(true)
+    trackFunnelEvent('onboarding_model_save_clicked')
+    try {
+      setStatus('Собираем профиль модели…')
+      const profileFd = new FormData()
+      profileFd.append('images', modelFile)
+      profileFd.append('onboarding_wizard', '1')
+      const profileR = await apiFetch('/api/studio/models/generate-profile', {
+        method: 'POST',
+        body: profileFd,
+        timeoutMs: 120_000,
+      })
+      if (!profileR.ok) {
+        const j = await profileR.json().catch(() => ({}))
+        throw new Error(formatHttpApiError(profileR, j))
+      }
+      const profileData = (await profileR.json()) as { profile_text: string }
+      trackFunnelEvent('onboarding_profile_generated')
+
+      setStatus('Сохраняем модель в кабинете…')
+      const modelFd = new FormData()
+      modelFd.append('name', 'Моя модель')
+      modelFd.append('profile_text', profileData.profile_text)
+      modelFd.append('images', modelFile)
+      modelFd.append('image_kinds', JSON.stringify(['face']))
+      const modelR = await apiFetch('/api/studio/models', {
+        method: 'POST',
+        body: modelFd,
+        timeoutMs: 120_000,
+      })
+      if (!modelR.ok) {
+        const j = await modelR.json().catch(() => ({}))
+        throw new Error(formatHttpApiError(modelR, j))
+      }
+      setModelSaved(true)
+      trackFunnelEvent('onboarding_model_saved')
+      onModelSaved?.()
+    } catch (e) {
+      setError(formatClientFetchError(e, true))
+    } finally {
+      setModelSaveBusy(false)
+      setStatus(null)
+    }
+  }
+
+  const finishWizard = () => {
+    onComplete(resultGenId)
+    onClose()
+  }
+
   if (!open) return null
 
   return (
@@ -281,7 +313,7 @@ export function FirstGenWizard({
             <p className="first-gen-wizard__eyebrow">Первая картинка</p>
             <h2 id="fgw-title">Попробуйте студию за 2 минуты</h2>
             <p className="muted first-gen-wizard__lead">
-              Два фото — модель и референс сцены. Мы соберём профиль по вашему снимку и сгенерируем кадр.
+              Два фото — модель и референс сцены. Подставим внешность с первого снимка в кадр со второго.
             </p>
           </div>
           <button type="button" className="ghost-btn first-gen-wizard__skip" onClick={skip}>
@@ -422,14 +454,43 @@ export function FirstGenWizard({
             ) : (
               <p className="muted">Результат сохранён в «Сохранённые» — откройте вкладку «Картинки».</p>
             )}
+            {modelFile ? (
+              <div className="first-gen-wizard__save-model">
+                <div className="first-gen-wizard__save-model-head">
+                  {modelPreview ? (
+                    <img src={modelPreview} alt="" className="first-gen-wizard__save-model-thumb" />
+                  ) : null}
+                  <div>
+                    <p className="first-gen-wizard__save-model-title">Сохранить модель в кабинет?</p>
+                    <p className="muted small first-gen-wizard__save-model-hint">
+                      {modelSaved
+                        ? 'Модель «Моя модель» сохранена — можно выбирать её в студии и workflow.'
+                        : 'Необязательно. Профиль соберём по вашему фото — для режимов «Основная» и «По промту».'}
+                    </p>
+                  </div>
+                </div>
+                {!modelSaved ? (
+                  <button
+                    type="button"
+                    className="ghost-btn first-gen-wizard__save-model-btn"
+                    disabled={modelSaveBusy || busy}
+                    onClick={() => void saveModelToCabinet()}
+                  >
+                    {modelSaveBusy ? (status ?? 'Сохраняем…') : 'Сохранить модель в кабинет'}
+                  </button>
+                ) : (
+                  <p className="first-gen-wizard__save-model-done" role="status">
+                    ✓ Сохранено в кабинете
+                  </p>
+                )}
+              </div>
+            ) : null}
             <div className="first-gen-wizard__actions">
               <button
                 type="button"
                 className="send-btn"
-                onClick={() => {
-                  onComplete(resultGenId)
-                  onClose()
-                }}
+                disabled={modelSaveBusy}
+                onClick={finishWizard}
               >
                 Перейти в студию
               </button>

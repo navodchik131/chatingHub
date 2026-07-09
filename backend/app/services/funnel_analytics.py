@@ -52,6 +52,8 @@ ALLOWED_FUNNEL_EVENTS = frozenset(
         "onboarding_profile_generated",
         "onboarding_generate_clicked",
         "onboarding_generation_success",
+        "onboarding_model_save_clicked",
+        "onboarding_model_saved",
         "onboarding_ws_key_saved",
         "model_created",
         "studio_opened",

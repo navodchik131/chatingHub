@@ -78,6 +78,13 @@ import {
 } from './components/SetupTour'
 import { studioImageGenerateBlockReason } from './studio/studioGenerateGate'
 import {
+  buildAndStartFaceSwapScenario,
+  buildAndStartPhotoEditScenario,
+  buildAndStartPoRefuScenario,
+  buildAndStartPromptOnlyScenario,
+} from './studio/runStudioScenario'
+import type { StudioScenarioGenOptions } from './studio/studioScenarioPresets'
+import {
   WavespeedSetupBanner,
   needsUserWavespeedKey,
 } from './components/WavespeedSetupBanner'
@@ -511,6 +518,7 @@ interface UserMe {
   signup_bonus_credits?: number
   demo_generations_remaining?: number
   demo_generations_grant?: number
+  workflow_demo_limited?: boolean
   chat_allowed?: boolean
 }
 
@@ -1198,12 +1206,15 @@ export default function App() {
   const [appSection, setAppSection] = useState<WorkspaceSection>('overview')
   const [studioDesc, setStudioDesc] = useState('')
   const [studioFile, setStudioFile] = useState<File | null>(null)
+  /** Face swap без модели из кабинета — фото identity (как в workflow «Смена модели»). */
+  const [studioIdentityFile, setStudioIdentityFile] = useState<File | null>(null)
   /** Маска (белое = зона замены): Multi-URL в Nano/WAN при STUDIO_REGIONAL_MASKED_EDIT=true или Z-Inpaint если false. */
   const [studioInpaintMaskFile, setStudioInpaintMaskFile] = useState<File | null>(null)
   /** Режим маски: рисуем белым по превью референса. */
   const [studioPaintInpaintMask, setStudioPaintInpaintMask] = useState(false)
   const [studioMaskBrushPreset, setStudioMaskBrushPreset] = useState<'s' | 'm' | 'l'>('m')
   const [studioReferenceObjectUrl, setStudioReferenceObjectUrl] = useState<string | null>(null)
+  const [studioIdentityObjectUrl, setStudioIdentityObjectUrl] = useState<string | null>(null)
   const [studioReferenceAnalysis, setStudioReferenceAnalysis] =
     useState<StudioReferenceAnalysisResponse | null>(null)
   const [studioReferenceAnalyzing, setStudioReferenceAnalyzing] = useState(false)
@@ -1445,6 +1456,21 @@ export default function App() {
       return url
     })
   }, [studioFile])
+
+  useEffect(() => {
+    if (!studioIdentityFile) {
+      setStudioIdentityObjectUrl((prev) => {
+        if (prev) URL.revokeObjectURL(prev)
+        return null
+      })
+      return
+    }
+    const url = URL.createObjectURL(studioIdentityFile)
+    setStudioIdentityObjectUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev)
+      return url
+    })
+  }, [studioIdentityFile])
 
   useEffect(() => {
     setStudioReferenceAnalysis(null)
@@ -2222,6 +2248,7 @@ export default function App() {
         studioMode,
         studioDesc,
         studioFile,
+        studioIdentityFile,
         studioPhotoEditArchiveId,
         studioSelectedModelId,
         studioSendPoseRefToWavespeed,
@@ -2239,6 +2266,7 @@ export default function App() {
       studioMode,
       studioDesc,
       studioFile,
+      studioIdentityFile,
       studioPhotoEditArchiveId,
       studioSelectedModelId,
       studioSendPoseRefToWavespeed,
@@ -3745,31 +3773,23 @@ export default function App() {
       setError('Добавьте описание, референс и/или выберите сохранённую модель.')
       return
     }
-    if (studioMode === 'face_swap') {
-      if (studioSelectedModelId == null) {
-        setError('В режиме Face swap выберите модель студии (эталон внешности).')
-        return
-      }
-      if (!studioFile) {
-        setError('Загрузите исходное фото (сцена + человека, которого заменить на вашу модель).')
-        return
-      }
-    }
     if (studioMode === 'no_face' && studioSelectedModelId == null && !studioFile) {
       setError('В режиме «Без лица» выберите модель или загрузите референс.')
       return
     }
-    if (studioMode === 'grok_compose') {
+    if (studioMode === 'grok_compose' || studioMode === 'face_swap') {
       if (health?.studio_grok_scene_compose_configured === false) {
         setError('Grok не настроен на сервере (нужен GROK_API_KEY в .env).')
         return
       }
-      if (studioSelectedModelId == null) {
-        setError('В режиме «Face swap» выберите модель с листами и JSON-профилем.')
-        return
-      }
       if (!studioFile) {
         setError('Загрузите референс сцены (поза, свет, кадр).')
+        return
+      }
+      if (studioSelectedModelId == null && !studioIdentityFile) {
+        setError(
+          'Face swap: выберите модель из кабинета или загрузите фото модели (identity).',
+        )
         return
       }
     }
@@ -3815,39 +3835,106 @@ export default function App() {
         import.meta.env.DEV &&
         Boolean(health?.studio_allow_prompt_only) &&
         studioDevPromptOnly
-      const fd = new FormData()
-      fd.append('description', studioDesc.trim())
-      if (studioSelectedModelId != null) {
-        fd.append('model_id', String(studioSelectedModelId))
+      const workflowDemoLimited = Boolean(me?.workflow_demo_limited)
+      const genOptions: StudioScenarioGenOptions = {
+        outputAspect: studioOutputAspect,
+        waveProfile: studioWaveProfile,
+        wanEditTier: studioWanEditTier,
+        exifCamera: studioExifCamera,
+        realismEnabled: true,
+        userPrompt: studioDesc.trim(),
       }
-      if (studioFile) fd.append('image', studioFile)
-      if (inpaintAttach) fd.append('inpaint_mask', inpaintAttach)
-      if (
-        studioMode === 'photo_edit' &&
-        studioPhotoEditArchiveId != null &&
-        !studioFile
-      ) {
-        fd.append('existing_generation_id', String(studioPhotoEditArchiveId))
+      const useWorkflowPath =
+        !promptOnlyActive &&
+        (studioMode === 'model_scene' ||
+          studioMode === 'grok_compose' ||
+          studioMode === 'face_swap' ||
+          studioMode === 'model' ||
+          (studioMode === 'photo_edit' &&
+            studioFile != null &&
+            !inpaintAttach &&
+            studioPhotoEditArchiveId == null))
+
+      let accepted: Awaited<ReturnType<typeof postStudioJobStart>>
+      if (useWorkflowPath) {
+        if (studioMode === 'model_scene') {
+          if (studioSelectedModelId == null || !studioFile) {
+            throw new Error('Основная: нужны модель и референс сцены.')
+          }
+          ;({ accepted } = await buildAndStartPoRefuScenario({
+            modelId: studioSelectedModelId,
+            sceneFile: studioFile,
+            genOptions,
+            workflowDemoLimited,
+          }))
+        } else if (studioMode === 'grok_compose' || studioMode === 'face_swap') {
+          if (!studioFile) {
+            throw new Error('Face swap: загрузите референс сцены.')
+          }
+          ;({ accepted } = await buildAndStartFaceSwapScenario({
+            sceneFile: studioFile,
+            identityFile: studioIdentityFile,
+            modelId: studioSelectedModelId,
+            genOptions,
+            workflowDemoLimited,
+          }))
+        } else if (studioMode === 'model') {
+          if (studioSelectedModelId == null) {
+            throw new Error('По промту: выберите модель.')
+          }
+          ;({ accepted } = await buildAndStartPromptOnlyScenario({
+            modelId: studioSelectedModelId,
+            genOptions,
+            workflowDemoLimited,
+          }))
+        } else if (studioMode === 'photo_edit') {
+          if (!studioFile) {
+            throw new Error('Доработка фото: загрузите снимок.')
+          }
+          ;({ accepted } = await buildAndStartPhotoEditScenario({
+            sceneFile: studioFile,
+            userPrompt: studioDesc.trim(),
+            genOptions,
+            workflowDemoLimited,
+          }))
+        } else {
+          throw new Error('Режим студии не поддерживается через workflow.')
+        }
+      } else {
+        const fd = new FormData()
+        fd.append('description', studioDesc.trim())
+        if (studioSelectedModelId != null) {
+          fd.append('model_id', String(studioSelectedModelId))
+        }
+        if (studioFile) fd.append('image', studioFile)
+        if (inpaintAttach) fd.append('inpaint_mask', inpaintAttach)
+        if (
+          studioMode === 'photo_edit' &&
+          studioPhotoEditArchiveId != null &&
+          !studioFile
+        ) {
+          fd.append('existing_generation_id', String(studioPhotoEditArchiveId))
+        }
+        fd.append('output_aspect', studioOutputAspect)
+        fd.append('studio_mode', studioMode)
+        fd.append('wan_edit_tier', studioWanEditTier)
+        fd.append('studio_wave_profile', studioWaveProfile)
+        fd.append('generate_wavespeed', promptOnlyActive ? '0' : '1')
+        fd.append('wavespeed_single_reference', '1')
+        fd.append(
+          'send_pose_reference_to_wavespeed',
+          studioSendPoseRefToWavespeed ? '1' : '0',
+        )
+        fd.append('lock_model_hairstyle', studioLockModelHairstyle ? '1' : '0')
+        fd.append('exif_camera', studioExifCamera)
+        if (studioReferenceAnalysis?.analysis) {
+          fd.append('reference_analysis_json', JSON.stringify(studioReferenceAnalysis.analysis))
+        }
+        accepted = await postStudioJobStart('/api/studio/refine-prompt', {
+          method: 'POST',
+          body: fd,
+        })
       }
-      fd.append('output_aspect', studioOutputAspect)
-      fd.append('studio_mode', studioMode)
-      fd.append('wan_edit_tier', studioWanEditTier)
-      fd.append('studio_wave_profile', studioWaveProfile)
-      fd.append('generate_wavespeed', promptOnlyActive ? '0' : '1')
-      fd.append('wavespeed_single_reference', '1')
-      fd.append(
-        'send_pose_reference_to_wavespeed',
-        studioSendPoseRefToWavespeed ? '1' : '0',
-      )
-      fd.append('lock_model_hairstyle', studioLockModelHairstyle ? '1' : '0')
-      fd.append('exif_camera', studioExifCamera)
-      if (studioReferenceAnalysis?.analysis) {
-        fd.append('reference_analysis_json', JSON.stringify(studioReferenceAnalysis.analysis))
-      }
-      const accepted = await postStudioJobStart('/api/studio/refine-prompt', {
-        method: 'POST',
-        body: fd,
-      })
       const gid =
         typeof accepted.generation_id === 'number' ? accepted.generation_id : null
       resolveOptimisticStudioGeneration(optimisticTempId, gid)
@@ -5161,6 +5248,7 @@ export default function App() {
         open={firstGenWizardOpen}
         ownerId={me?.id ?? 0}
         studioNeedsUserWsKey={studioNeedsUserWsKey}
+        workflowDemoLimited={Boolean(me?.workflow_demo_limited)}
         onClose={() => setFirstGenWizardOpen(false)}
         onOpenIntegrations={() => {
           setAccountTab('integrations')
@@ -5176,6 +5264,9 @@ export default function App() {
           void loadStudioModels()
           void loadStudioGenerationsReset()
           void refreshMe()
+        }}
+        onModelSaved={() => {
+          void loadStudioModels()
         }}
       />
 
@@ -7957,8 +8048,8 @@ export default function App() {
                   ? 'Развёртка, тело, лицо — фигура и внешность модели'
                   : studioModeUsesTextOnlyPrompt(studioMode)
                     ? 'Обязательна — только её фото в генерацию'
-                    : studioMode === 'face_swap'
-                      ? 'Обязательна вместе с фото'
+                    : studioMode === 'face_swap' || studioMode === 'grok_compose'
+                      ? 'Или загрузите фото модели ниже'
                       : 'Листы для лица и тела'
               }
               icon={<IconModel className="studio-slot__icon-svg" />}
@@ -7969,6 +8060,22 @@ export default function App() {
               allowEmpty={studioMode !== 'model_scene' && !studioModeUsesTextOnlyPrompt(studioMode)}
               emptyLabel="Без модели"
             />
+            {studioMode === 'grok_compose' || studioMode === 'face_swap' ? (
+              <StudioMediaSlot
+                label="Фото модели"
+                hint={
+                  studioSelectedModelId != null
+                    ? 'Необязательно — identity уже из кабинета'
+                    : 'Лицо и внешность (как identity ref в workflow)'
+                }
+                icon="image"
+                previewUrl={studioIdentityObjectUrl}
+                accept="image/jpeg,image/png,image/webp,image/gif"
+                onFile={(f) => setStudioIdentityFile(f)}
+                onClear={() => setStudioIdentityFile(null)}
+                emptyLabel="JPG, PNG, WebP"
+              />
+            ) : null}
             {studioMode === 'photo_edit' ? (
               <StudioArchiveThumbPicker
                 label="Кадр из архива"
@@ -7986,8 +8093,8 @@ export default function App() {
                 label={
                   studioMode === 'photo_edit'
                     ? 'Фото'
-                    : studioMode === 'face_swap'
-                      ? 'Исходное фото'
+                    : studioMode === 'face_swap' || studioMode === 'grok_compose'
+                      ? 'Референс сцены'
                       : 'Референс'
                 }
                 hint={
@@ -7995,7 +8102,9 @@ export default function App() {
                     ? 'Или выберите миниатюру выше'
                     : studioMode === 'model_scene'
                       ? 'Якорь кадра: Grok + WaveSpeed (поза, свет, ракурс)'
-                      : 'Поза и сцена'
+                      : studioMode === 'grok_compose' || studioMode === 'face_swap'
+                        ? 'Pose, фон, свет — как scene ref в «Смена модели»'
+                        : 'Поза и сцена'
                 }
                 icon="image"
                 previewUrl={studioReferenceObjectUrl}
@@ -8065,9 +8174,14 @@ export default function App() {
             ) : null}
             {studioMode === 'model_scene' ? (
               <p className="studio-mode-hint">
-                Референс анализирует Grok (поза, свет, кадр — без внешности с рефа). В WaveSpeed
-                уходит готовый текстовый промпт и фото модели — без реф-кадра, чтобы не
-                «приклеивало» чужое лицо и тело.
+                Пайплайн как workflow «По рефу»: модель из кабинета + референс сцены (Grok описывает
+                кадр, WaveSpeed собирает снимок).
+              </p>
+            ) : null}
+            {studioMode === 'grok_compose' || studioMode === 'face_swap' ? (
+              <p className="studio-mode-hint">
+                Пайплайн как workflow «Смена модели»: модель из кабинета или отдельное фото identity
+                + референс сцены с человеком.
               </p>
             ) : null}
             {!studioModeUsesTextOnlyPrompt(studioMode) && studioMode !== 'model_scene' ? (

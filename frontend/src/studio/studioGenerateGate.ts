@@ -18,6 +18,7 @@ export type StudioGenerateGateInput = {
   studioMode: StudioImageMode
   studioDesc: string
   studioFile: File | null
+  studioIdentityFile: File | null
   studioPhotoEditArchiveId: number | null
   studioSelectedModelId: number | null
   studioSendPoseRefToWavespeed: boolean
@@ -37,6 +38,7 @@ export function studioImageGenerateBlockReason(input: StudioGenerateGateInput): 
     studioMode,
     studioDesc,
     studioFile,
+    studioIdentityFile,
     studioPhotoEditArchiveId,
     studioSelectedModelId,
     studioSendPoseRefToWavespeed,
@@ -96,11 +98,11 @@ export function studioImageGenerateBlockReason(input: StudioGenerateGateInput): 
   }
 
   if (studioMode === 'grok_compose') {
-    if (studioSelectedModelId == null) {
-      return 'Face swap: выберите модель с фото и профилем.'
-    }
     if (!studioFile) {
       return 'Face swap: загрузите референс сцены (поза, свет, кадр).'
+    }
+    if (studioSelectedModelId == null && !studioIdentityFile) {
+      return 'Face swap: выберите модель из кабинета или загрузите фото модели (identity).'
     }
     return null
   }

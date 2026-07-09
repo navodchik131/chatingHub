@@ -13,6 +13,8 @@ export type FunnelEventName =
   | 'onboarding_profile_generated'
   | 'onboarding_generate_clicked'
   | 'onboarding_generation_success'
+  | 'onboarding_model_save_clicked'
+  | 'onboarding_model_saved'
   | 'onboarding_ws_key_saved'
   | 'studio_opened'
   | 'generate_clicked'
