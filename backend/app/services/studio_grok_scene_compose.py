@@ -852,7 +852,8 @@ async def grok_compose_studio_workflow_multi_ref(
         "Hairstyle locked from photo-base workflow reference — do not change length, color, or style."
         if location_change
         else (
-            "Hairstyle from MODEL photos and profile — scene reference must not override hair identity."
+            "Hairstyle from identity source (MODEL photos or identity workflow ref) — "
+            "scene reference must not override hair identity."
             if face_swap or lock_hairstyle
             else "Hairstyle may follow workflow references when USER_NOTES request it."
         )
@@ -883,11 +884,18 @@ async def grok_compose_studio_workflow_multi_ref(
             "MODEL studio photos are NOT used.\n\n"
         )
     elif face_swap:
-        model_rule = (
-            "FACE/MODEL SWAP: scene reference locks pose, camera, crop, background, and light ONLY. "
-            "MODEL studio photos define WHO replaces the person in that scene. "
-            "Do NOT keep the scene-reference person's face or body identity.\n\n"
-        )
+        if labeled:
+            model_rule = (
+                "FACE/MODEL SWAP: scene reference locks pose, camera, crop, background, and light ONLY. "
+                "MODEL studio photos define WHO replaces the person in that scene. "
+                "Do NOT keep the scene-reference person's face or body identity.\n\n"
+            )
+        else:
+            model_rule = (
+                "FACE/MODEL SWAP (refs only): scene reference locks pose, camera, crop, background, and light. "
+                "Identity reference (model / subject / photo base) defines WHO replaces the person in that scene. "
+                "Do NOT keep the scene-reference person's face or body identity.\n\n"
+            )
     elif labeled:
         model_rule = (
             "Attached MODEL studio photos define WHO when present. "

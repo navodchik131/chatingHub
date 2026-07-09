@@ -19,7 +19,7 @@ function ScenarioFaceSwapNodeComponent({ id, data }: NodeProps) {
         className="workflow-node__handle-label workflow-node__handle-label--left"
         style={{ top: '16%' }}
       >
-        model
+        model (opt)
       </span>
 
       <Handle
@@ -79,8 +79,8 @@ function ScenarioFaceSwapNodeComponent({ id, data }: NodeProps) {
       </span>
 
       <p className="workflow-node__hint">
-        Сценарий «смена модели»: модель из кабинета + ref сцены → pipeline.
-        Pose, ракурс, фон и свет — с референса; меняется только человек (identity).
+        Смена модели: pose/сцена с ref, identity — из ноды «Модель» или второго ref
+        (model / subject / photo base). Без модели: два ref — identity + scene.
       </p>
 
       <Handle

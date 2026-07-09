@@ -169,7 +169,11 @@ from app.services.studio_grok_scene_compose import (
     grok_scene_compose_configured,
 )
 from app.services.studio_workflow_refs import load_workflow_reference
-from app.services.studio_workflow_resolver import WorkflowGenerationPlan, WorkflowReferenceItem
+from app.services.studio_workflow_resolver import (
+    WorkflowGenerationPlan,
+    WorkflowReferenceItem,
+    is_workflow_dual_ref_identity_mode,
+)
 from app.services.studio_motion_grok_pipeline import (
     assemble_motion_grok_wavespeed_prompt,
     describe_motion_still_for_ui,
@@ -2571,12 +2575,17 @@ async def _accept_studio_refine_job_from_workflow(
     _ = primary_bytes, primary_mime
 
     if reference_images:
+        dual_ref_identity = is_workflow_dual_ref_identity_mode(
+            scenario_type=plan.scenario_type,
+            model_id=plan.model_id,
+            references=[ref_item for _b, _m, ref_item in reference_images],
+        )
         if plan.scenario_type == "scenarioLocationChange":
             # Identity + pose from photo-base ref; location refs = background only.
             studio_mode = "grok_compose"
-        elif plan.scenario_type == "scenarioFaceSwap":
+        elif plan.scenario_type == "scenarioFaceSwap" or dual_ref_identity:
             # face_swap: scene ref must be Image 1 in WaveSpeed (pose/camera/background lock).
-            studio_mode = "face_swap" if plan.model_id is not None else "grok_compose"
+            studio_mode = "face_swap"
         elif plan.model_id is not None:
             studio_mode = "model_scene"
         else:
@@ -2586,7 +2595,14 @@ async def _accept_studio_refine_job_from_workflow(
         studio_mode = "model"
 
     location_change = plan.scenario_type == "scenarioLocationChange" and bool(reference_images)
-    face_swap = plan.scenario_type == "scenarioFaceSwap" and bool(reference_images)
+    face_swap = bool(reference_images) and (
+        plan.scenario_type == "scenarioFaceSwap"
+        or is_workflow_dual_ref_identity_mode(
+            scenario_type=plan.scenario_type,
+            model_id=plan.model_id,
+            references=[ref_item for _b, _m, ref_item in reference_images],
+        )
+    )
     effective_model_id = None if location_change else plan.model_id
 
     params: dict[str, Any] = {
@@ -3690,16 +3706,19 @@ async def _studio_job_execute_refine_prompt(
                         )
                         attach_model_urls = bool(prompt_only_ws)
                 elif mode_n == "face_swap":
-                    attach_model_urls = bool(
-                        select_grok_compose_wavespeed_identity_images(
-                            imgs_for_ws,
-                            pose_reference_nude=reference_pose_is_nude_or_minimal_coverage(
-                                reference_scene
-                            ),
+                    if mid is None:
+                        attach_model_urls = False
+                    elif user_pose_ref_prepended:
+                        attach_model_urls = bool(
+                            select_grok_compose_wavespeed_identity_images(
+                                imgs_for_ws,
+                                pose_reference_nude=reference_pose_is_nude_or_minimal_coverage(
+                                    reference_scene
+                                ),
+                            )
                         )
-                        if user_pose_ref_prepended
-                        else imgs_model
-                    )
+                    else:
+                        attach_model_urls = bool(imgs_model)
                 elif mode_n == "no_face":
                     attach_model_urls = bool(sm_loaded and imgs_model)
 

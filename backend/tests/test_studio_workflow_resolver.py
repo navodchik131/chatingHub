@@ -1156,7 +1156,7 @@ def test_scenario_face_swap_enriches_and_requires_model():
             },
         ],
     }
-    with pytest.raises(WorkflowResolutionError, match="Модель"):
+    with pytest.raises(WorkflowResolutionError, match="identity"):
         resolve_workflow_generation_plan(
             target_node_id="gen-1",
             nodes=g["nodes"],
@@ -1173,6 +1173,71 @@ def test_scenario_face_swap_enriches_and_requires_model():
     assert plan.scenario_type == "scenarioFaceSwap"
     assert plan.model_id == 3
     assert "model swap" in plan.description.lower()
+
+
+def test_scenario_face_swap_dual_ref_without_model():
+    from app.services.studio_workflow_resolver import (
+        is_workflow_dual_ref_identity_mode,
+        order_workflow_references_for_wavespeed,
+    )
+
+    g = {
+        "nodes": [
+            {
+                "id": "desc-id",
+                "type": "refDescription",
+                "data": {"role": "model / identity", "description": "WHO"},
+            },
+            {"id": "ref-id", "type": "reference", "data": {"refId": "id1"}},
+            {
+                "id": "desc-scene",
+                "type": "refDescription",
+                "data": {"role": "pose + camera", "description": "geometry"},
+            },
+            {"id": "ref-scene", "type": "reference", "data": {"refId": "scene1"}},
+            {"id": "prompt-1", "type": "prompt", "data": {"prompt": "swap model"}},
+            {"id": "scenario-1", "type": "scenarioFaceSwap", "data": {}},
+            {
+                "id": "gen-1",
+                "type": "imageGeneration",
+                "data": {"waveModelId": "wan-2.7", "nsfwEnabled": True},
+            },
+        ],
+        "edges": [
+            {"source": "desc-id", "target": "ref-id", "targetHandle": "description-in"},
+            {"source": "desc-scene", "target": "ref-scene", "targetHandle": "description-in"},
+            {"source": "ref-id", "target": "scenario-1", "targetHandle": "reference-in"},
+            {"source": "ref-scene", "target": "scenario-1", "targetHandle": "reference-in"},
+            {"source": "prompt-1", "target": "scenario-1", "targetHandle": "prompt-in"},
+            {
+                "source": "scenario-1",
+                "target": "gen-1",
+                "sourceHandle": "pipeline-out",
+                "targetHandle": "pipeline-in",
+            },
+        ],
+    }
+    plan = resolve_workflow_generation_plan(
+        target_node_id="gen-1",
+        nodes=g["nodes"],
+        edges=g["edges"],
+    )
+    assert plan.model_id is None
+    assert plan.scenario_type == "scenarioFaceSwap"
+    assert is_workflow_dual_ref_identity_mode(
+        scenario_type=plan.scenario_type,
+        model_id=plan.model_id,
+        references=plan.references,
+    )
+    assert plan.references[0].ref_id == "scene1"
+    assert plan.references[1].ref_id == "id1"
+    ordered = order_workflow_references_for_wavespeed(
+        scenario_type=plan.scenario_type,
+        model_id=plan.model_id,
+        references=plan.references,
+    )
+    assert ordered[0].ref_id == "scene1"
+    assert ordered[1].ref_id == "id1"
 
 
 def test_scenario_motion_video_pipeline_reads_scenario_settings():

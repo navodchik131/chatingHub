@@ -45,7 +45,7 @@ export const NODE_DESCRIPTIONS: Record<NodeType, string> = {
   scenarioLocationChange:
     'Сценарий: photo base / модель + refs локаций → pipeline → генерация изображения',
   scenarioFaceSwap:
-    'Сценарий: модель из кабинета + ref сцены → pipeline → замена человека с сохранением pose',
+    'Сценарий: ref сцены + модель из кабинета или ref identity → замена человека с сохранением pose',
   scenarioMotionVideo:
     'Сценарий: motion + BoardStory → Grok-промпт, звук и Seedance → pipeline → видео',
   scenarioFirstFrame:

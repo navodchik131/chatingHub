@@ -153,8 +153,9 @@ def enrich_description_for_face_swap(description: str) -> str:
         "SCENARIO — face / model swap (strict scene lock):\n"
         "PRIORITY 1 — scene reference defines pose, limb angles, head yaw/gaze, camera height/angle/distance, "
         "crop edges, background, props, environmental light, and wardrobe coverage zones. Do NOT change these.\n"
-        "PRIORITY 2 — replace ONLY the person in the scene with MODEL_PROFILE from studio model photos: "
-        "face, skin, hair, body proportions and identity.\n"
+        "PRIORITY 2 — replace ONLY the person in the scene with identity from MODEL_PROFILE "
+        "(studio model photos) OR from the identity workflow reference (model / subject / photo base): "
+        "face, skin, hair, body proportions.\n"
         "FORBIDDEN: copying the original person's face from the scene ref; re-pose or reframe; new background; "
         "face-swap paste look — rebuild one coherent individual from MODEL_PROFILE in the locked scene geometry."
     )

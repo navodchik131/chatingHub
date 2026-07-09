@@ -42,10 +42,29 @@ _PRIMARY_REF_ROLE_HINTS = (
     "base",
     "model",
     "subject",
+    "identity",
     "pose",
     "scene",
     "photo edit",
     "photo_edit",
+)
+
+_IDENTITY_REF_ROLE_HINTS = (
+    "identity",
+    "photo base",
+    "photo_base",
+    "subject",
+    "who",
+)
+
+_SCENE_DONOR_REF_ROLE_HINTS = (
+    "pose",
+    "camera",
+    "framing",
+    "geometry",
+    "scene donor",
+    "scene /",
+    "light donor",
 )
 
 
@@ -1097,6 +1116,73 @@ def sort_workflow_references(
     return tuple(sorted(references, key=lambda ref: _role_sort_key(ref.role)))
 
 
+def is_identity_ref_role(role: str | None) -> bool:
+    r = (role or "").strip().lower()
+    if not r:
+        return False
+    if any(h in r for h in _IDENTITY_REF_ROLE_HINTS):
+        return True
+    if "model" in r and not any(h in r for h in ("pose", "camera", "scene", "framing")):
+        return True
+    return False
+
+
+def is_scene_donor_ref_role(role: str | None) -> bool:
+    r = (role or "").strip().lower()
+    if not r:
+        return False
+    if any(h in r for h in _LOCATION_REF_ROLE_HINTS):
+        return False
+    if any(h in r for h in _SCENE_DONOR_REF_ROLE_HINTS):
+        return True
+    if "scene" in r and not is_identity_ref_role(role):
+        return True
+    return False
+
+
+def is_workflow_dual_ref_identity_mode(
+    *,
+    scenario_type: str | None,
+    model_id: int | None,
+    references: tuple[WorkflowReferenceItem, ...] | list[WorkflowReferenceItem],
+) -> bool:
+    """Два ref без модели из кабинета: identity-фото + scene/pose-фото."""
+    if model_id is not None:
+        return False
+    refs = list(references)
+    if len(refs) < 2:
+        return False
+    has_identity = any(is_identity_ref_role(r.role) for r in refs)
+    has_scene = any(is_scene_donor_ref_role(r.role) for r in refs)
+    if not (has_identity and has_scene):
+        return False
+    return scenario_type in (None, "scenarioFaceSwap")
+
+
+def order_workflow_references_for_wavespeed(
+    *,
+    scenario_type: str | None,
+    model_id: int | None,
+    references: tuple[WorkflowReferenceItem, ...] | list[WorkflowReferenceItem],
+) -> tuple[WorkflowReferenceItem, ...]:
+    """WaveSpeed / face_swap: scene bitmap first, identity ref second when no cabinet model."""
+    refs = list(references)
+    if not refs:
+        return ()
+    if model_id is not None:
+        return sort_workflow_references(refs)
+    identity = [r for r in refs if is_identity_ref_role(r.role)]
+    scene = [r for r in refs if is_scene_donor_ref_role(r.role)]
+    if identity and scene and scenario_type in (None, "scenarioFaceSwap"):
+        ordered = scene + identity
+        seen = {id(r) for r in ordered}
+        for r in refs:
+            if id(r) not in seen:
+                ordered.append(r)
+        return tuple(ordered)
+    return sort_workflow_references(refs)
+
+
 def assemble_workflow_grok_notes(
     *,
     prompt_text: str,
@@ -1358,21 +1444,32 @@ def resolve_workflow_generation_plan(
         description = enrich_description_for_location_change(description)
     elif scenario_type == "scenarioFaceSwap":
         description = enrich_description_for_face_swap(description)
-        if model_id is None:
+        if model_id is None and not any(is_identity_ref_role(r.role) for r in sorted_refs):
             raise WorkflowResolutionError(
-                "Сценарий «смена модели»: выберите модель в ноде «Модель»"
+                "Сценарий «смена модели»: выберите модель в ноде «Модель» "
+                "или подключите ref identity (model / subject / photo base)"
             )
         if not sorted_refs:
             raise WorkflowResolutionError(
                 "Сценарий «смена модели»: подключите референс сцены с человеком"
             )
+        if model_id is None and not any(is_scene_donor_ref_role(r.role) for r in sorted_refs):
+            raise WorkflowResolutionError(
+                "Сценарий «смена модели»: у ref сцены укажите роль pose / camera / scene"
+            )
     elif scenario_type == "scenarioFirstFrame":
         description = enrich_description_for_first_frame(description)
+
+    output_refs = order_workflow_references_for_wavespeed(
+        scenario_type=scenario_type,
+        model_id=model_id,
+        references=sorted_refs,
+    )
 
     return WorkflowGenerationPlan(
         model_id=model_id,
         description=description,
-        references=sorted_refs,
+        references=output_refs,
         output_aspect=output_aspect,
         studio_wave_profile=wave_profile,
         workflow_wave_model=wave_model,
