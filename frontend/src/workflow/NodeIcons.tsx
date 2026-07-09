@@ -54,6 +54,18 @@ export function NodeIcon({ type, size = 16, className }: Props) {
           <path d="M6 7h12M6 12h9M6 17h11" stroke={stroke} strokeWidth="1.75" strokeLinecap="round" />
         </svg>
       )
+    case 'textNote':
+      return (
+        <svg {...common}>
+          <path
+            d="M6 4h12a2 2 0 012 2v14l-4-3H6a2 2 0 01-2-2V6a2 2 0 012-2z"
+            stroke={stroke}
+            strokeWidth="1.75"
+            strokeLinejoin="round"
+          />
+          <path d="M8 9h8M8 13h6M8 17h4" stroke={stroke} strokeWidth="1.75" strokeLinecap="round" />
+        </svg>
+      )
     case 'refDescription':
       return (
         <svg {...common}>
@@ -211,6 +223,7 @@ export const NODE_ICON_COLORS: Record<NodeType, string> = {
   realism: '#22c55e',
   selfie: '#38bdf8',
   prompt: '#10b981',
+  textNote: '#94a3b8',
   refDescription: '#a855f7',
   reference: '#f59e0b',
   imageGeneration: '#6366f1',

@@ -5,6 +5,7 @@ import { ModelNode } from './ModelNode'
 import { MotionVideoNode } from './MotionVideoNode'
 import { PreviewNode } from './PreviewNode'
 import { PromptNode } from './PromptNode'
+import { TextNoteNode } from './TextNoteNode'
 import { RealismNode } from './RealismNode'
 import { SelfieNode } from './SelfieNode'
 import { RefDescriptionNode } from './RefDescriptionNode'
@@ -25,6 +26,7 @@ export const nodeTypes: NodeTypes = {
   realism: RealismNode,
   selfie: SelfieNode,
   prompt: PromptNode,
+  textNote: TextNoteNode,
   refDescription: RefDescriptionNode,
   reference: ReferenceNode,
   imageGeneration: ImageGenerationNode,

@@ -603,6 +603,24 @@
   border-color: rgba(16, 185, 129, 0.35);
 }
 
+.workflow-node--textNote {
+  border-color: rgba(148, 163, 184, 0.4);
+  border-style: dashed;
+  min-width: 240px;
+  max-width: 360px;
+  background: rgba(24, 24, 27, 0.92);
+  box-shadow: none;
+}
+
+.workflow-node--textNote .workflow-node__textarea--note {
+  min-height: 120px;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  background: rgba(9, 9, 11, 0.55);
+  border-style: dashed;
+  border-color: rgba(113, 113, 122, 0.45);
+}
+
 .workflow-node--refDescription {
   border-color: rgba(168, 85, 247, 0.35);
 }

@@ -8,6 +8,7 @@ export const NODE_LABELS: Record<NodeType, string> = {
   realism: 'Реализм',
   selfie: 'Селфи',
   prompt: 'Промпт',
+  textNote: 'Заметка',
   refDescription: 'Описание референса',
   reference: 'Images ref',
   imageGeneration: 'Генерация фото',
@@ -30,6 +31,7 @@ export const NODE_DESCRIPTIONS: Record<NodeType, string> = {
   realism: 'Реалистичный вид снимка',
   selfie: 'Селфи с вытянутой руки — фронталка, перебивает противоречия в промпте',
   prompt: 'Доп. указания (опционально; сцена берётся из первого кадра)',
+  textNote: 'Текстовый блок на холсте — подсказки, чеклисты, заметки (не влияет на генерацию)',
   refDescription: 'Роль и назначение референса (photo base, clothes, pose…)',
   reference: 'Фото-референс — к генерации можно подключить несколько',
   imageGeneration: 'Сборка промпта и генерация изображения (plain или через pipeline)',
@@ -67,7 +69,7 @@ export const NODE_PALETTE_SECTIONS: NodePaletteSection[] = [
   {
     id: 'common',
     title: 'Общие',
-    types: ['model', 'realism', 'selfie', 'prompt', 'refDescription', 'reference', 'preview'],
+    types: ['model', 'realism', 'selfie', 'prompt', 'textNote', 'refDescription', 'reference', 'preview'],
   },
   {
     id: 'image',

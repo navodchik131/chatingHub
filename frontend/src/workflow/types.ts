@@ -10,6 +10,7 @@ export type NodeType =
   | 'realism'
   | 'selfie'
   | 'prompt'
+  | 'textNote'
   | 'refDescription'
   | 'reference'
   | 'imageGeneration'
@@ -53,6 +54,11 @@ export interface PromptNodeData {
   prompt: string
   isRunning?: boolean
   error?: string
+  [key: string]: unknown
+}
+
+export interface TextNoteNodeData {
+  text: string
   [key: string]: unknown
 }
 
@@ -197,6 +203,7 @@ export type AppNodeData =
   | RealismNodeData
   | SelfieNodeData
   | PromptNodeData
+  | TextNoteNodeData
   | RefDescriptionNodeData
   | ReferenceNodeData
   | ImageGenerationNodeData

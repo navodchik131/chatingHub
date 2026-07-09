@@ -16,6 +16,8 @@ export function createDefaultNodeData(type: NodeType): AppNodeData {
       return { enabled: true }
     case 'prompt':
       return { prompt: '' }
+    case 'textNote':
+      return { text: '' }
     case 'refDescription':
       return { role: '', description: '' }
     case 'reference':
