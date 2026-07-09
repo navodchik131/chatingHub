@@ -79,8 +79,9 @@ function ScenarioLocationChangeNodeComponent({ id, data }: NodeProps) {
       </span>
 
       <p className="workflow-node__hint">
-        Сценарий «смена локации»: photo base (модель + pose/camera) + refs локаций → pipeline.
-        Identity, pose и ракурс сохраняются; меняются только окружение и освещение сцены.
+        Сценарий «смена локации»: photo base (весь человек + pose/camera) + refs локаций → pipeline.
+        Identity, причёска, pose и ракурс — только с photo base; ноду «Модель» не подключайте.
+        Локация — только фон.
       </p>
 
       <Handle

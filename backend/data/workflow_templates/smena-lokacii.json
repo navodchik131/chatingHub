@@ -2,7 +2,7 @@
   "format": "modelmate-workflow",
   "version": 1,
   "name": "Смена локации",
-  "exported_at": "2026-07-08T12:00:00.000Z",
+  "exported_at": "2026-07-09T06:30:00.000Z",
   "graph": {
     "nodes": [
       {
@@ -17,15 +17,6 @@
         }
       },
       {
-        "id": "model-1",
-        "type": "model",
-        "position": {
-          "x": 200,
-          "y": 420
-        },
-        "data": {}
-      },
-      {
         "id": "refDescription-base",
         "type": "refDescription",
         "position": {
@@ -33,8 +24,8 @@
           "y": 597
         },
         "data": {
-          "role": "photo base / model",
-          "description": "Кого переносим — identity + pose + camera + crop. Фон и локацию НЕ копировать."
+          "role": "photo base / subject",
+          "description": "Полный исходный кадр: лицо, причёска, одежда, поза, ракурс, кроп, реквизит.\nФон с этого фото НЕ копировать — только человек и geometry кадра."
         }
       },
       {
@@ -55,7 +46,7 @@
         },
         "data": {
           "role": "location / environment",
-          "description": "Целевая локация — фон, окружение, атмосфера и освещение сцены. Без человека."
+          "description": "Только фон: архитектура, площадь, небо, освещение.\nБез людей. Не менять позу и ракурс с photo base."
         }
       },
       {
@@ -64,27 +55,6 @@
         "position": {
           "x": 1003,
           "y": 1031
-        },
-        "data": {}
-      },
-      {
-        "id": "refDescription-loc2",
-        "type": "refDescription",
-        "position": {
-          "x": 522,
-          "y": 1450
-        },
-        "data": {
-          "role": "location / environment",
-          "description": "Доп. реф локации (опционально) — детали интерьера, ракурс комнаты, время суток."
-        }
-      },
-      {
-        "id": "reference-loc2",
-        "type": "reference",
-        "position": {
-          "x": 1003,
-          "y": 1454
         },
         "data": {}
       },
@@ -105,7 +75,7 @@
           "y": 900
         },
         "data": {
-          "waveModelId": "wan-2.7",
+          "waveModelId": "seedream-v5.0-pro",
           "nsfwEnabled": true,
           "outputAspect": "3:4"
         }
@@ -118,7 +88,7 @@
           "y": 1303
         },
         "data": {
-          "prompt": "Replace background and environment with location reference(s).\nKeep same person, identity, pose, wardrobe, camera angle, framing, and crop as photo-base reference.\nAdapt scene lighting to the new location while preserving subject geometry."
+          "prompt": "In-place background swap only.\nKeep the exact same person, hairstyle, outfit, pose, camera angle, crop, and props from photo-base reference.\nReplace ONLY the background/environment with the location reference — match its architecture, ground, sky, and ambient light.\nDo NOT copy people from the location ref. Do NOT reframe or re-pose."
         }
       },
       {
@@ -147,25 +117,11 @@
         "targetHandle": "description-in"
       },
       {
-        "id": "e-desc-loc2-ref",
-        "source": "refDescription-loc2",
-        "target": "reference-loc2",
-        "sourceHandle": "description-out",
-        "targetHandle": "description-in"
-      },
-      {
         "id": "e-realism-scenario",
         "source": "realism-1",
         "target": "scenario-location",
         "sourceHandle": "realism-out",
         "targetHandle": "realism-in"
-      },
-      {
-        "id": "e-model-scenario",
-        "source": "model-1",
-        "target": "scenario-location",
-        "sourceHandle": "model-out",
-        "targetHandle": "model-in"
       },
       {
         "id": "e-ref-base-scenario",
@@ -177,13 +133,6 @@
       {
         "id": "e-ref-loc1-scenario",
         "source": "reference-loc1",
-        "target": "scenario-location",
-        "sourceHandle": "reference-out",
-        "targetHandle": "reference-in"
-      },
-      {
-        "id": "e-ref-loc2-scenario",
-        "source": "reference-loc2",
         "target": "scenario-location",
         "sourceHandle": "reference-out",
         "targetHandle": "reference-in"

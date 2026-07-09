@@ -2571,7 +2571,10 @@ async def _accept_studio_refine_job_from_workflow(
     _ = primary_bytes, primary_mime
 
     if reference_images:
-        if plan.model_id is not None:
+        if plan.scenario_type == "scenarioLocationChange":
+            # Identity + pose from photo-base ref; location refs = background only.
+            studio_mode = "grok_compose"
+        elif plan.model_id is not None:
             studio_mode = "model_scene"
         else:
             # Референс + промпт без модели из кабинета — identity из загруженного фото
@@ -2579,27 +2582,35 @@ async def _accept_studio_refine_job_from_workflow(
     else:
         studio_mode = "model"
 
+    location_change = plan.scenario_type == "scenarioLocationChange" and bool(reference_images)
+    effective_model_id = None if location_change else plan.model_id
+
     params: dict[str, Any] = {
         "description": plan.description,
-        "model_id": str(plan.model_id) if plan.model_id is not None else "",
+        "model_id": str(effective_model_id) if effective_model_id is not None else "",
         "existing_generation_id": "",
         "output_aspect": plan.output_aspect,
         "studio_mode": studio_mode,
         "wan_edit_tier": plan.wan_edit_tier,
         "studio_wave_profile": plan.studio_wave_profile,
         "generate_wavespeed": "1",
-        "wavespeed_single_reference": "1" if reference_images else "0",
-        "send_pose_reference_to_wavespeed": (
+        "wavespeed_single_reference": (
             "0"
-            if reference_images and plan.model_id is not None
+            if location_change
             else ("1" if reference_images else "0")
         ),
-        "lock_model_hairstyle": "0",
+        "send_pose_reference_to_wavespeed": (
+            "1"
+            if location_change or not (reference_images and plan.model_id is not None)
+            else "0"
+        ),
+        "lock_model_hairstyle": "1" if location_change else "0",
         "exif_camera": normalize_exif_camera(plan.exif_camera),
         "include_realism_engine": "1" if plan.realism_enabled else "0",
         "workflow_selfie_capture": "1" if plan.selfie_capture_enabled else "0",
         "workflow_source": "1",
         "workflow_wave_model": plan.workflow_wave_model,
+        "workflow_scenario_type": plan.scenario_type or "",
     }
     if workflow_first_frame:
         params["workflow_first_frame"] = "1"
@@ -2636,7 +2647,7 @@ async def _accept_studio_refine_job_from_workflow(
         session,
         owner_id=oid,
         studio_job_id=job.id,
-        studio_model_id=plan.model_id,
+        studio_model_id=effective_model_id,
         output_aspect=aspect_reserve,
         content_type="image/png",
         prompt_excerpt=(plan.description or "")[:2000] or None,
@@ -3106,6 +3117,7 @@ async def _studio_job_execute_refine_prompt(
                     reference_scene_description=(
                         prompt_plan.reference_scene_description if prompt_plan else None
                     ),
+                    scenario_type=str(p.get("workflow_scenario_type") or "").strip() or None,
                 )
                 refined = composed.wavespeed_scene_prompt
                 reference_scene = composed.reference_scene_lock or None

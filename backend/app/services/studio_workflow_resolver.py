@@ -1067,12 +1067,24 @@ def _reference_description_for_node(
     return "", ""
 
 
+_LOCATION_REF_ROLE_HINTS = (
+    "location",
+    "environment",
+    "background",
+    "scene donor",
+    "scene_donor",
+)
+
+
 def _role_sort_key(role: str) -> tuple[int, str]:
     r = (role or "").strip().lower()
-    for i, hint in enumerate(_PRIMARY_REF_ROLE_HINTS):
+    for hint in _PRIMARY_REF_ROLE_HINTS:
         if hint in r:
             return (0, r)
-    return (1, r)
+    for hint in _LOCATION_REF_ROLE_HINTS:
+        if hint in r:
+            return (1, r)
+    return (2, r)
 
 
 def sort_workflow_references(

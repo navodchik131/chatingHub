@@ -111,10 +111,15 @@ def outfit_change_role_hints() -> dict[str, str]:
 def enrich_description_for_location_change(description: str) -> str:
     base = (description or "").strip()
     hint = (
-        "SCENARIO — location change: keep subject identity, face, body, wardrobe, pose, "
-        "camera angle, framing, and crop EXACTLY from MODEL_PROFILE and/or photo-base reference. "
-        "Replace ONLY background, environment, surroundings, and scene lighting with location "
-        "reference(s). Do NOT alter the person's appearance, proportions, or camera geometry."
+        "SCENARIO — location change (strict in-place background swap):\n"
+        "PRIORITY 1 — photo-base reference defines EVERYTHING about the subject: face, skin, "
+        "hair style and color, body, wardrobe, props, pose, limb angles, gaze, camera geometry, "
+        "selfie arm / crop, subject scale in frame. Do NOT change any of these.\n"
+        "PRIORITY 2 — location / environment reference(s) donate ONLY background pixels: "
+        "architecture, ground, sky, distant objects, ambient light and weather behind the subject.\n"
+        "FORBIDDEN: copying people from location refs; new hairstyle or outfit; re-pose or reframe; "
+        "inventing a different place; face-swap; studio MODEL photos overriding photo-base identity.\n"
+        "If text conflicts, photo-base wins for subject geometry; location refs win only for background."
     )
     if not base:
         return hint
@@ -123,10 +128,14 @@ def enrich_description_for_location_change(description: str) -> str:
 
 def location_change_role_hints() -> dict[str, str]:
     return {
-        "photo base": "subject identity, pose, camera, and framing anchor",
-        "photo_base": "subject identity, pose, camera, and framing anchor",
-        "model": "subject identity from studio profile",
-        "location": "target environment / background to apply",
-        "environment": "target environment / background to apply",
-        "scene": "target environment / background to apply",
+        "photo base": "full source photo — identity, pose, camera, crop, wardrobe, hair (DO NOT copy background)",
+        "photo_base": "full source photo — identity, pose, camera, crop, wardrobe, hair (DO NOT copy background)",
+        "model": "same as photo base when no studio model node — full subject anchor",
+        "location": "background / environment donor ONLY — no people",
+        "environment": "background / environment donor ONLY — no people",
+        "scene": "background / environment donor ONLY — no people",
     }
+
+
+def is_location_change_scenario(scenario_type: str | None) -> bool:
+    return (scenario_type or "").strip() == "scenarioLocationChange"

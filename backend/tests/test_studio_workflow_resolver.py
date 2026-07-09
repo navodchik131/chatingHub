@@ -1110,6 +1110,29 @@ def test_scenario_location_change_enriches_description():
     assert len(plan.references) == 3
 
 
+def test_location_change_ref_sort_order():
+    from app.services.studio_workflow_resolver import (
+        WorkflowReferenceItem,
+        sort_workflow_references,
+    )
+
+    refs = [
+        WorkflowReferenceItem(ref_id="loc", role="location / environment", description="", file_name=""),
+        WorkflowReferenceItem(ref_id="base", role="photo base / subject", description="", file_name=""),
+    ]
+    sorted_refs = sort_workflow_references(refs)
+    assert sorted_refs[0].ref_id == "base"
+    assert sorted_refs[1].ref_id == "loc"
+
+
+def test_location_change_enrich_description_strict():
+    from app.services.studio_workflow_scenarios import enrich_description_for_location_change
+
+    hint = enrich_description_for_location_change("")
+    assert "FORBIDDEN" in hint
+    assert "photo-base" in hint.lower()
+
+
 def test_scenario_motion_video_pipeline_reads_scenario_settings():
     from app.services.studio_workflow_resolver import resolve_workflow_video_plan
 

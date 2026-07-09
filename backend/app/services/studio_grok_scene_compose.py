@@ -780,6 +780,15 @@ class WorkflowGrokUserRef:
     file_name: str
 
 
+_WORKFLOW_LOCATION_CHANGE_SYSTEM_ADDON = """
+LOCATION CHANGE SCENARIO (strict):
+- The photo-base / subject reference is the FULL in-place edit target: keep face, hair, skin, body, clothes, props, pose, camera, crop EXACTLY.
+- Location / environment references are BACKGROUND DONORS ONLY — replace pixels behind and around the subject; never copy people from them.
+- Do NOT reframe, re-pose, or change hairstyle/outfit. Do NOT paste location-ref people into the shot.
+- Ignore MODEL studio photos for identity when USER_NOTES say location change — photo-base reference is WHO.
+"""
+
+
 def _workflow_ref_caption(ref: WorkflowGrokUserRef, index: int) -> str:
     role = (ref.role or "").strip() or "reference"
     parts = [f"[USER_WORKFLOW_REFERENCE_{index}] Role: {role}"]
@@ -787,9 +796,19 @@ def _workflow_ref_caption(ref: WorkflowGrokUserRef, index: int) -> str:
         parts.append(f"Notes: {ref.description.strip()}")
     if (ref.file_name or "").strip():
         parts.append(f"File: {ref.file_name.strip()}")
-    parts.append(
-        "Follow the Role — do not copy identity from outfit/clothes donors onto the base subject."
-    )
+    low = role.lower()
+    if any(h in low for h in ("location", "environment", "background")):
+        parts.append(
+            "BACKGROUND DONOR ONLY — architecture/ground/sky/light; never copy people from this image."
+        )
+    elif any(h in low for h in ("photo base", "photo_base", "subject", "model")):
+        parts.append(
+            "PHOTO BASE — keep this person's identity, hair, outfit, pose, camera, crop; do not copy this background."
+        )
+    else:
+        parts.append(
+            "Follow the Role — do not copy identity from outfit/clothes donors onto the base subject."
+        )
     return " — ".join(parts)
 
 
@@ -804,6 +823,7 @@ async def grok_compose_studio_workflow_multi_ref(
     credentials: StudioOpenAiCredentials | None = None,
     visibility: "IdentityVisibility | None" = None,
     reference_scene_description: str | None = None,
+    scenario_type: str | None = None,
 ) -> GrokSceneComposeResult:
     """Workflow: несколько референсов с ролями + опционально фото модели из кабинета."""
     if not user_refs:
@@ -812,10 +832,18 @@ async def grok_compose_studio_workflow_multi_ref(
     wp = (wave_profile or "nsfw").strip().lower()
     profile = (model_profile_text or "").strip() or "{}"
     notes = (user_notes or "").strip()
+    location_change = (scenario_type or "").strip() == "scenarioLocationChange"
+    if location_change:
+        model_images = []
+        profile = "{}"
     hair_rule = (
-        "Hairstyle from MODEL photos and profile when present; otherwise from photo-base workflow ref."
-        if lock_hairstyle
-        else "Hairstyle may follow workflow references when USER_NOTES request it."
+        "Hairstyle locked from photo-base workflow reference — do not change length, color, or style."
+        if location_change
+        else (
+            "Hairstyle from MODEL photos and profile when present; otherwise from photo-base workflow ref."
+            if lock_hairstyle
+            else "Hairstyle may follow workflow references when USER_NOTES request it."
+        )
     )
     max_out = int(settings.grok_scene_compose_output_max_chars)
 
@@ -826,13 +854,21 @@ async def grok_compose_studio_workflow_multi_ref(
         )
 
     system = load_grok_scene_compose_main_system() + _WORKFLOW_MULTI_REF_SYSTEM_ADDON
+    if location_change:
+        system += _WORKFLOW_LOCATION_CHANGE_SYSTEM_ADDON
     vis_block = _grok_visibility_user_block(
         visibility=visibility,
         reference_scene_description=reference_scene_description,
     )
 
     model_rule = ""
-    if labeled:
+    if location_change:
+        model_rule = (
+            "LOCATION CHANGE: identity, pose, camera, crop, wardrobe, and hair come ONLY from the "
+            "photo-base USER_WORKFLOW_REFERENCE. Location refs supply background only. "
+            "MODEL studio photos are NOT used.\n\n"
+        )
+    elif labeled:
         model_rule = (
             "Attached MODEL studio photos define WHO when present. "
             "USER_WORKFLOW_REFERENCE images follow their Role labels.\n\n"
