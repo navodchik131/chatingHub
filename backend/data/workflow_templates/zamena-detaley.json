@@ -1,0 +1,170 @@
+{
+  "format": "modelmate-workflow",
+  "version": 1,
+  "name": "Замена деталей",
+  "exported_at": "2026-07-09T11:13:15.731Z",
+  "graph": {
+    "nodes": [
+      {
+        "id": "realism-1",
+        "type": "realism",
+        "position": {
+          "x": 430.85354291242993,
+          "y": 162.16123181129245
+        },
+        "data": {
+          "enabled": true
+        }
+      },
+      {
+        "id": "prompt-2",
+        "type": "prompt",
+        "position": {
+          "x": 1232.912724835565,
+          "y": 264.60578652232846
+        },
+        "data": {
+          "prompt": "",
+          "disabled": false
+        }
+      },
+      {
+        "id": "imageGeneration-3",
+        "type": "imageGeneration",
+        "position": {
+          "x": 1341.0642852867343,
+          "y": 704.1730657304356
+        },
+        "data": {
+          "waveModelId": "seedream-v5.0-pro",
+          "nsfwEnabled": false,
+          "outputAspect": "9:16"
+        }
+      },
+      {
+        "id": "preview-4",
+        "type": "preview",
+        "position": {
+          "x": 1753.9425554347895,
+          "y": 695.2303765864455
+        },
+        "data": {}
+      },
+      {
+        "id": "reference-5",
+        "type": "reference",
+        "position": {
+          "x": 426.49134258295356,
+          "y": 595.2947925430805
+        },
+        "data": {
+          "disabled": false
+        }
+      },
+      {
+        "id": "reference-6",
+        "type": "reference",
+        "position": {
+          "x": 379.3390986335435,
+          "y": 1035.6519857945193
+        },
+        "data": {
+          "disabled": true
+        }
+      },
+      {
+        "id": "refDescription-7",
+        "type": "refDescription",
+        "position": {
+          "x": -279.3363298683023,
+          "y": 1048.699822505239
+        },
+        "data": {
+          "role": "",
+          "description": "",
+          "disabled": false
+        }
+      },
+      {
+        "id": "model-1",
+        "type": "model",
+        "position": {
+          "x": 414.7138508611861,
+          "y": 400.1555258372108
+        },
+        "data": {
+          "disabled": true
+        }
+      },
+      {
+        "id": "selfie-6",
+        "type": "selfie",
+        "position": {
+          "x": 671.8909030982189,
+          "y": -30.535640875932337
+        },
+        "data": {
+          "enabled": false
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "xy-edge__reference-5reference-out-imageGeneration-3reference-in",
+        "source": "reference-5",
+        "target": "imageGeneration-3",
+        "sourceHandle": "reference-out",
+        "targetHandle": "reference-in"
+      },
+      {
+        "id": "xy-edge__prompt-2prompt-out-imageGeneration-3prompt-in",
+        "source": "prompt-2",
+        "target": "imageGeneration-3",
+        "sourceHandle": "prompt-out",
+        "targetHandle": "prompt-in"
+      },
+      {
+        "id": "xy-edge__realism-1realism-out-imageGeneration-3realism-in",
+        "source": "realism-1",
+        "target": "imageGeneration-3",
+        "sourceHandle": "realism-out",
+        "targetHandle": "realism-in"
+      },
+      {
+        "id": "xy-edge__imageGeneration-3image-out-preview-4image-in",
+        "source": "imageGeneration-3",
+        "target": "preview-4",
+        "sourceHandle": "image-out",
+        "targetHandle": "image-in"
+      },
+      {
+        "id": "xy-edge__refDescription-7description-out-reference-6description-in",
+        "source": "refDescription-7",
+        "target": "reference-6",
+        "sourceHandle": "description-out",
+        "targetHandle": "description-in"
+      },
+      {
+        "id": "xy-edge__reference-6reference-out-imageGeneration-3reference-in",
+        "source": "reference-6",
+        "target": "imageGeneration-3",
+        "sourceHandle": "reference-out",
+        "targetHandle": "reference-in"
+      },
+      {
+        "id": "xy-edge__model-1model-out-imageGeneration-3model-in",
+        "source": "model-1",
+        "target": "imageGeneration-3",
+        "sourceHandle": "model-out",
+        "targetHandle": "model-in"
+      },
+      {
+        "id": "xy-edge__selfie-6selfie-out-imageGeneration-3selfie-in",
+        "source": "selfie-6",
+        "target": "imageGeneration-3",
+        "sourceHandle": "selfie-out",
+        "targetHandle": "selfie-in"
+      }
+    ]
+  }
+}

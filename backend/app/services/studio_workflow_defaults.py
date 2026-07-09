@@ -22,18 +22,22 @@ _BUNDLED_TEMPLATES_DIR = (BACKEND_DIR / "_bundled_workflow_templates").resolve()
 
 # Порядок отображения в sidebar (сверху — первый шаблон).
 _DEFAULT_TEMPLATE_FILES: tuple[str, ...] = (
-    "boardstory_pipeline.json",
-    "motion_pipeline.json",
-    "razvertka.json",
-    "sozdanie-litsa.json",
-    "smena-odezhdy.json",
-    "smena-lokacii.json",
-    "smena-modeli.json",
     "po-refu.json",
+    "razvertka.json",
+    "generatsiya-video-s-odezhdoy-seedance.json",
+    "smena-odezhdy.json",
+    "motion_pipeline.json",
+    "smena-lokacii.json",
+    "zamena-detaley.json",
+    "smena-modeli.json",
+    "odezhda-s-kartinki.json",
+    "generatsiya-video.json",
+    "boardstory_pipeline.json",
+    "sozdanie-litsa.json",
 )
 
-DEMO_WORKFLOW_TEMPLATE_FILE = "po-refu.json"
-DEMO_WORKFLOW_NAME = "По рефу"
+DEMO_WORKFLOW_TEMPLATE_FILE = "smena-modeli.json"
+DEMO_WORKFLOW_NAME = "Смена модели"
 
 
 @dataclass(frozen=True)
@@ -144,6 +148,19 @@ async def ensure_default_workflow_workspaces(
     return created
 
 
+async def provision_demo_workflow_workspaces(
+    session: AsyncSession,
+    *,
+    owner_id: int,
+) -> list[WorkflowWorkspace]:
+    """Один шаблон для демо / без оплаты — «Смена модели»."""
+    return await ensure_default_workflow_workspaces(
+        session,
+        owner_id=owner_id,
+        template_files=demo_workflow_template_files(),
+    )
+
+
 async def provision_full_workflow_workspaces(
     session: AsyncSession,
     *,
@@ -151,7 +168,7 @@ async def provision_full_workflow_workspaces(
 ) -> list[WorkflowWorkspace]:
     """
     Все встроенные шаблоны (идемпотентно).
-    Вызывается при регистрации, оплате и когда демо-ограничение снято —
+    Вызывается после оплаты и когда демо-ограничение снято —
     недостающие проекты появятся без ручной догрузки.
     """
     return await ensure_default_workflow_workspaces(session, owner_id=owner_id, template_files=None)

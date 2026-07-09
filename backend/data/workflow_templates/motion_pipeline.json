@@ -2,19 +2,25 @@
   "format": "modelmate-workflow",
   "version": 1,
   "name": "Motion pipeline",
-  "exported_at": "2026-06-25T12:00:00.000Z",
+  "exported_at": "2026-07-09T11:13:06.763Z",
   "graph": {
     "nodes": [
       {
         "id": "model-1",
         "type": "model",
-        "position": { "x": 80, "y": 120 },
+        "position": {
+          "x": 80,
+          "y": 120
+        },
         "data": {}
       },
       {
         "id": "prompt-scene",
         "type": "prompt",
-        "position": { "x": 80, "y": 280 },
+        "position": {
+          "x": 80,
+          "y": 280
+        },
         "data": {
           "prompt": "Доп. указания (необязательно — сцена из первого кадра)"
         }
@@ -22,7 +28,10 @@
       {
         "id": "first-frame",
         "type": "firstFrameGeneration",
-        "position": { "x": 420, "y": 200 },
+        "position": {
+          "x": 420,
+          "y": 200
+        },
         "data": {
           "waveModelId": "nano-banana-pro",
           "nsfwEnabled": false,
@@ -32,31 +41,46 @@
       {
         "id": "preview-frame",
         "type": "preview",
-        "position": { "x": 780, "y": 200 },
+        "position": {
+          "x": 780,
+          "y": 200
+        },
         "data": {}
       },
       {
         "id": "turnaround",
         "type": "turnaroundSheet",
-        "position": { "x": 420, "y": 520 },
+        "position": {
+          "x": 420,
+          "y": 520
+        },
         "data": {}
       },
       {
         "id": "preview-sheet",
         "type": "preview",
-        "position": { "x": 780, "y": 520 },
+        "position": {
+          "x": 780,
+          "y": 520
+        },
         "data": {}
       },
       {
         "id": "motion-ref",
         "type": "motionVideo",
-        "position": { "x": 80, "y": 680 },
+        "position": {
+          "x": 80,
+          "y": 680
+        },
         "data": {}
       },
       {
         "id": "scenario-motion",
         "type": "scenarioMotionVideo",
-        "position": { "x": 80, "y": 820 },
+        "position": {
+          "x": 80,
+          "y": 820
+        },
         "data": {
           "prompt": "",
           "generateAudio": true,
@@ -66,7 +90,10 @@
       {
         "id": "video-gen",
         "type": "videoGeneration",
-        "position": { "x": 460, "y": 820 },
+        "position": {
+          "x": 460,
+          "y": 820
+        },
         "data": {
           "outputAspect": "9:16",
           "durationSeconds": 5,
@@ -77,7 +104,10 @@
       {
         "id": "preview-video",
         "type": "preview",
-        "position": { "x": 860, "y": 820 },
+        "position": {
+          "x": 860,
+          "y": 820
+        },
         "data": {}
       }
     ],

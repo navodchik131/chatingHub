@@ -2,19 +2,25 @@
   "format": "modelmate-workflow",
   "version": 1,
   "name": "BoardStory Seedance",
-  "exported_at": "2026-06-25T18:00:00.000Z",
+  "exported_at": "2026-07-09T11:13:27.330Z",
   "graph": {
     "nodes": [
       {
         "id": "model-1",
         "type": "model",
-        "position": { "x": 80, "y": 200 },
+        "position": {
+          "x": 56.613000306700314,
+          "y": 38.62970211623224
+        },
         "data": {}
       },
       {
         "id": "prompt-notes",
         "type": "prompt",
-        "position": { "x": 80, "y": 360 },
+        "position": {
+          "x": 80,
+          "y": 360
+        },
         "data": {
           "prompt": "Доп. указания (необязательно)"
         }
@@ -22,13 +28,19 @@
       {
         "id": "motion-ref",
         "type": "motionVideo",
-        "position": { "x": 80, "y": 520 },
+        "position": {
+          "x": 80,
+          "y": 520
+        },
         "data": {}
       },
       {
         "id": "desc-clothing",
         "type": "refDescription",
-        "position": { "x": 80, "y": 680 },
+        "position": {
+          "x": 80,
+          "y": 680
+        },
         "data": {
           "role": "clothes / outfit",
           "description": "Одежда — только garment, без лица и комнаты"
@@ -37,13 +49,19 @@
       {
         "id": "ref-clothing",
         "type": "reference",
-        "position": { "x": 80, "y": 820 },
+        "position": {
+          "x": 80,
+          "y": 820
+        },
         "data": {}
       },
       {
         "id": "desc-environment",
         "type": "refDescription",
-        "position": { "x": 80, "y": 960 },
+        "position": {
+          "x": 80,
+          "y": 960
+        },
         "data": {
           "role": "environment / room",
           "description": "Комната, свет, декор — без модели"
@@ -52,13 +70,19 @@
       {
         "id": "ref-environment",
         "type": "reference",
-        "position": { "x": 80, "y": 1100 },
+        "position": {
+          "x": 103.38699969329966,
+          "y": 1378.3052963502662
+        },
         "data": {}
       },
       {
         "id": "scenario-motion",
         "type": "scenarioMotionVideo",
-        "position": { "x": 460, "y": 520 },
+        "position": {
+          "x": 941.7721936819734,
+          "y": 470.8873006440707
+        },
         "data": {
           "prompt": "",
           "generateAudio": true,
@@ -68,7 +92,10 @@
       {
         "id": "video-gen",
         "type": "videoGeneration",
-        "position": { "x": 900, "y": 480 },
+        "position": {
+          "x": 1442.5783928845526,
+          "y": 451.9356003680404
+        },
         "data": {
           "outputAspect": "9:16",
           "durationSeconds": 5,
@@ -79,7 +106,10 @@
       {
         "id": "preview-video",
         "type": "preview",
-        "position": { "x": 1280, "y": 520 },
+        "position": {
+          "x": 1922.5578165734087,
+          "y": 688.3863977917576
+        },
         "data": {}
       }
     ],

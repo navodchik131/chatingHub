@@ -32,7 +32,7 @@ def test_is_workflow_demo_limited_not_when_no_demo():
     assert not is_workflow_demo_limited(_sub(), _cr(demo=0, balance=0))
 
 
-def test_assert_workflow_workspace_po_refu_ok():
+def test_assert_workflow_workspace_demo_ok():
     row = WorkflowWorkspace(user_id=1, name=DEMO_WORKFLOW_NAME, graph_json="{}")
     assert_workflow_workspace_allowed(row, _sub(), _cr())
 

@@ -1,0 +1,86 @@
+{
+  "format": "modelmate-workflow",
+  "version": 1,
+  "name": "Одежда с картинки",
+  "exported_at": "2026-07-09T11:13:22.619Z",
+  "graph": {
+    "nodes": [
+      {
+        "id": "prompt-1",
+        "type": "prompt",
+        "position": {
+          "x": -54.0000000000001,
+          "y": -179.98437500000009
+        },
+        "data": {
+          "prompt": "Extract only the clothing item worn by the person in the reference image (no body, face, skin, hair, or background) and generate a new image of the garment as a professional product photo. Render it as a ghost mannequin shot or flat lay, preserving the exact shape, volume, folds, color, fabric texture, and details (buttons, zippers, prints, stitching) from the original. Background: solid light neutral (white or light gray, #F5F5F5), soft studio lighting, subtle drop shadow for depth. No mannequin, no person, no distracting elements. High resolution, sharp focus, e-commerce product photography style"
+        }
+      },
+      {
+        "id": "reference-2",
+        "type": "reference",
+        "position": {
+          "x": -52.07594555683207,
+          "y": 129.93059470220012
+        },
+        "data": {}
+      },
+      {
+        "id": "imageGeneration-3",
+        "type": "imageGeneration",
+        "position": {
+          "x": 461.92405444316796,
+          "y": -124.06940529779993
+        },
+        "data": {
+          "waveModelId": "nano-banana-pro",
+          "nsfwEnabled": false,
+          "outputAspect": "3:4"
+        }
+      },
+      {
+        "id": "preview-4",
+        "type": "preview",
+        "position": {
+          "x": 890.5665694666086,
+          "y": -108.67249508186046
+        },
+        "data": {}
+      },
+      {
+        "id": "textNote-5",
+        "type": "textNote",
+        "position": {
+          "x": 381.7018971759216,
+          "y": -517.064725179035
+        },
+        "data": {
+          "text": "Если у вас есть картинка девушки, вы можете ее загрузить сюда и получить одежду с этой картинки, чтоб в дальнейшем например надеть на свою модель"
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "xy-edge__reference-2reference-out-imageGeneration-3reference-in",
+        "source": "reference-2",
+        "target": "imageGeneration-3",
+        "sourceHandle": "reference-out",
+        "targetHandle": "reference-in"
+      },
+      {
+        "id": "xy-edge__prompt-1prompt-out-imageGeneration-3prompt-in",
+        "source": "prompt-1",
+        "target": "imageGeneration-3",
+        "sourceHandle": "prompt-out",
+        "targetHandle": "prompt-in"
+      },
+      {
+        "id": "xy-edge__imageGeneration-3image-out-preview-4image-in",
+        "source": "imageGeneration-3",
+        "target": "preview-4",
+        "sourceHandle": "image-out",
+        "targetHandle": "image-in"
+      }
+    ]
+  }
+}

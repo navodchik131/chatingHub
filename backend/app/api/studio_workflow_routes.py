@@ -30,6 +30,7 @@ from app.services.studio_workflow_resolver import (
 )
 from app.services.studio_workflow_defaults import (
     DEMO_WORKFLOW_NAME,
+    provision_demo_workflow_workspaces,
     provision_full_workflow_workspaces,
 )
 from app.services.workflow_entitlements import (
@@ -205,7 +206,10 @@ async def api_workflow_list_workspaces(
     oid = workspace_owner_id(user)
     sub, cr = await _workflow_owner_billing(session, user)
     demo_limited = is_workflow_demo_limited(sub, cr)
-    await provision_full_workflow_workspaces(session, owner_id=oid)
+    if demo_limited:
+        await provision_demo_workflow_workspaces(session, owner_id=oid)
+    else:
+        await provision_full_workflow_workspaces(session, owner_id=oid)
     await session.commit()
     rows = (
         await session.scalars(

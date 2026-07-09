@@ -2,25 +2,36 @@
   "format": "modelmate-workflow",
   "version": 1,
   "name": "Смена модели",
-  "exported_at": "2026-07-09T08:00:00.000Z",
+  "exported_at": "2026-07-09T11:13:18.051Z",
   "graph": {
     "nodes": [
       {
         "id": "realism-1",
         "type": "realism",
-        "position": { "x": 1456, "y": 567 },
-        "data": { "enabled": true }
+        "position": {
+          "x": 1456,
+          "y": 567
+        },
+        "data": {
+          "enabled": true
+        }
       },
       {
         "id": "model-1",
         "type": "model",
-        "position": { "x": 200, "y": 420 },
+        "position": {
+          "x": 470.1218487394958,
+          "y": 357.14145658263305
+        },
         "data": {}
       },
       {
         "id": "refDescription-scene",
         "type": "refDescription",
-        "position": { "x": 502, "y": 597 },
+        "position": {
+          "x": 502,
+          "y": 597
+        },
         "data": {
           "role": "scene / pose / camera",
           "description": "Исходная сцена с человеком — фиксируем pose, ракурс, кроп, фон, свет, реквизит.\nЛицо, кожу, волосы и тело с этого фото НЕ копировать — identity из ноды «Модель»."
@@ -29,38 +40,64 @@
       {
         "id": "reference-scene",
         "type": "reference",
-        "position": { "x": 973, "y": 603 },
+        "position": {
+          "x": 973,
+          "y": 603
+        },
         "data": {}
       },
       {
         "id": "scenario-faceswap",
         "type": "scenarioFaceSwap",
-        "position": { "x": 1580, "y": 900 },
+        "position": {
+          "x": 1580,
+          "y": 900
+        },
         "data": {}
       },
       {
         "id": "imageGeneration-1",
         "type": "imageGeneration",
-        "position": { "x": 1986, "y": 900 },
+        "position": {
+          "x": 1986,
+          "y": 900
+        },
         "data": {
           "waveModelId": "seedream-v5.0-pro",
-          "nsfwEnabled": true,
-          "outputAspect": "3:4"
+          "nsfwEnabled": false,
+          "outputAspect": "9:16"
         }
       },
       {
         "id": "prompt-1",
         "type": "prompt",
-        "position": { "x": 1427, "y": 1303 },
+        "position": {
+          "x": 1427,
+          "y": 1303
+        },
         "data": {
-          "prompt": "PRIORITY: match scene reference geometry as closely as possible.\nReplace ONLY the person with our studio model — face, skin, hair, body proportions from MODEL.\nKeep exact pose, camera angle, crop, background, props, and lighting from the scene reference.\nIf text conflicts with the reference image, the reference wins for pose/camera/light/crop/background."
+          "prompt": "Replace the person in the scene reference with our studio model.\nKeep exact pose, camera angle, crop, background, props, and lighting from the scene reference.\nDo NOT copy the original person's face, hair, or body — identity from MODEL only."
         }
       },
       {
         "id": "preview-1",
         "type": "preview",
-        "position": { "x": 2306, "y": 896 },
+        "position": {
+          "x": 2306,
+          "y": 896
+        },
         "data": {}
+      },
+      {
+        "id": "textNote-3",
+        "type": "textNote",
+        "position": {
+          "x": 1232.5297383659347,
+          "y": 179.80305113773446
+        },
+        "data": {
+          "text": "Этот режим больше похож на Face swap. Максимально пытается повторить ракурс, положение и локацию"
+        }
       }
     ],
     "edges": [

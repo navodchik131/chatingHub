@@ -1,9 +1,9 @@
 """
 Доступ к workflow для тарифа Credits с демо-генерациями.
 
-Шаблоны: при регистрации создаются все встроенные проекты; на демо-тарифе
-в UI и API доступен только «По рефу». После пополнения кредитов или подписки
-provision_full_workflow_workspaces() догружает недостающие (идемпотентно).
+Шаблоны: при регистрации создаётся «Смена модели»; на демо-тарифе
+в UI и API доступен только этот проект. После пополнения кредитов или подписки
+provision_full_workflow_workspaces() догружает остальные (идемпотентно).
 """
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ def is_workflow_demo_limited(
 ) -> bool:
     """
     Credits без оплаченной подписки, есть демо и нет купленных кредитов —
-    только шаблон «По рефу».
+    только шаблон «Смена модели».
     """
     plan = normalize_billing_plan(sub.billing_plan if sub else None)
     if not is_credits_plan(plan):
@@ -46,7 +46,7 @@ def assert_workflow_full_access(sub: Subscription | None, cr: CreditAccount | No
         raise HTTPException(
             status_code=403,
             detail=(
-                "На демо-тарифе доступен только workflow «По рефу». "
+                "На демо-тарифе доступен только workflow «Смена модели». "
                 "Пополните кредиты или оформите Standard / Pro для других проектов."
             ),
         )
@@ -63,7 +63,7 @@ def assert_workflow_workspace_allowed(
         raise HTTPException(
             status_code=403,
             detail=(
-                "На демо-тарифе доступен только workflow «По рефу». "
+                "На демо-тарифе доступен только workflow «Смена модели». "
                 "Пополните кредиты для остальных шаблонов."
             ),
         )

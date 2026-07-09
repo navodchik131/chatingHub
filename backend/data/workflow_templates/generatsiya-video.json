@@ -1,0 +1,286 @@
+{
+  "format": "modelmate-workflow",
+  "version": 1,
+  "name": "Генерация видео",
+  "exported_at": "2026-07-09T11:13:24.747Z",
+  "graph": {
+    "nodes": [
+      {
+        "id": "realism-6",
+        "type": "realism",
+        "position": {
+          "x": -411.1260793582573,
+          "y": -1965.4748976174176
+        },
+        "data": {
+          "enabled": true
+        }
+      },
+      {
+        "id": "firstFrameGeneration-9",
+        "type": "firstFrameGeneration",
+        "position": {
+          "x": 124.48767101463639,
+          "y": -1762.8296698676327
+        },
+        "data": {
+          "waveModelId": "gpt-image-2",
+          "nsfwEnabled": false,
+          "outputAspect": "9:16"
+        }
+      },
+      {
+        "id": "videoPromptCompose-10",
+        "type": "videoPromptCompose",
+        "position": {
+          "x": 602.2213877790274,
+          "y": -1731.44426971764
+        },
+        "data": {
+          "prompt": "MODEL REPLACEMENT: @Image1 is the lead character for the full clip — face, hair, and identity. Fully replicate @Video1's choreography, timing, gestures, body dynamics, and camera movement. Do not copy the reference performer's face, skin, hair, or body shape from @Video1.\n\nCamera: fully replicate @Video1 for all camera movement, framing, push-in, pull-out, tracking, and orbit — smooth and stable, no jitter.\n\nCinematic quality, stable face without deformation, normal body proportions, smooth and fluid motion, sharp details, no flickering or ghosting.",
+          "sendVideoReference": true,
+          "clothingGenerationId": null,
+          "environmentGenerationId": null
+        }
+      },
+      {
+        "id": "motionVideo-13",
+        "type": "motionVideo",
+        "position": {
+          "x": -380.349289136155,
+          "y": -1278.04905878176
+        },
+        "data": {}
+      },
+      {
+        "id": "model-2",
+        "type": "model",
+        "position": {
+          "x": -410.1275387751907,
+          "y": -1742.3121973973282
+        },
+        "data": {}
+      },
+      {
+        "id": "videoGeneration-3",
+        "type": "videoGeneration",
+        "position": {
+          "x": 1282.1881701983507,
+          "y": -1681.426721351572
+        },
+        "data": {
+          "outputAspect": "9:16",
+          "durationSeconds": 10,
+          "videoProvider": "seedance_t2v",
+          "seedanceVariant": "standard",
+          "videoResolution": "720p",
+          "generateAudio": false,
+          "autoMotionPrompt": false
+        }
+      },
+      {
+        "id": "preview-4",
+        "type": "preview",
+        "position": {
+          "x": 2028.4459368661587,
+          "y": -1336.0826286038357
+        },
+        "data": {}
+      },
+      {
+        "id": "prompt-2",
+        "type": "prompt",
+        "position": {
+          "x": -393.9894734171581,
+          "y": -1529.4351208442201
+        },
+        "data": {
+          "prompt": "Измени локацию, в обычной Российской квартире, в гостинной",
+          "disabled": true
+        }
+      },
+      {
+        "id": "videoUpscale-1",
+        "type": "videoUpscale",
+        "position": {
+          "x": 2019.6880302976188,
+          "y": -933.212919989088
+        },
+        "data": {
+          "targetResolution": "2k"
+        }
+      },
+      {
+        "id": "preview-2",
+        "type": "preview",
+        "position": {
+          "x": 2758.2907724952993,
+          "y": -880.7860030063719
+        },
+        "data": {}
+      },
+      {
+        "id": "videoGeneration-3",
+        "type": "videoGeneration",
+        "position": {
+          "x": 1282.1881701983507,
+          "y": -1681.426721351572
+        },
+        "data": {
+          "outputAspect": "9:16",
+          "durationSeconds": 10,
+          "videoProvider": "seedance_t2v",
+          "seedanceVariant": "standard",
+          "videoResolution": "720p",
+          "generateAudio": false,
+          "autoMotionPrompt": false
+        }
+      },
+      {
+        "id": "reference-5",
+        "type": "reference",
+        "position": {
+          "x": 121.93947029192773,
+          "y": -2092.9620722542777
+        },
+        "data": {
+          "disabled": true
+        }
+      },
+      {
+        "id": "refDescription-6",
+        "type": "refDescription",
+        "position": {
+          "x": -379.21063226468755,
+          "y": -2389.8821645517246
+        },
+        "data": {
+          "role": "Первый кадр",
+          "description": "",
+          "disabled": true
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "xy-edge__realism-6realism-out-firstFrameGeneration-9realism-in",
+        "source": "realism-6",
+        "target": "firstFrameGeneration-9",
+        "sourceHandle": "realism-out",
+        "targetHandle": "realism-in"
+      },
+      {
+        "id": "xy-edge__motionVideo-13motion-video-out-firstFrameGeneration-9motion-video-in",
+        "source": "motionVideo-13",
+        "target": "firstFrameGeneration-9",
+        "sourceHandle": "motion-video-out",
+        "targetHandle": "motion-video-in"
+      },
+      {
+        "id": "xy-edge__model-2model-out-firstFrameGeneration-9model-in",
+        "source": "model-2",
+        "target": "firstFrameGeneration-9",
+        "sourceHandle": "model-out",
+        "targetHandle": "model-in"
+      },
+      {
+        "id": "xy-edge__firstFrameGeneration-9image-out-videoPromptCompose-10reference-in",
+        "source": "firstFrameGeneration-9",
+        "target": "videoPromptCompose-10",
+        "sourceHandle": "image-out",
+        "targetHandle": "reference-in"
+      },
+      {
+        "id": "xy-edge__model-2model-out-videoPromptCompose-10model-in",
+        "source": "model-2",
+        "target": "videoPromptCompose-10",
+        "sourceHandle": "model-out",
+        "targetHandle": "model-in"
+      },
+      {
+        "id": "xy-edge__motionVideo-13motion-video-out-videoPromptCompose-10motion-video-in",
+        "source": "motionVideo-13",
+        "target": "videoPromptCompose-10",
+        "sourceHandle": "motion-video-out",
+        "targetHandle": "motion-video-in"
+      },
+      {
+        "id": "xy-edge__videoPromptCompose-10prompt-out-videoGeneration-3prompt-in",
+        "source": "videoPromptCompose-10",
+        "target": "videoGeneration-3",
+        "sourceHandle": "prompt-out",
+        "targetHandle": "prompt-in"
+      },
+      {
+        "id": "xy-edge__firstFrameGeneration-9image-out-videoGeneration-3first-frame-in",
+        "source": "firstFrameGeneration-9",
+        "target": "videoGeneration-3",
+        "sourceHandle": "image-out",
+        "targetHandle": "first-frame-in"
+      },
+      {
+        "id": "xy-edge__model-2model-out-videoGeneration-3model-in",
+        "source": "model-2",
+        "target": "videoGeneration-3",
+        "sourceHandle": "model-out",
+        "targetHandle": "model-in"
+      },
+      {
+        "id": "xy-edge__motionVideo-13motion-video-out-videoGeneration-3motion-video-in",
+        "source": "motionVideo-13",
+        "target": "videoGeneration-3",
+        "sourceHandle": "motion-video-out",
+        "targetHandle": "motion-video-in"
+      },
+      {
+        "id": "xy-edge__videoGeneration-3video-out-preview-4image-in",
+        "source": "videoGeneration-3",
+        "target": "preview-4",
+        "sourceHandle": "video-out",
+        "targetHandle": "image-in"
+      },
+      {
+        "id": "xy-edge__prompt-2prompt-out-firstFrameGeneration-9prompt-in",
+        "source": "prompt-2",
+        "target": "firstFrameGeneration-9",
+        "sourceHandle": "prompt-out",
+        "targetHandle": "prompt-in"
+      },
+      {
+        "id": "xy-edge__videoGeneration-3video-out-videoUpscale-1video-in",
+        "source": "videoGeneration-3",
+        "target": "videoUpscale-1",
+        "sourceHandle": "video-out",
+        "targetHandle": "video-in"
+      },
+      {
+        "id": "xy-edge__videoUpscale-1video-out-preview-2image-in",
+        "source": "videoUpscale-1",
+        "target": "preview-2",
+        "sourceHandle": "video-out",
+        "targetHandle": "image-in"
+      },
+      {
+        "id": "xy-edge__reference-5reference-out-videoPromptCompose-10reference-in",
+        "source": "reference-5",
+        "target": "videoPromptCompose-10",
+        "sourceHandle": "reference-out",
+        "targetHandle": "reference-in"
+      },
+      {
+        "id": "xy-edge__reference-5reference-out-videoGeneration-3first-frame-in",
+        "source": "reference-5",
+        "target": "videoGeneration-3",
+        "sourceHandle": "reference-out",
+        "targetHandle": "first-frame-in"
+      },
+      {
+        "id": "xy-edge__refDescription-6description-out-reference-5description-in",
+        "source": "refDescription-6",
+        "target": "reference-5",
+        "sourceHandle": "description-out",
+        "targetHandle": "description-in"
+      }
+    ]
+  }
+}

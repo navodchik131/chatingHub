@@ -2,15 +2,15 @@
   "format": "modelmate-workflow",
   "version": 1,
   "name": "Смена одежды",
-  "exported_at": "2026-06-24T20:15:44.027Z",
+  "exported_at": "2026-07-09T11:12:59.059Z",
   "graph": {
     "nodes": [
       {
         "id": "realism-3",
         "type": "realism",
         "position": {
-          "x": 1456.854539964149,
-          "y": 567.9087144606045
+          "x": 1383.1542326254958,
+          "y": 526.8066199832788
         },
         "data": {
           "enabled": true
@@ -32,8 +32,8 @@
         "id": "reference-5",
         "type": "reference",
         "position": {
-          "x": 973.4691456568617,
-          "y": 603.8875359945602
+          "x": 987.9927473057212,
+          "y": 666.5266077700697
         },
         "data": {}
       },
@@ -41,8 +41,8 @@
         "id": "reference-6",
         "type": "reference",
         "position": {
-          "x": 1003.938415372226,
-          "y": 1031.3278625729574
+          "x": 999.3895674814041,
+          "y": 1024.149185018418
         },
         "data": {}
       },
@@ -55,50 +55,52 @@
         },
         "data": {
           "role": "clothes / outfit",
-          "description": "Донор одежды — только outfit, не лицо и не сцена"
+          "description": "Донор одежды "
         }
-      },
-      {
-        "id": "scenario-outfit",
-        "type": "scenarioOutfitChange",
-        "position": {
-          "x": 1580,
-          "y": 825
-        },
-        "data": {}
       },
       {
         "id": "imageGeneration-8",
         "type": "imageGeneration",
         "position": {
-          "x": 1986.6766865544964,
-          "y": 825.8779296350721
+          "x": 1851.0499729636283,
+          "y": 831.1559612781638
         },
         "data": {
-          "waveModelId": "wan-2.7",
-          "nsfwEnabled": true,
-          "outputAspect": "3:4"
+          "waveModelId": "seedream-v5.0-pro",
+          "nsfwEnabled": false,
+          "outputAspect": "9:16"
         }
       },
       {
         "id": "prompt-9",
         "type": "prompt",
         "position": {
-          "x": 1427.8965396974388,
-          "y": 1303.810188884644
+          "x": 1452.7965829518125,
+          "y": 702.1501946045115
         },
         "data": {
-          "prompt": "Replace wardrobe on photo-base reference with outfit from clothes reference.\nKeep same person, pose, face, background, camera, and lighting."
+          "prompt": "Replace wardrobe on photo-base reference with outfit from clothes reference.\nKeep same person, pose, face, background, camera, and lighting.\nбез сумки яндекса"
         }
       },
       {
         "id": "preview-10",
         "type": "preview",
         "position": {
-          "x": 2306.1687432841745,
+          "x": 2206.1687432841745,
           "y": 821.5251768185911
         },
         "data": {}
+      },
+      {
+        "id": "selfie-7",
+        "type": "selfie",
+        "position": {
+          "x": 1390.9005475483823,
+          "y": 1284.6932180832353
+        },
+        "data": {
+          "enabled": false
+        }
       }
     ],
     "edges": [
@@ -117,39 +119,32 @@
         "targetHandle": "description-in"
       },
       {
-        "id": "e-realism-scenario",
+        "id": "xy-edge__reference-5reference-out-imageGeneration-8reference-in",
+        "source": "reference-5",
+        "target": "imageGeneration-8",
+        "sourceHandle": "reference-out",
+        "targetHandle": "reference-in"
+      },
+      {
+        "id": "xy-edge__reference-6reference-out-imageGeneration-8reference-in",
+        "source": "reference-6",
+        "target": "imageGeneration-8",
+        "sourceHandle": "reference-out",
+        "targetHandle": "reference-in"
+      },
+      {
+        "id": "xy-edge__realism-3realism-out-imageGeneration-8realism-in",
         "source": "realism-3",
-        "target": "scenario-outfit",
+        "target": "imageGeneration-8",
         "sourceHandle": "realism-out",
         "targetHandle": "realism-in"
       },
       {
-        "id": "e-ref5-scenario",
-        "source": "reference-5",
-        "target": "scenario-outfit",
-        "sourceHandle": "reference-out",
-        "targetHandle": "reference-in"
-      },
-      {
-        "id": "e-ref6-scenario",
-        "source": "reference-6",
-        "target": "scenario-outfit",
-        "sourceHandle": "reference-out",
-        "targetHandle": "reference-in"
-      },
-      {
-        "id": "e-prompt-scenario",
+        "id": "xy-edge__prompt-9prompt-out-imageGeneration-8prompt-in",
         "source": "prompt-9",
-        "target": "scenario-outfit",
+        "target": "imageGeneration-8",
         "sourceHandle": "prompt-out",
         "targetHandle": "prompt-in"
-      },
-      {
-        "id": "e-scenario-gen",
-        "source": "scenario-outfit",
-        "target": "imageGeneration-8",
-        "sourceHandle": "pipeline-out",
-        "targetHandle": "pipeline-in"
       },
       {
         "id": "xy-edge__imageGeneration-8image-out-preview-10image-in",
@@ -157,6 +152,13 @@
         "target": "preview-10",
         "sourceHandle": "image-out",
         "targetHandle": "image-in"
+      },
+      {
+        "id": "xy-edge__selfie-7selfie-out-imageGeneration-8selfie-in",
+        "source": "selfie-7",
+        "target": "imageGeneration-8",
+        "sourceHandle": "selfie-out",
+        "targetHandle": "selfie-in"
       }
     ]
   }

@@ -2,15 +2,15 @@
   "format": "modelmate-workflow",
   "version": 1,
   "name": "По рефу",
-  "exported_at": "2026-06-24T20:15:30.300Z",
+  "exported_at": "2026-07-09T11:13:20.587Z",
   "graph": {
     "nodes": [
       {
         "id": "reference-2",
         "type": "reference",
         "position": {
-          "x": -399.25373131633387,
-          "y": 184.44314599785514
+          "x": -436.7320130560614,
+          "y": 435.87001339788924
         },
         "data": {}
       },
@@ -18,8 +18,8 @@
         "id": "preview-5",
         "type": "preview",
         "position": {
-          "x": 860.7418435560993,
-          "y": 61.63565600565781
+          "x": 652.7435035121305,
+          "y": -17.30718161818699
         },
         "data": {}
       },
@@ -27,8 +27,8 @@
         "id": "realism-6",
         "type": "realism",
         "position": {
-          "x": -17.916786750111385,
-          "y": 49.374110179630044
+          "x": -435.8068585126668,
+          "y": 16.928448789557372
         },
         "data": {
           "enabled": true
@@ -38,8 +38,8 @@
         "id": "model-8",
         "type": "model",
         "position": {
-          "x": -410.72458111370895,
-          "y": -121.84789733541726
+          "x": -442.9413444786101,
+          "y": -212.0173859263665
         },
         "data": {}
       },
@@ -47,11 +47,11 @@
         "id": "imageGeneration-1",
         "type": "imageGeneration",
         "position": {
-          "x": 433.4110483723475,
-          "y": -46.57908029520928
+          "x": 207.98946165848807,
+          "y": -45.396750157477584
         },
         "data": {
-          "waveModelId": "wan-2.7",
+          "waveModelId": "seedream-v5.0-pro",
           "nsfwEnabled": true,
           "outputAspect": "9:16"
         }
@@ -60,11 +60,12 @@
         "id": "prompt-1",
         "type": "prompt",
         "position": {
-          "x": 9.327290192100406,
-          "y": -298.31087127725505
+          "x": -436.62558028097243,
+          "y": 199.3354529382884
         },
         "data": {
-          "prompt": "PRIORITY: match USER_SCENE_REFERENCE geometry as closely as possible.\nIf text conflicts with the reference image, the reference wins for pose/camera/light/crop."
+          "prompt": "PRIORITY: match USER_SCENE_REFERENCE geometry as closely as possible.\nIf text conflicts with the reference image, the reference wins for pose/camera/light/crop.",
+          "disabled": false
         }
       },
       {
@@ -76,7 +77,19 @@
         },
         "data": {
           "role": "pose + camera + framing + light donor",
-          "description": "This image locks ONLY: body pose, limb angles, head yaw/gaze (if visible),\ncamera height/angle/distance, crop edges, background layout,\nenvironmental light direction, wardrobe/nudity coverage zones.\nDo NOT copy from this image: face, skin tone, hair, body proportions,\nbust/waist/hip size, muscle build, glute volume, ethnicity, age look.\nIdentity comes from the studio model photos only."
+          "description": "This image locks ONLY: body pose, limb angles, head yaw/gaze (if visible),\ncamera height/angle/distance, crop edges, background layout,\nenvironmental light direction, wardrobe/nudity coverage zones.\nDo NOT copy from this image: face, skin tone, hair, body proportions,\nbust/waist/hip size, muscle build, glute volume, ethnicity, age look.\nIdentity comes from the studio model photos only.",
+          "disabled": false
+        }
+      },
+      {
+        "id": "textNote-4",
+        "type": "textNote",
+        "position": {
+          "x": 58.959623359408454,
+          "y": -478.2368949356509
+        },
+        "data": {
+          "text": "В отличии от Face swap режима, он по референсу пытается повторить картинку, но 1 в 1 не будет ни когда. Тут больше идет упор на саму модель и ее детали"
         }
       }
     ],

@@ -1,0 +1,255 @@
+{
+  "format": "modelmate-workflow",
+  "version": 1,
+  "name": "Генерация видео с одеждой Seedance",
+  "exported_at": "2026-07-09T11:13:31.507Z",
+  "graph": {
+    "nodes": [
+      {
+        "id": "model-1",
+        "type": "model",
+        "position": {
+          "x": 19.64701381574693,
+          "y": 18.941041447240757
+        },
+        "data": {}
+      },
+      {
+        "id": "prompt-notes",
+        "type": "prompt",
+        "position": {
+          "x": 33.68259199813137,
+          "y": 202.8015243572943
+        },
+        "data": {
+          "prompt": "Доп. указания (необязательно)",
+          "disabled": true
+        }
+      },
+      {
+        "id": "motion-ref",
+        "type": "motionVideo",
+        "position": {
+          "x": 30.5026696643244,
+          "y": 405.68942992252005
+        },
+        "data": {}
+      },
+      {
+        "id": "desc-clothing",
+        "type": "refDescription",
+        "position": {
+          "x": -357.56752476515584,
+          "y": 567.9573899143114
+        },
+        "data": {
+          "role": "clothes / outfit",
+          "description": "Одежда — только garment, без лица и комнаты"
+        }
+      },
+      {
+        "id": "ref-clothing",
+        "type": "reference",
+        "position": {
+          "x": 30.84755801059876,
+          "y": 865.6606436740715
+        },
+        "data": {
+          "disabled": true
+        }
+      },
+      {
+        "id": "desc-environment",
+        "type": "refDescription",
+        "position": {
+          "x": -364.4308064523707,
+          "y": 881.7637852387277
+        },
+        "data": {
+          "role": "environment / room",
+          "description": "Комната, свет, декор — без модели"
+        }
+      },
+      {
+        "id": "ref-environment",
+        "type": "reference",
+        "position": {
+          "x": 22.44574987254009,
+          "y": 1201.2755633661332
+        },
+        "data": {
+          "disabled": true
+        }
+      },
+      {
+        "id": "video-prompt",
+        "type": "videoPromptCompose",
+        "position": {
+          "x": 723.3961553117745,
+          "y": 524.1725323280273
+        },
+        "data": {
+          "prompt": " замени персонажа на видео на персонажа с фото",
+          "generateClothingFromVideo": false,
+          "generateEnvironmentFromVideo": false,
+          "clothingGenerationId": null,
+          "environmentGenerationId": null,
+          "sendVideoReference": true
+        }
+      },
+      {
+        "id": "video-gen",
+        "type": "videoGeneration",
+        "position": {
+          "x": 1519.208949108074,
+          "y": 573.0240667103344
+        },
+        "data": {
+          "outputAspect": "9:16",
+          "durationSeconds": 5,
+          "seedanceVariant": "standard",
+          "videoResolution": "720p",
+          "generateAudio": true,
+          "autoMotionPrompt": false,
+          "videoProvider": "seedance_t2v"
+        }
+      },
+      {
+        "id": "preview-video",
+        "type": "preview",
+        "position": {
+          "x": 1965.6709882600342,
+          "y": 840.2014994801599
+        },
+        "data": {}
+      },
+      {
+        "id": "videoUpscale-1",
+        "type": "videoUpscale",
+        "position": {
+          "x": 2374.609814762947,
+          "y": 838.5975854469053
+        },
+        "data": {
+          "targetResolution": "1080p"
+        }
+      },
+      {
+        "id": "preview-2",
+        "type": "preview",
+        "position": {
+          "x": 2837.2436440618676,
+          "y": 888.8503539673845
+        },
+        "data": {}
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-model-vp",
+        "source": "model-1",
+        "target": "video-prompt",
+        "sourceHandle": "model-out",
+        "targetHandle": "model-in"
+      },
+      {
+        "id": "e-motion-vp",
+        "source": "motion-ref",
+        "target": "video-prompt",
+        "sourceHandle": "motion-video-out",
+        "targetHandle": "motion-video-in"
+      },
+      {
+        "id": "e-notes-vp",
+        "source": "prompt-notes",
+        "target": "video-prompt",
+        "sourceHandle": "prompt-out",
+        "targetHandle": "prompt-in"
+      },
+      {
+        "id": "e-desc-cloth",
+        "source": "desc-clothing",
+        "target": "ref-clothing",
+        "sourceHandle": "description-out",
+        "targetHandle": "description-in"
+      },
+      {
+        "id": "e-cloth-vp",
+        "source": "ref-clothing",
+        "target": "video-prompt",
+        "sourceHandle": "reference-out",
+        "targetHandle": "clothing-in"
+      },
+      {
+        "id": "e-desc-env",
+        "source": "desc-environment",
+        "target": "ref-environment",
+        "sourceHandle": "description-out",
+        "targetHandle": "description-in"
+      },
+      {
+        "id": "e-env-vp",
+        "source": "ref-environment",
+        "target": "video-prompt",
+        "sourceHandle": "reference-out",
+        "targetHandle": "environment-in"
+      },
+      {
+        "id": "e-vp-video",
+        "source": "video-prompt",
+        "target": "video-gen",
+        "sourceHandle": "prompt-out",
+        "targetHandle": "prompt-in"
+      },
+      {
+        "id": "e-model-video",
+        "source": "model-1",
+        "target": "video-gen",
+        "sourceHandle": "model-out",
+        "targetHandle": "model-in"
+      },
+      {
+        "id": "e-motion-video",
+        "source": "motion-ref",
+        "target": "video-gen",
+        "sourceHandle": "motion-video-out",
+        "targetHandle": "motion-video-in"
+      },
+      {
+        "id": "e-cloth-video",
+        "source": "ref-clothing",
+        "target": "video-gen",
+        "sourceHandle": "reference-out",
+        "targetHandle": "clothing-in"
+      },
+      {
+        "id": "e-env-video",
+        "source": "ref-environment",
+        "target": "video-gen",
+        "sourceHandle": "reference-out",
+        "targetHandle": "environment-in"
+      },
+      {
+        "id": "xy-edge__video-genvideo-out-preview-videoimage-in",
+        "source": "video-gen",
+        "target": "preview-video",
+        "sourceHandle": "video-out",
+        "targetHandle": "image-in"
+      },
+      {
+        "id": "xy-edge__video-genvideo-out-videoUpscale-1video-in",
+        "source": "video-gen",
+        "target": "videoUpscale-1",
+        "sourceHandle": "video-out",
+        "targetHandle": "video-in"
+      },
+      {
+        "id": "xy-edge__videoUpscale-1video-out-preview-2image-in",
+        "source": "videoUpscale-1",
+        "target": "preview-2",
+        "sourceHandle": "video-out",
+        "targetHandle": "image-in"
+      }
+    ]
+  }
+}
