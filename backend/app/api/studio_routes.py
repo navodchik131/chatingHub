@@ -2575,7 +2575,8 @@ async def _accept_studio_refine_job_from_workflow(
             # Identity + pose from photo-base ref; location refs = background only.
             studio_mode = "grok_compose"
         elif plan.scenario_type == "scenarioFaceSwap":
-            studio_mode = "model_scene" if plan.model_id is not None else "grok_compose"
+            # face_swap: scene ref must be Image 1 in WaveSpeed (pose/camera/background lock).
+            studio_mode = "face_swap" if plan.model_id is not None else "grok_compose"
         elif plan.model_id is not None:
             studio_mode = "model_scene"
         else:
@@ -3063,7 +3064,11 @@ async def _studio_job_execute_refine_prompt(
     if workflow_source and workflow_ref_loaded:
         # model_scene + saved model: pose только для analysis/prompt (как вкладка «Основная»),
         # не bitmap Image 1 в WAN — иначе силуэт донора перебивает FIGURE_LOCK.
-        send_pose_to_ws = not (mode_n == "model_scene" and not workflow_first_frame)
+        # Явный send_pose_reference_to_wavespeed=1 (face swap, смена локации) — всегда в API.
+        if _truthy_send_pose_reference_to_wavespeed(send_pose_reference_to_wavespeed):
+            send_pose_to_ws = True
+        else:
+            send_pose_to_ws = not (mode_n == "model_scene" and not workflow_first_frame)
     elif mode_n == "model_scene":
         send_pose_to_ws = False
     elif mode_n == "grok_compose":
@@ -3685,7 +3690,16 @@ async def _studio_job_execute_refine_prompt(
                         )
                         attach_model_urls = bool(prompt_only_ws)
                 elif mode_n == "face_swap":
-                    attach_model_urls = bool(imgs_model)
+                    attach_model_urls = bool(
+                        select_grok_compose_wavespeed_identity_images(
+                            imgs_for_ws,
+                            pose_reference_nude=reference_pose_is_nude_or_minimal_coverage(
+                                reference_scene
+                            ),
+                        )
+                        if user_pose_ref_prepended
+                        else imgs_model
+                    )
                 elif mode_n == "no_face":
                     attach_model_urls = bool(sm_loaded and imgs_model)
 
@@ -3707,6 +3721,13 @@ async def _studio_job_execute_refine_prompt(
                     elif mode_n == "model" and not image_bytes:
                         imgs_ws_order = select_prompt_only_wavespeed_identity_images(
                             imgs_for_ws, wave_profile=wave_profile_n
+                        )
+                    elif mode_n == "face_swap" and user_pose_ref_prepended:
+                        imgs_ws_order = select_grok_compose_wavespeed_identity_images(
+                            imgs_for_ws,
+                            pose_reference_nude=reference_pose_is_nude_or_minimal_coverage(
+                                reference_scene
+                            ),
                         )
                     elif wave_profile_n == "nsfw" and user_pose_ref_prepended:
                         imgs_ws_order = select_wan_identity_images_with_pose_ref(

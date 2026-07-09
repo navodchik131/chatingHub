@@ -53,7 +53,7 @@
         "type": "prompt",
         "position": { "x": 1427, "y": 1303 },
         "data": {
-          "prompt": "Replace the person in the scene reference with our studio model.\nKeep exact pose, camera angle, crop, background, props, and lighting from the scene reference.\nDo NOT copy the original person's face, hair, or body — identity from MODEL only."
+          "prompt": "PRIORITY: match scene reference geometry as closely as possible.\nReplace ONLY the person with our studio model — face, skin, hair, body proportions from MODEL.\nKeep exact pose, camera angle, crop, background, props, and lighting from the scene reference.\nIf text conflicts with the reference image, the reference wins for pose/camera/light/crop/background."
         }
       },
       {
