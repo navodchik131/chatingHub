@@ -119,33 +119,28 @@ def demo_request_eligible_for_free_slot(
     wan_edit_tier: str | None = "standard",
 ) -> bool:
     """
-    Бесплатная демо-генерация:
-    - regular → nano-banana-2, light/none/workflow;
-    - nsfw → wan-2.7 standard tier, light/standard/none/workflow.
+    Бесплатная демо-генерация: любая модель профиля (regular / NSFW), кроме Wan Pro tier.
     """
     profile = normalize_studio_wave_profile(wave_profile)
     model = effective_wave_model_for_billing(wave_model_id, wave_profile=profile)
     tier = normalize_wan_edit_tier(wan_edit_tier)
     gp = grok_pipeline
 
-    if model == demo_allowed_wave_model_id():
-        if profile != "regular":
-            return False
-        return gp in ("light", "none", "workflow")
+    if tier == "pro":
+        return False
 
-    if model == DEMO_WAN_WAVE_MODEL:
-        if profile != "nsfw":
-            return False
-        if tier == "pro":
-            return False
+    regular_models = frozenset({"nano-banana-2", "nano-banana-pro", "gpt-image-2", "seedream-v5.0-pro"})
+    nsfw_models = frozenset({"wan-2.7", "seedream-v5.0-pro"})
+
+    if profile == "regular" and model in regular_models:
+        return gp in ("light", "none", "workflow", "standard")
+    if profile == "nsfw" and model in nsfw_models:
         return gp in ("light", "standard", "none", "workflow")
-
     return False
 
 
 def demo_allowed_models_label() -> str:
-    nb = demo_allowed_wave_model_id()
-    return f"{nb} (обычные фото) или {DEMO_WAN_WAVE_MODEL} (NSFW)"
+    return "любая модель выбранного профиля (Обычные или NSFW), кроме Wan 2.7 Pro"
 
 
 def quote_demo_image_credits() -> int:

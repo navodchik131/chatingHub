@@ -76,7 +76,7 @@ import {
   readSetupTourHadGeneration,
   resolveSetupTourPhase,
 } from './components/SetupTour'
-import { studioImageGenerateBlockReason } from './studio/studioGenerateGate'
+import { studioImageGenerateBlockReason, studioDemoModelHint } from './studio/studioGenerateGate'
 import {
   buildAndStartFaceSwapScenario,
   buildAndStartPhotoEditScenario,
@@ -84,6 +84,16 @@ import {
   buildAndStartPromptOnlyScenario,
 } from './studio/runStudioScenario'
 import type { StudioScenarioGenOptions } from './studio/studioScenarioPresets'
+import {
+  aspectsForModel,
+  defaultUiModelForNsfw,
+  fetchGenerationModelOptions,
+  modelsForNsfwMode,
+  normalizeWaveModelSelection,
+  pickValidAspect,
+  pickValidModelId,
+  type GenerationModelDefinition,
+} from './workflow/wavespeedModels'
 import {
   WavespeedSetupBanner,
   needsUserWavespeedKey,
@@ -1227,6 +1237,21 @@ export default function App() {
   const [studioMode, setStudioMode] = useState<StudioJobMode>('model_scene')
   const [studioWanEditTier, setStudioWanEditTier] = useState<'standard' | 'pro'>('standard')
   const [studioWaveProfile, setStudioWaveProfile] = useState<'regular' | 'nsfw'>('nsfw')
+  const [studioWaveModelId, setStudioWaveModelId] = useState<string>(() =>
+    defaultUiModelForNsfw(true),
+  )
+  const [studioGenModels, setStudioGenModels] = useState<GenerationModelDefinition[]>([])
+
+  const studioAvailableGenModels = useMemo(
+    () => modelsForNsfwMode(studioGenModels, studioWaveProfile === 'nsfw'),
+    [studioGenModels, studioWaveProfile],
+  )
+
+  const studioEffectiveWanTier = useMemo((): 'standard' | 'pro' => {
+    if (studioWaveModelId === 'wan-2.7-pro') return 'pro'
+    if (studioWaveModelId === 'wan-2.7') return studioWanEditTier
+    return 'standard'
+  }, [studioWaveModelId, studioWanEditTier])
 
   const studioImageCreditQuote = useMemo(() => {
     const plan = normalizeBillingPlan(me?.billing_plan)
@@ -1235,16 +1260,20 @@ export default function App() {
     }
     const credits = quoteStudioImageCredits({
       waveProfile: studioWaveProfile,
-      wanEditTier: studioWaveProfile === 'nsfw' ? studioWanEditTier : 'standard',
+      waveModelId: studioWaveModelId,
+      wanEditTier: studioEffectiveWanTier,
       studioMode,
+      workflow: true,
     })
     const useDemo = studioGenerationUsesDemo({
       billingPlan: me?.billing_plan,
       demoRemaining: me?.demo_generations_remaining ?? 0,
       creditsBalance: me?.credits_balance ?? 0,
       waveProfile: studioWaveProfile,
-      wanEditTier: studioWanEditTier,
+      waveModelId: studioWaveModelId,
+      wanEditTier: studioEffectiveWanTier,
       studioMode,
+      workflow: true,
     })
     return {
       credits,
@@ -1260,6 +1289,8 @@ export default function App() {
     me?.demo_generations_remaining,
     studioMode,
     studioWaveProfile,
+    studioWaveModelId,
+    studioEffectiveWanTier,
     studioWanEditTier,
   ])
 
@@ -2121,6 +2152,31 @@ export default function App() {
         appSection !== 'studio_video')
     )
       return
+    void fetchGenerationModelOptions().then(setStudioGenModels)
+  }, [authed, appSection])
+
+  useEffect(() => {
+    if (!studioGenModels.length) return
+    setStudioWaveModelId((prev) =>
+      pickValidModelId(studioGenModels, studioWaveProfile === 'nsfw', prev),
+    )
+  }, [studioGenModels, studioWaveProfile])
+
+  useEffect(() => {
+    if (!studioGenModels.length) return
+    const aspects = aspectsForModel(studioGenModels, studioWaveModelId)
+    setStudioOutputAspect((prev) => pickValidAspect(aspects, prev))
+  }, [studioGenModels, studioWaveModelId])
+
+  useEffect(() => {
+    if (
+      !authed ||
+      (appSection !== 'overview' &&
+        appSection !== 'studio' &&
+        appSection !== 'studio_bootstrap' &&
+        appSection !== 'studio_video')
+    )
+      return
     fetch('/api/studio/output-aspects')
       .then((r) => r.json())
       .then((d: { aspects?: StudioAspectPreset[] }) => {
@@ -2249,6 +2305,12 @@ export default function App() {
         studioDesc,
         studioFile,
         studioIdentityFile,
+        studioWaveModelId,
+        studioWaveProfile,
+        studioWanEditTier,
+        creditsBalance: me?.credits_balance ?? 0,
+        demoRemaining: me?.demo_generations_remaining ?? 0,
+        billingPlan: me?.billing_plan,
         studioPhotoEditArchiveId,
         studioSelectedModelId,
         studioSendPoseRefToWavespeed,
@@ -2267,6 +2329,12 @@ export default function App() {
       studioDesc,
       studioFile,
       studioIdentityFile,
+      studioWaveModelId,
+      studioWaveProfile,
+      studioWanEditTier,
+      me?.billing_plan,
+      me?.credits_balance,
+      me?.demo_generations_remaining,
       studioPhotoEditArchiveId,
       studioSelectedModelId,
       studioSendPoseRefToWavespeed,
@@ -3839,7 +3907,8 @@ export default function App() {
       const genOptions: StudioScenarioGenOptions = {
         outputAspect: studioOutputAspect,
         waveProfile: studioWaveProfile,
-        wanEditTier: studioWanEditTier,
+        waveModelId: studioWaveModelId,
+        wanEditTier: studioEffectiveWanTier,
         exifCamera: studioExifCamera,
         realismEnabled: true,
         userPrompt: studioDesc.trim(),
@@ -3917,8 +3986,10 @@ export default function App() {
         }
         fd.append('output_aspect', studioOutputAspect)
         fd.append('studio_mode', studioMode)
-        fd.append('wan_edit_tier', studioWanEditTier)
+        fd.append('wan_edit_tier', studioEffectiveWanTier)
         fd.append('studio_wave_profile', studioWaveProfile)
+        const waveSel = normalizeWaveModelSelection(studioWaveModelId)
+        fd.append('workflow_wave_model', waveSel.apiWaveModelId)
         fd.append('generate_wavespeed', promptOnlyActive ? '0' : '1')
         fd.append('wavespeed_single_reference', '1')
         fd.append(
@@ -7967,6 +8038,26 @@ export default function App() {
                 </button>
               </div>
             </div>
+            {studioAvailableGenModels.length > 0 ? (
+              <StudioPillField
+                label="Модель"
+                hint="WaveSpeed — как в workflow"
+                scrollRow
+                options={studioAvailableGenModels.map((m) => ({
+                  value: m.id,
+                  label: m.label,
+                  title: m.label,
+                }))}
+                value={studioWaveModelId}
+                onChange={(v) => v != null && setStudioWaveModelId(String(v))}
+              />
+            ) : null}
+            {!studioImageCreditQuote.useDemo &&
+            (me?.demo_generations_remaining ?? 0) > 0 &&
+            (me?.credits_balance ?? 0) <= 0 &&
+            normalizeBillingPlan(me?.billing_plan) === 'credits' ? (
+              <p className="studio-mode-hint">{studioDemoModelHint()}</p>
+            ) : null}
             {import.meta.env.DEV && health?.studio_allow_prompt_only ? (
               <>
                 <div className="studio-mode-row" role="group" aria-label="Режим вывода студии (отладка)">
@@ -8001,7 +8092,9 @@ export default function App() {
                 </p>
               </>
             ) : null}
-            {health?.studio_wan_edit_tier_switch && studioWaveProfile === 'nsfw' ? (
+            {health?.studio_wan_edit_tier_switch &&
+            studioWaveProfile === 'nsfw' &&
+            studioWaveModelId === 'wan-2.7' ? (
               <>
                 <div className="studio-mode-row" role="group" aria-label="Детализация редактора">
                   <span className="studio-mode-label">Качество</span>
@@ -8030,13 +8123,24 @@ export default function App() {
               hint="Стороны кадра"
               scrollRow
               options={
-                studioAspectPresets.length > 0
-                  ? studioAspectPresets.map((p) => ({
+                (() => {
+                  const fromModel = aspectsForModel(studioGenModels, studioWaveModelId)
+                  if (fromModel.length > 0) {
+                    return fromModel.map((p) => ({
                       value: p.key,
                       label: p.key,
                       title: p.label,
                     }))
-                  : [{ value: '9:16', label: '9:16', title: '9:16' }]
+                  }
+                  if (studioAspectPresets.length > 0) {
+                    return studioAspectPresets.map((p) => ({
+                      value: p.key,
+                      label: p.key,
+                      title: p.label,
+                    }))
+                  }
+                  return [{ value: '9:16', label: '9:16', title: '9:16' }]
+                })()
               }
               value={studioOutputAspect}
               onChange={(v) => v != null && setStudioOutputAspect(String(v))}

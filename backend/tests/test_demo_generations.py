@@ -15,10 +15,18 @@ def test_demo_nano_regular_light():
         grok_pipeline="light",
         wave_profile="regular",
     )
-    assert not demo_request_eligible_for_free_slot(
+    assert demo_request_eligible_for_free_slot(
         wave_model_id=nb,
         grok_pipeline="standard",
         wave_profile="regular",
+    )
+
+
+def test_demo_seedream_nsfw():
+    assert demo_request_eligible_for_free_slot(
+        wave_model_id="seedream-v5.0-pro",
+        grok_pipeline="workflow",
+        wave_profile="nsfw",
     )
 
 
@@ -64,17 +72,25 @@ def test_assert_demo_only_blocks_premium_without_credits():
         grok_pipeline="standard",
         wave_profile="nsfw",
     )
+    assert_demo_only_user_model_allowed(
+        plan="credits",
+        demo_remaining=2,
+        credits_balance=0,
+        wave_model_id="nano-banana-pro",
+        grok_pipeline="light",
+        wave_profile="regular",
+    )
     with pytest.raises(HTTPException) as exc:
         assert_demo_only_user_model_allowed(
             plan="credits",
             demo_remaining=2,
             credits_balance=0,
-            wave_model_id="nano-banana-pro",
-            grok_pipeline="light",
-            wave_profile="regular",
+            wave_model_id="wan-2.7",
+            grok_pipeline="standard",
+            wave_profile="nsfw",
+            wan_edit_tier="pro",
         )
     assert exc.value.status_code == 402
-    assert "wan-2.7" in str(exc.value.detail)
 
 
 def test_demo_wan_nsfw_workflow():

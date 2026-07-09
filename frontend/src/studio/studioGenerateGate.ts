@@ -1,4 +1,4 @@
-/** Почему кнопка «Сгенерировать» в студии картинок неактивна (для title и подсказки под кнопкой). */
+import { studioGenerationUsesDemo } from '../studioImagePricing'
 
 export type StudioImageMode =
   | 'model_scene'
@@ -12,6 +12,10 @@ export function studioIntegrationsHint(): string {
   return 'Добавьте API-ключ WaveSpeed: кабинет → Подключения → блок WaveSpeed.'
 }
 
+export function studioDemoModelHint(): string {
+  return 'На демо без кредитов: любая модель профиля (Обычные / NSFW), кроме Wan 2.7 Pro. Или пополните кредиты.'
+}
+
 export type StudioGenerateGateInput = {
   studioBusy: boolean
   canStudioGenerate: boolean
@@ -19,6 +23,12 @@ export type StudioGenerateGateInput = {
   studioDesc: string
   studioFile: File | null
   studioIdentityFile: File | null
+  studioWaveModelId: string
+  studioWaveProfile: 'regular' | 'nsfw'
+  studioWanEditTier: 'standard' | 'pro'
+  creditsBalance: number
+  demoRemaining: number
+  billingPlan: string | null | undefined
   studioPhotoEditArchiveId: number | null
   studioSelectedModelId: number | null
   studioSendPoseRefToWavespeed: boolean
@@ -39,6 +49,12 @@ export function studioImageGenerateBlockReason(input: StudioGenerateGateInput): 
     studioDesc,
     studioFile,
     studioIdentityFile,
+    studioWaveModelId,
+    studioWaveProfile,
+    studioWanEditTier,
+    creditsBalance,
+    demoRemaining,
+    billingPlan,
     studioPhotoEditArchiveId,
     studioSelectedModelId,
     studioSendPoseRefToWavespeed,
@@ -55,6 +71,20 @@ export function studioImageGenerateBlockReason(input: StudioGenerateGateInput): 
   if (!canStudioGenerate) return 'Нет прав на генерацию в студии — уточните у владельца аккаунта.'
 
   if (studioNeedsUserWsKey) return studioIntegrationsHint()
+
+  const useDemo = studioGenerationUsesDemo({
+    billingPlan,
+    demoRemaining,
+    creditsBalance,
+    waveProfile: studioWaveProfile,
+    waveModelId: studioWaveModelId,
+    wanEditTier: studioWanEditTier,
+    studioMode,
+    workflow: true,
+  })
+  if (!useDemo && creditsBalance <= 0 && (demoRemaining ?? 0) > 0) {
+    return studioDemoModelHint()
+  }
 
   if (studioMode === 'model_scene' && !grokSceneConfigured) {
     return 'Grok не настроен на сервере — режим «Основная» временно недоступен.'

@@ -93,20 +93,20 @@ export function studioGenerationUsesDemo(params: {
 }): boolean {
   if (normalizeBillingPlan(params.billingPlan) !== 'credits') return false
   if (params.demoRemaining <= 0) return false
+  if (params.creditsBalance > 0) return false
   const profile = normalizeWaveProfile(params.waveProfile)
   const model = params.waveModelId
     ? normalizeWaveModelId(params.waveModelId)
     : effectiveWaveModelForStudio(null, profile)
   const tier =
     (params.wanEditTier || 'standard').toString().toLowerCase() === 'pro' ? 'pro' : 'standard'
-  const pipeline = grokPipelineForStudioMode(params.studioMode ?? 'model_scene', {
-    workflow: params.workflow,
-  })
-  if (profile === 'regular') {
-    return model === 'nano-banana-2' && (pipeline === 'light' || pipeline === 'none' || pipeline === 'workflow')
-  }
-  if (model !== 'wan-2.7' || tier === 'pro') return false
-  return pipeline === 'light' || pipeline === 'standard' || pipeline === 'none' || pipeline === 'workflow'
+  if (tier === 'pro') return false
+
+  const regularModels = new Set(['nano-banana-2', 'nano-banana-pro', 'gpt-image-2', 'seedream-v5.0-pro'])
+  const nsfwModels = new Set(['wan-2.7', 'seedream-v5.0-pro'])
+
+  if (profile === 'regular') return regularModels.has(model)
+  return nsfwModels.has(model)
 }
 
 export function formatStudioImageCostLabel(

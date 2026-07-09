@@ -3,6 +3,7 @@ import type { ProjectGraph } from '../workflow/types'
 import {
   DEFAULT_NSFW_MODEL_ID,
   DEFAULT_REGULAR_MODEL_ID,
+  normalizeWaveModelSelection,
 } from '../workflow/wavespeedModels'
 
 export type StudioWaveProfile = 'regular' | 'nsfw'
@@ -65,11 +66,14 @@ function mergePrompt(base: string, userPrompt?: string): string {
 
 function imageGenData(opts: StudioScenarioGenOptions): Record<string, unknown> {
   const nsfwEnabled = opts.waveProfile === 'nsfw'
+  const sel = normalizeWaveModelSelection(opts.waveModelId || pickWaveModelId(opts))
+  const wanTier =
+    sel.uiModelId === 'wan-2.7' && opts.wanEditTier ? opts.wanEditTier : sel.wanEditTier
   return {
-    waveModelId: pickWaveModelId(opts),
+    waveModelId: sel.uiModelId,
     nsfwEnabled,
     outputAspect: opts.outputAspect,
-    wanEditTier: opts.wanEditTier ?? 'standard',
+    wanEditTier: wanTier,
     exifCamera: opts.exifCamera ?? 'main',
   }
 }
