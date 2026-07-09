@@ -2,7 +2,7 @@
   "format": "modelmate-workflow",
   "version": 1,
   "name": "Смена модели",
-  "exported_at": "2026-07-09T11:13:18.051Z",
+  "exported_at": "2026-07-09T12:00:00.000Z",
   "graph": {
     "nodes": [
       {
@@ -17,11 +17,23 @@
         }
       },
       {
-        "id": "model-1",
-        "type": "model",
+        "id": "refDescription-identity",
+        "type": "refDescription",
         "position": {
-          "x": 470.1218487394958,
-          "y": 357.14145658263305
+          "x": 502,
+          "y": 357
+        },
+        "data": {
+          "role": "model / identity",
+          "description": "Фото модели — лицо, кожа, волосы, телосложение. Pose и фон с этого снимка НЕ копировать."
+        }
+      },
+      {
+        "id": "reference-identity",
+        "type": "reference",
+        "position": {
+          "x": 973,
+          "y": 357
         },
         "data": {}
       },
@@ -34,7 +46,7 @@
         },
         "data": {
           "role": "scene / pose / camera",
-          "description": "Исходная сцена с человеком — фиксируем pose, ракурс, кроп, фон, свет, реквизит.\nЛицо, кожу, волосы и тело с этого фото НЕ копировать — identity из ноды «Модель»."
+          "description": "Исходная сцена с человеком — фиксируем pose, ракурс, кроп, фон, свет, реквизит.\nЛицо, кожу, волосы и тело с этого фото НЕ копировать — identity из identity ref."
         }
       },
       {
@@ -76,7 +88,7 @@
           "y": 1303
         },
         "data": {
-          "prompt": "Replace the person in the scene reference with our studio model.\nKeep exact pose, camera angle, crop, background, props, and lighting from the scene reference.\nDo NOT copy the original person's face, hair, or body — identity from MODEL only."
+          "prompt": "Replace the person in the scene reference with the identity from the identity reference.\nKeep exact pose, camera angle, crop, background, props, and lighting from the scene reference.\nDo NOT copy the original person's face, hair, or body."
         }
       },
       {
@@ -96,11 +108,18 @@
           "y": 179.80305113773446
         },
         "data": {
-          "text": "Этот режим больше похож на Face swap. Максимально пытается повторить ракурс, положение и локацию"
+          "text": "Два ref: identity ref (кто) → вход identity ref, scene ref (pose/фон) → вход scene ref. Либо подключите ноду «Модель» из кабинета вместо identity ref."
         }
       }
     ],
     "edges": [
+      {
+        "id": "e-desc-identity-ref",
+        "source": "refDescription-identity",
+        "target": "reference-identity",
+        "sourceHandle": "description-out",
+        "targetHandle": "description-in"
+      },
       {
         "id": "e-desc-scene-ref",
         "source": "refDescription-scene",
@@ -116,11 +135,11 @@
         "targetHandle": "realism-in"
       },
       {
-        "id": "e-model-scenario",
-        "source": "model-1",
+        "id": "e-identity-scenario",
+        "source": "reference-identity",
         "target": "scenario-faceswap",
-        "sourceHandle": "model-out",
-        "targetHandle": "model-in"
+        "sourceHandle": "reference-out",
+        "targetHandle": "identity-ref-in"
       },
       {
         "id": "e-ref-scenario",

@@ -173,6 +173,8 @@ from app.services.studio_workflow_resolver import (
     WorkflowGenerationPlan,
     WorkflowReferenceItem,
     is_workflow_dual_ref_identity_mode,
+    workflow_dual_ref_face_swap_allowed,
+    workflow_ref_items_from_meta,
 )
 from app.services.studio_motion_grok_pipeline import (
     assemble_motion_grok_wavespeed_prompt,
@@ -533,6 +535,7 @@ def _studio_refine_wavespeed_preflight(
     image_bytes: bytes | None,
     wave_profile: str,
     workflow_source: bool = False,
+    workflow_dual_ref_face_swap: bool = False,
 ) -> str:
     """Перед списанием кредитов: ключ WaveSpeed и условия вызова API (иначе HTTPException)."""
     if not do_wavespeed:
@@ -600,16 +603,17 @@ def _studio_refine_wavespeed_preflight(
                         ),
                     )
     elif mode_n == "face_swap":
-        if mid is None or sm_loaded is None:
-            raise HTTPException(
-                status_code=400,
-                detail='В режиме «Face swap» выберите модель‑эталон для подмены внешности.',
-            )
-        if not imgs_model:
-            raise HTTPException(
-                status_code=400,
-                detail="У выбранной модели нет загруженных фото.",
-            )
+        if not workflow_dual_ref_face_swap:
+            if mid is None or sm_loaded is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail='В режиме «Face swap» выберите модель‑эталон для подмены внешности.',
+                )
+            if not imgs_model:
+                raise HTTPException(
+                    status_code=400,
+                    detail="У выбранной модели нет загруженных фото.",
+                )
         if not image_bytes:
             raise HTTPException(
                 status_code=400,
@@ -777,6 +781,23 @@ def _load_workflow_refs_from_job(
         mime = str(item.get("mime") or "image/jpeg").strip()
         out.append((data, mime, item))
     return out
+
+
+def _workflow_dual_ref_face_swap_from_job(
+    p: dict[str, Any],
+    workflow_ref_loaded: list[tuple[bytes, str, dict[str, Any]]],
+    *,
+    mid: int | None,
+    workflow_source: bool,
+) -> bool:
+    scenario_type = str(p.get("workflow_scenario_type") or "").strip() or None
+    refs_meta = [meta for _b, _m, meta in workflow_ref_loaded]
+    return workflow_dual_ref_face_swap_allowed(
+        scenario_type=scenario_type,
+        model_id=mid,
+        refs_meta=refs_meta,
+        workflow_source=workflow_source,
+    )
 
 
 _ALLOWED_STUDIO_MODES = frozenset(
@@ -2766,6 +2787,12 @@ async def _studio_job_execute_refine_prompt(
         image_mime = raw_mime or None
 
     workflow_ref_loaded = _load_workflow_refs_from_job(p) if workflow_source else []
+    workflow_dual_ref_face_swap = _workflow_dual_ref_face_swap_from_job(
+        p,
+        workflow_ref_loaded,
+        mid=mid,
+        workflow_source=workflow_source,
+    )
     if workflow_ref_loaded:
         image_bytes = workflow_ref_loaded[0][0]
         image_mime = workflow_ref_loaded[0][1]
@@ -2888,7 +2915,7 @@ async def _studio_job_execute_refine_prompt(
             status_code=400,
             detail='Режим «Face swap»: загрузите фото‑исходник (сцена + человек для замены).',
         )
-    if mode_n == "face_swap" and mid is None:
+    if mode_n == "face_swap" and mid is None and not workflow_dual_ref_face_swap:
         raise HTTPException(
             status_code=400,
             detail='Режим «Face swap»: выберите сохранённую модель студии.',
@@ -3005,6 +3032,7 @@ async def _studio_job_execute_refine_prompt(
         image_bytes=image_bytes,
         wave_profile=wave_profile_n,
         workflow_source=workflow_source,
+        workflow_dual_ref_face_swap=workflow_dual_ref_face_swap,
     )
 
     usage_kind = "studio_inpaint" if mask_bytes else "studio_prompt_refine"

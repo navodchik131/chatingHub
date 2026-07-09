@@ -1240,6 +1240,43 @@ def test_scenario_face_swap_dual_ref_without_model():
     assert ordered[1].ref_id == "id1"
 
 
+def test_workflow_dual_ref_face_swap_job_gate():
+    from app.services.studio_workflow_resolver import (
+        workflow_dual_ref_face_swap_allowed,
+        workflow_ref_items_from_meta,
+    )
+
+    refs_meta = [
+        {
+            "ref_id": "scene1",
+            "role": "scene / pose / camera",
+            "description": "geometry",
+            "file_name": "scene.jpg",
+        },
+        {
+            "ref_id": "id1",
+            "role": "model / identity",
+            "description": "who",
+            "file_name": "model.jpg",
+        },
+    ]
+    assert workflow_dual_ref_face_swap_allowed(
+        scenario_type="scenarioFaceSwap",
+        model_id=None,
+        refs_meta=refs_meta,
+        workflow_source=True,
+    )
+    assert not workflow_dual_ref_face_swap_allowed(
+        scenario_type="scenarioFaceSwap",
+        model_id=3,
+        refs_meta=refs_meta,
+        workflow_source=True,
+    )
+    items = workflow_ref_items_from_meta(refs_meta)
+    assert items[0].role == "scene / pose / camera"
+    assert items[1].role == "model / identity"
+
+
 def test_scenario_motion_video_pipeline_reads_scenario_settings():
     from app.services.studio_workflow_resolver import resolve_workflow_video_plan
 

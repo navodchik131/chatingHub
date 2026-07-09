@@ -1208,6 +1208,37 @@ def is_workflow_dual_ref_identity_mode(
     return scenario_type in (None, "scenarioFaceSwap")
 
 
+def workflow_ref_items_from_meta(
+    refs_meta: list[dict[str, str]],
+) -> list[WorkflowReferenceItem]:
+    return [
+        WorkflowReferenceItem(
+            ref_id=str(item.get("ref_id") or ""),
+            role=str(item.get("role") or ""),
+            description=str(item.get("description") or ""),
+            file_name=str(item.get("file_name") or ""),
+        )
+        for item in refs_meta
+    ]
+
+
+def workflow_dual_ref_face_swap_allowed(
+    *,
+    scenario_type: str | None,
+    model_id: int | None,
+    refs_meta: list[dict[str, str]],
+    workflow_source: bool,
+) -> bool:
+    """Face swap из workflow без model_id: identity ref + scene ref."""
+    if not workflow_source or model_id is not None or not refs_meta:
+        return False
+    return is_workflow_dual_ref_identity_mode(
+        scenario_type=scenario_type,
+        model_id=None,
+        references=workflow_ref_items_from_meta(refs_meta),
+    )
+
+
 def order_workflow_references_for_wavespeed(
     *,
     scenario_type: str | None,
