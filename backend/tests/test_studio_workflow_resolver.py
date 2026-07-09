@@ -1133,6 +1133,48 @@ def test_location_change_enrich_description_strict():
     assert "photo-base" in hint.lower()
 
 
+def test_scenario_face_swap_enriches_and_requires_model():
+    g = {
+        "nodes": [
+            {"id": "ref-scene", "type": "reference", "data": {"refId": "scene1"}},
+            {"id": "prompt-1", "type": "prompt", "data": {"prompt": "swap model"}},
+            {"id": "scenario-1", "type": "scenarioFaceSwap", "data": {}},
+            {
+                "id": "gen-1",
+                "type": "imageGeneration",
+                "data": {"waveModelId": "wan-2.7", "nsfwEnabled": True},
+            },
+        ],
+        "edges": [
+            {"source": "ref-scene", "target": "scenario-1", "targetHandle": "reference-in"},
+            {"source": "prompt-1", "target": "scenario-1", "targetHandle": "prompt-in"},
+            {
+                "source": "scenario-1",
+                "target": "gen-1",
+                "sourceHandle": "pipeline-out",
+                "targetHandle": "pipeline-in",
+            },
+        ],
+    }
+    with pytest.raises(WorkflowResolutionError, match="Модель"):
+        resolve_workflow_generation_plan(
+            target_node_id="gen-1",
+            nodes=g["nodes"],
+            edges=g["edges"],
+        )
+
+    g["nodes"].insert(0, {"id": "model-1", "type": "model", "data": {"modelId": 3}})
+    g["edges"].insert(0, {"source": "model-1", "target": "scenario-1", "targetHandle": "model-in"})
+    plan = resolve_workflow_generation_plan(
+        target_node_id="gen-1",
+        nodes=g["nodes"],
+        edges=g["edges"],
+    )
+    assert plan.scenario_type == "scenarioFaceSwap"
+    assert plan.model_id == 3
+    assert "model swap" in plan.description.lower()
+
+
 def test_scenario_motion_video_pipeline_reads_scenario_settings():
     from app.services.studio_workflow_resolver import resolve_workflow_video_plan
 

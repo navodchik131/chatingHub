@@ -42,6 +42,8 @@ export function createDefaultNodeData(type: NodeType): AppNodeData {
       return {}
     case 'scenarioLocationChange':
       return {}
+    case 'scenarioFaceSwap':
+      return {}
     case 'scenarioMotionVideo':
       return {
         prompt: '',

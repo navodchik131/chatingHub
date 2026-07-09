@@ -788,6 +788,13 @@ LOCATION CHANGE SCENARIO (strict):
 - Ignore MODEL studio photos for identity when USER_NOTES say location change — photo-base reference is WHO.
 """
 
+_WORKFLOW_FACE_SWAP_SYSTEM_ADDON = """
+FACE / MODEL SWAP SCENARIO (strict):
+- The scene / pose / camera reference locks geometry ONLY: body pose, limb angles, head yaw/gaze, camera, crop, background, props, light, wardrobe coverage.
+- MODEL studio photos + MODEL_PROFILE define WHO replaces the person in the scene — face, hair, skin, body proportions.
+- Do NOT copy the scene-reference person's identity. Do NOT re-pose or reframe. Rebuild one coherent individual from MODEL in the locked scene.
+"""
+
 
 def _workflow_ref_caption(ref: WorkflowGrokUserRef, index: int) -> str:
     role = (ref.role or "").strip() or "reference"
@@ -804,6 +811,10 @@ def _workflow_ref_caption(ref: WorkflowGrokUserRef, index: int) -> str:
     elif any(h in low for h in ("photo base", "photo_base", "subject", "model")):
         parts.append(
             "PHOTO BASE — keep this person's identity, hair, outfit, pose, camera, crop; do not copy this background."
+        )
+    elif any(h in low for h in ("scene", "pose", "camera", "framing")):
+        parts.append(
+            "SCENE DONOR — lock pose, camera, crop, background, light; do NOT copy this person's face or body identity."
         )
     else:
         parts.append(
@@ -833,6 +844,7 @@ async def grok_compose_studio_workflow_multi_ref(
     profile = (model_profile_text or "").strip() or "{}"
     notes = (user_notes or "").strip()
     location_change = (scenario_type or "").strip() == "scenarioLocationChange"
+    face_swap = (scenario_type or "").strip() == "scenarioFaceSwap"
     if location_change:
         model_images = []
         profile = "{}"
@@ -840,8 +852,8 @@ async def grok_compose_studio_workflow_multi_ref(
         "Hairstyle locked from photo-base workflow reference — do not change length, color, or style."
         if location_change
         else (
-            "Hairstyle from MODEL photos and profile when present; otherwise from photo-base workflow ref."
-            if lock_hairstyle
+            "Hairstyle from MODEL photos and profile — scene reference must not override hair identity."
+            if face_swap or lock_hairstyle
             else "Hairstyle may follow workflow references when USER_NOTES request it."
         )
     )
@@ -856,6 +868,8 @@ async def grok_compose_studio_workflow_multi_ref(
     system = load_grok_scene_compose_main_system() + _WORKFLOW_MULTI_REF_SYSTEM_ADDON
     if location_change:
         system += _WORKFLOW_LOCATION_CHANGE_SYSTEM_ADDON
+    if face_swap:
+        system += _WORKFLOW_FACE_SWAP_SYSTEM_ADDON
     vis_block = _grok_visibility_user_block(
         visibility=visibility,
         reference_scene_description=reference_scene_description,
@@ -867,6 +881,12 @@ async def grok_compose_studio_workflow_multi_ref(
             "LOCATION CHANGE: identity, pose, camera, crop, wardrobe, and hair come ONLY from the "
             "photo-base USER_WORKFLOW_REFERENCE. Location refs supply background only. "
             "MODEL studio photos are NOT used.\n\n"
+        )
+    elif face_swap:
+        model_rule = (
+            "FACE/MODEL SWAP: scene reference locks pose, camera, crop, background, and light ONLY. "
+            "MODEL studio photos define WHO replaces the person in that scene. "
+            "Do NOT keep the scene-reference person's face or body identity.\n\n"
         )
     elif labeled:
         model_rule = (

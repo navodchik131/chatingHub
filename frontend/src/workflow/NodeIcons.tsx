@@ -155,6 +155,14 @@ export function NodeIcon({ type, size = 16, className }: Props) {
           <circle cx="12" cy="12" r="2" fill={stroke} />
         </svg>
       )
+    case 'scenarioFaceSwap':
+      return (
+        <svg {...common}>
+          <circle cx="9" cy="10" r="4" stroke={stroke} strokeWidth="1.75" />
+          <circle cx="17" cy="10" r="4" stroke={stroke} strokeWidth="1.75" opacity="0.45" />
+          <path d="M13 10h2" stroke={stroke} strokeWidth="1.75" strokeLinecap="round" />
+        </svg>
+      )
     case 'scenarioMotionVideo':
       return (
         <svg {...common}>
@@ -212,6 +220,7 @@ export const NODE_ICON_COLORS: Record<NodeType, string> = {
   videoPromptCompose: '#eab308',
   scenarioOutfitChange: '#f472b6',
   scenarioLocationChange: '#34d399',
+  scenarioFaceSwap: '#fbbf24',
   scenarioMotionVideo: '#fb923c',
   scenarioFirstFrame: '#a78bfa',
   videoGeneration: '#ef4444',

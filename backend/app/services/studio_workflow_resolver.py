@@ -10,6 +10,7 @@ from app.services.studio_workflow_boardstory import (
     classify_boardstory_ref_role,
 )
 from app.services.studio_workflow_scenarios import (
+    enrich_description_for_face_swap,
     enrich_description_for_first_frame,
     enrich_description_for_location_change,
     enrich_description_for_outfit_change,
@@ -1355,6 +1356,16 @@ def resolve_workflow_generation_plan(
         description = enrich_description_for_outfit_change(description)
     elif scenario_type == "scenarioLocationChange":
         description = enrich_description_for_location_change(description)
+    elif scenario_type == "scenarioFaceSwap":
+        description = enrich_description_for_face_swap(description)
+        if model_id is None:
+            raise WorkflowResolutionError(
+                "Сценарий «смена модели»: выберите модель в ноде «Модель»"
+            )
+        if not sorted_refs:
+            raise WorkflowResolutionError(
+                "Сценарий «смена модели»: подключите референс сцены с человеком"
+            )
     elif scenario_type == "scenarioFirstFrame":
         description = enrich_description_for_first_frame(description)
 

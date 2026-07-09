@@ -2574,6 +2574,8 @@ async def _accept_studio_refine_job_from_workflow(
         if plan.scenario_type == "scenarioLocationChange":
             # Identity + pose from photo-base ref; location refs = background only.
             studio_mode = "grok_compose"
+        elif plan.scenario_type == "scenarioFaceSwap":
+            studio_mode = "model_scene" if plan.model_id is not None else "grok_compose"
         elif plan.model_id is not None:
             studio_mode = "model_scene"
         else:
@@ -2583,6 +2585,7 @@ async def _accept_studio_refine_job_from_workflow(
         studio_mode = "model"
 
     location_change = plan.scenario_type == "scenarioLocationChange" and bool(reference_images)
+    face_swap = plan.scenario_type == "scenarioFaceSwap" and bool(reference_images)
     effective_model_id = None if location_change else plan.model_id
 
     params: dict[str, Any] = {
@@ -2596,15 +2599,17 @@ async def _accept_studio_refine_job_from_workflow(
         "generate_wavespeed": "1",
         "wavespeed_single_reference": (
             "0"
-            if location_change
+            if location_change or face_swap
             else ("1" if reference_images else "0")
         ),
         "send_pose_reference_to_wavespeed": (
             "1"
-            if location_change or not (reference_images and plan.model_id is not None)
+            if location_change
+            or face_swap
+            or not (reference_images and plan.model_id is not None)
             else "0"
         ),
-        "lock_model_hairstyle": "1" if location_change else "0",
+        "lock_model_hairstyle": "1" if (location_change or face_swap) else "0",
         "exif_camera": normalize_exif_camera(plan.exif_camera),
         "include_realism_engine": "1" if plan.realism_enabled else "0",
         "workflow_selfie_capture": "1" if plan.selfie_capture_enabled else "0",

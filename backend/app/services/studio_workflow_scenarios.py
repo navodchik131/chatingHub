@@ -8,13 +8,19 @@ SCENARIO_NODE_TYPES = frozenset(
     {
         "scenarioOutfitChange",
         "scenarioLocationChange",
+        "scenarioFaceSwap",
         "scenarioMotionVideo",
         "scenarioFirstFrame",
     }
 )
 
 SCENARIO_IMAGE_TYPES = frozenset(
-    {"scenarioOutfitChange", "scenarioLocationChange", "scenarioFirstFrame"}
+    {
+        "scenarioOutfitChange",
+        "scenarioLocationChange",
+        "scenarioFaceSwap",
+        "scenarioFirstFrame",
+    }
 )
 SCENARIO_VIDEO_TYPES = frozenset({"scenarioMotionVideo"})
 
@@ -139,3 +145,33 @@ def location_change_role_hints() -> dict[str, str]:
 
 def is_location_change_scenario(scenario_type: str | None) -> bool:
     return (scenario_type or "").strip() == "scenarioLocationChange"
+
+
+def enrich_description_for_face_swap(description: str) -> str:
+    base = (description or "").strip()
+    hint = (
+        "SCENARIO — face / model swap (strict scene lock):\n"
+        "PRIORITY 1 — scene reference defines pose, limb angles, head yaw/gaze, camera height/angle/distance, "
+        "crop edges, background, props, environmental light, and wardrobe coverage zones. Do NOT change these.\n"
+        "PRIORITY 2 — replace ONLY the person in the scene with MODEL_PROFILE from studio model photos: "
+        "face, skin, hair, body proportions and identity.\n"
+        "FORBIDDEN: copying the original person's face from the scene ref; re-pose or reframe; new background; "
+        "face-swap paste look — rebuild one coherent individual from MODEL_PROFILE in the locked scene geometry."
+    )
+    if not base:
+        return hint
+    return f"{base}\n\n{hint}"
+
+
+def face_swap_role_hints() -> dict[str, str]:
+    return {
+        "scene": "pose + camera + crop + background donor — NOT identity",
+        "pose": "pose + camera + crop + background donor — NOT identity",
+        "camera": "pose + camera + crop + background donor — NOT identity",
+        "photo base": "full scene donor — geometry only, NOT the person's identity",
+        "photo_base": "full scene donor — geometry only, NOT the person's identity",
+    }
+
+
+def is_face_swap_scenario(scenario_type: str | None) -> bool:
+    return (scenario_type or "").strip() == "scenarioFaceSwap"

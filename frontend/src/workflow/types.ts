@@ -19,6 +19,7 @@ export type NodeType =
   | 'videoPromptCompose'
   | 'scenarioOutfitChange'
   | 'scenarioLocationChange'
+  | 'scenarioFaceSwap'
   | 'scenarioMotionVideo'
   | 'scenarioFirstFrame'
   | 'videoGeneration'
@@ -137,6 +138,12 @@ export interface ScenarioLocationChangeNodeData {
   [key: string]: unknown
 }
 
+export interface ScenarioFaceSwapNodeData {
+  disabled?: boolean
+  error?: string
+  [key: string]: unknown
+}
+
 export interface ScenarioFirstFrameNodeData {
   disabled?: boolean
   error?: string
@@ -200,6 +207,7 @@ export type AppNodeData =
   | ScenarioMotionVideoNodeData
   | ScenarioOutfitChangeNodeData
   | ScenarioLocationChangeNodeData
+  | ScenarioFaceSwapNodeData
   | ScenarioFirstFrameNodeData
   | VideoGenerationNodeData
   | VideoUpscaleNodeData
