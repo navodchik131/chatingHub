@@ -196,6 +196,19 @@ def wavespeed_is_image_poll_timeout_error(message: str | None) -> bool:
     return "timeout waiting for result" in low or "timeout waiting for image" in low
 
 
+def wavespeed_is_gateway_timeout_error(message: str | None) -> bool:
+    """504/502/503 от шлюза WaveSpeed — задача могла уже создаться на стороне провайдера."""
+    low = (message or "").lower()
+    return (
+        "504" in low
+        or "502" in low
+        or "503" in low
+        or "gateway time" in low
+        or "gateway timeout" in low
+        or "временно недоступен" in low
+    )
+
+
 def _wavespeed_raise_from_response(resp_json: dict[str, Any], *, context: str) -> None:
     task_err = _wavespeed_task_failed_error(resp_json)
     if task_err:
@@ -546,7 +559,7 @@ async def _wavespeed_post_json_and_resolve_image_url(
         api_key=api_key,
         full_post_url=full_post_url,
         body=body,
-        timeout_submit=timeout_submit,
+        timeout_submit=min(timeout_submit, 120.0),
     )
     if on_task_submitted and submitted.task_id:
         await on_task_submitted(submitted.task_id)
@@ -600,7 +613,8 @@ async def seedream_v45_edit_image_url(
         body = {
             "images": image_urls[:10],
             "prompt": prompt.strip(),
-            "enable_sync_mode": bool(settings.wavespeed_seedream_sync),
+            # Async + poll: sync держит POST минутами → 504 шлюза WaveSpeed.
+            "enable_sync_mode": False,
             "enable_base64_output": False,
         }
         if size and size.strip():
@@ -655,7 +669,7 @@ async def seedream_v50_pro_edit_image_url(
         "prompt": prompt.strip(),
         "aspect_ratio": (aspect_ratio or "3:4").strip(),
         "resolution": (resolution or "1k").strip().lower(),
-        "enable_sync_mode": bool(settings.wavespeed_seedream_sync),
+        "enable_sync_mode": False,
         "enable_base64_output": False,
     }
     fmt = (settings.wavespeed_seedream_output_format or "").strip().lower()
@@ -753,7 +767,7 @@ async def seedream_v45_bootstrap_edit_image_url(
     body: dict[str, Any] = {
         "images": image_urls[:10],
         "prompt": prompt.strip(),
-        "enable_sync_mode": bool(settings.wavespeed_seedream_sync),
+        "enable_sync_mode": False,
         "enable_base64_output": False,
     }
     if size and size.strip():

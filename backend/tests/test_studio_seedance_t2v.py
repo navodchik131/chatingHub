@@ -175,6 +175,17 @@ def test_wavespeed_image_poll_timeout_detector():
     assert not wavespeed_is_image_poll_timeout_error("WaveSpeed task failed")
 
 
+def test_wavespeed_gateway_timeout_detector():
+    from app.services.wavespeed_client import (
+        format_wavespeed_user_error,
+        wavespeed_is_gateway_timeout_error,
+    )
+
+    msg = format_wavespeed_user_error("<html>504 Gateway Time-out</html>")
+    assert wavespeed_is_gateway_timeout_error(msg)
+    assert not wavespeed_is_gateway_timeout_error("Insufficient credits")
+
+
 def test_wavespeed_sensitive_detector():
     assert wavespeed_is_sensitive_content_error(
         "Content flagged as potentially sensitive. Please try different prompts or images."

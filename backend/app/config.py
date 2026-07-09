@@ -218,8 +218,8 @@ class Settings(BaseSettings):
     wavespeed_seedream_output_format: str = Field(default="")
     # Только для WAN 2.7 Image Edit (-1 = случайный)
     wavespeed_wan_image_edit_seed: int = Field(default=-1)
-    # Только для Seedream: true = дождаться результата в ответе POST. Для WAN поле в тело не попадает.
-    wavespeed_seedream_sync: bool = Field(default=True)
+    # Только для Seedream: false = async + poll (sync даёт 504 шлюза при долгой генерации).
+    wavespeed_seedream_sync: bool = Field(default=False)
     # True = не передавать size (как пустой размер в Playground; иначе шлём WxH из кадра студии).
     wavespeed_seedream_omit_size: bool = Field(default=False)
     # Опционально: JSON-объект, полями дополняется тело POST к WaveSpeed (для полей из DevTools Playground).

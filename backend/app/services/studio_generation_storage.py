@@ -680,7 +680,10 @@ async def resolve_wavespeed_image_job_after_error(
     После ошибки WaveSpeed image-edit: попытка догрузить результат или отложить (processing).
     Returns (recovered_image_url, deferred_pending).
     """
-    from app.services.wavespeed_client import wavespeed_is_image_poll_timeout_error
+    from app.services.wavespeed_client import (
+        wavespeed_is_gateway_timeout_error,
+        wavespeed_is_image_poll_timeout_error,
+    )
 
     if gen_row is None or not (gen_row.wavespeed_task_id or "").strip():
         return None, False
@@ -695,7 +698,9 @@ async def resolve_wavespeed_image_job_after_error(
             return url, False
         if generation_has_archive_file(gen_row):
             return url or "ready", False
-    if wavespeed_is_image_poll_timeout_error(error_message):
+    if wavespeed_is_image_poll_timeout_error(error_message) or wavespeed_is_gateway_timeout_error(
+        error_message
+    ):
         gen_row.status = StudioGenerationStatus.PROCESSING
         gen_row.error_message = None
         gen_row.error_step = None
