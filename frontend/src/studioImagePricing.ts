@@ -9,6 +9,7 @@ const WS_BASE_CREDITS: Record<string, number> = {
   'nano-banana-pro': 3,
   'gpt-image-2': 3,
   'wan-2.7': 2,
+  'seedream-v5.0-pro': 3,
 }
 
 const GROK_SURCHARGE: Record<GrokPipelineKind, number> = {

@@ -11,6 +11,7 @@ WaveModelId = Literal[
     "nano-banana-pro",
     "gpt-image-2",
     "wan-2.7",
+    "seedream-v5.0-pro",
 ]
 WanEditTier = Literal["standard", "pro"]
 GrokPipelineKind = Literal["none", "light", "standard", "heavy", "workflow"]
@@ -21,6 +22,7 @@ _WS_BASE_CREDITS: dict[str, int] = {
     "nano-banana-pro": 3,
     "gpt-image-2": 3,
     "wan-2.7": 2,
+    "seedream-v5.0-pro": 3,
 }
 
 # Внутренние надбавки (промпт/vision на сервере) — не показываем пользователю отдельно

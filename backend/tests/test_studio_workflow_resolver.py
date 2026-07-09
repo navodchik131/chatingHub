@@ -206,6 +206,22 @@ def test_resolve_workflow_regular_rejects_wan():
         )
 
 
+def test_resolve_workflow_seedream_v5_in_regular_and_nsfw():
+    for nsfw_enabled in (False, True):
+        g = _base_graph()
+        for n in g["nodes"]:
+            if n["id"] == "gen-1":
+                n["data"]["nsfwEnabled"] = nsfw_enabled
+                n["data"]["waveModelId"] = "seedream-v5.0-pro"
+        plan = resolve_workflow_generation_plan(
+            target_node_id="gen-1",
+            nodes=g["nodes"],
+            edges=g["edges"],
+        )
+        assert plan.workflow_wave_model == "seedream-v5.0-pro"
+        assert plan.studio_wave_profile == ("nsfw" if nsfw_enabled else "regular")
+
+
 def test_resolve_workflow_realism_disabled():
     g = _base_graph(realism_enabled=False)
     plan = resolve_workflow_generation_plan(

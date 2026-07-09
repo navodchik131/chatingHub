@@ -27,6 +27,7 @@ def _seedream_edit_post_path() -> str:
 WAN_27_IMAGE_EDIT_STANDARD_PATH = "/api/v3/alibaba/wan-2.7/image-edit"
 WAN_27_IMAGE_EDIT_PRO_PATH = "/api/v3/alibaba/wan-2.7/image-edit-pro"
 SEEDREAM_V45_EDIT_PATH = "/api/v3/bytedance/seedream-v4.5/edit"
+SEEDREAM_V50_PRO_EDIT_PATH = "/api/v3/bytedance/seedream-v5.0-pro/edit"
 GPT_IMAGE_2_EDIT_PATH = "/api/v3/openai/gpt-image-2/edit"
 WAVESPEED_MEDIA_UPLOAD_PATH = "/api/v3/media/upload/binary"
 
@@ -629,6 +630,56 @@ async def seedream_v45_edit_image_url(
     )
 
 
+async def seedream_v50_pro_edit_image_url(
+    *,
+    api_key: str,
+    image_urls: list[str],
+    prompt: str,
+    aspect_ratio: str = "3:4",
+    resolution: str = "1k",
+    timeout_submit: float = 300.0,
+    poll_interval: float | None = None,
+    max_polls: int | None = None,
+    on_task_submitted: Callable[[str], Awaitable[None]] | None = None,
+) -> WaveSpeedImageResult:
+    """Seedream V5.0 Pro Edit — multi-reference image edit на WaveSpeed."""
+    if not image_urls:
+        raise RuntimeError("no image URLs")
+    if not (prompt or "").strip():
+        raise RuntimeError("empty prompt")
+
+    post_path = SEEDREAM_V50_PRO_EDIT_PATH
+    url = f"{_wavespeed_base()}{post_path}"
+    body: dict[str, Any] = {
+        "images": image_urls[:10],
+        "prompt": prompt.strip(),
+        "aspect_ratio": (aspect_ratio or "3:4").strip(),
+        "resolution": (resolution or "1k").strip().lower(),
+        "enable_sync_mode": bool(settings.wavespeed_seedream_sync),
+        "enable_base64_output": False,
+    }
+    fmt = (settings.wavespeed_seedream_output_format or "").strip().lower()
+    if fmt in ("jpeg", "jpg", "png"):
+        body["output_format"] = "jpeg" if fmt in ("jpeg", "jpg") else "png"
+    _apply_wavespeed_extra_body(body)
+    log.debug(
+        "wavespeed submit seedream-v5.0-pro path=%s images=%s prompt_len=%s keys=%s",
+        post_path,
+        len(body.get("images") or []),
+        len(str(body.get("prompt") or "")),
+        list(body.keys()),
+    )
+    return await _wavespeed_post_json_and_resolve_image_url(
+        api_key=api_key,
+        full_post_url=url,
+        body=body,
+        timeout_submit=timeout_submit,
+        poll_interval=poll_interval,
+        max_polls=max_polls,
+        on_task_submitted=on_task_submitted,
+    )
+
+
 async def wavespeed_upload_image_bytes(
     *,
     api_key: str,
@@ -1129,9 +1180,17 @@ async def workflow_edit_image_url(
             wan_edit_tier=wan_edit_tier,
             on_task_submitted=on_task_submitted,
         )
+    if model == "seedream-v5.0-pro":
+        return await seedream_v50_pro_edit_image_url(
+            api_key=api_key,
+            image_urls=image_urls,
+            prompt=prompt,
+            aspect_ratio=aspect_ratio,
+            on_task_submitted=on_task_submitted,
+        )
     raise RuntimeError(
         f"Неизвестная модель workflow: {wave_model_id}. "
-        "Доступны: gpt-image-2, nano-banana-2, nano-banana-pro, wan-2.7"
+        "Доступны: gpt-image-2, nano-banana-2, nano-banana-pro, seedream-v5.0-pro, wan-2.7"
     )
 
 

@@ -19,7 +19,20 @@ from app.services.studio_workflow_scenarios import (
 )
 
 WORKFLOW_WAVE_MODELS = frozenset(
-    {"nano-banana-2", "nano-banana-pro", "wan-2.7", "wan-2.7-pro", "gpt-image-2"}
+    {
+        "nano-banana-2",
+        "nano-banana-pro",
+        "gpt-image-2",
+        "wan-2.7",
+        "wan-2.7-pro",
+        "seedream-v5.0-pro",
+    }
+)
+
+WORKFLOW_CROSS_PROFILE_MODELS = frozenset({"seedream-v5.0-pro"})
+WORKFLOW_NSFW_ONLY_MODELS = frozenset({"wan-2.7", "wan-2.7-pro"})
+WORKFLOW_REGULAR_MODELS = frozenset(
+    {"nano-banana-2", "nano-banana-pro", "gpt-image-2", "seedream-v5.0-pro"}
 )
 
 _PRIMARY_REF_ROLE_HINTS = (
@@ -1299,21 +1312,20 @@ def resolve_workflow_generation_plan(
     else:
         wave_profile = "nsfw"
 
-    if wave_profile == "nsfw" and wave_model_raw not in ("wan-2.7", "wan-2.7-pro"):
+    if wave_profile == "nsfw" and wave_model_raw not in (
+        *WORKFLOW_NSFW_ONLY_MODELS,
+        *WORKFLOW_CROSS_PROFILE_MODELS,
+    ):
         raise WorkflowResolutionError(
-            "В режиме NSFW доступны только Wan 2.7 и Wan 2.7 Pro"
+            "В режиме NSFW доступны Wan 2.7, Wan 2.7 Pro и Seedream V5 Pro"
         )
-    if wave_profile == "regular" and wave_model_raw in ("wan-2.7", "wan-2.7-pro"):
+    if wave_profile == "regular" and wave_model_raw in WORKFLOW_NSFW_ONLY_MODELS:
         raise WorkflowResolutionError(
             "Wan 2.7 доступна только в режиме NSFW — отключите Regular или выберите другую модель"
         )
-    if wave_profile == "regular" and wave_model not in (
-        "nano-banana-2",
-        "nano-banana-pro",
-        "gpt-image-2",
-    ):
+    if wave_profile == "regular" and wave_model not in WORKFLOW_REGULAR_MODELS:
         raise WorkflowResolutionError(
-            "В обычном режиме доступны Nano Banana, Nano Banana Pro и GPT Image"
+            "В обычном режиме доступны Nano Banana, Nano Banana Pro, GPT Image и Seedream V5 Pro"
         )
 
     if wan_tier not in ("standard", "pro"):

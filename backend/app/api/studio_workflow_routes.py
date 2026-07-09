@@ -84,6 +84,12 @@ _MODEL_UI: dict[str, dict[str, Any]] = {
         "nsfw_only": True,
         "aspect_keys": sorted(_WAN_ASPECTS),
     },
+    "seedream-v5.0-pro": {
+        "label": "Seedream V5 Pro",
+        "nsfw_only": False,
+        "cross_profile": True,
+        "aspect_keys": sorted(_WAN_ASPECTS),
+    },
 }
 
 

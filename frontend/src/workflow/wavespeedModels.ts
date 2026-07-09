@@ -15,10 +15,15 @@ export interface GenerationModelDefinition {
 }
 
 /** UI id в селекте workflow-нод (regular). */
-export const REGULAR_IMAGE_MODEL_IDS = ['nano-banana-2', 'nano-banana-pro', 'gpt-image-2'] as const
+export const REGULAR_IMAGE_MODEL_IDS = [
+  'nano-banana-2',
+  'nano-banana-pro',
+  'gpt-image-2',
+  'seedream-v5.0-pro',
+] as const
 
 /** UI id в селекте workflow-нод (NSFW). */
-export const NSFW_IMAGE_MODEL_IDS = ['wan-2.7', 'wan-2.7-pro'] as const
+export const NSFW_IMAGE_MODEL_IDS = ['wan-2.7', 'wan-2.7-pro', 'seedream-v5.0-pro'] as const
 
 export type WorkflowUiModelId =
   | (typeof REGULAR_IMAGE_MODEL_IDS)[number]
@@ -77,6 +82,7 @@ function fallbackGenerationModels(): GenerationModelDefinition[] {
     { id: 'nano-banana-2', label: 'Nano Banana', nsfwOnly: false, aspects },
     { id: 'nano-banana-pro', label: 'Nano Banana Pro', nsfwOnly: false, aspects },
     { id: 'gpt-image-2', label: 'GPT Image', nsfwOnly: false, aspects },
+    { id: 'seedream-v5.0-pro', label: 'Seedream V5 Pro', nsfwOnly: false, aspects },
     { id: 'wan-2.7', label: 'Wan 2.7', nsfwOnly: true, aspects },
     { id: 'wan-2.7-pro', label: 'Wan 2.7 Pro', nsfwOnly: true, aspects },
   ]
@@ -93,6 +99,13 @@ export function normalizeWaveModelSelection(uiModelId: string | undefined): {
   }
   if (id === 'wan-2.7') {
     return { uiModelId: 'wan-2.7', apiWaveModelId: 'wan-2.7', wanEditTier: 'standard' }
+  }
+  if (id === 'seedream-v5.0-pro') {
+    return {
+      uiModelId: 'seedream-v5.0-pro',
+      apiWaveModelId: 'seedream-v5.0-pro',
+      wanEditTier: 'standard',
+    }
   }
   if ((REGULAR_IMAGE_MODEL_IDS as readonly string[]).includes(id)) {
     return { uiModelId: id as WorkflowUiModelId, apiWaveModelId: id, wanEditTier: 'standard' }
