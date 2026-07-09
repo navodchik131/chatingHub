@@ -13,11 +13,11 @@ function ScenarioFaceSwapNodeComponent({ id, data }: NodeProps) {
         type="target"
         position={Position.Left}
         className="workflow-handle workflow-handle--model"
-        style={{ top: '16%' }}
+        style={{ top: '14%' }}
       />
       <span
         className="workflow-node__handle-label workflow-node__handle-label--left"
-        style={{ top: '16%' }}
+        style={{ top: '14%' }}
       >
         model (opt)
       </span>
@@ -27,11 +27,11 @@ function ScenarioFaceSwapNodeComponent({ id, data }: NodeProps) {
         type="target"
         position={Position.Left}
         className="workflow-handle workflow-handle--realism"
-        style={{ top: '32%' }}
+        style={{ top: '28%' }}
       />
       <span
         className="workflow-node__handle-label workflow-node__handle-label--left"
-        style={{ top: '32%' }}
+        style={{ top: '28%' }}
       >
         realism
       </span>
@@ -41,11 +41,11 @@ function ScenarioFaceSwapNodeComponent({ id, data }: NodeProps) {
         type="target"
         position={Position.Left}
         className="workflow-handle workflow-handle--selfie"
-        style={{ top: '40%' }}
+        style={{ top: '36%' }}
       />
       <span
         className="workflow-node__handle-label workflow-node__handle-label--left"
-        style={{ top: '40%' }}
+        style={{ top: '36%' }}
       >
         selfie
       </span>
@@ -55,13 +55,27 @@ function ScenarioFaceSwapNodeComponent({ id, data }: NodeProps) {
         type="target"
         position={Position.Left}
         className="workflow-handle workflow-handle--prompt"
-        style={{ top: '52%' }}
+        style={{ top: '48%' }}
       />
       <span
         className="workflow-node__handle-label workflow-node__handle-label--left"
-        style={{ top: '52%' }}
+        style={{ top: '48%' }}
       >
         prompt
+      </span>
+
+      <Handle
+        id={HandleIds.identityRefIn}
+        type="target"
+        position={Position.Left}
+        className="workflow-handle workflow-handle--model"
+        style={{ top: '62%' }}
+      />
+      <span
+        className="workflow-node__handle-label workflow-node__handle-label--left"
+        style={{ top: '62%' }}
+      >
+        identity ref
       </span>
 
       <Handle
@@ -69,18 +83,18 @@ function ScenarioFaceSwapNodeComponent({ id, data }: NodeProps) {
         type="target"
         position={Position.Left}
         className="workflow-handle workflow-handle--reference"
-        style={{ top: '68%' }}
+        style={{ top: '76%' }}
       />
       <span
         className="workflow-node__handle-label workflow-node__handle-label--left"
-        style={{ top: '68%' }}
+        style={{ top: '76%' }}
       >
         scene ref
       </span>
 
       <p className="workflow-node__hint">
-        Смена модели: pose/сцена с ref, identity — из ноды «Модель» или второго ref
-        (model / subject / photo base). Без модели: два ref — identity + scene.
+        Без ноды «Модель»: identity ref (кто) + scene ref (pose/фон). С моделью из кабинета —
+        достаточно scene ref.
       </p>
 
       <Handle

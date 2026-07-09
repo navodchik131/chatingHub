@@ -723,6 +723,7 @@ HANDLE = {
     "ref_description_in": "description-in",
     "gen_prompt_in": "prompt-in",
     "gen_reference_in": "reference-in",
+    "identity_ref_in": "identity-ref-in",
     "gen_model_in": "model-in",
     "gen_realism_in": "realism-in",
     "gen_selfie_in": "selfie-in",
@@ -792,11 +793,15 @@ def _reference_item_from_source_node(
     src: dict[str, Any],
     edges: list[dict[str, Any]],
     node_map: dict[str, dict[str, Any]],
+    *,
+    default_role: str = "",
 ) -> WorkflowReferenceItem | None:
     ntype = str(src.get("type") or "")
     if ntype not in _REFERENCE_IMAGE_SOURCE_TYPES:
         return None
     ref_role, ref_description = _reference_description_for_node(src, edges, node_map)
+    if not (ref_role or "").strip() and (default_role or "").strip():
+        ref_role = default_role.strip()
     data = src.get("data") if isinstance(src.get("data"), dict) else {}
     node_id = str(src.get("id") or "").strip()
 
@@ -850,6 +855,50 @@ def _sources_for_target(
             seen.add(src_id)
             out.append(node)
     return out
+
+
+def _collect_plan_reference_items(
+    *,
+    target_id: str,
+    edges: list[dict[str, Any]],
+    node_map: dict[str, dict[str, Any]],
+    scenario_type: str | None,
+    is_first_frame: bool,
+) -> list[WorkflowReferenceItem]:
+    references: list[WorkflowReferenceItem] = []
+    seen_node_ids: set[str] = set()
+
+    def ingest_handle(handle_key: str, *, default_role: str = "") -> None:
+        for ref_node in _sources_for_plan_target(target_id, HANDLE[handle_key], edges, node_map):
+            node_id = str(ref_node.get("id") or "").strip()
+            if node_id and node_id in seen_node_ids:
+                continue
+            ntype = str(ref_node.get("type") or "")
+            if ntype not in _REFERENCE_IMAGE_SOURCE_TYPES:
+                raise WorkflowResolutionError(
+                    "К входу reference можно подключить «Images ref», «Просмотр» "
+                    "или ноду с результатом генерации"
+                )
+            if not _is_node_enabled(ref_node):
+                continue
+            item = _reference_item_from_source_node(
+                ref_node, edges, node_map, default_role=default_role
+            )
+            if item is None:
+                if is_first_frame:
+                    continue
+                raise WorkflowResolutionError(
+                    "Загрузите изображение во все подключённые референсы "
+                    "или выполните upstream-генерацию"
+                )
+            references.append(item)
+            if node_id:
+                seen_node_ids.add(node_id)
+
+    ingest_handle("gen_reference_in")
+    if scenario_type == "scenarioFaceSwap":
+        ingest_handle("identity_ref_in", default_role="model / identity")
+    return references
 
 
 def _motion_video_file_id_from_node(node: dict[str, Any] | None) -> str:
@@ -1286,26 +1335,22 @@ def resolve_workflow_generation_plan(
         if model_id <= 0:
             raise WorkflowResolutionError("Выберите модель в ноде «Модель»")
 
-    ref_nodes = _sources_for_plan_target(target_id, HANDLE["gen_reference_in"], edges, node_map)
+    _, scenario = _plan_input_target(target_id, edges, node_map)
+    scenario_type = scenario_type_of(scenario)
     is_first_frame = str(target.get("type") or "") == "firstFrameGeneration"
 
-    references: list[WorkflowReferenceItem] = []
-    for ref_node in ref_nodes:
-        ntype = str(ref_node.get("type") or "")
-        if ntype not in _REFERENCE_IMAGE_SOURCE_TYPES:
-            raise WorkflowResolutionError(
-                "К входу reference можно подключить «Images ref», «Просмотр» или ноду с результатом генерации"
-            )
-        if not _is_node_enabled(ref_node):
-            continue
-        item = _reference_item_from_source_node(ref_node, edges, node_map)
-        if item is None:
-            if is_first_frame:
-                continue
-            raise WorkflowResolutionError(
-                "Загрузите изображение во все подключённые референсы или выполните upstream-генерацию"
-            )
-        references.append(item)
+    references = _collect_plan_reference_items(
+        target_id=target_id,
+        edges=edges,
+        node_map=node_map,
+        scenario_type=scenario_type,
+        is_first_frame=is_first_frame,
+    )
+    ref_nodes = _sources_for_plan_target(target_id, HANDLE["gen_reference_in"], edges, node_map)
+    if scenario_type == "scenarioFaceSwap":
+        ref_nodes = ref_nodes + _sources_for_plan_target(
+            target_id, HANDLE["identity_ref_in"], edges, node_map
+        )
 
     motion_video_file_id = ""
     if is_first_frame:
@@ -1436,8 +1481,6 @@ def resolve_workflow_generation_plan(
     if wave_profile == "regular":
         wan_tier = "standard"
 
-    _, scenario = _plan_input_target(target_id, edges, node_map)
-    scenario_type = scenario_type_of(scenario)
     if scenario_type == "scenarioOutfitChange":
         description = enrich_description_for_outfit_change(description)
     elif scenario_type == "scenarioLocationChange":
@@ -1447,7 +1490,7 @@ def resolve_workflow_generation_plan(
         if model_id is None and not any(is_identity_ref_role(r.role) for r in sorted_refs):
             raise WorkflowResolutionError(
                 "Сценарий «смена модели»: выберите модель в ноде «Модель» "
-                "или подключите ref identity (model / subject / photo base)"
+                "или подключите identity ref (вход identity ref)"
             )
         if not sorted_refs:
             raise WorkflowResolutionError(

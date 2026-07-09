@@ -240,6 +240,7 @@ export const HandleIds = {
   imageGenSelfieIn: 'selfie-in',
   imageGenPromptIn: 'prompt-in',
   imageGenReferenceIn: 'reference-in',
+  identityRefIn: 'identity-ref-in',
   imageGenOut: 'image-out',
   firstFrameIn: 'first-frame-in',
   sheetIn: 'sheet-in',

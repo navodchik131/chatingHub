@@ -1206,7 +1206,7 @@ def test_scenario_face_swap_dual_ref_without_model():
         "edges": [
             {"source": "desc-id", "target": "ref-id", "targetHandle": "description-in"},
             {"source": "desc-scene", "target": "ref-scene", "targetHandle": "description-in"},
-            {"source": "ref-id", "target": "scenario-1", "targetHandle": "reference-in"},
+            {"source": "ref-id", "target": "scenario-1", "targetHandle": "identity-ref-in"},
             {"source": "ref-scene", "target": "scenario-1", "targetHandle": "reference-in"},
             {"source": "prompt-1", "target": "scenario-1", "targetHandle": "prompt-in"},
             {
