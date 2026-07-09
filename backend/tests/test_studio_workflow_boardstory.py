@@ -8,6 +8,7 @@ from app.services.studio_workflow_boardstory import (
     boardstory_slot_from_json,
     boardstory_slot_to_json,
     boardstory_tag_rules_text,
+    boardstory_user_supplied_workflow_refs,
     boardstory_video_only_swap_mode,
     build_boardstory_clothing_env_swap_prompt,
     build_boardstory_opening_frame_t2v_prompt,
@@ -15,6 +16,7 @@ from app.services.studio_workflow_boardstory import (
     build_boardstory_video_only_swap_prompt,
     classify_boardstory_ref_role,
     compute_boardstory_layout,
+    resolve_boardstory_user_opening_still,
 )
 
 
@@ -224,6 +226,56 @@ def test_build_boardstory_video_edit_swap_prompt():
         has_environment=True,
     )
     assert out == "замени персонажа на видео на персонажа с фото"
+
+
+class _Ref:
+    def __init__(self, ref_id: str):
+        self.ref_id = ref_id
+
+
+def test_boardstory_user_supplied_refs_detects_extra_ref():
+    assert boardstory_user_supplied_workflow_refs(
+        clothing_slot=None,
+        environment_slot=None,
+        extra_refs=(_Ref("abc"),),
+    )
+
+
+def test_boardstory_user_supplied_refs_false_without_refs():
+    assert not boardstory_user_supplied_workflow_refs(
+        clothing_slot=None,
+        environment_slot=None,
+        extra_refs=(),
+    )
+
+
+def test_resolve_boardstory_opening_from_extra_ref():
+    url, clothing, env, extra = resolve_boardstory_user_opening_still(
+        clothing_slot=None,
+        environment_slot=None,
+        extra_refs=(_Ref("ref1"), _Ref("ref2")),
+        generation_url_factory=lambda g: f"gen://{g}",
+        workflow_ref_url_factory=lambda r: f"wf://{r}",
+    )
+    assert url == "wf://ref1"
+    assert clothing is None
+    assert env is None
+    assert len(extra) == 1
+    assert extra[0].ref_id == "ref2"
+
+
+def test_resolve_boardstory_opening_from_clothing_slot():
+    slot = BoardStoryImageSlot(kind="clothing", ref_id="cloth1", role="outfit")
+    url, clothing, env, extra = resolve_boardstory_user_opening_still(
+        clothing_slot=slot,
+        environment_slot=None,
+        extra_refs=(),
+        generation_url_factory=lambda g: f"gen://{g}",
+        workflow_ref_url_factory=lambda r: f"wf://{r}",
+    )
+    assert url == "wf://cloth1"
+    assert clothing is None
+    assert env is None
 
 
 def test_boardstory_slot_json_roundtrip():

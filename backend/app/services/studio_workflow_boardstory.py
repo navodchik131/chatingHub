@@ -638,6 +638,83 @@ def build_boardstory_reference_urls(
     return urls, layout
 
 
+def _boardstory_slot_has_content(slot: BoardStoryImageSlot | None) -> bool:
+    if slot is None:
+        return False
+    if slot.generation_id is not None and slot.generation_id > 0:
+        return True
+    return bool((slot.ref_id or "").strip())
+
+
+def boardstory_user_supplied_workflow_refs(
+    *,
+    clothing_slot: BoardStoryImageSlot | None,
+    environment_slot: BoardStoryImageSlot | None,
+    extra_refs: tuple[Any, ...],
+) -> bool:
+    """Пользователь подключил Images ref / слоты — не генерировать opening still через WaveSpeed."""
+    if _boardstory_slot_has_content(clothing_slot):
+        return True
+    if _boardstory_slot_has_content(environment_slot):
+        return True
+    return any((str(getattr(r, "ref_id", "") or "")).strip() for r in extra_refs)
+
+
+def _slot_to_public_url(
+    slot: BoardStoryImageSlot | None,
+    *,
+    generation_url_factory,
+    workflow_ref_url_factory,
+) -> str | None:
+    if slot is None:
+        return None
+    if slot.generation_id is not None:
+        return generation_url_factory(slot.generation_id)
+    if slot.ref_id:
+        return workflow_ref_url_factory(slot.ref_id)
+    return None
+
+
+def resolve_boardstory_user_opening_still(
+    *,
+    clothing_slot: BoardStoryImageSlot | None,
+    environment_slot: BoardStoryImageSlot | None,
+    extra_refs: tuple[Any, ...],
+    generation_url_factory,
+    workflow_ref_url_factory,
+) -> tuple[str | None, BoardStoryImageSlot | None, BoardStoryImageSlot | None, tuple[Any, ...]]:
+    """
+    Готовый opening still из workflow refs (без WaveSpeed).
+    Приоритет: refs → clothing → environment. Слот, ушедший в opening, не дублируется в layout.
+    """
+    for i, ref in enumerate(extra_refs):
+        rid = (str(getattr(ref, "ref_id", "") or "")).strip()
+        if not rid:
+            continue
+        url = workflow_ref_url_factory(rid)
+        if url:
+            trimmed = tuple(extra_refs[:i] + extra_refs[i + 1 :])
+            return url, clothing_slot, environment_slot, trimmed
+
+    url = _slot_to_public_url(
+        clothing_slot,
+        generation_url_factory=generation_url_factory,
+        workflow_ref_url_factory=workflow_ref_url_factory,
+    )
+    if url:
+        return url, None, environment_slot, extra_refs
+
+    url = _slot_to_public_url(
+        environment_slot,
+        generation_url_factory=generation_url_factory,
+        workflow_ref_url_factory=workflow_ref_url_factory,
+    )
+    if url:
+        return url, clothing_slot, None, extra_refs
+
+    return None, clothing_slot, environment_slot, extra_refs
+
+
 def boardstory_slot_from_json(raw: dict[str, Any] | None) -> BoardStoryImageSlot | None:
     if not isinstance(raw, dict):
         return None

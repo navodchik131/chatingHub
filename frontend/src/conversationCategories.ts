@@ -9,6 +9,7 @@ export type ConversationCategory =
 export interface ConversationCategoryLike {
   manual_category?: 'vip' | 'bomzh' | null
   is_blocked?: boolean
+  peer_unavailable?: boolean
   is_no_response?: boolean
   is_new?: boolean
 }
@@ -75,6 +76,7 @@ export function countForConversationCategory(
 export function conversationCategoryBadge(
   conv: ConversationCategoryLike,
 ): { key: string; label: string } | null {
+  if (conv.peer_unavailable) return { key: 'unavailable', label: 'Недоступен' }
   if (conv.is_blocked) return { key: 'blocked', label: 'Блок' }
   if (conv.manual_category === 'vip') return { key: 'vip', label: 'VIP' }
   if (conv.manual_category === 'bomzh') return { key: 'bomzh', label: 'Бомж' }

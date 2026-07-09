@@ -222,6 +222,27 @@
   background: #ff5a6e;
 }
 
+.conv-cat-badge--unavailable {
+  color: #fff;
+  background: #8b5a2b;
+}
+
+.conv.is-unavailable .name {
+  opacity: 0.72;
+}
+
+.thread-peer-unavailable-banner {
+  grid-column: 1 / -1;
+  margin-top: 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(255, 90, 110, 0.12);
+  border: 1px solid rgba(255, 90, 110, 0.35);
+  color: var(--fg-1);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
 .conv-cat-badge--bomzh {
   color: var(--text-secondary);
   background: var(--bg-subtle);

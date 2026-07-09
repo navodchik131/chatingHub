@@ -5417,6 +5417,8 @@ async def _studio_job_execute_motion_render_video(
                 has_motion_reference_video=bool(mv_id),
             ),
         )
+        from app.services.studio_workflow_boardstory import boardstory_user_supplied_workflow_refs
+
         if (
             boardstory_mode
             and mv_id
@@ -5424,6 +5426,11 @@ async def _studio_job_execute_motion_render_video(
             and settings.studio_boardstory_auto_opening_frame
             and not settings.studio_boardstory_use_video_edit
             and grok_scene_compose_configured()
+            and not boardstory_user_supplied_workflow_refs(
+                clothing_slot=clothing_ref,
+                environment_slot=environment_ref,
+                extra_refs=tuple(extra_refs),
+            )
         ):
             cost += apply_studio_credit_cost(
                 plan, settings.credit_cost_studio_prompt_refine
@@ -5567,8 +5574,38 @@ async def _studio_job_execute_motion_render_video(
                         token_factory=create_workflow_ref_access_token,
                     )
 
+                from app.services.studio_workflow_boardstory import (
+                    boardstory_user_supplied_workflow_refs,
+                    resolve_boardstory_user_opening_still,
+                )
+
                 opening_still_url: str | None = None
-                if (
+                clothing_for_build = clothing_ref
+                environment_for_build = environment_ref
+                extra_refs_for_build = tuple(extra_refs)
+                if boardstory_user_supplied_workflow_refs(
+                    clothing_slot=clothing_ref,
+                    environment_slot=environment_ref,
+                    extra_refs=extra_refs_for_build,
+                ):
+                    (
+                        opening_still_url,
+                        clothing_for_build,
+                        environment_for_build,
+                        extra_refs_for_build,
+                    ) = resolve_boardstory_user_opening_still(
+                        clothing_slot=clothing_ref,
+                        environment_slot=environment_ref,
+                        extra_refs=extra_refs_for_build,
+                        generation_url_factory=_gen_url,
+                        workflow_ref_url_factory=_ref_url,
+                    )
+                    if opening_still_url:
+                        log.info(
+                            "motion_render_video job=%s boardstory opening from workflow ref",
+                            job.id,
+                        )
+                elif (
                     send_video_reference
                     and vpath is not None
                     and settings.studio_boardstory_auto_opening_frame
@@ -5603,9 +5640,9 @@ async def _studio_job_execute_motion_render_video(
                     owner_id=oid,
                     public_app_base=pub,
                     model_image_urls=model_urls,
-                    clothing_slot=clothing_ref,
-                    environment_slot=environment_ref,
-                    extra_refs=tuple(extra_refs),
+                    clothing_slot=clothing_for_build,
+                    environment_slot=environment_for_build,
+                    extra_refs=extra_refs_for_build,
                     generation_url_factory=_gen_url,
                     workflow_ref_url_factory=_ref_url,
                     opening_still_url=opening_still_url,

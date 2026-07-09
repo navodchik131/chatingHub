@@ -128,6 +128,24 @@ async def sync_fanvue_chat_history(
                         size=page_size,
                     )
                 except FanvueAPIError as e:
+                    from app.services.fanvue_peer_status import (
+                        fanvue_api_body_indicates_invalid_user,
+                        mark_conversation_peer_unavailable,
+                    )
+
+                    if fanvue_api_body_indicates_invalid_user(e.body):
+                        conv = await session.scalar(
+                            select(Conversation)
+                            .where(
+                                Conversation.user_id == owner_user_id,
+                                Conversation.platform == Platform.fanvue,
+                                Conversation.external_chat_id == fan_uuid,
+                            )
+                            .order_by(Conversation.updated_at.desc())
+                            .limit(1)
+                        )
+                        if conv:
+                            await mark_conversation_peer_unavailable(session, conv)
                     errors.append(
                         f"GET /chats/{fan_uuid}/messages page={msg_page}: {e.status}"
                     )
@@ -271,6 +289,29 @@ async def sync_fanvue_single_chat_recent(
             access_token, fan_uuid.strip(), page=1, size=min(50, max_messages)
         )
     except FanvueAPIError as e:
+        from app.services.fanvue_peer_status import (
+            fanvue_api_body_indicates_invalid_user,
+            mark_conversation_peer_unavailable,
+        )
+
+        if fanvue_api_body_indicates_invalid_user(e.body):
+            from sqlalchemy import select
+
+            from app.db.models import Conversation, Platform
+
+            conv = await session.scalar(
+                select(Conversation)
+                .where(
+                    Conversation.user_id == owner_user_id,
+                    Conversation.platform == Platform.fanvue,
+                    Conversation.external_chat_id == fan_uuid.strip(),
+                )
+                .order_by(Conversation.updated_at.desc())
+                .limit(1)
+            )
+            if conv:
+                await mark_conversation_peer_unavailable(session, conv)
+                await session.commit()
         log.warning("fanvue single chat sync failed fan=%s: %s", fan_uuid[:8], e.status)
         return 0
     messages = fanvue_api_data_list(msg_payload)

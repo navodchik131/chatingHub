@@ -2,9 +2,31 @@
 export function formatApiErrorDetail(data: unknown): string {
   if (!data || typeof data !== 'object') return ''
   const o = data as Record<string, unknown>
-  if (typeof o.message === 'string' && o.message.trim()) return o.message.trim()
+  if (typeof o.message === 'string' && o.message.trim()) {
+    const m = o.message.trim()
+    if (/invalid user uuid/i.test(m)) {
+      return 'Пользователь Fanvue недоступен: аккаунт удалён или заблокирован на платформе.'
+    }
+    return m
+  }
   const d = o.detail
-  if (typeof d === 'string') return d
+  if (typeof d === 'string') {
+    const trimmed = d.trim()
+    if (trimmed.startsWith('{')) {
+      try {
+        const parsed = JSON.parse(trimmed) as Record<string, unknown>
+        if (
+          typeof parsed.message === 'string' &&
+          /invalid user uuid/i.test(parsed.message)
+        ) {
+          return 'Пользователь Fanvue недоступен: аккаунт удалён или заблокирован на платформе.'
+        }
+      } catch {
+        /* not JSON */
+      }
+    }
+    return d
+  }
   if (Array.isArray(d)) {
     return d
       .map((item) => {

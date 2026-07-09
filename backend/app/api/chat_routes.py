@@ -455,6 +455,21 @@ async def api_patch_conversation(
     return await _conversation_out(session, conv, owner_id=oid)
 
 
+@router.delete("/conversations/{conv_id}", status_code=204)
+async def api_hide_conversation(
+    conv_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> None:
+    """Убрать диалог из списка (мягкое удаление, история сохраняется)."""
+    assert_permission(user, PERM_CHAT)
+    await _require_chat_plan(session, user)
+    oid = workspace_owner_id(user)
+    conv = await require_conversation_chat_access(session, user, conv_id, oid)
+    conv.is_hidden = True
+    await session.commit()
+
+
 @router.get(
     "/conversations/{conv_id}/companion-health",
     response_model=CompanionHealthOut,
@@ -556,6 +571,11 @@ async def api_reply(
 
     conv = await require_conversation_chat_access(session, user, conv_id, oid)
 
+    if conv.peer_unavailable:
+        from app.services.fanvue_peer_status import fanvue_peer_unavailable_http_exception
+
+        raise fanvue_peer_unavailable_http_exception()
+
     reply_target = await resolve_reply_target(
         session, conv_id=conv.id, reply_to_message_id=reply_to_message_id
     )
@@ -647,14 +667,22 @@ async def api_reply(
             fv_reply_uuid = reply_target.platform_message_id or platform_message_id_from_meta(
                 reply_target.meta
             )
-        platform_message_id = await send_fanvue_outbound(
-            access_token=fv_tok,
-            fan_uuid=conv.external_chat_id,
-            text=outgoing,
-            image_bytes=image_bytes,
-            image_mime=image_mime,
-            reply_to_message_uuid=fv_reply_uuid,
-        )
+        try:
+            platform_message_id = await send_fanvue_outbound(
+                access_token=fv_tok,
+                fan_uuid=conv.external_chat_id,
+                text=outgoing,
+                image_bytes=image_bytes,
+                image_mime=image_mime,
+                reply_to_message_uuid=fv_reply_uuid,
+            )
+        except HTTPException as e:
+            if e.status_code == 410:
+                from app.services.fanvue_peer_status import mark_conversation_peer_unavailable
+
+                await mark_conversation_peer_unavailable(session, conv)
+                await session.commit()
+            raise
     elif conv.platform == Platform.instagram:
         row_ig = await resolve_instagram_connection_for_conversation(session, conv, oid)
         if not row_ig:

@@ -139,6 +139,8 @@ interface Conversation {
   effective_companion_mode?: string | null
   manual_category?: 'vip' | 'bomzh' | null
   is_blocked?: boolean
+  peer_unavailable?: boolean
+  is_hidden?: boolean
   assigned_user_id?: number | null
   assigned_member_login?: string | null
   is_no_response?: boolean
@@ -998,6 +1000,7 @@ export default function App() {
   const [snippetBusy, setSnippetBusy] = useState(false)
   const [convCategoryBusy, setConvCategoryBusy] = useState(false)
   const [convBlockedBusy, setConvBlockedBusy] = useState(false)
+  const [convHideBusy, setConvHideBusy] = useState(false)
   const [companionFeedbackReports, setCompanionFeedbackReports] = useState<
     CompanionFeedbackReport[]
   >([])
@@ -3252,6 +3255,31 @@ export default function App() {
     }
   }
 
+  const hideConversation = async (convId: number) => {
+    if (!window.confirm('Убрать диалог из списка? История сохранится, но чат исчезнет из списка.')) {
+      return
+    }
+    setError(null)
+    setConvHideBusy(true)
+    try {
+      const r = await apiFetch(`/api/conversations/${convId}`, { method: 'DELETE' })
+      if (!r.ok && r.status !== 204) {
+        const err = await r.json().catch(() => ({}))
+        setError(formatHttpApiError(r, err))
+        return
+      }
+      setConversations((prev) => prev.filter((c) => c.id !== convId))
+      if (selectedId === convId) {
+        setSelectedId(null)
+        setMessages([])
+      }
+    } catch {
+      setError('Не удалось убрать диалог из списка')
+    } finally {
+      setConvHideBusy(false)
+    }
+  }
+
   const scrollToMessage = useCallback((messageId: number | null | undefined) => {
     if (!messageId) return
     const el = messagesContainerRef.current?.querySelector(
@@ -3309,6 +3337,7 @@ export default function App() {
 
   const sendReply = async () => {
     if (selectedId == null) return
+    if (selected?.peer_unavailable) return
     const text = draft.trim()
     if (!text && !chatReplyHasAttachment) return
     const convId = selectedId
@@ -3378,6 +3407,11 @@ export default function App() {
       if (!r.ok) {
         const err = await r.json().catch(() => ({}))
         setError(formatHttpApiError(r, err))
+        if (r.status === 410) {
+          setConversations((prev) =>
+            prev.map((c) => (c.id === convId ? { ...c, peer_unavailable: true } : c)),
+          )
+        }
         setMessages((prev) => {
           if (selectedIdRef.current !== convId) return prev
           return prev.filter((m) => m.id !== tempId)
@@ -8960,9 +8994,11 @@ export default function App() {
                         ? 'conv active'
                         : hasUnread
                           ? 'conv has-unread'
-                          : c.is_blocked
-                            ? 'conv is-blocked'
-                            : 'conv'
+                          : c.peer_unavailable
+                            ? 'conv is-unavailable'
+                            : c.is_blocked
+                              ? 'conv is-blocked'
+                              : 'conv'
                     }
                     onClick={() => setSelectedId(c.id)}
                   >
@@ -9243,6 +9279,16 @@ export default function App() {
                         <span>Заблокировать</span>
                       </label>
                     </div>
+                    <div className="outbound-lang-field" style={{ gridColumn: '1 / -1' }}>
+                      <button
+                        type="button"
+                        className="ghost-btn"
+                        disabled={convHideBusy}
+                        onClick={() => void hideConversation(selected.id)}
+                      >
+                        {convHideBusy ? '…' : 'Убрать из списка'}
+                      </button>
+                    </div>
                     {companionHealth &&
                     (companionHealth.reasons.length > 0 ||
                       companionHealth.status !== 'ok') ? (
@@ -9258,6 +9304,12 @@ export default function App() {
                         {companionHealth.reasons[0]
                           ? ` · ${companionHealth.reasons[0]}`
                           : ''}
+                      </div>
+                    ) : null}
+                    {selected.peer_unavailable ? (
+                      <div className="thread-peer-unavailable-banner" role="status">
+                        Пользователь Fanvue недоступен — аккаунт удалён или заблокирован на
+                        платформе. Отправка сообщений невозможна.
                       </div>
                     ) : null}
                 </div>
@@ -9727,9 +9779,18 @@ export default function App() {
                     <textarea
                       ref={textareaRef}
                       rows={3}
-                      placeholder="Сообщение на русском — уйдёт перевод на язык из «Язык ответа»"
-                      title="Пишите на русском; в Telegram/Fanvue уйдёт перевод по выбранному языку"
+                      placeholder={
+                        selected.peer_unavailable
+                          ? 'Пользователь недоступен на Fanvue — отправка невозможна'
+                          : 'Сообщение на русском — уйдёт перевод на язык из «Язык ответа»'
+                      }
+                      title={
+                        selected.peer_unavailable
+                          ? 'Пользователь Fanvue недоступен'
+                          : 'Пишите на русском; в Telegram/Fanvue уйдёт перевод по выбранному языку'
+                      }
                       value={draft}
+                      disabled={Boolean(selected.peer_unavailable)}
                       onSelect={(e) => {
                         const t = e.currentTarget
                         lastTextareaSelRef.current = {
@@ -9758,7 +9819,10 @@ export default function App() {
                         type="button"
                         className="send-btn"
                         onClick={() => void sendReply()}
-                        disabled={!draft.trim() && !chatReplyHasAttachment}
+                        disabled={
+                          Boolean(selected.peer_unavailable) ||
+                          (!draft.trim() && !chatReplyHasAttachment)
+                        }
                       >
                         Отправить
                       </button>

@@ -90,6 +90,8 @@ class ConversationOut(BaseModel):
     """Ручная категория: vip, bomzh или NULL."""
     manual_category: Literal["vip", "bomzh"] | None = None
     is_blocked: bool = False
+    peer_unavailable: bool = False
+    is_hidden: bool = False
     assigned_user_id: int | None = None
     assigned_member_login: str | None = None
     updated_at: datetime

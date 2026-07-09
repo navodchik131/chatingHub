@@ -490,6 +490,20 @@ def _migrate_conversation_categories(sync_conn) -> None:
                     "ALTER TABLE conversations ADD COLUMN is_blocked BOOLEAN NOT NULL DEFAULT false"
                 )
             )
+    for col in ("peer_unavailable", "is_hidden"):
+        if col not in cols:
+            if dialect == "sqlite":
+                sync_conn.execute(
+                    text(
+                        f"ALTER TABLE conversations ADD COLUMN {col} BOOLEAN NOT NULL DEFAULT 0"
+                    )
+                )
+            else:
+                sync_conn.execute(
+                    text(
+                        f"ALTER TABLE conversations ADD COLUMN {col} BOOLEAN NOT NULL DEFAULT false"
+                    )
+                )
 
 
 def _migrate_companion_bot(sync_conn) -> None:

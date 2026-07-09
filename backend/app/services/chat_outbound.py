@@ -309,6 +309,13 @@ async def send_fanvue_outbound(
             )
             media_uuids = [mu]
         except FanvueAPIError as e:
+            from app.services.fanvue_peer_status import (
+                fanvue_api_body_indicates_invalid_user,
+                fanvue_peer_unavailable_http_exception,
+            )
+
+            if fanvue_api_body_indicates_invalid_user(e.body):
+                raise fanvue_peer_unavailable_http_exception() from e
             st = e.status if e.status >= 400 else 502
             raise HTTPException(status_code=st, detail=(e.body or str(e))[:2000]) from e
     if not (text or "").strip() and not media_uuids:
@@ -322,6 +329,13 @@ async def send_fanvue_outbound(
             reply_to_message_uuid=reply_to_message_uuid,
         )
     except FanvueAPIError as e:
+        from app.services.fanvue_peer_status import (
+            fanvue_api_body_indicates_invalid_user,
+            fanvue_peer_unavailable_http_exception,
+        )
+
+        if fanvue_api_body_indicates_invalid_user(e.body):
+            raise fanvue_peer_unavailable_http_exception() from e
         st = e.status
         if st >= 500:
             st = 502

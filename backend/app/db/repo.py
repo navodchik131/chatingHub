@@ -137,7 +137,10 @@ async def add_message(
 async def list_conversations(session: AsyncSession, user_id: int) -> list[Conversation]:
     stmt = (
         select(Conversation)
-        .where(Conversation.user_id == user_id)
+        .where(
+            Conversation.user_id == user_id,
+            Conversation.is_hidden.is_(False),
+        )
         .order_by(Conversation.updated_at.desc())
     )
     r = await session.execute(stmt)

@@ -528,6 +528,10 @@ class Conversation(Base):
     manual_category: Mapped[str | None] = mapped_column(String(16), nullable=True)
     """Заблокирован — входящие сообщения не сохраняются и не уведомляют."""
     is_blocked: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    """Собеседник недоступен на платформе (Fanvue: удалён / заблокирован)."""
+    peer_unavailable: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    """Скрыт из списка диалогов (мягкое удаление)."""
+    is_hidden: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     """Назначенный чатер workspace (NULL = любой с доступом к модели)."""
     assigned_user_id: Mapped[int | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True

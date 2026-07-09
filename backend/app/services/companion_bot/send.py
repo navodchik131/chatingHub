@@ -8,6 +8,8 @@ from datetime import datetime, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from fastapi import HTTPException
+
 from app.db.models import Conversation, Message, MessageDirection, Platform
 from app.db.repo import add_message, mark_conversation_read
 from app.services.chat_messages import message_to_out
@@ -87,14 +89,21 @@ async def send_companion_outbound(
             fv_reply_uuid = reply_target.platform_message_id or platform_message_id_from_meta(
                 reply_target.meta
             )
-        platform_message_id = await send_fanvue_outbound(
-            access_token=fv_tok,
-            fan_uuid=conv.external_chat_id,
-            text=outgoing,
-            image_bytes=None,
-            image_mime=None,
-            reply_to_message_uuid=fv_reply_uuid,
-        )
+        try:
+            platform_message_id = await send_fanvue_outbound(
+                access_token=fv_tok,
+                fan_uuid=conv.external_chat_id,
+                text=outgoing,
+                image_bytes=None,
+                image_mime=None,
+                reply_to_message_uuid=fv_reply_uuid,
+            )
+        except HTTPException as e:
+            if e.status_code == 410:
+                from app.services.fanvue_peer_status import mark_conversation_peer_unavailable
+
+                await mark_conversation_peer_unavailable(session, conv)
+            raise
     else:
         raise RuntimeError(f"companion bot unsupported platform: {conv.platform.value}")
 
