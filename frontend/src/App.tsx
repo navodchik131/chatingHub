@@ -17,6 +17,7 @@ import {
   webPushEnvironmentOk,
 } from './webPush'
 import { billingReturnCopy } from './billingReturnCopy'
+import { openPaymentUrl } from './billing/openPaymentUrl'
 import { creditUnitFromHealth } from './billing/credits'
 import { subscriptionCostCredits } from './billing/referral'
 import { formatClientFetchError, formatHttpApiError } from './apiErrors'
@@ -5001,8 +5002,11 @@ export default function App() {
         setError(formatHttpApiError(r, j))
         return
       }
-      const data = (await r.json()) as { payment_url: string }
-      window.open(data.payment_url, '_blank', 'noopener,noreferrer')
+      const data = (await r.json()) as {
+        payment_url: string
+        telegram_deep_link?: string | null
+      }
+      openPaymentUrl(data.payment_url, { telegramDeepLink: data.telegram_deep_link })
     } finally {
       setTributePayBusy(null)
     }
