@@ -7,11 +7,17 @@ export interface GenerationAspectOption {
   size: string
 }
 
+export interface GenerationResolutionOption {
+  id: string
+  label: string
+}
+
 export interface GenerationModelDefinition {
   id: string
   label: string
   nsfwOnly: boolean
   aspects: GenerationAspectOption[]
+  resolutions?: GenerationResolutionOption[]
 }
 
 /** UI id в селекте workflow-нод (regular). */
@@ -53,6 +59,7 @@ export async function fetchGenerationModelOptions(): Promise<GenerationModelDefi
       label: string
       nsfw_only?: boolean
       aspects?: GenerationAspectOption[]
+      resolutions?: GenerationResolutionOption[]
     }>
   }
   if (!Array.isArray(data.models) || !data.models.length) {
@@ -63,6 +70,7 @@ export async function fetchGenerationModelOptions(): Promise<GenerationModelDefi
     label: m.label,
     nsfwOnly: Boolean(m.nsfw_only),
     aspects: Array.isArray(m.aspects) ? m.aspects : [],
+    resolutions: Array.isArray(m.resolutions) ? m.resolutions : undefined,
   }))
   return cachedModels
 }
@@ -76,15 +84,47 @@ function defaultAspects(): GenerationAspectOption[] {
   ]
 }
 
+function defaultResolutionsForModel(modelId: string): GenerationResolutionOption[] {
+  const id = normalizeWaveModelSelection(modelId).apiWaveModelId
+  const map: Record<string, string[]> = {
+    'nano-banana-2': ['1k', '2k', '4k'],
+    'nano-banana-pro': ['1k', '2k', '4k'],
+    'gpt-image-2': ['1k', '2k', '4k'],
+    'seedream-v5.0-pro': ['1k', '2k'],
+    'wan-2.7': ['1k', '2k', '4k'],
+  }
+  const ids = map[id] ?? ['2k']
+  return ids.map((rid) => ({ id: rid, label: rid.toUpperCase() }))
+}
+
+function defaultResolutionForModel(modelId: string): string {
+  const id = normalizeWaveModelSelection(modelId).apiWaveModelId
+  const defaults: Record<string, string> = {
+    'nano-banana-2': '1k',
+    'nano-banana-pro': '2k',
+    'gpt-image-2': '1k',
+    'seedream-v5.0-pro': '1k',
+    'wan-2.7': '2k',
+  }
+  return defaults[id] ?? '2k'
+}
+
 function fallbackGenerationModels(): GenerationModelDefinition[] {
   const aspects = defaultAspects()
+  const withRes = (id: string, label: string, nsfwOnly: boolean): GenerationModelDefinition => ({
+    id,
+    label,
+    nsfwOnly,
+    aspects,
+    resolutions: defaultResolutionsForModel(id),
+  })
   return [
-    { id: 'nano-banana-2', label: 'Nano Banana', nsfwOnly: false, aspects },
-    { id: 'nano-banana-pro', label: 'Nano Banana Pro', nsfwOnly: false, aspects },
-    { id: 'gpt-image-2', label: 'GPT Image', nsfwOnly: false, aspects },
-    { id: 'seedream-v5.0-pro', label: 'Seedream V5 Pro', nsfwOnly: false, aspects },
-    { id: 'wan-2.7', label: 'Wan 2.7', nsfwOnly: true, aspects },
-    { id: 'wan-2.7-pro', label: 'Wan 2.7 Pro', nsfwOnly: true, aspects },
+    withRes('nano-banana-2', 'Nano Banana', false),
+    withRes('nano-banana-pro', 'Nano Banana Pro', false),
+    withRes('gpt-image-2', 'GPT Image', false),
+    withRes('seedream-v5.0-pro', 'Seedream V5 Pro', false),
+    withRes('wan-2.7', 'Wan 2.7', true),
+    withRes('wan-2.7-pro', 'Wan 2.7 Pro', true),
   ]
 }
 
@@ -163,4 +203,27 @@ export function pickValidAspect(
   if (current && aspects.some((a) => a.key === current)) return current
   if (aspects.some((a) => a.key === DEFAULT_OUTPUT_ASPECT)) return DEFAULT_OUTPUT_ASPECT
   return aspects[0]?.key ?? DEFAULT_OUTPUT_ASPECT
+}
+
+export function resolutionsForModel(
+  models: GenerationModelDefinition[],
+  modelId: string,
+): GenerationResolutionOption[] {
+  const sel = normalizeWaveModelSelection(modelId)
+  const model = models.find((m) => m.id === sel.uiModelId)
+  if (model?.resolutions?.length) return model.resolutions
+  return defaultResolutionsForModel(modelId)
+}
+
+export function pickValidResolution(
+  models: GenerationModelDefinition[],
+  modelId: string,
+  current: string | undefined,
+): string {
+  const options = resolutionsForModel(models, modelId)
+  const currentId = (current || '').trim().toLowerCase()
+  if (currentId && options.some((o) => o.id === currentId)) return currentId
+  const fallback = defaultResolutionForModel(modelId)
+  if (options.some((o) => o.id === fallback)) return fallback
+  return options[0]?.id ?? '2k'
 }

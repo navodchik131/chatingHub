@@ -103,6 +103,7 @@ class WorkflowGenerationPlan:
     studio_wave_profile: str
     workflow_wave_model: str
     wan_edit_tier: str
+    output_resolution: str
     exif_camera: str
     realism_enabled: bool
     selfie_capture_enabled: bool = False
@@ -1508,6 +1509,13 @@ def resolve_workflow_generation_plan(
     if wave_profile == "regular":
         wan_tier = "standard"
 
+    from app.services.studio_workflow_image_resolution import normalize_workflow_image_resolution
+
+    output_resolution = normalize_workflow_image_resolution(
+        wave_model,
+        str(gen_data.get("outputResolution") or ""),
+    )
+
     if scenario_type == "scenarioOutfitChange":
         description = enrich_description_for_outfit_change(description)
     elif scenario_type == "scenarioLocationChange":
@@ -1544,6 +1552,7 @@ def resolve_workflow_generation_plan(
         studio_wave_profile=wave_profile,
         workflow_wave_model=wave_model,
         wan_edit_tier=wan_tier,
+        output_resolution=output_resolution,
         exif_camera=exif_camera,
         realism_enabled=realism_enabled,
         selfie_capture_enabled=selfie_capture_enabled,

@@ -8,6 +8,8 @@ import {
   modelsForNsfwMode,
   pickValidAspect,
   pickValidModelId,
+  pickValidResolution,
+  resolutionsForModel,
   type GenerationModelDefinition,
 } from '../wavespeedModels'
 import { useWorkflowBilling } from '../WorkflowBillingContext'
@@ -48,9 +50,14 @@ function FirstFrameGenerationNodeComponent({ id, data }: NodeProps) {
     () => aspectsForModel(models, waveModelId),
     [models, waveModelId],
   )
+  const resolutionOptions = useMemo(
+    () => resolutionsForModel(models, waveModelId),
+    [models, waveModelId],
+  )
   const { quoteWorkflowImageCredits } = useWorkflowBilling()
   const costQuote = quoteWorkflowImageCredits(waveModelId || DEFAULT_GENERATION_MODEL_ID, nsfwEnabled)
   const outputAspect = pickValidAspect(aspectOptions, nodeData.outputAspect)
+  const outputResolution = pickValidResolution(models, waveModelId, nodeData.outputResolution)
 
   const updateNodeData = useCallback(
     (patch: Partial<FirstFrameGenerationNodeData>) => {
@@ -69,13 +76,27 @@ function FirstFrameGenerationNodeComponent({ id, data }: NodeProps) {
       aspectsForModel(models, nextModel),
       nodeData.outputAspect,
     )
+    const nextResolution = pickValidResolution(models, nextModel, nodeData.outputResolution)
     if (
       models.length > 0 &&
-      (nodeData.waveModelId !== nextModel || nodeData.outputAspect !== nextAspect)
+      (nodeData.waveModelId !== nextModel ||
+        nodeData.outputAspect !== nextAspect ||
+        nodeData.outputResolution !== nextResolution)
     ) {
-      updateNodeData({ waveModelId: nextModel, outputAspect: nextAspect })
+      updateNodeData({
+        waveModelId: nextModel,
+        outputAspect: nextAspect,
+        outputResolution: nextResolution,
+      })
     }
-  }, [models, nsfwEnabled, nodeData.waveModelId, nodeData.outputAspect, updateNodeData])
+  }, [
+    models,
+    nsfwEnabled,
+    nodeData.waveModelId,
+    nodeData.outputAspect,
+    nodeData.outputResolution,
+    updateNodeData,
+  ])
 
   useEffect(() => {
     if (!nodeData.isRunning || runAbortRef.current) return
@@ -180,21 +201,28 @@ function FirstFrameGenerationNodeComponent({ id, data }: NodeProps) {
         aspectsForModel(models, nextModel),
         nodeData.outputAspect,
       )
+      const nextResolution = pickValidResolution(models, nextModel, nodeData.outputResolution)
       updateNodeData({
         nsfwEnabled: checked,
         waveModelId: nextModel,
         outputAspect: nextAspect,
+        outputResolution: nextResolution,
       })
     },
-    [models, nodeData.outputAspect, nodeData.waveModelId, updateNodeData],
+    [models, nodeData.outputAspect, nodeData.outputResolution, nodeData.waveModelId, updateNodeData],
   )
 
   const onModelChange = useCallback(
     (modelId: string) => {
       const nextAspect = pickValidAspect(aspectsForModel(models, modelId), nodeData.outputAspect)
-      updateNodeData({ waveModelId: modelId, outputAspect: nextAspect })
+      const nextResolution = pickValidResolution(models, modelId, nodeData.outputResolution)
+      updateNodeData({
+        waveModelId: modelId,
+        outputAspect: nextAspect,
+        outputResolution: nextResolution,
+      })
     },
-    [models, nodeData.outputAspect, updateNodeData],
+    [models, nodeData.outputAspect, nodeData.outputResolution, updateNodeData],
   )
 
   return (
@@ -354,6 +382,27 @@ function FirstFrameGenerationNodeComponent({ id, data }: NodeProps) {
                 {aspectOptions.map((aspect) => (
                   <option key={aspect.key} value={aspect.key}>
                     {aspect.key} · {aspect.size}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
+
+          {resolutionOptions.length > 0 ? (
+            <div className="workflow-gen-form__row">
+              <label className="workflow-gen-form__label" htmlFor={`${id}-resolution`}>
+                Качество
+              </label>
+              <select
+                id={`${id}-resolution`}
+                className="workflow-gen-form__select nodrag nowheel"
+                value={outputResolution}
+                onChange={(e) => updateNodeData({ outputResolution: e.target.value })}
+                disabled={nodeData.isRunning}
+              >
+                {resolutionOptions.map((resolution) => (
+                  <option key={resolution.id} value={resolution.id}>
+                    {resolution.label}
                   </option>
                 ))}
               </select>

@@ -2665,6 +2665,7 @@ async def _accept_studio_refine_job_from_workflow(
         "workflow_selfie_capture": "1" if plan.selfie_capture_enabled else "0",
         "workflow_source": "1",
         "workflow_wave_model": plan.workflow_wave_model,
+        "workflow_wave_resolution": plan.output_resolution,
         "workflow_scenario_type": plan.scenario_type or "",
     }
     if workflow_first_frame:
@@ -2756,7 +2757,17 @@ async def _studio_job_execute_refine_prompt(
         "yes",
     )
     workflow_wave_model = str(p.get("workflow_wave_model") or "").strip().lower()
+    workflow_wave_resolution_raw = str(p.get("workflow_wave_resolution") or "").strip().lower()
     workflow_first_frame = _truthy_wavespeed_flag(str(p.get("workflow_first_frame") or ""))
+    from app.services.studio_workflow_image_resolution import (
+        normalize_workflow_image_resolution,
+        workflow_wavespeed_size_for_resolution,
+    )
+
+    workflow_wave_resolution = normalize_workflow_image_resolution(
+        workflow_wave_model or "wan-2.7",
+        workflow_wave_resolution_raw or None,
+    )
 
     system_instr = load_image_studio_system()
     if not system_instr:
@@ -3927,6 +3938,10 @@ async def _studio_job_execute_refine_prompt(
                 size_for_ws: str | None
                 if settings.wavespeed_seedream_omit_size:
                     size_for_ws = None
+                elif workflow_source and workflow_wave_model == "wan-2.7":
+                    size_for_ws = workflow_wavespeed_size_for_resolution(
+                        aspect_key, workflow_wave_resolution
+                    )
                 else:
                     size_for_ws = wavespeed_size_string(aspect_key)
                 try:
@@ -3943,6 +3958,7 @@ async def _studio_job_execute_refine_prompt(
                             wave_profile=wave_profile_n,
                             reference_scene_description=reference_scene,
                             size=size_for_ws,
+                            resolution=workflow_wave_resolution,
                             on_task_submitted=_on_wavespeed_task_submitted,
                         )
                     elif wave_profile_n == "regular":

@@ -28,6 +28,7 @@ from app.services.studio_workflow_resolver import (
     resolve_workflow_video_prompt_compose_plan,
     resolve_workflow_video_upscale_plan_async,
 )
+from app.services.studio_workflow_image_resolution import workflow_resolution_options_public
 from app.services.studio_workflow_defaults import (
     DEMO_WORKFLOW_NAME,
     provision_demo_workflow_workspaces,
@@ -186,6 +187,7 @@ async def api_workflow_model_options() -> dict:
                 "label": meta.get("label") or model_id,
                 "nsfw_only": bool(meta.get("nsfw_only")),
                 "aspects": aspects,
+                "resolutions": workflow_resolution_options_public(model_id),
             }
         )
     return {"models": models, "video": _workflow_video_options()}

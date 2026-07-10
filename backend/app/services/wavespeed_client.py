@@ -654,7 +654,7 @@ async def seedream_v50_pro_edit_image_url(
     image_urls: list[str],
     prompt: str,
     aspect_ratio: str = "3:4",
-    resolution: str = "1k",
+    resolution: str | None = None,
     timeout_submit: float = 300.0,
     poll_interval: float | None = None,
     max_polls: int | None = None,
@@ -668,11 +668,14 @@ async def seedream_v50_pro_edit_image_url(
 
     post_path = SEEDREAM_V50_PRO_EDIT_PATH
     url = f"{_wavespeed_base()}{post_path}"
+    res = (resolution or "1k").strip().lower()
+    if res not in ("1k", "2k"):
+        res = "1k"
     body: dict[str, Any] = {
         "images": image_urls[:10],
         "prompt": prompt.strip(),
         "aspect_ratio": (aspect_ratio or "3:4").strip(),
-        "resolution": (resolution or "1k").strip().lower(),
+        "resolution": res,
         "enable_sync_mode": False,
         "enable_base64_output": False,
     }
@@ -1014,6 +1017,7 @@ async def nano_banana_pro_edit_image_url(
     aspect_ratio: str,
     wave_profile: str | None = None,
     reference_scene_description: str | None = None,
+    resolution: str | None = None,
     timeout_submit: float = 300.0,
     poll_interval: float | None = None,
     max_polls: int | None = None,
@@ -1060,7 +1064,7 @@ async def nano_banana_pro_edit_image_url(
             "Доступно: 1:1, 3:2, 2:3, 3:4, 4:3, 4:5, 5:4, 9:16, 16:9, 21:9."
         )
 
-    res = (settings.wavespeed_nano_banana_pro_resolution or "2k").strip().lower()
+    res = (resolution or settings.wavespeed_nano_banana_pro_resolution or "2k").strip().lower()
     if res not in ("1k", "2k", "4k"):
         res = "2k"
     fmt = (settings.wavespeed_nano_banana_pro_output_format or "png").strip().lower()
@@ -1114,6 +1118,7 @@ async def nano_banana_2_edit_image_url(
     image_urls: list[str],
     prompt: str,
     aspect_ratio: str = "3:4",
+    resolution: str | None = None,
     timeout_submit: float = 300.0,
     poll_interval: float | None = None,
     max_polls: int | None = None,
@@ -1125,13 +1130,16 @@ async def nano_banana_2_edit_image_url(
     if not (prompt or "").strip():
         raise RuntimeError("empty prompt")
     ar = (aspect_ratio or "3:4").strip()
+    res = (resolution or "1k").strip().lower()
+    if res not in ("1k", "2k", "4k"):
+        res = "1k"
     path = NANO_BANANA_2_EDIT_PATH
     url = f"{_wavespeed_base()}{path}"
     body: dict[str, Any] = {
         "images": image_urls[:14],
         "prompt": prompt.strip(),
         "aspect_ratio": ar,
-        "resolution": "1k",
+        "resolution": res,
         "output_format": "png",
         "enable_sync_mode": False,
         "enable_base64_output": False,
@@ -1158,18 +1166,25 @@ async def workflow_text_to_image_url(
     wave_profile: str | None = None,
     reference_scene_description: str | None = None,
     size: str | None = None,
+    resolution: str | None = None,
     on_task_submitted: Callable[[str], Awaitable[None]] | None = None,
 ) -> WaveSpeedImageResult:
     """Workflow text-to-image без референсов (только промпт)."""
     if not (prompt or "").strip():
         raise RuntimeError("empty prompt")
+    from app.services.studio_workflow_image_resolution import (
+        default_workflow_image_resolution,
+        normalize_workflow_image_resolution,
+    )
+
     model = (wave_model_id or "wan-2.7").strip().lower()
+    res = normalize_workflow_image_resolution(model, resolution)
     ar = (aspect_ratio or "3:4").strip()
     if model == "gpt-image-2":
         body: dict[str, Any] = {
             "prompt": prompt.strip(),
             "aspect_ratio": ar,
-            "resolution": "1k",
+            "resolution": res,
             "quality": "medium",
             "output_format": "png",
             "enable_sync_mode": False,
@@ -1195,9 +1210,9 @@ async def workflow_text_to_image_url(
                 f"Nano Banana: недопустимый aspect_ratio «{ar}». "
                 "Доступно: 1:1, 3:2, 2:3, 3:4, 4:3, 4:5, 5:4, 9:16, 16:9, 21:9."
             )
-        res = (settings.wavespeed_nano_banana_pro_resolution or "2k").strip().lower()
+        res = (resolution or settings.wavespeed_nano_banana_pro_resolution or "2k").strip().lower()
         if res not in ("1k", "2k", "4k"):
-            res = "2k"
+            res = default_workflow_image_resolution("nano-banana-pro")
         fmt = (settings.wavespeed_nano_banana_pro_output_format or "png").strip().lower()
         if fmt == "jpg":
             fmt = "jpeg"
@@ -1216,7 +1231,7 @@ async def workflow_text_to_image_url(
         body = {
             "prompt": prompt.strip(),
             "aspect_ratio": ar,
-            "resolution": "1k",
+            "resolution": res,
             "output_format": "png",
             "enable_sync_mode": False,
             "enable_base64_output": False,
@@ -1226,7 +1241,7 @@ async def workflow_text_to_image_url(
         body = {
             "prompt": prompt.strip(),
             "aspect_ratio": ar,
-            "resolution": "1k",
+            "resolution": res,
             "enable_sync_mode": False,
             "enable_base64_output": False,
         }
@@ -1260,9 +1275,20 @@ async def workflow_edit_image_url(
     wave_profile: str | None = None,
     reference_scene_description: str | None = None,
     size: str | None = None,
+    resolution: str | None = None,
     on_task_submitted: Callable[[str], Awaitable[None]] | None = None,
 ) -> WaveSpeedImageResult:
     """WaveSpeed edit по выбору модели в workflow-редакторе."""
+    from app.services.studio_workflow_image_resolution import (
+        normalize_workflow_image_resolution,
+        workflow_wavespeed_size_for_resolution,
+    )
+
+    model = (wave_model_id or "wan-2.7").strip().lower()
+    res = normalize_workflow_image_resolution(model, resolution)
+    size_use = size
+    if model == "wan-2.7" and not size_use:
+        size_use = workflow_wavespeed_size_for_resolution(aspect_ratio, res)
     if not image_urls:
         return await workflow_text_to_image_url(
             api_key=api_key,
@@ -1272,10 +1298,10 @@ async def workflow_edit_image_url(
             wan_edit_tier=wan_edit_tier,
             wave_profile=wave_profile,
             reference_scene_description=reference_scene_description,
-            size=size,
+            size=size_use,
+            resolution=res,
             on_task_submitted=on_task_submitted,
         )
-    model = (wave_model_id or "wan-2.7").strip().lower()
     if model == "nano-banana-pro":
         return await nano_banana_pro_edit_image_url(
             api_key=api_key,
@@ -1284,6 +1310,7 @@ async def workflow_edit_image_url(
             aspect_ratio=aspect_ratio,
             wave_profile=wave_profile,
             reference_scene_description=reference_scene_description,
+            resolution=res,
             on_task_submitted=on_task_submitted,
         )
     if model == "nano-banana-2":
@@ -1292,6 +1319,7 @@ async def workflow_edit_image_url(
             image_urls=image_urls,
             prompt=prompt,
             aspect_ratio=aspect_ratio,
+            resolution=res,
             on_task_submitted=on_task_submitted,
         )
     if model == "gpt-image-2":
@@ -1300,6 +1328,7 @@ async def workflow_edit_image_url(
             image_urls=image_urls,
             prompt=prompt,
             aspect_ratio=aspect_ratio,
+            resolution=res,
             on_task_submitted=on_task_submitted,
         )
     if model == "wan-2.7":
@@ -1307,7 +1336,7 @@ async def workflow_edit_image_url(
             api_key=api_key,
             image_urls=image_urls,
             prompt=prompt,
-            size=size,
+            size=size_use,
             wan_edit_tier=wan_edit_tier,
             on_task_submitted=on_task_submitted,
         )
@@ -1317,6 +1346,7 @@ async def workflow_edit_image_url(
             image_urls=image_urls,
             prompt=prompt,
             aspect_ratio=aspect_ratio,
+            resolution=res,
             on_task_submitted=on_task_submitted,
         )
     raise RuntimeError(

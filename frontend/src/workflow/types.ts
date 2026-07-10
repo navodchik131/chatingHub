@@ -83,6 +83,7 @@ export interface ImageGenerationNodeData {
   waveModelId?: string
   nsfwEnabled?: boolean
   outputAspect?: string
+  outputResolution?: string
   imageUrl?: string
   generationId?: number | null
   isRunning?: boolean

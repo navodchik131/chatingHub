@@ -759,6 +759,32 @@ def test_image_generation_prompt_only_without_model_or_reference():
     assert "Sunset beach" in plan.description
 
 
+def test_image_generation_output_resolution_from_node_data():
+    g = {
+        "nodes": [
+            {"id": "prompt-1", "type": "prompt", "data": {"prompt": "Sunset beach"}},
+            {
+                "id": "gen-1",
+                "type": "imageGeneration",
+                "data": {
+                    "waveModelId": "nano-banana-pro",
+                    "nsfwEnabled": False,
+                    "outputResolution": "4k",
+                },
+            },
+        ],
+        "edges": [
+            {"source": "prompt-1", "target": "gen-1", "targetHandle": "prompt-in"},
+        ],
+    }
+    plan = resolve_workflow_generation_plan(
+        target_node_id="gen-1",
+        nodes=g["nodes"],
+        edges=g["edges"],
+    )
+    assert plan.output_resolution == "4k"
+
+
 def test_first_frame_model_prompt_without_reference():
     g = {
         "nodes": [
