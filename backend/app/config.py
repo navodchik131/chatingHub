@@ -425,6 +425,28 @@ class Settings(BaseSettings):
     def yookassa_configured(self) -> bool:
         return bool((self.yookassa_shop_id or "").strip() and (self.yookassa_secret_key or "").strip())
 
+    # --- Tribute billing (платформа ModelMate, не Tribute креаторов) ---
+    tribute_billing_api_key: str = Field(
+        default="",
+        validation_alias=AliasChoices("TRIBUTE_BILLING_API_KEY"),
+    )
+    tribute_billing_webhook_secret: str = Field(
+        default="",
+        validation_alias=AliasChoices("TRIBUTE_BILLING_WEBHOOK_SECRET"),
+    )
+    tribute_billing_product_map_json: str = Field(
+        default="{}",
+        validation_alias=AliasChoices("TRIBUTE_BILLING_PRODUCT_MAP", "TRIBUTE_BILLING_PRODUCT_MAP_JSON"),
+    )
+
+    @property
+    def tribute_billing_configured(self) -> bool:
+        from app.services.tribute_billing_catalog import parse_tribute_billing_catalog
+
+        if not (self.tribute_billing_api_key or "").strip():
+            return False
+        return parse_tribute_billing_catalog(self.tribute_billing_product_map_json).configured()
+
     # --- Legacy single-bot polling (локальная отладка) ---
     legacy_bot_token: str = Field(
         default="",
@@ -432,6 +454,30 @@ class Settings(BaseSettings):
     )
     legacy_user_id: int = Field(default=0, validation_alias=AliasChoices("LEGACY_USER_ID"))
     telegram_proxy: str | None = None
+
+    # --- Telegram Login (владелец: вход / привязка; домен в BotFather → Login Widget) ---
+    telegram_login_bot_token: str = Field(
+        default="",
+        validation_alias=AliasChoices("TELEGRAM_LOGIN_BOT_TOKEN"),
+    )
+    telegram_login_bot_username: str = Field(
+        default="",
+        validation_alias=AliasChoices("TELEGRAM_LOGIN_BOT_USERNAME"),
+        description="Username бота без @ (для Login Widget на фронте).",
+    )
+    telegram_login_max_age_seconds: int = Field(
+        default=86400,
+        ge=60,
+        le=604800,
+        validation_alias=AliasChoices("TELEGRAM_LOGIN_MAX_AGE_SECONDS"),
+    )
+
+    @property
+    def telegram_login_configured(self) -> bool:
+        return bool(
+            (self.telegram_login_bot_token or "").strip()
+            and (self.telegram_login_bot_username or "").strip()
+        )
 
     # --- EXIF Telegram bot (отдельный бот, не SaaS-чат) ---
     exif_bot_token: str = Field(

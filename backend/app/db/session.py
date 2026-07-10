@@ -360,6 +360,8 @@ async def init_db() -> None:
         await conn.run_sync(_migrate_billing_plans_rename)
         await conn.run_sync(_migrate_trialing_to_credits_demo)
         await conn.run_sync(_migrate_user_email_marketing_opt_out)
+        await conn.run_sync(_migrate_user_telegram_identity)
+        await conn.run_sync(_migrate_tribute_processed_events)
         await conn.run_sync(_migrate_email_campaigns_tables)
         await conn.run_sync(_migrate_fanvue_oauth_columns)
         await conn.run_sync(_migrate_fanvue_oauth_states_table)
@@ -1677,6 +1679,43 @@ def _migrate_user_email_marketing_opt_out(sync_conn) -> None:
                 "ALTER TABLE users ADD COLUMN email_marketing_opt_out BOOLEAN NOT NULL DEFAULT false"
             )
         )
+
+
+def _migrate_user_telegram_identity(sync_conn) -> None:
+    from sqlalchemy import inspect, text
+
+    insp = inspect(sync_conn)
+    if not insp.has_table("users"):
+        return
+    cols = {c["name"] for c in insp.get_columns("users")}
+    dialect = sync_conn.dialect.name
+    bool_true = "1" if dialect == "sqlite" else "true"
+
+    if "telegram_id" not in cols:
+        sync_conn.execute(text("ALTER TABLE users ADD COLUMN telegram_id BIGINT"))
+        sync_conn.execute(
+            text("CREATE UNIQUE INDEX IF NOT EXISTS ix_users_telegram_id ON users(telegram_id)")
+        )
+    if "telegram_username" not in cols:
+        sync_conn.execute(text("ALTER TABLE users ADD COLUMN telegram_username VARCHAR(64)"))
+    if "telegram_linked_at" not in cols:
+        sync_conn.execute(text("ALTER TABLE users ADD COLUMN telegram_linked_at DATETIME"))
+    if "auth_email_verified" not in cols:
+        sync_conn.execute(
+            text(
+                f"ALTER TABLE users ADD COLUMN auth_email_verified BOOLEAN NOT NULL DEFAULT {bool_true}"
+            )
+        )
+
+
+def _migrate_tribute_processed_events(sync_conn) -> None:
+    from sqlalchemy import inspect
+
+    from app.db.models import TributeProcessedEvent
+
+    insp = inspect(sync_conn)
+    if not insp.has_table("tribute_processed_events"):
+        TributeProcessedEvent.__table__.create(sync_conn, checkfirst=True)
 
 
 def _migrate_email_campaigns_tables(sync_conn) -> None:

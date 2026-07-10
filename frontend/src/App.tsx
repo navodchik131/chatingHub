@@ -52,6 +52,7 @@ import { StudioModelBootstrapPanel } from './components/studio/StudioModelBootst
 import { StudioPillField } from './components/studio/StudioPillField'
 import { IconModel, IconSpark } from './components/studio/studioIcons'
 import { AuthPanel } from './AuthPanel'
+import { OwnerEmailCompleteForm, TelegramLoginButton } from './auth/TelegramAuth'
 import { AppShell, type WorkspaceSection } from './components/AppShell'
 import { WorkspaceOverview } from './components/WorkspaceOverview'
 import { ConversationPlatformTabs } from './components/ConversationPlatformTabs'
@@ -420,6 +421,9 @@ interface HealthInfo {
   telegram_bot_username?: string | null
   telegram_api_error?: string | null
   telegram_proxy_configured?: boolean
+  telegram_login_configured?: boolean
+  telegram_login_bot_username?: string | null
+  tribute_billing_configured?: boolean
   yookassa_configured?: boolean
   billing_require_active_subscription?: boolean
   billing_price_managed_month_rub?: number
@@ -530,6 +534,12 @@ interface UserMe {
   demo_generations_grant?: number
   workflow_demo_limited?: boolean
   chat_allowed?: boolean
+  telegram_linked?: boolean
+  telegram_username?: string | null
+  email_setup_required?: boolean
+  public_email?: string | null
+  telegram_login_available?: boolean
+  tribute_billing_available?: boolean
 }
 
 interface ReferralMe {
@@ -824,6 +834,8 @@ const CREDIT_KIND_LABELS: Record<string, string> = {
   studio_carousel_shot: 'Студия: карусель',
   studio_model_profile_generate: 'Студия: профиль модели',
   yookassa_credits_pack: 'Пополнение баланса',
+  tribute_credits_pack: 'Пополнение (Tribute)',
+  tribute_subscription_renewed: 'Продление (Tribute)',
   yookassa_managed_subscription_bonus: 'Подписка Standard: бонус кредитов',
   standard_subscription_bonus: 'Подписка Standard: бонус кредитов',
   demo_studio_image: 'Бесплатная генерация',
@@ -1326,6 +1338,8 @@ export default function App() {
   const [referralInfo, setReferralInfo] = useState<ReferralMe | null>(null)
   const [creditsPurchaseQty, setCreditsPurchaseQty] = useState(50)
   const [yookassaPayBusy, setYookassaPayBusy] = useState<string | null>(null)
+  const [tributePayBusy, setTributePayBusy] = useState<string | null>(null)
+  const anyBillingPayBusy = yookassaPayBusy !== null || tributePayBusy !== null
   const [billingCreditUnitRub, setBillingCreditUnitRub] = useState(3.7)
   const [creditHistoryItems, setCreditHistoryItems] = useState<
     { id: number; created_at: string; kind: string; credits_delta: number }[]
@@ -5118,6 +5132,34 @@ export default function App() {
     }
   }
 
+  const startTributePayment = async (
+    product: BillingPlanRow['product'],
+    creditsQuantity?: number,
+  ) => {
+    setError(null)
+    setTributePayBusy(product)
+    try {
+      const body =
+        product === 'credits_pack'
+          ? { product, credits_quantity: creditsQuantity }
+          : { product }
+      const r = await apiFetch('/api/billing/tribute/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        setError(formatHttpApiError(r, j))
+        return
+      }
+      const data = (await r.json()) as { payment_url: string }
+      window.open(data.payment_url, '_blank', 'noopener,noreferrer')
+    } finally {
+      setTributePayBusy(null)
+    }
+  }
+
   if (!authReady) {
     return (
       <div className="app">
@@ -5518,6 +5560,72 @@ export default function App() {
                   <strong>{subscriptionStatusLabel(me?.subscription_status)}</strong>.
                 </div>
               ) : null}
+              {isOwner && me?.email_setup_required ? (
+                <div className="banner warn" style={{ marginTop: '1rem' }}>
+                  <OwnerEmailCompleteForm
+                    onError={setError}
+                    onSuccess={async () => {
+                      setError(null)
+                      await refreshMe()
+                    }}
+                  />
+                </div>
+              ) : null}
+              {isOwner ? (
+                <div className="cabinet-identity-block" style={{ marginTop: '1.25rem' }}>
+                  <h4 className="account-sub">Telegram</h4>
+                  {me?.telegram_linked ? (
+                    <p className="muted">
+                      Привязан{me.telegram_username ? `: @${me.telegram_username}` : ''}. Нужен для
+                      международной оплаты через Tribute.
+                    </p>
+                  ) : health?.telegram_login_configured && health.telegram_login_bot_username ? (
+                    <>
+                      <p className="muted" style={{ marginBottom: '0.75rem' }}>
+                        Привяжите Telegram к аккаунту владельца — для оплаты без российской карты и входа в один
+                        клик.
+                      </p>
+                      <TelegramLoginButton
+                        botUsername={health.telegram_login_bot_username}
+                        mode="link"
+                        onError={setError}
+                        onSuccess={async () => {
+                          setError(null)
+                          await refreshMe()
+                        }}
+                      />
+                    </>
+                  ) : (
+                    <p className="muted">Telegram Login на сервере не настроен.</p>
+                  )}
+                  {me?.telegram_linked && me.public_email ? (
+                    <button
+                      type="button"
+                      className="ghost-btn"
+                      style={{ marginTop: '0.75rem' }}
+                      onClick={() =>
+                        void (async () => {
+                          if (
+                            !window.confirm(
+                              'Отвязать Telegram? Понадобится email и пароль для входа.',
+                            )
+                          )
+                            return
+                          const r = await apiFetch('/api/auth/telegram/link', { method: 'DELETE' })
+                          if (!r.ok) {
+                            const j = await r.json().catch(() => ({}))
+                            setError(formatHttpApiError(r, j))
+                            return
+                          }
+                          await refreshMe()
+                        })()
+                      }
+                    >
+                      Отвязать Telegram
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
               <div className="cabinet-overview-actions">
                 {isOwner ? (
                   <button type="button" className="ghost-btn" onClick={() => setAccountTab('billing')}>
@@ -5606,11 +5714,25 @@ export default function App() {
                 </div>
               ) : null}
               <h4 className="account-sub">Тариф и пополнение</h4>
-              {me?.online_payment_available ? (
+              {me?.tribute_billing_available && !me?.telegram_linked ? (
+                <div className="banner info" style={{ marginBottom: '0.75rem' }}>
+                  Для оплаты через Tribute привяжите Telegram в разделе «Обзор» — иначе платёж не будет
+                  зачислен на аккаунт.
+                </div>
+              ) : null}
+              {me?.online_payment_available || me?.tribute_billing_available ? (
                 <>
-                  <p className="muted" style={{ marginBottom: '0.75rem' }}>
-                    Оплата банковской картой. После успешной оплаты вернитесь в кабинет.
-                  </p>
+                  {me?.online_payment_available ? (
+                    <p className="muted" style={{ marginBottom: '0.75rem' }}>
+                      Оплата банковской картой (РФ). После успешной оплаты вернитесь в кабинет.
+                    </p>
+                  ) : null}
+                  {me?.tribute_billing_available ? (
+                    <p className="muted" style={{ marginBottom: '0.75rem' }}>
+                      Tribute — карта / Stars / крипта (международная оплата). Откроется страница оплаты;
+                      доступ обновится автоматически в течение минуты.
+                    </p>
+                  ) : null}
                   <div className="mkt-pricing-toggles" style={{ marginBottom: '0.75rem' }}>
                     <button
                       type="button"
@@ -5733,14 +5855,35 @@ export default function App() {
                                   : '—'}
                               </div>
                             </div>
-                            <button
-                              type="button"
-                              className="send-btn"
-                              disabled={yookassaPayBusy !== null || !valid}
-                              onClick={() => void startYookassaPayment('credits_pack', q)}
-                            >
-                              {yookassaPayBusy === row.product ? '…' : 'Оплатить'}
-                            </button>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.45rem' }}>
+                              {me?.online_payment_available ? (
+                                <button
+                                  type="button"
+                                  className="send-btn"
+                                  disabled={anyBillingPayBusy || !valid}
+                                  onClick={() => void startYookassaPayment('credits_pack', q)}
+                                >
+                                  {yookassaPayBusy === row.product ? '…' : 'Картой ₽'}
+                                </button>
+                              ) : null}
+                              {me?.tribute_billing_available ? (
+                                <button
+                                  type="button"
+                                  className={me?.online_payment_available ? 'ghost-btn' : 'send-btn'}
+                                  disabled={
+                                    anyBillingPayBusy || !valid || !me.telegram_linked
+                                  }
+                                  title={
+                                    me.telegram_linked
+                                      ? 'Оплата через Tribute (международная)'
+                                      : 'Сначала привяжите Telegram'
+                                  }
+                                  onClick={() => void startTributePayment('credits_pack', q)}
+                                >
+                                  {tributePayBusy === row.product ? '…' : 'Tribute'}
+                                </button>
+                              ) : null}
+                            </div>
                           </div>
                         )
                       }
@@ -5763,7 +5906,7 @@ export default function App() {
                             <button
                               type="button"
                               className="ghost-btn"
-                              disabled={yookassaPayBusy !== null || !canPayCredits}
+                              disabled={anyBillingPayBusy || !canPayCredits}
                               title={
                                 canPayCredits
                                   ? undefined
@@ -5773,14 +5916,31 @@ export default function App() {
                             >
                               {yookassaPayBusy === row.product ? '…' : 'Кредитами'}
                             </button>
-                            <button
-                              type="button"
-                              className="send-btn"
-                              disabled={yookassaPayBusy !== null}
-                              onClick={() => void startYookassaPayment(row.product)}
-                            >
-                              {yookassaPayBusy === row.product ? '…' : 'Картой'}
-                            </button>
+                            {me?.online_payment_available ? (
+                              <button
+                                type="button"
+                                className="send-btn"
+                                disabled={anyBillingPayBusy}
+                                onClick={() => void startYookassaPayment(row.product)}
+                              >
+                                {yookassaPayBusy === row.product ? '…' : 'Картой ₽'}
+                              </button>
+                            ) : null}
+                            {me?.tribute_billing_available ? (
+                              <button
+                                type="button"
+                                className={me?.online_payment_available ? 'ghost-btn' : 'send-btn'}
+                                disabled={anyBillingPayBusy || !me.telegram_linked}
+                                title={
+                                  me.telegram_linked
+                                    ? 'Оплата через Tribute'
+                                    : 'Сначала привяжите Telegram в Обзоре'
+                                }
+                                onClick={() => void startTributePayment(row.product)}
+                              >
+                                {tributePayBusy === row.product ? '…' : 'Tribute'}
+                              </button>
+                            ) : null}
                           </div>
                         </div>
                       )
@@ -7494,10 +7654,17 @@ export default function App() {
           {accountTab === 'team' && isOwner && (
             <div className="account-cabinet-pane" role="tabpanel">
               <p className="cabinet-lead muted">
-                Сотрудники входят с email владельца (ваш), отдельным логином команды и паролем. Кредиты и
-                подписка — на владельце; права ниже ограничивают разделы. Модели студии и чаты назначаются
-                вручную — без галочки участник их не видит. Доля Tribute в KPI — индивидуально для каждого чатера.
+                Сотрудники входят с email владельца
+                {me?.public_email ? ` (${me.public_email})` : ''}, отдельным логином команды и паролем.
+                Кредиты и подписка — на владельце; права ниже ограничивают разделы. Модели студии и чаты
+                назначаются вручную — без галочки участник их не видит. Доля Tribute в KPI — индивидуально для
+                каждого чатера. Вход операторов — только email+пароль, без Telegram.
               </p>
+              {me?.email_setup_required ? (
+                <div className="banner warn" style={{ marginBottom: '1rem' }}>
+                  Укажите рабочий email владельца в разделе «Обзор» — без него операторы не смогут войти.
+                </div>
+              ) : null}
               <h4 className="account-sub">Новый участник</h4>
               <div className="account-grid cabinet-keys-form">
                 <label>
@@ -7583,7 +7750,12 @@ export default function App() {
                 <button
                   type="button"
                   className="send-btn"
-                  disabled={teamBusy || newTeamLogin.trim().length < 3 || newTeamPassword.length < 8}
+                  disabled={
+                    teamBusy ||
+                    me?.email_setup_required ||
+                    newTeamLogin.trim().length < 3 ||
+                    newTeamPassword.length < 8
+                  }
                   onClick={() => void createWorkspaceMember()}
                 >
                   {teamBusy ? 'Создание…' : 'Создать участника'}

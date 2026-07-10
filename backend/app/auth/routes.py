@@ -8,25 +8,59 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.deps import get_current_user
 from app.auth.jwt_utils import create_access_token
 from app.auth.passwords import hash_password, verify_password
+from app.auth.telegram_login import TelegramLoginPayload, verify_telegram_login_payload
 from app.config import settings
-from app.db.models import CreditAccount, Subscription, SubscriptionStatus, User
+from app.db.models import Subscription, SubscriptionStatus, User
 from app.db.session import get_session
-from app.schemas import LoginIn, PlanLimitsOut, PlanUsageOut, RegisterIn, TokenOut, UserMeOut
+from app.schemas import (
+    CompleteOwnerEmailIn,
+    LoginIn,
+    PlanLimitsOut,
+    PlanUsageOut,
+    RegisterIn,
+    TelegramLoginIn,
+    TokenOut,
+    UserMeOut,
+)
 from app.services.admin_access import user_is_platform_admin
-from app.services.billing_plan import BILLING_PLAN_CREDITS, BILLING_PLAN_STANDARD, normalize_billing_plan
+from app.services.auth_provision import provision_workspace_owner
+from app.services.billing_plan import normalize_billing_plan
 from app.services.plan_catalog import normalize_plan_tier, plan_display_name
 from app.services.plan_entitlements import chat_allowed_for_subscription, plan_usage_snapshot
 from app.services.workflow_entitlements import is_workflow_demo_limited
-from app.services.referral import apply_referral_on_signup, ensure_owner_referral_code
 from app.services.starter_plan import ensure_starter_managed_subscription, starter_managed_effective
 from app.services.funnel_analytics import record_funnel_event_once
 from app.services.studio_workflow_defaults import (
     provision_demo_workflow_workspaces,
     provision_full_workflow_workspaces,
 )
-from app.services.workspace import resolve_billing_user, workspace_owner_id
+from app.services.telegram_identity import (
+    complete_owner_email,
+    create_owner_from_telegram,
+    find_owner_by_telegram_id,
+    is_real_owner_email,
+    link_telegram_to_owner,
+    owner_email_setup_required,
+    owner_telegram_linked,
+)
+from app.services.workspace import is_workspace_owner, resolve_billing_user, workspace_owner_id
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+def _public_email_for(user: User) -> str | None:
+    if is_real_owner_email(user.email):
+        return user.email
+    return None
+
+
+def _verify_telegram_body(body: TelegramLoginIn) -> TelegramLoginPayload:
+    payload = TelegramLoginPayload.model_validate(body.model_dump())
+    return verify_telegram_login_payload(
+        payload,
+        bot_token=settings.telegram_login_bot_token,
+        max_age_seconds=settings.telegram_login_max_age_seconds,
+    )
 
 
 @router.post("/register", response_model=TokenOut)
@@ -34,50 +68,13 @@ async def register(body: RegisterIn, session: AsyncSession = Depends(get_session
     stmt = select(User).where(User.email == body.email.lower().strip())
     if (await session.execute(stmt)).scalar_one_or_none():
         raise HTTPException(status_code=400, detail="email already registered")
-    email = body.email.lower().strip()
-    user = User(
-        email=email,
+    user = await provision_workspace_owner(
+        session,
+        email=body.email,
         hashed_password=hash_password(body.password),
-        is_active=True,
+        auth_email_verified=True,
+        referral_code=body.referral_code,
     )
-    session.add(user)
-    await session.flush()
-    demo_grant = max(0, int(settings.demo_generations_grant))
-    if starter_managed_effective():
-        reg_status = SubscriptionStatus.active
-        reg_plan = BILLING_PLAN_STANDARD
-        demo_grant = 0
-    elif settings.yookassa_configured:
-        reg_status = SubscriptionStatus.none
-        reg_plan = BILLING_PLAN_CREDITS
-    else:
-        reg_status = SubscriptionStatus.none
-        reg_plan = BILLING_PLAN_CREDITS
-    session.add(
-        Subscription(
-            user_id=user.id,
-            status=reg_status,
-            billing_plan=reg_plan,
-            plan_tier="solo",
-        )
-    )
-    bonus = max(0, settings.signup_bonus_credits)
-    if reg_plan == BILLING_PLAN_CREDITS:
-        bonus = 0
-    session.add(
-        CreditAccount(
-            user_id=user.id,
-            balance=bonus,
-            demo_generations_remaining=demo_grant,
-        )
-    )
-    await session.flush()
-    await apply_referral_on_signup(
-        session, new_owner=user, referral_code=body.referral_code
-    )
-    await ensure_owner_referral_code(session, user)
-    await record_funnel_event_once(session, user=user, event="signup")
-    await provision_demo_workflow_workspaces(session, owner_id=user.id)
     await session.commit()
     token = create_access_token(str(user.id))
     return TokenOut(access_token=token)
@@ -112,6 +109,97 @@ async def login(body: LoginIn, session: AsyncSession = Depends(get_session)) -> 
         raise HTTPException(status_code=403, detail="account disabled")
     token = create_access_token(str(user.id))
     return TokenOut(access_token=token)
+
+
+@router.post("/telegram", response_model=TokenOut)
+async def telegram_login_or_register(
+    body: TelegramLoginIn,
+    session: AsyncSession = Depends(get_session),
+) -> TokenOut:
+    if not settings.telegram_login_configured:
+        raise HTTPException(status_code=503, detail="Telegram Login не настроен на сервере")
+    payload = _verify_telegram_body(body)
+    existing = await find_owner_by_telegram_id(session, payload.id)
+    if existing:
+        if not existing.is_active:
+            raise HTTPException(status_code=403, detail="account disabled")
+        user = existing
+        existing.telegram_username = (payload.username or "").strip().lstrip("@")[:64] or None
+    else:
+        user = await create_owner_from_telegram(
+            session,
+            telegram_id=payload.id,
+            telegram_username=payload.username,
+        )
+        await record_funnel_event_once(session, user=user, event="signup_telegram")
+    await session.commit()
+    return TokenOut(access_token=create_access_token(str(user.id)))
+
+
+@router.post("/telegram/link")
+async def telegram_link(
+    body: TelegramLoginIn,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> dict:
+    if not is_workspace_owner(user):
+        raise HTTPException(status_code=403, detail="Привязка Telegram только для владельца")
+    if not settings.telegram_login_configured:
+        raise HTTPException(status_code=503, detail="Telegram Login не настроен на сервере")
+    payload = _verify_telegram_body(body)
+    await link_telegram_to_owner(
+        session,
+        user,
+        telegram_id=payload.id,
+        telegram_username=payload.username,
+    )
+    await session.commit()
+    return {
+        "ok": True,
+        "telegram_linked": True,
+        "telegram_username": user.telegram_username,
+    }
+
+
+@router.delete("/telegram/link")
+async def telegram_unlink(
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> dict:
+    if not is_workspace_owner(user):
+        raise HTTPException(status_code=403, detail="Отвязка Telegram только для владельца")
+    if not owner_telegram_linked(user):
+        return {"ok": True, "telegram_linked": False}
+    if not is_real_owner_email(user.email) or not user.auth_email_verified:
+        raise HTTPException(
+            status_code=400,
+            detail="Сначала укажите рабочий email и пароль — без них отвязать Telegram нельзя",
+        )
+    user.telegram_id = None
+    user.telegram_username = None
+    user.telegram_linked_at = None
+    await session.commit()
+    return {"ok": True, "telegram_linked": False}
+
+
+@router.post("/email/complete", response_model=TokenOut)
+async def complete_email(
+    body: CompleteOwnerEmailIn,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> TokenOut:
+    if not is_workspace_owner(user):
+        raise HTTPException(status_code=403, detail="Только владелец может задать email")
+    if not owner_email_setup_required(user):
+        raise HTTPException(status_code=400, detail="Email уже настроен")
+    await complete_owner_email(
+        session,
+        user,
+        email=body.email,
+        password=body.password,
+    )
+    await session.commit()
+    return TokenOut(access_token=create_access_token(str(user.id)))
 
 
 @router.get("/me", response_model=UserMeOut)
@@ -149,6 +237,7 @@ async def me(
             max_grok_per_month=lim["max_grok_per_month"],
         ),
     )
+    owner_for_identity = owner_row or user
     return UserMeOut(
         id=user.id,
         email=user.email,
@@ -173,4 +262,12 @@ async def me(
         demo_generations_grant=max(0, int(settings.demo_generations_grant)),
         chat_allowed=chat_allowed_for_subscription(sub),
         workflow_demo_limited=is_workflow_demo_limited(sub, cr),
+        telegram_linked=owner_telegram_linked(owner_for_identity),
+        telegram_username=owner_for_identity.telegram_username,
+        email_setup_required=owner_email_setup_required(owner_for_identity)
+        if is_workspace_owner(user)
+        else False,
+        public_email=_public_email_for(owner_for_identity),
+        telegram_login_available=settings.telegram_login_configured,
+        tribute_billing_available=settings.tribute_billing_configured,
     )

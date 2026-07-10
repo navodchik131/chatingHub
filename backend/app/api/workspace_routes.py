@@ -36,6 +36,7 @@ from app.services.workspace_model_access import (
     load_member_studio_model_ids,
     replace_member_studio_models,
 )
+from app.services.telegram_identity import owner_email_setup_required
 from app.services.tribute_member_share import resolve_member_tribute_share_percent
 from app.services.workspace import workspace_owner_id
 
@@ -220,6 +221,11 @@ async def create_workspace_member(
     user: User = Depends(get_current_user),
 ) -> WorkspaceMemberOut:
     _require_workspace_owner(user)
+    if owner_email_setup_required(user):
+        raise HTTPException(
+            status_code=400,
+            detail="Сначала укажите рабочий email владельца (кабинет → Обзор) — он нужен для входа операторов",
+        )
     sub = await session.scalar(select(Subscription).where(Subscription.user_id == user.id))
     from app.services.plan_entitlements import assert_can_add_workspace_member
 

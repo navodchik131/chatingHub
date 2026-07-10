@@ -5,6 +5,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
+from app.config import settings
 from app.db.models import MessageDirection, Platform
 
 
@@ -199,6 +200,21 @@ class LoginIn(BaseModel):
     member_login: str | None = None
 
 
+class TelegramLoginIn(BaseModel):
+    id: int = Field(gt=0)
+    first_name: str | None = None
+    last_name: str | None = None
+    username: str | None = None
+    photo_url: str | None = None
+    auth_date: int = Field(gt=0)
+    hash: str = Field(min_length=1)
+
+
+class CompleteOwnerEmailIn(BaseModel):
+    email: EmailStr
+    password: str = Field(min_length=8, max_length=128)
+
+
 class TokenOut(BaseModel):
     access_token: str
     token_type: str = "bearer"
@@ -250,6 +266,14 @@ class UserMeOut(BaseModel):
     chat_allowed: bool = False
     """Credits с демо без купленных кредитов — только workflow «По рефу»."""
     workflow_demo_limited: bool = False
+    telegram_linked: bool = False
+    telegram_username: str | None = None
+    """Владелец: нужно указать рабочий email (после входа через Telegram)."""
+    email_setup_required: bool = False
+    """Email для отображения; пусто, если аккаунт только через Telegram."""
+    public_email: str | None = None
+    telegram_login_available: bool = False
+    tribute_billing_available: bool = False
 
 
 class WorkspaceMemberCreateIn(BaseModel):
@@ -853,6 +877,37 @@ class YookassaPaymentCreateIn(BaseModel):
 class YookassaPaymentOut(BaseModel):
     payment_id: str
     confirmation_url: str
+
+
+class TributeCheckoutIn(BaseModel):
+    product: str = Field(min_length=3, max_length=64)
+    credits_quantity: int | None = None
+
+    @model_validator(mode="after")
+    def credits_pack_needs_quantity(self) -> TributeCheckoutIn:
+        from app.services.tribute_billing_catalog import parse_tribute_billing_catalog
+        from app.services.plan_catalog import get_plan_spec, resolve_product_id
+
+        p = resolve_product_id(self.product.strip())
+        if p == "credits_pack":
+            if self.credits_quantity is None:
+                raise ValueError("Для покупки кредитов укажите credits_quantity")
+            cat = parse_tribute_billing_catalog(settings.tribute_billing_product_map_json)
+            if cat.tribute_product_id_for("credits_pack", credits_quantity=self.credits_quantity) is None:
+                raise ValueError("Этот пакет кредитов не настроен для оплаты через Tribute")
+        elif self.credits_quantity is not None:
+            raise ValueError("Поле credits_quantity только для product=credits_pack")
+        elif get_plan_spec(p) is None:
+            raise ValueError("Неизвестный продукт подписки")
+        return self
+
+
+class TributeCheckoutOut(BaseModel):
+    tribute_product_id: int
+    payment_url: str
+    telegram_deep_link: str | None = None
+    currency: str | None = None
+    amount_minor: int | None = None
 
 
 class PushSubscribeIn(BaseModel):

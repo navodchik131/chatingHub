@@ -116,6 +116,12 @@ class User(Base):
     )
     """Не слать маркетинговые письма (транзакционные — отдельно)."""
     email_marketing_opt_out: Mapped[bool] = mapped_column(Boolean, default=False)
+    """Telegram user id владельца (для Login и Tribute billing)."""
+    telegram_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True, unique=True, index=True)
+    telegram_username: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    telegram_linked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    """false — вход через TG без подтверждённого email (нужно дозаполнить)."""
+    auth_email_verified: Mapped[bool] = mapped_column(Boolean, default=True)
 
     parent: Mapped[User | None] = relationship(
         "User",
@@ -268,6 +274,24 @@ class YookassaProcessedPayment(Base):
     __tablename__ = "yookassa_processed_payments"
 
     payment_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+
+class TributeProcessedEvent(Base):
+    """Идемпотентность webhook Tribute (платформа ModelMate)."""
+
+    __tablename__ = "tribute_processed_events"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    external_event_id: Mapped[str] = mapped_column(String(128), unique=True, index=True)
+    event_name: Mapped[str] = mapped_column(String(64))
+    user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    telegram_user_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    result_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

@@ -3570,6 +3570,43 @@ select:focus {
   text-align: center;
 }
 
+.auth-hint--center {
+  margin: 0.5rem 0;
+}
+
+.telegram-login-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0.5rem 0 0.75rem;
+}
+
+.telegram-login-host {
+  min-height: 2.75rem;
+}
+
+.email-complete-card {
+  text-align: left;
+}
+
+.email-complete-card .auth-title {
+  font-size: 1.05rem;
+  margin-bottom: 0.35rem;
+}
+
+.cabinet-identity-block {
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--control-radius);
+  background: var(--surface-elevated, rgba(255, 255, 255, 0.02));
+}
+
+.banner.warn {
+  border-color: color-mix(in srgb, var(--warn, #c9a227) 45%, var(--border));
+  background: color-mix(in srgb, var(--warn, #c9a227) 12%, transparent);
+}
+
 .top-actions {
   display: flex;
   flex-wrap: wrap;

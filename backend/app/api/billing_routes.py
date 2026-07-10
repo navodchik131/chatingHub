@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
@@ -15,6 +16,8 @@ from app.schemas import (
     BillingPlansOut,
     SubscribeWithCreditsIn,
     SubscribeWithCreditsOut,
+    TributeCheckoutIn,
+    TributeCheckoutOut,
     YookassaPaymentCreateIn,
     YookassaPaymentOut,
 )
@@ -39,6 +42,10 @@ from app.services.plan_catalog import (
 from app.services.workspace import is_workspace_owner, workspace_owner_id
 from app.services.yookassa_apply import apply_yookassa_payment_succeeded
 from app.services.yookassa_client import create_payment, parse_notification_body
+from app.connectors.tribute.signature import verify_tribute_webhook_signature
+from app.services.telegram_identity import owner_telegram_linked
+from app.services.tribute_billing_apply import apply_tribute_billing_webhook, tribute_billing_catalog
+from app.services.tribute_billing_client import fetch_tribute_product
 
 log = logging.getLogger(__name__)
 
@@ -217,6 +224,92 @@ async def yookassa_start_payment(
     if not pid or not url:
         raise HTTPException(status_code=502, detail="ЮKassa вернула неполный ответ")
     return YookassaPaymentOut(payment_id=pid, confirmation_url=url)
+
+
+@router.post("/tribute/checkout", response_model=TributeCheckoutOut)
+async def tribute_checkout(
+    body: TributeCheckoutIn,
+    user: User = Depends(get_current_user),
+) -> TributeCheckoutOut:
+    if not is_workspace_owner(user):
+        raise HTTPException(
+            status_code=403,
+            detail="Оплата доступна только владельцу аккаунта",
+        )
+    if not settings.tribute_billing_configured:
+        raise HTTPException(status_code=503, detail="Оплата через Tribute не настроена на сервере")
+    if not owner_telegram_linked(user):
+        raise HTTPException(
+            status_code=400,
+            detail="Привяжите Telegram в кабинете (Обзор) — без этого Tribute не сопоставит оплату с аккаунтом",
+        )
+
+    product = resolve_product_id(body.product.strip())
+    catalog = tribute_billing_catalog()
+    tribute_pid = catalog.tribute_product_id_for(
+        product,
+        credits_quantity=body.credits_quantity,
+    )
+    if tribute_pid is None:
+        raise HTTPException(status_code=404, detail="Этот тариф не настроен для оплаты через Tribute")
+
+    try:
+        tribute_product = await fetch_tribute_product(
+            tribute_pid,
+            api_key=settings.tribute_billing_api_key,
+        )
+    except RuntimeError as e:
+        log.warning("tribute checkout fetch product %s: %s", tribute_pid, e)
+        raise HTTPException(status_code=502, detail="Не удалось получить товар из Tribute") from e
+
+    web_link = str(tribute_product.get("webLink") or tribute_product.get("web_link") or "").strip()
+    tg_link = str(tribute_product.get("link") or "").strip()
+    if not web_link and not tg_link:
+        raise HTTPException(status_code=502, detail="Tribute не вернул ссылку на оплату")
+
+    return TributeCheckoutOut(
+        tribute_product_id=tribute_pid,
+        payment_url=web_link or tg_link,
+        telegram_deep_link=tg_link or None,
+        currency=str(tribute_product.get("currency") or "") or None,
+        amount_minor=int(tribute_product.get("amount") or 0) or None,
+    )
+
+
+@router.post("/tribute/webhook")
+async def tribute_billing_webhook(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    if not settings.tribute_billing_configured:
+        raise HTTPException(status_code=503, detail="tribute billing not configured")
+
+    wh_secret = (settings.tribute_billing_webhook_secret or "").strip()
+    if wh_secret:
+        got = (request.query_params.get("secret") or "").strip()
+        if got != wh_secret:
+            raise HTTPException(status_code=403, detail="webhook secret")
+
+    raw = await request.body()
+    sig_header = request.headers.get("trbt-signature") or request.headers.get("Trbt-Signature")
+    api_key = (settings.tribute_billing_api_key or "").strip()
+    if not verify_tribute_webhook_signature(raw, sig_header, api_key):
+        raise HTTPException(status_code=401, detail="invalid tribute signature")
+
+    try:
+        body = json.loads(raw.decode("utf-8"))
+    except json.JSONDecodeError as e:
+        raise HTTPException(status_code=400, detail="invalid json body") from e
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="json must be an object")
+
+    try:
+        result = await apply_tribute_billing_webhook(session, body=body)
+        log.info("tribute billing webhook: %s", result)
+        return result
+    except Exception:
+        log.exception("tribute billing webhook failed")
+        raise HTTPException(status_code=500, detail="ingest failed") from None
 
 
 @router.post("/yookassa/webhook")
