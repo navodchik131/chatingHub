@@ -295,7 +295,7 @@ function ImageGenerationNodeComponent({ id, data }: NodeProps) {
         </span>
 
         <p className="workflow-node__hint">
-          Референс необязателен, если подключены модель и промпт. Можно несколько «Images ref» — у
+          Достаточно промпта — модель из кабинета и референс необязательны. Можно несколько «Images ref» — у
           каждой своя роль в «Описание».
         </p>
           </>

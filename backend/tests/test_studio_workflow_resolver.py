@@ -738,18 +738,25 @@ def test_image_generation_prompt_only_without_model_or_reference():
     g = {
         "nodes": [
             {"id": "prompt-1", "type": "prompt", "data": {"prompt": "Sunset beach"}},
-            {"id": "gen-1", "type": "imageGeneration", "data": {}},
+            {
+                "id": "gen-1",
+                "type": "imageGeneration",
+                "data": {"waveModelId": "gpt-image-2", "nsfwEnabled": False},
+            },
         ],
         "edges": [
             {"source": "prompt-1", "target": "gen-1", "targetHandle": "prompt-in"},
         ],
     }
-    with pytest.raises(WorkflowResolutionError, match="модель"):
-        resolve_workflow_generation_plan(
-            target_node_id="gen-1",
-            nodes=g["nodes"],
-            edges=g["edges"],
-        )
+    plan = resolve_workflow_generation_plan(
+        target_node_id="gen-1",
+        nodes=g["nodes"],
+        edges=g["edges"],
+    )
+    assert plan.model_id is None
+    assert plan.references == ()
+    assert plan.workflow_wave_model == "gpt-image-2"
+    assert "Sunset beach" in plan.description
 
 
 def test_first_frame_model_prompt_without_reference():

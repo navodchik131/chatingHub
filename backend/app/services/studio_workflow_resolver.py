@@ -1438,13 +1438,9 @@ def resolve_workflow_generation_plan(
                 "Добавьте промпт для генерации первого кадра по модели (без motion-видео)"
             )
     elif not references:
-        if model_id is None:
-            if not prompt_text.strip():
-                raise WorkflowResolutionError(
-                    "Добавьте промпт, подключите референс или выберите модель в ноде «Модель»"
-                )
+        if model_id is None and not prompt_text.strip():
             raise WorkflowResolutionError(
-                "Выберите модель в ноде «Модель» или подключите референс"
+                "Добавьте промпт, подключите референс или выберите модель в ноде «Модель»"
             )
     elif model_id is None and not (prompt_text.strip() or has_ref_context):
         raise WorkflowResolutionError(

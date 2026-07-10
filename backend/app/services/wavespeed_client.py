@@ -29,6 +29,10 @@ WAN_27_IMAGE_EDIT_PRO_PATH = "/api/v3/alibaba/wan-2.7/image-edit-pro"
 SEEDREAM_V45_EDIT_PATH = "/api/v3/bytedance/seedream-v4.5/edit"
 SEEDREAM_V50_PRO_EDIT_PATH = "/api/v3/bytedance/seedream-v5.0-pro/edit"
 GPT_IMAGE_2_EDIT_PATH = "/api/v3/openai/gpt-image-2/edit"
+GPT_IMAGE_2_T2I_PATH = "/api/v3/openai/gpt-image-2/text-to-image"
+NANO_BANANA_PRO_T2I_PATH = "/api/v3/google/nano-banana-pro/text-to-image"
+NANO_BANANA_2_T2I_PATH = "/api/v3/google/nano-banana-2/text-to-image"
+SEEDREAM_V50_PRO_T2I_PATH = "/api/v3/bytedance/seedream-v5.0-pro"
 WAVESPEED_MEDIA_UPLOAD_PATH = "/api/v3/media/upload/binary"
 
 
@@ -1144,6 +1148,107 @@ async def nano_banana_2_edit_image_url(
     )
 
 
+async def workflow_text_to_image_url(
+    *,
+    api_key: str,
+    wave_model_id: str,
+    prompt: str,
+    aspect_ratio: str,
+    wan_edit_tier: str = "standard",
+    wave_profile: str | None = None,
+    reference_scene_description: str | None = None,
+    size: str | None = None,
+    on_task_submitted: Callable[[str], Awaitable[None]] | None = None,
+) -> WaveSpeedImageResult:
+    """Workflow text-to-image без референсов (только промпт)."""
+    if not (prompt or "").strip():
+        raise RuntimeError("empty prompt")
+    model = (wave_model_id or "wan-2.7").strip().lower()
+    ar = (aspect_ratio or "3:4").strip()
+    if model == "gpt-image-2":
+        body: dict[str, Any] = {
+            "prompt": prompt.strip(),
+            "aspect_ratio": ar,
+            "resolution": "1k",
+            "quality": "medium",
+            "output_format": "png",
+            "enable_sync_mode": False,
+            "enable_base64_output": False,
+        }
+        post_path = GPT_IMAGE_2_T2I_PATH
+    elif model == "nano-banana-pro":
+        from app.services.studio_prompt_bundle import compact_studio_prompt_for_nano_banana
+
+        if ar not in (
+            "1:1",
+            "3:2",
+            "2:3",
+            "3:4",
+            "4:3",
+            "4:5",
+            "5:4",
+            "9:16",
+            "16:9",
+            "21:9",
+        ):
+            raise RuntimeError(
+                f"Nano Banana: недопустимый aspect_ratio «{ar}». "
+                "Доступно: 1:1, 3:2, 2:3, 3:4, 4:3, 4:5, 5:4, 9:16, 16:9, 21:9."
+            )
+        res = (settings.wavespeed_nano_banana_pro_resolution or "2k").strip().lower()
+        if res not in ("1k", "2k", "4k"):
+            res = "2k"
+        fmt = (settings.wavespeed_nano_banana_pro_output_format or "png").strip().lower()
+        if fmt == "jpg":
+            fmt = "jpeg"
+        if fmt not in ("png", "jpeg"):
+            fmt = "png"
+        body = {
+            "prompt": compact_studio_prompt_for_nano_banana(prompt),
+            "aspect_ratio": ar,
+            "resolution": res,
+            "output_format": fmt,
+            "enable_sync_mode": False,
+            "enable_base64_output": False,
+        }
+        post_path = NANO_BANANA_PRO_T2I_PATH
+    elif model == "nano-banana-2":
+        body = {
+            "prompt": prompt.strip(),
+            "aspect_ratio": ar,
+            "resolution": "1k",
+            "output_format": "png",
+            "enable_sync_mode": False,
+            "enable_base64_output": False,
+        }
+        post_path = NANO_BANANA_2_T2I_PATH
+    elif model == "seedream-v5.0-pro":
+        body = {
+            "prompt": prompt.strip(),
+            "aspect_ratio": ar,
+            "resolution": "1k",
+            "enable_sync_mode": False,
+            "enable_base64_output": False,
+        }
+        fmt = (settings.wavespeed_seedream_output_format or "").strip().lower()
+        if fmt in ("jpeg", "jpg", "png"):
+            body["output_format"] = "jpeg" if fmt in ("jpeg", "jpg") else "png"
+        post_path = SEEDREAM_V50_PRO_T2I_PATH
+    else:
+        raise RuntimeError(
+            f"Генерация только по промпту для модели «{wave_model_id}» не поддерживается. "
+            "Подключите референс или выберите GPT Image, Nano Banana, Nano Banana Pro или Seedream V5 Pro."
+        )
+    _ = wan_edit_tier, wave_profile, reference_scene_description, size
+    url = f"{_wavespeed_base()}{post_path}"
+    return await _wavespeed_post_json_and_resolve_image_url(
+        api_key=api_key,
+        full_post_url=url,
+        body=body,
+        on_task_submitted=on_task_submitted,
+    )
+
+
 async def workflow_edit_image_url(
     *,
     api_key: str,
@@ -1158,6 +1263,18 @@ async def workflow_edit_image_url(
     on_task_submitted: Callable[[str], Awaitable[None]] | None = None,
 ) -> WaveSpeedImageResult:
     """WaveSpeed edit по выбору модели в workflow-редакторе."""
+    if not image_urls:
+        return await workflow_text_to_image_url(
+            api_key=api_key,
+            wave_model_id=wave_model_id,
+            prompt=prompt,
+            aspect_ratio=aspect_ratio,
+            wan_edit_tier=wan_edit_tier,
+            wave_profile=wave_profile,
+            reference_scene_description=reference_scene_description,
+            size=size,
+            on_task_submitted=on_task_submitted,
+        )
     model = (wave_model_id or "wan-2.7").strip().lower()
     if model == "nano-banana-pro":
         return await nano_banana_pro_edit_image_url(

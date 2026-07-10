@@ -566,6 +566,9 @@ def _studio_refine_wavespeed_preflight(
             )
     if mode_n in ("model", "model_scene"):
         workflow_ref_only = workflow_source and bool(image_bytes)
+        workflow_prompt_only = workflow_source and not image_bytes and mid is None
+        if workflow_prompt_only:
+            return ws_key
         if (mid is None or sm_loaded is None) and not workflow_ref_only:
             label = "«Модель + промпт»" if mode_n == "model_scene" else "«По промту»"
             raise HTTPException(
@@ -2569,10 +2572,14 @@ async def _accept_studio_refine_job_from_workflow(
     assert_permission(user, PERM_STUDIO_GENERATE)
     oid = workspace_owner_id(user)
 
-    if not reference_images and plan.model_id is None:
+    if (
+        not reference_images
+        and plan.model_id is None
+        and not (plan.description or "").strip()
+    ):
         raise HTTPException(
             status_code=400,
-            detail="Подключите референс, motion-видео или выберите модель с промптом",
+            detail="Добавьте промпт, подключите референс или выберите модель в ноде «Модель»",
         )
 
     for ref_bytes, _ref_mime, ref_item in reference_images:
@@ -3652,6 +3659,7 @@ async def _studio_job_execute_refine_prompt(
             image_urls: list[str] = []
             user_pose_ref_prepended = False
             ws_identity_legend: str | None = None
+            workflow_prompt_only_t2i = False
             if workflow_ref_loaded and send_pose_to_ws:
                 try:
                     for ref_bytes, ref_mime, _meta in workflow_ref_loaded:
@@ -3804,8 +3812,17 @@ async def _studio_job_execute_refine_prompt(
                             image_index_offset=legend_offset,
                         )
 
+                workflow_prompt_only_t2i = (
+                    workflow_source
+                    and bool(workflow_wave_model)
+                    and mode_n == "model"
+                    and not workflow_ref_loaded
+                    and not image_urls
+                )
                 if not image_urls:
-                    if mode_n == "model_scene" and not workflow_ref_loaded:
+                    if workflow_prompt_only_t2i:
+                        pass
+                    elif mode_n == "model_scene" and not workflow_ref_loaded:
                         wavespeed_message = (
                             "Нет фото модели для WaveSpeed — добавьте развёртку, тело или лицо в кабинете модели."
                         )
@@ -3819,27 +3836,30 @@ async def _studio_job_execute_refine_prompt(
                             "Нет изображений для WaveSpeed — проверьте режим, модель и файлы."
                         )
 
-            if not wavespeed_message and image_urls:
-                if wave_profile_n == "nsfw" and _truthy_wavespeed_flag(
-                    wavespeed_single_reference
-                ):
-                    if user_pose_ref_prepended and len(image_urls) >= 2:
-                        image_urls = image_urls[:4]
-                    else:
-                        image_urls = image_urls[:9]
+            if not wavespeed_message and (image_urls or workflow_prompt_only_t2i):
+                if image_urls:
+                    if wave_profile_n == "nsfw" and _truthy_wavespeed_flag(
+                        wavespeed_single_reference
+                    ):
+                        if user_pose_ref_prepended and len(image_urls) >= 2:
+                            image_urls = image_urls[:4]
+                        else:
+                            image_urls = image_urls[:9]
 
-                pose_is_last_after_reorder = False
-                if wave_profile_n == "regular":
-                    pose_is_last_after_reorder = bool(
-                        user_pose_ref_prepended
-                        and mode_n != "photo_edit"
-                        and len(image_urls) >= 2
-                    )
-                    image_urls = _nano_banana_reorder_image_urls(
-                        image_urls,
-                        studio_mode=mode_n,
-                        user_pose_ref_prepended=user_pose_ref_prepended,
-                    )
+                    pose_is_last_after_reorder = False
+                    if wave_profile_n == "regular":
+                        pose_is_last_after_reorder = bool(
+                            user_pose_ref_prepended
+                            and mode_n != "photo_edit"
+                            and len(image_urls) >= 2
+                        )
+                        image_urls = _nano_banana_reorder_image_urls(
+                            image_urls,
+                            studio_mode=mode_n,
+                            user_pose_ref_prepended=user_pose_ref_prepended,
+                        )
+                else:
+                    pose_is_last_after_reorder = False
                 wavespeed_prompt = assemble_wavespeed_image_edit_prompt(
                     refined,
                     studio_mode=mode_n,
