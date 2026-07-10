@@ -41,6 +41,24 @@ export function isMarketingLocale(value: string | undefined | null): value is Ma
   return value === 'ru' || value === 'en'
 }
 
+/** Публичные маркетинговые маршруты (с опциональным префиксом /en). */
+const MARKETING_PATH_RE = /^\/(?:en\/)?(?:pricing|faq|privacy|terms|login)?$/
+
+export function isMarketingPathname(pathname: string): boolean {
+  return MARKETING_PATH_RE.test(pathname)
+}
+
+export function readStoredMarketingLocale(): MarketingLocale | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const stored = localStorage.getItem(MARKETING_LOCALE_STORAGE_KEY)
+    if (isMarketingLocale(stored)) return stored
+  } catch {
+    /* ignore */
+  }
+  return null
+}
+
 export function localeFromPathname(pathname: string): MarketingLocale {
   return pathname === '/en' || pathname.startsWith('/en/') ? 'en' : 'ru'
 }
@@ -69,12 +87,8 @@ export function stripMarketingLocalePrefix(pathname: string): string {
 export function detectMarketingLocale(): MarketingLocale {
   if (typeof window === 'undefined') return DEFAULT_MARKETING_LOCALE
 
-  try {
-    const stored = localStorage.getItem(MARKETING_LOCALE_STORAGE_KEY)
-    if (isMarketingLocale(stored)) return stored
-  } catch {
-    /* ignore */
-  }
+  const stored = readStoredMarketingLocale()
+  if (stored) return stored
 
   const nav = (navigator.language || navigator.languages?.[0] || '').toLowerCase()
   if (nav.startsWith('ru') || nav.startsWith('uk') || nav.startsWith('be')) return 'ru'

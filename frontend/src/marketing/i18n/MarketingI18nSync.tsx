@@ -5,20 +5,15 @@ import { useTranslation } from 'react-i18next'
 import { syncI18nMarketingLocale } from '../../i18n'
 import {
   detectMarketingLocale,
+  isMarketingPathname,
   localeFromPathname,
   MARKETING_LOCALE_DETECTED_KEY,
   marketingPath,
   persistMarketingLocale,
+  readStoredMarketingLocale,
   stripMarketingLocalePrefix,
   type MarketingLocale,
 } from './marketingLocale'
-
-const MARKETING_ROUTE_RE =
-  /^\/(?:en\/)?(?:pricing|faq|privacy|terms|login)?$/
-
-function isMarketingSurface(pathname: string): boolean {
-  return MARKETING_ROUTE_RE.test(pathname)
-}
 
 /** Синхрон URL ↔ i18n, hreflang, авто-локаль при первом визите. */
 export function MarketingI18nSync() {
@@ -29,13 +24,29 @@ export function MarketingI18nSync() {
   const urlLocale = localeFromPathname(location.pathname)
 
   useEffect(() => {
+    if (!isMarketingPathname(location.pathname)) return
+
+    const stored = readStoredMarketingLocale()
+    if (stored && stored !== urlLocale) {
+      const base = stripMarketingLocalePrefix(location.pathname)
+      navigate(
+        {
+          pathname: marketingPath(base, stored),
+          search: location.search,
+          hash: location.hash,
+        },
+        { replace: true },
+      )
+      return
+    }
+
     syncI18nMarketingLocale(urlLocale)
-    persistMarketingLocale(urlLocale)
     document.documentElement.lang = urlLocale
-  }, [urlLocale])
+  }, [urlLocale, location.pathname, location.search, location.hash, navigate])
 
   useEffect(() => {
-    if (!isMarketingSurface(location.pathname)) return
+    if (!isMarketingPathname(location.pathname)) return
+    if (readStoredMarketingLocale()) return
 
     let detected: MarketingLocale | null = null
     try {

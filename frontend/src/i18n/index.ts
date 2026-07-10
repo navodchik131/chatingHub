@@ -20,6 +20,7 @@ import ruWorkflow from './locales/ru/workflow.json'
 import ruWorkspace from './locales/ru/workspace.json'
 import {
   DEFAULT_MARKETING_LOCALE,
+  isMarketingPathname,
   MARKETING_LOCALE_STORAGE_KEY,
   type MarketingLocale,
 } from '../marketing/i18n/marketingLocale'
@@ -41,6 +42,8 @@ detector.addDetector({
   lookup() {
     if (typeof window === 'undefined') return undefined
     const p = window.location.pathname
+    // Только маркетинг: в /workspace и ЛК язык берётся из localStorage.
+    if (!isMarketingPathname(p)) return undefined
     if (p === '/en' || p.startsWith('/en/')) return 'en'
     return 'ru'
   },
@@ -80,7 +83,7 @@ void i18n
     defaultNS: WORKSPACE_NS,
     interpolation: { escapeValue: false },
     detection: {
-      order: ['mmPath', 'localStorage', 'navigator'],
+      order: ['localStorage', 'mmPath', 'navigator'],
       lookupLocalStorage: MARKETING_LOCALE_STORAGE_KEY,
       caches: ['localStorage'],
       convertDetectedLanguage: (lng: string) => {
