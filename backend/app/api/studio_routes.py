@@ -2564,7 +2564,12 @@ async def _accept_studio_refine_job_from_workflow(
     workflow_first_frame: bool = False,
 ) -> JSONResponse:
     """Workflow execute → фоновый refine_prompt."""
-    if not grok_scene_compose_configured():
+    workflow_pure_prompt = (
+        not reference_images
+        and plan.model_id is None
+        and bool((plan.description or "").strip())
+    )
+    if not workflow_pure_prompt and not grok_scene_compose_configured():
         raise HTTPException(
             status_code=503,
             detail="Grok не настроен: задайте GROK_API_KEY в .env на сервере.",
@@ -2804,6 +2809,8 @@ async def _studio_job_execute_refine_prompt(
         image_bytes = workflow_ref_loaded[0][0]
         image_mime = workflow_ref_loaded[0][1]
 
+    workflow_pure_prompt = workflow_source and mid is None and not workflow_ref_loaded
+
     mask_bytes: bytes | None = None
     mask_mime: str | None = None
     if p.get("mask_path"):
@@ -2954,7 +2961,7 @@ async def _studio_job_execute_refine_prompt(
                 status_code=400,
                 detail="В режиме «По промту» опишите сцену в поле промпта.",
             )
-        if not grok_scene_compose_configured():
+        if not workflow_pure_prompt and not grok_scene_compose_configured():
             raise HTTPException(
                 status_code=503,
                 detail="Режим «По промту» использует Grok (как «Основная»): задайте GROK_API_KEY на сервере.",
@@ -3277,27 +3284,62 @@ async def _studio_job_execute_refine_prompt(
                 session.add(gen_row)
                 await session.flush()
         elif mode_n == "model" and not image_bytes:
-            from app.services.plan_entitlements import assert_grok_allowed, record_grok_usage
+            if workflow_pure_prompt:
+                reference_scene = None
+                prompt_brief_mode = resolve_studio_prompt_brief_mode(
+                    studio_mode=mode_n,
+                    has_reference_scene=False,
+                    has_uploaded_reference_bytes=False,
+                    send_pose_reference_to_wavespeed=send_pose_to_ws,
+                )
+                skeleton = prepare_studio_prompt_skeleton_for_brief(prompt_brief_mode)
+                if not skeleton:
+                    raise RuntimeError(
+                        "Шаблон промпта пуст: заполните backend/data/prompts/image_studio_skeleton.txt "
+                        "или IMAGE_STUDIO_SKELETON_INLINE"
+                    )
+                refined = await refine_prompt_via_openai(
+                    system_instruction=system_instr,
+                    skeleton=skeleton,
+                    user_text=desc,
+                    reference_scene_description=None,
+                    model_profile_text=None,
+                    model_reference_photos=None,
+                    output_aspect_key=aspect_key,
+                    studio_mode=mode_n,
+                    lock_model_hairstyle=effective_lock_hairstyle,
+                    prompt_brief_mode=prompt_brief_mode,
+                    visibility_plan_block=None,
+                    credentials=llm_creds,
+                )
+                grok_negative_extra = None
+                if gen_row is not None:
+                    gen_row.refined_prompt = refined
+                    gen_row.prompt_excerpt = (refined[:2000] if refined else None) or None
+                    session.add(gen_row)
+                    await session.flush()
+            else:
+                from app.services.plan_entitlements import assert_grok_allowed, record_grok_usage
 
-            await assert_grok_allowed(session, oid, sub_b)
-            await record_grok_usage(session, oid, source="model_prompt")
-            grok_creds = grok_motion_studio_credentials()
-            composed = await grok_compose_studio_text_scene(
-                model_images=imgs_model,
-                model_profile_text=model_profile_text,
-                wave_profile=wave_profile_n,
-                user_notes=desc,
-                credentials=grok_creds,
-            )
-            refined = composed.wavespeed_scene_prompt
-            reference_scene = composed.reference_scene_lock or None
-            grok_negative_extra = composed.negative_prompt or None
-            prompt_brief_mode = "grok_composed_text"
-            if gen_row is not None:
-                gen_row.refined_prompt = refined
-                gen_row.prompt_excerpt = (refined[:2000] if refined else None) or None
-                session.add(gen_row)
-                await session.flush()
+                await assert_grok_allowed(session, oid, sub_b)
+                await record_grok_usage(session, oid, source="model_prompt")
+                grok_creds = grok_motion_studio_credentials()
+                composed = await grok_compose_studio_text_scene(
+                    model_images=imgs_model,
+                    model_profile_text=model_profile_text,
+                    wave_profile=wave_profile_n,
+                    user_notes=desc,
+                    credentials=grok_creds,
+                )
+                refined = composed.wavespeed_scene_prompt
+                reference_scene = composed.reference_scene_lock or None
+                grok_negative_extra = composed.negative_prompt or None
+                prompt_brief_mode = "grok_composed_text"
+                if gen_row is not None:
+                    gen_row.refined_prompt = refined
+                    gen_row.prompt_excerpt = (refined[:2000] if refined else None) or None
+                    session.add(gen_row)
+                    await session.flush()
         else:
             if prompt_plan is not None:
                 reference_scene = prompt_plan.reference_scene_description
