@@ -1,6 +1,9 @@
 import type { ReactNode } from 'react'
 import { useEffect, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Link, useLocation } from 'react-router-dom'
+import { AppLanguageSwitcher } from '../i18n/AppLanguageSwitcher'
+import { formatAppNumber } from '../i18n'
 import { TelegramChannelBanner } from './TelegramChannelBanner'
 import { WorkspaceNavIcon, type NavIconName } from './WorkspaceNavIcon'
 
@@ -52,6 +55,7 @@ export function AppShell({
   onLogout,
   children,
 }: AppShellProps) {
+  const { t } = useTranslation('workspace')
   const location = useLocation()
   const contentRef = useRef<HTMLDivElement>(null)
 
@@ -60,19 +64,19 @@ export function AppShell({
   }, [appSection, location.pathname])
 
   const nav: NavItem[] = [
-    { id: 'overview', label: 'Обзор', icon: 'overview', show: true },
-    { id: 'chat', label: 'Диалоги', icon: 'chat', show: canChat, badge: unreadTotal },
-    { id: 'studio', label: 'Картинки', icon: 'studio', show: canStudioAny },
+    { id: 'overview', label: t('nav.overview'), icon: 'overview', show: true },
+    { id: 'chat', label: t('nav.chat'), icon: 'chat', show: canChat, badge: unreadTotal },
+    { id: 'studio', label: t('nav.studio'), icon: 'studio', show: canStudioAny },
     {
       id: 'studio_bootstrap',
-      label: 'База модели',
+      label: t('nav.modelBootstrap'),
       icon: 'model',
       show: canStudioAny,
     },
-    { id: 'studio_video', label: 'Видео', icon: 'video', show: canStudioAny },
+    { id: 'studio_video', label: t('nav.video'), icon: 'video', show: canStudioAny },
     {
       href: '/workspace/workflow',
-      label: 'Workflow',
+      label: t('nav.workflow'),
       icon: 'workflow',
       show: canStudioAny,
       beta: true,
@@ -196,39 +200,47 @@ export function AppShell({
               </div>
             </div>
 
-            <nav className="workspace-topnav workspace-topnav--desktop" aria-label="Разделы">
+            <nav className="workspace-topnav workspace-topnav--desktop" aria-label={t('nav.sectionsAria')}>
               {visibleNav.map((item) => topNavButton(item))}
             </nav>
           </div>
 
           <div className="workspace-topbar-end">
+            <AppLanguageSwitcher className="mm-lang-switch mm-lang-switch--compact workspace-lang-switch" />
             <button
               type="button"
               className="workspace-credits-chip"
               onClick={onAccountOpen}
-              title={`${billingPlanLabel} · ${creditsBalance ?? '—'} кр.${
-                demoGenerationsRemaining > 0 ? ` · ${demoGenerationsRemaining} демо` : ''
-              }`}
+              title={t('shell.creditsTitle', {
+                plan: billingPlanLabel,
+                credits: creditsBalance != null ? formatAppNumber(creditsBalance) : '—',
+                demo:
+                  demoGenerationsRemaining > 0
+                    ? ` · ${demoGenerationsRemaining} ${t('shell.demo')}`
+                    : '',
+              })}
             >
               <span className="workspace-billing-plan">{billingPlanLabel}</span>
               <span className="workspace-credits-sep" aria-hidden>
                 ·
               </span>
               <span className="workspace-credits-value">{creditsBalance ?? '—'}</span>
-              <span className="workspace-credits-label">кр.</span>
+              <span className="workspace-credits-label">{t('shell.credits')}</span>
               {demoGenerationsRemaining > 0 ? (
-                <span className="workspace-demo-pill">{demoGenerationsRemaining} демо</span>
+                <span className="workspace-demo-pill">
+                  {demoGenerationsRemaining} {t('shell.demo')}
+                </span>
               ) : null}
             </button>
             <div className="workspace-topbar-end-desktop">
               <button type="button" className="ghost-btn workspace-topbar-btn" onClick={onAccountOpen}>
-                Кабинет
+                {t('shell.cabinet')}
               </button>
               <Link to="/" className="ghost-btn workspace-topbar-link workspace-topbar-btn">
-                Сайт
+                {t('shell.site')}
               </Link>
               <button type="button" className="ghost-btn workspace-topbar-btn" onClick={onLogout}>
-                Выйти
+                {t('shell.logout')}
               </button>
             </div>
             <button
@@ -236,7 +248,7 @@ export function AppShell({
               className="workspace-user-chip"
               onClick={onAccountOpen}
               title={userMeta}
-              aria-label="Личный кабинет"
+              aria-label={t('shell.accountAria')}
             >
               <span className="workspace-user-avatar" aria-hidden>
                 {userTitle.slice(0, 1).toUpperCase()}
@@ -250,7 +262,7 @@ export function AppShell({
           {children}
         </div>
 
-        <nav className="workspace-mobile-nav" aria-label="Разделы приложения">
+        <nav className="workspace-mobile-nav" aria-label={t('nav.mobileSectionsAria')}>
           {visibleNav.map((item) => mobileNavButton(item))}
         </nav>
       </div>

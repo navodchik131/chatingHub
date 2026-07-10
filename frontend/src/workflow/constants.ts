@@ -1,61 +1,22 @@
 import type { NodeType } from './types'
+import { workflowNodeDescription, workflowNodeLabel, workflowPaletteSectionTitle } from './workflowI18n'
 
 export const WORKFLOW_GRAPH_STORAGE_KEY = 'mm_workflow_graph_v2'
 export const WORKFLOW_PALETTE_COLLAPSED_KEY = 'mm_workflow_palette_collapsed'
 
-export const NODE_LABELS: Record<NodeType, string> = {
-  model: 'Модель',
-  realism: 'Реализм',
-  selfie: 'Селфи',
-  prompt: 'Промпт',
-  textNote: 'Заметка',
-  refDescription: 'Описание референса',
-  reference: 'Images ref',
-  imageGeneration: 'Генерация фото',
-  firstFrameGeneration: 'Первый кадр',
-  turnaroundSheet: 'Развёртка',
-  motionVideo: 'Реф. видео',
-  videoPromptCompose: 'Промпт из видео',
-  scenarioOutfitChange: 'Сценарий: одежда',
-  scenarioLocationChange: 'Сценарий: локация',
-  scenarioFaceSwap: 'Сценарий: модель',
-  scenarioMotionVideo: 'Сценарий: motion',
-  scenarioFirstFrame: 'Сценарий: 1-й кадр',
-  videoGeneration: 'Генерация видео',
-  videoUpscale: 'Апскейл видео',
-  preview: 'Просмотр',
-}
+/** @deprecated use workflowNodeLabel() for locale-aware label */
+export const NODE_LABELS: Record<NodeType, string> = new Proxy({} as Record<NodeType, string>, {
+  get(_target, prop: string) {
+    return workflowNodeLabel(prop as NodeType)
+  },
+})
 
-export const NODE_DESCRIPTIONS: Record<NodeType, string> = {
-  model: 'Модель из кабинета студии',
-  realism: 'Реалистичный вид снимка',
-  selfie: 'Селфи с вытянутой руки — фронталка, перебивает противоречия в промпте',
-  prompt: 'Доп. указания (опционально; сцена берётся из первого кадра)',
-  textNote: 'Текстовый блок на холсте — подсказки, чеклисты, заметки (не влияет на генерацию)',
-  refDescription: 'Роль и назначение референса (photo base, clothes, pose…)',
-  reference: 'Фото-референс — к генерации можно подключить несколько',
-  imageGeneration: 'Сборка промпта и генерация изображения (plain или через pipeline)',
-  firstFrameGeneration: 'Still t=0 для motion-пайплайна (plain или через pipeline)',
-  turnaroundSheet: 'Character sheet GPT Image 2.0 — сетка на лице (кроме вида сзади)',
-  motionVideo: 'Референс движения (@Video) для Seedance',
-  videoPromptCompose:
-    'Grok: детальный промпт из motion + BoardStory refs (одежда, окружение, модель)',
-  scenarioOutfitChange:
-    'Сценарий: photo base + outfit refs → pipeline → генерация изображения',
-  scenarioLocationChange:
-    'Сценарий: photo base / модель + refs локаций → pipeline → генерация изображения',
-  scenarioFaceSwap:
-    'Сценарий: ref сцены + модель из кабинета или ref identity → замена человека с сохранением pose',
-  scenarioMotionVideo:
-    'Сценарий: motion + BoardStory → Grok-промпт, звук и Seedance → pipeline → видео',
-  scenarioFirstFrame:
-    'Сценарий: модель + motion/refs → still t=0 → pipeline → «Первый кадр»',
-  videoGeneration:
-    'Рендер видео: Seedance/Grok + длительность. Сценарий — через pipeline-in.',
-  videoUpscale: 'Video Upscaler Pro — upscale готового ролика (720p–4K)',
-  preview:
-    'Просмотр результата. Можно подключить «Описание референса» и отдать картинку дальше как ref.',
-}
+/** @deprecated use workflowNodeDescription() for locale-aware description */
+export const NODE_DESCRIPTIONS: Record<NodeType, string> = new Proxy({} as Record<NodeType, string>, {
+  get(_target, prop: string) {
+    return workflowNodeDescription(prop as NodeType)
+  },
+})
 
 export type NodePaletteSection = {
   id: string
@@ -68,24 +29,32 @@ export type NodePaletteSection = {
 export const NODE_PALETTE_SECTIONS: NodePaletteSection[] = [
   {
     id: 'common',
-    title: 'Общие',
+    get title() {
+      return workflowPaletteSectionTitle('common')
+    },
     types: ['model', 'realism', 'selfie', 'prompt', 'textNote', 'refDescription', 'reference', 'preview'],
   },
   {
     id: 'image',
-    title: 'Картинки',
+    get title() {
+      return workflowPaletteSectionTitle('image')
+    },
     badge: '🖼',
     types: ['imageGeneration', 'firstFrameGeneration', 'turnaroundSheet'],
   },
   {
     id: 'video',
-    title: 'Видео',
+    get title() {
+      return workflowPaletteSectionTitle('video')
+    },
     badge: '🎬',
     types: ['motionVideo', 'videoPromptCompose', 'videoGeneration', 'videoUpscale'],
   },
   {
     id: 'scenarios',
-    title: 'Сценарии',
+    get title() {
+      return workflowPaletteSectionTitle('scenarios')
+    },
     badge: '⚡',
     types: [
       'scenarioOutfitChange',

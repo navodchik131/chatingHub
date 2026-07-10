@@ -1,0 +1,42 @@
+{
+  "errors": {
+    "fanvueInvalidUser": "Fanvue user unavailable: account deleted or blocked on the platform.",
+    "gatewayTimeout": "Gateway or proxy timed out waiting for the server. Long generation may still have finished — refresh and check Saved / Recent videos.",
+    "serviceUnavailable": "Service temporarily unavailable (503). Try again in a minute.",
+    "payloadTooLarge": "File too large to upload (413).",
+    "sessionExpired": "Session expired — sign in again.",
+    "forbidden": "No access to this operation (403).",
+    "serverError": "Server error ({{status}}{{statusText}}). Retry later or refresh the page.",
+    "clientError": "Request rejected ({{status}}{{statusText}}).",
+    "abortTimeout": "Response timed out.",
+    "abortHintLong": " Long generation may have finished on the server — refresh and check Saved and Recent videos.",
+    "abortHintShort": " Retry or refresh the page.",
+    "networkFailed": "No response from server (network, VPN, firewall or backend restart). Check connection. If you just started generation — refresh after reconnect and check archive.",
+    "genericTailLong": " Refresh the page — finished video or frame may already be in history.",
+    "genericTail": " Refresh the page and retry if needed.",
+    "generic": "Request error."
+  },
+  "duration": {
+    "seconds": "{{n}}s",
+    "minutes": "{{n}}m",
+    "hours": "{{n}}h"
+  },
+  "close": "Close",
+  "loading": "Loading…",
+  "copy": "Copy",
+  "delete": "Delete",
+  "cancel": "Cancel",
+  "save": "Save",
+  "add": "Add",
+  "remove": "Remove",
+  "on": "On",
+  "off": "Off",
+  "checking": "checking…",
+  "reading": "Reading…",
+  "replace": "Replace",
+  "upload": "Upload",
+  "reset": "Reset",
+  "notUploaded": "Not uploaded",
+  "saving": "Saving…",
+  "saved": "✓ Saved"
+}

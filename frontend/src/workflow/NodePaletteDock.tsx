@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { createPortal } from 'react-dom'
 import {
-  NODE_DESCRIPTIONS,
-  NODE_LABELS,
   NODE_PALETTE_SECTIONS,
   WORKFLOW_PALETTE_COLLAPSED_KEY,
 } from './constants'
+import { workflowNodeDescription, workflowNodeLabel } from './workflowI18n'
 import { NODE_ICON_COLORS, NodeIcon } from './NodeIcons'
 import { REACT_FLOW_DRAG_TYPE } from './nodeFactory'
 import { isCoarsePointer, useWorkflowMobile } from './useWorkflowMobile'
@@ -48,8 +48,8 @@ function PaletteItem({
   onHideTooltip: () => void
 }) {
   const color = NODE_ICON_COLORS[type]
-  const label = NODE_LABELS[type]
-  const description = NODE_DESCRIPTIONS[type]
+  const label = workflowNodeLabel(type)
+  const description = workflowNodeDescription(type)
 
   return (
     <button
@@ -86,6 +86,7 @@ function paletteTooltipPlacement(rect: DOMRect): Pick<PaletteTooltip, 'x' | 'y' 
 }
 
 export function NodePaletteDock({ onTapAdd }: Props) {
+  const { t, i18n } = useTranslation('workflow')
   const isMobile = useWorkflowMobile()
   const dockRef = useRef<HTMLDivElement>(null)
   const [collapsed, setCollapsed] = useState(() => readPaletteCollapsedPreference(isMobile))
@@ -97,11 +98,11 @@ export function NodePaletteDock({ onTapAdd }: Props) {
     if (isCoarsePointer() || collapsed) return
     const rect = el.getBoundingClientRect()
     setTooltip({
-      title: NODE_LABELS[type],
-      description: NODE_DESCRIPTIONS[type],
+      title: workflowNodeLabel(type),
+      description: workflowNodeDescription(type),
       ...paletteTooltipPlacement(rect),
     })
-  }, [collapsed])
+  }, [collapsed, i18n.language])
 
   useEffect(() => {
     if (!tooltip) return
@@ -147,23 +148,23 @@ export function NodePaletteDock({ onTapAdd }: Props) {
       <div
         ref={dockRef}
         className={`workflow-palette-dock${collapsed ? ' is-collapsed' : ''}`}
-        aria-label="Палитра нод"
+        aria-label={t('paletteDock.aria')}
       >
         <div className="workflow-palette-dock__toolbar">
-          <span className="workflow-palette-dock__toolbar-title">Ноды</span>
+          <span className="workflow-palette-dock__toolbar-title">{t('paletteDock.title')}</span>
           <button
             type="button"
             className="workflow-palette-dock__toggle"
             onClick={toggleCollapsed}
             aria-expanded={!collapsed}
             aria-controls="workflow-palette-dock-body"
-            title={collapsed ? 'Развернуть палитру' : 'Свернуть палитру'}
+            title={collapsed ? t('page.paletteExpand') : t('page.paletteCollapse')}
           >
             <span className="workflow-palette-dock__toggle-icon" aria-hidden>
               {collapsed ? '▲' : '▼'}
             </span>
             <span className="workflow-palette-dock__toggle-label">
-              {collapsed ? 'Развернуть' : 'Свернуть'}
+              {collapsed ? t('paletteDock.expand') : t('paletteDock.collapse')}
             </span>
           </button>
         </div>

@@ -1,9 +1,11 @@
 import { memo, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useReactFlow, type NodeProps } from '@xyflow/react'
 import { BaseNode } from './BaseNode'
 import type { TextNoteNodeData } from '../types'
 
 function TextNoteNodeComponent({ id, data }: NodeProps) {
+  const { t } = useTranslation('workflow')
   const { setNodes } = useReactFlow()
   const nodeData = data as TextNoteNodeData
 
@@ -21,12 +23,10 @@ function TextNoteNodeComponent({ id, data }: NodeProps) {
 
   return (
     <BaseNode nodeId={id} type="textNote">
-      <p className="workflow-node__hint">
-        Подсказки, чеклист или любой текст — не участвует в генерации
-      </p>
+      <p className="workflow-node__hint">{t('nodeUi.textNote.hint')}</p>
       <textarea
         className="workflow-node__textarea workflow-node__textarea--note nodrag nowheel"
-        placeholder={'Например: 1) photo base — исходная pose\n2) ref локации — только фон\n3) Seedream для edit…'}
+        placeholder={t('nodeUi.textNote.placeholder')}
         value={nodeData.text ?? ''}
         onChange={onTextChange}
         rows={6}

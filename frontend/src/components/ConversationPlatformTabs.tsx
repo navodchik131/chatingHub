@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import {
   CHAT_PLATFORM_META,
   type ChatPlatform,
@@ -20,10 +21,11 @@ export function ConversationPlatformTabs({
   conversations: ConversationLike[]
   onChange: (platform: ChatPlatform) => void
 }) {
+  const { t } = useTranslation('chat')
   if (platforms.length <= 1) return null
 
   return (
-    <div className="conv-platform-tabs" role="tablist" aria-label="Соцсети">
+    <div className="conv-platform-tabs" role="tablist" aria-label={t('platformTabsAria')}>
       {platforms.map((platform) => {
         const meta = CHAT_PLATFORM_META[platform]
         const unread = unreadCountForPlatform(conversations, platform)

@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
 
 export function AdminDrillableKpi({
   segment,
@@ -15,6 +16,7 @@ export function AdminDrillableKpi({
   className?: string
   children: ReactNode
 }) {
+  const { t } = useTranslation('admin')
   const clickable = count > 0
   if (!clickable) {
     return <div className={`admin-kpi ${className}`}>{children}</div>
@@ -24,7 +26,7 @@ export function AdminDrillableKpi({
       type="button"
       className={`admin-kpi admin-kpi--clickable ${className}`}
       onClick={() => onDrill(segment, title)}
-      title="Показать список"
+      title={t('drill.showList')}
     >
       {children}
     </button>

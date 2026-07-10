@@ -2,6 +2,7 @@ import { useEffect, useMemo } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { AuthPanel } from '../AuthPanel'
+import { AppLanguageSwitcher } from '../i18n/AppLanguageSwitcher'
 import { getToken } from '../api'
 import '../App.css'
 import { MmContainer } from './components/MmUi'
@@ -28,6 +29,9 @@ export function LoginPage() {
           {t('loginPage.backHome')}
         </Link>
         <header className="mm-page-head">
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 'var(--s-4)' }}>
+            <AppLanguageSwitcher />
+          </div>
           <h1>{t('loginPage.title')}</h1>
           <p className="mm-muted">{t('loginPage.intro')}</p>
         </header>

@@ -1,9 +1,11 @@
 import { memo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Handle, Position, type NodeProps } from '@xyflow/react'
 import { BaseNode } from './BaseNode'
 import { HandleIds, type ScenarioFirstFrameNodeData } from '../types'
 
 function ScenarioFirstFrameNodeComponent({ id, data }: NodeProps) {
+  const { t } = useTranslation('workflow')
   const nodeData = data as ScenarioFirstFrameNodeData
 
   return (
@@ -64,10 +66,7 @@ function ScenarioFirstFrameNodeComponent({ id, data }: NodeProps) {
         motion opt
       </span>
 
-      <p className="workflow-node__hint">
-        Сценарий «первый кадр»: модель + motion-видео или рефы → still на t=0 для motion-пайплайна.
-        Подключите к «Первый кадр» через pipeline.
-      </p>
+      <p className="workflow-node__hint">{t('nodeUi.scenarioFirstFrame.hint')}</p>
 
       <Handle
         id={HandleIds.pipelineOut}

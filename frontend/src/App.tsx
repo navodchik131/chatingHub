@@ -6,9 +6,9 @@ import {
   useMemo,
   useRef,
   useState,
-  type ReactNode,
 } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { useTranslation, Trans } from 'react-i18next'
 import { apiFetch, getToken, setToken } from './api'
 import {
   getPushSubscriptionState,
@@ -54,16 +54,37 @@ import { IconModel, IconSpark } from './components/studio/studioIcons'
 import { AuthPanel } from './AuthPanel'
 import { OwnerEmailCompleteForm, TelegramLoginButton } from './auth/TelegramAuth'
 import { AppShell, type WorkspaceSection } from './components/AppShell'
+import { AppLanguageSwitcher } from './i18n/AppLanguageSwitcher'
+import { formatAppNumber } from './i18n'
+import {
+  conversationNoteKindLabel,
+  formatSlaSeconds,
+  outboundLangOptions,
+  studioArchiveRetentionLead,
+} from './i18n/appLabels'
+import { formatAppCurrency, formatDateTimeApp, formatNoteUpdatedAtApp } from './i18n/appFormat'
+import {
+  companionModeLabel,
+  creditKindLabel,
+  memberPermissionLabel,
+  subscriptionStatusLabel,
+} from './i18n/cabinetLabels'
 import { WorkspaceOverview } from './components/WorkspaceOverview'
 import { ConversationPlatformTabs } from './components/ConversationPlatformTabs'
 import { ConversationCategoryTabs } from './components/ConversationCategoryTabs'
 import {
-  conversationCategoryBadge,
-  CONVERSATION_CATEGORY_META,
-  matchesConversationCategory,
-  MANUAL_CATEGORY_OPTIONS,
-  type ConversationCategory,
-} from './conversationCategories'
+  conversationCategoryBadgeLabel,
+  conversationCategoryLabel,
+  manualCategoryLabel,
+} from './i18n/chatLabels'
+import {
+  STUDIO_IMAGE_MODE_IDS,
+  STUDIO_MODEL_IMAGE_KIND_VALUES,
+  studioImageModeLabel,
+  studioModelImageKindLabel,
+  type StudioModelImageKind,
+} from './i18n/studioLabels'
+import { type ConversationCategory, MANUAL_CATEGORY_VALUES, matchesConversationCategory } from './conversationCategories'
 import {
   chatPlatformLabel,
   type ChatPlatform,
@@ -77,7 +98,7 @@ import {
   readSetupTourHadGeneration,
   resolveSetupTourPhase,
 } from './components/SetupTour'
-import { studioImageGenerateBlockReason, studioDemoModelHint } from './studio/studioGenerateGate'
+import { studioImageGenerateBlockReason, studioDemoModelHint, studioIntegrationsHint } from './studio/studioGenerateGate'
 import {
   buildAndStartFaceSwapScenario,
   buildAndStartPhotoEditScenario,
@@ -113,7 +134,7 @@ import './styles/chat-ui.css'
 import { StudioInpaintMaskPainter, type StudioInpaintMaskPainterRef } from './StudioInpaintMaskPainter'
 import {
   DEFAULT_MEMBER_PERMISSIONS,
-  MEMBER_PERMISSION_LABELS,
+  MEMBER_PERMISSION_ITEMS,
   PERM_CHAT,
   PERM_INTEGRATIONS,
   PERM_STUDIO_GENERATE,
@@ -180,39 +201,6 @@ interface ConversationNote {
   updated_at: string
 }
 
-function conversationNoteKindLabel(kind: ConversationNote['kind']): string {
-  switch (kind) {
-    case 'ai_profile':
-      return 'Профиль'
-    case 'ai_daily':
-      return 'Контекст'
-    case 'ai_insight':
-      return 'AI'
-    default:
-      return 'Заметка'
-  }
-}
-
-/** Языки для перевода исходящих (совпадают с типичными целями DeepL/Google). */
-const OUTBOUND_LANG_OPTIONS: { value: string; label: string }[] = [
-  { value: '', label: 'Авто (по переписке)' },
-  { value: 'en', label: 'English' },
-  { value: 'de', label: 'Deutsch' },
-  { value: 'fr', label: 'Français' },
-  { value: 'es', label: 'Español' },
-  { value: 'it', label: 'Italiano' },
-  { value: 'pt', label: 'Português' },
-  { value: 'ru', label: 'Русский' },
-  { value: 'uk', label: 'Українська' },
-  { value: 'pl', label: 'Polski' },
-  { value: 'tr', label: 'Türkçe' },
-  { value: 'nl', label: 'Nederlands' },
-  { value: 'sv', label: 'Svenska' },
-  { value: 'ja', label: '日本語' },
-  { value: 'ko', label: '한국어' },
-  { value: 'zh', label: '中文' },
-]
-
 const CHAT_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🔥'] as const
 
 interface MessageReaction {
@@ -256,20 +244,8 @@ interface CompanionDraft {
   created_at: string
 }
 
-const COMPANION_MODE_OPTIONS = [
-  { value: 'off', label: 'Выключен (оператор)' },
-  { value: 'draft', label: 'Черновик — оператор подтверждает' },
-  { value: 'semi_auto', label: 'Полуавто — короткие сообщения' },
-  { value: 'auto', label: 'Автопилот' },
-] as const
-
-const COMPANION_CONVERSATION_MODE_OPTIONS = [
-  { value: '', label: 'Как на подключении' },
-  { value: 'off', label: 'Выключен в этом диалоге' },
-  { value: 'draft', label: 'Черновик' },
-  { value: 'semi_auto', label: 'Полуавто' },
-  { value: 'auto', label: 'Автопилот' },
-] as const
+const COMPANION_MODE_VALUES = ['off', 'draft', 'semi_auto', 'auto'] as const
+const COMPANION_CONVERSATION_MODE_VALUES = ['', 'off', 'draft', 'semi_auto', 'auto'] as const
 
 function resolveEffectiveCompanionMode(conv: Conversation): string | null {
   if (conv.effective_companion_mode) return conv.effective_companion_mode
@@ -315,10 +291,6 @@ function preferNativeShareOnMobile(): boolean {
 
 function platformLabel(p: Platform): string {
   return chatPlatformLabel(p)
-}
-
-function studioIntegrationsHint(): string {
-  return 'Добавьте API-ключ WaveSpeed: кабинет → Подключения → блок WaveSpeed.'
 }
 
 const WS_ONBOARDING_LS = 'modelmate_ws_onboarding_v1'
@@ -389,6 +361,7 @@ function ChatStripItem({
   active: boolean
   onSelect: () => void
 }) {
+  const { t: tc } = useTranslation('chat')
   const url = useConversationAvatarBlob(conv.id, Boolean(conv.has_avatar))
   const letter = (conv.user_display_name ?? '?').slice(0, 1).toUpperCase()
   const unread = conv.unread_count ?? 0
@@ -397,13 +370,13 @@ function ChatStripItem({
       type="button"
       className={`chat-strip-item ${active ? 'is-active' : ''}`}
       onClick={onSelect}
-      title={conv.user_display_name ?? 'Диалог'}
-      aria-label={conv.user_display_name ?? 'Диалог'}
+      title={conv.user_display_name ?? tc('strip.dialogFallback')}
+      aria-label={conv.user_display_name ?? tc('strip.dialogFallback')}
       aria-current={active ? 'true' : undefined}
     >
       <span className="chat-strip-item-inner">
         {url ? <img src={url} alt="" /> : <span className="chat-strip-letter">{letter}</span>}
-        {unread > 0 ? <span className="chat-strip-unread" aria-label="Непрочитанные" /> : null}
+        {unread > 0 ? <span className="chat-strip-unread" aria-label={tc('strip.unreadAria')} /> : null}
       </span>
     </button>
   )
@@ -460,38 +433,6 @@ interface HealthInfo {
   studio_seedance_i2v_duration_min?: number
   studio_seedance_i2v_duration_max?: number
   web_push_configured?: boolean
-}
-
-function studioArchiveRetentionLead(health: HealthInfo | null, kind: 'image' | 'video' = 'image'): ReactNode {
-  const days = health?.studio_generations_retention_days
-  if (typeof days === 'number' && days > 0) {
-    const n100 = days % 100
-    const n10 = days % 10
-    const word =
-      n10 === 1 && n100 !== 11
-        ? 'день'
-        : n10 >= 2 && n10 <= 4 && (n100 < 10 || n100 >= 20)
-          ? 'дня'
-          : 'дней'
-    if (kind === 'video') {
-      return (
-        <>
-          Ролики доступны по ссылке провайдера примерно <strong>{days}</strong> {word}. Сохраните
-          важное на устройство заранее.
-        </>
-      )
-    }
-    return (
-      <>
-        Картинки с WaveSpeed хранятся на сервере примерно <strong>{days}</strong> {word}, затем
-        удаляются автоматически. Сохраните важное на устройство заранее.
-      </>
-    )
-  }
-  if (kind === 'video') {
-    return <>Готовые ролики можно открыть и скачать из истории.</>
-  }
-  return <>Картинки с WaveSpeed сохраняются на сервере — их можно открыть позже.</>
 }
 
 interface PlanLimitsMe {
@@ -663,13 +604,6 @@ interface ChatterSnippet {
   sort_order: number
 }
 
-function formatSlaSeconds(sec: number | null | undefined): string {
-  if (sec == null || sec <= 0) return '—'
-  if (sec < 60) return `${sec}с`
-  if (sec < 3600) return `${Math.round(sec / 60)}м`
-  return `${(sec / 3600).toFixed(1)}ч`
-}
-
 interface BillingCreditsPricing {
   min_quantity: number
   bulk_from: number
@@ -696,7 +630,6 @@ interface StudioModelImage {
   kind: string
 }
 
-type StudioModelImageKind = 'face' | 'body' | 'genitals' | 'turnaround' | 'other'
 type StudioExifCamera = 'selfie' | 'main'
 
 interface NewModelPhotoRow {
@@ -705,14 +638,6 @@ interface NewModelPhotoRow {
 }
 
 const STUDIO_MODEL_MAX_IMAGES = 8
-
-const STUDIO_MODEL_IMAGE_KIND_OPTIONS: { value: StudioModelImageKind; label: string }[] = [
-  { value: 'turnaround', label: 'Развёртка / character sheet' },
-  { value: 'face', label: 'Лицо / идентичность' },
-  { value: 'body', label: 'Тело целиком' },
-  { value: 'genitals', label: 'Интимная зона (реф.)' },
-  { value: 'other', label: 'Общий референс' },
-]
 
 function normalizeStudioImageKind(raw: string | undefined): StudioModelImageKind {
   if (
@@ -818,85 +743,6 @@ interface StudioCameraPreset {
 
 type AccountCabinetTab = 'overview' | 'billing' | 'integrations' | 'models' | 'team'
 
-const SUBSCRIPTION_STATUS_LABELS: Record<string, string> = {
-  none: 'Нет подписки',
-  incomplete: 'Оформление',
-  trialing: 'Пробный период',
-  active: 'Активна',
-  past_due: 'Просрочен платёж',
-  canceled: 'Отменена',
-  unpaid: 'Не оплачена',
-}
-
-const CREDIT_KIND_LABELS: Record<string, string> = {
-  studio_prompt_refine: 'Студия: генерация',
-  studio_image_upscale: 'Студия: апскейл',
-  studio_carousel_shot: 'Студия: карусель',
-  studio_model_profile_generate: 'Студия: профиль модели',
-  yookassa_credits_pack: 'Пополнение баланса',
-  tribute_credits_pack: 'Пополнение (Tribute)',
-  tribute_subscription_renewed: 'Продление (Tribute)',
-  yookassa_managed_subscription_bonus: 'Подписка Standard: бонус кредитов',
-  standard_subscription_bonus: 'Подписка Standard: бонус кредитов',
-  demo_studio_image: 'Бесплатная генерация',
-  admin_credit_adjustment: 'Изменение баланса',
-}
-
-function subscriptionStatusLabel(status: string | undefined): string {
-  if (!status) return '—'
-  return SUBSCRIPTION_STATUS_LABELS[status] ?? status
-}
-
-function creditKindLabel(kind: string): string {
-  return CREDIT_KIND_LABELS[kind] ?? kind
-}
-
-function formatDateTimeRu(iso: string | undefined | null): string {
-  if (!iso) return '—'
-  try {
-    return new Date(iso).toLocaleString('ru-RU', { dateStyle: 'medium', timeStyle: 'short' })
-  } catch {
-    return String(iso)
-  }
-}
-
-function formatNoteUpdatedAt(iso: string | undefined | null): string {
-  if (!iso) return '—'
-  try {
-    const updated = new Date(iso)
-    const now = new Date()
-    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-    const startOfUpdated = new Date(
-      updated.getFullYear(),
-      updated.getMonth(),
-      updated.getDate(),
-    )
-    const dayDiff = Math.round(
-      (startOfToday.getTime() - startOfUpdated.getTime()) / 86_400_000,
-    )
-    const time = updated.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
-    if (dayDiff === 0) return `сегодня, ${time}`
-    if (dayDiff === 1) return `вчера, ${time}`
-    if (dayDiff > 1 && dayDiff < 7) return `${dayDiff} дн. назад`
-    return formatDateTimeRu(iso)
-  } catch {
-    return String(iso)
-  }
-}
-
-function formatTributeMinor(amountMinor: number, currency: string): string {
-  const cur = (currency || 'USD').toUpperCase()
-  try {
-    return new Intl.NumberFormat('ru-RU', {
-      style: 'currency',
-      currency: cur,
-      maximumFractionDigits: 2,
-    }).format(amountMinor / 100)
-  } catch {
-    return `${(amountMinor / 100).toFixed(2)} ${cur}`
-  }
-}
-
 interface StudioAspectPreset {
   key: string
   label: string
@@ -955,15 +801,12 @@ interface StudioReferenceAnalysisResponse {
 
 const STUDIO_REFERENCE_ANALYSIS_MODES: StudioJobMode[] = ['model', 'no_face']
 
-const STUDIO_IMAGE_MODE_OPTIONS: { id: StudioJobMode; label: string }[] = [
-  { id: 'model_scene', label: 'Основная' },
-  { id: 'grok_compose', label: 'Face swap' },
-  { id: 'model', label: 'По промту' },
-  { id: 'photo_edit', label: 'Доработать фото' },
-  { id: 'no_face', label: 'Без лица' },
-]
-
 export default function App() {
+  const { t } = useTranslation('workspace')
+  const { t: tAuth } = useTranslation('auth')
+  const { t: ts } = useTranslation('studio')
+  const { t: tc } = useTranslation('chat')
+  const { t: tCommon } = useTranslation('common')
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const billingBannerCopy = useMemo(
@@ -1111,10 +954,14 @@ export default function App() {
     const emailLine = owner
       ? me.email
       : `${me.owner_email}${me.member_login ? ` · ${me.member_login}` : ''}`
-    const roleLine = owner ? 'владелец' : me.member_login ? `оператор · ${me.member_login}` : 'оператор'
+    const roleLine = owner
+      ? t('cabinet.roleOwner')
+      : me.member_login
+        ? t('cabinet.roleOperatorLogin', { login: me.member_login })
+        : t('cabinet.roleOperator')
     const seed = (owner ? me.email : me.member_login || me.email) || '?'
     return { emailLine, roleLine, initial: seed.charAt(0).toUpperCase() }
-  }, [me])
+  }, [me, t])
 
   const canPlatformAdmin = Boolean(me?.is_platform_admin)
 
@@ -1176,25 +1023,25 @@ export default function App() {
       if (integ?.tribute_configured) {
         return {
           label: '—',
-          hint: 'Донаты за текущий месяц (UTC). Если долго «—» — проверьте webhook URL в Tribute.',
+          hint: t('tribute.donationsHint'),
         }
       }
       return { label: null as string | null, hint: null as string | null }
     }
     const cur = tributeEarnings.currency || 'USD'
-    const label = formatTributeMinor(tributeEarnings.display_minor, cur)
+    const label = formatAppCurrency(tributeEarnings.display_minor, cur)
     const from = tributeEarnings.from_date
     const to = tributeEarnings.to_date
     const period = from === to ? from : `${from} — ${to}`
     if (tributeEarnings.event_count === 0) {
       return {
         label,
-        hint: `Нет webhook-событий за ${period}. В Tribute → Настройки → Webhooks укажите URL из раздела «Интеграции».`,
+        hint: t('tribute.noEvents', { period }),
       }
     }
     const hint = tributeEarnings.is_owner
-      ? `Полная сумма · ${period}${tributeEarnings.event_count ? ` · ${tributeEarnings.event_count} событий` : ''}`
-      : `${tributeEarnings.chatter_share_percent}% от дохода ваших моделей · ${period}`
+      ? t('tribute.ownerHint', { period, eventsPart: tributeEarnings.event_count ? t('tribute.ownerEvents', { count: tributeEarnings.event_count }) : '' })
+      : t('tribute.chatterHint', { percent: tributeEarnings.chatter_share_percent, period })
     return { label, hint }
   }, [tributeEarnings, integ?.tribute_configured])
 
@@ -1929,10 +1776,10 @@ export default function App() {
       setMotionVideoFileId(null)
       setError(
         e instanceof TypeError && e.message === 'Failed to fetch'
-          ? 'Сеть: не удалось загрузить видео на сервер.'
+          ? ts('runtime.videoUploadNetwork')
           : e instanceof Error
             ? e.message
-            : 'Ошибка загрузки видео',
+            : ts('runtime.videoUploadFailed'),
       )
     } finally {
       if (uploadSeq === motionVideoUploadSeqRef.current) {
@@ -2052,14 +1899,12 @@ export default function App() {
     if (fanvue === 'connected') {
       void refreshIntegrations()
     } else if (fanvue === 'error') {
-      setError('Не удалось подключить Fanvue. Проверьте scopes в Fanvue Developer Area и попробуйте снова.')
+      setError(tc('errors.fanvueConnect'))
     }
     if (instagram === 'connected') {
       void refreshIntegrations()
     } else if (instagram === 'error') {
-      setError(
-        'Не удалось подключить Instagram. Проверьте Business/Creator аккаунт, scopes и настройки Meta App.',
-      )
+      setError(tc('errors.instagramConnect'))
     }
     if (account || fanvue || instagram) {
       setSearchParams(
@@ -2294,12 +2139,12 @@ export default function App() {
   const motionVideoBtnBlockReason = useMemo((): string | null => {
     if (motionBusyVideo) return null
     if (studioNeedsUserWsKey) return studioIntegrationsHint()
-    if (studioSelectedModelId == null) return 'Выберите модель вверху страницы.'
+    if (studioSelectedModelId == null) return ts('runtime.selectModelTop')
     if (!motionHasFirstFrame) {
-      return 'Нужен первый кадр: архив, свой файл (и «Промпт по видео») или «Сгенерировать кадр».'
+      return ts('runtime.needFirstFrame')
     }
     if (!motionDesc.trim()) {
-      return 'Заполните краткий бриф для видео — хотя бы одной фразой.'
+      return ts('runtime.needVideoBrief')
     }
     return null
   }, [
@@ -2426,7 +2271,7 @@ export default function App() {
       setConversations([])
       return
     }
-    if (!r.ok) throw new Error('Не удалось загрузить диалоги')
+    if (!r.ok) throw new Error(tc('errors.loadConversations'))
     const data: Conversation[] = await r.json()
     setConversations(data)
   }, [])
@@ -2436,7 +2281,7 @@ export default function App() {
     p.set('limit', String(CHAT_MESSAGES_PAGE))
     if (before != null) p.set('before', String(before))
     const r = await apiFetch(`/api/conversations/${id}/messages?${p}`)
-    if (!r.ok) throw new Error('Не удалось загрузить сообщения')
+    if (!r.ok) throw new Error(tc('errors.loadMessages'))
     return (await r.json()) as ChatMessage[]
   }, [])
 
@@ -3098,7 +2943,7 @@ export default function App() {
       const updated = (await r.json()) as Conversation
       setConversations((prev) => prev.map((c) => (c.id === convId ? { ...c, ...updated } : c)))
     } catch {
-      setError('Не удалось сохранить язык ответа')
+      setError(tc('errors.saveReplyLang'))
     } finally {
       setOutboundLangBusy(false)
     }
@@ -3200,7 +3045,7 @@ export default function App() {
       const updated = (await r.json()) as Conversation
       setConversations((prev) => prev.map((c) => (c.id === convId ? { ...c, ...updated } : c)))
     } catch {
-      setError('Не удалось сохранить настройку перевода')
+      setError(tc('errors.saveTranslate'))
     } finally {
       setAutoTranslateBusy(false)
     }
@@ -3225,7 +3070,7 @@ export default function App() {
       setConversations((prev) => prev.map((c) => (c.id === convId ? { ...c, ...updated } : c)))
       void refreshCompanionHealth(convId)
     } catch {
-      setError('Не удалось сохранить режим AI-компаньона')
+      setError(tc('errors.saveCompanion'))
     } finally {
       setCompanionModeBusy(false)
     }
@@ -3249,7 +3094,7 @@ export default function App() {
       const updated = (await r.json()) as Conversation
       setConversations((prev) => prev.map((c) => (c.id === convId ? { ...c, ...updated } : c)))
     } catch {
-      setError('Не удалось назначить чатера')
+      setError(tc('errors.assignChatter'))
     } finally {
       setAssigneeBusy(false)
     }
@@ -3271,7 +3116,7 @@ export default function App() {
         body: JSON.stringify({ title, body }),
       })
       if (!r.ok) {
-        setError('Не удалось создать шаблон')
+        setError(tc('errors.createTemplate'))
         return
       }
       setNewSnippetTitle('')
@@ -3323,7 +3168,7 @@ export default function App() {
         ),
       )
     } catch {
-      setError('Не удалось сохранить категорию')
+      setError(tc('errors.saveCategory'))
     } finally {
       setConvCategoryBusy(false)
     }
@@ -3359,14 +3204,14 @@ export default function App() {
         ),
       )
     } catch {
-      setError('Не удалось изменить блокировку')
+      setError(tc('errors.saveBlock'))
     } finally {
       setConvBlockedBusy(false)
     }
   }
 
   const hideConversation = async (convId: number) => {
-    if (!window.confirm('Убрать диалог из списка? История сохранится, но чат исчезнет из списка.')) {
+    if (!window.confirm(tc('errors.hideConfirm'))) {
       return
     }
     setError(null)
@@ -3384,7 +3229,7 @@ export default function App() {
         setMessages([])
       }
     } catch {
-      setError('Не удалось убрать диалог из списка')
+      setError(tc('errors.hideFailed'))
     } finally {
       setConvHideBusy(false)
     }
@@ -3422,10 +3267,10 @@ export default function App() {
         prev.map((m) => (Number(m.id) === Number(updated.id) ? { ...m, ...updated } : m)),
       )
       if (updated.platform_sync_ok === false) {
-        setError('Реакция сохранена в чате, но Telegram не принял её — проверьте логи API.')
+        setError(tc('errors.reactionTelegram'))
       }
     } catch {
-      setError('Не удалось поставить реакцию')
+      setError(tc('errors.reactionFailed'))
     } finally {
       setReactionBusyKey(null)
     }
@@ -3479,7 +3324,7 @@ export default function App() {
         ? (
             replyTarget.text_original ||
             replyTarget.text_translated ||
-            'Сообщение'
+            tc('composer.messageFallback')
           ).slice(0, 160)
         : null,
     }
@@ -3556,7 +3401,7 @@ export default function App() {
       if (replyTarget) setReplyToMessage(replyTarget)
       if (fileToSend) setChatReplyFile(fileToSend)
       if (archiveIdToSend != null) setChatReplyArchiveId(archiveIdToSend)
-      setError('Не удалось отправить сообщение')
+      setError(tc('errors.sendFailed'))
     }
   }
 
@@ -3595,7 +3440,7 @@ export default function App() {
     try {
       const res = await fetch(url)
       if (!res.ok) {
-        setError('Не удалось загрузить изображение.')
+        setError(tc('errors.imageLoadFailed'))
         return
       }
       const blob = await res.blob()
@@ -3609,7 +3454,7 @@ export default function App() {
       ) {
         try {
           if (navigator.canShare({ files: [file] })) {
-            await navigator.share({ files: [file], title: 'Изображение' })
+            await navigator.share({ files: [file], title: tc('errors.shareImageTitle') })
             return
           }
         } catch (err: unknown) {
@@ -3630,7 +3475,7 @@ export default function App() {
       }
     } catch {
       setError(
-        'Не удалось скачать. На iPhone откройте меню «Поделиться» или удерживайте превью выше → «Сохранить в Фото».',
+        tc('errors.imageDownloadFailed'),
       )
     } finally {
       setStudioDownloadBusy(false)
@@ -3717,7 +3562,7 @@ export default function App() {
       const tryShareUrl = async (): Promise<boolean> => {
         if (!preferNativeShareOnMobile() || typeof navigator.share !== 'function') return false
         try {
-          await navigator.share({ title: 'Видео ModelMate', url })
+          await navigator.share({ title: ts('runtime.shareVideoTitle'), url })
           return true
         } catch (err: unknown) {
           if (err instanceof Error && err.name === 'AbortError') return true
@@ -3743,7 +3588,7 @@ export default function App() {
           navigator.canShare({ files: [file] })
         ) {
           try {
-            await navigator.share({ files: [file], title: 'Видео ModelMate' })
+            await navigator.share({ files: [file], title: ts('runtime.shareVideoTitle') })
             return
           } catch (err: unknown) {
             if (err instanceof Error && err.name === 'AbortError') return
@@ -3767,7 +3612,7 @@ export default function App() {
       window.open(url, '_blank', 'noopener,noreferrer')
     } catch {
       setError(
-        'Не удалось сохранить ролик. На iPhone: кнопка «Поделиться» или меню⋯ на плеере → «Сохранить видео».',
+        ts('runtime.videoDownloadFailed'),
       )
     } finally {
       setMotionVideoDownloadBusy(false)
@@ -3812,37 +3657,37 @@ export default function App() {
     setError(null)
     if (studioMode === 'photo_edit') {
       if (!studioFile && studioPhotoEditArchiveId == null) {
-        setError('В режиме «Доработать фото» загрузите изображение или выберите снимок из архива «Картинки».')
+        setError(ts('runtime.photoEditNeedImage'))
         return
       }
       if (!studioDesc.trim()) {
-        setError('Опишите, что изменить или исправить на фото.')
+        setError(ts('runtime.photoEditNeedPrompt'))
         return
       }
     } else if (studioMode === 'model_scene') {
       if (health?.studio_grok_scene_compose_configured === false) {
-        setError('Режим «Основная» использует Grok — на сервере нужен GROK_API_KEY.')
+        setError(ts('runtime.mainNeedsGrok'))
         return
       }
       if (studioSelectedModelId == null) {
-        setError('В режиме «Основная» выберите модель с развёрткой и профилем.')
+        setError(ts('runtime.mainNeedModel'))
         return
       }
       if (!studioFile) {
-        setError('Загрузите референс сцены — Grok возьмёт позу, свет и кадр; в генерацию уйдут только фото модели.')
+        setError(ts('runtime.mainNeedRef'))
         return
       }
     } else if (studioMode === 'model') {
       if (health?.studio_grok_scene_compose_configured === false) {
-        setError('Режим «По промту» использует Grok — на сервере нужен GROK_API_KEY.')
+        setError(ts('runtime.promptNeedsGrok'))
         return
       }
       if (studioSelectedModelId == null) {
-        setError('В режиме «По промту» выберите модель с фото «Тело целиком» в кабинете.')
+        setError(ts('runtime.promptNeedModel'))
         return
       }
       if (!studioDesc.trim()) {
-        setError('В режиме «По промту» опишите сцену в поле промпта.')
+        setError(ts('runtime.promptNeedText'))
         return
       }
     } else if (
@@ -3852,25 +3697,25 @@ export default function App() {
       !studioFile &&
       studioSelectedModelId == null
     ) {
-      setError('Добавьте описание, референс и/или выберите сохранённую модель.')
+      setError(ts('runtime.needInput'))
       return
     }
     if (studioMode === 'no_face' && studioSelectedModelId == null && !studioFile) {
-      setError('В режиме «Без лица» выберите модель или загрузите референс.')
+      setError(ts('runtime.noFaceNeedInput'))
       return
     }
     if (studioMode === 'grok_compose' || studioMode === 'face_swap') {
       if (health?.studio_grok_scene_compose_configured === false) {
-        setError('Grok не настроен на сервере (нужен GROK_API_KEY в .env).')
+        setError(ts('runtime.grokNotConfigured'))
         return
       }
       if (!studioFile) {
-        setError('Загрузите референс сцены (поза, свет, кадр).')
+        setError(ts('runtime.needSceneRef'))
         return
       }
       if (studioSelectedModelId == null && !studioIdentityFile) {
         setError(
-          'Face swap: выберите модель из кабинета или загрузите фото модели (identity).',
+          ts('gate.grokComposeNoIdentity'),
         )
         return
       }
@@ -3884,7 +3729,7 @@ export default function App() {
       (studioPaintInpaintMask || studioInpaintMaskFile != null)
     if (wantsInpaint && !hasStudioBaseImage) {
       setError(
-        'Для маски загрузите изображение или выберите снимок из архива (режим «Доработать фото»).',
+        ts('runtime.maskNeedImage'),
       )
       return
     }
@@ -3893,7 +3738,7 @@ export default function App() {
       inpaintAttach = (await studioMaskPainterRef.current?.getMaskFile()) ?? null
       if (!inpaintAttach) {
         setError(
-          'Включено «нарисовать маску»: закрасьте кистью область замены или снимите галочку.',
+          ts('runtime.maskNeedPaint'),
         )
         return
       }
@@ -3942,7 +3787,7 @@ export default function App() {
       if (useWorkflowPath) {
         if (studioMode === 'model_scene') {
           if (studioSelectedModelId == null || !studioFile) {
-            throw new Error('Основная: нужны модель и референс сцены.')
+            throw new Error(ts('runtime.workflowMainNeedInputs'))
           }
           ;({ accepted } = await buildAndStartPoRefuScenario({
             modelId: studioSelectedModelId,
@@ -3952,7 +3797,7 @@ export default function App() {
           }))
         } else if (studioMode === 'grok_compose' || studioMode === 'face_swap') {
           if (!studioFile) {
-            throw new Error('Face swap: загрузите референс сцены.')
+            throw new Error(ts('runtime.workflowFaceSwapNoScene'))
           }
           ;({ accepted } = await buildAndStartFaceSwapScenario({
             sceneFile: studioFile,
@@ -3963,7 +3808,7 @@ export default function App() {
           }))
         } else if (studioMode === 'model') {
           if (studioSelectedModelId == null) {
-            throw new Error('По промту: выберите модель.')
+            throw new Error(ts('runtime.workflowPromptNoModel'))
           }
           ;({ accepted } = await buildAndStartPromptOnlyScenario({
             modelId: studioSelectedModelId,
@@ -3972,7 +3817,7 @@ export default function App() {
           }))
         } else if (studioMode === 'photo_edit') {
           if (!studioFile) {
-            throw new Error('Доработка фото: загрузите снимок.')
+            throw new Error(ts('runtime.workflowPhotoEditNoImage'))
           }
           ;({ accepted } = await buildAndStartPhotoEditScenario({
             sceneFile: studioFile,
@@ -3981,7 +3826,7 @@ export default function App() {
             workflowDemoLimited,
           }))
         } else {
-          throw new Error('Режим студии не поддерживается через workflow.')
+          throw new Error(ts('runtime.workflowModeUnsupported'))
         }
       } else {
         const fd = new FormData()
@@ -4029,7 +3874,7 @@ export default function App() {
         setStudioPendingExternalImageUrl(null)
       }
       setStudioWavespeedMsg(
-        'Генерация запущена — смотрите прогресс в «Сохранённые». Результат подставится автоматически.',
+        ts('runtime.genStarted'),
       )
       void refreshMe()
       void syncStudioArchivePending()
@@ -4079,16 +3924,16 @@ export default function App() {
       const parts: string[] = []
       if (scene)
         parts.push(
-          'Первый кадр (сцена для вашей модели, без внешности из видео):\n' + scene,
+          ts('videoUi.grokSceneLine', { scene }),
         )
-      if (motion) parts.push('Движение по ролику (Grok timeline):\n' + motion)
+      if (motion) parts.push(ts('videoUi.grokMotionLine', { motion }))
       setMotionStep1Preview(parts.length > 0 ? parts.join('\n\n—\n\n') : null)
     }
     setMotionDesc((prev) => {
       if (prev.trim()) return prev
       const notes = motionFrameNotes.trim()
       if (notes) return notes
-      return 'Движение как в реф-видео. Сохранить сцену, одежду и свет с первого кадра.'
+      return ts('runtime.motionRefHint')
     })
   }
 
@@ -4132,7 +3977,7 @@ export default function App() {
         data: {
           generation_id: accepted.generation_id ?? null,
           wavespeed_message:
-            'Кадр генерируется — смотрите прогресс в «Сохранённые».',
+            ts('runtime.frameGenerating'),
         },
       }
     } catch (e) {
@@ -4155,8 +4000,8 @@ export default function App() {
     if (timeline) setMotionGrokTimeline(timeline)
     const scene = (data.reference_scene_description ?? '').trim()
     const parts: string[] = []
-    if (scene) parts.push('Кадр для модели:\n' + scene)
-    if (timeline) parts.push('Движение (Grok timeline):\n' + timeline)
+    if (scene) parts.push(ts('videoUi.grokFrameLine', { scene }))
+    if (timeline) parts.push(ts('videoUi.grokMotionLine', { motion: timeline }))
     setMotionStep1Preview(parts.length > 0 ? parts.join('\n\n—\n\n') : null)
     const gId = typeof data.generation_id === 'number' ? data.generation_id : null
     if (gId != null) {
@@ -4167,18 +4012,18 @@ export default function App() {
     if (data.motion_video_file_id) setMotionVideoFileId(data.motion_video_file_id)
     setMotionDesc((prev) => {
       if (prev.trim()) return prev
-      return 'Движение как в реф-видео. Сохранить сцену и свет с первого кадра.'
+      return ts('runtime.motionRefHintShort')
     })
   }
 
   const runMotionComposeVideoPrompt = async () => {
     setError(null)
     if (!motionVideoFileId) {
-      setError('Сначала загрузите референс-видео.')
+      setError(ts('runtime.needRefVideo'))
       return
     }
     if (studioSelectedModelId == null) {
-      setError('Выберите модель.')
+      setError(ts('runtime.selectModel'))
       return
     }
     if (
@@ -4186,7 +4031,7 @@ export default function App() {
       motionFrameArchiveId == null &&
       !motionFirstFrameFile
     ) {
-      setError('Нужен кадр: архив, свой файл или сгенерированный кадр.')
+      setError(ts('runtime.needFrame'))
       return
     }
     setMotionBusyCompose(true)
@@ -4226,17 +4071,17 @@ export default function App() {
     const hasStill =
       motionFrameArchiveId != null || motionFirstFrameFile != null || motionVideoFile != null
     if (!hasStill) {
-      setError('Загрузите референс-видео, файл первого кадра или выберите снимок из архива.')
+      setError(ts('runtime.needVideoOrFrame'))
       return
     }
     if (motionAutoPrompt && !motionVideoFile) {
       setError(
-        'Для авто-описания движения по ролику загрузите референс-видео (или отключите опцию).',
+        ts('runtime.needVideoForMotion'),
       )
       return
     }
     if (studioSelectedModelId == null) {
-      setError('Выберите модель.')
+      setError(ts('runtime.selectModel'))
       return
     }
     setMotionBusyFrame(true)
@@ -4248,7 +4093,7 @@ export default function App() {
     setMotionPendingExternalStillUrl(null)
     const { item: optimisticFrame, tempId: optimisticFrameTempId } = studioArchiveOptimisticOpts(
       'image',
-      motionFrameNotes.trim() || 'Первый кадр…',
+      motionFrameNotes.trim() || ts('videoUi.frameBusy'),
     )
     pushOptimisticStudioGeneration(optimisticFrame)
     try {
@@ -4277,15 +4122,15 @@ export default function App() {
   const runMotionRenderVideo = async () => {
     setError(null)
     if (studioSelectedModelId == null) {
-      setError('Выберите модель с фото (лучше — развёртка / character sheet).')
+      setError(ts('runtime.needModelWithPhotos'))
       return
     }
     if (!motionDesc.trim()) {
-      setError('Опишите сцену, движение и при необходимости одежду. Можно использовать @Image1 в тексте.')
+      setError(ts('runtime.needT2vPrompt'))
       return
     }
     if (motionPreviewGenId == null) {
-      setError('Нужен первый кадр: выберите из архива, загрузите файл или сгенерируйте кадр.')
+      setError(ts('runtime.needFirstFramePick'))
       return
     }
 
@@ -4332,7 +4177,7 @@ export default function App() {
       resolveOptimisticStudioGeneration(optimisticVideoTempId, videoGid)
       setMotionResultVideoUrl(null)
       setMotionMsg(
-        'Видео генерируется — заглушка в «Сохранённые», обычно 10–40 мин. Обновление по готовности автоматически.',
+        ts('runtime.videoGenerating'),
       )
       void refreshMe()
       void syncStudioArchivePending()
@@ -4348,7 +4193,7 @@ export default function App() {
 
   const upscaleStudioGeneration = async () => {
     if (studioGenGenerationId == null) {
-      setError('Откройте картинку из блока «Сохранённые» или сгенерируйте заново — нужна запись архива.')
+      setError(ts('runtime.openFromArchive'))
       return
     }
     setError(null)
@@ -4385,7 +4230,7 @@ export default function App() {
         }
       } else {
         setStudioPendingExternalImageUrl(null)
-        setStudioWavespeedMsg(data.message?.trim() || 'Апскейл не выполнен.')
+        setStudioWavespeedMsg(data.message?.trim() || ts('runtime.upscaleFailed'))
       }
       void refreshMe()
       void loadStudioGenerationsReset()
@@ -4398,7 +4243,7 @@ export default function App() {
 
   const runStudioCarousel = async (count: number) => {
     if (studioGenGenerationId == null) {
-      setError('Сначала сгенерируйте или откройте снимок в «Результат», чтобы был сохранённый кадр.')
+      setError(ts('runtime.needResultFrame'))
       return
     }
     setError(null)
@@ -4420,10 +4265,10 @@ export default function App() {
       const items = data.items ?? []
       const note = (data.message ?? '').trim()
       if (items.length > 0 && note) {
-        setStudioWavespeedMsg(`Сохранено кадров: ${items.length}. ${note}`)
+        setStudioWavespeedMsg(ts('runtime.carouselSaved', { count: items.length, note }))
       } else if (items.length > 0) {
         setStudioWavespeedMsg(
-          `Карусель: добавлено ${items.length} кадров — смотрите в «Сохранённые».`,
+          ts('runtime.carouselAdded', { count: items.length }),
         )
       } else if (note) {
         setStudioWavespeedMsg(note)
@@ -4441,7 +4286,7 @@ export default function App() {
     setError(null)
     const k = wsApiKey.trim()
     if (k.length < 8) {
-      setError('Вставьте API-ключ WaveSpeed (личный кабинет wavespeed.ai).')
+      setError(ts('runtime.wsKeyPersonal'))
       return
     }
     const r = await apiFetch('/api/integrations/wavespeed', {
@@ -4462,7 +4307,7 @@ export default function App() {
     setError(null)
     const k = llmApiKey.trim()
     if (k.length < 8) {
-      setError('Вставьте API-ключ WaveSpeed (тариф Pro).')
+      setError(ts('runtime.wsKeyPro'))
       return
     }
     const bu = llmBaseUrl.trim()
@@ -4483,7 +4328,7 @@ export default function App() {
   const generateModelProfileFromPhotos = async () => {
     setError(null)
     if (newModelPhotos.length === 0) {
-      setError(`Сначала выберите фото модели (до ${STUDIO_MODEL_MAX_IMAGES} файлов).`)
+      setError(ts('runtime.needModelPhotos', { max: STUDIO_MODEL_MAX_IMAGES }))
       return
     }
     setNewModelProfileGenBusy(true)
@@ -4549,13 +4394,13 @@ export default function App() {
     setError(null)
     const name = newModelName.trim()
     if (!name) {
-      setError('Укажите название модели.')
+      setError(ts('runtime.needModelName'))
       return
     }
     const lt = newModelExportLat.trim()
     const ln = newModelExportLon.trim()
     if ((lt && !ln) || (!lt && ln)) {
-      setError('Укажите и широту, и долготу для ГЕО, или оставьте оба поля пустыми.')
+      setError(ts('runtime.geoBothOrNone'))
       return
     }
     const fd = new FormData()
@@ -4617,7 +4462,7 @@ export default function App() {
     const lt = d.export_lat.trim()
     const ln = d.export_lon.trim()
     if ((lt && !ln) || (!lt && ln)) {
-      setError('Укажите и широту, и долготу для ГЕО, или оставьте оба поля пустыми.')
+      setError(ts('runtime.geoBothOrNone'))
       return
     }
     let export_lat: number | null = null
@@ -4626,7 +4471,7 @@ export default function App() {
       export_lat = parseFloat(lt.replace(',', '.'))
       export_lon = parseFloat(ln.replace(',', '.'))
       if (Number.isNaN(export_lat) || Number.isNaN(export_lon)) {
-        setError('Широта и долгота должны быть числами (например 55.7558 и 37.6173).')
+        setError(ts('runtime.geoInvalid'))
         return
       }
     }
@@ -4750,7 +4595,7 @@ export default function App() {
     setError(null)
     const tok = tgToken.trim()
     if (tok.length < 15) {
-      setError('Вставьте полный токен бота от BotFather (обычно длиннее 40 символов).')
+      setError(ts('runtime.tgTokenShort'))
       return
     }
     const body: Record<string, unknown> = { bot_token: tok }
@@ -4794,7 +4639,7 @@ export default function App() {
       }
       const j = (await r.json()) as { authorize_url?: string }
       if (!j.authorize_url) {
-        setError('Fanvue OAuth: пустой authorize_url')
+        setError(ts('runtime.fanvueEmptyAuth'))
         return
       }
       window.location.href = j.authorize_url
@@ -4846,9 +4691,12 @@ export default function App() {
       const chats = j.chats_processed ?? 0
       const skipped = j.messages_skipped ?? 0
       setFvSyncNote(
-        `История загружена: ${imported} сообщений в ${chats} диалогах` +
-          (skipped ? ` (${skipped} уже были в базе)` : '') +
-          (j.errors?.length ? `. Предупреждений: ${j.errors.length}` : ''),
+        tc('import.historyLoaded', {
+          imported,
+          chats,
+          skipped: skipped ? tc('import.skipped', { count: skipped }) : '',
+          warnings: j.errors?.length ? tc('import.warnings', { count: j.errors.length }) : '',
+        }),
       )
     } finally {
       setFvBusy(false)
@@ -4861,7 +4709,7 @@ export default function App() {
     try {
       await navigator.clipboard.writeText(url)
     } catch {
-      setError('Не удалось скопировать URL webhook')
+      setError(ts('runtime.webhookCopyFailed'))
     }
   }
 
@@ -4883,7 +4731,7 @@ export default function App() {
       }
       const j = (await r.json()) as { authorize_url?: string }
       if (!j.authorize_url) {
-        setError('Instagram OAuth: пустой authorize_url')
+        setError(ts('runtime.igEmptyAuth'))
         return
       }
       window.location.href = j.authorize_url
@@ -4915,7 +4763,7 @@ export default function App() {
     setError(null)
     const key = tributeApiKey.trim()
     if (key.length < 8) {
-      setError('Вставьте API-ключ Tribute из панели автора (Настройки → API Keys).')
+      setError(ts('runtime.tributeKey'))
       return
     }
     const body: Record<string, unknown> = { api_key: key }
@@ -4959,7 +4807,7 @@ export default function App() {
     try {
       await navigator.clipboard.writeText(url)
     } catch {
-      setError('Не удалось скопировать URL webhook')
+      setError(ts('runtime.webhookCopyFailed'))
     }
   }
 
@@ -4967,11 +4815,11 @@ export default function App() {
     setError(null)
     const login = newTeamLogin.trim().toLowerCase()
     if (login.length < 3) {
-      setError('Логин сотрудника: от 3 символов (латиница, цифры, подчёркивание).')
+      setError(ts('runtime.memberLoginShort'))
       return
     }
     if (newTeamPassword.length < 8) {
-      setError('Пароль сотрудника: минимум 8 символов.')
+      setError(ts('runtime.memberPasswordShort'))
       return
     }
     setTeamBusy(true)
@@ -4981,7 +4829,7 @@ export default function App() {
       if (shareRaw !== '') {
         const n = Number(shareRaw)
         if (!Number.isFinite(n) || n < 0 || n > 100) {
-          setError('Доля Tribute: число от 0 до 100.')
+          setError(ts('runtime.tributeShareInvalid'))
           return
         }
         tributeSharePercent = Math.round(n)
@@ -5018,7 +4866,7 @@ export default function App() {
     const mask = memberMaskEdits[row.id] ?? row.permissions_mask
     const pwd = (memberEditPassword[row.id] || '').trim()
     if (pwd.length > 0 && pwd.length < 8) {
-      setError('Новый пароль: минимум 8 символов или оставьте поле пустым.')
+      setError(ts('runtime.memberPasswordNew'))
       return
     }
     setTeamBusy(true)
@@ -5027,7 +4875,7 @@ export default function App() {
       const shareRaw = (memberTributeEdits[row.id] ?? String(row.tribute_share_percent)).trim()
       const n = Number(shareRaw)
       if (!Number.isFinite(n) || n < 0 || n > 100) {
-        setError('Доля Tribute: число от 0 до 100.')
+        setError(ts('runtime.tributeShareInvalid'))
         return
       }
       const body: {
@@ -5074,7 +4922,7 @@ export default function App() {
   }
 
   const removeWorkspaceMember = async (id: number) => {
-    if (!window.confirm('Удалить участника? Его доступ будет отозван.')) return
+    if (!window.confirm(ts('runtime.deleteMemberConfirm'))) return
     setError(null)
     const r = await apiFetch(`/api/workspace/members/${id}`, { method: 'DELETE' })
     if (!r.ok) {
@@ -5165,7 +5013,7 @@ export default function App() {
       <div className="app">
         <div className="app-bg" aria-hidden />
         <p className="muted" style={{ padding: '2rem' }}>
-          Загрузка…
+          {tAuth('loading')}
         </p>
       </div>
     )
@@ -5180,14 +5028,13 @@ export default function App() {
             <img src="/brand-icon.svg" alt="" className="brand-mark" width={40} height={40} aria-hidden />
             <div>
               <h1>ModelMate</h1>
-              <p className="sub">
-                Студия ведения AI-моделей: регистрация, чат с переводом и подключение каналов
-              </p>
+              <p className="sub">{tAuth('appTagline')}</p>
             </div>
           </div>
+          <AppLanguageSwitcher />
         </header>
         <nav
-          aria-label="Справочные страницы"
+          aria-label={tAuth('helpNavAria')}
           style={{
             display: 'flex',
             justifyContent: 'center',
@@ -5198,22 +5045,22 @@ export default function App() {
           }}
         >
           <Link to="/" className="ghost-btn" style={{ padding: '0.35rem 0.75rem', fontSize: 'inherit' }}>
-            Главная сайта
+            {tAuth('home')}
           </Link>
           <Link to="/pricing" className="ghost-btn" style={{ padding: '0.35rem 0.75rem', fontSize: 'inherit' }}>
-            Тарифы
+            {tAuth('pricing')}
           </Link>
           <Link to="/faq" className="ghost-btn" style={{ padding: '0.35rem 0.75rem', fontSize: 'inherit' }}>
-            FAQ
+            {tAuth('faq')}
           </Link>
           <Link to="/privacy" className="ghost-btn" style={{ padding: '0.35rem 0.75rem', fontSize: 'inherit' }}>
-            Конфиденциальность
+            {tAuth('privacy')}
           </Link>
           <Link to="/terms" className="ghost-btn" style={{ padding: '0.35rem 0.75rem', fontSize: 'inherit' }}>
-            Соглашение
+            {tAuth('terms')}
           </Link>
           <Link to="/login" className="ghost-btn" style={{ padding: '0.35rem 0.75rem', fontSize: 'inherit' }}>
-            Отдельная страница входа
+            {tAuth('loginPageLink')}
           </Link>
         </nav>
         <main className="auth-page">
@@ -5310,11 +5157,11 @@ export default function App() {
                   clearBillingQuery()
                 }}
               >
-                Тариф и пополнение
+                {t('billingReturn.goBilling')}
               </button>
             ) : null}
             <button type="button" className="ghost-btn" onClick={clearBillingQuery}>
-              Закрыть
+              {tCommon('close')}
             </button>
           </div>
         </div>
@@ -5330,14 +5177,14 @@ export default function App() {
               type="button"
               className="thread-mobile-dock-back"
               onClick={() => setSelectedId(null)}
-              aria-label="Назад к списку диалогов"
+              aria-label={tc('dock.backAria')}
             >
               <span aria-hidden>‹</span>
             </button>
             <div
               className="thread-mobile-dock-scroll"
               role="tablist"
-              aria-label="Другие диалоги"
+              aria-label={tc('dock.otherDialogsAria')}
             >
               {filteredConversations.map((c) => (
                 <ChatStripItem
@@ -5385,11 +5232,9 @@ export default function App() {
 
       {!hasAnyMainSection ? (
         <div className="banner info" style={{ margin: '0 1rem', display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center' }}>
-          <span>
-            Нет доступа к диалогам и студии по правам аккаунта. Откройте кабинет или обратитесь к владельцу.
-          </span>
+          <span>{t('cabinet.noAccessBanner')}</span>
           <button type="button" className="ghost-btn" onClick={() => setAccountOpen(true)}>
-            Личный кабинет
+            {t('accessDenied.openCabinet')}
           </button>
         </div>
       ) : null}
@@ -5401,7 +5246,7 @@ export default function App() {
               type="button"
               className="mm-cabinet-header-back"
               onClick={() => setAccountOpen(false)}
-              aria-label="Закрыть кабинет"
+              aria-label={t('cabinet.closeAria')}
             >
               ‹
             </button>
@@ -5410,7 +5255,7 @@ export default function App() {
                 M
               </div>
               <div>
-                <div className="mm-cabinet-header-title">Личный кабинет</div>
+                <div className="mm-cabinet-header-title">{t('cabinet.title')}</div>
                 <div className="mm-cabinet-header-meta">
                   {cabinetAccountMeta.emailLine} · {cabinetAccountMeta.roleLine}
                 </div>
@@ -5422,10 +5267,11 @@ export default function App() {
                 ◆
               </span>
               <span className="mm-cabinet-header-credits-value">
-                {(me?.credits_balance ?? 0).toLocaleString('ru-RU')}
+                {formatAppNumber(me?.credits_balance ?? 0)}
               </span>
-              <span className="mm-cabinet-header-credits-unit">кр.</span>
+              <span className="mm-cabinet-header-credits-unit">{t('cabinet.creditsUnit')}</span>
             </div>
+            <AppLanguageSwitcher className="mm-lang-switch mm-lang-switch--compact mm-cabinet-lang" />
             <div className="mm-cabinet-header-avatar" aria-hidden>
               {cabinetAccountMeta.initial}
             </div>
@@ -5433,8 +5279,8 @@ export default function App() {
 
           <div className="mm-cabinet-body">
             <div className="mm-cabinet-page-head">
-              <div className="mm-cabinet-page-kicker">Аккаунт</div>
-              <h1 className="mm-cabinet-page-title">Личный кабинет</h1>
+              <div className="mm-cabinet-page-kicker">{t('cabinet.kicker')}</div>
+              <h1 className="mm-cabinet-page-title">{t('cabinet.title')}</h1>
             </div>
 
             {error ? (
@@ -5444,7 +5290,7 @@ export default function App() {
             ) : null}
 
             <div className="mm-cabinet-tabs-wrap">
-              <div className="account-cabinet-tabs" role="tablist" aria-label="Разделы кабинета">
+              <div className="account-cabinet-tabs" role="tablist" aria-label={t('cabinet.tabsAria')}>
                 <button
                   type="button"
                   role="tab"
@@ -5455,7 +5301,7 @@ export default function App() {
                   <span className="account-cabinet-tab__icon" aria-hidden>
                     ▦
                   </span>
-                  <span>Обзор</span>
+                  <span>{t('cabinet.tabOverview')}</span>
                 </button>
                 {isOwner ? (
                   <button
@@ -5468,7 +5314,7 @@ export default function App() {
                     <span className="account-cabinet-tab__icon" aria-hidden>
                       ◈
                     </span>
-                    <span>Тариф и баланс</span>
+                    <span>{t('cabinet.tabBilling')}</span>
                   </button>
                 ) : null}
                 <button
@@ -5481,7 +5327,7 @@ export default function App() {
                   <span className="account-cabinet-tab__icon" aria-hidden>
                     ⎔
                   </span>
-                  <span>Подключения</span>
+                  <span>{t('cabinet.tabConnections')}</span>
                 </button>
                 {canStudioModels ? (
                   <button
@@ -5494,7 +5340,7 @@ export default function App() {
                     <span className="account-cabinet-tab__icon" aria-hidden>
                       ◉
                     </span>
-                    <span>Модели</span>
+                    <span>{t('cabinet.tabModels')}</span>
                   </button>
                 ) : null}
                 {isOwner ? (
@@ -5508,7 +5354,7 @@ export default function App() {
                     <span className="account-cabinet-tab__icon" aria-hidden>
                       ⚇
                     </span>
-                    <span>Команда</span>
+                    <span>{t('cabinet.tabTeam')}</span>
                   </button>
                 ) : null}
               </div>
@@ -5517,32 +5363,30 @@ export default function App() {
             <div className="mm-cabinet-content">
           {accountTab === 'overview' && (
             <div className="account-cabinet-pane cabinet-overview" role="tabpanel">
-              <p className="cabinet-lead muted">
-                Сводка по аккаунту. Тариф, оплата и история кредитов — в разделе «Тариф и баланс» (владелец).
-              </p>
+              <p className="cabinet-lead muted">{t('cabinet.overviewIntro')}</p>
               <div className="cabinet-dashboard-grid">
                 <div className="cabinet-dash-card">
-                  <div className="cabinet-dash-label">Баланс кредитов</div>
+                  <div className="cabinet-dash-label">{t('cabinet.creditBalance')}</div>
                   <div className="cabinet-dash-value">{me?.credits_balance ?? '—'}</div>
-                  <p className="cabinet-dash-hint muted">Общий для пространства</p>
+                  <p className="cabinet-dash-hint muted">{t('cabinet.creditBalanceHint')}</p>
                 </div>
                 <div className="cabinet-dash-card">
-                  <div className="cabinet-dash-label">Тариф</div>
+                  <div className="cabinet-dash-label">{t('cabinet.planLabel')}</div>
                   <div className="cabinet-dash-value">{planDisplayShort(me)}</div>
                   <p className="cabinet-dash-hint muted">{planDisplayLong(me)}</p>
                 </div>
                 <div className="cabinet-dash-card">
-                  <div className="cabinet-dash-label">Операторов</div>
+                  <div className="cabinet-dash-label">{t('cabinet.operatorsLabel')}</div>
                   <div className="cabinet-dash-value">{me?.operators_count ?? 0}</div>
-                  <p className="cabinet-dash-hint muted">Сотрудники без учёта владельца</p>
+                  <p className="cabinet-dash-hint muted">{t('cabinet.operatorsHint')}</p>
                 </div>
                 <div className="cabinet-dash-card">
-                  <div className="cabinet-dash-label">Подписка</div>
+                  <div className="cabinet-dash-label">{t('cabinet.subscriptionLabel')}</div>
                   <div className="cabinet-dash-value">{subscriptionStatusLabel(me?.subscription_status)}</div>
                   <p className="cabinet-dash-hint muted">
                     {me?.subscription_period_end
-                      ? `До ${formatDateTimeRu(me.subscription_period_end)}`
-                      : 'Оформите тариф при необходимости'}
+                      ? t('cabinet.subscriptionUntil', { date: formatDateTimeApp(me.subscription_period_end) })
+                      : t('cabinet.subscriptionNeedPlan')}
                   </p>
                 </div>
               </div>
@@ -5550,14 +5394,24 @@ export default function App() {
               me?.billing_require_active_subscription &&
               normalizeBillingPlan(me.billing_plan) === 'credits' ? (
                 <div className="banner info" style={{ marginTop: '1rem' }}>
-                  <strong>Бесплатный старт:</strong> осталось {me.demo_generations_remaining} из{' '}
-                  {me.demo_generations_grant ?? 3} бесплатных генераций картинок. Пополните кредиты или оформите
-                  Standard / Pro, когда закончатся.
+                  <Trans
+                    i18nKey="cabinet.demoBanner"
+                    ns="workspace"
+                    values={{
+                      remaining: me.demo_generations_remaining,
+                      grant: me.demo_generations_grant ?? 3,
+                    }}
+                    components={{ strong: <strong /> }}
+                  />
                 </div>
               ) : me?.billing_require_active_subscription && !studioAccessAllowed(me) ? (
                 <div className="banner info" style={{ marginTop: '1rem' }}>
-                  Для студии нужна активная подписка. Сейчас:{' '}
-                  <strong>{subscriptionStatusLabel(me?.subscription_status)}</strong>.
+                  <Trans
+                    i18nKey="cabinet.studioSubRequired"
+                    ns="workspace"
+                    values={{ status: subscriptionStatusLabel(me?.subscription_status) }}
+                    components={{ strong: <strong /> }}
+                  />
                 </div>
               ) : null}
               {isOwner && me?.email_setup_required ? (
@@ -5573,17 +5427,19 @@ export default function App() {
               ) : null}
               {isOwner ? (
                 <div className="cabinet-identity-block" style={{ marginTop: '1.25rem' }}>
-                  <h4 className="account-sub">Telegram</h4>
+                  <h4 className="account-sub">{t('cabinet.telegramTitle')}</h4>
                   {me?.telegram_linked ? (
                     <p className="muted">
-                      Привязан{me.telegram_username ? `: @${me.telegram_username}` : ''}. Нужен для
-                      международной оплаты через Tribute.
+                      {t('cabinet.telegramLinked', {
+                        username: me.telegram_username
+                          ? t('cabinet.telegramLinkedUser', { username: me.telegram_username })
+                          : '',
+                      })}
                     </p>
                   ) : health?.telegram_login_configured && health.telegram_login_bot_username ? (
                     <>
                       <p className="muted" style={{ marginBottom: '0.75rem' }}>
-                        Привяжите Telegram к аккаунту владельца — для оплаты без российской карты и входа в один
-                        клик.
+                        {t('cabinet.telegramLinkHint')}
                       </p>
                       <TelegramLoginButton
                         botUsername={health.telegram_login_bot_username}
@@ -5596,7 +5452,7 @@ export default function App() {
                       />
                     </>
                   ) : (
-                    <p className="muted">Telegram Login на сервере не настроен.</p>
+                    <p className="muted">{t('cabinet.telegramNotConfigured')}</p>
                   )}
                   {me?.telegram_linked && me.public_email ? (
                     <button
@@ -5605,12 +5461,7 @@ export default function App() {
                       style={{ marginTop: '0.75rem' }}
                       onClick={() =>
                         void (async () => {
-                          if (
-                            !window.confirm(
-                              'Отвязать Telegram? Понадобится email и пароль для входа.',
-                            )
-                          )
-                            return
+                          if (!window.confirm(t('cabinet.telegramUnlinkConfirm'))) return
                           const r = await apiFetch('/api/auth/telegram/link', { method: 'DELETE' })
                           if (!r.ok) {
                             const j = await r.json().catch(() => ({}))
@@ -5621,7 +5472,7 @@ export default function App() {
                         })()
                       }
                     >
-                      Отвязать Telegram
+                      {t('cabinet.telegramUnlink')}
                     </button>
                   ) : null}
                 </div>
@@ -5629,20 +5480,20 @@ export default function App() {
               <div className="cabinet-overview-actions">
                 {isOwner ? (
                   <button type="button" className="ghost-btn" onClick={() => setAccountTab('billing')}>
-                    Тариф и баланс
+                    {t('cabinet.goBilling')}
                   </button>
                 ) : null}
                 <button type="button" className="ghost-btn" onClick={() => setAccountTab('integrations')}>
-                  Подключения
+                  {t('cabinet.goConnections')}
                 </button>
                 {isOwner ? (
                   <button type="button" className="ghost-btn" onClick={() => setAccountTab('team')}>
-                    Команда
+                    {t('cabinet.goTeam')}
                   </button>
                 ) : null}
                 {canPlatformAdmin ? (
                   <Link to="/admin" className="ghost-btn cabinet-admin-link">
-                    Админ-панель
+                    {t('cabinet.adminPanel')}
                   </Link>
                 ) : null}
               </div>
@@ -5652,16 +5503,14 @@ export default function App() {
           {accountTab === 'billing' && isOwner && (
             <div className="account-cabinet-pane" role="tabpanel">
               <p className="cabinet-lead muted">
-                <strong>Здесь выбираете тариф</strong> (Standard или Pro) <strong>и оплачиваете</strong> подписку.
-                Пакет кредитов доступен на Credits и Standard.
+                <Trans i18nKey="cabinet.billing.lead1" ns="workspace" components={{ strong: <strong /> }} />
               </p>
               <p className="cabinet-lead muted">
-                <strong>Standard</strong> — кредиты на студию включены, чат и команда.{' '}
-                <strong>Pro</strong> — свой ключ WaveSpeed, генерации не списывают кредиты платформы.
+                <Trans i18nKey="cabinet.billing.lead2" ns="workspace" components={{ strong: <strong /> }} />
               </p>
               <div className="cabinet-module cabinet-module--highlight">
                 <div className="cabinet-module-head">
-                  <span className="cabinet-module-title">Текущее состояние</span>
+                  <span className="cabinet-module-title">{t('cabinet.billing.currentState')}</span>
                   <span
                     className={`cabinet-module-badge ${me?.subscription_status === 'active' ? 'is-ok' : 'is-warn'}`}
                   >
@@ -5671,23 +5520,42 @@ export default function App() {
                 <p className="cabinet-module-body">{planDisplayLong(me)}</p>
                 <p className="muted cabinet-module-meta">
                   {me?.subscription_period_end
-                    ? `Период до ${formatDateTimeRu(me.subscription_period_end)}`
-                    : 'Дата окончания появится после оплаты'}
-                  {' · '}Баланс: <strong>{me?.credits_balance ?? 0}</strong> кр.
+                    ? t('cabinet.billing.periodUntil', {
+                        date: formatDateTimeApp(me.subscription_period_end),
+                      })
+                    : t('cabinet.billing.periodAfterPay')}
+                  {' · '}
+                  <Trans
+                    i18nKey="cabinet.billing.balanceLine"
+                    ns="workspace"
+                    values={{ balance: me?.credits_balance ?? 0 }}
+                    components={{ strong: <strong /> }}
+                  />
                 </p>
                 {me?.plan_usage ? (
                   <ul className="muted small" style={{ margin: '0.75rem 0 0', paddingLeft: '1.1rem' }}>
                     <li>
-                      Пользователи: {me.plan_usage.users} / {me.plan_usage.limits.max_users}
+                      {t('cabinet.billing.usageUsers', {
+                        current: me.plan_usage.users,
+                        max: me.plan_usage.limits.max_users,
+                      })}
                     </li>
                     <li>
-                      Модели: {me.plan_usage.models} / {me.plan_usage.limits.max_models}
+                      {t('cabinet.billing.usageModels', {
+                        current: me.plan_usage.models,
+                        max: me.plan_usage.limits.max_models,
+                      })}
                     </li>
                     <li>
-                      Диалоги в месяце: {me.plan_usage.dialogs_this_month}
-                      {me.plan_usage.limits.max_dialogs_per_month != null
-                        ? ` / ${me.plan_usage.limits.max_dialogs_per_month}`
-                        : ' · без лимита'}
+                      {t('cabinet.billing.usageDialogs', {
+                        current: me.plan_usage.dialogs_this_month,
+                        limit:
+                          me.plan_usage.limits.max_dialogs_per_month != null
+                            ? t('cabinet.billing.usageDialogsLimit', {
+                                max: me.plan_usage.limits.max_dialogs_per_month,
+                              })
+                            : t('cabinet.billing.usageDialogsUnlimited'),
+                      })}
                     </li>
                   </ul>
                 ) : null}
@@ -5695,42 +5563,53 @@ export default function App() {
               {referralInfo ? (
                 <div className="cabinet-module" style={{ marginBottom: '1rem' }}>
                   <div className="cabinet-module-head">
-                    <span className="cabinet-module-title">Реферальная программа</span>
+                    <span className="cabinet-module-title">{t('cabinet.billing.referralTitle')}</span>
                   </div>
                   <p className="cabinet-module-body muted small">
-                    Друг по ссылке: +{referralInfo.friend_referral_credits} кр. С каждой оплаты приглашённого:{' '}
-                    <strong>{referralInfo.referrer_reward_summary}</strong>
-                    {referralInfo.credits_earned > 0
-                      ? ` Уже начислено: ${referralInfo.credits_earned} кр.`
-                      : null}
-                    . Подписку можно оплатить кредитами (1 кр. = {referralInfo.credit_unit_price_rub} ₽).
+                    <Trans
+                      i18nKey="cabinet.billing.referralBody"
+                      ns="workspace"
+                      values={{
+                        friendCredits: referralInfo.friend_referral_credits,
+                        reward: referralInfo.referrer_reward_summary,
+                        earned:
+                          referralInfo.credits_earned > 0
+                            ? t('cabinet.billing.referralEarned', {
+                                amount: referralInfo.credits_earned,
+                              })
+                            : '',
+                        rubPerCredit: referralInfo.credit_unit_price_rub,
+                      }}
+                      components={{ strong: <strong /> }}
+                    />
                   </p>
                   <p className="mono small" style={{ wordBreak: 'break-all' }}>
                     {referralInfo.referral_link}
                   </p>
                   <p className="muted small">
-                    Приглашено: {referralInfo.invited_count} · Заработано: {referralInfo.credits_earned} кр.
+                    {t('cabinet.billing.referralStats', {
+                      invited: referralInfo.invited_count,
+                      earned: referralInfo.credits_earned,
+                    })}
                   </p>
                 </div>
               ) : null}
-              <h4 className="account-sub">Тариф и пополнение</h4>
+              <h4 className="account-sub">{t('cabinet.billing.plansTitle')}</h4>
               {me?.tribute_billing_available && !me?.telegram_linked ? (
                 <div className="banner info" style={{ marginBottom: '0.75rem' }}>
-                  Для оплаты через Tribute привяжите Telegram в разделе «Обзор» — иначе платёж не будет
-                  зачислен на аккаунт.
+                  {t('cabinet.billing.tributeNeedTelegram')}
                 </div>
               ) : null}
               {me?.online_payment_available || me?.tribute_billing_available ? (
                 <>
                   {me?.online_payment_available ? (
                     <p className="muted" style={{ marginBottom: '0.75rem' }}>
-                      Оплата банковской картой (РФ). После успешной оплаты вернитесь в кабинет.
+                      {t('cabinet.billing.cardPayHint')}
                     </p>
                   ) : null}
                   {me?.tribute_billing_available ? (
                     <p className="muted" style={{ marginBottom: '0.75rem' }}>
-                      Tribute — карта / Stars / крипта (международная оплата). Откроется страница оплаты;
-                      доступ обновится автоматически в течение минуты.
+                      {t('cabinet.billing.tributePayHint')}
                     </p>
                   ) : null}
                   <div className="mkt-pricing-toggles" style={{ marginBottom: '0.75rem' }}>
@@ -5753,14 +5632,14 @@ export default function App() {
                       className={billingPayPeriod === 'month' ? 'mkt-toggle active' : 'mkt-toggle'}
                       onClick={() => setBillingPayPeriod('month')}
                     >
-                      Месяц
+                      {t('cabinet.billing.month')}
                     </button>
                     <button
                       type="button"
                       className={billingPayPeriod === 'year' ? 'mkt-toggle active' : 'mkt-toggle'}
                       onClick={() => setBillingPayPeriod('year')}
                     >
-                      Год
+                      {t('cabinet.billing.year')}
                     </button>
                   </div>
                   <div className="cabinet-yookassa-rows">
@@ -5783,12 +5662,11 @@ export default function App() {
                               <div>
                                 <div className="cabinet-offer-title">{row.title}</div>
                                 <p className="muted small" style={{ margin: '0.35rem 0 0' }}>
-                                  Покупка кредитов доступна на тарифе Credits или после оплаты подписки Standard
-                                  (статус «Активна»).
+                                  {t('cabinet.billing.creditsPackUnavailable')}
                                 </p>
                               </div>
                               <button type="button" className="send-btn" disabled>
-                                Недоступно
+                                {t('cabinet.billing.unavailable')}
                               </button>
                             </div>
                           )
@@ -5803,17 +5681,18 @@ export default function App() {
                             <div>
                               <div className="cabinet-offer-title">{row.title}</div>
                               <p className="muted small" style={{ margin: '0.35rem 0 0.25rem' }}>
-                                От {p.min_quantity} шт. —{' '}
-                                {p.unit_price_rub.toLocaleString('ru-RU', {
-                                  minimumFractionDigits: 0,
-                                  maximumFractionDigits: 2,
-                                })}{' '}
-                                ₽/кредит; от {p.bulk_from} шт. —{' '}
-                                {p.bulk_unit_price_rub.toLocaleString('ru-RU', {
-                                  minimumFractionDigits: 0,
-                                  maximumFractionDigits: 2,
-                                })}{' '}
-                                ₽/кредит.
+                                {t('cabinet.billing.creditsPricing', {
+                                  min: p.min_quantity,
+                                  unit: p.unit_price_rub.toLocaleString('ru-RU', {
+                                    minimumFractionDigits: 0,
+                                    maximumFractionDigits: 2,
+                                  }),
+                                  bulkFrom: p.bulk_from,
+                                  bulkUnit: p.bulk_unit_price_rub.toLocaleString('ru-RU', {
+                                    minimumFractionDigits: 0,
+                                    maximumFractionDigits: 2,
+                                  }),
+                                })}
                               </p>
                               <label
                                 className="muted small"
@@ -5825,7 +5704,7 @@ export default function App() {
                                   marginTop: '0.35rem',
                                 }}
                               >
-                                Количество кредитов:
+                                {t('cabinet.billing.creditsQtyLabel')}
                                 <input
                                   type="number"
                                   min={p.min_quantity}
@@ -5863,7 +5742,7 @@ export default function App() {
                                   disabled={anyBillingPayBusy || !valid}
                                   onClick={() => void startYookassaPayment('credits_pack', q)}
                                 >
-                                  {yookassaPayBusy === row.product ? '…' : 'Картой ₽'}
+                                  {yookassaPayBusy === row.product ? '…' : t('cabinet.billing.payCard')}
                                 </button>
                               ) : null}
                               {me?.tribute_billing_available ? (
@@ -5875,12 +5754,12 @@ export default function App() {
                                   }
                                   title={
                                     me.telegram_linked
-                                      ? 'Оплата через Tribute (международная)'
-                                      : 'Сначала привяжите Telegram'
+                                      ? t('cabinet.billing.tributeTitleIntl')
+                                      : t('cabinet.billing.tributeNeedTelegramShort')
                                   }
                                   onClick={() => void startTributePayment('credits_pack', q)}
                                 >
-                                  {tributePayBusy === row.product ? '…' : 'Tribute'}
+                                  {tributePayBusy === row.product ? '…' : t('cabinet.billing.payTribute')}
                                 </button>
                               ) : null}
                             </div>
@@ -5899,7 +5778,11 @@ export default function App() {
                               {row.currency === 'RUB' || !row.currency ? '₽' : row.currency}
                             </div>
                             <p className="muted small" style={{ margin: '0.35rem 0 0' }}>
-                              или {subCredits} кр. ({billingCreditUnitRub} ₽/кр.) · на балансе {balance} кр.
+                              {t('cabinet.billing.subOrCredits', {
+                                credits: subCredits,
+                                rubPerCredit: billingCreditUnitRub,
+                                balance,
+                              })}
                             </p>
                           </div>
                           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.45rem' }}>
@@ -5910,11 +5793,11 @@ export default function App() {
                               title={
                                 canPayCredits
                                   ? undefined
-                                  : `Нужно ${subCredits} кр., на балансе ${balance}`
+                                  : t('cabinet.billing.needCredits', { need: subCredits, balance })
                               }
                               onClick={() => void paySubscriptionWithCredits(row.product)}
                             >
-                              {yookassaPayBusy === row.product ? '…' : 'Кредитами'}
+                              {yookassaPayBusy === row.product ? '…' : t('cabinet.billing.payCredits')}
                             </button>
                             {me?.online_payment_available ? (
                               <button
@@ -5923,7 +5806,7 @@ export default function App() {
                                 disabled={anyBillingPayBusy}
                                 onClick={() => void startYookassaPayment(row.product)}
                               >
-                                {yookassaPayBusy === row.product ? '…' : 'Картой ₽'}
+                                {yookassaPayBusy === row.product ? '…' : t('cabinet.billing.payCard')}
                               </button>
                             ) : null}
                             {me?.tribute_billing_available ? (
@@ -5933,8 +5816,8 @@ export default function App() {
                                 disabled={anyBillingPayBusy || !me.telegram_linked}
                                 title={
                                   me.telegram_linked
-                                    ? 'Оплата через Tribute'
-                                    : 'Сначала привяжите Telegram в Обзоре'
+                                    ? t('cabinet.billing.tributeTitle')
+                                    : t('cabinet.billing.tributeNeedTelegramOverview')
                                 }
                                 onClick={() => void startTributePayment(row.product)}
                               >
@@ -5948,27 +5831,27 @@ export default function App() {
                   </div>
                 </>
               ) : (
-                <p className="muted">Онлайн-оплата не подключена. Обратитесь к администратору сервиса.</p>
+                <p className="muted">{t('cabinet.billing.onlinePayOff')}</p>
               )}
-              <h4 className="account-sub">История операций</h4>
+              <h4 className="account-sub">{t('cabinet.billing.historyTitle')}</h4>
               {creditHistoryBusy ? (
-                <p className="muted">Загрузка…</p>
+                <p className="muted">{t('cabinet.billing.loading')}</p>
               ) : creditHistoryItems.length === 0 ? (
-                <p className="muted">Записей пока нет.</p>
+                <p className="muted">{t('cabinet.billing.historyEmpty')}</p>
               ) : (
                 <div className="cabinet-table-wrap">
                   <table className="cabinet-table">
                     <thead>
                       <tr>
-                        <th>Дата</th>
-                        <th>Операция</th>
-                        <th>Кредиты</th>
+                        <th>{t('cabinet.billing.historyDate')}</th>
+                        <th>{t('cabinet.billing.historyOperation')}</th>
+                        <th>{t('cabinet.billing.historyCredits')}</th>
                       </tr>
                     </thead>
                     <tbody>
                       {creditHistoryItems.map((row) => (
                         <tr key={row.id}>
-                          <td className="mono small">{formatDateTimeRu(row.created_at)}</td>
+                          <td className="mono small">{formatDateTimeApp(row.created_at)}</td>
                           <td>{creditKindLabel(row.kind)}</td>
                           <td
                             className={`mono ${row.credits_delta >= 0 ? 'cabinet-credit-plus' : 'cabinet-credit-minus'}`}
@@ -5982,17 +5865,14 @@ export default function App() {
                 </div>
               )}
               {creditHistoryHasMore ? (
-                <p className="muted small">Показаны последние операции.</p>
+                <p className="muted small">{t('cabinet.billing.historyMore')}</p>
               ) : null}
             </div>
           )}
 
           {accountTab === 'integrations' && (
             <div className="account-cabinet-pane cabinet-connections" role="tabpanel">
-              <p className="cabinet-lead muted">
-                Подключите каналы и API. Поля редактирования зависят от прав: при необходимости попросите владельца
-                выдать доступ к интеграциям.
-              </p>
+              <p className="cabinet-lead muted">{t('cabinet.integrations.lead')}</p>
 
               {studioNeedsUserWsKey && isOwner ? (
                 <WavespeedSetupBanner
@@ -6007,35 +5887,39 @@ export default function App() {
                 className={`cabinet-module${studioNeedsUserWsKey ? ' cabinet-module--highlight' : ''}${wsSetupPulse ? ' cabinet-module--pulse' : ''}`}
               >
                 <div className="cabinet-module-head">
-                  <h4 className="cabinet-module-title">WaveSpeed</h4>
+                  <h4 className="cabinet-module-title">{t('cabinet.integrations.wavespeed')}</h4>
                   <span className={`cabinet-module-badge ${integ?.wavespeed_configured ? 'is-ok' : 'is-warn'}`}>
                     {integ?.wavespeed_managed_by_platform
-                      ? 'Ключ платформы'
+                      ? t('cabinet.integrations.badgePlatformKey')
                       : integ?.wavespeed_configured
-                        ? 'Ключ сохранён'
-                        : 'Нет ключа'}
+                        ? t('cabinet.integrations.badgeKeySaved')
+                        : t('cabinet.integrations.badgeNoKey')}
                   </span>
                 </div>
                 <p className="muted cabinet-module-body">
-                  <strong>Pro:</strong> нужен ваш API-ключ WaveSpeed — без него генерация недоступна.
-                  <br />
-                  <strong>Standard / Credits:</strong> платформа может использовать свой ключ; ваш ключ не обязателен.
-                  <br />
-                  <strong>Ключ:</strong>{' '}
-                  <a href={WAVESPEED_REF_URL} target="_blank" rel="noopener noreferrer">
-                    зарегистрируйтесь на wavespeed.ai
-                  </a>{' '}
-                  (реферальная ссылка ModelMate) и скопируйте API-ключ в поле ниже.
+                  <Trans
+                    i18nKey="cabinet.integrations.wavespeedBody"
+                    ns="workspace"
+                    components={{
+                      strong: <strong />,
+                      br: <br />,
+                      link: (
+                        <a href={WAVESPEED_REF_URL} target="_blank" rel="noopener noreferrer">
+                          wavespeed.ai
+                        </a>
+                      ),
+                    }}
+                  />
                 </p>
                 <div className="cabinet-module-form">
                   <label>
-                    API-ключ
+                    {t('cabinet.integrations.apiKey')}
                     <input
                       type="password"
                       autoComplete="off"
                       value={wsApiKey}
                       onChange={(e) => setWsApiKey(e.target.value)}
-                      placeholder="Вставьте ключ из wavespeed.ai"
+                      placeholder={t('cabinet.integrations.apiKeyPlaceholder')}
                       disabled={!canIntegrations}
                     />
                   </label>
@@ -6045,34 +5929,36 @@ export default function App() {
                     disabled={!canIntegrations}
                     onClick={() => void saveWavespeed()}
                   >
-                    Сохранить
+                    {t('cabinet.integrations.save')}
                   </button>
                 </div>
               </section>
 
               <section className="cabinet-module">
                 <div className="cabinet-module-head">
-                  <h4 className="cabinet-module-title">Telegram</h4>
+                  <h4 className="cabinet-module-title">{t('cabinet.integrations.telegram')}</h4>
                   <span
                     className={`cabinet-module-badge ${integ?.telegram_configured ? 'is-ok' : 'is-warn'}`}
                   >
                     {(integ?.telegram_connections?.length ?? 0) > 0
-                      ? `${integ?.telegram_connections?.length} подключ.`
-                      : 'Не подключено'}
+                      ? t('cabinet.integrations.connectedCount', {
+                          count: integ?.telegram_connections?.length ?? 0,
+                        })
+                      : t('cabinet.integrations.notConnected')}
                   </span>
                 </div>
-                <p className="muted cabinet-module-body">
-                  Несколько ботов по тарифу. Модель на подключении — все диалоги бота наследуют её.
-                </p>
+                <p className="muted cabinet-module-body">{t('cabinet.integrations.telegramBody')}</p>
                 {(integ?.telegram_connections ?? []).map((conn) => (
                   <div key={conn.id} className="cabinet-module-form">
                     <p className="small mono">
                       {conn.label ? `${conn.label} · ` : ''}@{conn.bot_username ?? '—'}
-                      {conn.webhook_registered ? ' · webhook активен' : ' · webhook не подтверждён'}
+                      {conn.webhook_registered
+                        ? t('cabinet.integrations.webhookActive')
+                        : t('cabinet.integrations.webhookPending')}
                     </p>
                     {studioModels.length > 0 ? (
                       <label>
-                        Модель
+                        {t('cabinet.integrations.model')}
                         <select
                           value={conn.studio_model_id != null ? String(conn.studio_model_id) : ''}
                           disabled={!canIntegrations}
@@ -6083,7 +5969,7 @@ export default function App() {
                             })
                           }}
                         >
-                          <option value="">Не назначена</option>
+                          <option value="">{t('cabinet.integrations.modelUnassigned')}</option>
                           {studioModels.map((m) => (
                             <option key={m.id} value={String(m.id)}>
                               {m.name}
@@ -6093,7 +5979,7 @@ export default function App() {
                       </label>
                     ) : null}
                     <label>
-                      AI-компаньон
+                      {t('cabinet.integrations.aiCompanion')}
                       <select
                         value={conn.companion_mode ?? 'off'}
                         disabled={!canIntegrations}
@@ -6103,20 +5989,17 @@ export default function App() {
                           })
                         }}
                       >
-                        {COMPANION_MODE_OPTIONS.map((o) => (
-                          <option key={o.value} value={o.value}>
-                            {o.label}
+                        {COMPANION_MODE_VALUES.map((value) => (
+                          <option key={value} value={value}>
+                            {companionModeLabel(value)}
                           </option>
                         ))}
                       </select>
                     </label>
-                    <p className="small muted">
-                      Базовый режим для всех диалогов. В каждом чате можно переопределить в шапке диалога.
-                      Перевод для оператора сохраняется.
-                    </p>
+                    <p className="small muted">{t('cabinet.integrations.companionHint')}</p>
                     <div className="companion-timing-grid">
                       <label>
-                        Задержка мин (с)
+                        {t('cabinet.integrations.delayMin')}
                         <input
                           type="number"
                           min={0}
@@ -6133,7 +6016,7 @@ export default function App() {
                         />
                       </label>
                       <label>
-                        Задержка макс (с)
+                        {t('cabinet.integrations.delayMax')}
                         <input
                           type="number"
                           min={0}
@@ -6150,7 +6033,7 @@ export default function App() {
                         />
                       </label>
                       <label>
-                        Авто/час
+                        {t('integrationsExt.telegram.repliesPerHour')}
                         <input
                           type="number"
                           min={1}
@@ -6177,7 +6060,7 @@ export default function App() {
                         setTgDraftModelId(conn.studio_model_id ?? '')
                       }}
                     >
-                      Обновить токен
+                      {t('integrationsExt.telegram.updateToken')}
                     </button>
                   </div>
                 ))}
@@ -6185,19 +6068,19 @@ export default function App() {
                 (integ?.max_connections_per_platform ?? 1) ? (
                   <div className="cabinet-module-form">
                     <label>
-                      Токен бота
+                      {t('integrationsExt.telegram.botToken')}
                       <input
                         type="password"
                         autoComplete="off"
                         value={tgToken}
                         onChange={(e) => setTgToken(e.target.value)}
-                        placeholder="Вставьте токен BotFather"
+                        placeholder={t('integrationsExt.telegram.botTokenPlaceholder')}
                         disabled={!canIntegrations}
                       />
                     </label>
                     {studioModels.length > 0 ? (
                       <label>
-                        Модель
+                        {t('cabinet.integrations.model')}
                         <select
                           value={tgDraftModelId === '' ? '' : String(tgDraftModelId)}
                           onChange={(e) => {
@@ -6206,7 +6089,7 @@ export default function App() {
                           }}
                           disabled={!canIntegrations}
                         >
-                          <option value="">Не назначена</option>
+                          <option value="">{t('cabinet.integrations.modelUnassigned')}</option>
                           {studioModels.map((m) => (
                             <option key={m.id} value={String(m.id)}>
                               {m.name}
@@ -6221,7 +6104,7 @@ export default function App() {
                       disabled={!canIntegrations}
                       onClick={() => void saveTelegram()}
                     >
-                      {tgEditConnectionId != null ? 'Сохранить токен' : 'Добавить бота'}
+                      {tgEditConnectionId != null ? t('integrationsExt.telegram.saveToken') : t('integrationsExt.telegram.addBot')}
                     </button>
                   </div>
                 ) : null}
@@ -6232,12 +6115,12 @@ export default function App() {
                   <h4 className="cabinet-module-title">Fanvue</h4>
                   <span className={`cabinet-module-badge ${integ?.fanvue_configured ? 'is-ok' : 'is-warn'}`}>
                     {(integ?.fanvue_connections?.length ?? 0) > 0
-                      ? `${integ?.fanvue_connections?.length} подключ.`
-                      : 'Не подключено'}
+                      ? t('cabinet.integrations.connectedCount', { count: integ?.fanvue_connections?.length ?? 0 })
+                      : t('cabinet.integrations.notConnected')}
                   </span>
                 </div>
                 <p className="muted cabinet-module-body">
-                  Несколько creator-аккаунтов. Модель на подключении — диалоги наследуют её автоматически.
+                  {t('integrationsExt.fanvue.body')}
                 </p>
                 {(integ?.fanvue_connections ?? []).map((conn) => (
                   <div key={conn.id} className="cabinet-module-form">
@@ -6247,7 +6130,7 @@ export default function App() {
                     </p>
                     {studioModels.length > 0 ? (
                       <label>
-                        Модель
+                        {t('cabinet.integrations.model')}
                         <select
                           value={conn.studio_model_id != null ? String(conn.studio_model_id) : ''}
                           disabled={!canIntegrations}
@@ -6258,7 +6141,7 @@ export default function App() {
                             })
                           }}
                         >
-                          <option value="">Не назначена</option>
+                          <option value="">{t('cabinet.integrations.modelUnassigned')}</option>
                           {studioModels.map((m) => (
                             <option key={m.id} value={String(m.id)}>
                               {m.name}
@@ -6268,7 +6151,7 @@ export default function App() {
                       </label>
                     ) : null}
                     <label>
-                      AI-компаньон
+                      {t('cabinet.integrations.aiCompanion')}
                       <select
                         value={conn.companion_mode ?? 'off'}
                         disabled={!canIntegrations}
@@ -6278,19 +6161,19 @@ export default function App() {
                           })
                         }}
                       >
-                        {COMPANION_MODE_OPTIONS.map((o) => (
-                          <option key={o.value} value={o.value}>
-                            {o.label}
+                        {COMPANION_MODE_VALUES.map((value) => (
+                          <option key={value} value={value}>
+                            {companionModeLabel(value)}
                           </option>
                         ))}
                       </select>
                     </label>
                     <p className="small muted">
-                      Базовый режим для всех диалогов. В каждом чате можно переопределить в шапке диалога.
+                      {t('cabinet.integrations.companionHint')}
                     </p>
                     <div className="companion-timing-grid">
                       <label>
-                        Задержка мин (с)
+                        {t('cabinet.integrations.delayMin')}
                         <input
                           type="number"
                           min={0}
@@ -6307,7 +6190,7 @@ export default function App() {
                         />
                       </label>
                       <label>
-                        Задержка макс (с)
+                        {t('cabinet.integrations.delayMax')}
                         <input
                           type="number"
                           min={0}
@@ -6324,7 +6207,7 @@ export default function App() {
                         />
                       </label>
                       <label>
-                        Авто/час
+                        {t('integrationsExt.autoPerHour')}
                         <input
                           type="number"
                           min={1}
@@ -6349,7 +6232,7 @@ export default function App() {
                           disabled={!canIntegrations || fvBusy}
                           onClick={() => void connectFanvueOAuth(conn.id)}
                         >
-                          Переподключить
+                          {t('integrationsExt.fanvue.reconnect')}
                         </button>
                         <button
                           type="button"
@@ -6357,7 +6240,7 @@ export default function App() {
                           disabled={!canIntegrations || fvBusy}
                           onClick={() => void syncFanvueHistory(conn.id)}
                         >
-                          История
+                          {t('integrationsExt.history')}
                         </button>
                         <button
                           type="button"
@@ -6365,7 +6248,7 @@ export default function App() {
                           disabled={!canIntegrations || fvBusy}
                           onClick={() => void disconnectFanvue(conn.id)}
                         >
-                          Отключить
+                          {t('integrationsExt.disconnect')}
                         </button>
                       </div>
                     ) : null}
@@ -6378,7 +6261,7 @@ export default function App() {
                       <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
                         <input readOnly value={integ.fanvue_webhook_url} />
                         <button type="button" className="ghost-btn" onClick={() => void copyFanvueWebhookUrl()}>
-                          Копировать
+                          {t('integrationsExt.copy')}
                         </button>
                       </div>
                     </label>
@@ -6390,7 +6273,7 @@ export default function App() {
                   <div className="cabinet-module-form">
                     {studioModels.length > 0 ? (
                       <label>
-                        Модель (новое подключение)
+                        {t('integrationsExt.fanvue.newConnectionModel')}
                         <select
                           value={fvDraftModelId === '' ? '' : String(fvDraftModelId)}
                           onChange={(e) => {
@@ -6399,7 +6282,7 @@ export default function App() {
                           }}
                           disabled={!canIntegrations}
                         >
-                          <option value="">Не назначена</option>
+                          <option value="">{t('cabinet.integrations.modelUnassigned')}</option>
                           {studioModels.map((m) => (
                             <option key={m.id} value={String(m.id)}>
                               {m.name}
@@ -6414,7 +6297,7 @@ export default function App() {
                       disabled={!canIntegrations || fvBusy}
                       onClick={() => void connectFanvueOAuth(null)}
                     >
-                      {fvBusy ? '…' : 'Добавить Fanvue (OAuth)'}
+                      {fvBusy ? '…' : t('integrationsExt.fanvue.addOAuth')}
                     </button>
                   </div>
                 ) : null}
@@ -6438,28 +6321,25 @@ export default function App() {
                     }`}
                   >
                     {INSTAGRAM_INTEGRATION_IN_DEVELOPMENT
-                      ? 'В разработке'
+                      ? t('integrationsExt.instagram.inDevelopment')
                       : (integ?.instagram_connections?.length ?? 0) > 0
-                        ? `${integ?.instagram_connections?.length} подключ.`
-                        : 'Не подключено'}
+                        ? t('cabinet.integrations.connectedCount', { count: integ?.instagram_connections?.length ?? 0 })
+                        : t('cabinet.integrations.notConnected')}
                   </span>
                 </div>
                 <p className="muted cabinet-module-body">
-                  Direct-сообщения Instagram Business / Creator. Окно ответа — 24 часа после
-                  последнего сообщения фана.
+                  {t('integrationsExt.instagram.body')}
                 </p>
                 {INSTAGRAM_INTEGRATION_IN_DEVELOPMENT ? (
                   <p className="banner info cabinet-module-body" style={{ marginBottom: '0.75rem' }}>
-                    Интеграция Instagram Direct пока в разработке. Подключение аккаунта временно
-                    недоступно — мы сообщим, когда функция будет готова.
+                    {t('integrationsExt.instagram.inDevelopmentBanner')}
                   </p>
                 ) : null}
                 <ol className="muted cabinet-module-body" style={{ margin: '0 0 1rem', paddingLeft: '1.25rem' }}>
                   <li>
-                    Выберите модель и нажмите «Добавить Instagram» — войдите в Business или Creator
-                    аккаунт.
+                    {t('integrationsExt.instagram.step1')}
                   </li>
-                  <li>Новые DM появятся в разделе «Диалоги» → Instagram. Отвечайте в течение 24 ч.</li>
+                  <li>{t('integrationsExt.instagram.step2')}</li>
                 </ol>
                 {(integ?.instagram_connections ?? []).map((conn) => (
                   <div key={conn.id} className="cabinet-module-form">
@@ -6473,7 +6353,7 @@ export default function App() {
                     </p>
                     {studioModels.length > 0 ? (
                       <label>
-                        Модель
+                        {t('cabinet.integrations.model')}
                         <select
                           value={conn.studio_model_id != null ? String(conn.studio_model_id) : ''}
                           disabled={!canIntegrations || INSTAGRAM_INTEGRATION_IN_DEVELOPMENT}
@@ -6484,7 +6364,7 @@ export default function App() {
                             })
                           }}
                         >
-                          <option value="">Не назначена</option>
+                          <option value="">{t('cabinet.integrations.modelUnassigned')}</option>
                           {studioModels.map((m) => (
                             <option key={m.id} value={String(m.id)}>
                               {m.name}
@@ -6501,7 +6381,7 @@ export default function App() {
                           disabled={!canIntegrations || igBusy}
                           onClick={() => void connectInstagramOAuth(conn.id)}
                         >
-                          Переподключить
+                          {t('integrationsExt.reconnect')}
                         </button>
                         <button
                           type="button"
@@ -6509,7 +6389,7 @@ export default function App() {
                           disabled={!canIntegrations || igBusy}
                           onClick={() => void disconnectInstagram(conn.id)}
                         >
-                          Отключить
+                          {t('integrationsExt.disconnect')}
                         </button>
                       </div>
                     ) : null}
@@ -6522,7 +6402,7 @@ export default function App() {
                   <div className="cabinet-module-form">
                     {studioModels.length > 0 ? (
                       <label>
-                        Модель (новое подключение)
+                        {t('integrationsExt.fanvue.newConnectionModel')}
                         <select
                           value={igDraftModelId === '' ? '' : String(igDraftModelId)}
                           onChange={(e) => {
@@ -6531,7 +6411,7 @@ export default function App() {
                           }}
                           disabled={!canIntegrations}
                         >
-                          <option value="">Не назначена</option>
+                          <option value="">{t('cabinet.integrations.modelUnassigned')}</option>
                           {studioModels.map((m) => (
                             <option key={m.id} value={String(m.id)}>
                               {m.name}
@@ -6546,7 +6426,7 @@ export default function App() {
                       disabled={!canIntegrations || igBusy}
                       onClick={() => void connectInstagramOAuth(null)}
                     >
-                      {igBusy ? '…' : 'Добавить Instagram (OAuth)'}
+                      {igBusy ? '…' : t('integrationsExt.instagram.addOAuth')}
                     </button>
                   </div>
                 ) : null}
@@ -6559,38 +6439,43 @@ export default function App() {
                     className={`cabinet-module-badge ${integ?.tribute_configured ? 'is-ok' : 'is-warn'}`}
                   >
                     {(integ?.tribute_connections?.length ?? 0) > 0
-                      ? `${integ?.tribute_connections?.length} подключ.`
-                      : 'Не подключено'}
+                      ? t('cabinet.integrations.connectedCount', { count: integ?.tribute_connections?.length ?? 0 })
+                      : t('cabinet.integrations.notConnected')}
                   </span>
                 </div>
                 <p className="muted cabinet-module-body">
-                  Донаты и подписки через{' '}
-                  <a href="https://wiki.tribute.tg/ru/api-dokumentaciya" target="_blank" rel="noopener noreferrer">
-                    Tribute API
-                  </a>
-                  . Ниже — пошаговая настройка. Доля чатера в KPI задаётся в разделе «Команда» для каждого участника.
+                  <Trans
+                    i18nKey="integrationsExt.tribute.body"
+                    ns="workspace"
+                    components={{
+                      link: (
+                        <a
+                          href="https://wiki.tribute.tg/ru/api-dokumentaciya"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        />
+                      ),
+                    }}
+                  />
                 </p>
                 <ol className="muted cabinet-module-body" style={{ margin: '0 0 1rem', paddingLeft: '1.25rem' }}>
                   <li>
-                    В панели автора Tribute: <strong>⋯ → Настройки → API Keys → Generate API Key</strong> — скопируйте
-                    ключ.
+                    <Trans i18nKey="integrationsExt.tribute.step1" ns="workspace" components={{ strong: <strong /> }} />
                   </li>
                   <li>
-                    Здесь: выберите <strong>модель</strong> (к какому профилю относится доход), вставьте API-ключ и
-                    нажмите «Добавить Tribute».
+                    <Trans i18nKey="integrationsExt.tribute.step2" ns="workspace" components={{ strong: <strong /> }} />
                   </li>
                   <li>
-                    После сохранения скопируйте <strong>Webhook URL</strong> из карточки подключения и вставьте в
-                    Tribute: <strong>Настройки → API → Webhooks</strong>.
+                    <Trans i18nKey="integrationsExt.tribute.step3" ns="workspace" components={{ strong: <strong /> }} />
                   </li>
-                  <li>Новые платежи приходят webhook-ом, пишутся в БД и попадают в KPI на «Обзоре».</li>
+                  <li>{t('integrationsExt.tribute.step4')}</li>
                 </ol>
                 {(integ?.tribute_connections ?? []).map((conn) => (
                   <div key={conn.id} className="cabinet-module-form">
-                    <p className="small mono">{conn.label ? conn.label : `Подключение #${conn.id}`}</p>
+                    <p className="small mono">{conn.label ? conn.label : t('integrationsExt.tribute.connectionFallback', { id: conn.id })}</p>
                     {studioModels.length > 0 ? (
                       <label>
-                        Модель
+                        {t('cabinet.integrations.model')}
                         <select
                           value={conn.studio_model_id != null ? String(conn.studio_model_id) : ''}
                           disabled={!canIntegrations}
@@ -6601,7 +6486,7 @@ export default function App() {
                             })
                           }}
                         >
-                          <option value="">Не назначена</option>
+                          <option value="">{t('cabinet.integrations.modelUnassigned')}</option>
                           {studioModels.map((m) => (
                             <option key={m.id} value={String(m.id)}>
                               {m.name}
@@ -6612,7 +6497,7 @@ export default function App() {
                     ) : null}
                     {conn.webhook_url ? (
                       <label className="cabinet-field-span2">
-                        Webhook URL (Tribute → Настройки → Webhooks)
+                        {t('integrationsExt.tribute.webhookLabel')}
                         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
                           <input readOnly value={conn.webhook_url} />
                           <button
@@ -6620,7 +6505,7 @@ export default function App() {
                             className="ghost-btn"
                             onClick={() => void copyTributeWebhookUrl(conn.webhook_url!)}
                           >
-                            Копировать
+                            {t('integrationsExt.copy')}
                           </button>
                         </div>
                       </label>
@@ -6636,7 +6521,7 @@ export default function App() {
                           setTributeDraftModelId(conn.studio_model_id ?? '')
                         }}
                       >
-                        Обновить ключ
+                        {t('integrationsExt.tribute.updateKey')}
                       </button>
                       <button
                         type="button"
@@ -6644,7 +6529,7 @@ export default function App() {
                         disabled={!canIntegrations}
                         onClick={() => void disconnectTribute(conn.id)}
                       >
-                        Отключить
+                        {t('integrationsExt.disconnect')}
                       </button>
                     </div>
                   </div>
@@ -6653,17 +6538,17 @@ export default function App() {
                 (integ?.max_connections_per_platform ?? 1) ? (
                   <div className="cabinet-module-form">
                     <label>
-                      Метка (необязательно)
+                      {t('integrationsExt.labelOptional')}
                       <input
                         value={tributeDraftLabel}
                         onChange={(e) => setTributeDraftLabel(e.target.value)}
                         disabled={!canIntegrations}
-                        placeholder="Например: Mia Tribute"
+                        placeholder={t('integrationsExt.labelPh')}
                       />
                     </label>
                     {studioModels.length > 0 ? (
                       <label>
-                        Модель
+                        {t('cabinet.integrations.model')}
                         <select
                           value={tributeDraftModelId === '' ? '' : String(tributeDraftModelId)}
                           onChange={(e) => {
@@ -6672,7 +6557,7 @@ export default function App() {
                           }}
                           disabled={!canIntegrations}
                         >
-                          <option value="">Не назначена</option>
+                          <option value="">{t('cabinet.integrations.modelUnassigned')}</option>
                           {studioModels.map((m) => (
                             <option key={m.id} value={String(m.id)}>
                               {m.name}
@@ -6682,13 +6567,13 @@ export default function App() {
                       </label>
                     ) : null}
                     <label>
-                      API-ключ Tribute
+                      {t('integrationsExt.tributeApiKey')}
                       <input
                         type="password"
                         autoComplete="off"
                         value={tributeApiKey}
                         onChange={(e) => setTributeApiKey(e.target.value)}
-                        placeholder="Api-Key из Tribute → Настройки → API Keys"
+                        placeholder={t('integrationsExt.tributeApiKeyPh')}
                         disabled={!canIntegrations}
                       />
                     </label>
@@ -6698,7 +6583,7 @@ export default function App() {
                       disabled={!canIntegrations}
                       onClick={() => void saveTribute(tributeEditConnectionId)}
                     >
-                      {tributeEditConnectionId != null ? 'Сохранить ключ' : 'Добавить Tribute'}
+                      {tributeEditConnectionId != null ? t('integrationsExt.saveTributeKey') : t('integrationsExt.addTribute')}
                     </button>
                   </div>
                 ) : null}
@@ -6707,18 +6592,17 @@ export default function App() {
               {canPlatformAdmin ? (
               <section className="cabinet-module">
                 <div className="cabinet-module-head">
-                  <h4 className="cabinet-module-title">Текстовая модель (студия)</h4>
+                  <h4 className="cabinet-module-title">{t('integrationsExt.llm.title')}</h4>
                   <span className={`cabinet-module-badge ${integ?.llm_configured ? 'is-ok' : 'is-warn'}`}>
-                    {integ?.llm_configured ? 'Ключ на сервере' : 'Сервер не настроен'}
+                    {integ?.llm_configured ? t('integrationsExt.llm.badgeConfigured') : t('integrationsExt.llm.badgeNotConfigured')}
                   </span>
                 </div>
                 <p className="muted cabinet-module-body">
-                  Промпты и vision в студии всегда идут через AI-ключ, заданный администратором на сервере (
-                  <code>OPENAI_API_KEY</code> / совместимая база). Поля ниже не используются студией и оставлены на будущее.
+                  <Trans i18nKey="integrationsExt.llm.body" ns="workspace" components={{ code: <code /> }} />
                 </p>
                 <div className="cabinet-module-form cabinet-module-form--grid">
                   <label>
-                    API-ключ
+                    {t('integrationsExt.llmApiKey')}
                     <input
                       type="password"
                       autoComplete="off"
@@ -6728,7 +6612,7 @@ export default function App() {
                     />
                   </label>
                   <label>
-                    Базовый URL (по желанию)
+                    {t('integrationsExt.llm.baseUrl')}
                     <input
                       type="text"
                       autoComplete="off"
@@ -6744,7 +6628,7 @@ export default function App() {
                     disabled={!canIntegrations}
                     onClick={() => void saveLlm()}
                   >
-                    Сохранить
+                    {t('integrationsExt.llmSave')}
                   </button>
                 </div>
               </section>
@@ -6752,18 +6636,18 @@ export default function App() {
 
               <section className="cabinet-module">
                 <div className="cabinet-module-head">
-                  <h4 className="cabinet-module-title">AI-компаньон · обратная связь</h4>
+                  <h4 className="cabinet-module-title">{t('integrationsExt.companionFeedback.title')}</h4>
                   <span className="cabinet-module-badge is-ok">
-                    {companionFeedbackLoading ? '…' : `${companionFeedbackReports.length} отч.`}
+                    {companionFeedbackLoading ? '…' : t('integrationsExt.companionFeedback.reportsCount', { count: companionFeedbackReports.length })}
                   </span>
                 </div>
                 <p className="muted cabinet-module-body">
-                  Nightly-сводка по 👍/👎 на ответах бота. Оценивайте сообщения в чате — отчёт обновляется автоматически.
+                  {t('integrationsExt.companionFeedback.body')}
                 </p>
                 {companionFeedbackLoading ? (
-                  <p className="muted">Загрузка…</p>
+                  <p className="muted">{tCommon('loading')}</p>
                 ) : companionFeedbackReports.length === 0 ? (
-                  <p className="muted small">Отчётов пока нет — появятся после первых оценок и ночного прогона.</p>
+                  <p className="muted small">{t('integrationsExt.companionFeedback.empty')}</p>
                 ) : (
                   <div className="companion-feedback-list">
                     {companionFeedbackReports.map((rep) => (
@@ -6786,18 +6670,18 @@ export default function App() {
 
               <section className="cabinet-module">
                 <div className="cabinet-module-head">
-                  <h4 className="cabinet-module-title">Уведомления</h4>
+                  <h4 className="cabinet-module-title">{t('notifications.title')}</h4>
                   <span className={`cabinet-module-badge ${webPushState === 'on' ? 'is-ok' : 'is-warn'}`}>
                     {webPushState === 'loading' || webPushState === 'unknown'
                       ? '…'
                       : webPushState === 'on'
-                        ? 'Вкл.'
-                        : 'Выкл.'}
+                        ? tCommon('on')
+                        : tCommon('off')}
                   </span>
                 </div>
-                <p className="muted cabinet-module-body">Браузерные уведомления о новых сообщениях в чате.</p>
+                <p className="muted cabinet-module-body">{t('notifications.body')}</p>
                 {webPushState === 'denied' ? (
-                  <p className="muted small">Разрешите уведомления для сайта в настройках браузера.</p>
+                  <p className="muted small">{t('notifications.denied')}</p>
                 ) : null}
                 {canChat && health?.web_push_configured && webPushEnvironmentOk() ? (
                   <div className="cabinet-module-form">
@@ -6808,7 +6692,7 @@ export default function App() {
                         disabled={pushBusy}
                         onClick={() => void disableWebPush()}
                       >
-                        Отключить
+                        {t('integrationsExt.disconnect')}
                       </button>
                     ) : webPushState === 'off' ? (
                       <button
@@ -6817,12 +6701,12 @@ export default function App() {
                         disabled={pushBusy}
                         onClick={() => void enableWebPush()}
                       >
-                        Включить уведомления
+                        {t('integrationsExt.pushEnable')}
                       </button>
                     ) : null}
                   </div>
                 ) : !health?.web_push_configured ? (
-                  <p className="muted small">На сервере не включены push-уведомления.</p>
+                  <p className="muted small">{t('notifications.serverDisabled')}</p>
                 ) : null}
               </section>
 
@@ -6831,7 +6715,7 @@ export default function App() {
               ) : null}
               {!canIntegrations ? (
                 <p className="muted" style={{ marginTop: '1rem' }}>
-                  Редактирование подключений недоступно по правам аккаунта.
+                  {t('cabinet.integrations.lead')}
                 </p>
               ) : null}
             </div>
@@ -6841,7 +6725,7 @@ export default function App() {
             <div className="account-cabinet-pane" role="tabpanel">
               {studioPaywalled ? (
                 <div className="banner info" style={{ marginBottom: '1rem' }}>
-                  Редактирование моделей недоступно без активной подписки владельца.{' '}
+                  {ts('models.paywall')}{' '}
                   {isOwner ? (
                     <button
                       type="button"
@@ -6849,33 +6733,30 @@ export default function App() {
                       style={{ marginLeft: '0.5rem' }}
                       onClick={() => setAccountTab('billing')}
                     >
-                      Тариф и баланс
+                      {ts('models.goBilling')}
                     </button>
                   ) : (
-                    <> Попросите владельца оформить тариф в кабинете.</>
+                    <> {ts('models.askOwner')}</>
                   )}
                 </div>
               ) : null}
               <p className="cabinet-lead muted">
-                Модели подставляются в промпт на вкладке «Генерация картинок». До {STUDIO_MODEL_MAX_IMAGES}{' '}
-                фото на модель. Для
-                каждого снимка укажите тип: лицо, тело, интимный референс или общий — от этого зависит
-                порядок в запросе к image-edit и текст для LLM.
+                {ts('models.lead', { max: STUDIO_MODEL_MAX_IMAGES })}
               </p>
 
-              <h4 className="account-sub">Новая модель</h4>
+              <h4 className="account-sub">{ts('models.newModel')}</h4>
               <div className="account-grid studio-models-block cabinet-new-model">
                 <label>
-                  Название
+                  {ts('models.name')}
                   <input
                     value={newModelName}
                     onChange={(e) => setNewModelName(e.target.value)}
-                    placeholder="Например: Анна — чёрные волосы"
+                    placeholder={ts('models.namePlaceholder')}
                     disabled={studioPaywalled}
                   />
                 </label>
                 <label>
-                  Фото модели (до {STUDIO_MODEL_MAX_IMAGES})
+                  {ts('models.photos', { max: STUDIO_MODEL_MAX_IMAGES })}
                   <input
                     type="file"
                     accept="image/jpeg,image/png,image/webp,image/gif"
@@ -6909,9 +6790,9 @@ export default function App() {
                               )
                             }}
                           >
-                            {STUDIO_MODEL_IMAGE_KIND_OPTIONS.map((o) => (
-                              <option key={o.value} value={o.value}>
-                                {o.label}
+                            {STUDIO_MODEL_IMAGE_KIND_VALUES.map((kind) => (
+                              <option key={kind} value={kind}>
+                                {studioModelImageKindLabel(kind)}
                               </option>
                             ))}
                           </select>
@@ -6921,12 +6802,12 @@ export default function App() {
                   ) : null}
                 </label>
                 <label className="studio-new-model-profile-label">
-                  Описание внешности (JSON, можно вставить вручную)
+                  {ts('models.profileJson')}
                   <textarea
                     rows={6}
                     value={newModelProfile}
                     onChange={(e) => setNewModelProfile(e.target.value)}
-                    placeholder='{"model_profile": { … }} — или нажмите кнопку ниже'
+                    placeholder={ts('models.profilePlaceholder')}
                     className="studio-model-profile-textarea"
                     disabled={studioPaywalled}
                   />
@@ -6934,25 +6815,23 @@ export default function App() {
                     type="button"
                     className="ghost-btn studio-gen-profile-btn"
                     disabled={studioPaywalled || newModelProfileGenBusy || newModelPhotos.length === 0}
-                    title={newModelPhotos.length === 0 ? 'Сначала выберите фото' : undefined}
+                    title={newModelPhotos.length === 0 ? ts('models.genFromPhotosNeedPhotos') : undefined}
                     onClick={() => void generateModelProfileFromPhotos()}
                   >
-                    {newModelProfileGenBusy ? 'Генерация…' : 'Сгенерировать из фото'}
+                    {newModelProfileGenBusy ? ts('models.genFromPhotosBusy') : ts('models.genFromPhotos')}
                   </button>
                 </label>
                 <div className="studio-model-export-block account-grid" style={{ gridColumn: '1 / -1' }}>
                   <h4 className="account-sub" style={{ margin: 0 }}>
-                    Экспорт «как с телефона»
+                    {ts('models.exportPhone')}
                   </h4>
                   <p className="muted small" style={{ margin: 0 }}>
-                    На сохранённые кадры студии: шум, JPEG и EXIF. Сначала эталоны с телефона (ниже), иначе
-                    пресет из списка. Фронталка или основная камера выбирается при каждой генерации на
-                    странице «Картинки».
+                    {ts('models.exportPhoneHint')}
                   </p>
                   <div className="studio-phone-exif-refs">
-                    <p className="studio-phone-exif-refs__title">Эталоны EXIF с телефона</p>
+                    <p className="studio-phone-exif-refs__title">{ts('models.exifRefsTitle')}</p>
                     <label className="studio-phone-exif-refs__slot">
-                      <span>Фронтальная камера</span>
+                      <span>{ts('models.exifSelfie')}</span>
                       <input
                         type="file"
                         accept="image/jpeg,image/jpg"
@@ -6964,11 +6843,11 @@ export default function App() {
                       {newModelPhoneExifSelfie ? (
                         <span className="muted small">{newModelPhoneExifSelfie.name}</span>
                       ) : (
-                        <span className="muted small">JPEG из галереи (не из мессенджера)</span>
+                        <span className="muted small">{ts('models.exifSelfieHint')}</span>
                       )}
                     </label>
                     <label className="studio-phone-exif-refs__slot">
-                      <span>Основная камера</span>
+                      <span>{ts('models.exifMain')}</span>
                       <input
                         type="file"
                         accept="image/jpeg,image/jpg"
@@ -6978,18 +6857,18 @@ export default function App() {
                       {newModelPhoneExifMain ? (
                         <span className="muted small">{newModelPhoneExifMain.name}</span>
                       ) : (
-                        <span className="muted small">Обычное фото с задней камеры</span>
+                        <span className="muted small">{ts('models.exifMainHint')}</span>
                       )}
                     </label>
                   </div>
                   <label>
-                    Пресет камеры (запасной)
+                    {ts('models.cameraPresetFallback')}
                     <select
                       value={newModelCameraPresetId}
                       disabled={studioPaywalled}
                       onChange={(e) => setNewModelCameraPresetId(e.target.value)}
                     >
-                      <option value="">— не применять —</option>
+                      <option value="">{ts('models.cameraPresetNone')}</option>
                       {studioCameraPresets.map((p) => (
                         <option key={p.id} value={p.id}>
                           {p.label}
@@ -6998,7 +6877,7 @@ export default function App() {
                     </select>
                   </label>
                   <label>
-                    Широта (ГЕО)
+                    {ts('models.latitude')}
                     <input
                       value={newModelExportLat}
                       onChange={(e) => setNewModelExportLat(e.target.value)}
@@ -7008,7 +6887,7 @@ export default function App() {
                     />
                   </label>
                   <label>
-                    Долгота (ГЕО)
+                    {ts('models.longitude')}
                     <input
                       value={newModelExportLon}
                       onChange={(e) => setNewModelExportLon(e.target.value)}
@@ -7024,12 +6903,12 @@ export default function App() {
                   disabled={studioPaywalled}
                   onClick={() => void createStudioModel()}
                 >
-                  Создать модель
+                  {ts('models.createModel')}
                 </button>
               </div>
 
               {studioModels.length === 0 ? (
-                <p className="muted cabinet-empty-models">Пока нет моделей — создайте первую выше.</p>
+                <p className="muted cabinet-empty-models">{ts('models.emptyList')}</p>
               ) : (
                 <div className="model-card-grid">
                   {studioModels.map((m) => {
@@ -7042,21 +6921,21 @@ export default function App() {
                     return (
                       <article key={m.id} className="model-card">
                         <div className="model-card-head">
-                          <h4 className="model-card-title">Модель #{m.id}</h4>
+                          <h4 className="model-card-title">{ts('models.modelCardTitle', { id: m.id })}</h4>
                           <button
                             type="button"
                             className="ghost-btn danger-text model-card-delete"
                             disabled={busy || studioPaywalled}
                             onClick={() => {
-                              if (window.confirm('Удалить модель и все её фото?')) void deleteStudioModel(m.id)
+                              if (window.confirm(ts('models.deleteConfirm'))) void deleteStudioModel(m.id)
                             }}
                           >
-                            Удалить
+                            {ts('models.delete')}
                           </button>
                         </div>
-                        <div className="model-card-thumbs" aria-label="Референсы">
+                        <div className="model-card-thumbs" aria-label={ts('models.referencesAria')}>
                           {imgs.length === 0 ? (
-                            <span className="model-card-no-photos muted">Нет фото</span>
+                            <span className="model-card-no-photos muted">{ts('models.noPhotos')}</span>
                           ) : (
                             imgs.map((im) => (
                               <div key={im.id} className="model-thumb-wrap">
@@ -7065,7 +6944,7 @@ export default function App() {
                                   <button
                                     type="button"
                                     className="model-thumb-remove"
-                                    title="Удалить фото"
+                                    title={ts('models.deletePhoto')}
                                     disabled={busy || studioPaywalled}
                                     onClick={() => void deleteStudioModelImage(m.id, im.id)}
                                   >
@@ -7074,7 +6953,7 @@ export default function App() {
                                 </div>
                                 <select
                                   className="studio-model-kind-select"
-                                  aria-label="Тип референса"
+                                  aria-label={ts('models.referenceKindAria')}
                                   value={normalizeStudioImageKind(im.kind)}
                                   disabled={busy || studioPaywalled}
                                   onChange={(e) => {
@@ -7082,9 +6961,9 @@ export default function App() {
                                     void patchStudioModelImage(m.id, im.id, { kind: v })
                                   }}
                                 >
-                                  {STUDIO_MODEL_IMAGE_KIND_OPTIONS.map((o) => (
-                                    <option key={o.value} value={o.value}>
-                                      {o.label}
+                                  {STUDIO_MODEL_IMAGE_KIND_VALUES.map((kind) => (
+                                    <option key={kind} value={kind}>
+                                      {studioModelImageKindLabel(kind)}
                                     </option>
                                   ))}
                                 </select>
@@ -7095,7 +6974,7 @@ export default function App() {
                         {pendingAppend.length > 0 ? (
                           <div className="model-card-append-draft">
                             <p className="muted small model-card-append-hint">
-                              К загрузке: укажите тип кадра для каждого файла.
+                              {t('modelsExt.appendHint')}
                             </p>
                             <ul className="studio-new-model-photo-kinds">
                               {pendingAppend.map((row, idx) => (
@@ -7121,9 +7000,9 @@ export default function App() {
                                       })
                                     }}
                                   >
-                                    {STUDIO_MODEL_IMAGE_KIND_OPTIONS.map((o) => (
-                                      <option key={o.value} value={o.value}>
-                                        {o.label}
+                                    {STUDIO_MODEL_IMAGE_KIND_VALUES.map((kind) => (
+                                      <option key={kind} value={kind}>
+                                        {studioModelImageKindLabel(kind)}
                                       </option>
                                     ))}
                                   </select>
@@ -7131,7 +7010,7 @@ export default function App() {
                                     type="button"
                                     className="ghost-btn danger-text"
                                     disabled={busy || studioPaywalled}
-                                    title="Убрать из списка"
+                                    title={ts('models.removeFromList')}
                                     onClick={() =>
                                       setAppendModelPhotosById((prev) => {
                                         const cur = prev[m.id] ?? []
@@ -7161,7 +7040,7 @@ export default function App() {
                                   })
                                 }
                               >
-                                Отменить
+                                {tCommon('cancel')}
                               </button>
                               <button
                                 type="button"
@@ -7169,13 +7048,13 @@ export default function App() {
                                 disabled={busy || studioPaywalled}
                                 onClick={() => void uploadAppendStudioModelImages(m.id, pendingAppend)}
                               >
-                                Загрузить ({pendingAppend.length})
+                                {t('modelsExt.uploadPhotos', { count: pendingAppend.length })}
                               </button>
                             </div>
                           </div>
                         ) : null}
                         <label className="model-card-field">
-                          Название
+                          {t('modelsExt.nameLabel')}
                           <input
                             value={draft.name}
                             disabled={busy || studioPaywalled}
@@ -7191,7 +7070,7 @@ export default function App() {
                           />
                         </label>
                         <label className="model-card-field">
-                          Описание (внешность для студии)
+                          {t('modelsExt.profileLabel')}
                           <textarea
                             rows={4}
                             value={draft.profile_text}
@@ -7209,18 +7088,17 @@ export default function App() {
                         </label>
                         <div className="studio-model-export-block account-grid" style={{ gridColumn: '1 / -1' }}>
                           <h4 className="account-sub" style={{ margin: 0 }}>
-                            AI-компаньон
+                            {t('cabinet.integrations.aiCompanion')}
                           </h4>
                           <p className="muted small" style={{ margin: 0 }}>
-                            Личность для чат-бота: где живёт, интересы, стиль общения. Бот использует это вместе с
-                            описанием внешности.
+                            {t('modelsExt.personaLead')}
                           </p>
                           <label>
-                            Возраст
+                            {t('modelsExt.age')}
                             <input
                               value={draft.companion_persona.age ?? ''}
                               disabled={busy || studioPaywalled}
-                              placeholder="например 23"
+                              placeholder={t('modelsExt.agePlaceholder')}
                               onChange={(e) =>
                                 setModelDrafts((prev) => ({
                                   ...prev,
@@ -7237,11 +7115,11 @@ export default function App() {
                             />
                           </label>
                           <label>
-                            Город
+                            {t('modelsExt.city')}
                             <input
                               value={draft.companion_persona.city ?? ''}
                               disabled={busy || studioPaywalled}
-                              placeholder="Барселона"
+                              placeholder={t('modelsExt.cityPlaceholder')}
                               onChange={(e) =>
                                 setModelDrafts((prev) => ({
                                   ...prev,
@@ -7258,11 +7136,11 @@ export default function App() {
                             />
                           </label>
                           <label>
-                            Страна
+                            {t('modelsExt.country')}
                             <input
                               value={draft.companion_persona.country ?? ''}
                               disabled={busy || studioPaywalled}
-                              placeholder="Испания"
+                              placeholder={t('modelsExt.countryPlaceholder')}
                               onChange={(e) =>
                                 setModelDrafts((prev) => ({
                                   ...prev,
@@ -7279,7 +7157,7 @@ export default function App() {
                             />
                           </label>
                           <label>
-                            Часовой пояс
+                            {t('modelsExt.timezone')}
                             <input
                               value={draft.companion_persona.timezone ?? ''}
                               disabled={busy || studioPaywalled}
@@ -7300,12 +7178,12 @@ export default function App() {
                             />
                           </label>
                           <label style={{ gridColumn: '1 / -1' }}>
-                            Характер
+                            {t('modelsExt.personality')}
                             <textarea
                               rows={2}
                               value={draft.companion_persona.personality ?? ''}
                               disabled={busy || studioPaywalled}
-                              placeholder="теплая, игривая, немного застенчивая…"
+                              placeholder={t('modelsExt.personalityPlaceholder')}
                               onChange={(e) =>
                                 setModelDrafts((prev) => ({
                                   ...prev,
@@ -7322,12 +7200,12 @@ export default function App() {
                             />
                           </label>
                           <label style={{ gridColumn: '1 / -1' }}>
-                            Хобби и увлечения
+                            {t('modelsExt.hobbies')}
                             <textarea
                               rows={2}
                               value={draft.companion_persona.hobbies ?? ''}
                               disabled={busy || studioPaywalled}
-                              placeholder="йога, кофе, путешествия…"
+                              placeholder={t('modelsExt.hobbiesPlaceholder')}
                               onChange={(e) =>
                                 setModelDrafts((prev) => ({
                                   ...prev,
@@ -7344,12 +7222,12 @@ export default function App() {
                             />
                           </label>
                           <label style={{ gridColumn: '1 / -1' }}>
-                            Интересы / темы для разговора
+                            {t('modelsExt.interests')}
                             <textarea
                               rows={2}
                               value={draft.companion_persona.interests ?? ''}
                               disabled={busy || studioPaywalled}
-                              placeholder="музыка, мода, спорт…"
+                              placeholder={t('modelsExt.interestsPlaceholder')}
                               onChange={(e) =>
                                 setModelDrafts((prev) => ({
                                   ...prev,
@@ -7366,12 +7244,12 @@ export default function App() {
                             />
                           </label>
                           <label style={{ gridColumn: '1 / -1' }}>
-                            Образ жизни
+                            {t('modelsExt.lifestyle')}
                             <textarea
                               rows={2}
                               value={draft.companion_persona.lifestyle ?? ''}
                               disabled={busy || studioPaywalled}
-                              placeholder="учится, работает фрилансером, любит вечерние прогулки…"
+                              placeholder={t('modelsExt.lifestylePlaceholder')}
                               onChange={(e) =>
                                 setModelDrafts((prev) => ({
                                   ...prev,
@@ -7388,12 +7266,12 @@ export default function App() {
                             />
                           </label>
                           <label style={{ gridColumn: '1 / -1' }}>
-                            Стиль переписки
+                            {t('modelsExt.speakingStyle')}
                             <textarea
                               rows={2}
                               value={draft.companion_persona.speaking_style ?? ''}
                               disabled={busy || studioPaywalled}
-                              placeholder="короткие сообщения, эмодзи, без формальностей…"
+                              placeholder={t('modelsExt.speakingStylePlaceholder')}
                               onChange={(e) =>
                                 setModelDrafts((prev) => ({
                                   ...prev,
@@ -7410,12 +7288,12 @@ export default function App() {
                             />
                           </label>
                           <label style={{ gridColumn: '1 / -1' }}>
-                            Предыстория
+                            {t('modelsExt.backstory')}
                             <textarea
                               rows={3}
                               value={draft.companion_persona.backstory ?? ''}
                               disabled={busy || studioPaywalled}
-                              placeholder="откуда она, чем занимается, что важно в жизни…"
+                              placeholder={t('modelsExt.backstoryPlaceholder')}
                               onChange={(e) =>
                                 setModelDrafts((prev) => ({
                                   ...prev,
@@ -7434,23 +7312,21 @@ export default function App() {
                         </div>
                         <div className="studio-model-export-block account-grid" style={{ gridColumn: '1 / -1' }}>
                           <h4 className="account-sub" style={{ margin: 0 }}>
-                            Экспорт «как с телефона»
+                            {t('modelsExt.exportPhoneTitle')}
                           </h4>
                           <p className="muted small" style={{ margin: 0 }}>
-                            Эталоны с телефона важнее пресета. Дата в EXIF — при сохранении кадра. ГЕО —
-                            опционально. Фронталка или основная — переключатель на странице «Картинки» при
-                            генерации.
+                            {t('modelsExt.exportPhoneLead')}
                           </p>
                           <div className="studio-phone-exif-refs">
-                            <p className="studio-phone-exif-refs__title">Эталоны EXIF с телефона</p>
+                            <p className="studio-phone-exif-refs__title">{t('modelsExt.exifRefsTitle')}</p>
                             <div className="studio-phone-exif-refs__slot">
-                              <span>Фронтальная камера</span>
+                              <span>{ts('models.exifSelfie')}</span>
                               {m.phone_exif_selfie_ready && m.phone_exif_selfie_summary ? (
                                 <p className="muted small studio-phone-exif-refs__ok">
                                   ✓ {m.phone_exif_selfie_summary}
                                 </p>
                               ) : (
-                                <p className="muted small">Не загружен</p>
+                                <p className="muted small">{tCommon('notUploaded')}</p>
                               )}
                               <label className="model-card-add-files">
                                 <input
@@ -7472,10 +7348,10 @@ export default function App() {
                                 />
                                 <span className="ghost-btn">
                                   {modelPhoneExifBusy === `${m.id}-selfie`
-                                    ? 'Чтение…'
+                                    ? tCommon('reading')
                                     : m.phone_exif_selfie_ready
-                                      ? 'Заменить'
-                                      : 'Загрузить'}
+                                      ? tCommon('replace')
+                                      : tCommon('upload')}
                                 </span>
                               </label>
                               {m.phone_exif_selfie_ready ? (
@@ -7485,18 +7361,18 @@ export default function App() {
                                   disabled={busy || studioPaywalled}
                                   onClick={() => void clearModelPhoneExifRef(m.id, 'selfie')}
                                 >
-                                  Сбросить
+                                  {tCommon('reset')}
                                 </button>
                               ) : null}
                             </div>
                             <div className="studio-phone-exif-refs__slot">
-                              <span>Основная камера</span>
+                              <span>{ts('models.exifMain')}</span>
                               {m.phone_exif_main_ready && m.phone_exif_main_summary ? (
                                 <p className="muted small studio-phone-exif-refs__ok">
                                   ✓ {m.phone_exif_main_summary}
                                 </p>
                               ) : (
-                                <p className="muted small">Не загружен</p>
+                                <p className="muted small">{tCommon('notUploaded')}</p>
                               )}
                               <label className="model-card-add-files">
                                 <input
@@ -7518,10 +7394,10 @@ export default function App() {
                                 />
                                 <span className="ghost-btn">
                                   {modelPhoneExifBusy === `${m.id}-main`
-                                    ? 'Чтение…'
+                                    ? tCommon('reading')
                                     : m.phone_exif_main_ready
-                                      ? 'Заменить'
-                                      : 'Загрузить'}
+                                      ? tCommon('replace')
+                                      : tCommon('upload')}
                                 </span>
                               </label>
                               {m.phone_exif_main_ready ? (
@@ -7531,13 +7407,13 @@ export default function App() {
                                   disabled={busy || studioPaywalled}
                                   onClick={() => void clearModelPhoneExifRef(m.id, 'main')}
                                 >
-                                  Сбросить
+                                  {tCommon('reset')}
                                 </button>
                               ) : null}
                             </div>
                           </div>
                           <label>
-                            Пресет камеры (запасной)
+                            {ts('models.cameraPresetFallback')}
                             <select
                               value={draft.camera_preset_id}
                               disabled={busy || studioPaywalled}
@@ -7551,7 +7427,7 @@ export default function App() {
                                 }))
                               }
                             >
-                              <option value="">— не применять —</option>
+                              <option value="">{ts('models.cameraPresetNone')}</option>
                               {studioCameraPresets.map((p) => (
                                 <option key={p.id} value={p.id}>
                                   {p.label}
@@ -7560,7 +7436,7 @@ export default function App() {
                             </select>
                           </label>
                           <label>
-                            Широта
+                            {t('modelsExt.latitude')}
                             <input
                               value={draft.export_lat}
                               disabled={busy || studioPaywalled}
@@ -7578,7 +7454,7 @@ export default function App() {
                             />
                           </label>
                           <label>
-                            Долгота
+                            {t('modelsExt.longitude')}
                             <input
                               value={draft.export_lon}
                               disabled={busy || studioPaywalled}
@@ -7632,7 +7508,7 @@ export default function App() {
                                 e.target.value = ''
                               }}
                             />
-                            <span className="ghost-btn model-card-add-btn">Добавить фото</span>
+                            <span className="ghost-btn model-card-add-btn">{ts('models.addPhoto')}</span>
                           </label>
                           <button
                             type="button"
@@ -7640,7 +7516,7 @@ export default function App() {
                             disabled={busy || studioPaywalled || !draft.name.trim()}
                             onClick={() => void patchStudioModel(m.id)}
                           >
-                            {busy ? 'Сохранение…' : 'Сохранить изменения'}
+                            {busy ? ts('models.saving') : ts('models.saveChanges')}
                           </button>
                         </div>
                       </article>
@@ -7654,31 +7530,29 @@ export default function App() {
           {accountTab === 'team' && isOwner && (
             <div className="account-cabinet-pane" role="tabpanel">
               <p className="cabinet-lead muted">
-                Сотрудники входят с email владельца
-                {me?.public_email ? ` (${me.public_email})` : ''}, отдельным логином команды и паролем.
-                Кредиты и подписка — на владельце; права ниже ограничивают разделы. Модели студии и чаты
-                назначаются вручную — без галочки участник их не видит. Доля Tribute в KPI — индивидуально для
-                каждого чатера. Вход операторов — только email+пароль, без Telegram.
+                {t('cabinet.team.lead', {
+                  email: me?.public_email ? ` (${me.public_email})` : '',
+                })}
               </p>
               {me?.email_setup_required ? (
                 <div className="banner warn" style={{ marginBottom: '1rem' }}>
-                  Укажите рабочий email владельца в разделе «Обзор» — без него операторы не смогут войти.
+                  {t('cabinet.team.emailRequired')}
                 </div>
               ) : null}
-              <h4 className="account-sub">Новый участник</h4>
+              <h4 className="account-sub">{t('cabinet.team.newMember')}</h4>
               <div className="account-grid cabinet-keys-form">
                 <label>
-                  Логин (латиница, цифры, _ · 3–32)
+                  {t('cabinet.team.loginLabel')}
                   <input
                     value={newTeamLogin}
                     onChange={(e) => setNewTeamLogin(e.target.value)}
-                    placeholder="например operator_1"
+                    placeholder={t('cabinet.team.loginPlaceholder')}
                     autoComplete="off"
                     disabled={teamBusy}
                   />
                 </label>
                 <label>
-                  Пароль (мин. 8)
+                  {t('cabinet.team.passwordLabel')}
                   <input
                     type="password"
                     value={newTeamPassword}
@@ -7688,7 +7562,7 @@ export default function App() {
                   />
                 </label>
                 <div style={{ gridColumn: '1 / -1' }} className="team-perm-grid">
-                  {MEMBER_PERMISSION_LABELS.map(({ bit, label }) => (
+                  {MEMBER_PERMISSION_ITEMS.map(({ bit, key }) => (
                     <label key={bit} className="studio-label studio-check">
                       <input
                         type="checkbox"
@@ -7696,14 +7570,14 @@ export default function App() {
                         disabled={teamBusy}
                         onChange={(e) => setNewTeamMask((m) => togglePermission(m, bit, e.target.checked))}
                       />
-                      <span>{label}</span>
+                      <span>{memberPermissionLabel(key)}</span>
                     </label>
                   ))}
                 </div>
                 {studioModels.length > 0 ? (
                   <div style={{ gridColumn: '1 / -1' }} className="team-model-grid">
                     <span className="account-sub" style={{ margin: 0 }}>
-                      Модели студии
+                      {t('modelsExt.teamStudioModels')}
                     </span>
                     {studioModels.map((m) => (
                       <label key={m.id} className="studio-label studio-check">
@@ -7727,11 +7601,11 @@ export default function App() {
                   </div>
                 ) : (
                   <p className="muted" style={{ gridColumn: '1 / -1' }}>
-                    Сначала создайте модели в студии — затем назначьте их участникам.
+                    {t('cabinet.team.createModelsFirst')}
                   </p>
                 )}
                 <label>
-                  Доля Tribute в KPI, %
+                  {t('cabinet.team.tributeShare')}
                   <input
                     type="number"
                     min={0}
@@ -7744,8 +7618,7 @@ export default function App() {
                   />
                 </label>
                 <p className="muted small" style={{ gridColumn: '1 / -1', margin: 0 }}>
-                  Сколько процентов от gross по назначенным моделям чатер видит на «Обзоре». Пустое поле — значение
-                  по умолчанию с сервера (обычно 20%).
+                  {t('cabinet.team.tributeShareHint')}
                 </p>
                 <button
                   type="button"
@@ -7758,23 +7631,26 @@ export default function App() {
                   }
                   onClick={() => void createWorkspaceMember()}
                 >
-                  {teamBusy ? 'Создание…' : 'Создать участника'}
+                  {teamBusy ? t('cabinet.team.creating') : t('cabinet.team.createMember')}
                 </button>
               </div>
 
-              <h4 className="account-sub">KPI команды {chatterStatsDisplay.period ? `· ${chatterStatsDisplay.period}` : ''}</h4>
+              <h4 className="account-sub">
+                {t('cabinet.team.kpiTitle')}
+                {chatterStatsDisplay.period ? ` · ${chatterStatsDisplay.period}` : ''}
+              </h4>
               {(chatterStats?.members?.length ?? 0) > 0 ? (
                 <div className="cabinet-table-wrap" style={{ marginBottom: '1.25rem' }}>
                   <table className="cabinet-table">
                     <thead>
                       <tr>
-                        <th>Участник</th>
-                        <th>Ответов</th>
-                        <th>Диалогов</th>
-                        <th>SLA мед.</th>
-                        <th>1-й ответ</th>
-                        <th>AI 👍/👎</th>
-                        <th>Tribute</th>
+                        <th>{t('cabinet.team.memberCol')}</th>
+                        <th>{t('cabinet.team.repliesCol')}</th>
+                        <th>{t('cabinet.team.dialogsCol')}</th>
+                        <th>{t('cabinet.team.slaCol')}</th>
+                        <th>{t('cabinet.team.firstReplyCol')}</th>
+                        <th>{t('cabinet.team.aiRatingsCol')}</th>
+                        <th>{t('cabinet.team.tributeCol')}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -7791,10 +7667,10 @@ export default function App() {
                             {row.companion_ratings_positive}/{row.companion_ratings_negative}
                           </td>
                           <td className="mono">
-                            {formatTributeMinor(row.tribute_display_minor, row.tribute_currency)}
+                            {formatAppCurrency(row.tribute_display_minor, row.tribute_currency)}
                             <span className="muted small" style={{ display: 'block' }}>
-                              {row.tribute_share_percent}% · gross{' '}
-                              {formatTributeMinor(row.tribute_gross_minor, row.tribute_currency)}
+                              {row.tribute_share_percent}% · {t('cabinet.team.grossLabel')}{' '}
+                              {formatAppCurrency(row.tribute_gross_minor, row.tribute_currency)}
                             </span>
                           </td>
                         </tr>
@@ -7804,23 +7680,23 @@ export default function App() {
                 </div>
               ) : (
                 <p className="muted" style={{ marginBottom: '1rem' }}>
-                  KPI появятся после первых ответов чатеров в периоде.
+                  {t('modelsExt.kpiEmpty')}
                 </p>
               )}
 
-              <h4 className="account-sub">Шаблоны ответов</h4>
+              <h4 className="account-sub">{tc('templates.title')}</h4>
               <p className="muted small" style={{ marginTop: 0 }}>
-                Кнопки появляются над полем ввода в чате — быстрая вставка текста.
+                {tc('templates.lead')}
               </p>
               <div className="team-create-grid" style={{ marginBottom: '0.75rem' }}>
                 <input
-                  placeholder="Название кнопки"
+                  placeholder={tc('templates.namePlaceholder')}
                   value={newSnippetTitle}
                   onChange={(e) => setNewSnippetTitle(e.target.value)}
                   disabled={snippetBusy}
                 />
                 <input
-                  placeholder="Текст шаблона"
+                  placeholder={tc('templates.bodyPlaceholder')}
                   value={newSnippetBody}
                   onChange={(e) => setNewSnippetBody(e.target.value)}
                   disabled={snippetBusy}
@@ -7831,7 +7707,7 @@ export default function App() {
                   disabled={snippetBusy || !newSnippetTitle.trim() || !newSnippetBody.trim()}
                   onClick={() => void createChatterSnippet()}
                 >
-                  Добавить
+                  {t('modelsExt.snippetAdd')}
                 </button>
               </div>
               {chatterSnippets.length > 0 ? (
@@ -7849,20 +7725,20 @@ export default function App() {
                         disabled={snippetBusy}
                         onClick={() => void deleteChatterSnippet(sn.id)}
                       >
-                        Удалить
+                        {tc('templates.delete')}
                       </button>
                     </li>
                   ))}
                 </ul>
               ) : (
                 <p className="muted" style={{ marginBottom: '1.25rem' }}>
-                  Пока нет шаблонов.
+                  {tc('templates.empty')}
                 </p>
               )}
 
-              <h4 className="account-sub">Участники</h4>
+              <h4 className="account-sub">{t('cabinet.team.membersTitle')}</h4>
               {workspaceMembers.length === 0 ? (
-                <p className="muted">Пока никого нет — добавьте первого выше.</p>
+                <p className="muted">{t('team.membersEmpty')}</p>
               ) : (
                 <ul className="team-member-list">
                   {workspaceMembers.map((row) => {
@@ -7882,11 +7758,11 @@ export default function App() {
                               disabled={teamBusy}
                               onChange={(e) => void setWorkspaceMemberActive(row, e.target.checked)}
                             />
-                            <span>Активен</span>
+                            <span>{t('cabinet.team.active')}</span>
                           </label>
                         </div>
                         <div className="team-perm-grid">
-                          {MEMBER_PERMISSION_LABELS.map(({ bit, label }) => (
+                          {MEMBER_PERMISSION_ITEMS.map(({ bit, key }) => (
                             <label key={bit} className="studio-label studio-check">
                               <input
                                 type="checkbox"
@@ -7899,14 +7775,14 @@ export default function App() {
                                   }))
                                 }
                               />
-                              <span>{label}</span>
+                              <span>{memberPermissionLabel(key)}</span>
                             </label>
                           ))}
                         </div>
                         {studioModels.length > 0 ? (
                           <div className="team-model-grid">
                             <span className="account-sub" style={{ margin: 0 }}>
-                              Модели студии
+                              {t('modelsExt.studioModels')}
                             </span>
                             {studioModels.map((m) => (
                               <label key={m.id} className="studio-label studio-check">
@@ -7931,7 +7807,7 @@ export default function App() {
                           </div>
                         ) : null}
                         <label>
-                          Доля Tribute в KPI, %
+                          {t('modelsExt.teamTributeShare')}
                           <input
                             type="number"
                             min={0}
@@ -7945,7 +7821,7 @@ export default function App() {
                           />
                         </label>
                         <label>
-                          Новый пароль (необязательно)
+                          {t('modelsExt.newPassword')}
                           <input
                             type="password"
                             value={pwd}
@@ -7963,7 +7839,7 @@ export default function App() {
                             disabled={teamBusy}
                             onClick={() => void saveWorkspaceMemberRow(row)}
                           >
-                            Сохранить права, модели, долю Tribute и пароль
+                            {t('modelsExt.saveMember')}
                           </button>
                           <button
                             type="button"
@@ -7971,7 +7847,7 @@ export default function App() {
                             disabled={teamBusy}
                             onClick={() => void removeWorkspaceMember(row.id)}
                           >
-                            Удалить
+                            {t('cabinet.team.deleteMember')}
                           </button>
                         </div>
                       </li>
@@ -8001,13 +7877,13 @@ export default function App() {
               ? me.email
               : `${me?.owner_email ?? ''}${me?.member_login ? ` · ${me.member_login}` : ''}`
           }
-          userMeta={`${me?.credits_balance ?? 0} кр. · ${planDisplayShort(me)}`}
+          userMeta={t('shell.creditsMeta', { credits: me?.credits_balance ?? 0, plan: planDisplayShort(me) })}
           onAccountOpen={() => setAccountOpen(true)}
           onLogout={handleLogout}
         >
           {health?.legacy_telegram_polling && health.telegram_api_reachable === false && (
             <div className="banner error">
-              Нет связи с Telegram. Обратитесь к администратору сервиса.
+              {t('health.telegramUnreachable')}
             </div>
           )}
 
@@ -8060,8 +7936,7 @@ export default function App() {
         appSection !== 'studio_bootstrap' &&
         appSection !== 'studio_video' && (
         <div className="health-strip" title={health.database_file}>
-          Режим: {health.mode ?? '—'} · всего в БД: {health.conversations_count ?? 0} диалогов,{' '}
-          {health.messages_count ?? 0} сообщений
+          {t('health.modeLine', { mode: health.mode ?? '—', conversations: health.conversations_count ?? 0, messages: health.messages_count ?? 0 })}
           {health.legacy_telegram_polling ? (
             <>
               {' '}
@@ -8069,22 +7944,22 @@ export default function App() {
               {health.telegram_api_reachable === true ? (
                 <span className="ok">API OK @{health.telegram_bot_username ?? '?'}</span>
               ) : health.telegram_api_reachable === false ? (
-                <span className="warn">API недоступен</span>
+                <span className="warn">{t('health.telegramUnreachable')}</span>
               ) : (
-                <span className="muted">проверка…</span>
+                <span className="muted">{tCommon('checking')}</span>
               )}
             </>
           ) : (
-            <span className="muted"> · интеграции через личный кабинет (webhook)</span>
+            <span className="muted">{t('health.webhookIntegrations')}</span>
           )}
-          {health.telegram_proxy_configured ? <span className="ok"> · прокси TG</span> : null}
+          {health.telegram_proxy_configured ? <span className="ok">{t('health.telegramProxy')}</span> : null}
           {health.openai_studio_configured ? (
             <span className="ok">
               {' '}
-              · студия: промпт ({health.studio_prompt_credit_cost ?? '—'} кр.)
+              {t('health.studioPromptOk', { credits: health.studio_prompt_credit_cost ?? '—' })}
             </span>
           ) : (
-            <span className="warn"> · студия: текстовая модель на сервере недоступна</span>
+            <span className="warn">{t('health.studioTextUnavailable')}</span>
           )}
         </div>
       )}
@@ -8094,14 +7969,14 @@ export default function App() {
           <div className="studio-workspace">
             <div className="studio-workspace__composer" aria-labelledby="studio-heading">
               <header className="studio-workspace__composer-head">
-                <h2 id="studio-heading">Картинки</h2>
+                <h2 id="studio-heading">{ts('page.imagesTitle')}</h2>
                 <p className="studio-workspace__tagline">
-                  Модель, референс и описание — результат в истории справа.
+                  {ts('page.tagline')}
                   {me && normalizeBillingPlan(me.billing_plan) !== 'pro' ? (
                     <span className="studio-workspace__price-hint">
                       {' '}
-                      · ~{studioImageCreditQuote.label} кр. за генерацию
-                      {studioImageCreditQuote.useDemo ? ' (демо)' : ''}
+                      {ts('page.creditPerGen', { credits: studioImageCreditQuote.label })}
+                      {studioImageCreditQuote.useDemo ? ts('page.demoSuffix') : ''}
                     </span>
                   ) : null}
                 </p>
@@ -8130,19 +8005,13 @@ export default function App() {
           {studioPaywalled ? (
             <div className="studio-paywall cabinet-module cabinet-module--highlight" role="status">
               <p className="cabinet-module-body" style={{ marginBottom: '0.75rem' }}>
-                Чтобы генерировать картинки, пополните кредиты или оформите подписку Standard / Pro в разделе «Тариф и баланс».
+                {ts('page.paywallBody')}
               </p>
               <p className="muted small" style={{ marginBottom: '1rem' }}>
                 {isOwner ? (
-                  <>
-                    Откройте личный кабинет → вкладка <strong>«Тариф и баланс»</strong>, выберите план и нажмите
-                    «Оплатить».
-                  </>
+                  <Trans i18nKey="page.paywallOwnerHint" ns="studio" components={{ strong: <strong /> }} />
                 ) : (
-                  <>
-                    Оформить подписку может владелец аккаунта ({me?.owner_email ?? 'email владельца'}) в кабинете →
-                    «Тариф и баланс».
-                  </>
+                  ts('page.paywallMemberHint', { email: me?.owner_email ?? '—' })
                 )}
               </p>
               {isOwner ? (
@@ -8154,32 +8023,32 @@ export default function App() {
                     setAccountTab('billing')
                   }}
                 >
-                  Перейти к тарифу и оплате
+                  {ts('page.goBilling')}
                 </button>
               ) : (
                 <button type="button" className="ghost-btn" onClick={() => setAccountOpen(true)}>
-                  Открыть кабинет
+                  {ts('page.openCabinet')}
                 </button>
               )}
             </div>
           ) : (
             <>
               {!canStudioGenerate ? (
-                <div className="banner info">Генерация недоступна по правам. Попросите владельца аккаунта.</div>
+                <div className="banner info">{ts('page.noGeneratePermission')}</div>
               ) : null}
               <div className="studio-workspace__composer-scroll">
               <div className="studio-slot-grid studio-slot-grid--composer">
-            <div className="studio-mode-row studio-mode-compact" role="group" aria-label="Режим студии">
-              <span className="studio-mode-label">Режим</span>
+            <div className="studio-mode-row studio-mode-compact" role="group" aria-label={ts('page.modeAria')}>
+              <span className="studio-mode-label">{ts('page.modeLabel')}</span>
               <div className="studio-mode-segment">
-                {STUDIO_IMAGE_MODE_OPTIONS.map(({ id, label }) => (
+                {STUDIO_IMAGE_MODE_IDS.map((id) => (
                   <button
                     key={id}
                     type="button"
                     className={`studio-mode-btn${studioMode === id ? ' is-active' : ''}`}
                     onClick={() => setStudioMode(id)}
                   >
-                    {label}
+                    {studioImageModeLabel(id)}
                   </button>
                 ))}
               </div>
@@ -8187,19 +8056,18 @@ export default function App() {
             {studioMode === 'grok_compose' &&
             health?.studio_grok_scene_compose_configured === false ? (
               <div className="banner warn">
-                Grok не настроен: на сервере нужен <span className="mono">GROK_API_KEY</span> (или
-                OpenAI-совместимый ключ с vision).
+                <Trans i18nKey="page.grokNotConfigured" ns="studio" components={{ mono: <span className="mono" /> }} />
               </div>
             ) : null}
-            <div className="studio-mode-row" role="group" aria-label="Тип снимка">
-              <span className="studio-mode-label">Стиль</span>
+            <div className="studio-mode-row" role="group" aria-label={ts('page.styleAria')}>
+              <span className="studio-mode-label">{ts('page.styleLabel')}</span>
               <div className="studio-mode-segment">
                 <button
                   type="button"
                   className={`studio-mode-btn${studioWaveProfile === 'regular' ? ' is-active' : ''}`}
                   onClick={() => setStudioWaveProfile('regular')}
                 >
-                  Обычные
+                  {ts('page.regular')}
                 </button>
                 <button
                   type="button"
@@ -8212,8 +8080,8 @@ export default function App() {
             </div>
             {studioAvailableGenModels.length > 0 ? (
               <StudioPillField
-                label="Модель"
-                hint="WaveSpeed — как в workflow"
+                label={ts('page.modelLabel')}
+                hint={ts('page.modelHint')}
                 scrollRow
                 options={studioAvailableGenModels.map((m) => ({
                   value: m.id,
@@ -8232,8 +8100,8 @@ export default function App() {
             ) : null}
             {import.meta.env.DEV && health?.studio_allow_prompt_only ? (
               <>
-                <div className="studio-mode-row" role="group" aria-label="Режим вывода студии (отладка)">
-                  <span className="studio-mode-label">Вывод</span>
+                <div className="studio-mode-row" role="group" aria-label={ts('imageUi.outputDevAria')}>
+                  <span className="studio-mode-label">{ts('imageUi.outputLabel')}</span>
                   <div className="studio-mode-segment">
                     <button
                       type="button"
@@ -8243,7 +8111,7 @@ export default function App() {
                         setStudioRefinedPromptPreview(null)
                       }}
                     >
-                      Картинка
+                      {ts('imageUi.outputImage')}
                     </button>
                     <button
                       type="button"
@@ -8253,30 +8121,26 @@ export default function App() {
                         setStudioRefinedPromptPreview(null)
                       }}
                     >
-                      Только промпт
+                      {ts('imageUi.outputPromptOnly')}
                     </button>
                   </div>
                 </div>
-                <p className="studio-mode-hint">
-                  Только dev-сборка Vite +{' '}
-                  <span className="mono">STUDIO_ALLOW_PROMPT_ONLY=true</span> на сервере: WaveSpeed не
-                  вызывается, внизу показывается итоговый JSON-промпт.
-                </p>
+                <p className="studio-mode-hint">{ts('imageUi.devOutputHintPlain')}</p>
               </>
             ) : null}
             {health?.studio_wan_edit_tier_switch &&
             studioWaveProfile === 'nsfw' &&
             studioWaveModelId === 'wan-2.7' ? (
               <>
-                <div className="studio-mode-row" role="group" aria-label="Детализация редактора">
-                  <span className="studio-mode-label">Качество</span>
+                <div className="studio-mode-row" role="group" aria-label={ts('imageUi.qualityAria')}>
+                  <span className="studio-mode-label">{ts('page.qualityLabel')}</span>
                   <div className="studio-mode-segment">
                     <button
                       type="button"
                       className={`studio-mode-btn${studioWanEditTier === 'standard' ? ' is-active' : ''}`}
                       onClick={() => setStudioWanEditTier('standard')}
                     >
-                      Стандарт
+                      {ts('imageUi.standard')}
                     </button>
                     <button
                       type="button"
@@ -8287,12 +8151,12 @@ export default function App() {
                     </button>
                   </div>
                 </div>
-                <p className="studio-mode-hint">Pro — выше детализация, обычно дороже по кредитам.</p>
+                <p className="studio-mode-hint">{ts('imageUi.qualityHint')}</p>
               </>
             ) : null}
             <StudioPillField
-              label="Формат"
-              hint="Стороны кадра"
+              label={ts('imageUi.formatLabel')}
+              hint={ts('imageUi.formatHint')}
               scrollRow
               options={
                 (() => {
@@ -8318,15 +8182,15 @@ export default function App() {
               onChange={(v) => v != null && setStudioOutputAspect(String(v))}
             />
             <StudioPillField
-              label="Модель"
+              label={ts('imageUi.modelLabel')}
               hint={
                 studioMode === 'model_scene'
-                  ? 'Развёртка, тело, лицо — фигура и внешность модели'
+                  ? ts('imageUi.modelHintMain')
                   : studioModeUsesTextOnlyPrompt(studioMode)
-                    ? 'Обязательна — только её фото в генерацию'
+                    ? ts('imageUi.modelHintRequired')
                     : studioMode === 'face_swap' || studioMode === 'grok_compose'
-                      ? 'Или загрузите фото модели ниже'
-                      : 'Листы для лица и тела'
+                      ? ts('imageUi.modelHintOrUpload')
+                      : ts('imageUi.modelHintSheets')
               }
               icon={<IconModel className="studio-slot__icon-svg" />}
               scrollRow={studioModels.length > 4}
@@ -8334,15 +8198,15 @@ export default function App() {
               value={studioSelectedModelId}
               onChange={(v) => setStudioSelectedModelId(v)}
               allowEmpty={studioMode !== 'model_scene' && !studioModeUsesTextOnlyPrompt(studioMode)}
-              emptyLabel="Без модели"
+              emptyLabel={ts('imageUi.noModel')}
             />
             {studioMode === 'grok_compose' || studioMode === 'face_swap' ? (
               <StudioMediaSlot
-                label="Фото модели"
+                label={ts('imageUi.identityLabel')}
                 hint={
                   studioSelectedModelId != null
-                    ? 'Необязательно — identity уже из кабинета'
-                    : 'Лицо и внешность (как identity ref в workflow)'
+                    ? ts('imageUi.identityHintCabinet')
+                    : ts('imageUi.identityHintUpload')
                 }
                 icon="image"
                 previewUrl={studioIdentityObjectUrl}
@@ -8354,8 +8218,8 @@ export default function App() {
             ) : null}
             {studioMode === 'photo_edit' ? (
               <StudioArchiveThumbPicker
-                label="Кадр из архива"
-                hint="Вместо загрузки с устройства"
+                label={ts('imageUi.archiveLabel')}
+                hint={ts('imageUi.archiveHint')}
                 items={studioGenerations}
                 value={studioPhotoEditArchiveId}
                 onChange={(id) => {
@@ -8368,19 +8232,19 @@ export default function App() {
               <StudioMediaSlot
                 label={
                   studioMode === 'photo_edit'
-                    ? 'Фото'
+                    ? ts('imageUi.refPhoto')
                     : studioMode === 'face_swap' || studioMode === 'grok_compose'
-                      ? 'Референс сцены'
-                      : 'Референс'
+                      ? ts('imageUi.refScene')
+                      : ts('imageUi.refGeneric')
                 }
                 hint={
                   studioMode === 'photo_edit'
-                    ? 'Или выберите миниатюру выше'
+                    ? ts('imageUi.refOrThumb')
                     : studioMode === 'model_scene'
-                      ? 'Якорь кадра: Grok + WaveSpeed (поза, свет, ракурс)'
+                      ? ts('imageUi.refAnchor')
                       : studioMode === 'grok_compose' || studioMode === 'face_swap'
-                        ? 'Pose, фон, свет — как scene ref в «Смена модели»'
-                        : 'Поза и сцена'
+                        ? ts('imageUi.refPose')
+                        : ts('imageUi.refPoseScene')
                 }
                 icon="image"
                 previewUrl={studioReferenceObjectUrl}
@@ -8400,15 +8264,14 @@ export default function App() {
               />
             ) : (
               <p className="studio-mode-hint">
-                Режим «По промту»: сцена только из текста промпта, без референс-фото.
+                {ts('imageUi.promptOnlyHint')}
               </p>
             )}
             {studioFile &&
             STUDIO_REFERENCE_ANALYSIS_MODES.includes(studioMode) ? (
               <div className="studio-ref-analysis-block">
                 <p className="muted small" style={{ margin: '0 0 0.5rem' }}>
-                  Анализ референса определяет, какие части тела в кадре — промпт и фото модели
-                  подстроятся автоматически (без лишних инструкций про лицо/волосы).
+                  {ts('imageUi.refAnalysisLead')}
                 </p>
                 <div className="studio-ref-analysis-actions">
                   <button
@@ -8418,10 +8281,10 @@ export default function App() {
                     onClick={() => void analyzeStudioReference()}
                   >
                     {studioReferenceAnalyzing
-                      ? 'Анализ…'
+                      ? ts('imageUi.analyzing')
                       : studioReferenceAnalysis
-                        ? 'Переанализировать'
-                        : 'Анализировать референс'}
+                        ? ts('imageUi.reanalyze')
+                        : ts('imageUi.analyze')}
                   </button>
                 </div>
                 {studioReferenceAnalysis ? (
@@ -8431,33 +8294,31 @@ export default function App() {
                     </p>
                     {studioReferenceAnalysis.visibility.crop_locked_no_face ? (
                       <p className="muted small">
-                        Режим: кроп без лица — face-референсы модели не пойдут в генерацию.
+                        {ts('imageUi.noFaceCrop')}
                       </p>
                     ) : null}
                     {studioReferenceAnalysis.visibility.allowed_image_kinds?.length ? (
                       <p className="muted small">
-                        Референсы модели:{' '}
+                        {ts('imageUi.modelRefs')}{' '}
                         {studioReferenceAnalysis.visibility.allowed_image_kinds.join(', ')}
                       </p>
                     ) : null}
                   </div>
                 ) : (
                   <p className="muted small">
-                    Можно сразу «Сгенерировать» — анализ выполнится на сервере автоматически.
+                    {ts('imageUi.autoAnalyze')}
                   </p>
                 )}
               </div>
             ) : null}
             {studioMode === 'model_scene' ? (
               <p className="studio-mode-hint">
-                Пайплайн как workflow «По рефу»: модель из кабинета + референс сцены (Grok описывает
-                кадр, WaveSpeed собирает снимок).
+                {ts('imageUi.pipelineMain')}
               </p>
             ) : null}
             {studioMode === 'grok_compose' || studioMode === 'face_swap' ? (
               <p className="studio-mode-hint">
-                Пайплайн как workflow «Смена модели»: модель из кабинета или отдельное фото identity
-                + референс сцены с человеком.
+                {ts('imageUi.pipelineFaceSwap')}
               </p>
             ) : null}
             {!studioModeUsesTextOnlyPrompt(studioMode) && studioMode !== 'model_scene' ? (
@@ -8474,7 +8335,7 @@ export default function App() {
                   setStudioPaintInpaintMask(on)
                 }}
               />
-              <span>Нарисовать маску кистью — белым отметьте, что нужно изменить на снимке.</span>
+              <span>{ts('imageUi.maskPaint')}</span>
             </label>
             ) : null}
             {!studioModeUsesTextOnlyPrompt(studioMode) &&
@@ -8484,16 +8345,16 @@ export default function App() {
               <div className="studio-mask-painter-controls">
                 <div className="studio-mask-painter-row">
                   <label className="studio-mask-brush-label">
-                    Кисть
+                    {ts('imageUi.brushLabel')}
                     <select
                       value={studioMaskBrushPreset}
                       onChange={(e) =>
                         setStudioMaskBrushPreset(e.target.value as 's' | 'm' | 'l')
                       }
                     >
-                      <option value="s">Тонкая</option>
-                      <option value="m">Средняя</option>
-                      <option value="l">Толщина</option>
+                      <option value="s">{ts('imageUi.brushThin')}</option>
+                      <option value="m">{ts('imageUi.brushMedium')}</option>
+                      <option value="l">{ts('imageUi.brushThick')}</option>
                     </select>
                   </label>
                   <button
@@ -8501,7 +8362,7 @@ export default function App() {
                     className="ghost-btn"
                     onClick={() => studioMaskPainterRef.current?.clearMask()}
                   >
-                    Очистить маску
+                    {ts('imageUi.clearMask')}
                   </button>
                 </div>
                 <StudioInpaintMaskPainter
@@ -8521,8 +8382,8 @@ export default function App() {
                   : undefined
               }
             >
-              Файл маски (белое — что менять){' '}
-              <span className="muted studio-file-name">альтернатива кисти</span>
+              {ts('imageUi.maskFile')}{' '}
+              <span className="muted studio-file-name">{ts('imageUi.maskAlt')}</span>
               <input
                 type="file"
                 accept="image/png,image/jpeg,image/webp"
@@ -8539,13 +8400,13 @@ export default function App() {
                   className="muted"
                   style={{ display: 'block', marginTop: '0.35rem', fontSize: '0.85rem' }}
                 >
-                  Альтернатива кисти: полностью подготовленная маска во внешнем редакторе.
+                  {ts('imageUi.maskExternal')}
                 </span>
               ) : null}
             </label>
             ) : null}
             {studioSelectedModelId != null ? (
-              <div className="studio-mode-row" role="group" aria-label="Камера для EXIF при сохранении">
+              <div className="studio-mode-row" role="group" aria-label={ts('imageUi.exifAria')}>
                 <span className="studio-mode-label">EXIF</span>
                 <div className="studio-mode-segment">
                   <button
@@ -8553,22 +8414,21 @@ export default function App() {
                     className={`studio-mode-btn${studioExifCamera === 'selfie' ? ' is-active' : ''}`}
                     onClick={() => setStudioExifCamera('selfie')}
                   >
-                    Фронталка
+                    {ts('imageUi.exifSelfie')}
                   </button>
                   <button
                     type="button"
                     className={`studio-mode-btn${studioExifCamera === 'main' ? ' is-active' : ''}`}
                     onClick={() => setStudioExifCamera('main')}
                   >
-                    Основная
+                    {ts('imageUi.exifMain')}
                   </button>
                 </div>
               </div>
             ) : null}
             {studioSelectedModelId != null ? (
               <p className="studio-mode-hint">
-                При сохранении кадра в архив подставляются эталоны EXIF модели (фронталка или основная
-                камера) или пресет «как с телефона».
+                {ts('imageUi.exifHint')}
               </p>
             ) : null}
             <div className="studio-toggles">
@@ -8579,7 +8439,7 @@ export default function App() {
                 className="studio-toggle-row"
                 style={!studioFile ? { opacity: 0.55 } : undefined}
               >
-                <span>Причёска с модели</span>
+                <span>{ts('imageUi.hairFromModel')}</span>
                 <input
                   type="checkbox"
                   checked={studioLockModelHairstyle}
@@ -8593,7 +8453,7 @@ export default function App() {
                 className="studio-toggle-row"
                 style={!studioFile ? { opacity: 0.55 } : undefined}
               >
-                <span>Референс позы в WaveSpeed</span>
+                <span>{ts('imageUi.poseRefWs')}</span>
                 <input
                   type="checkbox"
                   checked={studioSendPoseRefToWavespeed}
@@ -8615,13 +8475,13 @@ export default function App() {
                   </svg>
                 </span>
                 <div className="studio-slot__titles">
-                  <span className="studio-slot__label">Промпт</span>
+                  <span className="studio-slot__label">{ts('imageUi.promptLabel')}</span>
                   <span className="studio-slot__hint">
                     {studioMode === 'model_scene'
-                      ? 'Уточнения к сцене (опционально)'
+                      ? ts('imageUi.promptHintScene')
                       : studioModeUsesTextOnlyPrompt(studioMode)
-                        ? 'Поза, место, одежда, свет — подробно'
-                        : 'Сцена, свет, настроение'}
+                        ? ts('imageUi.promptHintDetail')
+                        : ts('imageUi.promptHintDefault')}
                   </span>
                 </div>
               </div>
@@ -8629,10 +8489,10 @@ export default function App() {
                 rows={4}
                 placeholder={
                   studioMode === 'model_scene'
-                    ? 'По желанию: уточнить одежду, настроение, детали…'
+                    ? ts('imageUi.promptPhOptional')
                     : studioModeUsesTextOnlyPrompt(studioMode)
-                      ? 'Например: спальня, стоит у окна, красное платье, мягкий дневной свет…'
-                      : 'Опишите кадр…'
+                      ? ts('imageUi.promptPhExample')
+                      : ts('imageUi.promptPhDefault')
                 }
                 value={studioDesc}
                 onChange={(e) => setStudioDesc(e.target.value)}
@@ -8644,7 +8504,7 @@ export default function App() {
             studioDevPromptOnly &&
             studioRefinedPromptPreview ? (
               <label className="studio-label">
-                Итоговый промпт (WaveSpeed не вызывался)
+                {ts('imageUi.promptOnlyResult')}
                 <textarea
                   className="mono"
                   rows={16}
@@ -8660,7 +8520,7 @@ export default function App() {
             {studioPendingExternalImageUrl ? (
               <div className="studio-pending-archive studio-upscale-row" style={{ marginTop: '0.5rem', flexWrap: 'wrap', gap: '0.5rem' }}>
                 <p className="muted" style={{ margin: 0, flex: '1 1 12rem' }}>
-                  Картинка готова, но не попала в «Сохранённые». Можно сохранить в архив без повторной генерации.
+                  {ts('imageUi.pendingArchive')}
                 </p>
                 <button
                   type="button"
@@ -8668,19 +8528,19 @@ export default function App() {
                   disabled={studioImportArchiveBusy || !canStudioGenerate}
                   onClick={() => void retryImportStudioImageToArchive('studio_photo')}
                 >
-                  {studioImportArchiveBusy ? 'Сохраняем в архив…' : 'Сохранить в архив'}
+                  {studioImportArchiveBusy ? ts('imageUi.savingArchive') : ts('imageUi.saveArchive')}
                 </button>
               </div>
             ) : null}
             {studioGenImageUrl ? (
               <div className="studio-result-panel studio-generated">
-                <h3 className="studio-generated-title">Результат</h3>
+                <h3 className="studio-generated-title">{ts('imageUi.resultTitle')}</h3>
                 <div className="studio-generated-frame">
-                  <img src={studioGenImageUrl} alt="Сгенерировано" className="studio-gen-img" />
+                  <img src={studioGenImageUrl} alt={ts('imageUi.resultAlt')} className="studio-gen-img" />
                 </div>
                 <div className="studio-upscale-row">
                   <label className="studio-upscale-control">
-                    <span className="studio-upscale-control-label">Апскейл</span>
+                    <span className="studio-upscale-control-label">{ts('imageUi.upscale')}</span>
                     <select
                       value={studioUpscaleTarget}
                       onChange={(e) =>
@@ -8706,16 +8566,16 @@ export default function App() {
                       !integ?.wavespeed_configured
                         ? studioIntegrationsHint()
                         : studioGenGenerationId == null
-                          ? 'Выберите снимок из «Сохранённые» или сгенерируйте снова'
+                          ? ts('imageUi.upscalePick')
                           : undefined
                     }
                     onClick={() => void upscaleStudioGeneration()}
                   >
-                    {studioUpscaleBusy ? 'Апскейл…' : 'Апскейл'}
+                    {studioUpscaleBusy ? ts('imageUi.upscaleBusy') : ts('imageUi.upscale')}
                   </button>
                   {canStudioGenerate && health?.studio_upscale_credit_cost != null ? (
                     <span className="studio-credit-hint">
-                      {health.studio_upscale_credit_cost} кр.
+                      {health.studio_upscale_credit_cost} {ts('imageUi.creditSuffix')}
                     </span>
                   ) : null}
                 </div>
@@ -8733,11 +8593,11 @@ export default function App() {
                     title={
                       !integ?.wavespeed_configured
                         ? studioIntegrationsHint()
-                        : 'Тот же сценарий и образ, другие ракурсы'
+                        : ts('imageUi.carousel3')
                     }
                     onClick={() => void runStudioCarousel(3)}
                   >
-                    {studioCarouselBusy ? 'Карусель…' : 'Карусель ×3'}
+                    {studioCarouselBusy ? ts('page.generating') : ts('imageUi.carousel3Btn')}
                   </button>
                   <button
                     type="button"
@@ -8752,15 +8612,15 @@ export default function App() {
                     title={
                       !integ?.wavespeed_configured
                         ? studioIntegrationsHint()
-                        : 'Четыре кадра для ленты — окружение и образ как на этом снимке'
+                        : ts('imageUi.carousel4')
                     }
                     onClick={() => void runStudioCarousel(4)}
                   >
-                    {studioCarouselBusy ? 'Карусель…' : 'Карусель ×4'}
+                    {studioCarouselBusy ? ts('page.generating') : ts('imageUi.carousel4Btn')}
                   </button>
                   {canStudioGenerate && health?.studio_carousel_credit_cost != null ? (
                     <span className="studio-credit-hint">
-                      {health.studio_carousel_credit_cost} кр./кадр
+                      {health.studio_carousel_credit_cost} {ts('imageUi.creditPerFrame')}
                     </span>
                   ) : null}
                 </div>
@@ -8769,7 +8629,7 @@ export default function App() {
                     type="button"
                     className="ghost-btn studio-video-from-img-btn"
                     disabled={studioGenGenerationId == null || !canStudioGenerate}
-                    title="Открыть вкладку «Видео» с этим кадром"
+                    title={ts('imageUi.toVideoTitle')}
                     onClick={() => {
                       if (studioGenGenerationId == null) return
                       const g = findStudioArchiveItem(studioGenGenerationId)
@@ -8779,17 +8639,17 @@ export default function App() {
                       setAppSection('studio_video')
                     }}
                   >
-                    Видео из этого кадра
+                    {ts('imageUi.toVideo')}
                   </button>
                 </div>
                 <button
                   type="button"
                   className="send-btn studio-download"
                   disabled={studioDownloadBusy}
-                  title="На iPhone откроется меню «Поделиться» — сохраните в Фото без выхода из приложения"
+                  title={ts('imageUi.downloadIosTitle')}
                   onClick={() => void downloadStudioResultImage()}
                 >
-                  {studioDownloadBusy ? 'Сохранение…' : 'Скачать'}
+                  {studioDownloadBusy ? ts('imageUi.downloadBusy') : ts('imageUi.download')}
                 </button>
               </div>
             ) : null}
@@ -8810,17 +8670,17 @@ export default function App() {
                       onClick={() => void refineStudioPrompt()}
                     >
                       {studioBusy
-                        ? 'Генерация…'
+                        ? ts('page.generating')
                         : studioPromptOnlyDev
-                          ? 'Собрать промпт'
-                          : 'Сгенерировать'}
+                          ? ts('imageUi.buildPrompt')
+                          : ts('page.generate')}
                       {canStudioGenerate &&
                       (studioPromptOnlyDev || integ?.wavespeed_configured) ? (
                         <span className="studio-magic-btn__cost">
                           <IconSpark className="studio-slot__icon-svg" />
                           {studioImageCreditQuote.label === 'Pro'
                             ? 'Pro'
-                            : `${studioImageCreditQuote.label} кр.`}
+                            : `${studioImageCreditQuote.label} ${ts('imageUi.creditSuffix')}`}
                         </span>
                       ) : null}
                     </button>
@@ -8832,14 +8692,14 @@ export default function App() {
             </div>
             {canStudioGenerate ? (
               <StudioGenerationGallery
-                title="История"
+                title={ts('gallery.title')}
                 lead={studioArchiveRetentionLead(health)}
                 items={studioGenerations}
                 loading={studioArchiveInitialLoading}
                 hasMore={studioGenHasMore}
                 loadingMore={studioGenLoadingMore}
                 onLoadMore={() => void loadMoreStudioGenerations()}
-                loadMoreLabel={`Ещё ${STUDIO_ARCHIVE_PAGE}`}
+                loadMoreLabel={ts('imageUi.loadMore', { count: STUDIO_ARCHIVE_PAGE })}
                 onDelete={(g) =>
                   void deleteStudioGeneration(g.id, g.image_url || g.video_url || '')
                 }
@@ -8863,16 +8723,16 @@ export default function App() {
           <div className="studio-workspace">
             <div className="studio-workspace__composer">
               <header className="studio-workspace__composer-head">
-                <h2 id="studio-bootstrap-heading">База модели</h2>
+                <h2 id="studio-bootstrap-heading">{ts('page.bootstrapTitle')}</h2>
                 <p className="studio-workspace__tagline">
-                  Развёртка 16:9 из своего фото или архива; опционально — слияние двух референсов.
+                  {ts('imageUi.bootstrapTagline')}
                 </p>
               </header>
               {!canStudioGenerate ? (
-                <div className="banner info">Генерация недоступна по правам.</div>
+                <div className="banner info">{ts('imageUi.noPermBanner')}</div>
               ) : studioPaywalled ? (
                 <div className="banner info">
-                  Оформите подписку в кабинете → «Тариф и баланс».
+                  {ts('imageUi.subRequired')}
                 </div>
               ) : (
                 <div className="studio-workspace__composer-scroll">
@@ -8904,14 +8764,14 @@ export default function App() {
             </div>
             {canStudioGenerate ? (
               <StudioGenerationGallery
-                title="История"
+                title={ts('gallery.title')}
                 lead={studioArchiveRetentionLead(health)}
                 items={studioGenerations}
                 loading={studioArchiveInitialLoading}
                 hasMore={studioGenHasMore}
                 loadingMore={studioGenLoadingMore}
                 onLoadMore={() => void loadMoreStudioGenerations()}
-                loadMoreLabel={`Ещё ${STUDIO_ARCHIVE_PAGE}`}
+                loadMoreLabel={ts('imageUi.loadMore', { count: STUDIO_ARCHIVE_PAGE })}
                 onDelete={(g) =>
                   void deleteStudioGeneration(g.id, g.image_url || g.video_url || '')
                 }
@@ -8932,9 +8792,9 @@ export default function App() {
             <div className="studio-workspace">
             <div className="studio-workspace__composer">
               <header className="studio-workspace__composer-head">
-                <h2 id="studio-motion-heading">Видео</h2>
+                <h2 id="studio-motion-heading">{ts('page.videoTitle')}</h2>
                 <p className="studio-workspace__tagline">
-                  Реф-ролик, первый кадр и бриф — готовые ролики в истории справа.
+                  {ts('videoUi.tagline')}
                 </p>
               </header>
               {!studioPaywalled && studioNeedsUserWsKey ? (
@@ -8946,18 +8806,18 @@ export default function App() {
               ) : null}
             {!canStudioGenerate ? (
               <div className="banner info" role="status">
-                Нет прав на генерацию. Обратитесь к владельцу аккаунта.
+                {ts('videoUi.noPerm')}
               </div>
             ) : studioPaywalled ? (
               <div className="banner info" role="status">
-                Оформите подписку в кабинете → «Тариф и баланс».
+                {ts('videoUi.paywall')}
               </div>
             ) : (
               <>
               <div className="studio-workspace__composer-scroll">
               <div className="studio-slot-grid studio-slot-grid--composer">
                 <StudioPillField
-                  label="Формат"
+                  label={ts('videoUi.formatLabel')}
                   scrollRow
                   options={
                     studioAspectPresets.length > 0
@@ -8972,29 +8832,29 @@ export default function App() {
                   onChange={(v) => v != null && setStudioOutputAspect(String(v))}
                 />
                 <StudioPillField
-                  label="Модель"
+                  label={ts('videoUi.modelLabel')}
                   icon={<IconModel className="studio-slot__icon-svg" />}
                   options={studioModels.map((m) => ({ value: m.id, label: m.name }))}
                   value={studioSelectedModelId}
                   onChange={(v) => setStudioSelectedModelId(v)}
                   allowEmpty
-                  emptyLabel="Выберите"
+                  emptyLabel={ts('videoUi.selectModel')}
                 />
                 {health?.studio_grok_motion_configured === false ? (
                   <div className="banner warn">
-                    Grok не настроен на сервере.
+                    {ts('videoUi.grokNotConfigured')}
                   </div>
                 ) : null}
 
                 <div className="studio-video-step-card">
-                  <h3>Кадр и движение</h3>
+                  <h3>{ts('videoUi.frameMotion')}</h3>
                   <div className="studio-slot-grid">
                     <StudioMediaSlot
-                      label="Реф. видео"
-                      hint="Движение · MP4"
+                      label={ts('videoUi.refVideo')}
+                      hint={ts('videoUi.refVideoHint')}
                       icon="video"
                       busy={motionDrivingUploadBusy}
-                      emptyLabel={motionVideoFile?.name || 'Загрузить'}
+                      emptyLabel={motionVideoFile?.name || ts('videoUi.upload')}
                       accept="video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov"
                       onFile={(f) => {
                         ++motionVideoUploadSeqRef.current
@@ -9011,7 +8871,7 @@ export default function App() {
                       }}
                     />
                     <StudioMediaSlot
-                      label="Первый кадр"
+                      label={ts('videoUi.firstFrame')}
                       hint="JPG, PNG"
                       icon="image"
                       previewUrl={studioMotionStillDisplayUrl}
@@ -9029,8 +8889,8 @@ export default function App() {
                     />
                   </div>
                   <StudioArchiveThumbPicker
-                    label="Кадр из архива"
-                    hint="Вместо загрузки файла"
+                    label={ts('videoUi.archiveFrameLabel')}
+                    hint={ts('videoUi.archiveFrameHint')}
                     items={studioImagePickerArchive}
                     value={motionFrameArchiveId}
                     onChange={(id, item) => {
@@ -9044,9 +8904,9 @@ export default function App() {
                     }}
                   />
                   <StudioPillField
-                    label="Стиль кадра"
+                    label={ts('videoUi.frameStyle')}
                     options={[
-                      { value: 'regular', label: 'Обычный' },
+                      { value: 'regular', label: ts('videoUi.frameRegular') },
                       { value: 'nsfw', label: 'NSFW' },
                     ]}
                     value={motionFirstFrameWaveProfile}
@@ -9056,7 +8916,7 @@ export default function App() {
                     }
                   />
                   {studioSelectedModelId != null ? (
-                    <div className="studio-mode-row" role="group" aria-label="Камера для EXIF при сохранении кадра">
+                    <div className="studio-mode-row" role="group" aria-label={ts('videoUi.exifAria')}>
                       <span className="studio-mode-label">EXIF</span>
                       <div className="studio-mode-segment">
                         <button
@@ -9064,21 +8924,21 @@ export default function App() {
                           className={`studio-mode-btn${studioExifCamera === 'selfie' ? ' is-active' : ''}`}
                           onClick={() => setStudioExifCamera('selfie')}
                         >
-                          Фронталка
+                          {ts('imageUi.exifSelfie')}
                         </button>
                         <button
                           type="button"
                           className={`studio-mode-btn${studioExifCamera === 'main' ? ' is-active' : ''}`}
                           onClick={() => setStudioExifCamera('main')}
                         >
-                          Основная
+                          {ts('imageUi.exifMain')}
                         </button>
                       </div>
                     </div>
                   ) : null}
                   <div className="studio-toggles">
                     <label className="studio-toggle-row">
-                      <span>Timeline по ролику</span>
+                      <span>{ts('videoUi.timelineFromVideo')}</span>
                       <input
                         type="checkbox"
                         checked={motionAutoPrompt}
@@ -9086,7 +8946,7 @@ export default function App() {
                       />
                     </label>
                     <label className="studio-toggle-row">
-                      <span>Причёска модели</span>
+                      <span>{ts('videoUi.lockHairstyle')}</span>
                       <input
                         type="checkbox"
                         checked={motionLockHairstyle}
@@ -9094,7 +8954,7 @@ export default function App() {
                       />
                     </label>
                     <label className="studio-toggle-row">
-                      <span>Кадр без WaveSpeed</span>
+                      <span>{ts('videoUi.frameNoWs')}</span>
                       <input
                         type="checkbox"
                         checked={motionUseStillFinal}
@@ -9105,13 +8965,13 @@ export default function App() {
                   <textarea
                     className="studio-field-textarea"
                     rows={2}
-                    placeholder="Уточнения к кадру (по желанию)"
+                    placeholder={ts('videoUi.frameNotesPh')}
                     value={motionFrameNotes}
                     onChange={(e) => setMotionFrameNotes(e.target.value)}
                   />
                   {motionStep1Preview ? (
                     <details className="studio-video-auto-block">
-                      <summary>Grok: сцена и движение</summary>
+                      <summary>{ts('videoUi.grokSummary')}</summary>
                       <div className="studio-motion-auto-preview">{motionStep1Preview}</div>
                     </details>
                   ) : null}
@@ -9126,7 +8986,7 @@ export default function App() {
                       }
                       onClick={() => void runMotionComposeVideoPrompt()}
                     >
-                      {motionBusyCompose ? 'Grok…' : 'Промпт по видео'}
+                      {motionBusyCompose ? ts('videoUi.grokBusy') : ts('videoUi.promptFromVideo')}
                     </button>
                     <button
                       type="button"
@@ -9142,16 +9002,16 @@ export default function App() {
                       }
                       title={
                         motionDrivingUploadBusy && motionVideoFile
-                          ? 'Дождитесь окончания загрузки реф-видео на сервер'
+                          ? ts('videoUi.waitVideoUpload')
                           : undefined
                       }
                       onClick={() => void runMotionFirstFrame()}
                     >
                       {motionBusyFrame
-                        ? 'Кадр…'
+                        ? ts('videoUi.frameBusy')
                         : motionDrivingUploadBusy && motionVideoFile
-                          ? 'Загрузка видео…'
-                          : 'Сгенерировать кадр'}
+                          ? ts('videoUi.videoUploading')
+                          : ts('videoUi.genFrame')}
                     </button>
                   </div>
                 </div>
@@ -9159,8 +9019,8 @@ export default function App() {
                 <div className="studio-video-step-card">
                   <h3>Seedance</h3>
                   <StudioArchiveThumbPicker
-                    label="Наряд (опционально)"
-                    hint="Доп. референс одежды"
+                    label={ts('videoUi.outfit')}
+                    hint={ts('videoUi.outfitHint')}
                     items={studioImagePickerArchive}
                     value={motionOutfitArchiveId}
                     onChange={(id) => setMotionOutfitArchiveId(id)}
@@ -9173,19 +9033,19 @@ export default function App() {
                         </svg>
                       </span>
                       <div className="studio-slot__titles">
-                        <span className="studio-slot__label">Бриф</span>
-                        <span className="studio-slot__hint">Сцена и движение</span>
+                        <span className="studio-slot__label">{ts('videoUi.brief')}</span>
+                        <span className="studio-slot__hint">{ts('videoUi.briefHint')}</span>
                       </div>
                     </div>
                     <textarea
                       rows={4}
-                      placeholder="Опишите ролик…"
+                      placeholder={ts('videoUi.briefPh')}
                       value={motionDesc}
                       onChange={(e) => setMotionDesc(e.target.value)}
                     />
                   </div>
                   <StudioPillField
-                    label="Модель"
+                    label={ts('videoUi.modelLabel')}
                     options={[
                       {
                         value: 'standard',
@@ -9200,7 +9060,7 @@ export default function App() {
                     onChange={(v) => v != null && setMotionSeedanceVariant(v as SeedanceT2vVariant)}
                   />
                   <StudioPillField
-                    label="Качество"
+                    label={ts('videoUi.qualityLabel')}
                     options={(health?.studio_seedance_t2v_resolutions ?? ['480p', '720p', '1080p']).map(
                       (res) => ({
                         value: res,
@@ -9211,7 +9071,7 @@ export default function App() {
                     onChange={(v) => v != null && setMotionVideoResolution(v as SeedanceT2vResolution)}
                   />
                   <StudioPillField
-                    label="Длительность"
+                    label={ts('videoUi.duration')}
                     options={Array.from(
                       { length: Math.max(0, seedanceDurationMax - seedanceDurationMin + 1) },
                       (_, i) => {
@@ -9225,36 +9085,42 @@ export default function App() {
                             resolution: motionVideoResolution,
                           },
                         )
-                        const costSuffix = ` · ${cost} кр.`
-                        return { value: sec, label: `${sec} с${costSuffix}` }
+                        const costSuffix = ` · ${cost} ${ts('imageUi.creditSuffix')}`
+                        return { value: sec, label: ts('videoUi.durationSec', { sec }) + costSuffix }
                       },
                     )}
                     value={motionSeedanceDuration}
                     onChange={(v) => v != null && setMotionSeedanceDuration(Number(v))}
                   />
                   <p className="muted studio-field-hint">
-                    Стоимость: ${motionVideoUsdPerSecDisplay.toFixed(3)}/с (≈{' '}
-                    {computeMotionVideoCreditCost(1, motionHasReferenceVideo, motionVideoPricing, {
-                      variant: motionSeedanceVariant,
+                    {ts('videoUi.costHint', {
+                      usdPerSec: motionVideoUsdPerSecDisplay.toFixed(3),
+                      creditPerSec: computeMotionVideoCreditCost(1, motionHasReferenceVideo, motionVideoPricing, {
+                        variant: motionSeedanceVariant,
+                        resolution: motionVideoResolution,
+                      }),
                       resolution: motionVideoResolution,
-                    })}{' '}
-                    кр./с, {motionVideoResolution},{' '}
-                    {motionSeedanceVariant === 'mini' ? 'Mini' : 'Standard'}
-                    {motionHasReferenceVideo ? ', с реф-видео' : ''}). Курс {motionVideoPricing.rub_per_usd}{' '}
-                    ₽/$, {motionVideoPricing.rub_per_credit} ₽/кредит.
+                      variant:
+                        motionSeedanceVariant === 'mini'
+                          ? ts('videoUi.costVariantMini')
+                          : ts('videoUi.costVariantStandard'),
+                      refVideoSuffix: motionHasReferenceVideo ? ts('videoUi.costRefVideoSuffix') : '',
+                      rubPerUsd: motionVideoPricing.rub_per_usd,
+                      rubPerCredit: motionVideoPricing.rub_per_credit,
+                    })}
                   </p>
                   <label className="studio-field-optional">
-                    Негатив (по желанию)
+                    {ts('videoUi.negativeLabel')}
                     <textarea
                       rows={2}
-                      placeholder="Чего избегать"
+                      placeholder={ts('videoUi.negativePlaceholder')}
                       value={motionVideoNegPrompt}
                       onChange={(e) => setMotionVideoNegPrompt(e.target.value)}
                     />
                   </label>
                   <div className="studio-toggles">
                     <label className="studio-toggle-row">
-                      <span>Звук</span>
+                      <span>{ts('videoUi.soundToggle')}</span>
                       <input
                         type="checkbox"
                         checked={motionKeepSound}
@@ -9264,7 +9130,7 @@ export default function App() {
                   </div>
                   {motionAutoTextPreview ? (
                     <details className="studio-video-auto-block">
-                      <summary>Промпт Seedance</summary>
+                      <summary>{ts('videoUi.seedancePrompt')}</summary>
                       <div className="studio-motion-auto-preview">{motionAutoTextPreview}</div>
                     </details>
                   ) : null}
@@ -9286,7 +9152,7 @@ export default function App() {
                           disabled={motionVideoDownloadBusy}
                           onClick={() => void downloadMotionResultVideo(motionResultVideoUrl)}
                         >
-                          {motionVideoDownloadBusy ? 'Сохранение…' : 'Скачать'}
+                          {motionVideoDownloadBusy ? ts('imageUi.downloadBusy') : ts('imageUi.download')}
                         </button>
                       </div>
                     </div>
@@ -9309,7 +9175,7 @@ export default function App() {
                       title={motionVideoBtnBlockReason ?? undefined}
                       onClick={() => void runMotionRenderVideo()}
                     >
-                      {motionBusyVideo ? 'Видео…' : 'Сгенерировать видео'}
+                      {motionBusyVideo ? ts('videoUi.videoBusy') : ts('videoUi.genVideo')}
                       <span
                         className="studio-magic-btn__cost"
                         key={`${motionSeedanceDuration}-${motionHasReferenceVideo ? 1 : 0}`}
@@ -9326,15 +9192,15 @@ export default function App() {
             </div>
             {canStudioGenerate ? (
               <StudioGenerationGallery
-                title="История"
+                title={ts('gallery.title')}
                 lead={studioArchiveRetentionLead(health, 'video')}
                 items={studioVideoGalleryItems}
                 loading={studioArchiveInitialLoading}
                 hasMore={studioGenHasMore}
                 loadingMore={studioGenLoadingMore}
                 onLoadMore={() => void loadMoreStudioGenerations()}
-                loadMoreLabel={`Ещё ${STUDIO_ARCHIVE_PAGE}`}
-                emptyText="Здесь появятся ваши ролики после «Сделать видео»"
+                loadMoreLabel={ts('imageUi.loadMore', { count: STUDIO_ARCHIVE_PAGE })}
+                emptyText={ts('videoUi.galleryEmpty')}
                 onDelete={(g) => deleteStudioVideoArchiveItem(g)}
               />
             ) : null}
@@ -9346,7 +9212,7 @@ export default function App() {
       <div className={layoutClass}>
         <aside className="sidebar">
           <div className="sidebar-head">
-            <h2>Диалоги</h2>
+            <h2>{tc('sidebar.title')}</h2>
             <span className="sidebar-hint">{filteredConversations.length}</span>
           </div>
           <ConversationPlatformTabs
@@ -9363,10 +9229,12 @@ export default function App() {
           {filteredConversations.length === 0 && (
             <p className="muted empty-hint">
               {conversations.length === 0
-                ? 'Подключите бота или Fanvue в кабинете → Подключения.'
+                ? tc('sidebar.emptyNoConversations')
                 : chatCategoryTab !== 'all'
-                  ? `Нет диалогов в категории «${CONVERSATION_CATEGORY_META[chatCategoryTab].label}».`
-                  : `Нет диалогов в ${platformLabel(chatPlatformTab)}.`}
+                  ? tc('sidebar.emptyCategory', {
+                      category: conversationCategoryLabel(chatCategoryTab),
+                    })
+                  : tc('sidebar.emptyPlatform', { platform: platformLabel(chatPlatformTab) })}
             </p>
           )}
           <div className="sidebar-conv-scroll">
@@ -9374,7 +9242,7 @@ export default function App() {
             {filteredConversations.map((c) => {
               const unread = c.unread_count ?? 0
               const hasUnread = unread > 0 && c.id !== selectedId
-              const catBadge = conversationCategoryBadge(c)
+              const catBadge = conversationCategoryBadgeLabel(c)
               return (
                 <li key={c.id}>
                   <button
@@ -9402,28 +9270,28 @@ export default function App() {
                     </span>
                     <span className="conv-main">
                     <span className="conv-row-top">
-                      <span className="name">{c.user_display_name ?? 'Без имени'}</span>
+                      <span className="name">{c.user_display_name ?? tc('thread.unnamed')}</span>
                       {(c.outbound_lang || c.user_lang) && (
                         <span
                           className="lang"
                           title={
                             c.outbound_lang
-                              ? `Ответ: ${c.outbound_lang} (принудительно)`
-                              : `Язык переписки: ${c.user_lang ?? '—'}`
+                              ? tc('thread.replyLangForced', { lang: c.outbound_lang })
+                              : tc('thread.replyLang', { lang: c.user_lang ?? '—' })
                           }
                         >
                           {c.outbound_lang ? `${c.outbound_lang}*` : c.user_lang}
                         </span>
                       )}
                       {unread > 0 ? (
-                        <span className="unread-badge" title="Непрочитанных">
+                        <span className="unread-badge" title={tc('thread.unreadTitle')}>
                           {unread > 99 ? '99+' : unread}
                         </span>
                       ) : null}
                     </span>
                     {c.studio_model_id != null ? (
                       <span className="conv-model-line">
-                        Модель ·{' '}
+                        {tc('thread.modelLine')}{' '}
                         <strong>
                           {studioModels.find((m) => m.id === c.studio_model_id)?.name ??
                             `#${c.studio_model_id}`}
@@ -9449,8 +9317,8 @@ export default function App() {
           {!selected && (
             <div className="empty-thread">
               <div className="empty-card">
-                <p className="empty-title">Выберите диалог</p>
-                <p className="empty-sub">Слева список переписок с канала</p>
+                <p className="empty-title">{tc('thread.selectTitle')}</p>
+                <p className="empty-sub">{tc('thread.selectSub')}</p>
               </div>
             </div>
           )}
@@ -9471,7 +9339,7 @@ export default function App() {
                       type="button"
                       className="back-btn"
                       onClick={() => setSelectedId(null)}
-                      aria-label="Назад к списку диалогов"
+                      aria-label={tc('thread.backAria')}
                     >
                       <span className="back-btn-icon" aria-hidden>
                         ‹
@@ -9481,9 +9349,9 @@ export default function App() {
                   <ThreadAvatar conv={selected} />
                   <div className="thread-head-text">
                     <h3>
-                      {selected.user_display_name ?? 'Диалог'}
+                      {selected.user_display_name ?? tc('thread.dialogFallback')}
                       {(() => {
-                        const headBadge = conversationCategoryBadge(selected)
+                        const headBadge = conversationCategoryBadgeLabel(selected)
                         return headBadge ? (
                           <span
                             className={`thread-head-cat-badge conv-cat-badge conv-cat-badge--${headBadge.key}`}
@@ -9513,7 +9381,7 @@ export default function App() {
                   selected.studio_model_id != null &&
                   studioModels.length > 0 ? (
                     <div className="thread-head-model-chip">
-                      <span className="thread-head-model-chip__label">Модель</span>
+                      <span className="thread-head-model-chip__label">{tc('thread.modelLabel')}</span>
                       <span className="thread-head-model-chip__value">
                         {studioModels.find((m) => m.id === selected.studio_model_id)?.name ??
                           `#${selected.studio_model_id}`}
@@ -9525,7 +9393,7 @@ export default function App() {
                       <button
                         type="button"
                         className="thread-head-icon-btn"
-                        title="Заметки о пользователе"
+                        title={tc('thread.notesTitle')}
                         onClick={() => setConvNotesOpen(true)}
                       >
                         <span aria-hidden>📝</span>
@@ -9533,7 +9401,7 @@ export default function App() {
                       <button
                         type="button"
                         className="thread-head-icon-btn"
-                        title="Настройки чата"
+                      title={tc('thread.settingsTitle')}
                         aria-expanded={threadSettingsOpen}
                         onClick={() => setThreadSettingsOpen((o) => !o)}
                       >
@@ -9552,22 +9420,22 @@ export default function App() {
                 >
                     <div
                       className="outbound-lang-field thread-head-lang"
-                      title="На какой язык переводить ваши ответы. «Авто» — по последним входящим (поле user_lang)."
+                      title={tc('thread.outboundLangTitle')}
                     >
                       {!isMobileLayout ? (
                         <label className="outbound-lang-label" htmlFor="outbound-lang-select">
-                          Язык ответа
+                          {tc('thread.outboundLangLabel')}
                         </label>
                       ) : null}
                       <select
                         id="outbound-lang-select"
                         className="outbound-lang-select"
-                        aria-label="Язык ответа"
+                        aria-label={tc('thread.outboundLangAria')}
                         value={selected.outbound_lang ?? ''}
                         disabled={outboundLangBusy}
                         onChange={(e) => void saveOutboundLang(selected.id, e.target.value)}
                       >
-                        {OUTBOUND_LANG_OPTIONS.map((o) => (
+                        {outboundLangOptions().map((o) => (
                           <option key={o.value || 'auto'} value={o.value}>
                             {o.label}
                           </option>
@@ -9576,7 +9444,7 @@ export default function App() {
                     </div>
                     <div
                       className="outbound-lang-field auto-translate-toggle"
-                      title="Отключить автоперевод входящих и исходящих в этом диалоге."
+                      title={tc('thread.autoTranslateTitle')}
                     >
                       <label className="auto-translate-label">
                         <input
@@ -9587,12 +9455,12 @@ export default function App() {
                             void saveAutoTranslateDisabled(selected.id, e.target.checked)
                           }
                         />
-                        <span>Без перевода</span>
+                        <span>{tc('thread.noTranslate')}</span>
                       </label>
                     </div>
                     <div className="outbound-lang-field thread-head-lang">
                       <label className="outbound-lang-label" htmlFor="companion-mode-select">
-                        AI-компаньон
+                        {t('cabinet.integrations.aiCompanion')}
                       </label>
                       <select
                         id="companion-mode-select"
@@ -9603,16 +9471,16 @@ export default function App() {
                           void saveCompanionModeOverride(selected.id, e.target.value)
                         }
                       >
-                        {COMPANION_CONVERSATION_MODE_OPTIONS.map((o) => (
-                          <option key={o.value || 'inherit'} value={o.value}>
-                            {o.label}
+                        {COMPANION_CONVERSATION_MODE_VALUES.map((value) => (
+                          <option key={value || 'inherit'} value={value}>
+                            {companionModeLabel(value, 'conversation')}
                           </option>
                         ))}
                       </select>
                     </div>
                     <div className="outbound-lang-field thread-head-lang">
                       <label className="outbound-lang-label" htmlFor="conv-category-select">
-                        Категория
+                        {tc('thread.categoryLabel')}
                       </label>
                       <select
                         id="conv-category-select"
@@ -9623,9 +9491,9 @@ export default function App() {
                           void saveManualCategory(selected.id, e.target.value)
                         }
                       >
-                        {MANUAL_CATEGORY_OPTIONS.map((o) => (
-                          <option key={o.value || 'none'} value={o.value}>
-                            {o.label}
+                        {MANUAL_CATEGORY_VALUES.map((value) => (
+                          <option key={value || 'none'} value={value}>
+                            {manualCategoryLabel(value)}
                           </option>
                         ))}
                       </select>
@@ -9633,7 +9501,7 @@ export default function App() {
                     {isOwner ? (
                       <div className="outbound-lang-field thread-head-lang">
                         <label className="outbound-lang-label" htmlFor="conv-assignee-select">
-                          Чатер
+                          {tc('thread.chatterLabel')}
                         </label>
                         <select
                           id="conv-assignee-select"
@@ -9644,7 +9512,7 @@ export default function App() {
                             void saveAssignedUser(selected.id, e.target.value)
                           }
                         >
-                          <option value="">Любой</option>
+                          <option value="">{tc('thread.chatterAny')}</option>
                           {workspaceMembers.map((m) => (
                             <option key={m.id} value={m.id}>
                               {m.member_login || `#${m.id}`}
@@ -9655,7 +9523,7 @@ export default function App() {
                     ) : null}
                     <div
                       className="outbound-lang-field auto-translate-toggle"
-                      title="Заблокированный пользователь не сможет отправлять сообщения в этот диалог."
+                      title={tc('thread.blockTitle')}
                     >
                       <label className="auto-translate-label">
                         <input
@@ -9666,7 +9534,7 @@ export default function App() {
                             void saveConversationBlocked(selected.id, e.target.checked)
                           }
                         />
-                        <span>Заблокировать</span>
+                        <span>{tc('thread.block')}</span>
                       </label>
                     </div>
                     <div className="outbound-lang-field" style={{ gridColumn: '1 / -1' }}>
@@ -9676,7 +9544,7 @@ export default function App() {
                         disabled={convHideBusy}
                         onClick={() => void hideConversation(selected.id)}
                       >
-                        {convHideBusy ? '…' : 'Убрать из списка'}
+                        {convHideBusy ? '…' : tc('threadExtra.hideFromList')}
                       </button>
                     </div>
                     {companionHealth &&
@@ -9689,7 +9557,7 @@ export default function App() {
                       >
                         AI: {companionHealth.status}
                         {companionHealth.pending_jobs > 0
-                          ? ` · очередь ${companionHealth.pending_jobs}`
+                          ? tc('companion.queue', { count: companionHealth.pending_jobs })
                           : ''}
                         {companionHealth.reasons[0]
                           ? ` · ${companionHealth.reasons[0]}`
@@ -9698,8 +9566,7 @@ export default function App() {
                     ) : null}
                     {selected.peer_unavailable ? (
                       <div className="thread-peer-unavailable-banner" role="status">
-                        Пользователь Fanvue недоступен — аккаунт удалён или заблокирован на
-                        платформе. Отправка сообщений невозможна.
+                        {tc('threadExtra.fanvueUnavailableBanner')}
                       </div>
                     ) : null}
                 </div>
@@ -9722,7 +9589,7 @@ export default function App() {
                     <>
                       {loadingOlder ? (
                         <div className="messages-older-loading" role="status">
-                          <span className="muted">Загрузка истории…</span>
+                          <span className="muted">{tc('messages.loadingHistory')}</span>
                         </div>
                       ) : null}
                       {displayMessages.map((m) => {
@@ -9769,7 +9636,7 @@ export default function App() {
                             type="button"
                             className="bubble-reply-quote"
                             onClick={() => scrollToMessage(m.reply_to_message_id)}
-                            title="Перейти к сообщению"
+                            title={tc('messages.gotoTitle')}
                           >
                             {m.reply_preview}
                           </button>
@@ -9800,7 +9667,7 @@ export default function App() {
                           ) : (
                             <>
                               <div className="ru">{displayInboundText}</div>
-                              <div className="orig" title="Оригинал">
+                              <div className="orig" title={tc('messages.originalTitle')}>
                                 {m.text_original}
                               </div>
                             </>
@@ -9813,18 +9680,18 @@ export default function App() {
                               <div className="ru">{m.text_original}</div>
                               <div
                                 className={m.pending ? 'orig bubble-pending-meta' : 'orig'}
-                                title="Ушло пользователю"
+                                title={tc('messages.sentTitle')}
                               >
                                 →{' '}
                                 {m.pending
-                                  ? 'перевод и отправка…'
+                                  ? tc('messages.translating')
                                   : m.text_translated ?? '—'}
                               </div>
                             </>
                           )
                         ) : null}
                         {reactionCounts.size > 0 ? (
-                          <div className="bubble-reactions" aria-label="Реакции">
+                          <div className="bubble-reactions" aria-label={tc('reactions.aria')}>
                             {[...reactionCounts.entries()].map(([emoji, info]) => (
                               <button
                                 key={emoji}
@@ -9836,7 +9703,7 @@ export default function App() {
                                 }
                                 disabled={Boolean(reactionBusyKey?.startsWith(`${m.id}:`))}
                                 onClick={() => void toggleReaction(m, emoji)}
-                                title={info.hasOwner ? 'Убрать реакцию' : 'Поставить реакцию'}
+                                title={info.hasOwner ? tc('reactions.removeTitle') : tc('reactions.addTitle')}
                               >
                                 <span>{emoji}</span>
                                 {info.count > 1 ? (
@@ -9860,7 +9727,7 @@ export default function App() {
                               <button
                                 type="button"
                                 className="bubble-action-btn"
-                                title="Ответить"
+                                title={tc('reactions.replyTitle')}
                                 onClick={() => setReplyToMessage(m)}
                               >
                                 ↩
@@ -9877,7 +9744,7 @@ export default function App() {
                                         ? 'bubble-action-btn bubble-action-btn--active'
                                         : 'bubble-action-btn'
                                     }
-                                    title="Реакция"
+                                    title={tc('reactions.emojiTitle')}
                                     disabled={busy}
                                     onClick={() => void toggleReaction(m, emoji)}
                                   >
@@ -9897,9 +9764,9 @@ export default function App() {
                                   ? 'bubble-companion-rate bubble-companion-rate--rated-down'
                                   : 'bubble-companion-rate'
                             }
-                            aria-label="Оценка ответа AI"
+                            aria-label={tc('companion.rateAria')}
                           >
-                            <span className="bubble-companion-rate-label">Оценка AI</span>
+                            <span className="bubble-companion-rate-label">{tc('companion.rateLabel')}</span>
                             <div className="bubble-companion-rate-actions">
                               <button
                                 type="button"
@@ -9910,8 +9777,8 @@ export default function App() {
                                 }
                                 title={
                                   m.operator_rating === 1
-                                    ? 'Снять оценку «хорошо»'
-                                    : 'Хороший ответ AI'
+                                    ? tc('companion.unrateGood')
+                                    : tc('companion.goodTitle')
                                 }
                                 disabled={companionRatingBusy === m.id}
                                 onClick={() => void rateCompanionMessage(m.id, 1)}
@@ -9927,8 +9794,8 @@ export default function App() {
                                 }
                                 title={
                                   m.operator_rating === -1
-                                    ? 'Снять оценку «плохо»'
-                                    : 'Плохой ответ AI'
+                                    ? tc('companion.unrateBad')
+                                    : tc('companion.badTitle')
                                 }
                                 disabled={companionRatingBusy === m.id}
                                 onClick={() => void rateCompanionMessage(m.id, -1)}
@@ -9951,14 +9818,14 @@ export default function App() {
                               aria-live="polite"
                             >
                               {companionRatingBusy === m.id
-                                ? 'Сохранение…'
+                                ? tCommon('saving')
                                 : companionRatingSavedId === m.id
-                                  ? '✓ Сохранено'
+                                  ? tCommon('saved')
                                   : m.operator_rating === 1
-                                    ? 'Оценено: хорошо'
+                                    ? tc('companion.ratedGood')
                                     : m.operator_rating === -1
-                                      ? 'Оценено: плохо'
-                                      : 'Помогите боту учиться'}
+                                      ? tc('companion.ratedBad')
+                                      : tc('companion.helpLearn')}
                             </span>
                           </div>
                         ) : null}
@@ -9976,7 +9843,7 @@ export default function App() {
                           className="bubble out msg-enter companion-draft-bubble"
                         >
                           <div className="companion-draft-label">
-                            {manualDraft ? 'Черновик AI' : 'AI не отправил — проверьте'}
+                            {manualDraft ? tc('companion.draftLabel') : tc('companion.failedLabel')}
                           </div>
                           <div className="ru">{draft.draft_text}</div>
                           {draft.target_lang ? (
@@ -9989,7 +9856,7 @@ export default function App() {
                               disabled={companionDraftBusy === draft.id}
                               onClick={() => void approveCompanionDraft(draft)}
                             >
-                              Отправить
+                              {tc('thread.send')}
                             </button>
                             <button
                               type="button"
@@ -9997,7 +9864,7 @@ export default function App() {
                               disabled={companionDraftBusy === draft.id}
                               onClick={() => void rejectCompanionDraft(draft.id)}
                             >
-                              Отклонить
+                              {tc('companion.reject')}
                             </button>
                           </div>
                         </article>
@@ -10014,7 +9881,7 @@ export default function App() {
                     className="jump-down"
                     onClick={() => scrollToBottom(true)}
                   >
-                    К последним ↓
+                    {tc('composer.scrollToLatest')}
                   </button>
                 )}
 
@@ -10023,12 +9890,12 @@ export default function App() {
                     {replyToMessage ? (
                       <div className="composer-reply-bar">
                         <div className="composer-reply-bar__main">
-                          <span className="composer-reply-bar__label">Ответ на</span>
+                          <span className="composer-reply-bar__label">{tc('composer.replyTo')}</span>
                           <span className="composer-reply-bar__text">
                             {(
                               replyToMessage.text_original ||
                               replyToMessage.text_translated ||
-                              'Сообщение'
+                              tc('composer.messageFallback')
                             ).slice(0, 120)}
                           </span>
                         </div>
@@ -10036,7 +9903,7 @@ export default function App() {
                           type="button"
                           className="composer-reply-bar__clear"
                           onClick={() => setReplyToMessage(null)}
-                          title="Отменить ответ"
+                          title={tc('composer.cancelReplyTitle')}
                         >
                           ×
                         </button>
@@ -10059,7 +9926,7 @@ export default function App() {
                             return src ? (
                               <img src={src} alt="" className="chat-composer-attach-preview__img" />
                             ) : (
-                              <span className="muted">Архив #{chatReplyArchiveId}</span>
+                              <span className="muted">{tc('composer.archiveBadge', { id: chatReplyArchiveId })}</span>
                             )
                           })()
                         ) : null}
@@ -10067,7 +9934,7 @@ export default function App() {
                           type="button"
                           className="chat-composer-attach-preview__clear"
                           onClick={clearChatReplyAttachment}
-                          title="Убрать вложение"
+                          title={tc('composer.removeAttachmentTitle')}
                         >
                           ×
                         </button>
@@ -10076,8 +9943,8 @@ export default function App() {
                     {chatArchivePickerOpen ? (
                       <div className="chat-composer-archive">
                         <StudioArchiveThumbPicker
-                          label="Из архива студии"
-                          hint="Готовое изображение уйдёт в чат"
+                          label={tc('composer.archiveLabel')}
+                          hint={tc('composer.archiveHint')}
                           items={studioImagePickerArchive}
                           value={chatReplyArchiveId}
                           onChange={(id) => {
@@ -10121,7 +9988,7 @@ export default function App() {
                       <button
                         type="button"
                         className="icon-btn"
-                        title="Фото с устройства"
+                        title={tc('composer.photoDeviceTitle')}
                         onClick={() => chatReplyFileInputRef.current?.click()}
                       >
                         <span aria-hidden>📎</span>
@@ -10129,7 +9996,7 @@ export default function App() {
                       <button
                         type="button"
                         className="icon-btn"
-                        title="Из архива студии"
+                        title={tc('composer.archiveTitle')}
                         aria-expanded={chatArchivePickerOpen}
                         onClick={() => {
                           setChatArchivePickerOpen((o) => {
@@ -10144,7 +10011,7 @@ export default function App() {
                       <button
                         type="button"
                         className="icon-btn"
-                        title="Эмодзи"
+                        title={tc('composer.emojiTitle')}
                         aria-expanded={emojiOpen}
                         aria-haspopup="dialog"
                         onClick={() => setEmojiOpen((o) => !o)}
@@ -10171,13 +10038,13 @@ export default function App() {
                       rows={3}
                       placeholder={
                         selected.peer_unavailable
-                          ? 'Пользователь недоступен на Fanvue — отправка невозможна'
-                          : 'Сообщение на русском — уйдёт перевод на язык из «Язык ответа»'
+                          ? tc('composer.hintFanvueBlocked')
+                          : tc('composer.hintTranslate')
                       }
                       title={
                         selected.peer_unavailable
-                          ? 'Пользователь Fanvue недоступен'
-                          : 'Пишите на русском; в Telegram/Fanvue уйдёт перевод по выбранному языку'
+                          ? tc('composer.titleFanvueBlocked')
+                          : tc('composer.titleTranslate')
                       }
                       value={draft}
                       disabled={Boolean(selected.peer_unavailable)}
@@ -10204,7 +10071,7 @@ export default function App() {
                       }}
                     />
                     <div className="composer-actions">
-                      <span className="hint">Ctrl+Enter — отправить</span>
+                      <span className="hint">{tc('composer.shortcut')}</span>
                       <button
                         type="button"
                         className="send-btn"
@@ -10214,7 +10081,7 @@ export default function App() {
                           (!draft.trim() && !chatReplyHasAttachment)
                         }
                       >
-                        Отправить
+                        {tc('thread.send')}
                       </button>
                     </div>
                     </div>
@@ -10232,39 +10099,39 @@ export default function App() {
               <button
                 type="button"
                 className="conv-notes-backdrop"
-                aria-label="Закрыть заметки"
+                aria-label={tc('notes.closeAria')}
                 onClick={() => setConvNotesOpen(false)}
               />
             ) : null}
             <aside
               className={['conv-notes-panel', convNotesOpen ? 'open' : ''].filter(Boolean).join(' ')}
-              aria-label="Заметки о пользователе"
+              aria-label={tc('notes.panelAria')}
             >
               <button
                 type="button"
                 className="conv-notes-tab"
                 aria-expanded={convNotesOpen}
-                title={convNotesOpen ? 'Скрыть заметки' : 'Заметки о пользователе'}
+                title={convNotesOpen ? tc('notes.toggleHide') : tc('notes.toggleTitle')}
                 onClick={() => setConvNotesOpen((o) => !o)}
               >
                 <span className="conv-notes-tab-label" aria-hidden>
-                  Заметки
+                  {tc('notes.title')}
                 </span>
               </button>
               <div className="conv-notes-panel-inner">
                 <div className="conv-notes-head">
-                  <h4>Заметки</h4>
+                  <h4>{tc('notes.title')}</h4>
                   <span className="muted conv-notes-sub">
-                    {selected.user_display_name ?? 'Пользователь'}
+                    {selected.user_display_name ?? tc('notes.userFallback')}
                   </span>
                   {isMobileLayout ? (
                     <button
                       type="button"
                       className="conv-notes-close"
-                      aria-label="Закрыть заметки"
+                      aria-label={tc('notes.closeAria')}
                       onClick={() => setConvNotesOpen(false)}
                     >
-                      Закрыть
+                      {tCommon('close')}
                     </button>
                   ) : null}
                 </div>
@@ -10288,7 +10155,7 @@ export default function App() {
                                 {conversationNoteKindLabel(n.kind)}
                               </span>
                               <time className="muted" dateTime={n.updated_at}>
-                                {formatNoteUpdatedAt(n.updated_at)}
+                                {formatNoteUpdatedAtApp(n.updated_at)}
                               </time>
                             </div>
                             <p className="conv-note-body">{n.content}</p>
@@ -10297,7 +10164,7 @@ export default function App() {
                       </div>
                     ) : (
                       <p className="conv-notes-empty muted">
-                        Профиль пока пуст — нажмите «AI-анализ» или добавьте заметку вручную.
+                        {tc('notes.emptyProfile')}
                       </p>
                     )}
 
@@ -10313,7 +10180,7 @@ export default function App() {
                             </span>
                             <span className="muted">{n.author_label}</span>
                             <time className="muted" dateTime={n.updated_at}>
-                              {formatNoteUpdatedAt(n.updated_at)}
+                              {formatNoteUpdatedAtApp(n.updated_at)}
                             </time>
                           </div>
                           <p className="conv-note-body">{n.content}</p>
@@ -10323,10 +10190,10 @@ export default function App() {
                                 type="button"
                                 className="conv-note-action"
                                 disabled={convNotesBusy}
-                                title={n.is_pinned ? 'Открепить' : 'Закрепить'}
+                                title={n.is_pinned ? tc('notes.unpin') : tc('notes.pin')}
                                 onClick={() => void toggleConvNotePin(n)}
                               >
-                                {n.is_pinned ? 'Открепить' : 'Закрепить'}
+                                {n.is_pinned ? tc('notes.unpin') : tc('notes.pin')}
                               </button>
                               <button
                                 type="button"
@@ -10334,7 +10201,7 @@ export default function App() {
                                 disabled={convNotesBusy}
                                 onClick={() => void deleteConvNote(n.id)}
                               >
-                                Удалить
+                                {tc('notes.delete')}
                               </button>
                             </div>
                           ) : null}
@@ -10348,7 +10215,7 @@ export default function App() {
                   <textarea
                     rows={3}
                     className="conv-notes-draft"
-                    placeholder="Ваша заметка о пользователе…"
+                    placeholder={tc('notes.placeholder')}
                     value={convNoteDraft}
                     disabled={convNotesBusy}
                     onChange={(e) => setConvNoteDraft(e.target.value)}
@@ -10366,7 +10233,7 @@ export default function App() {
                       disabled={convNotesAnalyzeBusy || convNotesLoading}
                       onClick={() => void analyzeConvNotes()}
                     >
-                      {convNotesAnalyzeBusy ? 'Анализ…' : 'AI-анализ'}
+                      {convNotesAnalyzeBusy ? tc('notes.analyzing') : tc('notes.analyze')}
                     </button>
                     <button
                       type="button"
@@ -10374,7 +10241,7 @@ export default function App() {
                       disabled={convNotesBusy || !convNoteDraft.trim()}
                       onClick={() => void addConvNote()}
                     >
-                      Добавить
+                      {tc('notes.add')}
                     </button>
                   </div>
                 </div>

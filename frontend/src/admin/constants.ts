@@ -1,3 +1,5 @@
+import i18n from '../i18n'
+
 export const SUBSCRIPTION_STATUS_OPTIONS = [
   'none',
   'incomplete',
@@ -8,14 +10,10 @@ export const SUBSCRIPTION_STATUS_OPTIONS = [
   'unpaid',
 ] as const
 
-export const SUBSCRIPTION_STATUS_LABELS: Record<string, string> = {
-  none: 'Нет подписки',
-  incomplete: 'Оформление',
-  trialing: 'Пробный период',
-  active: 'Активна',
-  past_due: 'Просрочен платёж',
-  canceled: 'Отменена',
-  unpaid: 'Не оплачена',
+export function subscriptionStatusLabel(status: string): string {
+  const key = `subscriptionStatus.${status}`
+  const translated = i18n.t(key, { ns: 'admin', defaultValue: '' })
+  return translated || status
 }
 
 export const PLAN_TIER_OPTIONS = ['solo', 'pro', 'studio'] as const
@@ -35,17 +33,8 @@ export function planTierLabel(tier: string | null | undefined): string {
   return t.charAt(0).toUpperCase() + t.slice(1)
 }
 
-export const USAGE_KIND_LABELS: Record<string, string> = {
-  studio_prompt_refine: 'Студия: генерация',
-  studio_image_upscale: 'Студия: апскейл',
-  studio_video_upscale: 'Студия: апскейл видео',
-  studio_carousel_shot: 'Студия: карусель',
-  studio_model_profile_generate: 'Студия: профиль модели',
-  yookassa_credits_pack: 'Пополнение баланса',
-  yookassa_managed_subscription_bonus: 'Подписка Standard: бонус',
-  standard_subscription_bonus: 'Подписка Standard: бонус',
-  demo_studio_image: 'Бесплатная генерация',
-  referral_signup_bonus: 'Реферал: регистрация',
-  referral_referrer_reward: 'Реферал: реферер',
-  admin_credit_adjustment: 'Админ: баланс',
+export function usageKindLabel(kind: string): string {
+  const key = `usageKind.${kind}`
+  const translated = i18n.t(key, { ns: 'admin', defaultValue: '' })
+  return translated || kind
 }

@@ -1,3 +1,5 @@
+import i18n, { COMMON_NS } from './i18n'
+
 /** Разбор detail / message из ответа FastAPI и похожих JSON. */
 export function formatApiErrorDetail(data: unknown): string {
   if (!data || typeof data !== 'object') return ''
@@ -5,7 +7,7 @@ export function formatApiErrorDetail(data: unknown): string {
   if (typeof o.message === 'string' && o.message.trim()) {
     const m = o.message.trim()
     if (/invalid user uuid/i.test(m)) {
-      return 'Пользователь Fanvue недоступен: аккаунт удалён или заблокирован на платформе.'
+      return i18n.t('errors.fanvueInvalidUser', { ns: COMMON_NS })
     }
     return m
   }
@@ -19,7 +21,7 @@ export function formatApiErrorDetail(data: unknown): string {
           typeof parsed.message === 'string' &&
           /invalid user uuid/i.test(parsed.message)
         ) {
-          return 'Пользователь Fanvue недоступен: аккаунт удалён или заблокирован на платформе.'
+          return i18n.t('errors.fanvueInvalidUser', { ns: COMMON_NS })
         }
       } catch {
         /* not JSON */
@@ -48,25 +50,31 @@ export function formatApiErrorDetail(data: unknown): string {
 
 function formatHttpStatusFallback(status: number, statusText: string): string {
   const st = (statusText || '').trim()
+  const statusTextSuffix = st ? ` ${st}` : ''
   if (status === 502 || status === 504) {
-    return (
-      'Шлюз или прокси не дождались ответа от сервера (таймаут). ' +
-      'Долгая генерация могла всё равно завершиться — обновите страницу и проверьте «Сохранённые» / «Последние видео».'
-    )
+    return i18n.t('errors.gatewayTimeout', { ns: COMMON_NS })
   }
   if (status === 503) {
-    return 'Сервис временно недоступен (503). Попробуйте через минуту.'
+    return i18n.t('errors.serviceUnavailable', { ns: COMMON_NS })
   }
   if (status === 413) {
-    return 'Файл слишком большой для загрузки (413).'
+    return i18n.t('errors.payloadTooLarge', { ns: COMMON_NS })
   }
-  if (status === 401) return 'Сессия истекла — войдите снова.'
-  if (status === 403) return 'Нет доступа к этой операции (403).'
+  if (status === 401) return i18n.t('errors.sessionExpired', { ns: COMMON_NS })
+  if (status === 403) return i18n.t('errors.forbidden', { ns: COMMON_NS })
   if (status >= 500) {
-    return `Ошибка сервера (${status}${st ? ` ${st}` : ''}). Повторите позже или обновите страницу.`
+    return i18n.t('errors.serverError', {
+      ns: COMMON_NS,
+      status,
+      statusText: statusTextSuffix,
+    })
   }
   if (status >= 400) {
-    return `Запрос отклонён (${status}${st ? ` ${st}` : ''}).`
+    return i18n.t('errors.clientError', {
+      ns: COMMON_NS,
+      status,
+      statusText: statusTextSuffix,
+    })
   }
   return st || `HTTP ${status}`
 }
@@ -85,22 +93,19 @@ export function formatHttpApiError(response: Response, data: unknown): string {
 export function formatClientFetchError(error: unknown, longOperation = false): string {
   if (error instanceof DOMException && error.name === 'AbortError') {
     const hint = longOperation
-      ? ' Долгая генерация могла завершиться на сервере — обновите страницу и проверьте «Сохранённые» и «Последние видео».'
-      : ' Повторите запрос или обновите страницу.'
-    return 'Превышено время ожидания ответа (таймаут).' + hint
+      ? i18n.t('errors.abortHintLong', { ns: COMMON_NS })
+      : i18n.t('errors.abortHintShort', { ns: COMMON_NS })
+    return i18n.t('errors.abortTimeout', { ns: COMMON_NS }) + hint
   }
   if (error instanceof TypeError && error.message === 'Failed to fetch') {
-    return (
-      'Нет ответа от сервера (сеть, VPN, блокировка или перезапуск бэкенда). ' +
-      'Проверьте соединение. Если только что запускали генерацию — после восстановления связи обновите страницу и посмотрите архив.'
-    )
+    return i18n.t('errors.networkFailed', { ns: COMMON_NS })
   }
   if (error instanceof Error) {
     const m = error.message?.trim()
     if (m && m !== 'Failed to fetch') return m
   }
   const tail = longOperation
-    ? ' Обновите страницу — готовое видео или кадр могли уже попасть в раздел истории.'
-    : ' Обновите страницу и повторите при необходимости.'
-  return 'Ошибка запроса.' + tail
+    ? i18n.t('errors.genericTailLong', { ns: COMMON_NS })
+    : i18n.t('errors.genericTail', { ns: COMMON_NS })
+  return i18n.t('errors.generic', { ns: COMMON_NS }) + tail
 }

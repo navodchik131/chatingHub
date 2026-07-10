@@ -1,3 +1,4 @@
+import i18n, { WORKFLOW_NS } from '../i18n'
 import { sanitizeGraphForExport } from './graphResolver'
 import type { ProjectGraph } from './types'
 
@@ -26,17 +27,17 @@ export function parseWorkflowImport(raw: string): WorkflowExportFile {
   try {
     parsed = JSON.parse(raw)
   } catch {
-    throw new Error('Файл не является корректным JSON')
+    throw new Error(i18n.t('nodeUi.export.invalidJson', { ns: WORKFLOW_NS }))
   }
   if (!isRecord(parsed)) {
-    throw new Error('Некорректный формат файла')
+    throw new Error(i18n.t('nodeUi.export.invalidFormat', { ns: WORKFLOW_NS }))
   }
 
   if (parsed.format === WORKFLOW_EXPORT_FORMAT && isValidProjectGraph(parsed.graph)) {
     return {
       format: WORKFLOW_EXPORT_FORMAT,
       version: WORKFLOW_EXPORT_VERSION,
-      name: typeof parsed.name === 'string' && parsed.name.trim() ? parsed.name.trim() : 'Импорт',
+      name: typeof parsed.name === 'string' && parsed.name.trim() ? parsed.name.trim() : i18n.t('nodeUi.export.importDefaultName', { ns: WORKFLOW_NS }),
       exported_at: typeof parsed.exported_at === 'string' ? parsed.exported_at : new Date().toISOString(),
       graph: parsed.graph,
     }
@@ -46,7 +47,7 @@ export function parseWorkflowImport(raw: string): WorkflowExportFile {
     return {
       format: WORKFLOW_EXPORT_FORMAT,
       version: WORKFLOW_EXPORT_VERSION,
-      name: 'Импорт',
+      name: i18n.t('nodeUi.export.importDefaultName', { ns: WORKFLOW_NS }),
       exported_at: new Date().toISOString(),
       graph: parsed,
     }
@@ -56,20 +57,20 @@ export function parseWorkflowImport(raw: string): WorkflowExportFile {
     return {
       format: WORKFLOW_EXPORT_FORMAT,
       version: WORKFLOW_EXPORT_VERSION,
-      name: typeof parsed.name === 'string' && parsed.name.trim() ? parsed.name.trim() : 'Импорт',
+      name: typeof parsed.name === 'string' && parsed.name.trim() ? parsed.name.trim() : i18n.t('nodeUi.export.importDefaultName', { ns: WORKFLOW_NS }),
       exported_at: new Date().toISOString(),
       graph: parsed.graph,
     }
   }
 
-  throw new Error('В файле нет графа workflow (nodes и edges)')
+  throw new Error(i18n.t('nodeUi.export.noGraph', { ns: WORKFLOW_NS }))
 }
 
 export function buildWorkflowExport(name: string, graph: ProjectGraph): WorkflowExportFile {
   return {
     format: WORKFLOW_EXPORT_FORMAT,
     version: WORKFLOW_EXPORT_VERSION,
-    name: name.trim() || 'Проект',
+    name: name.trim() || i18n.t('nodeUi.export.projectDefaultName', { ns: WORKFLOW_NS }),
     exported_at: new Date().toISOString(),
     graph: sanitizeGraphForExport(graph),
   }

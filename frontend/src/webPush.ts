@@ -1,4 +1,5 @@
 import { apiFetch } from './api'
+import i18n, { CHAT_NS } from './i18n'
 
 export function webPushEnvironmentOk(): boolean {
   return (
@@ -57,13 +58,15 @@ export async function getPushSubscriptionState(): Promise<PushSubscription | nul
 }
 
 export async function subscribeWebPush(): Promise<void> {
-  if (!webPushEnvironmentOk()) throw new Error('Push не поддерживается в этом браузере')
+  if (!webPushEnvironmentOk()) {
+    throw new Error(i18n.t('webPush.unsupported', { ns: CHAT_NS }))
+  }
   const perm = await Notification.requestPermission()
-  if (perm === 'denied') throw new Error('Уведомления запрещены')
-  if (perm !== 'granted') throw new Error('Нужен доступ к уведомлениям')
+  if (perm === 'denied') throw new Error(i18n.t('webPush.denied', { ns: CHAT_NS }))
+  if (perm !== 'granted') throw new Error(i18n.t('webPush.needPermission', { ns: CHAT_NS }))
   const kr = await apiFetch('/api/push/vapid-public-key')
-  if (kr.status === 503) throw new Error('Сервер не настроил VAPID (ключи в .env)')
-  if (!kr.ok) throw new Error('Не удалось получить ключ VAPID')
+  if (kr.status === 503) throw new Error(i18n.t('webPush.vapidNotConfigured', { ns: CHAT_NS }))
+  if (!kr.ok) throw new Error(i18n.t('webPush.vapidFetchFailed', { ns: CHAT_NS }))
   const { public_key: pub } = (await kr.json()) as { public_key: string }
   const reg = await navigator.serviceWorker.register(serviceWorkerScriptUrl(), {
     scope: serviceWorkerScopePath(),
@@ -74,12 +77,14 @@ export async function subscribeWebPush(): Promise<void> {
     applicationServerKey: urlBase64ToUint8Array(pub) as BufferSource,
   })
   const j = sub.toJSON() as { endpoint: string; keys?: { p256dh?: string; auth?: string } }
-  if (!j.endpoint || !j.keys?.p256dh || !j.keys?.auth) throw new Error('Некорректная подписка')
+  if (!j.endpoint || !j.keys?.p256dh || !j.keys?.auth) {
+    throw new Error(i18n.t('webPush.invalidSubscription', { ns: CHAT_NS }))
+  }
   const r = await apiFetch('/api/push/subscribe', {
     method: 'POST',
     body: JSON.stringify({ endpoint: j.endpoint, keys: { p256dh: j.keys.p256dh, auth: j.keys.auth } }),
   })
-  if (!r.ok) throw new Error('Не удалось сохранить подписку на сервере')
+  if (!r.ok) throw new Error(i18n.t('webPush.saveFailed', { ns: CHAT_NS }))
 }
 
 export async function unsubscribeWebPush(): Promise<void> {

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { Trans, useTranslation } from 'react-i18next'
 import { apiFetch } from '../../api'
 import { formatHttpApiError, formatClientFetchError } from '../../apiErrors'
 import { WAVESPEED_REF_URL } from '../../billing/planCatalog'
@@ -44,6 +45,7 @@ export function FirstGenWizard({
   onModelSaved,
   onOpenIntegrations,
 }: Props) {
+  const { t } = useTranslation('studio')
   const [phase, setPhase] = useState<Phase>('photos')
   const [modelFile, setModelFile] = useState<File | null>(null)
   const [refFile, setRefFile] = useState<File | null>(null)
@@ -136,7 +138,7 @@ export function FirstGenWizard({
   const saveWsKey = async (): Promise<boolean> => {
     const k = wsKey.trim()
     if (k.length < 8) {
-      setError('Вставьте API-ключ WaveSpeed (минимум 8 символов).')
+      setError(t('firstGenWizard.errWsKeyMin'))
       return false
     }
     setError(null)
@@ -173,7 +175,7 @@ export function FirstGenWizard({
     setPhase('generating')
     trackFunnelEvent('onboarding_generate_clicked')
     try {
-      setStatus('Загружаем фото…')
+      setStatus(t('firstGenWizard.statusUploading'))
       const waveProfile = nsfwEnabled ? 'nsfw' : 'regular'
       const [identityRef, sceneRef] = await Promise.all([
         uploadWorkflowReference(modelFile),
@@ -181,7 +183,7 @@ export function FirstGenWizard({
       ])
       if (abortController.signal.aborted) return
 
-      setStatus('Генерируем первую картинку…')
+      setStatus(t('firstGenWizard.statusGenerating'))
       const built = buildFaceSwapDualRefGraph(identityRef.ref_id, sceneRef.ref_id, {
         outputAspect: '3:4',
         waveProfile,
@@ -232,7 +234,7 @@ export function FirstGenWizard({
 
   const onPhotosNext = () => {
     if (!canProceedPhotos) {
-      setError('Загрузите фото модели и референс сцены.')
+      setError(t('firstGenWizard.errNeedPhotos'))
       return
     }
     if (modelFile) trackFunnelEvent('onboarding_model_photo_set')
@@ -256,7 +258,7 @@ export function FirstGenWizard({
     setModelSaveBusy(true)
     trackFunnelEvent('onboarding_model_save_clicked')
     try {
-      setStatus('Собираем профиль модели…')
+      setStatus(t('firstGenWizard.statusBuildingProfile'))
       const profileFd = new FormData()
       profileFd.append('images', modelFile)
       profileFd.append('onboarding_wizard', '1')
@@ -272,9 +274,9 @@ export function FirstGenWizard({
       const profileData = (await profileR.json()) as { profile_text: string }
       trackFunnelEvent('onboarding_profile_generated')
 
-      setStatus('Сохраняем модель в кабинете…')
+      setStatus(t('firstGenWizard.statusSavingModel'))
       const modelFd = new FormData()
-      modelFd.append('name', 'Моя модель')
+      modelFd.append('name', t('firstGenWizard.defaultModelName'))
       modelFd.append('profile_text', profileData.profile_text)
       modelFd.append('images', modelFile)
       modelFd.append('image_kinds', JSON.stringify(['face']))
@@ -310,14 +312,12 @@ export function FirstGenWizard({
       <div className="first-gen-wizard panel-glass">
         <header className="first-gen-wizard__head">
           <div>
-            <p className="first-gen-wizard__eyebrow">Первая картинка</p>
-            <h2 id="fgw-title">Попробуйте студию за 2 минуты</h2>
-            <p className="muted first-gen-wizard__lead">
-              Два фото — модель и референс сцены. Подставим внешность с первого снимка в кадр со второго.
-            </p>
+            <p className="first-gen-wizard__eyebrow">{t('firstGenWizard.eyebrow')}</p>
+            <h2 id="fgw-title">{t('firstGenWizard.title')}</h2>
+            <p className="muted first-gen-wizard__lead">{t('firstGenWizard.lead')}</p>
           </div>
           <button type="button" className="ghost-btn first-gen-wizard__skip" onClick={skip}>
-            Позже
+            {t('firstGenWizard.dismiss')}
           </button>
         </header>
 
@@ -331,8 +331,8 @@ export function FirstGenWizard({
           <div className="first-gen-wizard__body">
             <div className="first-gen-wizard__grid">
               <label className="first-gen-wizard__slot">
-                <span className="first-gen-wizard__slot-label">1. Фото модели</span>
-                <span className="first-gen-wizard__slot-hint muted">Лицо / внешность для профиля</span>
+                <span className="first-gen-wizard__slot-label">{t('firstGenWizard.modelPhotoLabel')}</span>
+                <span className="first-gen-wizard__slot-hint muted">{t('firstGenWizard.modelPhotoHint')}</span>
                 <input
                   type="file"
                   accept="image/jpeg,image/png,image/webp"
@@ -341,12 +341,12 @@ export function FirstGenWizard({
                 {modelPreview ? (
                   <img src={modelPreview} alt="" className="first-gen-wizard__preview" />
                 ) : (
-                  <span className="first-gen-wizard__placeholder">+ Загрузить</span>
+                  <span className="first-gen-wizard__placeholder">{t('firstGenWizard.upload')}</span>
                 )}
               </label>
               <label className="first-gen-wizard__slot">
-                <span className="first-gen-wizard__slot-label">2. Референс сцены</span>
-                <span className="first-gen-wizard__slot-hint muted">Поза, свет, кадр</span>
+                <span className="first-gen-wizard__slot-label">{t('firstGenWizard.sceneRefLabel')}</span>
+                <span className="first-gen-wizard__slot-hint muted">{t('firstGenWizard.sceneRefHint')}</span>
                 <input
                   type="file"
                   accept="image/jpeg,image/png,image/webp"
@@ -355,39 +355,37 @@ export function FirstGenWizard({
                 {refPreview ? (
                   <img src={refPreview} alt="" className="first-gen-wizard__preview" />
                 ) : (
-                  <span className="first-gen-wizard__placeholder">+ Загрузить</span>
+                  <span className="first-gen-wizard__placeholder">{t('firstGenWizard.upload')}</span>
                 )}
               </label>
             </div>
 
             <div className="first-gen-wizard__mode">
-              <span className="first-gen-wizard__mode-label">Тип генерации</span>
-              <div className="first-gen-wizard__mode-toggle" role="group" aria-label="Тип генерации">
+              <span className="first-gen-wizard__mode-label">{t('firstGenWizard.genTypeLabel')}</span>
+              <div className="first-gen-wizard__mode-toggle" role="group" aria-label={t('firstGenWizard.genTypeAria')}>
                 <button
                   type="button"
                   className={`first-gen-wizard__mode-btn${!nsfwEnabled ? ' is-active' : ''}`}
                   onClick={() => setNsfwEnabled(false)}
                 >
-                  Обычное фото
+                  {t('firstGenWizard.regularPhoto')}
                 </button>
                 <button
                   type="button"
                   className={`first-gen-wizard__mode-btn${nsfwEnabled ? ' is-active' : ''}`}
                   onClick={() => setNsfwEnabled(true)}
                 >
-                  NSFW
+                  {t('firstGenWizard.nsfw')}
                 </button>
               </div>
               <p className="muted small first-gen-wizard__mode-hint">
-                {nsfwEnabled
-                  ? 'Для откровенных референсов — модель WAN. Демо-генерации списываются из бесплатных.'
-                  : 'Для повседневных сцен — Nano Banana. Подходит для большинства референсов.'}
+                {nsfwEnabled ? t('firstGenWizard.nsfwHint') : t('firstGenWizard.regularHint')}
               </p>
             </div>
 
             <div className="first-gen-wizard__actions">
               <button type="button" className="send-btn" disabled={!canProceedPhotos || busy} onClick={onPhotosNext}>
-                Далее
+                {t('firstGenWizard.next')}
               </button>
             </div>
           </div>
@@ -396,14 +394,19 @@ export function FirstGenWizard({
         {phase === 'wavespeed' ? (
           <div className="first-gen-wizard__body">
             <p className="muted">
-              На тарифе <strong>Pro</strong> нужен ваш ключ{' '}
-              <a href={WAVESPEED_REF_URL} target="_blank" rel="noopener noreferrer">
-                WaveSpeed
-              </a>
-              . На Standard и Credits платформа может использовать свой ключ.
+              <Trans
+                i18nKey="firstGenWizard.wsLead"
+                ns="studio"
+                components={{
+                  strong: <strong />,
+                  wsLink: (
+                    <a href={WAVESPEED_REF_URL} target="_blank" rel="noopener noreferrer" />
+                  ),
+                }}
+              />
             </p>
             <label className="first-gen-wizard__ws-field">
-              API-ключ WaveSpeed
+              {t('firstGenWizard.wsKeyLabel')}
               <input
                 type="password"
                 value={wsKey}
@@ -414,10 +417,10 @@ export function FirstGenWizard({
             </label>
             <div className="first-gen-wizard__actions">
               <button type="button" className="ghost-btn" onClick={() => setPhase('photos')} disabled={busy}>
-                Назад
+                {t('firstGenWizard.back')}
               </button>
               <button type="button" className="ghost-btn" onClick={onOpenIntegrations} disabled={busy}>
-                Открыть подключения
+                {t('firstGenWizard.openIntegrations')}
               </button>
               <button
                 type="button"
@@ -425,7 +428,7 @@ export function FirstGenWizard({
                 disabled={busy || wsKey.trim().length < 8}
                 onClick={() => void onWsNext()}
               >
-                Сохранить ключ и сгенерировать
+                {t('firstGenWizard.saveKeyAndGenerate')}
               </button>
             </div>
           </div>
@@ -436,11 +439,11 @@ export function FirstGenWizard({
             <p className="first-gen-wizard__spinner" aria-hidden>
               ◌
             </p>
-            <p>{status ?? 'Генерация…'}</p>
-            <p className="muted small">Обычно 1–3 минуты.</p>
+            <p>{status ?? t('firstGenWizard.generating')}</p>
+            <p className="muted small">{t('firstGenWizard.generatingEta')}</p>
             <div className="first-gen-wizard__actions first-gen-wizard__actions--center">
               <button type="button" className="ghost-btn" onClick={onCancelGeneration}>
-                Отменить
+                {t('firstGenWizard.cancel')}
               </button>
             </div>
           </div>
@@ -448,11 +451,11 @@ export function FirstGenWizard({
 
         {phase === 'result' ? (
           <div className="first-gen-wizard__body">
-            <p className="first-gen-wizard__success">Готово — первая картинка в архиве.</p>
+            <p className="first-gen-wizard__success">{t('firstGenWizard.success')}</p>
             {resultUrl ? (
-              <img src={resultUrl} alt="Результат генерации" className="first-gen-wizard__result" />
+              <img src={resultUrl} alt={t('firstGenWizard.resultAlt')} className="first-gen-wizard__result" />
             ) : (
-              <p className="muted">Результат сохранён в «Сохранённые» — откройте вкладку «Картинки».</p>
+              <p className="muted">{t('firstGenWizard.resultSaved')}</p>
             )}
             {modelFile ? (
               <div className="first-gen-wizard__save-model">
@@ -461,11 +464,11 @@ export function FirstGenWizard({
                     <img src={modelPreview} alt="" className="first-gen-wizard__save-model-thumb" />
                   ) : null}
                   <div>
-                    <p className="first-gen-wizard__save-model-title">Сохранить модель в кабинет?</p>
+                    <p className="first-gen-wizard__save-model-title">{t('firstGenWizard.saveModelTitle')}</p>
                     <p className="muted small first-gen-wizard__save-model-hint">
                       {modelSaved
-                        ? 'Модель «Моя модель» сохранена — можно выбирать её в студии и workflow.'
-                        : 'Необязательно. Профиль соберём по вашему фото — для режимов «Основная» и «По промту».'}
+                        ? t('firstGenWizard.saveModelSaved', { name: t('firstGenWizard.defaultModelName') })
+                        : t('firstGenWizard.saveModelHint')}
                     </p>
                   </div>
                 </div>
@@ -476,11 +479,11 @@ export function FirstGenWizard({
                     disabled={modelSaveBusy || busy}
                     onClick={() => void saveModelToCabinet()}
                   >
-                    {modelSaveBusy ? (status ?? 'Сохраняем…') : 'Сохранить модель в кабинет'}
+                    {modelSaveBusy ? (status ?? t('firstGenWizard.saving')) : t('firstGenWizard.saveModelBtn')}
                   </button>
                 ) : (
                   <p className="first-gen-wizard__save-model-done" role="status">
-                    ✓ Сохранено в кабинете
+                    {t('firstGenWizard.savedInCabinet')}
                   </p>
                 )}
               </div>
@@ -492,7 +495,7 @@ export function FirstGenWizard({
                 disabled={modelSaveBusy}
                 onClick={finishWizard}
               >
-                Перейти в студию
+                {t('firstGenWizard.goStudio')}
               </button>
             </div>
           </div>

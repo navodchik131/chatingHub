@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Handle, Position, useReactFlow, type NodeProps } from '@xyflow/react'
 import {
   DEFAULT_GROK_IMAGINE_I2V_PRICING,
@@ -54,6 +55,7 @@ function patchFromModelKey(key: VideoModelKey): Partial<VideoGenerationNodeData>
 }
 
 function VideoGenerationNodeComponent({ id, data }: NodeProps) {
+  const { t } = useTranslation('workflow')
   const { setNodes, getNodes, getEdges } = useReactFlow()
   const { workspaceId } = useWorkflowRun()
   const { me } = useWorkflowBilling()
@@ -142,7 +144,7 @@ function VideoGenerationNodeComponent({ id, data }: NodeProps) {
 
       const videoUrl = result.video_url?.trim() || null
       if (!videoUrl) {
-        throw new Error('Видео-генерация завершилась без URL')
+        throw new Error(t('nodeUi.videoGen.noVideoUrl'))
       }
 
       const edges = getEdges()
@@ -184,14 +186,14 @@ function VideoGenerationNodeComponent({ id, data }: NodeProps) {
       }
       updateNodeData({
         isRunning: false,
-        error: error instanceof Error ? error.message : 'Ошибка видео',
+        error: error instanceof Error ? error.message : t('nodeUi.videoGen.error'),
       })
     } finally {
       if (runAbortRef.current === abortController) {
         runAbortRef.current = null
       }
     }
-  }, [getEdges, getNodes, id, nodeData.disabled, setNodes, updateNodeData, workspaceId])
+  }, [getEdges, getNodes, id, nodeData.disabled, setNodes, t, updateNodeData, workspaceId])
 
   const durationMin = isGrok ? (grokPricing.duration_min ?? 1) : (pricing.duration_min ?? 4)
   const durationMax = isGrok ? (grokPricing.duration_max ?? 15) : (pricing.duration_max ?? 15)
@@ -235,7 +237,7 @@ function VideoGenerationNodeComponent({ id, data }: NodeProps) {
       isRunning={nodeData.isRunning}
       error={nodeData.error}
       headerExtra={
-        nodeData.videoUrl ? <span className="workflow-node__badge">готово</span> : null
+        nodeData.videoUrl ? <span className="workflow-node__badge">{t('gen.done')}</span> : null
       }
     >
       <Handle
@@ -367,7 +369,7 @@ function VideoGenerationNodeComponent({ id, data }: NodeProps) {
         </>
       ) : (
         <p className="workflow-node__hint workflow-node__hint--muted">
-          Сценарий подключён — промпт, motion и BoardStory refs настраиваются в scenario-ноде.
+          {t('nodeUi.videoGen.scenarioHint')}
         </p>
       )}
 
@@ -383,15 +385,13 @@ function VideoGenerationNodeComponent({ id, data }: NodeProps) {
       {!isGrok ? <SeedanceReferenceGuide variant="video" /> : null}
 
       <p className="workflow-node__hint">
-        {isGrok
-          ? 'Grok Imagine Video · первый кадр + промпт с описанием движения'
-          : 'BoardStory Seedance: identity @Image, motion/camera @Video. Первый кадр — опционально.'}
+        {isGrok ? t('nodeUi.videoGen.grokHint') : t('nodeUi.videoGen.seedanceHint')}
       </p>
 
       <div className="workflow-gen-form">
         <div className="workflow-gen-form__row">
           <label className="workflow-gen-form__label" htmlFor={`${id}-variant`}>
-            Модель
+            {t('gen.model')}
           </label>
           <select
             id={`${id}-variant`}
@@ -408,7 +408,7 @@ function VideoGenerationNodeComponent({ id, data }: NodeProps) {
 
         <div className="workflow-gen-form__row">
           <label className="workflow-gen-form__label" htmlFor={`${id}-dur`}>
-            Длительность
+            {t('nodeUi.videoGen.duration')}
           </label>
           <select
             id={`${id}-dur`}
@@ -420,7 +420,7 @@ function VideoGenerationNodeComponent({ id, data }: NodeProps) {
             {Array.from({ length: durationMax - durationMin + 1 }, (_, i) => durationMin + i).map(
               (sec) => (
                 <option key={sec} value={sec}>
-                  {sec} сек
+                  {t('nodeUi.videoGen.seconds', { sec })}
                 </option>
               ),
             )}
@@ -429,7 +429,7 @@ function VideoGenerationNodeComponent({ id, data }: NodeProps) {
 
         <div className="workflow-gen-form__row">
           <label className="workflow-gen-form__label" htmlFor={`${id}-res`}>
-            Качество
+            {t('gen.quality')}
           </label>
           <select
             id={`${id}-res`}
@@ -454,7 +454,7 @@ function VideoGenerationNodeComponent({ id, data }: NodeProps) {
           <>
             <div className="workflow-gen-form__row">
               <label className="workflow-gen-form__label" htmlFor={`${id}-aspect`}>
-                Формат
+                {t('gen.format')}
               </label>
               <select
                 id={`${id}-aspect`}
@@ -480,7 +480,7 @@ function VideoGenerationNodeComponent({ id, data }: NodeProps) {
                 onChange={(e) => updateNodeData({ generateAudio: e.target.checked })}
                 disabled={nodeData.isRunning}
               />
-              <span>Звук</span>
+              <span>{t('nodeUi.videoGen.audio')}</span>
             </label>
 
             <label className="workflow-gen-form__check nodrag">
@@ -490,7 +490,7 @@ function VideoGenerationNodeComponent({ id, data }: NodeProps) {
                 onChange={(e) => updateNodeData({ autoMotionPrompt: e.target.checked })}
                 disabled={nodeData.isRunning}
               />
-              <span>Grok motion timeline (авто-описание движения)</span>
+              <span>{t('nodeUi.videoGen.grokMotionTimeline')}</span>
             </label>
               </>
             ) : null}
@@ -510,7 +510,7 @@ function VideoGenerationNodeComponent({ id, data }: NodeProps) {
         </div>
       ) : (
         <div className="workflow-node__preview-box workflow-node__preview-box--compact">
-          <span className="workflow-node__hint">Результат видео появится здесь</span>
+          <span className="workflow-node__hint">{t('nodeUi.videoGen.resultPlaceholder')}</span>
         </div>
       )}
 
@@ -524,10 +524,10 @@ function VideoGenerationNodeComponent({ id, data }: NodeProps) {
         onClick={() => (nodeData.isRunning ? onCancelRun() : void onGenerate())}
         disabled={nodeData.disabled === true && !nodeData.isRunning}
       >
-        {nodeData.isRunning ? 'Отменить' : 'Сгенерировать видео'}
+        {nodeData.isRunning ? t('gen.cancel') : t('nodeUi.videoGen.generate')}
         {!nodeData.isRunning ? (
           <span className="workflow-node__btn-cost">
-            {isPro ? 'Pro' : `${costCredits} кр.`}
+            {isPro ? 'Pro' : `${costCredits} ${t('gen.creditsUnit')}`}
           </span>
         ) : null}
       </button>

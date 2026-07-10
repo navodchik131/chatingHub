@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   studioArchiveIsPending,
   studioArchiveThumbUrl,
@@ -21,31 +22,36 @@ type Props = {
 }
 
 export function StudioGenerationGallery({
-  title = 'История',
+  title,
   lead,
   items,
   loading,
-  emptyText = 'Здесь появятся ваши генерации',
+  emptyText,
   hasMore,
   loadingMore,
   onLoadMore,
-  loadMoreLabel = 'Ещё',
+  loadMoreLabel,
   onDelete,
   onVideoFromImage,
 }: Props) {
+  const { t } = useTranslation('studio')
   const [preview, setPreview] = useState<StudioArchiveItem | null>(null)
+
+  const resolvedTitle = title ?? t('gallery.title')
+  const resolvedEmptyText = emptyText ?? t('gallery.empty')
+  const resolvedLoadMoreLabel = loadMoreLabel ?? t('gallery.loadMore')
 
   return (
     <section className="studio-gallery" aria-labelledby="studio-gallery-heading">
       <header className="studio-gallery__head">
-        <h2 id="studio-gallery-heading">{title}</h2>
+        <h2 id="studio-gallery-heading">{resolvedTitle}</h2>
         {lead ? <p className="studio-gallery__lead">{lead}</p> : null}
       </header>
 
       {loading && items.length === 0 ? (
-        <p className="muted studio-gallery__status">Загрузка…</p>
+        <p className="muted studio-gallery__status">{t('gallery.loading')}</p>
       ) : items.length === 0 ? (
-        <p className="muted studio-gallery__status">{emptyText}</p>
+        <p className="muted studio-gallery__status">{resolvedEmptyText}</p>
       ) : (
         <>
           <ul className="studio-gallery__grid">
@@ -74,7 +80,7 @@ export function StudioGenerationGallery({
                     type="button"
                     className="studio-gen-card__media"
                     disabled={!canOpen && !pending}
-                    aria-label={canOpen ? 'Открыть результат' : undefined}
+                    aria-label={canOpen ? t('gallery.openResult') : undefined}
                     onClick={() => canOpen && setPreview(g)}
                   >
                     {videoReady ? (
@@ -87,12 +93,12 @@ export function StudioGenerationGallery({
                     {pending ? (
                       <span className="studio-gen-card__overlay">
                         <span className="studio-archive-spinner" aria-hidden />
-                        {g.media_kind === 'video' ? 'Видео…' : 'Генерация…'}
+                        {g.media_kind === 'video' ? t('gallery.videoProcessing') : t('gallery.generating')}
                       </span>
                     ) : null}
                     {failed ? (
                       <span className="studio-gen-card__overlay studio-gen-card__overlay--error">
-                        Ошибка
+                        {t('gallery.error')}
                       </span>
                     ) : null}
                     {canOpen && g.media_kind === 'image' ? (
@@ -110,7 +116,7 @@ export function StudioGenerationGallery({
                   <button
                     type="button"
                     className="studio-gen-card__del"
-                    aria-label={pending ? 'Убрать из истории' : 'Удалить'}
+                    aria-label={pending ? t('gallery.removeFromHistory') : t('gallery.delete')}
                     onClick={(e) => {
                       e.stopPropagation()
                       onDelete(g)
@@ -120,7 +126,7 @@ export function StudioGenerationGallery({
                   </button>
 
                   <div className="studio-gen-card__foot">
-                    <span className="studio-gen-card__model">{g.model_name ?? 'Без модели'}</span>
+                    <span className="studio-gen-card__model">{g.model_name ?? t('gallery.noModel')}</span>
                     {g.prompt_excerpt ? (
                       <p className="studio-gen-card__prompt">{g.prompt_excerpt}</p>
                     ) : null}
@@ -129,7 +135,7 @@ export function StudioGenerationGallery({
                         <span className="studio-gen-card__tag">{g.output_aspect}</span>
                       ) : null}
                       {g.media_kind === 'video' ? (
-                        <span className="studio-gen-card__tag">Видео</span>
+                        <span className="studio-gen-card__tag">{t('gallery.videoTag')}</span>
                       ) : null}
                       {failed && g.error_message ? (
                         <span className="studio-gen-card__tag studio-gen-card__tag--err">
@@ -143,7 +149,7 @@ export function StudioGenerationGallery({
                         className="studio-gen-card__link"
                         onClick={() => onVideoFromImage(g)}
                       >
-                        → Видео
+                        {t('gallery.toVideo')}
                       </button>
                     ) : null}
                   </div>
@@ -159,7 +165,7 @@ export function StudioGenerationGallery({
                 disabled={loadingMore}
                 onClick={onLoadMore}
               >
-                {loadingMore ? 'Загрузка…' : loadMoreLabel}
+                {loadingMore ? t('gallery.loading') : resolvedLoadMoreLabel}
               </button>
             </div>
           ) : null}

@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { useTranslation } from 'react-i18next'
+import i18n, { STUDIO_NS } from '../../i18n'
 import type { StudioArchiveItem } from '../../studioArchive'
 
 type Props = {
@@ -15,7 +17,7 @@ function preferNativeShareOnMobile(): boolean {
 async function downloadArchiveMedia(item: StudioArchiveItem): Promise<string | null> {
   const isVideo = item.media_kind === 'video'
   const url = (isVideo ? item.video_url : item.image_url)?.trim()
-  if (!url) return 'Нет файла для скачивания.'
+  if (!url) return i18n.t('archiveModal.noFile', { ns: STUDIO_NS })
 
   const defaultName = isVideo
     ? `modelmate-video-${item.id}.mp4`
@@ -27,7 +29,7 @@ async function downloadArchiveMedia(item: StudioArchiveItem): Promise<string | n
     typeof navigator.share === 'function'
   ) {
     try {
-      await navigator.share({ title: 'Видео ModelMate', url })
+      await navigator.share({ title: i18n.t('archiveModal.videoTitle', { ns: STUDIO_NS }), url })
       return null
     } catch (err: unknown) {
       if (err instanceof Error && err.name === 'AbortError') return null
@@ -55,7 +57,9 @@ async function downloadArchiveMedia(item: StudioArchiveItem): Promise<string | n
       try {
         await navigator.share({
           files: [file],
-          title: isVideo ? 'Видео ModelMate' : 'Изображение',
+          title: isVideo
+            ? i18n.t('archiveModal.videoTitle', { ns: STUDIO_NS })
+            : i18n.t('archiveModal.imageTitle', { ns: STUDIO_NS }),
         })
         return null
       } catch (err: unknown) {
@@ -78,11 +82,12 @@ async function downloadArchiveMedia(item: StudioArchiveItem): Promise<string | n
 
   window.open(url, '_blank', 'noopener,noreferrer')
   return isVideo
-    ? 'Открыли видео в новой вкладке — сохраните оттуда, если загрузка не началась.'
-    : 'Открыли изображение в новой вкладке — сохраните оттуда, если загрузка не началась.'
+    ? i18n.t('archiveModal.openedVideoTab', { ns: STUDIO_NS })
+    : i18n.t('archiveModal.openedImageTab', { ns: STUDIO_NS })
 }
 
 export function StudioArchiveMediaModal({ item, onClose }: Props) {
+  const { t } = useTranslation('studio')
   const [busy, setBusy] = useState(false)
   const [hint, setHint] = useState<string | null>(null)
 
@@ -120,11 +125,11 @@ export function StudioArchiveMediaModal({ item, onClose }: Props) {
       const msg = await downloadArchiveMedia(item)
       if (msg) setHint(msg)
     } catch {
-      setHint('Не удалось скачать. Попробуйте «Открыть в новой вкладке».')
+      setHint(t('archiveModal.downloadFailed'))
     } finally {
       setBusy(false)
     }
-  }, [item, busy])
+  }, [item, busy, t])
 
   if (!item) return null
 
@@ -143,7 +148,7 @@ export function StudioArchiveMediaModal({ item, onClose }: Props) {
       <div className="studio-archive-modal__panel" onClick={(e) => e.stopPropagation()}>
         <header className="studio-archive-modal__head">
           <div className="studio-archive-modal__titles">
-            <h3 id="studio-archive-modal-title">{item.model_name ?? 'Результат'}</h3>
+            <h3 id="studio-archive-modal-title">{item.model_name ?? t('archiveModal.resultFallback')}</h3>
             {item.prompt_excerpt ? (
               <p className="studio-archive-modal__prompt">{item.prompt_excerpt}</p>
             ) : null}
@@ -151,7 +156,7 @@ export function StudioArchiveMediaModal({ item, onClose }: Props) {
           <button
             type="button"
             className="studio-archive-modal__close"
-            aria-label="Закрыть"
+            aria-label={t('archiveModal.close')}
             onClick={onClose}
           >
             ×
@@ -173,7 +178,7 @@ export function StudioArchiveMediaModal({ item, onClose }: Props) {
             disabled={busy}
             onClick={() => void handleDownload()}
           >
-            {busy ? 'Сохранение…' : 'Скачать'}
+            {busy ? t('archiveModal.saving') : t('archiveModal.download')}
           </button>
           <a
             className="ghost-btn"
@@ -181,7 +186,7 @@ export function StudioArchiveMediaModal({ item, onClose }: Props) {
             target="_blank"
             rel="noopener noreferrer"
           >
-            В новой вкладке
+            {t('archiveModal.openNewTab')}
           </a>
         </footer>
         {hint ? <p className="studio-archive-modal__hint muted">{hint}</p> : null}

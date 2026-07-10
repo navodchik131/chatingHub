@@ -1,4 +1,6 @@
 import type { ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
+import { formatAppNumber } from '../i18n'
 
 interface ConversationPreview {
   id: number
@@ -99,55 +101,63 @@ export function WorkspaceOverview({
   onOpenVideo,
   onOpenAccount,
 }: WorkspaceOverviewProps) {
+  const { t } = useTranslation('workspace')
   const recentChats = conversations.slice(0, 5)
   const recentGens = generations.slice(0, 4)
 
   return (
     <div className="dash">
       <div className="dash-kpi-row">
-        <KpiCard label="Кредиты" value={creditsBalance.toLocaleString('ru-RU')} hint={billingPlanLabel} />
         <KpiCard
-          label="Подписка"
+          label={t('overview.credits')}
+          value={formatAppNumber(creditsBalance)}
+          hint={billingPlanLabel}
+        />
+        <KpiCard
+          label={t('overview.subscription')}
           value={subscriptionLabel}
-          hint="Статус доступа"
+          hint={t('overview.accessStatus')}
           valueTone={subscriptionLooksActive(subscriptionLabel) ? 'success' : 'default'}
         />
         {canChat ? (
           <KpiCard
-            label="Диалоги"
+            label={t('overview.dialogs')}
             value={conversationsTotal}
-            hint={unreadTotal > 0 ? `${unreadTotal} непрочитанных` : 'Все прочитаны'}
+            hint={unreadTotal > 0 ? t('overview.unread', { count: unreadTotal }) : t('overview.allRead')}
           />
         ) : null}
         {canChat && (tributeEarningsLabel || tributeConfigured) ? (
           <KpiCard
-            label="Tribute"
+            label={t('overview.tribute')}
             value={tributeEarningsLabel ?? '—'}
-            hint={tributeEarningsHint ?? 'Донаты и подписки'}
+            hint={tributeEarningsHint ?? t('overview.tributeHint')}
             valueTone="success"
           />
         ) : null}
         {canChat && chatterOutboundCount != null ? (
           <KpiCard
-            label={isOwner ? 'Ответов команды' : 'Мои ответы'}
+            label={isOwner ? t('overview.teamReplies') : t('overview.myReplies')}
             value={chatterOutboundCount}
             hint={
               chatterStatsPeriod
-                ? `${chatterConversationsCount ?? 0} диалогов · ${chatterStatsPeriod}`
-                : `${chatterConversationsCount ?? 0} диалогов`
+                ? t('overview.dialogsPeriod', {
+                    count: chatterConversationsCount ?? 0,
+                    period: chatterStatsPeriod,
+                  })
+                : t('overview.dialogsCount', { count: chatterConversationsCount ?? 0 })
             }
           />
         ) : null}
         {canChat && chatterRatingsHint ? (
-          <KpiCard label="AI-ответы" value={chatterRatingsHint} hint="Оценки 👍 / 👎 за период" />
+          <KpiCard label={t('overview.aiReplies')} value={chatterRatingsHint} hint={t('overview.aiRatingsHint')} />
         ) : null}
         {canStudioAny ? (
-          <KpiCard label="В архиве" value={generationsTotal} hint="Сохранённые кадры" />
+          <KpiCard label={t('overview.archive')} value={generationsTotal} hint={t('overview.savedFrames')} />
         ) : null}
       </div>
 
       <div className="dash-quick">
-        <h2 className="dash-block-title">Быстрые действия</h2>
+        <h2 className="dash-block-title">{t('overview.quickActions')}</h2>
         <div className="dash-quick-actions">
           {canChat ? (
             <button
@@ -158,7 +168,7 @@ export function WorkspaceOverview({
               <span className="dash-action-btn__icon" aria-hidden>
                 💬
               </span>
-              Открыть диалоги
+              {t('overview.openChat')}
             </button>
           ) : null}
           {canStudioAny ? (
@@ -171,7 +181,7 @@ export function WorkspaceOverview({
                 <span className="dash-action-btn__icon dash-action-btn__icon--photo" aria-hidden>
                   🖼
                 </span>
-                Новая картинка
+                {t('overview.newImage')}
               </button>
               <button
                 type="button"
@@ -181,7 +191,7 @@ export function WorkspaceOverview({
                 <span className="dash-action-btn__icon dash-action-btn__icon--video" aria-hidden>
                   🎬
                 </span>
-                Motion / видео
+                {t('overview.motionVideo')}
               </button>
             </>
           ) : null}
@@ -193,7 +203,7 @@ export function WorkspaceOverview({
             <span className="dash-action-btn__icon dash-action-btn__icon--muted" aria-hidden>
               ⚙
             </span>
-            Кабинет и интеграции
+            {t('overview.cabinetIntegrations')}
           </button>
         </div>
       </div>
@@ -202,20 +212,20 @@ export function WorkspaceOverview({
         {canChat ? (
           <section className="dash-panel">
             <div className="dash-panel-head">
-              <h2 className="dash-block-title">Недавние диалоги</h2>
+              <h2 className="dash-block-title">{t('overview.recentChats')}</h2>
               <button type="button" className="dash-link-btn" onClick={() => onOpenChat()}>
-                Все
+                {t('overview.openAll')}
               </button>
             </div>
             {recentChats.length === 0 ? (
-              <p className="muted dash-empty">Подключите Telegram или Fanvue в кабинете.</p>
+              <p className="muted dash-empty">{t('overview.emptyChats')}</p>
             ) : (
               <ul className="dash-list">
                 {recentChats.map((c) => (
                   <li key={c.id}>
                     <button type="button" className="dash-list-item" onClick={() => onOpenChat(c.id)}>
                       <span className="dash-list-main">
-                        <strong>{c.user_display_name ?? 'Без имени'}</strong>
+                        <strong>{c.user_display_name ?? t('overview.unnamed')}</strong>
                         <span className="dash-list-platform">{platformLabel(c.platform)}</span>
                         {(c.unread_count ?? 0) > 0 ? (
                           <span className="dash-list-badge">{c.unread_count}</span>
@@ -235,13 +245,13 @@ export function WorkspaceOverview({
         {canStudioAny ? (
           <section className="dash-panel">
             <div className="dash-panel-head">
-              <h2 className="dash-block-title">Последние кадры</h2>
+              <h2 className="dash-block-title">{t('overview.recentGenerations')}</h2>
               <button type="button" className="dash-link-btn" onClick={onOpenStudio}>
-                Студия
+                {t('overview.studio')}
               </button>
             </div>
             {recentGens.length === 0 ? (
-              <p className="muted dash-empty">Сгенерируйте первый кадр во вкладке «Картинки».</p>
+              <p className="muted dash-empty">{t('overview.emptyGenerations')}</p>
             ) : (
               <div className="dash-thumb-grid">
                 {recentGens.map((g) => (

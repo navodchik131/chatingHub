@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import {
   studioArchiveIsPending,
   studioArchiveThumbUrl,
@@ -22,6 +23,8 @@ export function StudioArchiveThumbPicker({
   onChange,
   imagesOnly = true,
 }: Props) {
+  const { t } = useTranslation('studio')
+
   const pickable = items.filter((g) => {
     if (imagesOnly && g.media_kind !== 'image') return false
     if (studioArchiveIsPending(g) || g.status === 'failed') return false
@@ -49,7 +52,7 @@ export function StudioArchiveThumbPicker({
       </div>
 
       {pickable.length === 0 ? (
-        <p className="studio-archive-picker__empty">В архиве пока нет готовых кадров</p>
+        <p className="studio-archive-picker__empty">{t('archivePicker.empty')}</p>
       ) : (
         <ul className="studio-archive-picker__grid" role="listbox" aria-label={label}>
           <li>

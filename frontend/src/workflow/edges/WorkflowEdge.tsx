@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   BaseEdge,
   EdgeLabelRenderer,
@@ -19,6 +20,7 @@ export function WorkflowEdge({
   markerEnd,
   style,
 }: EdgeProps) {
+  const { t } = useTranslation('workflow')
   const { setEdges } = useReactFlow()
   const [hovered, setHovered] = useState(false)
   const [edgePath, labelX, labelY] = getBezierPath({
@@ -62,8 +64,8 @@ export function WorkflowEdge({
           <button
             type="button"
             className="workflow-edge-tools__btn"
-            aria-label="Отсоединить"
-            title="Отсоединить"
+            aria-label={t('nodeUi.edge.disconnect')}
+            title={t('nodeUi.edge.disconnect')}
             onClick={onDisconnect}
           >
             ×

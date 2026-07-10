@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
 export interface WorkflowWorkspaceItem {
   id: number
@@ -37,6 +38,7 @@ export function WorkspaceSidebar({
   onExport,
   onImport,
 }: Props) {
+  const { t } = useTranslation('workflow')
   const [creating, setCreating] = useState(false)
   const [newName, setNewName] = useState('')
   const [editingId, setEditingId] = useState<number | null>(null)
@@ -63,7 +65,7 @@ export function WorkspaceSidebar({
   return (
     <aside className={`workflow-workspaces${mobileOpen ? ' is-open' : ''}`}>
       <div className="workflow-workspaces__head">
-        <h2>Проекты</h2>
+        <h2>{t('sidebar.projects')}</h2>
         <div className="workflow-workspaces__head-actions">
           {!demoLimited ? (
             <button
@@ -71,7 +73,7 @@ export function WorkspaceSidebar({
               className="workflow-workspaces__add"
               disabled={busy}
               onClick={() => setCreating(true)}
-              title="Новый проект"
+              title={t('sidebar.newProject')}
             >
               +
             </button>
@@ -80,7 +82,7 @@ export function WorkspaceSidebar({
             <button
               type="button"
               className="workflow-workspaces__close"
-              aria-label="Закрыть список проектов"
+              aria-label={t('page.closeProjectsAria')}
               onClick={onClose}
             >
               ×
@@ -95,7 +97,7 @@ export function WorkspaceSidebar({
             className="workflow-workspaces__input"
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
-            placeholder="Название проекта"
+            placeholder={t('sidebar.projectNamePlaceholder')}
             autoFocus
             onKeyDown={(e) => {
               if (e.key === 'Enter') submitCreate()
@@ -104,14 +106,14 @@ export function WorkspaceSidebar({
           />
           <div className="workflow-workspaces__create-actions">
             <button type="button" className="workflow-workspaces__btn" onClick={submitCreate}>
-              Создать
+              {t('sidebar.create')}
             </button>
             <button
               type="button"
               className="workflow-workspaces__btn workflow-workspaces__btn--ghost"
               onClick={() => setCreating(false)}
             >
-              Отмена
+              {t('sidebar.cancel')}
             </button>
           </div>
         </div>
@@ -153,8 +155,8 @@ export function WorkspaceSidebar({
               <button
                 type="button"
                 className="workflow-workspaces__edit"
-                title="Переименовать"
-                aria-label={`Переименовать «${ws.name}»`}
+                title={t('sidebar.rename')}
+                aria-label={t('sidebar.renameProject', { name: ws.name })}
                 onClick={() => {
                   setEditingId(ws.id)
                   setEditName(ws.name)
@@ -167,10 +169,10 @@ export function WorkspaceSidebar({
               <button
                 type="button"
                 className="workflow-workspaces__delete"
-                title="Удалить проект"
+                title={t('sidebar.delete')}
                 disabled={busy}
                 onClick={() => {
-                  if (window.confirm(`Удалить «${ws.name}»?`)) onDelete(ws.id)
+                  if (window.confirm(t('sidebar.deleteConfirm', { name: ws.name }))) onDelete(ws.id)
                 }}
               >
                 ×
@@ -186,7 +188,11 @@ export function WorkspaceSidebar({
           className="workflow-workspaces__io-btn"
           disabled={busy || activeId == null}
           onClick={onExport}
-          title={activeName ? `Скачать «${activeName}» как JSON` : 'Скачать проект'}
+          title={
+            activeName
+              ? t('sidebar.exportProject', { name: activeName })
+              : t('sidebar.exportFallback')
+          }
         >
           ↓ JSON
         </button>
@@ -196,7 +202,7 @@ export function WorkspaceSidebar({
             className="workflow-workspaces__io-btn"
             disabled={busy}
             onClick={() => importRef.current?.click()}
-            title="Загрузить проект из JSON"
+            title={t('sidebar.import')}
           >
             ↑ JSON
           </button>

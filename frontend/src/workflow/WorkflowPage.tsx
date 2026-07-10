@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import { apiFetch, getToken } from '../api'
+import { AppLanguageSwitcher } from '../i18n/AppLanguageSwitcher'
 import { hasAllBits, PERM_STUDIO_GENERATE } from '../workspacePermissions'
 import {
   createWorkflowWorkspace,
@@ -45,6 +47,7 @@ function loadLegacyGraph(): ProjectGraph | null {
 }
 
 export function WorkflowPage() {
+  const { t } = useTranslation('workflow')
   const [gate, setGate] = useState<'loading' | 'ok' | 'denied' | 'anon'>('loading')
   const [models, setModels] = useState<StudioModelOption[]>([])
   const [workspaces, setWorkspaces] = useState<WorkflowWorkspaceItem[]>([])
@@ -98,7 +101,7 @@ export function WorkflowPage() {
       if (!list.length) {
         const legacy = loadLegacyGraph()
         const created = await createWorkflowWorkspace(
-          legacy?.nodes?.length ? 'Мой проект' : 'Новый проект',
+          legacy?.nodes?.length ? t('page.myProject') : t('page.defaultProject'),
         )
         if (legacy?.nodes?.length) {
           await saveWorkflowWorkspace(created.id, { graph: legacy })
@@ -115,7 +118,7 @@ export function WorkflowPage() {
       }
       setGate('ok')
     })()
-  }, [refreshWorkspaces])
+  }, [refreshWorkspaces, t])
 
   const selectWorkspace = useCallback(async (id: number) => {
     if (id === activeId) return
@@ -176,7 +179,7 @@ export function WorkflowPage() {
         await deleteWorkflowWorkspace(id)
         const list = await refreshWorkspaces()
         if (!list.length) {
-          const created = await createWorkflowWorkspace('Новый проект')
+          const created = await createWorkflowWorkspace(t('page.defaultProject'))
           await refreshWorkspaces()
           setActiveId(created.id)
           setGraph(hydrateGraphFromServer(created.graph))
@@ -191,11 +194,11 @@ export function WorkflowPage() {
         setBusy(false)
       }
     },
-    [activeId, refreshWorkspaces],
+    [activeId, refreshWorkspaces, t],
   )
 
   const activeWorkspaceName =
-    workspaces.find((ws) => ws.id === activeId)?.name ?? 'Проект'
+    workspaces.find((ws) => ws.id === activeId)?.name ?? t('page.projectFallback')
 
   const handleExport = useCallback(() => {
     if (activeId == null) return
@@ -213,7 +216,7 @@ export function WorkflowPage() {
         const replaceCurrent =
           activeId != null &&
           window.confirm(
-            `Заменить текущий проект «${activeWorkspaceName}» графом из «${imported.name}»?`,
+            t('page.importReplaceConfirm', { current: activeWorkspaceName, imported: imported.name }),
           )
 
         if (replaceCurrent && activeId != null) {
@@ -228,18 +231,18 @@ export function WorkflowPage() {
         setActiveId(created.id)
         setGraph(graphClean)
       } catch (error) {
-        window.alert(error instanceof Error ? error.message : 'Не удалось импортировать JSON')
+        window.alert(error instanceof Error ? error.message : t('page.importFailed'))
       } finally {
         setBusy(false)
       }
     },
-    [activeId, activeWorkspaceName, refreshWorkspaces],
+    [activeId, activeWorkspaceName, refreshWorkspaces, t],
   )
 
   if (gate === 'loading') {
     return (
       <div className="workflow-gate">
-        <div className="workflow-gate__card">Загрузка…</div>
+        <div className="workflow-gate__card">{t('page.loading')}</div>
       </div>
     )
   }
@@ -248,10 +251,10 @@ export function WorkflowPage() {
     return (
       <div className="workflow-gate">
         <div className="workflow-gate__card">
-          <h1>Workflow</h1>
-          <p>Нужен вход в аккаунт с доступом к студии.</p>
+          <h1>{t('page.title')}</h1>
+          <p>{t('page.signInRequired')}</p>
           <Link className="workflow-gate__link" to="/login">
-            Войти
+            {t('page.signIn')}
           </Link>
         </div>
       </div>
@@ -262,10 +265,10 @@ export function WorkflowPage() {
     return (
       <div className="workflow-gate">
         <div className="workflow-gate__card">
-          <h1>Нет доступа</h1>
-          <p>Для workflow нужно право «Генерация промпта и картинок (студия)».</p>
+          <h1>{t('page.accessDeniedTitle')}</h1>
+          <p>{t('page.accessDenied')}</p>
           <Link className="workflow-gate__link" to="/workspace">
-            В кабинет
+            {t('page.toCabinet')}
           </Link>
         </div>
       </div>
@@ -280,38 +283,36 @@ export function WorkflowPage() {
       <div className={`workflow-page${isMobile ? ' workflow-page--mobile' : ''}`}>
         <header className="workflow-page__header">
           <div className="workflow-page__header-main">
-            <h1 className="workflow-page__title">Workflow</h1>
+            <h1 className="workflow-page__title">{t('page.title')}</h1>
             {isMobile ? (
               <p className="workflow-page__active-project" title={activeWorkspaceName}>
                 {activeWorkspaceName}
               </p>
             ) : (
               <p className="workflow-page__subtitle">
-                Соберите цепочку и сгенерируйте изображение
+                {t('page.subtitle')}
                 {me ? (
                   <span className="workflow-page__billing"> · {workflowBillingHeaderLine(me)}</span>
                 ) : null}
               </p>
             )}
             {demoLimited && !isMobile ? (
-              <p className="workflow-page__demo-hint muted small">
-                Демо-режим: в списке только «Смена модели»; остальные шаблоны откроются после
-                пополнения кредитов или подписки. Генерации списываются из бесплатных демо.
-              </p>
+              <p className="workflow-page__demo-hint muted small">{t('page.demoLimited')}</p>
             ) : null}
           </div>
           <div className="workflow-page__actions">
+            <AppLanguageSwitcher className="mm-lang-switch mm-lang-switch--compact workflow-lang-switch" />
             {isMobile ? (
               <button
                 type="button"
                 className="workflow-page__btn"
                 onClick={() => setProjectsOpen(true)}
               >
-                Проекты
+                {t('sidebar.projects')}
               </button>
             ) : null}
             <Link className="workflow-page__btn" to="/workspace">
-              ← Студия
+              {t('page.backToStudio')}
             </Link>
           </div>
         </header>
@@ -320,7 +321,7 @@ export function WorkflowPage() {
             <button
               type="button"
               className="workflow-drawer-backdrop"
-              aria-label="Закрыть список проектов"
+              aria-label={t('page.closeProjectsAria')}
               onClick={() => setProjectsOpen(false)}
             />
           ) : null}

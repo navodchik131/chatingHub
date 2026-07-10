@@ -1,10 +1,12 @@
 import { memo, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Handle, Position, useReactFlow, type NodeProps } from '@xyflow/react'
 import { useWorkflowModels } from '../WorkflowModelsContext'
 import { BaseNode } from './BaseNode'
 import { HandleIds, type ModelNodeData } from '../types'
 
 function ModelNodeComponent({ id, data }: NodeProps) {
+  const { t } = useTranslation('workflow')
   const { setNodes } = useReactFlow()
   const models = useWorkflowModels()
   const nodeData = data as ModelNodeData
@@ -35,13 +37,13 @@ function ModelNodeComponent({ id, data }: NodeProps) {
 
   return (
     <BaseNode nodeId={id} type="model" error={nodeData.error}>
-      <p className="workflow-node__hint">Модель из кабинета (необязательно) — для нового персонажа можно не подключать</p>
+      <p className="workflow-node__hint">{t('nodeUi.model.hint')}</p>
       <select
         className="workflow-node__field nodrag nowheel"
         value={nodeData.modelId ?? ''}
         onChange={onChange}
       >
-        <option value="">Выберите модель…</option>
+        <option value="">{t('nodeUi.model.selectPlaceholder')}</option>
         {models.map((m) => (
           <option key={m.id} value={m.id}>
             {m.name}

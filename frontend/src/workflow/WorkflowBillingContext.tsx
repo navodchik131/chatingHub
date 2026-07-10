@@ -1,4 +1,5 @@
 import { createContext, useContext, type ReactNode } from 'react'
+import i18n, { WORKFLOW_NS } from '../i18n'
 import { normalizeBillingPlan } from '../billing/planCatalog'
 import { planDisplayShort, type BillingMeLike } from '../billing/planLabels'
 import {
@@ -89,10 +90,10 @@ export function workflowBillingHeaderLine(me: BillingMeLike | null): string {
   const bal = me.credits_balance ?? 0
   const demo = me.demo_generations_remaining ?? 0
   if (normalizeBillingPlan(me.billing_plan) === 'pro') {
-    return `${plan} · оплата у WaveSpeed`
+    return `${plan} · ${i18n.t('nodeUi.billing.proPayment', { ns: WORKFLOW_NS })}`
   }
   if (demo > 0) {
-    return `${plan} · ${bal} кр. · ${demo} демо`
+    return `${plan} · ${bal} ${i18n.t('nodeUi.billing.creditsShort', { ns: WORKFLOW_NS })} · ${demo} ${i18n.t('nodeUi.billing.demoSuffix', { ns: WORKFLOW_NS })}`
   }
-  return `${plan} · ${bal} кр.`
+  return `${plan} · ${bal} ${i18n.t('nodeUi.billing.creditsShort', { ns: WORKFLOW_NS })}`
 }

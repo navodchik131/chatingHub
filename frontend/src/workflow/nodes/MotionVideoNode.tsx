@@ -1,4 +1,5 @@
 import { memo, useCallback, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Handle, Position, useReactFlow, type NodeProps } from '@xyflow/react'
 import { uploadWorkflowMotionVideo } from '../api'
 import { SeedanceReferenceGuide } from '../SeedanceReferenceGuide'
@@ -6,6 +7,7 @@ import { BaseNode } from './BaseNode'
 import { HandleIds, type MotionVideoNodeData } from '../types'
 
 function MotionVideoNodeComponent({ id, data }: NodeProps) {
+  const { t } = useTranslation('workflow')
   const { setNodes } = useReactFlow()
   const nodeData = data as MotionVideoNodeData
   const inputRef = useRef<HTMLInputElement>(null)
@@ -41,13 +43,13 @@ function MotionVideoNodeComponent({ id, data }: NodeProps) {
         })
       } catch (error) {
         updateNodeData({
-          error: error instanceof Error ? error.message : 'Не удалось загрузить видео',
+          error: error instanceof Error ? error.message : t('nodeUi.motionVideo.uploadError'),
         })
       } finally {
         setUploading(false)
       }
     },
-    [updateNodeData],
+    [t, updateNodeData],
   )
 
   const onClear = useCallback(() => {
@@ -59,9 +61,7 @@ function MotionVideoNodeComponent({ id, data }: NodeProps) {
   return (
     <BaseNode nodeId={id} type="motionVideo" error={nodeData.error}>
       <SeedanceReferenceGuide variant="motion" />
-      <p className="workflow-node__hint">
-        Motion-референс → @Video1 в Seedance. Без ноды движение задаётся только текстом промпта.
-      </p>
+      <p className="workflow-node__hint">{t('nodeUi.motionVideo.hint')}</p>
 
       <input
         ref={inputRef}
@@ -73,14 +73,14 @@ function MotionVideoNodeComponent({ id, data }: NodeProps) {
 
       {hasVideo ? (
         <>
-          <p className="workflow-node__hint">{nodeData.fileName || 'Видео загружено'}</p>
+          <p className="workflow-node__hint">{nodeData.fileName || t('nodeUi.motionVideo.videoUploaded')}</p>
           <button
             type="button"
             className="workflow-node__btn workflow-node__btn--ghost nodrag"
             onClick={onClear}
             disabled={uploading}
           >
-            Удалить
+            {t('nodeUi.common.remove')}
           </button>
         </>
       ) : (
@@ -90,7 +90,7 @@ function MotionVideoNodeComponent({ id, data }: NodeProps) {
           onClick={onPickFile}
           disabled={uploading}
         >
-          {uploading ? 'Загрузка…' : 'Загрузить MP4/WebM'}
+          {uploading ? t('nodeUi.common.uploading') : t('nodeUi.motionVideo.uploadButton')}
         </button>
       )}
 

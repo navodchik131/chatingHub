@@ -1,13 +1,14 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { apiFetch } from '../api'
 import { formatHttpApiError } from '../apiErrors'
 import {
   BILLING_PLAN_OPTIONS,
   PLAN_TIER_OPTIONS,
-  SUBSCRIPTION_STATUS_LABELS,
   SUBSCRIPTION_STATUS_OPTIONS,
   billingPlanLabel,
   planTierLabel,
+  subscriptionStatusLabel,
 } from './constants'
 import type { AdminUserDetail, AdminUserRow } from './types'
 import {
@@ -31,6 +32,7 @@ export function AdminUserPanel({
   onClose: () => void
   onError: (msg: string | null) => void
 }) {
+  const { t } = useTranslation('admin')
   const [creditDelta, setCreditDelta] = useState('')
   const isOwner = user.parent_user_id == null
   const periodKey = `admin-panel-period-${user.id}-${user.subscription_period_end ?? 'none'}`
@@ -84,7 +86,7 @@ export function AdminUserPanel({
   const applyCredits = async () => {
     const delta = parseInt(creditDelta, 10)
     if (Number.isNaN(delta) || delta === 0) {
-      onError('Укажите целое число кредитов (не 0).')
+      onError(t('userPanel.creditDeltaError'))
       return
     }
     onError(null)
@@ -109,62 +111,65 @@ export function AdminUserPanel({
   }
 
   return (
-    <aside className="admin-panel" aria-label="Карточка пользователя">
+    <aside className="admin-panel" aria-label={t('userPanel.ariaLabel')}>
       <div className="admin-panel__head">
         <div>
           <h2 className="admin-panel__title">{user.email}</h2>
           <p className="admin-panel__meta muted">
-            ID {user.id} · {isOwner ? 'владелец' : `участник · ${user.member_login ?? '—'}`}
+            ID {user.id} ·{' '}
+            {isOwner
+              ? t('roles.owner')
+              : t('userPanel.memberMeta', { login: user.member_login ?? '—' })}
           </p>
         </div>
-        <button type="button" className="ghost-btn" onClick={onClose} aria-label="Закрыть">
+        <button type="button" className="ghost-btn" onClick={onClose} aria-label={t('common.close')}>
           ✕
         </button>
       </div>
 
       <dl className="admin-panel__stats">
         <div>
-          <dt>Регистрация</dt>
+          <dt>{t('userPanel.registered')}</dt>
           <dd>{formatDateTimeRu(user.created_at)}</dd>
         </div>
         <div>
-          <dt>Баланс кредитов</dt>
+          <dt>{t('userPanel.creditsBalance')}</dt>
           <dd className="mono">{user.credits_balance}</dd>
         </div>
         <div>
-          <dt>Модели студии</dt>
+          <dt>{t('userPanel.studioModels')}</dt>
           <dd>{user.studio_models_count}</dd>
         </div>
         <div>
-          <dt>Генерации в архиве</dt>
+          <dt>{t('userPanel.archiveGenerations')}</dt>
           <dd>{user.studio_generations_count}</dd>
         </div>
         <div>
-          <dt>Диалоги</dt>
+          <dt>{t('userPanel.conversations')}</dt>
           <dd>{user.conversations_count}</dd>
         </div>
         <div>
-          <dt>Приглашено по рефералке</dt>
+          <dt>{t('userPanel.invitedByReferral')}</dt>
           <dd>{user.invited_users_count}</dd>
         </div>
         {user.referred_by_email ? (
           <div>
-            <dt>Пришёл по рефералке</dt>
+            <dt>{t('userPanel.referredBy')}</dt>
             <dd>{user.referred_by_email}</dd>
           </div>
         ) : null}
         {isOwner && user.workspace_members_count > 0 ? (
           <div>
-            <dt>Участников в команде</dt>
+            <dt>{t('userPanel.teamMembers')}</dt>
             <dd>{user.workspace_members_count}</dd>
           </div>
         ) : null}
       </dl>
 
       <section className="admin-panel__section">
-        <h3>Подписка (владелец пространства)</h3>
+        <h3>{t('userPanel.subscriptionSection')}</h3>
         <label className="admin-field">
-          <span>Статус</span>
+          <span>{t('common.status')}</span>
           <select
             value={user.subscription_status}
             disabled={busy}
@@ -175,13 +180,13 @@ export function AdminUserPanel({
           >
             {SUBSCRIPTION_STATUS_OPTIONS.map((s) => (
               <option key={s} value={s}>
-                {SUBSCRIPTION_STATUS_LABELS[s] ?? s}
+                {subscriptionStatusLabel(s)}
               </option>
             ))}
           </select>
         </label>
         <label className="admin-field">
-          <span>Биллинг</span>
+          <span>{t('userPanel.billing')}</span>
           <select
             value={(user.billing_plan || 'managed').toLowerCase()}
             disabled={busy}
@@ -200,7 +205,7 @@ export function AdminUserPanel({
           </select>
         </label>
         <label className="admin-field">
-          <span>Тариф</span>
+          <span>{t('common.plan')}</span>
           <select
             value={(user.plan_tier || 'solo').toLowerCase()}
             disabled={busy}
@@ -211,15 +216,15 @@ export function AdminUserPanel({
               }
             }}
           >
-            {PLAN_TIER_OPTIONS.map((t) => (
-              <option key={t} value={t}>
-                {planTierLabel(t)}
+            {PLAN_TIER_OPTIONS.map((tier) => (
+              <option key={tier} value={tier}>
+                {planTierLabel(tier)}
               </option>
             ))}
           </select>
         </label>
         <div className="admin-field">
-          <span>Период до</span>
+          <span>{t('userPanel.periodUntil')}</span>
           <p className="mono small">{formatDateTimeRu(user.subscription_period_end)}</p>
           <div className="admin-period-row">
             <input
@@ -242,7 +247,7 @@ export function AdminUserPanel({
                 })
               }}
             >
-              Сохранить
+              {t('common.save')}
             </button>
             <button
               type="button"
@@ -250,14 +255,14 @@ export function AdminUserPanel({
               disabled={busy}
               onClick={() => void patchSubscription({ current_period_end: null })}
             >
-              Сброс
+              {t('common.reset')}
             </button>
           </div>
         </div>
       </section>
 
       <section className="admin-panel__section">
-        <h3>Доступ и кредиты</h3>
+        <h3>{t('userPanel.accessSection')}</h3>
         <label className="admin-check">
           <input
             type="checkbox"
@@ -265,7 +270,7 @@ export function AdminUserPanel({
             disabled={busy}
             onChange={(e) => void patchUser({ is_active: e.target.checked })}
           />
-          Аккаунт активен
+          {t('userPanel.accountActive')}
         </label>
         {isOwner ? (
           <label className="admin-check">
@@ -275,20 +280,20 @@ export function AdminUserPanel({
               disabled={busy}
               onChange={(e) => void patchUser({ is_platform_admin: e.target.checked })}
             />
-            Администратор платформы
+            {t('userPanel.platformAdmin')}
           </label>
         ) : null}
         <div className="admin-credit-row">
           <input
             type="text"
             inputMode="numeric"
-            placeholder="+/- кредиты"
+            placeholder={t('userPanel.creditDeltaPlaceholder')}
             value={creditDelta}
             disabled={busy}
             onChange={(e) => setCreditDelta(e.target.value)}
           />
           <button type="button" className="ghost-btn" disabled={busy} onClick={() => void applyCredits()}>
-            Применить
+            {t('userPanel.apply')}
           </button>
         </div>
       </section>

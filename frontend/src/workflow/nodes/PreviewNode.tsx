@@ -1,4 +1,5 @@
 import { memo, useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Handle, Position, useEdges, useNodes, type NodeProps } from '@xyflow/react'
 import { resolveConnectedPreviewMedia, resolvePreviewGenerationId } from '../graphResolver'
 import { WorkflowImageLightbox } from '../WorkflowImageLightbox'
@@ -6,6 +7,7 @@ import { BaseNode } from './BaseNode'
 import { HandleIds, type PreviewNodeData, type RefDescriptionNodeData } from '../types'
 
 function PreviewNodeComponent({ id, data }: NodeProps) {
+  const { t } = useTranslation('workflow')
   const nodes = useNodes()
   const edges = useEdges()
   const nodeData = data as PreviewNodeData
@@ -101,15 +103,16 @@ function PreviewNodeComponent({ id, data }: NodeProps) {
 
         <p className="workflow-node__hint">
           {mediaKind === 'video' ? (
-            'Итоговое видео'
+            t('nodeUi.preview.finalVideo')
           ) : assignedRole ? (
             <>
-              Роль: <strong>{assignedRole}</strong> — выход ref → references
+              {t('nodeUi.refDescription.roleLabel')}: <strong>{assignedRole}</strong>{' '}
+              {t('nodeUi.preview.roleConnectOut')}
             </>
           ) : canUseAsRef ? (
-            <>Подключите «Описание референса» слева и ref → references</>
+            <>{t('nodeUi.preview.connectDescAndRef')}</>
           ) : (
-            'Подключите выход генерации или дождитесь результата'
+            t('nodeUi.preview.connectOrWait')
           )}
         </p>
 
@@ -130,12 +133,12 @@ function PreviewNodeComponent({ id, data }: NodeProps) {
               className="workflow-node__preview-box workflow-node__preview-box--filled workflow-node__preview-click nodrag"
               onClick={() => setLightboxUrl(imageUrl ?? null)}
             >
-              <img src={imageUrl!} alt="Результат генерации" />
+              <img src={imageUrl!} alt={t('gen.resultAlt')} />
             </button>
           )
         ) : (
           <div className="workflow-node__preview-box">
-            <span className="workflow-node__hint">Подключите выход генерации</span>
+            <span className="workflow-node__hint">{t('nodeUi.preview.connectGeneration')}</span>
           </div>
         )}
 
@@ -145,7 +148,7 @@ function PreviewNodeComponent({ id, data }: NodeProps) {
           onClick={handleDownload}
           disabled={!hasMedia}
         >
-          Скачать
+          {t('nodeUi.common.download')}
         </button>
       </BaseNode>
       <WorkflowImageLightbox

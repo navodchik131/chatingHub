@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Handle, Position, useReactFlow, type NodeProps } from '@xyflow/react'
 import { executeWorkflowGeneration } from '../api'
 import { serializeGraph, upstreamBoardstoryRefHasContent } from '../graphResolver'
@@ -14,6 +15,7 @@ function isAbortError(error: unknown): boolean {
 }
 
 function ScenarioMotionVideoNodeComponent({ id, data }: NodeProps) {
+  const { t } = useTranslation('workflow')
   const { setNodes, getNodes, getEdges } = useReactFlow()
   const { workspaceId } = useWorkflowRun()
   const { me } = useWorkflowBilling()
@@ -93,7 +95,7 @@ function ScenarioMotionVideoNodeComponent({ id, data }: NodeProps) {
         (result.motion_video_prompt_auto ?? '').trim() ||
         ''
       if (!prompt) {
-        throw new Error('Генерация завершилась без текста промпта')
+        throw new Error(t('nodeUi.videoPromptCompose.noPromptText'))
       }
 
       updateNodeData({
@@ -113,14 +115,14 @@ function ScenarioMotionVideoNodeComponent({ id, data }: NodeProps) {
       }
       updateNodeData({
         isRunning: false,
-        error: error instanceof Error ? error.message : 'Ошибка генерации промпта',
+        error: error instanceof Error ? error.message : t('nodeUi.videoPromptCompose.promptError'),
       })
     } finally {
       if (runAbortRef.current === abortController) {
         runAbortRef.current = null
       }
     }
-  }, [getEdges, getNodes, id, nodeData.disabled, updateNodeData, workspaceId])
+  }, [getEdges, getNodes, id, nodeData.disabled, t, updateNodeData, workspaceId])
 
   const onPromptChange = useCallback(
     (event: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -139,7 +141,7 @@ function ScenarioMotionVideoNodeComponent({ id, data }: NodeProps) {
       isRunning={nodeData.isRunning}
       error={nodeData.error}
       headerExtra={
-        nodeData.prompt?.trim() ? <span className="workflow-node__badge">готово</span> : null
+        nodeData.prompt?.trim() ? <span className="workflow-node__badge">{t('gen.done')}</span> : null
       }
     >
       <Handle
@@ -256,9 +258,7 @@ function ScenarioMotionVideoNodeComponent({ id, data }: NodeProps) {
 
       <SeedanceReferenceGuide variant="compose" />
 
-      <p className="workflow-node__hint">
-        Сценарий motion-видео: Grok → промпт + BoardStory refs. Настройки Seedance — здесь; модель рендера — в «Видео».
-      </p>
+      <p className="workflow-node__hint">{t('nodeUi.scenarioMotionVideo.hint')}</p>
 
       <div className="workflow-gen-form nodrag">
         <label className="workflow-gen-form__check">
@@ -273,7 +273,7 @@ function ScenarioMotionVideoNodeComponent({ id, data }: NodeProps) {
             }
             disabled={nodeData.isRunning}
           />
-          <span>Отправлять motion-видео в генерацию</span>
+          <span>{t('nodeUi.videoPromptCompose.sendMotionVideo')}</span>
         </label>
         <label className="workflow-gen-form__check">
           <input
@@ -282,7 +282,7 @@ function ScenarioMotionVideoNodeComponent({ id, data }: NodeProps) {
             onChange={(e) => updateNodeData({ generateAudio: e.target.checked })}
             disabled={nodeData.isRunning}
           />
-          <span>Звук</span>
+          <span>{t('nodeUi.videoGen.audio')}</span>
         </label>
         <label className="workflow-gen-form__check">
           <input
@@ -291,7 +291,7 @@ function ScenarioMotionVideoNodeComponent({ id, data }: NodeProps) {
             onChange={(e) => updateNodeData({ autoMotionPrompt: e.target.checked })}
             disabled={nodeData.isRunning}
           />
-          <span>Grok motion timeline (авто-описание движения)</span>
+          <span>{t('nodeUi.videoGen.grokMotionTimeline')}</span>
         </label>
         <label className="workflow-gen-form__check">
           <input
@@ -305,7 +305,7 @@ function ScenarioMotionVideoNodeComponent({ id, data }: NodeProps) {
             }
             disabled={nodeData.isRunning || clothingRefLoaded}
           />
-          <span>Сгенерировать одежду из видео</span>
+          <span>{t('nodeUi.videoPromptCompose.generateClothing')}</span>
         </label>
         <label className="workflow-gen-form__check">
           <input
@@ -321,7 +321,7 @@ function ScenarioMotionVideoNodeComponent({ id, data }: NodeProps) {
             }
             disabled={nodeData.isRunning || environmentRefLoaded}
           />
-          <span>Сгенерировать помещение из видео</span>
+          <span>{t('nodeUi.videoPromptCompose.generateEnvironment')}</span>
         </label>
       </div>
 
@@ -334,12 +334,12 @@ function ScenarioMotionVideoNodeComponent({ id, data }: NodeProps) {
                 className="workflow-node__preview-box workflow-node__preview-box--filled workflow-node__preview-click"
                 onClick={() => setLightboxUrl(nodeData.clothingImageUrl ?? null)}
               >
-                <img src={nodeData.clothingImageUrl} alt="Одежда из видео" />
-                <span className="workflow-node__preview-caption">Одежда</span>
+                <img src={nodeData.clothingImageUrl} alt={t('nodeUi.videoPromptCompose.clothingAlt')} />
+                <span className="workflow-node__preview-caption">{t('nodeUi.videoPromptCompose.clothingCaption')}</span>
               </button>
             ) : (
               <div className="workflow-node__preview-box workflow-node__preview-box--compact">
-                <span className="workflow-node__hint">Одежда — после «Сгенерировать промпт»</span>
+                <span className="workflow-node__hint">{t('nodeUi.videoPromptCompose.clothingPending')}</span>
               </div>
             )
           ) : null}
@@ -350,12 +350,12 @@ function ScenarioMotionVideoNodeComponent({ id, data }: NodeProps) {
                 className="workflow-node__preview-box workflow-node__preview-box--filled workflow-node__preview-click"
                 onClick={() => setLightboxUrl(nodeData.environmentImageUrl ?? null)}
               >
-                <img src={nodeData.environmentImageUrl} alt="Помещение из видео" />
-                <span className="workflow-node__preview-caption">Помещение</span>
+                <img src={nodeData.environmentImageUrl} alt={t('nodeUi.videoPromptCompose.environmentAlt')} />
+                <span className="workflow-node__preview-caption">{t('nodeUi.videoPromptCompose.environmentCaption')}</span>
               </button>
             ) : (
               <div className="workflow-node__preview-box workflow-node__preview-box--compact">
-                <span className="workflow-node__hint">Помещение — после «Сгенерировать промпт»</span>
+                <span className="workflow-node__hint">{t('nodeUi.videoPromptCompose.environmentPending')}</span>
               </div>
             )
           ) : null}
@@ -364,7 +364,7 @@ function ScenarioMotionVideoNodeComponent({ id, data }: NodeProps) {
 
       <textarea
         className="workflow-node__textarea nodrag nowheel"
-        placeholder="Промпт появится после генерации — можно отредактировать"
+        placeholder={t('nodeUi.videoPromptCompose.promptPlaceholderShort')}
         value={nodeData.prompt ?? ''}
         onChange={onPromptChange}
         rows={6}
@@ -379,7 +379,7 @@ function ScenarioMotionVideoNodeComponent({ id, data }: NodeProps) {
           id={`${id}-neg`}
           className="workflow-gen-form__input nodrag nowheel"
           type="text"
-          placeholder="опционально"
+          placeholder={t('nodeUi.common.optional')}
           value={nodeData.negativePrompt ?? ''}
           onChange={(e) => updateNodeData({ negativePrompt: e.target.value })}
           disabled={nodeData.isRunning}
@@ -396,10 +396,10 @@ function ScenarioMotionVideoNodeComponent({ id, data }: NodeProps) {
         onClick={() => (nodeData.isRunning ? onCancelRun() : void onGenerate())}
         disabled={nodeData.disabled === true && !nodeData.isRunning}
       >
-        {nodeData.isRunning ? 'Отменить' : 'Сгенерировать промпт'}
+        {nodeData.isRunning ? t('gen.cancel') : t('nodeUi.videoPromptCompose.generatePrompt')}
         {!nodeData.isRunning ? (
           <span className="workflow-node__btn-cost">
-            {isPro ? 'Pro' : `${promptCost} кр.`}
+            {isPro ? 'Pro' : `${promptCost} ${t('gen.creditsUnit')}`}
           </span>
         ) : null}
       </button>

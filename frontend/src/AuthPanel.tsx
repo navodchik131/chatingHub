@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { apiFetch, setToken } from './api'
 import { formatHttpApiError } from './apiErrors'
 import { markFirstGenWizardPending } from './analytics/funnel'
@@ -11,6 +12,7 @@ export function AuthPanel({
   onSuccess: (fromRegister?: boolean) => void | Promise<void>
   referralCode?: string | null
 }) {
+  const { t } = useTranslation('auth')
   const [tab, setTab] = useState<'login' | 'register'>('login')
   const [email, setEmail] = useState('')
   const [memberLogin, setMemberLogin] = useState('')
@@ -73,9 +75,9 @@ export function AuthPanel({
   return (
     <div className="auth-card">
       <div className="auth-card-inner">
-        <h2 className="auth-title">Вход в ModelMate</h2>
-        <p className="auth-sub">Мультитенантный кабинет: диалоги, интеграции, подписка</p>
-        <div className="auth-tabs" role="tablist" aria-label="Режим входа">
+        <h2 className="auth-title">{t('title')}</h2>
+        <p className="auth-sub">{t('subtitle')}</p>
+        <div className="auth-tabs" role="tablist" aria-label={t('tabsAria')}>
           <button
             type="button"
             role="tab"
@@ -85,7 +87,7 @@ export function AuthPanel({
               setTab('login')
             }}
           >
-            Вход
+            {t('login')}
           </button>
           <button
             type="button"
@@ -97,7 +99,7 @@ export function AuthPanel({
               setMemberLogin('')
             }}
           >
-            Регистрация
+            {t('register')}
           </button>
         </div>
         {err ? <div className="banner error">{err}</div> : null}
@@ -109,7 +111,7 @@ export function AuthPanel({
               onSuccess={onTelegramSuccess}
               onError={setErr}
             />
-            <p className="auth-hint auth-hint--center">или email</p>
+            <p className="auth-hint auth-hint--center">{t('orEmail')}</p>
           </>
         ) : null}
         {tgBotUsername && tab === 'login' && !memberLogin.trim() ? (
@@ -120,11 +122,11 @@ export function AuthPanel({
               onSuccess={() => onSuccess(false)}
               onError={setErr}
             />
-            <p className="auth-hint auth-hint--center">или email</p>
+            <p className="auth-hint auth-hint--center">{t('orEmail')}</p>
           </>
         ) : null}
         <label className="auth-label">
-          <span className="auth-label-text">Email</span>
+          <span className="auth-label-text">{t('email')}</span>
           <input
             type="email"
             autoComplete="email"
@@ -134,7 +136,7 @@ export function AuthPanel({
           />
         </label>
         <label className="auth-label">
-          <span className="auth-label-text">Пароль</span>
+          <span className="auth-label-text">{t('password')}</span>
           <input
             type="password"
             autoComplete={tab === 'login' ? 'current-password' : 'new-password'}
@@ -145,13 +147,13 @@ export function AuthPanel({
         </label>
         {tab === 'login' ? (
           <label className="auth-label">
-            <span className="auth-label-text">Логин в команде (необязательно)</span>
+            <span className="auth-label-text">{t('teamLoginOptional')}</span>
             <input
               type="text"
               autoComplete="username"
               value={memberLogin}
               onChange={(e) => setMemberLogin(e.target.value)}
-              placeholder="Если вы сотрудник — логин от владельца, латиница и цифры"
+              placeholder={t('teamLoginPlaceholder')}
             />
           </label>
         ) : null}
@@ -166,12 +168,9 @@ export function AuthPanel({
           }
           onClick={() => void submit()}
         >
-          {tab === 'login' ? 'Войти' : 'Создать аккаунт'}
+          {tab === 'login' ? t('submitLogin') : t('submitRegister')}
         </button>
-        <p className="auth-hint">
-          Минимум 8 символов в пароле. Сотрудник: email владельца, свой логин команды (3–32 символа: a-z,
-          0-9, _) и пароль — без Telegram.
-        </p>
+        <p className="auth-hint">{t('passwordHint')}</p>
       </div>
     </div>
   )

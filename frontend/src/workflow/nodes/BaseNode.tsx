@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react'
 import { useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useReactFlow } from '@xyflow/react'
-import { NODE_LABELS } from '../constants'
+import { workflowNodeLabel } from '../workflowI18n'
 import { NODE_ICON_COLORS, NodeIcon } from '../NodeIcons'
 import { WorkflowNodeMenu } from '../WorkflowNodeMenu'
 import { isWorkflowNodeDisabled } from '../workflowNodeState'
@@ -24,6 +25,7 @@ export function BaseNode({
   isRunning,
   error,
 }: BaseNodeProps) {
+  const { t } = useTranslation('workflow')
   const { setNodes, setEdges, getNode } = useReactFlow()
   const nodeData = getNode(nodeId)?.data as Record<string, unknown> | undefined
   const disabled = isWorkflowNodeDisabled(nodeData)
@@ -62,8 +64,8 @@ export function BaseNode({
           >
             <NodeIcon type={type} size={14} />
           </span>
-          <span>{NODE_LABELS[type]}</span>
-          {disabled ? <span className="workflow-node__badge workflow-node__badge--muted">выкл</span> : null}
+          <span>{workflowNodeLabel(type)}</span>
+          {disabled ? <span className="workflow-node__badge workflow-node__badge--muted">{t('gen.disabled')}</span> : null}
           {isRunning ? <span className="workflow-spinner" aria-hidden /> : null}
         </div>
         <div className="workflow-node__header-actions">

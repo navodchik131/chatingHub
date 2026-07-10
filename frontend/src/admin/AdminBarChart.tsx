@@ -1,21 +1,24 @@
+import { useTranslation } from 'react-i18next'
 import { formatShortDate } from './utils'
 
 export function AdminBarChart({
   title,
   series,
-  emptyHint = 'Нет данных за период',
+  emptyHint,
 }: {
   title: string
   series: { date: string; count: number }[]
   emptyHint?: string
 }) {
+  const { t } = useTranslation('admin')
+  const hint = emptyHint ?? t('overview.charts.noDataPeriod')
   const max = Math.max(1, ...series.map((p) => p.count))
   const total = series.reduce((s, p) => s + p.count, 0)
   if (total === 0) {
     return (
       <div className="admin-chart">
         <h3 className="admin-chart__title">{title}</h3>
-        <p className="admin-chart__empty muted">{emptyHint}</p>
+        <p className="admin-chart__empty muted">{hint}</p>
       </div>
     )
   }
@@ -23,7 +26,7 @@ export function AdminBarChart({
     <div className="admin-chart">
       <h3 className="admin-chart__title">
         {title}
-        <span className="admin-chart__total muted"> · {total} за период</span>
+        <span className="admin-chart__total muted">{t('overview.charts.totalForPeriod', { total })}</span>
       </h3>
       <div className="admin-chart__bars" role="img" aria-label={title}>
         {series.map((p) => (
@@ -52,12 +55,13 @@ export function AdminHBarChart({
   title: string
   items: { label: string; count: number }[]
 }) {
+  const { t } = useTranslation('admin')
   const max = Math.max(1, ...items.map((i) => i.count))
   if (items.length === 0) {
     return (
       <div className="admin-chart admin-chart--h">
         <h3 className="admin-chart__title">{title}</h3>
-        <p className="admin-chart__empty muted">Нет данных</p>
+        <p className="admin-chart__empty muted">{t('overview.charts.noData')}</p>
       </div>
     )
   }

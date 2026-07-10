@@ -1,3 +1,5 @@
+import i18n, { CHAT_NS } from './i18n'
+
 /** Сообщение после редиректа с ЮKassa (`return_url` с query `billing=`). */
 export function billingReturnCopy(raw: string | null): {
   variant: 'success' | 'warn' | 'error'
@@ -9,28 +11,27 @@ export function billingReturnCopy(raw: string | null): {
   if (k === 'success' || k === 'ok' || k === 'paid') {
     return {
       variant: 'success',
-      title: 'Оплата принята',
-      body:
-        'Если платёж прошёл успешно, подписка или кредиты обновятся через короткое время (до нескольких минут). Зайдите в кабинет и при необходимости откройте «Тариф и пополнение».',
+      title: i18n.t('billingReturn.successTitle', { ns: CHAT_NS }),
+      body: i18n.t('billingReturn.successBody', { ns: CHAT_NS }),
     }
   }
   if (k === 'cancel' || k === 'cancelled' || k === 'canceled') {
     return {
       variant: 'warn',
-      title: 'Оплата не завершена',
-      body: 'Вы закрыли страницу оплаты или отменили попытку. Обычно средства при этом не списываются.',
+      title: i18n.t('billingReturn.cancelTitle', { ns: CHAT_NS }),
+      body: i18n.t('billingReturn.cancelBody', { ns: CHAT_NS }),
     }
   }
   if (k === 'fail' || k === 'failed' || k === 'error') {
     return {
       variant: 'error',
-      title: 'Не удалось подтвердить оплату',
-      body: 'Если деньги списались, сохраните чек и обратитесь в поддержку. Иначе повторите оплату из кабинета.',
+      title: i18n.t('billingReturn.failTitle', { ns: CHAT_NS }),
+      body: i18n.t('billingReturn.failBody', { ns: CHAT_NS }),
     }
   }
   return {
     variant: 'warn',
-    title: 'Возврат после оплаты',
-    body: 'Проверьте в кабинете статус подписки и баланс кредитов.',
+    title: i18n.t('billingReturn.unknownTitle', { ns: CHAT_NS }),
+    body: i18n.t('billingReturn.unknownBody', { ns: CHAT_NS }),
   }
 }

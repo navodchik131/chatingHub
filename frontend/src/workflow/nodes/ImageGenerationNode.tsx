@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Handle, Position, useReactFlow, type NodeProps } from '@xyflow/react'
 import {
   DEFAULT_GENERATION_MODEL_ID,
@@ -26,6 +27,7 @@ function isAbortError(error: unknown): boolean {
 }
 
 function ImageGenerationNodeComponent({ id, data }: NodeProps) {
+  const { t } = useTranslation('workflow')
   const { setNodes, getNodes, getEdges } = useReactFlow()
   const { workspaceId } = useWorkflowRun()
   const nodeData = data as ImageGenerationNodeData
@@ -144,7 +146,7 @@ function ImageGenerationNodeComponent({ id, data }: NodeProps) {
         })
       }
       if (!imageUrl) {
-        throw new Error('Задача завершилась без URL изображения')
+        throw new Error(t('gen.noImageUrl'))
       }
 
       const previewTargets = new Set(getDownstreamPreviewNodeIds(id, edges))
@@ -185,14 +187,14 @@ function ImageGenerationNodeComponent({ id, data }: NodeProps) {
       }
       updateNodeData({
         isRunning: false,
-        error: error instanceof Error ? error.message : 'Ошибка генерации',
+        error: error instanceof Error ? error.message : t('gen.generationError'),
       })
     } finally {
       if (runAbortRef.current === abortController) {
         runAbortRef.current = null
       }
     }
-  }, [getEdges, getNodes, id, setNodes, updateNodeData])
+  }, [getEdges, getNodes, id, setNodes, t, updateNodeData, workspaceId])
 
   const onNsfwToggle = useCallback(
     (checked: boolean) => {
@@ -233,7 +235,7 @@ function ImageGenerationNodeComponent({ id, data }: NodeProps) {
         isRunning={nodeData.isRunning}
         error={nodeData.error}
         headerExtra={
-          nodeData.imageUrl ? <span className="workflow-node__badge">готово</span> : null
+          nodeData.imageUrl ? <span className="workflow-node__badge">{t('gen.done')}</span> : null
         }
       >
         <Handle
@@ -322,21 +324,16 @@ function ImageGenerationNodeComponent({ id, data }: NodeProps) {
           references
         </span>
 
-        <p className="workflow-node__hint">
-          Достаточно промпта — модель из кабинета и референс необязательны. Можно несколько «Images ref» — у
-          каждой своя роль в «Описание».
-        </p>
+        <p className="workflow-node__hint">{t('gen.promptOnlyHint')}</p>
           </>
         ) : (
-          <p className="workflow-node__hint workflow-node__hint--muted">
-            Входы подключены через сценарий — настройте refs/prompt в scenario-ноде.
-          </p>
+          <p className="workflow-node__hint workflow-node__hint--muted">{t('gen.scenarioInputsHint')}</p>
         )}
 
         <div className="workflow-gen-form">
           <div className="workflow-gen-form__row">
             <label className="workflow-gen-form__label" htmlFor={`${id}-model`}>
-              Модель
+              {t('gen.model')}
             </label>
             <select
               id={`${id}-model`}
@@ -356,7 +353,7 @@ function ImageGenerationNodeComponent({ id, data }: NodeProps) {
           {aspectOptions.length > 0 ? (
             <div className="workflow-gen-form__row">
               <label className="workflow-gen-form__label" htmlFor={`${id}-aspect`}>
-                Формат
+                {t('gen.format')}
               </label>
               <select
                 id={`${id}-aspect`}
@@ -377,7 +374,7 @@ function ImageGenerationNodeComponent({ id, data }: NodeProps) {
           {resolutionOptions.length > 0 ? (
             <div className="workflow-gen-form__row">
               <label className="workflow-gen-form__label" htmlFor={`${id}-resolution`}>
-                Качество
+                {t('gen.quality')}
               </label>
               <select
                 id={`${id}-resolution`}
@@ -402,7 +399,7 @@ function ImageGenerationNodeComponent({ id, data }: NodeProps) {
               onChange={(e) => onNsfwToggle(e.target.checked)}
               disabled={nodeData.isRunning}
             />
-            <span>{nsfwEnabled ? 'NSFW' : 'Обычная генерация'}</span>
+            <span>{nsfwEnabled ? t('gen.nsfw') : t('gen.regularGeneration')}</span>
           </label>
         </div>
 
@@ -412,11 +409,11 @@ function ImageGenerationNodeComponent({ id, data }: NodeProps) {
             className="workflow-node__preview-box workflow-node__preview-box--filled workflow-node__preview-click nodrag"
             onClick={() => setLightboxUrl(nodeData.imageUrl ?? null)}
           >
-            <img src={nodeData.imageUrl} alt="Результат генерации" />
+            <img src={nodeData.imageUrl} alt={t('gen.resultAlt')} />
           </button>
         ) : (
           <div className="workflow-node__preview-box workflow-node__preview-box--compact">
-            <span className="workflow-node__hint">Результат появится здесь</span>
+            <span className="workflow-node__hint">{t('gen.resultHere')}</span>
           </div>
         )}
 
@@ -430,10 +427,10 @@ function ImageGenerationNodeComponent({ id, data }: NodeProps) {
           onClick={() => (nodeData.isRunning ? onCancelRun() : void onGenerate())}
           disabled={nodeData.disabled === true && !nodeData.isRunning}
         >
-          {nodeData.isRunning ? 'Отменить' : 'Сгенерировать'}
+          {nodeData.isRunning ? t('gen.cancel') : t('gen.generate')}
           {!nodeData.isRunning ? (
             <span className="workflow-node__btn-cost">
-              {costQuote.label === 'Pro' ? 'Pro' : `${costQuote.label} кр.`}
+              {costQuote.label === 'Pro' ? 'Pro' : `${costQuote.label} ${t('gen.creditsUnit')}`}
             </span>
           ) : null}
         </button>

@@ -1,9 +1,11 @@
 import { memo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Handle, Position, type NodeProps } from '@xyflow/react'
 import { BaseNode } from './BaseNode'
 import { HandleIds, type ScenarioLocationChangeNodeData } from '../types'
 
 function ScenarioLocationChangeNodeComponent({ id, data }: NodeProps) {
+  const { t } = useTranslation('workflow')
   const nodeData = data as ScenarioLocationChangeNodeData
 
   return (
@@ -78,11 +80,7 @@ function ScenarioLocationChangeNodeComponent({ id, data }: NodeProps) {
         references
       </span>
 
-      <p className="workflow-node__hint">
-        Сценарий «смена локации»: photo base (весь человек + pose/camera) + refs локаций → pipeline.
-        Identity, причёска, pose и ракурс — только с photo base; ноду «Модель» не подключайте.
-        Локация — только фон.
-      </p>
+      <p className="workflow-node__hint">{t('nodeUi.scenarioLocationChange.hint')}</p>
 
       <Handle
         id={HandleIds.pipelineOut}

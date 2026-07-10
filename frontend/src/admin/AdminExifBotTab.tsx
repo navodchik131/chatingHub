@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { apiFetch } from '../api'
 import { formatDateTimeRu } from './utils'
 import type { AdminExifBotStats, AdminExifBotUserDetail, AdminExifBotUserRow } from './types'
@@ -8,6 +9,7 @@ export function AdminExifBotTab({
 }: {
   onError: (msg: string | null) => void
 }) {
+  const { t } = useTranslation('admin')
   const [stats, setStats] = useState<AdminExifBotStats | null>(null)
   const [users, setUsers] = useState<AdminExifBotUserRow[]>([])
   const [search, setSearch] = useState('')
@@ -18,8 +20,8 @@ export function AdminExifBotTab({
   const loadStats = useCallback(async () => {
     const r = await apiFetch('/api/admin/exif-bot/stats')
     if (r.ok) setStats((await r.json()) as AdminExifBotStats)
-    else onError('Не удалось загрузить статистику EXIF-бота')
-  }, [onError])
+    else onError(t('exifBot.statsError'))
+  }, [onError, t])
 
   const loadUsers = useCallback(
     async (q: string) => {
@@ -28,16 +30,16 @@ export function AdminExifBotTab({
       if (q.trim()) params.set('q', q.trim())
       const r = await apiFetch(`/api/admin/exif-bot/users?${params}`)
       if (r.ok) setUsers((await r.json()) as AdminExifBotUserRow[])
-      else onError('Не удалось загрузить пользователей EXIF-бота')
+      else onError(t('exifBot.usersError'))
     },
-    [onError],
+    [onError, t],
   )
 
   const loadDetail = useCallback(async (id: number) => {
     const r = await apiFetch(`/api/admin/exif-bot/users/${id}`)
     if (r.ok) setDetail((await r.json()) as AdminExifBotUserDetail)
-    else onError('Не удалось загрузить карточку пользователя')
-  }, [onError])
+    else onError(t('exifBot.detailError'))
+  }, [onError, t])
 
   useEffect(() => {
     setBusy(true)
@@ -65,29 +67,29 @@ export function AdminExifBotTab({
         {stats ? (
           <div className="admin-kpi-grid" style={{ marginBottom: '1.25rem' }}>
             <div className="admin-kpi">
-              <span className="admin-kpi__label">Пользователей бота</span>
+              <span className="admin-kpi__label">{t('exifBot.botUsers')}</span>
               <strong className="admin-kpi__value">{stats.total_users}</strong>
-              <span className="admin-kpi__hint">с профилями: {stats.users_with_profiles}</span>
+              <span className="admin-kpi__hint">{t('exifBot.withProfiles', { count: stats.users_with_profiles })}</span>
             </div>
             <div className="admin-kpi">
-              <span className="admin-kpi__label">Обработок всего</span>
+              <span className="admin-kpi__label">{t('exifBot.totalProcesses')}</span>
               <strong className="admin-kpi__value">{stats.total_processes}</strong>
             </div>
             <div className="admin-kpi">
-              <span className="admin-kpi__label">Сегодня (UTC)</span>
+              <span className="admin-kpi__label">{t('exifBot.todayUtc')}</span>
               <strong className="admin-kpi__value">{stats.processes_today}</strong>
-              <span className="admin-kpi__hint">день {stats.utc_day}</span>
+              <span className="admin-kpi__hint">{t('common.day')} {stats.utc_day}</span>
             </div>
             <div className="admin-kpi">
-              <span className="admin-kpi__label">Профилей телефонов</span>
+              <span className="admin-kpi__label">{t('exifBot.phoneProfiles')}</span>
               <strong className="admin-kpi__value">{stats.total_profiles}</strong>
             </div>
             <div className="admin-kpi">
-              <span className="admin-kpi__label">Активны 7 / 30 дн.</span>
+              <span className="admin-kpi__label">{t('exifBot.active7_30')}</span>
               <strong className="admin-kpi__value">
                 {stats.active_users_7d} / {stats.active_users_30d}
               </strong>
-              <span className="admin-kpi__hint">по updated_at</span>
+              <span className="admin-kpi__hint">{t('exifBot.byUpdatedAt')}</span>
             </div>
           </div>
         ) : null}
@@ -95,13 +97,13 @@ export function AdminExifBotTab({
         <div className="admin-user-toolbar">
           <input
             type="search"
-            placeholder="Поиск: @username, имя, telegram id"
+            placeholder={t('exifBot.searchPlaceholder')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="admin-user-search"
           />
           <button type="button" className="ghost-btn" disabled={busy} onClick={() => void loadUsers(search)}>
-            Найти
+            {t('common.search')}
           </button>
           <button
             type="button"
@@ -112,26 +114,26 @@ export function AdminExifBotTab({
               void loadUsers('')
             }}
           >
-            Сброс
+            {t('common.reset')}
           </button>
           <button type="button" className="ghost-btn" disabled={busy} onClick={refresh}>
-            Обновить
+            {t('common.refresh')}
           </button>
         </div>
 
-        {busy && !users.length ? <p className="muted">Загрузка…</p> : null}
+        {busy && !users.length ? <p className="muted">{t('common.loading')}</p> : null}
 
         <div className="admin-user-table-wrap">
           <table className="admin-user-table">
             <thead>
               <tr>
-                <th>ID</th>
-                <th>Telegram</th>
-                <th>Профили</th>
-                <th>Всего фото</th>
-                <th>Сегодня</th>
-                <th>Регистрация</th>
-                <th>Активность</th>
+                <th>{t('common.id')}</th>
+                <th>{t('common.telegram')}</th>
+                <th>{t('exifBot.profiles')}</th>
+                <th>{t('exifBot.totalPhotos')}</th>
+                <th>{t('common.today')}</th>
+                <th>{t('common.registration')}</th>
+                <th>{t('common.activity')}</th>
               </tr>
             </thead>
             <tbody>
@@ -159,7 +161,7 @@ export function AdminExifBotTab({
           </table>
           {!busy && users.length === 0 ? (
             <p className="muted" style={{ padding: '1rem' }}>
-              Пользователей EXIF-бота пока нет или бот не включён (EXIF_BOT_TOKEN).
+              {t('exifBot.noUsers')}
             </p>
           ) : null}
         </div>
@@ -183,38 +185,38 @@ export function AdminExifBotTab({
           {detail.telegram_link ? (
             <p style={{ margin: '0 0 1rem' }}>
               <a href={detail.telegram_link} target="_blank" rel="noreferrer">
-                Открыть в Telegram
+                {t('common.openInTelegram')}
               </a>
             </p>
           ) : null}
 
           <dl className="admin-panel__stats">
-            <dt>Всего обработок</dt>
+            <dt>{t('exifBot.totalProcessesDetail')}</dt>
             <dd className="mono">{detail.total_process_count}</dd>
-            <dt>Сегодня (UTC)</dt>
+            <dt>{t('exifBot.todayUtc')}</dt>
             <dd className="mono">{detail.daily_process_count}</dd>
-            <dt>Профилей</dt>
+            <dt>{t('exifBot.profilesCount')}</dt>
             <dd className="mono">{detail.profiles_count}</dd>
-            <dt>Язык</dt>
+            <dt>{t('common.language')}</dt>
             <dd>{detail.language_code ?? '—'}</dd>
-            <dt>Регистрация</dt>
+            <dt>{t('common.registration')}</dt>
             <dd>{formatDateTimeRu(detail.created_at)}</dd>
-            <dt>Последняя активность</dt>
+            <dt>{t('common.lastActivity')}</dt>
             <dd>{formatDateTimeRu(detail.updated_at)}</dd>
           </dl>
 
           <section className="admin-panel__section">
-            <h3>Профили телефонов</h3>
+            <h3>{t('exifBot.phoneProfilesSection')}</h3>
             {detail.profiles.length === 0 ? (
-              <p className="muted">Профилей нет</p>
+              <p className="muted">{t('exifBot.noProfiles')}</p>
             ) : (
               <ul className="admin-usage-list">
                 {detail.profiles.map((p) => (
                   <li key={p.id}>
                     <strong>{p.title || `#${p.id}`}</strong>
                     <div className="muted small">
-                      {p.camera_preset_id ?? 'без пресета'}
-                      {p.is_ready ? ' · готов' : ' · черновик'}
+                      {p.camera_preset_id ?? t('exifBot.noPreset')}
+                      {p.is_ready ? ` · ${t('exifBot.ready')}` : ` · ${t('exifBot.draft')}`}
                       {p.has_gps ? ' · GPS' : ''}
                     </div>
                     <div className="muted small">
@@ -228,7 +230,7 @@ export function AdminExifBotTab({
         </aside>
       ) : (
         <div className="admin-users__placeholder muted">
-          Выберите пользователя бота, чтобы увидеть профили и статистику обработок.
+          {t('exifBot.placeholder')}
         </div>
       )}
     </div>

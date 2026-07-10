@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { apiFetch } from '../api'
-import { SUBSCRIPTION_STATUS_LABELS, billingPlanLabel, planTierLabel } from './constants'
+import { billingPlanLabel, planTierLabel, subscriptionStatusLabel } from './constants'
 import type { AdminSegmentItem, AdminSegmentResponse } from './types'
 import { formatDateTimeRu } from './utils'
 
@@ -12,6 +13,7 @@ interface AdminSegmentDrillProps {
 }
 
 export function AdminSegmentDrill({ segment, title, onClose, onSelectUser }: AdminSegmentDrillProps) {
+  const { t } = useTranslation('admin')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [data, setData] = useState<AdminSegmentResponse | null>(null)
@@ -30,7 +32,7 @@ export function AdminSegmentDrill({ segment, title, onClose, onSelectUser }: Adm
       )
       if (!r.ok) {
         const err = (await r.json().catch(() => ({}))) as { detail?: string }
-        setError(typeof err.detail === 'string' ? err.detail : `Ошибка ${r.status}`)
+        setError(typeof err.detail === 'string' ? err.detail : t('drill.error', { status: r.status }))
         setData(null)
         setLoading(false)
         return
@@ -38,7 +40,7 @@ export function AdminSegmentDrill({ segment, title, onClose, onSelectUser }: Adm
       setData((await r.json()) as AdminSegmentResponse)
       setLoading(false)
     })()
-  }, [segment])
+  }, [segment, t])
 
   if (!segment) return null
 
@@ -57,18 +59,18 @@ export function AdminSegmentDrill({ segment, title, onClose, onSelectUser }: Adm
             </h2>
             {data ? (
               <p className="admin-drill__sub muted">
-                Показано {data.items.length}
-                {data.total !== data.items.length ? ` из ${data.total}` : ''} · клик по строке — карточка
-                пользователя
+                {data.total !== data.items.length
+                  ? t('drill.shownOf', { shown: data.items.length, total: data.total })
+                  : t('drill.shownSimple', { shown: data.items.length })}
               </p>
             ) : null}
           </div>
-          <button type="button" className="admin-drill__close" onClick={onClose} aria-label="Закрыть">
+          <button type="button" className="admin-drill__close" onClick={onClose} aria-label={t('common.close')}>
             ✕
           </button>
         </header>
 
-        {loading ? <p className="admin-drill__loading muted">Загрузка…</p> : null}
+        {loading ? <p className="admin-drill__loading muted">{t('common.loading')}</p> : null}
         {error ? (
           <p className="admin-drill__error" role="alert">
             {error}
@@ -76,7 +78,7 @@ export function AdminSegmentDrill({ segment, title, onClose, onSelectUser }: Adm
         ) : null}
 
         {!loading && !error && data && data.items.length === 0 ? (
-          <p className="muted">Нет записей.</p>
+          <p className="muted">{t('common.noRecords')}</p>
         ) : null}
 
         {!loading && !error && data && data.items.length > 0 ? (
@@ -84,11 +86,11 @@ export function AdminSegmentDrill({ segment, title, onClose, onSelectUser }: Adm
             <table className="admin-drill__table">
               <thead>
                 <tr>
-                  <th>ID</th>
-                  <th>Email</th>
-                  <th>Подписка</th>
-                  <th>Детали</th>
-                  <th>Дата</th>
+                  <th>{t('common.id')}</th>
+                  <th>{t('common.email')}</th>
+                  <th>{t('common.subscription')}</th>
+                  <th>{t('common.details')}</th>
+                  <th>{t('common.date')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -118,7 +120,7 @@ function SegmentRow({
   const clickable = row.user_id != null
   const sub =
     row.subscription_status != null
-      ? `${SUBSCRIPTION_STATUS_LABELS[row.subscription_status] ?? row.subscription_status} · ${billingPlanLabel(row.billing_plan ?? 'managed')} · ${planTierLabel(row.plan_tier)}`
+      ? `${subscriptionStatusLabel(row.subscription_status)} · ${billingPlanLabel(row.billing_plan ?? 'managed')} · ${planTierLabel(row.plan_tier)}`
       : '—'
 
   return (

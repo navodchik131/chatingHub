@@ -1,4 +1,5 @@
 import { apiFetch } from '../api'
+import i18n, { WORKFLOW_NS } from '../i18n'
 import type { WanEditTier } from '../studioImagePricing'
 
 export interface GenerationAspectOption {
@@ -75,12 +76,16 @@ export async function fetchGenerationModelOptions(): Promise<GenerationModelDefi
   return cachedModels
 }
 
+function aspectLabel(key: string): string {
+  return i18n.t(`aspects.${key}`, { ns: WORKFLOW_NS, defaultValue: key })
+}
+
 function defaultAspects(): GenerationAspectOption[] {
   return [
-    { key: '9:16', label: '9:16 — вертикаль', size: '1080x1920' },
-    { key: '3:4', label: '3:4 — вертикальный портрет', size: '768x1024' },
-    { key: '1:1', label: '1:1 — квадрат', size: '1024x1024' },
-    { key: '16:9', label: '16:9 — горизонталь', size: '1920x1080' },
+    { key: '9:16', label: aspectLabel('9:16'), size: '1080x1920' },
+    { key: '3:4', label: aspectLabel('3:4'), size: '768x1024' },
+    { key: '1:1', label: aspectLabel('1:1'), size: '1024x1024' },
+    { key: '16:9', label: aspectLabel('16:9'), size: '1920x1080' },
   ]
 }
 

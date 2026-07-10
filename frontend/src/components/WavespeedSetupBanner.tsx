@@ -1,3 +1,4 @@
+import { Trans, useTranslation } from 'react-i18next'
 import { WAVESPEED_REF_URL } from '../billing/planCatalog'
 
 export type WavespeedKeyInteg = {
@@ -22,25 +23,40 @@ export function WavespeedSetupBanner({
   canConnect,
   onOpenIntegrations,
 }: Props) {
+  const { t } = useTranslation('workspace')
+
   if (variant === 'integrations') {
     return (
       <div className="ws-setup-banner ws-setup-banner--integrations" role="status">
-        <h4 className="ws-setup-banner__title">Подключите WaveSpeed для картинок и видео</h4>
+        <h4 className="ws-setup-banner__title">{t('cabinet.wavespeedBanner.integrationsTitle')}</h4>
         <p className="muted ws-setup-banner__lead">
-          На тарифе <strong>Pro</strong> нужен ваш API-ключ WaveSpeed. На <strong>Standard</strong> и{' '}
-          <strong>Credits</strong> платформа может использовать свой ключ — тогда поле ниже не обязательно.
+          <Trans
+            i18nKey="cabinet.wavespeedBanner.integrationsLead"
+            ns="workspace"
+            components={{ strong: <strong /> }}
+          />
         </p>
         <ol className="ws-setup-banner__steps">
           <li>
-            Зарегистрируйтесь на{' '}
-            <a href={WAVESPEED_REF_URL} target="_blank" rel="noopener noreferrer">
-              wavespeed.ai
-            </a>{' '}
-            и пополните баланс.
+            <Trans
+              i18nKey="cabinet.wavespeedBanner.step1"
+              ns="workspace"
+              components={{
+                link: (
+                  <a href={WAVESPEED_REF_URL} target="_blank" rel="noopener noreferrer">
+                    wavespeed.ai
+                  </a>
+                ),
+              }}
+            />
           </li>
-          <li>В личном кабинете WaveSpeed скопируйте API-ключ.</li>
+          <li>{t('cabinet.wavespeedBanner.step2')}</li>
           <li>
-            Вставьте ключ в поле <strong>«API-ключ»</strong> ниже и нажмите <strong>«Сохранить»</strong>.
+            <Trans
+              i18nKey="cabinet.wavespeedBanner.step3"
+              ns="workspace"
+              components={{ strong: <strong /> }}
+            />
           </li>
         </ol>
       </div>
@@ -48,21 +64,31 @@ export function WavespeedSetupBanner({
   }
 
   const place =
-    variant === 'video' ? 'раздел «Видео»' : 'раздел «Картинки»'
+    variant === 'video'
+      ? t('cabinet.wavespeedBanner.sectionVideo')
+      : t('cabinet.wavespeedBanner.sectionImages')
 
   return (
     <div className="ws-setup-banner ws-setup-banner--studio" role="status">
       <p className="ws-setup-banner__compact">
-        <strong>Нет ключа WaveSpeed</strong> — {place} не сможет сгенерировать результат. Добавьте ключ в кабинете →
-        Подключения.
+        <Trans
+          i18nKey="cabinet.wavespeedBanner.studioCompact"
+          ns="workspace"
+          values={{ section: place }}
+          components={{ strong: <strong /> }}
+        />
       </p>
       {canConnect ? (
         <button type="button" className="send-btn ws-setup-banner__cta" onClick={onOpenIntegrations}>
-          Подключить ключ WaveSpeed
+          {t('cabinet.wavespeedBanner.connectCta')}
         </button>
       ) : (
         <p className="muted small">
-          Попросите владельца аккаунта открыть кабинет → <strong>Подключения</strong> → WaveSpeed.
+          <Trans
+            i18nKey="cabinet.wavespeedBanner.askOwner"
+            ns="workspace"
+            components={{ strong: <strong /> }}
+          />
         </p>
       )}
     </div>

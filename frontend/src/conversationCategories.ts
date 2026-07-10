@@ -23,26 +23,20 @@ export const CONVERSATION_CATEGORY_ORDER: ConversationCategory[] = [
   'blocked',
 ]
 
+/** @deprecated use conversationCategoryLabel() from i18n/chatLabels */
 export const CONVERSATION_CATEGORY_META: Record<
   ConversationCategory,
   { label: string; short?: string }
 > = {
-  all: { label: 'Все' },
-  vip: { label: 'VIP' },
-  bomzh: { label: 'Бомж' },
-  no_response: { label: 'Без ответа', short: '24ч+' },
-  new: { label: 'Новые' },
-  blocked: { label: 'Заблок.' },
+  all: { label: 'all' },
+  vip: { label: 'vip' },
+  bomzh: { label: 'bomzh' },
+  no_response: { label: 'no_response' },
+  new: { label: 'new' },
+  blocked: { label: 'blocked' },
 }
 
-export const MANUAL_CATEGORY_OPTIONS: {
-  value: '' | 'vip' | 'bomzh'
-  label: string
-}[] = [
-  { value: '', label: 'Без категории' },
-  { value: 'vip', label: 'VIP' },
-  { value: 'bomzh', label: 'Бомж' },
-]
+export const MANUAL_CATEGORY_VALUES = ['', 'vip', 'bomzh'] as const
 
 export function matchesConversationCategory(
   conv: ConversationCategoryLike,
@@ -73,14 +67,15 @@ export function countForConversationCategory(
   return conversations.filter((c) => matchesConversationCategory(c, category)).length
 }
 
+/** @deprecated use conversationCategoryBadgeLabel() from i18n/chatLabels */
 export function conversationCategoryBadge(
   conv: ConversationCategoryLike,
 ): { key: string; label: string } | null {
-  if (conv.peer_unavailable) return { key: 'unavailable', label: 'Недоступен' }
-  if (conv.is_blocked) return { key: 'blocked', label: 'Блок' }
+  if (conv.peer_unavailable) return { key: 'unavailable', label: 'unavailable' }
+  if (conv.is_blocked) return { key: 'blocked', label: 'blocked' }
   if (conv.manual_category === 'vip') return { key: 'vip', label: 'VIP' }
-  if (conv.manual_category === 'bomzh') return { key: 'bomzh', label: 'Бомж' }
-  if (conv.is_no_response) return { key: 'no_response', label: '24ч+' }
-  if (conv.is_new) return { key: 'new', label: 'Новый' }
+  if (conv.manual_category === 'bomzh') return { key: 'bomzh', label: 'bomzh' }
+  if (conv.is_no_response) return { key: 'no_response', label: 'no_response' }
+  if (conv.is_new) return { key: 'new', label: 'new' }
   return null
 }

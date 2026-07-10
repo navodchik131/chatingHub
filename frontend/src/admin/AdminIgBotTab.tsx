@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { apiFetch } from '../api'
 import { formatDateTimeRu } from './utils'
 import type { AdminIgBotStats, AdminIgBotUserDetail, AdminIgBotUserRow } from './types'
@@ -8,6 +9,7 @@ export function AdminIgBotTab({
 }: {
   onError: (msg: string | null) => void
 }) {
+  const { t } = useTranslation('admin')
   const [stats, setStats] = useState<AdminIgBotStats | null>(null)
   const [users, setUsers] = useState<AdminIgBotUserRow[]>([])
   const [search, setSearch] = useState('')
@@ -18,8 +20,8 @@ export function AdminIgBotTab({
   const loadStats = useCallback(async () => {
     const r = await apiFetch('/api/admin/ig-bot/stats')
     if (r.ok) setStats((await r.json()) as AdminIgBotStats)
-    else onError('Не удалось загрузить статистику IG-бота')
-  }, [onError])
+    else onError(t('igBot.statsError'))
+  }, [onError, t])
 
   const loadUsers = useCallback(
     async (q: string) => {
@@ -28,16 +30,16 @@ export function AdminIgBotTab({
       if (q.trim()) params.set('q', q.trim())
       const r = await apiFetch(`/api/admin/ig-bot/users?${params}`)
       if (r.ok) setUsers((await r.json()) as AdminIgBotUserRow[])
-      else onError('Не удалось загрузить пользователей IG-бота')
+      else onError(t('igBot.usersError'))
     },
-    [onError],
+    [onError, t],
   )
 
   const loadDetail = useCallback(async (id: number) => {
     const r = await apiFetch(`/api/admin/ig-bot/users/${id}`)
     if (r.ok) setDetail((await r.json()) as AdminIgBotUserDetail)
-    else onError('Не удалось загрузить карточку пользователя')
-  }, [onError])
+    else onError(t('igBot.detailError'))
+  }, [onError, t])
 
   useEffect(() => {
     setBusy(true)
@@ -65,34 +67,34 @@ export function AdminIgBotTab({
         {stats ? (
           <div className="admin-kpi-grid" style={{ marginBottom: '1.25rem' }}>
             <div className="admin-kpi">
-              <span className="admin-kpi__label">Пользователей бота</span>
+              <span className="admin-kpi__label">{t('igBot.botUsers')}</span>
               <strong className="admin-kpi__value">{stats.total_users}</strong>
               <span className="admin-kpi__hint">
-                скачивали сегодня: {stats.users_downloaded_today}
+                {t('igBot.downloadedToday', { count: stats.users_downloaded_today })}
               </span>
             </div>
             <div className="admin-kpi">
-              <span className="admin-kpi__label">Скачиваний всего</span>
+              <span className="admin-kpi__label">{t('igBot.totalDownloads')}</span>
               <strong className="admin-kpi__value">{stats.total_downloads}</strong>
             </div>
             <div className="admin-kpi">
-              <span className="admin-kpi__label">Сегодня (UTC)</span>
+              <span className="admin-kpi__label">{t('igBot.todayUtc')}</span>
               <strong className="admin-kpi__value">{stats.downloads_today}</strong>
-              <span className="admin-kpi__hint">день {stats.utc_day}</span>
+              <span className="admin-kpi__hint">{t('common.day')} {stats.utc_day}</span>
             </div>
             <div className="admin-kpi">
-              <span className="admin-kpi__label">Лимиты / сутки</span>
+              <span className="admin-kpi__label">{t('igBot.limitsPerDay')}</span>
               <strong className="admin-kpi__value">
                 {stats.daily_limit_default} / {stats.daily_limit_subscribed}
               </strong>
-              <span className="admin-kpi__hint">без подписки / с каналом</span>
+              <span className="admin-kpi__hint">{t('igBot.limitsHint')}</span>
             </div>
             <div className="admin-kpi">
-              <span className="admin-kpi__label">Активны 7 / 30 дн.</span>
+              <span className="admin-kpi__label">{t('igBot.active7_30')}</span>
               <strong className="admin-kpi__value">
                 {stats.active_users_7d} / {stats.active_users_30d}
               </strong>
-              <span className="admin-kpi__hint">по updated_at</span>
+              <span className="admin-kpi__hint">{t('igBot.byUpdatedAt')}</span>
             </div>
           </div>
         ) : null}
@@ -100,13 +102,13 @@ export function AdminIgBotTab({
         <div className="admin-user-toolbar">
           <input
             type="search"
-            placeholder="Поиск: @username, имя, telegram id"
+            placeholder={t('igBot.searchPlaceholder')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="admin-user-search"
           />
           <button type="button" className="ghost-btn" disabled={busy} onClick={() => void loadUsers(search)}>
-            Найти
+            {t('common.search')}
           </button>
           <button
             type="button"
@@ -117,25 +119,25 @@ export function AdminIgBotTab({
               void loadUsers('')
             }}
           >
-            Сброс
+            {t('common.reset')}
           </button>
           <button type="button" className="ghost-btn" disabled={busy} onClick={refresh}>
-            Обновить
+            {t('common.refresh')}
           </button>
         </div>
 
-        {busy && !users.length ? <p className="muted">Загрузка…</p> : null}
+        {busy && !users.length ? <p className="muted">{t('common.loading')}</p> : null}
 
         <div className="admin-user-table-wrap">
           <table className="admin-user-table">
             <thead>
               <tr>
-                <th>ID</th>
-                <th>Telegram</th>
-                <th>Всего видео</th>
-                <th>Сегодня</th>
-                <th>Регистрация</th>
-                <th>Активность</th>
+                <th>{t('common.id')}</th>
+                <th>{t('common.telegram')}</th>
+                <th>{t('igBot.totalVideos')}</th>
+                <th>{t('common.today')}</th>
+                <th>{t('common.registration')}</th>
+                <th>{t('common.activity')}</th>
               </tr>
             </thead>
             <tbody>
@@ -162,7 +164,7 @@ export function AdminIgBotTab({
           </table>
           {!busy && users.length === 0 ? (
             <p className="muted" style={{ padding: '1rem' }}>
-              Пользователей IG-бота пока нет или бот не включён (IG_BOT_TOKEN).
+              {t('igBot.noUsers')}
             </p>
           ) : null}
         </div>
@@ -186,37 +188,37 @@ export function AdminIgBotTab({
           {detail.telegram_link ? (
             <p style={{ margin: '0 0 1rem' }}>
               <a href={detail.telegram_link} target="_blank" rel="noreferrer">
-                Открыть в Telegram
+                {t('common.openInTelegram')}
               </a>
             </p>
           ) : null}
 
           <dl className="admin-panel__stats">
-            <dt>Всего скачиваний</dt>
+            <dt>{t('igBot.totalDownloadsDetail')}</dt>
             <dd className="mono">{detail.total_process_count}</dd>
-            <dt>Сегодня (UTC)</dt>
+            <dt>{t('igBot.todayUtc')}</dt>
             <dd className="mono">{detail.daily_process_count}</dd>
             {stats ? (
               <>
-                <dt>Лимит без подписки</dt>
-                <dd className="mono">{stats.daily_limit_default} / сутки</dd>
-                <dt>Лимит с подпиской</dt>
-                <dd className="mono">{stats.daily_limit_subscribed} / сутки</dd>
+                <dt>{t('igBot.limitNoSub')}</dt>
+                <dd className="mono">{stats.daily_limit_default}{t('common.perDay')}</dd>
+                <dt>{t('igBot.limitWithSub')}</dt>
+                <dd className="mono">{stats.daily_limit_subscribed}{t('common.perDay')}</dd>
               </>
             ) : null}
-            <dt>Язык</dt>
+            <dt>{t('common.language')}</dt>
             <dd>{detail.language_code ?? '—'}</dd>
-            <dt>День счётчика</dt>
+            <dt>{t('igBot.counterDay')}</dt>
             <dd className="mono">{detail.daily_process_day ?? '—'}</dd>
-            <dt>Регистрация</dt>
+            <dt>{t('common.registration')}</dt>
             <dd>{formatDateTimeRu(detail.created_at)}</dd>
-            <dt>Последняя активность</dt>
+            <dt>{t('common.lastActivity')}</dt>
             <dd>{formatDateTimeRu(detail.updated_at)}</dd>
           </dl>
         </aside>
       ) : (
         <div className="admin-users__placeholder muted">
-          Выберите пользователя бота, чтобы увидеть статистику скачиваний.
+          {t('igBot.placeholder')}
         </div>
       )}
     </div>

@@ -1,0 +1,275 @@
+{
+  "page": {
+    "title": "Workflow",
+    "subtitle": "Соберите цепочку и сгенерируйте изображение",
+    "backToStudio": "← Студия",
+    "backToWorkspace": "← Кабинет",
+    "loading": "Загрузка…",
+    "signInRequired": "Нужен вход в аккаунт с доступом к студии.",
+    "signIn": "Войти",
+    "accessDeniedTitle": "Нет доступа",
+    "accessDenied": "Для workflow нужно право «Генерация промпта и картинок (студия)».",
+    "toCabinet": "В кабинет",
+    "demoLimited": "Демо-режим: в списке только «Смена модели»; остальные шаблоны откроются после пополнения кредитов или подписки. Генерации списываются из бесплатных демо.",
+    "defaultProject": "Новый проект",
+    "myProject": "Мой проект",
+    "projectFallback": "Проект",
+    "importReplaceConfirm": "Заменить текущий проект «{{current}}» графом из «{{imported}}»?",
+    "importFailed": "Не удалось импортировать JSON",
+    "closeProjectsAria": "Закрыть список проектов",
+    "paletteCollapsed": "Палитра",
+    "paletteExpand": "Развернуть палитру",
+    "paletteCollapse": "Свернуть палитру"
+  },
+  "paletteDock": {
+    "aria": "Палитра нод",
+    "title": "Ноды",
+    "expand": "Развернуть",
+    "collapse": "Свернуть"
+  },
+  "palette": {
+    "common": "Общие",
+    "image": "Картинки",
+    "video": "Видео",
+    "scenarios": "Сценарии"
+  },
+  "nodes": {
+    "model": { "label": "Модель", "description": "Модель из кабинета студии" },
+    "realism": { "label": "Реализм", "description": "Реалистичный вид снимка" },
+    "selfie": { "label": "Селфи", "description": "Селфи с вытянутой руки — фронталка, перебивает противоречия в промпте" },
+    "prompt": { "label": "Промпт", "description": "Доп. указания (опционально; сцена берётся из первого кадра)" },
+    "textNote": { "label": "Заметка", "description": "Текстовый блок на холсте — подсказки, чеклисты, заметки (не влияет на генерацию)" },
+    "refDescription": { "label": "Описание референса", "description": "Роль и назначение референса (photo base, clothes, pose…)" },
+    "reference": { "label": "Images ref", "description": "Фото-референс — к генерации можно подключить несколько" },
+    "imageGeneration": { "label": "Генерация фото", "description": "Сборка промпта и генерация изображения (plain или через pipeline)" },
+    "firstFrameGeneration": { "label": "Первый кадр", "description": "Still t=0 для motion-пайплайна (plain или через pipeline)" },
+    "turnaroundSheet": { "label": "Развёртка", "description": "Character sheet GPT Image 2.0 — сетка на лице (кроме вида сзади)" },
+    "motionVideo": { "label": "Реф. видео", "description": "Референс движения (@Video) для Seedance" },
+    "videoPromptCompose": { "label": "Промпт из видео", "description": "Grok: детальный промпт из motion + BoardStory refs (одежда, окружение, модель)" },
+    "scenarioOutfitChange": { "label": "Сценарий: одежда", "description": "Сценарий: photo base + outfit refs → pipeline → генерация изображения" },
+    "scenarioLocationChange": { "label": "Сценарий: локация", "description": "Сценарий: photo base / модель + refs локаций → pipeline → генерация изображения" },
+    "scenarioFaceSwap": { "label": "Сценарий: модель", "description": "Сценарий: ref сцены + модель из кабинета или ref identity → замена человека с сохранением pose" },
+    "scenarioMotionVideo": { "label": "Сценарий: motion", "description": "Сценарий: motion + BoardStory → Grok-промпт, звук и Seedance → pipeline → видео" },
+    "scenarioFirstFrame": { "label": "Сценарий: 1-й кадр", "description": "Сценарий: модель + motion/refs → still t=0 → pipeline → «Первый кадр»" },
+    "videoGeneration": { "label": "Генерация видео", "description": "Рендер видео: Seedance/Grok + длительность. Сценарий — через pipeline-in." },
+    "videoUpscale": { "label": "Апскейл видео", "description": "Video Upscaler Pro — upscale готового ролика (720p–4K)" },
+    "preview": { "label": "Просмотр", "description": "Просмотр результата. Можно подключить «Описание референса» и отдать картинку дальше как ref." }
+  },
+  "sidebar": {
+    "projects": "Проекты",
+    "newProject": "Новый проект",
+    "projectNamePlaceholder": "Название проекта",
+    "create": "Создать",
+    "cancel": "Отмена",
+    "rename": "Переименовать",
+    "renameProject": "Переименовать «{{name}}»",
+    "delete": "Удалить проект",
+    "export": "Экспорт",
+    "import": "Загрузить проект из JSON",
+    "exportProject": "Скачать «{{name}}» как JSON",
+    "exportFallback": "Скачать проект",
+    "deleteConfirm": "Удалить проект «{{name}}»?"
+  },
+  "gen": {
+    "model": "Модель",
+    "format": "Формат",
+    "quality": "Качество",
+    "regularGeneration": "Обычная генерация",
+    "nsfw": "NSFW",
+    "generate": "Сгенерировать",
+    "generateFrame": "Сгенерировать кадр",
+    "cancel": "Отменить",
+    "resultHere": "Результат появится здесь",
+    "done": "готово",
+    "disabled": "выкл",
+    "scenarioInputsHint": "Входы подключены через сценарий — настройте refs/prompt в scenario-ноде.",
+    "noImageUrl": "Задача завершилась без URL изображения",
+    "generationError": "Ошибка генерации",
+    "resultAlt": "Результат генерации",
+    "creditsUnit": "кр.",
+    "promptOnlyHint": "Достаточно промпта — модель из кабинета и референс необязательны. Можно несколько «Images ref» — у каждой своя роль в «Описание».",
+    "firstFrameHint": "Как в студии motion: видео → Grok → WaveSpeed. Лёгкая плёночная зернистость на кадре (без сетки на лице; опц. кадр в «Референс»).",
+    "firstFrameScenarioHint": "Входы через сценарий «Первый кадр» — подключите model/motion/refs к scenario-ноде.",
+    "refOptional": "ref (опц.)"
+  },
+  "aspects": {
+    "9:16": "9:16 — вертикаль",
+    "3:4": "3:4 — вертикальный портрет",
+    "1:1": "1:1 — квадрат",
+    "16:9": "16:9 — горизонталь"
+  },
+  "menu": {
+    "aria": "Меню ноды",
+    "enable": "Включить",
+    "disable": "Отключить",
+    "delete": "Удалить"
+  },
+  "nodeUi": {
+    "common": {
+      "toggleOn": "Включён",
+      "toggleOff": "Выключен",
+      "remove": "Удалить",
+      "download": "Скачать",
+      "uploading": "Загрузка…",
+      "previewLoading": "Загрузка превью…",
+      "optional": "опционально"
+    },
+    "model": {
+      "hint": "Модель из кабинета (необязательно) — для нового персонажа можно не подключать",
+      "selectPlaceholder": "Выберите модель…"
+    },
+    "prompt": {
+      "hint": "Дополнительные указания (необязательно)",
+      "placeholder": "Например: вечерний свет, улыбка, casual outfit…"
+    },
+    "realism": {
+      "hint": "Реалистичный вид снимка с телефона"
+    },
+    "selfie": {
+      "hint": "Селфи с вытянутой руки: фронталка, ракурс с телефона. Перебивает противоречия в промпте."
+    },
+    "textNote": {
+      "hint": "Подсказки, чеклист или любой текст — не участвует в генерации",
+      "placeholder": "Например: 1) photo base — исходная pose\n2) ref локации — только фон\n3) Seedream для edit…"
+    },
+    "refDescription": {
+      "hint": "Роль — назначение референса для Grok (можно несколько референсов на одну генерацию).",
+      "roleLabel": "Роль",
+      "descriptionLabel": "Описание",
+      "descriptionPlaceholder": "photo base: кого/кадр редактируем; clothes: донор одежды — цвет, фасон"
+    },
+    "reference": {
+      "roleConnectGen": "— подключите к «Генерация» → references",
+      "uploadHint": "Загрузите фото и задайте роль в «Описание референса» слева",
+      "refNotFound": "Референс не найден на сервере — загрузите файл снова",
+      "uploadError": "Ошибка загрузки",
+      "refAlt": "Референс",
+      "fileFormats": "PNG, JPG, WEBP · до 25 МБ"
+    },
+    "preview": {
+      "finalVideo": "Итоговое видео",
+      "roleConnectOut": "— выход ref → references",
+      "connectDescAndRef": "Подключите «Описание референса» слева и ref → references",
+      "connectOrWait": "Подключите выход генерации или дождитесь результата",
+      "connectGeneration": "Подключите выход генерации"
+    },
+    "turnaroundSheet": {
+      "hint": "GPT Image 2.0 · character sheet 16:9 · белая сетка на всех ракурсах с лицом (не сзади) · одежда с первого кадра",
+      "noImageUrl": "Развёртка завершилась без URL изображения",
+      "error": "Ошибка развёртки",
+      "alt": "Развёртка",
+      "connectFirstFrame": "Подключите первый кадр и запустите",
+      "generate": "Сгенерировать развёртку"
+    },
+    "motionVideo": {
+      "hint": "Motion-референс → @Video1 в Seedance. Без ноды движение задаётся только текстом промпта.",
+      "uploadError": "Не удалось загрузить видео",
+      "videoUploaded": "Видео загружено",
+      "uploadButton": "Загрузить MP4/WebM"
+    },
+    "videoGen": {
+      "noVideoUrl": "Видео-генерация завершилась без URL",
+      "error": "Ошибка видео",
+      "scenarioHint": "Сценарий подключён — промпт, motion и BoardStory refs настраиваются в scenario-ноде.",
+      "grokHint": "Grok Imagine Video · первый кадр + промпт с описанием движения",
+      "seedanceHint": "BoardStory Seedance: identity @Image, motion/camera @Video. Первый кадр — опционально.",
+      "duration": "Длительность",
+      "seconds": "{{sec}} сек",
+      "audio": "Звук",
+      "grokMotionTimeline": "Grok motion timeline (авто-описание движения)",
+      "resultPlaceholder": "Результат видео появится здесь",
+      "generate": "Сгенерировать видео"
+    },
+    "videoUpscale": {
+      "hint": "WaveSpeed Video Upscaler Pro — upscale готового ролика до 720p–4K",
+      "resolution": "Разрешение",
+      "connectAndRun": "Подключите «Видео» и запустите апскейл",
+      "connectVideoHint": "Подключите выход «video» с ноды «Видео» после генерации ролика",
+      "noVideoUrl": "Апскейл завершился без URL видео",
+      "error": "Ошибка апскейла видео",
+      "upscale": "Апскейл видео"
+    },
+    "videoPromptCompose": {
+      "sendMotionVideo": "Отправлять motion-видео в генерацию",
+      "sendVideoOnHint": "Промпт с @Video1 — подмена актёра; движение из видео-рефа, без текстового timeline.",
+      "sendVideoOffHint": "Видео только для анализа — в Seedance не уходит; Grok пишет подробный промпт с движением и [t s].",
+      "hint": "Grok разбирает motion-видео → промпт с @Image/@Video для BoardStory Seedance",
+      "generateClothing": "Сгенерировать одежду из видео",
+      "generateEnvironment": "Сгенерировать помещение из видео",
+      "extractHint": "Extract из motion — превью внутри этой ноды (подхватится в «Видео» автоматически)",
+      "clothingAlt": "Одежда из видео",
+      "clothingCaption": "Одежда",
+      "clothingPending": "Одежда — после «Сгенерировать промпт»",
+      "environmentAlt": "Помещение из видео",
+      "environmentCaption": "Помещение",
+      "environmentPending": "Помещение — после «Сгенерировать промпт»",
+      "fixedPromptHint": "Без рефов и без галочек: фиксированный промпт — identity из @Image1, одежда/комната/движение из @Video1",
+      "promptPlaceholder": "Промпт появится после генерации — можно отредактировать вручную",
+      "promptPlaceholderShort": "Промпт появится после генерации — можно отредактировать",
+      "noPromptText": "Генерация завершилась без текста промпта",
+      "promptError": "Ошибка генерации промпта",
+      "generatePrompt": "Сгенерировать промпт"
+    },
+    "scenarioMotionVideo": {
+      "hint": "Сценарий motion-видео: Grok → промпт + BoardStory refs. Настройки Seedance — здесь; модель рендера — в «Видео»."
+    },
+    "scenarioFirstFrame": {
+      "hint": "Сценарий «первый кадр»: модель + motion-видео или рефы → still на t=0 для motion-пайплайна. Подключите к «Первый кадр» через pipeline."
+    },
+    "scenarioFaceSwap": {
+      "hint": "Без ноды «Модель»: identity ref (кто) + scene ref (pose/фон). С моделью из кабинета — достаточно scene ref."
+    },
+    "scenarioLocationChange": {
+      "hint": "Сценарий «смена локации»: photo base (весь человек + pose/camera) + refs локаций → pipeline. Identity, причёска, pose и ракурс — только с photo base; ноду «Модель» не подключайте. Локация — только фон."
+    },
+    "scenarioOutfitChange": {
+      "hint": "Сценарий «смена одежды»: photo base + outfit refs → нода «Генерация» через pipeline. Identity и pose сохраняются, меняется только одежда."
+    },
+    "seedanceGuide": {
+      "title": "Seedance 2.0 — роли референсов",
+      "image1Role": "лицо / identity модели",
+      "image2Role": "character sheet, одежда, комната (если подключены)",
+      "video1Role": "только motion + camera — не лицо актёра из видео",
+      "motionTip1": "Один человек в кадре, простые движения, до ~15 сек.",
+      "motionTip2": "Без толпы, драк и сложной хореографии — Seedance это хуже тянет.",
+      "motionTip3": "Чёткое видео: стабильная камера или понятный tracking.",
+      "composeFoot": "Grok пишет промпт с явным MODEL REPLACEMENT: identity из @Image, движение и камера из @Video1.",
+      "videoFoot": "Промпт должен явно разделять: кто на экране (@Image) и откуда motion/camera (@Video)."
+    },
+    "canvasControls": {
+      "toolbarAria": "Масштаб холста",
+      "disconnect": "Отсоединить выбранные связи",
+      "disconnectShort": "Отсоед.",
+      "zoomLabel": "Масштаб",
+      "zoomIn": "Увеличить",
+      "zoomOut": "Уменьшить",
+      "fitView": "Показать весь граф",
+      "lockOn": "Разблокировать перетаскивание нод",
+      "lockOff": "Заблокировать перетаскивание нод",
+      "unlockAria": "Разблокировать ноды",
+      "lockAria": "Заблокировать ноды",
+      "locked": "Блок",
+      "unlocked": "Движ"
+    },
+    "lightbox": {
+      "defaultAlt": "Результат",
+      "reset": "Сброс",
+      "close": "Закрыть"
+    },
+    "billing": {
+      "proPayment": "оплата у WaveSpeed",
+      "demoSuffix": "демо",
+      "creditsShort": "кр."
+    },
+    "edge": {
+      "disconnect": "Отсоединить"
+    },
+    "export": {
+      "invalidJson": "Файл не является корректным JSON",
+      "invalidFormat": "Некорректный формат файла",
+      "importDefaultName": "Импорт",
+      "noGraph": "В файле нет графа workflow (nodes и edges)",
+      "projectDefaultName": "Проект"
+    }
+  }
+}

@@ -1,9 +1,11 @@
 import { memo, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Handle, Position, useReactFlow, type NodeProps } from '@xyflow/react'
 import { BaseNode } from './BaseNode'
 import { HandleIds, type RefDescriptionNodeData } from '../types'
 
 function RefDescriptionNodeComponent({ id, data }: NodeProps) {
+  const { t } = useTranslation('workflow')
   const { setNodes } = useReactFlow()
   const nodeData = data as RefDescriptionNodeData
 
@@ -20,20 +22,18 @@ function RefDescriptionNodeComponent({ id, data }: NodeProps) {
 
   return (
     <BaseNode nodeId={id} type="refDescription" error={nodeData.error}>
-      <p className="workflow-node__hint">
-        Роль — назначение референса для Grok (можно несколько референсов на одну генерацию).
-      </p>
-      <label className="workflow-node__label">Роль</label>
+      <p className="workflow-node__hint">{t('nodeUi.refDescription.hint')}</p>
+      <label className="workflow-node__label">{t('nodeUi.refDescription.roleLabel')}</label>
       <input
         className="workflow-node__field nodrag nowheel"
         placeholder="photo base, clothes, pose, scene, face…"
         value={nodeData.role ?? ''}
         onChange={(e) => update({ role: e.target.value })}
       />
-      <label className="workflow-node__label">Описание</label>
+      <label className="workflow-node__label">{t('nodeUi.refDescription.descriptionLabel')}</label>
       <textarea
         className="workflow-node__textarea nodrag nowheel"
-        placeholder="photo base: кого/кадр редактируем; clothes: донор одежды — цвет, фасон"
+        placeholder={t('nodeUi.refDescription.descriptionPlaceholder')}
         value={nodeData.description ?? ''}
         onChange={(e) => update({ description: e.target.value })}
       />

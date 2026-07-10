@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 
 export const SETUP_TOUR_LS = 'modelmate_setup_tour_v1'
 export const SETUP_TOUR_HAD_GEN_LS = 'modelmate_setup_tour_had_gen_v1'
@@ -73,33 +74,33 @@ export function SetupTour({
   onGoStudio,
   onDismiss,
 }: Props) {
+  const { t } = useTranslation('studio')
+
   const content = useMemo(() => {
     if (!phase || phase === 'done') return null
     if (phase === 'wavespeed') {
       return {
-        title: 'Шаг 1 из 3 — ключ WaveSpeed',
-        body: isOwner
-          ? 'Без API-ключа WaveSpeed студия не сгенерирует картинки и видео. Откройте подключения и вставьте ключ.'
-          : 'Попросите владельца аккаунта добавить ключ WaveSpeed в кабинете → Подключения.',
-        cta: isOwner ? 'Открыть подключения' : null,
+        title: t('setupTour.wavespeed.title'),
+        body: isOwner ? t('setupTour.wavespeed.bodyOwner') : t('setupTour.wavespeed.bodyMember'),
+        cta: isOwner ? t('setupTour.wavespeed.cta') : null,
         onCta: onOpenIntegrations,
       }
     }
     if (phase === 'model') {
       return {
-        title: 'Шаг 2 из 3 — ваша модель',
-        body: 'Создайте модель в кабинете: имя, несколько фото (лицо, тело) — так студия узнает внешность.',
-        cta: canStudioModels ? 'Создать модель' : 'Открыть кабинет',
+        title: t('setupTour.model.title'),
+        body: t('setupTour.model.body'),
+        cta: canStudioModels ? t('setupTour.model.ctaCreate') : t('setupTour.model.ctaCabinet'),
         onCta: onOpenModels,
       }
     }
     return {
-      title: 'Шаг 3 из 3 — первая картинка',
-      body: 'В «Картинки» режим «Основная»: модель с развёрткой + референс кадра — фигура с модели, поза максимально как на рефе. «Face swap» — другой баланс (референс сильнее влияет на тело).',
-      cta: 'Перейти в студию',
+      title: t('setupTour.generate.title'),
+      body: t('setupTour.generate.body'),
+      cta: t('setupTour.generate.cta'),
       onCta: onGoStudio,
     }
-  }, [phase, isOwner, canStudioModels, onOpenIntegrations, onOpenModels, onGoStudio])
+  }, [phase, isOwner, canStudioModels, onOpenIntegrations, onOpenModels, onGoStudio, t])
 
   if (!content) return null
 
@@ -107,8 +108,13 @@ export function SetupTour({
     <div className="setup-tour" role="status">
       <div className="setup-tour__head">
         <strong className="setup-tour__title">{content.title}</strong>
-        <button type="button" className="setup-tour__dismiss" onClick={onDismiss} aria-label="Скрыть подсказки">
-          Позже
+        <button
+          type="button"
+          className="setup-tour__dismiss"
+          onClick={onDismiss}
+          aria-label={t('setupTour.dismissAria')}
+        >
+          {t('setupTour.dismiss')}
         </button>
       </div>
       <p className="setup-tour__body">{content.body}</p>
@@ -118,12 +124,12 @@ export function SetupTour({
             phase === 'wavespeed' ? 'is-current' : phase === 'model' || phase === 'generate' ? 'is-done' : ''
           }
         >
-          Ключ WaveSpeed
+          {t('setupTour.steps.wavespeed')}
         </li>
         <li className={phase === 'model' ? 'is-current' : phase === 'generate' ? 'is-done' : ''}>
-          Модель в кабинете
+          {t('setupTour.steps.model')}
         </li>
-        <li className={phase === 'generate' ? 'is-current' : ''}>Первая генерация</li>
+        <li className={phase === 'generate' ? 'is-current' : ''}>{t('setupTour.steps.generate')}</li>
       </ol>
       {content.cta ? (
         <button type="button" className="send-btn setup-tour__cta" onClick={content.onCta}>

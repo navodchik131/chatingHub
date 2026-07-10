@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { createPortal } from 'react-dom'
 
 type Props = {
@@ -7,7 +8,9 @@ type Props = {
   onClose: () => void
 }
 
-export function WorkflowImageLightbox({ imageUrl, alt = 'Результат', onClose }: Props) {
+export function WorkflowImageLightbox({ imageUrl, alt, onClose }: Props) {
+  const { t } = useTranslation('workflow')
+  const resolvedAlt = alt ?? t('nodeUi.lightbox.defaultAlt')
   const [scale, setScale] = useState(1)
   const [offset, setOffset] = useState({ x: 0, y: 0 })
   const dragRef = useRef<{ x: number; y: number; ox: number; oy: number } | null>(null)
@@ -78,9 +81,9 @@ export function WorkflowImageLightbox({ imageUrl, alt = 'Результат', on
           +
         </button>
         <button type="button" className="workflow-lightbox__btn" onClick={() => setScale(1)}>
-          Сброс
+          {t('nodeUi.lightbox.reset')}
         </button>
-        <button type="button" className="workflow-lightbox__close" onClick={onClose} aria-label="Закрыть">
+        <button type="button" className="workflow-lightbox__close" onClick={onClose} aria-label={t('nodeUi.lightbox.close')}>
           ×
         </button>
       </div>
@@ -95,7 +98,7 @@ export function WorkflowImageLightbox({ imageUrl, alt = 'Результат', on
       >
         <img
           src={imageUrl}
-          alt={alt}
+          alt={resolvedAlt}
           className="workflow-lightbox__img"
           style={{
             transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`,

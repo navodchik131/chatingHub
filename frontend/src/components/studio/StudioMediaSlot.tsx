@@ -1,4 +1,5 @@
 import { useId, type ChangeEvent, type ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
 import { slotIcon } from './studioIcons'
 
 export type StudioSlotIcon = 'image' | 'video' | 'model' | 'prompt' | 'archive'
@@ -26,15 +27,17 @@ export function StudioMediaSlot({
   className = '',
   previewUrl,
   busy,
-  emptyLabel = 'Нажмите или перетащите',
+  emptyLabel,
   accept,
   onFile,
   onClear,
   children,
   fullWidth,
 }: Props) {
+  const { t } = useTranslation('studio')
   const inputId = useId()
   const hasPreview = Boolean((previewUrl || '').trim())
+  const resolvedEmptyLabel = emptyLabel ?? t('mediaSlot.emptyLabel')
 
   return (
     <div
@@ -60,7 +63,7 @@ export function StudioMediaSlot({
             {hasPreview ? (
               <img src={previewUrl!} alt="" className="studio-slot__preview" />
             ) : (
-              <span className="studio-slot__empty">{busy ? 'Загрузка…' : emptyLabel}</span>
+              <span className="studio-slot__empty">{busy ? t('mediaSlot.loading') : resolvedEmptyLabel}</span>
             )}
             {onFile && accept ? (
               <input
@@ -79,7 +82,12 @@ export function StudioMediaSlot({
               <label htmlFor={inputId} className="studio-slot__hit" aria-label={label} />
             ) : null}
             {hasPreview && onClear ? (
-              <button type="button" className="studio-slot__clear" onClick={onClear} aria-label="Убрать">
+              <button
+                type="button"
+                className="studio-slot__clear"
+                onClick={onClear}
+                aria-label={t('mediaSlot.clear')}
+              >
                 ×
               </button>
             ) : null}

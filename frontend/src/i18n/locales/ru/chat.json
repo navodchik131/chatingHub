@@ -1,0 +1,216 @@
+{
+  "categoriesAria": "Категории диалогов",
+  "platformTabsAria": "Соцсети",
+  "categories": {
+    "all": {
+      "label": "Все"
+    },
+    "vip": {
+      "label": "VIP"
+    },
+    "bomzh": {
+      "label": "Бомж"
+    },
+    "no_response": {
+      "label": "Без ответа",
+      "short": "24ч+"
+    },
+    "new": {
+      "label": "Новые"
+    },
+    "blocked": {
+      "label": "Заблок."
+    }
+  },
+  "manualCategory": {
+    "none": "Без категории",
+    "vip": "VIP",
+    "bomzh": "Бомж"
+  },
+  "badges": {
+    "unavailable": "Недоступен",
+    "blocked": "Блок",
+    "bomzh": "Бомж",
+    "noResponse": "24ч+",
+    "new": "Новый"
+  },
+  "sidebar": {
+    "title": "Диалоги",
+    "emptyNoConversations": "Подключите бота или Fanvue в кабинете → Подключения.",
+    "emptyCategory": "Нет диалогов в категории «{{category}}».",
+    "emptyPlatform": "Нет диалогов в {{platform}}."
+  },
+  "thread": {
+    "selectTitle": "Выберите диалог",
+    "selectSub": "Слева список переписок с канала",
+    "unnamed": "Без имени",
+    "dialogFallback": "Диалог",
+    "backAria": "Назад к списку диалогов",
+    "modelLabel": "Модель",
+    "modelLine": "Модель ·",
+    "unreadTitle": "Непрочитанных",
+    "notesTitle": "Заметки о пользователе",
+    "replyLangForced": "Ответ: {{lang}} (принудительно)",
+    "replyLang": "Язык переписки: {{lang}}",
+    "companionMode": "AI-компаньон",
+    "send": "Отправить",
+    "attach": "Прикрепить файл",
+    "emoji": "Эмодзи",
+    "settingsTitle": "Настройки чата",
+    "outboundLangTitle": "На какой язык переводить ваши ответы. «Авто» — по последним входящим (поле user_lang).",
+    "outboundLangLabel": "Язык ответа",
+    "outboundLangAria": "Язык ответа",
+    "autoTranslateTitle": "Отключить автоперевод входящих и исходящих в этом диалоге.",
+    "noTranslate": "Без перевода",
+    "categoryLabel": "Категория",
+    "chatterLabel": "Чатер",
+    "chatterAny": "Любой",
+    "blockTitle": "Заблокированный пользователь не сможет отправлять сообщения в этот диалог.",
+    "block": "Заблокировать"
+  },
+  "telegramBanner": {
+    "aria": "Канал ModelMate в Telegram — поддержка, анонсы, общение",
+    "text": "Поддержка, анонсы, общение в",
+    "emph": "нашем канале"
+  },
+  "billingReturn": {
+    "successTitle": "Оплата принята",
+    "successBody": "Если платёж прошёл успешно, подписка или кредиты обновятся через короткое время (до нескольких минут). Зайдите в кабинет и при необходимости откройте «Тариф и пополнение».",
+    "cancelTitle": "Оплата не завершена",
+    "cancelBody": "Вы закрыли страницу оплаты или отменили попытку. Обычно средства при этом не списываются.",
+    "failTitle": "Не удалось подтвердить оплату",
+    "failBody": "Если деньги списались, сохраните чек и обратитесь в поддержку. Иначе повторите оплату из кабинета.",
+    "unknownTitle": "Возврат после оплаты",
+    "unknownBody": "Проверьте в кабинете статус подписки и баланс кредитов."
+  },
+  "webPush": {
+    "unsupported": "Push не поддерживается в этом браузере",
+    "denied": "Уведомления запрещены",
+    "needPermission": "Нужен доступ к уведомлениям",
+    "vapidNotConfigured": "Сервер не настроил VAPID (ключи в .env)",
+    "vapidFetchFailed": "Не удалось получить ключ VAPID",
+    "invalidSubscription": "Некорректная подписка",
+    "saveFailed": "Не удалось сохранить подписку на сервере"
+  },
+  "outboundLang": {
+    "auto": "Авто (по переписке)",
+    "ru": "Русский"
+  },
+  "strip": {
+    "dialogFallback": "Диалог",
+    "unreadAria": "Непрочитанные"
+  },
+  "dock": {
+    "backAria": "Назад к списку диалогов",
+    "otherDialogsAria": "Другие диалоги"
+  },
+  "notes": {
+    "kinds": {
+      "profile": "Профиль",
+      "context": "Контекст",
+      "manual": "Заметка"
+    },
+    "title": "Заметки",
+    "userFallback": "Пользователь",
+    "closeAria": "Закрыть заметки",
+    "panelAria": "Заметки о пользователе",
+    "toggleTitle": "Заметки о пользователе",
+    "toggleHide": "Скрыть заметки",
+    "emptyProfile": "Профиль пока пуст — нажмите «AI-анализ» или добавьте заметку вручную.",
+    "placeholder": "Ваша заметка о пользователе…",
+    "analyze": "AI-анализ",
+    "analyzing": "Анализ…",
+    "add": "Добавить",
+    "pin": "Закрепить",
+    "unpin": "Открепить",
+    "delete": "Удалить"
+  },
+  "composer": {
+    "replyTo": "Ответ на",
+    "messageFallback": "Сообщение",
+    "cancelReplyTitle": "Отменить ответ",
+    "removeAttachmentTitle": "Убрать вложение",
+    "archiveLabel": "Из архива студии",
+    "archiveHint": "Готовое изображение уйдёт в чат",
+    "archiveBadge": "Архив #{{id}}",
+    "photoDeviceTitle": "Фото с устройства",
+    "archiveTitle": "Из архива студии",
+    "emojiTitle": "Эмодзи",
+    "hintFanvueBlocked": "Пользователь недоступен на Fanvue — отправка невозможна",
+    "hintTranslate": "Сообщение на русском — уйдёт перевод на язык из «Язык ответа»",
+    "titleFanvueBlocked": "Пользователь Fanvue недоступен",
+    "titleTranslate": "Пишите на русском; в Telegram/Fanvue уйдёт перевод по выбранному языку",
+    "shortcut": "Ctrl+Enter — отправить",
+    "scrollToLatest": "К последним ↓"
+  },
+  "messages": {
+    "loadingHistory": "Загрузка истории…",
+    "gotoTitle": "Перейти к сообщению",
+    "originalTitle": "Оригинал",
+    "sentTitle": "Ушло пользователю",
+    "translating": "перевод и отправка…"
+  },
+  "reactions": {
+    "aria": "Реакции",
+    "removeTitle": "Убрать реакцию",
+    "addTitle": "Поставить реакцию",
+    "replyTitle": "Ответить",
+    "emojiTitle": "Реакция"
+  },
+  "companion": {
+    "rateAria": "Оценка ответа AI",
+    "rateLabel": "Оценка AI",
+    "goodTitle": "Хороший ответ AI",
+    "badTitle": "Плохой ответ AI",
+    "unrateGood": "Снять оценку «хорошо»",
+    "unrateBad": "Снять оценку «плохо»",
+    "ratedGood": "Оценено: хорошо",
+    "ratedBad": "Оценено: плохо",
+    "helpLearn": "Помогите боту учиться",
+    "draftLabel": "Черновик AI",
+    "failedLabel": "AI не отправил — проверьте",
+    "send": "Отправить",
+    "reject": "Отклонить",
+    "queue": " · очередь {{count}}"
+  },
+  "threadExtra": {
+    "hideFromList": "Убрать из списка",
+    "fanvueUnavailableBanner": "Пользователь Fanvue недоступен — аккаунт удалён или заблокирован на платформе. Отправка сообщений невозможна.",
+    "unblock": "Разблокировать"
+  },
+  "templates": {
+    "title": "Шаблоны ответов",
+    "lead": "Кнопки появляются над полем ввода в чате — быстрая вставка текста.",
+    "namePlaceholder": "Название кнопки",
+    "bodyPlaceholder": "Текст шаблона",
+    "add": "Добавить",
+    "delete": "Удалить",
+    "empty": "Пока нет шаблонов."
+  },
+  "errors": {
+    "loadConversations": "Не удалось загрузить диалоги",
+    "loadMessages": "Не удалось загрузить сообщения",
+    "saveReplyLang": "Не удалось сохранить язык ответа",
+    "saveTranslate": "Не удалось сохранить настройку перевода",
+    "saveCompanion": "Не удалось сохранить режим AI-компаньона",
+    "assignChatter": "Не удалось назначить чатера",
+    "createTemplate": "Не удалось создать шаблон",
+    "saveCategory": "Не удалось сохранить категорию",
+    "saveBlock": "Не удалось изменить блокировку",
+    "hideConfirm": "Убрать диалог из списка? История сохранится, но чат исчезнет из списка.",
+    "hideFailed": "Не удалось убрать диалог из списка",
+    "reactionTelegram": "Реакция сохранена в чате, но Telegram не принял её — проверьте логи API.",
+    "reactionFailed": "Не удалось поставить реакцию",
+    "sendFailed": "Не удалось отправить сообщение",
+    "imageLoadFailed": "Не удалось загрузить изображение.",
+    "imageDownloadFailed": "Не удалось скачать. На iPhone откройте меню «Поделиться» или удерживайте превью выше → «Сохранить в Фото».",
+    "shareImageTitle": "Изображение",
+    "fanvueConnect": "Не удалось подключить Fanvue. Проверьте scopes в Fanvue Developer Area и попробуйте снова.",
+    "instagramConnect": "Не удалось подключить Instagram. Проверьте Business/Creator аккаунт, scopes и настройки Meta App."
+  },
+  "import": {
+    "historyLoaded": "История загружена: {{imported}} сообщений в {{chats}} диалогах{{skipped}}{{warnings}}",
+    "skipped": " ({{count}} уже были в базе)",
+    "warnings": ". Предупреждений: {{count}}"
+  }
+}

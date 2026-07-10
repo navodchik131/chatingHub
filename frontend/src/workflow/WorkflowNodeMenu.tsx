@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
 type Props = {
   disabled: boolean
@@ -7,6 +8,7 @@ type Props = {
 }
 
 export function WorkflowNodeMenu({ disabled, onToggleDisabled, onDelete }: Props) {
+  const { t } = useTranslation('workflow')
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
 
@@ -33,7 +35,7 @@ export function WorkflowNodeMenu({ disabled, onToggleDisabled, onDelete }: Props
       <button
         type="button"
         className="workflow-node-menu__trigger"
-        aria-label="Меню ноды"
+        aria-label={t('menu.aria')}
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
       >
@@ -50,7 +52,7 @@ export function WorkflowNodeMenu({ disabled, onToggleDisabled, onDelete }: Props
               close()
             }}
           >
-            {disabled ? 'Включить' : 'Отключить'}
+            {disabled ? t('menu.enable') : t('menu.disable')}
           </button>
           <button
             type="button"
@@ -61,7 +63,7 @@ export function WorkflowNodeMenu({ disabled, onToggleDisabled, onDelete }: Props
               close()
             }}
           >
-            Удалить
+            {t('menu.delete')}
           </button>
         </div>
       ) : null}

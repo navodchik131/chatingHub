@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { apiFetch } from '../api'
 import type {
   AdminEmailCampaign,
@@ -13,6 +14,7 @@ interface Props {
 }
 
 export function AdminEmailTab({ meEmail, onError }: Props) {
+  const { t } = useTranslation('admin')
   const [config, setConfig] = useState<AdminEmailConfig | null>(null)
   const [templates, setTemplates] = useState<AdminEmailTemplate[]>([])
   const [campaigns, setCampaigns] = useState<AdminEmailCampaign[]>([])
@@ -61,7 +63,7 @@ export function AdminEmailTab({ meEmail, onError }: Props) {
 
   useEffect(() => {
     if (!templateId) return
-    const tpl = templates.find((t) => t.id === templateId)
+    const tpl = templates.find((tplItem) => tplItem.id === templateId)
     if (!tpl) return
     setSubject(tpl.subject)
     setBodyHtml(tpl.body_html)
@@ -77,8 +79,8 @@ export function AdminEmailTab({ meEmail, onError }: Props) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           to_email: meEmail,
-          subject: subject || 'Тест ModelMate',
-          body_html: bodyHtml || '<p>Тестовое письмо</p>',
+          subject: subject || t('email.testSubject'),
+          body_html: bodyHtml || t('email.testBody'),
         }),
       })
       if (!r.ok) {
@@ -86,9 +88,9 @@ export function AdminEmailTab({ meEmail, onError }: Props) {
         throw new Error(d.detail ?? r.statusText)
       }
       onError(null)
-      alert(`Тестовое письмо отправлено на ${meEmail}`)
+      alert(t('email.testSent', { email: meEmail }))
     } catch (e) {
-      onError(e instanceof Error ? e.message : 'Ошибка отправки теста')
+      onError(e instanceof Error ? e.message : t('email.testError'))
     } finally {
       setBusy(false)
     }
@@ -115,34 +117,33 @@ export function AdminEmailTab({ meEmail, onError }: Props) {
         throw new Error(d.detail ?? r.statusText)
       }
       await loadAll()
-      alert(sendNow ? 'Кампания поставлена в очередь' : 'Черновик сохранён')
+      alert(sendNow ? t('email.campaignQueued') : t('email.draftSaved'))
     } catch (e) {
-      onError(e instanceof Error ? e.message : 'Ошибка кампании')
+      onError(e instanceof Error ? e.message : t('email.campaignError'))
     } finally {
       setBusy(false)
     }
   }
 
   if (!config) {
-    return <p className="muted">Загрузка настроек email…</p>
+    return <p className="muted">{t('email.loading')}</p>
   }
 
   return (
     <div className="admin-email" role="tabpanel">
       {!config.smtp_configured ? (
         <div className="admin-banner admin-banner--error" style={{ marginBottom: '1rem' }}>
-          SMTP не настроен. Добавьте в .env на сервере: SMTP_HOST, SMTP_FROM_EMAIL и при необходимости
-          SMTP_USER / SMTP_PASSWORD. Можно свой Postfix на localhost:587 или relay (Yandex, Mailgun).
+          {t('email.smtpNotConfigured')}
         </div>
       ) : (
         <>
           <p className="admin-section-lead muted">
-            Отправитель: {config.from_name} &lt;{config.from_email}&gt;. Письма уходят пачками в фоне.
+            {t('email.senderInfo', { fromName: config.from_name, fromEmail: config.from_email })}
           </p>
           {smtpCheck && !smtpCheck.ok ? (
             <div className="admin-banner admin-banner--error" style={{ marginBottom: '1rem' }}>
               <div>
-                <strong>Нет TCP-соединения с SMTP</strong>
+                <strong>{t('email.smtpNoConnection')}</strong>
                 {smtpCheck.error ? `: ${smtpCheck.error}` : ''}
               </div>
               {smtpCheck.hint ? <div className="small" style={{ marginTop: '0.35rem' }}>{smtpCheck.hint}</div> : null}
@@ -150,7 +151,7 @@ export function AdminEmailTab({ meEmail, onError }: Props) {
           ) : null}
           {smtpCheck?.ok ? (
             <p className="muted small" style={{ marginBottom: '1rem' }}>
-              SMTP-сервер доступен из контейнера.
+              {t('email.smtpAvailable')}
             </p>
           ) : null}
         </>
@@ -158,10 +159,10 @@ export function AdminEmailTab({ meEmail, onError }: Props) {
 
       <div className="admin-email-grid">
         <section className="admin-section admin-email-form">
-          <h2 className="admin-section-title">Новая рассылка</h2>
+          <h2 className="admin-section-title">{t('email.newCampaign')}</h2>
 
           <label className="admin-field">
-            <span>Сегмент</span>
+            <span>{t('common.segment')}</span>
             <select
               value={segment}
               onChange={(e) => setSegment(e.target.value)}
@@ -177,54 +178,53 @@ export function AdminEmailTab({ meEmail, onError }: Props) {
 
           {preview ? (
             <p className="muted small">
-              В сегменте: {preview.segment_total} · получат:{' '}
-              <strong>{preview.eligible}</strong>
-              {preview.opted_out > 0 ? ` · отписались ${preview.opted_out}` : ''}
-              {preview.inactive > 0 ? ` · неактивны ${preview.inactive}` : ''}
+              {t('email.segmentIn', { total: preview.segment_total })} · {t('email.segmentEligible', { eligible: preview.eligible })}
+              {preview.opted_out > 0 ? ` · ${t('email.segmentOptedOut', { count: preview.opted_out })}` : ''}
+              {preview.inactive > 0 ? ` · ${t('email.segmentInactive', { count: preview.inactive })}` : ''}
             </p>
           ) : null}
 
           <label className="admin-field">
-            <span>Шаблон</span>
+            <span>{t('email.template')}</span>
             <select
               value={templateId}
               onChange={(e) => setTemplateId(e.target.value)}
               className="admin-user-search"
             >
-              <option value="">— свой текст —</option>
-              {templates.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
+              <option value="">{t('email.customText')}</option>
+              {templates.map((tpl) => (
+                <option key={tpl.id} value={tpl.id}>
+                  {tpl.name}
                 </option>
               ))}
             </select>
           </label>
 
           <label className="admin-field">
-            <span>Тема</span>
+            <span>{t('common.subject')}</span>
             <input
               type="text"
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
               className="admin-user-search"
-              placeholder="Тема письма"
+              placeholder={t('email.subjectPlaceholder')}
             />
           </label>
 
           <label className="admin-field">
-            <span>HTML-тело</span>
+            <span>{t('email.bodyLabel')}</span>
             <textarea
               value={bodyHtml}
               onChange={(e) => setBodyHtml(e.target.value)}
               className="admin-email-textarea"
               rows={12}
-              placeholder="<p>Текст…</p>  Переменные: {{email}}, {{app_url}}"
+              placeholder={t('email.bodyPlaceholder')}
             />
           </label>
 
           <div className="admin-email-actions">
             <button type="button" className="ghost-btn" disabled={busy || !config.smtp_configured} onClick={() => void sendTest()}>
-              Тест на {meEmail || 'мой email'}
+              {t('email.testOn', { email: meEmail || t('email.myEmail') })}
             </button>
             <button
               type="button"
@@ -232,7 +232,7 @@ export function AdminEmailTab({ meEmail, onError }: Props) {
               disabled={busy || !config.smtp_configured}
               onClick={() => void launchCampaign(false)}
             >
-              Сохранить черновик
+              {t('email.saveDraft')}
             </button>
             <button
               type="button"
@@ -241,7 +241,10 @@ export function AdminEmailTab({ meEmail, onError }: Props) {
               onClick={() => {
                 if (
                   !window.confirm(
-                    `Отправить ${preview?.eligible ?? '?'} писем сегменту «${preview?.title ?? segment}»?`,
+                    t('email.confirmSend', {
+                      count: preview?.eligible ?? '?',
+                      title: preview?.title ?? segment,
+                    }),
                   )
                 ) {
                   return
@@ -249,25 +252,25 @@ export function AdminEmailTab({ meEmail, onError }: Props) {
                 void launchCampaign(true)
               }}
             >
-              Отправить кампанию
+              {t('email.sendCampaign')}
             </button>
           </div>
         </section>
 
         <section className="admin-section">
-          <h2 className="admin-section-title">История кампаний</h2>
+          <h2 className="admin-section-title">{t('email.history')}</h2>
           {campaigns.length === 0 ? (
-            <p className="muted">Пока нет кампаний</p>
+            <p className="muted">{t('email.noCampaigns')}</p>
           ) : (
             <div className="admin-user-table-wrap">
               <table className="admin-user-table">
                 <thead>
                   <tr>
-                    <th>ID</th>
-                    <th>Сегмент</th>
-                    <th>Тема</th>
-                    <th>Статус</th>
-                    <th>Отправлено</th>
+                    <th>{t('common.id')}</th>
+                    <th>{t('common.segment')}</th>
+                    <th>{t('common.subject')}</th>
+                    <th>{t('common.status')}</th>
+                    <th>{t('common.sent')}</th>
                   </tr>
                 </thead>
                 <tbody>

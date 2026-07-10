@@ -1,9 +1,11 @@
 import { memo, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Handle, Position, useReactFlow, type NodeProps } from '@xyflow/react'
 import { BaseNode } from './BaseNode'
 import { HandleIds, type RealismNodeData } from '../types'
 
 function RealismNodeComponent({ id, data }: NodeProps) {
+  const { t } = useTranslation('workflow')
   const { setNodes } = useReactFlow()
   const nodeData = data as RealismNodeData
   const enabled = nodeData.enabled !== false
@@ -23,10 +25,10 @@ function RealismNodeComponent({ id, data }: NodeProps) {
 
   return (
     <BaseNode nodeId={id} type="realism" error={nodeData.error}>
-      <p className="workflow-node__hint">Реалистичный вид снимка с телефона</p>
+      <p className="workflow-node__hint">{t('nodeUi.realism.hint')}</p>
       <label className="workflow-node__toggle nodrag">
         <input type="checkbox" checked={enabled} onChange={onToggle} />
-        <span>{enabled ? 'Включён' : 'Выключен'}</span>
+        <span>{enabled ? t('nodeUi.common.toggleOn') : t('nodeUi.common.toggleOff')}</span>
       </label>
       <Handle
         id={HandleIds.realismOut}

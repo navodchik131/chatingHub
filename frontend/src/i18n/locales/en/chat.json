@@ -1,0 +1,216 @@
+{
+  "categoriesAria": "Chat categories",
+  "platformTabsAria": "Social platforms",
+  "categories": {
+    "all": {
+      "label": "All"
+    },
+    "vip": {
+      "label": "VIP"
+    },
+    "bomzh": {
+      "label": "Low spend"
+    },
+    "no_response": {
+      "label": "No reply",
+      "short": "24h+"
+    },
+    "new": {
+      "label": "New"
+    },
+    "blocked": {
+      "label": "Blocked"
+    }
+  },
+  "manualCategory": {
+    "none": "No category",
+    "vip": "VIP",
+    "bomzh": "Low spend"
+  },
+  "badges": {
+    "unavailable": "Unavailable",
+    "blocked": "Block",
+    "bomzh": "Low spend",
+    "noResponse": "24h+",
+    "new": "New"
+  },
+  "sidebar": {
+    "title": "Chats",
+    "emptyNoConversations": "Connect a bot or Fanvue in Account → Connections.",
+    "emptyCategory": "No chats in category «{{category}}».",
+    "emptyPlatform": "No chats on {{platform}}."
+  },
+  "thread": {
+    "selectTitle": "Select a chat",
+    "selectSub": "Conversation list on the left",
+    "unnamed": "Unnamed",
+    "dialogFallback": "Chat",
+    "backAria": "Back to chat list",
+    "modelLabel": "Model",
+    "modelLine": "Model ·",
+    "unreadTitle": "Unread",
+    "notesTitle": "User notes",
+    "replyLangForced": "Reply: {{lang}} (forced)",
+    "replyLang": "Chat language: {{lang}}",
+    "companionMode": "AI companion",
+    "send": "Send",
+    "attach": "Attach file",
+    "emoji": "Emoji",
+    "settingsTitle": "Chat settings",
+    "outboundLangTitle": "Language for your replies. Auto follows recent incoming (user_lang).",
+    "outboundLangLabel": "Reply language",
+    "outboundLangAria": "Reply language",
+    "autoTranslateTitle": "Disable auto-translation for incoming and outgoing in this chat.",
+    "noTranslate": "No translation",
+    "categoryLabel": "Category",
+    "chatterLabel": "Chatter",
+    "chatterAny": "Anyone",
+    "blockTitle": "Blocked users cannot send messages in this chat.",
+    "block": "Block"
+  },
+  "telegramBanner": {
+    "aria": "ModelMate Telegram channel — support, announcements, community",
+    "text": "Support, announcements, community in",
+    "emph": "our channel"
+  },
+  "billingReturn": {
+    "successTitle": "Payment received",
+    "successBody": "If payment succeeded, subscription or credits will update shortly (up to a few minutes). Open account and check Plan & top-up if needed.",
+    "cancelTitle": "Payment not completed",
+    "cancelBody": "You closed the payment page or cancelled. Funds are usually not charged.",
+    "failTitle": "Could not confirm payment",
+    "failBody": "If you were charged, keep the receipt and contact support. Otherwise retry payment from account.",
+    "unknownTitle": "Return after payment",
+    "unknownBody": "Check subscription status and credit balance in account."
+  },
+  "webPush": {
+    "unsupported": "Push is not supported in this browser",
+    "denied": "Notifications are blocked",
+    "needPermission": "Notification permission required",
+    "vapidNotConfigured": "Server VAPID not configured (keys in .env)",
+    "vapidFetchFailed": "Could not fetch VAPID key",
+    "invalidSubscription": "Invalid subscription",
+    "saveFailed": "Could not save subscription on server"
+  },
+  "outboundLang": {
+    "auto": "Auto (from chat)",
+    "ru": "Russian"
+  },
+  "strip": {
+    "dialogFallback": "Chat",
+    "unreadAria": "Unread"
+  },
+  "dock": {
+    "backAria": "Back to chat list",
+    "otherDialogsAria": "Other chats"
+  },
+  "notes": {
+    "kinds": {
+      "profile": "Profile",
+      "context": "Context",
+      "manual": "Note"
+    },
+    "title": "Notes",
+    "userFallback": "User",
+    "closeAria": "Close notes",
+    "panelAria": "User notes",
+    "toggleTitle": "User notes",
+    "toggleHide": "Hide notes",
+    "emptyProfile": "Profile is empty — run AI analysis or add a note manually.",
+    "placeholder": "Your note about this user…",
+    "analyze": "AI analysis",
+    "analyzing": "Analyzing…",
+    "add": "Add",
+    "pin": "Pin",
+    "unpin": "Unpin",
+    "delete": "Delete"
+  },
+  "composer": {
+    "replyTo": "Reply to",
+    "messageFallback": "Message",
+    "cancelReplyTitle": "Cancel reply",
+    "removeAttachmentTitle": "Remove attachment",
+    "archiveLabel": "From studio archive",
+    "archiveHint": "Ready image will be sent to chat",
+    "archiveBadge": "Archive #{{id}}",
+    "photoDeviceTitle": "Photo from device",
+    "archiveTitle": "From studio archive",
+    "emojiTitle": "Emoji",
+    "hintFanvueBlocked": "Fanvue user unavailable — cannot send",
+    "hintTranslate": "Message in Russian — will be translated per Reply language",
+    "titleFanvueBlocked": "Fanvue user unavailable",
+    "titleTranslate": "Write in Russian; Telegram/Fanvue will get translation per selected language",
+    "shortcut": "Ctrl+Enter — send",
+    "scrollToLatest": "Jump to latest ↓"
+  },
+  "messages": {
+    "loadingHistory": "Loading history…",
+    "gotoTitle": "Go to message",
+    "originalTitle": "Original",
+    "sentTitle": "Sent to user",
+    "translating": "translating and sending…"
+  },
+  "reactions": {
+    "aria": "Reactions",
+    "removeTitle": "Remove reaction",
+    "addTitle": "Add reaction",
+    "replyTitle": "Reply",
+    "emojiTitle": "Reaction"
+  },
+  "companion": {
+    "rateAria": "Rate AI reply",
+    "rateLabel": "AI rating",
+    "goodTitle": "Good AI reply",
+    "badTitle": "Bad AI reply",
+    "unrateGood": "Remove good rating",
+    "unrateBad": "Remove bad rating",
+    "ratedGood": "Rated: good",
+    "ratedBad": "Rated: bad",
+    "helpLearn": "Help the bot learn",
+    "draftLabel": "AI draft",
+    "failedLabel": "AI did not send — check",
+    "send": "Send",
+    "reject": "Reject",
+    "queue": " · queue {{count}}"
+  },
+  "threadExtra": {
+    "hideFromList": "Remove from list",
+    "fanvueUnavailableBanner": "Fanvue user unavailable — account deleted or blocked on the platform. Cannot send messages.",
+    "unblock": "Unblock"
+  },
+  "templates": {
+    "title": "Reply templates",
+    "lead": "Buttons appear above the composer for quick text insertion.",
+    "namePlaceholder": "Button label",
+    "bodyPlaceholder": "Template text",
+    "add": "Add",
+    "delete": "Delete",
+    "empty": "No templates yet."
+  },
+  "errors": {
+    "loadConversations": "Could not load chats",
+    "loadMessages": "Could not load messages",
+    "saveReplyLang": "Could not save reply language",
+    "saveTranslate": "Could not save translation setting",
+    "saveCompanion": "Could not save AI companion mode",
+    "assignChatter": "Could not assign chatter",
+    "createTemplate": "Could not create template",
+    "saveCategory": "Could not save category",
+    "saveBlock": "Could not change block status",
+    "hideConfirm": "Remove chat from list? History is kept but the chat disappears from the list.",
+    "hideFailed": "Could not remove chat from list",
+    "reactionTelegram": "Reaction saved in chat but Telegram rejected it — check API logs.",
+    "reactionFailed": "Could not add reaction",
+    "sendFailed": "Could not send message",
+    "imageLoadFailed": "Could not load image.",
+    "imageDownloadFailed": "Download failed. On iPhone use Share menu or long-press preview above → Save to Photos.",
+    "shareImageTitle": "Image",
+    "fanvueConnect": "Could not connect Fanvue. Check scopes in Fanvue Developer Area and try again.",
+    "instagramConnect": "Could not connect Instagram. Check Business/Creator account, scopes and Meta App settings."
+  },
+  "import": {
+    "historyLoaded": "History imported: {{imported}} messages in {{chats}} chats{{skipped}}{{warnings}}",
+    "skipped": " ({{count}} already in database)",
+    "warnings": ". Warnings: {{count}}"
+  }
+}

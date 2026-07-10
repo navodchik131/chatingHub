@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Handle, Position, useEdges, useNodes, useReactFlow, type NodeProps } from '@xyflow/react'
 import {
   computeVideoUpscaleCreditCost,
@@ -21,6 +22,7 @@ function isAbortError(error: unknown): boolean {
 const RESOLUTIONS: VideoUpscaleResolution[] = ['720p', '1080p', '2k', '4k']
 
 function VideoUpscaleNodeComponent({ id, data }: NodeProps) {
+  const { t } = useTranslation('workflow')
   const { setNodes, getNodes, getEdges } = useReactFlow()
   const nodes = useNodes()
   const edges = useEdges()
@@ -97,7 +99,7 @@ function VideoUpscaleNodeComponent({ id, data }: NodeProps) {
 
       const videoUrl = result.video_url?.trim() || null
       if (!videoUrl) {
-        throw new Error('Апскейл завершился без URL видео')
+        throw new Error(t('nodeUi.videoUpscale.noVideoUrl'))
       }
 
       const previewTargets = new Set(getDownstreamPreviewNodeIds(id, edges))
@@ -133,14 +135,14 @@ function VideoUpscaleNodeComponent({ id, data }: NodeProps) {
       }
       updateNodeData({
         isRunning: false,
-        error: error instanceof Error ? error.message : 'Ошибка апскейла видео',
+        error: error instanceof Error ? error.message : t('nodeUi.videoUpscale.error'),
       })
     } finally {
       if (runAbortRef.current === abortController) {
         runAbortRef.current = null
       }
     }
-  }, [getEdges, getNodes, id, nodeData.disabled, setNodes, updateNodeData, workspaceId])
+  }, [getEdges, getNodes, id, nodeData.disabled, setNodes, t, updateNodeData, workspaceId])
 
   const isPro = (me?.billing_plan ?? '').toLowerCase() === 'pro'
   const upscalePricing = pricing.video_upscale ?? DEFAULT_VIDEO_UPSCALE_PRICING
@@ -152,7 +154,7 @@ function VideoUpscaleNodeComponent({ id, data }: NodeProps) {
       isRunning={nodeData.isRunning}
       error={nodeData.error}
       headerExtra={
-        previewVideoUrl ? <span className="workflow-node__badge">готово</span> : null
+        previewVideoUrl ? <span className="workflow-node__badge">{t('gen.done')}</span> : null
       }
     >
       <Handle
@@ -169,13 +171,11 @@ function VideoUpscaleNodeComponent({ id, data }: NodeProps) {
         video
       </span>
 
-      <p className="workflow-node__hint">
-        WaveSpeed Video Upscaler Pro — upscale готового ролика до 720p–4K
-      </p>
+      <p className="workflow-node__hint">{t('nodeUi.videoUpscale.hint')}</p>
 
       <div className="workflow-gen-form nodrag">
         <div className="workflow-gen-form__row">
-          <label className="workflow-gen-form__label">Разрешение</label>
+          <label className="workflow-gen-form__label">{t('nodeUi.videoUpscale.resolution')}</label>
           <select
             className="workflow-gen-form__select nodrag"
             value={targetResolution}
@@ -205,13 +205,13 @@ function VideoUpscaleNodeComponent({ id, data }: NodeProps) {
         </div>
       ) : (
         <div className="workflow-node__preview-box workflow-node__preview-box--compact">
-          <span className="workflow-node__hint">Подключите «Видео» и запустите апскейл</span>
+          <span className="workflow-node__hint">{t('nodeUi.videoUpscale.connectAndRun')}</span>
         </div>
       )}
 
       {!hasUpstreamVideo && !nodeData.isRunning ? (
         <p className="workflow-node__hint workflow-node__hint--muted">
-          Подключите выход «video» с ноды «Видео» после генерации ролика
+          {t('nodeUi.videoUpscale.connectVideoHint')}
         </p>
       ) : null}
 
@@ -225,10 +225,10 @@ function VideoUpscaleNodeComponent({ id, data }: NodeProps) {
         onClick={() => (nodeData.isRunning ? onCancelRun() : void onUpscale())}
         disabled={nodeData.disabled === true && !nodeData.isRunning}
       >
-        {nodeData.isRunning ? 'Отменить' : 'Апскейл видео'}
+        {nodeData.isRunning ? t('gen.cancel') : t('nodeUi.videoUpscale.upscale')}
         {!nodeData.isRunning ? (
           <span className="workflow-node__btn-cost">
-            {isPro ? 'Pro' : `${costCredits} кр.`}
+            {isPro ? 'Pro' : `${costCredits} ${t('gen.creditsUnit')}`}
           </span>
         ) : null}
       </button>

@@ -1,3 +1,4 @@
+import i18n, { STUDIO_NS } from '../i18n'
 import { studioGenerationUsesDemo } from '../studioImagePricing'
 
 export type StudioImageMode =
@@ -9,11 +10,11 @@ export type StudioImageMode =
   | 'grok_compose'
 
 export function studioIntegrationsHint(): string {
-  return 'Добавьте API-ключ WaveSpeed: кабинет → Подключения → блок WaveSpeed.'
+  return i18n.t('integrationsHint', { ns: STUDIO_NS })
 }
 
 export function studioDemoModelHint(): string {
-  return 'На демо без кредитов: любая модель профиля (Обычные / NSFW), кроме Wan 2.7 Pro. Или пополните кредиты.'
+  return i18n.t('demoModelHint', { ns: STUDIO_NS })
 }
 
 export type StudioGenerateGateInput = {
@@ -39,6 +40,10 @@ export type StudioGenerateGateInput = {
   wavespeedConfigured: boolean
   studioPromptOnlyDev: boolean
   studioNeedsUserWsKey: boolean
+}
+
+function gate(key: string): string {
+  return i18n.t(`gate.${key}`, { ns: STUDIO_NS })
 }
 
 export function studioImageGenerateBlockReason(input: StudioGenerateGateInput): string | null {
@@ -68,7 +73,7 @@ export function studioImageGenerateBlockReason(input: StudioGenerateGateInput): 
   } = input
 
   if (studioBusy) return null
-  if (!canStudioGenerate) return 'Нет прав на генерацию в студии — уточните у владельца аккаунта.'
+  if (!canStudioGenerate) return gate('noPermission')
 
   if (studioNeedsUserWsKey) return studioIntegrationsHint()
 
@@ -87,76 +92,52 @@ export function studioImageGenerateBlockReason(input: StudioGenerateGateInput): 
   }
 
   if (studioMode === 'model_scene' && !grokSceneConfigured) {
-    return 'Grok не настроен на сервере — режим «Основная» временно недоступен.'
+    return gate('grokMainUnavailable')
   }
 
   if (studioMode === 'grok_compose' && !grokSceneConfigured) {
-    return 'Grok не настроен на сервере — режим «Face swap» временно недоступен.'
+    return gate('grokFaceSwapUnavailable')
   }
 
   if (studioMode === 'face_swap') {
-    if (studioSelectedModelId == null) {
-      return 'Подмена лица: выберите модель (эталон внешности) в блоке «Модель».'
-    }
-    if (!studioFile) {
-      return 'Подмена лица: загрузите референс — фото со сценой и человеком, которого заменить на вашу модель.'
-    }
+    if (studioSelectedModelId == null) return gate('faceSwapNoModel')
+    if (!studioFile) return gate('faceSwapNoRef')
     return null
   }
 
   if (studioMode === 'model_scene') {
-    if (studioSelectedModelId == null) {
-      return 'Основная: выберите модель с развёрткой/лицом/телом и JSON-профилем.'
-    }
-    if (!studioFile) {
-      return 'Основная: загрузите референс сцены — Grok и WaveSpeed используют его для точного кадра.'
-    }
+    if (studioSelectedModelId == null) return gate('mainNoModel')
+    if (!studioFile) return gate('mainNoRef')
     return null
   }
 
   if (studioMode === 'model') {
-    if (!grokSceneConfigured) {
-      return 'По промту: нужен Grok на сервере.'
-    }
-    if (studioSelectedModelId == null) {
-      return 'По промту: выберите модель с фото «Тело целиком» (и «Интимная анатомия» для NSFW).'
-    }
-    if (!studioDesc.trim()) {
-      return 'По промту: опишите сцену в поле промпта.'
-    }
+    if (!grokSceneConfigured) return gate('promptNoGrok')
+    if (studioSelectedModelId == null) return gate('promptNoModel')
+    if (!studioDesc.trim()) return gate('promptNoText')
     return null
   }
 
   if (studioMode === 'grok_compose') {
-    if (!studioFile) {
-      return 'Face swap: загрузите референс сцены (поза, свет, кадр).'
-    }
-    if (studioSelectedModelId == null && !studioIdentityFile) {
-      return 'Face swap: выберите модель из кабинета или загрузите фото модели (identity).'
-    }
+    if (!studioFile) return gate('grokComposeNoScene')
+    if (studioSelectedModelId == null && !studioIdentityFile) return gate('grokComposeNoIdentity')
     return null
   }
 
   if (studioMode === 'photo_edit') {
-    if (!studioFile && studioPhotoEditArchiveId == null) {
-      return 'Доработка фото: загрузите снимок или выберите картинку из архива «История».'
-    }
-    if (!studioDesc.trim()) {
-      return 'Доработка фото: опишите в промпте, что изменить на изображении.'
-    }
+    if (!studioFile && studioPhotoEditArchiveId == null) return gate('photoEditNoImage')
+    if (!studioDesc.trim()) return gate('photoEditNoPrompt')
     const wantsInpaint = studioPaintInpaintMask || studioInpaintMaskFile != null
     if (wantsInpaint && !studioFile && studioPhotoEditArchiveId == null) {
-      return 'Для маски нужно изображение — загрузите файл или выберите снимок из архива.'
+      return gate('photoEditMaskNeedsImage')
     }
     return null
   }
 
   if (studioMode === 'no_face') {
-    if (studioSelectedModelId == null && !studioFile) {
-      return 'Без лица: выберите модель или загрузите референс сцены.'
-    }
+    if (studioSelectedModelId == null && !studioFile) return gate('noFaceNoInput')
   } else if (!studioDesc.trim() && !studioFile && studioSelectedModelId == null) {
-    return 'Добавьте промпт, референс-фото и/или выберите сохранённую модель.'
+    return gate('needInput')
   }
 
   if (
@@ -165,16 +146,12 @@ export function studioImageGenerateBlockReason(input: StudioGenerateGateInput): 
     studioSelectedModelId == null &&
     studioMode === 'no_face'
   ) {
-    return 'Выберите модель или включите «Референс позы в WaveSpeed» для загруженного фото.'
+    return gate('poseRefOrModel')
   }
 
-  if (!openaiStudioConfigured) {
-    return 'Текстовая модель студии на сервере недоступна — генерация временно отключена.'
-  }
+  if (!openaiStudioConfigured) return gate('openaiUnavailable')
 
-  if (!studioPromptOnlyDev && !wavespeedConfigured) {
-    return studioIntegrationsHint()
-  }
+  if (!studioPromptOnlyDev && !wavespeedConfigured) return studioIntegrationsHint()
 
   return null
 }

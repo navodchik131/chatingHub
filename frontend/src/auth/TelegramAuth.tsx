@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { apiFetch, setToken } from '../api'
 import { formatHttpApiError } from '../apiErrors'
 import {
@@ -15,6 +16,7 @@ type Props = {
 }
 
 export function TelegramLoginButton({ botUsername, mode, onSuccess, onError }: Props) {
+  const { t } = useTranslation('auth')
   const hostRef = useRef<HTMLDivElement>(null)
   const [busy, setBusy] = useState(false)
 
@@ -49,7 +51,7 @@ export function TelegramLoginButton({ botUsername, mode, onSuccess, onError }: P
   return (
     <div className="telegram-login-wrap">
       <div ref={hostRef} className="telegram-login-host" aria-busy={busy} />
-      {busy ? <p className="auth-hint">Проверяем Telegram…</p> : null}
+      {busy ? <p className="auth-hint">{t('telegramChecking')}</p> : null}
     </div>
   )
 }
@@ -60,6 +62,7 @@ type EmailCompleteProps = {
 }
 
 export function OwnerEmailCompleteForm({ onSuccess, onError }: EmailCompleteProps) {
+  const { t } = useTranslation('auth')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
@@ -87,12 +90,10 @@ export function OwnerEmailCompleteForm({ onSuccess, onError }: EmailCompleteProp
 
   return (
     <div className="auth-card-inner email-complete-card">
-      <h3 className="auth-title">Укажите рабочий email</h3>
-      <p className="auth-sub">
-        Нужен для входа операторов в команду и восстановления доступа. Telegram остаётся привязанным.
-      </p>
+      <h3 className="auth-title">{t('emailCompleteTitle')}</h3>
+      <p className="auth-sub">{t('emailCompleteSubtitle')}</p>
       <label className="auth-label">
-        <span className="auth-label-text">Email</span>
+        <span className="auth-label-text">{t('email')}</span>
         <input
           type="email"
           autoComplete="email"
@@ -102,13 +103,13 @@ export function OwnerEmailCompleteForm({ onSuccess, onError }: EmailCompleteProp
         />
       </label>
       <label className="auth-label">
-        <span className="auth-label-text">Пароль</span>
+        <span className="auth-label-text">{t('password')}</span>
         <input
           type="password"
           autoComplete="new-password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          placeholder="Минимум 8 символов"
+          placeholder={t('passwordPlaceholderMin')}
         />
       </label>
       <button
@@ -117,7 +118,7 @@ export function OwnerEmailCompleteForm({ onSuccess, onError }: EmailCompleteProp
         disabled={busy || !email.trim() || password.length < 8}
         onClick={() => void submit()}
       >
-        Сохранить email
+        {t('saveEmail')}
       </button>
     </div>
   )

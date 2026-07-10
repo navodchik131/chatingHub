@@ -1,9 +1,11 @@
 import { memo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Handle, Position, type NodeProps } from '@xyflow/react'
 import { BaseNode } from './BaseNode'
 import { HandleIds, type ScenarioFaceSwapNodeData } from '../types'
 
 function ScenarioFaceSwapNodeComponent({ id, data }: NodeProps) {
+  const { t } = useTranslation('workflow')
   const nodeData = data as ScenarioFaceSwapNodeData
 
   return (
@@ -92,10 +94,7 @@ function ScenarioFaceSwapNodeComponent({ id, data }: NodeProps) {
         scene ref
       </span>
 
-      <p className="workflow-node__hint">
-        Без ноды «Модель»: identity ref (кто) + scene ref (pose/фон). С моделью из кабинета —
-        достаточно scene ref.
-      </p>
+      <p className="workflow-node__hint">{t('nodeUi.scenarioFaceSwap.hint')}</p>
 
       <Handle
         id={HandleIds.pipelineOut}

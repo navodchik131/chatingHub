@@ -1,10 +1,12 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Handle, Position, useEdges, useNodes, useReactFlow, type NodeProps } from '@xyflow/react'
 import { fetchWorkflowReferencePreviewUrl, uploadWorkflowReference } from '../api'
 import { BaseNode } from './BaseNode'
 import { HandleIds, type RefDescriptionNodeData, type ReferenceNodeData } from '../types'
 
 function ReferenceNodeComponent({ id, data }: NodeProps) {
+  const { t } = useTranslation('workflow')
   const { setNodes } = useReactFlow()
   const edges = useEdges()
   const nodes = useNodes()
@@ -75,7 +77,7 @@ function ReferenceNodeComponent({ id, data }: NodeProps) {
         if (!cancelled) {
           clearMedia()
           updateNodeData({
-            error: 'Референс не найден на сервере — загрузите файл снова',
+            error: t('nodeUi.reference.refNotFound'),
           })
         }
       } finally {
@@ -86,7 +88,7 @@ function ReferenceNodeComponent({ id, data }: NodeProps) {
     return () => {
       cancelled = true
     }
-  }, [nodeData.refId, nodeData.previewUrl, clearMedia, revokePreviewUrl, updateNodeData])
+  }, [nodeData.refId, nodeData.previewUrl, clearMedia, revokePreviewUrl, t, updateNodeData])
 
   useEffect(
     () => () => {
@@ -116,14 +118,14 @@ function ReferenceNodeComponent({ id, data }: NodeProps) {
         previewUrlRef.current = null
         updateNodeData({
           previewUrl: undefined,
-          error: error instanceof Error ? error.message : 'Ошибка загрузки',
+          error: error instanceof Error ? error.message : t('nodeUi.reference.uploadError'),
         })
       } finally {
         setIsUploading(false)
         setIsDragging(false)
       }
     },
-    [revokePreviewUrl, updateNodeData],
+    [revokePreviewUrl, t, updateNodeData],
   )
 
   const onFileInputChange = useCallback(
@@ -193,10 +195,11 @@ function ReferenceNodeComponent({ id, data }: NodeProps) {
       <p className="workflow-node__hint">
         {assignedRole ? (
           <>
-            Роль: <strong>{assignedRole}</strong> — подключите к «Генерация» → references
+            {t('nodeUi.refDescription.roleLabel')}: <strong>{assignedRole}</strong>{' '}
+            {t('nodeUi.reference.roleConnectGen')}
           </>
         ) : (
-          <>Загрузите фото и задайте роль в «Описание референса» слева</>
+          <>{t('nodeUi.reference.uploadHint')}</>
         )}
       </p>
       <input
@@ -239,25 +242,25 @@ function ReferenceNodeComponent({ id, data }: NodeProps) {
           <>
             <span className="workflow-spinner" />
             <p className="workflow-node__hint">
-              {isUploading ? 'Загрузка…' : 'Загрузка превью…'}
+              {isUploading ? t('nodeUi.common.uploading') : t('nodeUi.common.previewLoading')}
             </p>
           </>
         ) : showPreview ? (
           <>
             <img
               src={nodeData.previewUrl}
-              alt={nodeData.fileName ?? 'Референс'}
+              alt={nodeData.fileName ?? t('nodeUi.reference.refAlt')}
               className="workflow-node__preview-img"
             />
             <p className="workflow-node__hint">{nodeData.fileName}</p>
             <button type="button" className="workflow-node__btn workflow-node__btn--ghost" onClick={onClearMedia}>
-              Удалить
+              {t('nodeUi.common.remove')}
             </button>
           </>
         ) : (
           <>
             <span style={{ fontSize: '1.5rem', opacity: 0.4 }}>↑</span>
-            <p className="workflow-node__hint">PNG, JPG, WEBP · до 25 МБ</p>
+            <p className="workflow-node__hint">{t('nodeUi.reference.fileFormats')}</p>
           </>
         )}
       </div>

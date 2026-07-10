@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { WavespeedSetupBanner } from '../WavespeedSetupBanner'
 import { StudioArchiveThumbPicker } from './StudioArchiveThumbPicker'
 import { StudioMediaSlot } from './StudioMediaSlot'
@@ -51,6 +52,7 @@ export function StudioModelBootstrapPanel({
   onArchiveRefresh,
   onError,
 }: Props) {
+  const { t } = useTranslation('studio')
   const [refFormFile, setRefFormFile] = useState<File | null>(null)
   const [refFaceFile, setRefFaceFile] = useState<File | null>(null)
   const [refFormPreview, setRefFormPreview] = useState<string | null>(null)
@@ -141,7 +143,7 @@ export function StudioModelBootstrapPanel({
       }
       onArchiveRefresh()
     } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Не удалось создать кадр'
+      const msg = e instanceof Error ? e.message : t('bootstrap.errFaceMerge')
       onError(msg)
     } finally {
       setMergeBusy(false)
@@ -153,6 +155,7 @@ export function StudioModelBootstrapPanel({
     aspect,
     onError,
     onArchiveRefresh,
+    t,
   ])
 
   const runSheet = useCallback(async () => {
@@ -170,7 +173,7 @@ export function StudioModelBootstrapPanel({
       } else if (sheetSource === 'step1' && mergeResult?.generation_id) {
         fd.append('source_generation_id', String(mergeResult.generation_id))
       } else {
-        onError('Выберите источник: своё фото, кадр из архива или результат шага 1.')
+        onError(t('bootstrap.errPickSource'))
         return
       }
 
@@ -187,7 +190,7 @@ export function StudioModelBootstrapPanel({
       }
       onArchiveRefresh()
     } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Не удалось сделать развёртку'
+      const msg = e instanceof Error ? e.message : t('bootstrap.errSheet')
       onError(msg)
     } finally {
       sheetInFlightRef.current = false
@@ -201,6 +204,7 @@ export function StudioModelBootstrapPanel({
     sheetPrompt,
     onError,
     onArchiveRefresh,
+    t,
   ])
 
   return (
@@ -214,34 +218,31 @@ export function StudioModelBootstrapPanel({
       ) : null}
 
       <section className="studio-bootstrap__step" aria-labelledby="bootstrap-step1-title">
-        <h3 id="bootstrap-step1-title">Шаг 1 — базовый кадр (опционально)</h3>
-        <p className="studio-bootstrap__lead muted">
-          Два референса: первый — волосы и форма лица, второй — лицо для наложения. Результат можно
-          использовать для развёртки ниже.
-        </p>
+        <h3 id="bootstrap-step1-title">{t('bootstrap.step1Title')}</h3>
+        <p className="studio-bootstrap__lead muted">{t('bootstrap.step1Lead')}</p>
 
         <div className="studio-slot-grid studio-slot-grid--composer">
           <StudioMediaSlot
-            label="Референс 1"
-            hint="Волосы и форма лица"
+            label={t('bootstrap.ref1Label')}
+            hint={t('bootstrap.ref1Hint')}
             previewUrl={refFormPreview}
             accept="image/jpeg,image/png,image/webp"
             onFile={setRefFormFile}
             onClear={() => setRefFormFile(null)}
-            emptyLabel="Загрузить"
+            emptyLabel={t('bootstrap.upload')}
           />
           <StudioMediaSlot
-            label="Референс 2"
-            hint="Лицо для наложения"
+            label={t('bootstrap.ref2Label')}
+            hint={t('bootstrap.ref2Hint')}
             previewUrl={refFacePreview}
             accept="image/jpeg,image/png,image/webp"
             onFile={setRefFaceFile}
             onClear={() => setRefFaceFile(null)}
-            emptyLabel="Загрузить"
+            emptyLabel={t('bootstrap.upload')}
           />
           <StudioPillField
-            label="Формат"
-            hint="Разрешение кадра"
+            label={t('bootstrap.formatLabel')}
+            hint={t('bootstrap.formatHint')}
             scrollRow
             options={aspectOptions}
             value={aspect}
@@ -250,11 +251,8 @@ export function StudioModelBootstrapPanel({
         </div>
 
         <label className="studio-label studio-bootstrap__prompt">
-          <span>Промпт (необязательно)</span>
-          <span className="muted small studio-bootstrap__prompt-hint">
-            Можно оставить поле пустым — подставится стандартный промпт слияния лиц. Если нужен свой
-            сценарий, опишите его здесь.
-          </span>
+          <span>{t('bootstrap.promptOptional')}</span>
+          <span className="muted small studio-bootstrap__prompt-hint">{t('bootstrap.promptOptionalHint')}</span>
           <textarea
             className="studio-textarea studio-bootstrap__textarea"
             rows={4}
@@ -271,34 +269,31 @@ export function StudioModelBootstrapPanel({
             disabled={!canRunMerge}
             onClick={() => void runFaceMerge()}
           >
-            {mergeBusy ? 'Генерация…' : 'Создать базовый кадр'}
+            {mergeBusy ? t('page.generating') : t('bootstrap.createBaseFrame')}
           </button>
         </div>
 
         {mergePreviewUrl ? (
           <div className="studio-bootstrap__result">
-            <p className="studio-bootstrap__result-label">Результат шага 1</p>
-            <img src={mergePreviewUrl} alt="Базовый кадр модели" className="studio-bootstrap__result-img" />
+            <p className="studio-bootstrap__result-label">{t('bootstrap.step1Result')}</p>
+            <img src={mergePreviewUrl} alt={t('bootstrap.step1ResultAlt')} className="studio-bootstrap__result-img" />
           </div>
         ) : null}
       </section>
 
       <section className="studio-bootstrap__step" aria-labelledby="bootstrap-step2-title">
-        <h3 id="bootstrap-step2-title">Развёртка модели</h3>
-        <p className="studio-bootstrap__lead muted">
-          Кадр 16:9 с раскладкой (лицо, профили, рост) через GPT Image 2 Edit. Шаг 1 не обязателен —
-          загрузите своё фото или выберите готовый кадр из архива.
-        </p>
+        <h3 id="bootstrap-step2-title">{t('bootstrap.step2Title')}</h3>
+        <p className="studio-bootstrap__lead muted">{t('bootstrap.step2Lead')}</p>
 
         <div className="studio-slot-grid studio-slot-grid--composer">
           <StudioMediaSlot
-            label="Своё фото"
-            hint="JPG, PNG, WebP"
+            label={t('bootstrap.ownPhotoLabel')}
+            hint={t('bootstrap.ownPhotoHint')}
             previewUrl={sheetSource === 'upload' ? sheetPreview : null}
             accept="image/jpeg,image/png,image/webp"
             onFile={selectSheetUpload}
             onClear={() => selectSheetUpload(null)}
-            emptyLabel="Загрузить"
+            emptyLabel={t('bootstrap.upload')}
             className={sheetSource === 'upload' ? 'studio-bootstrap__source--active' : ''}
           />
           <div
@@ -309,8 +304,8 @@ export function StudioModelBootstrapPanel({
             style={{ gridColumn: '1 / -1' }}
           >
             <StudioArchiveThumbPicker
-              label="Или из архива"
-              hint="Готовые кадры из истории"
+              label={t('bootstrap.fromArchiveLabel')}
+              hint={t('bootstrap.fromArchiveHint')}
               items={archiveItems}
               value={sheetSource === 'archive' ? sheetArchiveId : null}
               onChange={(id) => {
@@ -338,18 +333,15 @@ export function StudioModelBootstrapPanel({
                 setSheetFile(null)
               }}
             >
-              <span className="muted small">Кадр из шага 1 (выше)</span>
+              <span className="muted small">{t('bootstrap.step1FrameLabel')}</span>
               <img src={mergePreviewUrl} alt="" />
             </button>
           ) : null}
         </div>
 
         <label className="studio-label studio-bootstrap__prompt">
-          <span>Промпт развёртки</span>
-          <span className="muted small studio-bootstrap__prompt-hint">
-            Стандартный промпт для GPT Image 2 Edit — можно отредактировать перед генерацией.
-            Если очистить поле, снова подставится значение по умолчанию.
-          </span>
+          <span>{t('bootstrap.sheetPromptLabel')}</span>
+          <span className="muted small studio-bootstrap__prompt-hint">{t('bootstrap.sheetPromptHint')}</span>
           <textarea
             className="studio-textarea studio-bootstrap__textarea"
             rows={5}
@@ -365,16 +357,16 @@ export function StudioModelBootstrapPanel({
             disabled={!canRunSheet}
             onClick={() => void runSheet()}
           >
-            {sheetBusy ? 'Генерация…' : 'Сделать развёртку модели'}
+            {sheetBusy ? t('page.generating') : t('bootstrap.makeSheet')}
           </button>
         </div>
 
         {sheetResult?.generated_image_url ? (
           <div className="studio-bootstrap__result">
-            <p className="studio-bootstrap__result-label">Развёртка 16:9</p>
+            <p className="studio-bootstrap__result-label">{t('bootstrap.sheetResult')}</p>
             <img
               src={sheetResult.generated_image_url}
-              alt="Развёртка модели"
+              alt={t('bootstrap.sheetResultAlt')}
               className="studio-bootstrap__result-img studio-bootstrap__result-img--wide"
             />
           </div>

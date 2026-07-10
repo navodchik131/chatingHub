@@ -1,3 +1,4 @@
+import i18n from '../i18n'
 import { normalizeBillingPlan, type CreditsPlanKind } from './planCatalog'
 
 export { normalizeBillingPlan }
@@ -49,12 +50,12 @@ export function planDisplayLong(me: BillingMeLike | null | undefined): string {
   const tier = (me?.plan_tier || 'solo').toUpperCase()
   if (plan === 'credits') {
     const demo = me?.demo_generations_remaining ?? 0
-    return `Credits — ${demo} бесплатных генераций, далее списание кредитов · тариф ${tier}`
+    return i18n.t('plan.creditsLong', { demo, tier, ns: 'workspace' })
   }
   if (plan === 'pro') {
-    return `Pro — свой ключ WaveSpeed, без списаний на платформе · тариф ${tier}`
+    return i18n.t('plan.proLong', { tier, ns: 'workspace' })
   }
-  return `Standard — кредиты на студию включены, чат и команда · тариф ${tier}`
+  return i18n.t('plan.standardLong', { tier, ns: 'workspace' })
 }
 
 export function studioAccessAllowed(me: BillingMeLike): boolean {

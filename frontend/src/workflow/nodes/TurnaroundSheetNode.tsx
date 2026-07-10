@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Handle, Position, useReactFlow, type NodeProps } from '@xyflow/react'
 import { executeWorkflowGeneration } from '../api'
 import { getDownstreamPreviewNodeIds, serializeGraph } from '../graphResolver'
@@ -12,6 +13,7 @@ function isAbortError(error: unknown): boolean {
 }
 
 function TurnaroundSheetNodeComponent({ id, data }: NodeProps) {
+  const { t } = useTranslation('workflow')
   const { setNodes, getNodes, getEdges } = useReactFlow()
   const { workspaceId } = useWorkflowRun()
   const nodeData = data as TurnaroundSheetNodeData
@@ -69,7 +71,7 @@ function TurnaroundSheetNodeComponent({ id, data }: NodeProps) {
 
       const imageUrl = result.generated_image_url?.trim() || null
       if (!imageUrl) {
-        throw new Error('Развёртка завершилась без URL изображения')
+        throw new Error(t('nodeUi.turnaroundSheet.noImageUrl'))
       }
 
       const previewTargets = new Set(getDownstreamPreviewNodeIds(id, edges))
@@ -112,14 +114,14 @@ function TurnaroundSheetNodeComponent({ id, data }: NodeProps) {
       }
       updateNodeData({
         isRunning: false,
-        error: error instanceof Error ? error.message : 'Ошибка развёртки',
+        error: error instanceof Error ? error.message : t('nodeUi.turnaroundSheet.error'),
       })
     } finally {
       if (runAbortRef.current === abortController) {
         runAbortRef.current = null
       }
     }
-  }, [getEdges, getNodes, id, setNodes, updateNodeData, workspaceId])
+  }, [getEdges, getNodes, id, setNodes, t, updateNodeData, workspaceId])
 
   return (
     <>
@@ -129,7 +131,7 @@ function TurnaroundSheetNodeComponent({ id, data }: NodeProps) {
         isRunning={nodeData.isRunning}
         error={nodeData.error}
         headerExtra={
-          nodeData.imageUrl ? <span className="workflow-node__badge">готово</span> : null
+          nodeData.imageUrl ? <span className="workflow-node__badge">{t('gen.done')}</span> : null
         }
       >
         <Handle
@@ -174,10 +176,7 @@ function TurnaroundSheetNodeComponent({ id, data }: NodeProps) {
           prompt
         </span>
 
-        <p className="workflow-node__hint">
-          GPT Image 2.0 · character sheet 16:9 · белая сетка на всех ракурсах с лицом (не сзади) ·
-          одежда с первого кадра
-        </p>
+        <p className="workflow-node__hint">{t('nodeUi.turnaroundSheet.hint')}</p>
 
         {nodeData.imageUrl ? (
           <button
@@ -185,11 +184,11 @@ function TurnaroundSheetNodeComponent({ id, data }: NodeProps) {
             className="workflow-node__preview-box workflow-node__preview-box--filled workflow-node__preview-click nodrag"
             onClick={() => setLightboxUrl(nodeData.imageUrl ?? null)}
           >
-            <img src={nodeData.imageUrl} alt="Развёртка" />
+            <img src={nodeData.imageUrl} alt={t('nodeUi.turnaroundSheet.alt')} />
           </button>
         ) : (
           <div className="workflow-node__preview-box workflow-node__preview-box--compact">
-            <span className="workflow-node__hint">Подключите первый кадр и запустите</span>
+            <span className="workflow-node__hint">{t('nodeUi.turnaroundSheet.connectFirstFrame')}</span>
           </div>
         )}
 
@@ -203,7 +202,7 @@ function TurnaroundSheetNodeComponent({ id, data }: NodeProps) {
           onClick={() => (nodeData.isRunning ? onCancelRun() : void onGenerate())}
           disabled={nodeData.disabled === true && !nodeData.isRunning}
         >
-          {nodeData.isRunning ? 'Отменить' : 'Сгенерировать развёртку'}
+          {nodeData.isRunning ? t('gen.cancel') : t('nodeUi.turnaroundSheet.generate')}
         </button>
 
         <Handle

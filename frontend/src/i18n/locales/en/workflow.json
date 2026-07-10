@@ -1,0 +1,275 @@
+{
+  "page": {
+    "title": "Workflow",
+    "subtitle": "Build a chain and generate an image",
+    "backToStudio": "← Studio",
+    "backToWorkspace": "← Workspace",
+    "loading": "Loading…",
+    "signInRequired": "Sign in with studio access to open workflow.",
+    "signIn": "Sign in",
+    "accessDeniedTitle": "Access denied",
+    "accessDenied": "Workflow requires the «Studio prompt & image generation» permission.",
+    "toCabinet": "Open account",
+    "demoLimited": "Demo mode: only the «Model swap» template is listed; other templates unlock after topping up credits or subscribing. Generations use free demo quota.",
+    "defaultProject": "New project",
+    "myProject": "My project",
+    "projectFallback": "Project",
+    "importReplaceConfirm": "Replace current project «{{current}}» with graph from «{{imported}}»?",
+    "importFailed": "Failed to import JSON",
+    "closeProjectsAria": "Close project list",
+    "paletteCollapsed": "Palette",
+    "paletteExpand": "Expand palette",
+    "paletteCollapse": "Collapse palette"
+  },
+  "paletteDock": {
+    "aria": "Node palette",
+    "title": "Nodes",
+    "expand": "Expand",
+    "collapse": "Collapse"
+  },
+  "palette": {
+    "common": "Common",
+    "image": "Images",
+    "video": "Video",
+    "scenarios": "Scenarios"
+  },
+  "nodes": {
+    "model": { "label": "Model", "description": "Studio model from your account" },
+    "realism": { "label": "Realism", "description": "Realistic photo look" },
+    "selfie": { "label": "Selfie", "description": "Arm-extended selfie — front camera, overrides conflicting prompt hints" },
+    "prompt": { "label": "Prompt", "description": "Extra directions (optional; scene may come from first frame)" },
+    "textNote": { "label": "Note", "description": "Canvas text block — hints, checklists (does not affect generation)" },
+    "refDescription": { "label": "Ref description", "description": "Reference role (photo base, clothes, pose…)" },
+    "reference": { "label": "Images ref", "description": "Photo reference — you can connect several to one generation" },
+    "imageGeneration": { "label": "Image generation", "description": "Prompt assembly and image generation (plain or via pipeline)" },
+    "firstFrameGeneration": { "label": "First frame", "description": "Still at t=0 for motion pipeline (plain or via pipeline)" },
+    "turnaroundSheet": { "label": "Turnaround", "description": "GPT Image 2.0 character sheet — face grid (except back view)" },
+    "motionVideo": { "label": "Motion ref", "description": "Motion reference (@Video) for Seedance" },
+    "videoPromptCompose": { "label": "Prompt from video", "description": "Grok: detailed prompt from motion + BoardStory refs (outfit, environment, model)" },
+    "scenarioOutfitChange": { "label": "Scenario: outfit", "description": "Photo base + outfit refs → pipeline → image generation" },
+    "scenarioLocationChange": { "label": "Scenario: location", "description": "Photo base / model + location refs → pipeline → image generation" },
+    "scenarioFaceSwap": { "label": "Scenario: model", "description": "Scene ref + cabinet model or identity ref → person swap keeping pose" },
+    "scenarioMotionVideo": { "label": "Scenario: motion", "description": "Motion + BoardStory → Grok prompt, audio and Seedance → pipeline → video" },
+    "scenarioFirstFrame": { "label": "Scenario: 1st frame", "description": "Model + motion/refs → still t=0 → pipeline → First frame" },
+    "videoGeneration": { "label": "Video generation", "description": "Video render: Seedance/Grok + duration. Scenario via pipeline-in." },
+    "videoUpscale": { "label": "Video upscale", "description": "Video Upscaler Pro — upscale finished clip (720p–4K)" },
+    "preview": { "label": "Preview", "description": "View result. Connect ref description and pass image downstream as ref." }
+  },
+  "sidebar": {
+    "projects": "Projects",
+    "newProject": "New project",
+    "projectNamePlaceholder": "Project name",
+    "create": "Create",
+    "cancel": "Cancel",
+    "rename": "Rename",
+    "renameProject": "Rename «{{name}}»",
+    "delete": "Delete project",
+    "export": "Export",
+    "import": "Import project from JSON",
+    "exportProject": "Download «{{name}}» as JSON",
+    "exportFallback": "Download project",
+    "deleteConfirm": "Delete project «{{name}}»?"
+  },
+  "gen": {
+    "model": "Model",
+    "format": "Format",
+    "quality": "Quality",
+    "regularGeneration": "Regular generation",
+    "nsfw": "NSFW",
+    "generate": "Generate",
+    "generateFrame": "Generate frame",
+    "cancel": "Cancel",
+    "resultHere": "Result will appear here",
+    "done": "done",
+    "disabled": "off",
+    "scenarioInputsHint": "Inputs connected via scenario — configure refs/prompt on the scenario node.",
+    "noImageUrl": "Job finished without an image URL",
+    "generationError": "Generation error",
+    "resultAlt": "Generation result",
+    "creditsUnit": "cr.",
+    "promptOnlyHint": "Prompt alone is enough — cabinet model and reference are optional. Multiple Images ref nodes allowed — each with its own role in Description.",
+    "firstFrameHint": "Like motion studio: video → Grok → WaveSpeed. Light film grain on frame (no face grid; optional frame to Reference).",
+    "firstFrameScenarioHint": "Inputs via First frame scenario — connect model/motion/refs to the scenario node.",
+    "refOptional": "ref (opt.)"
+  },
+  "aspects": {
+    "9:16": "9:16 — vertical",
+    "3:4": "3:4 — portrait",
+    "1:1": "1:1 — square",
+    "16:9": "16:9 — landscape"
+  },
+  "menu": {
+    "aria": "Node menu",
+    "enable": "Enable",
+    "disable": "Disable",
+    "delete": "Delete"
+  },
+  "nodeUi": {
+    "common": {
+      "toggleOn": "On",
+      "toggleOff": "Off",
+      "remove": "Remove",
+      "download": "Download",
+      "uploading": "Uploading…",
+      "previewLoading": "Loading preview…",
+      "optional": "optional"
+    },
+    "model": {
+      "hint": "Studio model (optional) — skip for a brand-new character",
+      "selectPlaceholder": "Select model…"
+    },
+    "prompt": {
+      "hint": "Extra directions (optional)",
+      "placeholder": "e.g. evening light, smile, casual outfit…"
+    },
+    "realism": {
+      "hint": "Realistic phone-camera look"
+    },
+    "selfie": {
+      "hint": "Arm-extended selfie: front camera angle. Overrides conflicting prompt hints."
+    },
+    "textNote": {
+      "hint": "Hints, checklist or any text — does not affect generation",
+      "placeholder": "e.g. 1) photo base — source pose\n2) location ref — background only\n3) Seedream for edit…"
+    },
+    "refDescription": {
+      "hint": "Role — reference purpose for Grok (multiple refs per generation allowed).",
+      "roleLabel": "Role",
+      "descriptionLabel": "Description",
+      "descriptionPlaceholder": "photo base: who/frame to edit; clothes: outfit donor — color, cut"
+    },
+    "reference": {
+      "roleConnectGen": "— connect to Image generation → references",
+      "uploadHint": "Upload a photo and set a role in Ref description on the left",
+      "refNotFound": "Reference not found on server — upload the file again",
+      "uploadError": "Upload error",
+      "refAlt": "Reference",
+      "fileFormats": "PNG, JPG, WEBP · up to 25 MB"
+    },
+    "preview": {
+      "finalVideo": "Final video",
+      "roleConnectOut": "— ref output → references",
+      "connectDescAndRef": "Connect Ref description on the left and ref → references",
+      "connectOrWait": "Connect a generation output or wait for the result",
+      "connectGeneration": "Connect generation output"
+    },
+    "turnaroundSheet": {
+      "hint": "GPT Image 2.0 · character sheet 16:9 · white grid on all face views (not back) · outfit from first frame",
+      "noImageUrl": "Turnaround finished without an image URL",
+      "error": "Turnaround error",
+      "alt": "Turnaround",
+      "connectFirstFrame": "Connect first frame and run",
+      "generate": "Generate turnaround"
+    },
+    "motionVideo": {
+      "hint": "Motion reference → @Video1 in Seedance. Without this node, motion is text-only in the prompt.",
+      "uploadError": "Failed to upload video",
+      "videoUploaded": "Video uploaded",
+      "uploadButton": "Upload MP4/WebM"
+    },
+    "videoGen": {
+      "noVideoUrl": "Video generation finished without a URL",
+      "error": "Video error",
+      "scenarioHint": "Scenario connected — configure prompt, motion and BoardStory refs on the scenario node.",
+      "grokHint": "Grok Imagine Video · first frame + prompt with motion description",
+      "seedanceHint": "BoardStory Seedance: identity @Image, motion/camera @Video. First frame optional.",
+      "duration": "Duration",
+      "seconds": "{{sec}} sec",
+      "audio": "Audio",
+      "grokMotionTimeline": "Grok motion timeline (auto motion description)",
+      "resultPlaceholder": "Video result will appear here",
+      "generate": "Generate video"
+    },
+    "videoUpscale": {
+      "hint": "WaveSpeed Video Upscaler Pro — upscale finished clip to 720p–4K",
+      "resolution": "Resolution",
+      "connectAndRun": "Connect Video and run upscale",
+      "connectVideoHint": "Connect the video output from the Video node after rendering",
+      "noVideoUrl": "Upscale finished without a video URL",
+      "error": "Video upscale error",
+      "upscale": "Upscale video"
+    },
+    "videoPromptCompose": {
+      "sendMotionVideo": "Send motion video to generation",
+      "sendVideoOnHint": "Prompt with @Video1 — actor swap; motion from video ref, no text timeline.",
+      "sendVideoOffHint": "Video for analysis only — not sent to Seedance; Grok writes a detailed prompt with motion and [t s].",
+      "hint": "Grok parses motion video → prompt with @Image/@Video for BoardStory Seedance",
+      "generateClothing": "Generate outfit from video",
+      "generateEnvironment": "Generate room from video",
+      "extractHint": "Extract from motion — preview in this node (auto-picked up in Video)",
+      "clothingAlt": "Outfit from video",
+      "clothingCaption": "Outfit",
+      "clothingPending": "Outfit — after Generate prompt",
+      "environmentAlt": "Room from video",
+      "environmentCaption": "Room",
+      "environmentPending": "Room — after Generate prompt",
+      "fixedPromptHint": "No refs and no checkboxes: fixed prompt — identity from @Image1, outfit/room/motion from @Video1",
+      "promptPlaceholder": "Prompt appears after generation — you can edit manually",
+      "promptPlaceholderShort": "Prompt appears after generation — you can edit",
+      "noPromptText": "Generation finished without prompt text",
+      "promptError": "Prompt generation error",
+      "generatePrompt": "Generate prompt"
+    },
+    "scenarioMotionVideo": {
+      "hint": "Motion video scenario: Grok → prompt + BoardStory refs. Seedance settings here; render model in Video."
+    },
+    "scenarioFirstFrame": {
+      "hint": "First frame scenario: model + motion video or refs → still at t=0 for motion pipeline. Connect to First frame via pipeline."
+    },
+    "scenarioFaceSwap": {
+      "hint": "Without Model node: identity ref (who) + scene ref (pose/background). With cabinet model — scene ref is enough."
+    },
+    "scenarioLocationChange": {
+      "hint": "Location change scenario: photo base (full person + pose/camera) + location refs → pipeline. Identity, hair, pose and angle — photo base only; do not connect Model. Location is background only."
+    },
+    "scenarioOutfitChange": {
+      "hint": "Outfit change scenario: photo base + outfit refs → Image generation via pipeline. Identity and pose preserved; only outfit changes."
+    },
+    "seedanceGuide": {
+      "title": "Seedance 2.0 — reference roles",
+      "image1Role": "face / model identity",
+      "image2Role": "character sheet, outfit, room (if connected)",
+      "video1Role": "motion + camera only — not the actor's face from video",
+      "motionTip1": "One person in frame, simple motion, up to ~15 sec.",
+      "motionTip2": "No crowds, fights or complex choreography — Seedance handles those poorly.",
+      "motionTip3": "Clear video: stable camera or readable tracking.",
+      "composeFoot": "Grok writes a prompt with explicit MODEL REPLACEMENT: identity from @Image, motion and camera from @Video1.",
+      "videoFoot": "Prompt must clearly separate: who is on screen (@Image) and where motion/camera come from (@Video)."
+    },
+    "canvasControls": {
+      "toolbarAria": "Canvas zoom",
+      "disconnect": "Disconnect selected edges",
+      "disconnectShort": "Disc.",
+      "zoomLabel": "Zoom",
+      "zoomIn": "Zoom in",
+      "zoomOut": "Zoom out",
+      "fitView": "Fit entire graph",
+      "lockOn": "Unlock node dragging",
+      "lockOff": "Lock node dragging",
+      "unlockAria": "Unlock nodes",
+      "lockAria": "Lock nodes",
+      "locked": "Lock",
+      "unlocked": "Move"
+    },
+    "lightbox": {
+      "defaultAlt": "Result",
+      "reset": "Reset",
+      "close": "Close"
+    },
+    "billing": {
+      "proPayment": "billed via WaveSpeed",
+      "demoSuffix": "demo",
+      "creditsShort": "cr."
+    },
+    "edge": {
+      "disconnect": "Disconnect"
+    },
+    "export": {
+      "invalidJson": "File is not valid JSON",
+      "invalidFormat": "Invalid file format",
+      "importDefaultName": "Import",
+      "noGraph": "File has no workflow graph (nodes and edges)",
+      "projectDefaultName": "Project"
+    }
+  }
+}

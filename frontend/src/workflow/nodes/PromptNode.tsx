@@ -1,9 +1,11 @@
 import { memo, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Handle, Position, useReactFlow, type NodeProps } from '@xyflow/react'
 import { BaseNode } from './BaseNode'
 import { HandleIds, type PromptNodeData } from '../types'
 
 function PromptNodeComponent({ id, data }: NodeProps) {
+  const { t } = useTranslation('workflow')
   const { setNodes } = useReactFlow()
   const nodeData = data as PromptNodeData
 
@@ -26,10 +28,10 @@ function PromptNodeComponent({ id, data }: NodeProps) {
       isRunning={nodeData.isRunning}
       error={nodeData.error}
     >
-      <p className="workflow-node__hint">Дополнительные указания (необязательно)</p>
+      <p className="workflow-node__hint">{t('nodeUi.prompt.hint')}</p>
       <textarea
         className="workflow-node__textarea nodrag nowheel"
-        placeholder="Например: вечерний свет, улыбка, casual outfit…"
+        placeholder={t('nodeUi.prompt.placeholder')}
         value={nodeData.prompt ?? ''}
         onChange={onPromptChange}
       />

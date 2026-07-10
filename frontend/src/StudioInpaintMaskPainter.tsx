@@ -6,6 +6,7 @@ import {
   useRef,
   type PointerEvent,
 } from 'react'
+import { useTranslation } from 'react-i18next'
 
 /** PNG-маска: чёрное = сохранить, белое = зона inpaint (совпадает с пикселями превью). */
 
@@ -39,6 +40,7 @@ export const StudioInpaintMaskPainter = forwardRef<StudioInpaintMaskPainterRef, 
     { imageSrc, enabled, brushSize: brushPreset, onPaintStateChange = noopPaint },
     ref,
   ) {
+    const { t } = useTranslation('studio')
     const wrapRef = useRef<HTMLDivElement>(null)
     const imgRef = useRef<HTMLImageElement>(null)
     const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -210,10 +212,7 @@ export const StudioInpaintMaskPainter = forwardRef<StudioInpaintMaskPainterRef, 
         ref={wrapRef}
         className={`studio-inpaint-mask-painter${enabled ? ' is-enabled' : ''}`}
       >
-        <p className="muted studio-mask-painter-hint">
-          Белым закрасьте участок, который нужно заменить по описанию ниже; чёрное на маске (всё вокруг) не
-          трогаем. Если что-то сбились — «Очистить маску».
-        </p>
+        <p className="muted studio-mask-painter-hint">{t('inpaintMask.hint')}</p>
         <div className="studio-mask-painter-frame">
           <img
             ref={imgRef}
@@ -229,7 +228,7 @@ export const StudioInpaintMaskPainter = forwardRef<StudioInpaintMaskPainterRef, 
             className="studio-mask-painter-canvas"
             width={1}
             height={1}
-            aria-label="Область рисования маски inpaint"
+            aria-label={t('inpaintMask.canvasAria')}
             style={{
               visibility: enabled ? 'visible' : 'hidden',
               pointerEvents: enabled ? 'auto' : 'none',
