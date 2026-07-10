@@ -1699,7 +1699,12 @@ def _migrate_user_telegram_identity(sync_conn) -> None:
     if "telegram_username" not in cols:
         sync_conn.execute(text("ALTER TABLE users ADD COLUMN telegram_username VARCHAR(64)"))
     if "telegram_linked_at" not in cols:
-        sync_conn.execute(text("ALTER TABLE users ADD COLUMN telegram_linked_at DATETIME"))
+        if dialect == "sqlite":
+            sync_conn.execute(text("ALTER TABLE users ADD COLUMN telegram_linked_at DATETIME"))
+        else:
+            sync_conn.execute(
+                text("ALTER TABLE users ADD COLUMN telegram_linked_at TIMESTAMPTZ")
+            )
     if "auth_email_verified" not in cols:
         sync_conn.execute(
             text(
