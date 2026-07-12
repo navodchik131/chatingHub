@@ -486,7 +486,26 @@
     "deleteMemberConfirm": "Remove member? Their access will be revoked."
   },
   "donationsExt": {
-    "intro": "Set up a personal Tribute donation link. After review we create the donation in Tribute and give you a link for fans. All payments are tracked in analytics below.",
+    "intro": "Donations via the ModelMate platform Tribute account. After moderation you will get a fan payment link.",
+    "tabs": {
+      "overview": "Donations",
+      "setup": "Create donation"
+    },
+    "tabsAria": "Donation sections",
+    "payoutPolicyTitle": "Payouts on request",
+    "payoutPolicyBrief": "Funds are held on the Tribute schedule: donations from the 1st–15th become available on the 16th; from the 16th through month end — on the 1st of the next month. You can request a payout in Tribute once the date has passed and the minimum is reached (3,000 ₽ / €100 / $100). ModelMate transfers your share manually in those windows.",
+    "payoutPolicyLink": "More about Tribute payouts",
+    "totalEarned": "Total earned",
+    "availableForPayout": "Available for payout",
+    "heldUntilRelease": "On hold",
+    "alreadyPaid": "Already paid out",
+    "payoutMinimumHint": "Minimum to request: 3,000 ₽, €100, or $100",
+    "requestPayout": "Request payout",
+    "requestPayoutDisabled": "Available amount is below the Tribute minimum",
+    "requestPayoutConfirm": "Available for payout:\n{{amounts}}\n\nSubmit a request in Tribute (on request — from the 16th for days 1–15, from the 1st for days 16–31). ModelMate will transfer your share after the request is processed.",
+    "recentDonations": "Recent donations",
+    "activeDonationLinks": "Active links",
+    "noActiveDonation": "No active donation — create one and submit for review under “Create donation”.",
     "platformNotConfigured": "Platform Tribute is not configured on the server yet — requests are saved; link activation will be available after setup.",
     "createTitle": "New donation",
     "editTitle": "Edit donation",

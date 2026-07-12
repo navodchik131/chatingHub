@@ -1,5 +1,80 @@
 /* Platform creator donations — cabinet + admin */
 
+.donations-inner-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 1.25rem;
+  padding: 0.25rem;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.donations-inner-tab {
+  flex: 1 1 auto;
+  min-width: 140px;
+  padding: 0.55rem 1rem;
+  border: none;
+  border-radius: 9px;
+  background: transparent;
+  color: #b8c0d0;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.donations-inner-tab:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.donations-inner-tab.active {
+  color: #fff;
+  background: rgba(142, 120, 255, 0.35);
+}
+
+.donations-payout-policy {
+  margin-bottom: 1rem;
+}
+
+.donations-policy-link {
+  display: inline-block;
+  margin-top: 0.5rem;
+  font-size: 0.875rem;
+  color: #9eb8ff;
+}
+
+.donations-summary-grid {
+  margin-top: 0.5rem;
+}
+
+.donations-summary-currency-group {
+  display: contents;
+}
+
+.donations-summary-currency-label {
+  grid-column: 1 / -1;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #8b95a8;
+  margin-top: 0.35rem;
+}
+
+.donations-payout-min-hint {
+  margin: 0.75rem 0 0;
+}
+
+.donations-payout-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
 .cabinet-donations .donations-form-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
