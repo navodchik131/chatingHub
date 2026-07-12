@@ -734,6 +734,7 @@ class CreatorDonationLinkOut(BaseModel):
     description: str | None = None
     button_text: str | None = None
     cover_image_url: str | None = None
+    has_cover: bool = False
     currency: str
     min_amount_minor: int | None = None
     allow_one_time: bool
@@ -766,6 +767,24 @@ class CreatorDonationEventOut(BaseModel):
 class AdminCreatorDonationLinkOut(CreatorDonationLinkOut):
     user_id: int
     admin_notes_internal: str | None = None
+
+
+class TributeProductBriefOut(BaseModel):
+    id: int
+    type: str | None = None
+    name: str | None = None
+    amount: int | None = None
+    currency: str | None = None
+    web_link: str | None = None
+    telegram_link: str | None = None
+    status: str | None = None
+
+
+class TributeProductsListOut(BaseModel):
+    rows: list[TributeProductBriefOut] = Field(default_factory=list)
+    total: int = 0
+    page: int = 1
+    note: str | None = None
 
 
 class AdminCreatorDonationActivateIn(BaseModel):

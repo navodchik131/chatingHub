@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.deps import get_current_user
@@ -14,17 +15,19 @@ from app.schemas import (
     CreatorDonationLinkOut,
     CreatorDonationLinkPatchIn,
 )
+from app.services.creator_donation_cover import resolve_creator_donation_cover
 from app.services.creator_donations import (
+    aggregate_donation_totals,
     create_creator_donation_link,
     delete_creator_donation_link,
+    donation_link_to_dict as _link_dict,
     get_creator_donation_link,
     list_creator_donation_events,
     list_creator_donation_links,
     update_creator_donation_link,
+    upload_creator_donation_cover,
 )
-from app.services.creator_donations import donation_link_to_dict as _link_dict
-from app.services.creator_donations import aggregate_donation_totals
-from app.services.workspace import is_workspace_owner
+from app.services.workspace import is_workspace_owner, workspace_owner_id
 
 router = APIRouter(prefix="/creator-donations", tags=["creator-donations"])
 
@@ -90,6 +93,43 @@ async def creator_donations_patch(
     data = body.model_dump(exclude_unset=True)
     row = await update_creator_donation_link(session, viewer=user, link_id=link_id, data=data)
     return CreatorDonationLinkOut.model_validate(row)
+
+
+@router.post("/{link_id}/cover", response_model=CreatorDonationLinkOut)
+async def creator_donations_upload_cover(
+    link_id: int,
+    cover: UploadFile = File(...),
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> CreatorDonationLinkOut:
+    _assert_owner(user)
+    raw = await cover.read()
+    try:
+        row = await upload_creator_donation_cover(
+            session,
+            viewer=user,
+            link_id=link_id,
+            raw=raw,
+            content_type=cover.content_type,
+            filename=cover.filename,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    return CreatorDonationLinkOut.model_validate(row)
+
+
+@router.get("/{link_id}/cover")
+async def creator_donations_get_cover(
+    link_id: int,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    _assert_owner(user)
+    row = await get_creator_donation_link(session, viewer=user, link_id=link_id)
+    path = resolve_creator_donation_cover(workspace_owner_id(user), row.cover_image_url)
+    if not path:
+        raise HTTPException(status_code=404, detail="cover not found")
+    return FileResponse(path, media_type=None, filename=path.name)
 
 
 @router.delete("/{link_id}")

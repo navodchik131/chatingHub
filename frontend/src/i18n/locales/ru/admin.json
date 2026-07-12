@@ -259,6 +259,14 @@
     "empty": "Нет заявок на модерации.",
     "activate": "Активировать",
     "reject": "Отклонить",
+    "loadTributeProducts": "Загрузить products из Tribute",
+    "hideProducts": "Скрыть список",
+    "copyId": "Копировать ID",
+    "downloadCover": "Скачать обложку",
+    "buttonLabel": "Кнопка",
+    "productName": "Название",
+    "productAmount": "Сумма",
+    "pickProductHint": "Скопируйте ID из таблицы products и вставьте в поле Tribute ID (donation_request_id для классических донатов берётся из Dashboard).",
     "rejectNotesPrompt": "Причина отклонения (необязательно):",
     "fields": {
       "currency": "Валюта",
@@ -270,7 +278,8 @@
       "tgLink": "Telegram link (optional)"
     },
     "errors": {
-      "actionFailed": "Не удалось выполнить действие"
+      "actionFailed": "Не удалось выполнить действие",
+      "productsFailed": "Не удалось загрузить products из Tribute"
     }
   }
 }

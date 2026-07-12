@@ -511,7 +511,8 @@
       "title": "Title",
       "description": "Description",
       "buttonText": "Button text",
-      "coverUrl": "Cover (URL)",
+      "coverUpload": "Cover image",
+    "hasCover": "has cover",
       "currency": "Currency",
       "minAmount": "Minimum amount",
       "frequency": "Payment frequency",
@@ -525,7 +526,8 @@
       "minAmount": "1.00"
     },
     "hints": {
-      "minAmount": "Leave empty for no minimum on our side; Tribute platform limits apply (from €1 / $1 / ₽100)."
+      "minAmount": "Leave empty for no minimum on our side; Tribute platform limits apply (from €1 / $1 / ₽100).",
+      "coverUpload": "JPG, PNG, WebP or GIF, up to 5 MB."
     },
     "status": {
       "draft": "Draft",
@@ -546,7 +548,8 @@
     },
     "errors": {
       "saveFailed": "Could not save",
-      "deleteFailed": "Could not delete"
+      "deleteFailed": "Could not delete",
+      "coverFailed": "Saved, but cover upload failed"
     }
   }
 }

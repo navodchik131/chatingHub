@@ -259,6 +259,14 @@
     "empty": "No requests pending review.",
     "activate": "Activate",
     "reject": "Reject",
+    "loadTributeProducts": "Load Tribute products",
+    "hideProducts": "Hide list",
+    "copyId": "Copy ID",
+    "downloadCover": "Download cover",
+    "buttonLabel": "Button",
+    "productName": "Name",
+    "productAmount": "Amount",
+    "pickProductHint": "Copy an ID from the products table into the Tribute ID field (donation_request_id for classic donations comes from the Dashboard).",
     "rejectNotesPrompt": "Rejection reason (optional):",
     "fields": {
       "currency": "Currency",
@@ -270,7 +278,8 @@
       "tgLink": "Telegram link (optional)"
     },
     "errors": {
-      "actionFailed": "Action failed"
+      "actionFailed": "Action failed",
+      "productsFailed": "Could not load Tribute products"
     }
   }
 }

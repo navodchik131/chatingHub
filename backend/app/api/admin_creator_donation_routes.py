@@ -3,23 +3,77 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.deps import get_platform_admin
-from app.db.models import User
+from app.config import settings
+from app.db.models import CreatorDonationLink, User
 from app.db.session import get_session
 from app.schemas import (
     AdminCreatorDonationActivateIn,
     AdminCreatorDonationLinkOut,
     AdminCreatorDonationRejectIn,
+    TributeProductBriefOut,
+    TributeProductsListOut,
 )
+from app.services.creator_donation_cover import resolve_creator_donation_cover
 from app.services.creator_donations import (
     admin_activate_creator_donation_link,
     admin_list_creator_donation_links,
     admin_reject_creator_donation_link,
 )
+from app.services.tribute_billing_client import fetch_tribute_products
 
 router = APIRouter(prefix="/admin/creator-donations", tags=["admin"])
+
+
+@router.get("/tribute-products", response_model=TributeProductsListOut)
+async def admin_tribute_products_list(
+    page: int = Query(default=1, ge=1),
+    size: int = Query(default=50, ge=1, le=100),
+    _admin: User = Depends(get_platform_admin),
+) -> TributeProductsListOut:
+    if not settings.tribute_billing_configured:
+        raise HTTPException(status_code=503, detail="tribute billing not configured")
+    api_key = (settings.tribute_billing_api_key or "").strip()
+    try:
+        data = await fetch_tribute_products(api_key=api_key, page=page, size=size)
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
+
+    rows_raw = data.get("rows") if isinstance(data.get("rows"), list) else []
+    items: list[TributeProductBriefOut] = []
+    for row in rows_raw:
+        if not isinstance(row, dict):
+            continue
+        pid = row.get("id")
+        if pid is None:
+            continue
+        items.append(
+            TributeProductBriefOut(
+                id=int(pid),
+                type=str(row.get("type") or "") or None,
+                name=str(row.get("name") or "") or None,
+                amount=int(row["amount"]) if row.get("amount") is not None else None,
+                currency=str(row.get("currency") or "") or None,
+                web_link=str(row.get("webLink") or row.get("web_link") or "") or None,
+                telegram_link=str(row.get("link") or "") or None,
+                status=str(row.get("status") or "") or None,
+            )
+        )
+    meta = data.get("meta") if isinstance(data.get("meta"), dict) else {}
+    total = int(meta.get("total") or len(items))
+    return TributeProductsListOut(
+        rows=items,
+        total=total,
+        page=page,
+        note=(
+            "Список digital/custom/physical products из Tribute API. "
+            "Классические Donations могут не отображаться здесь — "
+            "для них используйте donation_request_id из Creator Dashboard."
+        ),
+    )
 
 
 @router.get("", response_model=list[AdminCreatorDonationLinkOut])
@@ -31,6 +85,21 @@ async def admin_creator_donations_list(
 ) -> list[AdminCreatorDonationLinkOut]:
     rows = await admin_list_creator_donation_links(session, status=status, limit=limit)
     return [AdminCreatorDonationLinkOut.model_validate(r) for r in rows]
+
+
+@router.get("/{link_id}/cover")
+async def admin_creator_donation_cover(
+    link_id: int,
+    _admin: User = Depends(get_platform_admin),
+    session: AsyncSession = Depends(get_session),
+):
+    row = await session.get(CreatorDonationLink, link_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="donation link not found")
+    path = resolve_creator_donation_cover(row.user_id, row.cover_image_url)
+    if not path:
+        raise HTTPException(status_code=404, detail="cover not found")
+    return FileResponse(path, media_type=None, filename=f"donation-cover-{link_id}{path.suffix}")
 
 
 @router.post("/{link_id}/activate", response_model=AdminCreatorDonationLinkOut)

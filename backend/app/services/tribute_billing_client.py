@@ -12,6 +12,28 @@ log = logging.getLogger(__name__)
 TRIBUTE_API = "https://tribute.tg/api/v1"
 
 
+async def fetch_tribute_products(
+    *,
+    api_key: str,
+    page: int = 1,
+    size: int = 50,
+) -> dict[str, Any]:
+    key = (api_key or "").strip()
+    if not key:
+        raise RuntimeError("tribute billing api key not configured")
+    headers = {"Api-Key": key}
+    params = {"page": max(1, int(page)), "size": max(1, min(int(size), 100)), "desc": "true"}
+    async with httpx.AsyncClient(timeout=45.0) as client:
+        r = await client.get(f"{TRIBUTE_API}/products", headers=headers, params=params)
+    if r.status_code >= 400:
+        log.warning("tribute products list failed status=%s", r.status_code)
+        raise RuntimeError(f"Tribute HTTP {r.status_code}")
+    data = r.json()
+    if not isinstance(data, dict):
+        raise RuntimeError("Tribute: invalid products response")
+    return data
+
+
 async def fetch_tribute_product(
     product_id: int,
     *,

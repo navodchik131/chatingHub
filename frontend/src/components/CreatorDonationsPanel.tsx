@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { apiFetch } from '../api'
 import { formatAppNumber } from '../i18n'
+import '../styles/donations-ui.css'
 
 export interface StudioModelOption {
   id: number
@@ -15,6 +16,7 @@ export interface CreatorDonationLink {
   description: string | null
   button_text: string | null
   cover_image_url: string | null
+  has_cover?: boolean
   currency: 'EUR' | 'RUB' | 'USD'
   min_amount_minor: number | null
   allow_one_time: boolean
@@ -48,7 +50,6 @@ const EMPTY_FORM = {
   title: '',
   description: '',
   button_text: '',
-  cover_image_url: '',
   currency: 'EUR' as 'EUR' | 'RUB' | 'USD',
   min_amount_major: '',
   allow_one_time: true,
@@ -82,6 +83,13 @@ function statusClass(status: CreatorDonationLink['status']): string {
   return 'is-muted'
 }
 
+async function uploadCoverFile(linkId: number, file: File): Promise<boolean> {
+  const fd = new FormData()
+  fd.append('cover', file)
+  const r = await apiFetch(`/api/creator-donations/${linkId}/cover`, { method: 'POST', body: fd })
+  return r.ok
+}
+
 export interface CreatorDonationsPanelProps {
   studioModels: StudioModelOption[]
   platformConfigured?: boolean
@@ -98,7 +106,17 @@ export function CreatorDonationsPanel({
   const [error, setError] = useState<string | null>(null)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [form, setForm] = useState({ ...EMPTY_FORM })
+  const [coverFile, setCoverFile] = useState<File | null>(null)
+  const [coverPreview, setCoverPreview] = useState<string | null>(null)
+  const [existingCover, setExistingCover] = useState(false)
   const [selectedLinkId, setSelectedLinkId] = useState<number | null>(null)
+
+  const loadCoverPreview = useCallback(async (linkId: number) => {
+    const r = await apiFetch(`/api/creator-donations/${linkId}/cover`)
+    if (!r.ok) return null
+    const blob = await r.blob()
+    return URL.createObjectURL(blob)
+  }, [])
 
   const load = useCallback(async () => {
     const [linksRes, eventsRes] = await Promise.all([
@@ -113,9 +131,31 @@ export function CreatorDonationsPanel({
     void load()
   }, [load])
 
+  useEffect(() => {
+    if (coverFile) {
+      const url = URL.createObjectURL(coverFile)
+      setCoverPreview(url)
+      return () => URL.revokeObjectURL(url)
+    }
+    if (existingCover && editingId) {
+      let cancelled = false
+      void loadCoverPreview(editingId).then((url) => {
+        if (!cancelled && url) setCoverPreview(url)
+      })
+      return () => {
+        cancelled = true
+      }
+    }
+    setCoverPreview(null)
+    return undefined
+  }, [coverFile, existingCover, editingId, loadCoverPreview])
+
   const resetForm = () => {
     setEditingId(null)
     setForm({ ...EMPTY_FORM })
+    setCoverFile(null)
+    setExistingCover(false)
+    setCoverPreview(null)
     setError(null)
   }
 
@@ -125,13 +165,14 @@ export function CreatorDonationsPanel({
       title: link.title,
       description: link.description ?? '',
       button_text: link.button_text ?? '',
-      cover_image_url: link.cover_image_url ?? '',
       currency: link.currency,
       min_amount_major: minorToMajor(link.min_amount_minor),
       allow_one_time: link.allow_one_time,
       allow_recurring: link.allow_recurring,
       studio_model_id: link.studio_model_id != null ? String(link.studio_model_id) : '',
     })
+    setCoverFile(null)
+    setExistingCover(Boolean(link.has_cover))
     setSelectedLinkId(link.id)
   }
 
@@ -139,7 +180,6 @@ export function CreatorDonationsPanel({
     title: form.title.trim(),
     description: form.description.trim() || null,
     button_text: form.button_text.trim() || null,
-    cover_image_url: form.cover_image_url.trim() || null,
     currency: form.currency,
     min_amount_minor: majorToMinor(form.min_amount_major),
     allow_one_time: form.allow_one_time,
@@ -162,6 +202,15 @@ export function CreatorDonationsPanel({
         const data = (await r.json().catch(() => ({}))) as { detail?: string }
         setError(data.detail ?? t('donationsExt.errors.saveFailed'))
         return
+      }
+      const data = (await r.json()) as CreatorDonationLink
+      if (coverFile) {
+        const ok = await uploadCoverFile(data.id, coverFile)
+        if (!ok) {
+          setError(t('donationsExt.errors.coverFailed'))
+          await load()
+          return
+        }
       }
       resetForm()
       await load()
@@ -219,8 +268,8 @@ export function CreatorDonationsPanel({
           </h4>
         </div>
 
-        <div className="cabinet-module-form cabinet-module-form--grid">
-          <label className="cabinet-field-span2">
+        <div className="donations-form-grid">
+          <label className="donations-field-full">
             {t('donationsExt.fields.title')}
             <input
               value={form.title}
@@ -231,7 +280,7 @@ export function CreatorDonationsPanel({
             />
           </label>
 
-          <label className="cabinet-field-span2">
+          <label className="donations-field-full">
             {t('donationsExt.fields.description')}
             <textarea
               rows={3}
@@ -251,17 +300,6 @@ export function CreatorDonationsPanel({
               disabled={busy}
               onChange={(e) => setForm((f) => ({ ...f, button_text: e.target.value }))}
               placeholder={t('donationsExt.placeholders.buttonText')}
-            />
-          </label>
-
-          <label>
-            {t('donationsExt.fields.coverUrl')}
-            <input
-              value={form.cover_image_url}
-              maxLength={2048}
-              disabled={busy}
-              onChange={(e) => setForm((f) => ({ ...f, cover_image_url: e.target.value }))}
-              placeholder="https://..."
             />
           </label>
 
@@ -311,45 +349,75 @@ export function CreatorDonationsPanel({
                 ))}
               </select>
             </label>
-          ) : null}
+          ) : (
+            <div aria-hidden />
+          )}
 
-          <fieldset className="cabinet-field-span2 cabinet-check-row">
-            <legend className="small">{t('donationsExt.fields.frequency')}</legend>
-            <label className="cabinet-inline-check">
-              <input
-                type="checkbox"
-                checked={form.allow_one_time}
-                disabled={busy}
-                onChange={(e) => setForm((f) => ({ ...f, allow_one_time: e.target.checked }))}
-              />
-              {t('donationsExt.fields.allowOneTime')}
-            </label>
-            <label className="cabinet-inline-check">
-              <input
-                type="checkbox"
-                checked={form.allow_recurring}
-                disabled={busy}
-                onChange={(e) => setForm((f) => ({ ...f, allow_recurring: e.target.checked }))}
-              />
-              {t('donationsExt.fields.allowRecurring')}
-            </label>
+          <div className="donations-field-full donations-cover-field">
+            <span>{t('donationsExt.fields.coverUpload')}</span>
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              disabled={busy}
+              onChange={(e) => {
+                const file = e.target.files?.[0] ?? null
+                setCoverFile(file)
+                if (file) setExistingCover(false)
+              }}
+            />
+            {(coverPreview || coverFile) && (
+              <div className="donations-cover-preview">
+                {coverPreview ? <img src={coverPreview} alt="" /> : null}
+                {coverFile ? <span className="donations-cover-name">{coverFile.name}</span> : null}
+              </div>
+            )}
+            <span className="small muted">{t('donationsExt.hints.coverUpload')}</span>
+          </div>
+
+          <fieldset className="donations-frequency">
+            <legend>{t('donationsExt.fields.frequency')}</legend>
+            <div className="donations-frequency-row">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={form.allow_one_time}
+                  disabled={busy}
+                  onChange={(e) => setForm((f) => ({ ...f, allow_one_time: e.target.checked }))}
+                />
+                {t('donationsExt.fields.allowOneTime')}
+              </label>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={form.allow_recurring}
+                  disabled={busy}
+                  onChange={(e) => setForm((f) => ({ ...f, allow_recurring: e.target.checked }))}
+                />
+                {t('donationsExt.fields.allowRecurring')}
+              </label>
+            </div>
           </fieldset>
-        </div>
 
-        {error ? <p className="cabinet-form-error">{error}</p> : null}
+          {error ? <p className="cabinet-form-error donations-field-full">{error}</p> : null}
 
-        <div className="cabinet-module-actions">
-          <button type="button" className="ghost-btn" disabled={busy} onClick={() => void save(false)}>
-            {t('donationsExt.saveDraft')}
-          </button>
-          <button type="button" className="primary-btn" disabled={busy || !form.title.trim()} onClick={() => void save(true)}>
-            {busy ? '…' : t('donationsExt.submitForReview')}
-          </button>
-          {editingId ? (
-            <button type="button" className="ghost-btn" disabled={busy} onClick={resetForm}>
-              {t('donationsExt.cancelEdit')}
+          <div className="donations-form-actions">
+            <button type="button" className="ghost-btn" disabled={busy} onClick={() => void save(false)}>
+              {t('donationsExt.saveDraft')}
             </button>
-          ) : null}
+            <button
+              type="button"
+              className="primary-btn"
+              disabled={busy || !form.title.trim()}
+              onClick={() => void save(true)}
+            >
+              {busy ? '…' : t('donationsExt.submitForReview')}
+            </button>
+            {editingId ? (
+              <button type="button" className="ghost-btn" disabled={busy} onClick={resetForm}>
+                {t('donationsExt.cancelEdit')}
+              </button>
+            ) : null}
+          </div>
         </div>
       </section>
 
@@ -373,15 +441,16 @@ export function CreatorDonationsPanel({
                   {link.currency}
                   {link.min_amount_minor != null ? ` · min ${formatMoney(link.min_amount_minor, link.currency)}` : ''}
                   {link.donations_count ? ` · ${t('donationsExt.donationsCount', { count: link.donations_count })}` : ''}
+                  {link.has_cover ? ` · ${t('donationsExt.hasCover')}` : ''}
                 </p>
                 {link.status === 'rejected' && link.admin_notes ? (
                   <p className="small cabinet-form-error">{link.admin_notes}</p>
                 ) : null}
                 {link.status === 'active' && link.web_link ? (
                   <div className="cabinet-donation-card__links">
-                    <label className="cabinet-field-span2">
+                    <label>
                       {t('donationsExt.paymentLink')}
-                      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                      <div className="cabinet-link-row">
                         <input readOnly value={link.web_link} />
                         <button type="button" className="ghost-btn" onClick={() => void copyText(link.web_link!)}>
                           {t('donationsExt.copy')}
@@ -389,9 +458,9 @@ export function CreatorDonationsPanel({
                       </div>
                     </label>
                     {link.telegram_link ? (
-                      <label className="cabinet-field-span2">
+                      <label>
                         Telegram
-                        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                        <div className="cabinet-link-row">
                           <input readOnly value={link.telegram_link} />
                           <button type="button" className="ghost-btn" onClick={() => void copyText(link.telegram_link!)}>
                             {t('donationsExt.copy')}
@@ -404,7 +473,7 @@ export function CreatorDonationsPanel({
                 {link.status === 'pending' ? (
                   <p className="small muted">{t('donationsExt.pendingHint')}</p>
                 ) : null}
-                <div className="cabinet-module-actions">
+                <div className="cabinet-donation-card__actions">
                   {(link.status === 'draft' || link.status === 'pending' || link.status === 'rejected') && (
                     <button type="button" className="ghost-btn" onClick={() => fillForm(link)}>
                       {t('donationsExt.edit')}
@@ -466,9 +535,7 @@ export function CreatorDonationsPanel({
                       <td>{new Date(ev.occurred_at).toLocaleString()}</td>
                       <td>{formatMoney(ev.amount_minor, ev.currency)}</td>
                       <td className="mono">
-                        {ev.payer_telegram_user_id != null
-                          ? `tg:${ev.payer_telegram_user_id}`
-                          : '—'}
+                        {ev.payer_telegram_user_id != null ? `tg:${ev.payer_telegram_user_id}` : '—'}
                       </td>
                       <td>{t(`donationsExt.payoutStatus.${ev.payout_status}`, { defaultValue: ev.payout_status })}</td>
                     </tr>

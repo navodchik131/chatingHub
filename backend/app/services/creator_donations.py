@@ -10,7 +10,19 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import CreatorDonationEvent, CreatorDonationLink, User, UserStudioModel
+from app.services.creator_donation_cover import is_stored_cover_path
 from app.services.workspace import workspace_owner_id
+
+
+def cover_preview_url(link_id: int, storage: str | None) -> str | None:
+    raw = (storage or "").strip()
+    if not raw:
+        return None
+    if raw.startswith("http://") or raw.startswith("https://"):
+        return raw
+    if is_stored_cover_path(raw):
+        return f"/api/creator-donations/{int(link_id)}/cover"
+    return raw
 
 DONATION_CURRENCIES = frozenset({"EUR", "RUB", "USD"})
 DONATION_STATUSES = frozenset({"draft", "pending", "active", "rejected", "disabled"})
@@ -67,7 +79,8 @@ def donation_link_to_dict(link: CreatorDonationLink, *, totals: dict[str, Any] |
         "title": link.title,
         "description": link.description,
         "button_text": link.button_text,
-        "cover_image_url": link.cover_image_url,
+        "cover_image_url": cover_preview_url(link.id, link.cover_image_url),
+        "has_cover": bool(link.cover_image_url),
         "currency": link.currency,
         "min_amount_minor": link.min_amount_minor,
         "allow_one_time": bool(link.allow_one_time),
@@ -214,7 +227,7 @@ async def create_creator_donation_link(
         title=title,
         description=(str(data["description"]).strip() if data.get("description") else None),
         button_text=(str(data["button_text"]).strip() if data.get("button_text") else None),
-        cover_image_url=(str(data["cover_image_url"]).strip() if data.get("cover_image_url") else None),
+        cover_image_url=None,
         currency=currency,
         min_amount_minor=min_amount_minor,
         allow_one_time=bool(data.get("allow_one_time", True)),
@@ -239,6 +252,13 @@ async def update_creator_donation_link(
         raise HTTPException(status_code=400, detail="donation link cannot be edited in current status")
 
     owner_id = workspace_owner_id(viewer)
+    if "cover_image_url" in data:
+        val = data["cover_image_url"]
+        if val is None or str(val).strip() == "":
+            pass  # cover managed via upload endpoint
+        elif str(val).strip().startswith("http"):
+            row.cover_image_url = str(val).strip()
+
     if "currency" in data:
         row.currency = normalize_donation_currency(str(data["currency"]))
     if "min_amount_minor" in data:
@@ -253,7 +273,7 @@ async def update_creator_donation_link(
         await _validate_studio_model(session, owner_id=owner_id, studio_model_id=studio_model_id)
         row.studio_model_id = studio_model_id
 
-    for field in ("title", "description", "button_text", "cover_image_url"):
+    for field in ("title", "description", "button_text"):
         if field in data:
             val = data[field]
             if field == "title":
@@ -295,6 +315,40 @@ async def delete_creator_donation_link(
         raise HTTPException(status_code=400, detail="active donation link cannot be deleted")
     await session.delete(row)
     await session.commit()
+
+
+async def upload_creator_donation_cover(
+    session: AsyncSession,
+    *,
+    viewer: User,
+    link_id: int,
+    raw: bytes,
+    content_type: str | None,
+    filename: str | None,
+) -> dict[str, Any]:
+    from app.services.creator_donation_cover import (
+        delete_creator_donation_cover_file,
+        save_creator_donation_cover,
+    )
+
+    row = await get_creator_donation_link(session, viewer=viewer, link_id=link_id)
+    if row.status not in EDITABLE_STATUSES:
+        raise HTTPException(status_code=400, detail="donation link cannot be edited in current status")
+    owner_id = workspace_owner_id(viewer)
+    delete_creator_donation_cover_file(row.cover_image_url)
+    rel = save_creator_donation_cover(
+        owner_id=owner_id,
+        link_id=row.id,
+        raw=raw,
+        content_type=content_type,
+        filename=filename,
+    )
+    row.cover_image_url = rel
+    row.updated_at = datetime.now(timezone.utc)
+    await session.commit()
+    await session.refresh(row)
+    totals = await aggregate_donation_totals(session, link_ids=[row.id])
+    return donation_link_to_dict(row, totals=totals.get(row.id))
 
 
 async def list_creator_donation_events(
