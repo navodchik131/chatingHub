@@ -288,6 +288,9 @@ async def tribute_billing_webhook(
     if wh_secret:
         got = (request.query_params.get("secret") or "").strip()
         if got != wh_secret:
+            log.warning(
+                "tribute billing webhook: rejected missing or wrong ?secret= (Tribute URL must include it)"
+            )
             raise HTTPException(status_code=403, detail="webhook secret")
 
     raw = await request.body()
