@@ -371,6 +371,7 @@ async def init_db() -> None:
         await conn.run_sync(_migrate_tribute_connections)
         await conn.run_sync(_migrate_creator_donation_links)
         await conn.run_sync(_migrate_creator_donation_webhook_inbox)
+        await conn.run_sync(_migrate_creator_donation_telegram_bigint)
         await conn.run_sync(_migrate_conversation_notes)
         await conn.run_sync(_migrate_companion_bot)
         await conn.run_sync(_migrate_conversation_categories)
@@ -1304,7 +1305,7 @@ def _migrate_creator_donation_links(sync_conn) -> None:
                         event_name VARCHAR(64) NOT NULL,
                         amount_minor INTEGER NOT NULL,
                         currency VARCHAR(8) NOT NULL,
-                        payer_telegram_user_id INTEGER,
+                        payer_telegram_user_id BIGINT,
                         payout_status VARCHAR(16) NOT NULL DEFAULT 'pending',
                         occurred_at DATETIME NOT NULL,
                         raw_meta TEXT,
@@ -1329,7 +1330,7 @@ def _migrate_creator_donation_links(sync_conn) -> None:
                         event_name VARCHAR(64) NOT NULL,
                         amount_minor INTEGER NOT NULL,
                         currency VARCHAR(8) NOT NULL,
-                        payer_telegram_user_id INTEGER,
+                        payer_telegram_user_id BIGINT,
                         payout_status VARCHAR(16) NOT NULL DEFAULT 'pending',
                         occurred_at TIMESTAMPTZ NOT NULL,
                         raw_meta TEXT,
@@ -1366,6 +1367,38 @@ def _migrate_creator_donation_webhook_inbox(sync_conn) -> None:
     insp = inspect(sync_conn)
     if not insp.has_table("creator_donation_webhook_inbox"):
         CreatorDonationWebhookInbox.__table__.create(sync_conn, checkfirst=True)
+
+
+def _migrate_creator_donation_telegram_bigint(sync_conn) -> None:
+    """Telegram user id > int32 — BIGINT для payer_telegram_user_id."""
+    import logging
+
+    from sqlalchemy import inspect, text
+
+    log = logging.getLogger(__name__)
+    insp = inspect(sync_conn)
+    dialect = sync_conn.dialect.name
+    if dialect not in ("postgresql", "postgres"):
+        return
+
+    for table in ("creator_donation_events", "creator_donation_webhook_inbox"):
+        if not insp.has_table(table):
+            continue
+        cols = {c["name"]: c for c in insp.get_columns(table)}
+        col = cols.get("payer_telegram_user_id")
+        if not col:
+            continue
+        type_str = str(col.get("type") or "").upper()
+        if "BIGINT" in type_str or "INT8" in type_str:
+            continue
+        sync_conn.execute(
+            text(
+                f"ALTER TABLE {table} "
+                f"ALTER COLUMN payer_telegram_user_id TYPE BIGINT "
+                f"USING payer_telegram_user_id::bigint"
+            )
+        )
+        log.info("%s: payer_telegram_user_id migrated to BIGINT", table)
 
 
 def _migrate_chat_message_features(sync_conn) -> None:

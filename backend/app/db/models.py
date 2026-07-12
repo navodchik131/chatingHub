@@ -540,7 +540,7 @@ class CreatorDonationEvent(Base):
     amount_minor: Mapped[int] = mapped_column(Integer)
     currency: Mapped[str] = mapped_column(String(8))
     payer_telegram_user_id: Mapped[int | None] = mapped_column(
-        Integer, nullable=True, index=True
+        BigInteger, nullable=True, index=True
     )
     payout_status: Mapped[str] = mapped_column(String(16), default="pending", index=True)
     occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
@@ -565,7 +565,7 @@ class CreatorDonationWebhookInbox(Base):
     event_name: Mapped[str] = mapped_column(String(64))
     amount_minor: Mapped[int] = mapped_column(Integer)
     currency: Mapped[str] = mapped_column(String(8))
-    payer_telegram_user_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    payer_telegram_user_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     raw_meta: Mapped[str | None] = mapped_column(Text, nullable=True)
     resolved_link_id: Mapped[int | None] = mapped_column(
