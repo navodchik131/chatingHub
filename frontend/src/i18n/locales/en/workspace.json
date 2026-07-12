@@ -493,7 +493,7 @@
     },
     "tabsAria": "Donation sections",
     "payoutPolicyTitle": "Payouts on request",
-    "payoutPolicyBrief": "Funds are held on the Tribute schedule: donations from the 1st–15th become available on the 16th; from the 16th through month end — on the 1st of the next month. You can request a payout in Tribute once the date has passed and the minimum is reached (3,000 ₽ / €100 / $100). ModelMate transfers your share manually in those windows.",
+    "payoutPolicyBrief": "Funds are held on the Tribute schedule: donations from the 1st–15th become available on the 16th; from the 16th through month end — on the 1st of the next month. Submit a payout request here — ModelMate transfers manually to your crypto wallet. Platform fee is 2%. Minimum: 3,000 ₽ / €100 / $100.",
     "payoutPolicyLink": "More about Tribute payouts",
     "totalEarned": "Total earned",
     "availableForPayout": "Available for payout",
@@ -502,7 +502,17 @@
     "payoutMinimumHint": "Minimum to request: 3,000 ₽, €100, or $100",
     "requestPayout": "Request payout",
     "requestPayoutDisabled": "Available amount is below the Tribute minimum",
-    "requestPayoutConfirm": "Available for payout:\n{{amounts}}\n\nSubmit a request in Tribute (on request — from the 16th for days 1–15, from the 1st for days 16–31). ModelMate will transfer your share after the request is processed.",
+    "requestPayoutConfirm": "Payout request {{currency}}:\nAmount: {{amount}}\n2% fee: {{fee}}\nNet: {{net}}\nWallet: {{wallet}}\nAsset: {{asset}}\n\nSubmit request to admin?",
+    "payoutSettingsTitle": "Payout settings",
+    "payoutSettingsHint": "Set your crypto wallet and asset for manual transfer from ModelMate (mock for now, address not verified).",
+    "savePayoutSettings": "Save settings",
+    "payoutSettingsSaved": "Saved: {{asset}}",
+    "platformFeeHint": "A 2% platform fee is deducted from each payout.",
+    "payoutCurrencyPick": "Request currency",
+    "openPayoutRequestHint": "You already have an open request — wait for processing.",
+    "payoutSettingsRequiredHint": "Save payout settings (wallet and asset) first.",
+    "payoutRequestsTitle": "My payout requests",
+    "noPayoutRequests": "No requests yet.",
     "recentDonations": "Recent donations",
     "activeDonationLinks": "Active links",
     "noActiveDonation": "No active donation — create one and submit for review under “Create donation”.",
@@ -536,13 +546,16 @@
       "minAmount": "Minimum amount",
       "frequency": "Payment frequency",
       "allowOneTime": "One-time donations",
-      "allowRecurring": "Recurring donations"
+      "allowRecurring": "Recurring donations",
+      "walletAddress": "Crypto wallet",
+      "payoutAsset": "Currency and network"
     },
     "placeholders": {
       "title": "Support me",
       "description": "Briefly describe what fans are supporting.",
       "buttonText": "Donate",
-      "minAmount": "1.00"
+      "minAmount": "1.00",
+      "walletAddress": "UQ… / T… / 0x…"
     },
     "hints": {
       "minAmount": "Leave empty for no minimum on our side; Tribute platform limits apply (from €1 / $1 / ₽100).",
@@ -558,7 +571,22 @@
     },
     "payoutStatus": {
       "pending": "Pending",
+      "in_request": "In request",
       "paid": "Paid"
+    },
+    "payoutRequestStatus": {
+      "requested": "Pending",
+      "processing": "In progress",
+      "paid": "Completed",
+      "rejected": "Rejected"
+    },
+    "payoutRequestsTable": {
+      "date": "Date",
+      "amount": "Amount",
+      "fee": "Fee",
+      "net": "Net",
+      "asset": "Asset",
+      "status": "Status"
     },
     "table": {
       "date": "Date",
@@ -569,7 +597,10 @@
     "errors": {
       "saveFailed": "Could not save",
       "deleteFailed": "Could not delete",
-      "coverFailed": "Saved, but cover upload failed"
+      "coverFailed": "Saved, but cover upload failed",
+      "payoutSettingsFailed": "Could not save payout settings",
+      "payoutSettingsRequired": "Set your wallet in payout settings first",
+      "payoutRequestFailed": "Could not create payout request"
     }
   }
 }

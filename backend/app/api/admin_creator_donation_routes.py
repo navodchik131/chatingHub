@@ -12,11 +12,21 @@ from app.db.session import get_session
 from app.schemas import (
     AdminCreatorDonationActivateIn,
     AdminCreatorDonationBindIn,
+    AdminCreatorDonationEventOut,
     AdminCreatorDonationLinkOut,
     AdminCreatorDonationRejectIn,
+    AdminCreatorDonationStatsOut,
     AdminCreatorDonationWebhookInboxOut,
+    AdminCreatorPayoutRequestOut,
+    AdminCreatorPayoutRequestUpdateIn,
 )
 from app.services.creator_donation_cover import resolve_creator_donation_cover
+from app.services.creator_donation_payout import (
+    admin_donation_stats,
+    admin_list_all_events,
+    admin_update_payout_request,
+    list_payout_requests,
+)
 from app.services.creator_donations import (
     admin_activate_creator_donation_link,
     admin_bind_creator_donation_request_id,
@@ -50,6 +60,67 @@ async def admin_creator_donations_webhook_inbox(
         session, unresolved_only=unresolved_only, limit=limit
     )
     return [AdminCreatorDonationWebhookInboxOut.model_validate(r) for r in rows]
+
+
+@router.get("/stats", response_model=AdminCreatorDonationStatsOut)
+async def admin_creator_donations_stats(
+    _admin: User = Depends(get_platform_admin),
+    session: AsyncSession = Depends(get_session),
+) -> AdminCreatorDonationStatsOut:
+    data = await admin_donation_stats(session)
+    return AdminCreatorDonationStatsOut.model_validate(data)
+
+
+@router.get("/events", response_model=list[AdminCreatorDonationEventOut])
+async def admin_creator_donations_events(
+    user_id: int | None = Query(default=None, ge=1),
+    limit: int = Query(default=200, ge=1, le=500),
+    _admin: User = Depends(get_platform_admin),
+    session: AsyncSession = Depends(get_session),
+) -> list[AdminCreatorDonationEventOut]:
+    rows = await admin_list_all_events(session, user_id=user_id, limit=limit)
+    return [AdminCreatorDonationEventOut.model_validate(r) for r in rows]
+
+
+@router.get("/payout-requests", response_model=list[AdminCreatorPayoutRequestOut])
+async def admin_creator_payout_requests_list(
+    status: str | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+    _admin: User = Depends(get_platform_admin),
+    session: AsyncSession = Depends(get_session),
+) -> list[AdminCreatorPayoutRequestOut]:
+    rows = await list_payout_requests(session, limit=limit)
+    if status:
+        rows = [r for r in rows if r["status"] == status]
+    out: list[AdminCreatorPayoutRequestOut] = []
+    for row in rows:
+        user = await session.get(User, row["user_id"])
+        out.append(
+            AdminCreatorPayoutRequestOut.model_validate(
+                {**row, "user_email": user.email if user else None}
+            )
+        )
+    return out
+
+
+@router.patch("/payout-requests/{request_id}", response_model=AdminCreatorPayoutRequestOut)
+async def admin_creator_payout_request_update(
+    request_id: int,
+    body: AdminCreatorPayoutRequestUpdateIn,
+    admin: User = Depends(get_platform_admin),
+    session: AsyncSession = Depends(get_session),
+) -> AdminCreatorPayoutRequestOut:
+    row = await admin_update_payout_request(
+        session,
+        request_id=request_id,
+        status=body.status,
+        admin_notes=body.admin_notes,
+        admin_user_id=admin.id,
+    )
+    user = await session.get(User, row["user_id"])
+    return AdminCreatorPayoutRequestOut.model_validate(
+        {**row, "user_email": user.email if user else None}
+    )
 
 
 @router.get("/{link_id}/cover")

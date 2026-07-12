@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { apiFetch } from '../api'
+import { AdminCreatorDonationsEventsTab } from './AdminCreatorDonationsEventsTab'
+import { AdminCreatorDonationsPayoutsTab } from './AdminCreatorDonationsPayoutsTab'
+import { AdminCreatorDonationsStatsTab } from './AdminCreatorDonationsStatsTab'
 import '../styles/donations-ui.css'
+
+type AdminDonationsSubTab = 'moderation' | 'stats' | 'events' | 'payouts'
 
 interface AdminDonationLink {
   id: number
@@ -82,6 +87,7 @@ function buildTributeDonationBrief(row: AdminDonationLink, t: (key: string) => s
 
 export function AdminCreatorDonationsTab() {
   const { t } = useTranslation('admin')
+  const [subTab, setSubTab] = useState<AdminDonationsSubTab>('moderation')
   const [rows, setRows] = useState<AdminDonationLink[]>([])
   const [inbox, setInbox] = useState<WebhookInboxRow[]>([])
   const [busy, setBusy] = useState(false)
@@ -258,7 +264,29 @@ export function AdminCreatorDonationsTab() {
 
   return (
     <div className="admin-panel admin-donations-panel">
-      <h2>{t('creatorDonations.title')}</h2>
+      <h2>{t('creatorDonations.mainTitle')}</h2>
+
+      <div className="donations-inner-tabs admin-donations-subtabs" role="tablist" aria-label={t('creatorDonations.tabsAria')}>
+        {(['moderation', 'stats', 'events', 'payouts'] as const).map((tab) => (
+          <button
+            key={tab}
+            type="button"
+            role="tab"
+            aria-selected={subTab === tab}
+            className={subTab === tab ? 'donations-inner-tab active' : 'donations-inner-tab'}
+            onClick={() => setSubTab(tab)}
+          >
+            {t(`creatorDonations.tabs.${tab}`)}
+          </button>
+        ))}
+      </div>
+
+      {subTab === 'stats' ? <AdminCreatorDonationsStatsTab /> : null}
+      {subTab === 'events' ? <AdminCreatorDonationsEventsTab /> : null}
+      {subTab === 'payouts' ? <AdminCreatorDonationsPayoutsTab /> : null}
+
+      {subTab === 'moderation' ? (
+        <>
       <p className="muted">{t('creatorDonations.intro')}</p>
       <p className="admin-donation-api-note">{t('creatorDonations.noDonationsApi')}</p>
       <p className="admin-donation-api-note admin-donation-id-note">{t('creatorDonations.idFromWebhook')}</p>
@@ -486,6 +514,8 @@ export function AdminCreatorDonationsTab() {
           })}
         </div>
       )}
+        </>
+      ) : null}
     </div>
   )
 }

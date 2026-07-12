@@ -47,6 +47,36 @@ export interface CreatorDonationEvent {
   occurred_at: string
 }
 
+interface PayoutAssetOption {
+  id: string
+  label: string
+  payout_currency: string
+  network: string
+}
+
+interface PayoutSettings {
+  wallet_address: string
+  payout_currency: string
+  network: string
+  payout_asset: string
+  updated_at: string
+}
+
+interface PayoutRequestRow {
+  id: number
+  source_currency: string
+  amount_minor: number
+  platform_fee_minor: number
+  net_amount_minor: number
+  wallet_address: string
+  payout_currency: string
+  network: string
+  status: string
+  admin_notes: string | null
+  requested_at: string
+  processed_at: string | null
+}
+
 type DonationsSubTab = 'overview' | 'setup'
 
 const TRIBUTE_PAYOUTS_URL_RU = 'https://wiki.tribute.tg/ru/for-content-creators/payouts'
@@ -124,6 +154,11 @@ export function CreatorDonationsPanel({
   const [coverFile, setCoverFile] = useState<File | null>(null)
   const [coverPreview, setCoverPreview] = useState<string | null>(null)
   const [existingCover, setExistingCover] = useState(false)
+  const [payoutAssets, setPayoutAssets] = useState<PayoutAssetOption[]>([])
+  const [payoutSettings, setPayoutSettings] = useState<PayoutSettings | null>(null)
+  const [payoutSettingsForm, setPayoutSettingsForm] = useState({ wallet: '', payout_asset: 'USDT_TRC20' })
+  const [payoutRequests, setPayoutRequests] = useState<PayoutRequestRow[]>([])
+  const [payoutCurrency, setPayoutCurrency] = useState('')
 
   const loadCoverPreview = useCallback(async (linkId: number) => {
     const r = await apiFetch(`/api/creator-donations/${linkId}/cover`)
@@ -133,12 +168,24 @@ export function CreatorDonationsPanel({
   }, [])
 
   const load = useCallback(async () => {
-    const [linksRes, eventsRes] = await Promise.all([
+    const [linksRes, eventsRes, assetsRes, settingsRes, requestsRes] = await Promise.all([
       apiFetch('/api/creator-donations'),
       apiFetch('/api/creator-donations/events?limit=100'),
+      apiFetch('/api/creator-donations/payout-assets'),
+      apiFetch('/api/creator-donations/payout-settings'),
+      apiFetch('/api/creator-donations/payout-requests'),
     ])
     if (linksRes.ok) setLinks((await linksRes.json()) as CreatorDonationLink[])
     if (eventsRes.ok) setEvents((await eventsRes.json()) as CreatorDonationEvent[])
+    if (assetsRes.ok) setPayoutAssets((await assetsRes.json()) as PayoutAssetOption[])
+    if (settingsRes.ok) {
+      const data = (await settingsRes.json()) as PayoutSettings | null
+      setPayoutSettings(data)
+      if (data) {
+        setPayoutSettingsForm({ wallet: data.wallet_address, payout_asset: data.payout_asset })
+      }
+    }
+    if (requestsRes.ok) setPayoutRequests((await requestsRes.json()) as PayoutRequestRow[])
   }, [])
 
   useEffect(() => {
@@ -167,6 +214,14 @@ export function CreatorDonationsPanel({
   const payoutWikiUrl = i18n.language.startsWith('ru') ? TRIBUTE_PAYOUTS_URL_RU : TRIBUTE_PAYOUTS_URL_EN
 
   const payoutSummary = useMemo(() => summarizeDonationPayouts(events), [events])
+
+  const hasOpenPayoutRequest = useMemo(
+    () => payoutRequests.some((r) => r.status === 'requested' || r.status === 'processing'),
+    [payoutRequests],
+  )
+
+  const eligibleCurrencies = payoutSummary.eligibleCurrencies
+  const selectedPayoutCurrency = payoutCurrency || eligibleCurrencies[0] || ''
 
   const activeLinks = useMemo(() => links.filter((l) => l.status === 'active'), [links])
 
@@ -275,16 +330,66 @@ export function CreatorDonationsPanel({
     }
   }
 
-  const requestPayout = () => {
-    const amounts = payoutSummary.eligibleCurrencies
-      .map((cur) => formatMoney(payoutSummary.availableByCurrency[cur] ?? 0, cur))
-      .join('\n')
+  const savePayoutSettings = async () => {
+    setBusy(true)
+    setError(null)
+    try {
+      const r = await apiFetch('/api/creator-donations/payout-settings', {
+        method: 'PUT',
+        body: JSON.stringify({
+          wallet_address: payoutSettingsForm.wallet.trim(),
+          payout_asset: payoutSettingsForm.payout_asset,
+        }),
+      })
+      if (!r.ok) {
+        const data = (await r.json().catch(() => ({}))) as { detail?: string }
+        setError(data.detail ?? t('donationsExt.errors.payoutSettingsFailed'))
+        return
+      }
+      await load()
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const requestPayout = async () => {
+    if (!selectedPayoutCurrency) return
+    if (!payoutSettings?.wallet_address?.trim()) {
+      setError(t('donationsExt.errors.payoutSettingsRequired'))
+      return
+    }
+    const amount = payoutSummary.availableByCurrency[selectedPayoutCurrency] ?? 0
+    const fee = Math.round(amount * 0.02)
+    const net = amount - fee
     if (
-      window.confirm(
-        t('donationsExt.requestPayoutConfirm', { amounts: amounts || '—' }),
+      !window.confirm(
+        t('donationsExt.requestPayoutConfirm', {
+          currency: selectedPayoutCurrency,
+          amount: formatMoney(amount, selectedPayoutCurrency),
+          fee: formatMoney(fee, selectedPayoutCurrency),
+          net: formatMoney(net, selectedPayoutCurrency),
+          wallet: payoutSettings.wallet_address,
+          asset: `${payoutSettings.payout_currency} · ${payoutSettings.network}`,
+        }),
       )
     ) {
-      window.open(payoutWikiUrl, '_blank', 'noopener,noreferrer')
+      return
+    }
+    setBusy(true)
+    setError(null)
+    try {
+      const r = await apiFetch('/api/creator-donations/payout-requests', {
+        method: 'POST',
+        body: JSON.stringify({ source_currency: selectedPayoutCurrency }),
+      })
+      if (!r.ok) {
+        const data = (await r.json().catch(() => ({}))) as { detail?: string }
+        setError(data.detail ?? t('donationsExt.errors.payoutRequestFailed'))
+        return
+      }
+      await load()
+    } finally {
+      setBusy(false)
     }
   }
 
@@ -325,6 +430,8 @@ export function CreatorDonationsPanel({
 
       {subTab === 'overview' ? (
         <>
+          {error ? <p className="cabinet-banner cabinet-banner--warn">{error}</p> : null}
+
           <section className="cabinet-module donations-payout-policy">
             <h4 className="cabinet-module-title">{t('donationsExt.payoutPolicyTitle')}</h4>
             <p className="muted cabinet-module-body">{t('donationsExt.payoutPolicyBrief')}</p>
@@ -336,6 +443,57 @@ export function CreatorDonationsPanel({
             >
               {t('donationsExt.payoutPolicyLink')}
             </a>
+          </section>
+
+          <section className="cabinet-module donations-payout-settings">
+            <div className="cabinet-module-head">
+              <h4 className="cabinet-module-title">{t('donationsExt.payoutSettingsTitle')}</h4>
+            </div>
+            <p className="small muted cabinet-module-body">{t('donationsExt.payoutSettingsHint')}</p>
+            <div className="donations-form-grid donations-payout-settings-grid">
+              <label className="donations-field-full">
+                {t('donationsExt.fields.walletAddress')}
+                <input
+                  value={payoutSettingsForm.wallet}
+                  disabled={busy}
+                  placeholder={t('donationsExt.placeholders.walletAddress')}
+                  onChange={(e) => setPayoutSettingsForm((f) => ({ ...f, wallet: e.target.value }))}
+                />
+              </label>
+              <label>
+                {t('donationsExt.fields.payoutAsset')}
+                <select
+                  value={payoutSettingsForm.payout_asset}
+                  disabled={busy}
+                  onChange={(e) =>
+                    setPayoutSettingsForm((f) => ({ ...f, payout_asset: e.target.value }))
+                  }
+                >
+                  {payoutAssets.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="donations-payout-settings-actions">
+                <button
+                  type="button"
+                  className="primary-btn"
+                  disabled={busy || !payoutSettingsForm.wallet.trim()}
+                  onClick={() => void savePayoutSettings()}
+                >
+                  {t('donationsExt.savePayoutSettings')}
+                </button>
+              </div>
+            </div>
+            {payoutSettings ? (
+              <p className="small muted">
+                {t('donationsExt.payoutSettingsSaved', {
+                  asset: `${payoutSettings.payout_currency} · ${payoutSettings.network}`,
+                })}
+              </p>
+            ) : null}
           </section>
 
           <section className="cabinet-module">
@@ -374,20 +532,88 @@ export function CreatorDonationsPanel({
             </div>
 
             <p className="small muted donations-payout-min-hint">{t('donationsExt.payoutMinimumHint')}</p>
+            <p className="small muted donations-payout-fee-hint">{t('donationsExt.platformFeeHint')}</p>
 
             <div className="donations-payout-actions">
+              {eligibleCurrencies.length > 1 ? (
+                <label className="donations-payout-currency-pick">
+                  {t('donationsExt.payoutCurrencyPick')}
+                  <select
+                    value={selectedPayoutCurrency}
+                    disabled={busy}
+                    onChange={(e) => setPayoutCurrency(e.target.value)}
+                  >
+                    {eligibleCurrencies.map((cur) => (
+                      <option key={cur} value={cur}>
+                        {cur} — {formatMoney(payoutSummary.availableByCurrency[cur] ?? 0, cur)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
               <button
                 type="button"
                 className="primary-btn"
-                disabled={!payoutSummary.canRequestPayout}
-                onClick={requestPayout}
+                disabled={
+                  busy ||
+                  !payoutSummary.canRequestPayout ||
+                  hasOpenPayoutRequest ||
+                  !payoutSettings?.wallet_address
+                }
+                onClick={() => void requestPayout()}
               >
                 {t('donationsExt.requestPayout')}
               </button>
               {!payoutSummary.canRequestPayout && events.length > 0 ? (
                 <p className="small muted">{t('donationsExt.requestPayoutDisabled')}</p>
               ) : null}
+              {hasOpenPayoutRequest ? (
+                <p className="small muted">{t('donationsExt.openPayoutRequestHint')}</p>
+              ) : null}
+              {!payoutSettings?.wallet_address ? (
+                <p className="small muted">{t('donationsExt.payoutSettingsRequiredHint')}</p>
+              ) : null}
             </div>
+          </section>
+
+          <section className="cabinet-module">
+            <div className="cabinet-module-head">
+              <h4 className="cabinet-module-title">{t('donationsExt.payoutRequestsTitle')}</h4>
+            </div>
+            {payoutRequests.length === 0 ? (
+              <p className="muted cabinet-module-body">{t('donationsExt.noPayoutRequests')}</p>
+            ) : (
+              <div className="cabinet-table-wrap">
+                <table className="cabinet-table">
+                  <thead>
+                    <tr>
+                      <th>{t('donationsExt.payoutRequestsTable.date')}</th>
+                      <th>{t('donationsExt.payoutRequestsTable.amount')}</th>
+                      <th>{t('donationsExt.payoutRequestsTable.fee')}</th>
+                      <th>{t('donationsExt.payoutRequestsTable.net')}</th>
+                      <th>{t('donationsExt.payoutRequestsTable.asset')}</th>
+                      <th>{t('donationsExt.payoutRequestsTable.status')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {payoutRequests.map((req) => (
+                      <tr key={req.id}>
+                        <td>{new Date(req.requested_at).toLocaleString()}</td>
+                        <td>{formatMoney(req.amount_minor, req.source_currency)}</td>
+                        <td>{formatMoney(req.platform_fee_minor, req.source_currency)}</td>
+                        <td>{formatMoney(req.net_amount_minor, req.source_currency)}</td>
+                        <td>
+                          {req.payout_currency} · {req.network}
+                        </td>
+                        <td>
+                          {t(`donationsExt.payoutRequestStatus.${req.status}`, { defaultValue: req.status })}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </section>
 
           <section className="cabinet-module">

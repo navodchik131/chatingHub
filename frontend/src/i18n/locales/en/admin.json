@@ -254,6 +254,14 @@
     "placeholder": "Select a bot user to see download stats."
   },
   "creatorDonations": {
+    "mainTitle": "Creator donations",
+    "tabsAria": "Donation sections",
+    "tabs": {
+      "moderation": "Moderation",
+      "stats": "Statistics",
+      "events": "All donations",
+      "payouts": "Payout requests"
+    },
     "title": "Creator donations (moderation)",
     "intro": "Pending requests. Create the donation in Tribute Dashboard with the same fields the creator submitted.",
     "noDonationsApi": "Tribute has no API to list or create Donations — only manual creation in the Dashboard.",
@@ -306,6 +314,50 @@
       "actionFailed": "Action failed",
       "webLinkRequired": "Enter the Tribute Web link in the request card below first (under “After creating the donation”).",
       "copyFailed": "Could not copy to clipboard"
+    },
+    "payoutStatus": {
+      "pending": "Pending payout",
+      "in_request": "In request",
+      "paid": "Paid"
+    },
+    "stats": {
+      "loading": "Loading statistics…",
+      "events": "Total donations",
+      "activeLinks": "Active links",
+      "openPayouts": "Open requests",
+      "platformFee": "Platform fee",
+      "currency": "Currency",
+      "total": "Total",
+      "toTransfer": "To transfer",
+      "fee": "2% fee",
+      "net": "Net to creator",
+      "byCreator": "By creator",
+      "noCreators": "No donations yet.",
+      "creator": "Creator"
+    },
+    "events": {
+      "empty": "No incoming donations yet.",
+      "date": "Date",
+      "creator": "Creator",
+      "donation": "Donation",
+      "amount": "Amount",
+      "fee": "Fee",
+      "net": "Net",
+      "payer": "Payer",
+      "status": "Status"
+    },
+    "payouts": {
+      "empty": "No payout requests yet.",
+      "amount": "Amount",
+      "fee": "Fee",
+      "net": "Net",
+      "wallet": "Wallet",
+      "asset": "Asset / network",
+      "requested": "Requested",
+      "markProcessing": "In progress",
+      "markPaid": "Completed",
+      "reject": "Reject",
+      "rejectNotes": "Rejection reason (optional):"
     }
   }
 }

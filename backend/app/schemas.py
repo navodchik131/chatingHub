@@ -797,6 +797,94 @@ class AdminCreatorDonationRejectIn(BaseModel):
     admin_notes: str | None = Field(default=None, max_length=2000)
 
 
+class PayoutAssetOptionOut(BaseModel):
+    id: str
+    label: str
+    payout_currency: str
+    network: str
+
+
+class CreatorPayoutSettingsOut(BaseModel):
+    wallet_address: str
+    payout_currency: str
+    network: str
+    payout_asset: str
+    updated_at: datetime
+
+
+class CreatorPayoutSettingsIn(BaseModel):
+    wallet_address: str = Field(min_length=8, max_length=256)
+    payout_asset: str = Field(min_length=2, max_length=32)
+
+
+class CreatorPayoutRequestCreateIn(BaseModel):
+    source_currency: Literal["EUR", "RUB", "USD"]
+
+
+class CreatorPayoutRequestOut(BaseModel):
+    id: int
+    user_id: int
+    source_currency: str
+    amount_minor: int
+    platform_fee_minor: int
+    net_amount_minor: int
+    wallet_address: str
+    payout_currency: str
+    network: str
+    payout_asset: str
+    status: str
+    admin_notes: str | None = None
+    requested_at: datetime
+    processed_at: datetime | None = None
+    processed_by_admin_id: int | None = None
+
+
+class AdminCreatorPayoutRequestOut(CreatorPayoutRequestOut):
+    user_email: str | None = None
+
+
+class AdminCreatorPayoutRequestUpdateIn(BaseModel):
+    status: Literal["processing", "paid", "rejected"]
+    admin_notes: str | None = Field(default=None, max_length=2000)
+
+
+class AdminCreatorDonationStatsCreatorOut(BaseModel):
+    user_id: int
+    email: str
+    totals_by_currency: dict[str, int] = Field(default_factory=dict)
+    pending_by_currency: dict[str, int] = Field(default_factory=dict)
+    platform_fee_by_currency: dict[str, int] = Field(default_factory=dict)
+    net_to_transfer_by_currency: dict[str, int] = Field(default_factory=dict)
+
+
+class AdminCreatorDonationStatsOut(BaseModel):
+    totals_by_currency: dict[str, int] = Field(default_factory=dict)
+    pending_transfer_by_currency: dict[str, int] = Field(default_factory=dict)
+    platform_fee_by_currency: dict[str, int] = Field(default_factory=dict)
+    net_to_transfer_by_currency: dict[str, int] = Field(default_factory=dict)
+    creators: list[AdminCreatorDonationStatsCreatorOut] = Field(default_factory=list)
+    events_count: int = 0
+    active_links: int = 0
+    open_payout_requests: int = 0
+    platform_fee_percent: float = 2.0
+
+
+class AdminCreatorDonationEventOut(BaseModel):
+    id: int
+    user_id: int
+    user_email: str | None = None
+    link_title: str
+    creator_donation_link_id: int
+    amount_minor: int
+    currency: str
+    platform_fee_minor: int
+    net_amount_minor: int
+    payer_telegram_user_id: int | None = None
+    payout_status: str
+    payout_request_id: int | None = None
+    occurred_at: datetime
+
+
 class ChatterStatsRowOut(BaseModel):
     user_id: int
     member_login: str

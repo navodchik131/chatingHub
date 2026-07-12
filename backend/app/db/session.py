@@ -372,6 +372,7 @@ async def init_db() -> None:
         await conn.run_sync(_migrate_creator_donation_links)
         await conn.run_sync(_migrate_creator_donation_webhook_inbox)
         await conn.run_sync(_migrate_creator_donation_telegram_bigint)
+        await conn.run_sync(_migrate_creator_donation_payout)
         await conn.run_sync(_migrate_conversation_notes)
         await conn.run_sync(_migrate_companion_bot)
         await conn.run_sync(_migrate_conversation_categories)
@@ -1399,6 +1400,34 @@ def _migrate_creator_donation_telegram_bigint(sync_conn) -> None:
             )
         )
         log.info("%s: payer_telegram_user_id migrated to BIGINT", table)
+
+
+def _migrate_creator_donation_payout(sync_conn) -> None:
+    from sqlalchemy import inspect, text
+
+    from app.db.models import CreatorDonationPayoutRequest, CreatorPayoutSettings
+
+    insp = inspect(sync_conn)
+    if not insp.has_table("creator_payout_settings"):
+        CreatorPayoutSettings.__table__.create(sync_conn, checkfirst=True)
+    if not insp.has_table("creator_donation_payout_requests"):
+        CreatorDonationPayoutRequest.__table__.create(sync_conn, checkfirst=True)
+    if insp.has_table("creator_donation_events"):
+        cols = {c["name"] for c in insp.get_columns("creator_donation_events")}
+        if "payout_request_id" not in cols:
+            sync_conn.execute(
+                text(
+                    "ALTER TABLE creator_donation_events "
+                    "ADD COLUMN payout_request_id INTEGER "
+                    "REFERENCES creator_donation_payout_requests(id) ON DELETE SET NULL"
+                )
+            )
+            sync_conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_creator_donation_events_payout_request_id "
+                    "ON creator_donation_events(payout_request_id)"
+                )
+            )
 
 
 def _migrate_chat_message_features(sync_conn) -> None:

@@ -14,8 +14,22 @@ from app.schemas import (
     CreatorDonationLinkIn,
     CreatorDonationLinkOut,
     CreatorDonationLinkPatchIn,
+    CreatorPayoutRequestCreateIn,
+    CreatorPayoutRequestOut,
+    CreatorPayoutSettingsIn,
+    CreatorPayoutSettingsOut,
+    PayoutAssetOptionOut,
 )
 from app.services.creator_donation_cover import resolve_creator_donation_cover
+from app.services.creator_donation_payout import (
+    PAYOUT_ASSET_OPTIONS,
+    available_balance_by_currency,
+    create_payout_request,
+    get_payout_settings,
+    list_payout_requests,
+    payout_settings_to_dict,
+    upsert_payout_settings,
+)
 from app.services.creator_donations import (
     aggregate_donation_totals,
     create_creator_donation_link,
@@ -68,6 +82,75 @@ async def creator_donations_events(
     _assert_owner(user)
     rows = await list_creator_donation_events(session, viewer=user, link_id=link_id, limit=limit)
     return [CreatorDonationEventOut.model_validate(r) for r in rows]
+
+
+@router.get("/payout-assets", response_model=list[PayoutAssetOptionOut])
+async def creator_payout_assets(
+    user: User = Depends(get_current_user),
+) -> list[PayoutAssetOptionOut]:
+    _assert_owner(user)
+    return [PayoutAssetOptionOut.model_validate(a) for a in PAYOUT_ASSET_OPTIONS]
+
+
+@router.get("/payout-settings", response_model=CreatorPayoutSettingsOut | None)
+async def creator_payout_settings_get(
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    _assert_owner(user)
+    row = await get_payout_settings(session, user_id=workspace_owner_id(user))
+    data = payout_settings_to_dict(row)
+    return CreatorPayoutSettingsOut.model_validate(data) if data else None
+
+
+@router.put("/payout-settings", response_model=CreatorPayoutSettingsOut)
+async def creator_payout_settings_put(
+    body: CreatorPayoutSettingsIn,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> CreatorPayoutSettingsOut:
+    _assert_owner(user)
+    data = await upsert_payout_settings(
+        session,
+        user_id=workspace_owner_id(user),
+        wallet_address=body.wallet_address,
+        payout_asset=body.payout_asset,
+    )
+    return CreatorPayoutSettingsOut.model_validate(data)
+
+
+@router.get("/payout-balance")
+async def creator_payout_balance(
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, int]:
+    _assert_owner(user)
+    return await available_balance_by_currency(session, user_id=workspace_owner_id(user))
+
+
+@router.get("/payout-requests", response_model=list[CreatorPayoutRequestOut])
+async def creator_payout_requests_list(
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> list[CreatorPayoutRequestOut]:
+    _assert_owner(user)
+    rows = await list_payout_requests(session, user_id=workspace_owner_id(user))
+    return [CreatorPayoutRequestOut.model_validate(r) for r in rows]
+
+
+@router.post("/payout-requests", response_model=CreatorPayoutRequestOut)
+async def creator_payout_requests_create(
+    body: CreatorPayoutRequestCreateIn,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> CreatorPayoutRequestOut:
+    _assert_owner(user)
+    row = await create_payout_request(
+        session,
+        user_id=workspace_owner_id(user),
+        source_currency=body.source_currency,
+    )
+    return CreatorPayoutRequestOut.model_validate(row)
 
 
 @router.get("/{link_id}", response_model=CreatorDonationLinkOut)

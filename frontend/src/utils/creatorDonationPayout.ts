@@ -57,6 +57,10 @@ export function summarizeDonationPayouts(
       continue
     }
 
+    if (ev.payout_status === 'in_request') {
+      continue
+    }
+
     const at = new Date(ev.occurred_at)
     if (isDonationAvailableForPayout(at, now)) {
       availableByCurrency[cur] = (availableByCurrency[cur] ?? 0) + ev.amount_minor

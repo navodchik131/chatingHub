@@ -543,6 +543,11 @@ class CreatorDonationEvent(Base):
         BigInteger, nullable=True, index=True
     )
     payout_status: Mapped[str] = mapped_column(String(16), default="pending", index=True)
+    payout_request_id: Mapped[int | None] = mapped_column(
+        ForeignKey("creator_donation_payout_requests.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     raw_meta: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -551,6 +556,9 @@ class CreatorDonationEvent(Base):
 
     donation_link: Mapped[CreatorDonationLink] = relationship(
         "CreatorDonationLink", back_populates="events"
+    )
+    payout_request: Mapped["CreatorDonationPayoutRequest | None"] = relationship(
+        "CreatorDonationPayoutRequest", back_populates="events"
     )
 
 
@@ -575,6 +583,59 @@ class CreatorDonationWebhookInbox(Base):
     )
     resolved_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
+    )
+
+
+class CreatorPayoutSettings(Base):
+    """Криптокошелёк креатора для выплат донатов."""
+
+    __tablename__ = "creator_payout_settings"
+
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    wallet_address: Mapped[str] = mapped_column(String(256))
+    payout_currency: Mapped[str] = mapped_column(String(16))
+    network: Mapped[str] = mapped_column(String(32))
+    payout_asset: Mapped[str] = mapped_column(String(32))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+
+class CreatorDonationPayoutRequest(Base):
+    """Заявка креатора на вывод донатов (ModelMate → криптокошелёк)."""
+
+    __tablename__ = "creator_donation_payout_requests"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    source_currency: Mapped[str] = mapped_column(String(8))
+    amount_minor: Mapped[int] = mapped_column(Integer)
+    platform_fee_minor: Mapped[int] = mapped_column(Integer)
+    net_amount_minor: Mapped[int] = mapped_column(Integer)
+    wallet_address: Mapped[str] = mapped_column(String(256))
+    payout_currency: Mapped[str] = mapped_column(String(16))
+    network: Mapped[str] = mapped_column(String(32))
+    payout_asset: Mapped[str] = mapped_column(String(32))
+    status: Mapped[str] = mapped_column(String(16), default="requested", index=True)
+    admin_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    requested_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True
+    )
+    processed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    processed_by_admin_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+
+    events: Mapped[list["CreatorDonationEvent"]] = relationship(
+        "CreatorDonationEvent", back_populates="payout_request"
     )
 
 

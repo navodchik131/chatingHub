@@ -242,9 +242,95 @@
   gap: 1.25rem;
 }
 
-.admin-donations-toolbar {
-  display: none;
+.admin-donations-subtabs {
+  margin-bottom: 0.25rem;
 }
+
+.admin-donations-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.admin-donations-kpi {
+  padding: 0.85rem 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.admin-donations-kpi span {
+  font-size: 0.75rem;
+  color: #8b95a8;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.admin-donations-kpi strong {
+  font-size: 1.35rem;
+}
+
+.admin-donations-summary-table-wrap {
+  overflow-x: auto;
+}
+
+.admin-donations-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.admin-donations-table th,
+.admin-donations-table td {
+  padding: 0.55rem 0.65rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  text-align: left;
+}
+
+.admin-donations-table th {
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #8b95a8;
+}
+
+.donations-payout-settings-grid {
+  margin-top: 0.75rem;
+}
+
+.donations-payout-settings-actions {
+  display: flex;
+  align-items: flex-end;
+}
+
+.donations-payout-fee-hint {
+  margin-top: 0.35rem;
+}
+
+.donations-payout-currency-pick {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.875rem;
+}
+
+.donations-payout-currency-pick select {
+  min-width: 12rem;
+}
+
+@media (max-width: 900px) {
+  .admin-donations-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .admin-donation-meta-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 
 .admin-donation-queue {
   display: flex;
