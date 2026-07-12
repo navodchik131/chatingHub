@@ -24,15 +24,15 @@ interface AdminDonationLink {
   updated_at: string
 }
 
-interface TributeProduct {
+interface WebhookInboxRow {
   id: number
-  type: string | null
-  name: string | null
-  amount: number | null
-  currency: string | null
-  web_link: string | null
-  telegram_link: string | null
-  status: string | null
+  donation_request_id: number
+  event_name: string
+  amount_minor: number
+  currency: string
+  payer_telegram_user_id: number | null
+  received_at: string
+  resolved_link_id: number | null
 }
 
 function DonationCoverPreview({ linkId, hasCover }: { linkId: number; hasCover: boolean }) {
@@ -60,44 +60,49 @@ function DonationCoverPreview({ linkId, hasCover }: { linkId: number; hasCover: 
   return <img src={url} alt="" />
 }
 
+function formatAmount(minor: number | null, currency: string): string {
+  if (minor == null) return '—'
+  return `${(minor / 100).toFixed(2)} ${currency}`
+}
+
+function buildTributeDonationBrief(row: AdminDonationLink, t: (key: string) => string): string {
+  const lines = [
+    `${t('creatorDonations.copyBrief.title')}: ${row.title}`,
+    row.description ? `${t('creatorDonations.copyBrief.description')}: ${row.description}` : null,
+    row.button_text ? `${t('creatorDonations.copyBrief.button')}: ${row.button_text}` : null,
+    `${t('creatorDonations.fields.currency')}: ${row.currency}`,
+    `${t('creatorDonations.fields.min')}: ${formatAmount(row.min_amount_minor, row.currency)}`,
+    `${t('creatorDonations.fields.oneTime')}: ${row.allow_one_time ? 'yes' : 'no'}`,
+    `${t('creatorDonations.fields.recurring')}: ${row.allow_recurring ? 'yes' : 'no'}`,
+    `${t('creatorDonations.copyBrief.user')}: #${row.user_id}`,
+    `${t('creatorDonations.copyBrief.request')}: #${row.id}`,
+  ]
+  return lines.filter(Boolean).join('\n')
+}
+
 export function AdminCreatorDonationsTab() {
   const { t } = useTranslation('admin')
   const [rows, setRows] = useState<AdminDonationLink[]>([])
+  const [inbox, setInbox] = useState<WebhookInboxRow[]>([])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [products, setProducts] = useState<TributeProduct[]>([])
-  const [productsNote, setProductsNote] = useState<string | null>(null)
-  const [productsOpen, setProductsOpen] = useState(false)
+  const [copiedId, setCopiedId] = useState<number | null>(null)
   const [activateForms, setActivateForms] = useState<
-    Record<number, { tributeId: string; webLink: string; tgLink: string }>
+    Record<number, { donationRequestId: string; webLink: string; tgLink: string }>
   >({})
 
   const load = useCallback(async () => {
-    const r = await apiFetch('/api/admin/creator-donations?status=pending')
-    if (r.ok) setRows((await r.json()) as AdminDonationLink[])
+    const [linksRes, inboxRes] = await Promise.all([
+      apiFetch('/api/admin/creator-donations?status=moderation'),
+      apiFetch('/api/admin/creator-donations/webhook-inbox'),
+    ])
+    if (linksRes.ok) setRows((await linksRes.json()) as AdminDonationLink[])
+    if (inboxRes.ok) setInbox((await inboxRes.json()) as WebhookInboxRow[])
   }, [])
 
   useEffect(() => {
     void load()
   }, [load])
-
-  const loadTributeProducts = async () => {
-    setBusy(true)
-    setError(null)
-    try {
-      const r = await apiFetch('/api/admin/creator-donations/tribute-products?size=50')
-      if (!r.ok) {
-        setError(t('creatorDonations.errors.productsFailed'))
-        return
-      }
-      const data = (await r.json()) as { rows: TributeProduct[]; note?: string }
-      setProducts(data.rows ?? [])
-      setProductsNote(data.note ?? null)
-      setProductsOpen(true)
-    } finally {
-      setBusy(false)
-    }
-  }
 
   const downloadCover = async (linkId: number) => {
     const r = await apiFetch(`/api/admin/creator-donations/${linkId}/cover`)
@@ -109,6 +114,16 @@ export function AdminCreatorDonationsTab() {
     a.download = `donation-cover-${linkId}.jpg`
     a.click()
     URL.revokeObjectURL(url)
+  }
+
+  const copyDonationBrief = async (row: AdminDonationLink) => {
+    try {
+      await navigator.clipboard.writeText(buildTributeDonationBrief(row, t))
+      setCopiedId(row.id)
+      window.setTimeout(() => setCopiedId((cur) => (cur === row.id ? null : cur)), 2000)
+    } catch {
+      setError(t('creatorDonations.errors.copyFailed'))
+    }
   }
 
   const reject = async (id: number) => {
@@ -131,15 +146,14 @@ export function AdminCreatorDonationsTab() {
     }
   }
 
-  const activate = async (id: number) => {
-    const form = activateForms[id] ?? { tributeId: '', webLink: '', tgLink: '' }
+  const saveLinks = async (id: number) => {
+    const form = activateForms[id] ?? { donationRequestId: '', webLink: '', tgLink: '' }
     setBusy(true)
     setError(null)
     try {
       const r = await apiFetch(`/api/admin/creator-donations/${id}/activate`, {
         method: 'POST',
         body: JSON.stringify({
-          tribute_donation_request_id: Number(form.tributeId),
           web_link: form.webLink.trim(),
           telegram_link: form.tgLink.trim() || null,
         }),
@@ -154,11 +168,59 @@ export function AdminCreatorDonationsTab() {
     }
   }
 
-  const setFormField = (id: number, key: 'tributeId' | 'webLink' | 'tgLink', value: string) => {
+  const bindDonationId = async (linkId: number, donationRequestId: number, inboxId?: number) => {
+    setBusy(true)
+    setError(null)
+    try {
+      const r = await apiFetch(`/api/admin/creator-donations/${linkId}/bind-donation-id`, {
+        method: 'POST',
+        body: JSON.stringify({
+          tribute_donation_request_id: donationRequestId,
+          inbox_id: inboxId ?? null,
+        }),
+      })
+      if (!r.ok) {
+        setError(t('creatorDonations.errors.actionFailed'))
+        return
+      }
+      await load()
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const activateWithId = async (id: number) => {
+    const form = activateForms[id] ?? { donationRequestId: '', webLink: '', tgLink: '' }
+    setBusy(true)
+    setError(null)
+    try {
+      const r = await apiFetch(`/api/admin/creator-donations/${id}/activate`, {
+        method: 'POST',
+        body: JSON.stringify({
+          tribute_donation_request_id: Number(form.donationRequestId),
+          web_link: form.webLink.trim(),
+          telegram_link: form.tgLink.trim() || null,
+        }),
+      })
+      if (!r.ok) {
+        setError(t('creatorDonations.errors.actionFailed'))
+        return
+      }
+      await load()
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const setFormField = (
+    id: number,
+    key: 'donationRequestId' | 'webLink' | 'tgLink',
+    value: string,
+  ) => {
     setActivateForms((prev) => ({
       ...prev,
       [id]: {
-        tributeId: prev[id]?.tributeId ?? '',
+        donationRequestId: prev[id]?.donationRequestId ?? '',
         webLink: prev[id]?.webLink ?? '',
         tgLink: prev[id]?.tgLink ?? '',
         [key]: value,
@@ -166,87 +228,118 @@ export function AdminCreatorDonationsTab() {
     }))
   }
 
-  const formatAmount = (minor: number | null, currency: string) => {
-    if (minor == null) return '—'
-    return `${(minor / 100).toFixed(2)} ${currency}`
+  const applyInboxIdToForm = (linkId: number, donationRequestId: number) => {
+    setFormField(linkId, 'donationRequestId', String(donationRequestId))
   }
 
   return (
     <div className="admin-panel admin-donations-panel">
       <h2>{t('creatorDonations.title')}</h2>
       <p className="muted">{t('creatorDonations.intro')}</p>
-
-      <div className="admin-donations-toolbar">
-        <button type="button" className="primary-btn" disabled={busy} onClick={() => void loadTributeProducts()}>
-          {t('creatorDonations.loadTributeProducts')}
-        </button>
-        {productsOpen ? (
-          <button type="button" className="ghost-btn" onClick={() => setProductsOpen(false)}>
-            {t('creatorDonations.hideProducts')}
-          </button>
-        ) : null}
-      </div>
-
-      {productsOpen && products.length > 0 ? (
-        <div className="admin-tribute-products">
-          {productsNote ? <p className="admin-tribute-products__note">{productsNote}</p> : null}
-          <table>
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>{t('creatorDonations.productName')}</th>
-                <th>{t('creatorDonations.fields.currency')}</th>
-                <th>{t('creatorDonations.productAmount')}</th>
-                <th>Web</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {products.map((p) => (
-                <tr key={p.id}>
-                  <td className="mono">{p.id}</td>
-                  <td>{p.name ?? '—'}</td>
-                  <td>{p.currency ?? '—'}</td>
-                  <td>{formatAmount(p.amount, p.currency ?? '')}</td>
-                  <td className="mono" style={{ maxWidth: 180, wordBreak: 'break-all' }}>
-                    {p.web_link ? p.web_link.slice(0, 48) + (p.web_link.length > 48 ? '…' : '') : '—'}
-                  </td>
-                  <td>
-                    <button
-                      type="button"
-                      className="ghost-btn"
-                      onClick={() => {
-                        try {
-                          void navigator.clipboard.writeText(String(p.id))
-                        } catch {
-                          /* ignore */
-                        }
-                      }}
-                    >
-                      {t('creatorDonations.copyId')}
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : null}
+      <p className="admin-donation-api-note">{t('creatorDonations.noDonationsApi')}</p>
+      <p className="admin-donation-api-note admin-donation-id-note">{t('creatorDonations.idFromWebhook')}</p>
 
       {error ? <p className="admin-error">{error}</p> : null}
+
+      {inbox.length > 0 ? (
+        <section className="admin-donation-inbox">
+          <div className="admin-donation-inbox__head">
+            <h3>{t('creatorDonations.inboxTitle')}</h3>
+            <button type="button" className="ghost-btn" disabled={busy} onClick={() => void load()}>
+              {t('creatorDonations.refreshInbox')}
+            </button>
+          </div>
+          <p className="small muted">{t('creatorDonations.inboxHint')}</p>
+          <div className="admin-donation-inbox-list">
+            {inbox.map((item) => (
+              <div key={item.id} className="admin-donation-inbox-row">
+                <div className="admin-donation-inbox-row__main">
+                  <strong className="mono">donation_request_id = {item.donation_request_id}</strong>
+                  <span className="muted">
+                    {formatAmount(item.amount_minor, item.currency)} · {item.event_name}
+                  </span>
+                </div>
+                {rows.length === 1 ? (
+                  <button
+                    type="button"
+                    className="primary-btn"
+                    disabled={busy}
+                    onClick={() => void bindDonationId(rows[0].id, item.donation_request_id, item.id)}
+                  >
+                    {t('creatorDonations.bindToRequest', { id: rows[0].id })}
+                  </button>
+                ) : (
+                  rows.map((row) =>
+                    row.status === 'awaiting_id' ? (
+                      <button
+                        key={`${item.id}-${row.id}`}
+                        type="button"
+                        className="ghost-btn"
+                        disabled={busy}
+                        onClick={() => void bindDonationId(row.id, item.donation_request_id, item.id)}
+                      >
+                        {t('creatorDonations.bindToRequest', { id: row.id })}
+                      </button>
+                    ) : null,
+                  )
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : rows.some((r) => r.status === 'awaiting_id') ? (
+        <section className="admin-donation-inbox admin-donation-inbox--empty">
+          <div className="admin-donation-inbox__head">
+            <h3>{t('creatorDonations.inboxTitle')}</h3>
+            <button type="button" className="ghost-btn" disabled={busy} onClick={() => void load()}>
+              {t('creatorDonations.refreshInbox')}
+            </button>
+          </div>
+          <p className="small muted">{t('creatorDonations.inboxEmpty')}</p>
+        </section>
+      ) : null}
 
       {rows.length === 0 ? (
         <p className="muted">{t('creatorDonations.empty')}</p>
       ) : (
         <div className="admin-donation-queue">
           {rows.map((row) => {
-            const form = activateForms[row.id] ?? { tributeId: '', webLink: '', tgLink: '' }
+            const form = activateForms[row.id] ?? {
+              donationRequestId: row.tribute_donation_request_id
+                ? String(row.tribute_donation_request_id)
+                : '',
+              webLink: row.web_link ?? '',
+              tgLink: row.telegram_link ?? '',
+            }
+            const awaitingId = row.status === 'awaiting_id'
             return (
               <article key={row.id} className="admin-donation-card">
                 <header className="admin-donation-card__header">
                   <span className="admin-donation-card__title">{row.title}</span>
-                  <span className="admin-donation-card__user">user #{row.user_id}</span>
+                  <span className="admin-donation-card__user">
+                    user #{row.user_id}
+                    {awaitingId ? ` · ${t('creatorDonations.awaitingIdBadge')}` : ''}
+                  </span>
                 </header>
+
+                <ol className="admin-donation-steps">
+                  <li>{t('creatorDonations.steps.openTribute')}</li>
+                  <li>{t('creatorDonations.steps.copyFields')}</li>
+                  <li>{t('creatorDonations.steps.createDonation')}</li>
+                  <li>{t('creatorDonations.steps.pasteLinks')}</li>
+                  <li>{t('creatorDonations.steps.testDonation')}</li>
+                  <li>{t('creatorDonations.steps.bindFromInbox')}</li>
+                </ol>
+
+                <button
+                  type="button"
+                  className="ghost-btn admin-donation-copy-btn"
+                  onClick={() => void copyDonationBrief(row)}
+                >
+                  {copiedId === row.id
+                    ? t('creatorDonations.copiedBrief')
+                    : t('creatorDonations.copyBriefButton')}
+                </button>
 
                 <dl className="admin-donation-meta-grid">
                   <div>
@@ -283,15 +376,8 @@ export function AdminCreatorDonationsTab() {
                   </div>
                 ) : null}
 
+                <h5 className="admin-donation-activate-title">{t('creatorDonations.afterCreateTitle')}</h5>
                 <div className="admin-donation-activate-grid">
-                  <label>
-                    {t('creatorDonations.fields.tributeId')}
-                    <input
-                      value={form.tributeId}
-                      onChange={(e) => setFormField(row.id, 'tributeId', e.target.value)}
-                      placeholder="12345"
-                    />
-                  </label>
                   <label>
                     {t('creatorDonations.fields.webLink')}
                     <input
@@ -308,21 +394,65 @@ export function AdminCreatorDonationsTab() {
                       placeholder="https://t.me/..."
                     />
                   </label>
+                  <label>
+                    {t('creatorDonations.fields.donationRequestId')}
+                    <input
+                      value={form.donationRequestId}
+                      onChange={(e) => setFormField(row.id, 'donationRequestId', e.target.value)}
+                      placeholder={t('creatorDonations.idPlaceholder')}
+                      inputMode="numeric"
+                    />
+                  </label>
                 </div>
 
-                {products.length > 0 ? (
-                  <p className="small muted">{t('creatorDonations.pickProductHint')}</p>
+                {inbox.length > 0 && !form.donationRequestId ? (
+                  <div className="admin-donation-inbox-pick">
+                    {inbox.map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        className="ghost-btn"
+                        onClick={() => applyInboxIdToForm(row.id, item.donation_request_id)}
+                      >
+                        {t('creatorDonations.useInboxId', { id: item.donation_request_id })}
+                      </button>
+                    ))}
+                  </div>
                 ) : null}
 
                 <div className="admin-donation-actions">
-                  <button
-                    type="button"
-                    className="primary-btn"
-                    disabled={busy || !form.tributeId || !form.webLink.trim()}
-                    onClick={() => void activate(row.id)}
-                  >
-                    {t('creatorDonations.activate')}
-                  </button>
+                  {!awaitingId ? (
+                    <button
+                      type="button"
+                      className="primary-btn"
+                      disabled={busy || !form.webLink.trim()}
+                      onClick={() => void saveLinks(row.id)}
+                    >
+                      {t('creatorDonations.saveLinks')}
+                    </button>
+                  ) : null}
+                  {awaitingId && form.donationRequestId ? (
+                    <button
+                      type="button"
+                      className="primary-btn"
+                      disabled={busy}
+                      onClick={() =>
+                        void bindDonationId(row.id, Number(form.donationRequestId))
+                      }
+                    >
+                      {t('creatorDonations.bindAndActivate')}
+                    </button>
+                  ) : null}
+                  {!awaitingId && form.donationRequestId && form.webLink.trim() ? (
+                    <button
+                      type="button"
+                      className="ghost-btn"
+                      disabled={busy}
+                      onClick={() => void activateWithId(row.id)}
+                    >
+                      {t('creatorDonations.activateWithId')}
+                    </button>
+                  ) : null}
                   <button type="button" className="ghost-btn" disabled={busy} onClick={() => void reject(row.id)}>
                     {t('creatorDonations.reject')}
                   </button>

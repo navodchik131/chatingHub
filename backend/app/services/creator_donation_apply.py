@@ -16,7 +16,7 @@ from app.connectors.tribute.handlers import (
     _norm_event_name,
     _parse_dt,
 )
-from app.db.models import CreatorDonationEvent, CreatorDonationLink
+from app.db.models import CreatorDonationEvent, CreatorDonationLink, CreatorDonationWebhookInbox
 
 log = logging.getLogger(__name__)
 
@@ -54,6 +54,47 @@ def _donation_request_id(payload: dict[str, Any]) -> int | None:
     return None
 
 
+async def _store_unmapped_donation_webhook(
+    session: AsyncSession,
+    *,
+    body: dict[str, Any],
+    donation_request_id: int,
+    norm: str,
+    payload: dict[str, Any],
+) -> None:
+    external_id = _external_event_id(0, body)
+    external_id = f"creator_donation_inbox:{external_id}"
+    existing = await session.scalar(
+        select(CreatorDonationWebhookInbox.id).where(
+            CreatorDonationWebhookInbox.external_event_id == external_id
+        )
+    )
+    if existing:
+        return
+
+    amount_minor = abs(_amount_minor_from_payload(payload, event_name=norm))
+    currency = _currency_from_payload(payload) or "USD"
+    occurred_at = _parse_dt(body.get("created_at") or body.get("sent_at"))
+    session.add(
+        CreatorDonationWebhookInbox(
+            external_event_id=external_id,
+            donation_request_id=donation_request_id,
+            event_name=str(body.get("name") or norm),
+            amount_minor=amount_minor,
+            currency=currency,
+            payer_telegram_user_id=_telegram_user_id(payload),
+            received_at=occurred_at,
+            raw_meta=json.dumps(body, ensure_ascii=False)[:8000],
+        )
+    )
+    await session.commit()
+    log.info(
+        "creator donation inbox stored donation_request_id=%s amount_minor=%s",
+        donation_request_id,
+        amount_minor,
+    )
+
+
 async def apply_creator_donation_webhook(
     session: AsyncSession,
     *,
@@ -80,6 +121,13 @@ async def apply_creator_donation_webhook(
         )
     )
     if not link:
+        await _store_unmapped_donation_webhook(
+            session,
+            body=body,
+            donation_request_id=donation_request_id,
+            norm=norm,
+            payload=payload,
+        )
         return {"ok": True, "skipped": "unmapped_donation_request", "donation_request_id": donation_request_id}
 
     amount_minor = _amount_minor_from_payload(payload, event_name=norm)

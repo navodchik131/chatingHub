@@ -255,31 +255,56 @@
   },
   "creatorDonations": {
     "title": "Creator donations (moderation)",
-    "intro": "Pending requests. Create the donation in Tribute with the same fields, then enter donation_request_id and links.",
+    "intro": "Pending requests. Create the donation in Tribute Dashboard with the same fields the creator submitted.",
+    "noDonationsApi": "Tribute has no API to list or create Donations — only manual creation in the Dashboard.",
+    "idFromWebhook": "donation_request_id is not visible in Tribute short links (unlike product id). You can only get it from the newDonation webhook — make a test donation for the minimum amount and the ID will appear in “Incoming webhooks” below.",
+    "inboxTitle": "Incoming webhooks (unmapped donations)",
+    "inboxHint": "After a test donation, donation_request_id from the Tribute payload appears here.",
+    "inboxEmpty": "Empty for now. Make a test donation via the saved link, then click Refresh.",
+    "refreshInbox": "Refresh",
+    "bindToRequest": "Bind to request #{{id}}",
+    "useInboxId": "Use ID {{id}}",
+    "awaitingIdBadge": "awaiting donation_request_id",
+    "saveLinks": "Save links",
+    "bindAndActivate": "Bind ID and activate",
+    "activateWithId": "Activate with ID now",
+    "idPlaceholder": "from webhook after test donation",
     "empty": "No requests pending review.",
     "activate": "Activate",
     "reject": "Reject",
-    "loadTributeProducts": "Load Tribute products",
-    "hideProducts": "Hide list",
-    "copyId": "Copy ID",
+    "copyBriefButton": "Copy settings for Tribute",
+    "copiedBrief": "Copied",
+    "afterCreateTitle": "After creating the donation in Tribute",
     "downloadCover": "Download cover",
     "buttonLabel": "Button",
-    "productName": "Name",
-    "productAmount": "Amount",
-    "pickProductHint": "Copy an ID from the products table into the Tribute ID field (donation_request_id for classic donations comes from the Dashboard).",
     "rejectNotesPrompt": "Rejection reason (optional):",
+    "steps": {
+      "openTribute": "Open Tribute Creator Dashboard → Donations → Create donation",
+      "copyFields": "Click “Copy settings” and transfer fields into the Tribute form",
+      "createDonation": "Create the donation (upload cover separately if provided)",
+      "pasteLinks": "Paste web link and telegram link from Tribute → “Save links”",
+      "testDonation": "Make a test donation via that link (minimum amount)",
+      "bindFromInbox": "In “Incoming webhooks”, click Bind — donation_request_id is applied automatically"
+    },
+    "copyBrief": {
+      "title": "Title",
+      "description": "Description",
+      "button": "Button text",
+      "user": "ModelMate user",
+      "request": "Request"
+    },
     "fields": {
       "currency": "Currency",
       "min": "Min (minor)",
       "oneTime": "One-time",
       "recurring": "Recurring",
-      "tributeId": "Tribute donation_request_id",
-      "webLink": "Web link",
-      "tgLink": "Telegram link (optional)"
+      "donationRequestId": "donation_request_id (from Tribute)",
+      "webLink": "Web link (from Tribute)",
+      "tgLink": "Telegram link (from Tribute, optional)"
     },
     "errors": {
       "actionFailed": "Action failed",
-      "productsFailed": "Could not load Tribute products"
+      "copyFailed": "Could not copy to clipboard"
     }
   }
 }

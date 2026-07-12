@@ -554,6 +554,30 @@ class CreatorDonationEvent(Base):
     )
 
 
+class CreatorDonationWebhookInbox(Base):
+    """Непривязанные webhook донатов Tribute (donation_request_id виден только здесь)."""
+
+    __tablename__ = "creator_donation_webhook_inbox"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    external_event_id: Mapped[str] = mapped_column(String(128), unique=True, index=True)
+    donation_request_id: Mapped[int] = mapped_column(Integer, index=True)
+    event_name: Mapped[str] = mapped_column(String(64))
+    amount_minor: Mapped[int] = mapped_column(Integer)
+    currency: Mapped[str] = mapped_column(String(8))
+    payer_telegram_user_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    raw_meta: Mapped[str | None] = mapped_column(Text, nullable=True)
+    resolved_link_id: Mapped[int | None] = mapped_column(
+        ForeignKey("creator_donation_links.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    resolved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+
 class InstagramOAuthState(Base):
     __tablename__ = "instagram_oauth_states"
 

@@ -255,31 +255,56 @@
   },
   "creatorDonations": {
     "title": "Донаты креаторов (модерация)",
-    "intro": "Заявки в статусе pending. Создайте донат в Tribute с теми же полями, затем укажите donation_request_id и ссылки.",
+    "intro": "Заявки в статусе pending. Создайте донат в Tribute Dashboard с теми же полями, что указал креатор.",
+    "noDonationsApi": "У Tribute нет API для списка или создания Donations — только ручное создание в Dashboard.",
+    "idFromWebhook": "donation_request_id не виден в коротких ссылках Tribute (в отличие от product id). Его можно получить только из webhook newDonation — сделайте тестовый донат на минимальную сумму, ID появится в блоке «Входящие webhook» ниже.",
+    "inboxTitle": "Входящие webhook (непривязанные донаты)",
+    "inboxHint": "После тестового доната сюда попадает donation_request_id из payload Tribute.",
+    "inboxEmpty": "Пока пусто. Сделайте тестовый донат по сохранённой ссылке и нажмите «Обновить».",
+    "refreshInbox": "Обновить",
+    "bindToRequest": "Привязать к заявке #{{id}}",
+    "useInboxId": "Подставить ID {{id}}",
+    "awaitingIdBadge": "ждёт donation_request_id",
+    "saveLinks": "Сохранить ссылки",
+    "bindAndActivate": "Привязать ID и активировать",
+    "activateWithId": "Активировать с ID сразу",
+    "idPlaceholder": "из webhook после тестового доната",
     "empty": "Нет заявок на модерации.",
     "activate": "Активировать",
     "reject": "Отклонить",
-    "loadTributeProducts": "Загрузить products из Tribute",
-    "hideProducts": "Скрыть список",
-    "copyId": "Копировать ID",
+    "copyBriefButton": "Скопировать настройки для Tribute",
+    "copiedBrief": "Скопировано",
+    "afterCreateTitle": "После создания доната в Tribute",
     "downloadCover": "Скачать обложку",
     "buttonLabel": "Кнопка",
-    "productName": "Название",
-    "productAmount": "Сумма",
-    "pickProductHint": "Скопируйте ID из таблицы products и вставьте в поле Tribute ID (donation_request_id для классических донатов берётся из Dashboard).",
     "rejectNotesPrompt": "Причина отклонения (необязательно):",
+    "steps": {
+      "openTribute": "Откройте Tribute Creator Dashboard → Donations → Create donation",
+      "copyFields": "Нажмите «Скопировать настройки» и перенесите поля в форму Tribute",
+      "createDonation": "Создайте донат (обложку загрузите отдельно, если есть)",
+      "pasteLinks": "Вставьте web link и telegram link из Tribute → «Сохранить ссылки»",
+      "testDonation": "Сделайте тестовый донат по этой ссылке (минимальная сумма)",
+      "bindFromInbox": "В блоке «Входящие webhook» нажмите «Привязать» — donation_request_id подставится автоматически"
+    },
+    "copyBrief": {
+      "title": "Title",
+      "description": "Description",
+      "button": "Button text",
+      "user": "ModelMate user",
+      "request": "Request"
+    },
     "fields": {
       "currency": "Валюта",
       "min": "Min (minor)",
       "oneTime": "Разовые",
       "recurring": "Регулярные",
-      "tributeId": "Tribute donation_request_id",
-      "webLink": "Web link",
-      "tgLink": "Telegram link (optional)"
+      "donationRequestId": "donation_request_id (из Tribute)",
+      "webLink": "Web link (из Tribute)",
+      "tgLink": "Telegram link (из Tribute, необязательно)"
     },
     "errors": {
       "actionFailed": "Не удалось выполнить действие",
-      "productsFailed": "Не удалось загрузить products из Tribute"
+      "copyFailed": "Не удалось скопировать в буфер обмена"
     }
   }
 }

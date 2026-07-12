@@ -21,7 +21,7 @@ export interface CreatorDonationLink {
   min_amount_minor: number | null
   allow_one_time: boolean
   allow_recurring: boolean
-  status: 'draft' | 'pending' | 'active' | 'rejected' | 'disabled'
+  status: 'draft' | 'pending' | 'awaiting_id' | 'active' | 'rejected' | 'disabled'
   tribute_donation_request_id: number | null
   web_link: string | null
   telegram_link: string | null
@@ -78,7 +78,7 @@ function formatMoney(minor: number, currency: string): string {
 
 function statusClass(status: CreatorDonationLink['status']): string {
   if (status === 'active') return 'is-ok'
-  if (status === 'pending') return 'is-warn'
+  if (status === 'pending' || status === 'awaiting_id') return 'is-warn'
   if (status === 'rejected') return 'is-bad'
   return 'is-muted'
 }
@@ -470,7 +470,7 @@ export function CreatorDonationsPanel({
                     ) : null}
                   </div>
                 ) : null}
-                {link.status === 'pending' ? (
+                {link.status === 'pending' || link.status === 'awaiting_id' ? (
                   <p className="small muted">{t('donationsExt.pendingHint')}</p>
                 ) : null}
                 <div className="cabinet-donation-card__actions">

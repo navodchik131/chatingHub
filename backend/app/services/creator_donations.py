@@ -394,7 +394,10 @@ async def admin_list_creator_donation_links(
         max(1, min(limit, 500))
     )
     if status:
-        stmt = stmt.where(CreatorDonationLink.status == status)
+        if status == "moderation":
+            stmt = stmt.where(CreatorDonationLink.status.in_(["pending", "awaiting_id"]))
+        else:
+            stmt = stmt.where(CreatorDonationLink.status == status)
     rows = (await session.scalars(stmt)).all()
     link_ids = [r.id for r in rows]
     totals = await aggregate_donation_totals(session, link_ids=link_ids)
@@ -412,15 +415,67 @@ async def admin_activate_creator_donation_link(
     session: AsyncSession,
     *,
     link_id: int,
-    tribute_donation_request_id: int,
+    tribute_donation_request_id: int | None,
     web_link: str,
     telegram_link: str | None = None,
 ) -> dict[str, Any]:
     row = await session.get(CreatorDonationLink, link_id)
     if not row:
         raise HTTPException(status_code=404, detail="donation link not found")
-    if row.status not in {"pending", "draft", "disabled"}:
+    if row.status not in {"pending", "draft", "disabled", "awaiting_id"}:
         raise HTTPException(status_code=400, detail="donation link cannot be activated")
+
+    if tribute_donation_request_id is not None:
+        existing = await session.scalar(
+            select(CreatorDonationLink.id).where(
+                CreatorDonationLink.tribute_donation_request_id == tribute_donation_request_id,
+                CreatorDonationLink.id != link_id,
+            )
+        )
+        if existing:
+            raise HTTPException(status_code=400, detail="tribute donation id already used")
+
+    web_link = web_link.strip()
+    if not web_link:
+        raise HTTPException(status_code=400, detail="web_link required")
+
+    now = datetime.now(timezone.utc)
+    row.web_link = web_link
+    row.telegram_link = telegram_link.strip() if telegram_link else None
+    row.admin_notes = None
+    row.updated_at = now
+
+    if tribute_donation_request_id is not None:
+        row.tribute_donation_request_id = int(tribute_donation_request_id)
+        row.status = "active"
+        row.activated_at = now
+    else:
+        row.status = "awaiting_id"
+
+    await session.commit()
+    await session.refresh(row)
+    totals = await aggregate_donation_totals(session, link_ids=[row.id])
+    return {
+        **donation_link_to_dict(row, totals=totals.get(row.id)),
+        "user_id": row.user_id,
+        "admin_notes_internal": row.admin_notes,
+    }
+
+
+async def admin_bind_creator_donation_request_id(
+    session: AsyncSession,
+    *,
+    link_id: int,
+    tribute_donation_request_id: int,
+    inbox_id: int | None = None,
+) -> dict[str, Any]:
+    row = await session.get(CreatorDonationLink, link_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="donation link not found")
+    if row.status not in {"pending", "awaiting_id"}:
+        raise HTTPException(status_code=400, detail="donation link cannot be bound")
+    if not (row.web_link or "").strip():
+        raise HTTPException(status_code=400, detail="web_link required before bind")
 
     existing = await session.scalar(
         select(CreatorDonationLink.id).where(
@@ -431,17 +486,18 @@ async def admin_activate_creator_donation_link(
     if existing:
         raise HTTPException(status_code=400, detail="tribute donation id already used")
 
-    web_link = web_link.strip()
-    if not web_link:
-        raise HTTPException(status_code=400, detail="web_link required")
-
+    now = datetime.now(timezone.utc)
     row.tribute_donation_request_id = int(tribute_donation_request_id)
-    row.web_link = web_link
-    row.telegram_link = telegram_link.strip() if telegram_link else None
     row.status = "active"
-    row.admin_notes = None
-    row.activated_at = datetime.now(timezone.utc)
-    row.updated_at = row.activated_at
+    row.activated_at = row.activated_at or now
+    row.updated_at = now
+
+    if inbox_id is not None:
+        inbox = await session.get(CreatorDonationWebhookInbox, inbox_id)
+        if inbox and inbox.resolved_link_id is None:
+            inbox.resolved_link_id = row.id
+            inbox.resolved_at = now
+
     await session.commit()
     await session.refresh(row)
     totals = await aggregate_donation_totals(session, link_ids=[row.id])
@@ -450,6 +506,37 @@ async def admin_activate_creator_donation_link(
         "user_id": row.user_id,
         "admin_notes_internal": row.admin_notes,
     }
+
+
+async def admin_list_creator_donation_webhook_inbox(
+    session: AsyncSession,
+    *,
+    unresolved_only: bool = True,
+    limit: int = 50,
+) -> list[dict[str, Any]]:
+    from app.db.models import CreatorDonationWebhookInbox
+
+    stmt = (
+        select(CreatorDonationWebhookInbox)
+        .order_by(CreatorDonationWebhookInbox.received_at.desc())
+        .limit(max(1, min(limit, 200)))
+    )
+    if unresolved_only:
+        stmt = stmt.where(CreatorDonationWebhookInbox.resolved_link_id.is_(None))
+    rows = (await session.scalars(stmt)).all()
+    return [
+        {
+            "id": r.id,
+            "donation_request_id": r.donation_request_id,
+            "event_name": r.event_name,
+            "amount_minor": r.amount_minor,
+            "currency": r.currency,
+            "payer_telegram_user_id": r.payer_telegram_user_id,
+            "received_at": r.received_at,
+            "resolved_link_id": r.resolved_link_id,
+        }
+        for r in rows
+    ]
 
 
 async def admin_reject_creator_donation_link(
@@ -461,7 +548,7 @@ async def admin_reject_creator_donation_link(
     row = await session.get(CreatorDonationLink, link_id)
     if not row:
         raise HTTPException(status_code=404, detail="donation link not found")
-    if row.status != "pending":
+    if row.status not in {"pending", "awaiting_id"}:
         raise HTTPException(status_code=400, detail="only pending links can be rejected")
     row.status = "rejected"
     row.admin_notes = (admin_notes or "").strip() or None

@@ -532,6 +532,7 @@
     "status": {
       "draft": "Черновик",
       "pending": "На проверке",
+      "awaiting_id": "На проверке",
       "active": "Активен",
       "rejected": "Отклонён",
       "disabled": "Отключён"

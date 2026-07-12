@@ -532,6 +532,7 @@
     "status": {
       "draft": "Draft",
       "pending": "Pending review",
+      "awaiting_id": "Pending review",
       "active": "Active",
       "rejected": "Rejected",
       "disabled": "Disabled"

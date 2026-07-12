@@ -769,28 +769,26 @@ class AdminCreatorDonationLinkOut(CreatorDonationLinkOut):
     admin_notes_internal: str | None = None
 
 
-class TributeProductBriefOut(BaseModel):
-    id: int
-    type: str | None = None
-    name: str | None = None
-    amount: int | None = None
-    currency: str | None = None
-    web_link: str | None = None
-    telegram_link: str | None = None
-    status: str | None = None
-
-
-class TributeProductsListOut(BaseModel):
-    rows: list[TributeProductBriefOut] = Field(default_factory=list)
-    total: int = 0
-    page: int = 1
-    note: str | None = None
-
-
 class AdminCreatorDonationActivateIn(BaseModel):
-    tribute_donation_request_id: int = Field(ge=1)
+    tribute_donation_request_id: int | None = Field(default=None, ge=1)
     web_link: str = Field(min_length=8, max_length=2048)
     telegram_link: str | None = Field(default=None, max_length=2048)
+
+
+class AdminCreatorDonationBindIn(BaseModel):
+    tribute_donation_request_id: int = Field(ge=1)
+    inbox_id: int | None = Field(default=None, ge=1)
+
+
+class AdminCreatorDonationWebhookInboxOut(BaseModel):
+    id: int
+    donation_request_id: int
+    event_name: str
+    amount_minor: int
+    currency: str
+    payer_telegram_user_id: int | None = None
+    received_at: datetime
+    resolved_link_id: int | None = None
 
 
 class AdminCreatorDonationRejectIn(BaseModel):

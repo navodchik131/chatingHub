@@ -168,14 +168,7 @@
 }
 
 .admin-donations-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0.85rem 1rem;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.03);
+  display: none;
 }
 
 .admin-donation-queue {
@@ -286,49 +279,111 @@
   gap: 0.65rem;
 }
 
-.admin-tribute-products {
-  margin-top: 0.75rem;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+.admin-donation-id-note {
+  border-color: rgba(255, 196, 120, 0.35);
+  background: rgba(255, 196, 120, 0.1);
+  color: #f5d9b8;
+}
+
+.admin-donation-inbox {
+  margin-bottom: 1.25rem;
+  padding: 1rem;
   border-radius: 12px;
-  overflow: hidden;
+  border: 1px solid rgba(120, 220, 160, 0.25);
+  background: rgba(120, 220, 160, 0.06);
 }
 
-.admin-tribute-products__note {
-  padding: 0.65rem 0.85rem;
-  font-size: 0.8125rem;
-  color: #9aa3b2;
+.admin-donation-inbox h3 {
+  margin: 0 0 0.35rem;
+  font-size: 1rem;
+}
+
+.admin-donation-inbox__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.admin-donation-inbox__head h3 {
+  margin: 0;
+}
+
+.admin-donation-inbox--empty {
+  border-color: rgba(255, 255, 255, 0.12);
   background: rgba(255, 255, 255, 0.03);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-.admin-tribute-products table {
-  width: 100%;
-  border-collapse: collapse;
+.admin-donation-inbox-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  margin-top: 0.75rem;
+}
+
+.admin-donation-inbox-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.admin-donation-inbox-row__main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 220px;
+}
+
+.admin-donation-inbox-row .mono {
+  font-family: ui-monospace, monospace;
+}
+
+.admin-donation-inbox-pick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.admin-donation-api-note {
+  margin: 0 0 1rem;
+  padding: 0.75rem 1rem;
+  border-radius: 10px;
+  border: 1px solid rgba(142, 197, 255, 0.25);
+  background: rgba(142, 197, 255, 0.08);
+  color: #b8d4f5;
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+
+.admin-donation-steps {
+  margin: 0 0 0.85rem;
+  padding-left: 1.25rem;
+  color: #b8c0d0;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.admin-donation-steps li + li {
+  margin-top: 0.35rem;
+}
+
+.admin-donation-copy-btn {
+  margin-bottom: 0.85rem;
+}
+
+.admin-donation-activate-title {
+  margin: 0 0 0.65rem;
   font-size: 0.8125rem;
-}
-
-.admin-tribute-products th,
-.admin-tribute-products td {
-  text-align: left;
-  padding: 0.55rem 0.75rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-  vertical-align: top;
-}
-
-.admin-tribute-products th {
-  color: #8b95a8;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
-  font-size: 0.6875rem;
-}
-
-.admin-tribute-products tr:last-child td {
-  border-bottom: none;
-}
-
-.admin-tribute-products .mono {
-  font-family: ui-monospace, monospace;
+  letter-spacing: 0.05em;
+  color: #8b95a8;
 }
 
 @media (max-width: 900px) {

@@ -370,6 +370,7 @@ async def init_db() -> None:
         await conn.run_sync(_migrate_instagram_connections)
         await conn.run_sync(_migrate_tribute_connections)
         await conn.run_sync(_migrate_creator_donation_links)
+        await conn.run_sync(_migrate_creator_donation_webhook_inbox)
         await conn.run_sync(_migrate_conversation_notes)
         await conn.run_sync(_migrate_companion_bot)
         await conn.run_sync(_migrate_conversation_categories)
@@ -1355,6 +1356,16 @@ def _migrate_creator_donation_links(sync_conn) -> None:
                 "ON creator_donation_events(payer_telegram_user_id)"
             )
         )
+
+
+def _migrate_creator_donation_webhook_inbox(sync_conn) -> None:
+    from sqlalchemy import inspect, text
+
+    from app.db.models import CreatorDonationWebhookInbox
+
+    insp = inspect(sync_conn)
+    if not insp.has_table("creator_donation_webhook_inbox"):
+        CreatorDonationWebhookInbox.__table__.create(sync_conn, checkfirst=True)
 
 
 def _migrate_chat_message_features(sync_conn) -> None:
