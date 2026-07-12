@@ -108,6 +108,7 @@ export function AuthPanel({
             <TelegramLoginButton
               botUsername={tgBotUsername}
               mode="login"
+              referralCode={referralCode}
               onSuccess={onTelegramSuccess}
               onError={setErr}
             />
@@ -119,6 +120,7 @@ export function AuthPanel({
             <TelegramLoginButton
               botUsername={tgBotUsername}
               mode="login"
+              referralCode={referralCode}
               onSuccess={() => onSuccess(false)}
               onError={setErr}
             />

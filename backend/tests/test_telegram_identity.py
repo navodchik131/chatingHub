@@ -10,6 +10,7 @@ import pytest
 from fastapi import HTTPException
 
 from app.auth.telegram_login import TelegramLoginPayload, verify_telegram_login_payload
+from app.schemas import TelegramLoginIn
 from app.services.telegram_identity import (
     is_real_owner_email,
     owner_email_setup_required,
@@ -47,6 +48,18 @@ def test_verify_telegram_login_payload_bad_hash():
     with pytest.raises(HTTPException) as exc:
         verify_telegram_login_payload(payload, bot_token=token)
     assert exc.value.status_code == 401
+
+
+def test_telegram_login_in_accepts_referral_code():
+    body = TelegramLoginIn(
+        id=424242,
+        auth_date=int(time.time()),
+        hash="ignored",
+        referral_code="abc12xyz",
+    )
+    assert body.referral_code == "abc12xyz"
+    payload = TelegramLoginPayload.model_validate(body.model_dump(exclude={"referral_code"}))
+    assert payload.id == 424242
 
 
 def test_synthetic_telegram_email_roundtrip():

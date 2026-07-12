@@ -208,6 +208,7 @@ class TelegramLoginIn(BaseModel):
     photo_url: str | None = None
     auth_date: int = Field(gt=0)
     hash: str = Field(min_length=1)
+    referral_code: str | None = Field(default=None, max_length=16)
 
 
 class CompleteOwnerEmailIn(BaseModel):

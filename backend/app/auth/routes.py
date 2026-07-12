@@ -55,7 +55,7 @@ def _public_email_for(user: User) -> str | None:
 
 
 def _verify_telegram_body(body: TelegramLoginIn) -> TelegramLoginPayload:
-    payload = TelegramLoginPayload.model_validate(body.model_dump())
+    payload = TelegramLoginPayload.model_validate(body.model_dump(exclude={"referral_code"}))
     return verify_telegram_login_payload(
         payload,
         bot_token=settings.telegram_login_bot_token,
@@ -130,6 +130,7 @@ async def telegram_login_or_register(
             session,
             telegram_id=payload.id,
             telegram_username=payload.username,
+            referral_code=body.referral_code,
         )
         await record_funnel_event_once(session, user=user, event="signup_telegram")
     await session.commit()

@@ -11,11 +11,12 @@ import {
 type Props = {
   botUsername: string
   mode: 'login' | 'link'
+  referralCode?: string | null
   onSuccess: () => void | Promise<void>
   onError?: (message: string) => void
 }
 
-export function TelegramLoginButton({ botUsername, mode, onSuccess, onError }: Props) {
+export function TelegramLoginButton({ botUsername, mode, referralCode, onSuccess, onError }: Props) {
   const { t } = useTranslation('auth')
   const hostRef = useRef<HTMLDivElement>(null)
   const [busy, setBusy] = useState(false)
@@ -29,7 +30,7 @@ export function TelegramLoginButton({ botUsername, mode, onSuccess, onError }: P
         setBusy(true)
         try {
           const path = mode === 'link' ? '/api/auth/telegram/link' : '/api/auth/telegram'
-          const r = await postTelegramAuth(path, user)
+          const r = await postTelegramAuth(path, user, mode === 'login' ? referralCode : null)
           if (!r.ok) {
             const j = await r.json().catch(() => ({}))
             onError?.(formatHttpApiError(r, j))
@@ -46,7 +47,7 @@ export function TelegramLoginButton({ botUsername, mode, onSuccess, onError }: P
       })()
     })
     return cleanup
-  }, [botUsername, mode, onError, onSuccess])
+  }, [botUsername, mode, onError, onSuccess, referralCode])
 
   return (
     <div className="telegram-login-wrap">

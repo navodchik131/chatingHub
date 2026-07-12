@@ -49,10 +49,14 @@ export function mountTelegramLoginWidget(
 export async function postTelegramAuth(
   path: '/api/auth/telegram' | '/api/auth/telegram/link',
   user: TelegramLoginUser,
+  referralCode?: string | null,
 ): Promise<Response> {
+  const body: TelegramLoginUser & { referral_code?: string } = { ...user }
+  const ref = (referralCode || '').trim().toUpperCase()
+  if (ref) body.referral_code = ref
   return apiFetch(path, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(user),
+    body: JSON.stringify(body),
   })
 }
