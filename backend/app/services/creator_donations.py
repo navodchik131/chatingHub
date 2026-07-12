@@ -390,6 +390,81 @@ async def list_creator_donation_events(
     ]
 
 
+def _donation_event_dict(event: CreatorDonationEvent) -> dict[str, Any]:
+    return {
+        "id": event.id,
+        "creator_donation_link_id": event.creator_donation_link_id,
+        "studio_model_id": event.studio_model_id,
+        "event_name": event.event_name,
+        "amount_minor": event.amount_minor,
+        "currency": event.currency,
+        "payer_telegram_user_id": event.payer_telegram_user_id,
+        "payout_status": event.payout_status,
+        "occurred_at": event.occurred_at,
+    }
+
+
+async def creator_donation_overview(
+    session: AsyncSession,
+    *,
+    user_id: int,
+) -> dict[str, Any]:
+    links = (
+        await session.scalars(
+            select(CreatorDonationLink).where(CreatorDonationLink.user_id == user_id)
+        )
+    ).all()
+    link_ids = [link.id for link in links]
+    active_links = sum(1 for link in links if link.status == "active")
+
+    totals_by_currency: dict[str, int] = {}
+    pending_payout_by_currency: dict[str, int] = {}
+    donations_count = 0
+
+    if link_ids:
+        agg = await aggregate_donation_totals(session, link_ids=link_ids)
+        for bucket in agg.values():
+            donations_count += int(bucket.get("donations_count") or 0)
+            for cur, amt in (bucket.get("totals_by_currency") or {}).items():
+                totals_by_currency[str(cur)] = totals_by_currency.get(str(cur), 0) + int(amt)
+            for cur, amt in (bucket.get("pending_payout_by_currency") or {}).items():
+                pending_payout_by_currency[str(cur)] = (
+                    pending_payout_by_currency.get(str(cur), 0) + int(amt)
+                )
+
+    latest = await session.scalar(
+        select(CreatorDonationEvent)
+        .where(
+            CreatorDonationEvent.user_id == user_id,
+            CreatorDonationEvent.amount_minor > 0,
+        )
+        .order_by(CreatorDonationEvent.id.desc())
+        .limit(1)
+    )
+    recent_rows = (
+        await session.scalars(
+            select(CreatorDonationEvent)
+            .where(
+                CreatorDonationEvent.user_id == user_id,
+                CreatorDonationEvent.amount_minor > 0,
+            )
+            .order_by(CreatorDonationEvent.occurred_at.desc())
+            .limit(5)
+        )
+    ).all()
+
+    return {
+        "donations_count": donations_count,
+        "active_links": active_links,
+        "has_donation_setup": len(links) > 0,
+        "totals_by_currency": totals_by_currency,
+        "pending_payout_by_currency": pending_payout_by_currency,
+        "latest_event_id": latest.id if latest else None,
+        "latest_event": _donation_event_dict(latest) if latest else None,
+        "recent_events": [_donation_event_dict(row) for row in recent_rows],
+    }
+
+
 async def admin_list_creator_donation_links(
     session: AsyncSession,
     *,

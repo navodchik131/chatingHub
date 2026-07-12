@@ -48,7 +48,23 @@
     "emptyGenerations": "Archive is empty — create your first image in the studio.",
     "openAll": "All →",
     "unnamed": "Unnamed",
-    "studio": "Studio"
+    "studio": "Studio",
+    "platformDonations": "ModelMate donations",
+    "platformDonationsHint": "Via platform Tribute",
+    "openDonations": "Donations & payouts",
+    "recentPlatformDonations": "Recent donations",
+    "openAllDonations": "All →"
+  },
+  "platformDonations": {
+    "hintEmpty": "Create a donation in Account → Donations",
+    "hintSetup": "Donation pending review or activation",
+    "hintWaiting": "Link is active — waiting for first donations",
+    "hintTotal": "{{count}} donations via ModelMate",
+    "hintWithPending": "{{count}} donations · {{pending}} pending payout",
+    "alertTitle": "New donation!",
+    "alertBody": "Received {{amount}} via ModelMate",
+    "alertOpen": "Open donations",
+    "alertDismiss": "Dismiss"
   },
   "cabinet": {
     "title": "Account",
@@ -476,7 +492,7 @@
   },
   "notifications": {
     "title": "Notifications",
-    "body": "Browser notifications for new chat messages.",
+    "body": "Browser notifications for new chat messages and ModelMate donations.",
     "denied": "Allow notifications for this site in browser settings.",
     "serverDisabled": "Push notifications are not enabled on the server."
   },

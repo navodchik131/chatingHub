@@ -242,6 +242,10 @@
   gap: 1.25rem;
 }
 
+.creator-donation-alert {
+  margin: 0.75rem 1rem 0;
+}
+
 .admin-donations-subtabs {
   margin-bottom: 0.25rem;
 }

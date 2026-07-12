@@ -108,6 +108,10 @@ select:focus {
   background: rgba(34, 197, 94, 0.08);
 }
 
+.creator-donation-alert {
+  margin: 0 0 1rem;
+}
+
 .billing-return-banner--warn {
   border-color: rgba(251, 191, 36, 0.4);
   background: rgba(251, 191, 36, 0.06);

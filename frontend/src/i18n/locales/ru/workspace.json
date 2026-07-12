@@ -48,7 +48,23 @@
     "emptyGenerations": "Архив пуст — создайте первую картинку в студии.",
     "openAll": "Все →",
     "unnamed": "Без имени",
-    "studio": "Студия"
+    "studio": "Студия",
+    "platformDonations": "Донаты ModelMate",
+    "platformDonationsHint": "Через platform Tribute",
+    "openDonations": "Донаты и выплаты",
+    "recentPlatformDonations": "Недавние донаты",
+    "openAllDonations": "Все →"
+  },
+  "platformDonations": {
+    "hintEmpty": "Создайте донат в кабинете → Донаты",
+    "hintSetup": "Донат на модерации или ожидает активации",
+    "hintWaiting": "Ссылка активна — ждём первых донатов",
+    "hintTotal": "{{count}} донатов через ModelMate",
+    "hintWithPending": "{{count}} донатов · к выплате {{pending}}",
+    "alertTitle": "Новый донат!",
+    "alertBody": "Получено {{amount}} через ModelMate",
+    "alertOpen": "Открыть донаты",
+    "alertDismiss": "Скрыть"
   },
   "cabinet": {
     "title": "Личный кабинет",
@@ -476,7 +492,7 @@
   },
   "notifications": {
     "title": "Уведомления",
-    "body": "Браузерные уведомления о новых сообщениях в чате.",
+    "body": "Браузерные уведомления о новых сообщениях в чате и о донатах через ModelMate.",
     "denied": "Разрешите уведомления для сайта в настройках браузера.",
     "serverDisabled": "На сервере не включены push-уведомления."
   },

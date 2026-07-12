@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { formatAppNumber } from '../i18n'
+import { formatAppCurrency } from '../i18n/appFormat'
 
 interface ConversationPreview {
   id: number
@@ -30,6 +31,16 @@ export interface WorkspaceOverviewProps {
   tributeEarningsLabel?: string | null
   tributeEarningsHint?: string | null
   tributeConfigured?: boolean
+  platformDonationsLabel?: string | null
+  platformDonationsHint?: string | null
+  platformDonationsVisible?: boolean
+  platformDonationsRecent?: Array<{
+    id: number
+    amount_minor: number
+    currency: string
+    occurred_at: string
+  }>
+  onOpenDonations?: () => void
   chatterOutboundCount?: number | null
   chatterConversationsCount?: number | null
   chatterRatingsHint?: string | null
@@ -91,6 +102,11 @@ export function WorkspaceOverview({
   tributeEarningsLabel,
   tributeEarningsHint,
   tributeConfigured,
+  platformDonationsLabel,
+  platformDonationsHint,
+  platformDonationsVisible,
+  platformDonationsRecent = [],
+  onOpenDonations,
   chatterOutboundCount,
   chatterConversationsCount,
   chatterRatingsHint,
@@ -124,6 +140,14 @@ export function WorkspaceOverview({
             label={t('overview.dialogs')}
             value={conversationsTotal}
             hint={unreadTotal > 0 ? t('overview.unread', { count: unreadTotal }) : t('overview.allRead')}
+          />
+        ) : null}
+        {platformDonationsVisible ? (
+          <KpiCard
+            label={t('overview.platformDonations')}
+            value={platformDonationsLabel ?? '—'}
+            hint={platformDonationsHint ?? t('overview.platformDonationsHint')}
+            valueTone={platformDonationsLabel ? 'success' : 'default'}
           />
         ) : null}
         {canChat && (tributeEarningsLabel || tributeConfigured) ? (
@@ -195,6 +219,18 @@ export function WorkspaceOverview({
               </button>
             </>
           ) : null}
+          {platformDonationsVisible && onOpenDonations ? (
+            <button
+              type="button"
+              className="dash-action-btn dash-action-btn--secondary"
+              onClick={onOpenDonations}
+            >
+              <span className="dash-action-btn__icon" aria-hidden>
+                💝
+              </span>
+              {t('overview.openDonations')}
+            </button>
+          ) : null}
           <button
             type="button"
             className="dash-action-btn dash-action-btn--secondary"
@@ -209,6 +245,31 @@ export function WorkspaceOverview({
       </div>
 
       <div className="dash-grid">
+        {platformDonationsVisible && platformDonationsRecent.length > 0 && onOpenDonations ? (
+          <section className="dash-panel">
+            <div className="dash-panel-head">
+              <h2 className="dash-block-title">{t('overview.recentPlatformDonations')}</h2>
+              <button type="button" className="dash-link-btn" onClick={onOpenDonations}>
+                {t('overview.openAllDonations')}
+              </button>
+            </div>
+            <ul className="dash-list">
+              {platformDonationsRecent.map((ev) => (
+                <li key={ev.id}>
+                  <button type="button" className="dash-list-item" onClick={onOpenDonations}>
+                    <span className="dash-list-main">
+                      <strong>{formatAppCurrency(ev.amount_minor, ev.currency)}</strong>
+                      <span className="dash-list-platform">{t('overview.platformDonations')}</span>
+                    </span>
+                    <span className="dash-list-preview">
+                      {new Date(ev.occurred_at).toLocaleString()}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
         {canChat ? (
           <section className="dash-panel">
             <div className="dash-panel-head">

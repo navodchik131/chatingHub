@@ -14,6 +14,7 @@ from app.schemas import (
     CreatorDonationLinkIn,
     CreatorDonationLinkOut,
     CreatorDonationLinkPatchIn,
+    CreatorDonationOverviewOut,
     CreatorPayoutRequestCreateIn,
     CreatorPayoutRequestOut,
     CreatorPayoutSettingsIn,
@@ -33,6 +34,7 @@ from app.services.creator_donation_payout import (
 from app.services.creator_donations import (
     aggregate_donation_totals,
     create_creator_donation_link,
+    creator_donation_overview,
     delete_creator_donation_link,
     donation_link_to_dict as _link_dict,
     get_creator_donation_link,
@@ -82,6 +84,16 @@ async def creator_donations_events(
     _assert_owner(user)
     rows = await list_creator_donation_events(session, viewer=user, link_id=link_id, limit=limit)
     return [CreatorDonationEventOut.model_validate(r) for r in rows]
+
+
+@router.get("/overview", response_model=CreatorDonationOverviewOut)
+async def creator_donations_overview(
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> CreatorDonationOverviewOut:
+    _assert_owner(user)
+    data = await creator_donation_overview(session, user_id=workspace_owner_id(user))
+    return CreatorDonationOverviewOut.model_validate(data)
 
 
 @router.get("/payout-assets", response_model=list[PayoutAssetOptionOut])

@@ -72,6 +72,15 @@ import {
 } from './i18n/cabinetLabels'
 import { WorkspaceOverview } from './components/WorkspaceOverview'
 import { CreatorDonationsPanel } from './components/CreatorDonationsPanel'
+import { CreatorDonationAlertBanner } from './components/CreatorDonationAlertBanner'
+import {
+  type CreatorDonationOverview,
+  type CreatorDonationOverviewEvent,
+  formatDonationOverviewHint,
+  formatDonationTotalsLabel,
+  readDonationLastSeenEventId,
+  writeDonationLastSeenEventId,
+} from './utils/creatorDonationOverview'
 import { ConversationPlatformTabs } from './components/ConversationPlatformTabs'
 import { ConversationCategoryTabs } from './components/ConversationCategoryTabs'
 import {
@@ -1018,6 +1027,8 @@ export default function App() {
   const [tributeDraftModelId, setTributeDraftModelId] = useState<number | ''>('')
   const [tributeEditConnectionId, setTributeEditConnectionId] = useState<number | null>(null)
   const [tributeEarnings, setTributeEarnings] = useState<TributeEarningsSummary | null>(null)
+  const [creatorDonationOverview, setCreatorDonationOverview] = useState<CreatorDonationOverview | null>(null)
+  const [creatorDonationAlert, setCreatorDonationAlert] = useState<CreatorDonationOverviewEvent | null>(null)
   const [chatterStats, setChatterStats] = useState<ChatterStatsSummary | null>(null)
 
   const tributeEarningsDisplay = useMemo(() => {
@@ -1045,7 +1056,29 @@ export default function App() {
       ? t('tribute.ownerHint', { period, eventsPart: tributeEarnings.event_count ? t('tribute.ownerEvents', { count: tributeEarnings.event_count }) : '' })
       : t('tribute.chatterHint', { percent: tributeEarnings.chatter_share_percent, period })
     return { label, hint }
-  }, [tributeEarnings, integ?.tribute_configured])
+  }, [tributeEarnings, integ?.tribute_configured, t])
+
+  const platformDonationsDisplay = useMemo(() => {
+    if (!creatorDonationOverview) {
+      return {
+        visible: false,
+        label: null as string | null,
+        hint: null as string | null,
+        recent: [] as CreatorDonationOverview['recent_events'],
+      }
+    }
+    const ov = creatorDonationOverview
+    const visible =
+      ov.has_donation_setup || ov.donations_count > 0 || ov.active_links > 0
+    const label = formatDonationTotalsLabel(ov.totals_by_currency)
+    const hint = formatDonationOverviewHint(ov, t)
+    return {
+      visible,
+      label,
+      hint,
+      recent: ov.recent_events.slice(0, 5),
+    }
+  }, [creatorDonationOverview, t])
 
   const chatterStatsDisplay = useMemo(() => {
     if (!chatterStats) {
@@ -1505,6 +1538,48 @@ export default function App() {
     }
   }, [])
 
+  const refreshCreatorDonationOverview = useCallback(async () => {
+    if (!isOwner) return
+    const r = await apiFetch('/api/creator-donations/overview')
+    if (!r.ok) {
+      setCreatorDonationOverview(null)
+      return
+    }
+    const data = (await r.json()) as CreatorDonationOverview
+    setCreatorDonationOverview(data)
+    const ownerId = me?.id
+    const latestId = data.latest_event_id
+    if (!ownerId || !latestId) {
+      setCreatorDonationAlert(null)
+      return
+    }
+    const seenId = readDonationLastSeenEventId(ownerId)
+    if (seenId === 0) {
+      writeDonationLastSeenEventId(ownerId, latestId)
+      setCreatorDonationAlert(null)
+      return
+    }
+    if (latestId > seenId && data.latest_event) {
+      setCreatorDonationAlert(data.latest_event)
+      if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+        const amount = formatAppCurrency(
+          data.latest_event.amount_minor,
+          data.latest_event.currency,
+        )
+        try {
+          new Notification(t('platformDonations.alertTitle'), {
+            body: t('platformDonations.alertBody', { amount }),
+            tag: `creator-donation-${latestId}`,
+          })
+        } catch {
+          /* ignore */
+        }
+      }
+    } else {
+      setCreatorDonationAlert(null)
+    }
+  }, [isOwner, me?.id, t])
+
   const refreshChatterStats = useCallback(async () => {
     const r = await apiFetch('/api/workspace/chatter-stats/summary')
     if (r.ok) {
@@ -1882,6 +1957,19 @@ export default function App() {
     if (!integ?.tribute_configured) return
     void refreshTributeEarnings()
   }, [authed, canChat, appSection, integ?.tribute_configured, refreshTributeEarnings])
+
+  useEffect(() => {
+    if (!authed || !isOwner) return
+    void refreshCreatorDonationOverview()
+    const timer = window.setInterval(() => void refreshCreatorDonationOverview(), 60_000)
+    return () => window.clearInterval(timer)
+  }, [authed, isOwner, refreshCreatorDonationOverview])
+
+  useEffect(() => {
+    if (authed && accountOpen && accountTab === 'donations' && isOwner) {
+      void refreshCreatorDonationOverview()
+    }
+  }, [authed, accountOpen, accountTab, isOwner, refreshCreatorDonationOverview])
 
   useEffect(() => {
     if (authed && accountOpen && accountTab === 'team' && isOwner) {
@@ -5140,6 +5228,22 @@ export default function App() {
     setAppSection('chat')
   }
 
+  const openCreatorDonations = useCallback(() => {
+    if (me?.id && creatorDonationOverview?.latest_event_id) {
+      writeDonationLastSeenEventId(me.id, creatorDonationOverview.latest_event_id)
+    }
+    setCreatorDonationAlert(null)
+    setAccountOpen(true)
+    setAccountTab('donations')
+  }, [me?.id, creatorDonationOverview?.latest_event_id])
+
+  const dismissCreatorDonationAlert = useCallback(() => {
+    if (me?.id && creatorDonationOverview?.latest_event_id) {
+      writeDonationLastSeenEventId(me.id, creatorDonationOverview.latest_event_id)
+    }
+    setCreatorDonationAlert(null)
+  }, [me?.id, creatorDonationOverview?.latest_event_id])
+
   return (
     <div className={appClass}>
       <div className="app-bg" aria-hidden />
@@ -5171,6 +5275,13 @@ export default function App() {
             </button>
           </div>
         </div>
+      ) : null}
+      {creatorDonationAlert && isOwner ? (
+        <CreatorDonationAlertBanner
+          event={creatorDonationAlert}
+          onOpen={openCreatorDonations}
+          onDismiss={dismissCreatorDonationAlert}
+        />
       ) : null}
       {showThreadDock ? (
         <header
@@ -5409,6 +5520,21 @@ export default function App() {
                       : t('cabinet.subscriptionNeedPlan')}
                   </p>
                 </div>
+                {isOwner && platformDonationsDisplay.visible ? (
+                  <div className="cabinet-dash-card">
+                    <div className="cabinet-dash-label">{t('overview.platformDonations')}</div>
+                    <div className="cabinet-dash-value">{platformDonationsDisplay.label ?? '—'}</div>
+                    <p className="cabinet-dash-hint muted">{platformDonationsDisplay.hint}</p>
+                    <button
+                      type="button"
+                      className="ghost-btn"
+                      style={{ marginTop: '0.5rem' }}
+                      onClick={openCreatorDonations}
+                    >
+                      {t('overview.openDonations')}
+                    </button>
+                  </div>
+                ) : null}
               </div>
               {(me?.demo_generations_remaining ?? 0) > 0 &&
               me?.billing_require_active_subscription &&
@@ -7944,6 +8070,11 @@ export default function App() {
               tributeEarningsLabel={tributeEarningsDisplay.label}
               tributeEarningsHint={tributeEarningsDisplay.hint}
               tributeConfigured={Boolean(integ?.tribute_configured)}
+              platformDonationsLabel={platformDonationsDisplay.label}
+              platformDonationsHint={platformDonationsDisplay.hint}
+              platformDonationsVisible={isOwner && platformDonationsDisplay.visible}
+              platformDonationsRecent={platformDonationsDisplay.recent}
+              onOpenDonations={openCreatorDonations}
               chatterOutboundCount={chatterStatsDisplay.outbound}
               chatterConversationsCount={chatterStatsDisplay.conversations}
               chatterRatingsHint={chatterStatsDisplay.ratingsHint}

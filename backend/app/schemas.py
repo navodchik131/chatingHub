@@ -765,6 +765,17 @@ class CreatorDonationEventOut(BaseModel):
     occurred_at: datetime
 
 
+class CreatorDonationOverviewOut(BaseModel):
+    donations_count: int = 0
+    active_links: int = 0
+    has_donation_setup: bool = False
+    totals_by_currency: dict[str, int] = Field(default_factory=dict)
+    pending_payout_by_currency: dict[str, int] = Field(default_factory=dict)
+    latest_event_id: int | None = None
+    latest_event: CreatorDonationEventOut | None = None
+    recent_events: list[CreatorDonationEventOut] = Field(default_factory=list)
+
+
 class AdminCreatorDonationLinkOut(CreatorDonationLinkOut):
     user_id: int
     admin_notes_internal: str | None = None
