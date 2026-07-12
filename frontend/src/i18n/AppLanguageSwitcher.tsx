@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next'
 import { persistMarketingLocale } from '../marketing/i18n/marketingLocale'
+import './lang-switch.css'
 
 export function AppLanguageSwitcher({ className }: { className?: string }) {
   const { i18n, t } = useTranslation('workspace')

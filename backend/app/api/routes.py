@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from app.api.analytics_routes import router as analytics_router
+from app.api.admin_creator_donation_routes import router as admin_creator_donation_router
 from app.api.admin_routes import router as admin_router
 from app.api.admin_email_routes import router as admin_email_router
 from app.api.admin_exif_bot_routes import router as admin_exif_bot_router
@@ -12,6 +13,7 @@ from app.api.admin_ig_bot_routes import router as admin_ig_bot_router
 from app.api.billing_routes import router as billing_router
 from app.api.referral_routes import router as referral_router
 from app.api.chat_routes import router as chat_router
+from app.api.creator_donation_routes import router as creator_donation_router
 from app.api.integrations_routes import router as integrations_router
 from app.api.push_routes import router as push_router
 from app.api.studio_routes import router as studio_router
@@ -28,6 +30,7 @@ router.include_router(chat_router)
 router.include_router(push_router)
 router.include_router(webhooks_router)
 router.include_router(tribute_router)
+router.include_router(creator_donation_router)
 router.include_router(integrations_router)
 router.include_router(billing_router)
 router.include_router(referral_router)
@@ -35,6 +38,7 @@ router.include_router(studio_router)
 router.include_router(studio_workflow_router)
 router.include_router(analytics_router)
 router.include_router(admin_router)
+router.include_router(admin_creator_donation_router)
 router.include_router(admin_email_router)
 router.include_router(admin_exif_bot_router)
 router.include_router(admin_ig_bot_router)

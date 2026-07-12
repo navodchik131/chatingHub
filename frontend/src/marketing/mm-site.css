@@ -1463,10 +1463,13 @@ html {
     justify-content: center;
   }
 
-  .mm-lang-switch {
+  .mm-header__inner .mm-lang-switch {
     order: 3;
-    width: 100%;
+    width: auto;
+    max-width: max-content;
     justify-content: center;
     margin-top: 0.25rem;
+    margin-left: auto;
+    margin-right: auto;
   }
 }

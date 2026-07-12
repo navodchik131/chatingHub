@@ -701,6 +701,83 @@ class TributeEarningsSummaryOut(BaseModel):
     event_count: int = 0
 
 
+class CreatorDonationLinkIn(BaseModel):
+    title: str = Field(min_length=1, max_length=128)
+    description: str | None = Field(default=None, max_length=2000)
+    button_text: str | None = Field(default=None, max_length=64)
+    cover_image_url: str | None = Field(default=None, max_length=2048)
+    currency: Literal["EUR", "RUB", "USD"]
+    min_amount_minor: int | None = Field(default=None, ge=1)
+    allow_one_time: bool = True
+    allow_recurring: bool = True
+    studio_model_id: int | None = Field(default=None, ge=1)
+    submit: bool = False
+
+
+class CreatorDonationLinkPatchIn(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=128)
+    description: str | None = Field(default=None, max_length=2000)
+    button_text: str | None = Field(default=None, max_length=64)
+    cover_image_url: str | None = Field(default=None, max_length=2048)
+    currency: Literal["EUR", "RUB", "USD"] | None = None
+    min_amount_minor: int | None = Field(default=None, ge=1)
+    allow_one_time: bool | None = None
+    allow_recurring: bool | None = None
+    studio_model_id: int | None = Field(default=None, ge=1)
+    submit: bool | None = None
+
+
+class CreatorDonationLinkOut(BaseModel):
+    id: int
+    studio_model_id: int | None = None
+    title: str
+    description: str | None = None
+    button_text: str | None = None
+    cover_image_url: str | None = None
+    currency: str
+    min_amount_minor: int | None = None
+    allow_one_time: bool
+    allow_recurring: bool
+    status: str
+    tribute_donation_request_id: int | None = None
+    web_link: str | None = None
+    telegram_link: str | None = None
+    admin_notes: str | None = None
+    created_at: datetime
+    updated_at: datetime
+    activated_at: datetime | None = None
+    donations_count: int | None = None
+    totals_by_currency: dict[str, int] = Field(default_factory=dict)
+    pending_payout_by_currency: dict[str, int] = Field(default_factory=dict)
+
+
+class CreatorDonationEventOut(BaseModel):
+    id: int
+    creator_donation_link_id: int
+    studio_model_id: int | None = None
+    event_name: str
+    amount_minor: int
+    currency: str
+    payer_telegram_user_id: int | None = None
+    payout_status: str
+    occurred_at: datetime
+
+
+class AdminCreatorDonationLinkOut(CreatorDonationLinkOut):
+    user_id: int
+    admin_notes_internal: str | None = None
+
+
+class AdminCreatorDonationActivateIn(BaseModel):
+    tribute_donation_request_id: int = Field(ge=1)
+    web_link: str = Field(min_length=8, max_length=2048)
+    telegram_link: str | None = Field(default=None, max_length=2048)
+
+
+class AdminCreatorDonationRejectIn(BaseModel):
+    admin_notes: str | None = Field(default=None, max_length=2000)
+
+
 class ChatterStatsRowOut(BaseModel):
     user_id: int
     member_login: str

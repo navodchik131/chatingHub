@@ -61,6 +61,7 @@
     "tabConnections": "Подключения",
     "tabModels": "Модели",
     "tabTeam": "Команда",
+    "tabDonations": "Донаты",
     "overviewIntro": "Сводка по аккаунту. Тариф, оплата и история кредитов — в разделе «Тариф и баланс» (владелец).",
     "planLabel": "Тариф",
     "creditBalance": "Баланс кредитов",
@@ -483,5 +484,69 @@
     "membersTitle": "Участники",
     "membersEmpty": "Пока никого нет — добавьте первого выше.",
     "deleteMemberConfirm": "Удалить участника? Его доступ будет отозван."
+  },
+  "donationsExt": {
+    "intro": "Настройте персональную ссылку на донат через Tribute. После проверки мы создадим донат в Tribute и выдадим ссылку для фанатов. Все платежи учитываются в аналитике ниже.",
+    "platformNotConfigured": "Platform Tribute пока не настроен на сервере — заявки сохраняются, активация ссылок будет доступна после настройки.",
+    "createTitle": "Новый донат",
+    "editTitle": "Редактирование доната",
+    "saveDraft": "Сохранить черновик",
+    "submitForReview": "Отправить на модерацию",
+    "cancelEdit": "Отмена",
+    "myLinks": "Мои донаты",
+    "emptyLinks": "Пока нет донатов — заполните форму выше.",
+    "paymentLink": "Ссылка для оплаты",
+    "copy": "Копировать",
+    "pendingHint": "Заявка на проверке. После создания доната в Tribute вы получите ссылку здесь.",
+    "edit": "Изменить",
+    "delete": "Удалить",
+    "viewAnalytics": "Аналитика",
+    "analyticsTitle": "Донаты: {{title}}",
+    "totalReceived": "Всего получено",
+    "pendingPayout": "К выплате",
+    "noDonationsYet": "Пока нет донатов по этой ссылке.",
+    "donationsCount": "{{count}} донатов",
+    "confirmDelete": "Удалить этот донат?",
+    "fields": {
+      "title": "Заголовок",
+      "description": "Описание",
+      "buttonText": "Текст кнопки",
+      "coverUrl": "Обложка (URL)",
+      "currency": "Валюта",
+      "minAmount": "Минимальная сумма",
+      "frequency": "Частота платежей",
+      "allowOneTime": "Разовые донаты",
+      "allowRecurring": "Регулярные донаты"
+    },
+    "placeholders": {
+      "title": "Поддержать меня",
+      "description": "Кратко опишите, за что фанаты могут поблагодарить вас.",
+      "buttonText": "Donate",
+      "minAmount": "1.00"
+    },
+    "hints": {
+      "minAmount": "Пусто — без минимума на нашей стороне; в Tribute действуют лимиты платформы (от €1 / $1 / ₽100)."
+    },
+    "status": {
+      "draft": "Черновик",
+      "pending": "На проверке",
+      "active": "Активен",
+      "rejected": "Отклонён",
+      "disabled": "Отключён"
+    },
+    "payoutStatus": {
+      "pending": "К выплате",
+      "paid": "Выплачено"
+    },
+    "table": {
+      "date": "Дата",
+      "amount": "Сумма",
+      "payer": "Плательщик (Telegram)",
+      "payout": "Выплата"
+    },
+    "errors": {
+      "saveFailed": "Не удалось сохранить",
+      "deleteFailed": "Не удалось удалить"
+    }
   }
 }

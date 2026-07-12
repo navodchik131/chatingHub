@@ -71,6 +71,7 @@ import {
   subscriptionStatusLabel,
 } from './i18n/cabinetLabels'
 import { WorkspaceOverview } from './components/WorkspaceOverview'
+import { CreatorDonationsPanel } from './components/CreatorDonationsPanel'
 import { ConversationPlatformTabs } from './components/ConversationPlatformTabs'
 import { ConversationCategoryTabs } from './components/ConversationCategoryTabs'
 import {
@@ -742,7 +743,7 @@ interface StudioCameraPreset {
   label: string
 }
 
-type AccountCabinetTab = 'overview' | 'billing' | 'integrations' | 'models' | 'team'
+type AccountCabinetTab = 'overview' | 'billing' | 'donations' | 'integrations' | 'models' | 'team'
 
 interface StudioAspectPreset {
   key: string
@@ -1800,6 +1801,7 @@ export default function App() {
     if (accountTab === 'models' && !canStudioModels) setAccountTab('overview')
     if (accountTab === 'team' && !isOwner) setAccountTab('overview')
     if (accountTab === 'billing' && !isOwner) setAccountTab('overview')
+    if (accountTab === 'donations' && !isOwner) setAccountTab('overview')
   }, [me, accountOpen, accountTab, canPlatformAdmin, canStudioModels, isOwner])
 
   const openWavespeedIntegrations = useCallback(() => {
@@ -5321,6 +5323,20 @@ export default function App() {
                     <span>{t('cabinet.tabBilling')}</span>
                   </button>
                 ) : null}
+                {isOwner ? (
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={accountTab === 'donations'}
+                    className={accountTab === 'donations' ? 'account-cabinet-tab active' : 'account-cabinet-tab'}
+                    onClick={() => setAccountTab('donations')}
+                  >
+                    <span className="account-cabinet-tab__icon" aria-hidden>
+                      ♡
+                    </span>
+                    <span>{t('cabinet.tabDonations')}</span>
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   role="tab"
@@ -5872,6 +5888,13 @@ export default function App() {
                 <p className="muted small">{t('cabinet.billing.historyMore')}</p>
               ) : null}
             </div>
+          )}
+
+          {accountTab === 'donations' && isOwner && (
+            <CreatorDonationsPanel
+              studioModels={studioModels.map((m) => ({ id: m.id, name: m.name }))}
+              platformConfigured={Boolean(me?.tribute_billing_available)}
+            />
           )}
 
           {accountTab === 'integrations' && (

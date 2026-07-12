@@ -61,6 +61,7 @@
     "tabConnections": "Connections",
     "tabModels": "Models",
     "tabTeam": "Team",
+    "tabDonations": "Donations",
     "overviewIntro": "Account summary. Plan, billing and credit history — under Plan & balance (owner).",
     "planLabel": "Plan",
     "creditBalance": "Credit balance",
@@ -483,5 +484,69 @@
     "membersTitle": "Members",
     "membersEmpty": "No one yet — add the first member above.",
     "deleteMemberConfirm": "Remove member? Their access will be revoked."
+  },
+  "donationsExt": {
+    "intro": "Set up a personal Tribute donation link. After review we create the donation in Tribute and give you a link for fans. All payments are tracked in analytics below.",
+    "platformNotConfigured": "Platform Tribute is not configured on the server yet — requests are saved; link activation will be available after setup.",
+    "createTitle": "New donation",
+    "editTitle": "Edit donation",
+    "saveDraft": "Save draft",
+    "submitForReview": "Submit for review",
+    "cancelEdit": "Cancel",
+    "myLinks": "My donations",
+    "emptyLinks": "No donations yet — fill in the form above.",
+    "paymentLink": "Payment link",
+    "copy": "Copy",
+    "pendingHint": "Under review. After we create the donation in Tribute you will get the link here.",
+    "edit": "Edit",
+    "delete": "Delete",
+    "viewAnalytics": "Analytics",
+    "analyticsTitle": "Donations: {{title}}",
+    "totalReceived": "Total received",
+    "pendingPayout": "Pending payout",
+    "noDonationsYet": "No donations on this link yet.",
+    "donationsCount": "{{count}} donations",
+    "confirmDelete": "Delete this donation?",
+    "fields": {
+      "title": "Title",
+      "description": "Description",
+      "buttonText": "Button text",
+      "coverUrl": "Cover (URL)",
+      "currency": "Currency",
+      "minAmount": "Minimum amount",
+      "frequency": "Payment frequency",
+      "allowOneTime": "One-time donations",
+      "allowRecurring": "Recurring donations"
+    },
+    "placeholders": {
+      "title": "Support me",
+      "description": "Briefly describe what fans are supporting.",
+      "buttonText": "Donate",
+      "minAmount": "1.00"
+    },
+    "hints": {
+      "minAmount": "Leave empty for no minimum on our side; Tribute platform limits apply (from €1 / $1 / ₽100)."
+    },
+    "status": {
+      "draft": "Draft",
+      "pending": "Pending review",
+      "active": "Active",
+      "rejected": "Rejected",
+      "disabled": "Disabled"
+    },
+    "payoutStatus": {
+      "pending": "Pending",
+      "paid": "Paid"
+    },
+    "table": {
+      "date": "Date",
+      "amount": "Amount",
+      "payer": "Payer (Telegram)",
+      "payout": "Payout"
+    },
+    "errors": {
+      "saveFailed": "Could not save",
+      "deleteFailed": "Could not delete"
+    }
   }
 }

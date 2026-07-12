@@ -16,7 +16,8 @@
     "users": "Users",
     "email": "Email campaigns",
     "exifBot": "EXIF bot",
-    "igBot": "IG bot"
+    "igBot": "IG bot",
+    "creatorDonations": "Creator donations"
   },
   "common": {
     "search": "Search",
@@ -251,5 +252,25 @@
     "limitWithSub": "Limit with subscription",
     "counterDay": "Counter day",
     "placeholder": "Select a bot user to see download stats."
+  },
+  "creatorDonations": {
+    "title": "Creator donations (moderation)",
+    "intro": "Pending requests. Create the donation in Tribute with the same fields, then enter donation_request_id and links.",
+    "empty": "No requests pending review.",
+    "activate": "Activate",
+    "reject": "Reject",
+    "rejectNotesPrompt": "Rejection reason (optional):",
+    "fields": {
+      "currency": "Currency",
+      "min": "Min (minor)",
+      "oneTime": "One-time",
+      "recurring": "Recurring",
+      "tributeId": "Tribute donation_request_id",
+      "webLink": "Web link",
+      "tgLink": "Telegram link (optional)"
+    },
+    "errors": {
+      "actionFailed": "Action failed"
+    }
   }
 }

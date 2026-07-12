@@ -26,6 +26,7 @@ from app.services.entitlements import subscription_is_paid_active
 from app.services.plan_catalog import get_plan_spec, resolve_product_id
 from app.services.referral import grant_referrer_reward_if_needed
 from app.services.studio_workflow_defaults import provision_full_workflow_workspaces
+from app.services.creator_donation_apply import apply_creator_donation_webhook
 from app.services.telegram_identity import find_owner_by_telegram_id
 from app.services.tribute_billing_catalog import TributeBillingCatalog, TributeBillingTarget, parse_tribute_billing_catalog
 
@@ -242,6 +243,10 @@ async def apply_tribute_billing_webhook(
 
     norm = _norm_event_name(name_raw)
     payload = _payload(body)
+
+    if norm in frozenset({"newdonation", "recurrentdonation", "cancelleddonation"}):
+        return await apply_creator_donation_webhook(session, body=body)
+
     tg_id = _telegram_user_id(payload)
     if tg_id is None:
         log.warning("tribute billing webhook: no telegram_user_id event=%s", name_raw)

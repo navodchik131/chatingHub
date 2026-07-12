@@ -158,6 +158,11 @@ class User(Base):
     tribute_connections: Mapped[list["TributeConnection"]] = relationship(
         "TributeConnection", back_populates="user"
     )
+    creator_donation_links: Mapped[list["CreatorDonationLink"]] = relationship(
+        "CreatorDonationLink",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
     studio_models: Mapped[list[UserStudioModel]] = relationship(
         "UserStudioModel", back_populates="owner", cascade="all, delete-orphan"
     )
@@ -460,6 +465,92 @@ class TributeEarningEvent(Base):
 
     connection: Mapped[TributeConnection] = relationship(
         "TributeConnection", back_populates="earning_events"
+    )
+
+
+class CreatorDonationLink(Base):
+    """Настройки доната креатора (platform Tribute, semi-auto создание в Tribute)."""
+
+    __tablename__ = "creator_donation_links"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    studio_model_id: Mapped[int | None] = mapped_column(
+        ForeignKey("user_studio_models.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    title: Mapped[str] = mapped_column(String(128))
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    button_text: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    cover_image_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    currency: Mapped[str] = mapped_column(String(8))
+    min_amount_minor: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    allow_one_time: Mapped[bool] = mapped_column(Boolean, default=True)
+    allow_recurring: Mapped[bool] = mapped_column(Boolean, default=True)
+    status: Mapped[str] = mapped_column(String(16), default="draft", index=True)
+    tribute_donation_request_id: Mapped[int | None] = mapped_column(
+        Integer, nullable=True, unique=True, index=True
+    )
+    web_link: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    telegram_link: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    admin_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+    activated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    user: Mapped[User] = relationship("User", back_populates="creator_donation_links")
+    studio_model: Mapped[UserStudioModel | None] = relationship("UserStudioModel")
+    events: Mapped[list["CreatorDonationEvent"]] = relationship(
+        "CreatorDonationEvent",
+        back_populates="donation_link",
+        cascade="all, delete-orphan",
+    )
+
+
+class CreatorDonationEvent(Base):
+    """Платёж фана по platform-донату креатора."""
+
+    __tablename__ = "creator_donation_events"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    creator_donation_link_id: Mapped[int] = mapped_column(
+        ForeignKey("creator_donation_links.id", ondelete="CASCADE"), index=True
+    )
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    studio_model_id: Mapped[int | None] = mapped_column(
+        ForeignKey("user_studio_models.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    external_event_id: Mapped[str] = mapped_column(String(128), unique=True, index=True)
+    event_name: Mapped[str] = mapped_column(String(64), index=True)
+    amount_minor: Mapped[int] = mapped_column(Integer)
+    currency: Mapped[str] = mapped_column(String(8))
+    payer_telegram_user_id: Mapped[int | None] = mapped_column(
+        Integer, nullable=True, index=True
+    )
+    payout_status: Mapped[str] = mapped_column(String(16), default="pending", index=True)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    raw_meta: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+    donation_link: Mapped[CreatorDonationLink] = relationship(
+        "CreatorDonationLink", back_populates="events"
     )
 
 

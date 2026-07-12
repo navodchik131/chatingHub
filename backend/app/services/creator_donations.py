@@ -1,0 +1,422 @@
+"""CRUD и валидация platform-донатов креаторов."""
+
+from __future__ import annotations
+
+from datetime import datetime, timezone
+from typing import Any
+
+from fastapi import HTTPException
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.db.models import CreatorDonationEvent, CreatorDonationLink, User, UserStudioModel
+from app.services.workspace import workspace_owner_id
+
+DONATION_CURRENCIES = frozenset({"EUR", "RUB", "USD"})
+DONATION_STATUSES = frozenset({"draft", "pending", "active", "rejected", "disabled"})
+EDITABLE_STATUSES = frozenset({"draft", "pending", "rejected"})
+
+# Лимиты Tribute для донатов (minor units).
+_CURRENCY_LIMITS: dict[str, tuple[int, int]] = {
+    "EUR": (100, 200_000),
+    "USD": (100, 200_000),
+    "RUB": (10_000, 150_000_00),
+}
+
+
+def normalize_donation_currency(raw: str) -> str:
+    cur = (raw or "").strip().upper()
+    if cur not in DONATION_CURRENCIES:
+        raise HTTPException(status_code=400, detail="unsupported currency")
+    return cur
+
+
+def validate_min_amount_minor(currency: str, min_amount_minor: int | None) -> None:
+    if min_amount_minor is None:
+        return
+    lo, hi = _CURRENCY_LIMITS[currency]
+    if min_amount_minor < lo or min_amount_minor > hi:
+        raise HTTPException(
+            status_code=400,
+            detail=f"min amount must be between {lo} and {hi} minor units for {currency}",
+        )
+
+
+async def _validate_studio_model(
+    session: AsyncSession,
+    *,
+    owner_id: int,
+    studio_model_id: int | None,
+) -> None:
+    if studio_model_id is None:
+        return
+    row = await session.scalar(
+        select(UserStudioModel.id).where(
+            UserStudioModel.id == studio_model_id,
+            UserStudioModel.user_id == owner_id,
+        )
+    )
+    if not row:
+        raise HTTPException(status_code=400, detail="studio model not found")
+
+
+def donation_link_to_dict(link: CreatorDonationLink, *, totals: dict[str, Any] | None = None) -> dict[str, Any]:
+    out: dict[str, Any] = {
+        "id": link.id,
+        "studio_model_id": link.studio_model_id,
+        "title": link.title,
+        "description": link.description,
+        "button_text": link.button_text,
+        "cover_image_url": link.cover_image_url,
+        "currency": link.currency,
+        "min_amount_minor": link.min_amount_minor,
+        "allow_one_time": bool(link.allow_one_time),
+        "allow_recurring": bool(link.allow_recurring),
+        "status": link.status,
+        "tribute_donation_request_id": link.tribute_donation_request_id,
+        "web_link": link.web_link,
+        "telegram_link": link.telegram_link,
+        "admin_notes": link.admin_notes if link.status == "rejected" else None,
+        "created_at": link.created_at,
+        "updated_at": link.updated_at,
+        "activated_at": link.activated_at,
+    }
+    if totals:
+        out.update(totals)
+    return out
+
+
+async def aggregate_donation_totals(
+    session: AsyncSession,
+    *,
+    link_ids: list[int],
+) -> dict[int, dict[str, Any]]:
+    if not link_ids:
+        return {}
+    rows = (
+        await session.execute(
+            select(
+                CreatorDonationEvent.creator_donation_link_id,
+                CreatorDonationEvent.currency,
+                func.coalesce(func.sum(CreatorDonationEvent.amount_minor), 0),
+                func.count(CreatorDonationEvent.id),
+            )
+            .where(
+                CreatorDonationEvent.creator_donation_link_id.in_(link_ids),
+                CreatorDonationEvent.amount_minor > 0,
+            )
+            .group_by(
+                CreatorDonationEvent.creator_donation_link_id,
+                CreatorDonationEvent.currency,
+            )
+        )
+    ).all()
+    out: dict[int, dict[str, Any]] = {}
+    for link_id, currency, total_minor, count in rows:
+        bucket = out.setdefault(
+            int(link_id),
+            {"donations_count": 0, "totals_by_currency": {}, "pending_payout_by_currency": {}},
+        )
+        bucket["donations_count"] += int(count or 0)
+        bucket["totals_by_currency"][str(currency)] = int(total_minor or 0)
+    pending_rows = (
+        await session.execute(
+            select(
+                CreatorDonationEvent.creator_donation_link_id,
+                CreatorDonationEvent.currency,
+                func.coalesce(func.sum(CreatorDonationEvent.amount_minor), 0),
+            )
+            .where(
+                CreatorDonationEvent.creator_donation_link_id.in_(link_ids),
+                CreatorDonationEvent.amount_minor > 0,
+                CreatorDonationEvent.payout_status == "pending",
+            )
+            .group_by(
+                CreatorDonationEvent.creator_donation_link_id,
+                CreatorDonationEvent.currency,
+            )
+        )
+    ).all()
+    for link_id, currency, total_minor in pending_rows:
+        bucket = out.setdefault(
+            int(link_id),
+            {"donations_count": 0, "totals_by_currency": {}, "pending_payout_by_currency": {}},
+        )
+        bucket["pending_payout_by_currency"][str(currency)] = int(total_minor or 0)
+    return out
+
+
+async def list_creator_donation_links(
+    session: AsyncSession,
+    *,
+    viewer: User,
+) -> list[dict[str, Any]]:
+    owner_id = workspace_owner_id(viewer)
+    rows = (
+        await session.scalars(
+            select(CreatorDonationLink)
+            .where(CreatorDonationLink.user_id == owner_id)
+            .order_by(CreatorDonationLink.id.desc())
+        )
+    ).all()
+    link_ids = [r.id for r in rows]
+    totals = await aggregate_donation_totals(session, link_ids=link_ids)
+    return [donation_link_to_dict(r, totals=totals.get(r.id)) for r in rows]
+
+
+async def get_creator_donation_link(
+    session: AsyncSession,
+    *,
+    viewer: User,
+    link_id: int,
+) -> CreatorDonationLink:
+    owner_id = workspace_owner_id(viewer)
+    row = await session.scalar(
+        select(CreatorDonationLink).where(
+            CreatorDonationLink.id == link_id,
+            CreatorDonationLink.user_id == owner_id,
+        )
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="donation link not found")
+    return row
+
+
+async def create_creator_donation_link(
+    session: AsyncSession,
+    *,
+    viewer: User,
+    data: dict[str, Any],
+) -> dict[str, Any]:
+    owner_id = workspace_owner_id(viewer)
+    currency = normalize_donation_currency(str(data.get("currency") or ""))
+    min_amount_minor = data.get("min_amount_minor")
+    if min_amount_minor is not None:
+        min_amount_minor = int(min_amount_minor)
+    validate_min_amount_minor(currency, min_amount_minor)
+    studio_model_id = data.get("studio_model_id")
+    if studio_model_id is not None:
+        studio_model_id = int(studio_model_id)
+    await _validate_studio_model(session, owner_id=owner_id, studio_model_id=studio_model_id)
+
+    title = str(data.get("title") or "").strip()
+    if not title:
+        raise HTTPException(status_code=400, detail="title required")
+    if len(title) > 128:
+        raise HTTPException(status_code=400, detail="title too long")
+
+    submit = bool(data.get("submit"))
+    status = "pending" if submit else "draft"
+
+    row = CreatorDonationLink(
+        user_id=owner_id,
+        studio_model_id=studio_model_id,
+        title=title,
+        description=(str(data["description"]).strip() if data.get("description") else None),
+        button_text=(str(data["button_text"]).strip() if data.get("button_text") else None),
+        cover_image_url=(str(data["cover_image_url"]).strip() if data.get("cover_image_url") else None),
+        currency=currency,
+        min_amount_minor=min_amount_minor,
+        allow_one_time=bool(data.get("allow_one_time", True)),
+        allow_recurring=bool(data.get("allow_recurring", True)),
+        status=status,
+    )
+    session.add(row)
+    await session.commit()
+    await session.refresh(row)
+    return donation_link_to_dict(row, totals={"donations_count": 0, "totals_by_currency": {}, "pending_payout_by_currency": {}})
+
+
+async def update_creator_donation_link(
+    session: AsyncSession,
+    *,
+    viewer: User,
+    link_id: int,
+    data: dict[str, Any],
+) -> dict[str, Any]:
+    row = await get_creator_donation_link(session, viewer=viewer, link_id=link_id)
+    if row.status not in EDITABLE_STATUSES:
+        raise HTTPException(status_code=400, detail="donation link cannot be edited in current status")
+
+    owner_id = workspace_owner_id(viewer)
+    if "currency" in data:
+        row.currency = normalize_donation_currency(str(data["currency"]))
+    if "min_amount_minor" in data:
+        val = data["min_amount_minor"]
+        row.min_amount_minor = int(val) if val is not None else None
+    validate_min_amount_minor(row.currency, row.min_amount_minor)
+
+    if "studio_model_id" in data:
+        studio_model_id = data["studio_model_id"]
+        if studio_model_id is not None:
+            studio_model_id = int(studio_model_id)
+        await _validate_studio_model(session, owner_id=owner_id, studio_model_id=studio_model_id)
+        row.studio_model_id = studio_model_id
+
+    for field in ("title", "description", "button_text", "cover_image_url"):
+        if field in data:
+            val = data[field]
+            if field == "title":
+                title = str(val or "").strip()
+                if not title:
+                    raise HTTPException(status_code=400, detail="title required")
+                row.title = title
+            elif val is None or str(val).strip() == "":
+                setattr(row, field, None)
+            else:
+                setattr(row, field, str(val).strip())
+
+    if "allow_one_time" in data:
+        row.allow_one_time = bool(data["allow_one_time"])
+    if "allow_recurring" in data:
+        row.allow_recurring = bool(data["allow_recurring"])
+
+    if bool(data.get("submit")):
+        row.status = "pending"
+    elif row.status == "rejected" and not data.get("submit"):
+        row.status = "draft"
+        row.admin_notes = None
+
+    row.updated_at = datetime.now(timezone.utc)
+    await session.commit()
+    await session.refresh(row)
+    totals = await aggregate_donation_totals(session, link_ids=[row.id])
+    return donation_link_to_dict(row, totals=totals.get(row.id))
+
+
+async def delete_creator_donation_link(
+    session: AsyncSession,
+    *,
+    viewer: User,
+    link_id: int,
+) -> None:
+    row = await get_creator_donation_link(session, viewer=viewer, link_id=link_id)
+    if row.status == "active":
+        raise HTTPException(status_code=400, detail="active donation link cannot be deleted")
+    await session.delete(row)
+    await session.commit()
+
+
+async def list_creator_donation_events(
+    session: AsyncSession,
+    *,
+    viewer: User,
+    link_id: int | None = None,
+    limit: int = 100,
+) -> list[dict[str, Any]]:
+    owner_id = workspace_owner_id(viewer)
+    stmt = (
+        select(CreatorDonationEvent)
+        .where(CreatorDonationEvent.user_id == owner_id)
+        .order_by(CreatorDonationEvent.occurred_at.desc())
+        .limit(max(1, min(limit, 500)))
+    )
+    if link_id is not None:
+        stmt = stmt.where(CreatorDonationEvent.creator_donation_link_id == link_id)
+    rows = (await session.scalars(stmt)).all()
+    return [
+        {
+            "id": r.id,
+            "creator_donation_link_id": r.creator_donation_link_id,
+            "studio_model_id": r.studio_model_id,
+            "event_name": r.event_name,
+            "amount_minor": r.amount_minor,
+            "currency": r.currency,
+            "payer_telegram_user_id": r.payer_telegram_user_id,
+            "payout_status": r.payout_status,
+            "occurred_at": r.occurred_at,
+        }
+        for r in rows
+    ]
+
+
+async def admin_list_creator_donation_links(
+    session: AsyncSession,
+    *,
+    status: str | None = None,
+    limit: int = 200,
+) -> list[dict[str, Any]]:
+    stmt = select(CreatorDonationLink).order_by(CreatorDonationLink.updated_at.desc()).limit(
+        max(1, min(limit, 500))
+    )
+    if status:
+        stmt = stmt.where(CreatorDonationLink.status == status)
+    rows = (await session.scalars(stmt)).all()
+    link_ids = [r.id for r in rows]
+    totals = await aggregate_donation_totals(session, link_ids=link_ids)
+    return [
+        {
+            **donation_link_to_dict(r, totals=totals.get(r.id)),
+            "user_id": r.user_id,
+            "admin_notes_internal": r.admin_notes,
+        }
+        for r in rows
+    ]
+
+
+async def admin_activate_creator_donation_link(
+    session: AsyncSession,
+    *,
+    link_id: int,
+    tribute_donation_request_id: int,
+    web_link: str,
+    telegram_link: str | None = None,
+) -> dict[str, Any]:
+    row = await session.get(CreatorDonationLink, link_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="donation link not found")
+    if row.status not in {"pending", "draft", "disabled"}:
+        raise HTTPException(status_code=400, detail="donation link cannot be activated")
+
+    existing = await session.scalar(
+        select(CreatorDonationLink.id).where(
+            CreatorDonationLink.tribute_donation_request_id == tribute_donation_request_id,
+            CreatorDonationLink.id != link_id,
+        )
+    )
+    if existing:
+        raise HTTPException(status_code=400, detail="tribute donation id already used")
+
+    web_link = web_link.strip()
+    if not web_link:
+        raise HTTPException(status_code=400, detail="web_link required")
+
+    row.tribute_donation_request_id = int(tribute_donation_request_id)
+    row.web_link = web_link
+    row.telegram_link = telegram_link.strip() if telegram_link else None
+    row.status = "active"
+    row.admin_notes = None
+    row.activated_at = datetime.now(timezone.utc)
+    row.updated_at = row.activated_at
+    await session.commit()
+    await session.refresh(row)
+    totals = await aggregate_donation_totals(session, link_ids=[row.id])
+    return {
+        **donation_link_to_dict(row, totals=totals.get(row.id)),
+        "user_id": row.user_id,
+        "admin_notes_internal": row.admin_notes,
+    }
+
+
+async def admin_reject_creator_donation_link(
+    session: AsyncSession,
+    *,
+    link_id: int,
+    admin_notes: str | None,
+) -> dict[str, Any]:
+    row = await session.get(CreatorDonationLink, link_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="donation link not found")
+    if row.status != "pending":
+        raise HTTPException(status_code=400, detail="only pending links can be rejected")
+    row.status = "rejected"
+    row.admin_notes = (admin_notes or "").strip() or None
+    row.updated_at = datetime.now(timezone.utc)
+    await session.commit()
+    await session.refresh(row)
+    totals = await aggregate_donation_totals(session, link_ids=[row.id])
+    return {
+        **donation_link_to_dict(row, totals=totals.get(row.id)),
+        "user_id": row.user_id,
+        "admin_notes_internal": row.admin_notes,
+    }

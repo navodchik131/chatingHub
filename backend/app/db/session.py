@@ -369,6 +369,7 @@ async def init_db() -> None:
         await conn.run_sync(_migrate_platform_connections_multi)
         await conn.run_sync(_migrate_instagram_connections)
         await conn.run_sync(_migrate_tribute_connections)
+        await conn.run_sync(_migrate_creator_donation_links)
         await conn.run_sync(_migrate_conversation_notes)
         await conn.run_sync(_migrate_companion_bot)
         await conn.run_sync(_migrate_conversation_categories)
@@ -1204,6 +1205,154 @@ def _migrate_tribute_connections(sync_conn) -> None:
             text(
                 "CREATE INDEX IF NOT EXISTS ix_tribute_earning_events_studio_model_id "
                 "ON tribute_earning_events(studio_model_id)"
+            )
+        )
+
+
+def _migrate_creator_donation_links(sync_conn) -> None:
+    from sqlalchemy import inspect, text
+
+    insp = inspect(sync_conn)
+    dialect = sync_conn.dialect.name
+    bool_true = "1" if dialect == "sqlite" else "true"
+    bool_false = "0" if dialect == "sqlite" else "false"
+
+    if not insp.has_table("creator_donation_links"):
+        if dialect == "sqlite":
+            sync_conn.execute(
+                text(
+                    f"""
+                    CREATE TABLE creator_donation_links (
+                        id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                        user_id INTEGER NOT NULL,
+                        studio_model_id INTEGER,
+                        title VARCHAR(128) NOT NULL,
+                        description TEXT,
+                        button_text VARCHAR(64),
+                        cover_image_url VARCHAR(2048),
+                        currency VARCHAR(8) NOT NULL,
+                        min_amount_minor INTEGER,
+                        allow_one_time BOOLEAN NOT NULL DEFAULT {bool_true},
+                        allow_recurring BOOLEAN NOT NULL DEFAULT {bool_true},
+                        status VARCHAR(16) NOT NULL DEFAULT 'draft',
+                        tribute_donation_request_id INTEGER UNIQUE,
+                        web_link VARCHAR(2048),
+                        telegram_link VARCHAR(2048),
+                        admin_notes TEXT,
+                        created_at DATETIME,
+                        updated_at DATETIME,
+                        activated_at DATETIME,
+                        FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE,
+                        FOREIGN KEY(studio_model_id) REFERENCES user_studio_models (id) ON DELETE SET NULL
+                    )
+                    """
+                )
+            )
+        else:
+            sync_conn.execute(
+                text(
+                    f"""
+                    CREATE TABLE creator_donation_links (
+                        id SERIAL PRIMARY KEY,
+                        user_id INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+                        studio_model_id INTEGER REFERENCES user_studio_models (id) ON DELETE SET NULL,
+                        title VARCHAR(128) NOT NULL,
+                        description TEXT,
+                        button_text VARCHAR(64),
+                        cover_image_url VARCHAR(2048),
+                        currency VARCHAR(8) NOT NULL,
+                        min_amount_minor INTEGER,
+                        allow_one_time BOOLEAN NOT NULL DEFAULT {bool_true},
+                        allow_recurring BOOLEAN NOT NULL DEFAULT {bool_true},
+                        status VARCHAR(16) NOT NULL DEFAULT 'draft',
+                        tribute_donation_request_id INTEGER UNIQUE,
+                        web_link VARCHAR(2048),
+                        telegram_link VARCHAR(2048),
+                        admin_notes TEXT,
+                        created_at TIMESTAMPTZ,
+                        updated_at TIMESTAMPTZ,
+                        activated_at TIMESTAMPTZ
+                    )
+                    """
+                )
+            )
+        sync_conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_creator_donation_links_user_id "
+                "ON creator_donation_links(user_id)"
+            )
+        )
+        sync_conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_creator_donation_links_status "
+                "ON creator_donation_links(status)"
+            )
+        )
+
+    if not insp.has_table("creator_donation_events"):
+        if dialect == "sqlite":
+            sync_conn.execute(
+                text(
+                    """
+                    CREATE TABLE creator_donation_events (
+                        id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                        creator_donation_link_id INTEGER NOT NULL,
+                        user_id INTEGER NOT NULL,
+                        studio_model_id INTEGER,
+                        external_event_id VARCHAR(128) NOT NULL UNIQUE,
+                        event_name VARCHAR(64) NOT NULL,
+                        amount_minor INTEGER NOT NULL,
+                        currency VARCHAR(8) NOT NULL,
+                        payer_telegram_user_id INTEGER,
+                        payout_status VARCHAR(16) NOT NULL DEFAULT 'pending',
+                        occurred_at DATETIME NOT NULL,
+                        raw_meta TEXT,
+                        created_at DATETIME,
+                        FOREIGN KEY(creator_donation_link_id) REFERENCES creator_donation_links (id) ON DELETE CASCADE,
+                        FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE,
+                        FOREIGN KEY(studio_model_id) REFERENCES user_studio_models (id) ON DELETE SET NULL
+                    )
+                    """
+                )
+            )
+        else:
+            sync_conn.execute(
+                text(
+                    """
+                    CREATE TABLE creator_donation_events (
+                        id SERIAL PRIMARY KEY,
+                        creator_donation_link_id INTEGER NOT NULL REFERENCES creator_donation_links (id) ON DELETE CASCADE,
+                        user_id INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+                        studio_model_id INTEGER REFERENCES user_studio_models (id) ON DELETE SET NULL,
+                        external_event_id VARCHAR(128) NOT NULL UNIQUE,
+                        event_name VARCHAR(64) NOT NULL,
+                        amount_minor INTEGER NOT NULL,
+                        currency VARCHAR(8) NOT NULL,
+                        payer_telegram_user_id INTEGER,
+                        payout_status VARCHAR(16) NOT NULL DEFAULT 'pending',
+                        occurred_at TIMESTAMPTZ NOT NULL,
+                        raw_meta TEXT,
+                        created_at TIMESTAMPTZ
+                    )
+                    """
+                )
+            )
+        sync_conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_creator_donation_events_user_id "
+                "ON creator_donation_events(user_id)"
+            )
+        )
+        sync_conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_creator_donation_events_occurred_at "
+                "ON creator_donation_events(occurred_at)"
+            )
+        )
+        sync_conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_creator_donation_events_payer "
+                "ON creator_donation_events(payer_telegram_user_id)"
             )
         )
 

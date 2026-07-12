@@ -16,7 +16,8 @@
     "users": "Пользователи",
     "email": "Рассылки",
     "exifBot": "EXIF-бот",
-    "igBot": "IG-бот"
+    "igBot": "IG-бот",
+    "creatorDonations": "Донаты креаторов"
   },
   "common": {
     "search": "Найти",
@@ -251,5 +252,25 @@
     "limitWithSub": "Лимит с подпиской",
     "counterDay": "День счётчика",
     "placeholder": "Выберите пользователя бота, чтобы увидеть статистику скачиваний."
+  },
+  "creatorDonations": {
+    "title": "Донаты креаторов (модерация)",
+    "intro": "Заявки в статусе pending. Создайте донат в Tribute с теми же полями, затем укажите donation_request_id и ссылки.",
+    "empty": "Нет заявок на модерации.",
+    "activate": "Активировать",
+    "reject": "Отклонить",
+    "rejectNotesPrompt": "Причина отклонения (необязательно):",
+    "fields": {
+      "currency": "Валюта",
+      "min": "Min (minor)",
+      "oneTime": "Разовые",
+      "recurring": "Регулярные",
+      "tributeId": "Tribute donation_request_id",
+      "webLink": "Web link",
+      "tgLink": "Telegram link (optional)"
+    },
+    "errors": {
+      "actionFailed": "Не удалось выполнить действие"
+    }
   }
 }

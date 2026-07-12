@@ -5,6 +5,7 @@ import { apiFetch, getToken } from '../api'
 import { AdminBarChart, AdminHBarChart } from './AdminBarChart'
 import { AdminDrillableKpi, AdminDrillLink } from './AdminDrillableKpi'
 import { AdminSegmentDrill } from './AdminSegmentDrill'
+import { AdminCreatorDonationsTab } from './AdminCreatorDonationsTab'
 import { AdminEmailTab } from './AdminEmailTab'
 import { AdminExifBotTab } from './AdminExifBotTab'
 import { AdminIgBotTab } from './AdminIgBotTab'
@@ -28,7 +29,9 @@ export function AdminPage() {
   const { t } = useTranslation('admin')
   const [gate, setGate] = useState<'loading' | 'ok' | 'denied' | 'anon'>('loading')
   const [meEmail, setMeEmail] = useState('')
-  const [tab, setTab] = useState<'overview' | 'users' | 'email' | 'exif_bot' | 'ig_bot'>('overview')
+  const [tab, setTab] = useState<
+    'overview' | 'users' | 'email' | 'exif_bot' | 'ig_bot' | 'creator_donations'
+  >('overview')
   const [stats, setStats] = useState<AdminStats | null>(null)
   const [users, setUsers] = useState<AdminUserRow[]>([])
   const [userSearch, setUserSearch] = useState('')
@@ -220,6 +223,15 @@ export function AdminPage() {
           onClick={() => setTab('ig_bot')}
         >
           {t('tabs.igBot')}
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === 'creator_donations'}
+          className={tab === 'creator_donations' ? 'admin-tabs__btn active' : 'admin-tabs__btn'}
+          onClick={() => setTab('creator_donations')}
+        >
+          {t('tabs.creatorDonations')}
         </button>
       </nav>
 
@@ -607,6 +619,7 @@ export function AdminPage() {
 
       {tab === 'exif_bot' ? <AdminExifBotTab onError={setError} /> : null}
       {tab === 'ig_bot' ? <AdminIgBotTab onError={setError} /> : null}
+      {tab === 'creator_donations' ? <AdminCreatorDonationsTab /> : null}
 
       <AdminSegmentDrill
         segment={drillSegment}
