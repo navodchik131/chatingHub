@@ -1580,6 +1580,22 @@ export default function App() {
     }
   }, [isOwner, me?.id, t])
 
+  const openCreatorDonations = useCallback(() => {
+    if (me?.id && creatorDonationOverview?.latest_event_id) {
+      writeDonationLastSeenEventId(me.id, creatorDonationOverview.latest_event_id)
+    }
+    setCreatorDonationAlert(null)
+    setAccountOpen(true)
+    setAccountTab('donations')
+  }, [me?.id, creatorDonationOverview?.latest_event_id])
+
+  const dismissCreatorDonationAlert = useCallback(() => {
+    if (me?.id && creatorDonationOverview?.latest_event_id) {
+      writeDonationLastSeenEventId(me.id, creatorDonationOverview.latest_event_id)
+    }
+    setCreatorDonationAlert(null)
+  }, [me?.id, creatorDonationOverview?.latest_event_id])
+
   const refreshChatterStats = useCallback(async () => {
     const r = await apiFetch('/api/workspace/chatter-stats/summary')
     if (r.ok) {
@@ -5227,22 +5243,6 @@ export default function App() {
     if (convId != null) setSelectedId(convId)
     setAppSection('chat')
   }
-
-  const openCreatorDonations = useCallback(() => {
-    if (me?.id && creatorDonationOverview?.latest_event_id) {
-      writeDonationLastSeenEventId(me.id, creatorDonationOverview.latest_event_id)
-    }
-    setCreatorDonationAlert(null)
-    setAccountOpen(true)
-    setAccountTab('donations')
-  }, [me?.id, creatorDonationOverview?.latest_event_id])
-
-  const dismissCreatorDonationAlert = useCallback(() => {
-    if (me?.id && creatorDonationOverview?.latest_event_id) {
-      writeDonationLastSeenEventId(me.id, creatorDonationOverview.latest_event_id)
-    }
-    setCreatorDonationAlert(null)
-  }, [me?.id, creatorDonationOverview?.latest_event_id])
 
   return (
     <div className={appClass}>
