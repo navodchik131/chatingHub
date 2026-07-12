@@ -96,6 +96,8 @@ async def admin_creator_donations_bind(
         link_id=link_id,
         tribute_donation_request_id=body.tribute_donation_request_id,
         inbox_id=body.inbox_id,
+        web_link=body.web_link,
+        telegram_link=body.telegram_link,
     )
     return AdminCreatorDonationLinkOut.model_validate(row)
 

@@ -304,6 +304,7 @@
     },
     "errors": {
       "actionFailed": "Action failed",
+      "webLinkRequired": "Enter the Tribute Web link in the request card below first (under “After creating the donation”).",
       "copyFailed": "Could not copy to clipboard"
     }
   }

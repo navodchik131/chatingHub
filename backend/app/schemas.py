@@ -778,6 +778,8 @@ class AdminCreatorDonationActivateIn(BaseModel):
 class AdminCreatorDonationBindIn(BaseModel):
     tribute_donation_request_id: int = Field(ge=1)
     inbox_id: int | None = Field(default=None, ge=1)
+    web_link: str | None = Field(default=None, max_length=2048)
+    telegram_link: str | None = Field(default=None, max_length=2048)
 
 
 class AdminCreatorDonationWebhookInboxOut(BaseModel):

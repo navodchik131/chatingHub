@@ -168,7 +168,29 @@ export function AdminCreatorDonationsTab() {
     }
   }
 
+  const readApiError = async (r: Response, fallback: string): Promise<string> => {
+    try {
+      const data = (await r.json()) as { detail?: string | { msg?: string }[] }
+      if (typeof data.detail === 'string' && data.detail.trim()) return data.detail
+      if (Array.isArray(data.detail) && data.detail[0]?.msg) return data.detail[0].msg
+    } catch {
+      /* ignore */
+    }
+    return fallback
+  }
+
   const bindDonationId = async (linkId: number, donationRequestId: number, inboxId?: number) => {
+    const row = rows.find((r) => r.id === linkId)
+    const form = activateForms[linkId] ?? {
+      donationRequestId: String(donationRequestId),
+      webLink: row?.web_link ?? '',
+      tgLink: row?.telegram_link ?? '',
+    }
+    const webLink = form.webLink.trim()
+    if (!webLink) {
+      setError(t('creatorDonations.errors.webLinkRequired'))
+      return
+    }
     setBusy(true)
     setError(null)
     try {
@@ -177,10 +199,12 @@ export function AdminCreatorDonationsTab() {
         body: JSON.stringify({
           tribute_donation_request_id: donationRequestId,
           inbox_id: inboxId ?? null,
+          web_link: webLink,
+          telegram_link: form.tgLink.trim() || null,
         }),
       })
       if (!r.ok) {
-        setError(t('creatorDonations.errors.actionFailed'))
+        setError(await readApiError(r, t('creatorDonations.errors.actionFailed')))
         return
       }
       await load()

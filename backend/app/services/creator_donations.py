@@ -9,7 +9,13 @@ from fastapi import HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import CreatorDonationEvent, CreatorDonationLink, User, UserStudioModel
+from app.db.models import (
+    CreatorDonationEvent,
+    CreatorDonationLink,
+    CreatorDonationWebhookInbox,
+    User,
+    UserStudioModel,
+)
 from app.services.creator_donation_cover import is_stored_cover_path
 from app.services.workspace import workspace_owner_id
 
@@ -468,14 +474,27 @@ async def admin_bind_creator_donation_request_id(
     link_id: int,
     tribute_donation_request_id: int,
     inbox_id: int | None = None,
+    web_link: str | None = None,
+    telegram_link: str | None = None,
 ) -> dict[str, Any]:
     row = await session.get(CreatorDonationLink, link_id)
     if not row:
         raise HTTPException(status_code=404, detail="donation link not found")
     if row.status not in {"pending", "awaiting_id"}:
         raise HTTPException(status_code=400, detail="donation link cannot be bound")
+
+    if web_link is not None:
+        web_link = web_link.strip()
+        if web_link:
+            row.web_link = web_link
+    if telegram_link is not None:
+        row.telegram_link = telegram_link.strip() or None
+
     if not (row.web_link or "").strip():
-        raise HTTPException(status_code=400, detail="web_link required before bind")
+        raise HTTPException(
+            status_code=400,
+            detail="web_link required before bind — paste Tribute web link in the request card first",
+        )
 
     existing = await session.scalar(
         select(CreatorDonationLink.id).where(
