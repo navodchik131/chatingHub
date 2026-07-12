@@ -447,6 +447,11 @@ class Settings(BaseSettings):
             return False
         return parse_tribute_billing_catalog(self.tribute_billing_product_map_json).configured()
 
+    @property
+    def tribute_billing_webhook_enabled(self) -> bool:
+        """Webhook platform Tribute (донаты креаторов + billing) — достаточно API key."""
+        return bool((self.tribute_billing_api_key or "").strip())
+
     # --- Legacy single-bot polling (локальная отладка) ---
     legacy_bot_token: str = Field(
         default="",

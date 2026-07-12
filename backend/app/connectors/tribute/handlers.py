@@ -15,6 +15,8 @@ from app.db.models import TributeConnection, TributeEarningEvent
 
 log = logging.getLogger(__name__)
 
+_CREATOR_DONATION_EVENT_NAMES = frozenset({"newdonation", "recurrentdonation", "cancelleddonation"})
+
 _REVENUE_EVENTS = frozenset(
     {
         "newdonation",
@@ -212,6 +214,18 @@ async def ingest_tribute_webhook(
 
     norm = _norm_event_name(name_raw)
     payload = body.get("payload") if isinstance(body.get("payload"), dict) else {}
+
+    if norm in _CREATOR_DONATION_EVENT_NAMES:
+        from app.services.creator_donation_apply import apply_creator_donation_webhook
+
+        creator_result = await apply_creator_donation_webhook(session, body=body)
+        log.info(
+            "tribute conn=%s creator donation sidecar event=%s result=%s",
+            conn.id,
+            name_raw,
+            creator_result,
+        )
+
     kind = _event_kind(norm, payload)
     if kind is None:
         log.info(

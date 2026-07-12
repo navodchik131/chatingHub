@@ -111,7 +111,11 @@ async def apply_creator_donation_webhook(
     payload = _payload(body)
     donation_request_id = _donation_request_id(payload)
     if donation_request_id is None:
-        log.info("creator donation webhook: no donation_request_id event=%s", name_raw)
+        log.warning(
+            "creator donation webhook: no donation_request_id event=%s payload_keys=%s",
+            name_raw,
+            sorted(payload.keys()),
+        )
         return {"ok": True, "skipped": "no_donation_request_id"}
 
     link = await session.scalar(

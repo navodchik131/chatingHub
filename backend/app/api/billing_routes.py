@@ -281,8 +281,8 @@ async def tribute_billing_webhook(
     request: Request,
     session: AsyncSession = Depends(get_session),
 ) -> dict:
-    if not settings.tribute_billing_configured:
-        raise HTTPException(status_code=503, detail="tribute billing not configured")
+    if not settings.tribute_billing_webhook_enabled:
+        raise HTTPException(status_code=503, detail="tribute billing webhook not configured")
 
     wh_secret = (settings.tribute_billing_webhook_secret or "").strip()
     if wh_secret:
@@ -293,7 +293,13 @@ async def tribute_billing_webhook(
     raw = await request.body()
     sig_header = request.headers.get("trbt-signature") or request.headers.get("Trbt-Signature")
     api_key = (settings.tribute_billing_api_key or "").strip()
+    log.info(
+        "tribute billing webhook hit bytes=%s has_signature=%s",
+        len(raw),
+        bool(sig_header),
+    )
     if not verify_tribute_webhook_signature(raw, sig_header, api_key):
+        log.warning("tribute billing webhook: invalid signature")
         raise HTTPException(status_code=401, detail="invalid tribute signature")
 
     try:
