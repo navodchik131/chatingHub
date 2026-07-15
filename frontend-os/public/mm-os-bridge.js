@@ -244,20 +244,136 @@
     return (item.image_url || '').trim()
   }
 
+  const OPTIMISTIC_ARCHIVE_ID_FLOOR = -1_000_000_000
+  let optimisticArchiveSeq = 0
+  let archivePollTimer = null
+
+  function isOptimisticArchiveId(id) {
+    return id <= OPTIMISTIC_ARCHIVE_ID_FLOOR
+  }
+
+  function isArchivePending(item) {
+    if (!item) return false
+    const st = (item.status || '').trim()
+    if (st === 'processing' || st === 'archiving') return true
+    if (st === 'failed' || st === 'ready') return false
+    if (st === 'provider_ready') {
+      if (item.media_kind === 'video') return !(item.video_url || '').trim()
+      return !(item.image_url || '').trim()
+    }
+    return isOptimisticArchiveId(item.id)
+  }
+
+  function dedupeArchiveById(items) {
+    const seen = new Set()
+    const out = []
+    for (const g of items) {
+      if (seen.has(g.id)) continue
+      seen.add(g.id)
+      out.push(g)
+    }
+    return out
+  }
+
+  function mergeArchiveItems(current, incoming) {
+    if (!incoming.length) return dedupeArchiveById(current)
+    const byId = new Map(incoming.map((p) => [p.id, p]))
+    const merged = current.map((g) => byId.get(g.id) ?? g)
+    const seen = new Set(merged.map((g) => g.id))
+    for (const p of incoming) {
+      if (!seen.has(p.id)) merged.unshift(p)
+    }
+    return dedupeArchiveById(merged)
+  }
+
+  function createOptimisticArchiveItem(opts) {
+    optimisticArchiveSeq += 1
+    const tempId = OPTIMISTIC_ARCHIVE_ID_FLOOR - optimisticArchiveSeq
+    return {
+      tempId,
+      item: {
+        id: tempId,
+        created_at: new Date().toISOString(),
+        output_aspect: opts.outputAspect || '9:16',
+        studio_model_id: opts.studioModelId ?? null,
+        model_name: opts.modelName ?? null,
+        prompt_excerpt: (opts.promptExcerpt || '').trim().slice(0, 200) || 'Генерация…',
+        status: 'processing',
+        media_kind: opts.mediaKind || 'image',
+        error_message: null,
+        job_id: null,
+        image_url: '',
+        video_url: null,
+      },
+    }
+  }
+
+  function prependOptimisticArchive(current, item) {
+    return dedupeArchiveById([item, ...current])
+  }
+
+  function replaceOptimisticArchiveId(current, tempId, realId, patch) {
+    return dedupeArchiveById(
+      current.map((g) => (g.id === tempId ? { ...g, id: realId, ...patch } : g)),
+    )
+  }
+
+  function removeOptimisticArchive(current, tempId) {
+    return current.filter((g) => g.id !== tempId)
+  }
+
+  function hasPendingArchive() {
+    return (
+      store.archiveImages.some(isArchivePending) ||
+      store.archiveVideos.some(isArchivePending)
+    )
+  }
+
+  async function refreshArchiveImages() {
+    const optimistic = store.archiveImages.filter((g) => isOptimisticArchiveId(g.id))
+    const [page, pending] = await Promise.all([
+      API.apiJson('/api/studio/generations?limit=40&skip=0&media_kind=image').catch(() => ({ items: [] })),
+      API.apiJson('/api/studio/generations/pending?media_kind=image').catch(() => ({ items: [] })),
+    ])
+    let images = mergeArchiveItems(page.items || [], pending.items || [])
+    images = mergeArchiveItems(images, optimistic)
+    store.archiveImages = images
+  }
+
+  function scheduleArchivePoll() {
+    if (archivePollTimer != null) return
+    const tick = async () => {
+      archivePollTimer = null
+      if (!store.authed || !hasPendingArchive()) return
+      try {
+        await refreshArchiveImages()
+        store.logic?.forceUpdate()
+      } catch (_) {
+        /* тихий опрос */
+      }
+      if (hasPendingArchive()) {
+        archivePollTimer = setTimeout(tick, 12000)
+      }
+    }
+    archivePollTimer = setTimeout(tick, 4000)
+  }
+
   function archiveToFrame(item, i, logic, I) {
     const url = archiveThumbUrl(item)
+    const pending = isArchivePending(item)
     const who = item.model_name || '—'
     const ratio = item.output_aspect || '9:16'
     const tileBase =
       'aspect-ratio:9/16;border-radius:10px;display:flex;align-items:flex-end;padding:8px;position:relative;overflow:hidden;cursor:pointer;background:'
     const thumbBase =
       'aspect-ratio:9/16;border-radius:8px;cursor:pointer;border:2px solid transparent;background:'
-    const bgStyle = url
-      ? tileBase + 'center/cover no-repeat url("' + url.replace(/"/g, '') + '"),' + G[i % 6]
-      : tileBase + G[i % 6]
-    const thumbStyle = url
+    const bgCore = url
+      ? 'center/cover no-repeat url("' + url.replace(/"/g, '') + '"),' + G[i % 6]
+      : G[i % 6]
+    const bgStyle = tileBase + bgCore + ';'
+    const thumbStyle = (url
       ? thumbBase + 'center/cover no-repeat url("' + url.replace(/"/g, '') + '"),' + G[i % 6]
-      : thumbBase + G[i % 6]
+      : thumbBase + G[i % 6]) + ';'
     return {
       id: item.id,
       bg: bgStyle,
@@ -267,9 +383,17 @@
       who,
       ratio,
       url,
-      open: () => {
-        logic.setState({ lightbox: item.id })
-      },
+      pending,
+      spinnerWrap:
+        'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(6,7,9,.55);',
+      spinnerStyle:
+        'width:22px;height:22px;border-radius:50%;border:2.5px solid rgba(215,244,82,.25);border-top-color:#D7F452;animation:mmSpin .8s linear infinite;',
+      showPlaceholder: !url,
+      open: pending
+        ? () => {}
+        : () => {
+            logic.setState({ lightbox: item.id })
+          },
     }
   }
 
@@ -420,12 +544,13 @@
   }
 
   async function loadArchive() {
-    const img = await API.apiJson('/api/studio/generations?limit=40&skip=0&media_kind=image').catch(() => ({ items: [] }))
+    await refreshArchiveImages()
     const vid = await API.apiJson('/api/studio/generations?limit=40&skip=0&media_kind=video').catch(() => ({ items: [] }))
-    store.archiveImages = img.items || []
-    store.archiveVideos = vid.items || []
+    const vidPending = await API.apiJson('/api/studio/generations/pending?media_kind=video').catch(() => ({ items: [] }))
+    store.archiveVideos = mergeArchiveItems(vid.items || [], vidPending.items || [])
     const motion = await API.apiJson('/api/studio/motion/renders?limit=40&skip=0').catch(() => [])
     store.motionRenders = Array.isArray(motion) ? motion : motion.items || []
+    if (hasPendingArchive()) scheduleArchivePoll()
   }
 
   async function loadGenModels() {
@@ -1437,9 +1562,9 @@
   }
 
   async function runGenerate() {
-    if (store.busy) return
     const logic = store.logic
-    const s = logic?.state || {}
+    if (!logic) return
+    const s = logic.state || {}
     const mode = s.imgMode || 'prompt'
     const prompt = (queryPromptTextarea()?.value || '').trim()
     const modelId = store.selectedModelId
@@ -1448,44 +1573,94 @@
       logic.forceUpdate()
       return
     }
-    store.busy = true
     store.error = null
-    try {
-      if (mode === 'carousel') {
-        const srcId = s.carouselPickId
-        if (!srcId && store.uploadFiles.carousel) {
-          throw new Error('Загрузка файла для карусели пока не поддерживается — выберите кадр из архива')
-        }
-        if (!srcId) throw new Error('Выберите кадр из архива для карусели')
+
+    if (mode === 'carousel') {
+      const srcId = s.carouselPickId
+      if (!srcId && store.uploadFiles.carousel) {
+        store.error = 'Загрузка файла для карусели пока не поддерживается — выберите кадр из архива'
+        logic.forceUpdate()
+        return
+      }
+      if (!srcId) {
+        store.error = 'Выберите кадр из архива для карусели'
+        logic.forceUpdate()
+        return
+      }
+      const model = store.models.find((m) => m.id === modelId)
+      const { item: optimistic, tempId } = createOptimisticArchiveItem({
+        mediaKind: 'image',
+        promptExcerpt: prompt || 'Карусель…',
+        studioModelId: modelId,
+        modelName: model?.name ?? null,
+        outputAspect: store.selectedAspect,
+      })
+      store.archiveImages = prependOptimisticArchive(store.archiveImages, optimistic)
+      logic.forceUpdate()
+      scheduleArchivePoll()
+      try {
         await API.apiJson('/api/studio/generations/' + srcId + '/carousel', {
           method: 'POST',
           body: JSON.stringify({ count: s.carouselCount || 6 }),
         })
-      } else {
-        const fd = new FormData()
-        fd.append('description', prompt)
-        fd.append('model_id', String(modelId))
-        fd.append('output_aspect', store.selectedAspect)
-        fd.append('studio_mode', imgModeToStudio(mode))
-        fd.append('studio_wave_profile', isNsfwMode(s) ? 'nsfw' : 'regular')
-        const wave = normalizeWaveModel(waveModelFromState(s), isNsfwMode(s))
-        fd.append('workflow_wave_model', wave.apiId)
-        if (wave.apiId === 'wan-2.7') fd.append('wan_edit_tier', wave.tier)
-        fd.append('generate_wavespeed', '1')
-        fd.append('wavespeed_single_reference', '1')
-        const file = store.uploadFiles.ref
-        if (file && mode !== 'prompt') fd.append('image', file)
-        const accepted = await API.postStudioJob('/api/studio/refine-prompt', fd)
-        if (accepted.job_id) {
-          await API.pollStudioJob(accepted.job_id, { maxWaitMs: 8 * 60 * 1000 }).catch(() => {})
-        }
+        store.archiveImages = removeOptimisticArchive(store.archiveImages, tempId)
+        await refreshArchiveImages()
+        scheduleArchivePoll()
+        await API.apiJson('/api/auth/me').then((m) => { store.me = m })
+      } catch (e) {
+        store.archiveImages = removeOptimisticArchive(store.archiveImages, tempId)
+        store.error = e.message || String(e)
+      } finally {
+        logic.forceUpdate()
       }
-      await loadArchive()
-      await API.apiJson('/api/auth/me').then((m) => { store.me = m })
+      return
+    }
+
+    const model = store.models.find((m) => m.id === modelId)
+    const { item: optimistic, tempId } = createOptimisticArchiveItem({
+      mediaKind: 'image',
+      promptExcerpt: prompt || 'Генерация…',
+      studioModelId: modelId,
+      modelName: model?.name ?? null,
+      outputAspect: store.selectedAspect,
+    })
+    store.archiveImages = prependOptimisticArchive(store.archiveImages, optimistic)
+    logic.forceUpdate()
+    scheduleArchivePoll()
+
+    try {
+      const fd = new FormData()
+      fd.append('description', prompt)
+      fd.append('model_id', String(modelId))
+      fd.append('output_aspect', store.selectedAspect)
+      fd.append('studio_mode', imgModeToStudio(mode))
+      fd.append('studio_wave_profile', isNsfwMode(s) ? 'nsfw' : 'regular')
+      const wave = normalizeWaveModel(waveModelFromState(s), isNsfwMode(s))
+      fd.append('workflow_wave_model', wave.apiId)
+      if (wave.apiId === 'wan-2.7') fd.append('wan_edit_tier', wave.tier)
+      fd.append('generate_wavespeed', '1')
+      fd.append('wavespeed_single_reference', '1')
+      const file = store.uploadFiles.ref
+      if (file && mode !== 'prompt') fd.append('image', file)
+      const accepted = await API.postStudioJob('/api/studio/refine-prompt', fd)
+      const realId = typeof accepted.generation_id === 'number' ? accepted.generation_id : null
+      if (realId) {
+        store.archiveImages = replaceOptimisticArchiveId(store.archiveImages, tempId, realId, {
+          status: 'processing',
+          job_id: accepted.job_id ?? null,
+        })
+      } else {
+        store.archiveImages = removeOptimisticArchive(store.archiveImages, tempId)
+      }
+      scheduleArchivePoll()
+      void API.apiJson('/api/auth/me').then((m) => {
+        store.me = m
+        logic.forceUpdate()
+      })
     } catch (e) {
+      store.archiveImages = removeOptimisticArchive(store.archiveImages, tempId)
       store.error = e.message || String(e)
     } finally {
-      store.busy = false
       logic.forceUpdate()
     }
   }
@@ -2001,6 +2176,7 @@
     setInterval(() => {
       if (!store.authed || !store.logic) return
       bindDomActions()
+      if (hasPendingArchive()) scheduleArchivePoll()
       const co = store.logic.state.chatOpen ?? 0
       if (co !== lastChatOpen) {
         lastChatOpen = co

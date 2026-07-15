@@ -411,8 +411,13 @@ input::placeholder,textarea::placeholder{color:#5C6066;}
             <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;">
               <sc-for list="{{ archiveFrames }}" as="af" hint-placeholder-count="8">
                 <div onClick="{{ af.open }}" style="border-radius:12px;overflow:hidden;background:#121316;border:1px solid rgba(255,255,255,.07);cursor:pointer;" style-hover="border-color:rgba(215,244,82,.4);">
-                  <div style="{{ af.bg }}position:relative;" style-hover="filter:brightness(1.08);">
+                  <div style="{{ af.bg }}" style-hover="{{ af.pending ? '' : 'filter:brightness(1.08);' }}">
+                    <sc-if value="{{ af.pending }}" hint-placeholder-val="{{ false }}">
+                      <span style="{{ af.spinnerWrap }}"><span style="{{ af.spinnerStyle }}"></span></span>
+                    </sc-if>
+                    <sc-if value="{{ af.showPlaceholder }}" hint-placeholder-val="{{ true }}">
                     <span style="display:flex;width:22px;height:22px;color:rgba(255,255,255,.35);" dangerouslySetInnerHTML="{{ icoImage }}"></span>
+                    </sc-if>
                     <span style="position:absolute;top:7px;right:7px;display:flex;width:15px;height:15px;color:rgba(255,255,255,.7);background:rgba(0,0,0,.4);border-radius:6px;padding:3px;" dangerouslySetInnerHTML="{{ icoZoom }}"></span>
                   </div>
                   <div style="padding:8px 10px;">
