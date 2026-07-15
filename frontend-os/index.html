@@ -346,9 +346,7 @@ input::placeholder,textarea::placeholder{color:#5C6066;}
                     <div style="font-size:10px;color:#9BA0A6;">{{ am.note }}</div>
                   </div>
                 </sc-for>
-              </div>
-            </div>
-            <div style="display:flex;gap:10px;">
+              </div><div style="{{ lightboxData.actionsStyle }}">
               <sc-for list="{{ curMode.slots }}" as="s" hint-placeholder-count="2">
                 <div data-mm-upload="ref" style="flex:1;aspect-ratio:3/4;border:1.5px dashed rgba(255,255,255,.18);border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;cursor:pointer;" style-hover="border-color:rgba(215,244,82,.5);background:rgba(215,244,82,.03);">
                   <span style="display:flex;width:20px;height:20px;color:#6B7076;" dangerouslySetInnerHTML="{{ icoUpload }}"></span>
@@ -1169,8 +1167,8 @@ input::placeholder,textarea::placeholder{color:#5C6066;}
     <!-- archive lightbox -->
     <sc-if value="{{ hasLightbox }}" hint-placeholder-val="{{ false }}">
       <div onClick="{{ closeLightbox }}" style="position:fixed;inset:0;background:rgba(6,7,9,.86);z-index:60;display:flex;align-items:center;justify-content:center;padding:24px;">
-        <div onClick="{{ stop }}" style="display:flex;flex-direction:column;gap:14px;max-height:92vh;max-width:min(92vw,720px);">
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+        <div onClick="{{ stop }}" style="{{ lightboxData.cardStyle }}">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-shrink:0;">
             <div>
               <div style="font-weight:800;font-size:15px;">{{ lightboxData.who }}</div>
               <div style="font-size:11px;color:#9BA0A6;">{{ lightboxData.mode }} · {{ lightboxData.ratio }} · {{ lightboxData.when }}</div>
@@ -1179,13 +1177,13 @@ input::placeholder,textarea::placeholder{color:#5C6066;}
           </div>
           <div style="{{ lightboxData.previewWrap }}">
             <sc-if value="{{ lightboxData.showPlaceholder }}" hint-placeholder-val="{{ true }}">
-            <span style="display:flex;width:48px;height:48px;color:rgba(255,255,255,.25);" dangerouslySetInnerHTML="{{ icoImage }}"></span>
+            <span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;width:48px;height:48px;margin:auto;color:rgba(255,255,255,.25);" dangerouslySetInnerHTML="{{ icoImage }}"></span>
             </sc-if>
             <sc-if value="{{ lightboxData.hasImage }}" hint-placeholder-val="{{ false }}">
             <img src="{{ lightboxData.url }}" alt="" style="width:100%;height:100%;object-fit:contain;display:block;">
             </sc-if>
           </div>
-          <div style="display:flex;gap:10px;">
+          <div style="{{ lightboxData.actionsStyle }}">
             <div onClick="{{ downloadLightbox }}" style="flex:1;display:flex;align-items:center;justify-content:center;gap:8px;background:#D7F452;color:#171A05;border-radius:11px;padding:12px;font-size:13px;font-weight:800;cursor:pointer;" style-hover="background:#E8FA8A;"><span style="display:flex;width:16px;height:16px;" dangerouslySetInnerHTML="{{ icoDownload }}"></span>{{ t.download }}</div>
             <div onClick="{{ makeCarousel }}" style="flex:1;display:flex;align-items:center;justify-content:center;gap:8px;background:rgba(192,132,252,.12);border:1px solid rgba(192,132,252,.4);color:#C084FC;border-radius:11px;padding:12px;font-size:13px;font-weight:800;cursor:pointer;" style-hover="background:rgba(192,132,252,.2);"><span style="display:flex;width:16px;height:16px;" dangerouslySetInnerHTML="{{ icoGrid2 }}"></span>{{ t.makeCarousel }}</div>
           </div>

@@ -452,9 +452,13 @@
     const previewWrap =
       'width:100%;aspect-ratio:' +
       aspectCss(ratio) +
-      ';max-height:min(calc(92vh - 180px),720px);flex:none;border-radius:14px;overflow:hidden;display:flex;align-items:center;justify-content:center;background:' +
+      ';max-height:min(calc(92vh - 200px),640px);flex:none;flex-shrink:0;border-radius:14px;overflow:hidden;position:relative;background:' +
       (url ? '#0A0B0D' : G[id % 6]) +
       ';'
+    const actionsStyle =
+      'display:flex;gap:10px;width:100%;flex:none;flex-shrink:0;align-self:stretch;'
+    const cardStyle =
+      'display:flex;flex-direction:column;align-items:stretch;gap:14px;width:min(92vw,720px);max-height:92vh;flex-shrink:0;'
     const mode =
       item.media_kind === 'video'
         ? lang === 'ru'
@@ -465,6 +469,8 @@
           : 'Frame'
     return {
       previewWrap,
+      cardStyle,
+      actionsStyle,
       big: previewWrap,
       who: item.model_name || '—',
       ratio,
