@@ -60,22 +60,6 @@
         label: x.label + 's',
       })),
       videoRatioChips: mk('ratio', 'selectedAspect', ['9:16', '16:9', '1:1']),
-      modelChips: (store.models || []).map((m) => ({
-        id: m.id,
-        label: m.name,
-        pick: () => {
-          store.selectedModelId = m.id
-          logic.forceUpdate()
-        },
-        style:
-          'font-family:\'JetBrains Mono\';font-size:11px;font-weight:' +
-          (store.selectedModelId === m.id ? '800' : '700') +
-          ';' +
-          (store.selectedModelId === m.id
-            ? 'background:rgba(215,244,82,.12);color:#D7F452;border:1px solid rgba(215,244,82,.4);'
-            : 'border:1px solid rgba(255,255,255,.12);color:#9BA0A6;') +
-          'padding:5px 14px;border-radius:8px;cursor:pointer;',
-      })),
     }
   }
 

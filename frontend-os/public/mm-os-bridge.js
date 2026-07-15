@@ -54,6 +54,8 @@
     busy: false,
     error: null,
     selectedModelId: null,
+    selectedWaveModelId: null,
+    genModels: [],
     selectedAspect: '9:16',
     uploadFiles: {},
     uploadPreviewUrls: {},
@@ -141,8 +143,75 @@
     }
   }
 
+  const REGULAR_ENGINE_IDS = ['nano-banana-2', 'nano-banana-pro', 'gpt-image-2', 'seedream-v5.0-pro']
+  const NSFW_ENGINE_IDS = ['wan-2.7', 'wan-2.7-pro', 'seedream-v5.0-pro']
+  const FALLBACK_GEN_MODELS = [
+    { id: 'nano-banana-2', label: 'Nano Banana', nsfwOnly: false },
+    { id: 'nano-banana-pro', label: 'Nano Banana Pro', nsfwOnly: false },
+    { id: 'gpt-image-2', label: 'GPT Image 2', nsfwOnly: false },
+    { id: 'seedream-v5.0-pro', label: 'Seedream 5 Pro', nsfwOnly: false },
+    { id: 'wan-2.7', label: 'Wan 2.7', nsfwOnly: true },
+    { id: 'wan-2.7-pro', label: 'Wan 2.7 Pro', nsfwOnly: true },
+  ]
+
+  function enginesForNsfw(nsfw) {
+    const allowed = nsfw ? NSFW_ENGINE_IDS : REGULAR_ENGINE_IDS
+    const byId = new Map((store.genModels.length ? store.genModels : FALLBACK_GEN_MODELS).map((m) => [m.id, m]))
+    return allowed.map((id) => byId.get(id)).filter(Boolean)
+  }
+
+  function normalizeWaveModel(id, nsfw) {
+    const x = (id || '').trim().toLowerCase()
+    if (x === 'wan-2.7-pro') return { apiId: 'wan-2.7', tier: 'pro' }
+    if (x === 'wan-2.7') return { apiId: 'wan-2.7', tier: 'standard' }
+    if (REGULAR_ENGINE_IDS.includes(x) || NSFW_ENGINE_IDS.includes(x)) return { apiId: x, tier: 'standard' }
+    return { apiId: nsfw ? 'wan-2.7' : 'nano-banana-pro', tier: 'standard' }
+  }
+
+  function mapEngineChips(logic, lang) {
+    const nsfw = !!logic.state.nsfw
+    const acc = nsfw ? '#F0A8C8' : '#D7F452'
+    const models = enginesForNsfw(nsfw)
+    let cur = store.selectedWaveModelId
+    if (!models.some((m) => m.id === cur)) {
+      cur = models[0]?.id || (nsfw ? 'wan-2.7' : 'nano-banana-pro')
+      store.selectedWaveModelId = cur
+    }
+    const modelHint = nsfw
+      ? lang === 'ru'
+        ? 'NSFW-движки: без цензуры, приватная очередь. Доступно на Pro / Studio.'
+        : 'NSFW engines: uncensored, private queue. Pro / Studio only.'
+      : lang === 'ru'
+        ? 'SFW-движки: быстрые, безопасный контент для всех каналов.'
+        : 'SFW engines: fast, safe content for all channels.'
+    const modelChips = models.map((m) => ({
+      id: m.id,
+      label: m.label,
+      pick: () => {
+        store.selectedWaveModelId = m.id
+        logic.forceUpdate()
+      },
+      style:
+        'font-size:12px;padding:7px 14px;border-radius:9px;cursor:pointer;' +
+        (m.id === cur
+          ? 'font-weight:800;background:' +
+            (nsfw ? 'rgba(240,168,200,.14)' : 'rgba(215,244,82,.12)') +
+            ';color:' +
+            acc +
+            ';border:1px solid ' +
+            (nsfw ? 'rgba(240,168,200,.5)' : 'rgba(215,244,82,.5)') +
+            ';'
+          : 'font-weight:700;border:1px solid rgba(255,255,255,.12);color:#9BA0A6;'),
+    }))
+    return { modelChips, modelHint }
+  }
+
+  function archiveThumbUrl(item) {
+    return (item.image_url || '').trim()
+  }
+
   function archiveToFrame(item, i, logic, I) {
-    const url = (item.media_kind === 'video' ? item.image_url || item.video_url : item.image_url) || ''
+    const url = archiveThumbUrl(item)
     const who = item.model_name || '—'
     const ratio = item.output_aspect || '9:16'
     const tileBase =
@@ -157,6 +226,7 @@
       : thumbBase + G[i % 6]
     return {
       id: item.id,
+      bg: bgStyle,
       tileStyle: bgStyle,
       thumbStyle,
       label: who + ' · ' + ratio,
@@ -270,6 +340,20 @@
     store.motionRenders = Array.isArray(motion) ? motion : motion.items || []
   }
 
+  async function loadGenModels() {
+    const data = await API.apiJson('/api/studio/workflow/model-options').catch(() => null)
+    const list = data?.models
+    if (Array.isArray(list) && list.length) {
+      store.genModels = list.map((m) => ({
+        id: m.id,
+        label: m.label,
+        nsfwOnly: !!m.nsfw_only,
+      }))
+    } else {
+      store.genModels = FALLBACK_GEN_MODELS
+    }
+  }
+
   async function loadModels() {
     const data = await API.apiJson('/api/studio/models').catch(() => [])
     store.models = Array.isArray(data) ? data : []
@@ -307,6 +391,7 @@
       API.apiJson('/api/health').then((h) => { store.health = h }),
       loadConversations(),
       loadModels(),
+      loadGenModels(),
       loadArchive(),
       loadIntegrations(),
       loadTribute(),
@@ -988,6 +1073,9 @@
         fd.append('output_aspect', store.selectedAspect)
         fd.append('studio_mode', imgModeToStudio(mode))
         fd.append('studio_wave_profile', s.nsfw ? 'nsfw' : 'regular')
+        const wave = normalizeWaveModel(store.selectedWaveModelId, !!s.nsfw)
+        fd.append('workflow_wave_model', wave.apiId)
+        if (wave.apiId === 'wan-2.7') fd.append('wan_edit_tier', wave.tier)
         fd.append('generate_wavespeed', '1')
         fd.append('wavespeed_single_reference', '1')
         const file = store.uploadFiles.ref
@@ -1073,6 +1161,8 @@
       archiveFrames: [],
       videoArchive: [],
       charChips: [],
+      modelChips: vals.modelChips || [],
+      modelHint: vals.modelHint || '',
       characters: [],
       donStats: [],
       donLinks: [],
@@ -1261,6 +1351,7 @@
       "font-family:'JetBrains Mono';font-size:10px;background:rgba(215,244,82,.12);color:#D7F452;border:1px solid rgba(215,244,82,.4);padding:3px 10px;border-radius:20px;cursor:pointer;"
     const chipOff =
       "font-family:'JetBrains Mono';font-size:10px;border:1px solid rgba(255,255,255,.12);color:#9BA0A6;padding:3px 10px;border-radius:20px;cursor:pointer;"
+    const engine = mapEngineChips(logic, lang)
     const charChips = store.models.map((m) => ({
       id: m.id,
       label: m.name,
@@ -1388,6 +1479,8 @@
       archiveFrames,
       videoArchive,
       charChips,
+      modelChips: engine.modelChips,
+      modelHint: engine.modelHint,
       characters,
       donStats,
       donLinks,

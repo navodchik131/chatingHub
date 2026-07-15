@@ -281,7 +281,7 @@ const LOGIC_PATCHES = [
       runGenerate: () => {}, runGenerateVideo: () => {}, sendReply: () => {}, logout: () => {},
       apiError: null, apiBusy: false, canChat: true, canStudio: true, canBilling: true,
       referralLink: '—', referralStats: '—', dialogsPlatformLine: '—', userSidebarInitial: 'R',
-      payoutHint: '—', videoQualityChips: [], videoDurationChips: [], videoRatioChips: [], modelChips: [],
+      payoutHint: '—', videoQualityChips: [], videoDurationChips: [], videoRatioChips: [],
     };
     return (window.MMOS_BRIDGE ? window.MMOS_BRIDGE.enrich(this, __dcVals) : __dcVals);
   }`,
