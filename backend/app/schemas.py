@@ -453,9 +453,11 @@ class StudioUpscaleGenerationOut(BaseModel):
 class StudioCarouselIn(BaseModel):
     """Несколько кадров той же сцены / той же модели по мастер-генерации (для карусели в соцсетях)."""
 
-    count: int = Field(default=4, ge=1, le=5)
+    count: int = Field(default=4, ge=2, le=8)
     studio_wave_profile: Literal["regular", "nsfw"] = "nsfw"
     wan_edit_tier: Literal["standard", "pro"] = "standard"
+    user_notes: str = Field(default="", max_length=4000)
+    workflow_wave_model: str | None = Field(default=None, max_length=64)
 
 
 class StudioCarouselItemOut(BaseModel):

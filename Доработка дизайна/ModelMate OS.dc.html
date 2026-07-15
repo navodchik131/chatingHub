@@ -386,7 +386,7 @@ input::placeholder,textarea::placeholder{color:#5C6066;}
             </div>
           </div>
           <!-- archive -->
-          <div>
+          <div style="{{ archiveColStyle }}">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
               <span style="font-weight:800;font-size:14px;">{{ t.archive }}</span>
               <span style="font-size:10.5px;color:#FB923C;background:rgba(251,146,60,.08);border:1px solid rgba(251,146,60,.25);border-radius:8px;padding:4px 10px;">⏳ {{ t.retention }}</span>
@@ -514,7 +514,7 @@ input::placeholder,textarea::placeholder{color:#5C6066;}
               <span style="font-family:'JetBrains Mono';font-size:11px;font-weight:600;color:#3D4213;">−{{ vidCost }} {{ t.cr }}</span>
             </div>
           </div>
-          <div>
+          <div style="{{ archiveColStyle }}">
             <div style="font-weight:800;font-size:14px;margin-bottom:10px;">{{ t.archive }}</div>
             <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;">
               <sc-for list="{{ videoArchive }}" as="va" hint-placeholder-count="4">
@@ -1828,7 +1828,8 @@ class Component extends DCLogic {
       chatFilters, chats, messages, notes,
       showThread: !isMobile, showNotes: !isMobile,
       dialogsGrid: isMobile ? 'display:grid;grid-template-columns:1fr;gap:12px;flex:1;min-height:0;' : 'display:grid;grid-template-columns:290px 1fr 270px;gap:12px;flex:1;min-height:420px;',
-      studioGrid: isMobile ? 'display:grid;grid-template-columns:1fr;gap:14px;' : 'display:grid;grid-template-columns:340px 1fr;gap:16px;align-items:start;',
+      studioGrid: isMobile ? 'display:grid;grid-template-columns:1fr;gap:14px;width:100%;' : 'display:grid;grid-template-columns:minmax(280px,340px) minmax(0,1fr);gap:16px;align-items:start;width:100%;',
+      archiveColStyle: isMobile ? '' : 'min-width:0;',
       imgModes, curMode, charChips, ratioChips, archiveFrames, videoArchive,
       contentModes, aiModels, countChips,
       showGenError: s.showGenError, imgErrList, triggerGen, genFieldErr,

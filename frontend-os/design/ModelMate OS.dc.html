@@ -386,7 +386,7 @@ input::placeholder,textarea::placeholder{color:#5C6066;}
             </div>
           </div>
           <!-- archive -->
-          <div>
+          <div style="{{ archiveColStyle }}">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
               <span style="font-weight:800;font-size:14px;">{{ t.archive }}</span>
               <span style="font-size:10.5px;color:#FB923C;background:rgba(251,146,60,.08);border:1px solid rgba(251,146,60,.25);border-radius:8px;padding:4px 10px;">⏳ {{ t.retention }}</span>
@@ -514,7 +514,7 @@ input::placeholder,textarea::placeholder{color:#5C6066;}
               <span style="font-family:'JetBrains Mono';font-size:11px;font-weight:600;color:#3D4213;">−{{ vidCost }} {{ t.cr }}</span>
             </div>
           </div>
-          <div>
+          <div style="{{ archiveColStyle }}">
             <div style="font-weight:800;font-size:14px;margin-bottom:10px;">{{ t.archive }}</div>
             <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;">
               <sc-for list="{{ videoArchive }}" as="va" hint-placeholder-count="4">
@@ -1153,20 +1153,25 @@ input::placeholder,textarea::placeholder{color:#5C6066;}
     <!-- archive lightbox -->
     <sc-if value="{{ hasLightbox }}" hint-placeholder-val="{{ false }}">
       <div onClick="{{ closeLightbox }}" style="position:fixed;inset:0;background:rgba(6,7,9,.86);z-index:60;display:flex;align-items:center;justify-content:center;padding:24px;">
-        <div onClick="{{ stop }}" style="display:flex;flex-direction:column;gap:14px;max-height:92vh;max-width:min(92vw,720px);">
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+        <div onClick="{{ stop }}" style="{{ lightboxData.cardStyle }}">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-shrink:0;">
             <div>
               <div style="font-weight:800;font-size:15px;">{{ lightboxData.who }}</div>
               <div style="font-size:11px;color:#9BA0A6;">{{ lightboxData.mode }} · {{ lightboxData.ratio }} · {{ lightboxData.when }}</div>
             </div>
             <div onClick="{{ closeLightbox }}" style="display:flex;align-items:center;gap:6px;border:1px solid rgba(255,255,255,.14);border-radius:9px;padding:7px 12px;font-size:12px;font-weight:700;color:#9BA0A6;cursor:pointer;" style-hover="color:#F2F3F0;border-color:rgba(255,255,255,.3);">✕ {{ t.close }}</div>
           </div>
-          <div style="{{ lightboxData.big }}min-height:0;display:flex;align-items:center;justify-content:center;overflow:hidden;">
-            <span style="display:flex;width:48px;height:48px;color:rgba(255,255,255,.25);" dangerouslySetInnerHTML="{{ icoImage }}"></span>
+          <div style="{{ lightboxData.previewWrap }}">
+            <sc-if value="{{ lightboxData.showPlaceholder }}" hint-placeholder-val="{{ true }}">
+            <span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;width:48px;height:48px;margin:auto;color:rgba(255,255,255,.25);" dangerouslySetInnerHTML="{{ icoImage }}"></span>
+            </sc-if>
+            <sc-if value="{{ lightboxData.hasImage }}" hint-placeholder-val="{{ false }}">
+            <img src="{{ lightboxData.url }}" alt="" style="width:100%;height:100%;object-fit:contain;display:block;">
+            </sc-if>
           </div>
-          <div style="display:flex;gap:10px;">
-            <div style="flex:1;display:flex;align-items:center;justify-content:center;gap:8px;background:#D7F452;color:#171A05;border-radius:11px;padding:12px;font-size:13px;font-weight:800;cursor:pointer;" style-hover="background:#E8FA8A;"><span style="display:flex;width:16px;height:16px;" dangerouslySetInnerHTML="{{ icoDownload }}"></span>{{ t.download }}</div>
-            <div style="flex:1;display:flex;align-items:center;justify-content:center;gap:8px;background:rgba(192,132,252,.12);border:1px solid rgba(192,132,252,.4);color:#C084FC;border-radius:11px;padding:12px;font-size:13px;font-weight:800;cursor:pointer;" style-hover="background:rgba(192,132,252,.2);"><span style="display:flex;width:16px;height:16px;" dangerouslySetInnerHTML="{{ icoGrid2 }}"></span>{{ t.makeCarousel }}</div>
+          <div style="{{ lightboxData.actionsStyle }}">
+            <div onClick="{{ downloadLightbox }}" style="flex:1;display:flex;align-items:center;justify-content:center;gap:8px;background:#D7F452;color:#171A05;border-radius:11px;padding:12px;font-size:13px;font-weight:800;cursor:pointer;" style-hover="background:#E8FA8A;"><span style="display:flex;width:16px;height:16px;" dangerouslySetInnerHTML="{{ icoDownload }}"></span>{{ t.download }}</div>
+            <div onClick="{{ makeCarousel }}" style="flex:1;display:flex;align-items:center;justify-content:center;gap:8px;background:rgba(192,132,252,.12);border:1px solid rgba(192,132,252,.4);color:#C084FC;border-radius:11px;padding:12px;font-size:13px;font-weight:800;cursor:pointer;" style-hover="background:rgba(192,132,252,.2);"><span style="display:flex;width:16px;height:16px;" dangerouslySetInnerHTML="{{ icoGrid2 }}"></span>{{ t.makeCarousel }}</div>
           </div>
         </div>
       </div>
@@ -1823,7 +1828,8 @@ class Component extends DCLogic {
       chatFilters, chats, messages, notes,
       showThread: !isMobile, showNotes: !isMobile,
       dialogsGrid: isMobile ? 'display:grid;grid-template-columns:1fr;gap:12px;flex:1;min-height:0;' : 'display:grid;grid-template-columns:290px 1fr 270px;gap:12px;flex:1;min-height:420px;',
-      studioGrid: isMobile ? 'display:grid;grid-template-columns:1fr;gap:14px;' : 'display:grid;grid-template-columns:340px 1fr;gap:16px;align-items:start;',
+      studioGrid: isMobile ? 'display:grid;grid-template-columns:1fr;gap:14px;width:100%;' : 'display:grid;grid-template-columns:minmax(280px,340px) minmax(0,1fr);gap:16px;align-items:start;width:100%;',
+      archiveColStyle: isMobile ? '' : 'min-width:0;',
       imgModes, curMode, charChips, ratioChips, archiveFrames, videoArchive,
       contentModes, aiModels, countChips,
       showGenError: s.showGenError, imgErrList, triggerGen, genFieldErr,

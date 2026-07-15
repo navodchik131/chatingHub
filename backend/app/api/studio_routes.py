@@ -161,7 +161,12 @@ from app.services.studio_openai import (
     resolve_studio_prompt_brief_mode,
 )
 from app.services.studio_camera_presets import get_camera_preset_by_id, list_camera_presets
-from app.services.studio_carousel import build_carousel_wave_prompt
+from app.services.studio_carousel import (
+    build_carousel_grok_wave_prompt,
+    build_carousel_wave_prompt,
+    grok_compose_carousel_prompts,
+    static_carousel_variations,
+)
 from app.services.studio_grok_scene_compose import (
     grok_compose_studio_main_scene,
     grok_compose_studio_scene,
@@ -1620,10 +1625,11 @@ async def api_studio_carousel(
     await assert_studio_generation_access(session, user, row.studio_model_id)
 
     master_text = (row.refined_prompt or row.prompt_excerpt or "").strip()
-    if len(master_text) < 80:
+    user_notes = (payload.user_notes or "").strip()
+    if len(master_text) < 80 and not user_notes and not grok_scene_compose_configured():
         raise HTTPException(
             status_code=400,
-            detail="Для карусели нужен сохранённый полный промпт. Сгенерируйте снимок заново в студии.",
+            detail="Для карусели укажите промпт (что меняется) или используйте кадр с сохранённым полным промптом.",
         )
 
     pub = (settings.public_app_url or "").strip().rstrip("/")
@@ -1649,7 +1655,133 @@ async def api_studio_carousel(
             "count": int(payload.count),
             "studio_wave_profile": payload.studio_wave_profile,
             "wan_edit_tier": payload.wan_edit_tier,
+            "user_notes": (payload.user_notes or "").strip(),
+            "workflow_wave_model": (payload.workflow_wave_model or "").strip().lower() or None,
         },
+    )
+
+
+@router.post(
+    "/studio/carousel",
+    response_model=StudioCarouselOut,
+    responses={202: {"model": StudioJobAcceptedOut}},
+)
+async def api_studio_carousel_from_upload(
+    request: Request,
+    model_id: str = Form(...),
+    count: int = Form(4),
+    description: str = Form(""),
+    output_aspect: str = Form("9:16"),
+    studio_wave_profile: str = Form("nsfw"),
+    workflow_wave_model: str | None = Form(None),
+    wan_edit_tier: str = Form("standard"),
+    existing_generation_id: str = Form(""),
+    image: UploadFile | None = File(None),
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> StudioCarouselOut | JSONResponse:
+    """Карусель: архивный кадр или загрузка + Grok N промптов → последовательный img2img."""
+    _ = request
+    assert_permission(user, PERM_STUDIO_GENERATE)
+    oid = workspace_owner_id(user)
+
+    if count < 2 or count > 8:
+        raise HTTPException(status_code=400, detail="Количество кадров: от 2 до 8")
+
+    parsed_mid = _parse_optional_model_id(model_id)
+    if parsed_mid is None:
+        raise HTTPException(status_code=400, detail="Укажите персонажа (model_id)")
+
+    await assert_studio_generation_access(session, user, parsed_mid)
+
+    gen_id: int | None = None
+    raw_arch = (existing_generation_id or "").strip()
+    if raw_arch:
+        try:
+            gen_id = int(raw_arch)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Некорректный номер кадра из архива") from None
+
+    image_bytes: bytes | None = None
+    if image is not None and (image.filename or "").strip():
+        image_bytes = await image.read()
+        if not image_bytes:
+            raise HTTPException(status_code=400, detail="Пустой файл изображения")
+        if len(image_bytes) > MAX_IMAGE_BYTES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Изображение слишком большое (макс. {MAX_IMAGE_BYTES // (1024 * 1024)} МБ)",
+            )
+
+    if gen_id is not None and image_bytes:
+        raise HTTPException(
+            status_code=400,
+            detail="Выберите кадр из архива или загрузите фото — не оба сразу.",
+        )
+    if gen_id is None and not image_bytes:
+        raise HTTPException(
+            status_code=400,
+            detail="Выберите кадр из архива или загрузите базовое фото.",
+        )
+
+    if gen_id is not None:
+        row = await session.get(StudioGeneration, gen_id)
+        if not row or row.user_id != oid:
+            raise HTTPException(status_code=404, detail="Кадр архива не найден")
+
+    pub = (settings.public_app_url or "").strip().rstrip("/")
+    if not pub.lower().startswith("https://"):
+        raise HTTPException(
+            status_code=503,
+            detail="WaveSpeed скачивает мастер-кадр по HTTPS. Укажите PUBLIC_APP_URL=https://…",
+        )
+
+    if grok_scene_compose_configured():
+        pass
+    elif not (description or "").strip():
+        raise HTTPException(
+            status_code=400,
+            detail="Опишите, что меняется от кадра к кадру (промпт карусели).",
+        )
+
+    sub_b, _, ws_row, plan, _credits, _demo = await load_owner_studio_billing(session, oid)
+    _require_studio_subscription(user, sub_b, credits_balance=_credits, demo_generations_remaining=_demo)
+    try:
+        studio_wavespeed_api_key(plan=plan, ws_row=ws_row, owner_subscription=sub_b, demo_generations_remaining=_demo)
+    except HTTPException as e:
+        return StudioCarouselOut(message=str(e.detail))
+
+    try:
+        aspect_key = normalize_aspect_key(output_aspect)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    job = await studio_jobs.create_studio_job(
+        session,
+        owner_id=oid,
+        actor_user_id=user.id,
+        job_type="carousel",
+        params={
+            "gen_id": gen_id,
+            "count": int(count),
+            "studio_wave_profile": studio_wave_profile,
+            "wan_edit_tier": wan_edit_tier,
+            "user_notes": (description or "").strip(),
+            "workflow_wave_model": (workflow_wave_model or "").strip().lower() or None,
+            "studio_model_id": parsed_mid,
+            "output_aspect": aspect_key,
+        },
+    )
+    if image_bytes:
+        params = studio_jobs.job_params(job)
+        params["image_path"] = studio_jobs.save_studio_job_file(job.id, "carousel_master.bin", image_bytes)
+        params["image_mime"] = (image.content_type or "").strip() if image else ""
+        await studio_jobs.update_studio_job_params(session, job, params)
+
+    studio_jobs.schedule_studio_job(job.id)
+    return JSONResponse(
+        status_code=202,
+        content=StudioJobAcceptedOut(job_id=job.id, job_type="carousel", generation_id=None).model_dump(),
     )
 
 
@@ -1658,17 +1790,24 @@ async def _studio_job_execute_carousel(
     job: StudioJob,
     user: User,
 ) -> dict[str, Any]:
-    params = studio_jobs.job_params(job)
-    gen_id = int(params["gen_id"])
-    count = int(params.get("count") or 4)
-    oid = workspace_owner_id(user)
-    row = await session.get(StudioGeneration, gen_id)
-    if not row or row.user_id != oid:
-        raise RuntimeError("Генерация не найдена")
+    from app.services.chat_outbound import load_studio_generation_image_bytes
+    from app.services.studio_workflow_image_resolution import (
+        normalize_workflow_image_resolution,
+        workflow_wavespeed_size_for_resolution,
+    )
+    from app.services.wavespeed_client import workflow_edit_image_url
 
-    master_text = (row.refined_prompt or row.prompt_excerpt or "").strip()
-    if len(master_text) < 80:
-        raise RuntimeError("Для карусели нужен сохранённый полный промпт.")
+    params = studio_jobs.job_params(job)
+    count = max(2, min(8, int(params.get("count") or 4)))
+    oid = workspace_owner_id(user)
+
+    gen_id_raw = params.get("gen_id")
+    gen_id = int(gen_id_raw) if gen_id_raw is not None else None
+    row: StudioGeneration | None = None
+    if gen_id is not None:
+        row = await session.get(StudioGeneration, gen_id)
+        if not row or row.user_id != oid:
+            raise RuntimeError("Генерация не найдена")
 
     pub = (settings.public_app_url or "").strip().rstrip("/")
     if not pub.lower().startswith("https://"):
@@ -1676,26 +1815,106 @@ async def _studio_job_execute_carousel(
 
     sub_b, _, ws_row, plan, _credits, _demo = await load_owner_studio_billing(session, oid)
     _require_studio_subscription(user, sub_b, credits_balance=_credits, demo_generations_remaining=_demo)
-    ws_key = studio_wavespeed_api_key(plan=plan, ws_row=ws_row, owner_subscription=sub_b, demo_generations_remaining=_demo)
+    ws_key = studio_wavespeed_api_key(
+        plan=plan, ws_row=ws_row, owner_subscription=sub_b, demo_generations_remaining=_demo
+    )
 
     wave_profile_n = _normalize_studio_wave_profile(str(params.get("studio_wave_profile") or "nsfw"))
     wan_tier_n = _normalize_wan_edit_tier(str(params.get("wan_edit_tier") or "standard"))
-    aspect_key = normalize_aspect_key(row.output_aspect or "9:16")
+    workflow_wave_model = str(params.get("workflow_wave_model") or "").strip().lower()
+    user_notes = (params.get("user_notes") or params.get("description") or "").strip()
+
+    aspect_key = normalize_aspect_key(
+        (row.output_aspect if row else None) or params.get("output_aspect") or "9:16"
+    )
+    studio_model_id = (
+        row.studio_model_id if row else params.get("studio_model_id")
+    )
+    if studio_model_id is not None:
+        try:
+            studio_model_id = int(studio_model_id)
+        except (TypeError, ValueError):
+            studio_model_id = None
+
+    master_text = ""
+    if row:
+        master_text = (row.refined_prompt or row.prompt_excerpt or "").strip()
+
+    master_url: str | None = None
+    master_bytes: bytes | None = None
+    master_mime: str | None = None
+
+    if params.get("image_path"):
+        master_bytes = studio_jobs.load_studio_job_file(str(params["image_path"]))
+        raw_mime = str(params.get("image_mime") or "").strip()
+        master_mime = raw_mime or "image/jpeg"
+        fid = save_pose_reference_bytes(
+            owner_id=oid,
+            raw=master_bytes,
+            content_type=master_mime if master_mime.startswith("image/") else "image/jpeg",
+        )
+        ptok = create_pose_reference_access_token(user_id=oid, file_id=fid)
+        master_url = f"{pub}/api/studio/public-pose-reference?t={quote(ptok, safe='')}"
+    elif gen_id is not None:
+        master_bytes, master_mime = await load_studio_generation_image_bytes(
+            session, owner_id=oid, generation_id=gen_id
+        )
+        tok = create_generation_image_access_token(user_id=oid, generation_id=gen_id)
+        master_url = f"{pub}/api/studio/public-generation-image?t={quote(tok, safe='')}"
+    else:
+        raise RuntimeError("Не указан мастер-кадр для карусели")
+
+    if not master_url:
+        raise RuntimeError("Не удалось подготовить URL мастер-кадра")
+
+    use_grok = grok_scene_compose_configured() and master_bytes
+    shot_variations: list[str] = []
+    if use_grok:
+        try:
+            shot_variations = await grok_compose_carousel_prompts(
+                master_image_bytes=master_bytes,
+                master_image_mime=master_mime,
+                user_direction=user_notes,
+                count=count,
+                master_scene_text=master_text or None,
+            )
+        except Exception as e:
+            log.warning("carousel grok compose failed owner=%s: %s", oid, e)
+            shot_variations = []
+
+    if not shot_variations:
+        if not master_text and not user_notes and not use_grok:
+            raise RuntimeError(
+                "Для карусели нужен сохранённый промпт, загрузка с описанием или Grok."
+            )
+        shot_variations = static_carousel_variations(count)
+
+    scene_context = master_text or user_notes
 
     cost_one = apply_studio_credit_cost(plan, settings.credit_cost_studio_carousel_shot)
-    tok = create_generation_image_access_token(user_id=oid, generation_id=gen_id)
-    master_url = f"{pub}/api/studio/public-generation-image?t={quote(tok, safe='')}"
-
     items: list[StudioCarouselItemOut] = []
     last_msg: str | None = None
     arch_base = _public_app_base(None)
 
+    workflow_wave_resolution = normalize_workflow_image_resolution(
+        workflow_wave_model or "wan-2.7",
+        None,
+    )
+
     for shot_i in range(count):
         billing = await ensure_can_consume_credits(session, user, cost_one)
-        carousel_body = build_carousel_wave_prompt(
-            master_refined_json=master_text,
-            shot_index=shot_i,
-        )
+        variation = shot_variations[shot_i] if shot_i < len(shot_variations) else static_carousel_variations(1)[0]
+        if use_grok or user_notes or not master_text:
+            carousel_body = build_carousel_grok_wave_prompt(
+                master_scene_context=scene_context,
+                shot_variation=variation,
+            )
+        else:
+            carousel_body = build_carousel_wave_prompt(
+                master_refined_json=master_text,
+                shot_index=shot_i,
+            )
+
         if wave_profile_n == "regular":
             wavespeed_prompt = finalize_nano_banana_studio_prompt(
                 carousel_body,
@@ -1712,11 +1931,26 @@ async def _studio_job_execute_carousel(
 
         if settings.wavespeed_seedream_omit_size:
             size_for_ws: str | None = None
+        elif workflow_wave_model == "wan-2.7":
+            size_for_ws = workflow_wavespeed_size_for_resolution(aspect_key, workflow_wave_resolution)
         else:
             size_for_ws = wavespeed_size_string(aspect_key)
 
         try:
-            if wave_profile_n == "regular":
+            if workflow_wave_model:
+                ws_car = await workflow_edit_image_url(
+                    api_key=ws_key,
+                    wave_model_id=workflow_wave_model,
+                    image_urls=[master_url],
+                    prompt=wavespeed_prompt,
+                    aspect_ratio=aspect_key,
+                    wan_edit_tier=wan_tier_n,
+                    wave_profile=wave_profile_n,
+                    size=size_for_ws,
+                    resolution=workflow_wave_resolution,
+                )
+                raw_url = ws_car.url
+            elif wave_profile_n == "regular":
                 ws_car = await nano_banana_pro_edit_image_url(
                     api_key=ws_key,
                     image_urls=[master_url],
@@ -1745,15 +1979,16 @@ async def _studio_job_execute_carousel(
             )
             break
 
+        source_label = f"gen {gen_id}" if gen_id is not None else "upload"
         gen = await download_and_create_generation(
             session,
             owner_id=oid,
             source_url=raw_url,
-            refined_prompt=f"[carousel {shot_i + 1}/{count} from gen {gen_id}]",
+            refined_prompt=f"[carousel {shot_i + 1}/{count} from {source_label}]",
             output_aspect=aspect_key,
-            studio_model_id=row.studio_model_id,
+            studio_model_id=studio_model_id or (row.studio_model_id if row else None),
             refined_prompt_full=wavespeed_prompt,
-            exif_camera=getattr(row, "exif_camera", None),
+            exif_camera=getattr(row, "exif_camera", None) if row else None,
         )
         if gen is None:
             last_msg = "Не удалось сохранить кадр карусели — повторите позже."
@@ -1771,6 +2006,7 @@ async def _studio_job_execute_carousel(
                 "generation_id": gen.id,
                 "studio_wave_profile": wave_profile_n,
                 "wan_edit_tier": wan_tier_n,
+                "workflow_wave_model": workflow_wave_model or None,
             },
         )
         await session.commit()

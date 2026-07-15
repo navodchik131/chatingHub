@@ -1648,38 +1648,56 @@
 
     if (mode === 'carousel') {
       const srcId = s.carouselPickId
-      if (!srcId && store.uploadFiles.carousel) {
-        store.error = 'Загрузка файла для карусели пока не поддерживается — выберите кадр из архива'
+      const uploadFile = store.uploadFiles.carousel
+      if (!srcId && !uploadFile) {
+        store.error = 'Выберите кадр из архива или загрузите фото для карусели'
         logic.forceUpdate()
         return
       }
-      if (!srcId) {
-        store.error = 'Выберите кадр из архива для карусели'
-        logic.forceUpdate()
-        return
-      }
+      const count = Math.max(2, Math.min(8, Number(s.carouselCount) || 4))
       const model = store.models.find((m) => m.id === modelId)
-      const { item: optimistic, tempId } = createOptimisticArchiveItem({
-        mediaKind: 'image',
-        promptExcerpt: prompt || 'Карусель…',
-        studioModelId: modelId,
-        modelName: model?.name ?? null,
-        outputAspect: store.selectedAspect,
-      })
-      store.archiveImages = prependOptimisticArchive(store.archiveImages, optimistic)
+      const tempIds = []
+      for (let i = 0; i < count; i++) {
+        const { item, tempId } = createOptimisticArchiveItem({
+          mediaKind: 'image',
+          promptExcerpt: prompt || `Карусель ${i + 1}/${count}…`,
+          studioModelId: modelId,
+          modelName: model?.name ?? null,
+          outputAspect: store.selectedAspect,
+        })
+        store.archiveImages = prependOptimisticArchive(store.archiveImages, item)
+        tempIds.push(tempId)
+      }
       logic.forceUpdate()
       scheduleArchivePoll()
       try {
-        await API.apiJson('/api/studio/generations/' + srcId + '/carousel', {
-          method: 'POST',
-          body: JSON.stringify({ count: s.carouselCount || 6 }),
+        const fd = new FormData()
+        fd.append('model_id', String(modelId))
+        fd.append('count', String(count))
+        fd.append('description', prompt)
+        fd.append('output_aspect', store.selectedAspect)
+        fd.append('studio_wave_profile', isNsfwMode(s) ? 'nsfw' : 'regular')
+        const wave = normalizeWaveModel(waveModelFromState(s), isNsfwMode(s))
+        fd.append('workflow_wave_model', wave.apiId)
+        if (wave.apiId === 'wan-2.7') fd.append('wan_edit_tier', wave.tier)
+        if (srcId) fd.append('existing_generation_id', String(srcId))
+        else if (uploadFile) fd.append('image', uploadFile, uploadFile.name || 'carousel.jpg')
+        const accepted = await API.postStudioJob('/api/studio/carousel', fd)
+        await API.pollStudioJob(accepted.job_id, {
+          maxWaitMs: Math.max(8 * 60 * 1000, count * 4 * 60 * 1000),
         })
-        store.archiveImages = removeOptimisticArchive(store.archiveImages, tempId)
+        for (const tid of tempIds) {
+          store.archiveImages = removeOptimisticArchive(store.archiveImages, tid)
+        }
         await refreshArchiveImages()
         scheduleArchivePoll()
-        await API.apiJson('/api/auth/me').then((m) => { store.me = m })
+        await API.apiJson('/api/auth/me').then((m) => {
+          store.me = m
+        })
       } catch (e) {
-        store.archiveImages = removeOptimisticArchive(store.archiveImages, tempId)
+        for (const tid of tempIds) {
+          store.archiveImages = removeOptimisticArchive(store.archiveImages, tid)
+        }
         store.error = e.message || String(e)
       } finally {
         logic.forceUpdate()
