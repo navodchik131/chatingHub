@@ -2044,7 +2044,10 @@
       fd.append('model_id', String(modelId))
       fd.append('prompt', motion)
       fd.append('output_aspect', store.selectedAspect)
-      if (store.videoResolution) fd.append('video_resolution', store.videoResolution)
+      if (store.videoResolution) {
+        const vr = String(store.videoResolution)
+        fd.append('video_resolution', vr === '4K' || vr === '4k' ? '1080p' : vr)
+      }
       if (store.videoDuration) fd.append('duration_seconds', String(store.videoDuration))
       if (store.motionVideoFileId) fd.append('motion_video_file_id', store.motionVideoFileId)
       const frameFile = store.uploadFiles['motion-frame']

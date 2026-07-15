@@ -624,28 +624,28 @@ input::placeholder,textarea::placeholder{color:#5C6066;}
               <div style="font-family:'JetBrains Mono';font-size:9.5px;letter-spacing:1.8px;color:#6B7076;margin-bottom:8px;">{{ t.motionPrompt }}</div>
               <textarea rows="2" placeholder="{{ t.motionHint }}" style="width:100%;background:#0D0E11;border:1px solid rgba(255,255,255,.09);border-radius:10px;padding:10px 12px;color:#F2F3F0;font-family:'Manrope';font-size:12.5px;resize:vertical;outline:none;"></textarea>
             </div>
-            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;">
+            <div style="display:flex;flex-direction:column;gap:12px;">
               <div>
-                <div style="font-family:'JetBrains Mono';font-size:9px;letter-spacing:1.4px;color:#6B7076;margin-bottom:7px;">{{ t.vidQuality }}</div>
-                <div style="display:flex;gap:5px;flex-wrap:wrap;">
-                  <sc-for list="{{ qualityOpts }}" as="q" hint-placeholder-count="3">
-                    <span onClick="{{ q.pick }}" style="{{ q.style }}">{{ q.label }}</span>
+                <div style="font-family:'JetBrains Mono';font-size:9.5px;letter-spacing:1.8px;color:#6B7076;margin-bottom:8px;">{{ t.format }}</div>
+                <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                  <sc-for list="{{ videoRatioChips }}" as="vr" hint-placeholder-count="5">
+                    <span onClick="{{ vr.pick }}" style="{{ vr.style }}" style-hover="border-color:rgba(255,255,255,.3);">{{ vr.label }}</span>
                   </sc-for>
                 </div>
               </div>
               <div>
-                <div style="font-family:'JetBrains Mono';font-size:9px;letter-spacing:1.4px;color:#6B7076;margin-bottom:7px;">{{ t.format }}</div>
-                <div style="display:flex;gap:5px;flex-wrap:wrap;">
-                  <sc-for list="{{ vfmtOpts }}" as="vf" hint-placeholder-count="3">
-                    <span onClick="{{ vf.pick }}" style="{{ vf.style }}">{{ vf.label }}</span>
+                <div style="font-family:'JetBrains Mono';font-size:9.5px;letter-spacing:1.8px;color:#6B7076;margin-bottom:8px;">{{ t.vidQuality }}</div>
+                <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                  <sc-for list="{{ videoQualityChips }}" as="vq" hint-placeholder-count="3">
+                    <span onClick="{{ vq.pick }}" style="{{ vq.style }}" style-hover="border-color:rgba(255,255,255,.3);">{{ vq.label }}</span>
                   </sc-for>
                 </div>
               </div>
               <div>
-                <div style="font-family:'JetBrains Mono';font-size:9px;letter-spacing:1.4px;color:#6B7076;margin-bottom:7px;">{{ t.duration }}</div>
-                <div style="display:flex;gap:5px;flex-wrap:wrap;">
-                  <sc-for list="{{ vtimeOpts }}" as="vt" hint-placeholder-count="2">
-                    <span onClick="{{ vt.pick }}" style="{{ vt.style }}">{{ vt.label }}</span>
+                <div style="font-family:'JetBrains Mono';font-size:9.5px;letter-spacing:1.8px;color:#6B7076;margin-bottom:8px;">{{ t.duration }}</div>
+                <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                  <sc-for list="{{ videoDurationChips }}" as="vd" hint-placeholder-count="6">
+                    <span onClick="{{ vd.pick }}" style="{{ vd.style }}" style-hover="border-color:rgba(255,255,255,.3);">{{ vd.label }}</span>
                   </sc-for>
                 </div>
               </div>
@@ -1303,7 +1303,7 @@ input::placeholder,textarea::placeholder{color:#5C6066;}
     <!-- archive lightbox -->
     <sc-if value="{{ hasLightbox }}" hint-placeholder-val="{{ false }}">
       <div onClick="{{ closeLightbox }}" style="position:fixed;inset:0;background:rgba(6,7,9,.86);z-index:60;display:flex;align-items:center;justify-content:center;padding:24px;">
-        <div onClick="{{ stop }}" style="display:flex;flex-direction:column;gap:14px;max-height:92vh;max-width:min(92vw,720px);">
+        <div onClick="{{ stop }}" style="{{ lightboxData.cardStyle }}">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
             <div>
               <div style="font-weight:800;font-size:15px;">{{ lightboxData.who }}</div>
@@ -1311,12 +1311,17 @@ input::placeholder,textarea::placeholder{color:#5C6066;}
             </div>
             <div onClick="{{ closeLightbox }}" style="display:flex;align-items:center;gap:6px;border:1px solid rgba(255,255,255,.14);border-radius:9px;padding:7px 12px;font-size:12px;font-weight:700;color:#9BA0A6;cursor:pointer;" style-hover="color:#F2F3F0;border-color:rgba(255,255,255,.3);">✕ {{ t.close }}</div>
           </div>
-          <div style="{{ lightboxData.big }}min-height:0;display:flex;align-items:center;justify-content:center;overflow:hidden;">
-            <span style="display:flex;width:48px;height:48px;color:rgba(255,255,255,.25);" dangerouslySetInnerHTML="{{ icoImage }}"></span>
+          <div style="{{ lightboxData.previewWrap }}">
+            <sc-if value="{{ lightboxData.showPlaceholder }}" hint-placeholder-val="{{ true }}">
+            <span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.25);" dangerouslySetInnerHTML="{{ icoImage }}"></span>
+            </sc-if>
+            <sc-if value="{{ lightboxData.hasImage }}" hint-placeholder-val="{{ false }}">
+            <img src="{{ lightboxData.url }}" alt="" style="width:100%;height:100%;object-fit:contain;display:block;">
+            </sc-if>
           </div>
-          <div style="display:flex;gap:10px;">
-            <div style="flex:1;display:flex;align-items:center;justify-content:center;gap:8px;background:#D7F452;color:#171A05;border-radius:11px;padding:12px;font-size:13px;font-weight:800;cursor:pointer;" style-hover="background:#E8FA8A;"><span style="display:flex;width:16px;height:16px;" dangerouslySetInnerHTML="{{ icoDownload }}"></span>{{ t.download }}</div>
-            <div style="flex:1;display:flex;align-items:center;justify-content:center;gap:8px;background:rgba(192,132,252,.12);border:1px solid rgba(192,132,252,.4);color:#C084FC;border-radius:11px;padding:12px;font-size:13px;font-weight:800;cursor:pointer;" style-hover="background:rgba(192,132,252,.2);"><span style="display:flex;width:16px;height:16px;" dangerouslySetInnerHTML="{{ icoGrid2 }}"></span>{{ t.makeCarousel }}</div>
+          <div style="{{ lightboxData.actionsStyle }}">
+            <div onClick="{{ downloadLightbox }}" style="flex:1;display:flex;align-items:center;justify-content:center;gap:8px;background:#D7F452;color:#171A05;border-radius:11px;padding:12px;font-size:13px;font-weight:800;cursor:pointer;" style-hover="background:#E8FA8A;"><span style="display:flex;width:16px;height:16px;" dangerouslySetInnerHTML="{{ icoDownload }}"></span>{{ t.download }}</div>
+            <div onClick="{{ makeCarousel }}" style="flex:1;display:flex;align-items:center;justify-content:center;gap:8px;background:rgba(192,132,252,.12);border:1px solid rgba(192,132,252,.4);color:#C084FC;border-radius:11px;padding:12px;font-size:13px;font-weight:800;cursor:pointer;" style-hover="background:rgba(192,132,252,.2);"><span style="display:flex;width:16px;height:16px;" dangerouslySetInnerHTML="{{ icoGrid2 }}"></span>{{ t.makeCarousel }}</div>
           </div>
         </div>
       </div>
@@ -1786,7 +1791,10 @@ class Component extends DCLogic {
     const afBase = 'aspect-ratio:9/16;display:flex;align-items:center;justify-content:center;background:';
     const archiveFrames = [0, 1, 2, 3, 4, 5, 6, 7].map(i => ({ bg: afBase + G[i % 6], big: 'flex:1;display:flex;align-items:center;justify-content:center;border-radius:14px;background:' + G[i % 6], who: i % 3 === 0 ? 'Ruby' : 'Mia', ratio: '9:16', open: () => setS({ lightbox: i }) }));
     const lb = s.lightbox;
-    const lightboxData = lb == null ? null : { big: 'flex:1;min-height:0;display:flex;align-items:center;justify-content:center;border-radius:14px;background:' + G[lb % 6], who: lb % 3 === 0 ? 'Ruby' : 'Mia', ratio: '9:16', mode: lang === 'ru' ? 'Кадр по промпту' : 'From prompt', when: '12.07 · 14:2' + lb };
+    const lbCardStyle = 'display:flex;flex-direction:column;align-items:stretch;gap:14px;width:min(92vw,720px);max-height:92vh;flex-shrink:0;';
+    const lbActionsStyle = 'display:flex;gap:10px;width:100%;flex:none;flex-shrink:0;align-self:stretch;';
+    const lbPreview = 'width:100%;aspect-ratio:9/16;max-height:min(calc(92vh - 200px),640px);flex:none;flex-shrink:0;border-radius:14px;overflow:hidden;position:relative;background:';
+    const lightboxData = lb == null ? null : { previewWrap: lbPreview + G[lb % 6], cardStyle: lbCardStyle, actionsStyle: lbActionsStyle, big: lbPreview + G[lb % 6], who: lb % 3 === 0 ? 'Ruby' : 'Mia', ratio: '9:16', mode: lang === 'ru' ? 'Кадр по промпту' : 'From prompt', when: '12.07 · 14:2' + lb, url: '', hasImage: false, showPlaceholder: true };
 
     // ─── video ───
     const vaBase = 'aspect-ratio:9/16;display:flex;align-items:center;justify-content:center;position:relative;background:';
@@ -1796,11 +1804,14 @@ class Component extends DCLogic {
       { id: 'yes', label: lang === 'ru' ? 'Да, есть' : 'Yes, I have', style: ffSeg(s.hasFirstFrame === 'yes'), pick: () => setS({ hasFirstFrame: 'yes' }) },
       { id: 'no', label: lang === 'ru' ? 'Нет — сгенерировать' : 'No — generate it', style: ffSeg(s.hasFirstFrame === 'no'), pick: () => setS({ hasFirstFrame: 'no' }) }
     ];
-    const mkOpt = (arr, cur, key) => arr.map(o => ({ label: o.l, sub: o.s || false, style: cur === o.v ? chipOn : chipOff, pick: () => setS({ [key]: o.v }) }));
-    const qualityOpts = mkOpt([{ l: '720p', v: '720' }, { l: '1080p', v: '1080' }, { l: '4K', v: '4k' }], s.vidQuality, 'vidQuality');
-    const vfmtOpts = mkOpt([{ l: '9:16' }, { l: '16:9' }, { l: '1:1' }].map(o => ({ l: o.l, v: o.l })), s.vidFormat, 'vidFormat');
-    const vtimeOpts = mkOpt([{ l: lang === 'ru' ? '5 с' : '5s', v: '5' }, { l: lang === 'ru' ? '10 с' : '10s', v: '10' }], s.vidTime, 'vidTime');
-    const vidCost = (s.vidQuality === '4k' ? 80 : s.vidQuality === '1080' ? 40 : 25) * (s.vidTime === '10' ? 2 : 1);
+    const vidChipOn = "font-family:'JetBrains Mono';font-size:11px;background:rgba(215,244,82,.12);color:#D7F452;border:1px solid rgba(215,244,82,.4);padding:5px 14px;border-radius:8px;cursor:pointer;";
+    const vidChipOff = "font-family:'JetBrains Mono';font-size:11px;border:1px solid rgba(255,255,255,.12);color:#9BA0A6;padding:5px 14px;border-radius:8px;cursor:pointer;";
+    const curRes = s.vidQuality === '1080' ? '1080p' : s.vidQuality === '4k' ? '4K' : '720p';
+    const curDur = parseInt(s.vidTime, 10) || 5;
+    const videoRatioChips = ['9:16', '16:9', '1:1', '4:3', '3:4', '4:5', '21:9'].map(r => ({ label: r, style: s.vidFormat === r ? vidChipOn : vidChipOff, pick: () => setS({ vidFormat: r }) }));
+    const videoQualityChips = ['720p', '1080p', '4K'].map(q => ({ label: q, style: curRes === q ? vidChipOn : vidChipOff, pick: () => setS({ vidQuality: q === '1080p' ? '1080' : q === '4K' ? '4k' : '720' }) }));
+    const videoDurationChips = [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15].map(d => ({ label: lang === 'ru' ? d + ' с' : d + 's', style: curDur === d ? vidChipOn : vidChipOff, pick: () => setS({ vidTime: String(d) }) }));
+    const vidCost = Math.round((s.vidQuality === '4k' ? 80 : s.vidQuality === '1080' ? 40 : 25) * (curDur / 5));
     const genFirstFrame = () => {
       setS({ ffState: 'loading' });
       clearTimeout(this._ffTimer);
@@ -2077,7 +2088,7 @@ class Component extends DCLogic {
       contentModes, aiModels, countChips,
       showGenError: s.showGenError, imgErrList, triggerGen, genFieldErr,
       ffState: s.ffState, ffIdle: s.ffState === 'idle', ffLoading: s.ffState === 'loading', ffDone: s.ffState === 'done', genFirstFrame, ffImgStyle,
-      firstFrameOpts, qualityOpts, vfmtOpts, vtimeOpts, vidCost, showFirstFrameSlot: s.hasFirstFrame === 'yes',
+      firstFrameOpts, videoRatioChips, videoQualityChips, videoDurationChips, vidCost, showFirstFrameSlot: s.hasFirstFrame === 'yes',
       lightboxData, hasLightbox: lightboxData != null, closeLightbox: () => setS({ lightbox: null }),
       showGenFirst: s.hasFirstFrame === 'no',
       characters, charTabs, charPhotos, photoTagOpts, photoTagMenu, personaFields, exifPresets, exifPresetSel, historyRows,

@@ -40,12 +40,22 @@
     return days[d.getDay()] + ' · ' + d.getDate() + ' ' + months[d.getMonth()] + ' ' + d.getFullYear()
   }
 
-  function mapVideoChips(logic) {
+  const VIDEO_RATIO_OPTS = ['9:16', '16:9', '1:1', '4:3', '3:4', '4:5', '21:9']
+  const VIDEO_DURATION_OPTS = [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+
+  function computeVidCost() {
+    const res = String(store.videoResolution || '720p').toLowerCase()
+    const dur = Number(store.videoDuration) || 5
+    const base = res === '1080p' ? 40 : res === '4k' ? 80 : 25
+    return Math.round(base * (dur / 5))
+  }
+
+  function mapVideoChips(logic, lang) {
     const chipOn =
       "font-family:'JetBrains Mono';font-size:11px;background:rgba(215,244,82,.12);color:#D7F452;border:1px solid rgba(215,244,82,.4);padding:5px 14px;border-radius:8px;cursor:pointer;"
     const chipOff =
       "font-family:'JetBrains Mono';font-size:11px;border:1px solid rgba(255,255,255,.12);color:#9BA0A6;padding:5px 14px;border-radius:8px;cursor:pointer;"
-    const mk = (key, storeKey, options) =>
+    const mk = (storeKey, options) =>
       options.map((o) => ({
         label: o,
         style: store[storeKey] === o ? chipOn : chipOff,
@@ -55,12 +65,16 @@
         },
       }))
     return {
-      videoQualityChips: mk('res', 'videoResolution', ['480p', '720p', '1080p']),
-      videoDurationChips: mk('dur', 'videoDuration', [5, 10, 15]).map((x) => ({
-        ...x,
-        label: x.label + 's',
+      videoQualityChips: mk('videoResolution', ['720p', '1080p', '4K']),
+      videoDurationChips: VIDEO_DURATION_OPTS.map((d) => ({
+        label: lang === 'ru' ? d + ' с' : d + 's',
+        style: store.videoDuration === d ? chipOn : chipOff,
+        pick: () => {
+          store.videoDuration = d
+          logic.forceUpdate()
+        },
       })),
-      videoRatioChips: mk('ratio', 'selectedAspect', ['9:16', '16:9', '1:1']),
+      videoRatioChips: mk('selectedAspect', VIDEO_RATIO_OPTS),
     }
   }
 
@@ -911,7 +925,7 @@
     const chatFilters = mapChatFilters(allConvs, logic, lang, chipOn, chipOff)
     const platFilters = mapPlatFilters(allConvs, logic, lang)
 
-    const video = mapVideoChips(logic)
+    const video = mapVideoChips(logic, lang)
     const filteredIds = new Set(convs.map((c) => c.id))
     const chats = (out.chats || []).filter((ch) => filteredIds.has(ch.id))
     const noChats = chats.length === 0
@@ -962,6 +976,7 @@
       userSidebarInitial: ((me?.email || '?')[0] || '?').toUpperCase(),
       userEmailShort: out.userEmailShort,
       ...video,
+      vidCost: computeVidCost(),
     }
   }
 

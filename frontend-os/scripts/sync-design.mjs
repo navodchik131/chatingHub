@@ -233,19 +233,16 @@ const TEMPLATE_PATCHES = [
     '<div style="{{ ffImgStyleDone }}"><span style="font-family:\'JetBrains Mono\';font-size:7.5px;background:rgba(0,0,0,.6);color:#fff;padding:2px 6px;border-radius:4px;">{{ ffThumbLabel }}</span>',
   ],
   [
-    /<div style="\{\{ lightboxData\.big \}\}">\s*<sc-if value="\{\{ lightboxData\.showPlaceholder \}\}" hint-placeholder-val="\{\{ true \}\}">\s*<span style="display:flex;width:48px;height:48px;color:rgba\(255,255,255,.25\);" dangerouslySetInnerHTML="\{\{ icoImage \}\}"><\/span>\s*<\/sc-if>\s*<\/div>/,
-    '',
+    /<div onClick="\{\{ stop \}\}" style="display:flex;flex-direction:column;gap:14px;max-height:92vh;max-width:min\(92vw,720px\);">/,
+    '<div onClick="{{ stop }}" style="{{ lightboxData.cardStyle }}">',
   ],
   [
-    /<div style="\{\{ lightboxData\.big \}\}min-height:0;display:flex;align-items:center;justify-content:center;overflow:hidden;">\s*<span style="display:flex;width:48px;height:48px;color:rgba\(255,255,255,.25\);" dangerouslySetInnerHTML="\{\{ icoImage \}\}"><\/span>/,
-    `<div style="{{ lightboxData.previewWrap }}">
-            <sc-if value="{{ lightboxData.showPlaceholder }}" hint-placeholder-val="{{ true }}">
-            <span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.25);" dangerouslySetInnerHTML="{{ icoImage }}"></span>
-            </sc-if>
-            <sc-if value="{{ lightboxData.hasImage }}" hint-placeholder-val="{{ false }}">
-            <img src="{{ lightboxData.url }}" alt="" style="width:100%;height:100%;object-fit:contain;display:block;">
-            </sc-if>
-          </div>`,
+    /<div style="display:flex;gap:10px;">\s*<div onClick="\{\{ downloadLightbox \}\}"/,
+    '<div style="{{ lightboxData.actionsStyle }}"><div onClick="{{ downloadLightbox }}"',
+  ],
+  [
+    /<\/div>\s*<\/div>\s*<div style="\{\{ lightboxData\.actionsStyle \}\}">/,
+    '</div><div style="{{ lightboxData.actionsStyle }}">',
   ],
   [
     /<div style="\{\{ af\.bg \}\}position:relative;" style-hover="filter:brightness\(1\.08\);">\s*<span style="display:flex;width:22px;height:22px;color:rgba\(255,255,255,.35\);" dangerouslySetInnerHTML="\{\{ icoImage \}\}"><\/span>\s*<span style="position:absolute;top:7px;right:7px;display:flex;width:15px;height:15px;color:rgba\(255,255,255,.7\);background:rgba\(0,0,0,.4\);border-radius:6px;padding:3px;" dangerouslySetInnerHTML="\{\{ icoZoom \}\}"><\/span>/,
@@ -376,7 +373,7 @@ const LOGIC_PATCHES = [
       runGenerate: () => {}, runGenerateVideo: () => {}, sendReply: () => {}, logout: () => {},
       apiError: null, apiBusy: false, canChat: true, canStudio: true, canBilling: true,
       referralLink: '—', referralStats: '—', dialogsPlatformLine: '—', userSidebarInitial: 'R',
-      payoutHint: '—', videoQualityChips: [], videoDurationChips: [], videoRatioChips: [],
+      payoutHint: '—',
     };
     return (window.MMOS_BRIDGE ? window.MMOS_BRIDGE.enrich(this, __dcVals) : __dcVals);
   }`,
