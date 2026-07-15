@@ -675,7 +675,7 @@
     const slotCounts = { ref: 1, swap: 1, outfit: 2, location: 2, prompt: 0, carousel: 1 }
     const slotN = slotCounts[mode] ?? 0
     const hasCarouselSrc =
-      !!store.uploadFiles.carousel ||
+      !!resolveCarouselUploadFile(s) ||
       !!s.carouselPickId ||
       !!store.slotArchivePicks[slotStateKey('carousel', 0)]
     const hasFrame =
@@ -1088,10 +1088,38 @@
     if (vid) vid.currentTime = 0.15
   }
 
-  function clearCarouselUploadDom() {
-    document.querySelectorAll('[data-mm-upload="carousel"]').forEach((zone) => {
-      clearUploadZone(zone, 'carousel')
-    })
+  function uploadZoneKey(zone) {
+    return zone.dataset.mmUpload || zone.dataset.mmSlotUpload || ''
+  }
+
+  function carouselUploadZoneHasPreview() {
+    const root = document.querySelector('[data-screen-label="Студия — Картинки"]')
+    if (!root) return false
+    const zone = root.querySelector('[data-mm-slot-upload="carousel"], [data-mm-upload="carousel"]')
+    return !!(zone && zone.querySelector('.mm-os-upload-preview'))
+  }
+
+  function resolveCarouselUploadFile(s) {
+    if (store.uploadFiles.carousel) return store.uploadFiles.carousel
+    if (
+      store.uploadFiles.ref &&
+      !resolveCarouselArchiveId(s) &&
+      carouselUploadZoneHasPreview()
+    ) {
+      return store.uploadFiles.ref
+    }
+    return null
+  }
+
+  function resyncUploadZone(zone) {
+    const key = uploadZoneKey(zone)
+    if (!key) return
+    const bound = zone.dataset.mmBound || ''
+    if (bound && bound !== key && bound !== '1') {
+      clearUploadZone(zone, bound)
+      delete zone.dataset.mmBound
+    }
+    bindUploadZone(zone)
   }
 
   function resolveCarouselArchiveId(s) {
@@ -1102,13 +1130,22 @@
     )
   }
 
-  /** Archive pick wins over upload; never reuse ref-slot file from other image modes. */
   function resolveCarouselMasterSource(s) {
     const archId = resolveCarouselArchiveId(s)
     if (archId) return { srcId: archId, uploadFile: null }
-    const uploadFile = store.uploadFiles.carousel || null
+    const uploadFile = resolveCarouselUploadFile(s)
     if (uploadFile) return { srcId: null, uploadFile }
     return { srcId: null, uploadFile: null }
+  }
+
+  function clearCarouselUploadDom() {
+    document.querySelectorAll('[data-mm-upload="carousel"]').forEach((zone) => {
+      clearUploadZone(zone, 'carousel')
+    })
+    const root = document.querySelector('[data-screen-label="Студия — Картинки"]')
+    root?.querySelectorAll('[data-mm-slot-upload="carousel"]').forEach((zone) => {
+      clearUploadZone(zone, 'carousel')
+    })
   }
 
   function clearCarouselLocalUploads() {
@@ -1152,7 +1189,7 @@
   }
 
   function bindUploadZone(zone) {
-    const key = zone.dataset.mmUpload || zone.dataset.mmSlotUpload
+    const key = uploadZoneKey(zone)
     if (!key) return
     const accept = zone.dataset.mmAccept || (key === 'motion-video' ? 'video/mp4,video/*' : 'image/*')
     if (zone.dataset.mmBound === key) {
@@ -1167,18 +1204,19 @@
       void (async () => {
         const file = await pickLocalFile(accept)
         if (!file) return
-        store.uploadFiles[key] = file
-        renderUploadPreview(zone, key, file)
-        if (key === 'ref' || key === 'carousel') {
+        const activeKey = uploadZoneKey(zone) || key
+        store.uploadFiles[activeKey] = file
+        renderUploadPreview(zone, activeKey, file)
+        if (activeKey === 'ref' || activeKey === 'carousel') {
           Object.keys(store.slotArchivePicks || {}).forEach((k) => {
             if (k.startsWith((store.logic?.state?.imgMode || 'ref') + ':')) delete store.slotArchivePicks[k]
           })
         }
-        if (key === 'carousel') {
+        if (activeKey === 'carousel') {
           store.logic?.setState({ carSource: 'upload', carouselPickId: null })
           store.logic?.forceUpdate()
         }
-        if (key === 'motion-video') {
+        if (activeKey === 'motion-video') {
           zone.classList.add('mm-os-upload--busy')
           try {
             await uploadMotionDrivingVideo(file)
@@ -1840,11 +1878,7 @@
   function bindSlotUploadZones() {
     const root = document.querySelector('[data-screen-label="Студия — Картинки"]')
     if (!root) return
-    root.querySelectorAll('[data-mm-slot-upload]').forEach((zone) => {
-      if (zone.dataset.mmBound) return
-      zone.dataset.mmBound = '1'
-      bindUploadZone(zone)
-    })
+    root.querySelectorAll('[data-mm-slot-upload]').forEach(resyncUploadZone)
   }
 
   function bindChatComposer() {
@@ -1878,7 +1912,7 @@
 
   function bindDomActions() {
     bindAuthForm()
-    document.querySelectorAll('[data-mm-upload]').forEach(bindUploadZone)
+    document.querySelectorAll('[data-mm-upload]').forEach(resyncUploadZone)
     bindSlotUploadZones()
     bindCharPanel()
     bindChatComposer()
@@ -2598,6 +2632,7 @@
       pick: () => {
         logic.setState({ imgMode: im.id, showGenError: false })
         logic.forceUpdate()
+        queueMicrotask(() => bindDomActions())
       },
     }))
 
