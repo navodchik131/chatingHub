@@ -746,7 +746,17 @@
     const recentFrames = (out.archiveFrames || []).slice(0, 4).map((cf) => ({
       ...cf,
       pick: () => {
-        if (cf.id) logic.setState({ lightbox: { id: cf.id } })
+        if (!cf.id) return
+        logic.setState({
+          lightbox: {
+            id: cf.id,
+            url: cf.url,
+            who: cf.who,
+            ratio: cf.ratio,
+            model: '',
+            showModal: false,
+          },
+        })
       },
       thumbStyle: cf.thumbStyle + (logic.state.lightbox?.id === cf.id ? 'border-color:#D7F452;' : ''),
     }))

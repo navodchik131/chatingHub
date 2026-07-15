@@ -111,6 +111,10 @@ const TEMPLATE_PATCHES = [
     /<div style="background:#D7F452;color:#171A05;font-weight:800;font-size:12\.5px;border-radius:10px;padding:10px 16px;cursor:pointer;" style-hover="background:#E8FA8A;">{{ t\.send }}<\/div>/,
     `<div onClick="{{ sendReply }}" style="background:#D7F452;color:#171A05;font-weight:800;font-size:12.5px;border-radius:10px;padding:10px 16px;cursor:pointer;" style-hover="background:#E8FA8A;">{{ t.send }}</div>`,
   ],
+  [
+    /<div style="display:flex;align-items:center;gap:10px;background:#D7F452;border-radius:11px;padding:11px 16px;cursor:pointer;" style-hover="background:#E8FA8A;">\s*<span style="display:flex;width:16px;height:16px;color:#171A05;" dangerouslySetInnerHTML="\{\{ icoDownload \}\}"><\/span>\s*<span style="flex:1;font-weight:800;font-size:13px;color:#171A05;">\{\{ t\.download \}\}<\/span>/,
+    '<div onClick="{{ downloadLightbox }}" style="display:flex;align-items:center;gap:10px;background:#D7F452;border-radius:11px;padding:11px 16px;cursor:pointer;" style-hover="background:#E8FA8A;"><span style="display:flex;width:16px;height:16px;color:#171A05;" dangerouslySetInnerHTML="{{ icoDownload }}"></span><span style="flex:1;font-weight:800;font-size:13px;color:#171A05;">{{ t.download }}</span>',
+  ],
   // обзор KPI — убрать хардкод макета
   [
     /font-family:'Unbounded';font-weight:600;font-size:18px;">Standard<\/span>/,

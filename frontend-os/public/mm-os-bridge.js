@@ -236,6 +236,7 @@
       open: () => {
         logic.setState({
           lightbox: {
+            showModal: true,
             bgStyle: 'width:100%;aspect-ratio:9/16;border-radius:16px;background:center/cover no-repeat url("' +
               url.replace(/"/g, '') + '"),' + G[i % 6],
             who,
@@ -1004,6 +1005,75 @@
     }
   }
 
+  function preferNativeShareOnMobile() {
+    return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
+  }
+
+  async function downloadArchiveUrl(url, id, isVideo) {
+    const src = (url || '').trim()
+    if (!src) {
+      store.error = 'Файл недоступен для скачивания'
+      store.logic?.forceUpdate()
+      return
+    }
+    const defaultName = isVideo ? 'modelmate-video-' + id + '.mp4' : 'modelmate-image-' + id + '.png'
+    let blob = null
+    try {
+      const res = await fetch(src, { credentials: 'include' })
+      if (res.ok) blob = await res.blob()
+    } catch (_) {}
+    if (blob) {
+      const file = new File([blob], defaultName, {
+        type: blob.type || (isVideo ? 'video/mp4' : 'image/png'),
+      })
+      if (
+        preferNativeShareOnMobile() &&
+        typeof navigator.share === 'function' &&
+        typeof navigator.canShare === 'function' &&
+        navigator.canShare({ files: [file] })
+      ) {
+        try {
+          await navigator.share({ files: [file] })
+          return
+        } catch (err) {
+          if (err && err.name === 'AbortError') return
+        }
+      }
+      const objectUrl = URL.createObjectURL(blob)
+      try {
+        const a = document.createElement('a')
+        a.href = objectUrl
+        a.download = defaultName
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+      } finally {
+        window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60000)
+      }
+      return
+    }
+    window.open(src, '_blank', 'noopener,noreferrer')
+  }
+
+  async function downloadLightbox() {
+    const lb = store.logic?.state?.lightbox
+    if (!lb) return
+    let url = (lb.url || '').trim()
+    let isVideo = false
+    let id = lb.id || 0
+    if (!url && id) {
+      const item =
+        store.archiveImages.find((x) => x.id === id) ||
+        store.archiveVideos.find((x) => x.id === id)
+      if (item) {
+        isVideo = item.media_kind === 'video'
+        url = (isVideo ? item.video_url || item.image_url : item.image_url) || ''
+        id = item.id
+      }
+    }
+    await downloadArchiveUrl(url, id, isVideo)
+  }
+
   function bindDomActions() {
     bindAuthForm()
     document.querySelectorAll('[data-mm-upload]').forEach(bindUploadZone)
@@ -1097,6 +1167,7 @@
 
   async function runGenerateVideo() {
     if (store.busy) return
+    const s = store.logic?.state || {}
     const motion = (queryMotionTextarea()?.value || '').trim()
     if (!motion) {
       store.error = 'Опишите движение'
@@ -1511,6 +1582,9 @@
       canChat: isOwner || API.hasPerm(mask, API.PERM.CHAT),
       canStudio: isOwner || API.hasPerm(mask, API.PERM.STUDIO_GENERATE),
       canBilling: isOwner || API.hasPerm(mask, API.PERM.BILLING),
+      hasLightbox: !!(s.lightbox && s.lightbox.showModal),
+      closeLightbox: () => logic.setState({ lightbox: null }),
+      downloadLightbox: () => void downloadLightbox(),
     }
   }
 
