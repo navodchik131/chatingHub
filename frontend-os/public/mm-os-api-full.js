@@ -476,6 +476,87 @@
     return m?.name || '—'
   }
 
+  function buildCurConfig(connId, ig, lang) {
+    if (!ig) return []
+    if (connId === 'tg') {
+      const bots = ig.telegram_connections || []
+      if (!bots.length) return []
+      const c = bots[0]
+      return [
+        [lang === 'ru' ? 'Бот' : 'Bot', c.bot_username ? '@' + c.bot_username : '—'],
+        [
+          lang === 'ru' ? 'Вебхук' : 'Webhook',
+          c.webhook_registered ? (lang === 'ru' ? 'активен' : 'active') : lang === 'ru' ? 'не настроен' : 'not set',
+        ],
+        [lang === 'ru' ? 'Персонаж' : 'Character', modelName(c.studio_model_id)],
+        [
+          'AI',
+          c.companion_mode && c.companion_mode !== 'off' ? c.companion_mode : lang === 'ru' ? 'выключен' : 'off',
+        ],
+        [
+          lang === 'ru' ? 'Задержка' : 'Delay',
+          c.companion_delay_min_sec +
+            '–' +
+            c.companion_delay_max_sec +
+            ' c · ' +
+            c.companion_max_replies_per_hour +
+            '/' +
+            (lang === 'ru' ? 'ч' : 'h'),
+        ],
+      ]
+    }
+    if (connId === 'fanvue') {
+      const rows = ig.fanvue_connections || []
+      if (!rows.length) return []
+      const c = rows[0]
+      return [
+        [lang === 'ru' ? 'Аккаунт' : 'Account', (c.creator_user_id || c.label || '—').toString().slice(0, 20)],
+        [lang === 'ru' ? 'Персонаж' : 'Character', modelName(c.studio_model_id)],
+        ['OAuth', c.oauth_connected ? (lang === 'ru' ? 'сессия активна' : 'session active') : lang === 'ru' ? 'нет' : 'no'],
+        [
+          'AI',
+          c.companion_mode && c.companion_mode !== 'off' ? c.companion_mode : lang === 'ru' ? 'выключен' : 'off',
+        ],
+      ]
+    }
+    if (connId === 'tribute') {
+      const rows = ig.tribute_connections || []
+      if (!rows.length && !ig.tribute_configured) return []
+      const c = rows[0]
+      return [
+        [lang === 'ru' ? 'Метка' : 'Label', c?.label || 'Tribute'],
+        [lang === 'ru' ? 'Персонаж' : 'Character', modelName(c?.studio_model_id)],
+        ['API', ig.tribute_configured ? '••••' + (c?.id ? String(c.id).slice(-4) : 'set') : '—'],
+        ['Webhook', c?.webhook_url ? c.webhook_url.replace(/^https?:\/\//, '').slice(0, 24) + '…' : '—'],
+      ]
+    }
+    if (connId === 'wavespeed') {
+      if (!ig.wavespeed_configured) return []
+      return [
+        [
+          lang === 'ru' ? 'Режим' : 'Mode',
+          ig.wavespeed_managed_by_platform
+            ? lang === 'ru'
+              ? 'ключ платформы'
+              : 'platform key'
+            : lang === 'ru'
+              ? 'свой ключ'
+              : 'own key',
+        ],
+        [lang === 'ru' ? 'Кредиты' : 'Credits', lang === 'ru' ? 'списываются' : 'spent'],
+      ]
+    }
+    if (connId === 'push') {
+      const on = typeof Notification !== 'undefined' && Notification.permission === 'granted'
+      return [
+        [lang === 'ru' ? 'Сообщения' : 'Messages', on ? (lang === 'ru' ? 'вкл' : 'on') : lang === 'ru' ? 'выкл' : 'off'],
+        [lang === 'ru' ? 'Донаты' : 'Donations', on ? (lang === 'ru' ? 'вкл' : 'on') : lang === 'ru' ? 'выкл' : 'off'],
+        [lang === 'ru' ? 'Генерации' : 'Generations', lang === 'ru' ? 'выкл' : 'off'],
+      ]
+    }
+    return []
+  }
+
   function renderIntegrationPanels() {
     const ig = store.integrations
     if (!ig) return
@@ -568,26 +649,6 @@
     }
   }
 
-  async function addTeamMember() {
-    const login = prompt('Логин нового оператора')
-    if (!login?.trim()) return
-    const pass = prompt('Пароль')
-    if (!pass) return
-    store.busy = true
-    try {
-      await API.apiJson('/api/workspace/members', {
-        method: 'POST',
-        body: JSON.stringify({ member_login: login.trim(), password: pass, permissions_mask: API.PERM.CHAT | API.PERM.STUDIO_GENERATE }),
-      })
-      await bridge.refreshAll()
-    } catch (e) {
-      store.error = e.message || String(e)
-    } finally {
-      store.busy = false
-      bridge.store.logic?.forceUpdate()
-    }
-  }
-
   async function addSnippet() {
     const title = prompt('Название шаблона')
     if (!title?.trim()) return
@@ -648,7 +709,6 @@
     bindOnce(document.querySelector('[data-mm-conn-fanvue-oauth]'), startFanvueOAuth)
     bindOnce(document.querySelector('[data-mm-conn-tribute-save]'), saveTributeKey)
     bindOnce(document.querySelector('[data-mm-don-create]'), createDonationLink)
-    bindOnce(document.querySelector('[data-mm-team-add]'), addTeamMember)
     bindOnce(document.querySelector('[data-mm-snippet-add]'), addSnippet)
     bindOnce(document.querySelector('[data-mm-note-add]'), addConversationNote)
     bindOnce(document.querySelector('[data-mm-logout]'), () => {
@@ -720,6 +780,10 @@
 
     const connections = mapConnections(vals, logic, lang)
     const connDetailData = connections.find((c) => c.id === logic.state.connDetail) || connections[0] || vals.connDetailData
+    const cfsCurrent = buildCurConfig(connDetailData?.id, store.integrations, lang).map((kv) => ({
+      k: kv[0],
+      v: kv[1],
+    }))
     const billing = mapBilling(vals, lang, me)
     const ratioChips = mapRatioChips(logic)
     const chatFilters = mapChatFilters(allConvs, logic, lang, chipOn, chipOff)
@@ -747,18 +811,11 @@
       ...cf,
       pick: () => {
         if (!cf.id) return
-        logic.setState({
-          lightbox: {
-            id: cf.id,
-            url: cf.url,
-            who: cf.who,
-            ratio: cf.ratio,
-            model: '',
-            showModal: false,
-          },
-        })
+        logic.setState({ carouselPickId: cf.id })
       },
-      thumbStyle: cf.thumbStyle + (logic.state.lightbox?.id === cf.id ? 'border-color:#D7F452;' : ''),
+      thumbStyle:
+        cf.thumbStyle +
+        (logic.state.carouselPickId === cf.id ? 'border-color:#D7F452;' : ''),
     }))
 
     const avail = store.donationOverview?.pending_payout_by_currency?.RUB ?? 0
@@ -770,6 +827,8 @@
       dialogsPlatformLine: platformCounts(allConvs) || '—',
       connections,
       connDetailData,
+      cfsCurrent,
+      hasCurConfig: cfsCurrent.length > 0,
       connDetailIconBox: connDetailData?.iconBox ? 'width:48px;height:48px;border-radius:14px;display:flex;align-items:center;justify-content:center;flex:none;' + (connDetailData.iconCol || '') : out.connDetailIconBox,
       usageBars: billing.usageBars,
       plans: billing.plans,

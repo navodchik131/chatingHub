@@ -100,20 +100,14 @@ const TEMPLATE_PATCHES = [
     /{{ t\.until }} 07\.12\.2026 · {{ t\.balance }}: <b style="color:#D7F452;">510 {{ t\.cr }}<\/b>/,
     '{{ t.until }} {{ planUntil }} · {{ t.balance }}: <b style="color:#D7F452;">{{ creditsBalance }} {{ t.cr }}</b>',
   ],
-  // кнопки действий
-  [
-    /<div style="display:flex;align-items:center;gap:12px;background:#D7F452;border-radius:12px;padding:12px 16px;cursor:pointer;" style-hover="background:#E8FA8A;">\s*<span style="display:flex;width:17px;height:17px;color:#171A05;" dangerouslySetInnerHTML="{{ icoSpark }}"><\/span>\s*<span style="flex:1;font-weight:800;font-size:14px;color:#171A05;">{{ t\.generate }}<\/span>/,
-    `<div onClick="{{ runGenerate }}" style="display:flex;align-items:center;gap:12px;background:#D7F452;border-radius:12px;padding:12px 16px;cursor:pointer;" style-hover="background:#E8FA8A;">
-              <span style="display:flex;width:17px;height:17px;color:#171A05;" dangerouslySetInnerHTML="{{ icoSpark }}"></span>
-              <span style="flex:1;font-weight:800;font-size:14px;color:#171A05;">{{ t.generate }}</span>`,
-  ],
+  // кнопки действий (картинки: triggerGen в макете, логика в bridge)
   [
     /<div style="background:#D7F452;color:#171A05;font-weight:800;font-size:12\.5px;border-radius:10px;padding:10px 16px;cursor:pointer;" style-hover="background:#E8FA8A;">{{ t\.send }}<\/div>/,
     `<div onClick="{{ sendReply }}" style="background:#D7F452;color:#171A05;font-weight:800;font-size:12.5px;border-radius:10px;padding:10px 16px;cursor:pointer;" style-hover="background:#E8FA8A;">{{ t.send }}</div>`,
   ],
   [
-    /<div style="display:flex;align-items:center;gap:10px;background:#D7F452;border-radius:11px;padding:11px 16px;cursor:pointer;" style-hover="background:#E8FA8A;">\s*<span style="display:flex;width:16px;height:16px;color:#171A05;" dangerouslySetInnerHTML="\{\{ icoDownload \}\}"><\/span>\s*<span style="flex:1;font-weight:800;font-size:13px;color:#171A05;">\{\{ t\.download \}\}<\/span>/,
-    '<div onClick="{{ downloadLightbox }}" style="display:flex;align-items:center;gap:10px;background:#D7F452;border-radius:11px;padding:11px 16px;cursor:pointer;" style-hover="background:#E8FA8A;"><span style="display:flex;width:16px;height:16px;color:#171A05;" dangerouslySetInnerHTML="{{ icoDownload }}"></span><span style="flex:1;font-weight:800;font-size:13px;color:#171A05;">{{ t.download }}</span>',
+    /<div style="flex:1;display:flex;align-items:center;justify-content:center;gap:8px;background:#D7F452;color:#171A05;border-radius:11px;padding:12px;font-size:13px;font-weight:800;cursor:pointer;" style-hover="background:#E8FA8A;"><span style="display:flex;width:16px;height:16px;" dangerouslySetInnerHTML="\{\{ icoDownload \}\}"><\/span>\{\{ t\.download \}\}<\/div>/,
+    '<div onClick="{{ downloadLightbox }}" style="flex:1;display:flex;align-items:center;justify-content:center;gap:8px;background:#D7F452;color:#171A05;border-radius:11px;padding:12px;font-size:13px;font-weight:800;cursor:pointer;" style-hover="background:#E8FA8A;"><span style="display:flex;width:16px;height:16px;" dangerouslySetInnerHTML="{{ icoDownload }}"></span>{{ t.download }}</div>',
   ],
   // обзор KPI — убрать хардкод макета
   [
@@ -162,24 +156,19 @@ const TEMPLATE_PATCHES = [
     '<span onClick="{{ cc.pick }}" style="{{ cc.style }}" style-hover="border-color:rgba(255,255,255,.3);">{{ cc.label }}</span>',
   ],
   [
-    /<div style="flex:1;aspect-ratio:3\/4;border:1\.5px dashed rgba\(255,255,255,.18\);border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;cursor:pointer;" style-hover="border-color:rgba\(215,244,82,.5\);background:rgba\(215,244,82,.03\);">\s*<span style="display:flex;width:20px;height:20px;color:#6B7076;" dangerouslySetInnerHTML="\{\{ icoUpload \}\}"><\/span>/,
+    /<div style="flex:1;aspect-ratio:3\/4;border:1\.5px dashed rgba\(255,255,255,.18\);border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;cursor:pointer;" style-hover="border-color:rgba\(215,244,82,.5\);background:rgba\(215,244,82,.03\);">\s*<span style="display:flex;width:20px;height:20px;color:#6B7076;" dangerouslySetInnerHTML="\{\{ icoUpload \}\}"><\/span>/g,
     `<div data-mm-upload="ref" style="flex:1;aspect-ratio:3/4;border:1.5px dashed rgba(255,255,255,.18);border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;cursor:pointer;" style-hover="border-color:rgba(215,244,82,.5);background:rgba(215,244,82,.03);">
                   <span style="display:flex;width:20px;height:20px;color:#6B7076;" dangerouslySetInnerHTML="{{ icoUpload }}"></span>`,
   ],
   [
-    /<div style="aspect-ratio:16\/8;border:1\.5px dashed rgba\(255,255,255,.18\);border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;cursor:pointer;" style-hover="border-color:rgba\(215,244,82,.5\);background:rgba\(215,244,82,.03\);">\s*<span style="display:flex;width:26px;height:26px;color:#6B7076;" dangerouslySetInnerHTML="\{\{ icoVid \}\}"><\/span>/,
-    `<div data-mm-upload="motion-video" style="aspect-ratio:16/8;border:1.5px dashed rgba(255,255,255,.18);border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;cursor:pointer;" style-hover="border-color:rgba(215,244,82,.5);background:rgba(215,244,82,.03);">
-                <span style="display:flex;width:26px;height:26px;color:#6B7076;" dangerouslySetInnerHTML="{{ icoVid }}"></span>`,
+    /<div style="border:1\.5px dashed rgba\(255,255,255,.18\);border-radius:12px;padding:20px;display:flex;flex-direction:column;align-items:center;gap:8px;cursor:pointer;" style-hover="border-color:rgba\(215,244,82,.5\);background:rgba\(215,244,82,.03\);">\s*<span style="display:flex;width:22px;height:22px;color:#6B7076;" dangerouslySetInnerHTML="\{\{ icoFilm \}\}"><\/span>/,
+    `<div data-mm-upload="motion-video" style="border:1.5px dashed rgba(255,255,255,.18);border-radius:12px;padding:20px;display:flex;flex-direction:column;align-items:center;gap:8px;cursor:pointer;" style-hover="border-color:rgba(215,244,82,.5);background:rgba(215,244,82,.03);">
+                <span style="display:flex;width:22px;height:22px;color:#6B7076;" dangerouslySetInnerHTML="{{ icoFilm }}"></span>`,
   ],
   [
-    /<div style="width:96px;flex:none;aspect-ratio:3\/4;border:1\.5px dashed rgba\(255,255,255,.18\);border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;cursor:pointer;" style-hover="border-color:rgba\(215,244,82,.5\);background:rgba\(215,244,82,.03\);">\s*<span style="display:flex;width:20px;height:20px;color:#6B7076;" dangerouslySetInnerHTML="\{\{ icoUpload \}\}"><\/span>/,
-    `<div data-mm-upload="motion-frame" style="width:96px;flex:none;aspect-ratio:3/4;border:1.5px dashed rgba(255,255,255,.18);border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;cursor:pointer;" style-hover="border-color:rgba(215,244,82,.5);background:rgba(215,244,82,.03);">
-                  <span style="display:flex;width:20px;height:20px;color:#6B7076;" dangerouslySetInnerHTML="{{ icoUpload }}"></span>`,
-  ],
-  [
-    /<div style="aspect-ratio:16\/7;border:1\.5px dashed rgba\(255,255,255,.18\);border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;cursor:pointer;" style-hover="border-color:rgba\(215,244,82,.5\);background:rgba\(215,244,82,.03\);">\s*<span style="display:flex;width:22px;height:22px;color:#6B7076;" dangerouslySetInnerHTML="\{\{ icoUpload \}\}"><\/span>/,
-    `<div data-mm-upload="carousel" style="aspect-ratio:16/7;border:1.5px dashed rgba(255,255,255,.18);border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;cursor:pointer;" style-hover="border-color:rgba(215,244,82,.5);background:rgba(215,244,82,.03);">
-              <span style="display:flex;width:22px;height:22px;color:#6B7076;" dangerouslySetInnerHTML="{{ icoUpload }}"></span>`,
+    /<div style="width:70px;aspect-ratio:9\/16;border:1\.5px dashed rgba\(255,255,255,.18\);border-radius:10px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex:none;" style-hover="border-color:rgba\(215,244,82,.5\);">\s*<span style="display:flex;width:18px;height:18px;color:#6B7076;" dangerouslySetInnerHTML="\{\{ icoUpload \}\}"><\/span>/,
+    `<div data-mm-upload="motion-frame" style="width:70px;aspect-ratio:9/16;border:1.5px dashed rgba(255,255,255,.18);border-radius:10px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex:none;" style-hover="border-color:rgba(215,244,82,.5);">
+                  <span style="display:flex;width:18px;height:18px;color:#6B7076;" dangerouslySetInnerHTML="{{ icoUpload }}"></span>`,
   ],
   // персонажи — API: фото, описание, кнопки
   [
@@ -191,8 +180,45 @@ const TEMPLATE_PATCHES = [
     `<div style="width:52px;height:52px;border-radius:16px;background:linear-gradient(135deg,#F472B6,#C084FC);display:flex;align-items:center;justify-content:center;font-family:'Unbounded';font-weight:600;font-size:20px;color:#2A0A1C;">{{ activeCharInitial }}</div>`,
   ],
   [
-    /<div style="aspect-ratio:3\/4;border:1\.5px dashed rgba\(255,255,255,.18\);border-radius:10px;display:flex;align-items:center;justify-content:center;color:#6B7076;font-size:20px;cursor:pointer;" style-hover="border-color:rgba\(215,244,82,.5\);">\+<\/div>/,
-    `<div data-mm-upload="char-photo" style="aspect-ratio:3/4;border:1.5px dashed rgba(255,255,255,.18);border-radius:10px;display:flex;align-items:center;justify-content:center;color:#6B7076;font-size:20px;cursor:pointer;" style-hover="border-color:rgba(215,244,82,.5);">+</div>`,
+    /<div style="aspect-ratio:3\/4;border:1\.5px dashed rgba\(255,255,255,.18\);border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;color:#6B7076;cursor:pointer;" style-hover="border-color:rgba\(215,244,82,.5\);">\s*<span style="display:flex;width:18px;height:18px;" dangerouslySetInnerHTML="\{\{ icoUpload \}\}"><\/span>/,
+    `<div data-mm-upload="char-photo" style="aspect-ratio:3/4;border:1.5px dashed rgba(255,255,255,.18);border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;color:#6B7076;cursor:pointer;" style-hover="border-color:rgba(215,244,82,.5);">
+                  <span style="display:flex;width:18px;height:18px;" dangerouslySetInnerHTML="{{ icoUpload }}"></span>`,
+  ],
+  [
+    /<textarea rows="6" style="width:100%;background:#0D0E11;border:1px solid rgba\(255,255,255,.09\);border-radius:10px;padding:10px 12px;color:#C9CDD1;font-family:'Manrope';font-size:12px;line-height:1.55;resize:vertical;outline:none;">Slim athletic feminine body[^<]*<\/textarea>/,
+    `<textarea data-mm-char-profile rows="6" placeholder="{{ t.charAppearance }}" style="width:100%;background:#0D0E11;border:1px solid rgba(255,255,255,.09);border-radius:10px;padding:10px 12px;color:#C9CDD1;font-family:'Manrope';font-size:12px;line-height:1.55;resize:vertical;outline:none;"></textarea>`,
+  ],
+  [
+    /<span style="\{\{ ct\.style \}\}" style-hover="border-color:rgba\(255,255,255,.3\);">\{\{ ct\.label \}\}<\/span>/g,
+    '<span onClick="{{ ct.pick }}" style="{{ ct.style }}" style-hover="border-color:rgba(255,255,255,.3);">{{ ct.label }}</span>',
+  ],
+  [
+    /<div style="\{\{ tm\.style \}\}" style-hover="background:rgba\(255,255,255,.08\);">\{\{ tm\.label \}\}<\/div>/g,
+    '<div onClick="{{ tm.pick }}" style="{{ tm.style }}" style-hover="background:rgba(255,255,255,.08);">{{ tm.label }}</div>',
+  ],
+  [
+    /<div onClick="\{\{ cp\.open \}\}" style="margin-top:auto;font-size:10\.5px;font-weight:800;color:#F87171;/,
+    '<div onClick="{{ cp.deletePhoto }}" style="margin-top:auto;font-size:10.5px;font-weight:800;color:#F87171;',
+  ],
+  [
+    /<input placeholder="\{\{ t\.opLoginPh \}\}" style="\{\{ inputSt \}\}">/,
+    '<input data-mm-op-login placeholder="{{ t.opLoginPh }}" style="{{ inputSt }}">',
+  ],
+  [
+    /<input type="password" value="" style="\{\{ inputSt \}\}">/,
+    '<input data-mm-op-pass type="password" autocomplete="new-password" style="{{ inputSt }}">',
+  ],
+  [
+    /<div style="width:120px;"><div style="\{\{ fieldLbl \}\}">\{\{ t\.opTribute \}\}<\/div><input value="15" style="\{\{ inputSt \}\}"><\/div>/,
+    '<div style="width:120px;"><div style="{{ fieldLbl }}">{{ t.opTribute }}</div><input data-mm-op-tribute value="20" style="{{ inputSt }}"></div>',
+  ],
+  [
+    /<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;background:#0D0E11;border:1px solid rgba\(255,255,255,.07\);border-radius:10px;padding:10px 12px;cursor:pointer;" style-hover="border-color:rgba\(255,255,255,.2\);">\s*<span style="font-family:'JetBrains Mono';font-size:11px;letter-spacing:\.5px;">\{\{ om\.name \}\}<\/span>/g,
+    '<div onClick="{{ om.toggle }}" style="display:flex;align-items:center;justify-content:space-between;gap:10px;background:#0D0E11;border:1px solid rgba(255,255,255,.07);border-radius:10px;padding:10px 12px;cursor:pointer;" style-hover="border-color:rgba(255,255,255,.2);"><span style="font-family:\'JetBrains Mono\';font-size:11px;letter-spacing:.5px;">{{ om.name }}</span>',
+  ],
+  [
+    /<div style="flex:1;display:flex;align-items:center;justify-content:center;gap:8px;background:rgba\(192,132,252,.12\);border:1px solid rgba\(192,132,252,.4\);color:#C084FC;border-radius:11px;padding:12px;font-size:13px;font-weight:800;cursor:pointer;" style-hover="background:rgba\(192,132,252,.2\);"><span style="display:flex;width:16px;height:16px;" dangerouslySetInnerHTML="\{\{ icoGrid2 \}\}"><\/span>\{\{ t\.makeCarousel \}\}<\/div>/,
+    '<div onClick="{{ makeCarousel }}" style="flex:1;display:flex;align-items:center;justify-content:center;gap:8px;background:rgba(192,132,252,.12);border:1px solid rgba(192,132,252,.4);color:#C084FC;border-radius:11px;padding:12px;font-size:13px;font-weight:800;cursor:pointer;" style-hover="background:rgba(192,132,252,.2);"><span style="display:flex;width:16px;height:16px;" dangerouslySetInnerHTML="{{ icoGrid2 }}"></span>{{ t.makeCarousel }}</div>',
   ],
   [
     /<span style="font-size:11px;font-weight:700;color:#C084FC;cursor:pointer;" style-hover="color:#D8B4FE;">✦ \{\{ t\.genFromPhoto \}\}<\/span>/,
@@ -208,8 +234,8 @@ const TEMPLATE_PATCHES = [
                 <div data-mm-char-delete style="border:1px solid rgba(248,113,113,.3);border-radius:9px;padding:9px 14px;font-size:12px;font-weight:700;color:#F87171;cursor:pointer;" style-hover="background:rgba(248,113,113,.08);">{{ t.delete }}</div>`,
   ],
   [
-    /<span style="font-size:11px;font-weight:700;border:1px solid rgba\(255,255,255,.12\);color:#9BA0A6;padding:5px 12px;border-radius:8px;cursor:pointer;" style-hover="border-color:rgba\(215,244,82,.5\);color:#D7F452;">\{\{ pt \}\}<\/span>/,
-    `<span onClick="{{ pt.pick }}" style="{{ pt.style }}" style-hover="border-color:rgba(215,244,82,.5);color:#D7F452;">{{ pt.label }}</span>`,
+    /<span style="\{\{ pt\.style \}\}" style-hover="border-color:rgba\(255,255,255,.3\);">\{\{ pt\.label \}\}<\/span>/g,
+    '<span onClick="{{ pt.pick }}" style="{{ pt.style }}" style-hover="border-color:rgba(255,255,255,.3);">{{ pt.label }}</span>',
   ],
   [
     /<div><div style="font-family:'JetBrains Mono';font-size:8\.5px;letter-spacing:1\.2px;color:#6B7076;margin-bottom:6px;">ВОЗРАСТ<\/div><input value="24" style="width:100%;background:#0D0E11;border:1px solid rgba\(255,255,255,.09\);border-radius:9px;padding:9px 11px;color:#F2F3F0;font-family:'Manrope';font-size:12\.5px;outline:none;"><\/div>/,
@@ -427,10 +453,6 @@ const FULL_API_PATCHES = [
   [
     /<div style="display:flex;align-items:center;gap:10px;background:#F0A8C8;border-radius:11px;padding:11px 16px;cursor:pointer;" style-hover="filter:brightness\(1.08\);">\s*<span style="flex:1;font-weight:800;font-size:13\.5px;color:#2A0A1C;">\{\{ t\.requestPayout \}\}<\/span>\s*<span style="font-family:'JetBrains Mono';font-size:10\.5px;color:#5E2140;">100,00 ₽ − 2%<\/span>\s*<\/div>/,
     '<div data-mm-don-payout-request style="display:flex;align-items:center;gap:10px;background:#F0A8C8;border-radius:11px;padding:11px 16px;cursor:pointer;" style-hover="filter:brightness(1.08);"><span style="flex:1;font-weight:800;font-size:13.5px;color:#2A0A1C;">{{ t.requestPayout }}</span><span style="font-family:\'JetBrains Mono\';font-size:10.5px;color:#5E2140;">{{ payoutHint }}</span></div>',
-  ],
-  [
-    /<div style="display:flex;align-items:center;gap:8px;background:#D7F452;color:#171A05;font-weight:800;font-size:13px;border-radius:10px;padding:10px 16px;cursor:pointer;" style-hover="background:#E8FA8A;">\+ \{\{ t\.addOperator \}\}<\/div>/,
-    '<div data-mm-team-add style="display:flex;align-items:center;gap:8px;background:#D7F452;color:#171A05;font-weight:800;font-size:13px;border-radius:10px;padding:10px 16px;cursor:pointer;" style-hover="background:#E8FA8A;">+ {{ t.addOperator }}</div>',
   ],
   [
     /<span style="font-size:11.5px;font-weight:700;color:#D7F452;cursor:pointer;">\+ \{\{ t\.addTemplate \}\}<\/span>/,

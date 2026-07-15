@@ -63,7 +63,35 @@
     charProfileDraft: {},
     selectedPhotoKind: 'face',
     avatarCache: {},
+    firstFrameUrl: null,
+    firstFrameGenId: null,
+    opRights: { chat: true, studio: true, models: true, keys: false, billing: false },
+    opModelIds: null,
   }
+
+  const AI_MODEL_MAP = {
+    nano: 'nano-banana-pro',
+    gpt: 'gpt-image-2',
+    seedream: 'seedream-v5.0-pro',
+    wan: 'wan-2.7-pro',
+  }
+
+  const OP_RIGHT_BITS = {
+    chat: API.PERM.CHAT,
+    studio: API.PERM.STUDIO_GENERATE,
+    models: API.PERM.STUDIO_MODELS,
+    keys: API.PERM.INTEGRATIONS,
+    billing: API.PERM.BILLING,
+  }
+
+  const PHOTO_TAG_DEFS = [
+    { kind: 'face', ru: 'Лицо', en: 'Face' },
+    { kind: 'face', ru: 'Внешность', en: 'Look' },
+    { kind: 'turnaround', ru: 'Развёртка', en: 'Turnaround' },
+    { kind: 'body', ru: 'Тело целиком', en: 'Full body' },
+    { kind: 'other', ru: 'Selfie', en: 'Selfie' },
+    { kind: 'other', ru: 'Основная камера', en: 'Main camera' },
+  ]
 
   function fmtCredits(n) {
     const v = Math.max(0, Math.round(Number(n) || 0))
@@ -206,6 +234,12 @@
     return { modelChips, modelHint }
   }
 
+  function chatStatusType(c) {
+    if (c.is_blocked) return 'blocked'
+    if (c.peer_unavailable) return 'deleted'
+    return false
+  }
+
   function archiveThumbUrl(item) {
     return (item.image_url || '').trim()
   }
@@ -234,20 +268,73 @@
       ratio,
       url,
       open: () => {
-        logic.setState({
-          lightbox: {
-            showModal: true,
-            bgStyle: 'width:100%;aspect-ratio:9/16;border-radius:16px;background:center/cover no-repeat url("' +
-              url.replace(/"/g, '') + '"),' + G[i % 6],
-            who,
-            ratio,
-            model: '',
-            url,
-            id: item.id,
-          },
-        })
+        logic.setState({ lightbox: item.id })
       },
     }
+  }
+
+  function buildLightboxData(s, lang) {
+    const id = typeof s.lightbox === 'number' ? s.lightbox : null
+    if (id == null) return null
+    const item =
+      store.archiveImages.find((x) => x.id === id) ||
+      store.archiveVideos.find((x) => x.id === id)
+    if (!item) return null
+    const url = archiveThumbUrl(item)
+    const bigBase =
+      'flex:1;min-height:0;display:flex;align-items:center;justify-content:center;border-radius:14px;background:'
+    const bg = url
+      ? bigBase + 'center/cover no-repeat url("' + url.replace(/"/g, '') + '"),' + G[id % 6]
+      : bigBase + G[id % 6]
+    const mode =
+      item.media_kind === 'video'
+        ? lang === 'ru'
+          ? 'Видео'
+          : 'Video'
+        : lang === 'ru'
+          ? 'Кадр'
+          : 'Frame'
+    return {
+      big: bg,
+      who: item.model_name || '—',
+      ratio: item.output_aspect || '9:16',
+      mode,
+      when: fmtDateShort(item.created_at) + ' · ' + fmtTime(item.created_at),
+      url,
+      id: item.id,
+    }
+  }
+
+  function validateImageGen(logic, vals) {
+    const s = logic.state
+    const t = vals.t
+    const errs = []
+    const mode = s.imgMode || 'prompt'
+    const modeDefs = [
+      { id: 'ref', slots: 1 },
+      { id: 'swap', slots: 1 },
+      { id: 'outfit', slots: 1 },
+      { id: 'location', slots: 1 },
+      { id: 'prompt', slots: 0 },
+      { id: 'carousel', slots: 1 },
+    ]
+    const curMode = modeDefs.find((m) => m.id === mode) || { slots: 0 }
+    const hasRef = !!store.uploadFiles.ref
+    const hasCarouselSrc = !!(s.carouselPickId || store.uploadFiles.carousel)
+    if (curMode.slots && !hasRef && !(mode === 'carousel' && hasCarouselSrc)) errs.push(t.errNoRef)
+    if (mode === 'prompt' && !queryPromptTextarea()?.value?.trim()) errs.push(t.errNoPrompt)
+    if (!store.selectedModelId) errs.push(t.errNoChar)
+    return errs
+  }
+
+  function waveModelFromState(s) {
+    const mapped = AI_MODEL_MAP[s.aiModel]
+    if (mapped) return mapped
+    return store.selectedWaveModelId
+  }
+
+  function isNsfwMode(s) {
+    return s.contentMode === 'nsfw' || !!s.nsfw
   }
 
   function modelCoverStyle(m, i, coverBase) {
@@ -711,10 +798,12 @@
     return store.models.find((m) => m.id === id) || null
   }
 
-  function mapCharPhotos(model, lang) {
+  function mapCharPhotos(model, lang, logic) {
     const cpBase =
-      'aspect-ratio:3/4;border-radius:10px;overflow:hidden;display:flex;align-items:flex-end;padding:6px;background:'
+      'aspect-ratio:3/4;border-radius:10px;overflow:hidden;display:flex;align-items:flex-end;padding:6px;position:relative;background:'
+    const charId = model?.id
     const imgs = model?.images || []
+    const menuId = logic.state.photoMenu
     return imgs.map((im, i) => {
       const url = im.url || ''
       const bg = url
@@ -724,8 +813,238 @@
         id: im.id,
         bg,
         kind: imageKindLabel(im.kind, lang),
+        open: () => logic.setState({ photoMenu: menuId === im.id ? null : im.id }),
+        menuOpen: menuId === im.id,
+        deletePhoto: (e) => {
+          e?.stopPropagation?.()
+          void deleteCharPhoto(charId, im.id, logic)
+        },
       }
     })
+  }
+
+  function mapPhotoTagMenu(lang, logic) {
+    const charId = getActiveCharId()
+    const imageId = logic.state.photoMenu
+    const img = getActiveChar()?.images?.find((x) => x.id === imageId)
+    const curKind = (img?.kind || 'other').toLowerCase()
+    return PHOTO_TAG_DEFS.map((d, i) => ({
+      label: lang === 'ru' ? d.ru : d.en,
+      style:
+        'font-size:11px;font-weight:700;padding:5px 10px;border-radius:7px;cursor:pointer;' +
+        (d.kind === curKind && i === 0
+          ? 'background:rgba(215,244,82,.15);color:#D7F452;'
+          : 'color:#C9CDD1;'),
+      pick: () => {
+        if (!charId || !imageId) return
+        void patchCharPhotoKind(charId, imageId, d.kind, logic)
+      },
+    }))
+  }
+
+  async function patchCharPhotoKind(charId, imageId, kind, logic) {
+    store.busy = true
+    store.error = null
+    try {
+      await API.apiJson('/api/studio/models/' + charId + '/images/' + imageId, {
+        method: 'PATCH',
+        body: JSON.stringify({ kind }),
+      })
+      await loadModels()
+      logic.setState({ photoMenu: null })
+    } catch (e) {
+      store.error = e.message || String(e)
+    } finally {
+      store.busy = false
+      logic.forceUpdate()
+    }
+  }
+
+  async function deleteCharPhoto(charId, imageId, logic) {
+    if (!confirm('Удалить это фото?')) return
+    store.busy = true
+    store.error = null
+    try {
+      await API.apiJson('/api/studio/models/' + charId + '/images/' + imageId, { method: 'DELETE' })
+      await loadModels()
+      logic.setState({ photoMenu: null })
+    } catch (e) {
+      store.error = e.message || String(e)
+    } finally {
+      store.busy = false
+      logic.forceUpdate()
+    }
+  }
+
+  async function deleteConversation(id, logic) {
+    if (!confirm('Удалить диалог из списка?')) return
+    store.busy = true
+    store.error = null
+    try {
+      await API.apiFetch('/api/conversations/' + id, { method: 'DELETE' })
+      await loadConversations()
+      logic.setState({ chatOpen: 0 })
+    } catch (e) {
+      store.error = e.message || String(e)
+    } finally {
+      store.busy = false
+      logic.forceUpdate()
+    }
+  }
+
+  function maskFromOpRights(orR) {
+    let mask = 0
+    for (const [key, bit] of Object.entries(OP_RIGHT_BITS)) {
+      if (orR[key]) mask |= bit
+    }
+    return mask
+  }
+
+  function mapOperatorForm(logic, lang, vals) {
+    const s = logic.state
+    const orR = s.opRights || store.opRights
+    const cbStyle = (on) =>
+      'width:20px;height:20px;flex:none;border-radius:6px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:12px;font-weight:900;' +
+      (on ? 'background:#D7F452;color:#171A05;' : 'border:1.5px solid rgba(255,255,255,.2);color:transparent;')
+    const opRightDefs = [
+      { key: 'chat', label: vals.t.rChat },
+      { key: 'studio', label: vals.t.rStudio },
+      { key: 'models', label: vals.t.rModels },
+      { key: 'keys', label: vals.t.rKeys },
+      { key: 'billing', label: vals.t.rBilling },
+    ]
+    const opRightRows = opRightDefs.map((r) => ({
+      label: r.label,
+      on: !!orR[r.key],
+      cb: cbStyle(!!orR[r.key]),
+      rowStyle:
+        'display:flex;align-items:center;justify-content:space-between;gap:14px;background:#0D0E11;border:1px solid ' +
+        (orR[r.key] ? 'rgba(215,244,82,.25)' : 'rgba(255,255,255,.07)') +
+        ';border-radius:12px;padding:14px 16px;cursor:pointer;',
+      toggle: () => logic.setState({ opRights: { ...orR, [r.key]: !orR[r.key] }, opError: false }),
+    }))
+    if (store.opModelIds == null) {
+      store.opModelIds = new Set((store.models || []).map((m) => m.id))
+    }
+    const opModelRows = (store.models || []).map((m) => ({
+      id: m.id,
+      name: m.name,
+      on: store.opModelIds.has(m.id),
+      cb: cbStyle(store.opModelIds.has(m.id)),
+      toggle: () => {
+        if (store.opModelIds.has(m.id)) store.opModelIds.delete(m.id)
+        else store.opModelIds.add(m.id)
+        logic.setState({ opError: false })
+        logic.forceUpdate()
+      },
+    }))
+    return {
+      opRightRows,
+      opModelRows,
+      openNewOp: () => {
+        store.opModelIds = new Set((store.models || []).map((m) => m.id))
+        logic.setState({
+          page: 'newOperator',
+          opError: false,
+          opRights: { chat: true, studio: true, models: true, keys: false, billing: false },
+        })
+      },
+      closeNewOp: () => logic.setState({ page: 'team', opError: false }),
+      saveOp: () => void saveOperator(logic, orR),
+    }
+  }
+
+  async function saveOperator(logic, orR) {
+    const root = document.querySelector('[data-screen-label="Новый оператор"]')
+    const login = (root?.querySelector('[data-mm-op-login]')?.value || '').trim().toLowerCase()
+    const password = root?.querySelector('[data-mm-op-pass]')?.value || ''
+    const shareRaw = (root?.querySelector('[data-mm-op-tribute]')?.value || '').trim()
+    const mask = maskFromOpRights(orR)
+    if (!Object.values(orR).some(Boolean)) {
+      logic.setState({ opError: true })
+      logic.forceUpdate()
+      return
+    }
+    if (login.length < 3) {
+      store.error = 'Логин оператора: минимум 3 символа'
+      logic.forceUpdate()
+      return
+    }
+    if (password.length < 8) {
+      store.error = 'Пароль: минимум 8 символов'
+      logic.forceUpdate()
+      return
+    }
+    let tributeSharePercent
+    if (shareRaw !== '') {
+      const n = Number(shareRaw)
+      if (!Number.isFinite(n) || n < 0 || n > 100) {
+        store.error = 'Доля Tribute: число от 0 до 100'
+        logic.forceUpdate()
+        return
+      }
+      tributeSharePercent = Math.round(n)
+    }
+    store.busy = true
+    store.error = null
+    try {
+      await API.apiJson('/api/workspace/members', {
+        method: 'POST',
+        body: JSON.stringify({
+          member_login: login,
+          password,
+          permissions_mask: mask,
+          allowed_studio_model_ids: [...(store.opModelIds || [])],
+          ...(tributeSharePercent !== undefined ? { tribute_share_percent: tributeSharePercent } : {}),
+        }),
+      })
+      if (root?.querySelector('[data-mm-op-login]')) root.querySelector('[data-mm-op-login]').value = ''
+      if (root?.querySelector('[data-mm-op-pass]')) root.querySelector('[data-mm-op-pass]').value = ''
+      await loadOwnerPanels()
+      logic.setState({ page: 'team', opError: false })
+    } catch (e) {
+      store.error = e.message || String(e)
+      logic.setState({ opError: true })
+    } finally {
+      store.busy = false
+      logic.forceUpdate()
+    }
+  }
+
+  async function genFirstFrame(logic) {
+    const s = logic.state
+    logic.setState({ ffState: 'loading' })
+    store.error = null
+    try {
+      const fd = new FormData()
+      const modelId = store.selectedModelId
+      if (modelId) fd.append('model_id', String(modelId))
+      fd.append('output_aspect', store.selectedAspect || '9:16')
+      fd.append('studio_wave_profile', isNsfwMode(s) ? 'nsfw' : 'regular')
+      const videoFile = store.uploadFiles['motion-video']
+      if (videoFile) fd.append('video', videoFile)
+      const frameFile = store.uploadFiles['motion-frame']
+      if (frameFile) fd.append('first_frame_image', frameFile)
+      const archId = s.carouselPickId || (typeof s.lightbox === 'number' ? s.lightbox : null)
+      if (archId && !videoFile && !frameFile) fd.append('existing_generation_id', String(archId))
+      const motion = (queryMotionTextarea()?.value || '').trim()
+      if (motion) fd.append('description', motion)
+      const accepted = await API.postStudioJob('/api/studio/motion/first-frame', fd)
+      if (accepted.job_id) {
+        await API.pollStudioJob(accepted.job_id, { maxWaitMs: 10 * 60 * 1000 })
+      }
+      await loadArchive()
+      const genId = accepted.generation_id
+      const gen = store.archiveImages.find((g) => g.id === genId)
+      store.firstFrameUrl = gen?.image_url || ''
+      store.firstFrameGenId = genId || null
+      logic.setState({ ffState: 'done' })
+      await API.apiJson('/api/auth/me').then((m) => { store.me = m })
+    } catch (e) {
+      store.error = e.message || String(e)
+      logic.setState({ ffState: 'idle' })
+    }
+    logic.forceUpdate()
   }
 
   function mapPhotoTagList(lang, logic) {
@@ -1056,11 +1375,11 @@
   }
 
   async function downloadLightbox() {
-    const lb = store.logic?.state?.lightbox
-    if (!lb) return
-    let url = (lb.url || '').trim()
+    const s = store.logic?.state || {}
+    const lbData = buildLightboxData(s, s.lang || 'ru')
+    let url = (lbData?.url || '').trim()
+    let id = lbData?.id || 0
     let isVideo = false
-    let id = lb.id || 0
     if (!url && id) {
       const item =
         store.archiveImages.find((x) => x.id === id) ||
@@ -1068,8 +1387,10 @@
       if (item) {
         isVideo = item.media_kind === 'video'
         url = (isVideo ? item.video_url || item.image_url : item.image_url) || ''
-        id = item.id
       }
+    } else if (id) {
+      const item = store.archiveVideos.find((x) => x.id === id)
+      if (item) isVideo = true
     }
     await downloadArchiveUrl(url, id, isVideo)
   }
@@ -1117,24 +1438,28 @@
 
   async function runGenerate() {
     if (store.busy) return
-    const s = store.logic?.state || {}
+    const logic = store.logic
+    const s = logic?.state || {}
     const mode = s.imgMode || 'prompt'
     const prompt = (queryPromptTextarea()?.value || '').trim()
     const modelId = store.selectedModelId
     if (!modelId) {
       store.error = 'Выберите персонажа'
-      store.logic?.forceUpdate()
+      logic.forceUpdate()
       return
     }
     store.busy = true
     store.error = null
     try {
       if (mode === 'carousel') {
-        const srcId = store.logic?.state?.lightbox?.id
+        const srcId = s.carouselPickId
+        if (!srcId && store.uploadFiles.carousel) {
+          throw new Error('Загрузка файла для карусели пока не поддерживается — выберите кадр из архива')
+        }
         if (!srcId) throw new Error('Выберите кадр из архива для карусели')
         await API.apiJson('/api/studio/generations/' + srcId + '/carousel', {
           method: 'POST',
-          body: JSON.stringify({ count: s.carCount || 6 }),
+          body: JSON.stringify({ count: s.carouselCount || 6 }),
         })
       } else {
         const fd = new FormData()
@@ -1142,8 +1467,8 @@
         fd.append('model_id', String(modelId))
         fd.append('output_aspect', store.selectedAspect)
         fd.append('studio_mode', imgModeToStudio(mode))
-        fd.append('studio_wave_profile', s.nsfw ? 'nsfw' : 'regular')
-        const wave = normalizeWaveModel(store.selectedWaveModelId, !!s.nsfw)
+        fd.append('studio_wave_profile', isNsfwMode(s) ? 'nsfw' : 'regular')
+        const wave = normalizeWaveModel(waveModelFromState(s), isNsfwMode(s))
         fd.append('workflow_wave_model', wave.apiId)
         if (wave.apiId === 'wan-2.7') fd.append('wan_edit_tier', wave.tier)
         fd.append('generate_wavespeed', '1')
@@ -1161,7 +1486,7 @@
       store.error = e.message || String(e)
     } finally {
       store.busy = false
-      store.logic?.forceUpdate()
+      logic.forceUpdate()
     }
   }
 
@@ -1191,8 +1516,9 @@
       if (store.motionVideoFileId) fd.append('motion_video_file_id', store.motionVideoFileId)
       const frameFile = store.uploadFiles['motion-frame']
       if (frameFile) fd.append('image', frameFile)
-      const archId = s.lightbox?.id
+      const archId = s.carouselPickId || (typeof s.lightbox === 'number' ? s.lightbox : null)
       if (archId && !frameFile) fd.append('existing_generation_id', String(archId))
+      if (store.firstFrameGenId && !frameFile && !archId) fd.append('existing_generation_id', String(store.firstFrameGenId))
       const accepted = await API.postStudioJob('/api/studio/motion/render-video', fd)
       if (accepted.job_id) await API.pollStudioJob(accepted.job_id, { maxWaitMs: 15 * 60 * 1000 }).catch(() => {})
       await loadArchive()
@@ -1377,11 +1703,27 @@
     const recentDialogs = convs.slice(0, 4).map((c, i) => mkDlgFromConv(c, i, logic))
     const chats = convs.map((c, i) => {
       const d = mkDlgFromConv(c, i, logic)
+      const st = chatStatusType(c)
+      const blockedTag =
+        st === 'blocked' ? vals.t.dlgBlocked : st === 'deleted' ? vals.t.dlgDeleted : false
+      const blockedTagStyle =
+        'font-family:JetBrains Mono;font-size:7.5px;letter-spacing:.4px;padding:1px 6px;border-radius:4px;' +
+        (st === 'blocked'
+          ? 'background:rgba(248,113,113,.15);color:#F87171;'
+          : 'background:rgba(255,255,255,.08);color:#9BA0A6;')
       return {
         ...d,
-        avStyle: d.avStyleLg,
+        avStyle: st ? d.avStyleLg + 'filter:grayscale(1);opacity:.6;' : d.avStyleLg,
+        blockedTag,
+        blockedTagStyle,
+        nameStyle: 'font-weight:700;font-size:12.5px;' + (st ? 'color:#9BA0A6;' : ''),
+        canDelete: !!st,
+        delDialog: (e) => {
+          e?.stopPropagation?.()
+          void deleteConversation(c.id, logic)
+        },
         rowStyle:
-          'display:flex;gap:10px;align-items:center;padding:9px 8px;border-radius:12px;cursor:pointer;' +
+          'display:flex;gap:10px;align-items:center;padding:9px 8px;border-radius:12px;cursor:pointer;position:relative;' +
           (s.chatOpen === i
             ? 'background:rgba(215,244,82,.07);border:1px solid rgba(215,244,82,.2);'
             : 'border:1px solid transparent;'),
@@ -1409,7 +1751,20 @@
       text: n.content || '',
     }))
 
-    const archiveFrames = store.archiveImages.map((item, i) => archiveToFrame(item, i, logic, vals))
+    const archiveFrames = store.archiveImages.map((item, i) => {
+      const frame = archiveToFrame(item, i, logic, vals)
+      if (s.imgMode === 'carousel') {
+        const picked = s.carouselPickId === item.id
+        return {
+          ...frame,
+          open: () => logic.setState({ carouselPickId: item.id }),
+          bg:
+            frame.bg +
+            (picked ? 'box-shadow:inset 0 0 0 2px #D7F452;' : ''),
+        }
+      }
+      return frame
+    })
     const recentFrames = archiveFrames.slice(0, 4)
     const videoArchive = store.archiveVideos.slice(0, 4).map((item, i) => ({
       bg: 'aspect-ratio:9/16;display:flex;align-items:center;justify-content:center;position:relative;background:center/cover no-repeat url("' +
@@ -1522,9 +1877,21 @@
     const activeChar = charId ? store.models.find((m) => m.id === charId) : null
     const activeCharName = activeChar?.name || '—'
     const activeCharInitial = ((activeChar?.name || '—')[0] || '?').toUpperCase()
-    const charPhotos = activeChar ? mapCharPhotos(activeChar, lang) : []
+    const charPhotos = activeChar ? mapCharPhotos(activeChar, lang, logic) : []
     const photoTagList = mapPhotoTagList(lang, logic)
+    const photoTagMenu = mapPhotoTagMenu(lang, logic)
     const charHistory = charId ? mapCharHistory(charId, lang) : vals.charHistory || []
+    const operator = mapOperatorForm(logic, lang, vals)
+    const lightboxData = buildLightboxData(s, lang)
+    const imgErrList = s.showGenError ? validateImageGen(logic, vals) : []
+    const ffUrl = store.firstFrameUrl || ''
+    const ffImgStyle =
+      'width:70px;aspect-ratio:9/16;border-radius:10px;flex:none;background:' +
+      (ffUrl
+        ? 'center/cover no-repeat url("' + ffUrl.replace(/"/g, '') + '"),' + G[3]
+        : G[3])
+
+    logic._lastT = vals.t
 
     return {
       ...vals,
@@ -1567,7 +1934,40 @@
       activeCharInitial,
       charPhotos,
       photoTagList,
+      photoTagOpts: photoTagList,
+      photoTagMenu,
       charHistory,
+      showGenError: !!s.showGenError,
+      imgErrList,
+      triggerGen: () => {
+        const errs = validateImageGen(logic, vals)
+        if (errs.length) {
+          logic.setState({ showGenError: true })
+        } else {
+          logic.setState({ showGenError: false })
+          void runGenerate()
+        }
+        logic.forceUpdate()
+      },
+      genFieldErr: (need) =>
+        s.showGenError && need ? 'border:1px solid #F87171;border-radius:12px;padding:2px;' : '',
+      ffState: s.ffState || 'idle',
+      ffIdle: (s.ffState || 'idle') === 'idle',
+      ffLoading: s.ffState === 'loading',
+      ffDone: s.ffState === 'done',
+      genFirstFrame: () => void genFirstFrame(logic),
+      ffImgStyle,
+      lightboxData,
+      makeCarousel: () => {
+        const id = typeof s.lightbox === 'number' ? s.lightbox : null
+        logic.setState({ page: 'images', imgMode: 'carousel', lightbox: id, carouselPickId: id })
+      },
+      opRightRows: operator.opRightRows,
+      opModelRows: operator.opModelRows,
+      opError: !!s.opError,
+      openNewOp: operator.openNewOp,
+      saveOp: operator.saveOp,
+      closeNewOp: operator.closeNewOp,
       apiError: store.error,
       apiBusy: store.busy,
       runGenerate: () => void runGenerate(),
@@ -1582,7 +1982,7 @@
       canChat: isOwner || API.hasPerm(mask, API.PERM.CHAT),
       canStudio: isOwner || API.hasPerm(mask, API.PERM.STUDIO_GENERATE),
       canBilling: isOwner || API.hasPerm(mask, API.PERM.BILLING),
-      hasLightbox: !!(s.lightbox && s.lightbox.showModal),
+      hasLightbox: lightboxData != null,
       closeLightbox: () => logic.setState({ lightbox: null }),
       downloadLightbox: () => void downloadLightbox(),
     }
