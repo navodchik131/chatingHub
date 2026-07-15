@@ -47,14 +47,13 @@ const AUTH_OVERLAY = `
 
 /** Подстановки в шаблон: хардкод макета → биндинги API */
 const TEMPLATE_PATCHES = [
-  [/src="\.\/support\.js"/, 'src="/support.js"'],
   [
-    /<script src="\/support\.js"><\/script>/,
-    `<link rel="stylesheet" href="/mm-os-auth.css">
-<script src="/mm-os-api.js"></script>
-<script src="/mm-os-bridge.js"></script>
-<script src="/mm-os-api-full.js"></script>
-<script src="/support.js"></script>`,
+    /<script src="\.\/support\.js"><\/script>/,
+    `<link rel="stylesheet" href="./mm-os-auth.css">
+<script src="./mm-os-api.js"></script>
+<script src="./mm-os-bridge.js"></script>
+<script src="./mm-os-api-full.js"></script>
+<script src="./support.js"></script>`,
   ],
   [
     /<body>/,
@@ -111,10 +110,6 @@ const TEMPLATE_PATCHES = [
   [
     /<div style="background:#D7F452;color:#171A05;font-weight:800;font-size:12\.5px;border-radius:10px;padding:10px 16px;cursor:pointer;" style-hover="background:#E8FA8A;">{{ t\.send }}<\/div>/,
     `<div onClick="{{ sendReply }}" style="background:#D7F452;color:#171A05;font-weight:800;font-size:12.5px;border-radius:10px;padding:10px 16px;cursor:pointer;" style-hover="background:#E8FA8A;">{{ t.send }}</div>`,
-  ],
-  [
-    /<div id="mm-os-auth" class="mm-os-auth" style="display:none">/,
-    `<div id="mm-os-auth" class="mm-os-auth" style="display:flex">`,
   ],
   // обзор KPI — убрать хардкод макета
   [
