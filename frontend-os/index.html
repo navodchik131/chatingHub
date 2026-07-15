@@ -210,14 +210,17 @@ input::placeholder,textarea::placeholder{color:#5C6066;}
     <!-- ──────────── ДИАЛОГИ ──────────── -->
     <sc-if value="{{ isDialogs }}" hint-placeholder-val="{{ false }}">
       <div style="animation:mmFade .25s ease;height:100%;display:flex;flex-direction:column;" data-screen-label="Диалоги">
+        <sc-if value="{{ showDialogsHeader }}" hint-placeholder-val="{{ true }}">
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap;">
           <div style="font-family:'Unbounded';font-weight:600;font-size:20px;">{{ t.navDialogs }}</div>
           <div style="display:flex;gap:6px;">
             <span style="font-family:'JetBrains Mono';font-size:10px;background:rgba(255,255,255,.06);color:#9BA0A6;border:1px solid rgba(255,255,255,.12);padding:3px 10px;border-radius:20px;">{{ dialogsPlatformLine }}</span>
           </div>
         </div>
+        </sc-if>
         <div style="{{ dialogsGrid }}">
           <!-- list -->
+          <sc-if value="{{ showChatList }}" hint-placeholder-val="{{ true }}">
           <div style="background:#121316;border:1px solid rgba(255,255,255,.07);border-radius:16px;display:flex;flex-direction:column;overflow:hidden;min-height:0;">
             <div style="padding:12px 12px 8px;display:flex;flex-direction:column;gap:8px;">
               <input data-mm-chat-search placeholder="{{ t.searchDialogs }}" style="background:#0D0E11;border:1px solid rgba(255,255,255,.09);border-radius:9px;padding:8px 12px;color:#F2F3F0;font-family:'Manrope';font-size:12.5px;outline:none;">
@@ -251,10 +254,14 @@ input::placeholder,textarea::placeholder{color:#5C6066;}
               </sc-for>
             </div>
           </div>
+          </sc-if>
           <!-- thread -->
-          <sc-if value="{{ showThread }}" hint-placeholder-val="{{ false }}">
+          <sc-if value="{{ showChatThread }}" hint-placeholder-val="{{ false }}">
           <div style="background:#121316;border:1px solid rgba(255,255,255,.07);border-radius:16px;display:flex;flex-direction:column;overflow:hidden;min-height:0;">
             <div style="padding:12px 16px;border-bottom:1px solid rgba(255,255,255,.07);display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+              <sc-if value="{{ isMobile }}" hint-placeholder-val="{{ false }}">
+              <div onClick="{{ closeChatThread }}" style="display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;color:#9BA0A6;cursor:pointer;flex:none;" style-hover="color:#F2F3F0;">← {{ t.backToDialogs }}</div>
+              </sc-if>
               <div style="width:34px;height:34px;border-radius:50%;background:{{ activeChat.avStyle }};display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;">{{ activeChat.initial }}</div>
               <div style="flex:1;min-width:120px;">
                 <div style="display:flex;gap:7px;align-items:center;"><span style="font-weight:800;font-size:14px;">{{ activeChat.name }}</span><sc-if value="{{ activeChat.vip }}" hint-placeholder-val="{{ false }}"><span style="font-family:'JetBrains Mono';font-size:7.5px;background:#D7F452;color:#171A05;font-weight:700;padding:1px 5px;border-radius:5px;">VIP</span></sc-if></div>
@@ -1274,7 +1281,7 @@ class Component extends DCLogic {
     page: 'overview', lang: 'ru', imgMode: 'ref',
     connDetail: null, charDetail: null, donTab: 'overview',
     tier: 'standard', period: 'month', moreOpen: false,
-    isMobile: false, chatOpen: 0,
+    isMobile: false, chatOpen: 0, chatView: 'list',
     contentMode: 'sfw', aiModel: 'nano', carouselCount: 4,
     hasFirstFrame: 'yes', vidQuality: '1080', vidFormat: '9:16', vidTime: '5',
     charTab: 'photos', lightbox: null, carSource: 'archive', carouselPickId: null,
@@ -1331,7 +1338,7 @@ class Component extends DCLogic {
       curConfig: 'Текущая настройка', changeTag: 'Изменить тег', setTag: 'Тег фото', deletePhoto: 'Удалить фото', apply: 'Применить',
       dlgBlocked: 'Заблокировал(а)', dlgDeleted: 'Удалил(а) чат', dlgBlockedHint: 'Фан ограничил доступ — ответы не доставляются.', deleteDialog: 'Удалить диалог',
       genFirstFrame2: 'Генерируем первый кадр…', ffDone: 'Первый кадр готов', regen: 'Перегенерировать',
-      searchDialogs: 'Поиск по диалогам…', persona: 'персонаж', replyLang: 'язык ответа',
+      searchDialogs: 'Поиск по диалогам…', persona: 'персонаж', replyLang: 'язык ответа', backToDialogs: 'К диалогам',
       msgPlaceholder: 'Сообщение на русском — уйдёт перевод на язык фана…', send: 'Отправить',
       fanNotes: 'Досье фана', analysis: 'анализ', addNote: 'Заметка',
       imagesDesc: 'Пять способов создать кадр персонажа. Выберите режим — подсказки внутри.',
@@ -1396,7 +1403,7 @@ class Component extends DCLogic {
       curConfig: 'Current configuration', changeTag: 'Change tag', setTag: 'Photo tag', deletePhoto: 'Delete photo', apply: 'Apply',
       dlgBlocked: 'Blocked you', dlgDeleted: 'Deleted the chat', dlgBlockedHint: 'The fan restricted access — replies are not delivered.', deleteDialog: 'Delete dialog',
       genFirstFrame2: 'Generating first frame…', ffDone: 'First frame ready', regen: 'Regenerate',
-      searchDialogs: 'Search dialogs…', persona: 'character', replyLang: 'reply language',
+      searchDialogs: 'Search dialogs…', persona: 'character', replyLang: 'reply language', backToDialogs: 'Back to dialogs',
       msgPlaceholder: 'Type in Russian — it will be translated for the fan…', send: 'Send',
       fanNotes: 'Fan dossier', analysis: 'analysis', addNote: 'Note',
       imagesDesc: 'Five ways to create a character frame. Pick a mode — hints inside.',
@@ -1889,7 +1896,8 @@ class Component extends DCLogic {
       icoBolt, icoSpark, icoChat, icoUpload, icoCopy, icoImage, icoFilm, icoPlay, icoFlow, icoDownload, icoZoom, icoGrid2,
       studioCards, recentDialogs, recentFrames,
       chatFilters, chats, messages, notes,
-      showThread: !isMobile, showNotes: !isMobile,
+      showThread: !isMobile, showNotes: !isMobile, showChatList: !isMobile, showChatThread: !isMobile, showDialogsHeader: true,
+      closeChatThread: () => setS({ chatView: 'list' }),
       dialogsGrid: isMobile ? 'display:grid;grid-template-columns:1fr;gap:12px;flex:1;min-height:0;' : 'display:grid;grid-template-columns:290px 1fr 270px;gap:12px;flex:1;min-height:420px;',
       studioGrid: isMobile ? 'display:grid;grid-template-columns:1fr;gap:14px;width:100%;' : 'display:grid;grid-template-columns:minmax(280px,340px) minmax(0,1fr);gap:16px;align-items:start;width:100%;',
       archiveColStyle: isMobile ? '' : 'min-width:0;',

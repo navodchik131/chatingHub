@@ -165,7 +165,9 @@
       lang,
       unread: c.unread_count || 0,
       open: () => {
-        logic.setState({ chatOpen: i, page: 'dialogs' })
+        const patch = { chatOpen: i, page: 'dialogs' }
+        if (logic.state.isMobile) patch.chatView = 'thread'
+        logic.setState(patch)
         void loadMessages(c.id)
       },
     }
@@ -1156,7 +1158,7 @@
     try {
       await API.apiFetch('/api/conversations/' + id, { method: 'DELETE' })
       await loadConversations()
-      logic.setState({ chatOpen: 0 })
+      logic.setState({ chatOpen: 0, chatView: 'list' })
     } catch (e) {
       store.error = e.message || String(e)
     } finally {
@@ -2245,6 +2247,11 @@
     const ffModel = store.models.find((m) => m.id === store.selectedModelId)
     const ffThumbLabel = (ffModel?.name || '—') + ' · ' + (store.selectedAspect || '9:16')
 
+    const isMobile = !!s.isMobile
+    const showChatThread = !isMobile || s.chatView === 'thread'
+    const showChatList = !isMobile || s.chatView !== 'thread'
+    const showDialogsHeader = showChatList
+
     logic._lastT = vals.t
 
     return {
@@ -2373,6 +2380,12 @@
       canStudio: isOwner || API.hasPerm(mask, API.PERM.STUDIO_GENERATE),
       canBilling: isOwner || API.hasPerm(mask, API.PERM.BILLING),
       hasLightbox: lightboxData != null,
+      showThread: showChatThread,
+      showChatThread,
+      showChatList,
+      showDialogsHeader,
+      showNotes: !isMobile,
+      closeChatThread: () => logic.setState({ chatView: 'list' }),
       closeLightbox: () => logic.setState({ lightbox: null }),
       downloadLightbox: () => void downloadLightbox(),
     }
