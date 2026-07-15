@@ -1,12 +1,38 @@
 const TOKEN_KEY = 'chating_token'
+const COOKIE_MAX_AGE = 60 * 60 * 24 * 90
+
+function readCookieToken(): string | null {
+  const m = document.cookie.match(/(?:^|;\s*)chating_token=([^;]*)/)
+  return m ? decodeURIComponent(m[1]) : null
+}
+
+function writeCookieToken(token: string | null): void {
+  if (token) {
+    document.cookie = `${TOKEN_KEY}=${encodeURIComponent(token)}; path=/; max-age=${COOKIE_MAX_AGE}; SameSite=Lax`
+  } else {
+    document.cookie = `${TOKEN_KEY}=; path=/; max-age=0; SameSite=Lax`
+  }
+}
 
 export function getToken(): string | null {
-  return localStorage.getItem(TOKEN_KEY)
+  const ls = localStorage.getItem(TOKEN_KEY)
+  if (ls) return ls
+  const ck = readCookieToken()
+  if (ck) {
+    localStorage.setItem(TOKEN_KEY, ck)
+    return ck
+  }
+  return null
 }
 
 export function setToken(token: string | null): void {
-  if (token) localStorage.setItem(TOKEN_KEY, token)
-  else localStorage.removeItem(TOKEN_KEY)
+  if (token) {
+    localStorage.setItem(TOKEN_KEY, token)
+    writeCookieToken(token)
+  } else {
+    localStorage.removeItem(TOKEN_KEY)
+    writeCookieToken(null)
+  }
 }
 
 export async function apiFetch(
