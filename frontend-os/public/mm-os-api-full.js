@@ -284,6 +284,12 @@
       .join(' · ')
   }
 
+  function clearApiError() {
+    store.error = null
+    updateApiStatusBar()
+    bridge.store.logic?.forceUpdate()
+  }
+
   function updateApiStatusBar() {
     let el = document.getElementById('mm-os-api-status')
     if (!el) {
@@ -296,13 +302,30 @@
       el.textContent = 'Загрузка…'
       el.style.display = 'block'
       el.className = 'mm-os-api-status mm-os-api-status--busy'
-    } else if (store.error) {
-      el.textContent = store.error
-      el.style.display = 'block'
-      el.className = 'mm-os-api-status mm-os-api-status--err'
-    } else {
-      el.style.display = 'none'
+      return
     }
+    if (store.error) {
+      el.className = 'mm-os-api-status mm-os-api-status--err'
+      el.style.display = 'flex'
+      el.replaceChildren()
+      const msg = document.createElement('span')
+      msg.className = 'mm-os-api-status-msg'
+      msg.textContent = store.error
+      const btn = document.createElement('button')
+      btn.type = 'button'
+      btn.className = 'mm-os-api-status-close'
+      btn.setAttribute('aria-label', 'Закрыть')
+      btn.textContent = '✕'
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation()
+        clearApiError()
+      })
+      el.appendChild(msg)
+      el.appendChild(btn)
+      return
+    }
+    el.style.display = 'none'
+    el.replaceChildren()
   }
 
   function fillModelSelect(sel) {
@@ -904,6 +927,12 @@
   const origOnMount = bridge.onMount
   bridge.onMount = function (logic) {
     origOnMount(logic)
+    if (!document.body.dataset.mmErrEsc) {
+      document.body.dataset.mmErrEsc = '1'
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && store.error) clearApiError()
+      })
+    }
     setInterval(() => {
       if (store.authed) bindFullPanels()
     }, 450)
