@@ -312,6 +312,34 @@ const TEMPLATE_PATCHES = [
     `<div><div style="font-family:'JetBrains Mono';font-size:8.5px;letter-spacing:1.2px;color:#6B7076;margin-bottom:6px;">ПРЕДЫСТОРИЯ</div><textarea data-mm-persona="backstory" rows="2" placeholder="откуда она, чем занимается, что важно в жизни…" style="width:100%;background:#0D0E11;border:1px solid rgba(255,255,255,.09);border-radius:9px;padding:9px 11px;color:#F2F3F0;font-family:'Manrope';font-size:12px;line-height:1.5;resize:vertical;outline:none;"></textarea></div>`,
   ],
   [
+    /<div style="font-size:10\.5px;color:#9BA0A6;">\{\{ threadHead\.platform \}\} · \{\{ t\.persona \}\}: <span style="color:#F0A8C8;font-weight:700;">Mia<\/span>/,
+    '<div style="font-size:10.5px;color:#9BA0A6;">{{ threadHead.platform }} · {{ t.persona }}: <span style="color:#F0A8C8;font-weight:700;">{{ threadHead.persona }}</span>',
+  ],
+  [
+    /<sc-for list="\{\{ archiveMini \}\}" as="am"/,
+    '<sc-for list="{{ s.archiveMini }}" as="am"',
+  ],
+  [
+    /<div style="\{\{ am\.style \}\}" style-hover="border-color:#D7F452;"><\/div>/,
+    '<div onClick="{{ am.pick }}" style="{{ am.style }}" style-hover="border-color:#D7F452;"></div>',
+  ],
+  [
+    /<sc-if value="\{\{ s\.uploadMode \}\}" hint-placeholder-val="\{\{ true \}\}">\s*<div style="aspect-ratio:3\/4;border:1\.5px dashed/,
+    '<sc-if value="{{ s.uploadMode }}" hint-placeholder-val="{{ true }}"><div data-mm-slot-upload="{{ s.uploadKey }}" style="aspect-ratio:3/4;border:1.5px dashed',
+  ],
+  [
+    /<div title="\{\{ t\.attach \}\}" style="width:38px;height:38px;flex:none;border-radius:10px;border:1px solid rgba\(255,255,255,.1\);display:flex;align-items:center;justify-content:center;color:#9BA0A6;cursor:pointer;" style-hover="color:#D7F452;border-color:rgba\(215,244,82,.4\);"><span style="display:flex;width:18px;height:18px;" dangerouslySetInnerHTML="\{\{ icoClip \}\}"><\/span><\/div>/,
+    '<div data-mm-chat-attach title="{{ t.attach }}" style="width:38px;height:38px;flex:none;border-radius:10px;border:1px solid rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center;color:#9BA0A6;cursor:pointer;" style-hover="color:#D7F452;border-color:rgba(215,244,82,.4);"><span style="display:flex;width:18px;height:18px;" dangerouslySetInnerHTML="{{ icoClip }}"></span></div>',
+  ],
+  [
+    /<div style="width:38px;height:38px;flex:none;background:#D7F452;color:#171A05;border-radius:10px;display:flex;align-items:center;justify-content:center;cursor:pointer;" style-hover="background:#E8FA8A;"><span style="display:flex;width:17px;height:17px;" dangerouslySetInnerHTML="\{\{ icoSendArrow \}\}"><\/span><\/div>\s*<\/div>\s*<\/sc-if>\s*<!-- notes -->/,
+    '<div data-mm-chat-send style="width:38px;height:38px;flex:none;background:#D7F452;color:#171A05;border-radius:10px;display:flex;align-items:center;justify-content:center;cursor:pointer;" style-hover="background:#E8FA8A;"><span style="display:flex;width:17px;height:17px;" dangerouslySetInnerHTML="{{ icoSendArrow }}"></span></div></div></sc-if><!-- notes -->',
+  ],
+  [
+    /<span style="display:flex;width:14px;height:14px;color:#9BA0A6;cursor:pointer;flex:none;" style-hover="color:#D7F452;" dangerouslySetInnerHTML="\{\{ icoCopy \}\}"><\/span>\s*<\/div>\s*<\/sc-for>\s*<\/div>\s*<\/div>\s*<\/sc-for>/,
+    '<span onClick="{{ u.copy }}" style="display:flex;width:14px;height:14px;color:#9BA0A6;cursor:pointer;flex:none;" style-hover="color:#D7F452;" dangerouslySetInnerHTML="{{ icoCopy }}"></span></div></sc-for></div></div></sc-for>',
+  ],
+  [
     /<div style="display:flex;gap:8px;"><div style="flex:1;background:rgba\(215,244,82,.12\);border:1px solid rgba\(215,244,82,.3\);border-radius:9px;padding:10px;text-align:center;font-size:12px;font-weight:800;color:#D7F452;cursor:pointer;">\{\{ t\.save \}\}<\/div><\/div>\s*<\/div>\s*<\/sc-if>/,
     `<div style="display:flex;gap:8px;"><div data-mm-char-persona-save style="flex:1;background:rgba(215,244,82,.12);border:1px solid rgba(215,244,82,.3);border-radius:9px;padding:10px;text-align:center;font-size:12px;font-weight:800;color:#D7F452;cursor:pointer;">{{ t.save }}</div></div>
           </div>

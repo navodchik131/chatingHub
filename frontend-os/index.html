@@ -27,7 +27,7 @@
 <x-dc>
 <helmet>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Unbounded:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&amp;family=Unbounded:wght@500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
 <style>
 html,body{margin:0;padding:0;background:#0A0B0D;color:#F2F3F0;font-family:'Manrope',system-ui,sans-serif;}
 *{box-sizing:border-box;}
@@ -49,11 +49,13 @@ input::placeholder,textarea::placeholder{color:#5C6066;}
   <sc-if value="{{ showSidebar }}" hint-placeholder-val="{{ true }}">
   <div style="width:248px;flex:none;display:flex;flex-direction:column;border-right:1px solid rgba(255,255,255,.07);background:#0D0E11;">
     <!-- logo -->
-    <div style="display:flex;align-items:center;gap:10px;padding:18px 18px 14px;">
-      <div style="width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,#C084FC,#F472B6);display:flex;align-items:center;justify-content:center;font-family:'Unbounded';font-weight:700;font-size:15px;color:#14060D;">M</div>
+    <div style="display:flex;align-items:center;gap:11px;padding:18px 18px 14px;">
+      <div style="width:40px;height:40px;flex:none;border-radius:12px;overflow:hidden;box-shadow:0 4px 14px rgba(0,0,0,.5),inset 0 0 0 1px rgba(255,255,255,.08);">
+        <img src="assets/logo-m.png" alt="ModelMate" style="width:100%;height:100%;object-fit:cover;display:block;">
+      </div>
       <div>
-        <div style="font-weight:800;font-size:15px;letter-spacing:-.2px;">ModelMate</div>
-        <div style="font-family:'JetBrains Mono';font-size:9px;letter-spacing:2px;color:#6B7076;">CREATOR OS</div>
+        <div style="font-family:'Unbounded';font-weight:700;font-size:15px;letter-spacing:-.3px;line-height:1;">ModelMate</div>
+        <div style="font-family:'JetBrains Mono';font-size:8px;letter-spacing:1.4px;color:#8A8F95;margin-top:3px;">AI OFM · {{ t.fullCycle }}</div>
       </div>
     </div>
     <!-- nav -->
@@ -99,7 +101,9 @@ input::placeholder,textarea::placeholder{color:#5C6066;}
     <!-- mobile topbar -->
     <sc-if value="{{ isMobile }}" hint-placeholder-val="{{ false }}">
       <div style="flex:none;display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid rgba(255,255,255,.07);background:#0D0E11;">
-        <div style="width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,#C084FC,#F472B6);display:flex;align-items:center;justify-content:center;font-family:'Unbounded';font-weight:700;font-size:12px;color:#14060D;">M</div>
+        <div style="width:30px;height:30px;flex:none;border-radius:9px;overflow:hidden;box-shadow:inset 0 0 0 1px rgba(255,255,255,.08);">
+          <img src="assets/logo-m.png" alt="ModelMate" style="width:100%;height:100%;object-fit:cover;display:block;">
+        </div>
         <div style="font-weight:800;font-size:14px;flex:1;">{{ pageTitle }}</div>
         <div onClick="{{ toggleLang }}" style="font-family:'JetBrains Mono';font-size:10px;border:1px solid rgba(255,255,255,.14);border-radius:7px;padding:3px 7px;color:#9BA0A6;cursor:pointer;">{{ langLabel }}</div>
         <div onClick="{{ goBilling }}" style="display:flex;align-items:center;gap:5px;background:rgba(215,244,82,.1);border:1px solid rgba(215,244,82,.3);border-radius:20px;padding:4px 10px;cursor:pointer;">
@@ -154,6 +158,25 @@ input::placeholder,textarea::placeholder{color:#5C6066;}
           </div>
         </div>
 
+        <!-- С чего начать -->
+        <div style="background:linear-gradient(120deg,rgba(192,132,252,.1),rgba(240,168,200,.04));border:1px solid rgba(192,132,252,.28);border-radius:16px;padding:16px 18px;margin-bottom:24px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px;">
+            <div>
+              <div style="font-family:'Unbounded';font-weight:600;font-size:16px;margin-bottom:3px;">{{ t.startTitle }}</div>
+              <div style="font-size:12px;color:#9BA0A6;">{{ t.startDesc }}</div>
+            </div>
+            <div onClick="{{ goGuide }}" style="display:flex;align-items:center;gap:8px;background:linear-gradient(120deg,#C084FC,#F0A8C8);color:#1A0A14;font-weight:800;font-size:12.5px;border-radius:10px;padding:9px 16px;cursor:pointer;" style-hover="filter:brightness(1.08);">{{ t.openGuide }} →</div>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;">
+            <sc-for list="{{ startSteps }}" as="st" hint-placeholder-count="4">
+              <div onClick="{{ goGuide }}" style="display:flex;align-items:center;gap:10px;background:#121316;border:1px solid rgba(255,255,255,.07);border-radius:12px;padding:10px 12px;cursor:pointer;" style-hover="border-color:rgba(192,132,252,.4);">
+                <div style="width:24px;height:24px;flex:none;border-radius:8px;background:rgba(192,132,252,.15);color:#C084FC;display:flex;align-items:center;justify-content:center;font-family:'Unbounded';font-weight:600;font-size:12px;">{{ st.n }}</div>
+                <span style="font-size:12px;font-weight:700;">{{ st.label }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
         <!-- Studio shortcuts with icons + descriptions -->
         <div style="font-family:'JetBrains Mono';font-size:10px;letter-spacing:2px;color:#6B7076;margin:0 0 10px;">{{ t.studioBlock }}</div>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px;margin-bottom:24px;">
@@ -178,7 +201,7 @@ input::placeholder,textarea::placeholder{color:#5C6066;}
             </div>
             <div style="display:flex;flex-direction:column;">
               <sc-for list="{{ recentDialogs }}" as="d" hint-placeholder-count="4">
-                <div onClick="{{ goDialogs }}" style="display:flex;gap:10px;align-items:center;padding:9px 6px;border-radius:10px;cursor:pointer;" style-hover="background:rgba(255,255,255,.04);">
+                <div onClick="{{ d.open }}" style="display:flex;gap:10px;align-items:center;padding:9px 6px;border-radius:10px;cursor:pointer;" style-hover="background:rgba(255,255,255,.04);">
                   <div style="{{ d.avStyle }}">{{ d.initial }}</div>
                   <div style="flex:1;min-width:0;">
                     <div style="display:flex;gap:7px;align-items:baseline;"><span style="font-weight:700;font-size:12.5px;">{{ d.name }}</span><span style="font-family:'JetBrains Mono';font-size:8.5px;letter-spacing:1px;color:{{ d.platColor }};">{{ d.platform }}</span></div>
@@ -207,23 +230,76 @@ input::placeholder,textarea::placeholder{color:#5C6066;}
       </div>
     </sc-if>
 
+    <!-- ──────────── ИНСТРУКЦИЯ / С ЧЕГО НАЧАТЬ ──────────── -->
+    <sc-if value="{{ isGuide }}" hint-placeholder-val="{{ false }}">
+      <div style="animation:mmFade .25s ease;max-width:860px;" data-screen-label="Инструкция">
+        <div onClick="{{ goOverview }}" style="display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:700;color:#9BA0A6;cursor:pointer;margin-bottom:14px;" style-hover="color:#F2F3F0;">← {{ t.navOverview }}</div>
+        <div style="margin-bottom:6px;font-family:'Unbounded';font-weight:600;font-size:22px;">{{ t.startTitle }}</div>
+        <div style="font-size:13px;color:#9BA0A6;margin-bottom:22px;max-width:600px;line-height:1.55;">{{ t.guideIntro }}</div>
+        <div style="display:flex;flex-direction:column;gap:14px;">
+          <sc-for list="{{ guideSteps }}" as="g" hint-placeholder-count="5">
+            <div style="display:flex;gap:16px;align-items:stretch;background:#121316;border:1px solid rgba(255,255,255,.07);border-radius:16px;padding:16px;flex-wrap:wrap;">
+              <div onClick="{{ g.openMedia }}" style="width:200px;flex:none;aspect-ratio:16/10;border-radius:12px;border:1px dashed rgba(255,255,255,.16);background:#0D0E11;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;overflow:hidden;position:relative;cursor:pointer;" style-hover="border-color:rgba(215,244,82,.5);">
+                <div style="position:absolute;inset:0;opacity:.35;" style="{{ g.mediaBg }}"></div>
+                <div style="width:38px;height:38px;border-radius:50%;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;position:relative;"><span style="display:flex;width:16px;height:16px;color:#fff;margin-left:2px;" dangerouslySetInnerHTML="{{ icoPlay }}"></span></div>
+                <span style="font-family:'JetBrains Mono';font-size:8.5px;letter-spacing:1px;color:#8A8F95;position:relative;">GIF / VIDEO</span>
+              </div>
+              <div style="flex:1;min-width:220px;display:flex;flex-direction:column;">
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+                  <div style="width:28px;height:28px;flex:none;border-radius:9px;background:linear-gradient(120deg,#C084FC,#F0A8C8);color:#1A0A14;display:flex;align-items:center;justify-content:center;font-family:'Unbounded';font-weight:600;font-size:14px;">{{ g.n }}</div>
+                  <div style="font-weight:800;font-size:15px;">{{ g.title }}</div>
+                </div>
+                <div style="font-size:12.5px;color:#9BA0A6;line-height:1.6;margin-bottom:12px;">{{ g.desc }}</div>
+                <div onClick="{{ g.go }}" style="align-self:flex-start;margin-top:auto;display:flex;align-items:center;gap:7px;font-size:12px;font-weight:800;color:#D7F452;cursor:pointer;">{{ g.cta }} →</div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="margin-top:16px;background:rgba(215,244,82,.06);border:1px solid rgba(215,244,82,.2);border-radius:12px;padding:14px 16px;font-size:12px;color:#C9CDD1;line-height:1.55;">{{ t.guideOutro }} <a href="#">Wiki →</a></div>
+      </div>
+    </sc-if>
+
+    <!-- media modal (инструкция) -->
+    <sc-if value="{{ mediaOpen }}" hint-placeholder-val="{{ false }}">
+      <div onClick="{{ closeMedia }}" style="position:fixed;inset:0;background:rgba(6,7,9,.88);z-index:60;display:flex;align-items:center;justify-content:center;padding:24px;">
+        <div onClick="{{ stop }}" style="width:min(92vw,720px);display:flex;flex-direction:column;gap:12px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+            <div style="display:flex;align-items:center;gap:10px;">
+              <div style="width:26px;height:26px;flex:none;border-radius:8px;background:linear-gradient(120deg,#C084FC,#F0A8C8);color:#1A0A14;display:flex;align-items:center;justify-content:center;font-family:'Unbounded';font-weight:600;font-size:13px;">{{ mediaData.n }}</div>
+              <div style="font-weight:800;font-size:15px;">{{ mediaData.title }}</div>
+            </div>
+            <div onClick="{{ closeMedia }}" style="display:flex;align-items:center;gap:6px;border:1px solid rgba(255,255,255,.14);border-radius:9px;padding:7px 12px;font-size:12px;font-weight:700;color:#9BA0A6;cursor:pointer;" style-hover="color:#F2F3F0;border-color:rgba(255,255,255,.3);">✕ {{ t.close }}</div>
+          </div>
+          <div style="aspect-ratio:16/9;border-radius:14px;overflow:hidden;position:relative;display:flex;align-items:center;justify-content:center;" style="{{ mediaData.big }}">
+            <div style="position:absolute;inset:0;background:rgba(0,0,0,.35);"></div>
+            <div style="width:64px;height:64px;border-radius:50%;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;position:relative;cursor:pointer;" style-hover="background:rgba(0,0,0,.75);"><span style="display:flex;width:26px;height:26px;color:#fff;margin-left:3px;" dangerouslySetInnerHTML="{{ icoPlay }}"></span></div>
+            <span style="position:absolute;bottom:12px;left:14px;font-family:'JetBrains Mono';font-size:9px;letter-spacing:1px;color:rgba(255,255,255,.7);">GIF / VIDEO · {{ t.guidePlaceholder }}</span>
+          </div>
+          <div style="font-size:12.5px;color:#9BA0A6;line-height:1.6;">{{ mediaData.desc }}</div>
+        </div>
+      </div>
+    </sc-if>
+
     <!-- ──────────── ДИАЛОГИ ──────────── -->
     <sc-if value="{{ isDialogs }}" hint-placeholder-val="{{ false }}">
       <div style="animation:mmFade .25s ease;height:100%;display:flex;flex-direction:column;" data-screen-label="Диалоги">
-        <sc-if value="{{ showDialogsHeader }}" hint-placeholder-val="{{ true }}">
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap;">
           <div style="font-family:'Unbounded';font-weight:600;font-size:20px;">{{ t.navDialogs }}</div>
           <div style="display:flex;gap:6px;">
             <span style="font-family:'JetBrains Mono';font-size:10px;background:rgba(255,255,255,.06);color:#9BA0A6;border:1px solid rgba(255,255,255,.12);padding:3px 10px;border-radius:20px;">{{ dialogsPlatformLine }}</span>
           </div>
         </div>
-        </sc-if>
         <div style="{{ dialogsGrid }}">
           <!-- list -->
-          <sc-if value="{{ showChatList }}" hint-placeholder-val="{{ true }}">
-          <div style="background:#121316;border:1px solid rgba(255,255,255,.07);border-radius:16px;display:flex;flex-direction:column;overflow:hidden;min-height:0;">
+          <sc-if value="{{ showList }}" hint-placeholder-val="{{ true }}">
+          <div style="background:#121316;border:1px solid rgba(255,255,255,.07);border-radius:16px;display:flex;flex-direction:column;overflow:hidden;min-height:0;flex:1;">
             <div style="padding:12px 12px 8px;display:flex;flex-direction:column;gap:8px;">
               <input data-mm-chat-search placeholder="{{ t.searchDialogs }}" style="background:#0D0E11;border:1px solid rgba(255,255,255,.09);border-radius:9px;padding:8px 12px;color:#F2F3F0;font-family:'Manrope';font-size:12.5px;outline:none;">
+              <div style="display:flex;gap:5px;flex-wrap:wrap;">
+                <sc-for list="{{ platFilters }}" as="pf" hint-placeholder-count="3">
+                  <span onClick="{{ pf.pick }}" style="{{ pf.style }}">{{ pf.label }}</span>
+                </sc-for>
+              </div>
               <div style="display:flex;gap:6px;flex-wrap:wrap;">
                 <sc-for list="{{ chatFilters }}" as="cf" hint-placeholder-count="4">
                   <span onClick="{{ cf.pick }}" style="{{ cf.style }}" style-hover="border-color:rgba(255,255,255,.3);">{{ cf.label }}</span>
@@ -231,6 +307,9 @@ input::placeholder,textarea::placeholder{color:#5C6066;}
               </div>
             </div>
             <div style="flex:1;overflow-y:auto;padding:4px 8px 8px;">
+              <sc-if value="{{ noChats }}" hint-placeholder-val="{{ false }}">
+                <div style="padding:40px 20px;text-align:center;color:#5C6066;font-size:12.5px;">{{ t.noDialogs }}</div>
+              </sc-if>
               <sc-for list="{{ chats }}" as="ch" hint-placeholder-count="6">
                 <div onClick="{{ ch.open }}" style="{{ ch.rowStyle }}" style-hover="background:rgba(255,255,255,.05);">
                   <div style="{{ ch.avStyle }}">{{ ch.initial }}
@@ -256,36 +335,63 @@ input::placeholder,textarea::placeholder{color:#5C6066;}
           </div>
           </sc-if>
           <!-- thread -->
-          <sc-if value="{{ showChatThread }}" hint-placeholder-val="{{ false }}">
-          <div style="background:#121316;border:1px solid rgba(255,255,255,.07);border-radius:16px;display:flex;flex-direction:column;overflow:hidden;min-height:0;">
+          <sc-if value="{{ showThread }}" hint-placeholder-val="{{ false }}">
+          <div onClick="{{ closePops }}" style="background:#121316;border:1px solid rgba(255,255,255,.07);border-radius:16px;display:flex;flex-direction:column;overflow:hidden;min-height:0;flex:1;position:relative;">
             <div style="padding:12px 16px;border-bottom:1px solid rgba(255,255,255,.07);display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-              <sc-if value="{{ isMobile }}" hint-placeholder-val="{{ false }}">
-              <div onClick="{{ closeChatThread }}" style="display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;color:#9BA0A6;cursor:pointer;flex:none;" style-hover="color:#F2F3F0;">← {{ t.backToDialogs }}</div>
+              <sc-if value="{{ isMobileChat }}" hint-placeholder-val="{{ false }}">
+                <div onClick="{{ backToList }}" style="width:32px;height:32px;border-radius:9px;border:1px solid rgba(255,255,255,.12);display:flex;align-items:center;justify-content:center;font-size:16px;color:#9BA0A6;cursor:pointer;flex:none;">←</div>
               </sc-if>
-              <div style="width:34px;height:34px;border-radius:50%;background:{{ activeChat.avStyle }};display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;">{{ activeChat.initial }}</div>
+              <div style="{{ threadHead.avStyle }}">{{ threadHead.initial }}</div>
               <div style="flex:1;min-width:120px;">
-                <div style="display:flex;gap:7px;align-items:center;"><span style="font-weight:800;font-size:14px;">{{ activeChat.name }}</span><sc-if value="{{ activeChat.vip }}" hint-placeholder-val="{{ false }}"><span style="font-family:'JetBrains Mono';font-size:7.5px;background:#D7F452;color:#171A05;font-weight:700;padding:1px 5px;border-radius:5px;">VIP</span></sc-if></div>
-                <div style="font-size:10.5px;color:#9BA0A6;">{{ activeChat.platform }} · {{ t.persona }}: <span style="color:#F0A8C8;font-weight:700;">{{ activeChat.persona }}</span> · {{ t.replyLang }}: {{ activeChat.lang }}</div>
+                <div style="display:flex;gap:7px;align-items:center;"><span style="font-weight:800;font-size:14px;">{{ threadHead.name }}</span><sc-if value="{{ threadHead.vip }}" hint-placeholder-val="{{ false }}"><span style="font-family:'JetBrains Mono';font-size:7.5px;background:#D7F452;color:#171A05;font-weight:700;padding:1px 5px;border-radius:5px;">VIP</span></sc-if></div>
+                <div style="font-size:10.5px;color:#9BA0A6;">{{ threadHead.platform }} · {{ t.persona }}: <span style="color:#F0A8C8;font-weight:700;">{{ threadHead.persona }}</span> · {{ t.replyLang }}: {{ threadHead.replyLang }}</div>
               </div>
               <div style="display:flex;gap:6px;">
                 <span style="font-family:'JetBrains Mono';font-size:9.5px;border:1px solid rgba(255,255,255,.12);color:#9BA0A6;padding:4px 10px;border-radius:8px;cursor:pointer;" style-hover="color:#F2F3F0;">AI: OFF</span>
-                <span style="font-family:'JetBrains Mono';font-size:9.5px;border:1px solid rgba(255,255,255,.12);color:#9BA0A6;padding:4px 10px;border-radius:8px;cursor:pointer;" style-hover="color:#F2F3F0;">VIP</span>
               </div>
             </div>
-            <div style="flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:10px;">
+            <sc-if value="{{ threadHead.blocked }}" hint-placeholder-val="{{ false }}">
+              <div style="background:rgba(248,113,113,.08);border-bottom:1px solid rgba(248,113,113,.2);padding:9px 16px;font-size:11.5px;color:#F87171;display:flex;align-items:center;gap:8px;">⛔ {{ threadHead.blockedText }} — {{ t.dlgBlockedHint }}</div>
+            </sc-if>
+            <div id="mm-thread-scroll" style="flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px;">
               <sc-for list="{{ messages }}" as="m" hint-placeholder-count="4">
                 <div style="{{ m.wrap }}">
                   <div style="{{ m.bubble }}">
-                    <div style="font-size:13px;line-height:1.5;">{{ m.text }}</div>
+                    <div style="display:flex;gap:8px;align-items:flex-start;">
+                      <div style="flex:1;font-size:13px;line-height:1.5;">{{ m.text }}</div>
+                      <span onClick="{{ m.toggleReact }}" style="opacity:.5;font-size:12px;cursor:pointer;flex:none;margin-top:1px;" style-hover="opacity:1;">☺</span>
+                    </div>
                     <sc-if value="{{ m.tr }}" hint-placeholder-val="{{ false }}"><div style="font-size:11.5px;line-height:1.45;color:#8A8F95;margin-top:6px;padding-top:6px;border-top:1px dashed rgba(255,255,255,.1);">{{ m.tr }}</div></sc-if>
                     <div style="font-family:'JetBrains Mono';font-size:8.5px;color:#5C6066;margin-top:6px;">{{ m.time }}</div>
+                    <sc-if value="{{ m.reactOpen }}" hint-placeholder-val="{{ false }}">
+                      <div onClick="{{ stop }}" style="position:absolute;bottom:calc(100% - 4px);right:0;z-index:5;display:flex;gap:2px;background:#1A1C20;border:1px solid rgba(255,255,255,.14);border-radius:20px;padding:4px 7px;box-shadow:0 8px 24px rgba(0,0,0,.5);">
+                        <sc-for list="{{ m.reactRow }}" as="rr" hint-placeholder-count="6">
+                          <span onClick="{{ rr.pick }}" style="font-size:17px;cursor:pointer;padding:1px 2px;" style-hover="transform:scale(1.25);">{{ rr.e }}</span>
+                        </sc-for>
+                      </div>
+                    </sc-if>
                   </div>
+                  <sc-if value="{{ m.reaction }}" hint-placeholder-val="{{ false }}">
+                    <div style="{{ m.reactBadgeStyle }}">{{ m.reaction }}</div>
+                  </sc-if>
                 </div>
               </sc-for>
             </div>
-            <div style="padding:12px;border-top:1px solid rgba(255,255,255,.07);display:flex;gap:8px;align-items:flex-end;">
-              <textarea rows="2" placeholder="{{ t.msgPlaceholder }}" style="flex:1;background:#0D0E11;border:1px solid rgba(255,255,255,.09);border-radius:10px;padding:10px 12px;color:#F2F3F0;font-family:'Manrope';font-size:13px;resize:none;outline:none;"></textarea>
-              <div onClick="{{ sendReply }}" style="background:#D7F452;color:#171A05;font-weight:800;font-size:12.5px;border-radius:10px;padding:10px 16px;cursor:pointer;" style-hover="background:#E8FA8A;">{{ t.send }}</div>
+            <!-- scroll to bottom -->
+            <div onClick="{{ scrollDown }}" style="position:absolute;right:16px;bottom:82px;width:36px;height:36px;border-radius:50%;background:#1A1C20;border:1px solid rgba(255,255,255,.14);display:flex;align-items:center;justify-content:center;font-size:16px;color:#9BA0A6;cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,.4);" style-hover="color:#F2F3F0;border-color:rgba(255,255,255,.3);">↓</div>
+            <!-- emoji popover -->
+            <sc-if value="{{ emojiOpen }}" hint-placeholder-val="{{ false }}">
+              <div onClick="{{ stop }}" style="position:absolute;left:12px;right:12px;bottom:66px;z-index:6;background:#1A1C20;border:1px solid rgba(255,255,255,.14);border-radius:14px;padding:10px;display:grid;grid-template-columns:repeat(8,1fr);gap:4px;box-shadow:0 10px 30px rgba(0,0,0,.5);">
+                <sc-for list="{{ emojiPick }}" as="ep" hint-placeholder-count="16">
+                  <span onClick="{{ ep.pick }}" style="font-size:20px;cursor:pointer;text-align:center;padding:3px;border-radius:8px;" style-hover="background:rgba(255,255,255,.08);">{{ ep.e }}</span>
+                </sc-for>
+              </div>
+            </sc-if>
+            <div style="padding:10px 12px;border-top:1px solid rgba(255,255,255,.07);display:flex;gap:6px;align-items:flex-end;">
+              <div data-mm-chat-attach title="{{ t.attach }}" style="width:38px;height:38px;flex:none;border-radius:10px;border:1px solid rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center;color:#9BA0A6;cursor:pointer;" style-hover="color:#D7F452;border-color:rgba(215,244,82,.4);"><span style="display:flex;width:18px;height:18px;" dangerouslySetInnerHTML="{{ icoClip }}"></span></div>
+              <div onClick="{{ toggleEmoji }}" style="width:38px;height:38px;flex:none;border-radius:10px;border:1px solid rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center;font-size:18px;cursor:pointer;" style-hover="border-color:rgba(215,244,82,.4);">😊</div>
+              <textarea rows="1" placeholder="{{ t.msgPlaceholder }}" style="flex:1;min-height:38px;max-height:120px;background:#0D0E11;border:1px solid rgba(255,255,255,.09);border-radius:10px;padding:9px 12px;color:#F2F3F0;font-family:'Manrope';font-size:13px;resize:none;outline:none;"></textarea>
+              <div data-mm-chat-send style="width:38px;height:38px;flex:none;background:#D7F452;color:#171A05;border-radius:10px;display:flex;align-items:center;justify-content:center;cursor:pointer;" style-hover="background:#E8FA8A;"><span style="display:flex;width:17px;height:17px;" dangerouslySetInnerHTML="{{ icoSendArrow }}"></span></div>
             </div>
           </div>
           </sc-if>
@@ -355,13 +461,32 @@ input::placeholder,textarea::placeholder{color:#5C6066;}
                 </sc-for>
               </div>
             </div>
-            <sc-if value="{{ isStdImg }}" hint-placeholder-val="{{ true }}">
-            <div style="display:flex;flex-direction:column;gap:16px;">
-            <div style="display:flex;gap:10px;">
+            <div style="display:flex;gap:10px;align-items:stretch;">
               <sc-for list="{{ curMode.slots }}" as="s" hint-placeholder-count="2">
-                <div data-mm-upload="ref" style="flex:1;aspect-ratio:3/4;border:1.5px dashed rgba(255,255,255,.18);border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;cursor:pointer;" style-hover="border-color:rgba(215,244,82,.5);background:rgba(215,244,82,.03);">
-                  <span style="display:flex;width:20px;height:20px;color:#6B7076;" dangerouslySetInnerHTML="{{ icoUpload }}"></span>
-                  <span style="font-size:11px;font-weight:700;color:#9BA0A6;text-align:center;padding:0 8px;">{{ s }}</span>
+                <div style="flex:1;display:flex;flex-direction:column;gap:6px;">
+                  <div style="font-size:10.5px;font-weight:700;color:#C9CDD1;height:30px;line-height:1.3;display:flex;align-items:flex-start;overflow:hidden;">{{ s.label }}</div>
+                  <sc-if value="{{ s.archive }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;gap:3px;background:#0D0E11;border:1px solid rgba(255,255,255,.09);border-radius:8px;padding:3px;">
+                      <div onClick="{{ s.setUpload }}" style="{{ s.upStyle }}">{{ t.srcUpload }}</div>
+                      <div onClick="{{ s.setArchive }}" style="{{ s.arStyle }}">{{ t.srcArchive }}</div>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ s.noArchive }}" hint-placeholder-val="{{ false }}">
+                    <div style="height:32px;flex:none;"></div>
+                  </sc-if>
+                  <sc-if value="{{ s.fromArchive }}" hint-placeholder-val="{{ false }}">
+                    <div style="aspect-ratio:3/4;border:1px solid rgba(215,244,82,.3);border-radius:12px;background:rgba(215,244,82,.04);display:grid;grid-template-columns:1fr 1fr;gap:5px;padding:7px;overflow-y:auto;">
+                      <sc-for list="{{ s.archiveMini }}" as="am" hint-placeholder-count="4">
+                        <div onClick="{{ am.pick }}" style="{{ am.style }}" style-hover="border-color:#D7F452;"></div>
+                      </sc-for>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ s.uploadMode }}" hint-placeholder-val="{{ true }}">
+                    <div data-mm-slot-upload="{{ s.uploadKey }}" style="aspect-ratio:3/4;border:1.5px dashed rgba(255,255,255,.18);border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;cursor:pointer;" style-hover="border-color:rgba(215,244,82,.5);background:rgba(215,244,82,.03);">
+                      <span style="display:flex;width:20px;height:20px;color:#6B7076;" dangerouslySetInnerHTML="{{ icoUpload }}"></span>
+                      <span style="font-size:10px;font-weight:700;color:#9BA0A6;text-align:center;padding:0 8px;">{{ t.srcUpload }}</span>
+                    </div>
+                  </sc-if>
                 </div>
               </sc-for>
             </div>
@@ -391,48 +516,6 @@ input::placeholder,textarea::placeholder{color:#5C6066;}
               </div>
             </div>
             </sc-if>
-            </div>
-            </sc-if>
-            <sc-if value="{{ isCarousel }}" hint-placeholder-val="{{ false }}">
-            <div style="display:flex;flex-direction:column;gap:16px;">
-              <div>
-                <div style="font-family:'JetBrains Mono';font-size:9.5px;letter-spacing:1.8px;color:#6B7076;margin-bottom:8px;">{{ t.carSource }}</div>
-                <div style="display:flex;background:#0D0E11;border:1px solid rgba(255,255,255,.09);border-radius:10px;padding:3px;gap:3px;">
-                  <span onClick="{{ setCarArchive }}" style="{{ carSrcArchiveStyle }}">{{ t.carFromArchive }}</span>
-                  <span onClick="{{ setCarUpload }}" style="{{ carSrcUploadStyle }}">{{ t.carUpload }}</span>
-                </div>
-              </div>
-              <sc-if value="{{ showCarArchive }}" hint-placeholder-val="{{ true }}">
-              <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;">
-                <sc-for list="{{ recentFrames }}" as="cf" hint-placeholder-count="4">
-                  <div onClick="{{ cf.pick }}" style="{{ cf.thumbStyle }}" style-hover="border-color:#D7F452;"></div>
-                </sc-for>
-              </div>
-              </sc-if>
-              <sc-if value="{{ showCarUpload }}" hint-placeholder-val="{{ false }}">
-              <div data-mm-upload="carousel" style="aspect-ratio:16/7;border:1.5px dashed rgba(255,255,255,.18);border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;cursor:pointer;" style-hover="border-color:rgba(215,244,82,.5);background:rgba(215,244,82,.03);">
-                <span style="display:flex;width:22px;height:22px;color:#6B7076;" dangerouslySetInnerHTML="{{ icoUpload }}"></span>
-                <span style="font-size:11px;font-weight:700;color:#9BA0A6;">{{ t.carUploadHint }}</span>
-              </div>
-              </sc-if>
-              <div>
-                <div style="font-family:'JetBrains Mono';font-size:9.5px;letter-spacing:1.8px;color:#6B7076;margin-bottom:8px;">{{ t.carFrames }}</div>
-                <div style="display:flex;gap:6px;flex-wrap:wrap;">
-                  <sc-for list="{{ carCountChips }}" as="cn" hint-placeholder-count="5">
-                    <span onClick="{{ cn.pick }}" style="{{ cn.style }}" style-hover="border-color:rgba(255,255,255,.3);">{{ cn.label }}</span>
-                  </sc-for>
-                </div>
-              </div>
-              <div>
-                <div style="font-family:'JetBrains Mono';font-size:9.5px;letter-spacing:1.8px;color:#6B7076;margin-bottom:8px;">{{ t.character }}</div>
-                <div style="display:flex;gap:6px;flex-wrap:wrap;">
-                  <sc-for list="{{ charChips }}" as="cc" hint-placeholder-count="3">
-                    <span onClick="{{ cc.pick }}" style="{{ cc.style }}" style-hover="border-color:rgba(255,255,255,.3);">{{ cc.label }}</span>
-                  </sc-for>
-                </div>
-              </div>
-            </div>
-            </sc-if>
             <div>
               <div style="display:flex;justify-content:space-between;margin-bottom:8px;"><span style="font-family:'JetBrains Mono';font-size:9.5px;letter-spacing:1.8px;color:#6B7076;">{{ t.prompt }}</span><span style="font-size:10.5px;color:#5C6066;">{{ t.optional }}</span></div>
               <textarea rows="3" placeholder="{{ curMode.promptHint }}" style="width:100%;background:#0D0E11;border:1px solid rgba(255,255,255,.09);border-radius:10px;padding:10px 12px;color:#F2F3F0;font-family:'Manrope';font-size:12.5px;resize:vertical;outline:none;"></textarea>
@@ -454,7 +537,7 @@ input::placeholder,textarea::placeholder{color:#5C6066;}
             </div>
           </div>
           <!-- archive -->
-          <div style="{{ archiveColStyle }}">
+          <div>
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
               <span style="font-weight:800;font-size:14px;">{{ t.archive }}</span>
               <span style="font-size:10.5px;color:#FB923C;background:rgba(251,146,60,.08);border:1px solid rgba(251,146,60,.25);border-radius:8px;padding:4px 10px;">⏳ {{ t.retention }}</span>
@@ -493,6 +576,14 @@ input::placeholder,textarea::placeholder{color:#5C6066;}
         <div style="{{ studioGrid }}">
           <div style="background:#121316;border:1px solid rgba(255,255,255,.07);border-radius:16px;padding:18px;display:flex;flex-direction:column;gap:16px;height:fit-content;">
             <div>
+              <div style="font-family:'JetBrains Mono';font-size:9.5px;letter-spacing:1.8px;color:#6B7076;margin-bottom:8px;">{{ t.character }}</div>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                <sc-for list="{{ charChips }}" as="cc" hint-placeholder-count="3">
+                  <span onClick="{{ cc.pick }}" style="{{ cc.style }}" style-hover="border-color:rgba(255,255,255,.3);">{{ cc.label }}</span>
+                </sc-for>
+              </div>
+            </div>
+            <div>
               <div style="font-family:'JetBrains Mono';font-size:9.5px;letter-spacing:1.8px;color:#6B7076;margin-bottom:8px;">{{ t.refVideo }}</div>
               <div data-mm-upload="motion-video" style="border:1.5px dashed rgba(255,255,255,.18);border-radius:12px;padding:20px;display:flex;flex-direction:column;align-items:center;gap:8px;cursor:pointer;" style-hover="border-color:rgba(215,244,82,.5);background:rgba(215,244,82,.03);">
                 <span style="display:flex;width:22px;height:22px;color:#6B7076;" dangerouslySetInnerHTML="{{ icoFilm }}"></span>
@@ -509,12 +600,12 @@ input::placeholder,textarea::placeholder{color:#5C6066;}
             </div>
             <sc-if value="{{ showFirstFrameSlot }}" hint-placeholder-val="{{ true }}">
             <div>
-              <div style="font-family:'JetBrains Mono';font-size:9.5px;letter-spacing:1.8px;color:#6B7076;margin-bottom:8px;">{{ t.firstFrame }}</div>
+              
               <div style="display:flex;gap:8px;align-items:center;">
                 <div data-mm-upload="motion-frame" style="width:70px;aspect-ratio:9/16;border:1.5px dashed rgba(255,255,255,.18);border-radius:10px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex:none;" style-hover="border-color:rgba(215,244,82,.5);">
                   <span style="display:flex;width:18px;height:18px;color:#6B7076;" dangerouslySetInnerHTML="{{ icoUpload }}"></span>
                 </div>
-                <div style="font-size:11px;color:#9BA0A6;line-height:1.5;">{{ t.uploadFirst }} — 9:16 / 16:9. {{ t.orUpload }}</div>
+                <div style="font-family:'JetBrains Mono';font-size:9.5px;letter-spacing:1.8px;color:#6B7076;margin-bottom:8px;">{{ t.firstFrame }}</div><div style="font-size:11px;color:#9BA0A6;line-height:1.5;">{{ t.uploadFirst }} — 9:16 / 16:9. {{ t.orUpload }}</div>
               </div>
             </div>
             </sc-if>
@@ -586,7 +677,7 @@ input::placeholder,textarea::placeholder{color:#5C6066;}
               <span style="font-family:'JetBrains Mono';font-size:11px;font-weight:600;color:#3D4213;">−{{ vidCost }} {{ t.cr }}</span>
             </div>
           </div>
-          <div style="{{ archiveColStyle }}">
+          <div>
             <div style="font-weight:800;font-size:14px;margin-bottom:10px;">{{ t.archive }}</div>
             <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;">
               <sc-for list="{{ videoArchive }}" as="va" hint-placeholder-count="4">
@@ -831,13 +922,21 @@ input::placeholder,textarea::placeholder{color:#5C6066;}
               <div style="font-weight:800;font-size:14px;margin-bottom:12px;">{{ t.donLinks }}</div>
               <div style="display:flex;flex-direction:column;gap:8px;">
                 <sc-for list="{{ donLinks }}" as="dl" hint-placeholder-count="2">
-                  <div style="display:flex;align-items:center;gap:10px;background:#0D0E11;border:1px solid rgba(255,255,255,.07);border-radius:10px;padding:10px 12px;">
-                    <div style="flex:1;min-width:0;">
-                      <div style="font-weight:700;font-size:12px;margin-bottom:2px;">{{ dl.title }}</div>
-                      <div style="font-family:'JetBrains Mono';font-size:9.5px;color:#5C6066;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ dl.url }}</div>
+                  <div style="background:#0D0E11;border:1px solid rgba(255,255,255,.07);border-radius:12px;padding:12px 14px;">
+                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+                      <div style="flex:1;font-weight:700;font-size:12.5px;">{{ dl.title }}</div>
+                      <span style="{{ dl.stStyle }}">{{ dl.st }}</span>
                     </div>
-                    <span style="{{ dl.stStyle }}">{{ dl.st }}</span>
-                    <span style="display:flex;width:15px;height:15px;color:#9BA0A6;cursor:pointer;" style-hover="color:#D7F452;" dangerouslySetInnerHTML="{{ icoCopy }}"></span>
+                    <div style="display:flex;flex-direction:column;gap:6px;">
+                      <sc-for list="{{ dl.urls }}" as="u" hint-placeholder-count="2">
+                        <div style="display:flex;align-items:center;gap:9px;background:#121316;border:1px solid rgba(255,255,255,.07);border-radius:9px;padding:8px 10px;">
+                          <span style="display:flex;width:15px;height:15px;flex:none;color:{{ u.col }};" dangerouslySetInnerHTML="{{ u.icon }}"></span>
+                          <span style="font-family:'JetBrains Mono';font-size:8.5px;letter-spacing:.6px;color:{{ u.col }};width:56px;flex:none;">{{ u.kind }}</span>
+                          <span style="flex:1;min-width:0;font-family:'JetBrains Mono';font-size:9.5px;color:#9BA0A6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ u.url }}</span>
+                          <span onClick="{{ u.copy }}" style="display:flex;width:14px;height:14px;color:#9BA0A6;cursor:pointer;flex:none;" style-hover="color:#D7F452;" dangerouslySetInnerHTML="{{ icoCopy }}"></span>
+                        </div>
+                      </sc-for>
+                    </div>
                   </div>
                 </sc-for>
               </div>
@@ -914,7 +1013,7 @@ input::placeholder,textarea::placeholder{color:#5C6066;}
             <div style="font-weight:800;font-size:14px;margin-bottom:8px;">{{ t.referral }}</div>
             <div style="font-size:11.5px;color:#9BA0A6;line-height:1.55;margin-bottom:12px;">{{ t.referralHint }}</div>
             <div style="display:flex;gap:8px;margin-bottom:10px;">
-              <input value="{{ referralLink }}" readOnly style="flex:1;min-width:0;background:#0D0E11;border:1px solid rgba(255,255,255,.09);border-radius:9px;padding:9px 12px;color:#9BA0A6;font-family:'JetBrains Mono';font-size:10.5px;outline:none;">
+              <input value="https://model-mate.online/login?ref=N62KMA60" readonly="" style="flex:1;min-width:0;background:#0D0E11;border:1px solid rgba(255,255,255,.09);border-radius:9px;padding:9px 12px;color:#9BA0A6;font-family:'JetBrains Mono';font-size:10.5px;outline:none;">
               <div data-mm-referral-copy style="display:flex;align-items:center;gap:6px;border:1px solid rgba(215,244,82,.3);background:rgba(215,244,82,.1);border-radius:9px;padding:9px 12px;font-size:11.5px;font-weight:800;color:#D7F452;cursor:pointer;"><span style="display:flex;width:13px;height:13px;" dangerouslySetInnerHTML="{{ icoCopy }}"></span>{{ t.copy }}</div>
             </div>
             <div style="font-size:11px;color:#5C6066;">{{ referralStats }}</div>
@@ -1220,8 +1319,8 @@ input::placeholder,textarea::placeholder{color:#5C6066;}
     <!-- archive lightbox -->
     <sc-if value="{{ hasLightbox }}" hint-placeholder-val="{{ false }}">
       <div onClick="{{ closeLightbox }}" style="position:fixed;inset:0;background:rgba(6,7,9,.86);z-index:60;display:flex;align-items:center;justify-content:center;padding:24px;">
-        <div onClick="{{ stop }}" style="{{ lightboxData.cardStyle }}">
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-shrink:0;">
+        <div onClick="{{ stop }}" style="display:flex;flex-direction:column;gap:14px;max-height:92vh;max-width:min(92vw,720px);">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
             <div>
               <div style="font-weight:800;font-size:15px;">{{ lightboxData.who }}</div>
               <div style="font-size:11px;color:#9BA0A6;">{{ lightboxData.mode }} · {{ lightboxData.ratio }} · {{ lightboxData.when }}</div>
@@ -1230,13 +1329,14 @@ input::placeholder,textarea::placeholder{color:#5C6066;}
           </div>
           <div style="{{ lightboxData.previewWrap }}">
             <sc-if value="{{ lightboxData.showPlaceholder }}" hint-placeholder-val="{{ true }}">
-            <span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;width:48px;height:48px;margin:auto;color:rgba(255,255,255,.25);" dangerouslySetInnerHTML="{{ icoImage }}"></span>
+            <span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.25);" dangerouslySetInnerHTML="{{ icoImage }}"></span>
             </sc-if>
             <sc-if value="{{ lightboxData.hasImage }}" hint-placeholder-val="{{ false }}">
             <img src="{{ lightboxData.url }}" alt="" style="width:100%;height:100%;object-fit:contain;display:block;">
             </sc-if>
           </div>
-          <div style="{{ lightboxData.actionsStyle }}">
+          </div>
+          <div style="display:flex;gap:10px;">
             <div onClick="{{ downloadLightbox }}" style="flex:1;display:flex;align-items:center;justify-content:center;gap:8px;background:#D7F452;color:#171A05;border-radius:11px;padding:12px;font-size:13px;font-weight:800;cursor:pointer;" style-hover="background:#E8FA8A;"><span style="display:flex;width:16px;height:16px;" dangerouslySetInnerHTML="{{ icoDownload }}"></span>{{ t.download }}</div>
             <div onClick="{{ makeCarousel }}" style="flex:1;display:flex;align-items:center;justify-content:center;gap:8px;background:rgba(192,132,252,.12);border:1px solid rgba(192,132,252,.4);color:#C084FC;border-radius:11px;padding:12px;font-size:13px;font-weight:800;cursor:pointer;" style-hover="background:rgba(192,132,252,.2);"><span style="display:flex;width:16px;height:16px;" dangerouslySetInnerHTML="{{ icoGrid2 }}"></span>{{ t.makeCarousel }}</div>
           </div>
@@ -1281,13 +1381,15 @@ class Component extends DCLogic {
     page: 'overview', lang: 'ru', imgMode: 'ref',
     connDetail: null, charDetail: null, donTab: 'overview',
     tier: 'standard', period: 'month', moreOpen: false,
-    isMobile: false, chatOpen: 0, chatView: 'list',
-    contentMode: 'sfw', aiModel: 'nano', carouselCount: 4,
+    isMobile: false, chatOpen: 0,
+    chatFilter: 'all', chatPlatform: 'all', mobileChat: false,
+    msgReact: null, emojiOpen: false, reactions: {},
+    contentMode: 'sfw', aiModel: 'nano', carouselCount: 4, slotSource: {},
     hasFirstFrame: 'yes', vidQuality: '1080', vidFormat: '9:16', vidTime: '5',
-    charTab: 'photos', lightbox: null, carSource: 'archive', carouselPickId: null,
+    charTab: 'photos', lightbox: null,
     showGenError: false, ffState: 'idle', photoMenu: null,
     opRights: { chat: true, studio: true, models: true, keys: false, billing: false },
-    opError: false
+    opError: false, mediaStep: null
   };
   _ffTimer = null;
 
@@ -1307,6 +1409,7 @@ class Component extends DCLogic {
     const s = this.state;
     const setS = (o) => this.setState(o);
     const isMobile = s.isMobile;
+    const isNarrow = !isMobile && typeof window !== 'undefined' && window.innerWidth < 1120;
     const lang = s.lang;
 
     // ─── i18n ───
@@ -1316,15 +1419,17 @@ class Component extends DCLogic {
       kpiCredits: 'КРЕДИТЫ', kpiPlan: 'ПОДПИСКА', kpiDonations: 'ДОНАТЫ MODELMATE', kpiDialogs: 'ДИАЛОГИ',
       framesLeft: 'кадров', active: 'АКТИВНА', until: 'до', toPayout: 'к выплате', allRead: 'все прочитаны', teamReplies: 'ответов',
       studioBlock: 'СТУДИЯ — ЧТО ХОТИТЕ СДЕЛАТЬ?',
+      startTitle: 'С чего начать?', startDesc: 'Пять шагов от регистрации до первого дохода.', openGuide: 'Открыть инструкцию',
+      guideIntro: 'Короткая пошаговая инструкция: что и зачем делать. К каждому шагу — короткое видео и кнопка перехода в нужный раздел.',
+      guideOutro: 'Застряли на каком-то шаге? Полные гайды и частые вопросы — в базе знаний.', guidePlaceholder: 'материал появится здесь',
       recentDialogs: 'Недавние диалоги', recentFrames: 'Недавние кадры', all: 'Все', toStudio: 'В студию',
       framesHint: 'Кадры хранятся на сервере ~4 дня — скачивайте важное сразу.',
       navOverview: 'Обзор', navDialogs: 'Диалоги', navImages: 'Картинки', navVideo: 'Видео', navCharacters: 'Персонажи',
       navDonations: 'Донаты и выплаты', navBilling: 'Тариф и баланс', navConnections: 'Подключения', navTeam: 'Команда', navWorkflow: 'Workflow',
-      grpWork: 'Работа', grpStudio: 'Студия', grpMoney: 'Финансы', grpSettings: 'Настройки',
+      grpWork: 'Работа', grpStudio: 'Студия', grpMoney: 'Финансы', grpSettings: 'Настройки', fullCycle: 'СЕРВИС ПОЛНОГО ЦИКЛА',
       contentType: 'ТИП КОНТЕНТА', aiModel: 'МОДЕЛЬ ГЕНЕРАЦИИ (AI-движок)', frames: 'КОЛ-ВО КАДРОВ',
       refVideo: 'РЕФЕРЕНСНОЕ ВИДЕО', hasFirstFrame: 'У вас есть первый кадр?', firstFrame: 'ПЕРВЫЙ КАДР', genFirstFrame: 'Сгенерировать первый кадр', vidQuality: 'КАЧЕСТВО', dropVideo: 'Перетащите видео или нажмите — MP4 до 30 с',
       download: 'Скачать', makeCarousel: 'Сделать карусель', close: 'Закрыть', created: 'создан',
-      carSource: 'ОТКУДА КАДР', carFromArchive: 'Из архива', carUpload: 'Загрузить', carUploadHint: 'Перетащите фото или нажмите', carFrames: 'ЧИСЛО КАДРОВ',
       photoTags: 'Теги фото (назначаются при сохранении)', addPhoto: 'Добавить фото', uploadFirst: 'Загрузить первый кадр',
       workflowTitle: 'Workflow — визуальный конструктор', workflowBody: 'Для продвинутых: соберите цепочку из генераций, свапов и постобработки в узловом редакторе и запускайте её одной кнопкой. Раздел на подключении к Pro-тарифу.',
       workflowSoon: 'Скоро в Pro', notifyMe: 'Уведомить о запуске',
@@ -1338,8 +1443,9 @@ class Component extends DCLogic {
       curConfig: 'Текущая настройка', changeTag: 'Изменить тег', setTag: 'Тег фото', deletePhoto: 'Удалить фото', apply: 'Применить',
       dlgBlocked: 'Заблокировал(а)', dlgDeleted: 'Удалил(а) чат', dlgBlockedHint: 'Фан ограничил доступ — ответы не доставляются.', deleteDialog: 'Удалить диалог',
       genFirstFrame2: 'Генерируем первый кадр…', ffDone: 'Первый кадр готов', regen: 'Перегенерировать',
-      searchDialogs: 'Поиск по диалогам…', persona: 'персонаж', replyLang: 'язык ответа', backToDialogs: 'К диалогам',
+      searchDialogs: 'Поиск по диалогам…', persona: 'персонаж', replyLang: 'язык ответа',
       msgPlaceholder: 'Сообщение на русском — уйдёт перевод на язык фана…', send: 'Отправить',
+      attach: 'Прикрепить картинку', noDialogs: 'Нет диалогов под фильтр',
       fanNotes: 'Досье фана', analysis: 'анализ', addNote: 'Заметка',
       imagesDesc: 'Пять способов создать кадр персонажа. Выберите режим — подсказки внутри.',
       videoDesc: 'Оживите готовый кадр: выберите его из архива и опишите движение.',
@@ -1373,7 +1479,8 @@ class Component extends DCLogic {
       generate: 'Сгенерировать', archive: 'Архив', retention: 'хранится ~4 дня',
       toVideo: 'в видео', sourceFrame: 'ИСХОДНЫЙ КАДР', orUpload: '…или загрузите свой файл',
       motionPrompt: 'ДВИЖЕНИЕ', motionHint: 'She slowly turns to camera and smiles…', duration: 'ДЛИТЕЛЬНОСТЬ',
-      generateVideo: 'Создать видео', save: 'Сохранить', delete: 'Удалить'
+      generateVideo: 'Создать видео', save: 'Сохранить', delete: 'Удалить',
+      srcUpload: 'Загрузить', srcArchive: 'Из архива', pickFromArchive: 'Выбрать кадр из архива'
     };
     const EN = {
       credits: 'credits', topup: 'Top up', owner: 'Owner', hello: 'Welcome back, Renat',
@@ -1381,15 +1488,17 @@ class Component extends DCLogic {
       kpiCredits: 'CREDITS', kpiPlan: 'SUBSCRIPTION', kpiDonations: 'MODELMATE DONATIONS', kpiDialogs: 'DIALOGS',
       framesLeft: 'frames', active: 'ACTIVE', until: 'until', toPayout: 'payable', allRead: 'all read', teamReplies: 'replies',
       studioBlock: 'STUDIO — WHAT DO YOU WANT TO MAKE?',
+      startTitle: 'Where to start?', startDesc: 'Five steps from sign-up to first income.', openGuide: 'Open guide',
+      guideIntro: 'A short step-by-step: what to do and why. Each step has a quick video and a button to jump to the right section.',
+      guideOutro: 'Stuck on a step? Full guides and FAQ are in the knowledge base.', guidePlaceholder: 'media goes here',
       recentDialogs: 'Recent dialogs', recentFrames: 'Recent frames', all: 'All', toStudio: 'Studio',
       framesHint: 'Frames are stored ~4 days on the server — download what matters.',
       navOverview: 'Overview', navDialogs: 'Dialogs', navImages: 'Images', navVideo: 'Video', navCharacters: 'Characters',
       navDonations: 'Donations & payouts', navBilling: 'Plan & balance', navConnections: 'Connections', navTeam: 'Team', navWorkflow: 'Workflow',
-      grpWork: 'Work', grpStudio: 'Studio', grpMoney: 'Money', grpSettings: 'Settings',
+      grpWork: 'Work', grpStudio: 'Studio', grpMoney: 'Money', grpSettings: 'Settings', fullCycle: 'FULL-CYCLE SERVICE',
       contentType: 'CONTENT TYPE', aiModel: 'GENERATION MODEL (AI engine)', frames: 'FRAME COUNT',
       refVideo: 'REFERENCE VIDEO', hasFirstFrame: 'Do you have a first frame?', firstFrame: 'FIRST FRAME', genFirstFrame: 'Generate first frame', vidQuality: 'QUALITY', dropVideo: 'Drop a video or click — MP4 up to 30s',
       download: 'Download', makeCarousel: 'Make carousel', close: 'Close', created: 'created',
-      carSource: 'FRAME SOURCE', carFromArchive: 'From archive', carUpload: 'Upload', carUploadHint: 'Drop a photo or click', carFrames: 'FRAMES',
       photoTags: 'Photo tags (assigned on save)', addPhoto: 'Add photo', uploadFirst: 'Upload first frame',
       workflowTitle: 'Workflow — visual builder', workflowBody: 'For power users: chain generations, swaps and post-processing in a node editor and run it with one click. Available on the Pro plan.',
       workflowSoon: 'Coming to Pro', notifyMe: 'Notify me at launch',
@@ -1403,8 +1512,9 @@ class Component extends DCLogic {
       curConfig: 'Current configuration', changeTag: 'Change tag', setTag: 'Photo tag', deletePhoto: 'Delete photo', apply: 'Apply',
       dlgBlocked: 'Blocked you', dlgDeleted: 'Deleted the chat', dlgBlockedHint: 'The fan restricted access — replies are not delivered.', deleteDialog: 'Delete dialog',
       genFirstFrame2: 'Generating first frame…', ffDone: 'First frame ready', regen: 'Regenerate',
-      searchDialogs: 'Search dialogs…', persona: 'character', replyLang: 'reply language', backToDialogs: 'Back to dialogs',
+      searchDialogs: 'Search dialogs…', persona: 'character', replyLang: 'reply language',
       msgPlaceholder: 'Type in Russian — it will be translated for the fan…', send: 'Send',
+      attach: 'Attach image', noDialogs: 'No dialogs match the filter',
       fanNotes: 'Fan dossier', analysis: 'analysis', addNote: 'Note',
       imagesDesc: 'Five ways to create a character frame. Pick a mode — hints inside.',
       videoDesc: 'Animate a finished frame: pick it from the archive and describe the motion.',
@@ -1438,7 +1548,8 @@ class Component extends DCLogic {
       generate: 'Generate', archive: 'Archive', retention: 'stored ~4 days',
       toVideo: 'to video', sourceFrame: 'SOURCE FRAME', orUpload: '…or upload your own file',
       motionPrompt: 'MOTION', motionHint: 'She slowly turns to camera and smiles…', duration: 'DURATION',
-      generateVideo: 'Create video', save: 'Save', delete: 'Delete'
+      generateVideo: 'Create video', save: 'Save', delete: 'Delete',
+      srcUpload: 'Upload', srcArchive: 'From archive', pickFromArchive: 'Pick a frame from archive'
     };
     const t = lang === 'ru' ? RU : EN;
 
@@ -1465,11 +1576,14 @@ class Component extends DCLogic {
     const icoFlow = this.I('<rect x="3" y="4" width="6" height="5" rx="1.5"/><rect x="15" y="4" width="6" height="5" rx="1.5"/><rect x="9" y="15" width="6" height="5" rx="1.5"/><path d="M6 9v2.5a2 2 0 0 0 2 2h1M18 9v2.5a2 2 0 0 1-2 2h-1"/>');
     const icoDownload = this.I('<path d="M12 4v11"/><path d="M7.5 10.5L12 15l4.5-4.5"/><path d="M4 18.5h16"/>');
     const icoZoom = this.I('<circle cx="11" cy="11" r="7"/><path d="M16 16l4.5 4.5M8.5 11h5M11 8.5v5"/>');
+    const icoClip = this.I('<path d="M20 11.5l-8 8a5 5 0 0 1-7-7l8.5-8.5a3 3 0 0 1 4.3 4.3L9 12.7a1.2 1.2 0 0 1-1.7-1.7L15 3.5"/>');
+    const icoSendArrow = this.I('<path d="M5 12l15-7-6 16-3-6z"/><path d="M11 15l3-6"/>');
     const icoLayers = this.I('<path d="M12 3.5L21 8.5l-9 5-9-5z"/><path d="M4 13l8 4.5 8-4.5"/><path d="M4 17l8 4.5 8-4.5" opacity=".45"/>');
     const icoTg = this.I('<path d="M21 4.5L3.5 11.2c-.9.35-.85 1.6.1 1.85l4.4 1.2 1.7 5.2c.3.85 1.4 1 1.9.3l2.4-3.1 4.5 3.3c.75.55 1.8.15 2-.75L23 6c.25-1.1-.85-2-1.9-1.5z" transform="scale(.92) translate(1 .5)"/>');
     const icoWave = this.I('<path d="M3 12c2-4.5 4-4.5 6 0s4 4.5 6 0 4-4.5 6 0"/>');
     const icoBell = this.I('<path d="M12 4a5.5 5.5 0 0 0-5.5 5.5c0 4-1.5 5.5-2.5 6.5h16c-1-1-2.5-2.5-2.5-6.5A5.5 5.5 0 0 0 12 4z"/><path d="M10 19.5a2 2 0 0 0 4 0"/>');
     const icoCam = this.I('<rect x="3" y="7" width="18" height="13" rx="3"/><path d="M8.5 7L10 4h4l1.5 3"/><circle cx="12" cy="13" r="3.4"/>');
+    const icoGlobe = this.I('<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.4 2.3 3.6 5.3 3.6 8.5s-1.2 6.2-3.6 8.5c-2.4-2.3-3.6-5.3-3.6-8.5S9.6 5.8 12 3.5z"/>');
     const icoGift = this.I('<rect x="4" y="9" width="16" height="11" rx="2"/><path d="M12 9v11M4 13.5h16"/><path d="M12 9c-1.5-2.5-4-3.8-5.5-2.3S7.5 9 9.5 9zM12 9c1.5-2.5 4-3.8 5.5-2.3S16.5 9 14.5 9z"/>');
 
     // ─── shared style bases ───
@@ -1499,7 +1613,20 @@ class Component extends DCLogic {
     // gradients for placeholders
     const G = ['linear-gradient(160deg,#3B2A4F,#1A1428)', 'linear-gradient(160deg,#4F2A3E,#241019)', 'linear-gradient(160deg,#2A3E4F,#101A24)', 'linear-gradient(160deg,#2A4F3B,#0F241A)', 'linear-gradient(160deg,#4F3E2A,#241C10)', 'linear-gradient(160deg,#33265C,#150F28)'];
 
-    // ─── overview data ───
+    // ─── overview / guide data ───
+    const gGrad = ['linear-gradient(135deg,#F472B6,#C084FC)', 'linear-gradient(135deg,#4ADE80,#38BDF8)', 'linear-gradient(135deg,#D7F452,#4ADE80)', 'linear-gradient(135deg,#C084FC,#818CF8)', 'linear-gradient(135deg,#FB923C,#F472B6)'];
+    const guideDefs = [
+      { title: lang === 'ru' ? 'Создать персонажа' : 'Create a character', desc: lang === 'ru' ? 'Загрузите фото-референсы, опишите внешность и персону. Это ваша виртуальная модель — на её основе идут генерации и автоответы.' : 'Upload references, describe the look and persona — your virtual model.', cta: lang === 'ru' ? 'К персонажам' : 'To characters', go: go('characters') },
+      { title: lang === 'ru' ? 'Выбрать тариф' : 'Choose a plan', desc: lang === 'ru' ? 'Подберите подписку и пополните кредиты — они тратятся на генерации картинок и видео.' : 'Pick a subscription and top up credits used for generations.', cta: lang === 'ru' ? 'К тарифам' : 'To plans', go: go('billing') },
+      { title: lang === 'ru' ? 'Подключить каналы' : 'Connect channels', desc: lang === 'ru' ? 'Привяжите Telegram/Fanvue и AI-движок. Здесь же — AI-компаньон для автоответов от лица персонажа.' : 'Link Telegram/Fanvue and the AI engine; set up the AI companion.', cta: lang === 'ru' ? 'К подключениям' : 'To connections', go: go('connections') },
+      { title: lang === 'ru' ? 'Сгенерировать картинку' : 'Generate an image', desc: lang === 'ru' ? 'Выберите режим (референс, Face Swap, одежда, локация, промпт, карусель), модель и формат — и создайте кадр.' : 'Pick a mode, model and format — create a frame.', cta: lang === 'ru' ? 'В студию' : 'To studio', go: go('images') },
+      { title: lang === 'ru' ? 'Оживить и запустить донаты' : 'Animate & launch donations', desc: lang === 'ru' ? 'Сделайте видео из кадра, ведите диалоги с фанами и подключите донаты — деньги выводятся в разделе «Донаты».' : 'Make a video, chat with fans and enable donations.', cta: lang === 'ru' ? 'К донатам' : 'To donations', go: go('donations') }
+    ];
+    const guideSteps = guideDefs.map((g, i) => ({ ...g, n: i + 1, mediaBg: 'background:' + gGrad[i % 5], openMedia: () => setS({ mediaStep: i }) }));
+    const md = s.mediaStep;
+    const mediaData = md == null ? null : { n: md + 1, title: guideDefs[md].title, desc: guideDefs[md].desc, big: 'background:' + gGrad[md % 5] };
+    const startSteps = guideDefs.slice(0, 4).map((g, i) => ({ n: i + 1, label: g.title }));
+
     const studioCards = [
       { title: t.navImages, desc: t.imagesDesc, icon: icoImage, iconBox: iconBox40 + 'background:rgba(215,244,82,.12);color:#D7F452;', go: go('images') },
       { title: t.navVideo, desc: t.videoDesc, icon: icoFilm, iconBox: iconBox40 + 'background:rgba(192,132,252,.12);color:#C084FC;', go: go('video') },
@@ -1522,12 +1649,6 @@ class Component extends DCLogic {
     // ─── dialogs data ───
     const chipOn = 'font-family:JetBrains Mono;font-size:10px;background:rgba(215,244,82,.12);color:#D7F452;border:1px solid rgba(215,244,82,.4);padding:3px 10px;border-radius:20px;cursor:pointer;';
     const chipOff = 'font-family:JetBrains Mono;font-size:10px;border:1px solid rgba(255,255,255,.12);color:#9BA0A6;padding:3px 10px;border-radius:20px;cursor:pointer;';
-    const chatFilters = [
-      { label: lang === 'ru' ? 'Все · 9' : 'All · 9', style: chipOn },
-      { label: 'VIP · 1', style: chipOff },
-      { label: '24ч+ · 6', style: chipOff },
-      { label: lang === 'ru' ? 'Новые' : 'New', style: chipOff }
-    ];
     const chatsRaw = [
       mkDlg('duty', 'TELEGRAM', 'по милости', '22:48', 0, true, false, 'es*'),
       mkDlg('Radomir', 'TELEGRAM', 'Дорогая, скоро выходные…', '19:33', 1, false, true, 'en*'),
@@ -1538,26 +1659,83 @@ class Component extends DCLogic {
       mkDlg('Elijah', 'TELEGRAM', 'Привет', '11:05', 1, false, true, 'nl')
     ];
     const chatStatus = { 2: 'blocked', 4: 'deleted' }; // Pavol заблокировал, Thomas удалил чат
+    const chatNew = { 5: true, 6: true };
+    // ── filters ──
+    const cnt = (fn) => chatsRaw.filter((c, i) => fn(c, i)).length;
+    const filterDefs = [
+      { id: 'all', label: (lang === 'ru' ? 'Все' : 'All'), n: chatsRaw.length, test: () => true },
+      { id: 'vip', label: 'VIP', n: cnt((c) => c.vip), test: (c) => c.vip },
+      { id: 'hot', label: '24ч+', n: cnt((c) => c.hot), test: (c) => c.hot },
+      { id: 'new', label: (lang === 'ru' ? 'Новые' : 'New'), n: cnt((c, i) => chatNew[i]), test: (c, i) => chatNew[i] }
+    ];
+    const chatFilters = filterDefs.map(f => ({
+      label: f.label + ' · ' + f.n, style: s.chatFilter === f.id ? chipOn : chipOff,
+      pick: () => setS({ chatFilter: f.id })
+    }));
+    const platDefs = [
+      { id: 'all', label: (lang === 'ru' ? 'Все площадки' : 'All'), col: '#9BA0A6', bg: 'rgba(255,255,255,.05)', bd: 'rgba(255,255,255,.12)' },
+      { id: 'TELEGRAM', label: 'Telegram ' + cnt((c) => c.platform === 'TELEGRAM'), col: '#38BDF8', bg: 'rgba(56,189,248,.12)', bd: 'rgba(56,189,248,.35)' },
+      { id: 'FANVUE', label: 'Fanvue ' + cnt((c) => c.platform === 'FANVUE'), col: '#F0A8C8', bg: 'rgba(240,168,200,.12)', bd: 'rgba(240,168,200,.35)' }
+    ];
+    const platFilters = platDefs.map(p => {
+      const on = s.chatPlatform === p.id;
+      return {
+        label: p.label,
+        style: 'font-family:JetBrains Mono;font-size:9.5px;letter-spacing:.5px;padding:3px 10px;border-radius:20px;cursor:pointer;border:1px solid ' + (on ? p.bd : 'rgba(255,255,255,.1)') + ';color:' + (on ? p.col : '#6B7076') + ';background:' + (on ? p.bg : 'transparent') + ';',
+        pick: () => setS({ chatPlatform: p.id })
+      };
+    });
+    const curFilter = filterDefs.find(f => f.id === s.chatFilter) || filterDefs[0];
     const chats = chatsRaw.map((c, i) => {
       const st = chatStatus[i] || false;
+      const visible = curFilter.test(c, i) && (s.chatPlatform === 'all' || c.platform === s.chatPlatform);
       return {
-        ...c, avStyle: (st ? c.avStyleLg + 'filter:grayscale(1);opacity:.6;' : c.avStyleLg), open: () => setS({ chatOpen: i }),
+        ...c, avStyle: (st ? c.avStyleLg + 'filter:grayscale(1);opacity:.6;' : c.avStyleLg),
+        open: () => setS({ chatOpen: i, mobileChat: true, msgReact: null, emojiOpen: false }),
         blockedTag: st === 'blocked' ? t.dlgBlocked : (st === 'deleted' ? t.dlgDeleted : false),
         blockedTagStyle: 'font-family:JetBrains Mono;font-size:7.5px;letter-spacing:.4px;padding:1px 6px;border-radius:4px;' + (st === 'blocked' ? 'background:rgba(248,113,113,.15);color:#F87171;' : 'background:rgba(255,255,255,.08);color:#9BA0A6;'),
         nameStyle: 'font-weight:700;font-size:12.5px;' + (st ? 'color:#9BA0A6;' : ''),
         delDialog: (e) => { e.stopPropagation(); },
-        canDelete: !!st,
-        rowStyle: 'display:flex;gap:10px;align-items:center;padding:9px 8px;border-radius:12px;cursor:pointer;position:relative;' + (s.chatOpen === i ? 'background:rgba(215,244,82,.07);border:1px solid rgba(215,244,82,.2);' : 'border:1px solid transparent;')
+        canDelete: !!st, visible,
+        rowStyle: (visible ? 'display:flex;' : 'display:none;') + 'gap:10px;align-items:center;padding:9px 8px;border-radius:12px;cursor:pointer;position:relative;' + (s.chatOpen === i ? 'background:rgba(215,244,82,.07);border:1px solid rgba(215,244,82,.2);' : 'border:1px solid transparent;')
       };
     });
-    const bubbleIn = 'max-width:78%;background:#1A1C20;border:1px solid rgba(255,255,255,.07);border-radius:14px 14px 14px 4px;padding:10px 13px;';
-    const bubbleOut = 'max-width:78%;background:rgba(215,244,82,.09);border:1px solid rgba(215,244,82,.2);border-radius:14px 14px 4px 14px;padding:10px 13px;';
-    const messages = [
-      { wrap: 'display:flex;justify-content:flex-start;', bubble: bubbleIn, text: 'Очень странно что ты посчитал что это ИИ', tr: false, time: '10.07 · 22:45' },
-      { wrap: 'display:flex;justify-content:flex-end;', bubble: bubbleOut, text: 'Миа, я тоже пытаюсь быть с тобой честным. Мы игнорируем это, делаем вид и всё', tr: 'Mia, yo también intento ser sincero contigo. Lo ignoramos, pretendemos y ya está', time: '10.07 · 22:47' },
-      { wrap: 'display:flex;justify-content:flex-end;', bubble: bubbleOut, text: 'И не обижайся', tr: 'Y no te sientas ofendida', time: '10.07 · 22:48' },
-      { wrap: 'display:flex;justify-content:flex-start;', bubble: bubbleIn, text: 'по милости · por favor', tr: false, time: '10.07 · 22:48' }
+    const visibleChats = chats.filter(c => c.visible);
+    const noChats = visibleChats.length === 0;
+    // ── active thread ──
+    const cur = chatsRaw[s.chatOpen] || chatsRaw[0];
+    const curSt = chatStatus[s.chatOpen] || false;
+    const langMap = { 'es*': 'Español', 'en*': 'English', 'de*': 'Deutsch', 'ru*': 'Русский', 'nl': 'Nederlands' };
+    const threadHead = {
+      name: cur.name, initial: cur.initial, avStyle: cur.avStyleLg,
+      vip: cur.vip, platform: cur.platform === 'FANVUE' ? 'Fanvue' : 'Telegram',
+      replyLang: langMap[cur.lang] || 'English',
+      blocked: curSt === 'blocked', deleted: curSt === 'deleted', blockedText: curSt === 'blocked' ? t.dlgBlocked : t.dlgDeleted
+    };
+    const bubbleIn = 'max-width:80%;background:#1A1C20;border:1px solid rgba(255,255,255,.07);border-radius:14px 14px 14px 4px;padding:10px 13px;position:relative;';
+    const bubbleOut = 'max-width:80%;background:rgba(215,244,82,.09);border:1px solid rgba(215,244,82,.2);border-radius:14px 14px 4px 14px;padding:10px 13px;position:relative;';
+    const msgDefs = [
+      { side: 'in', text: 'Очень странно что ты посчитал что это ИИ', tr: false, time: '22:45' },
+      { side: 'out', text: 'Миа, я тоже пытаюсь быть с тобой честным. Мы игнорируем это, делаем вид и всё', tr: 'Mia, yo también intento ser sincero contigo…', time: '22:47' },
+      { side: 'out', text: 'И не обижайся', tr: 'Y no te sientas ofendida', time: '22:48' },
+      { side: 'in', text: 'по милости · por favor', tr: false, time: '22:48' }
     ];
+    const reactChoices = ['❤️', '😍', '😂', '🔥', '👍', '😢'];
+    const messages = msgDefs.map((m, i) => {
+      const rx = s.reactions[i];
+      return {
+        wrap: 'display:flex;flex-direction:column;gap:3px;' + (m.side === 'out' ? 'align-items:flex-end;' : 'align-items:flex-start;'),
+        bubble: m.side === 'out' ? bubbleOut : bubbleIn,
+        text: m.text, tr: m.tr, time: m.time,
+        toggleReact: (e) => { e.stopPropagation(); setS({ msgReact: s.msgReact === i ? null : i, emojiOpen: false }); },
+        reactOpen: s.msgReact === i,
+        reactRow: reactChoices.map(rc => ({ e: rc, pick: (ev) => { ev.stopPropagation(); setS({ reactions: { ...s.reactions, [i]: rc }, msgReact: null }); } })),
+        reaction: rx || false,
+        reactBadgeStyle: 'align-self:' + (m.side === 'out' ? 'flex-end' : 'flex-start') + ';background:#0D0E11;border:1px solid rgba(255,255,255,.12);border-radius:20px;padding:1px 7px;font-size:12px;margin-top:-8px;'
+      };
+    });
+    const emojiChoices = ['😊', '😍', '🥰', '😘', '💕', '🔥', '😂', '😅', '🙈', '😉', '💋', '🌹', '✨', '👀', '🥂', '💫'];
+    const emojiPick = emojiChoices.map(e => ({ e, pick: () => setS({ emojiOpen: false }) }));
     const tagBase = 'font-family:JetBrains Mono;font-size:8.5px;letter-spacing:1.2px;padding:2px 7px;border-radius:5px;';
     const notes = [
       { tag: lang === 'ru' ? 'ПРОФИЛЬ' : 'PROFILE', tagStyle: tagBase + 'background:rgba(215,244,82,.15);color:#D7F452;', when: '4 дн.', text: 'Тео (Theo) · Мадрид · есть дети. Предпочитает натуральный контент, детест AI. Недавно оплатил 145€.' },
@@ -1567,19 +1745,30 @@ class Component extends DCLogic {
 
     // ─── images data ───
     const modeDefs = [
-      { id: 'ref', title: lang === 'ru' ? 'Кадр по референсу' : 'From reference', desc: lang === 'ru' ? 'Похожий кадр по образцу: поза, свет, стиль' : 'Similar frame from a sample: pose, light, style', icon: icoLayers, cost: '−10 ' + t.cr, longDesc: lang === 'ru' ? 'Загрузите один референс — получите близкий кадр с вашим персонажем. Хорош для повторения удачных поз.' : 'Upload one reference — get a close frame with your character.', slots: [lang === 'ru' ? 'Референс-кадр' : 'Reference frame'], promptHint: lang === 'ru' ? 'Что изменить относительно референса…' : 'What to change vs the reference…', showChar: true, showRatio: true },
-      { id: 'swap', title: 'Face Swap', desc: lang === 'ru' ? 'Лицо персонажа на готовый кадр' : "Character's face onto a frame", icon: icoFace, cost: '−8 ' + t.cr, longDesc: lang === 'ru' ? 'Загрузите один референс-кадр. Лицо выбранного персонажа аккуратно заменит лицо на этом кадре — поза, свет и одежда сохранятся.' : 'Upload one reference frame. The chosen character\'s face replaces the face in it.', slots: [lang === 'ru' ? 'Референс-кадр' : 'Reference frame'], promptHint: lang === 'ru' ? 'Необязательно — уточнения по выражению лица…' : 'Optional — face expression tweaks…', showChar: true, showRatio: true },
-      { id: 'outfit', title: lang === 'ru' ? 'Замена одежды' : 'Outfit swap', desc: lang === 'ru' ? 'Одежда с фото → на персонажа' : 'Clothing from a photo → onto character', icon: icoShirt, cost: '−8 ' + t.cr, longDesc: lang === 'ru' ? 'Загрузите один референс с человеком или вещью. Мы выделим одежду и сгенерируем её на выбранном персонаже на однородном фоне.' : 'Upload one reference with a person or item. We extract the clothing and put it on your character on a clean background.', slots: [lang === 'ru' ? 'Референс одежды' : 'Clothing reference'], promptHint: lang === 'ru' ? 'Необязательно — цвет, длина, детали…' : 'Optional — colour, length, details…', showChar: true, showRatio: true },
-      { id: 'location', title: lang === 'ru' ? 'Смена локации' : 'Location swap', desc: lang === 'ru' ? 'Перенести персонажа в новое место' : 'Move the character to a new place', icon: icoPin, cost: '−8 ' + t.cr, longDesc: lang === 'ru' ? 'Загрузите один исходный кадр. Кадр остаётся, фон и окружение меняются: пляж, аэропорт, кафе — что угодно.' : 'Upload one source frame. Frame stays, background changes.', slots: [lang === 'ru' ? 'Исходный кадр' : 'Source frame'], promptHint: lang === 'ru' ? 'Терраса кафе в Мадриде, вечерний свет…' : 'Café terrace in Madrid, evening light…', showChar: true, showRatio: true },
+      { id: 'ref', title: lang === 'ru' ? 'Кадр по референсу' : 'From reference', desc: lang === 'ru' ? 'Похожий кадр по образцу: поза, свет, стиль' : 'Similar frame from a sample: pose, light, style', icon: icoLayers, cost: '−10 ' + t.cr, longDesc: lang === 'ru' ? 'Загрузите один референс — получите близкий кадр с вашим персонажем. Хорош для повторения удачных поз.' : 'Upload one reference — get a close frame with your character.', slots: [{ label: lang === 'ru' ? 'Референс-кадр' : 'Reference frame', archive: true }], promptHint: lang === 'ru' ? 'Что изменить относительно референса…' : 'What to change vs the reference…', showChar: true, showRatio: true },
+      { id: 'swap', title: 'Face Swap', desc: lang === 'ru' ? 'Лицо персонажа на готовый кадр' : "Character's face onto a frame", icon: icoFace, cost: '−8 ' + t.cr, longDesc: lang === 'ru' ? 'Загрузите один референс-кадр. Лицо выбранного персонажа аккуратно заменит лицо на этом кадре — поза, свет и одежда сохранятся.' : 'Upload one reference frame. The chosen character\'s face replaces the face in it.', slots: [{ label: lang === 'ru' ? 'Референс-кадр' : 'Reference frame', archive: true }], promptHint: lang === 'ru' ? 'Необязательно — уточнения по выражению лица…' : 'Optional — face expression tweaks…', showChar: true, showRatio: true },
+      { id: 'outfit', title: lang === 'ru' ? 'Замена одежды' : 'Outfit swap', desc: lang === 'ru' ? 'Одежда с фото → на персонажа' : 'Clothing from a photo → onto character', icon: icoShirt, cost: '−8 ' + t.cr, longDesc: lang === 'ru' ? 'Загрузите один референс с человеком или вещью. Мы выделим одежду и сгенерируем её на выбранном персонаже на однородном фоне.' : 'Upload one reference with a person or item. We extract the clothing and put it on your character on a clean background.', slots: [{ label: lang === 'ru' ? 'Кадр — где заменить одежду' : 'Frame — outfit to replace', archive: true }, { label: lang === 'ru' ? 'Фото одежды' : 'Clothing photo', archive: false }], promptHint: lang === 'ru' ? 'Необязательно — цвет, длина, детали…' : 'Optional — colour, length, details…', showChar: true, showRatio: true },
+      { id: 'location', title: lang === 'ru' ? 'Смена локации' : 'Location swap', desc: lang === 'ru' ? 'Перенести персонажа в новое место' : 'Move the character to a new place', icon: icoPin, cost: '−8 ' + t.cr, longDesc: lang === 'ru' ? 'Загрузите один исходный кадр. Кадр остаётся, фон и окружение меняются: пляж, аэропорт, кафе — что угодно.' : 'Upload one source frame. Frame stays, background changes.', slots: [{ label: lang === 'ru' ? 'Кадр — где сменить локацию' : 'Frame — location to replace', archive: true }, { label: lang === 'ru' ? 'Фото локации' : 'Location photo', archive: false }], promptHint: lang === 'ru' ? 'Терраса кафе в Мадриде, вечерний свет…' : 'Café terrace in Madrid, evening light…', showChar: true, showRatio: true },
       { id: 'prompt', title: lang === 'ru' ? 'Кадр по промпту' : 'From prompt', desc: lang === 'ru' ? 'Свободная генерация с нуля текстом' : 'Free-form generation from text', icon: icoText, cost: '−10 ' + t.cr, longDesc: lang === 'ru' ? 'Опишите сцену словами — персонаж подставится из карточки (внешность, EXIF).' : 'Describe the scene — the character comes from its card.', slots: [], promptHint: lang === 'ru' ? 'Photorealistic 8K still: девушка у окна с кофе, утренний свет…' : 'Photorealistic 8K still: girl by the window with coffee…', showChar: true, showRatio: true },
-      { id: 'carousel', title: lang === 'ru' ? 'Карусель' : 'Carousel', desc: lang === 'ru' ? 'Серия кадров из одного фото' : 'A series of frames from one photo', icon: icoGrid2, cost: lang === 'ru' ? '−8 кр/кадр' : '−8 cr/frame', longDesc: lang === 'ru' ? 'Выберите кадр из архива или загрузите готовый, задайте количество кадров — сгенерируем связанную серию (для постов и историй).' : 'Pick a frame from the archive or upload one, set frame count — get a coherent series.', slots: [], promptHint: lang === 'ru' ? 'Что меняется от кадра к кадру: ракурс, эмоция…' : 'What changes across frames: angle, emotion…', showChar: true, showRatio: true, showCount: false }
+      { id: 'carousel', title: lang === 'ru' ? 'Карусель' : 'Carousel', desc: lang === 'ru' ? 'Серия кадров из одного фото' : 'A series of frames from one photo', icon: icoGrid2, cost: lang === 'ru' ? '−8 кр/кадр' : '−8 cr/frame', longDesc: lang === 'ru' ? 'Выберите кадр из архива или загрузите готовый, задайте количество кадров — сгенерируем связанную серию (для постов и историй).' : 'Pick a frame from the archive or upload one, set frame count — get a coherent series.', slots: [{ label: lang === 'ru' ? 'Базовый кадр' : 'Base frame', archive: true }], promptHint: lang === 'ru' ? 'Что меняется от кадра к кадру: ракурс, эмоция…' : 'What changes across frames: angle, emotion…', showChar: true, showRatio: true, showCount: true }
     ];
     const imgModes = modeDefs.map(m => ({
       ...m, pick: () => setS({ imgMode: m.id }),
       cardStyle: 'border-radius:16px;padding:14px 16px;cursor:pointer;' + (s.imgMode === m.id ? 'background:rgba(215,244,82,.07);border:1px solid rgba(215,244,82,.45);' : 'background:#121316;border:1px solid rgba(255,255,255,.07);'),
       iconBox: iconBox36 + (s.imgMode === m.id ? 'background:rgba(215,244,82,.15);color:#D7F452;' : 'background:rgba(255,255,255,.06);color:#9BA0A6;')
     }));
-    const curMode = modeDefs.find(m => m.id === s.imgMode) || modeDefs[0];
+    const curModeRaw = modeDefs.find(m => m.id === s.imgMode) || modeDefs[0];
+    const segSm = (on) => 'flex:1;text-align:center;font-family:JetBrains Mono;font-size:9px;letter-spacing:.5px;padding:4px 8px;border-radius:6px;cursor:pointer;' + (on ? 'background:#D7F452;color:#171A05;font-weight:800;' : 'color:#9BA0A6;');
+    const curMode = { ...curModeRaw, slots: (curModeRaw.slots || []).map((sl, i) => {
+      const key = s.imgMode + ':' + i;
+      const src = s.slotSource[key] || 'upload';
+      return {
+        label: sl.label, archive: sl.archive, noArchive: !sl.archive, fromArchive: src === 'archive', uploadMode: src !== 'archive',
+        upStyle: segSm(src === 'upload'), arStyle: segSm(src === 'archive'),
+        setUpload: () => setS({ slotSource: { ...s.slotSource, [key]: 'upload' } }),
+        setArchive: () => setS({ slotSource: { ...s.slotSource, [key]: 'archive' } })
+      };
+    }) };
 
     // ─── SFW / NSFW + AI model selection ───
     const cmSeg = (on) => 'flex:1;text-align:center;font-size:12px;font-weight:800;border-radius:8px;padding:8px 10px;cursor:pointer;' + (on ? '' : 'color:#9BA0A6;');
@@ -1702,8 +1891,8 @@ class Component extends DCLogic {
       { label: lang === 'ru' ? 'ВЫПЛАЧЕНО' : 'PAID OUT', value: '0,00 ₽', color: '#9BA0A6' }
     ];
     const donLinks = [
-      { title: lang === 'ru' ? 'Поддержать Mia 💕' : 'Support Mia 💕', url: 'tribute.tg/mm/mia-support', st: 'ACTIVE', stStyle: stActive },
-      { title: lang === 'ru' ? 'Платье для съёмки' : 'Dress for a shoot', st: lang === 'ru' ? 'МОДЕРАЦИЯ' : 'PENDING', url: 'tribute.tg/mm/mia-dress', stStyle: stWarn }
+      { title: lang === 'ru' ? 'Поддержать Mia 💕' : 'Support Mia 💕', st: 'ACTIVE', stStyle: stActive, urls: [{ kind: 'Telegram', icon: icoTg, col: '#38BDF8', url: 't.me/tribute/app?startapp=N8c' }, { kind: 'Web', icon: icoGlobe, col: '#C084FC', url: 'web.tribute.tg/d/N8c' }] },
+      { title: lang === 'ru' ? 'Платье для съёмки' : 'Dress for a shoot', st: lang === 'ru' ? 'МОДЕРАЦИЯ' : 'PENDING', stStyle: stWarn, urls: [{ kind: 'Telegram', icon: icoTg, col: '#38BDF8', url: 't.me/tribute/app?startapp=Dr5' }, { kind: 'Web', icon: icoGlobe, col: '#C084FC', url: 'web.tribute.tg/d/Dr5' }] }
     ];
     const incoming = [{ sum: '+100,00 ₽', from: lang === 'ru' ? 'Аноним · «Поддержать Mia»' : 'Anonymous · "Support Mia"', when: '12.07 · 14:45' }];
     const myDonations = [
@@ -1888,20 +2077,26 @@ class Component extends DCLogic {
       pageTitle: pageTitles[s.page], todayLabel: dateStr,
       contentPad: isMobile ? 'padding:16px 14px 20px;height:100%;box-sizing:border-box;' : 'padding:24px 28px 32px;height:100%;box-sizing:border-box;max-width:1280px;margin:0 auto;',
       navGroups, mobileNav, moreItems,
-      goBilling: go('billing'), goImages: go('images'), goDialogs: go('dialogs'), goDonations: go('donations'),
+      goBilling: go('billing'), goImages: go('images'), goDialogs: go('dialogs'), goDonations: go('donations'), goGuide: go('guide'), goOverview: go('overview'),
+      startSteps, guideSteps, isGuide: s.page === 'guide',
+      mediaData, mediaOpen: mediaData != null, closeMedia: () => setS({ mediaStep: null }),
       closeMore: () => setS({ moreOpen: false }), stop: (e) => e.stopPropagation(),
       isOverview: s.page === 'overview', isDialogs: s.page === 'dialogs', isImages: s.page === 'images',
       isVideo: s.page === 'video', isCharacters: s.page === 'characters', isDonations: s.page === 'donations',
       isBilling: s.page === 'billing', isConnections: s.page === 'connections', isTeam: s.page === 'team', isWorkflow: s.page === 'workflow', isNewOperator: s.page === 'newOperator',
-      icoBolt, icoSpark, icoChat, icoUpload, icoCopy, icoImage, icoFilm, icoPlay, icoFlow, icoDownload, icoZoom, icoGrid2,
+      icoBolt, icoSpark, icoChat, icoUpload, icoCopy, icoImage, icoFilm, icoPlay, icoFlow, icoDownload, icoZoom, icoGrid2, icoClip, icoSendArrow,
       studioCards, recentDialogs, recentFrames,
-      chatFilters, chats, messages, notes,
-      showThread: !isMobile, showNotes: !isMobile, showChatList: !isMobile, showChatThread: !isMobile, showDialogsHeader: true,
-      closeChatThread: () => setS({ chatView: 'list' }),
-      dialogsGrid: isMobile ? 'display:grid;grid-template-columns:1fr;gap:12px;flex:1;min-height:0;' : 'display:grid;grid-template-columns:290px 1fr 270px;gap:12px;flex:1;min-height:420px;',
-      studioGrid: isMobile ? 'display:grid;grid-template-columns:1fr;gap:14px;width:100%;' : 'display:grid;grid-template-columns:minmax(280px,340px) minmax(0,1fr);gap:16px;align-items:start;width:100%;',
-      archiveColStyle: isMobile ? '' : 'min-width:0;',
+      chatFilters, platFilters, chats, messages, notes, threadHead, noChats,
+      emojiPick, emojiOpen: s.emojiOpen, toggleEmoji: () => setS({ emojiOpen: !s.emojiOpen, msgReact: null }),
+      backToList: () => setS({ mobileChat: false, msgReact: null, emojiOpen: false }),
+      closePops: () => { if (s.msgReact !== null || s.emojiOpen) setS({ msgReact: null, emojiOpen: false }); },
+      scrollDown: () => { const el = document.getElementById('mm-thread-scroll'); if (el) el.scrollTop = el.scrollHeight; },
+      showThread: !isMobile || s.mobileChat, showList: !isMobile || !s.mobileChat, showNotes: !isMobile && !isNarrow,
+      isMobileChat: isMobile && s.mobileChat,
+      dialogsGrid: isMobile ? 'display:flex;flex-direction:column;gap:12px;flex:1;min-height:0;' : (isNarrow ? 'display:grid;grid-template-columns:270px 1fr;gap:12px;flex:1;min-height:420px;' : 'display:grid;grid-template-columns:290px 1fr 270px;gap:12px;flex:1;min-height:420px;'),
+      studioGrid: isMobile ? 'display:grid;grid-template-columns:1fr;gap:14px;' : 'display:grid;grid-template-columns:340px 1fr;gap:16px;align-items:start;',
       imgModes, curMode, charChips, ratioChips, archiveFrames, videoArchive,
+      archiveMini: [0, 1, 2, 3].map(i => ({ style: 'aspect-ratio:3/4;border-radius:7px;border:2px solid transparent;cursor:pointer;background:' + G[i % 6] })),
       contentModes, aiModels, countChips,
       showGenError: s.showGenError, imgErrList, triggerGen, genFieldErr,
       ffState: s.ffState, ffIdle: s.ffState === 'idle', ffLoading: s.ffState === 'loading', ffDone: s.ffState === 'done', genFirstFrame, ffImgStyle,

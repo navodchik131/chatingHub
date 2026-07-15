@@ -18,6 +18,7 @@
   ]
 
   if (store.chatFilter == null) store.chatFilter = 'all'
+  if (store.chatPlatform == null) store.chatPlatform = 'all'
   if (store.videoResolution == null) store.videoResolution = '720p'
   if (store.videoDuration == null) store.videoDuration = 5
 
@@ -75,11 +76,46 @@
 
   function filterConversations(convs) {
     const f = store.chatFilter || 'all'
+    const plat = store.chatPlatform || 'all'
     let list = convs
     if (f === 'vip') list = list.filter((c) => c.manual_category === 'vip')
-    else if (f === 'stale') list = list.filter((c) => c.is_no_response)
+    else if (f === 'hot' || f === 'stale') list = list.filter((c) => c.is_no_response)
     else if (f === 'new') list = list.filter((c) => (c.unread_count || 0) > 0)
+    if (plat !== 'all') {
+      const p = plat.toLowerCase()
+      list = list.filter((c) => (c.platform || '').toLowerCase() === p)
+    }
     return filterConversationsBySearch(list)
+  }
+
+  function mapPlatFilters(convs, logic, lang) {
+    const plat = store.chatPlatform || 'all'
+    const cnt = (p) =>
+      convs.filter((c) => (p === 'all' ? true : (c.platform || '').toLowerCase() === p.toLowerCase())).length
+    const defs = [
+      { id: 'all', label: lang === 'ru' ? 'Все площадки' : 'All', col: '#9BA0A6', bg: 'rgba(255,255,255,.05)', bd: 'rgba(255,255,255,.12)' },
+      { id: 'telegram', label: 'Telegram ' + cnt('telegram'), col: '#38BDF8', bg: 'rgba(56,189,248,.12)', bd: 'rgba(56,189,248,.35)' },
+      { id: 'fanvue', label: 'Fanvue ' + cnt('fanvue'), col: '#F0A8C8', bg: 'rgba(240,168,200,.12)', bd: 'rgba(240,168,200,.35)' },
+    ]
+    return defs.map((p) => {
+      const on = plat === p.id
+      return {
+        label: p.label,
+        style:
+          'font-family:JetBrains Mono;font-size:9.5px;letter-spacing:.5px;padding:3px 10px;border-radius:20px;cursor:pointer;border:1px solid ' +
+          (on ? p.bd : 'rgba(255,255,255,.1)') +
+          ';color:' +
+          (on ? p.col : '#6B7076') +
+          ';background:' +
+          (on ? p.bg : 'transparent') +
+          ';',
+        pick: () => {
+          store.chatPlatform = p.id
+          logic.setState({ chatPlatform: p.id })
+          logic.forceUpdate()
+        },
+      }
+    })
   }
 
   function mapConnections(vals, logic, lang) {
@@ -262,13 +298,14 @@
       style: f === id ? chipOn : chipOff,
       pick: () => {
         store.chatFilter = id
+        logic.setState({ chatFilter: id })
         logic.forceUpdate()
       },
     })
     return [
       mk('all', lang === 'ru' ? 'Все' : 'All', convs.length),
       mk('vip', 'VIP', convs.filter((c) => c.manual_category === 'vip').length),
-      mk('stale', '24ч+', convs.filter((c) => c.is_no_response).length),
+      mk('hot', '24ч+', convs.filter((c) => c.is_no_response).length),
       mk('new', lang === 'ru' ? 'Новые' : 'New', convs.filter((c) => (c.unread_count || 0) > 0).length),
     ]
   }
@@ -872,10 +909,12 @@
     const billing = mapBilling(vals, lang, me)
     const ratioChips = mapRatioChips(logic)
     const chatFilters = mapChatFilters(allConvs, logic, lang, chipOn, chipOff)
+    const platFilters = mapPlatFilters(allConvs, logic, lang)
 
     const video = mapVideoChips(logic)
     const filteredIds = new Set(convs.map((c) => c.id))
     const chats = (out.chats || []).filter((ch) => filteredIds.has(ch.id))
+    const noChats = chats.length === 0
 
     const paidOut = store.donationOverview?.paid_out_by_currency?.RUB ?? store.donationOverview?.paid_out_minor
     const donStats = out.donStats ? [...out.donStats] : []
@@ -913,7 +952,9 @@
       referralStats: billing.referralStats,
       ratioChips,
       chatFilters,
+      platFilters,
       chats,
+      noChats,
       donStats,
       payoutHint,
       videoArchive,
