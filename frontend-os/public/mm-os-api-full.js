@@ -121,6 +121,30 @@
     })
   }
 
+  function parseSubscriptionProductId(product) {
+    const m = /^sub_(standard|pro)_(solo|pro|studio)_(month|year)$/.exec(String(product || '').trim())
+    if (!m) return null
+    return { billing_plan: m[1], tier: m[2], period: m[3] }
+  }
+
+  function planDescFromCatalog(p, lang) {
+    const lim = p.limits || {}
+    const users = lim.max_users
+    const models = lim.max_models
+    const credits = p.managed_period_credits || p.managed_monthly_credits || 0
+    const isPro = p.billing_plan === 'pro'
+    if (lang === 'ru') {
+      let s = `${users} ${users === 1 ? 'оператор' : 'оператора'} · ${models} ${models === 1 ? 'персонаж' : 'персонажа'}`
+      if (credits > 0) s += ` · +${credits} кр.`
+      if (isPro) s += ' · свой ключ WaveSpeed'
+      return s
+    }
+    let s = `${users} operator${users === 1 ? '' : 's'} · ${models} character${models === 1 ? '' : 's'}`
+    if (credits > 0) s += ` · +${credits} cr`
+    if (isPro) s += ' · own WaveSpeed key'
+    return s
+  }
+
   function mapBilling(vals, lang, me) {
     const fillBase = 'height:100%;background:#4ADE80;border-radius:3px;'
     const pct = (used, max) => (max > 0 ? Math.min(100, Math.round((used / max) * 100)) : 0)
@@ -151,30 +175,68 @@
         pick: () => { store.selectedCreditPack = x.product; payYookassa('credits_pack', qty) },
       }
     })
-    const tier = bridge.store.logic?.state?.tier || 'standard'
+    const uiTier = bridge.store.logic?.state?.tier || 'standard'
+    const uiPeriod = bridge.store.logic?.state?.period || 'month'
     const catalog = store.billingPlans?.catalog || {}
-    const subPlans = (catalog.subscription_plans || catalog.plans || items).filter?.((x) => x && (x.product || x.name)) || items
-    const plans = (Array.isArray(subPlans) ? subPlans : items)
-      .filter((x) => !x.credits_pricing)
-      .slice(0, 3)
-      .map((p, i) => ({
-        name: p.title || p.name || p.product,
-        price: String(p.price_rub || p.price || '—'),
-        tag: i === 1,
-        desc: p.description || p.desc || '',
-        product: p.product,
-        cardStyle: 'background:#121316;border:1px solid ' + (i === 1 ? 'rgba(215,244,82,.35)' : 'rgba(255,255,255,.07)') + ';border-radius:16px;padding:16px 18px;',
-        pick: () => { store.selectedPlanProduct = p.product; bridge.store.logic?.forceUpdate() },
-        payCard: () => payYookassa(p.product),
-        payCredits: () => subscribeWithCredits(p.product),
-        payTribute: () => payTributeCheckout(p.product),
-      }))
+    const catalogPlans = Array.isArray(catalog.plans) ? catalog.plans : []
+    const tierOrder = { solo: 0, pro: 1, studio: 2 }
+    let filtered = catalogPlans.filter(
+      (p) => p && p.billing_plan === uiTier && p.period === uiPeriod,
+    )
+    if (!filtered.length) {
+      filtered = items
+        .filter((x) => !x.credits_pricing)
+        .map((x) => {
+          const parsed = parseSubscriptionProductId(x.product)
+          if (!parsed) return null
+          return {
+            product: x.product,
+            title: (x.title || '').split(' — ')[0] || x.product,
+            price_rub: x.price_rub,
+            billing_plan: parsed.billing_plan,
+            tier: parsed.tier,
+            period: parsed.period,
+            popular: parsed.tier === 'pro',
+            limits: {},
+          }
+        })
+        .filter((x) => x && x.billing_plan === uiTier && x.period === uiPeriod)
+    }
+    const sorted = [...filtered].sort(
+      (a, b) => (tierOrder[a.tier] ?? 9) - (tierOrder[b.tier] ?? 9),
+    )
+    const plans = sorted.slice(0, 3).map((p) => ({
+      name: p.title || p.title_ru || p.name || p.product,
+      price: (p.price_rub ?? p.price ?? 0).toLocaleString('ru-RU'),
+      tag: p.popular ? (lang === 'ru' ? 'ПОПУЛЯРНЫЙ' : 'POPULAR') : false,
+      desc: p.description || p.desc || planDescFromCatalog(p, lang),
+      product: p.product,
+      cardStyle:
+        'background:#121316;border:1px solid ' +
+        (p.popular ? 'rgba(215,244,82,.35)' : 'rgba(255,255,255,.07)') +
+        ';border-radius:16px;padding:16px 18px;',
+      pick: () => {
+        store.selectedPlanProduct = p.product
+        bridge.store.logic?.forceUpdate()
+      },
+      payCard: () => payYookassa(p.product),
+      payCredits: () => subscribeWithCredits(p.product),
+      payTribute: () => payTributeCheckout(p.product),
+    }))
     const ref = store.referral
     const referralLink = ref?.referral_link || '—'
     const referralStats = ref
       ? (lang === 'ru' ? 'Приглашено: ' : 'Invited: ') + (ref.invited_count || 0) + ' · ' + (ref.credits_earned || 0) + ' кр.'
       : '—'
-    return { usageBars, plans: plans.length ? plans : vals.plans, packs: packs.length ? packs : vals.packs, referralLink, referralStats, tier }
+    return {
+      usageBars,
+      plans: plans.length ? plans : vals.plans,
+      packs: packs.length ? packs : vals.packs,
+      referralLink,
+      referralStats,
+      tier: uiTier,
+      period: uiPeriod,
+    }
   }
 
   function mapRatioChips(logic) {
