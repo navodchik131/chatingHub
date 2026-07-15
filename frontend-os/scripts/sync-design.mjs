@@ -197,6 +197,10 @@ const TEMPLATE_PATCHES = [
     '<div onClick="{{ tm.pick }}" style="{{ tm.style }}" style-hover="background:rgba(255,255,255,.08);">{{ tm.label }}</div>',
   ],
   [
+    /<div style="\{\{ cp\.bg \}\}flex-direction:column;align-items:stretch;justify-content:space-between;">/,
+    '<div style="{{ cp.cardStyle }}">',
+  ],
+  [
     /<div onClick="\{\{ cp\.open \}\}" style="margin-top:auto;font-size:10\.5px;font-weight:800;color:#F87171;/,
     '<div onClick="{{ cp.deletePhoto }}" style="margin-top:auto;font-size:10.5px;font-weight:800;color:#F87171;',
   ],
@@ -348,7 +352,6 @@ const LOGIC_PATCHES = [
       dialogsUnreadLabel: '', planDisplayName: '—', planUntil: '—', dialogsTotal: '0', teamRepliesCount: '0',
       creditsFramesHint: '', activeChat: { name: '—', initial: '?', vip: false, persona: '—', lang: '—', avStyle: '' },
       notesTitle: '', activeCharName: '—', activeCharInitial: '—',
-      charPhotos: [], photoTagList: [], charHistory: [],
       runGenerate: () => {}, runGenerateVideo: () => {}, sendReply: () => {}, logout: () => {},
       apiError: null, apiBusy: false, canChat: true, canStudio: true, canBilling: true,
       referralLink: '—', referralStats: '—', dialogsPlatformLine: '—', userSidebarInitial: 'R',

@@ -971,26 +971,37 @@
     return store.models.find((m) => m.id === id) || null
   }
 
+  function buildCharPhotoCardStyle(url, i) {
+    const cardBase =
+      'aspect-ratio:3/4;border-radius:10px;overflow:hidden;display:flex;flex-direction:column;align-items:stretch;justify-content:space-between;padding:6px;position:relative;background:'
+    const bgCore = url
+      ? 'center/cover no-repeat url("' + url.replace(/"/g, '') + '"),' + G[i % 6]
+      : G[i % 6]
+    return cardBase + bgCore + ';'
+  }
+
   function mapCharPhotos(model, lang, logic) {
-    const cpBase =
-      'aspect-ratio:3/4;border-radius:10px;overflow:hidden;display:flex;align-items:flex-end;padding:6px;position:relative;background:'
     const charId = model?.id
     const imgs = model?.images || []
-    const menuId = logic.state.photoMenu
+    const rawMenu = logic.state.photoMenu
+    const menuId = rawMenu != null && rawMenu !== '' ? Number(rawMenu) : null
     return imgs.map((im, i) => {
       const url = im.url || ''
-      const bg = url
-        ? cpBase + 'center/cover no-repeat url("' + url.replace(/"/g, '') + '"),' + G[i % 6]
-        : cpBase + G[i % 6]
+      const imageId = Number(im.id)
+      const cardStyle = buildCharPhotoCardStyle(url, i)
       return {
-        id: im.id,
-        bg,
+        id: imageId,
+        bg: cardStyle,
+        cardStyle,
         kind: imageKindLabel(im.kind, lang),
-        open: () => logic.setState({ photoMenu: menuId === im.id ? null : im.id }),
-        menuOpen: menuId === im.id,
+        open: (e) => {
+          e?.stopPropagation?.()
+          logic.setState({ photoMenu: menuId === imageId ? null : imageId })
+        },
+        menuOpen: menuId === imageId,
         deletePhoto: (e) => {
           e?.stopPropagation?.()
-          void deleteCharPhoto(charId, im.id, logic)
+          void deleteCharPhoto(charId, imageId, logic)
         },
       }
     })
@@ -998,18 +1009,20 @@
 
   function mapPhotoTagMenu(lang, logic) {
     const charId = getActiveCharId()
-    const imageId = logic.state.photoMenu
-    const img = getActiveChar()?.images?.find((x) => x.id === imageId)
+    const rawMenu = logic.state.photoMenu
+    const imageId = rawMenu != null && rawMenu !== '' ? Number(rawMenu) : null
+    const img = getActiveChar()?.images?.find((x) => Number(x.id) === imageId)
     const curKind = (img?.kind || 'other').toLowerCase()
-    return PHOTO_TAG_DEFS.map((d, i) => ({
+    return PHOTO_TAG_DEFS.map((d) => ({
       label: lang === 'ru' ? d.ru : d.en,
       style:
         'font-size:11px;font-weight:700;padding:5px 10px;border-radius:7px;cursor:pointer;' +
-        (d.kind === curKind && i === 0
+        (d.kind === curKind
           ? 'background:rgba(215,244,82,.15);color:#D7F452;'
           : 'color:#C9CDD1;'),
-      pick: () => {
-        if (!charId || !imageId) return
+      pick: (e) => {
+        e?.stopPropagation?.()
+        if (!charId || imageId == null) return
         void patchCharPhotoKind(charId, imageId, d.kind, logic)
       },
     }))
