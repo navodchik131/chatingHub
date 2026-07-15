@@ -478,7 +478,7 @@ input::placeholder,textarea::placeholder{color:#5C6066;}
               </sc-if>
               <sc-if value="{{ ffLoading }}" hint-placeholder-val="{{ false }}">
               <div style="display:flex;align-items:center;gap:14px;background:#0D0E11;border:1px solid rgba(192,132,252,.3);border-radius:12px;padding:14px 16px;">
-                <div style="{{ ffImgStyle }}display:flex;align-items:center;justify-content:center;animation:mmPulse 1.2s ease-in-out infinite;">
+                <div style="{{ ffImgStyleLoading }}">
                   <div style="width:22px;height:22px;border-radius:50%;border:2.5px solid rgba(192,132,252,.25);border-top-color:#C084FC;animation:mmSpin .8s linear infinite;"></div>
                 </div>
                 <div style="flex:1;">
@@ -489,8 +489,7 @@ input::placeholder,textarea::placeholder{color:#5C6066;}
               </sc-if>
               <sc-if value="{{ ffDone }}" hint-placeholder-val="{{ false }}">
               <div style="display:flex;align-items:center;gap:14px;background:#0D0E11;border:1px solid rgba(74,222,128,.3);border-radius:12px;padding:14px 16px;">
-                <div style="{{ ffImgStyle }}display:flex;align-items:flex-end;padding:6px;">
-                  <span style="font-family:'JetBrains Mono';font-size:7.5px;background:rgba(0,0,0,.6);color:#fff;padding:2px 6px;border-radius:4px;">Mia · 9:16</span>
+                <div style="{{ ffImgStyleDone }}"><span style="font-family:'JetBrains Mono';font-size:7.5px;background:rgba(0,0,0,.6);color:#fff;padding:2px 6px;border-radius:4px;">{{ ffThumbLabel }}</span>
                 </div>
                 <div style="flex:1;">
                   <div style="font-weight:800;font-size:13px;color:#4ADE80;margin-bottom:6px;">✓ {{ t.ffDone }}</div>
@@ -1178,9 +1177,12 @@ input::placeholder,textarea::placeholder{color:#5C6066;}
             </div>
             <div onClick="{{ closeLightbox }}" style="display:flex;align-items:center;gap:6px;border:1px solid rgba(255,255,255,.14);border-radius:9px;padding:7px 12px;font-size:12px;font-weight:700;color:#9BA0A6;cursor:pointer;" style-hover="color:#F2F3F0;border-color:rgba(255,255,255,.3);">✕ {{ t.close }}</div>
           </div>
-          <div style="{{ lightboxData.big }}">
+          <div style="{{ lightboxData.previewWrap }}">
             <sc-if value="{{ lightboxData.showPlaceholder }}" hint-placeholder-val="{{ true }}">
             <span style="display:flex;width:48px;height:48px;color:rgba(255,255,255,.25);" dangerouslySetInnerHTML="{{ icoImage }}"></span>
+            </sc-if>
+            <sc-if value="{{ lightboxData.hasImage }}" hint-placeholder-val="{{ false }}">
+            <img src="{{ lightboxData.url }}" alt="" style="width:100%;height:100%;object-fit:contain;display:block;">
             </sc-if>
           </div>
           <div style="display:flex;gap:10px;">

@@ -241,7 +241,32 @@
   }
 
   function archiveThumbUrl(item) {
+    if (!item) return ''
+    if (item.media_kind === 'video') {
+      const poster = (item.image_url || '').trim()
+      if (poster) return poster
+      return (item.video_url || '').trim()
+    }
     return (item.image_url || '').trim()
+  }
+
+  function resolveLightboxId(s) {
+    const lb = s?.lightbox
+    if (typeof lb === 'number' && !Number.isNaN(lb)) return lb
+    if (lb && typeof lb === 'object' && lb.id != null) {
+      const n = Number(lb.id)
+      return Number.isNaN(n) ? null : n
+    }
+    return null
+  }
+
+  function aspectCss(ratio) {
+    const r = (ratio || '9:16').trim()
+    if (r === '16:9') return '16/9'
+    if (r === '1:1') return '1/1'
+    if (r === '4:5') return '4/5'
+    if (r === '3:4') return '3/4'
+    return '9/16'
   }
 
   const OPTIMISTIC_ARCHIVE_ID_FLOOR = -1_000_000_000
@@ -393,25 +418,43 @@
         ? () => {}
         : () => {
             logic.setState({ lightbox: item.id })
+            if (!url || isArchivePending(item)) {
+              void refreshArchiveImages().then(() => logic.forceUpdate())
+            }
           },
     }
   }
 
+  function buildFfThumbStyles(url) {
+    const thumbBase =
+      'width:70px;aspect-ratio:9/16;border-radius:10px;flex:none;overflow:hidden;background:'
+    const bgCore = url
+      ? 'center/cover no-repeat url("' + url.replace(/"/g, '') + '"),' + G[3]
+      : G[3]
+    const bg = thumbBase + bgCore + ';'
+    return {
+      loading:
+        bg +
+        'display:flex;align-items:center;justify-content:center;animation:mmPulse 1.2s ease-in-out infinite;',
+      done: bg + 'display:flex;align-items:flex-end;padding:6px;',
+    }
+  }
+
   function buildLightboxData(s, lang) {
-    const id = typeof s.lightbox === 'number' ? s.lightbox : null
+    const id = resolveLightboxId(s)
     if (id == null) return null
     const item =
       store.archiveImages.find((x) => x.id === id) ||
       store.archiveVideos.find((x) => x.id === id)
     if (!item) return null
     const url = archiveThumbUrl(item)
-    const bigBase =
-      'flex:1;min-height:0;display:flex;align-items:center;justify-content:center;border-radius:14px;overflow:hidden;background:'
-    const bg = (
-      url
-        ? bigBase + 'center/cover no-repeat url("' + url.replace(/"/g, '') + '"),' + G[id % 6]
-        : bigBase + G[id % 6]
-    ) + ';'
+    const ratio = item.output_aspect || '9:16'
+    const previewWrap =
+      'width:100%;aspect-ratio:' +
+      aspectCss(ratio) +
+      ';max-height:min(calc(92vh - 180px),720px);flex:none;border-radius:14px;overflow:hidden;display:flex;align-items:center;justify-content:center;background:' +
+      (url ? '#0A0B0D' : G[id % 6]) +
+      ';'
     const mode =
       item.media_kind === 'video'
         ? lang === 'ru'
@@ -421,12 +464,14 @@
           ? 'Кадр'
           : 'Frame'
     return {
-      big: bg,
+      previewWrap,
+      big: previewWrap,
       who: item.model_name || '—',
-      ratio: item.output_aspect || '9:16',
+      ratio,
       mode,
       when: fmtDateShort(item.created_at) + ' · ' + fmtTime(item.created_at),
-      url,
+      url: url || '',
+      hasImage: !!url,
       id: item.id,
       showPlaceholder: !url,
     }
@@ -1153,18 +1198,22 @@
       if (videoFile) fd.append('video', videoFile)
       const frameFile = store.uploadFiles['motion-frame']
       if (frameFile) fd.append('first_frame_image', frameFile)
-      const archId = s.carouselPickId || (typeof s.lightbox === 'number' ? s.lightbox : null)
+      const archId = s.carouselPickId || resolveLightboxId(s)
       if (archId && !videoFile && !frameFile) fd.append('existing_generation_id', String(archId))
       const motion = (queryMotionTextarea()?.value || '').trim()
       if (motion) fd.append('description', motion)
       const accepted = await API.postStudioJob('/api/studio/motion/first-frame', fd)
+      let genId = accepted.generation_id || null
+      let directUrl = ''
       if (accepted.job_id) {
-        await API.pollStudioJob(accepted.job_id, { maxWaitMs: 10 * 60 * 1000 })
+        const job = await API.pollStudioJob(accepted.job_id, { maxWaitMs: 10 * 60 * 1000 })
+        const result = job?.result || {}
+        if (result.generation_id != null) genId = result.generation_id
+        directUrl = (result.generated_image_url || '').trim()
       }
       await loadArchive()
-      const genId = accepted.generation_id
-      const gen = store.archiveImages.find((g) => g.id === genId)
-      store.firstFrameUrl = gen?.image_url || ''
+      const gen = genId != null ? store.archiveImages.find((g) => g.id === genId) : null
+      store.firstFrameUrl = directUrl || archiveThumbUrl(gen) || ''
       store.firstFrameGenId = genId || null
       logic.setState({ ffState: 'done' })
       await API.apiJson('/api/auth/me').then((m) => { store.me = m })
@@ -1694,7 +1743,7 @@
       if (store.motionVideoFileId) fd.append('motion_video_file_id', store.motionVideoFileId)
       const frameFile = store.uploadFiles['motion-frame']
       if (frameFile) fd.append('image', frameFile)
-      const archId = s.carouselPickId || (typeof s.lightbox === 'number' ? s.lightbox : null)
+      const archId = s.carouselPickId || resolveLightboxId(s)
       if (archId && !frameFile) fd.append('existing_generation_id', String(archId))
       if (store.firstFrameGenId && !frameFile && !archId) fd.append('existing_generation_id', String(store.firstFrameGenId))
       const accepted = await API.postStudioJob('/api/studio/motion/render-video', fd)
@@ -2063,11 +2112,9 @@
     const lightboxData = buildLightboxData(s, lang)
     const imgErrList = s.showGenError ? validateImageGen(logic, vals) : []
     const ffUrl = store.firstFrameUrl || ''
-    const ffImgStyle =
-      'width:70px;aspect-ratio:9/16;border-radius:10px;flex:none;background:' +
-      (ffUrl
-        ? 'center/cover no-repeat url("' + ffUrl.replace(/"/g, '') + '"),' + G[3]
-        : G[3])
+    const ffThumb = buildFfThumbStyles(ffUrl)
+    const ffModel = store.models.find((m) => m.id === store.selectedModelId)
+    const ffThumbLabel = (ffModel?.name || '—') + ' · ' + (store.selectedAspect || '9:16')
 
     logic._lastT = vals.t
 
@@ -2134,10 +2181,12 @@
       ffLoading: s.ffState === 'loading',
       ffDone: s.ffState === 'done',
       genFirstFrame: () => void genFirstFrame(logic),
-      ffImgStyle,
+      ffImgStyleLoading: ffThumb.loading,
+      ffImgStyleDone: ffThumb.done,
+      ffThumbLabel,
       lightboxData,
       makeCarousel: () => {
-        const id = typeof s.lightbox === 'number' ? s.lightbox : null
+        const id = resolveLightboxId(s)
         logic.setState({ page: 'images', imgMode: 'carousel', lightbox: id, carouselPickId: id })
       },
       opRightRows: operator.opRightRows,
