@@ -807,16 +807,7 @@
       url: item.video_url || item.image_url || '',
     }))
 
-    const recentFrames = (out.archiveFrames || []).slice(0, 4).map((cf) => ({
-      ...cf,
-      pick: () => {
-        if (!cf.id) return
-        logic.setState({ carouselPickId: cf.id })
-      },
-      thumbStyle:
-        cf.thumbStyle +
-        (logic.state.carouselPickId === cf.id ? 'border-color:#D7F452;' : ''),
-    }))
+    const recentFrames = out.recentFrames || []
 
     const avail = store.donationOverview?.pending_payout_by_currency?.RUB ?? 0
     const payoutHint = fmtMoney(avail, 'RUB') + ' − 2%'

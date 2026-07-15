@@ -354,6 +354,18 @@
     )
   }
 
+  function archiveItemPollKey(item) {
+    if (!item) return ''
+    return [
+      item.id,
+      item.status || '',
+      item.image_url || '',
+      item.video_url || '',
+      item.error_message || '',
+      item.job_id || '',
+    ].join('|')
+  }
+
   async function refreshArchiveImages() {
     const optimistic = store.archiveImages.filter((g) => isOptimisticArchiveId(g.id))
     const [page, pending] = await Promise.all([
@@ -365,14 +377,69 @@
     store.archiveImages = images
   }
 
+  /** Опрос только незавершённых карточек — без полной перезагрузки архива. */
+  async function refreshPendingArchiveOnly() {
+    const tracked = store.archiveImages.filter(
+      (g) => isArchivePending(g) || isOptimisticArchiveId(g.id),
+    )
+    if (!tracked.length) return false
+
+    const pending = await API.apiJson('/api/studio/generations/pending?media_kind=image').catch(() => ({
+      items: [],
+    }))
+    const pendingItems = pending.items || []
+    const pendingById = new Map(pendingItems.map((p) => [p.id, p]))
+    let changed = false
+    const completedIds = []
+
+    store.archiveImages = store.archiveImages.map((g) => {
+      if (isOptimisticArchiveId(g.id)) {
+        const byJob =
+          g.job_id != null ? pendingItems.find((p) => p.job_id === g.job_id) : null
+        if (byJob) {
+          const next = { ...g, ...byJob, id: byJob.id }
+          if (archiveItemPollKey(g) !== archiveItemPollKey(next)) changed = true
+          return next
+        }
+        return g
+      }
+      if (!isArchivePending(g)) return g
+      const upd = pendingById.get(g.id)
+      if (upd) {
+        const next = { ...g, ...upd }
+        if (archiveItemPollKey(g) !== archiveItemPollKey(next)) changed = true
+        return next
+      }
+      completedIds.push(g.id)
+      return g
+    })
+
+    if (completedIds.length) {
+      const page = await API.apiJson('/api/studio/generations?limit=40&skip=0&media_kind=image').catch(() => ({
+        items: [],
+      }))
+      const freshById = new Map((page.items || []).map((p) => [p.id, p]))
+      store.archiveImages = store.archiveImages.map((g) => {
+        if (!completedIds.includes(g.id)) return g
+        const fresh = freshById.get(g.id)
+        if (!fresh) return g
+        const next = { ...g, ...fresh }
+        if (archiveItemPollKey(g) !== archiveItemPollKey(next)) changed = true
+        return next
+      })
+    }
+
+    return changed
+  }
+
   function scheduleArchivePoll() {
     if (archivePollTimer != null) return
     const tick = async () => {
       archivePollTimer = null
       if (!store.authed || !hasPendingArchive()) return
       try {
-        await refreshArchiveImages()
-        store.logic?.forceUpdate()
+        const changed = await refreshPendingArchiveOnly()
+        if (changed) store.logic?.forceUpdate()
       } catch (_) {
         /* тихий опрос */
       }
@@ -498,7 +565,7 @@
     ]
     const curMode = modeDefs.find((m) => m.id === mode) || { slots: 0 }
     const hasRef = !!store.uploadFiles.ref
-    const hasCarouselSrc = !!(s.carouselPickId || store.uploadFiles.carousel)
+    const hasCarouselSrc = !!store.uploadFiles.carousel || !!s.carouselPickId
     if (curMode.slots && !hasRef && !(mode === 'carousel' && hasCarouselSrc)) errs.push(t.errNoRef)
     if (mode === 'prompt' && !queryPromptTextarea()?.value?.trim()) errs.push(t.errNoPrompt)
     if (!store.selectedModelId) errs.push(t.errNoChar)
@@ -873,11 +940,21 @@
       clear.addEventListener('click', (e) => {
         e.stopPropagation()
         clearUploadZone(zone, key)
+        if (key === 'carousel' && store.logic) {
+          store.logic.setState({ carSource: 'upload', carouselPickId: null })
+          store.logic.forceUpdate()
+        }
       })
       zone.appendChild(clear)
     }
     const vid = box.querySelector('video')
     if (vid) vid.currentTime = 0.15
+  }
+
+  function clearCarouselUploadDom() {
+    document.querySelectorAll('[data-mm-upload="carousel"]').forEach((zone) => {
+      clearUploadZone(zone, 'carousel')
+    })
   }
 
   function clearUploadZone(zone, key) {
@@ -932,6 +1009,10 @@
         if (!file) return
         store.uploadFiles[key] = file
         renderUploadPreview(zone, key, file)
+        if (key === 'carousel') {
+          store.logic?.setState({ carSource: 'upload', carouselPickId: null })
+          store.logic?.forceUpdate()
+        }
         if (key === 'motion-video') {
           zone.classList.add('mm-os-upload--busy')
           try {
@@ -1647,8 +1728,8 @@
     store.error = null
 
     if (mode === 'carousel') {
-      const srcId = s.carouselPickId
       const uploadFile = store.uploadFiles.carousel
+      const srcId = uploadFile ? null : s.carouselPickId
       if (!srcId && !uploadFile) {
         store.error = 'Выберите кадр из архива или загрузите фото для карусели'
         logic.forceUpdate()
@@ -2015,21 +2096,32 @@
       text: n.content || '',
     }))
 
-    const archiveFrames = store.archiveImages.map((item, i) => {
-      const frame = archiveToFrame(item, i, logic, vals)
-      if (s.imgMode === 'carousel') {
-        const picked = s.carouselPickId === item.id
-        return {
-          ...frame,
-          open: () => logic.setState({ carouselPickId: item.id }),
-          bg:
-            frame.bg +
-            (picked ? 'box-shadow:inset 0 0 0 2px #D7F452;' : ''),
-        }
+    const archiveFrames = store.archiveImages.map((item, i) =>
+      archiveToFrame(item, i, logic, vals),
+    )
+    const thumbPickBase =
+      'aspect-ratio:9/16;border-radius:8px;cursor:pointer;border:2px solid transparent;background:'
+    const recentFrames = store.archiveImages.slice(0, 4).map((item, i) => {
+      const url = archiveThumbUrl(item)
+      const picked = s.carouselPickId === item.id
+      const bgCore = url
+        ? 'center/cover no-repeat url("' + url.replace(/"/g, '') + '"),' + G[i % 6]
+        : G[i % 6]
+      return {
+        id: item.id,
+        label: (item.model_name || '—') + ' · ' + (item.output_aspect || '9:16'),
+        thumbStyle:
+          thumbPickBase +
+          bgCore +
+          ';' +
+          (picked ? 'border-color:#D7F452;' : ''),
+        pick: () => {
+          if (!item.id || isArchivePending(item)) return
+          clearCarouselUploadDom()
+          logic.setState({ carouselPickId: item.id, carSource: 'archive' })
+        },
       }
-      return frame
     })
-    const recentFrames = archiveFrames.slice(0, 4)
     const videoArchive = store.archiveVideos.slice(0, 4).map((item, i) => ({
       bg: 'aspect-ratio:9/16;display:flex;align-items:center;justify-content:center;position:relative;background:center/cover no-repeat url("' +
         (item.image_url || '').replace(/"/g, '') + '"),' + G[(i + 2) % 6],
@@ -2224,8 +2316,42 @@
       lightboxData,
       makeCarousel: () => {
         const id = resolveLightboxId(s)
-        logic.setState({ page: 'images', imgMode: 'carousel', lightbox: id, carouselPickId: id })
+        if (id) clearCarouselUploadDom()
+        logic.setState({
+          page: 'images',
+          imgMode: 'carousel',
+          lightbox: null,
+          carouselPickId: id || s.carouselPickId || null,
+          carSource: id ? 'archive' : s.carSource || 'archive',
+        })
       },
+      isCarousel: s.imgMode === 'carousel',
+      isStdImg: s.imgMode !== 'carousel',
+      carCount: s.carouselCount,
+      carCountChips: [2, 3, 4, 6, 8].map((n) => ({
+        label: String(n),
+        pick: () => logic.setState({ carouselCount: n }),
+        style:
+          (Number(s.carouselCount) === n ? chipOn : chipOff) +
+          'min-width:40px;text-align:center;',
+      })),
+      carSrcArchiveStyle:
+        'flex:1;text-align:center;font-size:12px;font-weight:700;border-radius:8px;padding:9px 12px;cursor:pointer;' +
+        (s.carSource !== 'upload'
+          ? 'background:rgba(215,244,82,.12);color:#D7F452;border:1px solid rgba(215,244,82,.4);'
+          : 'color:#9BA0A6;border:1px solid transparent;'),
+      carSrcUploadStyle:
+        'flex:1;text-align:center;font-size:12px;font-weight:700;border-radius:8px;padding:9px 12px;cursor:pointer;' +
+        (s.carSource === 'upload'
+          ? 'background:rgba(215,244,82,.12);color:#D7F452;border:1px solid rgba(215,244,82,.4);'
+          : 'color:#9BA0A6;border:1px solid transparent;'),
+      setCarArchive: () => {
+        clearCarouselUploadDom()
+        logic.setState({ carSource: 'archive' })
+      },
+      setCarUpload: () => logic.setState({ carSource: 'upload', carouselPickId: null }),
+      showCarArchive: s.carSource !== 'upload',
+      showCarUpload: s.carSource === 'upload',
       opRightRows: operator.opRightRows,
       opModelRows: operator.opModelRows,
       opError: !!s.opError,

@@ -348,6 +348,8 @@ input::placeholder,textarea::placeholder{color:#5C6066;}
                 </sc-for>
               </div>
             </div>
+            <sc-if value="{{ isStdImg }}" hint-placeholder-val="{{ true }}">
+            <div style="display:flex;flex-direction:column;gap:16px;">
             <div style="display:flex;gap:10px;">
               <sc-for list="{{ curMode.slots }}" as="s" hint-placeholder-count="2">
                 <div data-mm-upload="ref" style="flex:1;aspect-ratio:3/4;border:1.5px dashed rgba(255,255,255,.18);border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;cursor:pointer;" style-hover="border-color:rgba(215,244,82,.5);background:rgba(215,244,82,.03);">
@@ -379,6 +381,48 @@ input::placeholder,textarea::placeholder{color:#5C6066;}
                 <sc-for list="{{ countChips }}" as="qc" hint-placeholder-count="5">
                   <span onClick="{{ qc.pick }}" style="{{ qc.style }}" style-hover="border-color:rgba(255,255,255,.3);">{{ qc.label }}</span>
                 </sc-for>
+              </div>
+            </div>
+            </sc-if>
+            </div>
+            </sc-if>
+            <sc-if value="{{ isCarousel }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;flex-direction:column;gap:16px;">
+              <div>
+                <div style="font-family:'JetBrains Mono';font-size:9.5px;letter-spacing:1.8px;color:#6B7076;margin-bottom:8px;">{{ t.carSource }}</div>
+                <div style="display:flex;background:#0D0E11;border:1px solid rgba(255,255,255,.09);border-radius:10px;padding:3px;gap:3px;">
+                  <span onClick="{{ setCarArchive }}" style="{{ carSrcArchiveStyle }}">{{ t.carFromArchive }}</span>
+                  <span onClick="{{ setCarUpload }}" style="{{ carSrcUploadStyle }}">{{ t.carUpload }}</span>
+                </div>
+              </div>
+              <sc-if value="{{ showCarArchive }}" hint-placeholder-val="{{ true }}">
+              <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;">
+                <sc-for list="{{ recentFrames }}" as="cf" hint-placeholder-count="4">
+                  <div onClick="{{ cf.pick }}" style="{{ cf.thumbStyle }}" style-hover="border-color:#D7F452;"></div>
+                </sc-for>
+              </div>
+              </sc-if>
+              <sc-if value="{{ showCarUpload }}" hint-placeholder-val="{{ false }}">
+              <div data-mm-upload="carousel" style="aspect-ratio:16/7;border:1.5px dashed rgba(255,255,255,.18);border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;cursor:pointer;" style-hover="border-color:rgba(215,244,82,.5);background:rgba(215,244,82,.03);">
+                <span style="display:flex;width:22px;height:22px;color:#6B7076;" dangerouslySetInnerHTML="{{ icoUpload }}"></span>
+                <span style="font-size:11px;font-weight:700;color:#9BA0A6;">{{ t.carUploadHint }}</span>
+              </div>
+              </sc-if>
+              <div>
+                <div style="font-family:'JetBrains Mono';font-size:9.5px;letter-spacing:1.8px;color:#6B7076;margin-bottom:8px;">{{ t.carFrames }}</div>
+                <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                  <sc-for list="{{ carCountChips }}" as="cn" hint-placeholder-count="5">
+                    <span onClick="{{ cn.pick }}" style="{{ cn.style }}" style-hover="border-color:rgba(255,255,255,.3);">{{ cn.label }}</span>
+                  </sc-for>
+                </div>
+              </div>
+              <div>
+                <div style="font-family:'JetBrains Mono';font-size:9.5px;letter-spacing:1.8px;color:#6B7076;margin-bottom:8px;">{{ t.character }}</div>
+                <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                  <sc-for list="{{ charChips }}" as="cc" hint-placeholder-count="3">
+                    <span onClick="{{ cc.pick }}" style="{{ cc.style }}" style-hover="border-color:rgba(255,255,255,.3);">{{ cc.label }}</span>
+                  </sc-for>
+                </div>
               </div>
             </div>
             </sc-if>
@@ -1233,7 +1277,7 @@ class Component extends DCLogic {
     isMobile: false, chatOpen: 0,
     contentMode: 'sfw', aiModel: 'nano', carouselCount: 4,
     hasFirstFrame: 'yes', vidQuality: '1080', vidFormat: '9:16', vidTime: '5',
-    charTab: 'photos', lightbox: null,
+    charTab: 'photos', lightbox: null, carSource: 'archive', carouselPickId: null,
     showGenError: false, ffState: 'idle', photoMenu: null,
     opRights: { chat: true, studio: true, models: true, keys: false, billing: false },
     opError: false
@@ -1273,6 +1317,7 @@ class Component extends DCLogic {
       contentType: 'ТИП КОНТЕНТА', aiModel: 'МОДЕЛЬ ГЕНЕРАЦИИ (AI-движок)', frames: 'КОЛ-ВО КАДРОВ',
       refVideo: 'РЕФЕРЕНСНОЕ ВИДЕО', hasFirstFrame: 'У вас есть первый кадр?', firstFrame: 'ПЕРВЫЙ КАДР', genFirstFrame: 'Сгенерировать первый кадр', vidQuality: 'КАЧЕСТВО', dropVideo: 'Перетащите видео или нажмите — MP4 до 30 с',
       download: 'Скачать', makeCarousel: 'Сделать карусель', close: 'Закрыть', created: 'создан',
+      carSource: 'ОТКУДА КАДР', carFromArchive: 'Из архива', carUpload: 'Загрузить', carUploadHint: 'Перетащите фото или нажмите', carFrames: 'ЧИСЛО КАДРОВ',
       photoTags: 'Теги фото (назначаются при сохранении)', addPhoto: 'Добавить фото', uploadFirst: 'Загрузить первый кадр',
       workflowTitle: 'Workflow — визуальный конструктор', workflowBody: 'Для продвинутых: соберите цепочку из генераций, свапов и постобработки в узловом редакторе и запускайте её одной кнопкой. Раздел на подключении к Pro-тарифу.',
       workflowSoon: 'Скоро в Pro', notifyMe: 'Уведомить о запуске',
@@ -1337,6 +1382,7 @@ class Component extends DCLogic {
       contentType: 'CONTENT TYPE', aiModel: 'GENERATION MODEL (AI engine)', frames: 'FRAME COUNT',
       refVideo: 'REFERENCE VIDEO', hasFirstFrame: 'Do you have a first frame?', firstFrame: 'FIRST FRAME', genFirstFrame: 'Generate first frame', vidQuality: 'QUALITY', dropVideo: 'Drop a video or click — MP4 up to 30s',
       download: 'Download', makeCarousel: 'Make carousel', close: 'Close', created: 'created',
+      carSource: 'FRAME SOURCE', carFromArchive: 'From archive', carUpload: 'Upload', carUploadHint: 'Drop a photo or click', carFrames: 'FRAMES',
       photoTags: 'Photo tags (assigned on save)', addPhoto: 'Add photo', uploadFirst: 'Upload first frame',
       workflowTitle: 'Workflow — visual builder', workflowBody: 'For power users: chain generations, swaps and post-processing in a node editor and run it with one click. Available on the Pro plan.',
       workflowSoon: 'Coming to Pro', notifyMe: 'Notify me at launch',
@@ -1519,7 +1565,7 @@ class Component extends DCLogic {
       { id: 'outfit', title: lang === 'ru' ? 'Замена одежды' : 'Outfit swap', desc: lang === 'ru' ? 'Одежда с фото → на персонажа' : 'Clothing from a photo → onto character', icon: icoShirt, cost: '−8 ' + t.cr, longDesc: lang === 'ru' ? 'Загрузите один референс с человеком или вещью. Мы выделим одежду и сгенерируем её на выбранном персонаже на однородном фоне.' : 'Upload one reference with a person or item. We extract the clothing and put it on your character on a clean background.', slots: [lang === 'ru' ? 'Референс одежды' : 'Clothing reference'], promptHint: lang === 'ru' ? 'Необязательно — цвет, длина, детали…' : 'Optional — colour, length, details…', showChar: true, showRatio: true },
       { id: 'location', title: lang === 'ru' ? 'Смена локации' : 'Location swap', desc: lang === 'ru' ? 'Перенести персонажа в новое место' : 'Move the character to a new place', icon: icoPin, cost: '−8 ' + t.cr, longDesc: lang === 'ru' ? 'Загрузите один исходный кадр. Кадр остаётся, фон и окружение меняются: пляж, аэропорт, кафе — что угодно.' : 'Upload one source frame. Frame stays, background changes.', slots: [lang === 'ru' ? 'Исходный кадр' : 'Source frame'], promptHint: lang === 'ru' ? 'Терраса кафе в Мадриде, вечерний свет…' : 'Café terrace in Madrid, evening light…', showChar: true, showRatio: true },
       { id: 'prompt', title: lang === 'ru' ? 'Кадр по промпту' : 'From prompt', desc: lang === 'ru' ? 'Свободная генерация с нуля текстом' : 'Free-form generation from text', icon: icoText, cost: '−10 ' + t.cr, longDesc: lang === 'ru' ? 'Опишите сцену словами — персонаж подставится из карточки (внешность, EXIF).' : 'Describe the scene — the character comes from its card.', slots: [], promptHint: lang === 'ru' ? 'Photorealistic 8K still: девушка у окна с кофе, утренний свет…' : 'Photorealistic 8K still: girl by the window with coffee…', showChar: true, showRatio: true },
-      { id: 'carousel', title: lang === 'ru' ? 'Карусель' : 'Carousel', desc: lang === 'ru' ? 'Серия кадров из одного фото' : 'A series of frames from one photo', icon: icoGrid2, cost: lang === 'ru' ? '−8 кр/кадр' : '−8 cr/frame', longDesc: lang === 'ru' ? 'Выберите кадр из архива или загрузите готовый, задайте количество кадров — сгенерируем связанную серию (для постов и историй).' : 'Pick a frame from the archive or upload one, set frame count — get a coherent series.', slots: [lang === 'ru' ? 'Базовый кадр (или из архива)' : 'Base frame (or from archive)'], promptHint: lang === 'ru' ? 'Что меняется от кадра к кадру: ракурс, эмоция…' : 'What changes across frames: angle, emotion…', showChar: true, showRatio: true, showCount: true }
+      { id: 'carousel', title: lang === 'ru' ? 'Карусель' : 'Carousel', desc: lang === 'ru' ? 'Серия кадров из одного фото' : 'A series of frames from one photo', icon: icoGrid2, cost: lang === 'ru' ? '−8 кр/кадр' : '−8 cr/frame', longDesc: lang === 'ru' ? 'Выберите кадр из архива или загрузите готовый, задайте количество кадров — сгенерируем связанную серию (для постов и историй).' : 'Pick a frame from the archive or upload one, set frame count — get a coherent series.', slots: [], promptHint: lang === 'ru' ? 'Что меняется от кадра к кадру: ракурс, эмоция…' : 'What changes across frames: angle, emotion…', showChar: true, showRatio: true, showCount: false }
     ];
     const imgModes = modeDefs.map(m => ({
       ...m, pick: () => setS({ imgMode: m.id }),
