@@ -406,10 +406,12 @@
     if (!item) return null
     const url = archiveThumbUrl(item)
     const bigBase =
-      'flex:1;min-height:0;display:flex;align-items:center;justify-content:center;border-radius:14px;background:'
-    const bg = url
-      ? bigBase + 'center/cover no-repeat url("' + url.replace(/"/g, '') + '"),' + G[id % 6]
-      : bigBase + G[id % 6]
+      'flex:1;min-height:0;display:flex;align-items:center;justify-content:center;border-radius:14px;overflow:hidden;background:'
+    const bg = (
+      url
+        ? bigBase + 'center/cover no-repeat url("' + url.replace(/"/g, '') + '"),' + G[id % 6]
+        : bigBase + G[id % 6]
+    ) + ';'
     const mode =
       item.media_kind === 'video'
         ? lang === 'ru'
@@ -426,6 +428,7 @@
       when: fmtDateShort(item.created_at) + ' · ' + fmtTime(item.created_at),
       url,
       id: item.id,
+      showPlaceholder: !url,
     }
   }
 

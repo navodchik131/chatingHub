@@ -221,6 +221,13 @@ const TEMPLATE_PATCHES = [
     '<div onClick="{{ makeCarousel }}" style="flex:1;display:flex;align-items:center;justify-content:center;gap:8px;background:rgba(192,132,252,.12);border:1px solid rgba(192,132,252,.4);color:#C084FC;border-radius:11px;padding:12px;font-size:13px;font-weight:800;cursor:pointer;" style-hover="background:rgba(192,132,252,.2);"><span style="display:flex;width:16px;height:16px;" dangerouslySetInnerHTML="{{ icoGrid2 }}"></span>{{ t.makeCarousel }}</div>',
   ],
   [
+    /<div style="\{\{ lightboxData\.big \}\}min-height:0;display:flex;align-items:center;justify-content:center;overflow:hidden;">\s*<span style="display:flex;width:48px;height:48px;color:rgba\(255,255,255,.25\);" dangerouslySetInnerHTML="\{\{ icoImage \}\}"><\/span>/,
+    `<div style="{{ lightboxData.big }}">
+            <sc-if value="{{ lightboxData.showPlaceholder }}" hint-placeholder-val="{{ true }}">
+            <span style="display:flex;width:48px;height:48px;color:rgba(255,255,255,.25);" dangerouslySetInnerHTML="{{ icoImage }}"></span>
+            </sc-if>`,
+  ],
+  [
     /<div style="\{\{ af\.bg \}\}position:relative;" style-hover="filter:brightness\(1\.08\);">\s*<span style="display:flex;width:22px;height:22px;color:rgba\(255,255,255,.35\);" dangerouslySetInnerHTML="\{\{ icoImage \}\}"><\/span>\s*<span style="position:absolute;top:7px;right:7px;display:flex;width:15px;height:15px;color:rgba\(255,255,255,.7\);background:rgba\(0,0,0,.4\);border-radius:6px;padding:3px;" dangerouslySetInnerHTML="\{\{ icoZoom \}\}"><\/span>/,
     `<div style="{{ af.bg }}" style-hover="{{ af.pending ? '' : 'filter:brightness(1.08);' }}">
                     <sc-if value="{{ af.pending }}" hint-placeholder-val="{{ false }}">
