@@ -674,15 +674,14 @@
     const mode = s.imgMode || 'prompt'
     const slotCounts = { ref: 1, swap: 1, outfit: 2, location: 2, prompt: 0, carousel: 1 }
     const slotN = slotCounts[mode] ?? 0
-    const hasFrame =
-      !!store.uploadFiles.ref ||
-      !!store.slotArchivePicks[slotStateKey(mode, 0)] ||
-      !!s.carouselPickId
     const hasCarouselSrc =
       !!store.uploadFiles.carousel ||
-      !!store.uploadFiles.ref ||
       !!s.carouselPickId ||
       !!store.slotArchivePicks[slotStateKey('carousel', 0)]
+    const hasFrame =
+      mode === 'carousel'
+        ? hasCarouselSrc
+        : !!store.uploadFiles.ref || !!store.slotArchivePicks[slotStateKey(mode, 0)]
     if (slotN > 0 && !hasFrame && !(mode === 'carousel' && hasCarouselSrc)) errs.push(t.errNoRef)
     if (mode === 'outfit') {
       const hasCloth =
@@ -1093,6 +1092,29 @@
     document.querySelectorAll('[data-mm-upload="carousel"]').forEach((zone) => {
       clearUploadZone(zone, 'carousel')
     })
+  }
+
+  function resolveCarouselArchiveId(s) {
+    return (
+      store.slotArchivePicks[slotStateKey('carousel', 0)] ||
+      s.carouselPickId ||
+      null
+    )
+  }
+
+  /** Archive pick wins over upload; never reuse ref-slot file from other image modes. */
+  function resolveCarouselMasterSource(s) {
+    const archId = resolveCarouselArchiveId(s)
+    if (archId) return { srcId: archId, uploadFile: null }
+    const uploadFile = store.uploadFiles.carousel || null
+    if (uploadFile) return { srcId: null, uploadFile }
+    return { srcId: null, uploadFile: null }
+  }
+
+  function clearCarouselLocalUploads() {
+    delete store.uploadFiles.carousel
+    delete store.uploadFiles.ref
+    clearCarouselUploadDom()
   }
 
   function clearUploadZone(zone, key) {
@@ -1932,10 +1954,7 @@
         logic.forceUpdate()
         return
       }
-      const uploadFile = store.uploadFiles.carousel || store.uploadFiles.ref
-      const srcId = uploadFile
-        ? null
-        : store.slotArchivePicks[slotStateKey('carousel', 0)] || s.carouselPickId
+      const { srcId, uploadFile } = resolveCarouselMasterSource(s)
       if (!srcId && !uploadFile) {
         store.error = 'Выберите кадр из архива или загрузите фото для карусели'
         logic.forceUpdate()
@@ -2396,7 +2415,8 @@
           (picked ? 'border-color:#D7F452;' : ''),
         pick: () => {
           if (!item.id || isArchivePending(item)) return
-          clearCarouselUploadDom()
+          clearCarouselLocalUploads()
+          store.slotArchivePicks[slotStateKey('carousel', 0)] = item.id
           logic.setState({ carouselPickId: item.id, carSource: 'archive' })
         },
       }
@@ -2675,7 +2695,7 @@
         const id = resolveLightboxId(s)
         if (id) {
           store.slotArchivePicks[slotStateKey('carousel', 0)] = id
-          clearCarouselUploadDom()
+          clearCarouselLocalUploads()
         }
         logic.setState({
           page: 'images',
@@ -2705,6 +2725,8 @@
           ? 'background:rgba(215,244,82,.12);color:#D7F452;border:1px solid rgba(215,244,82,.4);'
           : 'color:#9BA0A6;border:1px solid transparent;'),
       setCarArchive: () => {
+        delete store.uploadFiles.carousel
+        delete store.uploadFiles.ref
         clearCarouselUploadDom()
         logic.setState({ carSource: 'archive' })
       },
