@@ -233,16 +233,8 @@ const TEMPLATE_PATCHES = [
     '<div style="{{ ffImgStyleDone }}"><span style="font-family:\'JetBrains Mono\';font-size:7.5px;background:rgba(0,0,0,.6);color:#fff;padding:2px 6px;border-radius:4px;">{{ ffThumbLabel }}</span>',
   ],
   [
-    /<div onClick="\{\{ stop \}\}" style="display:flex;flex-direction:column;gap:14px;max-height:92vh;max-width:min\(92vw,720px\);">/,
-    '<div onClick="{{ stop }}" style="{{ lightboxData.cardStyle }}">',
-  ],
-  [
     /<div style="display:flex;gap:10px;">\s*<div onClick="\{\{ downloadLightbox \}\}"/,
     '<div style="{{ lightboxData.actionsStyle }}"><div onClick="{{ downloadLightbox }}"',
-  ],
-  [
-    /<\/div>\s*<\/div>\s*<div style="display:flex;gap:10px;">/,
-    '</div><div style="{{ lightboxData.actionsStyle }}">',
   ],
   [
     /<div style="\{\{ lightboxData\.big \}\}">\s*<sc-if value="\{\{ lightboxData\.showPlaceholder \}\}" hint-placeholder-val="\{\{ true \}\}">\s*<span style="display:flex;width:48px;height:48px;color:rgba\(255,255,255,.25\);" dangerouslySetInnerHTML="\{\{ icoImage \}\}"><\/span>\s*<\/sc-if>\s*<\/div>/,
