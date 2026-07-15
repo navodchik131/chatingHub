@@ -51,6 +51,7 @@ const TEMPLATE_PATCHES = [
     /<script src="\.\/support\.js"><\/script>/,
     `<link rel="stylesheet" href="./mm-os-auth.css">
 <script src="./mm-os-api.js"></script>
+<script src="./mm-os-studio-scenarios.js"></script>
 <script src="./mm-os-bridge.js"></script>
 <script src="./mm-os-api-full.js"></script>
 <script src="./support.js"></script>`,
@@ -487,6 +488,18 @@ const FULL_API_PATCHES = [
   [
     /<input placeholder="\{\{ t\.donTitle \}\}" style="background:#0D0E11/,
     '<input data-mm-don-title placeholder="{{ t.donTitle }}" style="background:#0D0E11',
+  ],
+  [
+    /<div>\s*<div style="display:flex;justify-content:space-between;margin-bottom:8px;"><span style="font-family:'JetBrains Mono';font-size:9.5px;letter-spacing:1.8px;color:#6B7076;">\{\{ t\.prompt \}\}<\/span><span style="font-size:10.5px;color:#5C6066;">\{\{ t\.optional \}\}<\/span><\/div>\s*<textarea data-mm-studio-prompt rows="3"/,
+    '<sc-if value="{{ curMode.showPrompt }}" hint-placeholder-val="{{ false }}"><div><div style="font-family:\'JetBrains Mono\';font-size:9.5px;letter-spacing:1.8px;color:#6B7076;margin-bottom:8px;">{{ t.prompt }}</div><textarea data-mm-studio-prompt rows="3"',
+  ],
+  [
+    /<textarea data-mm-studio-prompt rows="3" placeholder="\{\{ curMode\.promptHint \}\}" style="width:100%;background:#0D0E11[^>]*><\/textarea>\s*<\/div>\s*<sc-if value="\{\{ showGenError \}\}"/,
+    '<textarea data-mm-studio-prompt rows="3" placeholder="{{ curMode.promptHint }}" style="width:100%;background:#0D0E11;border:1px solid rgba(255,255,255,.09);border-radius:10px;padding:10px 12px;color:#F2F3F0;font-family:\'Manrope\';font-size:12.5px;resize:vertical;outline:none;"></textarea></div></sc-if><sc-if value="{{ showGenError }}"',
+  ],
+  [
+    /<textarea rows="3" placeholder="\{\{ curMode\.promptHint \}\}" style="width:100%;background:#0D0E11/,
+    '<textarea data-mm-studio-prompt rows="3" placeholder="{{ curMode.promptHint }}" style="width:100%;background:#0D0E11',
   ],
   [
     /<textarea rows="3" placeholder="\{\{ t\.donDesc \}\}" style="background:#0D0E11/,

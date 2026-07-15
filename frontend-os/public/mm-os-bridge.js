@@ -197,6 +197,10 @@
                 delete store.uploadFiles.ref
                 delete store.uploadFiles.carousel
               }
+              if (slotKeyStr.endsWith(':1')) {
+                delete store.uploadFiles['outfit-cloth']
+                delete store.uploadFiles['location-photo']
+              }
               logic.forceUpdate()
             },
       }
@@ -680,10 +684,18 @@
       !!s.carouselPickId ||
       !!store.slotArchivePicks[slotStateKey('carousel', 0)]
     if (slotN > 0 && !hasFrame && !(mode === 'carousel' && hasCarouselSrc)) errs.push(t.errNoRef)
-    if (mode === 'outfit' && !store.uploadFiles['outfit-cloth']) errs.push(t.errNoRef)
-    if (mode === 'location' && !store.uploadFiles['location-photo']) errs.push(t.errNoRef)
-    if (mode === 'prompt' && !queryPromptTextarea()?.value?.trim()) errs.push(t.errNoPrompt)
-    if (!store.selectedModelId) errs.push(t.errNoChar)
+    if (mode === 'outfit') {
+      const hasCloth =
+        !!store.uploadFiles['outfit-cloth'] || !!store.slotArchivePicks[slotStateKey('outfit', 1)]
+      if (!hasCloth) errs.push(t.errNoRef)
+    }
+    if (mode === 'location') {
+      const hasLoc =
+        !!store.uploadFiles['location-photo'] || !!store.slotArchivePicks[slotStateKey('location', 1)]
+      if (!hasLoc) errs.push(t.errNoRef)
+    }
+    if (mode === 'prompt' && !resolveStudioPrompt('prompt')) errs.push(t.errNoPrompt)
+    if (mode !== 'outfit' && mode !== 'location' && !store.selectedModelId) errs.push(t.errNoChar)
     return errs
   }
 
@@ -983,8 +995,19 @@
   }
 
   function queryPromptTextarea() {
-    const imgs = document.querySelector('[data-screen-label="Студия — Картинки"]')
-    return imgs?.querySelector('textarea') || null
+    return document.querySelector('[data-mm-studio-prompt]')
+  }
+
+  function getModeDefaultPrompt(mode) {
+    const map = window.MMOS_STUDIO_SCENARIOS?.MODE_DEFAULT_PROMPTS
+    if (!map) return ''
+    return map[mode] || ''
+  }
+
+  function resolveStudioPrompt(mode) {
+    const fromField = (queryPromptTextarea()?.value || '').trim()
+    if (fromField) return fromField
+    return getModeDefaultPrompt(mode)
   }
 
   function queryMotionTextarea() {
@@ -1881,16 +1904,11 @@
     if (logic?.state?.emojiOpen) logic.setState({ emojiOpen: false })
   }
 
-  function imgModeToStudio(mode) {
-    const map = {
-      ref: 'model_scene',
-      swap: 'face_swap',
-      outfit: 'photo_edit',
-      location: 'photo_edit',
-      prompt: 'model',
-      carousel: 'carousel',
-    }
-    return map[mode] || 'model'
+  async function startWorkflowScenarioJob(built) {
+    const fd = new FormData()
+    fd.append('graph', JSON.stringify(built.graph))
+    fd.append('target_node_id', built.targetNodeId)
+    return API.postStudioJob('/api/studio/workflow/execute', fd)
   }
 
   async function runGenerate() {
@@ -1898,9 +1916,10 @@
     if (!logic) return
     const s = logic.state || {}
     const mode = s.imgMode || 'prompt'
-    const prompt = (queryPromptTextarea()?.value || '').trim()
+    const prompt = resolveStudioPrompt(mode)
     const modelId = store.selectedModelId
-    if (!modelId) {
+    const needsModel = mode === 'ref' || mode === 'swap' || mode === 'prompt'
+    if (needsModel && !modelId) {
       store.error = 'Выберите персонажа'
       logic.forceUpdate()
       return
@@ -1908,6 +1927,11 @@
     store.error = null
 
     if (mode === 'carousel') {
+      if (!modelId) {
+        store.error = 'Выберите персонажа'
+        logic.forceUpdate()
+        return
+      }
       const uploadFile = store.uploadFiles.carousel || store.uploadFiles.ref
       const srcId = uploadFile
         ? null
@@ -1968,11 +1992,11 @@
       return
     }
 
-    const model = store.models.find((m) => m.id === modelId)
+    const model = needsModel ? store.models.find((m) => m.id === modelId) : null
     const { item: optimistic, tempId } = createOptimisticArchiveItem({
       mediaKind: 'image',
       promptExcerpt: prompt || 'Генерация…',
-      studioModelId: modelId,
+      studioModelId: modelId || null,
       modelName: model?.name ?? null,
       outputAspect: store.selectedAspect,
     })
@@ -1981,26 +2005,26 @@
     scheduleArchivePoll()
 
     try {
-      const fd = new FormData()
-      fd.append('description', prompt)
-      fd.append('model_id', String(modelId))
-      fd.append('output_aspect', store.selectedAspect)
-      fd.append('studio_mode', imgModeToStudio(mode))
-      fd.append('studio_wave_profile', isNsfwMode(s) ? 'nsfw' : 'regular')
-      const wave = normalizeWaveModel(waveModelFromState(s), isNsfwMode(s))
-      fd.append('workflow_wave_model', wave.apiId)
-      if (wave.apiId === 'wan-2.7') fd.append('wan_edit_tier', wave.tier)
-      fd.append('generate_wavespeed', '1')
-      fd.append('wavespeed_single_reference', '1')
-      const frameArchId = store.slotArchivePicks[slotStateKey(mode, 0)]
-      const file = store.uploadFiles.ref
-      if (file && mode !== 'prompt') fd.append('image', file)
-      else if (frameArchId && mode !== 'prompt') fd.append('existing_generation_id', String(frameArchId))
-      const secondary = store.uploadFiles['outfit-cloth'] || store.uploadFiles['location-photo']
-      if (secondary && (mode === 'outfit' || mode === 'location') && !file && !frameArchId) {
-        fd.append('image', secondary, secondary.name || 'ref.jpg')
+      const scenarios = window.MMOS_STUDIO_SCENARIOS
+      if (!scenarios || typeof scenarios.buildGraphForMode !== 'function') {
+        throw new Error('Workflow-сценарии не загружены')
       }
-      const accepted = await API.postStudioJob('/api/studio/refine-prompt', fd)
+      const built = await scenarios.buildGraphForMode(mode, {
+        API,
+        store,
+        archiveThumbUrl,
+        s,
+        modelId,
+        userPrompt: prompt,
+        helpers: {
+          normalizeWaveModel,
+          waveModelFromState,
+          isNsfwMode,
+          slotStateKey,
+        },
+      })
+      if (!built) throw new Error('Неизвестный режим генерации')
+      const accepted = await startWorkflowScenarioJob(built)
       const realId = typeof accepted.generation_id === 'number' ? accepted.generation_id : null
       if (realId) {
         store.archiveImages = replaceOptimisticArchiveId(store.archiveImages, tempId, realId, {
@@ -2549,6 +2573,14 @@
 
     logic._lastT = vals.t
 
+    const imgModes = (vals.imgModes || []).map((im) => ({
+      ...im,
+      pick: () => {
+        logic.setState({ imgMode: im.id, showGenError: false })
+        logic.forceUpdate()
+      },
+    }))
+
     return {
       ...vals,
       t: { ...vals.t, hello },
@@ -2618,6 +2650,7 @@
       ffThumbLabel,
       lightboxData,
       curMode,
+      imgModes,
       emojiPick,
       emojiOpen: s.emojiOpen,
       toggleEmoji: () => logic.setState({ emojiOpen: !s.emojiOpen, msgReact: null }),
