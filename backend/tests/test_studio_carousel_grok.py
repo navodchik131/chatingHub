@@ -4,6 +4,7 @@ import pytest
 
 from app.services.studio_carousel import (
     build_carousel_grok_wave_prompt,
+    carousel_variation_at,
     parse_carousel_grok_prompts,
     static_carousel_variations,
 )
@@ -33,6 +34,7 @@ def test_build_carousel_grok_wave_prompt_includes_lock() -> None:
     assert "CAROUSEL" in body.upper() or "carousel" in body.lower()
     assert "Ruby in a kitchen" in body
     assert "Camera slightly higher" in body
+    assert "IDENTITY_REINFORCE" in body
 
 
 def test_static_carousel_variations_count() -> None:
@@ -41,11 +43,20 @@ def test_static_carousel_variations_count() -> None:
     assert all(isinstance(b, str) and b.strip() for b in blocks)
 
 
-def test_static_carousel_variations_gaze_diversity() -> None:
+def test_static_carousel_variations_identity_and_variety() -> None:
     blocks = static_carousel_variations(8)
     joined = " ".join(blocks).lower()
-    assert "profile" in joined or "off-frame" in joined or "off-camera" in joined
-    assert "shoulder" in joined or "away" in joined or "down" in joined
+    assert "same" in joined and "master" in joined
+    assert "right" in joined and "left" in joined
+    assert "back" in joined
+
+
+def test_carousel_variation_order_spreads_sides() -> None:
+    first_three = [carousel_variation_at(i).lower() for i in range(3)]
+    assert any("right" in s for s in first_three)
+    assert any("back" in s for s in first_three)
+    assert any("left" in s for s in first_three)
+    assert first_three[0] != first_three[1]
 
 
 def test_parse_carousel_grok_prompts_too_few_raises() -> None:

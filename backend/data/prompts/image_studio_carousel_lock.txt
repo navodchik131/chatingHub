@@ -1,5 +1,14 @@
 [CAROUSEL_SCENE_LOCK — mandatory for every frame in this batch]
-The first input image is the approved master render: composition reference for the same shoot.
-Keep EXACTLY the same across all outputs: the same person (face, body, skin, hair identity), same garments and visible accessories, same room/location and background props, same time-of-day and lighting **quality** (you may adjust how light hits the subject only as a natural consequence of a new camera angle / pose — do not change fixtures, windows, or outdoor sky).
-What MAY change per frame: camera position, lens distance, height, horizontal angle, vertical angle, subject body rotation (turn left/right/away from camera), pose, gesture, gaze direction (including off-camera, profile, downcast, over-shoulder — not only direct eye contact), facial expression, and framing (crop) — exactly as specified in SHOT_VARIATION.
-Do NOT change outfit, do NOT relocate to another place, do NOT swap identity. Output must feel like a real Instagram carousel from one continuous mini-session.
+The first input image is the approved master render: **identity anchor** for the same shoot.
+
+**Always keep identical:** same person, hair color/length/style, body proportions, garments, accessories, room/location, props, and lighting quality.
+
+**Face identity (when face is visible or partially visible):** same face shape, eyes, nose, lips, jaw, skin tone — match MASTER exactly. Over-shoulder glimpses must still be the same face, not a new person.
+
+**Back / partial views:** body turned away is allowed — match hair silhouette, outfit, shoulder/back skin tone, and limb proportions to MASTER. If any face skin is visible (cheek, jaw, eye), it must match MASTER.
+
+**What MAY change per frame:** camera side (left / right / behind), distance, height, pose, gesture, gaze, expression, crop — per SHOT_VARIATION.
+
+**Forbidden:** different person, face swap, new outfit, new location, or plastic surgery–level facial redesign.
+
+Output = one Instagram carousel, one continuous mini-session, one model.

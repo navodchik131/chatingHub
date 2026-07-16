@@ -1,15 +1,15 @@
-Camera: three-quarter from subject's LEFT, medium distance waist-up. Body turned ~35° away from lens; gaze looks off-frame to the left (not at camera); relaxed neutral lips. Same room behind.
+[SIDE:RIGHT_3Q] Camera from subject's RIGHT three-quarter (~35°), medium waist-up. Face fully visible; soft smile; gaze slightly past camera. Clear break from a left-facing master. Same exact face, hair, outfit, room as master.
 ---
-Camera: straight-on but farther back, full body. Subject looks DOWN at phone in both hands, candid everyday moment, soft natural smile. Same floor and walls.
+[SIDE:LEFT_3Q] Camera from subject's LEFT three-quarter (~35°), medium shot. Neutral expression; eyes toward lens. Opposite side from RIGHT_3Q frame. Same exact face, hair, outfit, room as master.
 ---
-Camera: low angle from front-right. Subject mid-laugh, head tilted slightly back, eyes softened (not staring into lens). Dynamic but believable phone snapshot.
+[SIDE:BACK_R] Camera behind-right: subject's back and right shoulder dominate; head turns over RIGHT shoulder with partial face visible (one eye, cheek, jaw must match master). One hand visible in natural pose. Same hair, outfit, body, room as master.
 ---
-Camera: near PROFILE from subject's RIGHT (≈80–90°), collarbone-to-top-of-head crop. Gaze forward in profile direction, thoughtful expression, lips relaxed. Background still the same room.
+[POSE:FULL] Straight-on or mild three-quarter, full body farther back. New pose: weight on one leg, opposite arm relaxed or on hip — visibly different stance than master. Face fully visible. Same exact face, hair, outfit, room as master.
 ---
-Camera: high three-quarter from BEHIND-left; subject's back and shoulder visible, head turned over RIGHT shoulder with a quick glance toward camera — body mostly facing away. Same outfit and location.
+[SIDE:PROFILE_R] Near-profile from RIGHT (~60°, not full 90°): face still mostly readable; thoughtful gaze along profile; collarbone-up crop. Same exact face features and hair as master.
 ---
-Camera: eye level from subject's RIGHT three-quarter, medium shot. One hand adjusts hair or rests on hip; eyes look past the camera to the right, introspective mood. Environment unchanged.
+[SIDE:LOW_L] Modest low angle from front-left three-quarter (~25°). Dynamic but natural; hair falls as in master. Face clearly visible. Same exact face, hair, outfit, room as master.
 ---
-Camera: wider shot from LEFT, environmental framing. Subject leans lightly against wall or furniture, looking toward window/light off-camera; relaxed candid posture.
+[SIDE:BACK_L] Camera behind-left: back and left shoulder; subject glances over LEFT shoulder — partial face must match master (same eye/cheek/jaw). Different back angle than BACK_R. Same hair, outfit, body, room as master.
 ---
-Camera: closer crop from slightly below chin level. Subtle asymmetric smirk; gaze upward past the lens; one shoulder closer to camera — different side than master if master was centered.
+[POSE:CLOSE] Medium-close, mild asymmetric framing from whichever three-quarter side differs most from master. Subtle expression change (smirk or soft laugh). Face dominant in frame. Same exact face and hair as master.

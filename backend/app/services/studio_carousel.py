@@ -120,14 +120,14 @@ def load_carousel_variation_blocks() -> list[str]:
     raw = _read_text("data/prompts/image_studio_carousel_variations.txt")
     if not raw:
         return [
-            "Camera: three-quarter from left; body turned away; gaze off-frame left; neutral expression. Same room.",
-            "Camera: full body straight-on; subject looks down at phone, candid soft smile. Same environment.",
-            "Camera: low angle; mid-laugh, head tilted, eyes not locked on lens. Same outfit and room.",
-            "Camera: near profile from right; gaze forward in profile; thoughtful mood. Same background.",
-            "Camera: back three-quarter from behind-left; glance over shoulder toward camera; body facing away.",
-            "Camera: right three-quarter medium; hand on hip; gaze past camera to the right.",
-            "Camera: wider left environmental; leaning casual; looking toward off-camera light.",
-            "Camera: close crop from below; subtle smirk; gaze up past lens; asymmetric framing.",
+            "[SIDE:LEFT_3Q] Camera LEFT three-quarter ~35°; face visible. Same exact face as master.",
+            "[SIDE:RIGHT_3Q] Camera RIGHT three-quarter ~35°; opposite side from LEFT. Same exact face as master.",
+            "[SIDE:BACK_R] Behind-right; over-shoulder partial face must match master. Same hair, outfit, body.",
+            "[POSE:FULL] Full body; new stance and arm pose. Face visible. Same exact face as master.",
+            "[SIDE:PROFILE_R] Near-profile right ~60°; face readable. Same exact face as master.",
+            "[SIDE:LOW_L] Low angle front-left three-quarter. Same exact face as master.",
+            "[SIDE:BACK_L] Behind-left; over-shoulder glance; partial face matches master.",
+            "[POSE:CLOSE] Medium-close; expression change. Same exact face as master.",
         ]
     parts = [b.strip() for b in raw.split("\n---\n") if b.strip()]
     return parts if parts else [
@@ -135,14 +135,41 @@ def load_carousel_variation_blocks() -> list[str]:
     ]
 
 
+_CAROUSEL_VARIATION_ORDER = (
+    1,  # RIGHT three-quarter first — break from typical left-facing master
+    2,  # back over right shoulder
+    0,  # LEFT three-quarter
+    6,  # back over left shoulder
+    3,  # full-body pose change
+    4,  # near-profile right
+    5,  # low angle left
+    7,  # close expression variant
+)
+
+
+def carousel_variation_at(shot_index: int) -> str:
+    blocks = load_carousel_variation_blocks()
+    if not blocks:
+        return "Camera: medium three-quarter; small pose change. Same person as master."
+    order = _CAROUSEL_VARIATION_ORDER
+    idx = order[shot_index % len(order)] % len(blocks)
+    return blocks[idx]
+
+
+_CAROUSEL_IDENTITY_REINFORCE = (
+    "\n\n[IDENTITY_REINFORCE] Same person as the master input — match face whenever visible; "
+    "match hair, outfit, body, and skin on any visible skin. Never swap to a different model."
+)
+
+
 def build_carousel_wave_prompt(*, master_refined_json: str, shot_index: int) -> str:
     lock = load_carousel_lock_text()
-    blocks = load_carousel_variation_blocks()
-    v = blocks[shot_index % len(blocks)]
+    v = carousel_variation_at(shot_index)
     base = (master_refined_json or "").strip()
     return (
         f"{lock}\n\nBASE_SCENE_JSON (source of truth for styling — do not delete identity or wardrobe cues):\n"
         f"{base}\n\n[SHOT_VARIATION — this frame only]\n{v}"
+        f"{_CAROUSEL_IDENTITY_REINFORCE}"
     )
 
 
@@ -153,12 +180,13 @@ def build_carousel_grok_wave_prompt(*, master_scene_context: str, shot_variation
     return (
         f"{lock}\n\nBASE_SCENE (from master frame):\n{base}\n\n"
         f"[SHOT_VARIATION — this frame only]\n{variation}"
+        f"{_CAROUSEL_IDENTITY_REINFORCE}"
     )
 
 
 def static_carousel_variations(count: int) -> list[str]:
-    blocks = load_carousel_variation_blocks()
-    return [blocks[i % len(blocks)] for i in range(count)]
+    n = max(2, min(8, int(count)))
+    return [carousel_variation_at(i) for i in range(n)]
 
 
 async def grok_compose_carousel_prompts(
@@ -175,9 +203,10 @@ async def grok_compose_carousel_prompts(
     system = load_grok_carousel_compose_system()
     n = max(2, min(8, int(count)))
     direction = (user_direction or "").strip() or (
-        "Vary camera side (left/right/profile/back three-quarter), distance, and height across frames. "
-        "Mix gaze: off-camera, down at hands, profile, over-shoulder — avoid every frame staring into the lens. "
-        "Vary expressions (neutral, smile, candid laugh, thoughtful). Same outfit and room."
+        "Plan a varied carousel SET: infer master's camera side, then frame 1 must use a DIFFERENT side. "
+        "Include left AND right three-quarter, at least one back/over-shoulder view, and a pose change. "
+        "Keep the same person — face must match master when visible; hair/outfit/body on back shots. "
+        "Vary gaze and expression. Same outfit and room."
     )
     scene = (master_scene_text or "").strip()
 
