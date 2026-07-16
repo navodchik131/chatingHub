@@ -67,6 +67,10 @@
     firstFrameGenId: null,
     opRights: { chat: true, studio: true, models: true, keys: false, billing: false },
     opModelIds: null,
+    authTab: 'login',
+    telegramBotUsername: null,
+    telegramWidgetCleanup: null,
+    referralCode: null,
   }
 
   const AI_MODEL_MAP = {
@@ -207,10 +211,33 @@
     })
   }
 
+  function carouselPerFrameCost() {
+    const n = Number(store.health?.studio_carousel_credit_cost)
+    return Number.isFinite(n) && n >= 0 ? n : 2
+  }
+
+  function fmtCarouselGenerateCost(lang, count) {
+    const perFrame = carouselPerFrameCost()
+    const frames = Math.max(2, Math.min(8, Number(count) || 4))
+    const total = perFrame * frames
+    const cr = lang === 'ru' ? 'кр' : 'cr'
+    if (lang === 'ru') {
+      return `−${total} ${cr} (${perFrame} ${cr}/кадр × ${frames})`
+    }
+    return `−${total} ${cr} (${perFrame} ${cr}/frame × ${frames})`
+  }
+
+  function fmtCarouselModeCardCost(lang) {
+    const perFrame = carouselPerFrameCost()
+    const cr = lang === 'ru' ? 'кр' : 'cr'
+    return lang === 'ru' ? `−${perFrame} ${cr}/кадр` : `−${perFrame} ${cr}/frame`
+  }
+
   function mapCurMode(logic, vals) {
     const s = logic.state
     const base = vals.curMode || {}
     const mode = s.imgMode || 'ref'
+    const lang = s.lang || 'ru'
     const segSm = (on) =>
       'flex:1;text-align:center;font-family:JetBrains Mono;font-size:9px;letter-spacing:.5px;padding:4px 8px;border-radius:6px;cursor:pointer;' +
       (on ? 'background:#D7F452;color:#171A05;font-weight:800;' : 'color:#9BA0A6;')
@@ -230,7 +257,11 @@
         archiveMini: mkArchiveMiniGrid(logic, sk),
       }
     })
-    return { ...base, slots }
+    const out = { ...base, slots }
+    if (mode === 'carousel') {
+      out.cost = fmtCarouselGenerateCost(lang, s.carouselCount)
+    }
+    return out
   }
 
   async function copyText(text) {
@@ -911,14 +942,151 @@
     }
   }
 
+  function readReferralCodeFromUrl() {
+    try {
+      const ref = new URLSearchParams(global.location.search).get('ref')
+      return ref ? ref.trim().toUpperCase() : null
+    } catch {
+      return null
+    }
+  }
+
+  async function afterAuthSuccess() {
+    store.me = await API.apiJson('/api/auth/me')
+    store.authed = true
+    if (store.me?.email_setup_required) {
+      showAuth(true)
+      updateAuthUi()
+      return
+    }
+    showAuth(false)
+    await refreshAll()
+    connectWs()
+    const first = store.conversations[0]
+    if (first) void loadMessages(first.id)
+    store.logic?.forceUpdate()
+  }
+
+  async function loadAuthConfig() {
+    store.referralCode = readReferralCodeFromUrl()
+    try {
+      const h = await API.apiJson('/api/health')
+      store.health = h
+      if (h.telegram_login_configured && h.telegram_login_bot_username) {
+        store.telegramBotUsername = String(h.telegram_login_bot_username).trim().replace(/^@/, '')
+      } else {
+        store.telegramBotUsername = null
+      }
+    } catch {
+      store.telegramBotUsername = null
+    }
+  }
+
+  function mountAuthTelegramWidget() {
+    if (typeof store.telegramWidgetCleanup === 'function') {
+      store.telegramWidgetCleanup()
+      store.telegramWidgetCleanup = null
+    }
+    const host = document.getElementById('mm-os-auth-telegram-host')
+    const wrap = document.getElementById('mm-os-auth-telegram')
+    const divider = document.getElementById('mm-os-auth-or-email')
+    if (!host || !wrap) return
+
+    const member = (document.getElementById('mm-os-auth-member')?.value || '').trim()
+    const showTg =
+      !!store.telegramBotUsername &&
+      global.MMOS_TELEGRAM_LOGIN &&
+      (store.authTab === 'register' || (store.authTab === 'login' && !member))
+
+    wrap.style.display = showTg ? 'flex' : 'none'
+    if (divider) divider.style.display = showTg ? 'flex' : 'none'
+    host.replaceChildren()
+    if (!showTg) return
+
+    store.telegramWidgetCleanup = global.MMOS_TELEGRAM_LOGIN.mountTelegramLoginWidget(
+      host,
+      store.telegramBotUsername,
+      (user) => {
+        void telegramAuth(user)
+      },
+    )
+  }
+
+  async function telegramAuth(user) {
+    store.busy = true
+    store.error = null
+    updateAuthUi()
+    const busyEl = document.getElementById('mm-os-auth-telegram-busy')
+    if (busyEl) busyEl.style.display = 'block'
+    try {
+      const res = await global.MMOS_TELEGRAM_LOGIN.postTelegramAuth(
+        '/api/auth/telegram',
+        user,
+        store.referralCode,
+      )
+      const data = await API.readJson(res)
+      if (!res.ok) throw new Error(API.formatDetail(data) || 'Telegram login failed')
+      API.setToken(data.access_token)
+      await afterAuthSuccess()
+    } catch (e) {
+      store.error = e.message || String(e)
+      updateAuthUi()
+    } finally {
+      store.busy = false
+      if (busyEl) busyEl.style.display = 'none'
+      updateAuthUi()
+    }
+  }
+
+  async function completeOwnerEmail() {
+    const email = (document.getElementById('mm-os-auth-complete-email')?.value || '').trim()
+    const password = document.getElementById('mm-os-auth-complete-pass')?.value || ''
+    if (!email || password.length < 8) {
+      store.error = 'Укажите email и пароль (мин. 8 символов)'
+      updateAuthUi()
+      return
+    }
+    store.busy = true
+    store.error = null
+    updateAuthUi()
+    try {
+      const data = await API.apiJson('/api/auth/email/complete', {
+        method: 'POST',
+        body: JSON.stringify({ email, password }),
+      })
+      API.setToken(data.access_token)
+      showAuth(false)
+      await refreshAll()
+      connectWs()
+      store.logic?.forceUpdate()
+    } catch (e) {
+      store.error = e.message || String(e)
+      updateAuthUi()
+    } finally {
+      store.busy = false
+      updateAuthUi()
+    }
+  }
+
+  function setAuthTab(tab) {
+    store.authTab = tab === 'register' ? 'register' : 'login'
+    store.error = null
+    updateAuthUi()
+    mountAuthTelegramWidget()
+  }
   function showAuth(show) {
     const el = document.getElementById('mm-os-auth')
     if (el) el.style.display = show ? 'flex' : 'none'
     const root = document.querySelector('[data-screen-label="ModelMate OS"]')?.parentElement
     if (root) root.style.visibility = show ? 'hidden' : 'visible'
+    if (show) {
+      updateAuthUi()
+      mountAuthTelegramWidget()
+    }
   }
 
   async function bootAuth() {
+    await loadAuthConfig()
     const token = API.getToken()
     if (!token) {
       store.authed = false
@@ -929,11 +1097,15 @@
     try {
       store.me = await API.apiJson('/api/auth/me')
       store.authed = true
-      showAuth(false)
-      await refreshAll()
-      connectWs()
-      const first = store.conversations[0]
-      if (first) void loadMessages(first.id)
+      if (store.me?.email_setup_required) {
+        showAuth(true)
+      } else {
+        showAuth(false)
+        await refreshAll()
+        connectWs()
+        const first = store.conversations[0]
+        if (first) void loadMessages(first.id)
+      }
     } catch {
       API.setToken(null)
       store.authed = false
@@ -941,6 +1113,28 @@
     } finally {
       store.authReady = true
       store.logic?.forceUpdate()
+    }
+  }
+
+  async function register(email, password) {
+    store.busy = true
+    store.error = null
+    updateAuthUi()
+    try {
+      const body = { email, password }
+      if (store.referralCode) body.referral_code = store.referralCode
+      const data = await API.apiJson('/api/auth/register', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      })
+      API.setToken(data.access_token)
+      await afterAuthSuccess()
+    } catch (e) {
+      store.error = e.message || String(e)
+      updateAuthUi()
+    } finally {
+      store.busy = false
+      updateAuthUi()
     }
   }
 
@@ -957,13 +1151,7 @@
         body: JSON.stringify(body),
       })
       API.setToken(data.access_token)
-      store.authed = true
-      showAuth(false)
-      await refreshAll()
-      connectWs()
-      const first = store.conversations[0]
-      if (first) void loadMessages(first.id)
-      store.logic?.forceUpdate()
+      await afterAuthSuccess()
     } catch (e) {
       store.error = e.message || String(e)
       updateAuthUi()
@@ -976,20 +1164,77 @@
   function updateAuthUi() {
     const err = document.getElementById('mm-os-auth-err')
     const btn = document.getElementById('mm-os-auth-submit')
+    const pass = document.getElementById('mm-os-auth-pass')
+    const memberWrap = document.getElementById('mm-os-auth-member-wrap')
+    const tabLogin = document.getElementById('mm-os-auth-tab-login')
+    const tabRegister = document.getElementById('mm-os-auth-tab-register')
+    const emailComplete = document.getElementById('mm-os-auth-email-complete')
+    const referral = document.getElementById('mm-os-auth-referral')
+    const isRegister = store.authTab === 'register'
+    const needsEmail = !!store.me?.email_setup_required
+
     if (err) err.textContent = store.error || ''
-    if (btn) btn.disabled = store.busy
+    if (btn) {
+      btn.disabled = store.busy
+      btn.textContent = needsEmail
+        ? 'Войти'
+        : isRegister
+          ? 'Зарегистрироваться'
+          : 'Войти'
+    }
+    if (pass) pass.autocomplete = isRegister ? 'new-password' : 'current-password'
+    if (memberWrap) memberWrap.style.display = !needsEmail && !isRegister ? 'block' : 'none'
+    if (tabLogin) tabLogin.classList.toggle('is-active', store.authTab === 'login' && !needsEmail)
+    if (tabRegister) tabRegister.classList.toggle('is-active', store.authTab === 'register' && !needsEmail)
+    if (emailComplete) emailComplete.classList.toggle('is-visible', needsEmail)
+    if (referral) {
+      if (store.referralCode && !needsEmail) {
+        referral.style.display = 'block'
+        referral.textContent = 'Реферальный код: ' + store.referralCode
+      } else {
+        referral.style.display = 'none'
+        referral.textContent = ''
+      }
+    }
+    const tabs = document.querySelector('.mm-os-auth-tabs')
+    if (tabs) tabs.style.display = needsEmail ? 'none' : 'flex'
+    const credentials = document.getElementById('mm-os-auth-credentials')
+    if (credentials) credentials.style.display = needsEmail ? 'none' : 'block'
+    const telegram = document.getElementById('mm-os-auth-telegram')
+    const orEmail = document.getElementById('mm-os-auth-or-email')
+    if (telegram && needsEmail) telegram.style.display = 'none'
+    if (orEmail && needsEmail) orEmail.style.display = 'none'
+    const subtitle = document.getElementById('mm-os-auth-subtitle')
+    if (subtitle) {
+      subtitle.textContent = needsEmail
+        ? 'Завершите настройку аккаунта после входа через Telegram.'
+        : 'Войдите или зарегистрируйтесь — тем же аккаунтом, что и в основном кабинете.'
+    }
   }
 
   function bindAuthForm() {
     const form = document.getElementById('mm-os-auth-form')
     if (!form || form.dataset.bound) return
     form.dataset.bound = '1'
+
+    document.getElementById('mm-os-auth-tab-login')?.addEventListener('click', () => setAuthTab('login'))
+    document.getElementById('mm-os-auth-tab-register')?.addEventListener('click', () => setAuthTab('register'))
+    document.getElementById('mm-os-auth-member')?.addEventListener('input', () => mountAuthTelegramWidget())
+    document.getElementById('mm-os-auth-complete-submit')?.addEventListener('click', () => {
+      void completeOwnerEmail()
+    })
+
     form.addEventListener('submit', (e) => {
       e.preventDefault()
+      if (store.me?.email_setup_required) return
       const email = document.getElementById('mm-os-auth-email')?.value || ''
       const password = document.getElementById('mm-os-auth-pass')?.value || ''
       const member = document.getElementById('mm-os-auth-member')?.value || ''
-      void login(email, password, member.trim() || null)
+      if (store.authTab === 'register') {
+        void register(email, password)
+      } else {
+        void login(email, password, member.trim() || null)
+      }
     })
   }
 
@@ -2629,6 +2874,7 @@
 
     const imgModes = (vals.imgModes || []).map((im) => ({
       ...im,
+      ...(im.id === 'carousel' ? { cost: fmtCarouselModeCardCost(lang) } : {}),
       pick: () => {
         logic.setState({ imgMode: im.id, showGenError: false })
         logic.forceUpdate()
@@ -2782,6 +3028,9 @@
       logout: () => {
         API.setToken(null)
         store.authed = false
+        store.me = null
+        store.error = null
+        setAuthTab('login')
         showAuth(true)
         logic.forceUpdate()
       },
@@ -2826,6 +3075,7 @@
     store,
     refreshAll,
     login,
+    register,
     logout: () => API.setToken(null),
     runGenerate,
     runGenerateVideo,

@@ -33,24 +33,53 @@ const AUTH_OVERLAY = `
 <div id="mm-os-auth" class="mm-os-auth" style="display:none">
   <form id="mm-os-auth-form" class="mm-os-auth-card">
     <h1>ModelMate OS</h1>
-    <p>Войдите тем же аккаунтом, что и в текущем кабинете.</p>
+    <p id="mm-os-auth-subtitle">Войдите или зарегистрируйтесь — тем же аккаунтом, что и в основном кабинете.</p>
+    <div id="mm-os-auth-referral" class="mm-os-auth-referral" style="display:none"></div>
+    <div class="mm-os-auth-tabs" role="tablist" aria-label="Авторизация">
+      <button type="button" id="mm-os-auth-tab-login" class="mm-os-auth-tab is-active" data-auth-tab="login">Вход</button>
+      <button type="button" id="mm-os-auth-tab-register" class="mm-os-auth-tab" data-auth-tab="register">Регистрация</button>
+    </div>
+    <div id="mm-os-auth-telegram" class="mm-os-auth-telegram" style="display:none">
+      <div id="mm-os-auth-telegram-host" class="mm-os-auth-telegram-host"></div>
+      <div id="mm-os-auth-telegram-busy" class="mm-os-auth-telegram-busy" style="display:none">Проверяем Telegram…</div>
+    </div>
+    <div id="mm-os-auth-or-email" class="mm-os-auth-divider" style="display:none">или email</div>
+    <div id="mm-os-auth-credentials">
     <label for="mm-os-auth-email">Email</label>
-    <input id="mm-os-auth-email" type="email" autocomplete="username" required>
+    <input id="mm-os-auth-email" type="email" autocomplete="email" required>
     <label for="mm-os-auth-pass">Пароль</label>
     <input id="mm-os-auth-pass" type="password" autocomplete="current-password" required>
-    <label for="mm-os-auth-member">Логин оператора (необязательно)</label>
-    <input id="mm-os-auth-member" type="text" autocomplete="username">
-    <div id="mm-os-auth-err" class="mm-os-auth-err"></div>
+    <div id="mm-os-auth-member-wrap" class="mm-os-auth-member">
+      <label for="mm-os-auth-member">Логин оператора (необязательно)</label>
+      <input id="mm-os-auth-member" type="text" autocomplete="username">
+    </div>
     <button id="mm-os-auth-submit" type="submit" class="mm-os-auth-submit">Войти</button>
+    <p class="mm-os-auth-hint">Пароль — минимум 8 символов.</p>
+    </div>
+    <div id="mm-os-auth-err" class="mm-os-auth-err"></div>
+    <div id="mm-os-auth-email-complete" class="mm-os-auth-email-complete">
+      <p style="margin:0 0 12px;font-size:13px;color:#9BA0A6;line-height:1.5;">Вы вошли через Telegram. Укажите email и пароль для входа без Telegram и оплат.</p>
+      <label for="mm-os-auth-complete-email">Email</label>
+      <input id="mm-os-auth-complete-email" type="email" autocomplete="email">
+      <label for="mm-os-auth-complete-pass">Пароль</label>
+      <input id="mm-os-auth-complete-pass" type="password" autocomplete="new-password">
+      <button type="button" id="mm-os-auth-complete-submit" class="mm-os-auth-submit" style="margin-top:14px;">Сохранить email</button>
+    </div>
   </form>
 </div>`
 
 /** Подстановки в шаблон: хардкод макета → биндинги API */
 const TEMPLATE_PATCHES = [
   [
+    /<meta name="viewport" content="width=device-width, initial-scale=1">/,
+    `<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="./favicon.ico" type="image/x-icon">`,
+  ],
+  [
     /<script src="\.\/support\.js"><\/script>/,
     `<link rel="stylesheet" href="./mm-os-auth.css">
 <script src="./mm-os-api.js"></script>
+<script src="./mm-os-telegram-login.js"></script>
 <script src="./mm-os-studio-scenarios.js"></script>
 <script src="./mm-os-bridge.js"></script>
 <script src="./mm-os-api-full.js"></script>
