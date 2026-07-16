@@ -27,6 +27,39 @@
 
   const DONATION_SEEN_KEY_PREFIX = 'mm_creator_donation_last_seen_event_'
 
+  const ICO_ADMIN = {
+    __html:
+      '<svg viewBox="0 0 24 24" width="100%" height="100%" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' +
+      '<path d="M12 3l8 3.5v5.5c0 4.5-3.2 7.8-8 9-4.8-1.2-8-4.5-8-9V6.5z"/>' +
+      '<path d="M9 12l2 2 4-4"/>' +
+      '</svg>',
+  }
+
+  function adminNavItem(lang) {
+    const label = lang === 'ru' ? 'Админ-панель' : 'Admin panel'
+    return {
+      label,
+      icon: ICO_ADMIN,
+      badge: false,
+      go: () => {
+        window.location.assign('/admin')
+      },
+      style:
+        'display:flex;align-items:center;gap:11px;padding:8px 10px;border-radius:10px;font-size:13px;cursor:pointer;color:#FB923C;font-weight:700;',
+    }
+  }
+
+  function adminMoreItem(lang) {
+    return {
+      label: lang === 'ru' ? 'Админ-панель' : 'Admin panel',
+      desc: lang === 'ru' ? 'Пользователи, тарифы, аналитика' : 'Users, plans, analytics',
+      icon: ICO_ADMIN,
+      go: () => {
+        window.location.assign('/admin')
+      },
+    }
+  }
+
   function readDonationLastSeenEventId(userId) {
     if (!userId) return 0
     try {
@@ -3158,7 +3191,7 @@
       writeDonationLastSeenEventId(ownerId, store.donationOverview.latest_event_id)
     }
 
-    const navGroups = (vals.navGroups || []).map((grp) => ({
+    let navGroups = (vals.navGroups || []).map((grp) => ({
       ...grp,
       items: grp.items.map((it) => {
         let badge = it.badge
@@ -3172,6 +3205,20 @@
         return { ...it, badge }
       }),
     }))
+
+    if (me?.is_platform_admin) {
+      const adminItem = adminNavItem(lang)
+      navGroups = navGroups.map((grp) =>
+        grp.label === vals.t.grpSettings
+          ? { ...grp, items: [...grp.items, adminItem] }
+          : grp,
+      )
+    }
+
+    let moreItems = [...(vals.moreItems || [])]
+    if (me?.is_platform_admin) {
+      moreItems = [...moreItems, adminMoreItem(lang)]
+    }
 
     const chatFilters = [
       { label: (lang === 'ru' ? 'Все · ' : 'All · ') + convs.length, style: chipOn },
@@ -3325,6 +3372,7 @@
       planDisplayName: planName,
       planUntil: me?.subscription_period_end ? fmtDateShort(me.subscription_period_end) : '—',
       navGroups,
+      moreItems,
       recentDialogs,
       recentFrames,
       recentFramesEmpty: recentFrames.length === 0,
