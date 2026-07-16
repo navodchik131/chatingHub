@@ -1651,7 +1651,13 @@ class Component extends DCLogic {
     const stDim = chipBase + 'background:rgba(255,255,255,.06);color:#9BA0A6;border:1px solid rgba(255,255,255,.1);';
 
     // ─── nav ───
-    const go = (page) => () => setS({ page, connDetail: null, charDetail: null, moreOpen: false });
+    const go = (page) => () => {
+      if (page === 'workflow') {
+        window.location.assign('/workspace/workflow')
+        return
+      }
+      setS({ page, connDetail: null, charDetail: null, moreOpen: false })
+    };
     const navItem = (id, label, icon, badge) => ({
       label, icon, badge: badge || false, go: go(id),
       style: 'display:flex;align-items:center;gap:11px;padding:8px 10px;border-radius:10px;font-size:13px;cursor:pointer;' +

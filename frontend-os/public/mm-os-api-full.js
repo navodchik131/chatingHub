@@ -933,8 +933,10 @@
       const box = wf.querySelector('div[style*="max-width"]') || wf.firstElementChild
       if (box) {
         const a = document.createElement('a')
-        a.href = (global.location?.origin || '') + '/'
-        a.textContent = 'Открыть Workflow в полном кабинете →'
+        a.href = '/workspace/workflow'
+        a.textContent = (bridge.store.logic?.state?.lang === 'en')
+          ? 'Open Workflow editor →'
+          : 'Открыть Workflow в полном кабинете →'
         a.style.cssText = 'display:inline-block;margin-top:12px;font-weight:800;color:#D7F452;'
         box.appendChild(a)
       }

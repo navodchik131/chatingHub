@@ -1581,16 +1581,22 @@ class Component extends DCLogic {
     const stDim = chipBase + 'background:rgba(255,255,255,.06);color:#9BA0A6;border:1px solid rgba(255,255,255,.1);';
 
     // ─── nav ───
-    const go = (page) => () => setS({ page, connDetail: null, charDetail: null, moreOpen: false });
+    const go = (page) => () => {
+      if (page === 'workflow') {
+        window.location.assign('/workspace/workflow')
+        return
+      }
+      setS({ page, connDetail: null, charDetail: null, moreOpen: false })
+    };
     const navItem = (id, label, icon, badge) => ({
       label, icon, badge: badge || false, go: go(id),
       style: 'display:flex;align-items:center;gap:11px;padding:8px 10px;border-radius:10px;font-size:13px;cursor:pointer;' +
         (s.page === id ? 'background:rgba(215,244,82,.1);color:#D7F452;font-weight:800;' : 'color:#B7BBC0;font-weight:600;')
     });
     const navGroups = [
-      { label: t.grpWork, items: [navItem('overview', t.navOverview, icoGrid), navItem('dialogs', t.navDialogs, icoChat, '2')] },
+      { label: t.grpWork, items: [navItem('overview', t.navOverview, icoGrid), navItem('dialogs', t.navDialogs, icoChat)] },
       { label: t.grpStudio, items: [navItem('images', t.navImages, icoImage), navItem('video', t.navVideo, icoFilm), navItem('characters', t.navCharacters, icoStar), navItem('workflow', t.navWorkflow, icoFlow, 'PRO')] },
-      { label: t.grpMoney, items: [navItem('donations', t.navDonations, icoHeart, '1'), navItem('billing', t.navBilling, icoCard)] },
+      { label: t.grpMoney, items: [navItem('donations', t.navDonations, icoHeart), navItem('billing', t.navBilling, icoCard)] },
       { label: t.grpSettings, items: [navItem('connections', t.navConnections, icoPlug), navItem('team', t.navTeam, icoTeam)] }
     ];
     const pageTitles = { overview: t.navOverview, dialogs: t.navDialogs, images: t.navImages, video: t.navVideo, characters: t.navCharacters, workflow: t.navWorkflow, donations: t.navDonations, billing: t.navBilling, connections: t.navConnections, team: t.navTeam };
