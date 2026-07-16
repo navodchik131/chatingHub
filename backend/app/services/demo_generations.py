@@ -43,13 +43,44 @@ def demo_generations_grant() -> int:
     return max(0, int(settings.demo_generations_grant))
 
 
+MODEL_PROFILE_GEN_KIND = "studio_model_profile_generate"
+
+
+async def owner_used_model_profile_generation(
+    session: AsyncSession, owner_id: int
+) -> bool:
+    row = (
+        await session.execute(
+            select(UsageEvent.id)
+            .where(
+                UsageEvent.user_id == owner_id,
+                UsageEvent.kind == MODEL_PROFILE_GEN_KIND,
+            )
+            .limit(1)
+        )
+    ).first()
+    return row is not None
+
+
+def model_profile_generation_free(
+    *,
+    plan: str,
+    demo_remaining: int,
+    prior_profile_generation: bool,
+) -> bool:
+    """Первая генерация описания по фото — бесплатно; на Credits также пока есть демо."""
+    if not prior_profile_generation:
+        return True
+    return is_credits_plan(plan) and demo_remaining > 0
+
+
 def onboarding_wizard_profile_free(
     *,
     plan: str,
     demo_remaining: int,
     onboarding_wizard: bool,
 ) -> bool:
-    """Сбор профиля в визарде «первая картинка» — без кредитов, пока есть демо-слоты."""
+    """Legacy: визард передаёт onboarding_wizard=1 — бесплатно на Credits с демо."""
     if not onboarding_wizard:
         return False
     if not is_credits_plan(plan):

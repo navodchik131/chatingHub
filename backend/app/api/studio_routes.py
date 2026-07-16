@@ -67,7 +67,8 @@ from app.services.billing_plan import is_credits_plan, normalize_billing_plan
 from app.services.credits import ensure_can_consume_credits, record_usage
 from app.services.demo_generations import (
     assert_demo_only_user_model_allowed,
-    onboarding_wizard_profile_free,
+    model_profile_generation_free,
+    owner_used_model_profile_generation,
     parse_onboarding_wizard_flag,
     prepare_studio_image_billing,
     raise_studio_access_denied,
@@ -2085,10 +2086,11 @@ async def api_generate_model_profile(
             detail="Пустые файлы",
         )
     cost = apply_studio_credit_cost(plan, settings.credit_cost_studio_model_profile_generate)
-    if onboarding_wizard_profile_free(
+    prior_profile = await owner_used_model_profile_generation(session, oid)
+    if model_profile_generation_free(
         plan=plan,
         demo_remaining=_demo,
-        onboarding_wizard=parse_onboarding_wizard_flag(onboarding_wizard),
+        prior_profile_generation=prior_profile,
     ):
         cost = 0
     billing = await ensure_can_consume_credits(session, user, cost)

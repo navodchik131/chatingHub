@@ -1,4 +1,42 @@
-from app.services.demo_generations import onboarding_wizard_profile_free, parse_onboarding_wizard_flag
+from app.services.demo_generations import (
+    model_profile_generation_free,
+    onboarding_wizard_profile_free,
+    parse_onboarding_wizard_flag,
+)
+
+
+def test_model_profile_free_first_time_any_plan():
+    assert model_profile_generation_free(
+        plan="standard",
+        demo_remaining=0,
+        prior_profile_generation=False,
+    )
+    assert model_profile_generation_free(
+        plan="credits",
+        demo_remaining=0,
+        prior_profile_generation=False,
+    )
+
+
+def test_model_profile_not_free_repeat_without_credits():
+    assert not model_profile_generation_free(
+        plan="standard",
+        demo_remaining=0,
+        prior_profile_generation=True,
+    )
+    assert not model_profile_generation_free(
+        plan="credits",
+        demo_remaining=0,
+        prior_profile_generation=True,
+    )
+
+
+def test_model_profile_free_repeat_credits_with_demo():
+    assert model_profile_generation_free(
+        plan="credits",
+        demo_remaining=3,
+        prior_profile_generation=True,
+    )
 
 
 def test_onboarding_wizard_profile_free_credits_with_demo():
@@ -17,11 +55,11 @@ def test_onboarding_wizard_profile_not_free_without_demo():
     )
 
 
-def test_onboarding_wizard_profile_not_free_standard():
+def test_onboarding_wizard_profile_not_free_without_flag():
     assert not onboarding_wizard_profile_free(
-        plan="standard",
+        plan="credits",
         demo_remaining=3,
-        onboarding_wizard=True,
+        onboarding_wizard=False,
     )
 
 
