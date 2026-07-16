@@ -1,6 +1,5 @@
 import { useEffect } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { useTranslation } from 'react-i18next'
 
 import { syncI18nMarketingLocale } from '../../i18n'
 import {
@@ -17,7 +16,6 @@ import {
 
 /** Синхрон URL ↔ i18n, hreflang, авто-локаль при первом визите. */
 export function MarketingI18nSync() {
-  const { i18n } = useTranslation('marketing')
   const location = useLocation()
   const navigate = useNavigate()
 
@@ -109,10 +107,6 @@ export function MarketingI18nSync() {
       /* оставляем alternate на всех маркетинг-страницах */
     }
   }, [location.pathname, location.search, urlLocale])
-
-  useEffect(() => {
-    void i18n.changeLanguage(urlLocale)
-  }, [urlLocale, i18n])
 
   return null
 }

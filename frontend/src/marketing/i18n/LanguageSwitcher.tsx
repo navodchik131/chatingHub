@@ -10,7 +10,7 @@ import {
 } from './marketingLocale'
 
 export function LanguageSwitcher() {
-  const { i18n, t } = useTranslation('marketing')
+  const { t } = useTranslation('marketing')
   const location = useLocation()
   const navigate = useNavigate()
   const current = localeFromPathname(location.pathname)
@@ -18,7 +18,6 @@ export function LanguageSwitcher() {
   const setLocale = (next: MarketingLocale) => {
     if (next === current) return
     persistMarketingLocale(next)
-    void i18n.changeLanguage(next)
     const base = stripMarketingLocalePrefix(location.pathname)
     navigate(
       {
@@ -26,7 +25,7 @@ export function LanguageSwitcher() {
         search: location.search,
         hash: location.hash,
       },
-      { replace: false },
+      { replace: true },
     )
   }
 

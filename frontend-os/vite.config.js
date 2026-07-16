@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url'
 
 const root = path.dirname(fileURLToPath(import.meta.url))
 
-/** На бою за nginx: VITE_BASE_PATH=/os/ (см. docker-compose.prod.yml). Локально — /. */
+/** На бою за nginx: VITE_BASE_PATH=/workspace/ (см. docker-compose.prod.yml). Локально — /. */
 const base = process.env.VITE_BASE_PATH || '/'
 
 /** Новый кабинет на базе DesignCode-макета. Старый frontend/ не трогаем. */

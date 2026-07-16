@@ -2,12 +2,14 @@
 
 ## Адреса
 
-| Кабинет | URL |
-|---------|-----|
-| Старый (как сейчас) | https://model-mate.online/ |
-| Новый OS | https://model-mate.online/os/ |
+| Раздел | URL |
+|--------|-----|
+| Маркетинг (лендинг, pricing, login) | https://model-mate.online/ |
+| **Кабинет OS** | https://model-mate.online/workspace/ |
+| Workflow (пока старый редактор) | https://model-mate.online/workspace/workflow |
+| Старый путь (редирект) | https://model-mate.online/os/ → `/workspace/` |
 
-Оба работают параллельно, один API и одна БД. Cookie `chating_token` общий (path=/).
+Один API и одна БД. Cookie `chating_token` общий (path=/).
 
 ## Деплой на сервер (один раз + обновления)
 
@@ -15,46 +17,51 @@
 cd /opt/chatinghub   # или ваш каталог проекта
 git pull
 
-# Собрать с base path /os/ для production
-docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
-
-# Nginx (первый раз)
+# Nginx (при смене конфига)
 sudo cp deploy/nginx-model-mate.online.conf /etc/nginx/sites-available/model-mate.online
 sudo ln -sf /etc/nginx/sites-available/model-mate.online /etc/nginx/sites-enabled/
 sudo nginx -t && sudo systemctl reload nginx
+
+# Собрать: маркетинг (api) + кабинет OS с base /workspace/
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build api frontend-os
 ```
 
-## Обновление после правок в frontend-os
+## Обновление после правок
+
+**Только кабинет OS:**
 
 ```bash
-cd /opt/chatinghub
 git pull
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build frontend-os
 ```
 
-## Обновление только старого кабинета
+**Только маркетинг / favicon:**
 
 ```bash
-docker compose up -d --build api
+git pull
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build api
 ```
 
 ## Проверка
 
 ```bash
-curl -sI https://model-mate.online/os/ | head -5
+curl -sI https://model-mate.online/workspace/ | head -5
+curl -sI https://model-mate.online/os/ | head -3    # должен быть 301 → /workspace/
 curl -s https://model-mate.online/api/health
 docker compose ps
 ```
 
-## Локальная разработка (без /os/)
+## Локальная разработка (без /workspace/)
 
 ```bash
 docker compose up -d --build          # frontend-os на http://127.0.0.1:5180/ (base /)
 ```
 
+Маркетинг + старый `/workspace` в dev: `cd frontend && npm run dev` или api на :8080.
+
 ## CORS
 
-При доступе через `https://model-mate.online/os/` запросы идут на `https://model-mate.online/api/` — тот же origin, отдельный CORS не нужен.
+При доступе через `https://model-mate.online/workspace/` запросы идут на `https://model-mate.online/api/` — тот же origin, отдельный CORS не нужен.
 
 В `backend/.env` на всякий случай:
 

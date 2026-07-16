@@ -2,7 +2,7 @@
 FROM node:22-alpine AS build
 WORKDIR /app
 
-# На production: --build-arg VITE_BASE_PATH=/os/
+# На production: --build-arg VITE_BASE_PATH=/workspace/
 ARG VITE_BASE_PATH=/
 ENV VITE_BASE_PATH=$VITE_BASE_PATH
 

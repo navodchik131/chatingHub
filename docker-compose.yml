@@ -47,7 +47,7 @@ services:
       # Cookies IG-бота на хосте (не в git) — без bind mount контейнер их не видит.
       - ./backend/ig-bot:/app/backend/ig-bot:ro
 
-  # Новый кабинет (макет OS). Старый SPA по-прежнему на http://127.0.0.1:8080/
+  # Новый кабинет OS. На production за nginx: /workspace/ (см. deploy/nginx-model-mate.online.conf).
   frontend-os:
     build:
       context: .
