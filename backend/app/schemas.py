@@ -1153,6 +1153,31 @@ class AdminDayCount(BaseModel):
     count: int
 
 
+class AdminMonthRevenue(BaseModel):
+    month: str
+    label: str
+    amount_rub: int = 0
+
+
+class AdminPlanShare(BaseModel):
+    label: str
+    count: int
+    pct: float = 0.0
+
+
+class AdminGenerationTypeShare(BaseModel):
+    label: str
+    count: int
+    pct: float = 0.0
+    color: str = "#D7F452"
+
+
+class AdminEngineShare(BaseModel):
+    label: str
+    count: int
+    model_id: str = ""
+
+
 class AdminSegmentItemOut(BaseModel):
     user_id: int | None = None
     email: str | None = None
@@ -1225,6 +1250,16 @@ class AdminStatsOut(BaseModel):
     conversations_total: int = 0
     referrals_total: int = 0
     yookassa_payments_total: int = 0
+    payments_total: int = 0
+    revenue_total_rub: int = 0
+    revenue_month_rub: int = 0
+    revenue_month_change_pct: float = 0.0
+    donations_total_rub: int = 0
+    donations_count: int = 0
+    revenue_by_month: list[AdminMonthRevenue] = []
+    top_plans: list[AdminPlanShare] = []
+    generations_by_type: list[AdminGenerationTypeShare] = []
+    top_engines: list[AdminEngineShare] = []
     subscriptions_by_status: list[AdminLabelCount] = []
     subscriptions_by_plan: list[AdminLabelCount] = []
     registrations_by_day: list[AdminDayCount] = []

@@ -9,7 +9,19 @@
     "eyebrow": "ModelMate · платформа",
     "title": "Админ-панель",
     "refresh": "Обновить",
-    "backToCabinet": "← Кабинет"
+    "backToCabinet": "Кабинет"
+  },
+  "shell": {
+    "adminAccess": "ADMIN ACCESS",
+    "navAria": "Разделы админ-панели",
+    "topEyebrow": "ADMIN · MODELMATE",
+    "live": "LIVE",
+    "overviewTitle": "Обзор платформы",
+    "usersTitle": "Пользователи",
+    "emailTitle": "Рассылки",
+    "exifBotTitle": "EXIF-бот",
+    "igBotTitle": "IG-бот",
+    "creatorDonationsTitle": "Донаты креаторов"
   },
   "tabs": {
     "overview": "Обзор",
@@ -93,7 +105,20 @@
       "yookassaPayments": "Оплат (ЮKassa)",
       "yookassaPaymentsHint": "клик — кто оплатил и что",
       "referrals": "По рефералке",
-      "referralsHint": "зарегистрировались по приглашению"
+      "referralsHint": "зарегистрировались по приглашению",
+      "paymentsTotal": "Оплат всего",
+      "paymentsTotalHint": "ЮKassa + Tribute + донаты",
+      "activeSubscriptions": "Активных подписок",
+      "activeSubscriptionsHint": "{{pct}}% от владельцев",
+      "revenueTotal": "Выручка за всё время",
+      "revenueTotalHint": "платежи и донаты",
+      "revenueMonth": "Выручка за месяц",
+      "revenueMonthUp": "+{{pct}}% к прошлому месяцу",
+      "revenueMonthDown": "−{{pct}}% к прошлому месяцу",
+      "revenueMonthFlat": "как в прошлом месяце",
+      "donationsTotal": "Донатов за всё время",
+      "donationsTotalHint": "через Tribute · {{count}} шт.",
+      "generationsTotal": "Генераций всего"
     },
     "drill": {
       "yookassaPayments": "Оплаты ЮKassa",
@@ -138,6 +163,15 @@
       "generations": "Генерации в архиве (30 дн.)",
       "subscriptionsByStatus": "Подписки по статусу",
       "subscriptionsByPlan": "Оплачиваемые тарифы (active / trialing / past_due)",
+      "revenueByMonth": "Выручка по месяцам",
+      "last12mo": "12 мес.",
+      "topPlans": "Тарифы по популярности",
+      "genByType": "Генерации по типу",
+      "topEngines": "AI-движки по загрузке",
+      "images": "Картинки",
+      "videos": "Видео",
+      "total": "ВСЕГО",
+      "noEngines": "Пока нет данных по движкам",
       "noDataPeriod": "Нет данных за период",
       "noData": "Нет данных",
       "totalForPeriod": " · {{total}} за период"

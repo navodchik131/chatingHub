@@ -31,3 +31,12 @@ export function formatShortDate(iso: string): string {
   if (Number.isNaN(d.getTime())) return iso.slice(5)
   return d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' })
 }
+
+export function formatRub(amount: number): string {
+  const n = Math.max(0, Math.round(amount))
+  if (n >= 1_000_000) {
+    const m = n / 1_000_000
+    return `${m >= 10 ? Math.round(m) : m.toFixed(2).replace(/\.?0+$/, '')} млн ₽`
+  }
+  return `${n.toLocaleString('ru-RU')} ₽`
+}

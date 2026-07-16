@@ -9,7 +9,19 @@
     "eyebrow": "ModelMate · platform",
     "title": "Admin panel",
     "refresh": "Refresh",
-    "backToCabinet": "← Dashboard"
+    "backToCabinet": "Dashboard"
+  },
+  "shell": {
+    "adminAccess": "ADMIN ACCESS",
+    "navAria": "Admin sections",
+    "topEyebrow": "ADMIN · MODELMATE",
+    "live": "LIVE",
+    "overviewTitle": "Platform overview",
+    "usersTitle": "Users",
+    "emailTitle": "Email campaigns",
+    "exifBotTitle": "EXIF bot",
+    "igBotTitle": "IG bot",
+    "creatorDonationsTitle": "Creator donations"
   },
   "tabs": {
     "overview": "Overview",
@@ -93,7 +105,20 @@
       "yookassaPayments": "Payments (YooKassa)",
       "yookassaPaymentsHint": "click — who paid and what",
       "referrals": "Via referral",
-      "referralsHint": "signed up via invitation"
+      "referralsHint": "signed up via invitation",
+      "paymentsTotal": "Total payments",
+      "paymentsTotalHint": "YooKassa + Tribute + donations",
+      "activeSubscriptions": "Active subscriptions",
+      "activeSubscriptionsHint": "{{pct}}% of owners",
+      "revenueTotal": "Lifetime revenue",
+      "revenueTotalHint": "payments and donations",
+      "revenueMonth": "Revenue this month",
+      "revenueMonthUp": "+{{pct}}% vs last month",
+      "revenueMonthDown": "−{{pct}}% vs last month",
+      "revenueMonthFlat": "same as last month",
+      "donationsTotal": "Lifetime donations",
+      "donationsTotalHint": "via Tribute · {{count}} total",
+      "generationsTotal": "Total generations"
     },
     "drill": {
       "yookassaPayments": "YooKassa payments",
@@ -138,6 +163,15 @@
       "generations": "Archive generations (30d)",
       "subscriptionsByStatus": "Subscriptions by status",
       "subscriptionsByPlan": "Paid plans (active / trialing / past_due)",
+      "revenueByMonth": "Revenue by month",
+      "last12mo": "12 mo.",
+      "topPlans": "Plans by popularity",
+      "genByType": "Generations by type",
+      "topEngines": "AI engines by load",
+      "images": "Images",
+      "videos": "Videos",
+      "total": "TOTAL",
+      "noEngines": "No engine data yet",
       "noDataPeriod": "No data for period",
       "noData": "No data",
       "totalForPeriod": " · {{total}} for period"

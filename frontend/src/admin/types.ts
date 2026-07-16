@@ -63,6 +63,31 @@ export interface AdminEngagementStats {
   new_paid_active_30d_pct: number
 }
 
+export interface AdminMonthRevenue {
+  month: string
+  label: string
+  amount_rub: number
+}
+
+export interface AdminPlanShare {
+  label: string
+  count: number
+  pct: number
+}
+
+export interface AdminGenerationTypeShare {
+  label: string
+  count: number
+  pct: number
+  color: string
+}
+
+export interface AdminEngineShare {
+  label: string
+  count: number
+  model_id?: string
+}
+
 export interface AdminStats {
   total_users: number
   workspace_owners: number
@@ -78,6 +103,16 @@ export interface AdminStats {
   conversations_total: number
   referrals_total: number
   yookassa_payments_total: number
+  payments_total: number
+  revenue_total_rub: number
+  revenue_month_rub: number
+  revenue_month_change_pct: number
+  donations_total_rub: number
+  donations_count: number
+  revenue_by_month: AdminMonthRevenue[]
+  top_plans: AdminPlanShare[]
+  generations_by_type: AdminGenerationTypeShare[]
+  top_engines: AdminEngineShare[]
   subscriptions_by_status: AdminLabelCount[]
   subscriptions_by_plan: AdminLabelCount[]
   registrations_by_day: AdminDayCount[]
