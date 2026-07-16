@@ -436,9 +436,24 @@ input::placeholder,textarea::placeholder{color:#5C6066;}
                 </div>
               </sc-for>
             </div>
+            <sc-if value="{{ noteFormOpen }}" hint-placeholder-val="{{ false }}">
+            <div style="padding:12px;border-top:1px solid rgba(255,255,255,.07);display:flex;flex-direction:column;gap:9px;">
+              <div style="font-family:'JetBrains Mono';font-size:9px;letter-spacing:1.4px;color:#6B7076;">{{ t.noteTag }}</div>
+              <div style="display:flex;gap:5px;flex-wrap:wrap;">
+                <sc-for list="{{ noteTagChips }}" as="nt" hint-placeholder-count="3">
+                  <span onClick="{{ nt.pick }}" style="{{ nt.style }}">{{ nt.label }}</span>
+                </sc-for>
+              </div>
+              <textarea data-mm-note-text rows="3" placeholder="{{ t.noteTextPh }}" style="width:100%;background:#0D0E11;border:1px solid rgba(255,255,255,.09);border-radius:10px;padding:9px 12px;color:#F2F3F0;font-family:'Manrope';font-size:12px;line-height:1.5;resize:vertical;outline:none;"></textarea>
+              <div style="display:flex;gap:6px;">
+                <div onClick="{{ saveNote }}" style="flex:1;background:rgba(215,244,82,.12);border:1px solid rgba(215,244,82,.3);border-radius:9px;padding:8px;text-align:center;font-size:12px;font-weight:800;color:#D7F452;cursor:pointer;" style-hover="background:rgba(215,244,82,.2);">{{ t.save }}</div>
+                <div onClick="{{ closeNote }}" style="border:1px solid rgba(255,255,255,.12);border-radius:9px;padding:8px 14px;text-align:center;font-size:12px;font-weight:700;color:#9BA0A6;cursor:pointer;" style-hover="border-color:rgba(255,255,255,.3);">{{ t.opCancel }}</div>
+              </div>
+            </div>
+            </sc-if>
             <div style="padding:10px 12px;border-top:1px solid rgba(255,255,255,.07);display:flex;gap:6px;">
-              <div style="flex:1;border:1px solid rgba(255,255,255,.12);border-radius:9px;padding:7px;text-align:center;font-size:11.5px;font-weight:700;color:#C084FC;cursor:pointer;" style-hover="border-color:#C084FC;">✦ AI-{{ t.analysis }}</div>
-              <div data-mm-note-add style="flex:1;background:rgba(215,244,82,.12);border:1px solid rgba(215,244,82,.3);border-radius:9px;padding:7px;text-align:center;font-size:11.5px;font-weight:700;color:#D7F452;cursor:pointer;" style-hover="background:rgba(215,244,82,.2);">+ {{ t.addNote }}</div>
+              <div data-mm-note-analyze style="flex:1;border:1px solid rgba(255,255,255,.12);border-radius:9px;padding:7px;text-align:center;font-size:11.5px;font-weight:700;color:#C084FC;cursor:pointer;" style-hover="border-color:#C084FC;">✦ AI-{{ t.analysis }}</div>
+              <div onClick="{{ toggleNote }}" style="flex:1;background:rgba(215,244,82,.12);border:1px solid rgba(215,244,82,.3);border-radius:9px;padding:7px;text-align:center;font-size:11.5px;font-weight:700;color:#D7F452;cursor:pointer;" style-hover="background:rgba(215,244,82,.2);">+ {{ t.addNote }}</div>
             </div>
           </div>
           </sc-if>
@@ -1421,6 +1436,7 @@ class Component extends DCLogic {
     isMobile: false, chatOpen: 0,
     chatFilter: 'all', chatPlatform: 'all', mobileChat: false,
     msgReact: null, emojiOpen: false, reactions: {},
+    noteFormOpen: false, noteTag: 0,
     contentMode: 'sfw', aiModel: 'nano', carouselCount: 4, slotSource: {},
     hasFirstFrame: 'yes', vidQuality: '1080', vidFormat: '9:16', vidTime: '5',
     charTab: 'photos', lightbox: null,
@@ -1483,7 +1499,7 @@ class Component extends DCLogic {
       searchDialogs: 'Поиск по диалогам…', persona: 'персонаж', replyLang: 'язык ответа',
       msgPlaceholder: 'Сообщение на русском — уйдёт перевод на язык фана…', send: 'Отправить',
       attach: 'Прикрепить картинку', noDialogs: 'Нет диалогов под фильтр',
-      fanNotes: 'Досье фана', analysis: 'анализ', addNote: 'Заметка',
+      fanNotes: 'Досье фана', analysis: 'анализ', addNote: 'Заметка', noteTag: 'ТЕГ ЗАМЕТКИ', noteTextPh: 'Что важно помнить о фане…',
       imagesDesc: 'Пять способов создать кадр персонажа. Выберите режим — подсказки внутри.',
       videoDesc: 'Оживите готовый кадр: выберите его из архива и опишите движение.',
       charactersDesc: 'Персонажи — это ваши виртуальные модели (девушки): фото-референсы, описание внешности, персона для AI-компаньона и EXIF «как с телефона».',
@@ -1553,7 +1569,7 @@ class Component extends DCLogic {
       searchDialogs: 'Search dialogs…', persona: 'character', replyLang: 'reply language',
       msgPlaceholder: 'Type in Russian — it will be translated for the fan…', send: 'Send',
       attach: 'Attach image', noDialogs: 'No dialogs match the filter',
-      fanNotes: 'Fan dossier', analysis: 'analysis', addNote: 'Note',
+      fanNotes: 'Fan dossier', analysis: 'analysis', addNote: 'Note', noteTag: 'NOTE TAG', noteTextPh: 'What to remember about the fan…',
       imagesDesc: 'Five ways to create a character frame. Pick a mode — hints inside.',
       videoDesc: 'Animate a finished frame: pick it from the archive and describe the motion.',
       charactersDesc: 'Characters are your virtual models: photo references, appearance description, AI companion persona and phone-like EXIF.',

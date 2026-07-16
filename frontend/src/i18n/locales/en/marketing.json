@@ -289,6 +289,232 @@
       "link": "Questions about Credits, Standard, and Pro →"
     }
   },
+  "landingV2": {
+    "compare": {
+      "eyebrow": "Before / after",
+      "title": "Five tabs — or one dashboard.",
+      "before": "The usual way",
+      "after": "With ModelMate",
+      "rows": [
+        { "label": "Tools", "before": "5+ subscriptions", "after": "1 dashboard" },
+        { "label": "Model look", "before": "from scratch each time", "after": "character remembered" },
+        { "label": "Fan translation", "before": "wooden, robotic", "after": "natural auto-translate" },
+        { "label": "Team", "before": "sheets & chaos", "after": "roles, KPI, templates" },
+        { "label": "Money", "before": "scattered", "after": "donations & payouts inside" }
+      ]
+    },
+    "solution": {
+      "eyebrow": "Solution · ModelMate",
+      "titleBefore": "One dashboard — ",
+      "titleAccent": "the whole",
+      "titleAfter": " OFM cycle."
+    },
+    "stepsAria": "How it works",
+    "steps": [
+      {
+        "title": "Create a character",
+        "desc": "References, look, persona and EXIF — once."
+      },
+      {
+        "title": "Generate content",
+        "desc": "6 photo modes + video for any scenario."
+      },
+      {
+        "title": "Chat & earn",
+        "desc": "Auto-translated chats, AI companion and donations."
+      }
+    ],
+    "modulesAria": "Dashboard sections",
+    "modules": [
+      {
+        "tag": "STUDIO",
+        "title": "Generation for your content",
+        "desc": "Six guided modes, engine and format choice, built-in archive with lightbox — all in one studio window.",
+        "points": [
+          "SFW/NSFW and engine choice (Nano Banana, GPT Image, Seedream, Wan)",
+          "Outfit & location swap from two references",
+          "Upload or pick a frame from archive",
+          "Carousel — a coherent series"
+        ]
+      },
+      {
+        "tag": "DIALOGS",
+        "title": "Dialogs & AI companion",
+        "desc": "Unified inbox across channels with auto-translate, reactions and attachments. AI replies as the character.",
+        "points": [
+          "Status & platform filters",
+          "Reactions, emoji, attachments",
+          "Blocked / deleted markers",
+          "Fan dossier with notes & AI analysis"
+        ]
+      },
+      {
+        "tag": "VIDEO",
+        "title": "Animate a frame into video",
+        "desc": "Pick a character, add reference video, set or generate the first frame — get a clip in the quality you need.",
+        "points": [
+          "Character & source frame",
+          "First-frame generation",
+          "720p / 1080p / 4K",
+          "9:16, 16:9, 1:1 formats"
+        ]
+      },
+      {
+        "tag": "CHARACTERS",
+        "title": "A character is your model",
+        "desc": "Build the model once: tagged references, appearance, persona and EXIF. Then it works everywhere.",
+        "points": [
+          "Tagged references (face, body, turnaround)",
+          "Appearance & generate-from-photo",
+          "Persona for the AI companion",
+          "Phone-like EXIF & model history"
+        ]
+      },
+      {
+        "tag": "MONEY",
+        "title": "Donations & payouts",
+        "desc": "Collect donations via Tribute (Telegram and Web links), track incoming and withdraw funds.",
+        "points": [
+          "Telegram & Web donation links",
+          "Incoming, hold & payout history",
+          "Withdraw in USDT or TON",
+          "Referral program"
+        ]
+      }
+    ],
+    "modesSection": {
+      "eyebrow": "Image studio",
+      "title": "6 generation modes",
+      "sub": "Each mode is built for one job. Below — what it does and how the result looks."
+    },
+    "modes": [
+      {
+        "title": "From reference",
+        "desc": "Upload a sample — get a close frame with your character: pose, light and style preserved."
+      },
+      {
+        "title": "Face Swap",
+        "desc": "The character's face replaces the face in any frame — outfit and background stay."
+      },
+      {
+        "title": "Outfit swap",
+        "desc": "Two inputs: frame and clothing photo. We move the outfit onto your model."
+      },
+      {
+        "title": "Location swap",
+        "desc": "Frame stays, background changes: beach, airport, café — from a location photo or prompt."
+      },
+      {
+        "title": "From prompt",
+        "desc": "Free-form text generation — the character comes from its card with full look and EXIF."
+      },
+      {
+        "title": "Carousel",
+        "desc": "A coherent series from one photo — for posts and stories. Set the frame count."
+      }
+    ],
+    "enginesSection": {
+      "eyebrow": "AI engines",
+      "title": "Pick the model for the job.",
+      "sub": "SFW and NSFW engines switch right in the studio — by content type."
+    },
+    "engines": [
+      "Fast, great skin & light",
+      "Prompt & composition accurate",
+      "Photoreal 18+, detail",
+      "Body & pose detail"
+    ],
+    "ba": {
+      "eyebrow": "Before / after",
+      "title": "See how the modes work.",
+      "sub": "Drag the slider to compare the source frame with the generated result.",
+      "tabs": ["Face Swap", "Outfit", "Location"],
+      "before": "Source",
+      "after": "Result"
+    },
+    "duoAria": "Telegram and referral program",
+    "telegram": {
+      "title": "Telegram channel",
+      "desc": "News, mode guides, case studies and new-engine announcements. Join the community of OFM teams.",
+      "cta": "Subscribe"
+    },
+    "referralStatFriend": "credits per friend",
+    "referralStatPay": "of each payment",
+    "countersTitle": "Platform numbers",
+    "counters": [
+      "frames generated",
+      "dialogs / week",
+      "studio modes",
+      "AI engines"
+    ],
+    "reviewsSection": {
+      "eyebrow": "Reviews",
+      "title": "What teams say."
+    },
+    "reviewsPrev": "Previous review",
+    "reviewsNext": "Next review",
+    "reviews": [
+      {
+        "quote": "Three models in one dashboard — we stopped losing context between chatters. Donations grew thanks to natural translation.",
+        "name": "Alex",
+        "role": "OFM agency, 6 models"
+      },
+      {
+        "quote": "Face Swap and location swap replaced 80% of manual design work. Frames ready in minutes.",
+        "name": "Marina",
+        "role": "solo creator"
+      },
+      {
+        "quote": "Own WaveSpeed key on Pro — we pay real cost, no markup. Team works by roles.",
+        "name": "Denis",
+        "role": "studio, 4 operators"
+      }
+    ],
+    "faqSection": {
+      "eyebrow": "FAQ",
+      "title": "Frequent questions."
+    },
+    "faq": [
+      {
+        "q": "How to pay and what are credits?",
+        "a": "1 credit = 3.6 ₽, spent on generations. Pay by card, credits or Tribute. On Pro, generations run on your WaveSpeed key."
+      },
+      {
+        "q": "Is NSFW content allowed?",
+        "a": "Yes. The studio has an SFW/NSFW switch; 18+ uses Seedream 5 Pro and Wan 2.7 Pro."
+      },
+      {
+        "q": "Why my own WaveSpeed key on Pro?",
+        "a": "You connect a wavespeed.ai API key and pay the provider directly at real cost — no platform credits spent."
+      },
+      {
+        "q": "How to withdraw donation money?",
+        "a": "Donations go via Tribute. Withdraw in USDT or TON, 2% fee, respecting Tribute hold."
+      },
+      {
+        "q": "Does it work on mobile?",
+        "a": "Yes, ModelMate is a PWA: installs from the browser with push notifications on iOS, Android and desktop."
+      }
+    ],
+    "security": {
+      "eyebrow": "Security",
+      "title": "Your data stays yours.",
+      "items": [
+        {
+          "title": "Model privacy",
+          "desc": "References and characters are visible only to your workspace and operators with rights."
+        },
+        {
+          "title": "Frame storage",
+          "desc": "Generations are stored ~4 days — download what matters; archive is always at hand."
+        },
+        {
+          "title": "Keys & tokens",
+          "desc": "API keys and channel tokens are encrypted, owner-only."
+        }
+      ]
+    }
+  },
   "pricingPage": {
     "eyebrow": "Pricing · YooKassa",
     "title": "Pricing",

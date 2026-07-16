@@ -867,28 +867,6 @@
     }
   }
 
-  async function addConversationNote() {
-    const open = bridge.store.logic?.state?.chatOpen ?? 0
-    const conv = store.conversations[open]
-    if (!conv) return
-    const text = prompt('Текст заметки')
-    if (!text?.trim()) return
-    store.busy = true
-    try {
-      await API.apiJson('/api/conversations/' + conv.id + '/notes', {
-        method: 'POST',
-        body: JSON.stringify({ content: text.trim(), kind: 'note' }),
-      })
-      const nr = await API.apiJson('/api/conversations/' + conv.id + '/notes')
-      store.notes = Array.isArray(nr) ? nr : []
-    } catch (e) {
-      store.error = e.message || String(e)
-    } finally {
-      store.busy = false
-      bridge.store.logic?.forceUpdate()
-    }
-  }
-
   function outReferralLink() {
     return store.referral?.referral_link || ''
   }
@@ -909,7 +887,6 @@
     bindOnce(document.querySelector('[data-mm-don-create]'), createDonationLink)
     bindOnce(document.querySelector('[data-mm-don-draft]'), saveDonationDraft)
     bindOnce(document.querySelector('[data-mm-snippet-add]'), addSnippet)
-    bindOnce(document.querySelector('[data-mm-note-add]'), addConversationNote)
     bindOnce(document.querySelector('[data-mm-logout]'), () => {
       API.setToken(null)
       store.authed = false

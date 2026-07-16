@@ -134,6 +134,73 @@
     { kind: 'other', ru: 'Основная камера', en: 'Main camera' },
   ]
 
+  const NOTE_TAG_DEFS = [
+    { ru: 'ПРОФИЛЬ', en: 'PROFILE', col: '#D7F452', bg: 'rgba(215,244,82' },
+    { ru: 'КОНТЕКСТ', en: 'CONTEXT', col: '#FB923C', bg: 'rgba(251,146,60' },
+    { ru: 'ВАЖНО', en: 'IMPORTANT', col: '#F87171', bg: 'rgba(248,113,113' },
+  ]
+
+  function noteTagStyle(tagBase, col, bg) {
+    return tagBase + 'background:' + bg + ',.15);color:' + col + ';'
+  }
+
+  function parseManualNote(content, lang) {
+    const text = (content || '').trim()
+    for (const td of NOTE_TAG_DEFS) {
+      const label = lang === 'ru' ? td.ru : td.en
+      const prefix = '[' + label + ']'
+      if (text.toUpperCase().startsWith(prefix)) {
+        return {
+          tag: label,
+          text: text.slice(prefix.length).trim(),
+          col: td.col,
+          bg: td.bg,
+        }
+      }
+    }
+    return null
+  }
+
+  function noteToView(n, lang) {
+    const tagBase =
+      "font-family:'JetBrains Mono';font-size:8.5px;letter-spacing:1.2px;padding:2px 7px;border-radius:5px;"
+    const kind = n.kind || 'manual'
+    if (kind === 'ai_profile') {
+      return {
+        tag: lang === 'ru' ? 'ПРОФИЛЬ' : 'PROFILE',
+        tagStyle: noteTagStyle(tagBase, '#D7F452', 'rgba(215,244,82'),
+        text: n.content || '',
+      }
+    }
+    if (kind === 'ai_daily') {
+      return {
+        tag: lang === 'ru' ? 'КОНТЕКСТ' : 'CONTEXT',
+        tagStyle: noteTagStyle(tagBase, '#FB923C', 'rgba(251,146,60'),
+        text: n.content || '',
+      }
+    }
+    if (kind === 'ai_insight') {
+      return {
+        tag: 'AI',
+        tagStyle: tagBase + 'background:rgba(192,132,252,.15);color:#C084FC;',
+        text: n.content || '',
+      }
+    }
+    const parsed = parseManualNote(n.content, lang)
+    if (parsed) {
+      return {
+        tag: parsed.tag,
+        tagStyle: noteTagStyle(tagBase, parsed.col, parsed.bg),
+        text: parsed.text || n.content || '',
+      }
+    }
+    return {
+      tag: lang === 'ru' ? 'ЗАМЕТКА' : 'NOTE',
+      tagStyle: noteTagStyle(tagBase, '#D7F452', 'rgba(215,244,82'),
+      text: n.content || '',
+    }
+  }
+
   function fmtCredits(n) {
     const v = Math.max(0, Math.round(Number(n) || 0))
     return String(v)
@@ -2871,14 +2938,55 @@
       }
     })
 
-    const tagBase =
-      "font-family:'JetBrains Mono';font-size:8.5px;letter-spacing:1.2px;padding:2px 7px;border-radius:5px;"
-    const notes = store.notes.map((n) => ({
-      tag: (n.kind || 'NOTE').toUpperCase(),
-      tagStyle: tagBase + 'background:rgba(215,244,82,.15);color:#D7F452;',
-      when: fmtDateShort(n.updated_at || n.created_at),
-      text: n.content || '',
-    }))
+    const noteLang = s.lang || 'ru'
+    const noteTagChips = NOTE_TAG_DEFS.map((nt, i) => {
+      const label = noteLang === 'ru' ? nt.ru : nt.en
+      const active = (s.noteTag ?? 0) === i
+      return {
+        label,
+        style:
+          'font-family:JetBrains Mono;font-size:8.5px;letter-spacing:1px;padding:3px 10px;border-radius:6px;cursor:pointer;' +
+          (active
+            ? nt.bg + ',.18);color:' + nt.col + ';border:1px solid ' + nt.bg + ',.4);'
+            : 'background:rgba(255,255,255,.05);color:#9BA0A6;border:1px solid rgba(255,255,255,.1);'),
+        pick: () => logic.setState({ noteTag: i }),
+      }
+    })
+    const notes = store.notes.map((n) => {
+      const view = noteToView(n, noteLang)
+      return {
+        ...view,
+        when: fmtDateShort(n.updated_at || n.created_at),
+      }
+    })
+
+    async function saveConversationNote() {
+      const text = document.querySelector('[data-mm-note-text]')?.value?.trim()
+      if (!text) return
+      const open = logic.state.chatOpen ?? 0
+      const conv = store.conversations[open]
+      if (!conv) return
+      const td = NOTE_TAG_DEFS[s.noteTag ?? 0] || NOTE_TAG_DEFS[0]
+      const label = noteLang === 'ru' ? td.ru : td.en
+      const content = '[' + label + '] ' + text
+      store.busy = true
+      try {
+        await API.apiJson('/api/conversations/' + conv.id + '/notes', {
+          method: 'POST',
+          body: JSON.stringify({ content }),
+        })
+        const nr = await API.apiJson('/api/conversations/' + conv.id + '/notes')
+        store.notes = Array.isArray(nr) ? nr : []
+        const ta = document.querySelector('[data-mm-note-text]')
+        if (ta) ta.value = ''
+        logic.setState({ noteFormOpen: false })
+      } catch (e) {
+        store.error = e.message || String(e)
+      } finally {
+        store.busy = false
+        logic.forceUpdate()
+      }
+    }
 
     const archiveFrames = store.archiveImages.map((item, i) =>
       archiveToFrame(item, i, logic, vals),
@@ -3193,6 +3301,15 @@
       emojiPick,
       emojiOpen: s.emojiOpen,
       toggleEmoji: () => logic.setState({ emojiOpen: !s.emojiOpen, msgReact: null }),
+      noteFormOpen: !!s.noteFormOpen,
+      noteTagChips,
+      toggleNote: () => logic.setState({ noteFormOpen: !s.noteFormOpen }),
+      closeNote: () => {
+        const ta = document.querySelector('[data-mm-note-text]')
+        if (ta) ta.value = ''
+        logic.setState({ noteFormOpen: false })
+      },
+      saveNote: () => void saveConversationNote(),
       backToList: () => logic.setState({ mobileChat: false, msgReact: null, emojiOpen: false }),
       closePops: () => {
         if (s.msgReact !== null || s.emojiOpen) logic.setState({ msgReact: null, emojiOpen: false })
