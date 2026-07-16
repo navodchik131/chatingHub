@@ -1514,6 +1514,13 @@ html {
   to { transform: translateX(-50%); }
 }
 
+.mm-landing-compare .mm-display-lg,
+.mm-landing-reviews .mm-display-lg,
+.mm-landing-faq .mm-display-lg,
+.mm-landing-security .mm-display-lg {
+  margin-bottom: 1.75rem;
+}
+
 .mm-landing-compare__table-wrap {
   background: var(--bg-2);
   border: 1px solid var(--border-1);
