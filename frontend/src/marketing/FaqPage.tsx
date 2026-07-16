@@ -5,6 +5,7 @@ import { renderWithWavespeedRef } from '../billing/wavespeedRefLink'
 import { MmContainer } from './components/MmUi'
 import { usePublicHealth } from './usePublicHealth'
 import { useMarketingPath } from './i18n/useMarketingPath'
+import { WORKSPACE_URL } from './workspaceEntry'
 
 type FaqItemData = {
   question: string
@@ -17,9 +18,9 @@ function FaqAnswerParagraph({ text }: { text: string }) {
   if (text.includes('→') && (lower.includes('вход') || lower.includes('sign in') || lower.includes('log in'))) {
     return (
       <p>
-        <Link to={path('/login')} className="mm-link-arrow">
+        <a href={WORKSPACE_URL} className="mm-link-arrow">
           {text}
-        </Link>
+        </a>
       </p>
     )
   }

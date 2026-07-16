@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { useMarketingPath } from '../i18n/useMarketingPath'
+import { isWorkspaceAuthPath, WORKSPACE_URL } from '../workspaceEntry'
 
 export function MmContainer({ children, className = '' }: { children: ReactNode; className?: string }) {
   return <div className={`mm-container ${className}`.trim()}>{children}</div>
@@ -25,12 +26,19 @@ export function MmButton({ children, variant = 'primary', size = 'md', to, href,
   const { path } = useMarketingPath()
   const cls = `mm-btn mm-btn--${variant} mm-btn--${size} ${className}`.trim()
   const icon = variant === 'primary' && size !== 'sm' ? <MmArrowRight /> : null
+  const skipLocalePath =
+    Boolean(to?.startsWith('/workspace')) || Boolean(to && isWorkspaceAuthPath(to))
   const toResolved =
-    to && to.startsWith('/') && !to.startsWith('/workspace') ? path(to) : to
-  if (toResolved?.startsWith('/workspace')) {
-    const href = toResolved === '/workspace' ? '/workspace/' : toResolved
+    to && to.startsWith('/') && !skipLocalePath ? path(to) : to
+  if (
+    toResolved?.startsWith('/workspace') ||
+    (toResolved && isWorkspaceAuthPath(toResolved))
+  ) {
+    const workspaceHref = toResolved?.startsWith('/workspace') && toResolved !== '/workspace'
+      ? toResolved
+      : WORKSPACE_URL
     return (
-      <a href={href} className={cls}>
+      <a href={workspaceHref} className={cls}>
         {children}
         {icon}
       </a>

@@ -42,10 +42,10 @@ export function isMarketingLocale(value: string | undefined | null): value is Ma
 }
 
 /** Публичные маркетинговые маршруты (с опциональным префиксом /en). */
-const MARKETING_PATH_RE = /^\/(?:en\/)?(?:pricing|faq|privacy|terms|login)?$/
+const MARKETING_PATH_RE = /^\/(?:pricing|faq|privacy|terms|login)?$/
 
 export function isMarketingPathname(pathname: string): boolean {
-  return MARKETING_PATH_RE.test(pathname)
+  return MARKETING_PATH_RE.test(stripMarketingLocalePrefix(pathname))
 }
 
 export function readStoredMarketingLocale(): MarketingLocale | null {

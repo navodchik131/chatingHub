@@ -6,6 +6,7 @@ import { MmButton, MmContainer } from './components/MmUi'
 import { LanguageSwitcher } from './i18n/LanguageSwitcher'
 import { MarketingI18nSync } from './i18n/MarketingI18nSync'
 import { useMarketingPath } from './i18n/useMarketingPath'
+import { WORKSPACE_URL } from './workspaceEntry'
 import './mm-tokens.css'
 import './mm-site.css'
 
@@ -114,9 +115,9 @@ export function MarketingLayout() {
                 {t('layout.headerWorkspace')}
               </a>
             ) : (
-              <NavLink to={path('/login')} className="mm-header__login">
+              <a href={WORKSPACE_URL} className="mm-header__login">
                 {t('layout.headerLogin')}
-              </NavLink>
+              </a>
             )}
             <MmButton to={hasToken ? '/workspace' : '/login'} size="sm">
               {t('layout.headerCta')}
@@ -140,7 +141,7 @@ export function MarketingLayout() {
                   {t('layout.billingToWorkspace')}
                 </MmButton>
               ) : (
-                <MmButton to={path('/login')} size="sm">
+                <MmButton to="/login" size="sm">
                   {t('layout.billingLogin')}
                 </MmButton>
               )}
@@ -197,7 +198,7 @@ export function MarketingLayout() {
                   <NavLink to={path('/faq')}>{t('layout.footerHelpFaq')}</NavLink>
                 </li>
                 <li>
-                  <NavLink to={path('/login')}>{t('layout.footerHelpLogin')}</NavLink>
+                  <a href={WORKSPACE_URL}>{t('layout.footerHelpLogin')}</a>
                 </li>
               </ul>
             </div>
