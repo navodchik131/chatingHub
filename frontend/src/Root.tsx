@@ -1,5 +1,5 @@
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
-import App from './App'
+import { useEffect } from 'react'
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { FaqPage } from './marketing/FaqPage'
 import { LandingPage } from './marketing/LandingPage'
 import { LoginPage } from './marketing/LoginPage'
@@ -9,6 +9,16 @@ import { PrivacyPage } from './marketing/PrivacyPage'
 import { TermsPage } from './marketing/TermsPage'
 import { AdminPage } from './admin/AdminPage'
 import { WorkflowPage } from './workflow/WorkflowPage'
+
+/** Client-side /workspace/* остаётся в маркетинг-SPA — принудительно уходим на nginx → frontend-os. */
+function WorkspaceHandoff() {
+  const location = useLocation()
+  useEffect(() => {
+    const target = `${location.pathname}${location.search}${location.hash}`
+    window.location.replace(target === '/workspace' ? '/workspace/' : target)
+  }, [location.pathname, location.search, location.hash])
+  return null
+}
 
 /** Дочерние <Route> маркетинга (не компонент-обёртка — RR требует Route напрямую). */
 function marketingRouteChildren() {
@@ -33,7 +43,7 @@ export default function Root() {
           {marketingRouteChildren()}
         </Route>
         <Route path="/workspace/workflow" element={<WorkflowPage />} />
-        <Route path="/workspace/*" element={<App />} />
+        <Route path="/workspace/*" element={<WorkspaceHandoff />} />
         <Route path="/admin" element={<AdminPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

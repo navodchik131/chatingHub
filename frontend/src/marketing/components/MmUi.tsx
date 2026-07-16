@@ -27,6 +27,15 @@ export function MmButton({ children, variant = 'primary', size = 'md', to, href,
   const icon = variant === 'primary' && size !== 'sm' ? <MmArrowRight /> : null
   const toResolved =
     to && to.startsWith('/') && !to.startsWith('/workspace') ? path(to) : to
+  if (toResolved?.startsWith('/workspace')) {
+    const href = toResolved === '/workspace' ? '/workspace/' : toResolved
+    return (
+      <a href={href} className={cls}>
+        {children}
+        {icon}
+      </a>
+    )
+  }
   if (toResolved) {
     return (
       <Link to={toResolved} className={cls}>

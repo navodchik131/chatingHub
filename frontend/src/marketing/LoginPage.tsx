@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from 'react'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { AuthPanel } from '../AuthPanel'
 import { AppLanguageSwitcher } from '../i18n/AppLanguageSwitcher'
@@ -7,11 +7,11 @@ import { getToken } from '../api'
 import '../App.css'
 import { MmContainer } from './components/MmUi'
 import { useMarketingPath } from './i18n/useMarketingPath'
+import { goToWorkspace } from './workspaceEntry'
 
 export function LoginPage() {
   const { t } = useTranslation('marketing')
   const { path } = useMarketingPath()
-  const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const referralCode = useMemo(() => {
     const ref = (searchParams.get('ref') || '').trim().toUpperCase()
@@ -19,8 +19,8 @@ export function LoginPage() {
   }, [searchParams])
 
   useEffect(() => {
-    if (getToken()) navigate('/workspace', { replace: true })
-  }, [navigate])
+    if (getToken()) goToWorkspace()
+  }, [])
 
   return (
     <div className="mm-main--page">
@@ -41,7 +41,7 @@ export function LoginPage() {
               {t('loginPage.referralNotice', { code: referralCode })}
             </p>
           ) : null}
-          <AuthPanel referralCode={referralCode} onSuccess={() => navigate('/workspace', { replace: true })} />
+          <AuthPanel referralCode={referralCode} onSuccess={goToWorkspace} />
         </div>
         <p
           className="mm-muted"

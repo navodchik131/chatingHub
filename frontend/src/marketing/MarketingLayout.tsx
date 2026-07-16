@@ -110,9 +110,9 @@ export function MarketingLayout() {
           <div className="mm-header__actions">
             <LanguageSwitcher />
             {hasToken ? (
-              <NavLink to="/workspace" className="mm-header__login">
+              <a href="/workspace/" className="mm-header__login">
                 {t('layout.headerWorkspace')}
-              </NavLink>
+              </a>
             ) : (
               <NavLink to={path('/login')} className="mm-header__login">
                 {t('layout.headerLogin')}
