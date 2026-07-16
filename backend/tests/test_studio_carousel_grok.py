@@ -41,6 +41,13 @@ def test_static_carousel_variations_count() -> None:
     assert all(isinstance(b, str) and b.strip() for b in blocks)
 
 
+def test_static_carousel_variations_gaze_diversity() -> None:
+    blocks = static_carousel_variations(8)
+    joined = " ".join(blocks).lower()
+    assert "profile" in joined or "off-frame" in joined or "off-camera" in joined
+    assert "shoulder" in joined or "away" in joined or "down" in joined
+
+
 def test_parse_carousel_grok_prompts_too_few_raises() -> None:
     with pytest.raises(RuntimeError):
         parse_carousel_grok_prompts('{"prompts": ["only one"]}', count=3)

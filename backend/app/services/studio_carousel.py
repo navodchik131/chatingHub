@@ -120,9 +120,14 @@ def load_carousel_variation_blocks() -> list[str]:
     raw = _read_text("data/prompts/image_studio_carousel_variations.txt")
     if not raw:
         return [
-            "Camera: eye level, three-quarter left, medium shot; subtle pose change; same outfit and room.",
-            "Camera: slightly low angle, full body; shift weight; same environment.",
-            "Camera: closer portrait framing; soft gaze; same styling and background.",
+            "Camera: three-quarter from left; body turned away; gaze off-frame left; neutral expression. Same room.",
+            "Camera: full body straight-on; subject looks down at phone, candid soft smile. Same environment.",
+            "Camera: low angle; mid-laugh, head tilted, eyes not locked on lens. Same outfit and room.",
+            "Camera: near profile from right; gaze forward in profile; thoughtful mood. Same background.",
+            "Camera: back three-quarter from behind-left; glance over shoulder toward camera; body facing away.",
+            "Camera: right three-quarter medium; hand on hip; gaze past camera to the right.",
+            "Camera: wider left environmental; leaning casual; looking toward off-camera light.",
+            "Camera: close crop from below; subtle smirk; gaze up past lens; asymmetric framing.",
         ]
     parts = [b.strip() for b in raw.split("\n---\n") if b.strip()]
     return parts if parts else [
@@ -170,7 +175,9 @@ async def grok_compose_carousel_prompts(
     system = load_grok_carousel_compose_system()
     n = max(2, min(8, int(count)))
     direction = (user_direction or "").strip() or (
-        "Vary camera angle, distance, and pose naturally across frames; same outfit and room."
+        "Vary camera side (left/right/profile/back three-quarter), distance, and height across frames. "
+        "Mix gaze: off-camera, down at hands, profile, over-shoulder — avoid every frame staring into the lens. "
+        "Vary expressions (neutral, smile, candid laugh, thoughtful). Same outfit and room."
     )
     scene = (master_scene_text or "").strip()
 

@@ -10,11 +10,18 @@ Your job: write exactly FRAME_COUNT English img2img briefs. Each brief is a **SH
 
 Rules for every prompt:
 1. Keep EXACTLY the same person, face, body identity, garments, accessories, room/location, props, and lighting quality as MASTER_IMAGE.
-2. Only change what USER_DIRECTION allows: camera position, distance, height, horizontal/vertical angle, pose, gesture, gaze, crop/framing — one coherent mini-session.
+2. Only change what USER_DIRECTION allows: camera position, distance, height, horizontal/vertical angle, subject body rotation, pose, gesture, gaze direction, facial expression, crop/framing — one coherent mini-session.
 3. Do NOT relocate, re-dress, swap identity, or change time-of-day/sky.
 4. Write dense English prose (120–450 chars each), ready for an image-edit API — no JSON inside prompts, no "reference image" meta talk.
-5. Each frame must be visually distinct from the others and from MASTER_IMAGE (different angle or pose), but clearly the same shoot.
+5. Each frame must be visually distinct from the others and from MASTER_IMAGE (different angle OR pose OR gaze OR expression), but clearly the same shoot.
 6. Phone-snapshot realism: natural smartphone depth of field, readable background, incidental light — not studio catalog glamour unless USER_DIRECTION says so.
+
+**Diversity mandate (critical — avoid boring clones):**
+7. Do NOT make every frame front-facing with direct eye contact. Spread gaze across the set: off-camera left/right, down at hands or phone, profile gaze, over-shoulder glance, candid mid-laugh, thoughtful distant look. At most ~40% of frames may have direct lens eye contact.
+8. Alternate which side of the face/body the camera sees. Mix left three-quarter, right three-quarter, near-profile from each side, and at least one frame where the body is turned away (back three-quarter or over-shoulder) if FRAME_COUNT ≥ 3.
+9. Vary micro-expressions and energy: neutral, soft smile, playful, introspective, relaxed candid — not the same frozen expression repeated.
+
+Plan the set as a whole before writing: ensure frames 1…N together cover different sides, gazes, and moods. Never repeat the same camera side + pose + gaze combo.
 
 Output **only** valid JSON (no markdown fences):
 {
