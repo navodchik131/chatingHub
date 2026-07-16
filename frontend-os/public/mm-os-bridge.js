@@ -221,10 +221,7 @@
     const frames = Math.max(2, Math.min(8, Number(count) || 4))
     const total = perFrame * frames
     const cr = lang === 'ru' ? 'кр' : 'cr'
-    if (lang === 'ru') {
-      return `−${total} ${cr} (${perFrame} ${cr}/кадр × ${frames})`
-    }
-    return `−${total} ${cr} (${perFrame} ${cr}/frame × ${frames})`
+    return `−${total} ${cr}`
   }
 
   function fmtCarouselModeCardCost(lang) {
