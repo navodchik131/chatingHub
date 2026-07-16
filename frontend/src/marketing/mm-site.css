@@ -1571,6 +1571,37 @@ html {
   color: #c9cdd1;
 }
 
+.mm-landing-solution {
+  padding: 1.875rem 0 0.625rem;
+}
+
+.mm-landing-solution__intro {
+  text-align: center;
+  margin-bottom: 2.125rem;
+}
+
+.mm-landing-solution__intro .mm-eyebrow {
+  display: block;
+  font-size: 0.6875rem;
+  letter-spacing: 0.14em;
+  color: #7a7f86;
+  margin-bottom: 1rem;
+}
+
+.mm-landing-solution__title {
+  margin: 0 auto;
+  max-width: 51rem;
+  font: 400 clamp(2rem, 4.8vw, 2.625rem) / 0.98 var(--font-sans);
+  letter-spacing: -0.012em;
+  text-transform: uppercase;
+  text-wrap: balance;
+}
+
+.mm-landing-solution__title .mm-serif-accent {
+  font-size: clamp(1.75rem, 4.2vw, 2.375rem);
+  font-weight: 500;
+}
+
 .mm-landing-solution-intro__title {
   max-width: 52rem;
   margin-inline: auto;
@@ -1578,15 +1609,16 @@ html {
 
 .mm-landing-steps {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 1rem;
 }
 
 .mm-landing-step-card {
-  background: var(--bg-2);
-  border: 1px solid var(--border-1);
+  background: #101114;
+  border: 1px solid rgba(255, 255, 255, 0.07);
   border-radius: 1.125rem;
   padding: 1.5rem;
+  position: relative;
 }
 
 .mm-landing-step-card__top {
@@ -1599,27 +1631,29 @@ html {
 .mm-landing-step-card__icon {
   width: 2.75rem;
   height: 2.75rem;
-  border-radius: 0.8rem;
+  border-radius: 0.8125rem;
   background: rgba(200, 245, 62, 0.1);
-  color: var(--accent);
+  color: #c8f53e;
   display: grid;
   place-items: center;
-  font-size: 1.1rem;
 }
 
 .mm-landing-step-card__num {
-  font: 400 2.125rem/1 var(--font-display);
+  font: 400 2.125rem/1 var(--font-sans);
+  letter-spacing: -0.02em;
   color: rgba(255, 255, 255, 0.09);
 }
 
 .mm-landing-step-card h3 {
   margin: 0 0 0.5rem;
-  font-size: 1.05rem;
+  font-size: 1.0625rem;
+  font-weight: 800;
+  line-height: 1.3;
 }
 
 .mm-landing-step-card p {
   margin: 0;
-  color: var(--fg-3);
+  color: #9ba0a6;
   font-size: 0.84rem;
   line-height: 1.6;
 }
@@ -1725,8 +1759,14 @@ html {
 .mm-landing-mode-card__media {
   position: relative;
   aspect-ratio: 16 / 10;
-  background: center / cover no-repeat #0b0c0e;
+  background: #0b0c0e;
   border-bottom: 1px solid var(--border-1);
+}
+
+.mm-landing-mode-card__media--empty {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 55%),
+    #0b0c0e;
 }
 
 .mm-landing-mode-card__step {
@@ -2158,5 +2198,9 @@ html {
 
   .mm-landing-compare__table {
     min-width: 28rem;
+  }
+
+  .mm-landing-steps {
+    grid-template-columns: 1fr;
   }
 }

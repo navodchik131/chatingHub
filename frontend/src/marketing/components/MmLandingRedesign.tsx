@@ -28,14 +28,33 @@ const MODULE_SHOTS = [
   { id: 'donations', shot: '/marketing/landing-shots/06-shot.png', tagTone: 'green' as const, reverse: false },
 ]
 
-const MODE_SHOTS = [
-  '/marketing/ba/ba-swap-a.png',
-  '/marketing/ba/ba-swap-a.png',
-  '/marketing/ba/ba-outfit-a.jpg',
-  '/marketing/ba/ba-loc-a.jpg',
-  '/marketing/landing-shots/03-shot.png',
-  '/marketing/landing-shots/03-shot.png',
-]
+
+function StepIcon({ kind }: { kind: 'star' | 'image' | 'chat' }) {
+  if (kind === 'star') {
+    return (
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8">
+        <circle cx="12" cy="8.5" r="3.6" />
+        <path d="M5 20c.8-3.4 3.6-5.4 7-5.4s6.2 2 7 5.4" />
+      </svg>
+    )
+  }
+  if (kind === 'image') {
+    return (
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8">
+        <rect x="3" y="4" width="18" height="16" rx="3" />
+        <circle cx="9" cy="10" r="1.8" />
+        <path d="M3.5 18l5-5 3.5 3.5L16 12l4.5 5" />
+      </svg>
+    )
+  }
+  return (
+    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M21 12c0 4.4-4 8-9 8-1.2 0-2.4-.2-3.4-.6L3 21l1.7-4.1C3.6 15.5 3 13.8 3 12c0-4.4 4-8 9-8s9 3.6 9 8z" />
+    </svg>
+  )
+}
+
+const STEP_ICONS = ['star', 'image', 'chat'] as const
 
 const BA_PAIRS = [
   { before: '/marketing/ba/ba-swap-b.jpeg', after: '/marketing/ba/ba-swap-a.png' },
@@ -135,40 +154,34 @@ export function MmSolutionBlock() {
   const steps = t('landingV2.steps', { returnObjects: true }) as Array<{ title: string; desc: string }>
 
   return (
-    <>
-      <section className="mm-section mm-section--compact mm-landing-solution-intro" aria-labelledby="mm-solution-title">
-        <MmContainer>
-          <p className="mm-landing-center">
-            <MmEyebrow>{t('landingV2.solution.eyebrow')}</MmEyebrow>
-          </p>
-          <MmDisplayLg id="mm-solution-title" className="mm-landing-center mm-landing-solution-intro__title">
+    <section className="mm-landing-solution" aria-labelledby="mm-solution-title">
+      <MmContainer>
+        <div className="mm-landing-solution__intro">
+          <MmEyebrow>{t('landingV2.solution.eyebrow')}</MmEyebrow>
+          <h2 id="mm-solution-title" className="mm-landing-solution__title">
             {t('landingV2.solution.titleBefore')}
             <MmSerifAccent>{t('landingV2.solution.titleAccent')}</MmSerifAccent>
             {t('landingV2.solution.titleAfter')}
-          </MmDisplayLg>
-        </MmContainer>
-      </section>
-      <section className="mm-section mm-section--compact" aria-label={t('landingV2.stepsAria')}>
-        <MmContainer>
-          <div className="mm-landing-steps">
-            {Array.isArray(steps)
-              ? steps.map((step, i) => (
-                  <article key={step.title} className="mm-landing-step-card">
-                    <div className="mm-landing-step-card__top">
-                      <span className="mm-landing-step-card__icon" aria-hidden>
-                        {['★', '▣', '◉'][i] ?? '·'}
-                      </span>
-                      <span className="mm-landing-step-card__num">{String(i + 1).padStart(2, '0')}</span>
-                    </div>
-                    <h3>{step.title}</h3>
-                    <p>{step.desc}</p>
-                  </article>
-                ))
-              : null}
-          </div>
-        </MmContainer>
-      </section>
-    </>
+          </h2>
+        </div>
+        <div className="mm-landing-steps" aria-label={t('landingV2.stepsAria')}>
+          {Array.isArray(steps)
+            ? steps.map((step, i) => (
+                <article key={step.title} className="mm-landing-step-card">
+                  <div className="mm-landing-step-card__top">
+                    <span className="mm-landing-step-card__icon" aria-hidden>
+                      <StepIcon kind={STEP_ICONS[i] ?? 'star'} />
+                    </span>
+                    <span className="mm-landing-step-card__num">{String(i + 1).padStart(2, '0')}</span>
+                  </div>
+                  <h3>{step.title}</h3>
+                  <p>{step.desc}</p>
+                </article>
+              ))
+            : null}
+        </div>
+      </MmContainer>
+    </section>
   )
 }
 
@@ -237,10 +250,7 @@ export function MmModesShowcase() {
           {Array.isArray(modes)
             ? modes.map((mode, i) => (
                 <article key={mode.title} className="mm-landing-mode-card">
-                  <div
-                    className="mm-landing-mode-card__media"
-                    style={{ backgroundImage: `url(${MODE_SHOTS[i] ?? MODE_SHOTS[0]})` }}
-                  >
+                  <div className="mm-landing-mode-card__media mm-landing-mode-card__media--empty">
                     <span className="mm-landing-mode-card__step">{String(i + 1).padStart(2, '0')}</span>
                   </div>
                   <div className="mm-landing-mode-card__body">

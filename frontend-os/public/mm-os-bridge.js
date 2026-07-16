@@ -108,6 +108,7 @@
     telegramBotUsername: null,
     telegramWidgetCleanup: null,
     referralCode: null,
+    activeConvId: null,
   }
 
   const AI_MODEL_MAP = {
@@ -463,11 +464,15 @@
       lang,
       unread: c.unread_count || 0,
       open: () => {
+        store.activeConvId = c.id
+        clearReplyDraft()
         const patch = {
           chatOpen: i,
           page: 'dialogs',
           msgReact: null,
           emojiOpen: false,
+          noteFormOpen: false,
+          reactions: {},
         }
         if (logic.state.isMobile) patch.mobileChat = true
         logic.setState(patch)
@@ -963,12 +968,14 @@
   }
 
   async function loadMessages(convId) {
+    store.activeConvId = convId
     const data = await API.apiJson('/api/conversations/' + convId + '/messages?limit=50')
     store.messages = Array.isArray(data) ? data : []
     await API.apiFetch('/api/conversations/' + convId + '/read', { method: 'POST' })
     const nr = await API.apiJson('/api/conversations/' + convId + '/notes').catch(() => [])
     store.notes = Array.isArray(nr) ? nr : []
     store.logic?.forceUpdate()
+    scrollThreadToBottom()
     void loadConversations()
   }
 
@@ -1089,9 +1096,7 @@
         }
         if (msg.type === 'new_message' || msg.type === 'message_updated') {
           void loadConversations()
-          const open = store.logic?.state?.chatOpen
-          const conv = store.conversations[open]
-          if (conv) void loadMessages(conv.id)
+          if (store.activeConvId) void loadMessages(store.activeConvId)
         }
       } catch (_) {}
     }
@@ -1124,7 +1129,10 @@
     await refreshAll()
     connectWs()
     const first = store.conversations[0]
-    if (first) void loadMessages(first.id)
+    if (first) {
+      store.activeConvId = first.id
+      void loadMessages(first.id)
+    }
     store.logic?.forceUpdate()
   }
 
@@ -1422,7 +1430,67 @@
 
   function queryReplyInput() {
     const dlg = document.querySelector('[data-screen-label="Диалоги"]')
-    return dlg?.querySelector('input[type="text"], textarea') || null
+    return dlg?.querySelector('[data-mm-chat-reply]') || null
+  }
+
+  function scrollThreadToBottom() {
+    requestAnimationFrame(() => {
+      const el = document.getElementById('mm-thread-scroll')
+      if (el) el.scrollTop = el.scrollHeight
+    })
+  }
+
+  function clearReplyDraft() {
+    const input = queryReplyInput()
+    if (input) input.value = ''
+    store.pendingChatImage = null
+  }
+
+  function resolveActiveConv(convs) {
+    const list = convs || []
+    if (!list.length) return null
+    if (store.activeConvId) {
+      const hit = list.find((c) => c.id === store.activeConvId)
+      if (hit) return hit
+    }
+    const idx = store.logic?.state?.chatOpen ?? 0
+    const byIdx = list[idx]
+    if (byIdx) {
+      store.activeConvId = byIdx.id
+      return byIdx
+    }
+    store.activeConvId = list[0].id
+    return list[0]
+  }
+
+  async function saveConversationNote() {
+    const logic = store.logic
+    if (!logic) return
+    const text = document.querySelector('[data-mm-note-text]')?.value?.trim()
+    if (!text) return
+    const conv = resolveActiveConv(store.conversations)
+    if (!conv) return
+    const noteLang = logic.state.lang || 'ru'
+    const td = NOTE_TAG_DEFS[logic.state.noteTag ?? 0] || NOTE_TAG_DEFS[0]
+    const label = noteLang === 'ru' ? td.ru : td.en
+    const content = '[' + label + '] ' + text
+    store.busy = true
+    try {
+      await API.apiJson('/api/conversations/' + conv.id + '/notes', {
+        method: 'POST',
+        body: JSON.stringify({ content }),
+      })
+      const nr = await API.apiJson('/api/conversations/' + conv.id + '/notes')
+      store.notes = Array.isArray(nr) ? nr : []
+      const ta = document.querySelector('[data-mm-note-text]')
+      if (ta) ta.value = ''
+      logic.setState({ noteFormOpen: false })
+    } catch (e) {
+      store.error = e.message || String(e)
+    } finally {
+      store.busy = false
+      logic.forceUpdate()
+    }
   }
 
   function escHtml(s) {
@@ -1832,7 +1900,12 @@
     try {
       await API.apiFetch('/api/conversations/' + id, { method: 'DELETE' })
       await loadConversations()
-      logic.setState({ chatOpen: 0, mobileChat: false })
+      const next = store.conversations[0]
+      store.activeConvId = next?.id ?? null
+      store.messages = []
+      store.notes = []
+      clearReplyDraft()
+      logic.setState({ chatOpen: 0, mobileChat: false, noteFormOpen: false, msgReact: null, reactions: {} })
     } catch (e) {
       store.error = e.message || String(e)
     } finally {
@@ -2357,7 +2430,7 @@
   function bindChatComposer() {
     const root = document.querySelector('[data-screen-label="Диалоги"]')
     if (!root) return
-    const ta = root.querySelector('textarea[placeholder]')
+    const ta = root.querySelector('[data-mm-chat-reply]')
     if (ta && !ta.dataset.mmReply) {
       ta.dataset.mmReply = '1'
       ta.addEventListener('keydown', (e) => {
@@ -2383,17 +2456,57 @@
     }
   }
 
+  function bindNotePanel() {
+    const root = document.querySelector('[data-screen-label="Диалоги"]')
+    if (!root) return
+    const logic = store.logic
+    const toggle = root.querySelector('[data-mm-note-toggle]')
+    if (toggle && !toggle.dataset.mmBound) {
+      toggle.dataset.mmBound = '1'
+      toggle.addEventListener('click', () => {
+        if (!logic) return
+        logic.setState({ noteFormOpen: !logic.state.noteFormOpen })
+        logic.forceUpdate()
+      })
+    }
+    const save = root.querySelector('[data-mm-note-save]')
+    if (save && !save.dataset.mmBound) {
+      save.dataset.mmBound = '1'
+      save.addEventListener('click', () => void saveConversationNote())
+    }
+    const cancel = root.querySelector('[data-mm-note-cancel]')
+    if (cancel && !cancel.dataset.mmBound) {
+      cancel.dataset.mmBound = '1'
+      cancel.addEventListener('click', () => {
+        if (!logic) return
+        const ta = document.querySelector('[data-mm-note-text]')
+        if (ta) ta.value = ''
+        logic.setState({ noteFormOpen: false })
+        logic.forceUpdate()
+      })
+    }
+    root.querySelectorAll('[data-mm-note-tag]').forEach((el, i) => {
+      if (el.dataset.mmBound) return
+      el.dataset.mmBound = '1'
+      el.addEventListener('click', () => {
+        if (!logic) return
+        logic.setState({ noteTag: i })
+        logic.forceUpdate()
+      })
+    })
+  }
+
   function bindDomActions() {
     bindAuthForm()
     document.querySelectorAll('[data-mm-upload]').forEach(resyncUploadZone)
     bindSlotUploadZones()
     bindCharPanel()
     bindChatComposer()
+    bindNotePanel()
   }
 
   async function sendReply() {
-    const open = store.logic?.state?.chatOpen ?? 0
-    const conv = store.conversations[open]
+    const conv = resolveActiveConv(store.conversations)
     if (!conv) return
     const input = queryReplyInput()
     const text = (input?.value || '').trim()
@@ -2895,7 +3008,7 @@
         },
         rowStyle:
           'display:flex;gap:10px;align-items:center;padding:9px 8px;border-radius:12px;cursor:pointer;position:relative;' +
-          (s.chatOpen === i
+          (c.id === store.activeConvId
             ? 'background:rgba(215,244,82,.07);border:1px solid rgba(215,244,82,.2);'
             : 'border:1px solid transparent;'),
       }
@@ -2959,34 +3072,6 @@
         when: fmtDateShort(n.updated_at || n.created_at),
       }
     })
-
-    async function saveConversationNote() {
-      const text = document.querySelector('[data-mm-note-text]')?.value?.trim()
-      if (!text) return
-      const open = logic.state.chatOpen ?? 0
-      const conv = store.conversations[open]
-      if (!conv) return
-      const td = NOTE_TAG_DEFS[s.noteTag ?? 0] || NOTE_TAG_DEFS[0]
-      const label = noteLang === 'ru' ? td.ru : td.en
-      const content = '[' + label + '] ' + text
-      store.busy = true
-      try {
-        await API.apiJson('/api/conversations/' + conv.id + '/notes', {
-          method: 'POST',
-          body: JSON.stringify({ content }),
-        })
-        const nr = await API.apiJson('/api/conversations/' + conv.id + '/notes')
-        store.notes = Array.isArray(nr) ? nr : []
-        const ta = document.querySelector('[data-mm-note-text]')
-        if (ta) ta.value = ''
-        logic.setState({ noteFormOpen: false })
-      } catch (e) {
-        store.error = e.message || String(e)
-      } finally {
-        store.busy = false
-        logic.forceUpdate()
-      }
-    }
 
     const archiveFrames = store.archiveImages.map((item, i) =>
       archiveToFrame(item, i, logic, vals),
@@ -3095,8 +3180,8 @@
       { label: lang === 'ru' ? 'Новые' : 'New', style: chipOff },
     ]
 
-    const openIdx = s.chatOpen ?? 0
-    const activeConv = convs[openIdx]
+    const activeConv = resolveActiveConv(convs)
+    const activeIdx = activeConv ? Math.max(0, convs.findIndex((c) => c.id === activeConv.id)) : 0
     const avBase36 =
       'width:36px;height:36px;flex:none;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;position:relative;background:'
     const activeChat = activeConv
@@ -3107,7 +3192,7 @@
           persona: modelNameById(activeConv.studio_model_id),
           lang: activeConv.user_lang || activeConv.outbound_lang || '—',
           platform: platformLabel(activeConv.platform),
-          avStyle: AV_G[openIdx % 5],
+          avStyle: AV_G[activeIdx % 5],
         }
       : { name: '—', initial: '?', vip: false, persona: '—', lang: '—', avStyle: AV_G[0] }
     const curSt = activeConv ? chatStatusType(activeConv) : false
@@ -3314,10 +3399,7 @@
       closePops: () => {
         if (s.msgReact !== null || s.emojiOpen) logic.setState({ msgReact: null, emojiOpen: false })
       },
-      scrollDown: () => {
-        const el = document.getElementById('mm-thread-scroll')
-        if (el) el.scrollTop = el.scrollHeight
-      },
+      scrollDown: () => scrollThreadToBottom(),
       showThread,
       showList,
       isMobileChat,
@@ -3398,8 +3480,6 @@
     }
   }
 
-  let lastChatOpen = -1
-
   function onMount(logic) {
     store.logic = logic
     bindAuthForm()
@@ -3412,12 +3492,6 @@
       if (!store.authed || !store.logic) return
       bindDomActions()
       if (hasPendingArchive()) scheduleArchivePoll()
-      const co = store.logic.state.chatOpen ?? 0
-      if (co !== lastChatOpen) {
-        lastChatOpen = co
-        const conv = store.conversations[co]
-        if (conv) void loadMessages(conv.id)
-      }
       const cd = store.logic.state.charDetail ?? null
       const cdNum = cd != null && cd !== '' ? Number(cd) : null
       if (cdNum !== lastSyncedCharId) syncCharProfileTextarea()
