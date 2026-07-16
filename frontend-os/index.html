@@ -245,11 +245,14 @@ input::placeholder,textarea::placeholder{color:#5C6066;}
             </div>
             <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">
               <sc-for list="{{ recentFrames }}" as="f" hint-placeholder-count="4">
-                <div style="{{ f.tileStyle }}" style-hover="filter:brightness(1.15);">
+                <div onClick="{{ f.open }}" style="{{ f.tileStyle }}" style-hover="filter:brightness(1.15);">
                   <span style="font-family:'JetBrains Mono';font-size:8.5px;letter-spacing:1px;color:rgba(255,255,255,.75);">{{ f.label }}</span>
                 </div>
               </sc-for>
             </div>
+            <sc-if value="{{ recentFramesEmpty }}" hint-placeholder-val="{{ true }}">
+              <div style="font-size:11.5px;color:#5C6066;margin-top:10px;">{{ t.recentFramesEmpty }}</div>
+            </sc-if>
             <div style="font-size:10.5px;color:#5C6066;margin-top:10px;">{{ t.framesHint }}</div>
           </div>
         </div>
@@ -575,6 +578,9 @@ input::placeholder,textarea::placeholder{color:#5C6066;}
                   <div style="{{ af.bg }}" style-hover="{{ af.pending ? '' : 'filter:brightness(1.08);' }}">
                     <sc-if value="{{ af.pending }}" hint-placeholder-val="{{ false }}">
                       <span style="{{ af.spinnerWrap }}"><span style="{{ af.spinnerStyle }}"></span></span>
+                    </sc-if>
+                    <sc-if value="{{ af.failed }}" hint-placeholder-val="{{ false }}">
+                      <span style="{{ af.failedWrap }}"><span style="{{ af.failedStyle }}">{{ af.failedLabel }}</span></span>
                     </sc-if>
                     <sc-if value="{{ af.showPlaceholder }}" hint-placeholder-val="{{ true }}">
                     <span style="display:flex;width:22px;height:22px;color:rgba(255,255,255,.35);" dangerouslySetInnerHTML="{{ icoImage }}"></span>
@@ -950,10 +956,11 @@ input::placeholder,textarea::placeholder{color:#5C6066;}
               <div style="display:flex;flex-direction:column;gap:8px;">
                 <sc-for list="{{ donLinks }}" as="dl" hint-placeholder-count="2">
                   <div style="background:#0D0E11;border:1px solid rgba(255,255,255,.07);border-radius:12px;padding:12px 14px;">
-                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap;">
                       <div style="flex:1;font-weight:700;font-size:12.5px;">{{ dl.title }}</div>
                       <span style="{{ dl.stStyle }}">{{ dl.st }}</span>
                     </div>
+                    <div style="{{ dl.modelBadgeStyle }}">{{ dl.modelBadge }}</div>
                     <div style="display:flex;flex-direction:column;gap:6px;">
                       <sc-for list="{{ dl.urls }}" as="u" hint-placeholder-count="2">
                         <div style="display:flex;align-items:center;gap:9px;background:#121316;border:1px solid rgba(255,255,255,.07);border-radius:9px;padding:8px 10px;">
@@ -980,25 +987,34 @@ input::placeholder,textarea::placeholder{color:#5C6066;}
         <sc-if value="{{ isDonCreate }}" hint-placeholder-val="{{ false }}">
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;">
           <div style="background:#121316;border:1px solid rgba(255,255,255,.07);border-radius:16px;padding:18px;display:flex;flex-direction:column;gap:12px;">
-            <div style="font-weight:800;font-size:14px;">{{ t.newDonation }}</div>
+            <div style="font-weight:800;font-size:14px;">{{ donFormTitle }}</div>
             <input data-mm-don-title placeholder="{{ t.donTitle }}" style="background:#0D0E11;border:1px solid rgba(255,255,255,.09);border-radius:10px;padding:10px 12px;color:#F2F3F0;font-family:'Manrope';font-size:12.5px;outline:none;">
             <textarea data-mm-don-desc rows="3" placeholder="{{ t.donDesc }}" style="background:#0D0E11;border:1px solid rgba(255,255,255,.09);border-radius:10px;padding:10px 12px;color:#F2F3F0;font-family:'Manrope';font-size:12.5px;resize:vertical;outline:none;"></textarea>
-            <div style="display:flex;gap:8px;">
-              <input data-mm-don-min placeholder="{{ t.minSum }}" style="flex:1;background:#0D0E11;border:1px solid rgba(255,255,255,.09);border-radius:10px;padding:10px 12px;color:#F2F3F0;font-family:'Manrope';font-size:12.5px;outline:none;">
-              <div style="border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:10px 14px;font-size:12px;color:#9BA0A6;">₽ ▾</div>
-              <select data-mm-don-model style="border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:10px 14px;font-size:12px;color:#9BA0A6;background:#0D0E11;"><option value="">Не назначена</option></select>
+            <div>
+              <div style="font-size:11px;color:#9BA0A6;margin-bottom:6px;">{{ t.donCharacter }}</div>
+              <select data-mm-don-model style="width:100%;border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:10px 12px;font-size:12px;color:#F2F3F0;background:#0D0E11;"><option value="">{{ t.donCharacterNone }}</option></select>
             </div>
             <div style="display:flex;gap:8px;">
-              <div style="flex:1;border:1px solid rgba(255,255,255,.12);border-radius:9px;padding:9px;text-align:center;font-size:12px;font-weight:700;color:#9BA0A6;cursor:pointer;" style-hover="border-color:rgba(255,255,255,.3);">{{ t.saveDraft }}</div>
+              <input data-mm-don-min placeholder="{{ t.minSum }}" style="flex:1;background:#0D0E11;border:1px solid rgba(255,255,255,.09);border-radius:10px;padding:10px 12px;color:#F2F3F0;font-family:'Manrope';font-size:12.5px;outline:none;">
+              <div style="border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:10px 14px;font-size:12px;color:#9BA0A6;">₽</div>
+            </div>
+            <div style="display:flex;gap:8px;">
+              <div data-mm-don-draft style="flex:1;border:1px solid rgba(255,255,255,.12);border-radius:9px;padding:9px;text-align:center;font-size:12px;font-weight:700;color:#9BA0A6;cursor:pointer;" style-hover="border-color:rgba(255,255,255,.3);">{{ t.saveDraft }}</div>
               <div data-mm-don-create style="flex:1;background:rgba(215,244,82,.12);border:1px solid rgba(215,244,82,.3);border-radius:9px;padding:9px;text-align:center;font-size:12px;font-weight:800;color:#D7F452;cursor:pointer;">{{ t.toModeration }}</div>
             </div>
           </div>
           <div style="background:#121316;border:1px solid rgba(255,255,255,.07);border-radius:16px;padding:18px;">
             <div style="font-weight:800;font-size:14px;margin-bottom:12px;">{{ t.myDonations }}</div>
             <sc-for list="{{ myDonations }}" as="md" hint-placeholder-count="3">
-              <div style="display:flex;align-items:center;gap:12px;padding:10px 4px;border-bottom:1px solid rgba(255,255,255,.05);">
-                <span style="flex:1;font-weight:700;font-size:12.5px;">{{ md.title }}</span>
+              <div style="display:flex;align-items:center;gap:12px;padding:10px 4px;border-bottom:1px solid rgba(255,255,255,.05);flex-wrap:wrap;">
+                <div style="flex:1;min-width:160px;">
+                  <div style="font-weight:700;font-size:12.5px;">{{ md.title }}</div>
+                  <div style="font-size:10.5px;color:#9BA0A6;margin-top:3px;">{{ md.modelBadge }}</div>
+                </div>
                 <span style="{{ md.stStyle }}">{{ md.st }}</span>
+                <sc-if value="{{ md.canEdit }}" hint-placeholder-val="{{ false }}">
+                  <span onClick="{{ md.edit }}" style="font-size:11px;font-weight:700;color:#D7F452;cursor:pointer;">{{ t.donEdit }}</span>
+                </sc-if>
               </div>
             </sc-for>
           </div>
@@ -1443,7 +1459,7 @@ class Component extends DCLogic {
       startTitle: 'С чего начать?', startDesc: 'Пять шагов от регистрации до первого дохода.', openGuide: 'Открыть инструкцию',
       guideIntro: 'Короткая пошаговая инструкция: что и зачем делать. К каждому шагу — короткое видео и кнопка перехода в нужный раздел.',
       guideOutro: 'Застряли на каком-то шаге? Полные гайды и частые вопросы — в базе знаний.', guidePlaceholder: 'материал появится здесь',
-      recentDialogs: 'Недавние диалоги', recentFrames: 'Недавние кадры', all: 'Все', toStudio: 'В студию',
+      recentDialogs: 'Недавние диалоги', recentFrames: 'Недавние кадры', recentFramesEmpty: 'Пока нет готовых кадров — сгенерируйте в студии', all: 'Все', toStudio: 'В студию',
       framesHint: 'Кадры хранятся на сервере ~4 дня — скачивайте важное сразу.',
       navOverview: 'Обзор', navDialogs: 'Диалоги', navImages: 'Картинки', navVideo: 'Видео', navCharacters: 'Персонажи',
       navDonations: 'Донаты и выплаты', navBilling: 'Тариф и баланс', navConnections: 'Подключения', navTeam: 'Команда', navWorkflow: 'Workflow',
@@ -1481,7 +1497,8 @@ class Component extends DCLogic {
       payout: 'Вывод средств', payoutHint: 'USDT TRC20/ERC20 или TON. Холд Tribute: донаты 1–15 числа доступны с 16-го. Минимум 500 ₽.',
       requestPayout: 'Заявка на выплату', donLinks: 'Ссылки на донат', lastIncoming: 'Последние входящие',
       holdPolicy: 'Политика холда и модерации —',
-      newDonation: 'Новый донат', donTitle: 'Заголовок', donDesc: 'Описание', minSum: 'Мин. сумма',
+      newDonation: 'Новый донат', editDonation: 'Редактировать донат', donTitle: 'Заголовок', donDesc: 'Описание', minSum: 'Мин. сумма',
+      donCharacter: 'Персонаж', donCharacterNone: 'Не назначен', donEdit: 'Изменить',
       saveDraft: 'Черновик', toModeration: 'На модерацию', myDonations: 'Мои донаты',
       billingDesc: 'Подписка, кредиты и оплата. 1 кредит = 3.6 ₽. Кредиты списываются за генерации.',
       currentPlan: 'Текущий план', balance: 'баланс', cr: 'кр.', referral: 'Реферальная программа',
@@ -1512,7 +1529,7 @@ class Component extends DCLogic {
       startTitle: 'Where to start?', startDesc: 'Five steps from sign-up to first income.', openGuide: 'Open guide',
       guideIntro: 'A short step-by-step: what to do and why. Each step has a quick video and a button to jump to the right section.',
       guideOutro: 'Stuck on a step? Full guides and FAQ are in the knowledge base.', guidePlaceholder: 'media goes here',
-      recentDialogs: 'Recent dialogs', recentFrames: 'Recent frames', all: 'All', toStudio: 'Studio',
+      recentDialogs: 'Recent dialogs', recentFrames: 'Recent frames', recentFramesEmpty: 'No ready frames yet — generate in Studio', all: 'All', toStudio: 'Studio',
       framesHint: 'Frames are stored ~4 days on the server — download what matters.',
       navOverview: 'Overview', navDialogs: 'Dialogs', navImages: 'Images', navVideo: 'Video', navCharacters: 'Characters',
       navDonations: 'Donations & payouts', navBilling: 'Plan & balance', navConnections: 'Connections', navTeam: 'Team', navWorkflow: 'Workflow',
@@ -1550,7 +1567,8 @@ class Component extends DCLogic {
       payout: 'Withdraw', payoutHint: 'USDT TRC20/ERC20 or TON. Tribute hold: donations from the 1st–15th unlock on the 16th. Min 500 ₽.',
       requestPayout: 'Request payout', donLinks: 'Donation links', lastIncoming: 'Recent incoming',
       holdPolicy: 'Hold & moderation policy —',
-      newDonation: 'New donation', donTitle: 'Title', donDesc: 'Description', minSum: 'Min amount',
+      newDonation: 'New donation', editDonation: 'Edit donation', donTitle: 'Title', donDesc: 'Description', minSum: 'Min amount',
+      donCharacter: 'Character', donCharacterNone: 'Unassigned', donEdit: 'Edit',
       saveDraft: 'Draft', toModeration: 'Submit', myDonations: 'My donations',
       billingDesc: 'Subscription, credits and payments. 1 credit = 3.6 ₽. Credits are spent on generations.',
       currentPlan: 'Current plan', balance: 'balance', cr: 'cr.', referral: 'Referral program',
@@ -1624,9 +1642,9 @@ class Component extends DCLogic {
         (s.page === id ? 'background:rgba(215,244,82,.1);color:#D7F452;font-weight:800;' : 'color:#B7BBC0;font-weight:600;')
     });
     const navGroups = [
-      { label: t.grpWork, items: [navItem('overview', t.navOverview, icoGrid), navItem('dialogs', t.navDialogs, icoChat, '2')] },
+      { label: t.grpWork, items: [navItem('overview', t.navOverview, icoGrid), navItem('dialogs', t.navDialogs, icoChat)] },
       { label: t.grpStudio, items: [navItem('images', t.navImages, icoImage), navItem('video', t.navVideo, icoFilm), navItem('characters', t.navCharacters, icoStar), navItem('workflow', t.navWorkflow, icoFlow, 'PRO')] },
-      { label: t.grpMoney, items: [navItem('donations', t.navDonations, icoHeart, '1'), navItem('billing', t.navBilling, icoCard)] },
+      { label: t.grpMoney, items: [navItem('donations', t.navDonations, icoHeart), navItem('billing', t.navBilling, icoCard)] },
       { label: t.grpSettings, items: [navItem('connections', t.navConnections, icoPlug), navItem('team', t.navTeam, icoTeam)] }
     ];
     const pageTitles = { overview: t.navOverview, dialogs: t.navDialogs, images: t.navImages, video: t.navVideo, characters: t.navCharacters, workflow: t.navWorkflow, donations: t.navDonations, billing: t.navBilling, connections: t.navConnections, team: t.navTeam };

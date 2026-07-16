@@ -25,6 +25,42 @@
     'linear-gradient(135deg,#FACC15,#FB923C);color:#262008;',
   ]
 
+  const DONATION_SEEN_KEY_PREFIX = 'mm_creator_donation_last_seen_event_'
+
+  function readDonationLastSeenEventId(userId) {
+    if (!userId) return 0
+    try {
+      const n = Number(localStorage.getItem(DONATION_SEEN_KEY_PREFIX + userId))
+      return Number.isFinite(n) && n > 0 ? n : 0
+    } catch {
+      return 0
+    }
+  }
+
+  function writeDonationLastSeenEventId(userId, eventId) {
+    if (!userId || !(eventId > 0)) return
+    try {
+      localStorage.setItem(DONATION_SEEN_KEY_PREFIX + userId, String(eventId))
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function unseenDonationBadgeCount(overview, userId) {
+    if (!overview || !userId) return 0
+    const latestId = overview.latest_event_id
+    if (!latestId) return 0
+    const seenId = readDonationLastSeenEventId(userId)
+    if (seenId === 0) {
+      writeDonationLastSeenEventId(userId, latestId)
+      return 0
+    }
+    if (latestId <= seenId) return 0
+    const recent = overview.recent_events || []
+    const n = recent.filter((e) => e && e.id > seenId).length
+    return n > 0 ? n : 1
+  }
+
   const store = {
     logic: null,
     authed: false,
@@ -43,6 +79,7 @@
     donationOverview: null,
     donations: [],
     donationEvents: [],
+    donationEditId: null,
     billingPlans: null,
     creditHistory: [],
     referral: null,
@@ -176,10 +213,65 @@
     return mode + ':' + index
   }
 
+  const REF_SLOT_MODES = ['ref', 'swap', 'outfit', 'location']
+
+  function resolveSlotArchivePick(mode, index) {
+    const slotKey = slotStateKey(mode, index)
+    const direct = store.slotArchivePicks[slotKey]
+    if (direct != null) return direct
+    if (index !== 0) return null
+    if (slotUploadKey(mode, 0) !== 'ref') return null
+    for (const m of REF_SLOT_MODES) {
+      if (m === mode) continue
+      const inherited = store.slotArchivePicks[slotStateKey(m, 0)]
+      if (inherited != null) return inherited
+    }
+    return null
+  }
+
+  function resolveSlotSource(mode, index) {
+    const uploadKey = slotUploadKey(mode, index)
+    return {
+      file: store.uploadFiles[uploadKey] || null,
+      archiveId: resolveSlotArchivePick(mode, index),
+      uploadKey,
+      slotKey: slotStateKey(mode, index),
+    }
+  }
+
+  function slotHasSource(mode, index) {
+    const src = resolveSlotSource(mode, index)
+    return !!(src.file || src.archiveId)
+  }
+
+  function syncRefArchivePicksAcrossModes() {
+    let shared = null
+    for (const m of REF_SLOT_MODES) {
+      const id = store.slotArchivePicks[slotStateKey(m, 0)]
+      if (id != null) shared = id
+    }
+    if (shared == null) return
+    for (const m of REF_SLOT_MODES) {
+      store.slotArchivePicks[slotStateKey(m, 0)] = shared
+    }
+  }
+
+  function coerceJobGenerationId(accepted) {
+    const raw = accepted?.generation_id
+    if (typeof raw === 'number' && Number.isFinite(raw)) return raw
+    if (typeof raw === 'string' && raw.trim()) {
+      const n = Number(raw)
+      if (Number.isFinite(n)) return n
+    }
+    return null
+  }
+
   if (!store.slotArchivePicks) store.slotArchivePicks = {}
 
   function mkArchiveMiniGrid(logic, slotKeyStr) {
-    const pickedId = store.slotArchivePicks[slotKeyStr]
+    const mode = (slotKeyStr.split(':')[0] || 'ref')
+    const index = Number(slotKeyStr.split(':')[1] || 0)
+    const pickedId = resolveSlotArchivePick(mode, index)
     return store.archiveImages.slice(0, 8).map((item, i) => {
       const url = archiveThumbUrl(item)
       const pending = isArchivePending(item)
@@ -197,6 +289,7 @@
           ? () => {}
           : () => {
               store.slotArchivePicks[slotKeyStr] = item.id
+              syncRefArchivePicksAcrossModes()
               if (slotKeyStr.endsWith(':0') || slotKeyStr.includes('ref')) {
                 delete store.uploadFiles.ref
                 delete store.uploadFiles.carousel
@@ -512,13 +605,15 @@
   }
 
   async function refreshArchiveImages() {
-    const optimistic = store.archiveImages.filter((g) => isOptimisticArchiveId(g.id))
+    const localPending = store.archiveImages.filter(
+      (g) => isOptimisticArchiveId(g.id) || isArchivePending(g),
+    )
     const [page, pending] = await Promise.all([
       API.apiJson('/api/studio/generations?limit=40&skip=0&media_kind=image').catch(() => ({ items: [] })),
       API.apiJson('/api/studio/generations/pending?media_kind=image').catch(() => ({ items: [] })),
     ])
     let images = mergeArchiveItems(page.items || [], pending.items || [])
-    images = mergeArchiveItems(images, optimistic)
+    images = mergeArchiveItems(images, localPending)
     store.archiveImages = images
   }
 
@@ -535,7 +630,7 @@
     const pendingItems = pending.items || []
     const pendingById = new Map(pendingItems.map((p) => [p.id, p]))
     let changed = false
-    const completedIds = []
+    const maybeCompletedIds = []
 
     store.archiveImages = store.archiveImages.map((g) => {
       if (isOptimisticArchiveId(g.id)) {
@@ -555,17 +650,20 @@
         if (archiveItemPollKey(g) !== archiveItemPollKey(next)) changed = true
         return next
       }
-      completedIds.push(g.id)
+      const created = Date.parse(g.created_at || '')
+      const ageMs = Number.isFinite(created) ? Date.now() - created : 0
+      if (ageMs < 120_000) return g
+      maybeCompletedIds.push(g.id)
       return g
     })
 
-    if (completedIds.length) {
+    if (maybeCompletedIds.length) {
       const page = await API.apiJson('/api/studio/generations?limit=40&skip=0&media_kind=image').catch(() => ({
         items: [],
       }))
       const freshById = new Map((page.items || []).map((p) => [p.id, p]))
       store.archiveImages = store.archiveImages.map((g) => {
-        if (!completedIds.includes(g.id)) return g
+        if (!maybeCompletedIds.includes(g.id)) return g
         const fresh = freshById.get(g.id)
         if (!fresh) return g
         const next = { ...g, ...fresh }
@@ -598,6 +696,7 @@
   function archiveToFrame(item, i, logic, I) {
     const url = archiveThumbUrl(item)
     const pending = isArchivePending(item)
+    const failed = (item.status || '').trim() === 'failed'
     const who = item.model_name || '—'
     const ratio = item.output_aspect || '9:16'
     const tileBase =
@@ -626,6 +725,14 @@
       spinnerStyle:
         'width:22px;height:22px;border-radius:50%;border:2.5px solid rgba(215,244,82,.25);border-top-color:#D7F452;animation:mmSpin .8s linear infinite;',
       showPlaceholder: !url,
+      failed,
+      failedWrap:
+        'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(6,7,9,.72);padding:8px;',
+      failedStyle:
+        'font-size:10px;font-weight:700;color:#F87171;text-align:center;line-height:1.35;',
+      failedLabel: failed
+        ? (item.error_message || 'Ошибка генерации').trim().slice(0, 80)
+        : '',
       open: pending
         ? () => {}
         : () => {
@@ -707,20 +814,10 @@
       !!s.carouselPickId ||
       !!store.slotArchivePicks[slotStateKey('carousel', 0)]
     const hasFrame =
-      mode === 'carousel'
-        ? hasCarouselSrc
-        : !!store.uploadFiles.ref || !!store.slotArchivePicks[slotStateKey(mode, 0)]
+      mode === 'carousel' ? hasCarouselSrc : slotHasSource(mode, 0)
     if (slotN > 0 && !hasFrame && !(mode === 'carousel' && hasCarouselSrc)) errs.push(t.errNoRef)
-    if (mode === 'outfit') {
-      const hasCloth =
-        !!store.uploadFiles['outfit-cloth'] || !!store.slotArchivePicks[slotStateKey('outfit', 1)]
-      if (!hasCloth) errs.push(t.errNoRef)
-    }
-    if (mode === 'location') {
-      const hasLoc =
-        !!store.uploadFiles['location-photo'] || !!store.slotArchivePicks[slotStateKey('location', 1)]
-      if (!hasLoc) errs.push(t.errNoRef)
-    }
+    if (mode === 'outfit' && !slotHasSource('outfit', 1)) errs.push(t.errNoRef)
+    if (mode === 'location' && !slotHasSource('location', 1)) errs.push(t.errNoRef)
     if (mode === 'prompt' && !resolveStudioPrompt('prompt')) errs.push(t.errNoPrompt)
     if (mode !== 'outfit' && mode !== 'location' && !store.selectedModelId) errs.push(t.errNoChar)
     return errs
@@ -1330,6 +1427,75 @@
     if (vid) vid.currentTime = 0.15
   }
 
+  function renderArchivePickPreview(zone, uploadKey) {
+    const mode = store.logic?.state?.imgMode || 'ref'
+    const slotIndex =
+      uploadKey === 'outfit-cloth' || uploadKey === 'location-photo' ? 1 : 0
+    const archiveId = resolveSlotArchivePick(mode, slotIndex)
+    if (archiveId == null) return false
+    const item = store.archiveImages.find((x) => x.id === archiveId)
+    const url = item ? archiveThumbUrl(item) : null
+    if (!url) return false
+    zone.classList.add('mm-os-upload--filled')
+    zone.querySelectorAll(':scope > span, :scope > div:not(.mm-os-upload-preview)').forEach((el) => {
+      el.classList.add('mm-os-upload-ghost')
+    })
+    let box = zone.querySelector('.mm-os-upload-preview')
+    if (!box) {
+      box = document.createElement('div')
+      box.className = 'mm-os-upload-preview'
+      zone.appendChild(box)
+    }
+    box.innerHTML =
+      '<img src="' +
+      url.replace(/"/g, '') +
+      '" alt=""><span class="mm-os-upload-name" title="Архив">Архив #' +
+      archiveId +
+      '</span>'
+    let badge = zone.querySelector('.mm-os-upload-badge')
+    if (!badge) {
+      badge = document.createElement('span')
+      badge.className = 'mm-os-upload-badge'
+      zone.appendChild(badge)
+    }
+    badge.textContent = 'ARCHIVE'
+    let clear = zone.querySelector('.mm-os-upload-clear')
+    if (!clear) {
+      clear = document.createElement('button')
+      clear.type = 'button'
+      clear.className = 'mm-os-upload-clear'
+      clear.setAttribute('aria-label', 'Убрать кадр')
+      clear.textContent = '×'
+      clear.addEventListener('click', (e) => {
+        e.stopPropagation()
+        const sk = slotStateKey(mode, slotIndex)
+        delete store.slotArchivePicks[sk]
+        if (slotIndex === 0) {
+          for (const m of REF_SLOT_MODES) delete store.slotArchivePicks[slotStateKey(m, 0)]
+        }
+        clearUploadZone(zone, uploadKey)
+        store.logic?.forceUpdate()
+      })
+      zone.appendChild(clear)
+    }
+    return true
+  }
+
+  function syncUploadZonePreview(zone, key) {
+    const file = store.uploadFiles[key]
+    if (file) {
+      if (!zone.querySelector('.mm-os-upload-preview')) renderUploadPreview(zone, key, file)
+      return
+    }
+    if (!renderArchivePickPreview(zone, key)) {
+      zone.classList.remove('mm-os-upload--filled')
+      zone.querySelector('.mm-os-upload-preview')?.remove()
+      zone.querySelector('.mm-os-upload-badge')?.remove()
+      zone.querySelector('.mm-os-upload-clear')?.remove()
+      zone.querySelectorAll('.mm-os-upload-ghost').forEach((el) => el.classList.remove('mm-os-upload-ghost'))
+    }
+  }
+
   function uploadZoneKey(zone) {
     return zone.dataset.mmUpload || zone.dataset.mmSlotUpload || ''
   }
@@ -1435,8 +1601,7 @@
     if (!key) return
     const accept = zone.dataset.mmAccept || (key === 'motion-video' ? 'video/mp4,video/*' : 'image/*')
     if (zone.dataset.mmBound === key) {
-      const file = store.uploadFiles[key]
-      if (file && !zone.querySelector('.mm-os-upload-preview')) renderUploadPreview(zone, key, file)
+      syncUploadZonePreview(zone, key)
       return
     }
     zone.dataset.mmBound = key
@@ -1486,8 +1651,7 @@
         }
       })()
     })
-    const file = store.uploadFiles[key]
-    if (file) renderUploadPreview(zone, key, file)
+    syncUploadZonePreview(zone, key)
   }
 
   function getActiveCharId() {
@@ -2316,16 +2480,22 @@
           waveModelFromState,
           isNsfwMode,
           slotStateKey,
+          slotUploadKey,
+          resolveSlotSource,
         },
       })
       if (!built) throw new Error('Неизвестный режим генерации')
       const accepted = await startWorkflowScenarioJob(built)
-      const realId = typeof accepted.generation_id === 'number' ? accepted.generation_id : null
+      const realId = coerceJobGenerationId(accepted)
       if (realId) {
         store.archiveImages = replaceOptimisticArchiveId(store.archiveImages, tempId, realId, {
           status: 'processing',
           job_id: accepted.job_id ?? null,
         })
+      } else if (accepted.job_id) {
+        store.archiveImages = store.archiveImages.map((g) =>
+          g.id === tempId ? { ...g, job_id: accepted.job_id, status: 'processing' } : g,
+        )
       } else {
         store.archiveImages = removeOptimisticArchive(store.archiveImages, tempId)
       }
@@ -2454,6 +2624,7 @@
       return stDim
     }
     return (store.donations || []).map((d) => {
+      const modelLabel = d.studio_model_id ? modelNameById(d.studio_model_id) : null
       const urls = []
       if (d.telegram_link) {
         urls.push({
@@ -2492,21 +2663,60 @@
         })
       }
       return {
+        id: d.id,
         title: d.title || '—',
+        modelLabel: modelLabel && modelLabel !== '—' ? modelLabel : null,
+        modelBadge:
+          modelLabel && modelLabel !== '—'
+            ? lang === 'ru'
+              ? 'Персонаж: ' + modelLabel
+              : 'Character: ' + modelLabel
+            : lang === 'ru'
+              ? 'Без персонажа'
+              : 'No character',
+        modelBadgeStyle:
+          modelLabel && modelLabel !== '—'
+            ? 'font-size:10.5px;color:#F0A8C8;margin-bottom:8px;'
+            : 'font-size:10.5px;color:#5C6066;margin-bottom:8px;',
         st: (d.status || '—').toUpperCase(),
         stStyle: statusStyle(d.status),
         urls,
+        edit:
+          d.status === 'draft' || d.status === 'pending' || d.status === 'awaiting_id'
+            ? () => {
+                const logic = store.logic
+                if (!logic) return
+                store.donationEditId = d.id
+                logic.setState({ donTab: 'create', donEditId: d.id })
+                logic.forceUpdate()
+                queueMicrotask(() => {
+                  if (typeof global.MMOS_API_FULL?.fillDonationForm === 'function') {
+                    global.MMOS_API_FULL.fillDonationForm(d)
+                  }
+                })
+              }
+            : null,
+        canEdit:
+          d.status === 'draft' || d.status === 'pending' || d.status === 'awaiting_id',
       }
     })
   }
 
   function mapIncomingEvents(lang) {
     const linkTitle = (id) => (store.donations || []).find((d) => d.id === id)?.title || ''
+    const linkModel = (id) => {
+      const link = (store.donations || []).find((d) => d.id === id)
+      if (!link?.studio_model_id) return ''
+      const name = modelNameById(link.studio_model_id)
+      return name && name !== '—' ? ' · ' + name : ''
+    }
     return (store.donationEvents || []).slice(0, 10).map((e) => ({
       sum: '+' + fmtMoney(e.amount_minor, e.currency),
       from:
         (lang === 'ru' ? 'Входящий' : 'Incoming') +
-        (linkTitle(e.creator_donation_link_id) ? ' · «' + linkTitle(e.creator_donation_link_id) + '»' : ''),
+        (linkTitle(e.creator_donation_link_id)
+          ? ' · «' + linkTitle(e.creator_donation_link_id) + '»' + linkModel(e.creator_donation_link_id)
+          : ''),
       when: fmtDateShort(e.occurred_at) + ' · ' + fmtTime(e.occurred_at),
     }))
   }
@@ -2673,30 +2883,24 @@
     const archiveFrames = store.archiveImages.map((item, i) =>
       archiveToFrame(item, i, logic, vals),
     )
-    const thumbPickBase =
-      'aspect-ratio:9/16;border-radius:8px;cursor:pointer;border:2px solid transparent;background:'
-    const recentFrames = store.archiveImages.slice(0, 4).map((item, i) => {
-      const url = archiveThumbUrl(item)
-      const picked = s.carouselPickId === item.id
-      const bgCore = url
-        ? 'center/cover no-repeat url("' + url.replace(/"/g, '') + '"),' + G[i % 6]
-        : G[i % 6]
-      return {
-        id: item.id,
-        label: (item.model_name || '—') + ' · ' + (item.output_aspect || '9:16'),
-        thumbStyle:
-          thumbPickBase +
-          bgCore +
-          ';' +
-          (picked ? 'border-color:#D7F452;' : ''),
-        pick: () => {
-          if (!item.id || isArchivePending(item)) return
-          clearCarouselLocalUploads()
-          store.slotArchivePicks[slotStateKey('carousel', 0)] = item.id
-          logic.setState({ carouselPickId: item.id, carSource: 'archive' })
-        },
-      }
-    })
+    const tileBase =
+      'aspect-ratio:9/16;border-radius:10px;display:flex;align-items:flex-end;padding:8px;position:relative;overflow:hidden;cursor:pointer;background:'
+    const recentFrames = store.archiveImages
+      .filter((item) => !isArchivePending(item) && archiveThumbUrl(item))
+      .slice(0, 4)
+      .map((item, i) => {
+        const url = archiveThumbUrl(item)
+        const bgCore =
+          'center/cover no-repeat url("' + url.replace(/"/g, '') + '"),' + G[i % 6]
+        const tileStyle = tileBase + bgCore + ';'
+        return {
+          id: item.id,
+          label: (item.model_name || '—') + ' · ' + (item.output_aspect || '9:16'),
+          tileStyle,
+          thumbStyle: tileStyle,
+          open: () => logic.setState({ page: 'images', lightbox: item.id }),
+        }
+      })
     const videoArchive = store.archiveVideos.slice(0, 4).map((item, i) => ({
       bg: 'aspect-ratio:9/16;display:flex;align-items:center;justify-content:center;position:relative;background:center/cover no-repeat url("' +
         (item.image_url || '').replace(/"/g, '') + '"),' + G[(i + 2) % 6],
@@ -2755,6 +2959,12 @@
         color: row.credits_delta >= 0 ? '#4ADE80' : '#F87171',
       }))
 
+    const ownerId = me?.id
+
+    if (s.page === 'donations' && ownerId && store.donationOverview?.latest_event_id) {
+      writeDonationLastSeenEventId(ownerId, store.donationOverview.latest_event_id)
+    }
+
     const navGroups = (vals.navGroups || []).map((grp) => ({
       ...grp,
       items: grp.items.map((it) => {
@@ -2762,8 +2972,9 @@
         if (it.label === vals.t.navDialogs || (it.label && it.label.includes('Диалог'))) {
           badge = unreadTotal > 0 ? String(unreadTotal) : false
         }
-        if (it.label === vals.t.navDonations && store.donationOverview?.active_links) {
-          badge = String(store.donationOverview.active_links)
+        if (it.label === vals.t.navDonations) {
+          const unseenDon = unseenDonationBadgeCount(store.donationOverview, ownerId)
+          badge = unseenDon > 0 ? String(unseenDon) : false
         }
         return { ...it, badge }
       }),
@@ -2830,6 +3041,12 @@
     const donLinks = mapDonationLinks(lang)
     const incoming = mapIncomingEvents(lang)
     const myDonations = donLinks
+    const donFormTitle =
+      s.donEditId || store.donationEditId
+        ? lang === 'ru'
+          ? 'Редактировать донат'
+          : 'Edit donation'
+        : vals.t?.newDonation || (lang === 'ru' ? 'Новый донат' : 'New donation')
     const { members, templates, teamKpi } = mapTeam(lang, vals)
 
     const charId = s.charDetail ? Number(s.charDetail) || null : null
@@ -2874,8 +3091,29 @@
       ...(im.id === 'carousel' ? { cost: fmtCarouselModeCardCost(lang) } : {}),
       pick: () => {
         logic.setState({ imgMode: im.id, showGenError: false })
+        syncRefArchivePicksAcrossModes()
         logic.forceUpdate()
         queueMicrotask(() => bindDomActions())
+      },
+    }))
+
+    const donTabs = (vals.donTabs || []).map((dt, idx) => ({
+      ...dt,
+      pick: () => {
+        if (idx === 1) {
+          store.donationEditId = null
+          logic.setState({ donTab: 'create', donEditId: null })
+          logic.forceUpdate()
+          queueMicrotask(() => {
+            if (typeof global.MMOS_API_FULL?.clearDonationForm === 'function') {
+              global.MMOS_API_FULL.clearDonationForm()
+            }
+          })
+        } else {
+          store.donationEditId = null
+          logic.setState({ donTab: 'overview', donEditId: null })
+          logic.forceUpdate()
+        }
       },
     }))
 
@@ -2896,6 +3134,7 @@
       navGroups,
       recentDialogs,
       recentFrames,
+      recentFramesEmpty: recentFrames.length === 0,
       chats,
       messages,
       notes,
@@ -2910,6 +3149,7 @@
       donLinks,
       incoming,
       myDonations,
+      donFormTitle,
       history,
       members,
       templates,
@@ -2949,6 +3189,7 @@
       lightboxData,
       curMode,
       imgModes,
+      donTabs,
       emojiPick,
       emojiOpen: s.emojiOpen,
       toggleEmoji: () => logic.setState({ emojiOpen: !s.emojiOpen, msgReact: null }),

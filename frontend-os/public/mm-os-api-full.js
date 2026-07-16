@@ -380,13 +380,12 @@
   }
 
   function fillModelSelect(sel) {
-    if (!sel || sel.dataset.mmFilled) return
-    sel.dataset.mmFilled = '1'
+    if (!sel) return
     const cur = sel.value
     sel.innerHTML = ''
     const empty = document.createElement('option')
     empty.value = ''
-    empty.textContent = 'Не назначена'
+    empty.textContent = 'Не назначен'
     sel.appendChild(empty)
     for (const m of store.models || []) {
       const o = document.createElement('option')
@@ -395,6 +394,97 @@
       sel.appendChild(o)
     }
     if (cur) sel.value = cur
+    sel.dataset.mmFilled = '1'
+  }
+
+  function clearDonationForm() {
+    const root = document.querySelector('[data-screen-label="Донаты"]')
+    if (!root) return
+    const title = root.querySelector('[data-mm-don-title]')
+    const desc = root.querySelector('[data-mm-don-desc]')
+    const min = root.querySelector('[data-mm-don-min]')
+    const model = root.querySelector('[data-mm-don-model]')
+    if (title) title.value = ''
+    if (desc) desc.value = ''
+    if (min) min.value = ''
+    if (model) {
+      fillModelSelect(model)
+      model.value = ''
+    }
+    store.donationEditId = null
+  }
+
+  function fillDonationForm(link) {
+    const root = document.querySelector('[data-screen-label="Донаты"]')
+    if (!root || !link) return
+    const title = root.querySelector('[data-mm-don-title]')
+    const desc = root.querySelector('[data-mm-don-desc]')
+    const min = root.querySelector('[data-mm-don-min]')
+    const model = root.querySelector('[data-mm-don-model]')
+    if (title) title.value = link.title || ''
+    if (desc) desc.value = link.description || ''
+    if (min) {
+      min.value =
+        link.min_amount_minor != null ? String(Math.round(link.min_amount_minor / 100)) : ''
+    }
+    if (model) {
+      fillModelSelect(model)
+      model.value = link.studio_model_id ? String(link.studio_model_id) : ''
+    }
+    store.donationEditId = link.id
+  }
+
+  async function saveDonationLink(submit) {
+    const root = document.querySelector('[data-screen-label="Донаты"]')
+    const title = (root?.querySelector('[data-mm-don-title]')?.value || '').trim()
+    if (!title) {
+      store.error = 'Укажите название ссылки'
+      return
+    }
+    const desc = (root?.querySelector('[data-mm-don-desc]')?.value || '').trim()
+    const minRaw = root?.querySelector('[data-mm-don-min]')?.value
+    const min = Number(minRaw || 0)
+    const modelId = root?.querySelector('[data-mm-don-model]')?.value
+    const editingId = store.donationEditId || bridge.store.logic?.state?.donEditId
+    const body = {
+      title,
+      description: desc || null,
+      currency: 'RUB',
+      min_amount_minor: min > 0 ? Math.round(min * 100) : null,
+      studio_model_id: modelId ? Number(modelId) : null,
+      submit: !!submit,
+    }
+    store.busy = true
+    try {
+      if (editingId) {
+        await API.apiJson('/api/creator-donations/' + editingId, {
+          method: 'PATCH',
+          body: JSON.stringify(body),
+        })
+      } else {
+        await API.apiJson('/api/creator-donations', {
+          method: 'POST',
+          body: JSON.stringify(body),
+        })
+      }
+      store.donationEditId = null
+      clearDonationForm()
+      await bridge.refreshAll()
+      bridge.store.logic?.setState({ donTab: 'overview', donEditId: null })
+    } catch (e) {
+      store.error = e.message || String(e)
+    } finally {
+      store.busy = false
+      bridge.store.logic?.forceUpdate()
+    }
+  }
+
+  async function createDonationLink() {
+    return saveDonationLink(true)
+  }
+
+  async function saveDonationDraft() {
+    return saveDonationLink(false)
   }
 
   async function saveWavespeedKey() {
@@ -757,34 +847,6 @@
     }
   }
 
-  async function createDonationLink() {
-    const root = document.querySelector('[data-screen-label="Донаты"]')
-    const title = (root?.querySelector('[data-mm-don-title]')?.value || '').trim()
-    if (!title) { store.error = 'Укажите название ссылки'; return }
-    const desc = (root?.querySelector('[data-mm-don-desc]')?.value || '').trim()
-    const min = Number(root?.querySelector('[data-mm-don-min]')?.value || 0)
-    const modelId = root?.querySelector('[data-mm-don-model]')?.value
-    store.busy = true
-    try {
-      await API.apiJson('/api/creator-donations', {
-        method: 'POST',
-        body: JSON.stringify({
-          title,
-          description: desc || null,
-          min_amount_minor: Math.round(min * 100),
-          studio_model_id: modelId ? Number(modelId) : null,
-        }),
-      })
-      await bridge.refreshAll()
-      bridge.store.logic?.setState({ donTab: 'overview' })
-    } catch (e) {
-      store.error = e.message || String(e)
-    } finally {
-      store.busy = false
-      bridge.store.logic?.forceUpdate()
-    }
-  }
-
   async function addSnippet() {
     const title = prompt('Название шаблона')
     if (!title?.trim()) return
@@ -845,6 +907,7 @@
     bindOnce(document.querySelector('[data-mm-conn-fanvue-oauth]'), startFanvueOAuth)
     bindOnce(document.querySelector('[data-mm-conn-tribute-save]'), saveTributeKey)
     bindOnce(document.querySelector('[data-mm-don-create]'), createDonationLink)
+    bindOnce(document.querySelector('[data-mm-don-draft]'), saveDonationDraft)
     bindOnce(document.querySelector('[data-mm-snippet-add]'), addSnippet)
     bindOnce(document.querySelector('[data-mm-note-add]'), addConversationNote)
     bindOnce(document.querySelector('[data-mm-logout]'), () => {
@@ -996,4 +1059,10 @@
   }
 
   bridge.runGenerateVideo = bridge.runGenerateVideo || function () {}
+
+  global.MMOS_API_FULL = {
+    fillDonationForm,
+    clearDonationForm,
+    saveDonationLink,
+  }
 })(window)

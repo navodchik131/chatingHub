@@ -285,10 +285,12 @@
   async function buildGraphForMode(mode, ctx) {
     const { API, store, archiveThumbUrl, s, modelId, userPrompt, helpers } = ctx
     const opts = genOptionsFromState(s, store, { ...helpers, userPrompt })
-    const slot0 = {
-      file: store.uploadFiles.ref,
-      archiveId: store.slotArchivePicks[helpers.slotStateKey(mode, 0)],
-    }
+    const slot0 = helpers.resolveSlotSource
+      ? helpers.resolveSlotSource(mode, 0)
+      : {
+          file: store.uploadFiles.ref,
+          archiveId: store.slotArchivePicks[helpers.slotStateKey(mode, 0)],
+        }
 
     if (mode === 'ref') {
       const sceneRefId = await resolveRefId(API, store, archiveThumbUrl, slot0)
@@ -302,19 +304,23 @@
       return buildPromptOnlyGraph(modelId, opts)
     }
     if (mode === 'location') {
-      const slot1 = {
-        file: store.uploadFiles['location-photo'],
-        archiveId: store.slotArchivePicks[helpers.slotStateKey('location', 1)],
-      }
+      const slot1 = helpers.resolveSlotSource
+        ? helpers.resolveSlotSource('location', 1)
+        : {
+            file: store.uploadFiles['location-photo'],
+            archiveId: store.slotArchivePicks[helpers.slotStateKey('location', 1)],
+          }
       const baseRefId = await resolveRefId(API, store, archiveThumbUrl, slot0)
       const locRefId = await resolveRefId(API, store, archiveThumbUrl, slot1)
       return buildLocationChangeGraph(baseRefId, locRefId, opts)
     }
     if (mode === 'outfit') {
-      const slot1 = {
-        file: store.uploadFiles['outfit-cloth'],
-        archiveId: store.slotArchivePicks[helpers.slotStateKey('outfit', 1)],
-      }
+      const slot1 = helpers.resolveSlotSource
+        ? helpers.resolveSlotSource('outfit', 1)
+        : {
+            file: store.uploadFiles['outfit-cloth'],
+            archiveId: store.slotArchivePicks[helpers.slotStateKey('outfit', 1)],
+          }
       const baseRefId = await resolveRefId(API, store, archiveThumbUrl, slot0)
       const clothesRefId = await resolveRefId(API, store, archiveThumbUrl, slot1)
       return buildOutfitChangeGraph(baseRefId, clothesRefId, opts)
