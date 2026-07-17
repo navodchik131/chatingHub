@@ -1189,7 +1189,7 @@ html {
 
 @media (min-width: 900px) {
   .mm-footer__grid {
-    grid-template-columns: 1.4fr repeat(4, 1fr);
+    grid-template-columns: 1.4fr repeat(3, 1fr);
   }
 }
 
@@ -1256,6 +1256,132 @@ html {
   margin: 0;
   color: var(--fg-2);
   line-height: 1.55;
+}
+
+.mm-info-h2 {
+  font-size: clamp(1.5rem, 3vw, 2rem) !important;
+  margin: 0 0 var(--s-4);
+}
+
+.mm-info-grid {
+  display: grid;
+  gap: var(--s-4);
+  margin-bottom: var(--s-10);
+}
+
+@media (min-width: 720px) {
+  .mm-info-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .mm-info-grid--2 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.mm-info-card {
+  padding: var(--s-5);
+  border-radius: var(--r-md);
+  background: var(--bg-2);
+  border: 1px solid var(--border-1);
+}
+
+.mm-info-card--accent {
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border-1));
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-2));
+}
+
+.mm-info-card__label {
+  display: block;
+  margin-bottom: var(--s-3);
+  font: 500 0.6875rem/1.2 var(--font-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg-3);
+}
+
+.mm-info-card__value {
+  display: block;
+  margin-bottom: var(--s-3);
+  font: 800 clamp(1.5rem, 3vw, 2rem) / 1 var(--font-sans);
+  letter-spacing: -0.03em;
+  color: var(--fg-1);
+}
+
+.mm-info-card p {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--fg-2);
+}
+
+.mm-info-steps {
+  list-style: none;
+  margin: var(--s-6) 0 0;
+  padding: 0;
+  display: grid;
+  gap: var(--s-5);
+}
+
+.mm-info-steps li {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--s-4);
+  align-items: start;
+}
+
+.mm-info-steps__n {
+  font: 700 0.875rem/1 var(--font-mono);
+  color: var(--accent);
+  padding-top: 0.2rem;
+}
+
+.mm-info-steps h3 {
+  margin: 0 0 var(--s-2);
+  font-size: 1rem;
+  color: var(--fg-1);
+}
+
+.mm-info-steps p {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.55;
+  color: var(--fg-2);
+}
+
+.mm-info-list {
+  margin: var(--s-5) 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: var(--s-3);
+}
+
+.mm-info-list li {
+  position: relative;
+  padding-left: 1.25rem;
+  font-size: 0.9rem;
+  line-height: 1.55;
+  color: var(--fg-2);
+}
+
+.mm-info-list li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.55em;
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 1px;
+  background: var(--accent);
+  transform: rotate(45deg);
+}
+
+.mm-info-cta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-3);
+  margin-top: var(--s-2);
 }
 
 .mm-faq {

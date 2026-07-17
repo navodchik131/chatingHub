@@ -459,7 +459,8 @@ input::placeholder,textarea::placeholder{color:#5C6066;}
               </div>
               <textarea data-mm-note-text rows="3" value="{{ noteDraft }}" onInput="{{ onNoteInput }}" placeholder="{{ t.noteTextPh }}" style="width:100%;background:#0D0E11;border:1px solid rgba(255,255,255,.09);border-radius:10px;padding:9px 12px;color:#F2F3F0;font-family:'Manrope';font-size:12px;line-height:1.5;resize:vertical;outline:none;"></textarea>
               <div style="display:flex;gap:6px;">
-                <div onClick="{{ saveNote }}" data-mm-note-save style="flex:1;background:rgba(215,244,82,.12);border:1px solid rgba(215,244,82,.3);border-radius:9px;padding:8px;text-align:center;font-size:12px;font-weight:800;color:#D7F452;cursor:pointer;" style-hover="background:rgba(215,244,82,.2);">{{ t.save }}</div><div onClick="{{ closeNote }}" data-mm-note-cancel style="border:1px solid rgba(255,255,255,.12);border-radius:9px;padding:8px 14px;text-align:center;font-size:12px;font-weight:700;color:#9BA0A6;cursor:pointer;" style-hover="border-color:rgba(255,255,255,.3);">{{ t.opCancel }}</div>
+                <div onClick="{{ saveNote }}" data-mm-note-save style="flex:1;background:rgba(215,244,82,.12);border:1px solid rgba(215,244,82,.3);border-radius:9px;padding:8px;text-align:center;font-size:12px;font-weight:800;color:#D7F452;cursor:pointer;" style-hover="background:rgba(215,244,82,.2);">{{ t.save }}</div>
+                <div onClick="{{ closeNote }}" data-mm-note-cancel style="border:1px solid rgba(255,255,255,.12);border-radius:9px;padding:8px 14px;text-align:center;font-size:12px;font-weight:700;color:#9BA0A6;cursor:pointer;" style-hover="border-color:rgba(255,255,255,.3);">{{ t.opCancel }}</div>
               </div>
             </div>
             </sc-if>
@@ -1428,7 +1429,7 @@ class Component extends DCLogic {
     tier: 'standard', period: 'month', moreOpen: false,
     isMobile: false, chatOpen: 0,
     chatFilter: 'all', chatPlatform: 'all', mobileChat: false,
-    msgReact: null, emojiOpen: false, showScrollDown: false, replyDraft: '', noteDraft: '', reactions: {},
+    msgReact: null, emojiOpen: false, showScrollDown: false, replyDraft: '', noteDraft: '', showScrollDown: false, replyDraft: '', noteDraft: '', reactions: {},
     contentMode: 'sfw', aiModel: 'nano', carouselCount: 4, slotSource: {},
     hasFirstFrame: 'yes', vidQuality: '1080', vidFormat: '9:16', vidTime: '5',
     charTab: 'photos', lightbox: null,
@@ -2150,12 +2151,6 @@ class Component extends DCLogic {
       analyzeNotes: () => void window.MMOS_BRIDGE?.analyzeConversationNotes?.(),
       analyzeNotesLabel: '✦ AI-' + (t.analysis || 'анализ'),
       onNoteInput: (e) => setS({ noteDraft: e?.target?.value ?? '' }),
-      replyDraft: s.replyDraft || '',
-      onReplyInput: (e) => setS({ replyDraft: e?.target?.value ?? '' }),
-      onReplyKeyDown: (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void window.MMOS_BRIDGE?.sendReply?.(); } },
-      pickChatFile: (e) => window.MMOS_BRIDGE?.pickChatFile?.(e),
-      sendReplyClick: () => void window.MMOS_BRIDGE?.sendReply?.(),
-      clearChatAttach: (e) => window.MMOS_BRIDGE?.clearChatAttachment?.(e),
       emojiPick, emojiOpen: s.emojiOpen, toggleEmoji: () => setS({ emojiOpen: !s.emojiOpen, msgReact: null }),
       backToList: () => setS({ mobileChat: false, msgReact: null, emojiOpen: false }),
       closePops: () => { if (s.msgReact !== null || s.emojiOpen) setS({ msgReact: null, emojiOpen: false }); },

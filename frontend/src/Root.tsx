@@ -6,6 +6,8 @@ import { LoginPage } from './marketing/LoginPage'
 import { MarketingLayout } from './marketing/MarketingLayout'
 import { PricingPage } from './marketing/PricingPage'
 import { PrivacyPage } from './marketing/PrivacyPage'
+import { ReferralPage } from './marketing/ReferralPage'
+import { DemoCreditsPage } from './marketing/DemoCreditsPage'
 import { TermsPage } from './marketing/TermsPage'
 import { AdminPage } from './admin/AdminPage'
 import { WorkflowPage } from './workflow/WorkflowPage'
@@ -26,6 +28,8 @@ function marketingRouteChildren() {
     <>
       <Route index element={<LandingPage />} />
       <Route path="pricing" element={<PricingPage />} />
+      <Route path="referral" element={<ReferralPage />} />
+      <Route path="demo" element={<DemoCreditsPage />} />
       <Route path="faq" element={<FaqPage />} />
       <Route path="privacy" element={<PrivacyPage />} />
       <Route path="terms" element={<TermsPage />} />

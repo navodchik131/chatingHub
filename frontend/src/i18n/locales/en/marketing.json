@@ -331,7 +331,7 @@
         "title": "Generation for your content",
         "desc": "Six guided modes, engine and format choice, built-in archive with lightbox — all in one studio window.",
         "points": [
-          "SFW/NSFW and engine choice (Nano Banana, GPT Image, Seedream, Wan)",
+          "SFW/NSFW and engine choice (Nano Banana, GPT Image 2, Seedream, Wan)",
           "Outfit & location swap from two references",
           "Upload or pick a frame from archive",
           "Carousel — a coherent series"
@@ -440,6 +440,7 @@
     },
     "referralStatFriend": "credits per friend",
     "referralStatPay": "of each payment",
+    "referralCta": "Program terms",
     "countersTitle": "Platform numbers",
     "counters": [
       "frames generated",
@@ -526,6 +527,106 @@
     "trialEyebrow": "Get started",
     "trialTitle": "No card required",
     "trialDek": "{{demoGenerations}} free image generations on signup. For Pro, connect your WaveSpeed key in Integrations. Demo generations do not expire over time.",
+    "footerFaq": "FAQ →",
+    "footerHome": "Back to home ↗"
+  },
+  "referralPage": {
+    "eyebrow": "Partnership · terms",
+    "title": "Referral program",
+    "intro": "Invite creators with your personal link and earn {{ref.referrer_payment_percent}}% of every subscription payment they make — paid as ModelMate credits. No time limit while your referral stays on the platform.",
+    "howEyebrow": "How it works",
+    "howTitle": "Three steps to your reward.",
+    "steps": [
+      {
+        "title": "Get your link",
+        "text": "Sign up and open Plan & balance in the dashboard — your personal referral link is there."
+      },
+      {
+        "title": "Invite a friend",
+        "text": "They register via your link and get +{{ref.friend_referral_credits}} credits right away."
+      },
+      {
+        "title": "Earn a share",
+        "text": "On every subscription payment they make (card, credits, or renewal) you receive {{ref.referrer_payment_percent}}% as credits at 1 cr. = {{ref.credit_unit_price_rub}} ₽."
+      }
+    ],
+    "examplesEyebrow": "Example",
+    "examplesTitle": "What you can earn.",
+    "examples": [
+      {
+        "label": "Friend’s payment",
+        "value": "{{ref.referrer_reward_example_rub}} ₽",
+        "hint": "Sample subscription payment — for estimating reward size."
+      },
+      {
+        "label": "Your reward",
+        "value": "~{{ref.referrer_reward_example_credits}} cr.",
+        "hint": "{{ref.referrer_payment_percent}}% of the payment → credits on your balance. Credits never expire."
+      }
+    ],
+    "conditionsEyebrow": "Terms",
+    "conditionsTitle": "What to know.",
+    "conditions": [
+      "Rewards apply only to Standard / Pro subscription payments (including renewals), not to standalone credit top-ups without a subscription.",
+      "The percentage is calculated from the invitee’s payment and credited to you at 1 cr. = {{ref.credit_unit_price_rub}} ₽.",
+      "The invited user gets +{{ref.friend_referral_credits}} credits once — on signup via your link.",
+      "There is no program end date: as long as their account is active and they pay for a subscription, you keep earning.",
+      "Subscriptions can be paid from the credit balance — referral rewards still count.",
+      "One personal link per account; self-referrals and abuse are not rewarded."
+    ],
+    "ctaPricing": "View pricing",
+    "footerDemo": "Demo & credits →",
+    "footerFaq": "FAQ →",
+    "footerHome": "Back to home ↗"
+  },
+  "demoPage": {
+    "eyebrow": "Start · no card",
+    "title": "Demo & credits",
+    "intro": "Right after signup you get demo mode: {{demoGenerations}} free image generations. No card required. Then top up credits or subscribe to Standard / Pro.",
+    "demoCardLabel": "Demo mode",
+    "demoCardValue": "{{demoGenerations}} images",
+    "demoCardHint": "Free generations at the start. They do not expire by calendar — only when you use them.",
+    "creditsCardLabel": "Credits",
+    "creditsCardValue": "from {{creditsMin}}",
+    "creditsCardHint": "Buy from {{creditsMin}} credits — {{creditsUnit}} ₽ each. Credits never expire.",
+    "demoEyebrow": "Demo",
+    "demoTitle": "What demo mode is.",
+    "demoDek": "A trial of the image studio on the Credits plan — no card and no WaveSpeed key required.",
+    "demoPoints": [
+      "On signup you receive {{demoGenerations}} free image generations.",
+      "Regular photos use nano-banana-2; NSFW uses wan-2.7 on platform WaveSpeed.",
+      "Demo is not calendar-limited: generations stay until you spend them.",
+      "Fanvue / Telegram chat and larger team limits unlock on Standard or Pro."
+    ],
+    "creditsEyebrow": "Balance",
+    "creditsTitle": "How credits work.",
+    "creditsDek": "Credits are the studio’s internal currency. They pay for generations on Credits / Standard and can cover a subscription.",
+    "creditPoints": [
+      "Top up in the dashboard via YooKassa — any amount from {{creditsMin}} at {{creditsUnit}} ₽ per credit.",
+      "On Credits without a subscription the studio runs on platform WaveSpeed; chat is unavailable.",
+      "Standard — subscription with plan credits, chat, and team in one workspace.",
+      "Pro — your own WaveSpeed key: generations are billed by the provider; the platform does not charge credits for images and video.",
+      "Credits never expire and roll over between periods."
+    ],
+    "afterEyebrow": "After demo",
+    "afterTitle": "Where to go next.",
+    "afterItems": [
+      {
+        "title": "Top up credits",
+        "text": "Stay on Credits: buy generations as needed, no subscription required."
+      },
+      {
+        "title": "Standard",
+        "text": "A subscription with plan credits — studio, chat, and team. Ideal for regular generation."
+      },
+      {
+        "title": "Pro",
+        "text": "Your WaveSpeed API key: pay the provider directly. ModelMate covers infrastructure, chat, and team."
+      }
+    ],
+    "ctaPrimary": "Try free — {{demoGenerations}} images",
+    "ctaPricing": "View pricing",
+    "footerReferral": "Referral program →",
     "footerFaq": "FAQ →",
     "footerHome": "Back to home ↗"
   },

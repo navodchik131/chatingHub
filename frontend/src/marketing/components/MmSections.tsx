@@ -105,9 +105,6 @@ export function MmHero() {
               <MmButton to="/login" size="lg">
                 {t('hero.ctaPrimary', { demoGenerations })}
               </MmButton>
-              <MmButton to="/#how" variant="secondary" size="lg">
-                {t('hero.ctaSecondary')}
-              </MmButton>
             </div>
             <div className="mm-hero__stats">
               <div>

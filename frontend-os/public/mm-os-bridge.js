@@ -1699,25 +1699,77 @@
     return list[0]
   }
 
+  function notifyApiStatus() {
+    let el = document.getElementById('mm-os-api-status')
+    if (!el) {
+      el = document.createElement('div')
+      el.id = 'mm-os-api-status'
+      el.className = 'mm-os-api-status'
+      document.body.appendChild(el)
+    }
+    if (store.busy || store.notesBusy) {
+      el.textContent = store.notesBusy
+        ? store.logic?.state?.lang === 'en'
+          ? 'Analyzing…'
+          : 'Анализ…'
+        : 'Загрузка…'
+      el.style.display = 'block'
+      el.className = 'mm-os-api-status mm-os-api-status--busy'
+      return
+    }
+    if (store.error) {
+      el.className = 'mm-os-api-status mm-os-api-status--err'
+      el.style.display = 'flex'
+      el.replaceChildren()
+      const msg = document.createElement('span')
+      msg.className = 'mm-os-api-status-msg'
+      msg.textContent = store.error
+      const btn = document.createElement('button')
+      btn.type = 'button'
+      btn.className = 'mm-os-api-status-close'
+      btn.setAttribute('aria-label', 'Закрыть')
+      btn.textContent = '✕'
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation()
+        store.error = null
+        notifyApiStatus()
+        store.logic?.forceUpdate()
+      })
+      el.appendChild(msg)
+      el.appendChild(btn)
+      return
+    }
+    el.style.display = 'none'
+    el.replaceChildren()
+  }
+
   function openNoteForm() {
     const logic = store.logic
-    if (!logic) return
+    if (!logic) return false
     logic.setState({ noteFormOpen: true })
+    logic.forceUpdate()
+    return true
   }
 
   function closeNoteForm() {
     const logic = store.logic
-    if (!logic) return
+    if (!logic) return false
     logic.setState({ noteFormOpen: false, noteDraft: '' })
     const ta = document.querySelector('[data-mm-note-text]')
     if (ta) ta.value = ''
+    logic.forceUpdate()
+    return true
   }
 
   function toggleNoteForm() {
     const logic = store.logic
-    if (!logic) return
-    if (logic.state.noteFormOpen) closeNoteForm()
-    else openNoteForm()
+    if (!logic) {
+      store.error = 'Кабинет ещё загружается — подождите секунду и нажмите снова'
+      notifyApiStatus()
+      return false
+    }
+    if (logic.state.noteFormOpen) return closeNoteForm()
+    return openNoteForm()
   }
 
   async function saveConversationNote() {
@@ -1726,12 +1778,14 @@
     const text = readNoteText()
     if (!text) {
       store.error = logic.state.lang === 'en' ? 'Enter note text' : 'Введите текст заметки'
+      notifyApiStatus()
       logic.forceUpdate()
       return
     }
     const conv = resolveActiveConv(store.conversations)
     if (!conv) {
       store.error = logic.state.lang === 'en' ? 'No dialog selected' : 'Нет выбранного диалога'
+      notifyApiStatus()
       logic.forceUpdate()
       return
     }
@@ -1742,6 +1796,7 @@
     const content = text.startsWith('[') ? text : '[' + label + '] ' + text
     store.notesBusy = true
     store.error = null
+    notifyApiStatus()
     logic.forceUpdate()
     try {
       await API.apiJson('/api/conversations/' + conv.id + '/notes', {
@@ -1753,8 +1808,10 @@
       closeNoteForm()
     } catch (e) {
       store.error = e.message || String(e)
+      notifyApiStatus()
     } finally {
       store.notesBusy = false
+      notifyApiStatus()
       logic.forceUpdate()
     }
   }
@@ -1764,12 +1821,14 @@
     const conv = resolveActiveConv(store.conversations)
     if (!conv) {
       store.error = logic?.state?.lang === 'en' ? 'No dialog selected' : 'Нет выбранного диалога'
+      notifyApiStatus()
       logic?.forceUpdate()
       return
     }
     if (store.notesBusy) return
     store.notesBusy = true
     store.error = null
+    notifyApiStatus()
     logic?.forceUpdate()
     try {
       const data = await API.apiJson('/api/conversations/' + conv.id + '/notes/analyze', {
@@ -1779,8 +1838,10 @@
       store.notes = Array.isArray(data) ? data : []
     } catch (e) {
       store.error = e.message || String(e)
+      notifyApiStatus()
     } finally {
       store.notesBusy = false
+      notifyApiStatus()
       logic?.forceUpdate()
     }
   }
@@ -2735,6 +2796,26 @@
     }
   }
 
+  function noteButtonKind(el) {
+    if (!el || typeof el.closest !== 'function') return null
+    if (el.closest('[data-mm-note-toggle], [data-mm-note-add]')) return 'toggle'
+    if (el.closest('[data-mm-note-analyze]')) return 'analyze'
+    if (el.closest('[data-mm-note-save]')) return 'save'
+    if (el.closest('[data-mm-note-cancel]')) return 'cancel'
+    if (el.closest('[data-mm-note-tag]')) return 'tag'
+    // Fallback: production HTML без data-mm-* после сбоя sync-design
+    const btn = el.closest('div[style*="cursor:pointer"]')
+    if (!btn) return null
+    const notesCol = btn.closest('[data-screen-label="Диалоги"]')
+    if (!notesCol) return null
+    const t = (btn.textContent || '').replace(/\s+/g, ' ').trim()
+    if (/^\+\s*(Заметка|Note)$/i.test(t)) return 'toggle'
+    if (/AI-?\s*(анализ|analysis)/i.test(t) || /^Анализ/i.test(t) || /^Analyz/i.test(t)) return 'analyze'
+    if (/^(Сохранить|Save)$/i.test(t)) return 'save'
+    if (/^(Отмена|Cancel)$/i.test(t)) return 'cancel'
+    return null
+  }
+
   function bindChatShell() {
     if (document.documentElement.dataset.mmChatShell) return
     document.documentElement.dataset.mmChatShell = '1'
@@ -2792,38 +2873,32 @@
           clearChatAttachment(e)
           return
         }
-        if (el.closest('[data-mm-note-toggle], [data-mm-note-add]')) {
+
+        const noteKind = noteButtonKind(el)
+        if (noteKind) {
+          // Помечаем, чтобы React onClick / bindNotePanel не переключили повторно
+          if (e.timeStamp != null) {
+            document.documentElement.dataset.mmNoteHandled = String(e.timeStamp)
+          }
           e.preventDefault()
           e.stopPropagation()
-          toggleNoteForm()
+          if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation()
+          if (noteKind === 'toggle') toggleNoteForm()
+          else if (noteKind === 'save') void saveConversationNote()
+          else if (noteKind === 'cancel') closeNoteForm()
+          else if (noteKind === 'analyze') void analyzeConversationNotes()
+          else if (noteKind === 'tag') {
+            const noteTag = el.closest('[data-mm-note-tag]') || el.closest('span')
+            if (noteTag) {
+              const root = noteTag.closest('[data-screen-label="Диалоги"]') || document
+              const tags = root.querySelectorAll('[data-mm-note-tag]')
+              const idx = tags.length
+                ? Array.from(tags).indexOf(noteTag)
+                : Array.from(root.querySelectorAll('span')).indexOf(noteTag)
+              if (idx >= 0 && store.logic) store.logic.setState({ noteTag: idx })
+            }
+          }
           return
-        }
-        if (el.closest('[data-mm-note-save]')) {
-          e.preventDefault()
-          e.stopPropagation()
-          void saveConversationNote()
-          return
-        }
-        if (el.closest('[data-mm-note-cancel]')) {
-          e.preventDefault()
-          e.stopPropagation()
-          closeNoteForm()
-          return
-        }
-        if (el.closest('[data-mm-note-analyze]')) {
-          e.preventDefault()
-          e.stopPropagation()
-          void analyzeConversationNotes()
-          return
-        }
-        const noteTag = el.closest('[data-mm-note-tag]')
-        if (noteTag) {
-          e.preventDefault()
-          e.stopPropagation()
-          const root = noteTag.closest('[data-screen-label="Диалоги"]') || document
-          const tags = root.querySelectorAll('[data-mm-note-tag]')
-          const idx = Array.from(tags).indexOf(noteTag)
-          if (idx >= 0 && store.logic) store.logic.setState({ noteTag: idx })
         }
       },
       true,
@@ -2847,54 +2922,14 @@
     )
   }
 
+  function noteHandlerAlreadyRan(e) {
+    const stamp = document.documentElement.dataset.mmNoteHandled
+    return stamp && e?.timeStamp != null && String(e.timeStamp) === stamp
+  }
+
   function bindNotePanel() {
-    const root = document.querySelector('[data-screen-label="Диалоги"]')
-    if (!root) return
-    const toggle = root.querySelector('[data-mm-note-toggle]')
-    if (toggle && !toggle.dataset.mmBound) {
-      toggle.dataset.mmBound = '1'
-      toggle.addEventListener('click', (e) => {
-        e.preventDefault()
-        e.stopPropagation()
-        toggleNoteForm()
-      })
-    }
-    const save = root.querySelector('[data-mm-note-save]')
-    if (save && !save.dataset.mmBound) {
-      save.dataset.mmBound = '1'
-      save.addEventListener('click', (e) => {
-        e.preventDefault()
-        e.stopPropagation()
-        void saveConversationNote()
-      })
-    }
-    const cancel = root.querySelector('[data-mm-note-cancel]')
-    if (cancel && !cancel.dataset.mmBound) {
-      cancel.dataset.mmBound = '1'
-      cancel.addEventListener('click', (e) => {
-        e.preventDefault()
-        e.stopPropagation()
-        closeNoteForm()
-      })
-    }
-    const analyze = root.querySelector('[data-mm-note-analyze]')
-    if (analyze && !analyze.dataset.mmBound) {
-      analyze.dataset.mmBound = '1'
-      analyze.addEventListener('click', (e) => {
-        e.preventDefault()
-        e.stopPropagation()
-        void analyzeConversationNotes()
-      })
-    }
-    root.querySelectorAll('[data-mm-note-tag]').forEach((el, i) => {
-      if (el.dataset.mmBound) return
-      el.dataset.mmBound = '1'
-      el.addEventListener('click', (e) => {
-        e.preventDefault()
-        e.stopPropagation()
-        store.logic?.setState({ noteTag: i })
-      })
-    })
+    // Клики по заметкам ловит bindChatShell (capture). Повторные listeners
+    // на кнопках давали double-toggle: открыли форму → сразу закрыли.
   }
 
   function bindDomActions() {
@@ -3194,7 +3229,7 @@
       noteFormOpen: false,
       noteFormClosed: true,
       noteDraft: '',
-      analyzeNotes: () => {},
+      analyzeNotes: () => void window.MMOS_BRIDGE?.analyzeConversationNotes?.(),
       analyzeNotesLabel: '✦ AI-' + (vals.t?.analysis || 'анализ'),
       toggleNote: () => window.MMOS_BRIDGE?.toggleNoteForm?.(),
       closeNote: () => window.MMOS_BRIDGE?.closeNoteForm?.(),
@@ -3423,6 +3458,7 @@
   }
 
   function enrich(logic, vals) {
+    store.logic = logic
     if (!store.authed) return emptyVals(vals)
     const s = logic.state
     const lang = s.lang || 'ru'
@@ -3920,18 +3956,22 @@
       },
       noteTagChips,
       toggleNote: (e) => {
+        if (noteHandlerAlreadyRan(e)) return
         e?.stopPropagation?.()
         toggleNoteForm()
       },
       closeNote: (e) => {
+        if (noteHandlerAlreadyRan(e)) return
         e?.stopPropagation?.()
         closeNoteForm()
       },
       saveNote: (e) => {
+        if (noteHandlerAlreadyRan(e)) return
         e?.stopPropagation?.()
         void saveConversationNote()
       },
       analyzeNotes: (e) => {
+        if (noteHandlerAlreadyRan(e)) return
         e?.stopPropagation?.()
         void analyzeConversationNotes()
       },

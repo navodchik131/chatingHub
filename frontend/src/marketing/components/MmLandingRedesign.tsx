@@ -10,7 +10,7 @@ const TICKER_ITEMS = [
   'Fanvue',
   'Instagram — soon',
   'Nano Banana Pro',
-  'GPT Image',
+  'GPT Image 2',
   'Seedream 5 Pro',
   'Wan 2.7 Pro',
   'Tribute',
@@ -64,7 +64,7 @@ const BA_PAIRS = [
 
 const ENGINE_META = [
   { name: 'Nano Banana Pro', tag: 'SFW', tone: 'green' as const },
-  { name: 'GPT Image', tag: 'SFW', tone: 'green' as const },
+  { name: 'GPT Image 2', tag: 'SFW', tone: 'green' as const },
   { name: 'Seedream 5 Pro', tag: 'NSFW', tone: 'pink' as const },
   { name: 'Wan 2.7 Pro', tag: 'NSFW', tone: 'pink' as const },
 ]
@@ -426,6 +426,9 @@ export function MmTelegramReferralRow() {
                 <span>{t('landingV2.referralStatPay')}</span>
               </div>
             </div>
+            <MmButton to="/referral" variant="secondary" size="lg">
+              {t('landingV2.referralCta')} →
+            </MmButton>
           </article>
         </div>
       </MmContainer>

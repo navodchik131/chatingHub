@@ -75,9 +75,6 @@ export function MarketingLayout() {
   }
 
   const homePath = path('/')
-  const hashTools = path('/#tools')
-  const hashShowcase = path('/#showcase')
-  const hashReferral = path('/#referral')
 
   return (
     <div className="mm-root">
@@ -94,12 +91,6 @@ export function MarketingLayout() {
           <nav className="mm-nav" aria-label={t('layout.navAria')}>
             <NavLink to={homePath} end className="mm-nav__link">
               {t('layout.navHome')}
-            </NavLink>
-            <NavLink to={hashTools} className="mm-nav__link">
-              {t('layout.navStudio')}
-            </NavLink>
-            <NavLink to={hashShowcase} className="mm-nav__link">
-              {t('layout.navShowcase')}
             </NavLink>
             <NavLink to={path('/pricing')} className="mm-nav__link">
               {t('layout.navPricing')}
@@ -164,30 +155,16 @@ export function MarketingLayout() {
               <p>{t('layout.footerBrand')}</p>
             </div>
             <div className="mm-footer__col">
-              <h4>{t('layout.footerStudio')}</h4>
-              <ul>
-                <li>
-                  <a href={hashTools}>{t('layout.footerStudioImages')}</a>
-                </li>
-                <li>
-                  <a href={hashTools}>{t('layout.footerStudioVideo')}</a>
-                </li>
-                <li>
-                  <a href={hashTools}>{t('layout.footerStudioChat')}</a>
-                </li>
-              </ul>
-            </div>
-            <div className="mm-footer__col">
               <h4>{t('layout.footerPricing')}</h4>
               <ul>
                 <li>
                   <NavLink to={path('/pricing')}>{t('layout.footerPricingPlans')}</NavLink>
                 </li>
                 <li>
-                  <a href={hashReferral}>{t('layout.footerPricingReferral')}</a>
+                  <NavLink to={path('/referral')}>{t('layout.footerPricingReferral')}</NavLink>
                 </li>
                 <li>
-                  <NavLink to={path('/faq')}>{t('layout.footerPricingTrial')}</NavLink>
+                  <NavLink to={path('/demo')}>{t('layout.footerPricingTrial')}</NavLink>
                 </li>
               </ul>
             </div>
