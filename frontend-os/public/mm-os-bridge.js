@@ -566,6 +566,7 @@
           msgReact: null,
           emojiOpen: false,
           noteFormOpen: false,
+          replyDraft: '',
         }
         if (logic.state.isMobile) patch.mobileChat = true
         logic.setState(patch)
@@ -1540,9 +1541,19 @@
   }
 
   function clearReplyDraft() {
-    const input = queryReplyInput()
-    if (input) input.value = ''
     store.pendingChatImage = null
+    store.logic?.setState({ replyDraft: '' })
+  }
+
+  function clearChatAttachment() {
+    store.pendingChatImage = null
+    const attachBtn = document.querySelector('[data-mm-chat-attach]')
+    if (attachBtn) {
+      attachBtn.title = ''
+      attachBtn.style.borderColor = ''
+      attachBtn.style.color = ''
+    }
+    store.logic?.forceUpdate()
   }
 
   function resolveActiveConv(convs) {
@@ -1565,7 +1576,7 @@
   async function saveConversationNote() {
     const logic = store.logic
     if (!logic) return
-    const text = document.querySelector('[data-mm-note-text]')?.value?.trim()
+    const text = (logic.state.noteDraft || '').trim()
     if (!text) return
     const conv = resolveActiveConv(store.conversations)
     if (!conv) return
@@ -1581,14 +1592,30 @@
       })
       const nr = await API.apiJson('/api/conversations/' + conv.id + '/notes')
       store.notes = Array.isArray(nr) ? nr : []
-      const ta = document.querySelector('[data-mm-note-text]')
-      if (ta) ta.value = ''
-      logic.setState({ noteFormOpen: false })
+      logic.setState({ noteFormOpen: false, noteDraft: '' })
     } catch (e) {
       store.error = e.message || String(e)
     } finally {
       store.busy = false
       logic.forceUpdate()
+    }
+  }
+
+  async function analyzeConversationNotes() {
+    const conv = resolveActiveConv(store.conversations)
+    if (!conv) return
+    store.busy = true
+    store.error = null
+    try {
+      const data = await API.apiJson('/api/conversations/' + conv.id + '/notes/analyze', {
+        method: 'POST',
+      })
+      store.notes = Array.isArray(data) ? data : []
+    } catch (e) {
+      store.error = e.message || String(e)
+    } finally {
+      store.busy = false
+      store.logic?.forceUpdate()
     }
   }
 
@@ -2584,10 +2611,16 @@
       cancel.dataset.mmBound = '1'
       cancel.addEventListener('click', () => {
         if (!logic) return
-        const ta = document.querySelector('[data-mm-note-text]')
-        if (ta) ta.value = ''
-        logic.setState({ noteFormOpen: false })
+        logic.setState({ noteFormOpen: false, noteDraft: '' })
         logic.forceUpdate()
+      })
+    }
+    const analyze = root.querySelector('[data-mm-note-analyze]')
+    if (analyze && !analyze.dataset.mmBound) {
+      analyze.dataset.mmBound = '1'
+      analyze.addEventListener('click', (e) => {
+        e.stopPropagation()
+        void analyzeConversationNotes()
       })
     }
     root.querySelectorAll('[data-mm-note-tag]').forEach((el, i) => {
@@ -2613,8 +2646,8 @@
   async function sendReply() {
     const conv = resolveActiveConv(store.conversations)
     if (!conv) return
-    const input = queryReplyInput()
-    const text = (input?.value || '').trim()
+    const logic = store.logic
+    const text = (logic?.state?.replyDraft || '').trim()
     const image = store.pendingChatImage
     if (!text && !image) return
     store.busy = true
@@ -2635,15 +2668,9 @@
           body: JSON.stringify({ text }),
         })
       }
-      if (input) input.value = ''
-      store.pendingChatImage = null
-      const attachBtn = document.querySelector('[data-mm-chat-attach]')
-      if (attachBtn) {
-        attachBtn.title = ''
-        attachBtn.style.borderColor = ''
-        attachBtn.style.color = ''
-      }
-      logicClearEmoji(store.logic)
+      clearReplyDraft()
+      clearChatAttachment()
+      logicClearEmoji(logic)
       await loadMessages(conv.id)
     } catch (e) {
       store.error = e.message || String(e)
@@ -3108,8 +3135,17 @@
           : 'background:rgba(255,255,255,.08);color:#9BA0A6;')
       const unreadCount = c.unread_count || 0
       const isUnread = unreadCount > 0 && c.id !== store.activeConvId
+      const preview = (c.last_message_preview || '—').slice(0, 80)
       return {
         ...d,
+        last: isUnread
+          ? (lang === 'ru' ? 'Новое: ' : 'New: ') + preview
+          : preview,
+        lastStyle:
+          'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;' +
+          (isUnread
+            ? 'font-size:11px;color:#D7F452;font-weight:700;'
+            : 'font-size:11px;color:#9BA0A6;'),
         avStyle: st ? d.avStyleLg + 'filter:grayscale(1);opacity:.6;' : d.avStyleLg,
         blockedTag,
         blockedTagStyle,
@@ -3403,13 +3439,8 @@
       e: em,
       pick: (ev) => {
         ev?.stopPropagation?.()
-        const input = queryReplyInput()
-        if (input) {
-          input.value = (input.value || '') + em
-          input.dispatchEvent(new Event('input', { bubbles: true }))
-          input.focus()
-        }
-        logic.setState({ emojiOpen: false })
+        const cur = s.replyDraft || ''
+        logic.setState({ replyDraft: cur + em, emojiOpen: false })
       },
     }))
 
@@ -3522,17 +3553,38 @@
       donTabs,
       emojiPick,
       emojiOpen: s.emojiOpen,
-      toggleEmoji: () => logic.setState({ emojiOpen: !s.emojiOpen, msgReact: null }),
+      toggleEmoji: (e) => {
+        e?.stopPropagation?.()
+        logic.setState({ emojiOpen: !s.emojiOpen, msgReact: null })
+      },
+      replyDraft: s.replyDraft || '',
+      onReplyInput: (e) => {
+        logic.setState({ replyDraft: e?.target?.value ?? '' })
+      },
+      chatAttachName: store.pendingChatImage?.name || false,
+      clearChatAttach: (e) => {
+        e?.stopPropagation?.()
+        clearChatAttachment()
+      },
       noteFormOpen: !!s.noteFormOpen,
       noteFormClosed: !s.noteFormOpen,
+      noteDraft: s.noteDraft || '',
+      onNoteInput: (e) => {
+        logic.setState({ noteDraft: e?.target?.value ?? '' })
+      },
       noteTagChips,
-      toggleNote: () => logic.setState({ noteFormOpen: !s.noteFormOpen }),
+      toggleNote: (e) => {
+        e?.stopPropagation?.()
+        logic.setState({ noteFormOpen: !s.noteFormOpen })
+      },
       closeNote: () => {
-        const ta = document.querySelector('[data-mm-note-text]')
-        if (ta) ta.value = ''
-        logic.setState({ noteFormOpen: false })
+        logic.setState({ noteFormOpen: false, noteDraft: '' })
       },
       saveNote: () => void saveConversationNote(),
+      analyzeNotes: (e) => {
+        e?.stopPropagation?.()
+        void analyzeConversationNotes()
+      },
       backToList: () => logic.setState({ mobileChat: false, msgReact: null, emojiOpen: false }),
       closePops: () => {
         if (s.msgReact !== null || s.emojiOpen) logic.setState({ msgReact: null, emojiOpen: false })

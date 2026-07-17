@@ -355,6 +355,10 @@ const TEMPLATE_PATCHES = [
     '<sc-if value="{{ s.uploadMode }}" hint-placeholder-val="{{ true }}"><div data-mm-slot-upload="{{ s.uploadKey }}" style="aspect-ratio:3/4;border:1.5px dashed',
   ],
   [
+    /<textarea rows="1" placeholder="\{\{ t\.msgPlaceholder \}\}" style="flex:1;min-height:38px;max-height:120px;background:#0D0E11;border:1px solid rgba\(255,255,255,.09\);border-radius:10px;padding:9px 12px;color:#F2F3F0;font-family:'Manrope';font-size:13px;resize:none;outline:none;"><\/textarea>/,
+    '<textarea data-mm-chat-reply rows="1" placeholder="{{ t.msgPlaceholder }}" style="flex:1;min-height:38px;max-height:120px;background:#0D0E11;border:1px solid rgba(255,255,255,.09);border-radius:10px;padding:9px 12px;color:#F2F3F0;font-family:\'Manrope\';font-size:13px;resize:none;outline:none;"></textarea>',
+  ],
+  [
     /<div title="\{\{ t\.attach \}\}" style="width:38px;height:38px;flex:none;border-radius:10px;border:1px solid rgba\(255,255,255,.1\);display:flex;align-items:center;justify-content:center;color:#9BA0A6;cursor:pointer;" style-hover="color:#D7F452;border-color:rgba\(215,244,82,.4\);"><span style="display:flex;width:18px;height:18px;" dangerouslySetInnerHTML="\{\{ icoClip \}\}"><\/span><\/div>/,
     '<div data-mm-chat-attach title="{{ t.attach }}" style="width:38px;height:38px;flex:none;border-radius:10px;border:1px solid rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center;color:#9BA0A6;cursor:pointer;" style-hover="color:#D7F452;border-color:rgba(215,244,82,.4);"><span style="display:flex;width:18px;height:18px;" dangerouslySetInnerHTML="{{ icoClip }}"></span></div>',
   ],
@@ -377,10 +381,43 @@ const TEMPLATE_PATCHES = [
     /<div style="padding:10px 12px;border-top:1px solid rgba\(255,255,255,.07\);display:flex;gap:6px;">\s*<div data-mm-note-analyze style="flex:1;border:1px solid rgba\(255,255,255,.12\);border-radius:9px;padding:7px;text-align:center;font-size:11\.5px;font-weight:700;color:#C084FC;cursor:pointer;" style-hover="border-color:#C084FC;">✦ AI-\{\{ t\.analysis \}\}<\/div>\s*<div data-mm-note-toggle style="flex:1;background:rgba\(215,244,82,.12\);border:1px solid rgba\(215,244,82,.3\);border-radius:9px;padding:7px;text-align:center;font-size:11\.5px;font-weight:700;color:#D7F452;cursor:pointer;" style-hover="background:rgba\(215,244,82,.2\);">\+ \{\{ t\.addNote \}\}<\/div>\s*<\/div>/,
     `<sc-if value="{{ noteFormClosed }}" hint-placeholder-val="{{ false }}">
             <div style="padding:10px 12px;border-top:1px solid rgba(255,255,255,.07);display:flex;gap:6px;">
-              <div data-mm-note-analyze style="flex:1;border:1px solid rgba(255,255,255,.12);border-radius:9px;padding:7px;text-align:center;font-size:11.5px;font-weight:700;color:#C084FC;cursor:pointer;" style-hover="border-color:#C084FC;">✦ AI-{{ t.analysis }}</div>
-              <div data-mm-note-toggle style="flex:1;background:rgba(215,244,82,.12);border:1px solid rgba(215,244,82,.3);border-radius:9px;padding:7px;text-align:center;font-size:11.5px;font-weight:700;color:#D7F452;cursor:pointer;" style-hover="background:rgba(215,244,82,.2);">+ {{ t.addNote }}</div>
+              <div onClick="{{ analyzeNotes }}" data-mm-note-analyze style="flex:1;border:1px solid rgba(255,255,255,.12);border-radius:9px;padding:7px;text-align:center;font-size:11.5px;font-weight:700;color:#C084FC;cursor:pointer;" style-hover="border-color:#C084FC;">✦ AI-{{ t.analysis }}</div>
+              <div onClick="{{ toggleNote }}" data-mm-note-toggle style="flex:1;background:rgba(215,244,82,.12);border:1px solid rgba(215,244,82,.3);border-radius:9px;padding:7px;text-align:center;font-size:11.5px;font-weight:700;color:#D7F452;cursor:pointer;" style-hover="background:rgba(215,244,82,.2);">+ {{ t.addNote }}</div>
             </div>
             </sc-if>`,
+  ],
+  [
+    /<div onClick="\{\{ closePops \}\}" style="background:#121316;border:1px solid rgba\(255,255,255,.07\);border-radius:16px;display:flex;flex-direction:column;overflow:hidden;min-height:0;flex:1;position:relative;">/,
+    '<div style="background:#121316;border:1px solid rgba(255,255,255,.07);border-radius:16px;display:flex;flex-direction:column;overflow:hidden;min-height:0;flex:1;position:relative;">',
+  ],
+  [
+    /<div id="mm-thread-scroll" style="flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px;">/,
+    '<div id="mm-thread-scroll" onClick="{{ closePops }}" style="flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px;">',
+  ],
+  [
+    /<div style="font-size:11px;color:#9BA0A6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">\{\{ ch\.last \}\}<\/div>/,
+    '<div style="{{ ch.lastStyle }}">{{ ch.last }}</div>',
+  ],
+  [
+    /<textarea data-mm-note-text rows="3" placeholder="\{\{ t\.noteTextPh \}\}" style="width:100%;background:#0D0E11;border:1px solid rgba\(255,255,255,.09\);border-radius:10px;padding:9px 12px;color:#F2F3F0;font-family:'Manrope';font-size:12px;line-height:1.5;resize:vertical;outline:none;"><\/textarea>/,
+    '<textarea data-mm-note-text rows="3" value="{{ noteDraft }}" onInput="{{ onNoteInput }}" placeholder="{{ t.noteTextPh }}" style="width:100%;background:#0D0E11;border:1px solid rgba(255,255,255,.09);border-radius:10px;padding:9px 12px;color:#F2F3F0;font-family:\'Manrope\';font-size:12px;line-height:1.5;resize:vertical;outline:none;"></textarea>',
+  ],
+  [
+    /<div style="padding:10px 12px;border-top:1px solid rgba\(255,255,255,.07\);display:flex;gap:6px;align-items:flex-end;">\s*<div data-mm-chat-attach title="\{\{ t\.attach \}\}" style="width:38px;height:38px;flex:none;border-radius:10px;border:1px solid rgba\(255,255,255,.1\);display:flex;align-items:center;justify-content:center;color:#9BA0A6;cursor:pointer;" style-hover="color:#D7F452;border-color:rgba\(215,244,82,.4\);"><span style="display:flex;width:18px;height:18px;" dangerouslySetInnerHTML="\{\{ icoClip \}\}"><\/span><\/div>\s*<div onClick="\{\{ toggleEmoji \}\}" style="width:38px;height:38px;flex:none;border-radius:10px;border:1px solid rgba\(255,255,255,.1\);display:flex;align-items:center;justify-content:center;font-size:18px;cursor:pointer;" style-hover="border-color:rgba\(215,244,82,.4\);">😊<\/div>\s*<textarea data-mm-chat-reply rows="1" placeholder="\{\{ t\.msgPlaceholder \}\}" style="flex:1;min-height:38px;max-height:120px;background:#0D0E11;border:1px solid rgba\(255,255,255,.09\);border-radius:10px;padding:9px 12px;color:#F2F3F0;font-family:'Manrope';font-size:13px;resize:none;outline:none;"><\/textarea>\s*<div data-mm-chat-send style="width:38px;height:38px;flex:none;background:#D7F452;color:#171A05;border-radius:10px;display:flex;align-items:center;justify-content:center;cursor:pointer;" style-hover="background:#E8FA8A;"><span style="display:flex;width:17px;height:17px;" dangerouslySetInnerHTML="\{\{ icoSendArrow \}\}"><\/span><\/div>\s*<\/div>/,
+    `<div onClick="{{ stop }}" style="padding:10px 12px;border-top:1px solid rgba(255,255,255,.07);display:flex;flex-direction:column;gap:6px;">
+              <sc-if value="{{ chatAttachName }}" hint-placeholder-val="{{ false }}">
+                <div style="display:flex;align-items:center;gap:8px;background:rgba(215,244,82,.08);border:1px solid rgba(215,244,82,.22);border-radius:9px;padding:6px 10px;font-size:11.5px;color:#D7F452;">
+                  <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">📎 {{ chatAttachName }}</span>
+                  <span onClick="{{ clearChatAttach }}" style="cursor:pointer;color:#9BA0A6;font-size:14px;line-height:1;" style-hover="color:#F87171;">✕</span>
+                </div>
+              </sc-if>
+              <div style="display:flex;gap:6px;align-items:flex-end;">
+                <div data-mm-chat-attach title="{{ t.attach }}" style="width:38px;height:38px;flex:none;border-radius:10px;border:1px solid rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center;color:#9BA0A6;cursor:pointer;" style-hover="color:#D7F452;border-color:rgba(215,244,82,.4);"><span style="display:flex;width:18px;height:18px;" dangerouslySetInnerHTML="{{ icoClip }}"></span></div>
+                <div onClick="{{ toggleEmoji }}" style="width:38px;height:38px;flex:none;border-radius:10px;border:1px solid rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center;font-size:18px;cursor:pointer;" style-hover="border-color:rgba(215,244,82,.4);">😊</div>
+                <textarea data-mm-chat-reply rows="1" value="{{ replyDraft }}" onInput="{{ onReplyInput }}" placeholder="{{ t.msgPlaceholder }}" style="flex:1;min-height:38px;max-height:120px;background:#0D0E11;border:1px solid rgba(255,255,255,.09);border-radius:10px;padding:9px 12px;color:#F2F3F0;font-family:'Manrope';font-size:13px;resize:none;outline:none;"></textarea>
+                <div data-mm-chat-send style="width:38px;height:38px;flex:none;background:#D7F452;color:#171A05;border-radius:10px;display:flex;align-items:center;justify-content:center;cursor:pointer;" style-hover="background:#E8FA8A;"><span style="display:flex;width:17px;height:17px;" dangerouslySetInnerHTML="{{ icoSendArrow }}"></span></div>
+              </div>
+            </div>`,
   ],
   [
     /<div style="display:flex;gap:8px;"><div style="flex:1;background:rgba\(215,244,82,.12\);border:1px solid rgba\(215,244,82,.3\);border-radius:9px;padding:10px;text-align:center;font-size:12px;font-weight:800;color:#D7F452;cursor:pointer;">\{\{ t\.save \}\}<\/div><\/div>\s*<\/div>\s*<\/sc-if>/,
