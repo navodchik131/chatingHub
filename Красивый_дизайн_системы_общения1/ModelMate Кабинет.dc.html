@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="./assets/favicon.ico" type="image/x-icon">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700;800;900&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<style>
+  :root{
+    --bg-0:#08080A; --bg-1:#121215; --bg-2:#16161B; --bg-3:#1A1A1F; --bg-inset:#050507;
+    --border-1:#26262C; --border-2:#34343B; --border-strong:#4A4A52;
+    --fg-1:#F5F5F7; --fg-2:#9A9AA3; --fg-3:#5F5F68; --fg-on-accent:#08080A;
+    --accent:#D8FF3D; --accent-hover:#E4FF66; --accent-press:#BFE830; --accent-glow:rgba(216,255,61,0.25);
+    --cat-photo:#FF7A4D; --cat-video:#5BD4FF; --cat-i2v:#C58CFF;
+    --success:#7CE38B; --warning:#F5C443; --danger:#FF5A6E;
+    --grad:linear-gradient(90deg,#FF7A4D 0%,#C58CFF 52%,#5BD4FF 100%);
+    --font-sans:"Geist",ui-sans-serif,system-ui,sans-serif;
+    --font-mono:"Geist Mono",ui-monospace,Menlo,monospace;
+    --ease-studio:cubic-bezier(0.2,0.8,0.2,1);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;background:var(--bg-0);color:var(--fg-1);font-family:var(--font-sans);-webkit-font-smoothing:antialiased;}
+  ::selection{background:var(--accent);color:var(--fg-on-accent);}
+  ::-webkit-scrollbar{width:10px;height:10px;}
+  ::-webkit-scrollbar-thumb{background:var(--border-2);border-radius:999px;border:2px solid var(--bg-0);}
+  ::-webkit-scrollbar-thumb:hover{background:var(--border-strong);}
+  ::-webkit-scrollbar-track{background:transparent;}
+  [data-lucide]{width:1em;height:1em;stroke-width:1.75;}
+  input,textarea,select,button{font-family:inherit;}
+  textarea::placeholder,input::placeholder{color:var(--fg-3);}
+  select{appearance:none;-webkit-appearance:none;}
+  .mm-field{background:var(--bg-inset);border:1px solid var(--border-1);color:var(--fg-1);font-size:14px;border-radius:10px;padding:12px 14px;outline:none;transition:border-color .16s;width:100%;}
+  .mm-field:focus{border-color:var(--border-strong);}
+  .mm-label{font-family:var(--font-mono);font-size:10.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--fg-3);}
+  .mm-sel-wrap{position:relative;}
+  .mm-sel-wrap > svg{position:absolute;right:12px;top:50%;transform:translateY(-50%);font-size:16px;color:var(--fg-3);pointer-events:none;}
+  @keyframes mmfade{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}
+  .mm-view{animation:mmfade .34s var(--ease-studio);}
+  .mm-tabs::-webkit-scrollbar{height:0;}
+  @media(max-width:820px){
+    .mm-stats{grid-template-columns:1fr 1fr !important;}
+    .mm-plan-grid{grid-template-columns:1fr !important;}
+    .mm-models{grid-template-columns:1fr !important;}
+    .mm-conn-row{flex-direction:column !important;align-items:stretch !important;}
+    .mm-conn-row .mm-conn-cta{align-self:flex-start !important;}
+    .mm-two{grid-template-columns:1fr !important;}
+    .mm-quick{flex-wrap:wrap !important;}
+  }
+  @media(max-width:640px){ .mm-hide-sm{display:none !important;} }
+  @media(max-width:520px){
+    .mm-stats{grid-template-columns:1fr !important;}
+    .mm-histrow{grid-template-columns:1fr auto !important;}
+    .mm-histrow .mm-hist-op{display:none !important;}
+  }
+</style>
+</helmet>
+
+<div style="min-height:100vh;background:var(--bg-0);display:flex;flex-direction:column;">
+
+  <!-- app header -->
+  <header style="position:sticky;top:0;z-index:40;display:flex;align-items:center;gap:14px;padding:12px 20px;background:rgba(8,8,10,0.72);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-bottom:1px solid var(--border-1);">
+    <a href="ModelMate Диалоги.dc.html" style="display:inline-flex;align-items:center;justify-content:center;width:38px;height:38px;border-radius:10px;border:1px solid var(--border-1);background:var(--bg-1);color:var(--fg-1);text-decoration:none;flex-shrink:0;" style-hover="border-color:var(--border-2);background:var(--bg-2);">
+      <i data-lucide="arrow-left" style="font-size:18px;"></i>
+    </a>
+    <div style="display:flex;align-items:center;gap:11px;flex-shrink:0;">
+      <div style="width:38px;height:38px;border-radius:11px;background:var(--grad);display:flex;align-items:center;justify-content:center;font-weight:800;color:var(--fg-on-accent);font-size:18px;">M</div>
+      <div style="line-height:1.15;">
+        <div style="font-weight:700;font-size:15px;letter-spacing:-0.01em;">Личный кабинет</div>
+        <div class="mm-hide-sm" style="font-family:var(--font-mono);font-size:10.5px;color:var(--fg-3);letter-spacing:0.05em;">utochkinrenat@gmail.com · владелец</div>
+      </div>
+    </div>
+    <div style="flex:1;"></div>
+    <div class="mm-hide-sm" style="display:flex;align-items:center;gap:8px;padding:8px 14px;border:1px solid var(--border-1);border-radius:999px;background:var(--bg-1);">
+      <i data-lucide="gem" style="font-size:14px;color:var(--accent);"></i>
+      <span style="font-family:var(--font-mono);font-size:13px;font-weight:600;color:var(--fg-1);">2 706</span>
+      <span style="font-family:var(--font-mono);font-size:11px;color:var(--fg-3);">кр.</span>
+    </div>
+    <div style="width:32px;height:32px;border-radius:999px;background:linear-gradient(135deg,var(--cat-i2v),var(--cat-video));display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;color:var(--fg-on-accent);flex-shrink:0;">U</div>
+  </header>
+
+  <div style="width:100%;max-width:1180px;margin:0 auto;padding:0 20px;">
+
+    <!-- page title -->
+    <div style="padding:28px 0 18px;">
+      <div style="font-family:var(--font-mono);font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--fg-3);margin-bottom:8px;">Аккаунт</div>
+      <h1 style="font-size:32px;font-weight:800;letter-spacing:-0.02em;margin:0;">Личный кабинет</h1>
+    </div>
+
+    <!-- tabs (sticky subnav) -->
+    <div style="position:sticky;top:63px;z-index:30;background:var(--bg-0);padding:6px 0 14px;">
+      <div class="mm-tabs" style="display:flex;gap:4px;background:var(--bg-inset);border:1px solid var(--border-1);border-radius:14px;padding:5px;overflow-x:auto;">
+        <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="5">
+          <button onClick="{{ t.onClick }}" style="{{ t.style }}">
+            <i data-lucide="{{ t.icon }}" style="font-size:15px;"></i>
+            <span>{{ t.label }}</span>
+          </button>
+        </sc-for>
+      </div>
+    </div>
+
+    <div style="padding:8px 0 60px;">
+
+      <!-- ============ OVERVIEW ============ -->
+      <sc-if value="{{ isOverview }}" hint-placeholder-val="{{ true }}">
+      <div class="mm-view">
+        <p style="font-size:14px;color:var(--fg-2);line-height:1.55;margin:0 0 22px;max-width:640px;">Сводка по аккаунту. Тариф, оплата и история кредитов — в разделе <span style="color:var(--fg-1);font-weight:500;">«Тариф и баланс»</span> (владелец).</p>
+
+        <div class="mm-stats" style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;">
+          <sc-for list="{{ ovStats }}" as="s" hint-placeholder-count="4">
+            <div style="background:var(--bg-2);border:1px solid var(--border-1);border-radius:16px;padding:18px 20px;">
+              <div class="mm-label" style="margin-bottom:12px;">{{ s.label }}</div>
+              <div style="font-size:26px;font-weight:800;letter-spacing:-0.02em;color:{{ s.color }};line-height:1.05;">{{ s.value }}</div>
+              <div style="font-size:12.5px;color:var(--fg-2);margin-top:8px;line-height:1.45;">{{ s.sub }}</div>
+            </div>
+          </sc-for>
+        </div>
+
+        <div class="mm-quick" style="display:flex;gap:10px;margin-top:20px;">
+          <sc-for list="{{ ovQuick }}" as="q" hint-placeholder-count="4">
+            <button onClick="{{ q.onClick }}" style="display:inline-flex;align-items:center;gap:8px;background:var(--bg-2);border:1px solid var(--border-1);color:var(--fg-1);font-size:13.5px;font-weight:500;padding:12px 18px;border-radius:11px;cursor:pointer;transition:all .16s;" style-hover="border-color:var(--border-2);background:var(--bg-3);">
+              <i data-lucide="{{ q.icon }}" style="font-size:16px;color:{{ q.color }};"></i>{{ q.label }}
+            </button>
+          </sc-for>
+        </div>
+      </div>
+      </sc-if>
+
+      <!-- ============ PLAN & BALANCE ============ -->
+      <sc-if value="{{ isPlan }}" hint-placeholder-val="{{ false }}">
+      <div class="mm-view">
+        <p style="font-size:14px;color:var(--fg-2);line-height:1.6;margin:0 0 20px;max-width:660px;"><span style="color:var(--fg-1);font-weight:600;">Здесь выбираете тариф</span> (Standard или Pro) и оплачиваете подписку. Пакет кредитов доступен на Credits и Standard. Standard — кредиты на студию включены, чат и команда. Pro — свой ключ WaveSpeed, генерации не списывают кредиты платформы.</p>
+
+        <!-- current state -->
+        <div style="background:linear-gradient(180deg,rgba(216,255,61,0.05),transparent);border:1px solid rgba(216,255,61,0.30);border-radius:16px;padding:20px 22px;margin-bottom:14px;">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">
+            <div style="font-size:15px;font-weight:700;">Текущее состояние</div>
+            <span style="display:inline-flex;align-items:center;gap:6px;font-family:var(--font-mono);font-size:10.5px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;color:var(--success);background:rgba(124,227,139,0.10);border:1px solid rgba(124,227,139,0.25);padding:4px 10px;border-radius:999px;"><span style="width:6px;height:6px;border-radius:999px;background:var(--success);"></span>Активна</span>
+          </div>
+          <div style="font-size:13.5px;color:var(--fg-2);margin-top:8px;line-height:1.5;">Standard — кредиты на студию включены, чат и команда · тариф <span style="font-family:var(--font-mono);color:var(--fg-1);">STUDIO</span></div>
+          <div style="font-size:13px;color:var(--fg-3);margin-top:4px;">Период до 7 дек. 2026 г., 10:20 · Баланс: <span style="font-family:var(--font-mono);color:var(--accent);font-weight:600;">2706 кр.</span></div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;">
+            <sc-for list="{{ planUsage }}" as="u" hint-placeholder-count="3">
+              <div style="display:inline-flex;align-items:center;gap:8px;background:var(--bg-2);border:1px solid var(--border-1);border-radius:10px;padding:8px 12px;">
+                <span style="font-family:var(--font-mono);font-size:11px;color:var(--fg-3);text-transform:uppercase;letter-spacing:0.05em;">{{ u.label }}</span>
+                <span style="font-family:var(--font-mono);font-size:13px;font-weight:600;color:var(--fg-1);">{{ u.value }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <!-- referral -->
+        <div style="background:var(--bg-2);border:1px solid var(--border-1);border-radius:16px;padding:18px 22px;margin-bottom:22px;">
+          <div style="display:flex;align-items:center;gap:8px;font-size:15px;font-weight:600;margin-bottom:10px;"><i data-lucide="gift" style="font-size:17px;color:var(--cat-i2v);"></i>Реферальная программа</div>
+          <div style="font-size:13px;color:var(--fg-2);line-height:1.55;margin-bottom:12px;">Друг по ссылке: <span style="color:var(--fg-1);font-weight:500;">+25 кр.</span> С каждой оплаты приглашённого — <span style="color:var(--fg-1);font-weight:500;">10% в кредитах</span> (1 кр. = 3.6 ₽). Подписку можно оплатить кредитами.</div>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <code style="flex:1;min-width:220px;font-family:var(--font-mono);font-size:12.5px;color:var(--fg-2);background:var(--bg-inset);border:1px solid var(--border-1);border-radius:9px;padding:10px 12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">https://model-mate.online/login?ref=N62KMA60</code>
+            <button style="display:inline-flex;align-items:center;gap:6px;background:var(--bg-3);border:1px solid var(--border-1);color:var(--fg-1);font-size:12.5px;font-weight:500;padding:10px 14px;border-radius:9px;cursor:pointer;" style-hover="border-color:var(--border-2);"><i data-lucide="copy" style="font-size:14px;"></i>Копировать</button>
+          </div>
+          <div style="font-size:12.5px;color:var(--fg-3);margin-top:12px;">Приглашено: <span style="color:var(--fg-1);">1</span> · Заработано: <span style="color:var(--fg-1);">0 кр.</span></div>
+        </div>
+
+        <!-- tariff picker -->
+        <div style="font-size:16px;font-weight:600;margin-bottom:4px;">Тариф и пополнение</div>
+        <p style="font-size:13px;color:var(--fg-2);margin:0 0 14px;">Оплата банковской картой. После успешной оплаты вернитесь в кабинет.</p>
+
+        <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:16px;">
+          <div style="display:flex;gap:6px;background:var(--bg-inset);border:1px solid var(--border-1);border-radius:11px;padding:4px;">
+            <sc-for list="{{ planTier }}" as="p" hint-placeholder-count="2">
+              <button onClick="{{ p.onClick }}" style="{{ p.style }}">{{ p.label }}</button>
+            </sc-for>
+          </div>
+          <div style="display:flex;gap:6px;background:var(--bg-inset);border:1px solid var(--border-1);border-radius:11px;padding:4px;">
+            <sc-for list="{{ planPeriod }}" as="p" hint-placeholder-count="2">
+              <button onClick="{{ p.onClick }}" style="{{ p.style }}">{{ p.label }}</button>
+            </sc-for>
+          </div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:26px;">
+          <sc-for list="{{ plans }}" as="pl" hint-placeholder-count="3">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;background:var(--bg-2);border:1px solid var(--border-1);border-radius:14px;padding:16px 20px;transition:border-color .16s;" style-hover="border-color:var(--border-2);">
+              <div style="min-width:200px;">
+                <div style="display:flex;align-items:baseline;gap:10px;">
+                  <span style="font-size:16px;font-weight:700;">{{ pl.name }}</span>
+                  <span style="font-family:var(--font-mono);font-size:16px;font-weight:600;color:var(--accent);">{{ pl.price }}</span>
+                </div>
+                <div style="font-size:12.5px;color:var(--fg-3);margin-top:4px;">{{ pl.sub }}</div>
+              </div>
+              <div style="display:flex;gap:8px;">
+                <button style="display:inline-flex;align-items:center;gap:6px;background:var(--bg-3);border:1px solid var(--border-1);color:var(--fg-1);font-size:13px;font-weight:500;padding:11px 16px;border-radius:10px;cursor:pointer;" style-hover="border-color:var(--border-2);"><i data-lucide="coins" style="font-size:15px;color:var(--warning);"></i>Кредитами</button>
+                <button style="display:inline-flex;align-items:center;gap:6px;background:var(--grad);border:0;color:var(--fg-on-accent);font-size:13px;font-weight:700;padding:11px 18px;border-radius:10px;cursor:pointer;transition:filter .16s,transform .12s;" style-hover="filter:brightness(1.08);" style-active="transform:scale(0.98);"><i data-lucide="credit-card" style="font-size:15px;"></i>Картой</button>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+
+        <!-- credits packet -->
+        <div style="background:var(--bg-2);border:1px solid var(--border-1);border-radius:14px;padding:18px 22px;margin-bottom:26px;">
+          <div style="font-size:15px;font-weight:700;">Кредиты студии — любое количество от 50 шт.</div>
+          <div style="font-size:12.5px;color:var(--fg-2);margin-top:4px;margin-bottom:14px;">От 50 шт. — 3,6 ₽/кредит; от 300 шт. — 2,7 ₽/кредит.</div>
+          <div style="display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap;">
+            <label style="display:flex;flex-direction:column;gap:6px;">
+              <span class="mm-label">Количество кредитов</span>
+              <input class="mm-field" value="50" style="width:120px;font-family:var(--font-mono);" />
+            </label>
+            <div style="padding-bottom:12px;font-family:var(--font-mono);font-size:16px;font-weight:600;color:var(--fg-1);">180 ₽</div>
+            <div style="flex:1;"></div>
+            <button style="display:inline-flex;align-items:center;gap:7px;background:var(--grad);border:0;color:var(--fg-on-accent);font-size:14px;font-weight:700;padding:13px 24px;border-radius:11px;cursor:pointer;" style-hover="filter:brightness(1.08);"><i data-lucide="zap" style="font-size:16px;"></i>Оплатить</button>
+          </div>
+        </div>
+
+        <!-- history -->
+        <div style="font-size:15px;font-weight:700;margin-bottom:12px;">История операций</div>
+        <div style="background:var(--bg-2);border:1px solid var(--border-1);border-radius:14px;overflow:hidden;">
+          <div class="mm-histrow" style="display:grid;grid-template-columns:200px 1fr 100px;gap:12px;padding:12px 20px;border-bottom:1px solid var(--border-1);">
+            <span class="mm-label">Дата</span><span class="mm-label mm-hist-op">Операция</span><span class="mm-label" style="text-align:right;">Кредиты</span>
+          </div>
+          <sc-for list="{{ history }}" as="h" hint-placeholder-count="6">
+            <div class="mm-histrow" style="display:grid;grid-template-columns:200px 1fr 100px;gap:12px;padding:13px 20px;border-bottom:1px solid var(--border-1);align-items:center;">
+              <span style="font-family:var(--font-mono);font-size:12.5px;color:var(--fg-2);">{{ h.date }}</span>
+              <span class="mm-hist-op" style="font-size:13.5px;color:var(--fg-1);">{{ h.op }}</span>
+              <span style="font-family:var(--font-mono);font-size:13.5px;font-weight:600;text-align:right;color:{{ h.color }};">{{ h.credits }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+      </sc-if>
+
+      <!-- ============ CONNECTIONS ============ -->
+      <sc-if value="{{ isConn }}" hint-placeholder-val="{{ false }}">
+      <div class="mm-view">
+        <p style="font-size:14px;color:var(--fg-2);line-height:1.55;margin:0 0 20px;max-width:640px;">Подключите каналы и API. Поля редактирования зависят от прав: при необходимости попросите владельца выдать доступ к интеграциям.</p>
+
+        <div style="display:flex;flex-direction:column;gap:14px;">
+          <sc-for list="{{ connections }}" as="c" hint-placeholder-count="4">
+            <div style="background:var(--bg-2);border:1px solid var(--border-1);border-radius:16px;padding:20px 22px;">
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:6px;">
+                <div style="display:flex;align-items:center;gap:11px;">
+                  <div style="width:36px;height:36px;border-radius:10px;background:{{ c.iconBg }};display:flex;align-items:center;justify-content:center;">
+                    <i data-lucide="{{ c.icon }}" style="font-size:18px;color:{{ c.iconColor }};"></i>
+                  </div>
+                  <div style="font-size:16px;font-weight:700;">{{ c.name }}</div>
+                </div>
+                <span style="font-family:var(--font-mono);font-size:10px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;padding:4px 10px;border-radius:999px;color:{{ c.badgeFg }};background:{{ c.badgeBg }};border:1px solid {{ c.badgeBorder }};white-space:nowrap;">{{ c.status }}</span>
+              </div>
+              <div style="font-size:13px;color:var(--fg-2);line-height:1.55;margin:2px 0 16px;">{{ c.desc }}</div>
+
+              <div class="mm-conn-row" style="display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap;">
+                <sc-for list="{{ c.fields }}" as="f" hint-placeholder-count="2">
+                  <label style="display:flex;flex-direction:column;gap:6px;flex:{{ f.grow }};min-width:{{ f.min }};">
+                    <span class="mm-label">{{ f.label }}</span>
+                    <sc-if value="{{ f.isSelect }}" hint-placeholder-val="{{ false }}">
+                      <div class="mm-sel-wrap">
+                        <select class="mm-field" style="cursor:pointer;">
+                          <sc-for list="{{ f.options }}" as="o" hint-placeholder-count="2"><option>{{ o }}</option></sc-for>
+                        </select>
+                        <i data-lucide="chevron-down"></i>
+                      </div>
+                    </sc-if>
+                    <sc-if value="{{ f.isInput }}" hint-placeholder-val="{{ true }}">
+                      <input class="mm-field" placeholder="{{ f.placeholder }}" value="{{ f.value }}" style="font-family:{{ f.mono }};" />
+                    </sc-if>
+                  </label>
+                </sc-for>
+                <button class="mm-conn-cta" style="{{ c.ctaStyle }}"><i data-lucide="{{ c.ctaIcon }}" style="font-size:15px;"></i>{{ c.cta }}</button>
+              </div>
+
+              <sc-if value="{{ c.hint }}" hint-placeholder-val="{{ false }}">
+                <div style="font-size:12px;color:var(--fg-3);line-height:1.5;margin-top:12px;">{{ c.hint }}</div>
+              </sc-if>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+      </sc-if>
+
+      <!-- ============ MODELS ============ -->
+      <sc-if value="{{ isModels }}" hint-placeholder-val="{{ false }}">
+      <div class="mm-view">
+        <p style="font-size:14px;color:var(--fg-2);line-height:1.55;margin:0 0 20px;max-width:660px;">Модели подставляются в промпт на вкладке «Генерация картинок». До 8 фото на модель. Для каждого снимка укажите тип: лицо, тело, интимный референс или общий — от этого зависит порядок в запросе к image-edit и текст для LLM.</p>
+
+        <!-- new model -->
+        <div style="background:var(--bg-2);border:1px solid var(--border-1);border-radius:16px;padding:22px;margin-bottom:20px;">
+          <div style="font-size:16px;font-weight:700;margin-bottom:16px;">Новая модель</div>
+          <div class="mm-two" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+            <label style="display:flex;flex-direction:column;gap:7px;">
+              <span class="mm-label">Название</span>
+              <input class="mm-field" placeholder="Например: Анна — чёрные волосы" />
+            </label>
+            <label style="display:flex;flex-direction:column;gap:7px;">
+              <span class="mm-label">Фото модели (до 8)</span>
+              <div style="display:flex;align-items:center;gap:12px;background:var(--bg-inset);border:1px dashed var(--border-2);border-radius:10px;padding:11px 14px;cursor:pointer;">
+                <i data-lucide="upload" style="font-size:16px;color:var(--fg-2);"></i>
+                <span style="font-size:13px;color:var(--fg-3);">Перетащите или выберите файлы</span>
+              </div>
+            </label>
+          </div>
+          <label style="display:flex;flex-direction:column;gap:7px;margin-top:16px;">
+            <span class="mm-label">Описание внешности (JSON, можно вставить вручную)</span>
+            <textarea rows="4" class="mm-field" placeholder='{"model_profile": { … }} — или нажмите кнопку ниже' style="font-family:var(--font-mono);font-size:13px;resize:vertical;"></textarea>
+          </label>
+          <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;">
+            <button style="display:inline-flex;align-items:center;gap:7px;background:var(--bg-3);border:1px solid var(--border-1);color:var(--fg-1);font-size:13px;font-weight:500;padding:11px 16px;border-radius:10px;cursor:pointer;" style-hover="border-color:var(--cat-i2v);color:var(--cat-i2v);"><i data-lucide="sparkles" style="font-size:15px;"></i>Сгенерировать из фото</button>
+          </div>
+
+          <!-- exif export -->
+          <div style="background:linear-gradient(180deg,rgba(216,255,61,0.04),transparent);border:1px solid rgba(216,255,61,0.22);border-radius:14px;padding:16px 18px;margin-top:18px;">
+            <div style="display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600;"><i data-lucide="smartphone" style="font-size:16px;color:var(--accent);"></i>Экспорт «как с телефона»</div>
+            <div style="font-size:12.5px;color:var(--fg-2);line-height:1.55;margin:8px 0 14px;">На сохранённые кадры студии: шум, JPEG и EXIF. Сначала эталоны с телефона, иначе пресет из списка. Фронталка или основная камера — переключатель при генерации.</div>
+            <div class="mm-two" style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+              <div style="display:flex;flex-direction:column;gap:6px;">
+                <span class="mm-label">Фронтальная камера · JPEG из галереи</span>
+                <div style="display:flex;align-items:center;gap:10px;background:var(--bg-inset);border:1px solid var(--border-1);border-radius:10px;padding:10px 12px;"><i data-lucide="camera" style="font-size:15px;color:var(--fg-3);"></i><span style="font-size:12.5px;color:var(--fg-3);">Не загружен</span></div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:6px;">
+                <span class="mm-label">Основная камера · задняя</span>
+                <div style="display:flex;align-items:center;gap:10px;background:var(--bg-inset);border:1px solid var(--border-1);border-radius:10px;padding:10px 12px;"><i data-lucide="camera" style="font-size:15px;color:var(--fg-3);"></i><span style="font-size:12.5px;color:var(--fg-3);">Не загружен</span></div>
+              </div>
+            </div>
+            <div class="mm-two" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-top:14px;">
+              <label style="display:flex;flex-direction:column;gap:6px;">
+                <span class="mm-label">Пресет камеры (запасной)</span>
+                <div class="mm-sel-wrap"><select class="mm-field" style="cursor:pointer;"><option>— не применять —</option><option>Apple iPhone 16 Pro</option><option>Apple iPhone 15 Pro</option><option>Apple iPhone 14</option></select><i data-lucide="chevron-down"></i></div>
+              </label>
+              <label style="display:flex;flex-direction:column;gap:6px;">
+                <span class="mm-label">Широта (гео)</span>
+                <input class="mm-field" placeholder="55.7558" style="font-family:var(--font-mono);" />
+              </label>
+              <label style="display:flex;flex-direction:column;gap:6px;">
+                <span class="mm-label">Долгота (гео)</span>
+                <input class="mm-field" placeholder="37.6173" style="font-family:var(--font-mono);" />
+              </label>
+            </div>
+          </div>
+
+          <button style="width:100%;display:inline-flex;align-items:center;justify-content:center;gap:8px;background:var(--grad);border:0;color:var(--fg-on-accent);font-size:15px;font-weight:700;padding:15px;border-radius:12px;cursor:pointer;margin-top:18px;transition:filter .16s,transform .12s;" style-hover="filter:brightness(1.08);" style-active="transform:scale(0.995);"><i data-lucide="plus" style="font-size:17px;"></i>Создать модель</button>
+        </div>
+
+        <!-- model cards -->
+        <div style="font-size:16px;font-weight:700;margin-bottom:14px;">Модели студии <span style="font-family:var(--font-mono);font-size:13px;color:var(--fg-3);font-weight:500;">7 / 10</span></div>
+        <div class="mm-models" style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;">
+          <sc-for list="{{ models }}" as="m" hint-placeholder-count="6">
+            <div style="background:var(--bg-2);border:1px solid var(--border-1);border-radius:14px;overflow:hidden;transition:border-color .16s;" style-hover="border-color:var(--border-2);">
+              <div style="aspect-ratio:4/3;background:linear-gradient(155deg,{{ m.a }},{{ m.b }});position:relative;display:flex;align-items:flex-end;padding:12px;">
+                <div style="position:absolute;top:10px;left:12px;font-family:var(--font-mono);font-size:11px;font-weight:600;letter-spacing:0.04em;color:rgba(255,255,255,0.9);">МОДЕЛЬ #{{ m.num }}</div>
+                <div style="position:absolute;top:8px;right:8px;width:26px;height:26px;border-radius:8px;background:rgba(8,8,10,0.5);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;cursor:pointer;border:1px solid rgba(255,255,255,0.12);"><i data-lucide="trash-2" style="font-size:13px;color:#fff;"></i></div>
+                <span style="font-size:17px;font-weight:700;color:#fff;text-shadow:0 2px 12px rgba(0,0,0,0.6);">{{ m.name }}</span>
+              </div>
+              <div style="padding:14px;">
+                <div style="display:flex;gap:6px;margin-bottom:12px;">
+                  <sc-for list="{{ m.chips }}" as="ch" hint-placeholder-count="3">
+                    <span style="font-family:var(--font-mono);font-size:9.5px;letter-spacing:0.03em;text-transform:uppercase;color:{{ ch.fg }};background:{{ ch.bg }};border:1px solid {{ ch.border }};padding:3px 7px;border-radius:6px;">{{ ch.label }}</span>
+                  </sc-for>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:8px;">
+                  <div class="mm-sel-wrap"><select class="mm-field" style="cursor:pointer;font-size:12.5px;padding:9px 12px;"><option>Развёртка / character sheet</option></select><i data-lucide="chevron-down"></i></div>
+                  <div class="mm-sel-wrap"><select class="mm-field" style="cursor:pointer;font-size:12.5px;padding:9px 12px;"><option>Лицо / идентичность</option></select><i data-lucide="chevron-down"></i></div>
+                  <div class="mm-sel-wrap"><select class="mm-field" style="cursor:pointer;font-size:12.5px;padding:9px 12px;"><option>Тело целиком</option></select><i data-lucide="chevron-down"></i></div>
+                </div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+      </sc-if>
+
+      <!-- ============ TEAM ============ -->
+      <sc-if value="{{ isTeam }}" hint-placeholder-val="{{ false }}">
+      <div class="mm-view">
+        <p style="font-size:14px;color:var(--fg-2);line-height:1.6;margin:0 0 20px;max-width:660px;">Сотрудники входят с email владельца (ваш), отдельным логином команды и паролем. Кредиты и подписка — на владельце; права ниже ограничивают разделы. Модели студии и чаты назначаются вручную — без галочки участник их не видит.</p>
+
+        <!-- new member -->
+        <div style="background:var(--bg-2);border:1px solid var(--border-1);border-radius:16px;padding:22px;margin-bottom:22px;">
+          <div style="font-size:16px;font-weight:700;margin-bottom:16px;">Новый участник</div>
+          <div class="mm-two" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:18px;">
+            <label style="display:flex;flex-direction:column;gap:7px;">
+              <span class="mm-label">Логин (латиница, цифры, _ · 3–32)</span>
+              <input class="mm-field" placeholder="например operator_1" style="font-family:var(--font-mono);" />
+            </label>
+            <label style="display:flex;flex-direction:column;gap:7px;">
+              <span class="mm-label">Пароль (мин. 8)</span>
+              <input type="password" class="mm-field" placeholder="••••••••" />
+            </label>
+          </div>
+
+          <div class="mm-two" style="display:grid;grid-template-columns:1fr 1fr;gap:24px;">
+            <div>
+              <div style="font-family:var(--font-mono);font-size:11px;letter-spacing:0.06em;text-transform:uppercase;color:var(--fg-3);margin-bottom:10px;">Права доступа</div>
+              <div style="display:flex;flex-direction:column;gap:2px;">
+                <sc-for list="{{ perms }}" as="p" hint-placeholder-count="5">
+                  <label style="display:flex;align-items:center;gap:11px;padding:9px 8px;border-radius:9px;cursor:pointer;" style-hover="background:var(--bg-3);">
+                    <span style="width:18px;height:18px;border-radius:5px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;border:1px solid {{ p.border }};background:{{ p.bg }};">
+                      <sc-if value="{{ p.on }}" hint-placeholder-val="{{ false }}"><i data-lucide="check" style="font-size:13px;color:var(--fg-on-accent);stroke-width:3;"></i></sc-if>
+                    </span>
+                    <span style="font-size:13px;color:var(--fg-1);">{{ p.label }}</span>
+                  </label>
+                </sc-for>
+              </div>
+            </div>
+            <div>
+              <div style="font-family:var(--font-mono);font-size:11px;letter-spacing:0.06em;text-transform:uppercase;color:var(--fg-3);margin-bottom:10px;">Модели студии</div>
+              <div style="display:flex;flex-direction:column;gap:2px;">
+                <sc-for list="{{ modelPerms }}" as="p" hint-placeholder-count="7">
+                  <label style="display:flex;align-items:center;gap:11px;padding:8px;border-radius:9px;cursor:pointer;" style-hover="background:var(--bg-3);">
+                    <span style="width:18px;height:18px;border-radius:5px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;border:1px solid {{ p.border }};background:{{ p.bg }};">
+                      <sc-if value="{{ p.on }}" hint-placeholder-val="{{ false }}"><i data-lucide="check" style="font-size:13px;color:var(--fg-on-accent);stroke-width:3;"></i></sc-if>
+                    </span>
+                    <span style="font-size:13px;color:var(--fg-1);">{{ p.label }}</span>
+                  </label>
+                </sc-for>
+              </div>
+            </div>
+          </div>
+
+          <button style="width:100%;display:inline-flex;align-items:center;justify-content:center;gap:8px;background:var(--grad);border:0;color:var(--fg-on-accent);font-size:15px;font-weight:700;padding:15px;border-radius:12px;cursor:pointer;margin-top:20px;transition:filter .16s;" style-hover="filter:brightness(1.08);"><i data-lucide="user-plus" style="font-size:17px;"></i>Создать участника</button>
+        </div>
+
+        <!-- members list -->
+        <div style="font-size:16px;font-weight:700;margin-bottom:14px;">Участники <span style="font-family:var(--font-mono);font-size:13px;color:var(--fg-3);font-weight:500;">2</span></div>
+        <div style="display:flex;flex-direction:column;gap:14px;">
+          <sc-for list="{{ members }}" as="mb" hint-placeholder-count="2">
+            <div style="background:var(--bg-2);border:1px solid var(--border-1);border-radius:16px;padding:18px 22px;">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;">
+                <div style="display:flex;align-items:center;gap:11px;">
+                  <div style="width:34px;height:34px;border-radius:10px;background:{{ mb.avatarBg }};display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;color:#fff;">{{ mb.initial }}</div>
+                  <span style="font-family:var(--font-mono);font-size:14px;font-weight:600;color:var(--fg-1);">{{ mb.login }}</span>
+                </div>
+                <label style="display:flex;align-items:center;gap:9px;cursor:pointer;">
+                  <span style="font-size:12.5px;color:var(--fg-2);">Активен</span>
+                  <span style="width:38px;height:22px;border-radius:999px;background:{{ mb.toggleBg }};position:relative;transition:background .16s;flex-shrink:0;">
+                    <span style="position:absolute;top:2px;left:{{ mb.knobLeft }};width:18px;height:18px;border-radius:999px;background:#fff;transition:left .16s;"></span>
+                  </span>
+                </label>
+              </div>
+              <div class="mm-two" style="display:grid;grid-template-columns:1fr 1fr;gap:24px;">
+                <div>
+                  <div style="font-family:var(--font-mono);font-size:10px;letter-spacing:0.06em;text-transform:uppercase;color:var(--fg-3);margin-bottom:8px;">Права</div>
+                  <div style="display:flex;flex-direction:column;gap:6px;">
+                    <sc-for list="{{ mb.perms }}" as="p" hint-placeholder-count="5">
+                      <div style="display:flex;align-items:center;gap:10px;">
+                        <span style="width:16px;height:16px;border-radius:5px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;border:1px solid {{ p.border }};background:{{ p.bg }};">
+                          <sc-if value="{{ p.on }}" hint-placeholder-val="{{ false }}"><i data-lucide="check" style="font-size:11px;color:var(--fg-on-accent);stroke-width:3;"></i></sc-if>
+                        </span>
+                        <span style="font-size:12.5px;color:{{ p.textColor }};">{{ p.label }}</span>
+                      </div>
+                    </sc-for>
+                  </div>
+                </div>
+                <div>
+                  <div style="font-family:var(--font-mono);font-size:10px;letter-spacing:0.06em;text-transform:uppercase;color:var(--fg-3);margin-bottom:8px;">Модели</div>
+                  <div style="display:flex;flex-wrap:wrap;gap:6px;">
+                    <sc-for list="{{ mb.models }}" as="ml" hint-placeholder-count="4">
+                      <span style="font-family:var(--font-mono);font-size:11px;padding:4px 9px;border-radius:7px;color:{{ ml.fg }};background:{{ ml.bg }};border:1px solid {{ ml.border }};">{{ ml.name }}</span>
+                    </sc-for>
+                  </div>
+                </div>
+              </div>
+              <div style="display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap;margin-top:16px;padding-top:16px;border-top:1px solid var(--border-1);">
+                <label style="display:flex;flex-direction:column;gap:6px;flex:1;min-width:180px;">
+                  <span class="mm-label">Новый пароль (необязательно)</span>
+                  <input type="password" class="mm-field" placeholder="••••••••" />
+                </label>
+                <button style="display:inline-flex;align-items:center;gap:6px;background:var(--bg-3);border:1px solid var(--border-1);color:var(--fg-1);font-size:13px;font-weight:500;padding:12px 16px;border-radius:10px;cursor:pointer;" style-hover="border-color:var(--accent);color:var(--accent);"><i data-lucide="save" style="font-size:15px;"></i>Сохранить</button>
+                <button style="display:inline-flex;align-items:center;gap:6px;background:transparent;border:1px solid var(--border-1);color:var(--fg-2);font-size:13px;font-weight:500;padding:12px 16px;border-radius:10px;cursor:pointer;" style-hover="border-color:var(--danger);color:var(--danger);"><i data-lucide="trash-2" style="font-size:15px;"></i>Удалить</button>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+      </sc-if>
+
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1180,&quot;height&quot;:940},&quot;defaultTab&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;overview&quot;,&quot;plan&quot;,&quot;connections&quot;,&quot;models&quot;,&quot;team&quot;],&quot;default&quot;:&quot;overview&quot;,&quot;tsType&quot;:&quot;'overview' | 'plan' | 'connections' | 'models' | 'team'&quot;,&quot;section&quot;:&quot;Экран&quot;}}">
+class Component extends DCLogic {
+  state = { tab: null, tier:'pro', period:'month' };
+
+  componentDidMount(){ this.icons(); }
+  componentDidUpdate(){ this.icons(); }
+  icons(){
+    if (window.lucide) { try { window.lucide.createIcons(); } catch(e){} }
+    else { setTimeout(()=>{ if(window.lucide){ try{window.lucide.createIcons();}catch(e){} } }, 300); }
+  }
+
+  chk(on){ return on
+    ? { on:true, border:'var(--accent)', bg:'var(--accent)' }
+    : { on:false, border:'var(--border-2)', bg:'var(--bg-inset)' }; }
+
+  renderVals(){
+    const tab = this.state.tab ?? (this.props.defaultTab || 'overview');
+    const set = (t)=> ()=> this.setState({tab:t});
+
+    const tabDefs = [
+      { key:'overview', label:'Обзор', icon:'layout-dashboard' },
+      { key:'plan', label:'Тариф и баланс', icon:'wallet' },
+      { key:'connections', label:'Подключения', icon:'plug' },
+      { key:'models', label:'Модели', icon:'sparkles' },
+      { key:'team', label:'Команда', icon:'users' }
+    ];
+    const tabs = tabDefs.map(t=>{
+      const active = t.key===tab;
+      return { ...t, onClick:set(t.key),
+        style:`display:inline-flex;align-items:center;gap:7px;white-space:nowrap;font-size:13px;font-weight:${active?600:500};padding:10px 16px;border-radius:10px;cursor:pointer;border:0;background:${active?'var(--bg-3)':'transparent'};color:${active?'var(--fg-1)':'var(--fg-2)'};transition:all .16s;`
+      };
+    });
+
+    // overview
+    const ovStats = [
+      { label:'Баланс кредитов', value:'2706', sub:'Общий для пространства', color:'var(--fg-1)' },
+      { label:'Тариф', value:'Standard Studio', sub:'Кредиты на студию, чат и команда · STUDIO', color:'var(--fg-1)' },
+      { label:'Операторов', value:'2', sub:'Сотрудники без учёта владельца', color:'var(--fg-1)' },
+      { label:'Подписка', value:'Активна', sub:'До 7 дек. 2026 г., 10:20', color:'var(--success)' }
+    ];
+    const ovQuick = [
+      { label:'Тариф и баланс', icon:'wallet', color:'var(--warning)', onClick:set('plan') },
+      { label:'Подключения', icon:'plug', color:'var(--cat-video)', onClick:set('connections') },
+      { label:'Команда', icon:'users', color:'var(--cat-i2v)', onClick:set('team') },
+      { label:'Админ-панель', icon:'shield', color:'var(--accent)', onClick:null }
+    ];
+
+    // plan
+    const planUsage = [
+      { label:'Пользователи', value:'3 / 10' },
+      { label:'Модели', value:'7 / 10' },
+      { label:'Диалоги в месяце', value:'2 · без лимита' }
+    ];
+    const seg = (arr, cur, onp)=> arr.map(x=>{
+      const active = x.key===cur;
+      return { ...x, onClick:()=>onp(x.key),
+        style:`font-size:13px;font-weight:${active?700:500};padding:8px 16px;border-radius:8px;cursor:pointer;border:0;background:${active?'var(--accent)':'transparent'};color:${active?'var(--fg-on-accent)':'var(--fg-2)'};transition:all .14s;`
+      };
+    });
+    const planTier = seg([{key:'pro',label:'Pro'},{key:'standard',label:'Standard'}], this.state.tier, k=>this.setState({tier:k}));
+    const planPeriod = seg([{key:'month',label:'Месяц'},{key:'year',label:'Год'}], this.state.period, k=>this.setState({period:k}));
+
+    const proPlans = [
+      { name:'Pro Solo — мес.', price:'990 ₽', sub:'или 275 кр. (3.6 ₽/кр.) · на балансе 2706 кр.' },
+      { name:'Pro Pro — мес.', price:'2490 ₽', sub:'или 692 кр. (3.6 ₽/кр.) · на балансе 2706 кр.' },
+      { name:'Pro Studio — мес.', price:'5990 ₽', sub:'или 1664 кр. (3.6 ₽/кр.) · на балансе 2706 кр.' }
+    ];
+    const stdPlans = [
+      { name:'Standard Solo — мес.', price:'1490 ₽', sub:'кредиты студии включены · 1 оператор' },
+      { name:'Standard Studio — мес.', price:'3990 ₽', sub:'кредиты студии включены · до 10 операторов' }
+    ];
+    const plans = this.state.tier==='pro' ? proPlans : stdPlans;
+
+    const history = [
+      { date:'2 июл. 2026 г., 15:41', op:'Студия: генерация', credits:'−4', color:'var(--danger)' },
+      { date:'2 июл. 2026 г., 15:39', op:'grok_prompt_generation', credits:'0', color:'var(--fg-3)' },
+      { date:'2 июл. 2026 г., 13:06', op:'Студия: генерация', credits:'−6', color:'var(--danger)' },
+      { date:'2 июл. 2026 г., 00:23', op:'Студия: генерация', credits:'−6', color:'var(--danger)' },
+      { date:'29 июн. 2026 г., 22:42', op:'Студия: генерация', credits:'−4', color:'var(--danger)' },
+      { date:'29 июн. 2026 г., 16:22', op:'Студия: генерация', credits:'−6', color:'var(--danger)' },
+      { date:'29 июн. 2026 г., 16:16', op:'Студия: генерация', credits:'−5', color:'var(--danger)' },
+      { date:'29 июн. 2026 г., 15:59', op:'grok_prompt_generation', credits:'0', color:'var(--fg-3)' }
+    ];
+
+    // connections
+    const inp=(label,ph,val,grow,min,mono)=>({label,placeholder:ph||'',value:val||'',grow:grow||'1',min:min||'160px',isInput:true,isSelect:false,mono:mono?'var(--font-mono)':'inherit'});
+    const selF=(label,options,grow,min)=>({label,options,grow:grow||'0 0 auto',min:min||'150px',isSelect:true,isInput:false,mono:'inherit'});
+    const ctaSolid = `display:inline-flex;align-items:center;gap:7px;background:var(--grad);border:0;color:var(--fg-on-accent);font-size:13px;font-weight:700;padding:12px 18px;border-radius:10px;cursor:pointer;white-space:nowrap;`;
+    const ctaGhost = `display:inline-flex;align-items:center;gap:7px;background:var(--bg-3);border:1px solid var(--border-1);color:var(--fg-1);font-size:13px;font-weight:600;padding:12px 18px;border-radius:10px;cursor:pointer;white-space:nowrap;`;
+    const badgeOK = { badgeFg:'var(--success)', badgeBg:'rgba(124,227,139,0.10)', badgeBorder:'rgba(124,227,139,0.25)' };
+    const badgeOff = { badgeFg:'var(--warning)', badgeBg:'rgba(245,196,67,0.10)', badgeBorder:'rgba(245,196,67,0.25)' };
+    const badgePlat = { badgeFg:'var(--cat-video)', badgeBg:'rgba(91,212,255,0.10)', badgeBorder:'rgba(91,212,255,0.25)' };
+
+    const connections = [
+      { name:'WaveSpeed', icon:'gauge', iconColor:'var(--accent)', iconBg:'rgba(216,255,61,0.10)', status:'Ключ платформы', ...badgePlat,
+        desc:'Pro: нужен ваш API-ключ WaveSpeed. Standard/Credits: платформа использует свой ключ. Зарегистрируйтесь на wavespeed.ai и вставьте ключ ниже.',
+        fields:[inp('API-ключ','Вставьте ключ из wavespeed','','1','220px',true)], cta:'Сохранить', ctaIcon:'save', ctaStyle:ctaSolid },
+      { name:'Telegram', icon:'send', iconColor:'var(--cat-video)', iconBg:'rgba(91,212,255,0.10)', status:'1 подключ.', ...badgeOK,
+        desc:'@miaklaim_chanel_bot · webhook активен. Несколько ботов по тарифу. Модель на подключении — все диалоги бота наследуют её.',
+        fields:[selF('Модель',['Mia','Nadia','Не назначена'],'0 0 auto','120px'), selF('AI-компаньон',['Выключен (оператор)','Как на подключении','Флирт'],'0 0 auto','200px'), inp('Токен бота','Вставьте токен BotFather','','1','180px',false)],
+        cta:'Добавить бота', ctaIcon:'plus', ctaStyle:ctaSolid,
+        hint:'Задержка 5–45 с · Авто/час 60 · базовый режим для всех диалогов, в шапке чата можно переопределить.' },
+      { name:'Fanvue', icon:'heart', iconColor:'var(--cat-i2v)', iconBg:'rgba(197,140,255,0.10)', status:'1 подключ.', ...badgeOK,
+        desc:'Несколько creator-аккаунтов. Модель на подключении — диалоги наследуют её автоматически.',
+        fields:[selF('Модель',['Mia','Nadia'],'0 0 auto','120px'), selF('Модель (новое подключ.)',['Не назначена','Mia'],'0 0 auto','170px')],
+        cta:'Добавить Fanvue (OAuth)', ctaIcon:'link', ctaStyle:ctaSolid,
+        hint:'Webhook URL: https://model-mate.online/api/... · задержка 5–45 с, авто/час 60.' },
+      { name:'Instagram', icon:'instagram', iconColor:'var(--cat-photo)', iconBg:'rgba(255,122,77,0.10)', status:'Не подключено', ...badgeOff,
+        desc:'Business или Creator аккаунт через Meta OAuth. Модель наследуется диалогами. Ответы возможны 24 часа после сообщения.',
+        fields:[inp('Webhook URL (Meta App Dashboard)','https://model-mate.online/api/...','','1','240px',true)],
+        cta:'Подключить', ctaIcon:'plug', ctaStyle:ctaGhost },
+      { name:'Tribute', icon:'gift', iconColor:'var(--warning)', iconBg:'rgba(245,196,67,0.10)', status:'Не подключено', ...badgeOff,
+        desc:'Донаты и подписки через Tribute API. Модель на подключении определяет профиль дохода. Чатеры видят 20% от суммы по своим моделям.',
+        fields:[inp('Метка (необязательно)','Например: Mia Tribute','','1','160px',false), selF('Модель',['Mia','Nadia'],'0 0 auto','110px'), inp('API-ключ Tribute','Api-Key из панели','','1','180px',true)],
+        cta:'Добавить Tribute', ctaIcon:'plus', ctaStyle:ctaSolid },
+      { name:'Текстовая модель (студия)', icon:'brain', iconColor:'var(--success)', iconBg:'rgba(124,227,139,0.10)', status:'Ключ на сервере', ...badgeOK,
+        desc:'Промпты и vision в студии идут через AI-ключ администратора на сервере. Поля ниже не используются студией и оставлены на будущее.',
+        fields:[inp('API-ключ','sk-...','','1','180px',true), inp('Базовый URL (по желанию)','https://api.openai.com/v1','','1','200px',true)],
+        cta:'Сохранить', ctaIcon:'save', ctaStyle:ctaSolid }
+    ];
+
+    // models
+    const chipDefs = {
+      sheet:{ label:'Sheet', fg:'var(--cat-video)', bg:'rgba(91,212,255,0.10)', border:'rgba(91,212,255,0.25)' },
+      face:{ label:'Лицо', fg:'var(--cat-photo)', bg:'rgba(255,122,77,0.10)', border:'rgba(255,122,77,0.25)' },
+      body:{ label:'Тело', fg:'var(--cat-i2v)', bg:'rgba(197,140,255,0.10)', border:'rgba(197,140,255,0.25)' }
+    };
+    const models = [
+      { num:'91', name:'Zaranoir', a:'#4a3550', b:'#1a1222', chips:[chipDefs.sheet,chipDefs.face,chipDefs.body] },
+      { num:'77', name:'Velvet.X', a:'#3a4a6b', b:'#161f2e', chips:[chipDefs.sheet,chipDefs.face,chipDefs.body] },
+      { num:'25', name:'Kima', a:'#5a3a3a', b:'#221414', chips:[chipDefs.sheet,chipDefs.face,chipDefs.body] },
+      { num:'24', name:'Nadia', a:'#2a4a42', b:'#12211e', chips:[chipDefs.sheet,chipDefs.face] },
+      { num:'22', name:'Rich', a:'#3a3a52', b:'#161622', chips:[chipDefs.sheet,chipDefs.face] },
+      { num:'18', name:'Mia', a:'#5a4a35', b:'#221a12', chips:[chipDefs.sheet,chipDefs.face,chipDefs.body] }
+    ];
+
+    // team
+    const permLabels = [
+      'Диалоги и ответы клиентам',
+      'Генерация промпта и картинок (студия)',
+      'Модели студии (создание, фото, правки)',
+      'Ключи Telegram, Fanvue, WaveSpeed',
+      'Оплата и биллинг'
+    ];
+    const newPermOn = [true,true,true,false,false];
+    const perms = permLabels.map((l,i)=>({ label:l, ...this.chk(newPermOn[i]) }));
+    const modelNames = ['zaranoir','velvet.x','kima','Nadia','Rich','Ruby','Mia'];
+    const newModelOn = [false,false,false,false,false,false,true];
+    const modelPerms = modelNames.map((l,i)=>({ label:l, ...this.chk(newModelOn[i]) }));
+
+    const mkPerms = (flags)=> permLabels.map((l,i)=>{
+      const c=this.chk(flags[i]); return { label:l, ...c, textColor: flags[i]?'var(--fg-1)':'var(--fg-3)' };
+    });
+    const mkModels = (names)=> names.map(n=>({ name:n, fg:'var(--accent)', bg:'rgba(216,255,61,0.10)', border:'rgba(216,255,61,0.25)' }));
+
+    const members = [
+      { login:'regina', initial:'R', avatarBg:'linear-gradient(135deg,#C58CFF,#5BD4FF)', active:true,
+        perms:mkPerms([true,true,true,false,false]), models:mkModels(['Mia']) },
+      { login:'dimon', initial:'D', avatarBg:'linear-gradient(135deg,#FF7A4D,#C58CFF)', active:true,
+        perms:mkPerms([true,true,true,false,false]), models:mkModels(['zaranoir']) }
+    ].map(m=>({ ...m,
+      toggleBg: m.active?'var(--accent)':'var(--border-2)',
+      knobLeft: m.active?'18px':'2px'
+    }));
+
+    return {
+      tabs,
+      isOverview: tab==='overview', isPlan: tab==='plan', isConn: tab==='connections',
+      isModels: tab==='models', isTeam: tab==='team',
+      ovStats, ovQuick,
+      planUsage, planTier, planPeriod, plans, history,
+      connections, models,
+      perms, modelPerms, members
+    };
+  }
+}
+</script>
+</body>
+</html>

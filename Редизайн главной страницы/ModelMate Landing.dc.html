@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Manrope:wght@400;500;600;700;800&family=Playfair+Display:ital,wght@0,600;1,500;1,600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="image-slot.js"></script>
+<style>
+html,body{margin:0;padding:0;background:#08090B;color:#F2F3F0;font-family:'Manrope',system-ui,sans-serif;}
+*{box-sizing:border-box;}
+a{color:#C8F53E;text-decoration:none;}
+a:hover{color:#DBFB7A;}
+img{display:block;max-width:100%;}
+::-webkit-scrollbar{width:9px;}
+::-webkit-scrollbar-thumb{background:rgba(255,255,255,.12);border-radius:5px;}
+.mm-disp{font-family:'Archivo Black',system-ui,sans-serif;text-transform:uppercase;letter-spacing:-.012em;line-height:.98;font-weight:400;}
+.mm-it{font-family:'Playfair Display',serif;font-style:italic;font-weight:500;text-transform:none;letter-spacing:0;}
+.mm-mono{font-family:'JetBrains Mono',monospace;}
+@keyframes mmTicker{from{transform:translateX(0);}to{transform:translateX(-50%);}}
+.mm-tick{animation:mmTicker 26s linear infinite;}
+@media(max-width:820px){
+  .mm-navlinks{display:none !important;}
+  .mm-hero{grid-template-columns:1fr !important;gap:32px !important;padding-top:40px !important;}
+  .mm-two{grid-template-columns:1fr !important;}
+  .mm-disp{font-size:32px !important;line-height:1.03 !important;}
+  .mm-hero .mm-disp{font-size:40px !important;}
+  .mm-hero .mm-it{font-size:36px !important;}
+  .mm-it{font-size:30px !important;}
+  .mm-cmp{grid-template-columns:1.3fr 1fr 1fr !important;font-size:12px;}
+  .mm-cmp .mm-cell{padding:12px 12px !important;}
+}
+@media(max-width:520px){
+  .mm-disp{font-size:26px !important;}
+  .mm-hero .mm-disp{font-size:32px !important;}
+  .mm-hero .mm-it{font-size:28px !important;}
+}
+</style>
+</helmet>
+
+<div style="min-height:100vh;background:radial-gradient(1200px 620px at 82% -8%,rgba(200,245,62,.07),transparent 58%),radial-gradient(900px 500px at -5% 4%,rgba(192,132,252,.07),transparent 55%),#08090B;overflow-x:hidden;" data-screen-label="ModelMate Landing">
+
+  <!-- NAV -->
+  <div style="position:sticky;top:0;z-index:40;backdrop-filter:blur(16px);background:rgba(8,9,11,.72);border-bottom:1px solid rgba(255,255,255,.06);">
+    <div style="max-width:1180px;margin:0 auto;display:flex;align-items:center;gap:16px;padding:14px 26px;">
+      <div style="display:flex;align-items:center;gap:11px;flex:1;">
+        <div style="width:36px;height:36px;flex:none;border-radius:11px;overflow:hidden;box-shadow:inset 0 0 0 1px rgba(255,255,255,.08);"><img src="assets/logo-m.png" alt="ModelMate" style="width:100%;height:100%;object-fit:cover;"></div>
+        <div style="font-family:'Archivo Black';font-size:17px;letter-spacing:-.5px;">ModelMate</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:24px;" class="mm-navlinks">
+        <sc-for list="{{ navLinks }}" as="n" hint-placeholder-count="4">
+          <a href="{{ n.href }}" class="mm-mono" style="font-size:11px;letter-spacing:1px;text-transform:uppercase;color:#8A8F95;" style-hover="color:#F2F3F0;">{{ n.label }}</a>
+        </sc-for>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div onClick="{{ toggleLang }}" class="mm-mono" style="font-size:10.5px;font-weight:600;border:1px solid rgba(255,255,255,.14);border-radius:8px;padding:6px 10px;cursor:pointer;color:#9BA0A6;" style-hover="color:#F2F3F0;">{{ langLabel }}</div>
+        <a href="https://model-mate.online/" style="background:#C8F53E;color:#0F1400;font-weight:800;font-size:13px;border-radius:9px;padding:9px 16px;" style-hover="background:#DBFB7A;">{{ t.login }}</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- HERO -->
+  <div style="max-width:1180px;margin:0 auto;padding:64px 26px 30px;display:grid;grid-template-columns:1.05fr .95fr;gap:48px;align-items:center;" class="mm-hero">
+    <div>
+      <div class="mm-mono" style="font-size:11px;letter-spacing:2px;color:#7A7F86;margin-bottom:26px;">AI OFM · PHOTO · VIDEO · CHAT</div>
+      <div class="mm-disp" style="font-size:66px;margin-bottom:26px;">{{ t.h1a }}<br><span class="mm-it" style="font-size:60px;">{{ t.h1it }}</span> {{ t.h1b }}<br>{{ t.h1c }}</div>
+      <div style="font-size:16px;color:#9BA0A6;line-height:1.6;max-width:440px;margin-bottom:30px;">{{ t.heroSub }}</div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:40px;">
+        <a href="https://model-mate.online/" style="display:flex;align-items:center;gap:9px;background:#C8F53E;color:#0F1400;font-weight:800;font-size:15px;border-radius:12px;padding:15px 26px;" style-hover="background:#DBFB7A;">{{ t.ctaFree }} →</a>
+        <a href="#studio" style="display:flex;align-items:center;gap:9px;background:#15161A;border:1px solid rgba(255,255,255,.12);font-weight:700;font-size:15px;border-radius:12px;padding:15px 26px;color:#F2F3F0;" style-hover="border-color:rgba(255,255,255,.3);">{{ t.ctaLaunch }}</a>
+      </div>
+      <div style="display:flex;gap:36px;flex-wrap:wrap;padding-top:26px;border-top:1px solid rgba(255,255,255,.08);">
+        <sc-for list="{{ stats }}" as="s" hint-placeholder-count="3">
+          <div>
+            <div class="mm-disp" style="font-size:26px;">{{ s.val }}</div>
+            <div class="mm-mono" style="font-size:9.5px;letter-spacing:1px;text-transform:uppercase;color:#7A7F86;margin-top:5px;">{{ s.label }}</div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    <!-- mosaic -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+      <div style="grid-row:span 2;position:relative;border-radius:16px;overflow:hidden;">
+        <div style="aspect-ratio:3/5;"><image-slot id="mm-hero-a" shape="rounded" radius="16" placeholder="{{ t.dropVideo }}"></image-slot></div>
+        <span class="mm-mono" style="position:absolute;top:10px;left:10px;font-size:8.5px;letter-spacing:1px;background:rgba(0,0,0,.6);color:#fff;padding:3px 8px;border-radius:6px;pointer-events:none;">VIDEO · 4K</span>
+      </div>
+      <div style="position:relative;border-radius:16px;overflow:hidden;">
+        <div style="aspect-ratio:4/5;"><image-slot id="mm-hero-b" shape="rounded" radius="16" placeholder="{{ t.dropPhoto }}"></image-slot></div>
+        <span class="mm-mono" style="position:absolute;top:10px;left:10px;font-size:8.5px;letter-spacing:1px;background:rgba(0,0,0,.6);color:#fff;padding:3px 8px;border-radius:6px;pointer-events:none;">PHOTO · 15S</span>
+      </div>
+      <div style="position:relative;border-radius:16px;overflow:hidden;">
+        <div style="aspect-ratio:1/1;"><image-slot id="mm-hero-c" shape="rounded" radius="16" placeholder="{{ t.dropVideo }}"></image-slot></div>
+        <span class="mm-mono" style="position:absolute;top:10px;left:10px;font-size:8.5px;letter-spacing:1px;background:rgba(0,0,0,.6);color:#fff;padding:3px 8px;border-radius:6px;pointer-events:none;">VIDEO</span>
+      </div>
+      <div style="position:relative;border-radius:16px;overflow:hidden;">
+        <div style="aspect-ratio:4/5;"><image-slot id="mm-hero-d" shape="rounded" radius="16" placeholder="{{ t.dropVideo }}"></image-slot></div>
+        <span class="mm-mono" style="position:absolute;top:10px;left:10px;font-size:8.5px;letter-spacing:1px;background:rgba(0,0,0,.6);color:#fff;padding:3px 8px;border-radius:6px;pointer-events:none;">VIDEO · I2V</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- PLATFORM TICKER -->
+  <div style="border-top:1px solid rgba(255,255,255,.06);border-bottom:1px solid rgba(255,255,255,.06);overflow:hidden;padding:16px 0;margin-top:20px;">
+    <div class="mm-tick" style="display:flex;gap:44px;width:max-content;white-space:nowrap;">
+      <sc-for list="{{ tickerItems }}" as="ti" hint-placeholder-count="12">
+        <span class="mm-mono" style="font-size:13px;letter-spacing:1px;color:#6B7076;display:flex;align-items:center;gap:44px;">{{ ti }}<span style="color:#C8F53E;">◆</span></span>
+      </sc-for>
+    </div>
+  </div>
+
+  <!-- PAIN -->
+  <div style="max-width:1180px;margin:0 auto;padding:60px 26px 40px;">
+    <div class="mm-mono" style="font-size:11px;letter-spacing:2px;color:#7A7F86;margin-bottom:18px;">{{ t.painKicker }}</div>
+    <div class="mm-disp" style="font-size:46px;margin-bottom:34px;">{{ t.painTitle }}</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;">
+      <sc-for list="{{ pains }}" as="p" hint-placeholder-count="4">
+        <div style="background:#101114;border:1px solid rgba(255,255,255,.06);border-radius:16px;padding:20px;">
+          <div style="width:40px;height:40px;border-radius:11px;background:#0B0C0E;border:1px solid rgba(200,245,62,.25);color:#C8F53E;display:flex;align-items:center;justify-content:center;margin-bottom:16px;"><span style="display:flex;width:18px;height:18px;" dangerouslySetInnerHTML="{{ p.icon }}"></span></div>
+          <div style="font-weight:800;font-size:15px;margin-bottom:8px;">{{ p.title }}</div>
+          <div style="font-size:12.5px;color:#9BA0A6;line-height:1.55;">{{ p.desc }}</div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+
+  <!-- COMPARISON -->
+  <div class="mm-reveal" style="max-width:1180px;margin:0 auto;padding:40px 26px;">
+    <div class="mm-mono" style="font-size:11px;letter-spacing:2px;color:#7A7F86;margin-bottom:16px;">{{ t.cmpKicker }}</div>
+    <div class="mm-disp" style="font-size:40px;margin-bottom:28px;">{{ t.cmpTitle }}</div>
+    <div style="background:#101114;border:1px solid rgba(255,255,255,.07);border-radius:20px;overflow-x:auto;">
+      <div class="mm-cmp" style="display:grid;grid-template-columns:1.2fr 1fr 1fr;min-width:520px;">
+        <div style="padding:16px 22px;border-bottom:1px solid rgba(255,255,255,.06);"></div>
+        <div style="padding:16px 22px;border-bottom:1px solid rgba(255,255,255,.06);border-left:1px solid rgba(255,255,255,.06);"><span class="mm-mono" style="font-size:10px;letter-spacing:1.5px;color:#F87171;text-transform:uppercase;">✕ {{ t.cmpBefore }}</span></div>
+        <div style="padding:16px 22px;border-bottom:1px solid rgba(255,255,255,.06);border-left:1px solid rgba(200,245,62,.2);background:rgba(200,245,62,.03);"><span class="mm-mono" style="font-size:10px;letter-spacing:1.5px;color:#C8F53E;text-transform:uppercase;">✓ {{ t.cmpAfter }}</span></div>
+        <sc-for list="{{ compRows }}" as="c" hint-placeholder-count="5">
+          <div style="padding:15px 22px;border-bottom:1px solid rgba(255,255,255,.04);font-weight:700;font-size:13.5px;color:#C9CDD1;">{{ c.l }}</div>
+          <div style="padding:15px 22px;border-bottom:1px solid rgba(255,255,255,.04);border-left:1px solid rgba(255,255,255,.06);font-size:13px;color:#8A8F95;">{{ c.before }}</div>
+          <div style="padding:15px 22px;border-bottom:1px solid rgba(255,255,255,.04);border-left:1px solid rgba(200,245,62,.2);background:rgba(200,245,62,.03);font-size:13px;color:#E7EBD8;font-weight:600;">{{ c.after }}</div>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+
+  <!-- SOLUTION intro -->
+  <div style="max-width:1180px;margin:0 auto;padding:30px 26px 10px;text-align:center;">
+    <div class="mm-mono" style="font-size:11px;letter-spacing:2px;color:#7A7F86;margin-bottom:16px;">{{ t.solKicker }}</div>
+    <div class="mm-disp" style="font-size:42px;max-width:820px;margin:0 auto;">{{ t.solTitleA }} <span class="mm-it" style="font-size:38px;">{{ t.solTitleIt }}</span> {{ t.solTitleB }}</div>
+  </div>
+
+  <!-- HOW IT WORKS -->
+  <div class="mm-reveal" style="max-width:1180px;margin:0 auto;padding:34px 26px 10px;">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;position:relative;">
+      <sc-for list="{{ steps }}" as="st" hint-placeholder-count="3">
+        <div style="background:#101114;border:1px solid rgba(255,255,255,.07);border-radius:18px;padding:24px;position:relative;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+            <div style="width:44px;height:44px;border-radius:13px;background:rgba(200,245,62,.1);color:#C8F53E;display:flex;align-items:center;justify-content:center;"><span style="display:flex;width:22px;height:22px;" dangerouslySetInnerHTML="{{ st.icon }}"></span></div>
+            <span class="mm-disp" style="font-size:34px;color:rgba(255,255,255,.09);">{{ st.n }}</span>
+          </div>
+          <div style="font-weight:800;font-size:17px;margin-bottom:8px;">{{ st.title }}</div>
+          <div style="font-size:13.5px;color:#9BA0A6;line-height:1.6;">{{ st.desc }}</div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+
+  <!-- MODULE SECTIONS (real cabinet screenshots) -->
+  <div style="max-width:1180px;margin:0 auto;padding:20px 26px 30px;">
+    <sc-for list="{{ sections }}" as="sec" hint-placeholder-count="5">
+      <div id="{{ sec.id }}" style="{{ sec.rowStyle }}">
+        <div style="flex:1;min-width:290px;">
+          <div class="mm-mono" style="display:inline-block;font-size:10px;letter-spacing:1.5px;padding:5px 12px;border-radius:20px;margin-bottom:18px;" style="{{ sec.tagStyle }}">{{ sec.tag }}</div>
+          <div class="mm-disp" style="font-size:32px;margin-bottom:16px;">{{ sec.title }}</div>
+          <div style="font-size:14.5px;color:#9BA0A6;line-height:1.65;margin-bottom:22px;">{{ sec.desc }}</div>
+          <div style="display:flex;flex-direction:column;gap:11px;">
+            <sc-for list="{{ sec.points }}" as="p" hint-placeholder-count="4">
+              <div style="display:flex;gap:11px;align-items:flex-start;">
+                <span style="display:flex;width:18px;height:18px;flex:none;color:#C8F53E;margin-top:1px;" dangerouslySetInnerHTML="{{ checkIcon }}"></span>
+                <span style="font-size:13.5px;color:#C9CDD1;line-height:1.5;">{{ p }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+        <div style="flex:1;min-width:320px;">
+          <div style="{{ sec.imgStyle }}"></div>
+        </div>
+      </div>
+    </sc-for>
+  </div>
+
+  <!-- MODES with media slots -->
+  <div style="max-width:1180px;margin:0 auto;padding:40px 26px;">
+    <div class="mm-mono" style="font-size:11px;letter-spacing:2px;color:#7A7F86;margin-bottom:16px;">{{ t.modesKicker }}</div>
+    <div class="mm-disp" style="font-size:42px;margin-bottom:10px;">{{ t.modesTitle }}</div>
+    <div style="font-size:14px;color:#9BA0A6;max-width:560px;margin-bottom:32px;line-height:1.6;">{{ t.modesSub }}</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px;">
+      <sc-for list="{{ modes }}" as="m" hint-placeholder-count="6">
+        <div style="background:#101114;border:1px solid rgba(255,255,255,.07);border-radius:18px;overflow:hidden;" style-hover="border-color:rgba(200,245,62,.35);">
+          <div style="position:relative;aspect-ratio:16/10;background:#0B0C0E;border-bottom:1px solid rgba(255,255,255,.06);">
+            <image-slot id="{{ m.slotId }}" shape="rect" placeholder="{{ t.dropGif }}"></image-slot>
+            <span class="mm-mono" style="position:absolute;top:12px;left:12px;font-size:8.5px;letter-spacing:1px;background:rgba(0,0,0,.6);color:#C8F53E;padding:3px 9px;border-radius:6px;pointer-events:none;">{{ m.step }}</span>
+          </div>
+          <div style="padding:18px 20px;">
+            <div style="display:flex;align-items:center;gap:11px;margin-bottom:9px;">
+              <div style="width:34px;height:34px;flex:none;border-radius:10px;background:rgba(200,245,62,.1);color:#C8F53E;display:flex;align-items:center;justify-content:center;"><span style="display:flex;width:18px;height:18px;" dangerouslySetInnerHTML="{{ m.icon }}"></span></div>
+              <div style="font-weight:800;font-size:16px;">{{ m.title }}</div>
+            </div>
+            <div style="font-size:13px;color:#9BA0A6;line-height:1.6;">{{ m.desc }}</div>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+
+  <!-- ENGINES + BEFORE/AFTER -->
+  <div class="mm-reveal" style="max-width:1180px;margin:0 auto;padding:40px 26px;">
+    <div class="mm-mono" style="font-size:11px;letter-spacing:2px;color:#7A7F86;margin-bottom:16px;">{{ t.engKicker }}</div>
+    <div class="mm-disp" style="font-size:40px;margin-bottom:10px;">{{ t.engTitle }}</div>
+    <div style="font-size:14px;color:#9BA0A6;max-width:540px;margin-bottom:28px;line-height:1.6;">{{ t.engSub }}</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px;">
+      <sc-for list="{{ engines }}" as="e" hint-placeholder-count="4">
+        <div style="background:#101114;border:1px solid rgba(255,255,255,.07);border-radius:16px;padding:20px;" style-hover="border-color:rgba(200,245,62,.3);">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+            <div style="width:38px;height:38px;border-radius:11px;background:rgba(255,255,255,.05);display:flex;align-items:center;justify-content:center;font-family:'Archivo Black';font-size:15px;color:#C8F53E;">{{ e.initial }}</div>
+            <span class="mm-mono" style="font-size:8.5px;letter-spacing:1px;padding:3px 9px;border-radius:20px;" style="{{ e.tagStyle }}">{{ e.tag }}</span>
+          </div>
+          <div style="font-weight:800;font-size:14.5px;margin-bottom:5px;">{{ e.name }}</div>
+          <div style="font-size:12px;color:#9BA0A6;line-height:1.5;">{{ e.desc }}</div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+
+  <!-- BEFORE / AFTER -->
+  <div class="mm-reveal" style="max-width:1180px;margin:0 auto;padding:30px 26px 40px;">
+    <div class="mm-mono" style="font-size:11px;letter-spacing:2px;color:#7A7F86;margin-bottom:16px;">{{ t.baKicker }}</div>
+    <div class="mm-disp" style="font-size:40px;margin-bottom:10px;">{{ t.baTitle }}</div>
+    <div style="font-size:14px;color:#9BA0A6;max-width:560px;margin-bottom:22px;line-height:1.6;">{{ t.baSub }}</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px;">
+      <sc-for list="{{ baTabChips }}" as="bt" hint-placeholder-count="3">
+        <span onClick="{{ bt.pick }}" style="{{ bt.style }}">{{ bt.label }}</span>
+      </sc-for>
+    </div>
+    <div ref="{{ baRef }}" onMouseDown="{{ baStart }}" onTouchStart="{{ baStart }}" style="position:relative;max-width:560px;margin:0 auto;aspect-ratio:4/3;border-radius:18px;overflow:hidden;border:1px solid rgba(255,255,255,.1);user-select:none;cursor:ew-resize;background:#0B0C0E;">
+      <div style="position:absolute;inset:0;"><image-slot id="{{ baCur.after }}" src="{{ baCur.afterSrc }}" fit="cover" shape="rect" placeholder="{{ t.baDropA }}"></image-slot></div>
+      <div style="position:absolute;inset:0;clip-path:{{ baClip }};"><image-slot id="{{ baCur.before }}" src="{{ baCur.beforeSrc }}" fit="cover" shape="rect" placeholder="{{ t.baDropB }}"></image-slot></div>
+      <span class="mm-mono" style="position:absolute;top:12px;left:12px;font-size:8.5px;letter-spacing:1px;background:rgba(0,0,0,.6);color:#fff;padding:3px 9px;border-radius:6px;pointer-events:none;">{{ t.baBefore }}</span>
+      <span class="mm-mono" style="position:absolute;top:12px;right:12px;font-size:8.5px;letter-spacing:1px;background:rgba(200,245,62,.85);color:#0F1400;padding:3px 9px;border-radius:6px;pointer-events:none;">{{ t.baAfter }}</span>
+      <div style="position:absolute;top:0;bottom:0;left:{{ baHandleLeft }};width:2px;background:#C8F53E;pointer-events:none;transform:translateX(-1px);">
+        <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:38px;height:38px;border-radius:50%;background:#C8F53E;color:#0F1400;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;box-shadow:0 4px 14px rgba(0,0,0,.5);">⇆</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TELEGRAM + REFERRAL -->
+  <div class="mm-reveal" style="max-width:1180px;margin:0 auto;padding:30px 26px;">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;" class="mm-two">
+      <!-- telegram -->
+      <div style="background:linear-gradient(135deg,rgba(56,189,248,.1),rgba(56,189,248,.02));border:1px solid rgba(56,189,248,.28);border-radius:20px;padding:30px;display:flex;flex-direction:column;">
+        <div style="width:48px;height:48px;border-radius:14px;background:rgba(56,189,248,.15);color:#38BDF8;display:flex;align-items:center;justify-content:center;margin-bottom:18px;"><span style="display:flex;width:26px;height:26px;" dangerouslySetInnerHTML="{{ icoTg }}"></span></div>
+        <div class="mm-disp" style="font-size:26px;margin-bottom:10px;">{{ t.tgTitle }}</div>
+        <div style="font-size:13.5px;color:#9BA0A6;line-height:1.6;margin-bottom:22px;flex:1;">{{ t.tgDesc }}</div>
+        <a href="https://t.me/" style="align-self:flex-start;display:flex;align-items:center;gap:9px;background:#38BDF8;color:#031621;font-weight:800;font-size:14px;border-radius:11px;padding:12px 22px;" style-hover="filter:brightness(1.08);">{{ t.tgBtn }} →</a>
+      </div>
+      <!-- referral -->
+      <div style="background:linear-gradient(135deg,rgba(200,245,62,.09),rgba(200,245,62,.02));border:1px solid rgba(200,245,62,.28);border-radius:20px;padding:30px;display:flex;flex-direction:column;">
+        <div style="width:48px;height:48px;border-radius:14px;background:rgba(200,245,62,.12);color:#C8F53E;display:flex;align-items:center;justify-content:center;margin-bottom:18px;"><span style="display:flex;width:26px;height:26px;" dangerouslySetInnerHTML="{{ icoGift }}"></span></div>
+        <div class="mm-disp" style="font-size:26px;margin-bottom:10px;">{{ t.refTitle }}</div>
+        <div style="font-size:13.5px;color:#9BA0A6;line-height:1.6;margin-bottom:18px;flex:1;">{{ t.refDesc }}</div>
+        <div style="display:flex;gap:20px;flex-wrap:wrap;">
+          <sc-for list="{{ refStats }}" as="r" hint-placeholder-count="2">
+            <div>
+              <div class="mm-disp" style="font-size:24px;color:#C8F53E;">{{ r.val }}</div>
+              <div class="mm-mono" style="font-size:9.5px;letter-spacing:1px;text-transform:uppercase;color:#7A7F86;margin-top:4px;">{{ r.label }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- COUNTERS -->
+  <div class="mm-reveal" style="max-width:1180px;margin:0 auto;padding:40px 26px;">
+    <div class="mm-mono" style="font-size:11px;letter-spacing:2px;color:#7A7F86;margin-bottom:22px;text-align:center;">{{ t.cntTitle }}</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;">
+      <sc-for list="{{ counters }}" as="c" hint-placeholder-count="4">
+        <div style="background:#101114;border:1px solid rgba(255,255,255,.06);border-radius:16px;padding:24px 20px;text-align:center;">
+          <div class="mm-disp" data-count="{{ c.n }}" data-suffix="{{ c.suffix }}" style="font-size:34px;color:#C8F53E;">0</div>
+          <div style="font-size:12.5px;color:#9BA0A6;margin-top:8px;">{{ c.label }}</div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+
+  <!-- REVIEWS -->
+  <div class="mm-reveal" style="max-width:1180px;margin:0 auto;padding:30px 26px;">
+    <div class="mm-mono" style="font-size:11px;letter-spacing:2px;color:#7A7F86;margin-bottom:16px;">{{ t.revKicker }}</div>
+    <div class="mm-disp" style="font-size:40px;margin-bottom:26px;">{{ t.revTitle }}</div>
+    <div style="background:#101114;border:1px solid rgba(255,255,255,.07);border-radius:20px;padding:34px;">
+      <div style="font-family:'Playfair Display';font-style:italic;font-size:24px;line-height:1.5;color:#EDEFE7;margin-bottom:22px;">“{{ review.q }}”</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,#C8F53E,#F0A8C8);display:flex;align-items:center;justify-content:center;font-family:'Archivo Black';font-size:16px;color:#0F1400;">{{ review.initial }}</div>
+          <div>
+            <div style="font-weight:800;font-size:14px;">{{ review.name }}</div>
+            <div style="font-size:12px;color:#9BA0A6;">{{ review.role }}</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <div onClick="{{ reviewPrev }}" style="width:40px;height:40px;border-radius:11px;border:1px solid rgba(255,255,255,.12);display:flex;align-items:center;justify-content:center;color:#9BA0A6;cursor:pointer;font-size:16px;" style-hover="color:#F2F3F0;border-color:rgba(255,255,255,.3);">←</div>
+          <div onClick="{{ reviewNext }}" style="width:40px;height:40px;border-radius:11px;border:1px solid rgba(255,255,255,.12);display:flex;align-items:center;justify-content:center;color:#9BA0A6;cursor:pointer;font-size:16px;" style-hover="color:#F2F3F0;border-color:rgba(255,255,255,.3);">→</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PRICING -->
+  <div id="pricing" style="max-width:1180px;margin:0 auto;padding:50px 26px;">
+    <div style="text-align:center;">
+      <div class="mm-mono" style="font-size:11px;letter-spacing:2px;color:#7A7F86;margin-bottom:18px;">{{ t.prKicker }}</div>
+      <div class="mm-disp" style="font-size:46px;max-width:780px;margin:0 auto 16px;">{{ t.prTitleA }} <span class="mm-it" style="font-size:42px;">{{ t.prTitleIt }}</span> {{ t.prTitleB }}</div>
+      <div style="font-size:14px;color:#9BA0A6;margin-bottom:26px;">{{ t.prSub }}</div>
+    </div>
+    <!-- toggles -->
+    <div style="display:flex;flex-direction:column;align-items:center;gap:10px;margin-bottom:28px;">
+      <div style="display:flex;background:#101114;border:1px solid rgba(255,255,255,.09);border-radius:11px;padding:4px;">
+        <span onClick="{{ setPro }}" style="{{ proStyle }}">{{ t.tierPro }}</span>
+        <span onClick="{{ setStd }}" style="{{ stdStyle }}">{{ t.tierStd }}</span>
+      </div>
+      <div style="display:flex;background:#101114;border:1px solid rgba(255,255,255,.09);border-radius:11px;padding:4px;">
+        <span onClick="{{ setMonth }}" style="{{ monthStyle }}">{{ t.month }}</span>
+        <span onClick="{{ setYear }}" style="{{ yearStyle }}">{{ t.year }}</span>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;align-items:start;">
+      <sc-for list="{{ plans }}" as="pl" hint-placeholder-count="3">
+        <div style="{{ pl.cardStyle }}">
+          <sc-if value="{{ pl.popular }}" hint-placeholder-val="{{ false }}">
+            <div class="mm-mono" style="display:inline-block;font-size:9px;letter-spacing:1px;background:#C8F53E;color:#0F1400;font-weight:600;padding:4px 11px;border-radius:20px;margin-bottom:14px;">{{ t.popular }}</div>
+          </sc-if>
+          <div style="font-weight:800;font-size:18px;margin-bottom:10px;">{{ pl.name }}</div>
+          <div style="display:flex;align-items:baseline;gap:6px;margin-bottom:4px;"><span class="mm-disp" style="font-size:34px;">{{ pl.price }} ₽</span></div>
+          <div style="font-size:12px;color:#7A7F86;margin-bottom:20px;">{{ pl.per }}</div>
+          <div style="display:flex;flex-direction:column;gap:11px;margin-bottom:22px;">
+            <sc-for list="{{ pl.feats }}" as="pf" hint-placeholder-count="5">
+              <div style="display:flex;gap:10px;align-items:flex-start;"><span style="width:6px;height:6px;border-radius:50%;background:#C8F53E;flex:none;margin-top:7px;"></span><span style="font-size:13px;color:#C9CDD1;line-height:1.45;">{{ pf }}</span></div>
+            </sc-for>
+          </div>
+          <a href="https://model-mate.online/" style="{{ pl.btnStyle }}">{{ pl.btn }}</a>
+        </div>
+      </sc-for>
+    </div>
+    <div style="margin-top:32px;max-width:760px;">
+      <div style="font-weight:800;font-size:16px;margin-bottom:8px;">{{ t.whatProTitle }}</div>
+      <div style="font-size:13.5px;color:#9BA0A6;line-height:1.65;">{{ t.whatProBody }}</div>
+    </div>
+  </div>
+
+  <!-- FAQ -->
+  <div class="mm-reveal" style="max-width:840px;margin:0 auto;padding:40px 26px;">
+    <div class="mm-mono" style="font-size:11px;letter-spacing:2px;color:#7A7F86;margin-bottom:16px;">{{ t.faqKicker }}</div>
+    <div class="mm-disp" style="font-size:40px;margin-bottom:26px;">{{ t.faqTitle }}</div>
+    <div style="display:flex;flex-direction:column;gap:10px;">
+      <sc-for list="{{ faq }}" as="f" hint-placeholder-count="5">
+        <div onClick="{{ f.toggle }}" style="background:#101114;border:1px solid rgba(255,255,255,.07);border-radius:14px;padding:18px 20px;cursor:pointer;" style-hover="border-color:rgba(255,255,255,.16);">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;">
+            <span style="font-weight:700;font-size:15px;color:#F2F3F0;">{{ f.q }}</span>
+            <span style="color:#C8F53E;font-size:20px;flex:none;">{{ f.sign }}</span>
+          </div>
+          <sc-if value="{{ f.open }}" hint-placeholder-val="{{ false }}">
+            <div style="font-size:13.5px;color:#9BA0A6;line-height:1.65;margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,.06);">{{ f.a }}</div>
+          </sc-if>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+
+  <!-- SECURITY -->
+  <div class="mm-reveal" style="max-width:1180px;margin:0 auto;padding:30px 26px 20px;">
+    <div class="mm-mono" style="font-size:11px;letter-spacing:2px;color:#7A7F86;margin-bottom:16px;">{{ t.secKicker }}</div>
+    <div class="mm-disp" style="font-size:40px;margin-bottom:26px;">{{ t.secTitle }}</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;">
+      <sc-for list="{{ secItems }}" as="si" hint-placeholder-count="3">
+        <div style="background:#101114;border:1px solid rgba(255,255,255,.06);border-radius:16px;padding:22px;">
+          <div style="width:44px;height:44px;border-radius:13px;background:rgba(200,245,62,.1);color:#C8F53E;display:flex;align-items:center;justify-content:center;margin-bottom:14px;"><span style="display:flex;width:22px;height:22px;" dangerouslySetInnerHTML="{{ si.icon }}"></span></div>
+          <div style="font-weight:800;font-size:15px;margin-bottom:8px;">{{ si.title }}</div>
+          <div style="font-size:13px;color:#9BA0A6;line-height:1.6;">{{ si.desc }}</div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+
+  <!-- CTA -->
+  <div style="max-width:1180px;margin:0 auto;padding:30px 26px 70px;">
+    <div style="background:linear-gradient(120deg,rgba(200,245,62,.1),rgba(192,132,252,.08));border:1px solid rgba(200,245,62,.25);border-radius:24px;padding:56px 32px;text-align:center;">
+      <div class="mm-disp" style="font-size:40px;margin-bottom:16px;">{{ t.ctaTitle }}</div>
+      <div style="font-size:15px;color:#9BA0A6;max-width:520px;margin:0 auto 28px;line-height:1.6;">{{ t.ctaSub }}</div>
+      <a href="https://model-mate.online/" style="display:inline-flex;align-items:center;gap:9px;background:#C8F53E;color:#0F1400;font-weight:800;font-size:16px;border-radius:13px;padding:16px 34px;" style-hover="background:#DBFB7A;">{{ t.ctaFree }} →</a>
+    </div>
+  </div>
+
+  <!-- FOOTER -->
+  <div style="border-top:1px solid rgba(255,255,255,.06);">
+    <div style="max-width:1180px;margin:0 auto;padding:30px 26px;display:flex;gap:16px;align-items:center;flex-wrap:wrap;">
+      <div style="display:flex;align-items:center;gap:10px;flex:1;">
+        <div style="width:30px;height:30px;border-radius:9px;overflow:hidden;"><img src="assets/logo-m.png" alt="" style="width:100%;height:100%;object-fit:cover;"></div>
+        <span style="font-family:'Archivo Black';font-size:14px;">ModelMate</span>
+      </div>
+      <div class="mm-mono" style="font-size:10px;letter-spacing:1px;color:#5C6066;">© 2026 · AI OFM {{ t.slogan }}</div>
+      <a href="https://model-mate.online/" style="font-size:12.5px;color:#9BA0A6;" style-hover="color:#C8F53E;">model-mate.online</a>
+    </div>
+  </div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1180,&quot;height&quot;:900}}">
+class Component extends DCLogic {
+  state = { lang:'ru', tier:'pro', period:'month', baPos:52, baTab:0, faqOpen:0, reviewIdx:0 };
+  I(p){ return { __html:'<svg viewBox="0 0 24 24" width="100%" height="100%" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">'+p+'</svg>' }; }
+  componentDidMount(){
+    // scroll reveal
+    this._io = new IntersectionObserver((es)=>{
+      es.forEach(e=>{ if(e.isIntersecting){ e.target.style.opacity='1'; e.target.style.transform='none'; this._io.unobserve(e.target); } });
+    },{threshold:.12});
+    // counters
+    this._cio = new IntersectionObserver((es)=>{
+      es.forEach(e=>{ if(e.isIntersecting){ this._runCount(e.target); this._cio.unobserve(e.target); } });
+    },{threshold:.4});
+    this._wire();
+    this._baDrag = (clientX)=>{
+      const el = this._baEl; if(!el) return;
+      const r = el.getBoundingClientRect();
+      let p = ((clientX - r.left)/r.width)*100; p = Math.max(2,Math.min(98,p));
+      this.setState({baPos:p});
+    };
+  }
+  _wire(){
+    setTimeout(()=>{
+      document.querySelectorAll('.mm-reveal').forEach(el=>{
+        if(el.dataset._rv) return; el.dataset._rv='1';
+        el.style.opacity='0'; el.style.transform='translateY(22px)';
+        el.style.transition='opacity .6s cubic-bezier(.2,.7,.2,1),transform .6s cubic-bezier(.2,.7,.2,1)';
+        this._io.observe(el);
+      });
+      document.querySelectorAll('[data-count]').forEach(el=>{ if(!el.dataset._cv){ el.dataset._cv='1'; this._cio.observe(el);} });
+      clearTimeout(this._revFallback);
+      this._revFallback=setTimeout(()=>{ document.querySelectorAll('.mm-reveal').forEach(el=>{ el.style.opacity='1'; el.style.transform='none'; }); document.querySelectorAll('[data-count]').forEach(el=>{ if(el.textContent==='0') this._runCount(el); }); },2600);
+    },60);
+  }
+  componentDidUpdate(){ this._wire(); }
+  _runCount(el){
+    const target = parseFloat(el.dataset.count); const suf = el.dataset.suffix||''; const dur=1400; const t0=performance.now();
+    const step=(t)=>{ const k=Math.min(1,(t-t0)/dur); const e=1-Math.pow(1-k,3); const v=Math.round(target*e);
+      el.textContent = v.toLocaleString('ru-RU')+suf; if(k<1) requestAnimationFrame(step); };
+    requestAnimationFrame(step);
+  }
+  _baStart(){ const mv=(ev)=>this._baDrag(ev.touches?ev.touches[0].clientX:ev.clientX);
+    const up=()=>{window.removeEventListener('mousemove',mv);window.removeEventListener('mouseup',up);window.removeEventListener('touchmove',mv);window.removeEventListener('touchend',up);};
+    window.addEventListener('mousemove',mv);window.addEventListener('mouseup',up);window.addEventListener('touchmove',mv);window.addEventListener('touchend',up); }
+  renderVals(){
+    const s=this.state; const ru=s.lang==='ru'; const setS=(o)=>this.setState(o);
+    const icoRefresh=this.I('<path d="M4 12a8 8 0 0 1 13.5-5.8L20 8"/><path d="M20 4v4h-4"/><path d="M20 12a8 8 0 0 1-13.5 5.8L4 16"/><path d="M4 20v-4h4"/>');
+    const icoTarget=this.I('<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="1" fill="currentColor"/>');
+    const icoDiamond=this.I('<path d="M12 3l7 6-7 12L5 9z"/><path d="M5 9h14"/>');
+    const icoGlobe=this.I('<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.4 2.3 3.6 5.3 3.6 8.5s-1.2 6.2-3.6 8.5c-2.4-2.3-3.6-5.3-3.6-8.5S9.6 5.8 12 3.5z"/>');
+    const icoImage=this.I('<rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="1.8"/><path d="M3.5 18l5-5 3.5 3.5L16 12l4.5 5"/>');
+    const icoFilm=this.I('<rect x="3" y="5" width="18" height="14" rx="3"/><path d="M10 9.5l5 2.5-5 2.5z"/>');
+    const icoChat=this.I('<path d="M21 12c0 4.4-4 8-9 8-1.2 0-2.4-.2-3.4-.6L3 21l1.7-4.1C3.6 15.5 3 13.8 3 12c0-4.4 4-8 9-8s9 3.6 9 8z"/>');
+    const icoStar=this.I('<circle cx="12" cy="8.5" r="3.6"/><path d="M5 20c.8-3.4 3.6-5.4 7-5.4s6.2 2 7 5.4"/>');
+    const icoHeart=this.I('<path d="M12 20.5S4 15.3 4 9.8C4 7 6.2 5 8.7 5c1.4 0 2.6.7 3.3 1.7C12.7 5.7 13.9 5 15.3 5 17.8 5 20 7 20 9.8c0 5.5-8 10.7-8 10.7z"/>');
+    const icoLayers=this.I('<path d="M12 3.5L21 8.5l-9 5-9-5z"/><path d="M4 13l8 4.5 8-4.5"/>');
+    const icoFace=this.I('<circle cx="12" cy="12" r="8.5"/><path d="M8.5 10.2v1.2M15.5 10.2v1.2"/><path d="M8.5 15c1 1.2 2.2 1.8 3.5 1.8s2.5-.6 3.5-1.8"/>');
+    const icoShirt=this.I('<path d="M8 4L4 7.5l2 3 2-1.2V20h8v-10.7l2 1.2 2-3L16 4c-1 1.2-2.4 1.8-4 1.8S9 5.2 8 4z"/>');
+    const icoPin=this.I('<path d="M12 21s-6.5-5.6-6.5-10.5A6.5 6.5 0 0 1 12 4a6.5 6.5 0 0 1 6.5 6.5C18.5 15.4 12 21 12 21z"/><circle cx="12" cy="10.5" r="2.3"/>');
+    const icoText=this.I('<path d="M4 6h16M4 12h16M4 18h9"/>');
+    const icoGrid2=this.I('<rect x="3" y="3" width="7" height="18" rx="2"/><rect x="14" y="3" width="7" height="18" rx="2"/>');
+    const icoTg=this.I('<path d="M21 4.5L3.5 11.2c-.9.35-.85 1.6.1 1.85l4.4 1.2 1.7 5.2c.3.85 1.4 1 1.9.3l2.4-3.1 4.5 3.3c.75.55 1.8.15 2-.75L23 6c.25-1.1-.85-2-1.9-1.5z"/>');
+    const icoGift=this.I('<rect x="4" y="9" width="16" height="11" rx="2"/><path d="M12 9v11M4 13.5h16"/><path d="M12 9c-1.5-2.5-4-3.8-5.5-2.3S7.5 9 9.5 9zM12 9c1.5-2.5 4-3.8 5.5-2.3S16.5 9 14.5 9z"/>');
+    const checkIcon=this.I('<circle cx="12" cy="12" r="9"/><path d="M8.5 12.2l2.3 2.3 4.7-4.9"/>');
+    const icoLock=this.I('<rect x="4.5" y="10.5" width="15" height="10" rx="2.5"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/>');
+    const icoClock=this.I('<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>');
+    const icoShield=this.I('<path d="M12 3l7 3v5.5c0 4.5-3 7.8-7 9.5-4-1.7-7-5-7-9.5V6z"/><path d="M9 12l2 2 4-4"/>');
+    const icoArrow=this.I('<path d="M5 12h14M13 6l6 6-6 6"/>');
+
+    const T={ru:{
+      slogan:'СЕРВИС ПОЛНОГО ЦИКЛА', login:'Войти',
+      navLinks0:'Возможности',navLinks1:'Студия',navLinks2:'Тарифы',navLinks3:'Telegram',
+      h1a:'СОЗДАВАЙ',h1it:'AI-моделей',h1b:'И',h1c:'ОБЩАЙСЯ С ФАНАМИ.',
+      heroSub:'Генерация фото и видео, чат Fanvue и Telegram, авто-перевод и команда — без переключения между пятью сервисами.',
+      ctaFree:'Попробовать бесплатно — 3 картинки', ctaLaunch:'Запуск за 5 минут',
+      dropVideo:'GIF / видео модели', dropPhoto:'Фото модели', dropGif:'GIF / видео работы режима',
+      painKicker:'БОЛЬ · ЗНАКОМО?', painTitle:'ПЯТЬ СЕРВИСОВ. НОЛЬ СВЯЗНОСТИ.',
+      solKicker:'РЕШЕНИЕ · MODELMATE', solTitleA:'ОДИН КАБИНЕТ —', solTitleIt:'весь', solTitleB:'ЦИКЛ OFM.',
+      modesKicker:'СТУДИЯ КАРТИНОК', modesTitle:'6 РЕЖИМОВ ГЕНЕРАЦИИ', modesSub:'Каждый режим заточен под свою задачу. Ниже — что делает и как выглядит результат.',
+      prKicker:'PRICING · PRO · STANDARD', prTitleA:'ПЛАТИШЬ ЗА', prTitleIt:'подписку', prTitleB:'ГЕНЕРАЦИЯ — ПО ПРАВИЛАМ ТАРИФА.',
+      prSub:'Свой ключ WaveSpeed (Pro) или кредиты платформы (Standard). Год — скидка 25%.',
+      tierPro:'Pro — свой ключ', tierStd:'Standard — кредиты включены', month:'Месяц', year:'Год — скидка 25%',
+      popular:'ПОПУЛЯРНЫЙ', per:'в месяц', perY:'в год',
+      whatProTitle:'Что такое Pro?', whatProBody:'Pro — вы подключаете API-ключ wavespeed.ai. Платите провайдеру напрямую по реальной цене генерации — платформа не списывает кредиты за картинки и видео. ModelMate берёт плату за инфраструктуру, чат и команду.',
+      tgTitle:'Telegram-канал', tgDesc:'Новости, гайды по режимам, разборы кейсов и анонсы новых движков. Присоединяйтесь к сообществу OFM-команд.', tgBtn:'Подписаться',
+      refTitle:'Реферальная программа', refDesc:'Приглашайте друзей по ссылке: +25 кредитов за регистрацию, дальше — 10% с каждой их оплаты в кредитах. Автоматически, без лимитов.',
+      ctaTitle:'ЗАПУСТИ СВОЮ AI-МОДЕЛЬ СЕГОДНЯ', ctaSub:'Регистрация за минуту, первые кадры — на пробных кредитах. Без привязки карты.',
+      cmpKicker:'ДО / ПОСЛЕ', cmpTitle:'ПЯТЬ ВКЛАДОК — ИЛИ ОДИН КАБИНЕТ.', cmpBefore:'Как обычно', cmpAfter:'С ModelMate',
+      howKicker:'КАК ЭТО РАБОТАЕТ', howTitle:'ТРИ ШАГА ДО ПЕРВОГО ДОХОДА.',
+      engKicker:'AI-ДВИЖКИ', engTitle:'ВЫБИРАЙ НЕЙРОСЕТЬ ПОД ЗАДАЧУ.', engSub:'SFW и NSFW-движки переключаются прямо в студии — под тип контента.',
+      baKicker:'ДО / ПОСЛЕ', baTitle:'СМОТРИ, КАК РАБОТАЮТ РЕЖИМЫ.', baSub:'Потяните ползунок, чтобы сравнить исходный кадр и результат генерации.', baBefore:'ИСХОДНИК', baAfter:'РЕЗУЛЬТАТ', baDropB:'Исходный кадр', baDropA:'Результат',
+      cntTitle:'ЦИФРЫ ПЛАТФОРМЫ',
+      revKicker:'ОТЗЫВЫ', revTitle:'ЧТО ГОВОРЯТ КОМАНДЫ.',
+      faqKicker:'FAQ', faqTitle:'ЧАСТЫЕ ВОПРОСЫ.',
+      secKicker:'БЕЗОПАСНОСТЬ', secTitle:'ВАШИ ДАННЫЕ ПОД КОНТРОЛЕМ.'
+    },en:{
+      slogan:'FULL-CYCLE SERVICE', login:'Log in',
+      navLinks0:'Features',navLinks1:'Studio',navLinks2:'Pricing',navLinks3:'Telegram',
+      h1a:'CREATE',h1it:'AI models',h1b:'&',h1c:'CHAT WITH FANS.',
+      heroSub:'Photo & video generation, Fanvue and Telegram chat, auto-translation and team — without juggling five tools.',
+      ctaFree:'Try free — 3 images', ctaLaunch:'Launch in 5 minutes',
+      dropVideo:'Model GIF / video', dropPhoto:'Model photo', dropGif:'Mode demo GIF / video',
+      painKicker:'PAIN · SOUND FAMILIAR?', painTitle:'FIVE TOOLS. ZERO COHESION.',
+      solKicker:'SOLUTION · MODELMATE', solTitleA:'ONE DASHBOARD —', solTitleIt:'the whole', solTitleB:'OFM CYCLE.',
+      modesKicker:'IMAGE STUDIO', modesTitle:'6 GENERATION MODES', modesSub:'Each mode is built for one job. Below — what it does and how the result looks.',
+      prKicker:'PRICING · PRO · STANDARD', prTitleA:'YOU PAY FOR THE', prTitleIt:'subscription', prTitleB:'GENERATION — BY PLAN RULES.',
+      prSub:'Your WaveSpeed key (Pro) or platform credits (Standard). Yearly — 25% off.',
+      tierPro:'Pro — own key', tierStd:'Standard — credits included', month:'Month', year:'Year — 25% off',
+      popular:'POPULAR', per:'per month', perY:'per year',
+      whatProTitle:'What is Pro?', whatProBody:'Pro — you connect a wavespeed.ai API key. You pay the provider directly at real generation cost — the platform spends no credits on images or video. ModelMate charges for infrastructure, chat and team.',
+      tgTitle:'Telegram channel', tgDesc:'News, mode guides, case studies and new-engine announcements. Join the community of OFM teams.', tgBtn:'Subscribe',
+      refTitle:'Referral program', refDesc:'Invite friends by link: +25 credits on sign-up, then 10% of each of their payments in credits. Automatic, no limits.',
+      ctaTitle:'LAUNCH YOUR AI MODEL TODAY', ctaSub:'Sign up in a minute, first frames on trial credits. No card required.',
+      cmpKicker:'BEFORE / AFTER', cmpTitle:'FIVE TABS — OR ONE DASHBOARD.', cmpBefore:'The usual way', cmpAfter:'With ModelMate',
+      howKicker:'HOW IT WORKS', howTitle:'THREE STEPS TO FIRST INCOME.',
+      engKicker:'AI ENGINES', engTitle:'PICK THE MODEL FOR THE JOB.', engSub:'SFW and NSFW engines switch right in the studio — by content type.',
+      baKicker:'BEFORE / AFTER', baTitle:'SEE HOW THE MODES WORK.', baSub:'Drag the slider to compare the source frame with the generated result.', baBefore:'SOURCE', baAfter:'RESULT', baDropB:'Source frame', baDropA:'Result',
+      cntTitle:'PLATFORM NUMBERS',
+      revKicker:'REVIEWS', revTitle:'WHAT TEAMS SAY.',
+      faqKicker:'FAQ', faqTitle:'FREQUENT QUESTIONS.',
+      secKicker:'SECURITY', secTitle:'YOUR DATA STAYS YOURS.'
+    }};
+    const t=T[s.lang];
+    const navLinks=[{label:t.navLinks0,href:'#studio'},{label:t.navLinks1,href:'#studio'},{label:t.navLinks2,href:'#pricing'},{label:t.navLinks3,href:'#pricing'}];
+    const tickerItems=['Telegram','Fanvue','Instagram — soon','Nano Banana Pro','GPT Image','Seedream 5 Pro','Wan 2.7 Pro','Tribute','WaveSpeed','PWA','SFW / NSFW','Auto-translate'];
+
+    const stats=[
+      {val:'3',label:ru?'бесплатные картинки':'free images'},
+      {val:'2 мин',label:ru?'до первой генерации':'to first generation'},
+      {val:'Standard',label:ru?'или PRO с подпиской':'or PRO with subscription'}
+    ];
+    const pains=[
+      {icon:icoRefresh,title:ru?'Скачешь между 5 сервисами':'Juggling 5 tools',desc:ru?'Промпты, генерация, перевод, CRM и таблицы для команды — переключение съедает время.':'Prompts, generation, translation, CRM and team sheets — switching eats time.'},
+      {icon:icoTarget,title:ru?'Каждая генерация с нуля':'Every generation from scratch',desc:ru?'Образ модели не запоминается — снова «as before, but…» и снова рандом.':'The model look isn\u2019t remembered — again \u201cas before, but\u2026\u201d and again random.'},
+      {icon:icoDiamond,title:ru?'Чаттеры путаются':'Chatters get confused',desc:ru?'Несколько моделей — разные характеры и языки. Фаны чувствуют фальшь.':'Multiple models — different personas and languages. Fans sense the fake.'},
+      {icon:icoGlobe,title:ru?'Иностранные фаны':'Foreign fans',desc:ru?'Машинный перевод звучит деревянно — доверие и чаевые падают.':'Machine translation sounds wooden — trust and tips drop.'}
+    ];
+
+    const secBase='display:flex;gap:44px;align-items:center;flex-wrap:wrap;padding:38px 0;border-bottom:1px solid rgba(255,255,255,.05);';
+    const tagS=(c)=>'background:rgba('+c+',.12);color:rgb('+c+');';
+    const sections=[
+      {id:'studio',tag:ru?'СТУДИЯ':'STUDIO',tagStyle:tagS('200,245,62'),shot:'landing-shots/03-shot.png',rowStyle:secBase,
+        title:ru?'ГЕНЕРАЦИЯ ПОД ВАШ КОНТЕНТ':'GENERATION FOR YOUR CONTENT',
+        desc:ru?'Шесть режимов с подсказками, выбор нейросети и формата, встроенный архив с лайтбоксом — всё в одном окне студии.':'Six guided modes, engine and format choice, built-in archive with lightbox — all in one studio window.',
+        points:ru?['SFW / NSFW и выбор AI-движка (Nano Banana, GPT Image, Seedream, Wan)','Замена одежды и локации по двум референсам','Загрузка или выбор кадра из архива','Карусель — серия связанных кадров']:['SFW/NSFW and engine choice','Outfit & location swap from two references','Upload or pick a frame from archive','Carousel — a coherent series']},
+      {id:'dialogs',tag:ru?'ДИАЛОГИ':'DIALOGS',tagStyle:tagS('56,189,248'),shot:'landing-shots/02-shot.png',rowStyle:secBase+'flex-direction:row-reverse;',
+        title:ru?'ДИАЛОГИ И AI-КОМПАНЬОН':'DIALOGS & AI COMPANION',
+        desc:ru?'Единая переписка по всем каналам с авто-переводом на язык фана, реакциями и вложениями. AI отвечает от лица персонажа.':'Unified inbox across channels with auto-translate, reactions and attachments.',
+        points:ru?['Фильтры по статусам и площадкам','Реакции, эмодзи, вложения, скролл к последнему','Метки «заблокировал / удалил чат»','Досье фана с заметками и AI-анализом']:['Status & platform filters','Reactions, emoji, attachments','Blocked / deleted markers','Fan dossier with notes & AI analysis']},
+      {id:'video',tag:ru?'ВИДЕО':'VIDEO',tagStyle:tagS('192,132,252'),shot:'landing-shots/04-shot.png',rowStyle:secBase,
+        title:ru?'ОЖИВИ КАДР В ВИДЕО':'ANIMATE A FRAME INTO VIDEO',
+        desc:ru?'Выберите персонажа, загрузите реф-видео, укажите первый кадр или сгенерируйте его — и получите ролик в нужном качестве.':'Pick a character, add reference video, set or generate the first frame.',
+        points:ru?['Выбор персонажа и исходного кадра','Генерация первого кадра с прелоадером','Качество 720p / 1080p / 4K','Форматы 9:16, 16:9, 1:1']:['Character & source frame','First-frame generation','720p / 1080p / 4K','9:16, 16:9, 1:1 formats']},
+      {id:'characters',tag:ru?'ПЕРСОНАЖИ':'CHARACTERS',tagStyle:tagS('240,168,200'),shot:'landing-shots/05-shot.png',rowStyle:secBase+'flex-direction:row-reverse;',
+        title:ru?'ПЕРСОНАЖ — ВАША МОДЕЛЬ':'A CHARACTER IS YOUR MODEL',
+        desc:ru?'Соберите модель один раз: фото-референсы с тегами, описание внешности, персона для AI и EXIF. Дальше она работает везде.':'Build the model once: tagged references, appearance, persona and EXIF.',
+        points:ru?['Фото-референсы с тегами (лицо, тело, развёртка)','Описание внешности и генерация из фото','Персона для AI-компаньона','EXIF «как с телефона» и история модели']:['Tagged references','Appearance & generate-from-photo','Persona for the AI companion','Phone-like EXIF & model history']},
+      {id:'donations',tag:ru?'ДЕНЬГИ':'MONEY',tagStyle:tagS('74,222,128'),shot:'landing-shots/06-shot.png',rowStyle:secBase,
+        title:ru?'ДОНАТЫ И ВЫПЛАТЫ':'DONATIONS & PAYOUTS',
+        desc:ru?'Собирайте донаты через Tribute (Telegram и Web-ссылки), отслеживайте входящие и выводите средства.':'Collect donations via Tribute, track incoming and withdraw funds.',
+        points:ru?['Две ссылки на донат: Telegram и Web','Входящие, холд и история выплат','Вывод в USDT (TRC20/ERC20) или TON','Реферальная программа']:['Telegram & Web donation links','Incoming, hold & payout history','Withdraw in USDT or TON','Referral program']}
+    ].map(x=>({...x,imgStyle:'border-radius:16px;border:1px solid rgba(255,255,255,.1);box-shadow:0 30px 70px rgba(0,0,0,.5);aspect-ratio:16/10;background-image:url('+x.shot+');background-size:cover;background-position:top center;'}));
+
+    const modes=[
+      {slotId:'mm-mode-ref',step:'01',icon:icoLayers,title:ru?'Кадр по референсу':'From reference',desc:ru?'Загрузите образец — получите похожий кадр с вашим персонажем: поза, свет и стиль сохранятся.':'Upload a sample — get a close frame with your character.'},
+      {slotId:'mm-mode-swap',step:'02',icon:icoFace,title:'Face Swap',desc:ru?'Лицо выбранного персонажа аккуратно заменит лицо на любом кадре — одежда и фон останутся.':'The character\u2019s face replaces the face in any frame.'},
+      {slotId:'mm-mode-outfit',step:'03',icon:icoShirt,title:ru?'Замена одежды':'Outfit swap',desc:ru?'Два поля: кадр и фото одежды. Мы перенесём наряд с фото на вашу модель.':'Two inputs: frame and clothing photo. We move the outfit onto your model.'},
+      {slotId:'mm-mode-loc',step:'04',icon:icoPin,title:ru?'Смена локации':'Location swap',desc:ru?'Кадр остаётся, меняется фон: пляж, аэропорт, кафе — по фото локации или описанию.':'Frame stays, background changes from a location photo or prompt.'},
+      {slotId:'mm-mode-prompt',step:'05',icon:icoText,title:ru?'Кадр по промпту':'From prompt',desc:ru?'Свободная генерация текстом — персонаж подставится из карточки со всей внешностью и EXIF.':'Free-form text generation — the character comes from its card.'},
+      {slotId:'mm-mode-carousel',step:'06',icon:icoGrid2,title:ru?'Карусель':'Carousel',desc:ru?'Серия связанных кадров из одного фото — для постов и историй. Задайте количество кадров.':'A coherent series from one photo — set the frame count.'}
+    ];
+
+    const refStats=[
+      {val:'+25',label:ru?'кредитов за друга':'credits per friend'},
+      {val:'10%',label:ru?'с каждой оплаты':'of each payment'}
+    ];
+
+    // engines catalog
+    const engineDefs=[
+      {name:'Nano Banana Pro',tag:'SFW',tagC:'74,222,128',desc:ru?'Быстрый, отличная кожа и свет':'Fast, great skin & light'},
+      {name:'GPT Image',tag:'SFW',tagC:'74,222,128',desc:ru?'Точный по промпту и композиции':'Prompt & composition accurate'},
+      {name:'Seedream 5 Pro',tag:'NSFW',tagC:'240,168,200',desc:ru?'Фотореализм 18+, детали':'Photoreal 18+, detail'},
+      {name:'Wan 2.7 Pro',tag:'NSFW',tagC:'240,168,200',desc:ru?'Детализация тела и поз':'Body & pose detail'}
+    ];
+    const engines=engineDefs.map(e=>({...e,initial:e.name.charAt(0),tagStyle:'background:rgba('+e.tagC+',.14);color:rgb('+e.tagC+');'}));
+    // how it works
+    const steps=[
+      {n:'01',icon:icoStar,title:ru?'Создай персонажа':'Create a character',desc:ru?'Фото-референсы, внешность, персона и EXIF — один раз.':'References, look, persona and EXIF — once.'},
+      {n:'02',icon:icoImage,title:ru?'Сгенерируй контент':'Generate content',desc:ru?'6 режимов фото + видео. Кадры под любой сценарий.':'6 photo modes + video for any scenario.'},
+      {n:'03',icon:icoChat,title:ru?'Общайся и зарабатывай':'Chat & earn',desc:ru?'Диалоги с авто-переводом, AI-компаньон и донаты.':'Auto-translated chats, AI companion and donations.'}
+    ];
+    // comparison
+    const compRows=[
+      {l:ru?'Инструментов':'Tools',before:ru?'5+ подписок':'5+ subscriptions',after:ru?'1 кабинет':'1 dashboard'},
+      {l:ru?'Образ модели':'Model look',before:ru?'каждый раз с нуля':'from scratch each time',after:ru?'персонаж запоминается':'character remembered'},
+      {l:ru?'Перевод фанам':'Fan translation',before:ru?'машинный, деревянный':'wooden, robotic',after:ru?'живой авто-перевод':'natural auto-translate'},
+      {l:ru?'Команда':'Team',before:ru?'таблицы и хаос':'sheets & chaos',after:ru?'роли, KPI, шаблоны':'roles, KPI, templates'},
+      {l:ru?'Деньги':'Money',before:ru?'разрозненно':'scattered',after:ru?'донаты и выплаты внутри':'donations & payouts inside'}
+    ];
+    // before/after examples
+    const baBase='display:flex;align-items:center;justify-content:center;';
+    const baTabs=[ru?'Face Swap':'Face Swap',ru?'Замена одежды':'Outfit',ru?'Смена локации':'Location'];
+    const baTabChips=baTabs.map((l,i)=>({label:l,active:s.baTab===i,
+      style:'font-size:12.5px;font-weight:700;padding:8px 15px;border-radius:9px;cursor:pointer;'+(s.baTab===i?'background:#C8F53E;color:#0F1400;font-weight:800;':'background:#101114;border:1px solid rgba(255,255,255,.1);color:#9BA0A6;'),
+      pick:()=>setS({baTab:i})}));
+    const baPairs=[['mm-ba-swap-b','mm-ba-swap-a','assets/ba-swap-b.jpeg','assets/ba-swap-a.png'],['mm-ba-outfit-b','mm-ba-outfit-a','assets/ba-outfit-b.jpg','assets/ba-outfit-a.jpg'],['mm-ba-loc-b','mm-ba-loc-a','assets/ba-loc-b.png','assets/ba-loc-a.jpg']];
+    const baCur={before:baPairs[s.baTab][0],after:baPairs[s.baTab][1],beforeSrc:baPairs[s.baTab][2],afterSrc:baPairs[s.baTab][3]};
+    // counters
+    const counters=[
+      {n:120000,suffix:'+',label:ru?'кадров сгенерировано':'frames generated'},
+      {n:8500,suffix:'+',label:ru?'диалогов в неделю':'dialogs / week'},
+      {n:6,suffix:'',label:ru?'режимов студии':'studio modes'},
+      {n:4,suffix:'',label:ru?'AI-движка':'AI engines'}
+    ];
+    // reviews
+    const reviewsData=[
+      {q:ru?'Собрали 3 модели в одном кабинете — перестали терять контекст между чаттерами. Донаты выросли за счёт живого перевода.':'Three models in one dashboard — we stopped losing context. Donations grew thanks to natural translation.',name:'Alex',role:ru?'OFM-агентство, 6 моделей':'OFM agency, 6 models'},
+      {q:ru?'Face Swap и замена локации закрыли 80% ручной работы дизайнера. Кадры готовы за минуты.':'Face Swap and location swap replaced 80% of manual design work. Frames ready in minutes.',name:'Marina',role:ru?'соло-креатор':'solo creator'},
+      {q:ru?'Свой ключ WaveSpeed на Pro — платим по реальной цене, без наценки платформы. Команда работает по ролям.':'Own WaveSpeed key on Pro — we pay real cost, no markup. Team works by roles.',name:'Denis',role:ru?'студия, 4 оператора':'studio, 4 operators'}
+    ];
+    const review={...reviewsData[s.reviewIdx],initial:reviewsData[s.reviewIdx].name.charAt(0)};
+    // faq
+    const faqData=[
+      {q:ru?'Как оплачивать и что такое кредиты?':'How to pay and what are credits?',a:ru?'1 кредит = 3.6 ₽, кредиты тратятся на генерации. Оплата картой, кредитами или через Tribute. На Pro генерации идут по вашему ключу WaveSpeed без списаний.':'1 credit = 3.6 ₽, spent on generations. Pay by card, credits or Tribute. On Pro, generations run on your WaveSpeed key.'},
+      {q:ru?'Разрешён ли NSFW-контент?':'Is NSFW content allowed?',a:ru?'Да. В студии есть переключатель SFW / NSFW, для 18+ доступны движки Seedream 5 Pro и Wan 2.7 Pro.':'Yes. The studio has an SFW/NSFW switch; 18+ uses Seedream 5 Pro and Wan 2.7 Pro.'},
+      {q:ru?'Зачем свой ключ WaveSpeed на Pro?':'Why my own WaveSpeed key on Pro?',a:ru?'Вы подключаете API-ключ wavespeed.ai и платите провайдеру напрямую по реальной цене — платформа не списывает кредиты за картинки и видео.':'You connect a wavespeed.ai API key and pay the provider directly at real cost — no platform credits spent.'},
+      {q:ru?'Как выводить деньги с донатов?':'How to withdraw donation money?',a:ru?'Донаты идут через Tribute (Telegram и Web-ссылки). Вывод — в USDT (TRC20/ERC20) или TON, комиссия 2%, с учётом холда Tribute.':'Donations go via Tribute. Withdraw in USDT or TON, 2% fee, respecting Tribute hold.'},
+      {q:ru?'Работает ли на телефоне?':'Does it work on mobile?',a:ru?'Да, ModelMate — PWA: устанавливается из браузера как приложение, с push-уведомлениями, на iOS, Android и десктопе.':'Yes, ModelMate is a PWA: installs from the browser with push notifications on iOS, Android and desktop.'}
+    ];
+    const faq=faqData.map((f,i)=>({q:f.q,a:f.a,open:s.faqOpen===i,sign:s.faqOpen===i?'−':'+',
+      toggle:()=>setS({faqOpen:s.faqOpen===i?-1:i})}));
+    // security
+    const secItems=[
+      {icon:icoLock,title:ru?'Приватность модели':'Model privacy',desc:ru?'Референсы и персонажи доступны только вашему workspace и операторам с правами.':'References and characters are visible only to your workspace.'},
+      {icon:icoClock,title:ru?'Хранение кадров':'Frame storage',desc:ru?'Генерации хранятся ~4 дня — скачивайте важное сразу, архив всегда под рукой.':'Generations are stored ~4 days — download what matters.'},
+      {icon:icoShield,title:ru?'Ключи и токены':'Keys & tokens',desc:ru?'API-ключи и токены каналов шифруются, видны только владельцу workspace.':'API keys and channel tokens are encrypted, owner-only.'}
+    ];
+
+    // pricing
+    const seg=(on)=>'font-size:12.5px;font-weight:700;border-radius:8px;padding:8px 15px;cursor:pointer;'+(on?'background:#C8F53E;color:#0F1400;font-weight:800;':'color:#9BA0A6;');
+    const yr=s.period==='year';
+    const disc=(n)=>yr?Math.round(n*12*0.75):n;
+    const fmt=(n)=>String(n).replace(/\B(?=(\d{3})+(?!\d))/g,'\u00A0');
+    const perLbl=yr?t.perY:t.per;
+    const proData=[
+      {name:'Pro Solo',base:990,popular:false,feats:ru?['1 пользователь','1 модель','Свой ключ WaveSpeed — без списаний на платформе','Чат Fanvue + Telegram','Авто-перевод переписок','История генераций']:['1 user','1 model','Own WaveSpeed key — no platform credits','Fanvue + Telegram chat','Auto-translated chats','Generation history']},
+      {name:'Pro Pro',base:2490,popular:true,feats:ru?['До 3 пользователей','До 3 моделей','Свой ключ WaveSpeed — без списаний','Чат Fanvue + Telegram','Авто-перевод переписок','Командная работа и роли']:['Up to 3 users','Up to 3 models','Own WaveSpeed key — no charges','Fanvue + Telegram chat','Auto-translated chats','Teamwork & roles']},
+      {name:'Pro Studio',base:5990,popular:false,feats:ru?['До 10 пользователей','До 10 моделей','Свой ключ WaveSpeed','Чат Fanvue + Telegram','История генераций','Расширенные лимиты диалогов']:['Up to 10 users','Up to 10 models','Own WaveSpeed key','Fanvue + Telegram chat','Generation history','Extended dialog limits']}
+    ];
+    const stdData=[
+      {name:'Solo',base:590,popular:false,feats:ru?['1 оператор · 3 персонажа','Кредиты включены','Студия и диалоги','Чат Fanvue + Telegram']:['1 operator · 3 characters','Credits included','Studio & dialogs','Fanvue + Telegram chat']},
+      {name:'Studio',base:1490,popular:true,feats:ru?['10 операторов · 10 персонажей','Кредиты включены','Команда, роли и KPI','Все каналы и AI-компаньон']:['10 operators · 10 characters','Credits included','Team, roles & KPI','All channels & AI companion']},
+      {name:'Agency',base:3990,popular:false,feats:ru?['Безлимит операторов','30 персонажей','Приоритетная поддержка','Все возможности платформы']:['Unlimited operators','30 characters','Priority support','All platform features']}
+    ];
+    const src=s.tier==='pro'?proData:stdData;
+    const plans=src.map(p=>({
+      name:p.name, price:fmt(disc(p.base)), per:perLbl, popular:p.popular, feats:p.feats,
+      cardStyle:'background:'+(p.popular?'#0E0F12':'#101114')+';border:1px solid '+(p.popular?'rgba(200,245,62,.5)':'rgba(255,255,255,.07)')+';border-radius:18px;padding:24px;'+(p.popular?'box-shadow:0 0 0 1px rgba(200,245,62,.15),0 20px 60px rgba(200,245,62,.06);':''),
+      btn:p.name==='Agency'?(ru?'Связаться / начать':'Contact / start'):(ru?'Попробовать бесплатно':'Try free'),
+      btnStyle:'display:block;text-align:center;border-radius:10px;padding:12px;font-weight:800;font-size:13.5px;'+(p.popular?'background:#C8F53E;color:#0F1400;':'border:1px solid rgba(255,255,255,.14);color:#F2F3F0;')
+    }));
+
+    return { t, ru, langLabel:ru?'RU → EN':'EN → RU', toggleLang:()=>setS({lang:ru?'en':'ru'}),
+      navLinks, stats, pains, sections, modes, refStats, plans, checkIcon, icoTg, icoGift, icoArrow, tickerItems,
+      engines, steps, compRows, counters, review, reviewIdx:s.reviewIdx, reviewsLen:reviewsData.length,
+      reviewPrev:()=>setS({reviewIdx:(s.reviewIdx-1+reviewsData.length)%reviewsData.length}),
+      reviewNext:()=>setS({reviewIdx:(s.reviewIdx+1)%reviewsData.length}),
+      faq, secItems,
+      baTabChips, baCur, baPos:s.baPos, baStart:()=>this._baStart(), baRef:(el)=>{this._baEl=el;},
+      baClip:'inset(0 '+(100-s.baPos)+'% 0 0)', baHandleLeft:s.baPos+'%',
+      setPro:()=>setS({tier:'pro'}), setStd:()=>setS({tier:'standard'}), setMonth:()=>setS({period:'month'}), setYear:()=>setS({period:'year'}),
+      proStyle:seg(s.tier==='pro'), stdStyle:seg(s.tier!=='pro'), monthStyle:seg(!yr), yearStyle:seg(yr) };
+  }
+}
+</script>
+</body>
+</html>

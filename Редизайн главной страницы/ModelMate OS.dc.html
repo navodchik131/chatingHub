@@ -1,0 +1,2132 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&amp;family=Unbounded:wght@500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+html,body{margin:0;padding:0;background:#0A0B0D;color:#F2F3F0;font-family:'Manrope',system-ui,sans-serif;}
+*{box-sizing:border-box;}
+a{color:#D7F452;text-decoration:none;}
+a:hover{color:#E8FA8A;}
+::-webkit-scrollbar{width:8px;height:8px;}
+::-webkit-scrollbar-thumb{background:rgba(255,255,255,.12);border-radius:4px;}
+::-webkit-scrollbar-track{background:transparent;}
+input::placeholder,textarea::placeholder{color:#5C6066;}
+@keyframes mmFade{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}
+@keyframes mmSpin{to{transform:rotate(360deg);}}
+@keyframes mmPulse{0%,100%{opacity:.4;}50%{opacity:.85;}}
+</style>
+</helmet>
+
+<div style="display:flex;height:100vh;overflow:hidden;background:#0A0B0D;" data-screen-label="ModelMate OS">
+
+  <!-- ═══════════ SIDEBAR (desktop) ═══════════ -->
+  <sc-if value="{{ showSidebar }}" hint-placeholder-val="{{ true }}">
+  <div style="width:248px;flex:none;display:flex;flex-direction:column;border-right:1px solid rgba(255,255,255,.07);background:#0D0E11;">
+    <!-- logo -->
+    <div style="display:flex;align-items:center;gap:11px;padding:18px 18px 14px;">
+      <div style="width:40px;height:40px;flex:none;border-radius:12px;overflow:hidden;box-shadow:0 4px 14px rgba(0,0,0,.5),inset 0 0 0 1px rgba(255,255,255,.08);">
+        <img src="assets/logo-m.png" alt="ModelMate" style="width:100%;height:100%;object-fit:cover;display:block;">
+      </div>
+      <div>
+        <div style="font-family:'Unbounded';font-weight:700;font-size:15px;letter-spacing:-.3px;line-height:1;">ModelMate</div>
+        <div style="font-family:'JetBrains Mono';font-size:8px;letter-spacing:1.4px;color:#8A8F95;margin-top:3px;">AI OFM · {{ t.fullCycle }}</div>
+      </div>
+    </div>
+    <!-- nav -->
+    <div style="flex:1;overflow-y:auto;padding:6px 10px 10px;display:flex;flex-direction:column;gap:2px;">
+      <sc-for list="{{ navGroups }}" as="grp" hint-placeholder-count="4">
+        <div style="display:flex;flex-direction:column;gap:2px;">
+          <div style="font-family:'JetBrains Mono';font-size:9px;letter-spacing:2.2px;color:#5C6066;padding:14px 10px 5px;text-transform:uppercase;">{{ grp.label }}</div>
+          <sc-for list="{{ grp.items }}" as="it" hint-placeholder-count="3">
+            <div onClick="{{ it.go }}" style="{{ it.style }}" style-hover="background:rgba(255,255,255,.05);color:#F2F3F0;">
+              <span style="display:flex;width:17px;height:17px;flex:none;" dangerouslySetInnerHTML="{{ it.icon }}"></span>
+              <span style="flex:1;">{{ it.label }}</span>
+              <sc-if value="{{ it.badge }}" hint-placeholder-val="{{ false }}"><span style="font-family:'JetBrains Mono';font-size:10px;background:rgba(215,244,82,.12);color:#D7F452;padding:1px 7px;border-radius:20px;">{{ it.badge }}</span></sc-if>
+            </div>
+          </sc-for>
+        </div>
+      </sc-for>
+    </div>
+    <!-- credits + user -->
+    <div style="padding:12px;border-top:1px solid rgba(255,255,255,.07);display:flex;flex-direction:column;gap:10px;">
+      <div onClick="{{ goBilling }}" style="display:flex;align-items:center;gap:10px;background:linear-gradient(120deg,rgba(215,244,82,.10),rgba(215,244,82,.03));border:1px solid rgba(215,244,82,.25);border-radius:12px;padding:10px 12px;cursor:pointer;" style-hover="border-color:rgba(215,244,82,.5);">
+        <span style="display:flex;width:18px;height:18px;color:#D7F452;" dangerouslySetInnerHTML="{{ icoBolt }}"></span>
+        <div style="flex:1;">
+          <div style="font-family:'Unbounded';font-weight:600;font-size:15px;color:#D7F452;line-height:1.1;">510</div>
+          <div style="font-size:10.5px;color:#9BA0A6;">{{ t.credits }}</div>
+        </div>
+        <span style="font-size:11px;font-weight:700;color:#D7F452;">{{ t.topup }} →</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;padding:2px 4px;">
+        <div style="width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,#818CF8,#C084FC);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;color:#14102A;">R</div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:12.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">utochkinrenat@g…</div>
+          <div style="font-size:10.5px;color:#9BA0A6;">{{ t.owner }} · Standard Studio</div>
+        </div>
+        <div onClick="{{ toggleLang }}" style="font-family:'JetBrains Mono';font-size:10px;font-weight:600;border:1px solid rgba(255,255,255,.14);border-radius:7px;padding:4px 8px;cursor:pointer;color:#9BA0A6;" style-hover="color:#F2F3F0;border-color:rgba(255,255,255,.3);">{{ langLabel }}</div>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ═══════════ MAIN ═══════════ -->
+  <div style="flex:1;display:flex;flex-direction:column;min-width:0;">
+
+    <!-- mobile topbar -->
+    <sc-if value="{{ isMobile }}" hint-placeholder-val="{{ false }}">
+      <div style="flex:none;display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid rgba(255,255,255,.07);background:#0D0E11;">
+        <div style="width:30px;height:30px;flex:none;border-radius:9px;overflow:hidden;box-shadow:inset 0 0 0 1px rgba(255,255,255,.08);">
+          <img src="assets/logo-m.png" alt="ModelMate" style="width:100%;height:100%;object-fit:cover;display:block;">
+        </div>
+        <div style="font-weight:800;font-size:14px;flex:1;">{{ pageTitle }}</div>
+        <div onClick="{{ toggleLang }}" style="font-family:'JetBrains Mono';font-size:10px;border:1px solid rgba(255,255,255,.14);border-radius:7px;padding:3px 7px;color:#9BA0A6;cursor:pointer;">{{ langLabel }}</div>
+        <div onClick="{{ goBilling }}" style="display:flex;align-items:center;gap:5px;background:rgba(215,244,82,.1);border:1px solid rgba(215,244,82,.3);border-radius:20px;padding:4px 10px;cursor:pointer;">
+          <span style="display:flex;width:13px;height:13px;color:#D7F452;" dangerouslySetInnerHTML="{{ icoBolt }}"></span>
+          <span style="font-family:'JetBrains Mono';font-size:11px;font-weight:600;color:#D7F452;">510</span>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- content scroll -->
+    <div style="flex:1;overflow-y:auto;" key="{{ page }}">
+    <div style="{{ contentPad }}">
+
+    <!-- ──────────── ОБЗОР ──────────── -->
+    <sc-if value="{{ isOverview }}" hint-placeholder-val="{{ true }}">
+      <div style="animation:mmFade .25s ease;" data-screen-label="Обзор">
+        <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:20px;">
+          <div>
+            <div style="font-family:'JetBrains Mono';font-size:10px;letter-spacing:2px;color:#6B7076;margin-bottom:6px;">{{ todayLabel }}</div>
+            <div style="font-family:'Unbounded';font-weight:600;font-size:24px;letter-spacing:-.5px;">{{ t.hello }}</div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <div onClick="{{ goImages }}" style="display:flex;align-items:center;gap:8px;background:#D7F452;color:#171A05;font-weight:800;font-size:13px;border-radius:10px;padding:10px 16px;cursor:pointer;" style-hover="background:#E8FA8A;"><span style="display:flex;width:15px;height:15px;" dangerouslySetInnerHTML="{{ icoSpark }}"></span>{{ t.newFrame }}</div>
+            <div onClick="{{ goDialogs }}" style="display:flex;align-items:center;gap:8px;background:#1A1C20;border:1px solid rgba(255,255,255,.1);font-weight:700;font-size:13px;border-radius:10px;padding:10px 16px;cursor:pointer;" style-hover="border-color:rgba(255,255,255,.25);"><span style="display:flex;width:15px;height:15px;color:#9BA0A6;" dangerouslySetInnerHTML="{{ icoChat }}"></span>{{ t.openDialogs }}</div>
+          </div>
+        </div>
+
+        <!-- KPI row -->
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:24px;">
+          <div onClick="{{ goBilling }}" style="background:linear-gradient(140deg,rgba(215,244,82,.12),rgba(215,244,82,.02));border:1px solid rgba(215,244,82,.28);border-radius:16px;padding:16px 18px;cursor:pointer;position:relative;" style-hover="border-color:rgba(215,244,82,.55);">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+              <span style="font-family:'JetBrains Mono';font-size:9.5px;letter-spacing:1.8px;color:#AEBF52;">{{ t.kpiCredits }}</span>
+              <span style="font-size:10.5px;font-weight:800;color:#D7F452;">{{ t.topup }} →</span>
+            </div>
+            <div style="font-family:'Unbounded';font-weight:700;font-size:26px;color:#D7F452;">510</div>
+            <div style="font-size:11.5px;color:#9BA0A6;margin-top:4px;">≈ 51 {{ t.framesLeft }}</div>
+          </div>
+          <div onClick="{{ goBilling }}" style="background:#121316;border:1px solid rgba(255,255,255,.07);border-radius:16px;padding:16px 18px;cursor:pointer;" style-hover="border-color:rgba(255,255,255,.18);">
+            <div style="font-family:'JetBrains Mono';font-size:9.5px;letter-spacing:1.8px;color:#6B7076;margin-bottom:10px;">{{ t.kpiPlan }}</div>
+            <div style="display:flex;align-items:center;gap:8px;"><span style="font-family:'Unbounded';font-weight:600;font-size:18px;">Standard</span><span style="font-family:'JetBrains Mono';font-size:9px;letter-spacing:1px;background:rgba(74,222,128,.12);color:#4ADE80;border:1px solid rgba(74,222,128,.3);padding:2px 8px;border-radius:20px;">{{ t.active }}</span></div>
+            <div style="font-size:11.5px;color:#9BA0A6;margin-top:6px;">{{ t.until }} 07.12.2026</div>
+          </div>
+          <div onClick="{{ goDonations }}" style="background:#121316;border:1px solid rgba(255,255,255,.07);border-radius:16px;padding:16px 18px;cursor:pointer;" style-hover="border-color:rgba(255,255,255,.18);">
+            <div style="font-family:'JetBrains Mono';font-size:9.5px;letter-spacing:1.8px;color:#6B7076;margin-bottom:10px;">{{ t.kpiDonations }}</div>
+            <div style="font-family:'Unbounded';font-weight:600;font-size:20px;">100,00 ₽</div>
+            <div style="font-size:11.5px;color:#F0A8C8;margin-top:6px;">{{ t.toPayout }}: 100,00 ₽ →</div>
+          </div>
+          <div onClick="{{ goDialogs }}" style="background:#121316;border:1px solid rgba(255,255,255,.07);border-radius:16px;padding:16px 18px;cursor:pointer;" style-hover="border-color:rgba(255,255,255,.18);">
+            <div style="font-family:'JetBrains Mono';font-size:9.5px;letter-spacing:1.8px;color:#6B7076;margin-bottom:10px;">{{ t.kpiDialogs }}</div>
+            <div style="font-family:'Unbounded';font-weight:600;font-size:20px;">14</div>
+            <div style="font-size:11.5px;color:#9BA0A6;margin-top:6px;">{{ t.allRead }} · 78 {{ t.teamReplies }}</div>
+          </div>
+        </div>
+
+        <!-- С чего начать -->
+        <div style="background:linear-gradient(120deg,rgba(192,132,252,.1),rgba(240,168,200,.04));border:1px solid rgba(192,132,252,.28);border-radius:16px;padding:16px 18px;margin-bottom:24px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px;">
+            <div>
+              <div style="font-family:'Unbounded';font-weight:600;font-size:16px;margin-bottom:3px;">{{ t.startTitle }}</div>
+              <div style="font-size:12px;color:#9BA0A6;">{{ t.startDesc }}</div>
+            </div>
+            <div onClick="{{ goGuide }}" style="display:flex;align-items:center;gap:8px;background:linear-gradient(120deg,#C084FC,#F0A8C8);color:#1A0A14;font-weight:800;font-size:12.5px;border-radius:10px;padding:9px 16px;cursor:pointer;" style-hover="filter:brightness(1.08);">{{ t.openGuide }} →</div>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;">
+            <sc-for list="{{ startSteps }}" as="st" hint-placeholder-count="4">
+              <div onClick="{{ goGuide }}" style="display:flex;align-items:center;gap:10px;background:#121316;border:1px solid rgba(255,255,255,.07);border-radius:12px;padding:10px 12px;cursor:pointer;" style-hover="border-color:rgba(192,132,252,.4);">
+                <div style="width:24px;height:24px;flex:none;border-radius:8px;background:rgba(192,132,252,.15);color:#C084FC;display:flex;align-items:center;justify-content:center;font-family:'Unbounded';font-weight:600;font-size:12px;">{{ st.n }}</div>
+                <span style="font-size:12px;font-weight:700;">{{ st.label }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <!-- Studio shortcuts with icons + descriptions -->
+        <div style="font-family:'JetBrains Mono';font-size:10px;letter-spacing:2px;color:#6B7076;margin:0 0 10px;">{{ t.studioBlock }}</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px;margin-bottom:24px;">
+          <sc-for list="{{ studioCards }}" as="c" hint-placeholder-count="3">
+            <div onClick="{{ c.go }}" style="background:#121316;border:1px solid rgba(255,255,255,.07);border-radius:16px;padding:16px 18px;cursor:pointer;display:flex;gap:14px;align-items:flex-start;" style-hover="border-color:rgba(192,132,252,.45);background:#15161A;">
+              <div style="{{ c.iconBox }}"><span style="display:flex;width:19px;height:19px;" dangerouslySetInnerHTML="{{ c.icon }}"></span></div>
+              <div style="flex:1;">
+                <div style="font-weight:800;font-size:14px;margin-bottom:3px;">{{ c.title }}</div>
+                <div style="font-size:11.5px;color:#9BA0A6;line-height:1.45;">{{ c.desc }}</div>
+              </div>
+              <span style="color:#5C6066;font-size:14px;">→</span>
+            </div>
+          </sc-for>
+        </div>
+
+        <!-- recents -->
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;">
+          <div style="background:#121316;border:1px solid rgba(255,255,255,.07);border-radius:16px;padding:16px 18px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+              <span style="font-weight:800;font-size:14px;">{{ t.recentDialogs }}</span>
+              <span onClick="{{ goDialogs }}" style="font-size:11.5px;font-weight:700;color:#D7F452;cursor:pointer;">{{ t.all }} →</span>
+            </div>
+            <div style="display:flex;flex-direction:column;">
+              <sc-for list="{{ recentDialogs }}" as="d" hint-placeholder-count="4">
+                <div onClick="{{ goDialogs }}" style="display:flex;gap:10px;align-items:center;padding:9px 6px;border-radius:10px;cursor:pointer;" style-hover="background:rgba(255,255,255,.04);">
+                  <div style="{{ d.avStyle }}">{{ d.initial }}</div>
+                  <div style="flex:1;min-width:0;">
+                    <div style="display:flex;gap:7px;align-items:baseline;"><span style="font-weight:700;font-size:12.5px;">{{ d.name }}</span><span style="font-family:'JetBrains Mono';font-size:8.5px;letter-spacing:1px;color:{{ d.platColor }};">{{ d.platform }}</span></div>
+                    <div style="font-size:11.5px;color:#9BA0A6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ d.last }}</div>
+                  </div>
+                  <span style="font-family:'JetBrains Mono';font-size:10px;color:#5C6066;">{{ d.time }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+          <div style="background:#121316;border:1px solid rgba(255,255,255,.07);border-radius:16px;padding:16px 18px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+              <span style="font-weight:800;font-size:14px;">{{ t.recentFrames }}</span>
+              <span onClick="{{ goImages }}" style="font-size:11.5px;font-weight:700;color:#D7F452;cursor:pointer;">{{ t.toStudio }} →</span>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">
+              <sc-for list="{{ recentFrames }}" as="f" hint-placeholder-count="4">
+                <div style="{{ f.tileStyle }}" style-hover="filter:brightness(1.15);">
+                  <span style="font-family:'JetBrains Mono';font-size:8.5px;letter-spacing:1px;color:rgba(255,255,255,.75);">{{ f.label }}</span>
+                </div>
+              </sc-for>
+            </div>
+            <div style="font-size:10.5px;color:#5C6066;margin-top:10px;">{{ t.framesHint }}</div>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ──────────── ИНСТРУКЦИЯ / С ЧЕГО НАЧАТЬ ──────────── -->
+    <sc-if value="{{ isGuide }}" hint-placeholder-val="{{ false }}">
+      <div style="animation:mmFade .25s ease;max-width:860px;" data-screen-label="Инструкция">
+        <div onClick="{{ goOverview }}" style="display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:700;color:#9BA0A6;cursor:pointer;margin-bottom:14px;" style-hover="color:#F2F3F0;">← {{ t.navOverview }}</div>
+        <div style="margin-bottom:6px;font-family:'Unbounded';font-weight:600;font-size:22px;">{{ t.startTitle }}</div>
+        <div style="font-size:13px;color:#9BA0A6;margin-bottom:22px;max-width:600px;line-height:1.55;">{{ t.guideIntro }}</div>
+        <div style="display:flex;flex-direction:column;gap:14px;">
+          <sc-for list="{{ guideSteps }}" as="g" hint-placeholder-count="5">
+            <div style="display:flex;gap:16px;align-items:stretch;background:#121316;border:1px solid rgba(255,255,255,.07);border-radius:16px;padding:16px;flex-wrap:wrap;">
+              <div onClick="{{ g.openMedia }}" style="width:200px;flex:none;aspect-ratio:16/10;border-radius:12px;border:1px dashed rgba(255,255,255,.16);background:#0D0E11;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;overflow:hidden;position:relative;cursor:pointer;" style-hover="border-color:rgba(215,244,82,.5);">
+                <div style="position:absolute;inset:0;opacity:.35;" style="{{ g.mediaBg }}"></div>
+                <div style="width:38px;height:38px;border-radius:50%;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;position:relative;"><span style="display:flex;width:16px;height:16px;color:#fff;margin-left:2px;" dangerouslySetInnerHTML="{{ icoPlay }}"></span></div>
+                <span style="font-family:'JetBrains Mono';font-size:8.5px;letter-spacing:1px;color:#8A8F95;position:relative;">GIF / VIDEO</span>
+              </div>
+              <div style="flex:1;min-width:220px;display:flex;flex-direction:column;">
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+                  <div style="width:28px;height:28px;flex:none;border-radius:9px;background:linear-gradient(120deg,#C084FC,#F0A8C8);color:#1A0A14;display:flex;align-items:center;justify-content:center;font-family:'Unbounded';font-weight:600;font-size:14px;">{{ g.n }}</div>
+                  <div style="font-weight:800;font-size:15px;">{{ g.title }}</div>
+                </div>
+                <div style="font-size:12.5px;color:#9BA0A6;line-height:1.6;margin-bottom:12px;">{{ g.desc }}</div>
+                <div onClick="{{ g.go }}" style="align-self:flex-start;margin-top:auto;display:flex;align-items:center;gap:7px;font-size:12px;font-weight:800;color:#D7F452;cursor:pointer;">{{ g.cta }} →</div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="margin-top:16px;background:rgba(215,244,82,.06);border:1px solid rgba(215,244,82,.2);border-radius:12px;padding:14px 16px;font-size:12px;color:#C9CDD1;line-height:1.55;">{{ t.guideOutro }} <a href="#">Wiki →</a></div>
+      </div>
+    </sc-if>
+
+    <!-- media modal (инструкция) -->
+    <sc-if value="{{ mediaOpen }}" hint-placeholder-val="{{ false }}">
+      <div onClick="{{ closeMedia }}" style="position:fixed;inset:0;background:rgba(6,7,9,.88);z-index:60;display:flex;align-items:center;justify-content:center;padding:24px;">
+        <div onClick="{{ stop }}" style="width:min(92vw,720px);display:flex;flex-direction:column;gap:12px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+            <div style="display:flex;align-items:center;gap:10px;">
+              <div style="width:26px;height:26px;flex:none;border-radius:8px;background:linear-gradient(120deg,#C084FC,#F0A8C8);color:#1A0A14;display:flex;align-items:center;justify-content:center;font-family:'Unbounded';font-weight:600;font-size:13px;">{{ mediaData.n }}</div>
+              <div style="font-weight:800;font-size:15px;">{{ mediaData.title }}</div>
+            </div>
+            <div onClick="{{ closeMedia }}" style="display:flex;align-items:center;gap:6px;border:1px solid rgba(255,255,255,.14);border-radius:9px;padding:7px 12px;font-size:12px;font-weight:700;color:#9BA0A6;cursor:pointer;" style-hover="color:#F2F3F0;border-color:rgba(255,255,255,.3);">✕ {{ t.close }}</div>
+          </div>
+          <div style="aspect-ratio:16/9;border-radius:14px;overflow:hidden;position:relative;display:flex;align-items:center;justify-content:center;" style="{{ mediaData.big }}">
+            <div style="position:absolute;inset:0;background:rgba(0,0,0,.35);"></div>
+            <div style="width:64px;height:64px;border-radius:50%;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;position:relative;cursor:pointer;" style-hover="background:rgba(0,0,0,.75);"><span style="display:flex;width:26px;height:26px;color:#fff;margin-left:3px;" dangerouslySetInnerHTML="{{ icoPlay }}"></span></div>
+            <span style="position:absolute;bottom:12px;left:14px;font-family:'JetBrains Mono';font-size:9px;letter-spacing:1px;color:rgba(255,255,255,.7);">GIF / VIDEO · {{ t.guidePlaceholder }}</span>
+          </div>
+          <div style="font-size:12.5px;color:#9BA0A6;line-height:1.6;">{{ mediaData.desc }}</div>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ──────────── ДИАЛОГИ ──────────── -->
+    <sc-if value="{{ isDialogs }}" hint-placeholder-val="{{ false }}">
+      <div style="animation:mmFade .25s ease;height:100%;display:flex;flex-direction:column;" data-screen-label="Диалоги">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap;">
+          <div style="font-family:'Unbounded';font-weight:600;font-size:20px;">{{ t.navDialogs }}</div>
+          <div style="display:flex;gap:6px;">
+            <span style="font-family:'JetBrains Mono';font-size:10px;background:rgba(215,244,82,.12);color:#D7F452;border:1px solid rgba(215,244,82,.3);padding:3px 10px;border-radius:20px;">TELEGRAM 8</span>
+            <span style="font-family:'JetBrains Mono';font-size:10px;background:rgba(240,168,200,.1);color:#F0A8C8;border:1px solid rgba(240,168,200,.3);padding:3px 10px;border-radius:20px;">FANVUE 1</span>
+          </div>
+        </div>
+        <div style="{{ dialogsGrid }}">
+          <!-- list -->
+          <sc-if value="{{ showList }}" hint-placeholder-val="{{ true }}">
+          <div style="background:#121316;border:1px solid rgba(255,255,255,.07);border-radius:16px;display:flex;flex-direction:column;overflow:hidden;min-height:0;flex:1;">
+            <div style="padding:12px 12px 8px;display:flex;flex-direction:column;gap:8px;">
+              <input placeholder="{{ t.searchDialogs }}" style="background:#0D0E11;border:1px solid rgba(255,255,255,.09);border-radius:9px;padding:8px 12px;color:#F2F3F0;font-family:'Manrope';font-size:12.5px;outline:none;">
+              <div style="display:flex;gap:5px;flex-wrap:wrap;">
+                <sc-for list="{{ platFilters }}" as="pf" hint-placeholder-count="3">
+                  <span onClick="{{ pf.pick }}" style="{{ pf.style }}">{{ pf.label }}</span>
+                </sc-for>
+              </div>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                <sc-for list="{{ chatFilters }}" as="cf" hint-placeholder-count="4">
+                  <span onClick="{{ cf.pick }}" style="{{ cf.style }}" style-hover="border-color:rgba(255,255,255,.3);">{{ cf.label }}</span>
+                </sc-for>
+              </div>
+            </div>
+            <div style="flex:1;overflow-y:auto;padding:4px 8px 8px;">
+              <sc-if value="{{ noChats }}" hint-placeholder-val="{{ false }}">
+                <div style="padding:40px 20px;text-align:center;color:#5C6066;font-size:12.5px;">{{ t.noDialogs }}</div>
+              </sc-if>
+              <sc-for list="{{ chats }}" as="ch" hint-placeholder-count="6">
+                <div onClick="{{ ch.open }}" style="{{ ch.rowStyle }}" style-hover="background:rgba(255,255,255,.05);">
+                  <div style="{{ ch.avStyle }}">{{ ch.initial }}
+                    <sc-if value="{{ ch.vip }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;top:-4px;left:-6px;font-family:'JetBrains Mono';font-size:7.5px;background:#D7F452;color:#171A05;font-weight:700;padding:1px 4px;border-radius:5px;">VIP</span></sc-if>
+                  </div>
+                  <div style="flex:1;min-width:0;">
+                    <div style="display:flex;gap:6px;align-items:baseline;"><span style="{{ ch.nameStyle }}">{{ ch.name }}</span><span style="font-family:'JetBrains Mono';font-size:8px;letter-spacing:1px;color:{{ ch.platColor }};">{{ ch.platform }}</span></div>
+                    <sc-if value="{{ ch.blockedTag }}" hint-placeholder-val="{{ false }}">
+                      <div style="margin-top:2px;"><span style="{{ ch.blockedTagStyle }}">⛔ {{ ch.blockedTag }}</span></div>
+                    </sc-if>
+                    <div style="font-size:11px;color:#9BA0A6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ ch.last }}</div>
+                  </div>
+                  <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;">
+                    <sc-if value="{{ ch.canDelete }}" hint-placeholder-val="{{ false }}">
+                      <span onClick="{{ ch.delDialog }}" style="width:22px;height:22px;border-radius:7px;display:flex;align-items:center;justify-content:center;color:#F87171;font-size:12px;cursor:pointer;border:1px solid rgba(248,113,113,.25);" style-hover="background:rgba(248,113,113,.12);">🗑</span>
+                    </sc-if>
+                    <span style="font-family:'JetBrains Mono';font-size:9px;color:#5C6066;">{{ ch.lang }}</span>
+                    <sc-if value="{{ ch.hot }}" hint-placeholder-val="{{ false }}"><span style="font-family:'JetBrains Mono';font-size:7.5px;background:rgba(251,146,60,.15);color:#FB923C;padding:1px 5px;border-radius:4px;">24ч+</span></sc-if>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+          </sc-if>
+          <!-- thread -->
+          <sc-if value="{{ showThread }}" hint-placeholder-val="{{ false }}">
+          <div onClick="{{ closePops }}" style="background:#121316;border:1px solid rgba(255,255,255,.07);border-radius:16px;display:flex;flex-direction:column;overflow:hidden;min-height:0;flex:1;position:relative;">
+            <div style="padding:12px 16px;border-bottom:1px solid rgba(255,255,255,.07);display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+              <sc-if value="{{ isMobileChat }}" hint-placeholder-val="{{ false }}">
+                <div onClick="{{ backToList }}" style="width:32px;height:32px;border-radius:9px;border:1px solid rgba(255,255,255,.12);display:flex;align-items:center;justify-content:center;font-size:16px;color:#9BA0A6;cursor:pointer;flex:none;">←</div>
+              </sc-if>
+              <div style="{{ threadHead.avStyle }}">{{ threadHead.initial }}</div>
+              <div style="flex:1;min-width:120px;">
+                <div style="display:flex;gap:7px;align-items:center;"><span style="font-weight:800;font-size:14px;">{{ threadHead.name }}</span><sc-if value="{{ threadHead.vip }}" hint-placeholder-val="{{ false }}"><span style="font-family:'JetBrains Mono';font-size:7.5px;background:#D7F452;color:#171A05;font-weight:700;padding:1px 5px;border-radius:5px;">VIP</span></sc-if></div>
+                <div style="font-size:10.5px;color:#9BA0A6;">{{ threadHead.platform }} · {{ t.persona }}: <span style="color:#F0A8C8;font-weight:700;">Mia</span> · {{ t.replyLang }}: {{ threadHead.replyLang }}</div>
+              </div>
+              <div style="display:flex;gap:6px;">
+                <span style="font-family:'JetBrains Mono';font-size:9.5px;border:1px solid rgba(255,255,255,.12);color:#9BA0A6;padding:4px 10px;border-radius:8px;cursor:pointer;" style-hover="color:#F2F3F0;">AI: OFF</span>
+              </div>
+            </div>
+            <sc-if value="{{ threadHead.blocked }}" hint-placeholder-val="{{ false }}">
+              <div style="background:rgba(248,113,113,.08);border-bottom:1px solid rgba(248,113,113,.2);padding:9px 16px;font-size:11.5px;color:#F87171;display:flex;align-items:center;gap:8px;">⛔ {{ threadHead.blockedText }} — {{ t.dlgBlockedHint }}</div>
+            </sc-if>
+            <div id="mm-thread-scroll" style="flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px;">
+              <sc-for list="{{ messages }}" as="m" hint-placeholder-count="4">
+                <div style="{{ m.wrap }}">
+                  <div style="{{ m.bubble }}">
+                    <div style="display:flex;gap:8px;align-items:flex-start;">
+                      <div style="flex:1;font-size:13px;line-height:1.5;">{{ m.text }}</div>
+                      <span onClick="{{ m.toggleReact }}" style="opacity:.5;font-size:12px;cursor:pointer;flex:none;margin-top:1px;" style-hover="opacity:1;">☺</span>
+                    </div>
+                    <sc-if value="{{ m.tr }}" hint-placeholder-val="{{ false }}"><div style="font-size:11.5px;line-height:1.45;color:#8A8F95;margin-top:6px;padding-top:6px;border-top:1px dashed rgba(255,255,255,.1);">{{ m.tr }}</div></sc-if>
+                    <div style="font-family:'JetBrains Mono';font-size:8.5px;color:#5C6066;margin-top:6px;">{{ m.time }}</div>
+                    <sc-if value="{{ m.reactOpen }}" hint-placeholder-val="{{ false }}">
+                      <div onClick="{{ stop }}" style="position:absolute;bottom:calc(100% - 4px);right:0;z-index:5;display:flex;gap:2px;background:#1A1C20;border:1px solid rgba(255,255,255,.14);border-radius:20px;padding:4px 7px;box-shadow:0 8px 24px rgba(0,0,0,.5);">
+                        <sc-for list="{{ m.reactRow }}" as="rr" hint-placeholder-count="6">
+                          <span onClick="{{ rr.pick }}" style="font-size:17px;cursor:pointer;padding:1px 2px;" style-hover="transform:scale(1.25);">{{ rr.e }}</span>
+                        </sc-for>
+                      </div>
+                    </sc-if>
+                  </div>
+                  <sc-if value="{{ m.reaction }}" hint-placeholder-val="{{ false }}">
+                    <div style="{{ m.reactBadgeStyle }}">{{ m.reaction }}</div>
+                  </sc-if>
+                </div>
+              </sc-for>
+            </div>
+            <!-- scroll to bottom -->
+            <div onClick="{{ scrollDown }}" style="position:absolute;right:16px;bottom:82px;width:36px;height:36px;border-radius:50%;background:#1A1C20;border:1px solid rgba(255,255,255,.14);display:flex;align-items:center;justify-content:center;font-size:16px;color:#9BA0A6;cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,.4);" style-hover="color:#F2F3F0;border-color:rgba(255,255,255,.3);">↓</div>
+            <!-- emoji popover -->
+            <sc-if value="{{ emojiOpen }}" hint-placeholder-val="{{ false }}">
+              <div onClick="{{ stop }}" style="position:absolute;left:12px;right:12px;bottom:66px;z-index:6;background:#1A1C20;border:1px solid rgba(255,255,255,.14);border-radius:14px;padding:10px;display:grid;grid-template-columns:repeat(8,1fr);gap:4px;box-shadow:0 10px 30px rgba(0,0,0,.5);">
+                <sc-for list="{{ emojiPick }}" as="ep" hint-placeholder-count="16">
+                  <span onClick="{{ ep.pick }}" style="font-size:20px;cursor:pointer;text-align:center;padding:3px;border-radius:8px;" style-hover="background:rgba(255,255,255,.08);">{{ ep.e }}</span>
+                </sc-for>
+              </div>
+            </sc-if>
+            <div style="padding:10px 12px;border-top:1px solid rgba(255,255,255,.07);display:flex;gap:6px;align-items:flex-end;">
+              <div title="{{ t.attach }}" style="width:38px;height:38px;flex:none;border-radius:10px;border:1px solid rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center;color:#9BA0A6;cursor:pointer;" style-hover="color:#D7F452;border-color:rgba(215,244,82,.4);"><span style="display:flex;width:18px;height:18px;" dangerouslySetInnerHTML="{{ icoClip }}"></span></div>
+              <div onClick="{{ toggleEmoji }}" style="width:38px;height:38px;flex:none;border-radius:10px;border:1px solid rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center;font-size:18px;cursor:pointer;" style-hover="border-color:rgba(215,244,82,.4);">😊</div>
+              <textarea rows="1" placeholder="{{ t.msgPlaceholder }}" style="flex:1;min-height:38px;max-height:120px;background:#0D0E11;border:1px solid rgba(255,255,255,.09);border-radius:10px;padding:9px 12px;color:#F2F3F0;font-family:'Manrope';font-size:13px;resize:none;outline:none;"></textarea>
+              <div style="width:38px;height:38px;flex:none;background:#D7F452;color:#171A05;border-radius:10px;display:flex;align-items:center;justify-content:center;cursor:pointer;" style-hover="background:#E8FA8A;"><span style="display:flex;width:17px;height:17px;" dangerouslySetInnerHTML="{{ icoSendArrow }}"></span></div>
+            </div>
+          </div>
+          </sc-if>
+          <!-- notes -->
+          <sc-if value="{{ showNotes }}" hint-placeholder-val="{{ false }}">
+          <div style="background:#121316;border:1px solid rgba(255,255,255,.07);border-radius:16px;display:flex;flex-direction:column;overflow:hidden;min-height:0;">
+            <div style="padding:12px 14px;border-bottom:1px solid rgba(255,255,255,.07);font-weight:800;font-size:13px;">{{ t.fanNotes }} · duty</div>
+            <div style="flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px;">
+              <sc-for list="{{ notes }}" as="n" hint-placeholder-count="3">
+                <div style="background:#0D0E11;border:1px solid rgba(255,255,255,.07);border-radius:12px;padding:10px 12px;">
+                  <div style="display:flex;justify-content:space-between;margin-bottom:5px;"><span style="{{ n.tagStyle }}">{{ n.tag }}</span><span style="font-family:'JetBrains Mono';font-size:8.5px;color:#5C6066;">{{ n.when }}</span></div>
+                  <div style="font-size:11.5px;line-height:1.5;color:#C9CDD1;">{{ n.text }}</div>
+                </div>
+              </sc-for>
+            </div>
+            <sc-if value="{{ noteFormOpen }}" hint-placeholder-val="{{ false }}">
+            <div style="padding:12px;border-top:1px solid rgba(255,255,255,.07);display:flex;flex-direction:column;gap:9px;">
+              <div style="font-family:'JetBrains Mono';font-size:9px;letter-spacing:1.4px;color:#6B7076;">{{ t.noteTag }}</div>
+              <div style="display:flex;gap:5px;flex-wrap:wrap;">
+                <sc-for list="{{ noteTagChips }}" as="nt" hint-placeholder-count="3">
+                  <span onClick="{{ nt.pick }}" style="{{ nt.style }}">{{ nt.label }}</span>
+                </sc-for>
+              </div>
+              <textarea rows="3" placeholder="{{ t.noteTextPh }}" style="width:100%;background:#0D0E11;border:1px solid rgba(255,255,255,.09);border-radius:10px;padding:9px 12px;color:#F2F3F0;font-family:'Manrope';font-size:12px;line-height:1.5;resize:vertical;outline:none;"></textarea>
+              <div style="display:flex;gap:6px;">
+                <div onClick="{{ saveNote }}" style="flex:1;background:rgba(215,244,82,.12);border:1px solid rgba(215,244,82,.3);border-radius:9px;padding:8px;text-align:center;font-size:12px;font-weight:800;color:#D7F452;cursor:pointer;" style-hover="background:rgba(215,244,82,.2);">{{ t.save }}</div>
+                <div onClick="{{ closeNote }}" style="border:1px solid rgba(255,255,255,.12);border-radius:9px;padding:8px 14px;text-align:center;font-size:12px;font-weight:700;color:#9BA0A6;cursor:pointer;" style-hover="border-color:rgba(255,255,255,.3);">{{ t.opCancel }}</div>
+              </div>
+            </div>
+            </sc-if>
+            <div style="padding:10px 12px;border-top:1px solid rgba(255,255,255,.07);display:flex;gap:6px;">
+              <div style="flex:1;border:1px solid rgba(255,255,255,.12);border-radius:9px;padding:7px;text-align:center;font-size:11.5px;font-weight:700;color:#C084FC;cursor:pointer;" style-hover="border-color:#C084FC;">✦ AI-{{ t.analysis }}</div>
+              <div onClick="{{ toggleNote }}" style="flex:1;background:rgba(215,244,82,.12);border:1px solid rgba(215,244,82,.3);border-radius:9px;padding:7px;text-align:center;font-size:11.5px;font-weight:700;color:#D7F452;cursor:pointer;" style-hover="background:rgba(215,244,82,.2);">+ {{ t.addNote }}</div>
+            </div>
+          </div>
+          </sc-if>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ──────────── КАРТИНКИ ──────────── -->
+    <sc-if value="{{ isImages }}" hint-placeholder-val="{{ false }}">
+      <div style="animation:mmFade .25s ease;" data-screen-label="Студия — Картинки">
+        <div style="margin-bottom:16px;">
+          <div style="font-family:'Unbounded';font-weight:600;font-size:20px;margin-bottom:5px;">{{ t.navImages }}</div>
+          <div style="font-size:12.5px;color:#9BA0A6;">{{ t.imagesDesc }}</div>
+        </div>
+        <!-- 5 modes -->
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-bottom:18px;">
+          <sc-for list="{{ imgModes }}" as="im" hint-placeholder-count="5">
+            <div onClick="{{ im.pick }}" style="{{ im.cardStyle }}" style-hover="border-color:rgba(215,244,82,.5);">
+              <div style="{{ im.iconBox }}"><span style="display:flex;width:18px;height:18px;" dangerouslySetInnerHTML="{{ im.icon }}"></span></div>
+              <div style="font-weight:800;font-size:13.5px;margin-bottom:4px;">{{ im.title }}</div>
+              <div style="font-size:11px;color:#9BA0A6;line-height:1.45;margin-bottom:8px;">{{ im.desc }}</div>
+              <div style="font-family:'JetBrains Mono';font-size:9.5px;color:#D7F452;">{{ im.cost }}</div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="{{ studioGrid }}">
+          <!-- form -->
+          <div style="background:#121316;border:1px solid rgba(255,255,255,.07);border-radius:16px;padding:18px;display:flex;flex-direction:column;gap:16px;height:fit-content;">
+            <div>
+              <div style="font-weight:800;font-size:15px;margin-bottom:3px;">{{ curMode.title }}</div>
+              <div style="font-size:11.5px;color:#9BA0A6;line-height:1.5;">{{ curMode.longDesc }}</div>
+            </div>
+            <div>
+              <div style="font-family:'JetBrains Mono';font-size:9.5px;letter-spacing:1.8px;color:#6B7076;margin-bottom:8px;">{{ t.contentType }}</div>
+              <div style="display:flex;gap:6px;background:#0D0E11;border:1px solid rgba(255,255,255,.09);border-radius:11px;padding:4px;">
+                <sc-for list="{{ contentModes }}" as="cm" hint-placeholder-count="2">
+                  <div onClick="{{ cm.pick }}" style="{{ cm.style }}">{{ cm.label }} · {{ cm.hint }}</div>
+                </sc-for>
+              </div>
+            </div>
+            <div>
+              <div style="font-family:'JetBrains Mono';font-size:9.5px;letter-spacing:1.8px;color:#6B7076;margin-bottom:8px;">{{ t.aiModel }}</div>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                <sc-for list="{{ aiModels }}" as="am" hint-placeholder-count="2">
+                  <div onClick="{{ am.pick }}" style="{{ am.style }}">
+                    <div style="{{ am.nameStyle }}">{{ am.name }}</div>
+                    <div style="font-size:10px;color:#9BA0A6;">{{ am.note }}</div>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+            <div style="display:flex;gap:10px;align-items:stretch;">
+              <sc-for list="{{ curMode.slots }}" as="s" hint-placeholder-count="2">
+                <div style="flex:1;display:flex;flex-direction:column;gap:6px;">
+                  <div style="font-size:10.5px;font-weight:700;color:#C9CDD1;height:30px;line-height:1.3;display:flex;align-items:flex-start;overflow:hidden;">{{ s.label }}</div>
+                  <sc-if value="{{ s.archive }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;gap:3px;background:#0D0E11;border:1px solid rgba(255,255,255,.09);border-radius:8px;padding:3px;">
+                      <div onClick="{{ s.setUpload }}" style="{{ s.upStyle }}">{{ t.srcUpload }}</div>
+                      <div onClick="{{ s.setArchive }}" style="{{ s.arStyle }}">{{ t.srcArchive }}</div>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ s.noArchive }}" hint-placeholder-val="{{ false }}">
+                    <div style="height:32px;flex:none;"></div>
+                  </sc-if>
+                  <sc-if value="{{ s.fromArchive }}" hint-placeholder-val="{{ false }}">
+                    <div style="aspect-ratio:3/4;border:1px solid rgba(215,244,82,.3);border-radius:12px;background:rgba(215,244,82,.04);display:grid;grid-template-columns:1fr 1fr;gap:5px;padding:7px;overflow-y:auto;">
+                      <sc-for list="{{ archiveMini }}" as="am" hint-placeholder-count="4">
+                        <div style="{{ am.style }}" style-hover="border-color:#D7F452;"></div>
+                      </sc-for>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ s.uploadMode }}" hint-placeholder-val="{{ true }}">
+                    <div style="aspect-ratio:3/4;border:1.5px dashed rgba(255,255,255,.18);border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;cursor:pointer;" style-hover="border-color:rgba(215,244,82,.5);background:rgba(215,244,82,.03);">
+                      <span style="display:flex;width:20px;height:20px;color:#6B7076;" dangerouslySetInnerHTML="{{ icoUpload }}"></span>
+                      <span style="font-size:10px;font-weight:700;color:#9BA0A6;text-align:center;padding:0 8px;">{{ t.srcUpload }}</span>
+                    </div>
+                  </sc-if>
+                </div>
+              </sc-for>
+            </div>
+            <div>
+              <div style="font-family:'JetBrains Mono';font-size:9.5px;letter-spacing:1.8px;color:#6B7076;margin-bottom:8px;">{{ t.character }}</div>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                <sc-for list="{{ charChips }}" as="cc" hint-placeholder-count="3">
+                  <span style="{{ cc.style }}" style-hover="border-color:rgba(255,255,255,.3);">{{ cc.label }}</span>
+                </sc-for>
+              </div>
+            </div>
+            <div>
+              <div style="font-family:'JetBrains Mono';font-size:9.5px;letter-spacing:1.8px;color:#6B7076;margin-bottom:8px;">{{ t.format }}</div>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                <sc-for list="{{ ratioChips }}" as="rc" hint-placeholder-count="5">
+                  <span style="{{ rc.style }}" style-hover="border-color:rgba(255,255,255,.3);">{{ rc.label }}</span>
+                </sc-for>
+              </div>
+            </div>
+            <sc-if value="{{ curMode.showCount }}" hint-placeholder-val="{{ false }}">
+            <div>
+              <div style="font-family:'JetBrains Mono';font-size:9.5px;letter-spacing:1.8px;color:#6B7076;margin-bottom:8px;">{{ t.frames }}</div>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                <sc-for list="{{ countChips }}" as="qc" hint-placeholder-count="5">
+                  <span onClick="{{ qc.pick }}" style="{{ qc.style }}" style-hover="border-color:rgba(255,255,255,.3);">{{ qc.label }}</span>
+                </sc-for>
+              </div>
+            </div>
+            </sc-if>
+            <div>
+              <div style="display:flex;justify-content:space-between;margin-bottom:8px;"><span style="font-family:'JetBrains Mono';font-size:9.5px;letter-spacing:1.8px;color:#6B7076;">{{ t.prompt }}</span><span style="font-size:10.5px;color:#5C6066;">{{ t.optional }}</span></div>
+              <textarea rows="3" placeholder="{{ curMode.promptHint }}" style="width:100%;background:#0D0E11;border:1px solid rgba(255,255,255,.09);border-radius:10px;padding:10px 12px;color:#F2F3F0;font-family:'Manrope';font-size:12.5px;resize:vertical;outline:none;"></textarea>
+            </div>
+            <sc-if value="{{ showGenError }}" hint-placeholder-val="{{ false }}">
+            <div style="background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.35);border-radius:12px;padding:12px 14px;">
+              <div style="font-weight:800;font-size:12px;color:#F87171;margin-bottom:7px;">⚠ {{ t.errImgTitle }}</div>
+              <div style="display:flex;flex-direction:column;gap:5px;">
+                <sc-for list="{{ imgErrList }}" as="er" hint-placeholder-count="2">
+                  <div style="font-size:11.5px;color:#F0A8C8;display:flex;gap:7px;align-items:center;"><span style="width:4px;height:4px;border-radius:50%;background:#F87171;flex:none;"></span>{{ er }}</div>
+                </sc-for>
+              </div>
+            </div>
+            </sc-if>
+            <div onClick="{{ triggerGen }}" style="display:flex;align-items:center;gap:12px;background:#D7F452;border-radius:12px;padding:12px 16px;cursor:pointer;" style-hover="background:#E8FA8A;">
+              <span style="display:flex;width:17px;height:17px;color:#171A05;" dangerouslySetInnerHTML="{{ icoSpark }}"></span>
+              <span style="flex:1;font-weight:800;font-size:14px;color:#171A05;">{{ t.generate }}</span>
+              <span style="font-family:'JetBrains Mono';font-size:11px;font-weight:600;color:#3D4213;">{{ curMode.cost }}</span>
+            </div>
+          </div>
+          <!-- archive -->
+          <div>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
+              <span style="font-weight:800;font-size:14px;">{{ t.archive }}</span>
+              <span style="font-size:10.5px;color:#FB923C;background:rgba(251,146,60,.08);border:1px solid rgba(251,146,60,.25);border-radius:8px;padding:4px 10px;">⏳ {{ t.retention }}</span>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;">
+              <sc-for list="{{ archiveFrames }}" as="af" hint-placeholder-count="8">
+                <div onClick="{{ af.open }}" style="border-radius:12px;overflow:hidden;background:#121316;border:1px solid rgba(255,255,255,.07);cursor:pointer;" style-hover="border-color:rgba(215,244,82,.4);">
+                  <div style="{{ af.bg }}position:relative;" style-hover="filter:brightness(1.08);">
+                    <span style="display:flex;width:22px;height:22px;color:rgba(255,255,255,.35);" dangerouslySetInnerHTML="{{ icoImage }}"></span>
+                    <span style="position:absolute;top:7px;right:7px;display:flex;width:15px;height:15px;color:rgba(255,255,255,.7);background:rgba(0,0,0,.4);border-radius:6px;padding:3px;" dangerouslySetInnerHTML="{{ icoZoom }}"></span>
+                  </div>
+                  <div style="padding:8px 10px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px;"><span style="font-weight:700;font-size:11px;">{{ af.who }}</span><span style="font-family:'JetBrains Mono';font-size:8.5px;color:#5C6066;">{{ af.ratio }}</span></div>
+                    <div style="display:flex;gap:8px;"><span style="font-size:10px;font-weight:700;color:#C084FC;cursor:pointer;">→ {{ t.toVideo }}</span><span style="font-size:10px;font-weight:700;color:#9BA0A6;cursor:pointer;">↓</span></div>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ──────────── ВИДЕО ──────────── -->
+    <sc-if value="{{ isVideo }}" hint-placeholder-val="{{ false }}">
+      <div style="animation:mmFade .25s ease;" data-screen-label="Студия — Видео">
+        <div style="margin-bottom:16px;">
+          <div style="font-family:'Unbounded';font-weight:600;font-size:20px;margin-bottom:5px;">{{ t.navVideo }}</div>
+          <div style="font-size:12.5px;color:#9BA0A6;">{{ t.videoDesc }}</div>
+        </div>
+        <div style="{{ studioGrid }}">
+          <div style="background:#121316;border:1px solid rgba(255,255,255,.07);border-radius:16px;padding:18px;display:flex;flex-direction:column;gap:16px;height:fit-content;">
+            <div>
+              <div style="font-family:'JetBrains Mono';font-size:9.5px;letter-spacing:1.8px;color:#6B7076;margin-bottom:8px;">{{ t.character }}</div>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                <sc-for list="{{ charChips }}" as="cc" hint-placeholder-count="3">
+                  <span style="{{ cc.style }}" style-hover="border-color:rgba(255,255,255,.3);">{{ cc.label }}</span>
+                </sc-for>
+              </div>
+            </div>
+            <div>
+              <div style="font-family:'JetBrains Mono';font-size:9.5px;letter-spacing:1.8px;color:#6B7076;margin-bottom:8px;">{{ t.refVideo }}</div>
+              <div style="border:1.5px dashed rgba(255,255,255,.18);border-radius:12px;padding:20px;display:flex;flex-direction:column;align-items:center;gap:8px;cursor:pointer;" style-hover="border-color:rgba(215,244,82,.5);background:rgba(215,244,82,.03);">
+                <span style="display:flex;width:22px;height:22px;color:#6B7076;" dangerouslySetInnerHTML="{{ icoFilm }}"></span>
+                <span style="font-size:11.5px;font-weight:700;color:#9BA0A6;text-align:center;">{{ t.dropVideo }}</span>
+              </div>
+            </div>
+            <div>
+              <div style="font-size:13px;font-weight:800;margin-bottom:10px;">{{ t.hasFirstFrame }}</div>
+              <div style="display:flex;gap:8px;">
+                <sc-for list="{{ firstFrameOpts }}" as="ff" hint-placeholder-count="2">
+                  <div onClick="{{ ff.pick }}" style="{{ ff.style }}">{{ ff.label }}</div>
+                </sc-for>
+              </div>
+            </div>
+            <sc-if value="{{ showFirstFrameSlot }}" hint-placeholder-val="{{ true }}">
+            <div>
+              
+              <div style="display:flex;gap:8px;align-items:center;">
+                <div style="width:70px;aspect-ratio:9/16;border:1.5px dashed rgba(255,255,255,.18);border-radius:10px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex:none;" style-hover="border-color:rgba(215,244,82,.5);">
+                  <span style="display:flex;width:18px;height:18px;color:#6B7076;" dangerouslySetInnerHTML="{{ icoUpload }}"></span>
+                </div>
+                <div style="font-family:'JetBrains Mono';font-size:9.5px;letter-spacing:1.8px;color:#6B7076;margin-bottom:8px;">{{ t.firstFrame }}</div><div style="font-size:11px;color:#9BA0A6;line-height:1.5;">{{ t.uploadFirst }} — 9:16 / 16:9. {{ t.orUpload }}</div>
+              </div>
+            </div>
+            </sc-if>
+            <sc-if value="{{ showGenFirst }}" hint-placeholder-val="{{ false }}">
+            <div>
+              <sc-if value="{{ ffIdle }}" hint-placeholder-val="{{ true }}">
+              <div onClick="{{ genFirstFrame }}" style="display:flex;align-items:center;gap:12px;background:rgba(192,132,252,.1);border:1px solid rgba(192,132,252,.35);border-radius:12px;padding:12px 16px;cursor:pointer;" style-hover="background:rgba(192,132,252,.18);">
+                <span style="display:flex;width:17px;height:17px;color:#C084FC;" dangerouslySetInnerHTML="{{ icoSpark }}"></span>
+                <span style="flex:1;font-weight:800;font-size:13px;color:#C084FC;">{{ t.genFirstFrame }}</span>
+                <span style="font-family:'JetBrains Mono';font-size:11px;color:#C084FC;">−10 {{ t.cr }}</span>
+              </div>
+              </sc-if>
+              <sc-if value="{{ ffLoading }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;align-items:center;gap:14px;background:#0D0E11;border:1px solid rgba(192,132,252,.3);border-radius:12px;padding:14px 16px;">
+                <div style="{{ ffImgStyle }}display:flex;align-items:center;justify-content:center;animation:mmPulse 1.2s ease-in-out infinite;">
+                  <div style="width:22px;height:22px;border-radius:50%;border:2.5px solid rgba(192,132,252,.25);border-top-color:#C084FC;animation:mmSpin .8s linear infinite;"></div>
+                </div>
+                <div style="flex:1;">
+                  <div style="font-weight:800;font-size:13px;color:#C084FC;margin-bottom:3px;">{{ t.genFirstFrame2 }}</div>
+                  <div style="font-size:11px;color:#9BA0A6;">Seedream 5 Pro · ~15 c</div>
+                </div>
+              </div>
+              </sc-if>
+              <sc-if value="{{ ffDone }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;align-items:center;gap:14px;background:#0D0E11;border:1px solid rgba(74,222,128,.3);border-radius:12px;padding:14px 16px;">
+                <div style="{{ ffImgStyle }}display:flex;align-items:flex-end;padding:6px;">
+                  <span style="font-family:'JetBrains Mono';font-size:7.5px;background:rgba(0,0,0,.6);color:#fff;padding:2px 6px;border-radius:4px;">Mia · 9:16</span>
+                </div>
+                <div style="flex:1;">
+                  <div style="font-weight:800;font-size:13px;color:#4ADE80;margin-bottom:6px;">✓ {{ t.ffDone }}</div>
+                  <div onClick="{{ genFirstFrame }}" style="display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:700;color:#C084FC;cursor:pointer;">↻ {{ t.regen }}</div>
+                </div>
+              </div>
+              </sc-if>
+            </div>
+            </sc-if>
+            <div>
+              <div style="font-family:'JetBrains Mono';font-size:9.5px;letter-spacing:1.8px;color:#6B7076;margin-bottom:8px;">{{ t.motionPrompt }}</div>
+              <textarea rows="2" placeholder="{{ t.motionHint }}" style="width:100%;background:#0D0E11;border:1px solid rgba(255,255,255,.09);border-radius:10px;padding:10px 12px;color:#F2F3F0;font-family:'Manrope';font-size:12.5px;resize:vertical;outline:none;"></textarea>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;">
+              <div>
+                <div style="font-family:'JetBrains Mono';font-size:9px;letter-spacing:1.4px;color:#6B7076;margin-bottom:7px;">{{ t.vidQuality }}</div>
+                <div style="display:flex;gap:5px;flex-wrap:wrap;">
+                  <sc-for list="{{ qualityOpts }}" as="q" hint-placeholder-count="3">
+                    <span onClick="{{ q.pick }}" style="{{ q.style }}">{{ q.label }}</span>
+                  </sc-for>
+                </div>
+              </div>
+              <div>
+                <div style="font-family:'JetBrains Mono';font-size:9px;letter-spacing:1.4px;color:#6B7076;margin-bottom:7px;">{{ t.format }}</div>
+                <div style="display:flex;gap:5px;flex-wrap:wrap;">
+                  <sc-for list="{{ vfmtOpts }}" as="vf" hint-placeholder-count="3">
+                    <span onClick="{{ vf.pick }}" style="{{ vf.style }}">{{ vf.label }}</span>
+                  </sc-for>
+                </div>
+              </div>
+              <div>
+                <div style="font-family:'JetBrains Mono';font-size:9px;letter-spacing:1.4px;color:#6B7076;margin-bottom:7px;">{{ t.duration }}</div>
+                <div style="display:flex;gap:5px;flex-wrap:wrap;">
+                  <sc-for list="{{ vtimeOpts }}" as="vt" hint-placeholder-count="2">
+                    <span onClick="{{ vt.pick }}" style="{{ vt.style }}">{{ vt.label }}</span>
+                  </sc-for>
+                </div>
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:12px;background:#D7F452;border-radius:12px;padding:12px 16px;cursor:pointer;" style-hover="background:#E8FA8A;">
+              <span style="display:flex;width:17px;height:17px;color:#171A05;" dangerouslySetInnerHTML="{{ icoFilm }}"></span>
+              <span style="flex:1;font-weight:800;font-size:14px;color:#171A05;">{{ t.generateVideo }}</span>
+              <span style="font-family:'JetBrains Mono';font-size:11px;font-weight:600;color:#3D4213;">−{{ vidCost }} {{ t.cr }}</span>
+            </div>
+          </div>
+          <div>
+            <div style="font-weight:800;font-size:14px;margin-bottom:10px;">{{ t.archive }}</div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;">
+              <sc-for list="{{ videoArchive }}" as="va" hint-placeholder-count="4">
+                <div style="border-radius:12px;overflow:hidden;background:#121316;border:1px solid rgba(255,255,255,.07);cursor:pointer;" style-hover="border-color:rgba(255,255,255,.2);">
+                  <div style="{{ va.bg }}">
+                    <div style="width:36px;height:36px;border-radius:50%;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;"><span style="display:flex;width:14px;height:14px;color:#fff;margin-left:2px;" dangerouslySetInnerHTML="{{ icoPlay }}"></span></div>
+                    <span style="position:absolute;bottom:8px;right:8px;font-family:'JetBrains Mono';font-size:9px;background:rgba(0,0,0,.55);color:#fff;padding:2px 6px;border-radius:5px;">{{ va.dur }}</span>
+                  </div>
+                  <div style="padding:8px 10px;display:flex;justify-content:space-between;align-items:center;">
+                    <span style="font-weight:700;font-size:11px;">{{ va.who }}</span>
+                    <span style="font-size:10px;font-weight:700;color:#9BA0A6;cursor:pointer;">↓ MP4</span>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ──────────── ПЕРСОНАЖИ ──────────── -->
+    <sc-if value="{{ isCharacters }}" hint-placeholder-val="{{ false }}">
+      <div style="animation:mmFade .25s ease;" data-screen-label="Персонажи">
+        <sc-if value="{{ noCharDetail }}" hint-placeholder-val="{{ true }}">
+        <div>
+          <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:14px;flex-wrap:wrap;margin-bottom:16px;">
+            <div>
+              <div style="font-family:'Unbounded';font-weight:600;font-size:20px;margin-bottom:5px;">{{ t.navCharacters }}</div>
+              <div style="font-size:12.5px;color:#9BA0A6;max-width:560px;line-height:1.5;">{{ t.charactersDesc }}</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;background:#D7F452;color:#171A05;font-weight:800;font-size:13px;border-radius:10px;padding:10px 16px;cursor:pointer;" style-hover="background:#E8FA8A;">+ {{ t.newCharacter }}</div>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;">
+            <sc-for list="{{ characters }}" as="p" hint-placeholder-count="3">
+              <div onClick="{{ p.open }}" style="background:#121316;border:1px solid rgba(255,255,255,.07);border-radius:16px;overflow:hidden;cursor:pointer;" style-hover="border-color:rgba(240,168,200,.45);">
+                <div style="{{ p.cover }}">
+                  <div style="width:56px;height:56px;border-radius:50%;background:rgba(0,0,0,.35);border:2px solid rgba(255,255,255,.5);display:flex;align-items:center;justify-content:center;font-family:'Unbounded';font-weight:600;font-size:20px;color:#fff;">{{ p.initial }}</div>
+                </div>
+                <div style="padding:14px 16px;">
+                  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                    <span style="font-weight:800;font-size:15px;">{{ p.name }}</span>
+                    <span style="{{ p.statusStyle }}">{{ p.status }}</span>
+                  </div>
+                  <div style="font-size:11.5px;color:#9BA0A6;line-height:1.45;margin-bottom:10px;">{{ p.blurb }}</div>
+                  <div style="display:flex;gap:5px;flex-wrap:wrap;">
+                    <sc-for list="{{ p.tags }}" as="tg" hint-placeholder-count="3">
+                      <span style="font-family:'JetBrains Mono';font-size:8.5px;color:#9BA0A6;border:1px solid rgba(255,255,255,.1);padding:2px 8px;border-radius:20px;">{{ tg }}</span>
+                    </sc-for>
+                  </div>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="margin-top:16px;background:rgba(192,132,252,.06);border:1px solid rgba(192,132,252,.2);border-radius:12px;padding:12px 16px;font-size:11.5px;color:#C9CDD1;line-height:1.55;">
+            <b style="color:#C084FC;">{{ t.namingTitle }}</b> — {{ t.namingBody }}
+          </div>
+        </div>
+        </sc-if>
+        <sc-if value="{{ hasCharDetail }}" hint-placeholder-val="{{ false }}">
+        <div>
+          <div onClick="{{ closeChar }}" style="display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:700;color:#9BA0A6;cursor:pointer;margin-bottom:14px;" style-hover="color:#F2F3F0;">← {{ t.allCharacters }}</div>
+          <div style="display:flex;align-items:center;gap:14px;margin-bottom:18px;">
+            <div style="width:52px;height:52px;border-radius:16px;background:linear-gradient(135deg,#F472B6,#C084FC);display:flex;align-items:center;justify-content:center;font-family:'Unbounded';font-weight:600;font-size:20px;color:#2A0A1C;">M</div>
+            <div>
+              <div style="font-family:'Unbounded';font-weight:600;font-size:20px;">Mia</div>
+              <div style="font-size:11.5px;color:#9BA0A6;">{{ t.charSub }}</div>
+            </div>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;">
+            <sc-for list="{{ charTabs }}" as="ct" hint-placeholder-count="4">
+              <span style="{{ ct.style }}" style-hover="border-color:rgba(255,255,255,.3);">{{ ct.label }}</span>
+            </sc-for>
+          </div>
+          <!-- TAB: Фото и внешность -->
+          <sc-if value="{{ isCharPhotos }}" hint-placeholder-val="{{ true }}">
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;">
+            <div style="background:#121316;border:1px solid rgba(255,255,255,.07);border-radius:16px;padding:16px 18px;">
+              <div style="font-weight:800;font-size:13.5px;margin-bottom:10px;">{{ t.charPhotos }}</div>
+              <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px;">
+                <sc-for list="{{ charPhotos }}" as="cp" hint-placeholder-count="5">
+                  <div style="{{ cp.bg }}flex-direction:column;align-items:stretch;justify-content:space-between;">
+                    <div style="display:flex;justify-content:flex-end;">
+                      <span onClick="{{ cp.open }}" style="width:22px;height:22px;border-radius:7px;background:rgba(0,0,0,.55);color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;cursor:pointer;" style-hover="background:rgba(0,0,0,.8);">⋯</span>
+                    </div>
+                    <span style="font-family:'JetBrains Mono';font-size:7.5px;background:rgba(0,0,0,.6);color:#fff;padding:2px 6px;border-radius:4px;align-self:flex-start;">{{ cp.kind }}</span>
+                    <sc-if value="{{ cp.menuOpen }}" hint-placeholder-val="{{ false }}">
+                      <div style="position:absolute;inset:0;background:rgba(6,7,9,.92);border-radius:10px;padding:8px;display:flex;flex-direction:column;gap:3px;overflow-y:auto;">
+                        <div style="font-family:'JetBrains Mono';font-size:7.5px;letter-spacing:.8px;color:#6B7076;margin-bottom:2px;">{{ t.setTag }}</div>
+                        <sc-for list="{{ photoTagMenu }}" as="tm" hint-placeholder-count="4">
+                          <div style="{{ tm.style }}" style-hover="background:rgba(255,255,255,.08);">{{ tm.label }}</div>
+                        </sc-for>
+                        <div onClick="{{ cp.open }}" style="margin-top:auto;font-size:10.5px;font-weight:800;color:#F87171;padding:5px 10px;border-radius:7px;border:1px solid rgba(248,113,113,.3);text-align:center;cursor:pointer;" style-hover="background:rgba(248,113,113,.1);">🗑 {{ t.deletePhoto }}</div>
+                      </div>
+                    </sc-if>
+                  </div>
+                </sc-for>
+                <div style="aspect-ratio:3/4;border:1.5px dashed rgba(255,255,255,.18);border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;color:#6B7076;cursor:pointer;" style-hover="border-color:rgba(215,244,82,.5);">
+                  <span style="display:flex;width:18px;height:18px;" dangerouslySetInnerHTML="{{ icoUpload }}"></span>
+                  <span style="font-size:9.5px;font-weight:700;">{{ t.addPhoto }}</span>
+                </div>
+              </div>
+              <div style="font-family:'JetBrains Mono';font-size:9px;letter-spacing:1.6px;color:#6B7076;margin:6px 0 7px;">{{ t.photoTags }}</div>
+              <div style="display:flex;gap:5px;flex-wrap:wrap;">
+                <sc-for list="{{ photoTagOpts }}" as="pt" hint-placeholder-count="6">
+                  <span style="{{ pt.style }}" style-hover="border-color:rgba(255,255,255,.3);">{{ pt.label }}</span>
+                </sc-for>
+              </div>
+            </div>
+            <div style="background:#121316;border:1px solid rgba(255,255,255,.07);border-radius:16px;padding:16px 18px;display:flex;flex-direction:column;gap:12px;">
+              <div style="display:flex;justify-content:space-between;align-items:center;">
+                <span style="font-weight:800;font-size:13.5px;">{{ t.charAppearance }}</span>
+                <span style="font-size:11px;font-weight:700;color:#C084FC;cursor:pointer;" style-hover="color:#D8B4FE;">✦ {{ t.genFromPhoto }}</span>
+              </div>
+              <textarea rows="6" style="width:100%;background:#0D0E11;border:1px solid rgba(255,255,255,.09);border-radius:10px;padding:10px 12px;color:#C9CDD1;font-family:'Manrope';font-size:12px;line-height:1.55;resize:vertical;outline:none;">Slim athletic feminine body, long dark hair, green eyes, soft natural makeup…</textarea>
+              <div style="display:flex;gap:8px;">
+                <div style="flex:1;background:rgba(215,244,82,.12);border:1px solid rgba(215,244,82,.3);border-radius:9px;padding:9px;text-align:center;font-size:12px;font-weight:800;color:#D7F452;cursor:pointer;">{{ t.save }}</div>
+                <div style="border:1px solid rgba(248,113,113,.3);border-radius:9px;padding:9px 14px;font-size:12px;font-weight:700;color:#F87171;cursor:pointer;" style-hover="background:rgba(248,113,113,.08);">{{ t.delete }}</div>
+              </div>
+            </div>
+          </div>
+          </sc-if>
+          <!-- TAB: Персона -->
+          <sc-if value="{{ isCharPersona }}" hint-placeholder-val="{{ false }}">
+          <div style="background:#121316;border:1px solid rgba(255,255,255,.07);border-radius:16px;padding:18px;max-width:560px;">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+              <sc-for list="{{ personaFields }}" as="pf" hint-placeholder-count="6">
+                <div style="{{ pf.wrapStyle }}">
+                  <div style="{{ fieldLbl }}">{{ pf.lbl }}</div>
+                  <sc-if value="{{ pf.area }}" hint-placeholder-val="{{ false }}">
+                    <textarea rows="2" placeholder="{{ pf.ph }}" style="{{ areaSt }}">{{ pf.val }}</textarea>
+                  </sc-if>
+                  <sc-if value="{{ pf.isText }}" hint-placeholder-val="{{ true }}">
+                    <input value="{{ pf.val }}" placeholder="{{ pf.ph }}" style="{{ inputSt }}">
+                  </sc-if>
+                </div>
+              </sc-for>
+            </div>
+            <div style="margin-top:14px;background:rgba(215,244,82,.12);border:1px solid rgba(215,244,82,.3);border-radius:9px;padding:10px;text-align:center;font-size:12px;font-weight:800;color:#D7F452;cursor:pointer;">{{ t.save }}</div>
+          </div>
+          </sc-if>
+          <!-- TAB: EXIF -->
+          <sc-if value="{{ isCharExif }}" hint-placeholder-val="{{ false }}">
+          <div style="background:#121316;border:1px solid rgba(255,255,255,.07);border-radius:16px;padding:18px;">
+            <div style="display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:14px;">
+              <div style="font-weight:800;font-size:14px;">{{ t.exifTitle }}</div>
+              <div style="font-size:11px;color:#9BA0A6;max-width:420px;line-height:1.5;">{{ t.exifHint }}</div>
+            </div>
+            <div style="background:#0D0E11;border:1px solid rgba(255,255,255,.07);border-radius:12px;padding:14px;margin-bottom:14px;">
+              <div style="font-weight:700;font-size:12.5px;margin-bottom:10px;">{{ t.exifRefs }}</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                <div>
+                  <div style="{{ fieldLbl }}">{{ t.frontCam }}</div>
+                  <div style="display:flex;align-items:center;gap:8px;border:1px solid rgba(255,255,255,.12);border-radius:9px;padding:8px 10px;cursor:pointer;" style-hover="border-color:rgba(215,244,82,.4);">
+                    <span style="display:flex;width:15px;height:15px;color:#9BA0A6;" dangerouslySetInnerHTML="{{ icoUpload }}"></span>
+                    <span style="font-size:11.5px;color:#9BA0A6;">{{ t.chooseFile }}</span>
+                  </div>
+                  <div style="font-size:9.5px;color:#5C6066;margin-top:5px;">JPEG {{ t.fromGallery }}</div>
+                </div>
+                <div>
+                  <div style="{{ fieldLbl }}">{{ t.mainCam }}</div>
+                  <div style="display:flex;align-items:center;gap:8px;border:1px solid rgba(255,255,255,.12);border-radius:9px;padding:8px 10px;cursor:pointer;" style-hover="border-color:rgba(215,244,82,.4);">
+                    <span style="display:flex;width:15px;height:15px;color:#9BA0A6;" dangerouslySetInnerHTML="{{ icoUpload }}"></span>
+                    <span style="font-size:11.5px;color:#9BA0A6;">{{ t.chooseFile }}</span>
+                  </div>
+                  <div style="font-size:9.5px;color:#5C6066;margin-top:5px;">{{ t.backCamPhoto }}</div>
+                </div>
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+              <div>
+                <div style="{{ fieldLbl }}">{{ t.camPreset }}</div>
+                <div style="display:flex;align-items:center;justify-content:space-between;border:1px solid rgba(215,244,82,.4);border-radius:10px;padding:9px 12px;cursor:pointer;font-size:12.5px;">{{ exifPresetSel }}<span style="color:#6B7076;">▾</span></div>
+              </div>
+              <div>
+                <div style="{{ fieldLbl }}">{{ t.latGeo }}</div>
+                <input value="55.7558" style="{{ inputSt }}">
+              </div>
+              <div>
+                <div style="{{ fieldLbl }}">{{ t.lonGeo }}</div>
+                <input value="37.6173" style="{{ inputSt }}">
+              </div>
+            </div>
+            <div style="margin-top:14px;background:rgba(215,244,82,.12);border:1px solid rgba(215,244,82,.3);border-radius:9px;padding:10px;text-align:center;font-size:12px;font-weight:800;color:#D7F452;cursor:pointer;max-width:200px;">{{ t.save }}</div>
+          </div>
+          </sc-if>
+          <!-- TAB: История -->
+          <sc-if value="{{ isCharHistory }}" hint-placeholder-val="{{ false }}">
+          <div style="background:#121316;border:1px solid rgba(255,255,255,.07);border-radius:16px;padding:16px 18px;max-width:640px;">
+            <div style="font-weight:800;font-size:14px;margin-bottom:12px;">{{ t.charHistoryTitle }}</div>
+            <sc-for list="{{ historyRows }}" as="hr" hint-placeholder-count="4">
+              <div style="display:flex;align-items:center;gap:12px;padding:11px 4px;border-bottom:1px solid rgba(255,255,255,.05);">
+                <span style="display:flex;width:16px;height:16px;color:#9BA0A6;flex:none;" dangerouslySetInnerHTML="{{ hr.icon }}"></span>
+                <span style="flex:1;font-size:12.5px;color:#C9CDD1;">{{ hr.what }}</span>
+                <span style="font-family:'JetBrains Mono';font-size:9.5px;color:#5C6066;">{{ hr.when }}</span>
+                <span style="font-family:'JetBrains Mono';font-size:10px;color:#D7F452;width:56px;text-align:right;">{{ hr.tag }}</span>
+              </div>
+            </sc-for>
+          </div>
+          </sc-if>
+        </div>
+        </sc-if>
+      </div>
+    </sc-if>
+
+    <!-- ──────────── ДОНАТЫ ──────────── -->
+    <sc-if value="{{ isDonations }}" hint-placeholder-val="{{ false }}">
+      <div style="animation:mmFade .25s ease;" data-screen-label="Донаты">
+        <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:14px;flex-wrap:wrap;margin-bottom:16px;">
+          <div>
+            <div style="font-family:'Unbounded';font-weight:600;font-size:20px;margin-bottom:5px;">{{ t.navDonations }}</div>
+            <div style="font-size:12.5px;color:#9BA0A6;">{{ t.donationsDesc }}</div>
+          </div>
+          <div style="display:flex;gap:6px;">
+            <sc-for list="{{ donTabs }}" as="dt" hint-placeholder-count="2">
+              <span onClick="{{ dt.pick }}" style="{{ dt.style }}" style-hover="border-color:rgba(255,255,255,.3);">{{ dt.label }}</span>
+            </sc-for>
+          </div>
+        </div>
+        <sc-if value="{{ isDonOverview }}" hint-placeholder-val="{{ true }}">
+        <div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:16px;">
+            <sc-for list="{{ donStats }}" as="ds" hint-placeholder-count="4">
+              <div style="background:#121316;border:1px solid rgba(255,255,255,.07);border-radius:14px;padding:14px 16px;">
+                <div style="font-family:'JetBrains Mono';font-size:9px;letter-spacing:1.8px;color:#6B7076;margin-bottom:8px;">{{ ds.label }}</div>
+                <div style="font-family:'Unbounded';font-weight:600;font-size:17px;color:{{ ds.color }};">{{ ds.value }}</div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;">
+            <div style="background:linear-gradient(140deg,rgba(240,168,200,.1),rgba(240,168,200,.02));border:1px solid rgba(240,168,200,.3);border-radius:16px;padding:16px 18px;">
+              <div style="font-weight:800;font-size:14px;margin-bottom:8px;">{{ t.payout }}</div>
+              <div style="font-size:11.5px;color:#C9CDD1;line-height:1.55;margin-bottom:12px;">{{ t.payoutHint }}</div>
+              <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px;">
+                <div style="display:flex;gap:8px;">
+                  <input value="TQrX…9fJk" style="flex:1;background:#0D0E11;border:1px solid rgba(255,255,255,.09);border-radius:9px;padding:9px 12px;color:#F2F3F0;font-family:'JetBrains Mono';font-size:11.5px;outline:none;">
+                  <div style="border:1px solid rgba(255,255,255,.12);border-radius:9px;padding:9px 12px;font-family:'JetBrains Mono';font-size:11px;color:#9BA0A6;">USDT · TRC20 ▾</div>
+                </div>
+              </div>
+              <div style="display:flex;align-items:center;gap:10px;background:#F0A8C8;border-radius:11px;padding:11px 16px;cursor:pointer;" style-hover="filter:brightness(1.08);">
+                <span style="flex:1;font-weight:800;font-size:13.5px;color:#2A0A1C;">{{ t.requestPayout }}</span>
+                <span style="font-family:'JetBrains Mono';font-size:10.5px;color:#5E2140;">100,00 ₽ − 2%</span>
+              </div>
+            </div>
+            <div style="background:#121316;border:1px solid rgba(255,255,255,.07);border-radius:16px;padding:16px 18px;">
+              <div style="font-weight:800;font-size:14px;margin-bottom:12px;">{{ t.donLinks }}</div>
+              <div style="display:flex;flex-direction:column;gap:8px;">
+                <sc-for list="{{ donLinks }}" as="dl" hint-placeholder-count="2">
+                  <div style="background:#0D0E11;border:1px solid rgba(255,255,255,.07);border-radius:12px;padding:12px 14px;">
+                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+                      <div style="flex:1;font-weight:700;font-size:12.5px;">{{ dl.title }}</div>
+                      <span style="{{ dl.stStyle }}">{{ dl.st }}</span>
+                    </div>
+                    <div style="display:flex;flex-direction:column;gap:6px;">
+                      <sc-for list="{{ dl.urls }}" as="u" hint-placeholder-count="2">
+                        <div style="display:flex;align-items:center;gap:9px;background:#121316;border:1px solid rgba(255,255,255,.07);border-radius:9px;padding:8px 10px;">
+                          <span style="display:flex;width:15px;height:15px;flex:none;color:{{ u.col }};" dangerouslySetInnerHTML="{{ u.icon }}"></span>
+                          <span style="font-family:'JetBrains Mono';font-size:8.5px;letter-spacing:.6px;color:{{ u.col }};width:56px;flex:none;">{{ u.kind }}</span>
+                          <span style="flex:1;min-width:0;font-family:'JetBrains Mono';font-size:9.5px;color:#9BA0A6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ u.url }}</span>
+                          <span style="display:flex;width:14px;height:14px;color:#9BA0A6;cursor:pointer;flex:none;" style-hover="color:#D7F452;" dangerouslySetInnerHTML="{{ icoCopy }}"></span>
+                        </div>
+                      </sc-for>
+                    </div>
+                  </div>
+                </sc-for>
+              </div>
+              <div style="font-size:10.5px;color:#5C6066;margin-top:10px;line-height:1.5;">{{ t.holdPolicy }} <a href="#">Wiki →</a></div>
+            </div>
+          </div>
+          <div style="margin-top:12px;background:#121316;border:1px solid rgba(255,255,255,.07);border-radius:16px;padding:16px 18px;">
+            <div style="font-weight:800;font-size:14px;margin-bottom:10px;">{{ t.lastIncoming }}</div>
+            <sc-for list="{{ incoming }}" as="inc" hint-placeholder-count="2">
+              <div style="display:flex;align-items:center;gap:12px;padding:9px 4px;border-bottom:1px solid rgba(255,255,255,.05);">
+                <span style="font-family:'Unbounded';font-weight:600;font-size:14px;color:#4ADE80;">{{ inc.sum }}</span>
+                <span style="flex:1;font-size:12px;color:#9BA0A6;">{{ inc.from }}</span>
+                <span style="font-family:'JetBrains Mono';font-size:10px;color:#5C6066;">{{ inc.when }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+        </sc-if>
+        <sc-if value="{{ isDonCreate }}" hint-placeholder-val="{{ false }}">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;">
+          <div style="background:#121316;border:1px solid rgba(255,255,255,.07);border-radius:16px;padding:18px;display:flex;flex-direction:column;gap:12px;">
+            <div style="font-weight:800;font-size:14px;">{{ t.newDonation }}</div>
+            <input placeholder="{{ t.donTitle }}" style="background:#0D0E11;border:1px solid rgba(255,255,255,.09);border-radius:10px;padding:10px 12px;color:#F2F3F0;font-family:'Manrope';font-size:12.5px;outline:none;">
+            <textarea rows="3" placeholder="{{ t.donDesc }}" style="background:#0D0E11;border:1px solid rgba(255,255,255,.09);border-radius:10px;padding:10px 12px;color:#F2F3F0;font-family:'Manrope';font-size:12.5px;resize:vertical;outline:none;"></textarea>
+            <div style="display:flex;gap:8px;">
+              <input placeholder="{{ t.minSum }}" style="flex:1;background:#0D0E11;border:1px solid rgba(255,255,255,.09);border-radius:10px;padding:10px 12px;color:#F2F3F0;font-family:'Manrope';font-size:12.5px;outline:none;">
+              <div style="border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:10px 14px;font-size:12px;color:#9BA0A6;">₽ ▾</div>
+              <div style="border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:10px 14px;font-size:12px;color:#9BA0A6;">Mia ▾</div>
+            </div>
+            <div style="display:flex;gap:8px;">
+              <div style="flex:1;border:1px solid rgba(255,255,255,.12);border-radius:9px;padding:9px;text-align:center;font-size:12px;font-weight:700;color:#9BA0A6;cursor:pointer;" style-hover="border-color:rgba(255,255,255,.3);">{{ t.saveDraft }}</div>
+              <div style="flex:1;background:rgba(215,244,82,.12);border:1px solid rgba(215,244,82,.3);border-radius:9px;padding:9px;text-align:center;font-size:12px;font-weight:800;color:#D7F452;cursor:pointer;">{{ t.toModeration }}</div>
+            </div>
+          </div>
+          <div style="background:#121316;border:1px solid rgba(255,255,255,.07);border-radius:16px;padding:18px;">
+            <div style="font-weight:800;font-size:14px;margin-bottom:12px;">{{ t.myDonations }}</div>
+            <sc-for list="{{ myDonations }}" as="md" hint-placeholder-count="3">
+              <div style="display:flex;align-items:center;gap:12px;padding:10px 4px;border-bottom:1px solid rgba(255,255,255,.05);">
+                <span style="flex:1;font-weight:700;font-size:12.5px;">{{ md.title }}</span>
+                <span style="{{ md.stStyle }}">{{ md.st }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+        </sc-if>
+      </div>
+    </sc-if>
+
+    <!-- ──────────── ТАРИФ ──────────── -->
+    <sc-if value="{{ isBilling }}" hint-placeholder-val="{{ false }}">
+      <div style="animation:mmFade .25s ease;" data-screen-label="Тариф и баланс">
+        <div style="margin-bottom:16px;">
+          <div style="font-family:'Unbounded';font-weight:600;font-size:20px;margin-bottom:5px;">{{ t.navBilling }}</div>
+          <div style="font-size:12.5px;color:#9BA0A6;">{{ t.billingDesc }}</div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;margin-bottom:16px;">
+          <div style="background:linear-gradient(140deg,rgba(74,222,128,.08),rgba(74,222,128,.01));border:1px solid rgba(74,222,128,.25);border-radius:16px;padding:16px 18px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+              <span style="font-weight:800;font-size:14px;">{{ t.currentPlan }}</span>
+              <span style="font-family:'JetBrains Mono';font-size:9px;letter-spacing:1px;background:rgba(74,222,128,.12);color:#4ADE80;border:1px solid rgba(74,222,128,.3);padding:2px 8px;border-radius:20px;">{{ t.active }}</span>
+            </div>
+            <div style="font-family:'Unbounded';font-weight:600;font-size:18px;margin-bottom:6px;">Standard Studio</div>
+            <div style="font-size:11.5px;color:#9BA0A6;margin-bottom:12px;">{{ t.until }} 07.12.2026 · {{ t.balance }}: <b style="color:#D7F452;">510 {{ t.cr }}</b></div>
+            <div style="display:flex;flex-direction:column;gap:8px;">
+              <sc-for list="{{ usageBars }}" as="ub" hint-placeholder-count="3">
+                <div>
+                  <div style="display:flex;justify-content:space-between;font-size:11px;color:#9BA0A6;margin-bottom:4px;"><span>{{ ub.label }}</span><span style="font-family:'JetBrains Mono';font-size:10px;">{{ ub.val }}</span></div>
+                  <div style="height:5px;background:rgba(255,255,255,.07);border-radius:3px;overflow:hidden;"><div style="{{ ub.fill }}"></div></div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+          <div style="background:#121316;border:1px solid rgba(255,255,255,.07);border-radius:16px;padding:16px 18px;">
+            <div style="font-weight:800;font-size:14px;margin-bottom:8px;">{{ t.referral }}</div>
+            <div style="font-size:11.5px;color:#9BA0A6;line-height:1.55;margin-bottom:12px;">{{ t.referralHint }}</div>
+            <div style="display:flex;gap:8px;margin-bottom:10px;">
+              <input value="https://model-mate.online/login?ref=N62KMA60" readonly="" style="flex:1;min-width:0;background:#0D0E11;border:1px solid rgba(255,255,255,.09);border-radius:9px;padding:9px 12px;color:#9BA0A6;font-family:'JetBrains Mono';font-size:10.5px;outline:none;">
+              <div style="display:flex;align-items:center;gap:6px;border:1px solid rgba(215,244,82,.3);background:rgba(215,244,82,.1);border-radius:9px;padding:9px 12px;font-size:11.5px;font-weight:800;color:#D7F452;cursor:pointer;"><span style="display:flex;width:13px;height:13px;" dangerouslySetInnerHTML="{{ icoCopy }}"></span>{{ t.copy }}</div>
+            </div>
+            <div style="font-size:11px;color:#5C6066;">{{ t.invited }}: 1 · {{ t.earned }}: 0 {{ t.cr }}</div>
+          </div>
+        </div>
+
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
+          <span style="font-weight:800;font-size:14px;">{{ t.plans }}</span>
+          <div style="display:flex;gap:12px;">
+            <div style="display:flex;background:#121316;border:1px solid rgba(255,255,255,.09);border-radius:10px;padding:3px;">
+              <span onClick="{{ setTierStd }}" style="{{ tierStdStyle }}">Standard</span>
+              <span onClick="{{ setTierPro }}" style="{{ tierProStyle }}">Pro</span>
+            </div>
+            <div style="display:flex;background:#121316;border:1px solid rgba(255,255,255,.09);border-radius:10px;padding:3px;">
+              <span onClick="{{ setPerM }}" style="{{ perMStyle }}">{{ t.month }}</span>
+              <span onClick="{{ setPerY }}" style="{{ perYStyle }}">{{ t.year }} −20%</span>
+            </div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px;margin-bottom:16px;">
+          <sc-for list="{{ plans }}" as="pl" hint-placeholder-count="3">
+            <div style="{{ pl.cardStyle }}">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                <span style="font-weight:800;font-size:14.5px;">{{ pl.name }}</span>
+                <sc-if value="{{ pl.tag }}" hint-placeholder-val="{{ false }}"><span style="font-family:'JetBrains Mono';font-size:8.5px;letter-spacing:1px;background:rgba(215,244,82,.15);color:#D7F452;padding:2px 8px;border-radius:20px;">{{ pl.tag }}</span></sc-if>
+              </div>
+              <div style="display:flex;align-items:baseline;gap:6px;margin-bottom:8px;"><span style="font-family:'Unbounded';font-weight:700;font-size:22px;color:#D7F452;">{{ pl.price }}</span><span style="font-size:11px;color:#9BA0A6;">₽/{{ perLabel }}</span></div>
+              <div style="font-size:11.5px;color:#9BA0A6;line-height:1.55;margin-bottom:12px;">{{ pl.desc }}</div>
+              <div style="display:flex;gap:6px;">
+                <div style="flex:1;background:rgba(215,244,82,.12);border:1px solid rgba(215,244,82,.3);border-radius:9px;padding:8px;text-align:center;font-size:11.5px;font-weight:800;color:#D7F452;cursor:pointer;" style-hover="background:rgba(215,244,82,.2);">{{ t.payCard }}</div>
+                <div style="border:1px solid rgba(255,255,255,.12);border-radius:9px;padding:8px 10px;font-size:11.5px;font-weight:700;color:#9BA0A6;cursor:pointer;" style-hover="border-color:rgba(255,255,255,.3);">{{ t.payCredits }}</div>
+                <div style="border:1px solid rgba(255,255,255,.12);border-radius:9px;padding:8px 10px;font-size:11.5px;font-weight:700;color:#9BA0A6;cursor:pointer;" style-hover="border-color:rgba(255,255,255,.3);">Tribute</div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+
+        <div style="font-weight:800;font-size:14px;margin-bottom:10px;">{{ t.creditPacks }}</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:16px;">
+          <sc-for list="{{ packs }}" as="pk" hint-placeholder-count="4">
+            <div style="background:#121316;border:1px solid rgba(255,255,255,.07);border-radius:14px;padding:14px 16px;cursor:pointer;" style-hover="border-color:rgba(215,244,82,.4);">
+              <div style="font-family:'Unbounded';font-weight:600;font-size:17px;color:#D7F452;margin-bottom:2px;">{{ pk.cr }}</div>
+              <div style="font-size:10.5px;color:#6B7076;margin-bottom:8px;">{{ t.credits }}</div>
+              <div style="font-size:13px;font-weight:800;">{{ pk.price }}</div>
+              <sc-if value="{{ pk.bonus }}" hint-placeholder-val="{{ false }}"><div style="font-size:10px;color:#4ADE80;margin-top:3px;">{{ pk.bonus }}</div></sc-if>
+            </div>
+          </sc-for>
+        </div>
+
+        <div style="background:#121316;border:1px solid rgba(255,255,255,.07);border-radius:16px;padding:16px 18px;">
+          <div style="font-weight:800;font-size:14px;margin-bottom:10px;">{{ t.history }}</div>
+          <sc-for list="{{ history }}" as="h" hint-placeholder-count="4">
+            <div style="display:flex;align-items:center;gap:12px;padding:9px 4px;border-bottom:1px solid rgba(255,255,255,.05);">
+              <span style="font-family:'JetBrains Mono';font-size:10px;color:#5C6066;width:84px;flex:none;">{{ h.date }}</span>
+              <span style="flex:1;font-size:12px;color:#C9CDD1;">{{ h.what }}</span>
+              <span style="font-family:'JetBrains Mono';font-size:11.5px;font-weight:600;color:{{ h.color }};">{{ h.delta }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ──────────── ПОДКЛЮЧЕНИЯ ──────────── -->
+    <sc-if value="{{ isConnections }}" hint-placeholder-val="{{ false }}">
+      <div style="animation:mmFade .25s ease;" data-screen-label="Подключения">
+        <sc-if value="{{ noConnDetail }}" hint-placeholder-val="{{ true }}">
+        <div>
+          <div style="margin-bottom:16px;">
+            <div style="font-family:'Unbounded';font-weight:600;font-size:20px;margin-bottom:5px;">{{ t.navConnections }}</div>
+            <div style="font-size:12.5px;color:#9BA0A6;">{{ t.connectionsDesc }}</div>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px;">
+            <sc-for list="{{ connections }}" as="cn" hint-placeholder-count="6">
+              <div onClick="{{ cn.open }}" style="background:#121316;border:1px solid rgba(255,255,255,.07);border-radius:16px;padding:16px 18px;cursor:pointer;" style-hover="border-color:rgba(255,255,255,.2);background:#15161A;">
+                <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">
+                  <div style="{{ cn.iconBox }}"><span style="display:flex;width:18px;height:18px;" dangerouslySetInnerHTML="{{ cn.icon }}"></span></div>
+                  <div style="flex:1;">
+                    <div style="font-weight:800;font-size:14px;">{{ cn.name }}</div>
+                    <span style="{{ cn.stStyle }}">{{ cn.st }}</span>
+                  </div>
+                  <span style="color:#5C6066;">→</span>
+                </div>
+                <div style="font-size:11.5px;color:#9BA0A6;line-height:1.5;">{{ cn.desc }}</div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+        </sc-if>
+        <sc-if value="{{ hasConnDetail }}" hint-placeholder-val="{{ false }}">
+        <div>
+          <div onClick="{{ closeConn }}" style="display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:700;color:#9BA0A6;cursor:pointer;margin-bottom:14px;" style-hover="color:#F2F3F0;">← {{ t.allConnections }}</div>
+          <div style="display:flex;align-items:center;gap:14px;margin-bottom:16px;">
+            <div style="{{ connDetailIconBox }}"><span style="display:flex;width:22px;height:22px;" dangerouslySetInnerHTML="{{ connDetailData.icon }}"></span></div>
+            <div>
+              <div style="font-family:'Unbounded';font-weight:600;font-size:19px;">{{ connDetailData.name }}</div>
+              <div style="font-size:11.5px;color:#9BA0A6;">{{ connDetailData.desc }}</div>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:12px;">
+            <div style="background:#121316;border:1px solid rgba(255,255,255,.07);border-radius:16px;padding:18px;display:flex;flex-direction:column;gap:14px;">
+              <div style="font-weight:800;font-size:13.5px;">{{ cfsTitle }}</div>
+              <sc-if value="{{ hasCurConfig }}" hint-placeholder-val="{{ false }}">
+              <div style="background:rgba(74,222,128,.05);border:1px solid rgba(74,222,128,.2);border-radius:12px;padding:12px 14px;">
+                <div style="display:flex;align-items:center;gap:7px;margin-bottom:9px;"><span style="width:7px;height:7px;border-radius:50%;background:#4ADE80;"></span><span style="font-family:'JetBrains Mono';font-size:9px;letter-spacing:1.4px;color:#4ADE80;">{{ t.curConfig }}</span></div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px 14px;">
+                  <sc-for list="{{ cfsCurrent }}" as="cc" hint-placeholder-count="4">
+                    <div style="display:flex;justify-content:space-between;gap:8px;font-size:11px;"><span style="color:#6B7076;">{{ cc.k }}</span><span style="font-weight:700;color:#C9CDD1;text-align:right;">{{ cc.v }}</span></div>
+                  </sc-for>
+                </div>
+              </div>
+              </sc-if>
+              <sc-if value="{{ hasConnList }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;flex-direction:column;gap:6px;">
+                <sc-for list="{{ connList }}" as="cl" hint-placeholder-count="1">
+                  <div style="display:flex;align-items:center;gap:10px;background:#0D0E11;border:1px solid rgba(255,255,255,.07);border-radius:10px;padding:9px 12px;">
+                    <span style="width:7px;height:7px;border-radius:50%;background:#4ADE80;flex:none;"></span>
+                    <div style="flex:1;min-width:0;"><div style="font-weight:700;font-size:12px;">{{ cl.name }}</div><div style="font-size:10px;color:#6B7076;">{{ cl.meta }}</div></div>
+                    <span style="font-size:11px;font-weight:700;color:#9BA0A6;cursor:pointer;" style-hover="color:#F87171;">{{ t.disconnect }}</span>
+                  </div>
+                </sc-for>
+              </div>
+              </sc-if>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                <sc-for list="{{ connFields }}" as="cf" hint-placeholder-count="4">
+                  <div style="{{ cf.wrap }}">
+                    <sc-if value="{{ cf.isText }}" hint-placeholder-val="{{ true }}">
+                      <div style="{{ fieldLbl }}">{{ cf.lbl }}</div>
+                      <input value="{{ cf.val }}" placeholder="{{ cf.ph }}" style="{{ inputSt }}">
+                    </sc-if>
+                    <sc-if value="{{ cf.isSelect }}" hint-placeholder-val="{{ false }}">
+                      <div style="{{ fieldLbl }}">{{ cf.lbl }}</div>
+                      <div style="display:flex;align-items:center;justify-content:space-between;background:#0D0E11;border:1px solid rgba(255,255,255,.09);border-radius:10px;padding:9px 12px;cursor:pointer;font-size:12.5px;">{{ cf.val }}<span style="color:#6B7076;">▾</span></div>
+                    </sc-if>
+                    <sc-if value="{{ cf.isToggle }}" hint-placeholder-val="{{ false }}">
+                      <div style="display:flex;align-items:center;justify-content:space-between;background:#0D0E11;border:1px solid rgba(255,255,255,.07);border-radius:10px;padding:10px 12px;">
+                        <div><div style="font-weight:700;font-size:12px;">{{ cf.lbl }}</div><div style="font-size:10px;color:#6B7076;">{{ cf.sub }}</div></div>
+                        <div style="{{ cf.knob }}"><div style="{{ cf.dot }}"></div></div>
+                      </div>
+                    </sc-if>
+                    <sc-if value="{{ cf.isNote }}" hint-placeholder-val="{{ false }}">
+                      <div style="background:rgba(56,189,248,.06);border:1px solid rgba(56,189,248,.2);border-radius:10px;padding:10px 12px;font-size:11px;color:#C9CDD1;line-height:1.55;">{{ cf.text }}</div>
+                    </sc-if>
+                  </div>
+                </sc-for>
+              </div>
+              <div style="display:flex;gap:8px;">
+                <div style="{{ cfsPrimStyle }}">{{ cfsPrim }}</div>
+                <sc-if value="{{ cfsHasCopy }}" hint-placeholder-val="{{ false }}">
+                  <div style="display:flex;align-items:center;gap:6px;border:1px solid rgba(255,255,255,.12);border-radius:9px;padding:9px 12px;font-size:12px;font-weight:700;color:#9BA0A6;cursor:pointer;" style-hover="border-color:rgba(255,255,255,.3);"><span style="display:flex;width:13px;height:13px;" dangerouslySetInnerHTML="{{ icoCopy }}"></span>{{ t.copy }}</div>
+                </sc-if>
+              </div>
+            </div>
+            <div style="background:#121316;border:1px solid rgba(255,255,255,.07);border-radius:16px;padding:18px;">
+              <div style="font-weight:800;font-size:13.5px;margin-bottom:10px;">{{ t.howItWorks }}</div>
+              <div style="font-size:12px;color:#9BA0A6;line-height:1.65;">{{ connDetailData.help }}</div>
+              <div style="margin-top:12px;"><a href="#" style="font-size:12px;font-weight:700;">{{ t.wikiGuide }} →</a></div>
+            </div>
+          </div>
+        </div>
+        </sc-if>
+      </div>
+    </sc-if>
+
+    <!-- ──────────── КОМАНДА ──────────── -->
+    <sc-if value="{{ isTeam }}" hint-placeholder-val="{{ false }}">
+      <div style="animation:mmFade .25s ease;" data-screen-label="Команда">
+        <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:14px;flex-wrap:wrap;margin-bottom:16px;">
+          <div>
+            <div style="font-family:'Unbounded';font-weight:600;font-size:20px;margin-bottom:5px;">{{ t.navTeam }}</div>
+            <div style="font-size:12.5px;color:#9BA0A6;">{{ t.teamDesc }}</div>
+          </div>
+          <div onClick="{{ openNewOp }}" style="display:flex;align-items:center;gap:8px;background:#D7F452;color:#171A05;font-weight:800;font-size:13px;border-radius:10px;padding:10px 16px;cursor:pointer;" style-hover="background:#E8FA8A;">+ {{ t.addOperator }}</div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:16px;">
+          <sc-for list="{{ teamKpi }}" as="tk" hint-placeholder-count="4">
+            <div style="background:#121316;border:1px solid rgba(255,255,255,.07);border-radius:14px;padding:14px 16px;">
+              <div style="font-family:'JetBrains Mono';font-size:9px;letter-spacing:1.8px;color:#6B7076;margin-bottom:8px;">{{ tk.label }}</div>
+              <div style="font-family:'Unbounded';font-weight:600;font-size:17px;">{{ tk.value }}</div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:10px;">
+          <sc-for list="{{ members }}" as="mb" hint-placeholder-count="2">
+            <div style="background:#121316;border:1px solid rgba(255,255,255,.07);border-radius:16px;padding:14px 18px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+              <div style="{{ mb.avStyle }}">{{ mb.initial }}</div>
+              <div style="min-width:130px;">
+                <div style="font-weight:800;font-size:13.5px;">{{ mb.login }}</div>
+                <div style="font-size:11px;color:#9BA0A6;">{{ mb.meta }}</div>
+              </div>
+              <div style="flex:1;display:flex;gap:5px;flex-wrap:wrap;min-width:200px;">
+                <sc-for list="{{ mb.rights }}" as="r" hint-placeholder-count="4">
+                  <span style="{{ r.style }}">{{ r.label }}</span>
+                </sc-for>
+              </div>
+              <div style="display:flex;gap:14px;align-items:center;">
+                <div style="text-align:right;"><div style="font-family:'JetBrains Mono';font-size:12px;font-weight:600;color:#D7F452;">{{ mb.sla }}</div><div style="font-size:9.5px;color:#6B7076;">SLA</div></div>
+                <div style="text-align:right;"><div style="font-family:'JetBrains Mono';font-size:12px;font-weight:600;">{{ mb.replies }}</div><div style="font-size:9.5px;color:#6B7076;">{{ t.replies }}</div></div>
+                <div style="text-align:right;"><div style="font-family:'JetBrains Mono';font-size:12px;font-weight:600;color:#F0A8C8;">{{ mb.tribute }}</div><div style="font-size:9.5px;color:#6B7076;">Tribute</div></div>
+                <span style="font-size:11.5px;font-weight:700;color:#9BA0A6;cursor:pointer;border:1px solid rgba(255,255,255,.12);border-radius:8px;padding:6px 12px;" style-hover="color:#F2F3F0;border-color:rgba(255,255,255,.3);">{{ t.edit }}</span>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="margin-top:16px;background:#121316;border:1px solid rgba(255,255,255,.07);border-radius:16px;padding:16px 18px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+            <span style="font-weight:800;font-size:14px;">{{ t.templates }}</span>
+            <span style="font-size:11.5px;font-weight:700;color:#D7F452;cursor:pointer;">+ {{ t.addTemplate }}</span>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px;">
+            <sc-for list="{{ templates }}" as="tp" hint-placeholder-count="2">
+              <div style="background:#0D0E11;border:1px solid rgba(255,255,255,.07);border-radius:12px;padding:12px 14px;">
+                <div style="font-weight:700;font-size:12.5px;margin-bottom:4px;">{{ tp.title }}</div>
+                <div style="font-size:11px;color:#9BA0A6;line-height:1.5;">{{ tp.body }}</div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ──────────── НОВЫЙ ОПЕРАТОР ──────────── -->
+    <sc-if value="{{ isNewOperator }}" hint-placeholder-val="{{ false }}">
+      <div style="animation:mmFade .25s ease;max-width:820px;" data-screen-label="Новый оператор">
+        <div onClick="{{ closeNewOp }}" style="display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:700;color:#9BA0A6;cursor:pointer;margin-bottom:14px;" style-hover="color:#F2F3F0;">← {{ t.navTeam }}</div>
+        <div style="font-family:'Unbounded';font-weight:600;font-size:20px;margin-bottom:16px;">{{ t.newOperator }}</div>
+
+        <div style="background:#121316;border:1px solid rgba(255,255,255,.07);border-radius:16px;padding:18px;margin-bottom:12px;">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+            <div>
+              <div style="{{ fieldLbl }}">{{ t.opLogin }}</div>
+              <input placeholder="{{ t.opLoginPh }}" style="{{ inputSt }}">
+            </div>
+            <div>
+              <div style="{{ fieldLbl }}">{{ t.opPass }}</div>
+              <input type="password" value="" style="{{ inputSt }}">
+            </div>
+          </div>
+        </div>
+
+        <div style="background:#121316;border:1px solid rgba(255,255,255,.07);border-radius:16px;padding:18px;margin-bottom:12px;">
+          <div style="font-weight:800;font-size:14px;margin-bottom:12px;">{{ t.opRights }}</div>
+          <div style="display:flex;flex-direction:column;gap:8px;">
+            <sc-for list="{{ opRightRows }}" as="rr" hint-placeholder-count="5">
+              <div onClick="{{ rr.toggle }}" style="{{ rr.rowStyle }}">
+                <span style="font-family:'JetBrains Mono';font-size:11px;letter-spacing:1px;color:#C9CDD1;text-transform:uppercase;">{{ rr.label }}</span>
+                <div style="{{ rr.cb }}">✓</div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <div style="background:#121316;border:1px solid rgba(255,255,255,.07);border-radius:16px;padding:18px;margin-bottom:12px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
+            <span style="font-weight:800;font-size:14px;">{{ t.opModels }}</span>
+            <div style="width:120px;"><div style="{{ fieldLbl }}">{{ t.opTribute }}</div><input value="15" style="{{ inputSt }}"></div>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;">
+            <sc-for list="{{ opModelRows }}" as="om" hint-placeholder-count="6">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;background:#0D0E11;border:1px solid rgba(255,255,255,.07);border-radius:10px;padding:10px 12px;cursor:pointer;" style-hover="border-color:rgba(255,255,255,.2);">
+                <span style="font-family:'JetBrains Mono';font-size:11px;letter-spacing:.5px;">{{ om.name }}</span>
+                <div style="{{ om.cb }}">✓</div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <sc-if value="{{ opError }}" hint-placeholder-val="{{ false }}">
+        <div style="background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.35);border-radius:12px;padding:12px 14px;margin-bottom:12px;font-size:12px;font-weight:700;color:#F87171;">⚠ {{ t.opErr }}</div>
+        </sc-if>
+
+        <div style="display:flex;gap:8px;">
+          <div onClick="{{ saveOp }}" style="background:#D7F452;color:#171A05;font-weight:800;font-size:13px;border-radius:10px;padding:11px 20px;cursor:pointer;" style-hover="background:#E8FA8A;">{{ t.opSave }}</div>
+          <div onClick="{{ closeNewOp }}" style="border:1px solid rgba(255,255,255,.12);color:#9BA0A6;font-weight:700;font-size:13px;border-radius:10px;padding:11px 20px;cursor:pointer;" style-hover="border-color:rgba(255,255,255,.3);">{{ t.opCancel }}</div>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ──────────── WORKFLOW ──────────── -->
+    <sc-if value="{{ isWorkflow }}" hint-placeholder-val="{{ false }}">
+      <div style="animation:mmFade .25s ease;height:100%;display:flex;flex-direction:column;" data-screen-label="Workflow">
+        <div style="margin-bottom:16px;">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:5px;">
+            <div style="font-family:'Unbounded';font-weight:600;font-size:20px;">Workflow</div>
+            <span style="font-family:'JetBrains Mono';font-size:9px;letter-spacing:1px;background:rgba(215,244,82,.12);color:#D7F452;border:1px solid rgba(215,244,82,.3);padding:2px 8px;border-radius:20px;">PRO</span>
+          </div>
+          <div style="font-size:12.5px;color:#9BA0A6;">{{ t.workflowBody }}</div>
+        </div>
+        <div style="flex:1;min-height:300px;border:1.5px dashed rgba(255,255,255,.14);border-radius:18px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;background:radial-gradient(circle at 50% 40%,rgba(192,132,252,.06),transparent 70%);">
+          <div style="width:64px;height:64px;border-radius:20px;background:rgba(192,132,252,.12);color:#C084FC;display:flex;align-items:center;justify-content:center;"><span style="display:flex;width:30px;height:30px;" dangerouslySetInnerHTML="{{ icoFlow }}"></span></div>
+          <div style="text-align:center;max-width:440px;">
+            <div style="font-family:'Unbounded';font-weight:600;font-size:18px;margin-bottom:8px;">{{ t.workflowTitle }}</div>
+            <div style="font-size:12.5px;color:#9BA0A6;line-height:1.6;">{{ t.workflowBody }}</div>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <div style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:9px 16px;font-size:12.5px;font-weight:700;color:#9BA0A6;">{{ t.workflowSoon }}</div>
+            <div style="background:linear-gradient(120deg,#C084FC,#F0A8C8);border-radius:10px;padding:9px 16px;font-size:12.5px;font-weight:800;color:#1A0A14;cursor:pointer;" style-hover="filter:brightness(1.08);">{{ t.notifyMe }}</div>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    </div>
+    </div>
+
+    <!-- archive lightbox -->
+    <sc-if value="{{ hasLightbox }}" hint-placeholder-val="{{ false }}">
+      <div onClick="{{ closeLightbox }}" style="position:fixed;inset:0;background:rgba(6,7,9,.86);z-index:60;display:flex;align-items:center;justify-content:center;padding:24px;">
+        <div onClick="{{ stop }}" style="display:flex;flex-direction:column;gap:14px;max-height:92vh;max-width:min(92vw,720px);">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+            <div>
+              <div style="font-weight:800;font-size:15px;">{{ lightboxData.who }}</div>
+              <div style="font-size:11px;color:#9BA0A6;">{{ lightboxData.mode }} · {{ lightboxData.ratio }} · {{ lightboxData.when }}</div>
+            </div>
+            <div onClick="{{ closeLightbox }}" style="display:flex;align-items:center;gap:6px;border:1px solid rgba(255,255,255,.14);border-radius:9px;padding:7px 12px;font-size:12px;font-weight:700;color:#9BA0A6;cursor:pointer;" style-hover="color:#F2F3F0;border-color:rgba(255,255,255,.3);">✕ {{ t.close }}</div>
+          </div>
+          <div style="{{ lightboxData.big }}min-height:0;display:flex;align-items:center;justify-content:center;overflow:hidden;">
+            <span style="display:flex;width:48px;height:48px;color:rgba(255,255,255,.25);" dangerouslySetInnerHTML="{{ icoImage }}"></span>
+          </div>
+          <div style="display:flex;gap:10px;">
+            <div style="flex:1;display:flex;align-items:center;justify-content:center;gap:8px;background:#D7F452;color:#171A05;border-radius:11px;padding:12px;font-size:13px;font-weight:800;cursor:pointer;" style-hover="background:#E8FA8A;"><span style="display:flex;width:16px;height:16px;" dangerouslySetInnerHTML="{{ icoDownload }}"></span>{{ t.download }}</div>
+            <div style="flex:1;display:flex;align-items:center;justify-content:center;gap:8px;background:rgba(192,132,252,.12);border:1px solid rgba(192,132,252,.4);color:#C084FC;border-radius:11px;padding:12px;font-size:13px;font-weight:800;cursor:pointer;" style-hover="background:rgba(192,132,252,.2);"><span style="display:flex;width:16px;height:16px;" dangerouslySetInnerHTML="{{ icoGrid2 }}"></span>{{ t.makeCarousel }}</div>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- mobile bottom nav -->
+    <sc-if value="{{ isMobile }}" hint-placeholder-val="{{ false }}">
+      <div style="flex:none;display:flex;border-top:1px solid rgba(255,255,255,.08);background:#0D0E11;padding:6px 4px calc(6px + env(safe-area-inset-bottom));">
+        <sc-for list="{{ mobileNav }}" as="mn" hint-placeholder-count="5">
+          <div onClick="{{ mn.go }}" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 2px;cursor:pointer;border-radius:10px;">
+            <span style="display:flex;width:19px;height:19px;color:{{ mn.color }};" dangerouslySetInnerHTML="{{ mn.icon }}"></span>
+            <span style="font-size:9px;font-weight:700;color:{{ mn.color }};">{{ mn.label }}</span>
+          </div>
+        </sc-for>
+      </div>
+    </sc-if>
+
+    <!-- mobile "more" sheet -->
+    <sc-if value="{{ moreOpen }}" hint-placeholder-val="{{ false }}">
+      <div onClick="{{ closeMore }}" style="position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:50;display:flex;align-items:flex-end;">
+        <div style="width:100%;background:#131417;border-radius:20px 20px 0 0;padding:14px 14px calc(20px + env(safe-area-inset-bottom));" onClick="{{ stop }}">
+          <div style="width:36px;height:4px;border-radius:2px;background:rgba(255,255,255,.2);margin:0 auto 14px;"></div>
+          <sc-for list="{{ moreItems }}" as="mi" hint-placeholder-count="5">
+            <div onClick="{{ mi.go }}" style="display:flex;align-items:center;gap:12px;padding:12px 10px;border-radius:12px;cursor:pointer;" style-hover="background:rgba(255,255,255,.05);">
+              <span style="display:flex;width:18px;height:18px;color:#9BA0A6;" dangerouslySetInnerHTML="{{ mi.icon }}"></span>
+              <div style="flex:1;"><div style="font-weight:700;font-size:13.5px;">{{ mi.label }}</div><div style="font-size:11px;color:#6B7076;">{{ mi.desc }}</div></div>
+              <span style="color:#5C6066;">→</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </sc-if>
+
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;forceMobile&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: false, &quot;tsType&quot;: &quot;boolean&quot;, &quot;section&quot;: &quot;Просмотр&quot;}}">
+class Component extends DCLogic {
+  state = {
+    page: 'overview', lang: 'ru', imgMode: 'ref',
+    connDetail: null, charDetail: null, donTab: 'overview',
+    tier: 'standard', period: 'month', moreOpen: false,
+    isMobile: false, chatOpen: 0,
+    chatFilter: 'all', chatPlatform: 'all', mobileChat: false,
+    msgReact: null, emojiOpen: false, reactions: {},
+    contentMode: 'sfw', aiModel: 'nano', carouselCount: 4, slotSource: {},
+    hasFirstFrame: 'yes', vidQuality: '1080', vidFormat: '9:16', vidTime: '5',
+    charTab: 'photos', lightbox: null,
+    showGenError: false, ffState: 'idle', photoMenu: null,
+    opRights: { chat: true, studio: true, models: true, keys: false, billing: false },
+    opError: false, mediaStep: null,
+    noteFormOpen: false, noteTag: 0
+  };
+  _ffTimer = null;
+
+  componentDidMount() {
+    this._onResize = () => this.setState({ isMobile: (this.props.forceMobile ?? false) || window.innerWidth < 760 });
+    window.addEventListener('resize', this._onResize);
+    this._onResize();
+  }
+  componentWillUnmount() { window.removeEventListener('resize', this._onResize); }
+
+  I(paths, fill) {
+    return { __html: '<svg viewBox="0 0 24 24" width="100%" height="100%" fill="' + (fill ? 'currentColor' : 'none') + '" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' + paths + '</svg>' };
+  }
+
+  renderVals() {
+    const s = this.state;
+    const setS = (o) => this.setState(o);
+    const isMobile = s.isMobile;
+    const isNarrow = !isMobile && typeof window !== 'undefined' && window.innerWidth < 1120;
+    const lang = s.lang;
+
+    // ─── i18n ───
+    const RU = {
+      credits: 'кредитов', topup: 'Пополнить', owner: 'Владелец', hello: 'С возвращением, Ренат',
+      newFrame: 'Новый кадр', openDialogs: 'Открыть диалоги',
+      kpiCredits: 'КРЕДИТЫ', kpiPlan: 'ПОДПИСКА', kpiDonations: 'ДОНАТЫ MODELMATE', kpiDialogs: 'ДИАЛОГИ',
+      framesLeft: 'кадров', active: 'АКТИВНА', until: 'до', toPayout: 'к выплате', allRead: 'все прочитаны', teamReplies: 'ответов',
+      studioBlock: 'СТУДИЯ — ЧТО ХОТИТЕ СДЕЛАТЬ?',
+      startTitle: 'С чего начать?', startDesc: 'Пять шагов от регистрации до первого дохода.', openGuide: 'Открыть инструкцию',
+      guideIntro: 'Короткая пошаговая инструкция: что и зачем делать. К каждому шагу — короткое видео и кнопка перехода в нужный раздел.',
+      guideOutro: 'Застряли на каком-то шаге? Полные гайды и частые вопросы — в базе знаний.', guidePlaceholder: 'материал появится здесь',
+      recentDialogs: 'Недавние диалоги', recentFrames: 'Недавние кадры', all: 'Все', toStudio: 'В студию',
+      framesHint: 'Кадры хранятся на сервере ~4 дня — скачивайте важное сразу.',
+      navOverview: 'Обзор', navDialogs: 'Диалоги', navImages: 'Картинки', navVideo: 'Видео', navCharacters: 'Персонажи',
+      navDonations: 'Донаты и выплаты', navBilling: 'Тариф и баланс', navConnections: 'Подключения', navTeam: 'Команда', navWorkflow: 'Workflow',
+      grpWork: 'Работа', grpStudio: 'Студия', grpMoney: 'Финансы', grpSettings: 'Настройки', fullCycle: 'СЕРВИС ПОЛНОГО ЦИКЛА',
+      contentType: 'ТИП КОНТЕНТА', aiModel: 'МОДЕЛЬ ГЕНЕРАЦИИ (AI-движок)', frames: 'КОЛ-ВО КАДРОВ',
+      refVideo: 'РЕФЕРЕНСНОЕ ВИДЕО', hasFirstFrame: 'У вас есть первый кадр?', firstFrame: 'ПЕРВЫЙ КАДР', genFirstFrame: 'Сгенерировать первый кадр', vidQuality: 'КАЧЕСТВО', dropVideo: 'Перетащите видео или нажмите — MP4 до 30 с',
+      download: 'Скачать', makeCarousel: 'Сделать карусель', close: 'Закрыть', created: 'создан',
+      photoTags: 'Теги фото (назначаются при сохранении)', addPhoto: 'Добавить фото', uploadFirst: 'Загрузить первый кадр',
+      workflowTitle: 'Workflow — визуальный конструктор', workflowBody: 'Для продвинутых: соберите цепочку из генераций, свапов и постобработки в узловом редакторе и запускайте её одной кнопкой. Раздел на подключении к Pro-тарифу.',
+      workflowSoon: 'Скоро в Pro', notifyMe: 'Уведомить о запуске',
+      exifTitle: 'Экспорт «как с телефона»', exifHint: 'На сохранённые кадры студии: шум, JPEG и EXIF. Сначала эталоны с телефона (ниже), иначе пресет из списка. Фронталка или основная камера выбирается при каждой генерации.',
+      exifRefs: 'Эталоны EXIF с телефона', frontCam: 'ФРОНТАЛЬНАЯ КАМЕРА', mainCam: 'ОСНОВНАЯ КАМЕРА', chooseFile: 'Выберите файл', fromGallery: 'из галереи (не из мессенджера)', backCamPhoto: 'обычное фото с задней камеры',
+      camPreset: 'ПРЕСЕТ КАМЕРЫ (ЗАПАСНОЙ)', latGeo: 'ШИРОТА (ГЕО)', lonGeo: 'ДОЛГОТА (ГЕО)', charHistoryTitle: 'Что делали с этим персонажем',
+      errImgTitle: 'Заполните перед генерацией:', errNoRef: 'Загрузите референс-кадр', errNoChar: 'Выберите персонажа', errNoPrompt: 'Опишите сцену в промпте', errFix: 'Проверьте выделенные поля',
+      newOperator: 'Новый участник', opLogin: 'ЛОГИН (латиница, цифры, _ · 3–32)', opPass: 'ПАРОЛЬ (мин. 8)', opLoginPh: 'например operator_1', opRights: 'Права доступа', opModels: 'Доступ к персонажам', opTribute: 'ДОЛЯ TRIBUTE (%)', opSave: 'Создать участника', opCancel: 'Отмена',
+      rChat: 'Диалоги и ответы клиентам', rStudio: 'Генерация промпта и картинок (студия)', rModels: 'Персонажи (создание, фото, правки)', rKeys: 'Ключи Telegram, Fanvue, WaveSpeed', rBilling: 'Оплата и биллинг',
+      opErr: 'Заполните логин и пароль и отметьте хотя бы одно право',
+      curConfig: 'Текущая настройка', changeTag: 'Изменить тег', setTag: 'Тег фото', deletePhoto: 'Удалить фото', apply: 'Применить',
+      dlgBlocked: 'Заблокировал(а)', dlgDeleted: 'Удалил(а) чат', dlgBlockedHint: 'Фан ограничил доступ — ответы не доставляются.', deleteDialog: 'Удалить диалог',
+      genFirstFrame2: 'Генерируем первый кадр…', ffDone: 'Первый кадр готов', regen: 'Перегенерировать',
+      searchDialogs: 'Поиск по диалогам…', persona: 'персонаж', replyLang: 'язык ответа',
+      msgPlaceholder: 'Сообщение на русском — уйдёт перевод на язык фана…', send: 'Отправить',
+      attach: 'Прикрепить картинку', noDialogs: 'Нет диалогов под фильтр',
+      fanNotes: 'Досье фана', analysis: 'анализ', addNote: 'Заметка', noteTag: 'ТЕГ ЗАМЕТКИ', noteTextPh: 'Что важно помнить о фане…',
+      imagesDesc: 'Пять способов создать кадр персонажа. Выберите режим — подсказки внутри.',
+      videoDesc: 'Оживите готовый кадр: выберите его из архива и опишите движение.',
+      charactersDesc: 'Персонажи — это ваши виртуальные модели (девушки): фото-референсы, описание внешности, персона для AI-компаньона и EXIF «как с телефона».',
+      newCharacter: 'Новый персонаж', allCharacters: 'Все персонажи',
+      charSub: 'Персонаж · подключена к Telegram и Fanvue',
+      charPhotos: 'Фото-референсы', charPhotosHint: 'Загрузите несколько кадров и отметьте тип: selfie, main, рост. Они используются студией и EXIF-пресетом.',
+      charAppearance: 'Описание внешности', genFromPhoto: 'Сгенерировать из фото',
+      namingTitle: 'Про названия', namingBody: '«Персонаж» — ваша девушка/виртуальная модель. Нейросети-генераторы (Nano Banana, GPT Image…) мы называем «AI-движок» — они выбираются внутри режимов студии.',
+      donationsDesc: 'Platform-донаты через аккаунт Tribute ModelMate: ссылки, входящие, выплаты (комиссия 2%).',
+      donTabOverview: 'Обзор и выплаты', donTabCreate: 'Мои донаты',
+      payout: 'Вывод средств', payoutHint: 'USDT TRC20/ERC20 или TON. Холд Tribute: донаты 1–15 числа доступны с 16-го. Минимум 500 ₽.',
+      requestPayout: 'Заявка на выплату', donLinks: 'Ссылки на донат', lastIncoming: 'Последние входящие',
+      holdPolicy: 'Политика холда и модерации —',
+      newDonation: 'Новый донат', donTitle: 'Заголовок', donDesc: 'Описание', minSum: 'Мин. сумма',
+      saveDraft: 'Черновик', toModeration: 'На модерацию', myDonations: 'Мои донаты',
+      billingDesc: 'Подписка, кредиты и оплата. 1 кредит = 3.6 ₽. Кредиты списываются за генерации.',
+      currentPlan: 'Текущий план', balance: 'баланс', cr: 'кр.', referral: 'Реферальная программа',
+      referralHint: 'Друг по ссылке: +25 кр. Дальше — 10% с каждой оплаты приглашённого в кредитах.',
+      copy: 'Копировать', invited: 'Приглашено', earned: 'Заработано',
+      plans: 'Сменить план', month: 'Месяц', year: 'Год', payCard: 'Картой ₽', payCredits: 'Кредитами',
+      creditPacks: 'Пакеты кредитов', history: 'История операций',
+      connectionsDesc: 'Каналы, ключи и AI-компаньон. Кликните на карточку, чтобы настроить.',
+      allConnections: 'Все подключения', connSettings: 'Настройки', linkedCharacter: 'ПРИВЯЗАННЫЙ ПЕРСОНАЖ',
+      companion: 'компаньон', companionHint: 'Автоответы от лица персонажа',
+      howItWorks: 'Как это работает', wikiGuide: 'Инструкция в Wiki', disconnect: 'Отключить',
+      teamDesc: 'Операторы workspace: права, персонажи, KPI и доля Tribute.',
+      addOperator: 'Оператор', replies: 'ответы', edit: 'Настроить',
+      templates: 'Шаблоны ответов', addTemplate: 'Шаблон',
+      character: 'ПЕРСОНАЖ', format: 'ФОРМАТ КАДРА', prompt: 'ПРОМПТ', optional: 'необязательно',
+      generate: 'Сгенерировать', archive: 'Архив', retention: 'хранится ~4 дня',
+      toVideo: 'в видео', sourceFrame: 'ИСХОДНЫЙ КАДР', orUpload: '…или загрузите свой файл',
+      motionPrompt: 'ДВИЖЕНИЕ', motionHint: 'She slowly turns to camera and smiles…', duration: 'ДЛИТЕЛЬНОСТЬ',
+      generateVideo: 'Создать видео', save: 'Сохранить', delete: 'Удалить',
+      srcUpload: 'Загрузить', srcArchive: 'Из архива', pickFromArchive: 'Выбрать кадр из архива'
+    };
+    const EN = {
+      credits: 'credits', topup: 'Top up', owner: 'Owner', hello: 'Welcome back, Renat',
+      newFrame: 'New frame', openDialogs: 'Open dialogs',
+      kpiCredits: 'CREDITS', kpiPlan: 'SUBSCRIPTION', kpiDonations: 'MODELMATE DONATIONS', kpiDialogs: 'DIALOGS',
+      framesLeft: 'frames', active: 'ACTIVE', until: 'until', toPayout: 'payable', allRead: 'all read', teamReplies: 'replies',
+      studioBlock: 'STUDIO — WHAT DO YOU WANT TO MAKE?',
+      startTitle: 'Where to start?', startDesc: 'Five steps from sign-up to first income.', openGuide: 'Open guide',
+      guideIntro: 'A short step-by-step: what to do and why. Each step has a quick video and a button to jump to the right section.',
+      guideOutro: 'Stuck on a step? Full guides and FAQ are in the knowledge base.', guidePlaceholder: 'media goes here',
+      recentDialogs: 'Recent dialogs', recentFrames: 'Recent frames', all: 'All', toStudio: 'Studio',
+      framesHint: 'Frames are stored ~4 days on the server — download what matters.',
+      navOverview: 'Overview', navDialogs: 'Dialogs', navImages: 'Images', navVideo: 'Video', navCharacters: 'Characters',
+      navDonations: 'Donations & payouts', navBilling: 'Plan & balance', navConnections: 'Connections', navTeam: 'Team', navWorkflow: 'Workflow',
+      grpWork: 'Work', grpStudio: 'Studio', grpMoney: 'Money', grpSettings: 'Settings', fullCycle: 'FULL-CYCLE SERVICE',
+      contentType: 'CONTENT TYPE', aiModel: 'GENERATION MODEL (AI engine)', frames: 'FRAME COUNT',
+      refVideo: 'REFERENCE VIDEO', hasFirstFrame: 'Do you have a first frame?', firstFrame: 'FIRST FRAME', genFirstFrame: 'Generate first frame', vidQuality: 'QUALITY', dropVideo: 'Drop a video or click — MP4 up to 30s',
+      download: 'Download', makeCarousel: 'Make carousel', close: 'Close', created: 'created',
+      photoTags: 'Photo tags (assigned on save)', addPhoto: 'Add photo', uploadFirst: 'Upload first frame',
+      workflowTitle: 'Workflow — visual builder', workflowBody: 'For power users: chain generations, swaps and post-processing in a node editor and run it with one click. Available on the Pro plan.',
+      workflowSoon: 'Coming to Pro', notifyMe: 'Notify me at launch',
+      exifTitle: 'Export "like a phone"', exifHint: 'Applied to saved studio frames: noise, JPEG and EXIF. Phone reference files first (below), otherwise a preset from the list. Front or main camera is chosen per generation.',
+      exifRefs: 'Phone EXIF references', frontCam: 'FRONT CAMERA', mainCam: 'MAIN CAMERA', chooseFile: 'Choose file', fromGallery: 'from gallery (not a messenger)', backCamPhoto: 'plain photo from the rear camera',
+      camPreset: 'CAMERA PRESET (FALLBACK)', latGeo: 'LATITUDE (GEO)', lonGeo: 'LONGITUDE (GEO)', charHistoryTitle: 'What was done with this character',
+      errImgTitle: 'Fill in before generating:', errNoRef: 'Upload a reference frame', errNoChar: 'Pick a character', errNoPrompt: 'Describe the scene in the prompt', errFix: 'Check the highlighted fields',
+      newOperator: 'New member', opLogin: 'LOGIN (latin, digits, _ · 3–32)', opPass: 'PASSWORD (min. 8)', opLoginPh: 'e.g. operator_1', opRights: 'Access rights', opModels: 'Character access', opTribute: 'TRIBUTE SHARE (%)', opSave: 'Create member', opCancel: 'Cancel',
+      rChat: 'Dialogs and client replies', rStudio: 'Prompt & image generation (studio)', rModels: 'Characters (create, photos, edits)', rKeys: 'Telegram, Fanvue, WaveSpeed keys', rBilling: 'Payments & billing',
+      opErr: 'Fill in login and password and check at least one right',
+      curConfig: 'Current configuration', changeTag: 'Change tag', setTag: 'Photo tag', deletePhoto: 'Delete photo', apply: 'Apply',
+      dlgBlocked: 'Blocked you', dlgDeleted: 'Deleted the chat', dlgBlockedHint: 'The fan restricted access — replies are not delivered.', deleteDialog: 'Delete dialog',
+      genFirstFrame2: 'Generating first frame…', ffDone: 'First frame ready', regen: 'Regenerate',
+      searchDialogs: 'Search dialogs…', persona: 'character', replyLang: 'reply language',
+      msgPlaceholder: 'Type in Russian — it will be translated for the fan…', send: 'Send',
+      attach: 'Attach image', noDialogs: 'No dialogs match the filter',
+      fanNotes: 'Fan dossier', analysis: 'analysis', addNote: 'Note', noteTag: 'NOTE TAG', noteTextPh: 'What to remember about the fan…',
+      imagesDesc: 'Five ways to create a character frame. Pick a mode — hints inside.',
+      videoDesc: 'Animate a finished frame: pick it from the archive and describe the motion.',
+      charactersDesc: 'Characters are your virtual models: photo references, appearance description, AI companion persona and phone-like EXIF.',
+      newCharacter: 'New character', allCharacters: 'All characters',
+      charSub: 'Character · connected to Telegram and Fanvue',
+      charPhotos: 'Photo references', charPhotosHint: 'Upload several frames and tag the kind: selfie, main, full-height. Used by the studio and EXIF preset.',
+      charAppearance: 'Appearance description', genFromPhoto: 'Generate from photos',
+      namingTitle: 'About naming', namingBody: '"Character" is your girl / virtual model. Generator neural networks (Nano Banana, GPT Image…) are called "AI engines" — picked inside studio modes.',
+      donationsDesc: 'Platform donations via the ModelMate Tribute account: links, incoming, payouts (2% fee).',
+      donTabOverview: 'Overview & payouts', donTabCreate: 'My donations',
+      payout: 'Withdraw', payoutHint: 'USDT TRC20/ERC20 or TON. Tribute hold: donations from the 1st–15th unlock on the 16th. Min 500 ₽.',
+      requestPayout: 'Request payout', donLinks: 'Donation links', lastIncoming: 'Recent incoming',
+      holdPolicy: 'Hold & moderation policy —',
+      newDonation: 'New donation', donTitle: 'Title', donDesc: 'Description', minSum: 'Min amount',
+      saveDraft: 'Draft', toModeration: 'Submit', myDonations: 'My donations',
+      billingDesc: 'Subscription, credits and payments. 1 credit = 3.6 ₽. Credits are spent on generations.',
+      currentPlan: 'Current plan', balance: 'balance', cr: 'cr.', referral: 'Referral program',
+      referralHint: 'Friend via link: +25 cr. Then 10% of every payment of the invitee, in credits.',
+      copy: 'Copy', invited: 'Invited', earned: 'Earned',
+      plans: 'Change plan', month: 'Month', year: 'Year', payCard: 'Card ₽', payCredits: 'Credits',
+      creditPacks: 'Credit packs', history: 'Transaction history',
+      connectionsDesc: 'Channels, keys and AI companion. Click a card to configure.',
+      allConnections: 'All connections', connSettings: 'Settings', linkedCharacter: 'LINKED CHARACTER',
+      companion: 'companion', companionHint: 'Auto-replies as the character',
+      howItWorks: 'How it works', wikiGuide: 'Wiki guide', disconnect: 'Disconnect',
+      teamDesc: 'Workspace operators: rights, characters, KPI and Tribute share.',
+      addOperator: 'Operator', replies: 'replies', edit: 'Configure',
+      templates: 'Reply templates', addTemplate: 'Template',
+      character: 'CHARACTER', format: 'FRAME FORMAT', prompt: 'PROMPT', optional: 'optional',
+      generate: 'Generate', archive: 'Archive', retention: 'stored ~4 days',
+      toVideo: 'to video', sourceFrame: 'SOURCE FRAME', orUpload: '…or upload your own file',
+      motionPrompt: 'MOTION', motionHint: 'She slowly turns to camera and smiles…', duration: 'DURATION',
+      generateVideo: 'Create video', save: 'Save', delete: 'Delete',
+      srcUpload: 'Upload', srcArchive: 'From archive', pickFromArchive: 'Pick a frame from archive'
+    };
+    const t = lang === 'ru' ? RU : EN;
+
+    // ─── icons ───
+    const icoGrid = this.I('<rect x="3" y="3" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="2"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="2"/>');
+    const icoChat = this.I('<path d="M21 12c0 4.4-4 8-9 8-1.2 0-2.4-.2-3.4-.6L3 21l1.7-4.1C3.6 15.5 3 13.8 3 12c0-4.4 4-8 9-8s9 3.6 9 8z"/>');
+    const icoImage = this.I('<rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="1.8"/><path d="M3.5 18l5-5 3.5 3.5L16 12l4.5 5"/>');
+    const icoFilm = this.I('<rect x="3" y="5" width="18" height="14" rx="3"/><path d="M10 9.5l5 2.5-5 2.5z"/>');
+    const icoStar = this.I('<circle cx="12" cy="8.5" r="3.6"/><path d="M5 20c.8-3.4 3.6-5.4 7-5.4s6.2 2 7 5.4"/>');
+    const icoHeart = this.I('<path d="M12 20.5S4 15.3 4 9.8C4 7 6.2 5 8.7 5c1.4 0 2.6.7 3.3 1.7C12.7 5.7 13.9 5 15.3 5 17.8 5 20 7 20 9.8c0 5.5-8 10.7-8 10.7z"/>');
+    const icoCard = this.I('<rect x="3" y="5.5" width="18" height="13" rx="3"/><path d="M3 10h18"/><path d="M7 15h4"/>');
+    const icoPlug = this.I('<path d="M9 7V3.5M15 7V3.5"/><path d="M7 7h10v4a5 5 0 0 1-10 0z"/><path d="M12 16v4.5"/>');
+    const icoTeam = this.I('<circle cx="9" cy="9" r="3.2"/><path d="M3.5 19.5c.6-2.9 2.9-4.6 5.5-4.6s4.9 1.7 5.5 4.6"/><circle cx="17" cy="10" r="2.5"/><path d="M16 15.2c2.3.2 4 1.7 4.5 4.3"/>');
+    const icoBolt = this.I('<path d="M13 2.5L5 13.5h6l-1 8 9-11.5h-6z"/>');
+    const icoSpark = this.I('<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M18.5 15.5l.9 2.6 2.6.9-2.6.9-.9 2.6-.9-2.6-2.6-.9 2.6-.9z"/>');
+    const icoUpload = this.I('<path d="M12 16V5"/><path d="M7.5 9L12 4.5 16.5 9"/><path d="M4 16.5v1.5A2.5 2.5 0 0 0 6.5 20.5h11a2.5 2.5 0 0 0 2.5-2.5v-1.5"/>');
+    const icoCopy = this.I('<rect x="8.5" y="8.5" width="12" height="12" rx="2.5"/><path d="M15.5 8.5V6a2.5 2.5 0 0 0-2.5-2.5H6A2.5 2.5 0 0 0 3.5 6v7A2.5 2.5 0 0 0 6 15.5h2.5"/>');
+    const icoPlay = this.I('<path d="M8 5.5l11 6.5-11 6.5z"/>', true);
+    const icoFace = this.I('<circle cx="12" cy="12" r="8.5"/><path d="M8.5 10.2v1.2M15.5 10.2v1.2"/><path d="M8.5 15c1 1.2 2.2 1.8 3.5 1.8s2.5-.6 3.5-1.8"/>');
+    const icoShirt = this.I('<path d="M8 4L4 7.5l2 3 2-1.2V20h8v-10.7l2 1.2 2-3L16 4c-1 1.2-2.4 1.8-4 1.8S9 5.2 8 4z"/>');
+    const icoPin = this.I('<path d="M12 21s-6.5-5.6-6.5-10.5A6.5 6.5 0 0 1 12 4a6.5 6.5 0 0 1 6.5 6.5C18.5 15.4 12 21 12 21z"/><circle cx="12" cy="10.5" r="2.3"/>');
+    const icoText = this.I('<path d="M4 6h16M4 12h16M4 18h9"/>');
+    const icoGrid2 = this.I('<rect x="3" y="3" width="7" height="18" rx="2"/><rect x="14" y="3" width="7" height="18" rx="2"/>');
+    const icoFlow = this.I('<rect x="3" y="4" width="6" height="5" rx="1.5"/><rect x="15" y="4" width="6" height="5" rx="1.5"/><rect x="9" y="15" width="6" height="5" rx="1.5"/><path d="M6 9v2.5a2 2 0 0 0 2 2h1M18 9v2.5a2 2 0 0 1-2 2h-1"/>');
+    const icoDownload = this.I('<path d="M12 4v11"/><path d="M7.5 10.5L12 15l4.5-4.5"/><path d="M4 18.5h16"/>');
+    const icoZoom = this.I('<circle cx="11" cy="11" r="7"/><path d="M16 16l4.5 4.5M8.5 11h5M11 8.5v5"/>');
+    const icoClip = this.I('<path d="M20 11.5l-8 8a5 5 0 0 1-7-7l8.5-8.5a3 3 0 0 1 4.3 4.3L9 12.7a1.2 1.2 0 0 1-1.7-1.7L15 3.5"/>');
+    const icoSendArrow = this.I('<path d="M5 12l15-7-6 16-3-6z"/><path d="M11 15l3-6"/>');
+    const icoLayers = this.I('<path d="M12 3.5L21 8.5l-9 5-9-5z"/><path d="M4 13l8 4.5 8-4.5"/><path d="M4 17l8 4.5 8-4.5" opacity=".45"/>');
+    const icoTg = this.I('<path d="M21 4.5L3.5 11.2c-.9.35-.85 1.6.1 1.85l4.4 1.2 1.7 5.2c.3.85 1.4 1 1.9.3l2.4-3.1 4.5 3.3c.75.55 1.8.15 2-.75L23 6c.25-1.1-.85-2-1.9-1.5z" transform="scale(.92) translate(1 .5)"/>');
+    const icoWave = this.I('<path d="M3 12c2-4.5 4-4.5 6 0s4 4.5 6 0 4-4.5 6 0"/>');
+    const icoBell = this.I('<path d="M12 4a5.5 5.5 0 0 0-5.5 5.5c0 4-1.5 5.5-2.5 6.5h16c-1-1-2.5-2.5-2.5-6.5A5.5 5.5 0 0 0 12 4z"/><path d="M10 19.5a2 2 0 0 0 4 0"/>');
+    const icoCam = this.I('<rect x="3" y="7" width="18" height="13" rx="3"/><path d="M8.5 7L10 4h4l1.5 3"/><circle cx="12" cy="13" r="3.4"/>');
+    const icoGlobe = this.I('<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.4 2.3 3.6 5.3 3.6 8.5s-1.2 6.2-3.6 8.5c-2.4-2.3-3.6-5.3-3.6-8.5S9.6 5.8 12 3.5z"/>');
+    const icoGift = this.I('<rect x="4" y="9" width="16" height="11" rx="2"/><path d="M12 9v11M4 13.5h16"/><path d="M12 9c-1.5-2.5-4-3.8-5.5-2.3S7.5 9 9.5 9zM12 9c1.5-2.5 4-3.8 5.5-2.3S16.5 9 14.5 9z"/>');
+
+    // ─── shared style bases ───
+    const iconBox40 = 'width:40px;height:40px;flex:none;border-radius:12px;display:flex;align-items:center;justify-content:center;';
+    const iconBox36 = 'width:36px;height:36px;border-radius:11px;display:flex;align-items:center;justify-content:center;margin-bottom:10px;';
+    const iconBox38 = 'width:38px;height:38px;border-radius:11px;display:flex;align-items:center;justify-content:center;flex:none;';
+    const chipBase = 'font-family:JetBrains Mono;font-size:8.5px;letter-spacing:1px;padding:2px 8px;border-radius:20px;';
+    const stActive = chipBase + 'background:rgba(74,222,128,.12);color:#4ADE80;border:1px solid rgba(74,222,128,.3);';
+    const stWarn = chipBase + 'background:rgba(251,146,60,.12);color:#FB923C;border:1px solid rgba(251,146,60,.3);';
+    const stDim = chipBase + 'background:rgba(255,255,255,.06);color:#9BA0A6;border:1px solid rgba(255,255,255,.1);';
+
+    // ─── nav ───
+    const go = (page) => () => setS({ page, connDetail: null, charDetail: null, moreOpen: false });
+    const navItem = (id, label, icon, badge) => ({
+      label, icon, badge: badge || false, go: go(id),
+      style: 'display:flex;align-items:center;gap:11px;padding:8px 10px;border-radius:10px;font-size:13px;cursor:pointer;' +
+        (s.page === id ? 'background:rgba(215,244,82,.1);color:#D7F452;font-weight:800;' : 'color:#B7BBC0;font-weight:600;')
+    });
+    const navGroups = [
+      { label: t.grpWork, items: [navItem('overview', t.navOverview, icoGrid), navItem('dialogs', t.navDialogs, icoChat, '2')] },
+      { label: t.grpStudio, items: [navItem('images', t.navImages, icoImage), navItem('video', t.navVideo, icoFilm), navItem('characters', t.navCharacters, icoStar), navItem('workflow', t.navWorkflow, icoFlow, 'PRO')] },
+      { label: t.grpMoney, items: [navItem('donations', t.navDonations, icoHeart, '1'), navItem('billing', t.navBilling, icoCard)] },
+      { label: t.grpSettings, items: [navItem('connections', t.navConnections, icoPlug), navItem('team', t.navTeam, icoTeam)] }
+    ];
+    const pageTitles = { overview: t.navOverview, dialogs: t.navDialogs, images: t.navImages, video: t.navVideo, characters: t.navCharacters, workflow: t.navWorkflow, donations: t.navDonations, billing: t.navBilling, connections: t.navConnections, team: t.navTeam };
+
+    // gradients for placeholders
+    const G = ['linear-gradient(160deg,#3B2A4F,#1A1428)', 'linear-gradient(160deg,#4F2A3E,#241019)', 'linear-gradient(160deg,#2A3E4F,#101A24)', 'linear-gradient(160deg,#2A4F3B,#0F241A)', 'linear-gradient(160deg,#4F3E2A,#241C10)', 'linear-gradient(160deg,#33265C,#150F28)'];
+
+    // ─── overview / guide data ───
+    const gGrad = ['linear-gradient(135deg,#F472B6,#C084FC)', 'linear-gradient(135deg,#4ADE80,#38BDF8)', 'linear-gradient(135deg,#D7F452,#4ADE80)', 'linear-gradient(135deg,#C084FC,#818CF8)', 'linear-gradient(135deg,#FB923C,#F472B6)'];
+    const guideDefs = [
+      { title: lang === 'ru' ? 'Создать персонажа' : 'Create a character', desc: lang === 'ru' ? 'Загрузите фото-референсы, опишите внешность и персону. Это ваша виртуальная модель — на её основе идут генерации и автоответы.' : 'Upload references, describe the look and persona — your virtual model.', cta: lang === 'ru' ? 'К персонажам' : 'To characters', go: go('characters') },
+      { title: lang === 'ru' ? 'Выбрать тариф' : 'Choose a plan', desc: lang === 'ru' ? 'Подберите подписку и пополните кредиты — они тратятся на генерации картинок и видео.' : 'Pick a subscription and top up credits used for generations.', cta: lang === 'ru' ? 'К тарифам' : 'To plans', go: go('billing') },
+      { title: lang === 'ru' ? 'Подключить каналы' : 'Connect channels', desc: lang === 'ru' ? 'Привяжите Telegram/Fanvue и AI-движок. Здесь же — AI-компаньон для автоответов от лица персонажа.' : 'Link Telegram/Fanvue and the AI engine; set up the AI companion.', cta: lang === 'ru' ? 'К подключениям' : 'To connections', go: go('connections') },
+      { title: lang === 'ru' ? 'Сгенерировать картинку' : 'Generate an image', desc: lang === 'ru' ? 'Выберите режим (референс, Face Swap, одежда, локация, промпт, карусель), модель и формат — и создайте кадр.' : 'Pick a mode, model and format — create a frame.', cta: lang === 'ru' ? 'В студию' : 'To studio', go: go('images') },
+      { title: lang === 'ru' ? 'Оживить и запустить донаты' : 'Animate & launch donations', desc: lang === 'ru' ? 'Сделайте видео из кадра, ведите диалоги с фанами и подключите донаты — деньги выводятся в разделе «Донаты».' : 'Make a video, chat with fans and enable donations.', cta: lang === 'ru' ? 'К донатам' : 'To donations', go: go('donations') }
+    ];
+    const guideSteps = guideDefs.map((g, i) => ({ ...g, n: i + 1, mediaBg: 'background:' + gGrad[i % 5], openMedia: () => setS({ mediaStep: i }) }));
+    const md = s.mediaStep;
+    const mediaData = md == null ? null : { n: md + 1, title: guideDefs[md].title, desc: guideDefs[md].desc, big: 'background:' + gGrad[md % 5] };
+    const startSteps = guideDefs.slice(0, 4).map((g, i) => ({ n: i + 1, label: g.title }));
+
+    const studioCards = [
+      { title: t.navImages, desc: t.imagesDesc, icon: icoImage, iconBox: iconBox40 + 'background:rgba(215,244,82,.12);color:#D7F452;', go: go('images') },
+      { title: t.navVideo, desc: t.videoDesc, icon: icoFilm, iconBox: iconBox40 + 'background:rgba(192,132,252,.12);color:#C084FC;', go: go('video') },
+      { title: t.navCharacters, desc: t.charactersDesc, icon: icoStar, iconBox: iconBox40 + 'background:rgba(240,168,200,.12);color:#F0A8C8;', go: go('characters') }
+    ];
+    const avG = ['linear-gradient(135deg,#38BDF8,#818CF8);color:#0A1526;', 'linear-gradient(135deg,#FB923C,#F87171);color:#26140A;', 'linear-gradient(135deg,#4ADE80,#38BDF8);color:#0A2614;', 'linear-gradient(135deg,#F472B6,#C084FC);color:#260A1C;', 'linear-gradient(135deg,#FACC15,#FB923C);color:#262008;'];
+    const avBase32 = 'width:32px;height:32px;flex:none;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;background:';
+    const avBase36 = 'width:36px;height:36px;flex:none;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;position:relative;background:';
+    const mkDlg = (name, platform, last, time, i, vip, hot, lng) => ({ name, platform, last, time, initial: name[0], avStyle: avBase32 + avG[i % 5], avStyleLg: avBase36 + avG[i % 5], platColor: platform === 'FANVUE' ? '#F0A8C8' : '#38BDF8', vip: vip || false, hot: hot || false, lang: lng || 'ru*' });
+    const recentDialogs = [
+      mkDlg('duty', 'TELEGRAM', 'по милости', '22:48', 0),
+      mkDlg('Ariana Woo', 'FANVUE', '😊 😇', '21:10', 3),
+      mkDlg('Radomir', 'TELEGRAM', 'Дорогая, скоро выходные, как ты планируешь…', '19:33', 1),
+      mkDlg('Pavol', 'TELEGRAM', 'я на работе', '18:02', 2)
+    ];
+    const tileBase = 'aspect-ratio:9/16;border-radius:10px;display:flex;align-items:flex-end;padding:8px;position:relative;overflow:hidden;cursor:pointer;background:';
+    const thumbBase = 'aspect-ratio:9/16;border-radius:8px;cursor:pointer;border:2px solid transparent;background:';
+    const recentFrames = [0, 1, 2, 3].map(i => ({ tileStyle: tileBase + G[i], thumbStyle: thumbBase + G[i], label: ['MIA · 9:16', 'MIA · 9:16', 'RUBY · 9:16', 'MIA · 16:9'][i] }));
+
+    // ─── dialogs data ───
+    const chipOn = 'font-family:JetBrains Mono;font-size:10px;background:rgba(215,244,82,.12);color:#D7F452;border:1px solid rgba(215,244,82,.4);padding:3px 10px;border-radius:20px;cursor:pointer;';
+    const chipOff = 'font-family:JetBrains Mono;font-size:10px;border:1px solid rgba(255,255,255,.12);color:#9BA0A6;padding:3px 10px;border-radius:20px;cursor:pointer;';
+    const chatsRaw = [
+      mkDlg('duty', 'TELEGRAM', 'по милости', '22:48', 0, true, false, 'es*'),
+      mkDlg('Radomir', 'TELEGRAM', 'Дорогая, скоро выходные…', '19:33', 1, false, true, 'en*'),
+      mkDlg('Pavol', 'TELEGRAM', 'я на работе', '18:02', 2, false, true, 'en*'),
+      mkDlg('Renat', 'TELEGRAM', 'Нормально, чуть устала…', '16:40', 3, false, false, 'ru*'),
+      mkDlg('Thomas', 'TELEGRAM', 'Если я узнаю вас поближе…', '14:12', 4, false, true, 'de*'),
+      mkDlg('Ariana Woo', 'FANVUE', '😊 😇', '21:10', 3, false, false, 'en*'),
+      mkDlg('Elijah', 'TELEGRAM', 'Привет', '11:05', 1, false, true, 'nl')
+    ];
+    const chatStatus = { 2: 'blocked', 4: 'deleted' }; // Pavol заблокировал, Thomas удалил чат
+    const chatNew = { 5: true, 6: true };
+    // ── filters ──
+    const cnt = (fn) => chatsRaw.filter((c, i) => fn(c, i)).length;
+    const filterDefs = [
+      { id: 'all', label: (lang === 'ru' ? 'Все' : 'All'), n: chatsRaw.length, test: () => true },
+      { id: 'vip', label: 'VIP', n: cnt((c) => c.vip), test: (c) => c.vip },
+      { id: 'hot', label: '24ч+', n: cnt((c) => c.hot), test: (c) => c.hot },
+      { id: 'new', label: (lang === 'ru' ? 'Новые' : 'New'), n: cnt((c, i) => chatNew[i]), test: (c, i) => chatNew[i] }
+    ];
+    const chatFilters = filterDefs.map(f => ({
+      label: f.label + ' · ' + f.n, style: s.chatFilter === f.id ? chipOn : chipOff,
+      pick: () => setS({ chatFilter: f.id })
+    }));
+    const platDefs = [
+      { id: 'all', label: (lang === 'ru' ? 'Все площадки' : 'All'), col: '#9BA0A6', bg: 'rgba(255,255,255,.05)', bd: 'rgba(255,255,255,.12)' },
+      { id: 'TELEGRAM', label: 'Telegram ' + cnt((c) => c.platform === 'TELEGRAM'), col: '#38BDF8', bg: 'rgba(56,189,248,.12)', bd: 'rgba(56,189,248,.35)' },
+      { id: 'FANVUE', label: 'Fanvue ' + cnt((c) => c.platform === 'FANVUE'), col: '#F0A8C8', bg: 'rgba(240,168,200,.12)', bd: 'rgba(240,168,200,.35)' }
+    ];
+    const platFilters = platDefs.map(p => {
+      const on = s.chatPlatform === p.id;
+      return {
+        label: p.label,
+        style: 'font-family:JetBrains Mono;font-size:9.5px;letter-spacing:.5px;padding:3px 10px;border-radius:20px;cursor:pointer;border:1px solid ' + (on ? p.bd : 'rgba(255,255,255,.1)') + ';color:' + (on ? p.col : '#6B7076') + ';background:' + (on ? p.bg : 'transparent') + ';',
+        pick: () => setS({ chatPlatform: p.id })
+      };
+    });
+    const curFilter = filterDefs.find(f => f.id === s.chatFilter) || filterDefs[0];
+    const chats = chatsRaw.map((c, i) => {
+      const st = chatStatus[i] || false;
+      const visible = curFilter.test(c, i) && (s.chatPlatform === 'all' || c.platform === s.chatPlatform);
+      return {
+        ...c, avStyle: (st ? c.avStyleLg + 'filter:grayscale(1);opacity:.6;' : c.avStyleLg),
+        open: () => setS({ chatOpen: i, mobileChat: true, msgReact: null, emojiOpen: false }),
+        blockedTag: st === 'blocked' ? t.dlgBlocked : (st === 'deleted' ? t.dlgDeleted : false),
+        blockedTagStyle: 'font-family:JetBrains Mono;font-size:7.5px;letter-spacing:.4px;padding:1px 6px;border-radius:4px;' + (st === 'blocked' ? 'background:rgba(248,113,113,.15);color:#F87171;' : 'background:rgba(255,255,255,.08);color:#9BA0A6;'),
+        nameStyle: 'font-weight:700;font-size:12.5px;' + (st ? 'color:#9BA0A6;' : ''),
+        delDialog: (e) => { e.stopPropagation(); },
+        canDelete: !!st, visible,
+        rowStyle: (visible ? 'display:flex;' : 'display:none;') + 'gap:10px;align-items:center;padding:9px 8px;border-radius:12px;cursor:pointer;position:relative;' + (s.chatOpen === i ? 'background:rgba(215,244,82,.07);border:1px solid rgba(215,244,82,.2);' : 'border:1px solid transparent;')
+      };
+    });
+    const visibleChats = chats.filter(c => c.visible);
+    const noChats = visibleChats.length === 0;
+    // ── active thread ──
+    const cur = chatsRaw[s.chatOpen] || chatsRaw[0];
+    const curSt = chatStatus[s.chatOpen] || false;
+    const langMap = { 'es*': 'Español', 'en*': 'English', 'de*': 'Deutsch', 'ru*': 'Русский', 'nl': 'Nederlands' };
+    const threadHead = {
+      name: cur.name, initial: cur.initial, avStyle: cur.avStyleLg,
+      vip: cur.vip, platform: cur.platform === 'FANVUE' ? 'Fanvue' : 'Telegram',
+      replyLang: langMap[cur.lang] || 'English',
+      blocked: curSt === 'blocked', deleted: curSt === 'deleted', blockedText: curSt === 'blocked' ? t.dlgBlocked : t.dlgDeleted
+    };
+    const bubbleIn = 'max-width:80%;background:#1A1C20;border:1px solid rgba(255,255,255,.07);border-radius:14px 14px 14px 4px;padding:10px 13px;position:relative;';
+    const bubbleOut = 'max-width:80%;background:rgba(215,244,82,.09);border:1px solid rgba(215,244,82,.2);border-radius:14px 14px 4px 14px;padding:10px 13px;position:relative;';
+    const msgDefs = [
+      { side: 'in', text: 'Очень странно что ты посчитал что это ИИ', tr: false, time: '22:45' },
+      { side: 'out', text: 'Миа, я тоже пытаюсь быть с тобой честным. Мы игнорируем это, делаем вид и всё', tr: 'Mia, yo también intento ser sincero contigo…', time: '22:47' },
+      { side: 'out', text: 'И не обижайся', tr: 'Y no te sientas ofendida', time: '22:48' },
+      { side: 'in', text: 'по милости · por favor', tr: false, time: '22:48' }
+    ];
+    const reactChoices = ['❤️', '😍', '😂', '🔥', '👍', '😢'];
+    const messages = msgDefs.map((m, i) => {
+      const rx = s.reactions[i];
+      return {
+        wrap: 'display:flex;flex-direction:column;gap:3px;' + (m.side === 'out' ? 'align-items:flex-end;' : 'align-items:flex-start;'),
+        bubble: m.side === 'out' ? bubbleOut : bubbleIn,
+        text: m.text, tr: m.tr, time: m.time,
+        toggleReact: (e) => { e.stopPropagation(); setS({ msgReact: s.msgReact === i ? null : i, emojiOpen: false }); },
+        reactOpen: s.msgReact === i,
+        reactRow: reactChoices.map(rc => ({ e: rc, pick: (ev) => { ev.stopPropagation(); setS({ reactions: { ...s.reactions, [i]: rc }, msgReact: null }); } })),
+        reaction: rx || false,
+        reactBadgeStyle: 'align-self:' + (m.side === 'out' ? 'flex-end' : 'flex-start') + ';background:#0D0E11;border:1px solid rgba(255,255,255,.12);border-radius:20px;padding:1px 7px;font-size:12px;margin-top:-8px;'
+      };
+    });
+    const emojiChoices = ['😊', '😍', '🥰', '😘', '💕', '🔥', '😂', '😅', '🙈', '😉', '💋', '🌹', '✨', '👀', '🥂', '💫'];
+    const emojiPick = emojiChoices.map(e => ({ e, pick: () => setS({ emojiOpen: false }) }));
+    const tagBase = 'font-family:JetBrains Mono;font-size:8.5px;letter-spacing:1.2px;padding:2px 7px;border-radius:5px;';
+    const notes = [
+      { tag: lang === 'ru' ? 'ПРОФИЛЬ' : 'PROFILE', tagStyle: tagBase + 'background:rgba(215,244,82,.15);color:#D7F452;', when: '4 дн.', text: 'Тео (Theo) · Мадрид · есть дети. Предпочитает натуральный контент, детест AI. Недавно оплатил 145€.' },
+      { tag: lang === 'ru' ? 'КОНТЕКСТ' : 'CONTEXT', tagStyle: tagBase + 'background:rgba(251,146,60,.15);color:#FB923C;', when: '4 дн.', text: 'Фан хочет реальное видео без единого элемента ИИ в обмен на оплату платья.' },
+      { tag: 'AI', tagStyle: tagBase + 'background:rgba(192,132,252,.15);color:#C084FC;', when: '4 дн.', text: 'Извиниться за недопонимание. Предложить конкретную цену и сроки. Лёгкий флирт, не углубляться в спор об ИИ.' }
+    ];
+    const noteTagDefs = [
+      { label: lang === 'ru' ? 'ПРОФИЛЬ' : 'PROFILE', col: '#D7F452', bg: 'rgba(215,244,82' },
+      { label: lang === 'ru' ? 'КОНТЕКСТ' : 'CONTEXT', col: '#FB923C', bg: 'rgba(251,146,60' },
+      { label: lang === 'ru' ? 'ВАЖНО' : 'IMPORTANT', col: '#F87171', bg: 'rgba(248,113,113' }
+    ];
+    const noteTagChips = noteTagDefs.map((nt, i) => ({
+      label: nt.label,
+      style: 'font-family:JetBrains Mono;font-size:8.5px;letter-spacing:1px;padding:3px 10px;border-radius:6px;cursor:pointer;' + (s.noteTag === i ? nt.bg + ',.18);color:' + nt.col + ';border:1px solid ' + nt.bg + ',.4);' : 'background:rgba(255,255,255,.05);color:#9BA0A6;border:1px solid rgba(255,255,255,.1);'),
+      pick: () => setS({ noteTag: i })
+    }));
+
+    // ─── images data ───
+    const modeDefs = [
+      { id: 'ref', title: lang === 'ru' ? 'Кадр по референсу' : 'From reference', desc: lang === 'ru' ? 'Похожий кадр по образцу: поза, свет, стиль' : 'Similar frame from a sample: pose, light, style', icon: icoLayers, cost: '−10 ' + t.cr, longDesc: lang === 'ru' ? 'Загрузите один референс — получите близкий кадр с вашим персонажем. Хорош для повторения удачных поз.' : 'Upload one reference — get a close frame with your character.', slots: [{ label: lang === 'ru' ? 'Референс-кадр' : 'Reference frame', archive: true }], promptHint: lang === 'ru' ? 'Что изменить относительно референса…' : 'What to change vs the reference…', showChar: true, showRatio: true },
+      { id: 'swap', title: 'Face Swap', desc: lang === 'ru' ? 'Лицо персонажа на готовый кадр' : "Character's face onto a frame", icon: icoFace, cost: '−8 ' + t.cr, longDesc: lang === 'ru' ? 'Загрузите один референс-кадр. Лицо выбранного персонажа аккуратно заменит лицо на этом кадре — поза, свет и одежда сохранятся.' : 'Upload one reference frame. The chosen character\'s face replaces the face in it.', slots: [{ label: lang === 'ru' ? 'Референс-кадр' : 'Reference frame', archive: true }], promptHint: lang === 'ru' ? 'Необязательно — уточнения по выражению лица…' : 'Optional — face expression tweaks…', showChar: true, showRatio: true },
+      { id: 'outfit', title: lang === 'ru' ? 'Замена одежды' : 'Outfit swap', desc: lang === 'ru' ? 'Одежда с фото → на персонажа' : 'Clothing from a photo → onto character', icon: icoShirt, cost: '−8 ' + t.cr, longDesc: lang === 'ru' ? 'Загрузите один референс с человеком или вещью. Мы выделим одежду и сгенерируем её на выбранном персонаже на однородном фоне.' : 'Upload one reference with a person or item. We extract the clothing and put it on your character on a clean background.', slots: [{ label: lang === 'ru' ? 'Кадр — где заменить одежду' : 'Frame — outfit to replace', archive: true }, { label: lang === 'ru' ? 'Фото одежды' : 'Clothing photo', archive: false }], promptHint: lang === 'ru' ? 'Необязательно — цвет, длина, детали…' : 'Optional — colour, length, details…', showChar: true, showRatio: true },
+      { id: 'location', title: lang === 'ru' ? 'Смена локации' : 'Location swap', desc: lang === 'ru' ? 'Перенести персонажа в новое место' : 'Move the character to a new place', icon: icoPin, cost: '−8 ' + t.cr, longDesc: lang === 'ru' ? 'Загрузите один исходный кадр. Кадр остаётся, фон и окружение меняются: пляж, аэропорт, кафе — что угодно.' : 'Upload one source frame. Frame stays, background changes.', slots: [{ label: lang === 'ru' ? 'Кадр — где сменить локацию' : 'Frame — location to replace', archive: true }, { label: lang === 'ru' ? 'Фото локации' : 'Location photo', archive: false }], promptHint: lang === 'ru' ? 'Терраса кафе в Мадриде, вечерний свет…' : 'Café terrace in Madrid, evening light…', showChar: true, showRatio: true },
+      { id: 'prompt', title: lang === 'ru' ? 'Кадр по промпту' : 'From prompt', desc: lang === 'ru' ? 'Свободная генерация с нуля текстом' : 'Free-form generation from text', icon: icoText, cost: '−10 ' + t.cr, longDesc: lang === 'ru' ? 'Опишите сцену словами — персонаж подставится из карточки (внешность, EXIF).' : 'Describe the scene — the character comes from its card.', slots: [], promptHint: lang === 'ru' ? 'Photorealistic 8K still: девушка у окна с кофе, утренний свет…' : 'Photorealistic 8K still: girl by the window with coffee…', showChar: true, showRatio: true },
+      { id: 'carousel', title: lang === 'ru' ? 'Карусель' : 'Carousel', desc: lang === 'ru' ? 'Серия кадров из одного фото' : 'A series of frames from one photo', icon: icoGrid2, cost: lang === 'ru' ? '−8 кр/кадр' : '−8 cr/frame', longDesc: lang === 'ru' ? 'Выберите кадр из архива или загрузите готовый, задайте количество кадров — сгенерируем связанную серию (для постов и историй).' : 'Pick a frame from the archive or upload one, set frame count — get a coherent series.', slots: [{ label: lang === 'ru' ? 'Базовый кадр' : 'Base frame', archive: true }], promptHint: lang === 'ru' ? 'Что меняется от кадра к кадру: ракурс, эмоция…' : 'What changes across frames: angle, emotion…', showChar: true, showRatio: true, showCount: true }
+    ];
+    const imgModes = modeDefs.map(m => ({
+      ...m, pick: () => setS({ imgMode: m.id }),
+      cardStyle: 'border-radius:16px;padding:14px 16px;cursor:pointer;' + (s.imgMode === m.id ? 'background:rgba(215,244,82,.07);border:1px solid rgba(215,244,82,.45);' : 'background:#121316;border:1px solid rgba(255,255,255,.07);'),
+      iconBox: iconBox36 + (s.imgMode === m.id ? 'background:rgba(215,244,82,.15);color:#D7F452;' : 'background:rgba(255,255,255,.06);color:#9BA0A6;')
+    }));
+    const curModeRaw = modeDefs.find(m => m.id === s.imgMode) || modeDefs[0];
+    const segSm = (on) => 'flex:1;text-align:center;font-family:JetBrains Mono;font-size:9px;letter-spacing:.5px;padding:4px 8px;border-radius:6px;cursor:pointer;' + (on ? 'background:#D7F452;color:#171A05;font-weight:800;' : 'color:#9BA0A6;');
+    const curMode = { ...curModeRaw, slots: (curModeRaw.slots || []).map((sl, i) => {
+      const key = s.imgMode + ':' + i;
+      const src = s.slotSource[key] || 'upload';
+      return {
+        label: sl.label, archive: sl.archive, noArchive: !sl.archive, fromArchive: src === 'archive', uploadMode: src !== 'archive',
+        upStyle: segSm(src === 'upload'), arStyle: segSm(src === 'archive'),
+        setUpload: () => setS({ slotSource: { ...s.slotSource, [key]: 'upload' } }),
+        setArchive: () => setS({ slotSource: { ...s.slotSource, [key]: 'archive' } })
+      };
+    }) };
+
+    // ─── SFW / NSFW + AI model selection ───
+    const cmSeg = (on) => 'flex:1;text-align:center;font-size:12px;font-weight:800;border-radius:8px;padding:8px 10px;cursor:pointer;' + (on ? '' : 'color:#9BA0A6;');
+    const contentModes = [
+      { id: 'sfw', label: 'SFW', hint: lang === 'ru' ? 'обычный' : 'safe', style: cmSeg(s.contentMode === 'sfw') + (s.contentMode === 'sfw' ? 'background:#4ADE80;color:#06240F;' : ''), pick: () => setS({ contentMode: 'sfw', aiModel: 'nano' }) },
+      { id: 'nsfw', label: 'NSFW', hint: '18+', style: cmSeg(s.contentMode === 'nsfw') + (s.contentMode === 'nsfw' ? 'background:#F0A8C8;color:#2A0A1C;' : ''), pick: () => setS({ contentMode: 'nsfw', aiModel: 'seedream' }) }
+    ];
+    const modelsByMode = {
+      sfw: [
+        { id: 'nano', name: 'Nano Banana Pro', note: lang === 'ru' ? 'быстрый, отличная кожа' : 'fast, great skin' },
+        { id: 'gpt', name: 'GPT Image', note: lang === 'ru' ? 'точный по промпту' : 'prompt-accurate' }
+      ],
+      nsfw: [
+        { id: 'seedream', name: 'Seedream 5 Pro', note: lang === 'ru' ? 'фотореализм 18+' : 'photoreal 18+' },
+        { id: 'wan', name: 'Wan 2.7 Pro', note: lang === 'ru' ? 'детализация тела' : 'body detail' }
+      ]
+    };
+    const aiModels = modelsByMode[s.contentMode].map(m => ({
+      ...m,
+      style: 'flex:1;min-width:130px;border-radius:11px;padding:10px 12px;cursor:pointer;' + (s.aiModel === m.id ? 'background:rgba(215,244,82,.08);border:1px solid rgba(215,244,82,.45);' : 'background:#0D0E11;border:1px solid rgba(255,255,255,.09);'),
+      nameStyle: 'font-weight:800;font-size:12.5px;margin-bottom:2px;' + (s.aiModel === m.id ? 'color:#D7F452;' : ''),
+      pick: () => setS({ aiModel: m.id })
+    }));
+    const countChips = [2, 3, 4, 6, 8].map(n => ({ label: String(n), style: s.carouselCount === n ? chipOn : chipOff, pick: () => setS({ carouselCount: n }) }));
+    // validation (демо: клик по «Сгенерировать» без заполнения)
+    const imgErrList = [];
+    if (curMode.slots.length) imgErrList.push(t.errNoRef);
+    if (curMode.id === 'prompt') imgErrList.push(t.errNoPrompt);
+    imgErrList.push(t.errNoChar);
+    const genFieldErr = (need) => s.showGenError && need ? 'border:1px solid #F87171;border-radius:12px;padding:2px;' : '';
+    const triggerGen = () => setS({ showGenError: true });
+    const charChips = [
+      { label: 'Mia', style: 'font-size:12px;font-weight:800;background:rgba(240,168,200,.12);color:#F0A8C8;border:1px solid rgba(240,168,200,.4);padding:6px 14px;border-radius:9px;cursor:pointer;' },
+      { label: 'Ruby', style: 'font-size:12px;font-weight:700;border:1px solid rgba(255,255,255,.12);color:#9BA0A6;padding:6px 14px;border-radius:9px;cursor:pointer;' },
+      { label: 'Velvet', style: 'font-size:12px;font-weight:700;border:1px solid rgba(255,255,255,.12);color:#9BA0A6;padding:6px 14px;border-radius:9px;cursor:pointer;' }
+    ];
+    const ratioChips = ['9:16', '16:9', '1:1', '4:3', '3:4'].map((r, i) => ({ label: r, style: i === 0 ? chipOn : chipOff }));
+    const afBase = 'aspect-ratio:9/16;display:flex;align-items:center;justify-content:center;background:';
+    const archiveFrames = [0, 1, 2, 3, 4, 5, 6, 7].map(i => ({ bg: afBase + G[i % 6], big: 'flex:1;display:flex;align-items:center;justify-content:center;border-radius:14px;background:' + G[i % 6], who: i % 3 === 0 ? 'Ruby' : 'Mia', ratio: '9:16', open: () => setS({ lightbox: i }) }));
+    const lb = s.lightbox;
+    const lightboxData = lb == null ? null : { big: 'flex:1;min-height:0;display:flex;align-items:center;justify-content:center;border-radius:14px;background:' + G[lb % 6], who: lb % 3 === 0 ? 'Ruby' : 'Mia', ratio: '9:16', mode: lang === 'ru' ? 'Кадр по промпту' : 'From prompt', when: '12.07 · 14:2' + lb };
+
+    // ─── video ───
+    const vaBase = 'aspect-ratio:9/16;display:flex;align-items:center;justify-content:center;position:relative;background:';
+    const videoArchive = [0, 1, 2, 3].map(i => ({ bg: vaBase + G[(i + 2) % 6], who: i % 2 ? 'Ruby' : 'Mia', dur: i % 2 ? '10s' : '5s' }));
+    const ffSeg = (on) => 'flex:1;text-align:center;font-size:12.5px;font-weight:800;border-radius:9px;padding:9px;cursor:pointer;' + (on ? 'background:#D7F452;color:#171A05;' : 'border:1px solid rgba(255,255,255,.12);color:#9BA0A6;');
+    const firstFrameOpts = [
+      { id: 'yes', label: lang === 'ru' ? 'Да, есть' : 'Yes, I have', style: ffSeg(s.hasFirstFrame === 'yes'), pick: () => setS({ hasFirstFrame: 'yes' }) },
+      { id: 'no', label: lang === 'ru' ? 'Нет — сгенерировать' : 'No — generate it', style: ffSeg(s.hasFirstFrame === 'no'), pick: () => setS({ hasFirstFrame: 'no' }) }
+    ];
+    const mkOpt = (arr, cur, key) => arr.map(o => ({ label: o.l, sub: o.s || false, style: cur === o.v ? chipOn : chipOff, pick: () => setS({ [key]: o.v }) }));
+    const qualityOpts = mkOpt([{ l: '720p', v: '720' }, { l: '1080p', v: '1080' }, { l: '4K', v: '4k' }], s.vidQuality, 'vidQuality');
+    const vfmtOpts = mkOpt([{ l: '9:16' }, { l: '16:9' }, { l: '1:1' }].map(o => ({ l: o.l, v: o.l })), s.vidFormat, 'vidFormat');
+    const vtimeOpts = mkOpt([{ l: lang === 'ru' ? '5 с' : '5s', v: '5' }, { l: lang === 'ru' ? '10 с' : '10s', v: '10' }], s.vidTime, 'vidTime');
+    const vidCost = (s.vidQuality === '4k' ? 80 : s.vidQuality === '1080' ? 40 : 25) * (s.vidTime === '10' ? 2 : 1);
+    const genFirstFrame = () => {
+      setS({ ffState: 'loading' });
+      clearTimeout(this._ffTimer);
+      this._ffTimer = setTimeout(() => this.setState({ ffState: 'done' }), 2200);
+    };
+    const ffImgStyle = 'width:70px;aspect-ratio:9/16;border-radius:10px;flex:none;background:' + G[3];
+
+    // ─── characters ───
+    const coverBase = 'height:110px;display:flex;align-items:center;justify-content:center;background:';
+    const characters = [
+      { name: 'Mia', initial: 'M', cover: coverBase + 'linear-gradient(135deg,#F472B6,#C084FC);', status: lang === 'ru' ? 'АКТИВНА' : 'ACTIVE', statusStyle: stActive, blurb: lang === 'ru' ? 'Основной персонаж · Мадрид · Telegram + Fanvue · EXIF настроен' : 'Main character · Madrid · Telegram + Fanvue · EXIF set', tags: ['TELEGRAM', 'FANVUE', 'EXIF ✓', 'PERSONA ✓'], open: () => setS({ charDetail: 'mia' }) },
+      { name: 'Ruby', initial: 'R', cover: coverBase + 'linear-gradient(135deg,#FB923C,#F87171);', status: lang === 'ru' ? 'АКТИВНА' : 'ACTIVE', statusStyle: stActive, blurb: lang === 'ru' ? 'Рыжая · рабочие кадры в студии · без компаньона' : 'Redhead · studio frames · no companion', tags: ['TELEGRAM', 'EXIF ✓'], open: () => setS({ charDetail: 'mia' }) },
+      { name: 'Velvet', initial: 'V', cover: coverBase + 'linear-gradient(135deg,#38BDF8,#818CF8);', status: lang === 'ru' ? 'ЧЕРНОВИК' : 'DRAFT', statusStyle: stDim, blurb: lang === 'ru' ? 'Новый персонаж — заполните внешность и персону' : 'New character — fill appearance and persona', tags: ['—'], open: () => setS({ charDetail: 'mia' }) }
+    ];
+    const charTabDefs = [
+      { id: 'photos', label: lang === 'ru' ? 'Фото и внешность' : 'Photos & look' },
+      { id: 'persona', label: lang === 'ru' ? 'Персона (AI-компаньон)' : 'Persona (AI companion)' },
+      { id: 'exif', label: lang === 'ru' ? 'EXIF «как с телефона»' : 'EXIF "like a phone"' },
+      { id: 'history', label: lang === 'ru' ? 'История модели' : 'Model history' }
+    ];
+    const charTabs = charTabDefs.map(td => ({ label: td.label, style: (s.charTab === td.id ? chipOn : chipOff), pick: () => setS({ charTab: td.id }) }));
+    const cpBase = 'aspect-ratio:3/4;border-radius:10px;display:flex;align-items:flex-end;padding:6px;position:relative;background:';
+    const tagStyleSm = 'font-family:JetBrains Mono;font-size:7.5px;letter-spacing:.5px;background:rgba(0,0,0,.6);color:#fff;padding:2px 6px;border-radius:4px;';
+    const tagNames = lang === 'ru' ? ['ЛИЦО', 'ВНЕШНОСТЬ', 'РАЗВЁРТКА', 'ТЕЛО ЦЕЛИКОМ', 'ЛИЦО'] : ['FACE', 'LOOK', 'TURNAROUND', 'FULL BODY', 'FACE'];
+    const charPhotos = [G[1], G[3], G[4], G[0], G[2]].map((g, i) => ({
+      bg: cpBase + g, kind: tagNames[i], idx: i,
+      open: () => setS({ photoMenu: s.photoMenu === i ? null : i }),
+      menuOpen: s.photoMenu === i
+    }));
+    const photoTagOpts = (lang === 'ru' ? ['Лицо', 'Внешность', 'Развёртка', 'Тело целиком', 'Selfie', 'Основная камера'] : ['Face', 'Look', 'Turnaround', 'Full body', 'Selfie', 'Main camera']).map((l, i) => ({ label: l, style: i === 0 ? chipOn : chipOff }));
+    const photoTagMenu = (lang === 'ru' ? ['Лицо', 'Внешность', 'Развёртка', 'Тело целиком', 'Selfie', 'Основная камера'] : ['Face', 'Look', 'Turnaround', 'Full body', 'Selfie', 'Main camera']).map((l, i) => ({ label: l, style: 'font-size:11px;font-weight:700;padding:5px 10px;border-radius:7px;cursor:pointer;' + (i === 0 ? 'background:rgba(215,244,82,.15);color:#D7F452;' : 'color:#C9CDD1;') + '' }));
+    const fieldLbl = 'font-family:JetBrains Mono;font-size:9px;letter-spacing:1.6px;color:#6B7076;margin-bottom:6px;';
+    const inputSt = 'width:100%;background:#0D0E11;border:1px solid rgba(255,255,255,.09);border-radius:10px;padding:9px 12px;color:#F2F3F0;font-family:Manrope;font-size:12.5px;outline:none;';
+    const areaSt = inputSt + 'resize:vertical;line-height:1.5;';
+    const personaFields = [
+      { lbl: lang === 'ru' ? 'ВОЗРАСТ' : 'AGE', val: '24', ph: '24', area: false, half: true },
+      { lbl: lang === 'ru' ? 'ГОРОД' : 'CITY', val: 'Пермь', ph: '', area: false, half: true },
+      { lbl: lang === 'ru' ? 'СТРАНА' : 'COUNTRY', val: 'Россия', ph: '', area: false, half: true },
+      { lbl: lang === 'ru' ? 'ЧАСОВОЙ ПОЯС' : 'TIMEZONE', val: '', ph: 'Europe/Madrid', area: false, half: true },
+      { lbl: lang === 'ru' ? 'ХАРАКТЕР' : 'PERSONALITY', val: '', ph: lang === 'ru' ? 'тёплая, игривая, немного застенчивая…' : 'warm, playful, a bit shy…', area: true, half: false },
+      { lbl: lang === 'ru' ? 'ХОББИ И УВЛЕЧЕНИЯ' : 'HOBBIES', val: '', ph: lang === 'ru' ? 'йога, кофе, путешествия…' : 'yoga, coffee, travel…', area: true, half: false },
+      { lbl: lang === 'ru' ? 'ИНТЕРЕСЫ / ТЕМЫ ДЛЯ РАЗГОВОРА' : 'INTERESTS', val: '', ph: lang === 'ru' ? 'музыка, мода, спорт…' : 'music, fashion, sport…', area: true, half: false },
+      { lbl: lang === 'ru' ? 'ОБРАЗ ЖИЗНИ' : 'LIFESTYLE', val: '', ph: lang === 'ru' ? 'учится, работает фрилансером, любит вечерние прогулки…' : 'studies, freelances, loves evening walks…', area: true, half: false },
+      { lbl: lang === 'ru' ? 'СТИЛЬ ПЕРЕПИСКИ' : 'CHAT STYLE', val: '', ph: lang === 'ru' ? 'короткие сообщения, эмодзи, без формальностей…' : 'short messages, emoji, informal…', area: true, half: false },
+      { lbl: lang === 'ru' ? 'ПРЕДЫСТОРИЯ' : 'BACKSTORY', val: '', ph: lang === 'ru' ? 'откуда она, чем занимается, что важно в жизни…' : 'where she is from, what matters to her…', area: true, half: false }
+    ].map(f => ({ ...f, isText: !f.area, wrapStyle: 'display:flex;flex-direction:column;' + (f.half ? '' : 'grid-column:1 / -1;') }));
+    const exifPresets = lang === 'ru' ? ['— не применять —', 'iPhone 15 Pro', 'Samsung S24 Ultra', 'Pixel 8 Pro'] : ['— none —', 'iPhone 15 Pro', 'Samsung S24 Ultra', 'Pixel 8 Pro'];
+    const exifPresetSel = exifPresets[0];
+    const historyRows = [
+      { icon: icoImage, what: lang === 'ru' ? 'Кадр по промпту · Nano Banana Pro' : 'From prompt · Nano Banana Pro', when: '12.07 · 14:20', tag: '−10 кр.' },
+      { icon: icoFace, what: lang === 'ru' ? 'Face Swap · Seedream 5 Pro' : 'Face Swap · Seedream 5 Pro', when: '11.07 · 19:02', tag: '−8 кр.' },
+      { icon: icoFilm, what: lang === 'ru' ? 'Видео 1080p · 5с' : 'Video 1080p · 5s', when: '10.07 · 22:40', tag: '−40 кр.' },
+      { icon: icoStar, what: lang === 'ru' ? 'Обновлено описание внешности' : 'Appearance updated', when: '08.07 · 10:11', tag: '' }
+    ];
+
+    // ─── donations ───
+    const donTabs = [
+      { label: t.donTabOverview, pick: () => setS({ donTab: 'overview' }), style: s.donTab === 'overview' ? chipOn : chipOff },
+      { label: t.donTabCreate, pick: () => setS({ donTab: 'create' }), style: s.donTab === 'create' ? chipOn : chipOff }
+    ];
+    const donStats = [
+      { label: lang === 'ru' ? 'ВСЕГО' : 'TOTAL', value: '100,00 ₽', color: '#F2F3F0' },
+      { label: lang === 'ru' ? 'ДОСТУПНО' : 'AVAILABLE', value: '100,00 ₽', color: '#4ADE80' },
+      { label: lang === 'ru' ? 'НА УДЕРЖАНИИ' : 'ON HOLD', value: '0,00 ₽', color: '#FB923C' },
+      { label: lang === 'ru' ? 'ВЫПЛАЧЕНО' : 'PAID OUT', value: '0,00 ₽', color: '#9BA0A6' }
+    ];
+    const donLinks = [
+      { title: lang === 'ru' ? 'Поддержать Mia 💕' : 'Support Mia 💕', st: 'ACTIVE', stStyle: stActive, urls: [{ kind: 'Telegram', icon: icoTg, col: '#38BDF8', url: 't.me/tribute/app?startapp=N8c' }, { kind: 'Web', icon: icoGlobe, col: '#C084FC', url: 'web.tribute.tg/d/N8c' }] },
+      { title: lang === 'ru' ? 'Платье для съёмки' : 'Dress for a shoot', st: lang === 'ru' ? 'МОДЕРАЦИЯ' : 'PENDING', stStyle: stWarn, urls: [{ kind: 'Telegram', icon: icoTg, col: '#38BDF8', url: 't.me/tribute/app?startapp=Dr5' }, { kind: 'Web', icon: icoGlobe, col: '#C084FC', url: 'web.tribute.tg/d/Dr5' }] }
+    ];
+    const incoming = [{ sum: '+100,00 ₽', from: lang === 'ru' ? 'Аноним · «Поддержать Mia»' : 'Anonymous · "Support Mia"', when: '12.07 · 14:45' }];
+    const myDonations = [
+      { title: lang === 'ru' ? 'Поддержать Mia 💕' : 'Support Mia 💕', st: 'ACTIVE', stStyle: stActive },
+      { title: lang === 'ru' ? 'Платье для съёмки' : 'Dress for a shoot', st: 'PENDING', stStyle: stWarn },
+      { title: lang === 'ru' ? 'Регулярная подписка' : 'Recurring support', st: 'DRAFT', stStyle: stDim }
+    ];
+
+    // ─── billing ───
+    const segOn = 'font-size:12px;font-weight:800;background:#D7F452;color:#171A05;border-radius:8px;padding:6px 14px;cursor:pointer;';
+    const segOff = 'font-size:12px;font-weight:700;color:#9BA0A6;padding:6px 14px;cursor:pointer;';
+    const fillBase = 'height:100%;background:#4ADE80;border-radius:3px;';
+    const usageBars = [
+      { label: lang === 'ru' ? 'Операторы' : 'Operators', val: '3 / 10', fill: fillBase + 'width:30%;' },
+      { label: lang === 'ru' ? 'Персонажи' : 'Characters', val: '7 / 10', fill: fillBase + 'width:70%;' },
+      { label: lang === 'ru' ? 'Диалоги в месяце' : 'Dialogs this month', val: '4 · ∞', fill: fillBase + 'width:8%;' }
+    ];
+    const priceMap = {
+      standard: [{ name: 'Solo', price: s.period === 'month' ? '590' : '5 660', desc: lang === 'ru' ? '1 оператор · 3 персонажа · кредиты на студию включены' : '1 operator · 3 characters · studio credits included' }, { name: 'Studio', price: s.period === 'month' ? '1 490' : '14 300', tag: lang === 'ru' ? 'ВАШ' : 'YOURS', desc: lang === 'ru' ? '10 операторов · 10 персонажей · чат и команда · кредиты включены' : '10 operators · 10 characters · chat & team · credits included' }, { name: 'Agency', price: s.period === 'month' ? '3 990' : '38 300', desc: lang === 'ru' ? 'Безлимит операторов · 30 персонажей · приоритетная поддержка' : 'Unlimited operators · 30 characters · priority support' }],
+      pro: [{ name: 'Pro Solo', price: s.period === 'month' ? '990' : '9 500', desc: lang === 'ru' ? 'Свой ключ WaveSpeed — генерации не тратят кредиты платформы' : 'Own WaveSpeed key — generations don\'t spend platform credits' }, { name: 'Pro Pro', price: s.period === 'month' ? '2 490' : '23 900', desc: lang === 'ru' ? 'Всё из Pro Solo + команда до 10 операторов' : 'Everything in Pro Solo + team up to 10 operators' }, { name: 'Pro Studio', price: s.period === 'month' ? '4 990' : '47 900', desc: lang === 'ru' ? 'Максимум: безлимит, все каналы, персональный онбординг' : 'Maximum: unlimited, all channels, personal onboarding' }]
+    };
+    const plans = priceMap[s.tier].map(p => ({ ...p, tag: p.tag || false, cardStyle: 'background:#121316;border:1px solid ' + (p.tag ? 'rgba(215,244,82,.35)' : 'rgba(255,255,255,.07)') + ';border-radius:16px;padding:16px 18px;' }));
+    const packs = [
+      { cr: '100', price: '360 ₽', bonus: false }, { cr: '300', price: '1 020 ₽', bonus: '+5%' },
+      { cr: '600', price: '1 940 ₽', bonus: '+10%' }, { cr: '1500', price: '4 590 ₽', bonus: '+15%' }
+    ];
+    const history = [
+      { date: '12.07.26', what: lang === 'ru' ? 'Донат «Поддержать Mia»' : 'Donation "Support Mia"', delta: '+100 ₽', color: '#4ADE80' },
+      { date: '10.07.26', what: lang === 'ru' ? 'Генерация видео · Mia' : 'Video generation · Mia', delta: '−40 кр.', color: '#F87171' },
+      { date: '08.07.26', what: lang === 'ru' ? 'Пакет кредитов 600' : 'Credit pack 600', delta: '+600 кр.', color: '#4ADE80' },
+      { date: '07.07.26', what: lang === 'ru' ? 'Подписка Standard Studio' : 'Standard Studio subscription', delta: '−1 490 ₽', color: '#F87171' }
+    ];
+
+    // ─── connections ───
+    const connDefs = [
+      { id: 'tg', name: 'Telegram', icon: icoTg, iconCol: 'background:rgba(56,189,248,.12);color:#38BDF8;', st: lang === 'ru' ? '2 БОТА' : '2 BOTS', stStyle: stActive, desc: lang === 'ru' ? 'Боты для диалогов с фанами: вебхук, AI-компаньон, автоответы, задержка' : 'Fan dialog bots: webhook, AI companion, auto-replies, delay', help: lang === 'ru' ? 'Создайте бота у @BotFather, вставьте токен — вебхук настроится сам. Затем привяжите персонажа и включите AI-компаньона, если нужны автоответы.' : 'Create a bot via @BotFather, paste the token — the webhook configures itself.' },
+      { id: 'wavespeed', name: 'WaveSpeed', icon: icoWave, iconCol: 'background:rgba(215,244,82,.12);color:#D7F452;', st: lang === 'ru' ? 'КЛЮЧ ПЛАТФОРМЫ' : 'PLATFORM KEY', stStyle: stDim, desc: lang === 'ru' ? 'AI-движок генераций. Свой ключ на Pro — генерации без списания кредитов' : 'Generation AI engine. Own key on Pro — no platform credits spent', help: lang === 'ru' ? 'На Standard используется ключ платформы (списываются кредиты). На Pro вставьте свой API-ключ WaveSpeed — генерации пойдут напрямую.' : 'Standard uses the platform key (credits). On Pro paste your own WaveSpeed API key.' },
+      { id: 'fanvue', name: 'Fanvue', icon: icoHeart, iconCol: 'background:rgba(240,168,200,.12);color:#F0A8C8;', st: lang === 'ru' ? 'ПОДКЛЮЧЁН' : 'CONNECTED', stStyle: stActive, desc: lang === 'ru' ? 'OAuth-коннект аккаунта: диалоги, вебхук, companion-настройки' : 'OAuth account connect: dialogs, webhook, companion settings', help: lang === 'ru' ? 'Авторизуйтесь через OAuth, выберите персонажа. Reconnect — если слетела сессия.' : 'Authorize via OAuth and pick a character.' },
+      { id: 'tribute', name: 'Tribute API', icon: icoGift, iconCol: 'background:rgba(192,132,252,.12);color:#C084FC;', st: lang === 'ru' ? 'НЕ НАСТРОЕН' : 'NOT SET', stStyle: stWarn, desc: lang === 'ru' ? 'Ваш собственный Tribute-аккаунт для донатов и платных чатов (не платформенные донаты)' : 'Your own Tribute account for donations and paid chats', help: lang === 'ru' ? 'Это ВАШ Tribute (авторский API) — не путать с разделом «Донаты», где выплаты идут через аккаунт ModelMate. Ключ и вебхук — по инструкции в Wiki.' : 'This is YOUR Tribute (author API) — not the platform "Donations" section.' },
+      { id: 'ig', name: 'Instagram', icon: icoCam, iconCol: 'background:rgba(255,255,255,.07);color:#9BA0A6;', st: lang === 'ru' ? 'В РАЗРАБОТКЕ' : 'COMING SOON', stStyle: stDim, desc: lang === 'ru' ? 'Диалоги Instagram — скоро. Существующие коннекты видны в списке' : 'Instagram dialogs — soon. Existing connects remain visible', help: lang === 'ru' ? 'Раздел в разработке — интерфейс ограничен.' : 'Under development — limited UI.' },
+      { id: 'push', name: lang === 'ru' ? 'Уведомления' : 'Notifications', icon: icoBell, iconCol: 'background:rgba(74,222,128,.12);color:#4ADE80;', st: lang === 'ru' ? 'ВКЛЮЧЕНЫ' : 'ON', stStyle: stActive, desc: lang === 'ru' ? 'Browser push о новых сообщениях в чате и донатах ModelMate' : 'Browser push for new chat messages and ModelMate donations', help: lang === 'ru' ? 'Разрешите уведомления в браузере. Работает и в установленной PWA.' : 'Allow notifications in the browser. Works in the installed PWA too.' }
+    ];
+    const connections = connDefs.map(c => ({ ...c, iconBox: iconBox38 + c.iconCol, stStyle: c.stStyle + 'display:inline-block;margin-top:3px;', open: () => setS({ connDetail: c.id }) }));
+    const connDetailData = connDefs.find(c => c.id === s.connDetail) || connDefs[0];
+    const connDetailIconBox = 'width:48px;height:48px;border-radius:14px;display:flex;align-items:center;justify-content:center;flex:none;' + connDetailData.iconCol;
+
+    // ─── per-platform field sets (по скриншотам) ───
+    const F = {
+      text: (lbl, val, ph, half) => ({ kind: 'text', lbl, val: val || '', ph: ph || '', half: half || false }),
+      select: (lbl, val, opts, half) => ({ kind: 'select', lbl, val, opts, half: half || false }),
+      toggle: (lbl, sub, on) => ({ kind: 'toggle', lbl, sub, on }),
+      note: (text) => ({ kind: 'note', text })
+    };
+    const modelOpts = ['Mia', 'Ruby', 'Velvet', lang === 'ru' ? 'Не назначена' : 'Not assigned'];
+    const aiCompOpts = [lang === 'ru' ? 'Выключен (оператор)' : 'Off (operator)', lang === 'ru' ? 'Включён (AI отвечает)' : 'On (AI replies)'];
+    const connFieldSets = {
+      tg: { title: lang === 'ru' ? 'Боты Telegram' : 'Telegram bots', prim: lang === 'ru' ? 'Добавить бота' : 'Add bot', fields: [
+        F.text(lang === 'ru' ? 'ТОКЕН БОТА (BotFather)' : 'BOT TOKEN (BotFather)', '', lang === 'ru' ? 'Вставьте токен BotFather' : 'Paste BotFather token'),
+        F.select(lang === 'ru' ? 'ПЕРСОНАЖ' : 'CHARACTER', 'Mia', modelOpts, true),
+        F.select('AI-' + (lang === 'ru' ? 'КОМПАНЬОН' : 'COMPANION'), aiCompOpts[0], aiCompOpts, true),
+        F.text(lang === 'ru' ? 'ЗАДЕРЖКА МИН (с)' : 'DELAY MIN (s)', '5', '', true),
+        F.text(lang === 'ru' ? 'ЗАДЕРЖКА МАКС (с)' : 'DELAY MAX (s)', '45', '', true),
+        F.text(lang === 'ru' ? 'АВТО / ЧАС' : 'AUTO / HOUR', '60', '', true),
+        F.note(lang === 'ru' ? 'Несколько ботов по тарифу. Персонаж на подключении — все диалоги бота наследуют его. В каждом чате можно переопределить в шапке диалога.' : 'Multiple bots per plan. The connection character is inherited by all the bot\'s dialogs.')
+      ], list: [{ name: '@miaklaim_chanel_bot', meta: lang === 'ru' ? 'webhook активен · Mia' : 'webhook active · Mia' }] },
+      wavespeed: { title: lang === 'ru' ? 'AI-движок генераций' : 'Generation AI engine', prim: lang === 'ru' ? 'Сохранить' : 'Save', fields: [
+        F.text('API-' + (lang === 'ru' ? 'КЛЮЧ' : 'KEY'), '', lang === 'ru' ? 'Вставьте ключ из wavespeed.ai' : 'Paste key from wavespeed.ai'),
+        F.note(lang === 'ru' ? 'Pro: нужен ваш API-ключ WaveSpeed — без него генерация недоступна. Standard / Credits: платформа может использовать свой ключ; ваш ключ не обязателен. Зарегистрируйтесь на wavespeed.ai (реф-ссылка ModelMate) и скопируйте ключ.' : 'Pro: needs your WaveSpeed API key. Standard/Credits: platform can use its own key.')
+      ], list: [] },
+      fanvue: { title: lang === 'ru' ? 'Аккаунты Fanvue' : 'Fanvue accounts', prim: lang === 'ru' ? 'Добавить Fanvue (OAuth)' : 'Add Fanvue (OAuth)', fields: [
+        F.select(lang === 'ru' ? 'ПЕРСОНАЖ' : 'CHARACTER', 'Mia', modelOpts, true),
+        F.select('AI-' + (lang === 'ru' ? 'КОМПАНЬОН' : 'COMPANION'), aiCompOpts[0], aiCompOpts, true),
+        F.text(lang === 'ru' ? 'ЗАДЕРЖКА МИН (с)' : 'DELAY MIN (s)', '5', '', true),
+        F.text(lang === 'ru' ? 'ЗАДЕРЖКА МАКС (с)' : 'DELAY MAX (s)', '45', '', true),
+        F.text(lang === 'ru' ? 'АВТО / ЧАС' : 'AUTO / HOUR', '60', '', true),
+        F.text('WEBHOOK URL', 'https://model-mate.online/api/fanvue/…', '', false),
+        F.note(lang === 'ru' ? 'Несколько creator-аккаунтов. Персонаж на подключении — диалоги наследуют его автоматически. Reconnect — если слетела сессия.' : 'Multiple creator accounts. Character on the connection is inherited automatically.')
+      ], list: [{ name: 'cb130848…', meta: lang === 'ru' ? 'подключён · Mia' : 'connected · Mia' }] },
+      tribute: { title: 'Tribute API', prim: lang === 'ru' ? 'Добавить Tribute' : 'Add Tribute', fields: [
+        F.text(lang === 'ru' ? 'МЕТКА (необязательно)' : 'LABEL (optional)', '', lang === 'ru' ? 'Например: Mia Tribute' : 'e.g. Mia Tribute', true),
+        F.select(lang === 'ru' ? 'ПЕРСОНАЖ' : 'CHARACTER', 'Mia', modelOpts, true),
+        F.text('API-' + (lang === 'ru' ? 'КЛЮЧ TRIBUTE' : 'KEY TRIBUTE'), '', lang === 'ru' ? 'Api-Key из Tribute → Настройки → API' : 'Api-Key from Tribute → Settings → API'),
+        F.text('WEBHOOK URL (Tribute → ' + (lang === 'ru' ? 'НАСТРОЙКИ' : 'SETTINGS') + ' → WEBHOOKS)', 'https://model-mate.online/api/tribute/…', '', false),
+        F.note(lang === 'ru' ? 'Донаты и подписки через ВАШ Tribute API (не путать с разделом «Донаты»). Доля чатера задаётся в «Команде». Ключ: панель автора Tribute → Настройки → API Keys → Generate.' : 'Donations & subscriptions via YOUR Tribute API. Chatter share is set in "Team".')
+      ], list: [{ name: 'Mia Tribute', meta: lang === 'ru' ? 'активен · Mia' : 'active · Mia' }] },
+      ig: { title: 'Instagram', prim: lang === 'ru' ? 'Добавить Instagram' : 'Add Instagram', disabled: true, fields: [
+        F.note(lang === 'ru' ? 'Интеграция Instagram Direct пока в разработке. Подключение аккаунта временно недоступно — мы сообщим, когда функция будет готова. Окно ответа — 24 часа после последнего сообщения фана.' : 'Instagram Direct integration is under development. Reply window is 24h after the fan\'s last message.')
+      ], list: [] },
+      push: { title: lang === 'ru' ? 'Уведомления браузера' : 'Browser notifications', prim: lang === 'ru' ? 'Сохранить' : 'Save', fields: [
+        F.toggle(lang === 'ru' ? 'Новые сообщения в чате' : 'New chat messages', lang === 'ru' ? 'push при входящем от фана' : 'push on incoming fan message', true),
+        F.toggle(lang === 'ru' ? 'Донаты ModelMate' : 'ModelMate donations', lang === 'ru' ? 'push при новом донате' : 'push on new donation', true),
+        F.toggle(lang === 'ru' ? 'Готовые генерации' : 'Finished generations', lang === 'ru' ? 'когда кадр или видео готовы' : 'when a frame or video is ready', false),
+        F.note(lang === 'ru' ? 'Разрешите уведомления в браузере. Работает и в установленной PWA.' : 'Allow notifications in the browser. Works in the installed PWA too.')
+      ], list: [] }
+    };
+    const cfs = connFieldSets[connDetailData.id] || connFieldSets.tg;
+    const knobOn = 'width:38px;height:22px;border-radius:12px;background:#D7F452;position:relative;cursor:pointer;flex:none;';
+    const knobOff = 'width:38px;height:22px;border-radius:12px;background:rgba(255,255,255,.15);position:relative;cursor:pointer;flex:none;';
+    const connFields = cfs.fields.map(f => ({
+      ...f,
+      isText: f.kind === 'text', isSelect: f.kind === 'select', isToggle: f.kind === 'toggle', isNote: f.kind === 'note',
+      knob: f.on ? knobOn : knobOff,
+      dot: 'width:18px;height:18px;border-radius:50%;position:absolute;top:2px;' + (f.on ? 'right:2px;background:#171A05;' : 'left:2px;background:#0D0E11;'),
+      wrap: 'display:flex;flex-direction:column;' + (f.half ? '' : 'grid-column:1 / -1;')
+    }));
+    const connList = cfs.list || [];
+    const cfsPrimStyle = 'flex:1;text-align:center;border-radius:9px;padding:10px;font-size:12px;font-weight:800;cursor:pointer;' + (cfs.disabled ? 'background:rgba(255,255,255,.06);color:#5C6066;' : 'background:linear-gradient(120deg,#C084FC,#F0A8C8);color:#1A0A14;');
+    const cfsHasCopy = ['fanvue', 'tribute'].includes(connDetailData.id);
+    // текущая настроенная конфигурация (если уже подключено)
+    const curConfigMap = {
+      tg: [[lang === 'ru' ? 'Бот' : 'Bot', '@miaklaim_chanel_bot'], [lang === 'ru' ? 'Вебхук' : 'Webhook', lang === 'ru' ? 'активен' : 'active'], [lang === 'ru' ? 'Персонаж' : 'Character', 'Mia'], ['AI', lang === 'ru' ? 'выключен' : 'off'], [lang === 'ru' ? 'Задержка' : 'Delay', '5–45 c · 60/' + (lang === 'ru' ? 'ч' : 'h')]],
+      fanvue: [[lang === 'ru' ? 'Аккаунт' : 'Account', 'cb130848…'], [lang === 'ru' ? 'Персонаж' : 'Character', 'Mia'], ['OAuth', lang === 'ru' ? 'сессия активна' : 'session active'], ['AI', lang === 'ru' ? 'выключен' : 'off']],
+      tribute: [[lang === 'ru' ? 'Метка' : 'Label', 'Mia Tribute'], [lang === 'ru' ? 'Персонаж' : 'Character', 'Mia'], ['API', '••••3f8a'], ['Webhook', 'model-mate.online/…']],
+      wavespeed: [[lang === 'ru' ? 'Режим' : 'Mode', lang === 'ru' ? 'ключ платформы' : 'platform key'], [lang === 'ru' ? 'Кредиты' : 'Credits', lang === 'ru' ? 'списываются' : 'spent']],
+      push: [[lang === 'ru' ? 'Сообщения' : 'Messages', lang === 'ru' ? 'вкл' : 'on'], [lang === 'ru' ? 'Донаты' : 'Donations', lang === 'ru' ? 'вкл' : 'on'], [lang === 'ru' ? 'Генерации' : 'Generations', lang === 'ru' ? 'выкл' : 'off']]
+    };
+    const cfsCurrent = (curConfigMap[connDetailData.id] || []).map(kv => ({ k: kv[0], v: kv[1] }));
+
+    // ─── team ───
+    const rOn = 'font-family:JetBrains Mono;font-size:8.5px;letter-spacing:.5px;background:rgba(215,244,82,.12);color:#D7F452;padding:2px 8px;border-radius:5px;';
+    const rOff = 'font-family:JetBrains Mono;font-size:8.5px;letter-spacing:.5px;background:rgba(255,255,255,.05);color:#5C6066;padding:2px 8px;border-radius:5px;text-decoration:line-through;';
+    const teamKpi = [
+      { label: lang === 'ru' ? 'ОТВЕТЫ / МЕС' : 'REPLIES / MO', value: '78' },
+      { label: lang === 'ru' ? 'ДИАЛОГИ' : 'DIALOGS', value: '2' },
+      { label: lang === 'ru' ? 'ПЕРВЫЙ ОТВЕТ' : 'FIRST REPLY', value: '4м 12с' },
+      { label: 'AI 👍 / 👎', value: '92%' }
+    ];
+    const mbBase = 'width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;flex:none;background:';
+    const members = [
+      { login: 'anna_op', meta: (lang === 'ru' ? 'активна · персонажи' : 'active · characters') + ': Mia', initial: 'A', avStyle: mbBase + 'linear-gradient(135deg,#4ADE80,#38BDF8);color:#0A2614;', sla: '96%', replies: '52', tribute: '15%', rights: [{ label: 'CHAT', style: rOn }, { label: 'STUDIO GEN', style: rOn }, { label: 'MODELS', style: rOff }, { label: 'INTEGRATIONS', style: rOff }, { label: 'BILLING', style: rOff }] },
+      { login: 'mark_night', meta: (lang === 'ru' ? 'активен · персонажи' : 'active · characters') + ': Mia, Ruby', initial: 'M', avStyle: mbBase + 'linear-gradient(135deg,#FACC15,#FB923C);color:#262008;', sla: '88%', replies: '26', tribute: '10%', rights: [{ label: 'CHAT', style: rOn }, { label: 'STUDIO GEN', style: rOn }, { label: 'MODELS', style: rOn }, { label: 'INTEGRATIONS', style: rOff }, { label: 'BILLING', style: rOff }] }
+    ];
+    const templates = [
+      { title: lang === 'ru' ? 'Приветствие VIP' : 'VIP greeting', body: lang === 'ru' ? 'Привет, милый! Так рада тебя видеть 💕 Как прошёл день?' : 'Hi love! So glad to see you 💕 How was your day?' },
+      { title: lang === 'ru' ? 'Оффер видео' : 'Video offer', body: lang === 'ru' ? 'Могу записать для тебя особенное видео… обсудим детали?' : 'I can record a special video for you… shall we discuss?' }
+    ];
+
+    // ─── operator create ───
+    const orR = s.opRights;
+    const opRightDefs = [
+      { key: 'chat', label: t.rChat }, { key: 'studio', label: t.rStudio },
+      { key: 'models', label: t.rModels }, { key: 'keys', label: t.rKeys }, { key: 'billing', label: t.rBilling }
+    ];
+    const cbStyle = (on) => 'width:20px;height:20px;flex:none;border-radius:6px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:12px;font-weight:900;' + (on ? 'background:#D7F452;color:#171A05;' : 'border:1.5px solid rgba(255,255,255,.2);color:transparent;');
+    const opRightRows = opRightDefs.map(r => ({
+      label: r.label, on: orR[r.key], cb: cbStyle(orR[r.key]),
+      rowStyle: 'display:flex;align-items:center;justify-content:space-between;gap:14px;background:#0D0E11;border:1px solid ' + (orR[r.key] ? 'rgba(215,244,82,.25)' : 'rgba(255,255,255,.07)') + ';border-radius:12px;padding:14px 16px;cursor:pointer;',
+      toggle: () => setS({ opRights: { ...orR, [r.key]: !orR[r.key] } })
+    }));
+    const opModelNames = ['Zaranoir', 'Velvet.X', 'Kima', 'Nadia', 'Rich', 'Ruby', 'Mia'];
+    const opModelRows = opModelNames.map((n, i) => ({ name: n, cb: cbStyle(i >= 5), on: i >= 5 }));
+    const openNewOp = () => setS({ page: 'newOperator', opError: false });
+    const saveOp = () => {
+      const ok = Object.values(orR).some(Boolean);
+      setS({ opError: !ok });
+    };
+
+    // mobile nav
+    const mColor = (ids) => ids.includes(s.page) ? '#D7F452' : '#7A7F86';
+    const mobileNav = [
+      { label: t.navOverview, icon: icoGrid, color: mColor(['overview']), go: go('overview') },
+      { label: t.navDialogs, icon: icoChat, color: mColor(['dialogs']), go: go('dialogs') },
+      { label: lang === 'ru' ? 'Студия' : 'Studio', icon: icoSpark, color: mColor(['images', 'video', 'characters']), go: go('images') },
+      { label: lang === 'ru' ? 'Финансы' : 'Money', icon: icoHeart, color: mColor(['donations', 'billing']), go: go('donations') },
+      { label: lang === 'ru' ? 'Ещё' : 'More', icon: icoLayers, color: s.moreOpen ? '#D7F452' : '#7A7F86', go: () => setS({ moreOpen: true }) }
+    ];
+    const moreItems = [
+      { label: t.navVideo, desc: t.videoDesc, icon: icoFilm, go: go('video') },
+      { label: t.navCharacters, desc: lang === 'ru' ? 'Ваши виртуальные модели' : 'Your virtual models', icon: icoStar, go: go('characters') },
+      { label: t.navWorkflow, desc: lang === 'ru' ? 'Узловой конструктор (Pro)' : 'Node builder (Pro)', icon: icoFlow, go: go('workflow') },
+      { label: t.navBilling, desc: t.billingDesc, icon: icoCard, go: go('billing') },
+      { label: t.navConnections, desc: t.connectionsDesc, icon: icoPlug, go: go('connections') },
+      { label: t.navTeam, desc: t.teamDesc, icon: icoTeam, go: go('team') }
+    ];
+
+    const dateStr = lang === 'ru' ? 'ВТ · 14 ИЮЛЯ 2026' : 'TUE · JULY 14 2026';
+
+    return {
+      t, isMobile, showSidebar: !isMobile, page: s.page, moreOpen: s.moreOpen,
+      langLabel: lang === 'ru' ? 'RU → EN' : 'EN → RU',
+      toggleLang: () => setS({ lang: lang === 'ru' ? 'en' : 'ru' }),
+      pageTitle: pageTitles[s.page], todayLabel: dateStr,
+      contentPad: isMobile ? 'padding:16px 14px 20px;height:100%;box-sizing:border-box;' : 'padding:24px 28px 32px;height:100%;box-sizing:border-box;max-width:1280px;margin:0 auto;',
+      navGroups, mobileNav, moreItems,
+      goBilling: go('billing'), goImages: go('images'), goDialogs: go('dialogs'), goDonations: go('donations'), goGuide: go('guide'), goOverview: go('overview'),
+      startSteps, guideSteps, isGuide: s.page === 'guide',
+      mediaData, mediaOpen: mediaData != null, closeMedia: () => setS({ mediaStep: null }),
+      closeMore: () => setS({ moreOpen: false }), stop: (e) => e.stopPropagation(),
+      isOverview: s.page === 'overview', isDialogs: s.page === 'dialogs', isImages: s.page === 'images',
+      isVideo: s.page === 'video', isCharacters: s.page === 'characters', isDonations: s.page === 'donations',
+      isBilling: s.page === 'billing', isConnections: s.page === 'connections', isTeam: s.page === 'team', isWorkflow: s.page === 'workflow', isNewOperator: s.page === 'newOperator',
+      icoBolt, icoSpark, icoChat, icoUpload, icoCopy, icoImage, icoFilm, icoPlay, icoFlow, icoDownload, icoZoom, icoGrid2, icoClip, icoSendArrow,
+      studioCards, recentDialogs, recentFrames,
+      chatFilters, platFilters, chats, messages, notes, threadHead, noChats,
+      noteFormOpen: s.noteFormOpen, noteTagChips, toggleNote: () => setS({ noteFormOpen: !s.noteFormOpen }), closeNote: () => setS({ noteFormOpen: false }), saveNote: () => setS({ noteFormOpen: false }),
+      emojiPick, emojiOpen: s.emojiOpen, toggleEmoji: () => setS({ emojiOpen: !s.emojiOpen, msgReact: null }),
+      backToList: () => setS({ mobileChat: false, msgReact: null, emojiOpen: false }),
+      closePops: () => { if (s.msgReact !== null || s.emojiOpen) setS({ msgReact: null, emojiOpen: false }); },
+      scrollDown: () => { const el = document.getElementById('mm-thread-scroll'); if (el) el.scrollTop = el.scrollHeight; },
+      showThread: !isMobile || s.mobileChat, showList: !isMobile || !s.mobileChat, showNotes: !isMobile && !isNarrow,
+      isMobileChat: isMobile && s.mobileChat,
+      dialogsGrid: isMobile ? 'display:flex;flex-direction:column;gap:12px;flex:1;min-height:0;' : (isNarrow ? 'display:grid;grid-template-columns:270px 1fr;gap:12px;flex:1;min-height:420px;' : 'display:grid;grid-template-columns:290px 1fr 270px;gap:12px;flex:1;min-height:420px;'),
+      studioGrid: isMobile ? 'display:grid;grid-template-columns:1fr;gap:14px;' : 'display:grid;grid-template-columns:340px 1fr;gap:16px;align-items:start;',
+      imgModes, curMode, charChips, ratioChips, archiveFrames, videoArchive,
+      archiveMini: [0, 1, 2, 3].map(i => ({ style: 'aspect-ratio:3/4;border-radius:7px;border:2px solid transparent;cursor:pointer;background:' + G[i % 6] })),
+      contentModes, aiModels, countChips,
+      showGenError: s.showGenError, imgErrList, triggerGen, genFieldErr,
+      ffState: s.ffState, ffIdle: s.ffState === 'idle', ffLoading: s.ffState === 'loading', ffDone: s.ffState === 'done', genFirstFrame, ffImgStyle,
+      firstFrameOpts, qualityOpts, vfmtOpts, vtimeOpts, vidCost, showFirstFrameSlot: s.hasFirstFrame === 'yes',
+      lightboxData, hasLightbox: lightboxData != null, closeLightbox: () => setS({ lightbox: null }),
+      showGenFirst: s.hasFirstFrame === 'no',
+      characters, charTabs, charPhotos, photoTagOpts, photoTagMenu, personaFields, exifPresets, exifPresetSel, historyRows,
+      fieldLbl, inputSt, areaSt,
+      isCharPhotos: s.charTab === 'photos', isCharPersona: s.charTab === 'persona', isCharExif: s.charTab === 'exif', isCharHistory: s.charTab === 'history',
+      noCharDetail: !s.charDetail, hasCharDetail: !!s.charDetail, closeChar: () => setS({ charDetail: null }),
+      connFields, connList, hasConnList: connList.length > 0, cfsTitle: cfs.title, cfsPrim: cfs.prim, cfsDisabled: cfs.disabled || false, cfsPrimStyle, cfsHasCopy,
+      cfsCurrent, hasCurConfig: cfsCurrent.length > 0,
+      opRightRows, opModelRows, opError: s.opError, openNewOp, saveOp, closeNewOp: go('team'),
+      donTabs, donStats, donLinks, incoming, myDonations,
+      isDonOverview: s.donTab === 'overview', isDonCreate: s.donTab === 'create',
+      usageBars, plans, packs, history, perLabel: s.period === 'month' ? (lang === 'ru' ? 'мес' : 'mo') : (lang === 'ru' ? 'год' : 'yr'),
+      setTierStd: () => setS({ tier: 'standard' }), setTierPro: () => setS({ tier: 'pro' }),
+      setPerM: () => setS({ period: 'month' }), setPerY: () => setS({ period: 'year' }),
+      tierStdStyle: s.tier === 'standard' ? segOn : segOff, tierProStyle: s.tier === 'pro' ? segOn : segOff,
+      perMStyle: s.period === 'month' ? segOn : segOff, perYStyle: s.period === 'year' ? segOn : segOff,
+      connections, connDetailData, connDetailIconBox,
+      noConnDetail: !s.connDetail, hasConnDetail: !!s.connDetail, closeConn: () => setS({ connDetail: null }),
+      teamKpi, members, templates
+    };
+  }
+}
+</script>
+</body>
+</html>

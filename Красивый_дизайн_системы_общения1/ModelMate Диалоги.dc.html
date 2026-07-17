@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="./assets/favicon.ico" type="image/x-icon">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700;800;900&family=Geist+Mono:wght@400;500;600&family=Instrument+Serif:ital@1&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<style>
+  :root{
+    --bg-0:#08080A; --bg-1:#121215; --bg-2:#16161B; --bg-3:#1A1A1F; --bg-inset:#050507;
+    --border-1:#26262C; --border-2:#34343B; --border-strong:#4A4A52;
+    --fg-1:#F5F5F7; --fg-2:#9A9AA3; --fg-3:#5F5F68; --fg-on-accent:#08080A;
+    --accent:#D8FF3D; --accent-hover:#E4FF66; --accent-press:#BFE830; --accent-glow:rgba(216,255,61,0.25);
+    --cat-photo:#FF7A4D; --cat-video:#5BD4FF; --cat-i2v:#C58CFF;
+    --success:#7CE38B; --warning:#F5C443; --danger:#FF5A6E;
+    --font-sans:"Geist",ui-sans-serif,system-ui,sans-serif;
+    --font-mono:"Geist Mono",ui-monospace,Menlo,monospace;
+    --font-serif:"Instrument Serif",serif;
+    --ease-studio:cubic-bezier(0.2,0.8,0.2,1);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;background:var(--bg-0);color:var(--fg-1);font-family:var(--font-sans);-webkit-font-smoothing:antialiased;}
+  ::selection{background:var(--accent);color:var(--fg-on-accent);}
+  ::-webkit-scrollbar{width:10px;height:10px;}
+  ::-webkit-scrollbar-thumb{background:var(--border-2);border-radius:999px;border:2px solid var(--bg-0);}
+  ::-webkit-scrollbar-thumb:hover{background:var(--border-strong);}
+  ::-webkit-scrollbar-track{background:transparent;}
+  [data-lucide]{width:1em;height:1em;stroke-width:1.75;}
+  .mm-msg .mm-orig{max-height:0;opacity:0;overflow:hidden;transition:max-height .28s var(--ease-studio),opacity .28s var(--ease-studio),margin .28s var(--ease-studio);}
+  .mm-msg:hover .mm-orig,.mm-msg.mm-open .mm-orig{max-height:140px;opacity:1;margin-top:8px;}
+  .mm-link{color:var(--accent);background-image:linear-gradient(currentColor,currentColor);background-position:0 100%;background-repeat:no-repeat;background-size:0 1px;transition:background-size .24s var(--ease-studio);}
+  .mm-link:hover{background-size:100% 1px;}
+  input,textarea,select,button{font-family:inherit;}
+  textarea::placeholder,input::placeholder{color:var(--fg-3);}
+  @keyframes mmfade{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}
+  .mm-view{animation:mmfade .4s var(--ease-studio);}
+
+  /* ---- responsive ---- */
+  .mm-mobile-only{display:none !important;}
+  @media(max-width:1180px){
+    .mm-notes{display:none !important;}
+    .mm-dlg-grid{grid-template-columns:300px 1fr !important;}
+  }
+  @media(max-width:920px){
+    .mm-navlabels{display:none !important;}
+    .mm-topmeta{display:none !important;}
+    .mm-dlg-grid{grid-template-columns:1fr !important;}
+    .mm-dlg-grid > [data-pane]{display:none !important;}
+    .mm-dlg-grid[data-active="list"] [data-pane="list"]{display:flex !important;}
+    .mm-dlg-grid[data-active="chat"] [data-pane="chat"]{display:flex !important;}
+    .mm-dlg-grid[data-active="notes"] [data-pane="notes"]{display:flex !important;}
+    .mm-notes[data-pane="notes"]{display:none;}
+    .mm-dlg-grid[data-active="notes"] .mm-notes{display:flex !important;}
+    .mm-mobile-only{display:flex !important;}
+    .mm-ov-two{grid-template-columns:1fr !important;}
+    .mm-params{flex-wrap:wrap !important;}
+    .mm-param{flex:1 1 46% !important;}
+  }
+  @media(max-width:560px){
+    .mm-stats{grid-template-columns:1fr 1fr !important;}
+    .mm-frames{grid-template-columns:1fr 1fr !important;}
+    .mm-param{flex:1 1 100% !important;}
+  }
+</style>
+</helmet>
+
+<div style="min-height:100vh;background:var(--bg-0);display:flex;flex-direction:column;">
+
+  <!-- announcement bar -->
+  <div style="background:linear-gradient(90deg,rgba(91,212,255,0.10),rgba(197,140,255,0.10));border-bottom:1px solid var(--border-1);display:flex;align-items:center;justify-content:center;gap:8px;padding:9px 16px;font-size:13px;color:var(--fg-2);">
+    <i data-lucide="send" style="color:var(--cat-video);font-size:15px;"></i>
+    <span>Поддержка, анонсы, общение в <a class="mm-link" href="#">нашем канале</a></span>
+  </div>
+
+  <!-- header -->
+  <header style="position:sticky;top:0;z-index:40;display:flex;align-items:center;gap:14px;padding:12px 20px;background:var(--glass,rgba(8,8,10,0.72));backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-bottom:1px solid var(--border-1);">
+    <div style="display:flex;align-items:center;gap:11px;flex-shrink:0;">
+      <div style="width:40px;height:40px;border-radius:12px;background:linear-gradient(135deg,var(--cat-photo),var(--cat-i2v) 55%,var(--cat-video));display:flex;align-items:center;justify-content:center;font-weight:800;color:var(--fg-on-accent);font-size:19px;box-shadow:var(--elev-1,0 1px 2px rgba(0,0,0,.4));">M</div>
+      <div style="line-height:1.1;">
+        <div style="font-weight:700;font-size:15px;letter-spacing:-0.01em;">ModelMate</div>
+        <div style="font-family:var(--font-mono);font-size:10.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--fg-3);">Creator OS</div>
+      </div>
+    </div>
+
+    <nav style="display:flex;align-items:center;gap:2px;margin-left:8px;">
+      <sc-for list="{{ nav }}" as="item" hint-placeholder-count="6">
+        <button onClick="{{ item.onClick }}" style="{{ item.style }}" style-hover="color:var(--fg-1);background:var(--bg-2);">
+          <i data-lucide="{{ item.icon }}" style="font-size:16px;"></i>
+          <span class="mm-navlabels">{{ item.label }}</span>
+          <sc-if value="{{ item.beta }}" hint-placeholder-val="{{ false }}">
+            <span style="font-family:var(--font-mono);font-size:9px;letter-spacing:0.06em;text-transform:uppercase;background:var(--warning);color:var(--fg-on-accent);padding:1px 5px;border-radius:999px;font-weight:600;">beta</span>
+          </sc-if>
+        </button>
+      </sc-for>
+    </nav>
+
+    <div style="flex:1;"></div>
+
+    <div class="mm-topmeta" style="display:flex;align-items:center;gap:8px;padding:8px 14px;border:1px solid var(--border-1);border-radius:999px;background:var(--bg-1);">
+      <i data-lucide="gem" style="font-size:14px;color:var(--accent);"></i>
+      <span style="font-family:var(--font-mono);font-size:11px;letter-spacing:0.06em;color:var(--fg-2);text-transform:uppercase;">Standard Studio</span>
+      <span style="width:1px;height:14px;background:var(--border-2);"></span>
+      <span style="font-family:var(--font-mono);font-size:13px;font-weight:600;color:var(--fg-1);">2 710</span>
+      <span style="font-family:var(--font-mono);font-size:11px;color:var(--fg-3);">кр.</span>
+    </div>
+
+    <div class="mm-topmeta" style="display:flex;align-items:center;gap:2px;">
+      <button style="background:transparent;border:0;color:var(--fg-2);font-size:13px;font-weight:500;padding:8px 11px;border-radius:8px;cursor:pointer;" style-hover="color:var(--fg-1);background:var(--bg-2);">Кабинет</button>
+      <button style="background:transparent;border:0;color:var(--fg-2);font-size:13px;font-weight:500;padding:8px 11px;border-radius:8px;cursor:pointer;" style-hover="color:var(--fg-1);background:var(--bg-2);">Сайт</button>
+      <button style="background:transparent;border:0;color:var(--fg-2);font-size:13px;font-weight:500;padding:8px 11px;border-radius:8px;cursor:pointer;" style-hover="color:var(--danger);background:var(--bg-2);">Выйти</button>
+    </div>
+
+    <div style="display:flex;align-items:center;gap:9px;padding:5px 12px 5px 5px;border:1px solid var(--border-1);border-radius:999px;background:var(--bg-1);flex-shrink:0;">
+      <div style="width:28px;height:28px;border-radius:999px;background:linear-gradient(135deg,var(--cat-i2v),var(--cat-video));display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;color:var(--fg-on-accent);">U</div>
+      <span class="mm-topmeta" style="font-size:12.5px;color:var(--fg-2);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">utochkinrenat@g…</span>
+    </div>
+  </header>
+
+  <!-- ============ OVERVIEW ============ -->
+  <sc-if value="{{ isOverview }}" hint-placeholder-val="{{ false }}">
+  <main class="mm-view" style="width:100%;max-width:1280px;margin:0 auto;padding:28px 24px 60px;">
+
+    <div class="mm-stats" style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;">
+      <sc-for list="{{ stats }}" as="s" hint-placeholder-count="4">
+        <div style="background:var(--bg-1);border:1px solid var(--border-1);border-radius:16px;padding:20px 22px;box-shadow:var(--elev-1,inset 0 1px 0 rgba(255,255,255,0.04));">
+          <div style="font-family:var(--font-mono);font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:var(--fg-3);margin-bottom:12px;">{{ s.label }}</div>
+          <div style="font-size:34px;font-weight:800;letter-spacing:-0.02em;color:{{ s.color }};line-height:1;">{{ s.value }}</div>
+          <div style="font-size:13px;color:var(--fg-2);margin-top:8px;">{{ s.sub }}</div>
+        </div>
+      </sc-for>
+    </div>
+
+    <div style="background:var(--bg-1);border:1px solid var(--border-1);border-radius:16px;padding:22px 24px;margin-top:16px;">
+      <div style="font-size:16px;font-weight:600;margin-bottom:16px;">Быстрые действия</div>
+      <div style="display:flex;flex-wrap:wrap;gap:12px;">
+        <button onClick="{{ goDialogs }}" style="display:inline-flex;align-items:center;gap:9px;background:var(--accent);color:var(--fg-on-accent);border:0;font-weight:600;font-size:14px;padding:13px 20px;border-radius:12px;cursor:pointer;transition:transform .12s var(--ease-studio),background .12s;" style-hover="background:var(--accent-hover);" style-active="transform:scale(0.985);">
+          <i data-lucide="messages-square" style="font-size:17px;"></i>Открыть диалоги
+        </button>
+        <button style="display:inline-flex;align-items:center;gap:9px;background:var(--bg-2);color:var(--fg-1);border:1px solid var(--border-1);font-weight:500;font-size:14px;padding:13px 20px;border-radius:12px;cursor:pointer;" style-hover="border-color:var(--border-2);background:var(--bg-3);">
+          <i data-lucide="image" style="font-size:17px;color:var(--cat-photo);"></i>Новая картинка
+        </button>
+        <button style="display:inline-flex;align-items:center;gap:9px;background:var(--bg-2);color:var(--fg-1);border:1px solid var(--border-1);font-weight:500;font-size:14px;padding:13px 20px;border-radius:12px;cursor:pointer;" style-hover="border-color:var(--border-2);background:var(--bg-3);">
+          <i data-lucide="clapperboard" style="font-size:17px;color:var(--cat-video);"></i>Motion / видео
+        </button>
+        <button style="display:inline-flex;align-items:center;gap:9px;background:var(--bg-2);color:var(--fg-1);border:1px solid var(--border-1);font-weight:500;font-size:14px;padding:13px 20px;border-radius:12px;cursor:pointer;" style-hover="border-color:var(--border-2);background:var(--bg-3);">
+          <i data-lucide="sliders-horizontal" style="font-size:17px;color:var(--fg-2);"></i>Кабинет и интеграции
+        </button>
+      </div>
+    </div>
+
+    <div class="mm-ov-two" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px;">
+      <!-- recent dialogs -->
+      <div style="background:var(--bg-1);border:1px solid var(--border-1);border-radius:16px;padding:20px 22px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+          <div style="font-size:16px;font-weight:600;">Недавние диалоги</div>
+          <button onClick="{{ goDialogs }}" style="background:transparent;border:0;color:var(--accent);font-size:13px;font-weight:500;cursor:pointer;display:inline-flex;align-items:center;gap:4px;">Все <i data-lucide="arrow-right" style="font-size:14px;"></i></button>
+        </div>
+        <sc-for list="{{ recent }}" as="r" hint-placeholder-count="5">
+          <button onClick="{{ r.onClick }}" style="display:block;width:100%;text-align:left;background:transparent;border:0;border-top:1px solid var(--border-1);padding:14px 4px;cursor:pointer;transition:padding-left .18s var(--ease-studio);" style-hover="padding-left:10px;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+              <span style="font-weight:600;font-size:14px;">{{ r.name }}</span>
+              <span style="font-family:var(--font-mono);font-size:10px;letter-spacing:0.05em;text-transform:uppercase;color:var(--cat-video);">Telegram</span>
+            </div>
+            <div style="font-size:13px;color:var(--fg-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ r.preview }}</div>
+          </button>
+        </sc-for>
+      </div>
+      <!-- last frames -->
+      <div style="background:var(--bg-1);border:1px solid var(--border-1);border-radius:16px;padding:20px 22px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+          <div style="font-size:16px;font-weight:600;">Последние кадры</div>
+          <button style="background:transparent;border:0;color:var(--accent);font-size:13px;font-weight:500;cursor:pointer;display:inline-flex;align-items:center;gap:4px;">Студия <i data-lucide="arrow-right" style="font-size:14px;"></i></button>
+        </div>
+        <div class="mm-frames" style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;">
+          <sc-for list="{{ frames }}" as="f" hint-placeholder-count="4">
+            <div style="aspect-ratio:3/4;border-radius:12px;border:1px solid var(--border-1);background:linear-gradient(160deg,{{ f.a }},{{ f.b }});display:flex;align-items:flex-end;padding:8px;overflow:hidden;position:relative;cursor:pointer;transition:transform .5s var(--ease-studio);" style-hover="transform:scale(1.03);">
+              <i data-lucide="image" style="position:absolute;top:8px;left:8px;font-size:15px;color:rgba(255,255,255,0.4);"></i>
+              <span style="font-family:var(--font-mono);font-size:9px;letter-spacing:0.05em;color:rgba(255,255,255,0.8);text-transform:uppercase;">{{ f.tag }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+
+    <!-- last videos -->
+    <div style="background:var(--bg-1);border:1px solid var(--border-1);border-radius:16px;padding:20px 22px;margin-top:16px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+        <div style="font-size:16px;font-weight:600;">Последние видео</div>
+        <button style="background:transparent;border:0;color:var(--accent);font-size:13px;font-weight:500;cursor:pointer;display:inline-flex;align-items:center;gap:4px;">Motion <i data-lucide="arrow-right" style="font-size:14px;"></i></button>
+      </div>
+      <div class="mm-frames" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">
+        <sc-for list="{{ videos }}" as="v" hint-placeholder-count="3">
+          <div style="aspect-ratio:16/10;border-radius:12px;border:1px solid var(--border-1);background:linear-gradient(160deg,{{ v.a }},{{ v.b }});display:flex;align-items:center;justify-content:center;cursor:pointer;transition:transform .5s var(--ease-studio);" style-hover="transform:scale(1.02);">
+            <div style="width:46px;height:46px;border-radius:999px;background:rgba(8,8,10,0.5);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;border:1px solid rgba(255,255,255,0.15);">
+              <i data-lucide="play" style="font-size:18px;color:#fff;"></i>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </main>
+  </sc-if>
+
+  <!-- ============ DIALOGS ============ -->
+  <sc-if value="{{ isDialogs }}" hint-placeholder-val="{{ true }}">
+  <main class="mm-view" style="flex:1;padding:16px 20px 20px;overflow:hidden;">
+    <div class="mm-dlg-grid" data-active="{{ mobilePane }}" style="display:grid;grid-template-columns:320px 1fr 340px;gap:16px;height:calc(100vh - 132px);min-height:560px;">
+
+      <!-- ===== LIST ===== -->
+      <aside data-pane="list" style="display:flex;flex-direction:column;background:var(--bg-1);border:1px solid var(--border-1);border-radius:16px;overflow:hidden;">
+        <div style="padding:18px 18px 12px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+            <span style="font-family:var(--font-mono);font-size:12px;letter-spacing:0.1em;text-transform:uppercase;color:var(--fg-2);">Диалоги</span>
+            <span style="font-family:var(--font-mono);font-size:13px;color:var(--fg-3);">9</span>
+          </div>
+          <!-- platform toggle -->
+          <div style="display:flex;gap:6px;background:var(--bg-inset);border:1px solid var(--border-1);border-radius:12px;padding:4px;margin-bottom:12px;">
+            <button style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:8px;border-radius:9px;border:0;background:var(--bg-3);color:var(--fg-1);cursor:pointer;font-size:12px;font-weight:600;">
+              <i data-lucide="send" style="font-size:15px;color:var(--cat-video);"></i>Telegram
+            </button>
+            <button style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:8px;border-radius:9px;border:0;background:transparent;color:var(--fg-3);cursor:pointer;font-size:12px;font-weight:500;" style-hover="color:var(--fg-1);">
+              <i data-lucide="globe" style="font-size:15px;color:var(--success);"></i>Прочее
+            </button>
+          </div>
+          <!-- filters -->
+          <div style="display:flex;flex-wrap:wrap;gap:6px;">
+            <sc-for list="{{ filters }}" as="fl" hint-placeholder-count="6">
+              <button onClick="{{ fl.onClick }}" style="{{ fl.style }}">
+                {{ fl.label }}
+                <sc-if value="{{ fl.count }}" hint-placeholder-val="{{ false }}">
+                  <span style="font-family:var(--font-mono);font-size:10px;padding:1px 6px;border-radius:999px;background:{{ fl.badgeBg }};color:{{ fl.badgeFg }};font-weight:600;">{{ fl.count }}</span>
+                </sc-if>
+              </button>
+            </sc-for>
+          </div>
+        </div>
+
+        <div style="flex:1;overflow-y:auto;padding:4px 10px 12px;">
+          <sc-for list="{{ dialogs }}" as="d" hint-placeholder-count="6">
+            <button onClick="{{ d.onClick }}" style="{{ d.rowStyle }}">
+              <div style="position:relative;flex-shrink:0;">
+                <div style="width:44px;height:44px;border-radius:13px;background:{{ d.avatarBg }};display:flex;align-items:center;justify-content:center;font-weight:700;font-size:16px;color:#fff;overflow:hidden;">
+                  <i data-lucide="{{ d.avatarIcon }}" style="font-size:19px;"></i>
+                </div>
+                <sc-if value="{{ d.badge }}" hint-placeholder-val="{{ false }}">
+                  <span style="position:absolute;top:-6px;left:-6px;font-family:var(--font-mono);font-size:8.5px;letter-spacing:0.04em;font-weight:700;padding:2px 5px;border-radius:6px;background:{{ d.badgeBg }};color:{{ d.badgeFg }};text-transform:uppercase;box-shadow:0 2px 6px rgba(0,0,0,0.4);">{{ d.badge }}</span>
+                </sc-if>
+              </div>
+              <div style="flex:1;min-width:0;text-align:left;">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:2px;">
+                  <span style="font-weight:600;font-size:14px;color:var(--fg-1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ d.name }}</span>
+                  <span style="font-family:var(--font-mono);font-size:10px;color:var(--fg-3);flex-shrink:0;">{{ d.lang }}</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;">
+                  <span style="font-family:var(--font-mono);font-size:10px;letter-spacing:0.05em;text-transform:uppercase;color:var(--fg-3);">Модель · {{ d.model }}</span>
+                </div>
+                <div style="font-size:12.5px;color:var(--fg-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ d.preview }}</div>
+              </div>
+            </button>
+          </sc-for>
+        </div>
+      </aside>
+
+      <!-- ===== CHAT ===== -->
+      <section data-pane="chat" style="display:flex;flex-direction:column;background:var(--bg-1);border:1px solid var(--border-1);border-radius:16px;overflow:hidden;position:relative;">
+        <!-- chat header -->
+        <div style="padding:14px 20px;border-bottom:1px solid var(--border-1);display:flex;flex-direction:column;gap:14px;">
+          <div style="display:flex;align-items:center;gap:12px;">
+            <button class="mm-mobile-only" onClick="{{ backToList }}" style="display:none;align-items:center;justify-content:center;width:36px;height:36px;border-radius:10px;border:1px solid var(--border-1);background:var(--bg-2);color:var(--fg-1);cursor:pointer;flex-shrink:0;">
+              <i data-lucide="arrow-left" style="font-size:18px;"></i>
+            </button>
+            <div style="width:44px;height:44px;border-radius:13px;background:{{ current.avatarBg }};display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+              <i data-lucide="{{ current.avatarIcon }}" style="font-size:20px;color:#fff;"></i>
+            </div>
+            <div style="flex:1;min-width:0;">
+              <div style="display:flex;align-items:center;gap:8px;">
+                <span style="font-weight:700;font-size:17px;letter-spacing:-0.01em;">{{ current.name }}</span>
+                <sc-if value="{{ current.badge }}" hint-placeholder-val="{{ false }}">
+                  <span style="font-family:var(--font-mono);font-size:9.5px;letter-spacing:0.04em;font-weight:700;padding:2px 6px;border-radius:6px;background:{{ current.badgeBg }};color:{{ current.badgeFg }};text-transform:uppercase;">{{ current.badge }}</span>
+                </sc-if>
+              </div>
+              <div style="font-family:var(--font-mono);font-size:11px;color:var(--fg-3);letter-spacing:0.03em;">Telegram · topic 8093427922</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+              <span style="font-family:var(--font-mono);font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--fg-3);">Модель</span>
+              <span style="font-family:var(--font-mono);font-size:12px;font-weight:600;color:var(--accent);">MIA</span>
+              <button class="mm-mobile-only mm-notes-btn" onClick="{{ openNotes }}" style="display:none;align-items:center;justify-content:center;width:36px;height:36px;border-radius:10px;border:1px solid var(--border-1);background:var(--bg-2);color:var(--fg-2);cursor:pointer;">
+                <i data-lucide="clipboard-list" style="font-size:17px;"></i>
+              </button>
+            </div>
+          </div>
+
+          <!-- reply params -->
+          <div class="mm-params" style="display:flex;align-items:flex-end;gap:12px;">
+            <label class="mm-param" style="display:flex;flex-direction:column;gap:5px;min-width:150px;">
+              <span style="font-family:var(--font-mono);font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--fg-3);">Язык ответа</span>
+              <div style="position:relative;">
+                <select style="appearance:none;width:100%;background:var(--bg-2);border:1px solid var(--border-1);color:var(--fg-1);font-size:13px;padding:9px 30px 9px 12px;border-radius:10px;cursor:pointer;" style-hover="border-color:var(--border-2);">
+                  <option>Español</option><option>English</option><option>Deutsch</option><option>Русский</option>
+                </select>
+                <i data-lucide="chevron-down" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:15px;color:var(--fg-3);pointer-events:none;"></i>
+              </div>
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;padding-bottom:9px;cursor:pointer;">
+              <span style="width:18px;height:18px;border-radius:5px;border:1px solid var(--border-2);background:var(--bg-2);display:inline-flex;align-items:center;justify-content:center;"></span>
+              <span style="font-size:13px;color:var(--fg-2);">Без перевода</span>
+            </label>
+            <label class="mm-param" style="display:flex;flex-direction:column;gap:5px;min-width:180px;">
+              <span style="font-family:var(--font-mono);font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--fg-3);">AI-компаньон</span>
+              <div style="position:relative;">
+                <select style="appearance:none;width:100%;background:var(--bg-2);border:1px solid var(--border-1);color:var(--fg-1);font-size:13px;padding:9px 30px 9px 12px;border-radius:10px;cursor:pointer;" style-hover="border-color:var(--border-2);">
+                  <option>Как на подключении</option><option>Флирт</option><option>Дружеский</option><option>Выкл</option>
+                </select>
+                <i data-lucide="chevron-down" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:15px;color:var(--fg-3);pointer-events:none;"></i>
+              </div>
+            </label>
+            <label class="mm-param" style="display:flex;flex-direction:column;gap:5px;min-width:110px;">
+              <span style="font-family:var(--font-mono);font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--fg-3);">Категория</span>
+              <div style="position:relative;">
+                <select style="appearance:none;width:100%;background:var(--bg-2);border:1px solid var(--border-1);color:var(--fg-1);font-size:13px;padding:9px 30px 9px 12px;border-radius:10px;cursor:pointer;" style-hover="border-color:var(--border-2);">
+                  <option>VIP</option><option>Бомж</option><option>Новый</option>
+                </select>
+                <i data-lucide="chevron-down" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:15px;color:var(--fg-3);pointer-events:none;"></i>
+              </div>
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;padding-bottom:9px;cursor:pointer;">
+              <span style="width:18px;height:18px;border-radius:5px;border:1px solid var(--border-2);background:var(--bg-2);display:inline-flex;align-items:center;justify-content:center;"></span>
+              <span style="font-size:13px;color:var(--fg-2);">Заблокировать</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- messages -->
+        <div style="flex:1;overflow-y:auto;padding:22px 24px;display:flex;flex-direction:column;gap:14px;">
+          <div style="align-self:center;font-family:var(--font-mono);font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--fg-3);background:var(--bg-2);border:1px solid var(--border-1);padding:5px 12px;border-radius:999px;">02 июля 2026</div>
+          <sc-for list="{{ messages }}" as="m" hint-placeholder-count="5">
+            <div class="mm-msg {{ m.openClass }}" onClick="{{ m.onClick }}" style="{{ m.wrapStyle }}">
+              <div style="{{ m.bubbleStyle }}">
+                <div style="font-size:15px;line-height:1.5;color:var(--fg-1);">{{ m.ru }}</div>
+                <div class="mm-orig" style="border-top:1px solid {{ m.origBorder }};padding-top:0;">
+                  <div style="display:flex;align-items:center;gap:6px;padding-top:8px;">
+                    <span style="font-family:var(--font-mono);font-size:9px;letter-spacing:0.08em;text-transform:uppercase;color:var(--fg-3);">{{ m.origLabel }}</span>
+                    <span style="font-family:var(--font-mono);font-size:9px;color:{{ m.langColor }};text-transform:uppercase;">{{ m.langTag }}</span>
+                  </div>
+                  <div style="font-size:13.5px;line-height:1.45;color:var(--fg-2);margin-top:3px;">{{ m.orig }}</div>
+                </div>
+                <div style="display:flex;align-items:center;gap:6px;margin-top:8px;">
+                  <span style="font-family:var(--font-mono);font-size:10px;color:var(--fg-3);">{{ m.time }}</span>
+                  <i data-lucide="languages" style="font-size:12px;color:var(--fg-3);opacity:0.7;"></i>
+                </div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+
+        <!-- composer -->
+        <div style="border-top:1px solid var(--border-1);padding:14px 18px 16px;">
+          <div style="display:flex;gap:6px;margin-bottom:10px;">
+            <button style="width:34px;height:34px;border-radius:9px;border:1px solid var(--border-1);background:var(--bg-2);color:var(--fg-2);cursor:pointer;display:flex;align-items:center;justify-content:center;" style-hover="color:var(--fg-1);border-color:var(--border-2);"><i data-lucide="paperclip" style="font-size:16px;"></i></button>
+            <button style="width:34px;height:34px;border-radius:9px;border:1px solid var(--border-1);background:var(--bg-2);color:var(--fg-2);cursor:pointer;display:flex;align-items:center;justify-content:center;" style-hover="color:var(--fg-1);border-color:var(--border-2);"><i data-lucide="image" style="font-size:16px;"></i></button>
+            <button style="width:34px;height:34px;border-radius:9px;border:1px solid var(--border-1);background:var(--bg-2);color:var(--fg-2);cursor:pointer;display:flex;align-items:center;justify-content:center;" style-hover="color:var(--fg-1);border-color:var(--border-2);"><i data-lucide="smile" style="font-size:16px;"></i></button>
+          </div>
+          <div style="position:relative;background:var(--bg-inset);border:1px solid var(--border-1);border-radius:12px;transition:border-color .18s;" style-focus-within="border-color:var(--border-2);">
+            <textarea rows="2" placeholder="Сообщение на русском — уйдёт перевод на язык из «Язык ответа»" style="width:100%;background:transparent;border:0;outline:none;resize:none;color:var(--fg-1);font-size:14px;line-height:1.5;padding:14px 16px 42px;"></textarea>
+            <div style="position:absolute;left:14px;bottom:11px;font-family:var(--font-mono);font-size:11px;color:var(--fg-3);">Ctrl+Enter — отправить</div>
+            <button style="position:absolute;right:10px;bottom:9px;display:inline-flex;align-items:center;gap:7px;background:var(--accent);color:var(--fg-on-accent);border:0;font-weight:600;font-size:13px;padding:9px 16px;border-radius:9px;cursor:pointer;transition:background .12s,transform .12s;" style-hover="background:var(--accent-hover);" style-active="transform:scale(0.97);">
+              Отправить <i data-lucide="send" style="font-size:14px;"></i>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== NOTES ===== -->
+      <aside class="mm-notes" data-pane="notes" style="display:flex;flex-direction:column;background:var(--bg-1);border:1px solid var(--border-1);border-radius:16px;overflow:hidden;">
+        <div style="padding:16px 18px;border-bottom:1px solid var(--border-1);display:flex;align-items:center;gap:8px;">
+          <button class="mm-mobile-only" onClick="{{ closeNotes }}" style="display:none;align-items:center;justify-content:center;width:32px;height:32px;border-radius:9px;border:1px solid var(--border-1);background:var(--bg-2);color:var(--fg-1);cursor:pointer;">
+            <i data-lucide="arrow-left" style="font-size:16px;"></i>
+          </button>
+          <i data-lucide="clipboard-list" style="font-size:17px;color:var(--fg-2);"></i>
+          <span style="font-weight:600;font-size:15px;">Заметки</span>
+          <span style="font-size:13px;color:var(--fg-3);">{{ current.name }}</span>
+        </div>
+
+        <div style="flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px;">
+          <sc-for list="{{ notes }}" as="n" hint-placeholder-count="4">
+            <div style="background:var(--bg-2);border:1px solid {{ n.border }};border-radius:12px;padding:13px 14px;">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+                <span style="font-family:var(--font-mono);font-size:9.5px;letter-spacing:0.06em;text-transform:uppercase;font-weight:600;padding:2px 8px;border-radius:6px;background:{{ n.tagBg }};color:{{ n.tagFg }};">{{ n.type }}</span>
+                <span style="font-family:var(--font-mono);font-size:10px;color:var(--fg-3);">{{ n.date }}</span>
+              </div>
+              <div style="font-size:13px;line-height:1.55;color:var(--fg-1);white-space:pre-line;">{{ n.text }}</div>
+            </div>
+          </sc-for>
+        </div>
+
+        <div style="border-top:1px solid var(--border-1);padding:14px;">
+          <textarea rows="2" placeholder="Ваша заметка о пользователе…" style="width:100%;background:var(--bg-inset);border:1px solid var(--border-1);border-radius:10px;color:var(--fg-1);font-size:13px;line-height:1.5;padding:11px 12px;resize:none;outline:none;" style-focus="border-color:var(--border-2);"></textarea>
+          <div style="display:flex;gap:8px;margin-top:10px;">
+            <button style="flex:1;display:inline-flex;align-items:center;justify-content:center;gap:7px;background:var(--bg-2);color:var(--fg-1);border:1px solid var(--border-1);font-weight:500;font-size:13px;padding:10px;border-radius:10px;cursor:pointer;" style-hover="border-color:var(--cat-i2v);color:var(--cat-i2v);">
+              <i data-lucide="sparkles" style="font-size:15px;"></i>AI-анализ
+            </button>
+            <button style="flex:1;display:inline-flex;align-items:center;justify-content:center;gap:7px;background:var(--accent);color:var(--fg-on-accent);border:0;font-weight:600;font-size:13px;padding:10px;border-radius:10px;cursor:pointer;" style-hover="background:var(--accent-hover);">
+              <i data-lucide="plus" style="font-size:15px;"></i>Добавить
+            </button>
+          </div>
+        </div>
+      </aside>
+
+    </div>
+  </main>
+  </sc-if>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:&quot;100%&quot;,&quot;height&quot;:900},&quot;defaultView&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;overview&quot;,&quot;dialogs&quot;],&quot;default&quot;:&quot;dialogs&quot;,&quot;tsType&quot;:&quot;'overview' | 'dialogs'&quot;,&quot;section&quot;:&quot;Экран&quot;}}">
+class Component extends DCLogic {
+  state = { view: null, selected: 'duty', mobilePane: 'chat', filter: 'all', openOrig: {} };
+
+  componentDidMount(){ this.icons(); }
+  componentDidUpdate(){ this.icons(); }
+  icons(){
+    if (window.lucide) { try { window.lucide.createIcons(); } catch(e){} }
+    else { setTimeout(()=>{ if(window.lucide){ try{window.lucide.createIcons();}catch(e){} } }, 300); }
+  }
+
+  DATA(){
+    return {
+      dialogs: [
+        { id:'duty', name:'duty', model:'Mia', lang:'es', preview:'Esto es para una suscripción p…', badge:'VIP', badgeBg:'var(--accent)', badgeFg:'var(--fg-on-accent)', avatarBg:'linear-gradient(135deg,#4aa3ff,#2f7fe0)', avatarIcon:'megaphone' },
+        { id:'thomas', name:'Thomas', model:'Mia', lang:'de', preview:'Если я узнаю вас поближе и увижу…', badge:'24ч+', badgeBg:'var(--cat-photo)', badgeFg:'#fff', avatarBg:'linear-gradient(135deg,#4aa3ff,#2f7fe0)', avatarIcon:'megaphone' },
+        { id:'radomir', name:'Radomir', model:'Mia', lang:'en', preview:'Мне очень жаль это слышать…', badge:null, avatarBg:'linear-gradient(135deg,#3a7d4e,#2a5c3a)', avatarIcon:'user' },
+        { id:'renat', name:'Renat', model:'Mia', lang:'ru', preview:'Поняла, не буду. Как смена на…', badge:null, avatarBg:'linear-gradient(135deg,#565a63,#3a3d44)', avatarIcon:'user' },
+        { id:'escorpions', name:'🐎 escorpions 🐎', model:'Mia', lang:'es', preview:'Lo siento, hubo problemas, ¿c…', badge:null, avatarBg:'linear-gradient(135deg,#c23b3b,#7a1f1f)', avatarIcon:'flame' },
+        { id:'elijah', name:'Elijah', model:'Mia', lang:'en', preview:'Los más básicos 😂', badge:'24ч+', badgeBg:'var(--cat-photo)', badgeFg:'#fff', avatarBg:'linear-gradient(135deg,#8a5cff,#5c34c2)', avatarIcon:'user' }
+      ],
+      messages: {
+        duty: [
+          { side:'in', ru:'Хорошего дня', orig:'Que tengas un estupendo día', time:'13:11' },
+          { side:'out', ru:'А какие именно упражнения ты делал? 😂😂😂', orig:'…que tipo de ejercicios hiciste? 😂😂😂', time:'13:40' },
+          { side:'out', ru:'Самые-самые основные 😂', orig:'Los más básicos 😂', time:'13:42' },
+          { side:'in', ru:'😂😂😂😂😂 …подробности о грехе', orig:'😂😂😂😂😂 …sin detalles', time:'13:58' },
+          { side:'out', ru:'Это по платной подписке 😂😂😂😂😂', orig:'Esto es para una suscripción paga 😂😂😂😂😂', time:'14:05' }
+        ],
+        thomas: [
+          { side:'in', ru:'Если я узнаю вас поближе и увижу, возможно…', orig:'Wenn ich dich besser kennenlerne…', time:'11:20' },
+          { side:'out', ru:'Давай узнаем друг друга ближе 😉', orig:'Lass uns uns besser kennenlernen 😉', time:'11:25' }
+        ],
+        radomir: [
+          { side:'in', ru:'Мне очень жаль это слышать — можно ли отменить?', orig:'I am so sorry to hear that — can it be cancelled?', time:'10:02' }
+        ],
+        renat: [
+          { side:'in', ru:'Поняла, не буду. Как смена на заводе сегодня?', orig:'Поняла, не буду. Как смена на заводе сегодня?', time:'09:15' }
+        ],
+        escorpions: [
+          { side:'in', ru:'Извини, были проблемы, как ты?', orig:'Lo siento, hubo problemas, ¿cómo estás?', time:'12:40' }
+        ],
+        elijah: [
+          { side:'in', ru:'Привет 😊', orig:'Hey there 😊', time:'08:00' }
+        ]
+      },
+      notes: {
+        duty: [
+          { type:'ПРОФИЛЬ', date:'27 июн. 2026, 14:53', text:'- Имя: Тео\n- Имеет двух сыновей (старший сдаёт экзамен)\n- Есть собака\n- Повредил лодыжку, находится на восстановлении\n- Много работает, часто занят встречами\n- Живёт в Молдове (упоминает Chișinău и местное время)\n- Любит флиртовать, просит фото\n- Смотрит футбол (матч Испании на ЧМ)', kind:'profile' },
+          { type:'AI', date:'27 июн. 2026, 14:53', text:'Фан активно использует испанский и много эмодзи, тон очень игривый и сексуализированный', kind:'ai' },
+          { type:'AI', date:'27 июн. 2026, 14:53', text:'Часто упоминает семью и бытовые детали (дети, собака, травма)', kind:'ai' },
+          { type:'AI', date:'27 июн. 2026, 14:53', text:'Регулярно просит фото и намекает на интимные темы', kind:'ai' }
+        ]
+      }
+    };
+  }
+
+  langMeta(code){
+    const m = { es:{tag:'ES',color:'var(--cat-photo)'}, de:{tag:'DE',color:'var(--warning)'}, en:{tag:'EN',color:'var(--cat-video)'}, ru:{tag:'RU',color:'var(--fg-2)'} };
+    return m[code] || { tag:code.toUpperCase(), color:'var(--fg-2)' };
+  }
+
+  renderVals(){
+    const D = this.DATA();
+    const view = this.state.view ?? (this.props.defaultView || 'dialogs');
+    const sel = this.state.selected;
+    const current = D.dialogs.find(d=>d.id===sel) || D.dialogs[0];
+    const cm = this.langMeta(current.lang);
+
+    const nav = [
+      { key:'overview', label:'Обзор', icon:'gem' },
+      { key:'dialogs', label:'Диалоги', icon:'messages-square' },
+      { key:'images', label:'Картинки', icon:'image' },
+      { key:'model', label:'База модели', icon:'sparkles' },
+      { key:'video', label:'Видео', icon:'clapperboard' },
+      { key:'workflow', label:'Workflow', icon:'workflow', beta:true }
+    ].map(n=>{
+      const active = (n.key===view);
+      return { ...n,
+        onClick: ()=> (n.key==='overview'||n.key==='dialogs') ? this.setState({view:n.key}) : null,
+        style: `display:inline-flex;align-items:center;gap:7px;font-size:13px;font-weight:500;padding:9px 14px;border-radius:10px;cursor:pointer;border:1px solid ${active?'var(--border-2)':'transparent'};background:${active?'var(--bg-3)':'transparent'};color:${active?'var(--fg-1)':'var(--fg-2)'};transition:all .16s var(--ease-studio);`
+      };
+    });
+
+    const filterDefs = [
+      { key:'all', label:'Все', count:'9', accent:false },
+      { key:'vip', label:'VIP', count:'1', accent:true },
+      { key:'bomzh', label:'Бомж', count:null },
+      { key:'noreply', label:'Без ответа', count:'4' },
+      { key:'new', label:'Новые', count:null },
+      { key:'blocked', label:'Заблок.', count:null }
+    ];
+    const filters = filterDefs.map(f=>{
+      const active = this.state.filter===f.key;
+      return { ...f,
+        onClick: ()=> this.setState({filter:f.key}),
+        style: `display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:500;padding:6px 11px;border-radius:999px;cursor:pointer;border:1px solid ${active?'var(--accent)':'var(--border-1)'};background:${active?'rgba(216,255,61,0.10)':'var(--bg-2)'};color:${active?'var(--fg-1)':'var(--fg-2)'};transition:all .16s;`,
+        badgeBg: f.accent ? 'var(--accent)' : 'var(--bg-3)',
+        badgeFg: f.accent ? 'var(--fg-on-accent)' : 'var(--fg-2)'
+      };
+    });
+
+    const dialogs = D.dialogs.map(d=>{
+      const active = d.id===sel;
+      return { ...d,
+        onClick: ()=> this.setState({selected:d.id, mobilePane:'chat', openOrig:{}}),
+        rowStyle: `display:flex;gap:12px;width:100%;align-items:center;padding:11px 10px;border-radius:13px;border:1px solid ${active?'var(--border-2)':'transparent'};background:${active?'var(--bg-3)':'transparent'};cursor:pointer;margin-bottom:2px;transition:background .14s,border-color .14s;`,
+        badgeBg: d.badgeBg || 'var(--bg-3)', badgeFg: d.badgeFg || 'var(--fg-2)'
+      };
+    });
+
+    const msgs = (D.messages[sel] || []).map((m,i)=>{
+      const id = sel+'_'+i;
+      const isOut = m.side==='out';
+      const open = !!this.state.openOrig[id];
+      const meta = this.langMeta(current.lang);
+      return {
+        ...m,
+        onClick: ()=> this.setState(s=>({ openOrig: { ...s.openOrig, [id]: !s.openOrig[id] } })),
+        openClass: open ? 'mm-open' : '',
+        wrapStyle: `display:flex;max-width:100%;${isOut?'justify-content:flex-end;':'justify-content:flex-start;'}`,
+        bubbleStyle: `max-width:min(560px,82%);padding:13px 16px;border-radius:${isOut?'16px 16px 4px 16px':'16px 16px 16px 4px'};cursor:pointer;border:1px solid ${isOut?'rgba(216,255,61,0.22)':'var(--border-1)'};background:${isOut?'linear-gradient(180deg,rgba(216,255,61,0.09),rgba(216,255,61,0.04))':'var(--bg-2)'};`,
+        origBorder: isOut?'rgba(216,255,61,0.18)':'var(--border-1)',
+        origLabel: isOut?'Отправлено':'Оригинал',
+        langTag: meta.tag, langColor: meta.color
+      };
+    });
+
+    const notesRaw = D.notes[sel] || [{ type:'AI', date:'—', text:'Заметок по этому диалогу пока нет. Добавьте первую или запустите AI-анализ.', kind:'ai' }];
+    const notes = notesRaw.map(n=>({
+      ...n,
+      border: n.kind==='profile' ? 'rgba(216,255,61,0.30)' : 'var(--border-1)',
+      tagBg: n.kind==='profile' ? 'var(--accent)' : 'var(--bg-3)',
+      tagFg: n.kind==='profile' ? 'var(--fg-on-accent)' : 'var(--cat-i2v)'
+    }));
+
+    const stats = [
+      { label:'Кредиты', value:'2 710', sub:'Standard Studio', color:'var(--fg-1)' },
+      { label:'Подписка', value:'Активна', sub:'Статус доступа', color:'var(--success)' },
+      { label:'Диалоги', value:'14', sub:'Все прочитаны', color:'var(--fg-1)' },
+      { label:'В архиве', value:'10', sub:'Сохранённые кадры', color:'var(--fg-1)' }
+    ];
+    const recent = D.dialogs.slice(0,5).map(d=>({
+      name:d.name, preview:d.preview,
+      onClick: ()=> this.setState({view:'dialogs', selected:d.id, mobilePane:'chat'})
+    }));
+    const frames = [
+      { a:'#3a4a6b', b:'#1a2233', tag:'4K' }, { a:'#6b3a52', b:'#2a1a22', tag:'Portrait' },
+      { a:'#2a3a4a', b:'#12181f', tag:'Studio' }, { a:'#5a4a3a', b:'#221a12', tag:'Editorial' }
+    ];
+    const videos = [ { a:'#2a3550', b:'#141a2a' }, { a:'#3a2a4a', b:'#1a1222' }, { a:'#2a4a42', b:'#12221e' } ];
+
+    return {
+      isOverview: view==='overview', isDialogs: view==='dialogs',
+      mobilePane: this.state.mobilePane,
+      nav, filters, dialogs, messages: msgs, notes, current,
+      stats, recent, frames, videos,
+      goDialogs: ()=> this.setState({view:'dialogs'}),
+      backToList: ()=> this.setState({mobilePane:'list'}),
+      openNotes: ()=> this.setState({mobilePane:'notes'}),
+      closeNotes: ()=> this.setState({mobilePane:'chat'})
+    };
+  }
+}
+</script>
+</body>
+</html>

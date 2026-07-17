@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Unbounded:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+html,body{margin:0;padding:0;background:#0A0B0D;color:#F2F3F0;font-family:'Manrope',system-ui,sans-serif;}
+*{box-sizing:border-box;}
+a{color:#D7F452;text-decoration:none;}
+a:hover{color:#E8FA8A;}
+::-webkit-scrollbar{width:8px;height:8px;}
+::-webkit-scrollbar-thumb{background:rgba(255,255,255,.12);border-radius:4px;}
+input,select,textarea{font-family:'Manrope';}
+@keyframes mmFade{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}
+</style>
+</helmet>
+
+<div style="display:flex;height:100vh;overflow:hidden;background:#0A0B0D;" data-screen-label="ModelMate Admin">
+
+  <!-- ═══════ SIDEBAR (desktop) ═══════ -->
+  <sc-if value="{{ showSidebar }}" hint-placeholder-val="{{ true }}">
+  <div style="width:230px;flex:none;display:flex;flex-direction:column;border-right:1px solid rgba(255,255,255,.07);background:#0D0E11;">
+    <div style="display:flex;align-items:center;gap:10px;padding:18px 18px 14px;">
+      <div style="width:34px;height:34px;border-radius:10px;overflow:hidden;box-shadow:inset 0 0 0 1px rgba(255,255,255,.08);"><img src="assets/logo-m.png" alt="" style="width:100%;height:100%;object-fit:cover;display:block;"></div>
+      <div>
+        <div style="font-weight:800;font-size:14px;letter-spacing:-.2px;">ModelMate</div>
+        <div style="font-family:'JetBrains Mono';font-size:8.5px;letter-spacing:1.6px;color:#F87171;">ADMIN ACCESS</div>
+      </div>
+    </div>
+    <div style="flex:1;overflow-y:auto;padding:6px 10px 10px;display:flex;flex-direction:column;gap:2px;">
+      <sc-for list="{{ navItems }}" as="it" hint-placeholder-count="6">
+        <div onClick="{{ it.go }}" style="{{ it.style }}" style-hover="background:rgba(255,255,255,.05);color:#F2F3F0;">
+          <span style="display:flex;width:17px;height:17px;flex:none;" dangerouslySetInnerHTML="{{ it.icon }}"></span>
+          <span style="flex:1;">{{ it.label }}</span>
+        </div>
+      </sc-for>
+    </div>
+    <div style="padding:12px;border-top:1px solid rgba(255,255,255,.07);">
+      <div onClick="{{ goCabinet }}" style="display:flex;align-items:center;gap:9px;border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:9px 12px;cursor:pointer;font-size:12.5px;font-weight:700;color:#9BA0A6;" style-hover="border-color:rgba(255,255,255,.3);color:#F2F3F0;">← {{ t.toCabinet }}</div>
+      <div style="display:flex;align-items:center;gap:9px;padding:10px 2px 0;">
+        <div style="width:26px;height:26px;border-radius:50%;background:linear-gradient(135deg,#818CF8,#C084FC);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:11px;color:#14102A;flex:none;">R</div>
+        <div style="font-size:11.5px;color:#9BA0A6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">utochkinrenat@g…</div>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ═══════ MAIN ═══════ -->
+  <div style="flex:1;display:flex;flex-direction:column;min-width:0;">
+
+    <!-- topbar -->
+    <div style="flex:none;display:flex;align-items:center;gap:12px;padding:14px 22px;border-bottom:1px solid rgba(255,255,255,.07);background:#0D0E11;flex-wrap:wrap;">
+      <sc-if value="{{ isMobile }}" hint-placeholder-val="{{ false }}">
+        <div style="width:28px;height:28px;border-radius:8px;overflow:hidden;flex:none;"><img src="assets/logo-m.png" alt="" style="width:100%;height:100%;object-fit:cover;"></div>
+      </sc-if>
+      <div style="flex:1;min-width:120px;">
+        <div style="font-family:'JetBrains Mono';font-size:9px;letter-spacing:2px;color:#6B7076;">ADMIN · MODELMATE</div>
+        <div style="font-weight:800;font-size:16px;">{{ pageTitle }}</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span style="font-family:'JetBrains Mono';font-size:10px;background:rgba(74,222,128,.1);color:#4ADE80;border:1px solid rgba(74,222,128,.3);padding:4px 10px;border-radius:20px;">● {{ t.live }}</span>
+        <span onClick="{{ refresh }}" style="font-family:'JetBrains Mono';font-size:11px;font-weight:700;border:1px solid rgba(255,255,255,.14);border-radius:8px;padding:6px 12px;cursor:pointer;color:#9BA0A6;" style-hover="color:#F2F3F0;border-color:rgba(255,255,255,.3);">↻ {{ t.refresh }}</span>
+      </div>
+    </div>
+
+    <!-- mobile tab strip -->
+    <sc-if value="{{ isMobile }}" hint-placeholder-val="{{ false }}">
+      <div style="flex:none;display:flex;gap:6px;overflow-x:auto;padding:10px 14px;border-bottom:1px solid rgba(255,255,255,.07);background:#0A0B0D;">
+        <sc-for list="{{ navItems }}" as="it" hint-placeholder-count="6">
+          <div onClick="{{ it.go }}" style="{{ it.chipStyle }}">{{ it.label }}</div>
+        </sc-for>
+      </div>
+    </sc-if>
+
+    <div style="flex:1;overflow-y:auto;">
+    <div style="{{ contentPad }}">
+
+    <!-- ═══════ ОБЗОР ═══════ -->
+    <sc-if value="{{ isOverview }}" hint-placeholder-val="{{ true }}">
+      <div style="animation:mmFade .25s ease;">
+        <!-- KPI row -->
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:16px;">
+          <sc-for list="{{ kpis }}" as="k" hint-placeholder-count="8">
+            <div style="background:#121316;border:1px solid rgba(255,255,255,.07);border-radius:14px;padding:14px 16px;">
+              <div style="font-family:'JetBrains Mono';font-size:8.5px;letter-spacing:1.5px;color:#6B7076;margin-bottom:8px;">{{ k.label }}</div>
+              <div style="font-family:'Unbounded';font-weight:600;font-size:22px;color:{{ k.color }};">{{ k.val }}</div>
+              <div style="font-size:10.5px;color:#9BA0A6;margin-top:4px;">{{ k.sub }}</div>
+            </div>
+          </sc-for>
+        </div>
+
+        <!-- revenue chart + top plans -->
+        <div style="{{ twoCol }}">
+          <div style="background:#121316;border:1px solid rgba(255,255,255,.07);border-radius:16px;padding:18px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px;">
+              <span style="font-weight:800;font-size:14px;">{{ t.revenueChart }}</span>
+              <span style="font-family:'JetBrains Mono';font-size:10.5px;color:#9BA0A6;">{{ t.last12mo }}</span>
+            </div>
+            <div style="display:flex;align-items:flex-end;gap:6px;height:150px;padding-top:6px;">
+              <sc-for list="{{ revenueBars }}" as="b" hint-placeholder-count="12">
+                <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;height:100%;justify-content:flex-end;">
+                  <span style="font-family:'JetBrains Mono';font-size:8.5px;color:#9BA0A6;">{{ b.label }}</span>
+                  <div style="{{ b.barStyle }}"></div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+          <div style="background:#121316;border:1px solid rgba(255,255,255,.07);border-radius:16px;padding:18px;">
+            <div style="font-weight:800;font-size:14px;margin-bottom:14px;">{{ t.topPlans }}</div>
+            <div style="display:flex;flex-direction:column;gap:12px;">
+              <sc-for list="{{ topPlans }}" as="p" hint-placeholder-count="5">
+                <div>
+                  <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:5px;"><span style="font-weight:700;">{{ p.name }}</span><span style="font-family:'JetBrains Mono';color:#9BA0A6;">{{ p.count }} · {{ p.pct }}%</span></div>
+                  <div style="height:7px;background:rgba(255,255,255,.06);border-radius:4px;overflow:hidden;"><div style="{{ p.fill }}"></div></div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+
+        <!-- generations + engines -->
+        <div style="{{ twoCol }}margin-top:10px;">
+          <div style="background:#121316;border:1px solid rgba(255,255,255,.07);border-radius:16px;padding:18px;">
+            <div style="font-weight:800;font-size:14px;margin-bottom:16px;">{{ t.genByType }}</div>
+            <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;">
+              <div style="position:relative;width:120px;height:120px;flex:none;border-radius:50%;background:{{ donutBg }};display:flex;align-items:center;justify-content:center;">
+                <div style="width:76px;height:76px;border-radius:50%;background:#121316;display:flex;flex-direction:column;align-items:center;justify-content:center;">
+                  <span style="font-family:'Unbounded';font-weight:600;font-size:16px;">{{ totalGens }}</span>
+                  <span style="font-family:'JetBrains Mono';font-size:7.5px;color:#6B7076;">{{ t.total }}</span>
+                </div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:9px;flex:1;min-width:140px;">
+                <sc-for list="{{ genTypes }}" as="g" hint-placeholder-count="3">
+                  <div style="display:flex;align-items:center;gap:8px;">
+                    <span style="width:9px;height:9px;border-radius:3px;background:{{ g.color }};flex:none;"></span>
+                    <span style="font-size:12px;flex:1;">{{ g.label }}</span>
+                    <span style="font-family:'JetBrains Mono';font-size:11.5px;font-weight:700;">{{ g.val }}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </div>
+          <div style="background:#121316;border:1px solid rgba(255,255,255,.07);border-radius:16px;padding:18px;">
+            <div style="font-weight:800;font-size:14px;margin-bottom:14px;">{{ t.topEngines }}</div>
+            <div style="display:flex;flex-direction:column;gap:12px;">
+              <sc-for list="{{ engines }}" as="e" hint-placeholder-count="4">
+                <div>
+                  <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:5px;"><span style="font-weight:700;">{{ e.name }}</span><span style="font-family:'JetBrains Mono';color:#9BA0A6;">{{ e.count }}</span></div>
+                  <div style="height:7px;background:rgba(255,255,255,.06);border-radius:4px;overflow:hidden;"><div style="{{ e.fill }}"></div></div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ═══════ ПОЛЬЗОВАТЕЛИ ═══════ -->
+    <sc-if value="{{ isUsers }}" hint-placeholder-val="{{ false }}">
+      <div style="animation:mmFade .25s ease;">
+        <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
+          <input value="{{ userSearch }}" onChange="{{ onSearch }}" placeholder="{{ t.searchEmail }}" style="flex:1;min-width:200px;background:#121316;border:1px solid rgba(255,255,255,.09);border-radius:9px;padding:9px 12px;color:#F2F3F0;font-size:12.5px;outline:none;">
+          <div onClick="{{ resetSearch }}" style="border:1px solid rgba(255,255,255,.12);border-radius:9px;padding:9px 16px;font-size:12px;font-weight:700;color:#9BA0A6;cursor:pointer;" style-hover="border-color:rgba(255,255,255,.3);">{{ t.reset }}</div>
+        </div>
+        <div style="{{ usersLayout }}">
+          <div style="background:#121316;border:1px solid rgba(255,255,255,.07);border-radius:16px;overflow:hidden;overflow-x:auto;">
+            <div style="min-width:640px;">
+              <div style="display:grid;grid-template-columns:50px 1.6fr .8fr 1fr .9fr .7fr .7fr;gap:8px;padding:10px 16px;border-bottom:1px solid rgba(255,255,255,.07);font-family:'JetBrains Mono';font-size:9px;letter-spacing:1px;color:#6B7076;">
+                <span>ID</span><span>{{ t.email }}</span><span>{{ t.role }}</span><span>{{ t.subscription }}</span><span>{{ t.plan }}</span><span>{{ t.credits }}</span><span>{{ t.gens }}</span>
+              </div>
+              <div style="max-height:560px;overflow-y:auto;">
+                <sc-for list="{{ users }}" as="u" hint-placeholder-count="10">
+                  <div onClick="{{ u.open }}" style="{{ u.rowStyle }}">
+                    <span style="font-family:'JetBrains Mono';font-size:11px;color:#6B7076;">{{ u.id }}</span>
+                    <span style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ u.email }}</span>
+                    <span style="font-size:11px;color:#9BA0A6;">{{ u.role }}</span>
+                    <span style="font-size:11px;color:{{ u.subColor }};">{{ u.subLabel }}</span>
+                    <span style="font-size:11px;color:#9BA0A6;">{{ u.plan }}</span>
+                    <span style="font-family:'JetBrains Mono';font-size:11.5px;color:#D7F452;">{{ u.credits }}</span>
+                    <span style="font-family:'JetBrains Mono';font-size:11.5px;">{{ u.gens }}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </div>
+          <!-- detail panel -->
+          <sc-if value="{{ hasUserDetail }}" hint-placeholder-val="{{ false }}">
+          <div style="background:#121316;border:1px solid rgba(255,255,255,.07);border-radius:16px;padding:18px;height:fit-content;">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;">
+              <div>
+                <div style="font-weight:800;font-size:14.5px;">{{ userDetail.email }}</div>
+                <div style="font-size:11px;color:#9BA0A6;">ID {{ userDetail.id }} · {{ userDetail.role }}</div>
+              </div>
+              <span onClick="{{ closeUser }}" style="cursor:pointer;color:#9BA0A6;font-size:15px;" style-hover="color:#F2F3F0;">✕</span>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
+              <sc-for list="{{ userDetail.stats }}" as="s" hint-placeholder-count="6">
+                <div>
+                  <div style="font-family:'JetBrains Mono';font-size:8.5px;letter-spacing:1px;color:#6B7076;margin-bottom:3px;">{{ s.l }}</div>
+                  <div style="font-weight:700;font-size:13.5px;">{{ s.v }}</div>
+                </div>
+              </sc-for>
+            </div>
+            <div style="font-weight:800;font-size:12.5px;margin-bottom:10px;border-top:1px solid rgba(255,255,255,.07);padding-top:14px;">{{ t.subscription }}</div>
+            <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px;">
+              <div><div style="font-family:'JetBrains Mono';font-size:8.5px;letter-spacing:1px;color:#6B7076;margin-bottom:5px;">{{ t.status }}</div><div style="border:1px solid rgba(255,255,255,.12);border-radius:8px;padding:8px 10px;font-size:12px;color:#9BA0A6;">{{ userDetail.subLabel }}</div></div>
+              <div><div style="font-family:'JetBrains Mono';font-size:8.5px;letter-spacing:1px;color:#6B7076;margin-bottom:5px;">{{ t.plan }}</div><div style="border:1px solid rgba(255,255,255,.12);border-radius:8px;padding:8px 10px;font-size:12px;color:#9BA0A6;">{{ userDetail.plan }}</div></div>
+            </div>
+            <div style="font-weight:800;font-size:12.5px;margin-bottom:10px;">{{ t.accessCredits }}</div>
+            <div style="display:flex;align-items:center;justify-content:space-between;background:#0D0E11;border:1px solid rgba(255,255,255,.07);border-radius:10px;padding:9px 12px;margin-bottom:8px;">
+              <span style="font-size:12px;font-weight:700;">{{ t.accountActive }}</span>
+              <div style="width:16px;height:16px;border-radius:4px;background:#D7F452;"></div>
+            </div>
+            <div style="display:flex;gap:6px;">
+              <input placeholder="+/- {{ t.credits }}" style="flex:1;background:#0D0E11;border:1px solid rgba(255,255,255,.09);border-radius:9px;padding:8px 10px;color:#F2F3F0;font-size:12px;outline:none;">
+              <div style="background:rgba(215,244,82,.12);border:1px solid rgba(215,244,82,.3);border-radius:9px;padding:8px 14px;font-size:12px;font-weight:800;color:#D7F452;cursor:pointer;">{{ t.apply }}</div>
+            </div>
+          </div>
+          </sc-if>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ═══════ РАССЫЛКИ ═══════ -->
+    <sc-if value="{{ isBroadcasts }}" hint-placeholder-val="{{ false }}">
+      <div style="animation:mmFade .25s ease;">
+        <div style="font-size:12px;color:#9BA0A6;margin-bottom:16px;line-height:1.5;">{{ t.broadcastHint }}</div>
+        <div style="{{ twoCol }}">
+          <div style="background:#121316;border:1px solid rgba(255,255,255,.07);border-radius:16px;padding:18px;display:flex;flex-direction:column;gap:12px;">
+            <div style="font-weight:800;font-size:14px;">{{ t.newBroadcast }}</div>
+            <div><div style="font-family:'JetBrains Mono';font-size:8.5px;letter-spacing:1px;color:#6B7076;margin-bottom:6px;">{{ t.segment }}</div>
+              <div style="display:flex;flex-direction:column;gap:6px;">
+                <sc-for list="{{ segments }}" as="sg" hint-placeholder-count="4">
+                  <div onClick="{{ sg.pick }}" style="{{ sg.style }}"><span>{{ sg.label }}</span><span style="font-family:'JetBrains Mono';font-size:10.5px;color:#9BA0A6;">{{ sg.count }}</span></div>
+                </sc-for>
+              </div>
+            </div>
+            <input placeholder="{{ t.subject }}" style="background:#0D0E11;border:1px solid rgba(255,255,255,.09);border-radius:9px;padding:9px 12px;color:#F2F3F0;font-size:12.5px;outline:none;">
+            <textarea rows="6" placeholder="{{ t.htmlBody }}" style="background:#0D0E11;border:1px solid rgba(255,255,255,.09);border-radius:9px;padding:9px 12px;color:#F2F3F0;font-family:'JetBrains Mono';font-size:11.5px;resize:vertical;outline:none;"></textarea>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;">
+              <div style="border:1px solid rgba(255,255,255,.12);border-radius:9px;padding:9px 14px;font-size:12px;font-weight:700;color:#9BA0A6;cursor:pointer;">{{ t.sendTest }}</div>
+              <div style="border:1px solid rgba(255,255,255,.12);border-radius:9px;padding:9px 14px;font-size:12px;font-weight:700;color:#9BA0A6;cursor:pointer;">{{ t.saveDraft }}</div>
+              <div style="flex:1;background:#D7F452;border-radius:9px;padding:9px 14px;font-size:12px;font-weight:800;color:#171A05;text-align:center;cursor:pointer;" style-hover="background:#E8FA8A;">{{ t.sendCampaign }}</div>
+            </div>
+          </div>
+          <div style="background:#121316;border:1px solid rgba(255,255,255,.07);border-radius:16px;padding:18px;">
+            <div style="font-weight:800;font-size:14px;margin-bottom:12px;">{{ t.campaignHistory }}</div>
+            <sc-for list="{{ campaigns }}" as="c" hint-placeholder-count="3">
+              <div style="padding:11px 4px;border-bottom:1px solid rgba(255,255,255,.05);">
+                <div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span style="font-weight:700;font-size:12.5px;">{{ c.subject }}</span><span style="font-family:'JetBrains Mono';font-size:9px;background:rgba(74,222,128,.12);color:#4ADE80;padding:2px 7px;border-radius:5px;">{{ c.status }}</span></div>
+                <div style="font-size:11px;color:#9BA0A6;">{{ c.segment }} · {{ c.sent }}</div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ═══════ EXIF-БОТ / IG-БОТ (shared layout) ═══════ -->
+    <sc-if value="{{ isBotPage }}" hint-placeholder-val="{{ false }}">
+      <div style="animation:mmFade .25s ease;">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:16px;">
+          <sc-for list="{{ botKpis }}" as="k" hint-placeholder-count="5">
+            <div style="background:#121316;border:1px solid rgba(255,255,255,.07);border-radius:14px;padding:14px 16px;">
+              <div style="font-family:'JetBrains Mono';font-size:8.5px;letter-spacing:1.2px;color:#6B7076;margin-bottom:8px;">{{ k.label }}</div>
+              <div style="font-family:'Unbounded';font-weight:600;font-size:20px;">{{ k.val }}</div>
+              <div style="font-size:10px;color:#9BA0A6;margin-top:3px;">{{ k.sub }}</div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+          <input placeholder="{{ t.searchBot }}" style="flex:1;min-width:200px;background:#121316;border:1px solid rgba(255,255,255,.09);border-radius:9px;padding:9px 12px;color:#F2F3F0;font-size:12.5px;outline:none;">
+          <div style="border:1px solid rgba(255,255,255,.12);border-radius:9px;padding:9px 16px;font-size:12px;font-weight:700;color:#9BA0A6;cursor:pointer;">{{ t.reset }}</div>
+        </div>
+        <div style="background:#121316;border:1px solid rgba(255,255,255,.07);border-radius:16px;overflow:hidden;overflow-x:auto;">
+          <div style="min-width:560px;">
+            <div style="display:grid;grid-template-columns:50px 1.3fr 1fr 1fr 1.3fr;gap:8px;padding:10px 16px;border-bottom:1px solid rgba(255,255,255,.07);font-family:'JetBrains Mono';font-size:9px;letter-spacing:1px;color:#6B7076;">
+              <span>ID</span><span>TELEGRAM</span><span>{{ t.botMetric }}</span><span>{{ t.today }}</span><span>{{ t.registered }}</span>
+            </div>
+            <sc-for list="{{ botUsers }}" as="b" hint-placeholder-count="6">
+              <div style="display:grid;grid-template-columns:50px 1.3fr 1fr 1fr 1.3fr;gap:8px;padding:11px 16px;border-bottom:1px solid rgba(255,255,255,.04);align-items:center;">
+                <span style="font-family:'JetBrains Mono';font-size:11px;color:#6B7076;">{{ b.id }}</span>
+                <span><span style="font-weight:700;font-size:12px;">{{ b.name }}</span><br><span style="font-family:'JetBrains Mono';font-size:10px;color:#6B7076;">@{{ b.username }}</span></span>
+                <span style="font-family:'JetBrains Mono';font-size:12px;">{{ b.metric }}</span>
+                <span style="font-family:'JetBrains Mono';font-size:12px;color:#9BA0A6;">{{ b.today }}</span>
+                <span style="font-family:'JetBrains Mono';font-size:10.5px;color:#9BA0A6;">{{ b.registered }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ═══════ ДОНАТЫ КРЕАТОРОВ ═══════ -->
+    <sc-if value="{{ isDonations }}" hint-placeholder-val="{{ false }}">
+      <div style="animation:mmFade .25s ease;">
+        <div style="display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap;background:#121316;border:1px solid rgba(255,255,255,.07);border-radius:12px;padding:5px;">
+          <sc-for list="{{ donTabs }}" as="dt" hint-placeholder-count="4">
+            <div onClick="{{ dt.pick }}" style="{{ dt.style }}">{{ dt.label }}</div>
+          </sc-for>
+        </div>
+
+        <sc-if value="{{ isDonModeration }}" hint-placeholder-val="{{ true }}">
+        <div>
+          <div style="background:rgba(251,146,60,.06);border:1px solid rgba(251,146,60,.25);border-radius:12px;padding:14px 16px;margin-bottom:12px;font-size:12px;color:#F0A8C8;line-height:1.6;">{{ t.tributeApiNote1 }}</div>
+          <div style="background:#121316;border:1px solid rgba(255,255,255,.07);border-radius:16px;padding:16px 18px;margin-bottom:12px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;"><span style="font-weight:800;font-size:13.5px;">{{ t.incomingWebhooks }}</span><span style="font-size:11px;font-weight:700;color:#D7F452;cursor:pointer;">↻ {{ t.refresh }}</span></div>
+            <div style="background:rgba(74,222,128,.06);border:1px solid rgba(74,222,128,.2);border-radius:10px;padding:12px 14px;">
+              <div style="font-family:'JetBrains Mono';font-size:12px;color:#4ADE80;margin-bottom:4px;">donation_request_id = 188864</div>
+              <div style="font-size:11px;color:#9BA0A6;">100.00 RUB · new_donation</div>
+            </div>
+          </div>
+          <div style="text-align:center;padding:30px;color:#5C6066;font-size:12.5px;">{{ t.noModeration }}</div>
+        </div>
+        </sc-if>
+
+        <sc-if value="{{ isDonStats }}" hint-placeholder-val="{{ false }}">
+        <div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:16px;">
+            <sc-for list="{{ donStatsKpi }}" as="k" hint-placeholder-count="4">
+              <div style="background:#121316;border:1px solid rgba(255,255,255,.07);border-radius:14px;padding:14px 16px;">
+                <div style="font-family:'JetBrains Mono';font-size:8.5px;letter-spacing:1.2px;color:#6B7076;margin-bottom:8px;">{{ k.label }}</div>
+                <div style="font-family:'Unbounded';font-weight:600;font-size:20px;color:{{ k.color }};">{{ k.val }}</div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="background:#121316;border:1px solid rgba(255,255,255,.07);border-radius:16px;padding:16px 18px;margin-bottom:12px;">
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;font-family:'JetBrains Mono';font-size:9px;letter-spacing:1px;color:#6B7076;margin-bottom:10px;"><span>{{ t.currency }}</span><span>{{ t.total }}</span><span>{{ t.fee2 }}</span><span>{{ t.payoutCreator }}</span></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;font-size:13px;"><span style="font-weight:700;">RUB</span><span>100 ₽</span><span>2 ₽</span><span style="color:#4ADE80;font-weight:700;">98 ₽</span></div>
+          </div>
+          <div style="background:#121316;border:1px solid rgba(255,255,255,.07);border-radius:16px;padding:16px 18px;">
+            <div style="font-weight:800;font-size:13.5px;margin-bottom:10px;">{{ t.byCreator }}</div>
+            <sc-for list="{{ byCreator }}" as="c" hint-placeholder-count="2">
+              <div style="display:grid;grid-template-columns:1.6fr 1fr 1fr;gap:8px;padding:9px 0;border-bottom:1px solid rgba(255,255,255,.05);font-size:12px;">
+                <span style="font-weight:700;">{{ c.name }}</span><span>{{ c.total }}</span><span style="color:#4ADE80;">{{ c.payout }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+        </sc-if>
+
+        <sc-if value="{{ isDonAll }}" hint-placeholder-val="{{ false }}">
+        <div style="background:#121316;border:1px solid rgba(255,255,255,.07);border-radius:16px;overflow:hidden;overflow-x:auto;">
+          <div style="min-width:640px;">
+            <div style="display:grid;grid-template-columns:1.1fr 1.3fr 1.3fr .8fr .8fr .8fr 1fr .9fr;gap:8px;padding:10px 16px;border-bottom:1px solid rgba(255,255,255,.07);font-family:'JetBrains Mono';font-size:8.5px;letter-spacing:1px;color:#6B7076;">
+              <span>{{ t.date }}</span><span>{{ t.creator }}</span><span>{{ t.donation }}</span><span>{{ t.sum }}</span><span>{{ t.fee }}</span><span>{{ t.payoutShort }}</span><span>{{ t.payer }}</span><span>{{ t.status }}</span>
+            </div>
+            <sc-for list="{{ allDonations }}" as="d" hint-placeholder-count="3">
+              <div style="display:grid;grid-template-columns:1.1fr 1.3fr 1.3fr .8fr .8fr .8fr 1fr .9fr;gap:8px;padding:11px 16px;border-bottom:1px solid rgba(255,255,255,.04);align-items:center;font-size:11.5px;">
+                <span style="font-family:'JetBrains Mono';color:#9BA0A6;">{{ d.date }}</span><span>{{ d.creator }}</span><span>{{ d.title }}</span><span style="font-weight:700;">{{ d.sum }}</span><span style="color:#9BA0A6;">{{ d.fee }}</span><span style="color:#4ADE80;">{{ d.payout }}</span><span style="font-family:'JetBrains Mono';color:#9BA0A6;">{{ d.payer }}</span><span style="{{ d.stStyle }}">{{ d.status }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+        </sc-if>
+
+        <sc-if value="{{ isDonPayouts }}" hint-placeholder-val="{{ false }}">
+          <div style="text-align:center;padding:40px;color:#5C6066;font-size:12.5px;">{{ t.noPayouts }}</div>
+        </sc-if>
+      </div>
+    </sc-if>
+
+    </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{}">
+class Component extends DCLogic {
+  state = { page:'overview', isMobile:false, userSearch:'', userDetailId:null, donTab:'moderation' };
+  componentDidMount(){ this._onResize=()=>this.setState({isMobile:window.innerWidth<900}); window.addEventListener('resize',this._onResize); this._onResize(); }
+  componentWillUnmount(){ window.removeEventListener('resize',this._onResize); }
+  I(p){ return {__html:'<svg viewBox="0 0 24 24" width="100%" height="100%" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'+p+'</svg>'}; }
+
+  renderVals(){
+    const s=this.state; const set=(o)=>this.setState(o);
+    const isMobile=s.isMobile;
+    const t={
+      toCabinet:'Кабинет', live:'LIVE', refresh:'Обновить',
+      revenueChart:'ВЫРУЧКА ПО МЕСЯЦАМ', last12mo:'12 МЕС.', topPlans:'ТАРИФЫ ПО ПОПУЛЯРНОСТИ',
+      genByType:'ГЕНЕРАЦИИ ПО ТИПУ', total:'ВСЕГО', topEngines:'AI-ДВИЖКИ ПО ЗАГРУЗКЕ',
+      searchEmail:'Поиск по email…', reset:'Сброс', email:'EMAIL', role:'РОЛЬ', subscription:'ПОДПИСКА', plan:'ТАРИФ', credits:'КРЕДИТЫ', gens:'ГЕНЕРАЦИИ',
+      status:'СТАТУС', accessCredits:'ДОСТУП И КРЕДИТЫ', accountActive:'Аккаунт активен', apply:'Применить',
+      broadcastHint:'Отправитель: ModelMate <support@model-mate.online>. Письма уходят пачками в фоне.',
+      newBroadcast:'Новая рассылка', segment:'СЕГМЕНТ', subject:'Тема письма', htmlBody:'HTML-тело · {{email}}, {{appUrl}}',
+      sendTest:'Тест себе', saveDraft:'Черновик', sendCampaign:'Отправить кампанию', campaignHistory:'История кампаний',
+      searchBot:'Поиск: @username, имя, telegram id', botMetric:'МЕТРИКА', today:'СЕГОДНЯ', registered:'РЕГИСТРАЦИЯ',
+      tributeApiNote1:'У Tribute нет API для списка или создания донатов — только ручное создание в Dashboard. Создайте донат с теми же полями, что указал креатор.',
+      incomingWebhooks:'Входящие webhook (непривязанные донаты)', noModeration:'Нет заявок на модерации.',
+      currency:'ВАЛЮТА', fee2:'КОМИССИЯ 2%', payoutCreator:'К ВЫПЛАТЕ КРЕАТОРУ', byCreator:'ПО КРЕАТОРАМ',
+      date:'ДАТА', creator:'КРЕАТОР', donation:'ДОНАТ', sum:'СУММА', fee:'КОМ.', payoutShort:'ВЫПЛ.', payer:'ПЛАТЕЛЬЩИК',
+      noPayouts:'Заявок на вывод пока нет.'
+    };
+
+    const I=this.I.bind(this);
+    const icoGrid=I('<rect x="3" y="3" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="2"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="2"/>');
+    const icoUsers=I('<circle cx="9" cy="9" r="3.2"/><path d="M3.5 19.5c.6-2.9 2.9-4.6 5.5-4.6s4.9 1.7 5.5 4.6"/><circle cx="17" cy="10" r="2.5"/><path d="M16 15.2c2.3.2 4 1.7 4.5 4.3"/>');
+    const icoMail=I('<rect x="3" y="5" width="18" height="14" rx="3"/><path d="M4 7l8 6 8-6"/>');
+    const icoCam=I('<rect x="3" y="7" width="18" height="13" rx="3"/><path d="M8.5 7L10 4h4l1.5 3"/><circle cx="12" cy="13" r="3.4"/>');
+    const icoIg=I('<rect x="4" y="4" width="16" height="16" rx="5"/><circle cx="12" cy="12" r="3.6"/><circle cx="16.5" cy="7.5" r="1"/>');
+    const icoGift=I('<rect x="4" y="9" width="16" height="11" rx="2"/><path d="M12 9v11M4 13.5h16"/><path d="M12 9c-1.5-2.5-4-3.8-5.5-2.3S7.5 9 9.5 9zM12 9c1.5-2.5 4-3.8 5.5-2.3S16.5 9 14.5 9z"/>');
+
+    const go=(p)=>()=>set({page:p});
+    const navDefs=[
+      {id:'overview',label:'Обзор',icon:icoGrid},{id:'users',label:'Пользователи',icon:icoUsers},
+      {id:'broadcasts',label:'Рассылки',icon:icoMail},{id:'exif',label:'EXIF-бот',icon:icoCam},
+      {id:'ig',label:'IG-бот',icon:icoIg},{id:'donations',label:'Донаты креаторов',icon:icoGift}
+    ];
+    const navItems=navDefs.map(n=>({
+      label:n.label, icon:n.icon, go:go(n.id),
+      style:'display:flex;align-items:center;gap:11px;padding:9px 10px;border-radius:10px;font-size:13px;cursor:pointer;'+(s.page===n.id?'background:rgba(215,244,82,.1);color:#D7F452;font-weight:800;':'color:#B7BBC0;font-weight:600;'),
+      chipStyle:'font-family:JetBrains Mono;font-size:10.5px;white-space:nowrap;padding:6px 12px;border-radius:8px;cursor:pointer;flex:none;'+(s.page===n.id?'background:rgba(215,244,82,.12);color:#D7F452;border:1px solid rgba(215,244,82,.35);':'border:1px solid rgba(255,255,255,.1);color:#9BA0A6;')
+    }));
+    const titles={overview:'Обзор платформы',users:'Пользователи',broadcasts:'Рассылки',exif:'EXIF-бот',ig:'IG-бот',donations:'Донаты креаторов'};
+
+    // ── Overview KPIs ──
+    const kpis=[
+      {label:'ПОЛЬЗОВАТЕЛЕЙ',val:'193',sub:'владельцев 190 · команда 3',color:'#F2F3F0'},
+      {label:'ОПЛАТ ВСЕГО',val:'412',sub:'ЮKassa + Tribute + credits',color:'#F2F3F0'},
+      {label:'АКТИВНЫХ ПОДПИСОК',val:'46',sub:'23.8% от владельцев',color:'#4ADE80'},
+      {label:'ВЫРУЧКА ЗА ВСЁ ВРЕМЯ',val:'2,84 млн ₽',sub:'с запуска платформы',color:'#D7F452'},
+      {label:'ВЫРУЧКА ЗА МЕСЯЦ',val:'186 400 ₽',sub:'+18% к прошлому месяцу',color:'#D7F452'},
+      {label:'ДОНАТОВ ЗА ВСЁ ВРЕМЯ',val:'100 ₽',sub:'через Tribute, комиссия 2%',color:'#F0A8C8'},
+      {label:'ГЕНЕРАЦИЙ ВСЕГО',val:'12 480',sub:'фото 11 640 · видео 840',color:'#C084FC'},
+      {label:'ЗОМБИ (БЕЗ АКТИВНОСТИ)',val:'114 (60%)',sub:'зарегистрировались, не пользовались',color:'#FB923C'}
+    ];
+
+    const months=['ЯНВ','ФЕВ','МАР','АПР','МАЙ','ИЮН','ИЮЛ','АВГ','СЕН','ОКТ','НОЯ','ДЕК'];
+    const revVals=[92,105,88,130,145,160,152,171,190,205,178,220];
+    const maxRev=Math.max(...revVals);
+    const revenueBars=revVals.map((v,i)=>({label:months[i],barStyle:'width:100%;border-radius:5px 5px 0 0;background:linear-gradient(180deg,#D7F452,#AEBF35);height:'+Math.round(v/maxRev*100)+'%;'}));
+
+    const planColors={Solo:'#38BDF8',Studio:'#D7F452',Agency:'#C084FC','Pro Solo':'#4ADE80','Pro Pro':'#F0A8C8'};
+    const planData=[{name:'Studio',count:21,pct:46},{name:'Solo',count:12,pct:26},{name:'Pro Pro',count:7,pct:15},{name:'Agency',count:4,pct:9},{name:'Pro Solo',count:2,pct:4}];
+    const topPlans=planData.map(p=>({...p,color:planColors[p.name],fill:'height:100%;border-radius:4px;background:'+planColors[p.name]+';width:'+p.pct+'%;'}));
+
+    const genTypeData=[{label:'Картинки',val:'11 640',color:'#D7F452',pct:93},{label:'Видео',val:'840',color:'#C084FC',pct:7}];
+    const genTypes=genTypeData;
+    const totalGens='12 480';
+    const donutBg='conic-gradient(#D7F452 0% 93%, #C084FC 93% 100%)';
+
+    const engineData=[{name:'Nano Banana Pro',count:5820,color:'#4ADE80'},{name:'GPT Image',count:3140,color:'#38BDF8'},{name:'Seedream 5 Pro',count:2260,color:'#F0A8C8'},{name:'Wan 2.7 Pro',count:1260,color:'#FB923C'}];
+    const maxEng=Math.max(...engineData.map(e=>e.count));
+    const engines=engineData.map(e=>({...e,fill:'height:100%;border-radius:4px;background:'+e.color+';width:'+Math.round(e.count/maxEng*100)+'%;'}));
+
+    // ── Users ──
+    const usersRaw=[
+      {id:195,email:'goldmorfin009@gmail.com',role:'владелец',sub:'none',plan:'Credits · Solo',credits:0,gens:0},
+      {id:194,email:'romoiton20@gmail.com',role:'владелец',sub:'none',plan:'Credits · Solo',credits:0,gens:0},
+      {id:184,email:'rim1702sr@gmail.com',role:'владелец',sub:'none',plan:'Credits · Solo',credits:16,gens:6},
+      {id:183,email:'aimodelcore@gmail.com',role:'владелец',sub:'active',plan:'Standard · Pro',credits:300,gens:0},
+      {id:181,email:'vitim79@ya.ru',role:'владелец',sub:'none',plan:'Credits · Solo',credits:0,gens:2},
+      {id:178,email:'otchengazoom@gmail.com',role:'владелец',sub:'none',plan:'Credits · Solo',credits:0,gens:0},
+      {id:170,email:'anna_op@modelmate.local',role:'оператор',sub:'none',plan:'—',credits:0,gens:52}
+    ];
+    const filtered=usersRaw.filter(u=>!s.userSearch||u.email.toLowerCase().includes(s.userSearch.toLowerCase()));
+    const subLabelMap={active:'Активна',none:'Нет подписки',trial:'Триал'};
+    const subColorMap={active:'#4ADE80',none:'#6B7076',trial:'#FB923C'};
+    const users=filtered.map(u=>({
+      ...u, subLabel:subLabelMap[u.sub], subColor:subColorMap[u.sub],
+      open:()=>set({userDetailId:u.id}),
+      rowStyle:'display:grid;grid-template-columns:50px 1.6fr .8fr 1fr .9fr .7fr .7fr;gap:8px;padding:11px 16px;border-bottom:1px solid rgba(255,255,255,.04);align-items:center;cursor:pointer;'+(s.userDetailId===u.id?'background:rgba(215,244,82,.06);':'')
+    }));
+    const ud=usersRaw.find(u=>u.id===s.userDetailId);
+    const userDetail=ud?{...ud,subLabel:subLabelMap[ud.sub],stats:[
+      {l:'РЕГИСТРАЦИЯ',v:'16.07.2026'},{l:'БАЛАНС КРЕДИТОВ',v:ud.credits},
+      {l:'МОДЕЛИ СТУДИИ',v:Math.max(1,Math.round(ud.gens/10))},{l:'ГЕНЕРАЦИЙ В АРХИВЕ',v:ud.gens},
+      {l:'ДИАЛОГИ',v:0},{l:'ПРИГЛАШЕНО ПО РЕФЕРАЛКЕ',v:0}
+    ]}:null;
+
+    // ── Broadcasts ──
+    const segDefs=[{label:'Без активности (зомби)',count:114},{label:'Регистрации за 30 дней',count:46},{label:'Оплаченная подписка',count:5},{label:'Покупали кредиты',count:3}];
+    const segments=segDefs.map((sg,i)=>({...sg,pick:()=>{},style:'display:flex;justify-content:space-between;padding:9px 12px;border-radius:9px;cursor:pointer;font-size:12.5px;'+(i===0?'background:rgba(215,244,82,.08);border:1px solid rgba(215,244,82,.3);color:#D7F452;font-weight:700;':'border:1px solid rgba(255,255,255,.1);color:#C9CDD1;')}));
+    const campaigns=[{subject:'ModelMate — большое обновление: workflow и бесплатные демо',segment:'Регистрации за 30 дней',sent:'140/140',status:'completed'}];
+
+    // ── Bot pages ──
+    const isExif=s.page==='exif';
+    const botKpis=isExif?[
+      {label:'ПОЛЬЗОВАТЕЛЕЙ БОТА',val:'6',sub:'с профилями: 2'},{label:'ОБРАБОТОК ВСЕГО',val:'5',sub:''},
+      {label:'СЕГОДНЯ',val:'0',sub:'2026-07-16'},{label:'ПРОФИЛЕЙ ТЕЛЕФОНОВ',val:'2',sub:''},{label:'АКТИВНЫ 7/30 ДН.',val:'1 / 6',sub:''}
+    ]:[
+      {label:'ПОЛЬЗОВАТЕЛЕЙ БОТА',val:'4',sub:'сегодня: 0'},{label:'СКАЧИВАНИЙ ВСЕГО',val:'30',sub:''},
+      {label:'СЕГОДНЯ',val:'0',sub:'2026-07-16'},{label:'ЛИМИТ / СУТКИ',val:'5 / 50',sub:'без подписки / с каналом'},{label:'АКТИВНЫ 7/30 ДН.',val:'1 / 4',sub:''}
+    ];
+    const botUsersRaw=isExif?[
+      {id:1,name:'Renat',username:'rentauren',metric:'5',today:'0',registered:'06.07.2026'},
+      {id:2,name:'Ruby Praud',username:'rubypraud',metric:'0',today:'0',registered:'06.07.2026'},
+      {id:4,name:'Евгений',username:'stalkerlegend',metric:'0',today:'0',registered:'06.07.2026'},
+      {id:5,name:'ХеЈВаНЗо',username:'GiveTerrorist',metric:'0',today:'0',registered:'06.07.2026'},
+      {id:6,name:'`dm',username:'itsgooddamn',metric:'0',today:'0',registered:'07.07.2026'}
+    ]:[
+      {id:1,name:'Renat',username:'rentauren',metric:'29',today:'0',registered:'07.07.2026'},
+      {id:2,name:'DWInstaModelMate',username:'DWInstaModelMate_bot',metric:'0',today:'0',registered:'07.07.2026'},
+      {id:3,name:'`dm',username:'itsgooddamn',metric:'0',today:'0',registered:'07.07.2026'},
+      {id:4,name:'Ruby Praud',username:'rubypraud',metric:'1',today:'0',registered:'07.07.2026'}
+    ];
+    const botUsers=botUsersRaw;
+
+    // ── Donations ──
+    const donTabDefs=[{id:'moderation',label:'Модерация'},{id:'stats',label:'Статистика'},{id:'all',label:'Все донаты'},{id:'payouts',label:'Заявки на вывод'}];
+    const donTabs=donTabDefs.map(d=>({label:d.label,pick:()=>set({donTab:d.id}),style:'flex:1;min-width:110px;text-align:center;padding:9px;border-radius:9px;font-size:12.5px;font-weight:700;cursor:pointer;'+(s.donTab===d.id?'background:#4C3B9E;color:#fff;':'color:#9BA0A6;')}));
+    const donStatsKpi=[{label:'ДОНАТОВ ВСЕГО',val:'1',color:'#F2F3F0'},{label:'АКТИВНЫХ ССЫЛОК',val:'1',color:'#F2F3F0'},{label:'ОТКРЫТЫХ ЗАЯВОК',val:'0',color:'#F2F3F0'},{label:'КОМИССИЯ ПЛАТФОРМЫ',val:'2%',color:'#D7F452'}];
+    const byCreator=[{name:'utochkinrenat@gmail.com #1',total:'100 ₽',payout:'98 ₽'}];
+    const allDonations=[{date:'12.07.2026, 14:45',creator:'utochkinrenat@gmail.com',title:'Поддержи меня',sum:'100 ₽',fee:'2 ₽',payout:'98 ₽',payer:'tg:8353501632',status:'К выплате',stStyle:'color:#4ADE80;font-weight:700;'}];
+
+    return {
+      t, isMobile, showSidebar:!isMobile,
+      navItems, pageTitle:titles[s.page], goCabinet:()=>{}, refresh:()=>{},
+      contentPad: isMobile?'padding:16px 14px 24px;':'padding:22px 26px 30px;max-width:1280px;margin:0 auto;',
+      twoCol: isMobile?'display:grid;grid-template-columns:1fr;gap:10px;':'display:grid;grid-template-columns:1.3fr 1fr;gap:10px;',
+      isOverview:s.page==='overview', isUsers:s.page==='users', isBroadcasts:s.page==='broadcasts',
+      isBotPage:s.page==='exif'||s.page==='ig', isDonations:s.page==='donations',
+      kpis, revenueBars, topPlans, genTypes, totalGens, donutBg, engines,
+      userSearch:s.userSearch, onSearch:(e)=>set({userSearch:e.target.value}), resetSearch:()=>set({userSearch:'',userDetailId:null}),
+      usersLayout: isMobile?'display:flex;flex-direction:column;gap:12px;':'display:grid;grid-template-columns:1fr 300px;gap:12px;align-items:start;',
+      users, hasUserDetail:!!userDetail, userDetail, closeUser:()=>set({userDetailId:null}),
+      segments, campaigns,
+      botKpis, botUsers,
+      donTabs, isDonModeration:s.donTab==='moderation', isDonStats:s.donTab==='stats', isDonAll:s.donTab==='all', isDonPayouts:s.donTab==='payouts',
+      donStatsKpi, byCreator, allDonations
+    };
+  }
+}
+</script>
+</body>
+</html>
