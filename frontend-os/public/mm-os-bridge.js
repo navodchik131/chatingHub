@@ -476,6 +476,66 @@
       '<svg viewBox="0 0 24 24" width="100%" height="100%" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.4 2.3 3.6 5.3 3.6 8.5s-1.2 6.2-3.6 8.5c-2.4-2.3-3.6-5.3-3.6-8.5S9.6 5.8 12 3.5z"/></svg>',
   }
 
+  function markConversationReadOptimistic(convId) {
+    if (!convId) return
+    const idx = store.conversations.findIndex((c) => c.id === convId)
+    if (idx >= 0 && (store.conversations[idx].unread_count || 0) > 0) {
+      store.conversations = store.conversations.map((c) =>
+        c.id === convId ? { ...c, unread_count: 0 } : c,
+      )
+      store.logic?.forceUpdate()
+    }
+  }
+
+  async function markConversationRead(convId) {
+    if (!convId) return
+    markConversationReadOptimistic(convId)
+    try {
+      await API.apiFetch('/api/conversations/' + convId + '/read', { method: 'POST' })
+    } catch (_) {}
+    void loadConversations()
+  }
+
+  function ownerReactionEmoji(reactions) {
+    if (!Array.isArray(reactions)) return null
+    const hit = reactions.find((r) => r && r.actor === 'owner')
+    return hit?.emoji || null
+  }
+
+  async function toggleMessageReaction(convId, msg, emoji) {
+    if (!convId || !msg?.id || msg.pending) return
+    store.busy = true
+    store.error = null
+    try {
+      const res = await API.apiFetch(
+        '/api/conversations/' + convId + '/messages/' + msg.id + '/reactions',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ emoji }),
+        },
+      )
+      const data = await API.readJson(res)
+      if (!res.ok) throw new Error(API.formatDetail(data) || 'Не удалось поставить реакцию')
+      store.messages = store.messages.map((m) =>
+        Number(m.id) === Number(data.id) ? { ...m, ...data } : m,
+      )
+      if (data.platform_sync_ok === false) {
+        const lang = store.logic?.state?.lang || 'ru'
+        store.error =
+          lang === 'ru'
+            ? 'Реакция сохранена локально, но Telegram не принял её'
+            : 'Reaction saved locally but Telegram rejected it'
+      }
+      store.logic?.setState({ msgReact: null })
+    } catch (e) {
+      store.error = e.message || String(e)
+    } finally {
+      store.busy = false
+      store.logic?.forceUpdate()
+    }
+  }
+
   function mkDlgFromConv(c, i, logic) {
     const name = displayName(c)
     const initial = (name[0] || '?').toUpperCase()
@@ -499,13 +559,13 @@
       open: () => {
         store.activeConvId = c.id
         clearReplyDraft()
+        markConversationReadOptimistic(c.id)
         const patch = {
           chatOpen: i,
           page: 'dialogs',
           msgReact: null,
           emojiOpen: false,
           noteFormOpen: false,
-          reactions: {},
         }
         if (logic.state.isMobile) patch.mobileChat = true
         logic.setState(patch)
@@ -1002,9 +1062,12 @@
 
   async function loadMessages(convId) {
     store.activeConvId = convId
+    markConversationReadOptimistic(convId)
     const data = await API.apiJson('/api/conversations/' + convId + '/messages?limit=50')
     store.messages = Array.isArray(data) ? data : []
-    await API.apiFetch('/api/conversations/' + convId + '/read', { method: 'POST' })
+    try {
+      await API.apiFetch('/api/conversations/' + convId + '/read', { method: 'POST' })
+    } catch (_) {}
     const nr = await API.apiJson('/api/conversations/' + convId + '/notes').catch(() => [])
     store.notes = Array.isArray(nr) ? nr : []
     store.logic?.forceUpdate()
@@ -1128,6 +1191,9 @@
           void API.apiJson('/api/auth/me').then((m) => { store.me = m; store.logic?.forceUpdate() })
         }
         if (msg.type === 'new_message' || msg.type === 'message_updated') {
+          if (msg.type === 'new_message' && store.activeConvId) {
+            markConversationReadOptimistic(store.activeConvId)
+          }
           void loadConversations()
           if (store.activeConvId) void loadMessages(store.activeConvId)
         }
@@ -1938,7 +2004,7 @@
       store.messages = []
       store.notes = []
       clearReplyDraft()
-      logic.setState({ chatOpen: 0, mobileChat: false, noteFormOpen: false, msgReact: null, reactions: {} })
+      logic.setState({ chatOpen: 0, mobileChat: false, noteFormOpen: false, msgReact: null })
     } catch (e) {
       store.error = e.message || String(e)
     } finally {
@@ -2481,9 +2547,15 @@
     const attachBtn = root.querySelector('[data-mm-chat-attach]')
     if (attachBtn && !attachBtn.dataset.mmBound) {
       attachBtn.dataset.mmBound = '1'
-      attachBtn.addEventListener('click', () => {
+      attachBtn.addEventListener('click', (e) => {
+        e.stopPropagation()
         void pickLocalFile('image/*').then((file) => {
-          if (file) store.pendingChatImage = file
+          if (!file) return
+          store.pendingChatImage = file
+          attachBtn.title = file.name || 'photo'
+          attachBtn.style.borderColor = 'rgba(215,244,82,.45)'
+          attachBtn.style.color = '#D7F452'
+          store.logic?.forceUpdate()
         })
       })
     }
@@ -2565,6 +2637,12 @@
       }
       if (input) input.value = ''
       store.pendingChatImage = null
+      const attachBtn = document.querySelector('[data-mm-chat-attach]')
+      if (attachBtn) {
+        attachBtn.title = ''
+        attachBtn.style.borderColor = ''
+        attachBtn.style.color = ''
+      }
       logicClearEmoji(store.logic)
       await loadMessages(conv.id)
     } catch (e) {
@@ -3028,13 +3106,20 @@
         (st === 'blocked'
           ? 'background:rgba(248,113,113,.15);color:#F87171;'
           : 'background:rgba(255,255,255,.08);color:#9BA0A6;')
+      const unreadCount = c.unread_count || 0
+      const isUnread = unreadCount > 0 && c.id !== store.activeConvId
       return {
         ...d,
         avStyle: st ? d.avStyleLg + 'filter:grayscale(1);opacity:.6;' : d.avStyleLg,
         blockedTag,
         blockedTagStyle,
-        nameStyle: 'font-weight:700;font-size:12.5px;' + (st ? 'color:#9BA0A6;' : ''),
+        nameStyle:
+          'font-weight:700;font-size:12.5px;' +
+          (st ? 'color:#9BA0A6;' : isUnread ? 'color:#F2F3F0;' : ''),
         canDelete: !!st,
+        isUnread,
+        newLabel: isUnread ? (lang === 'ru' ? 'Новое' : 'New') : false,
+        unreadBadge: isUnread ? (unreadCount > 9 ? '9+' : String(unreadCount)) : false,
         delDialog: (e) => {
           e?.stopPropagation?.()
           void deleteConversation(c.id, logic)
@@ -3043,7 +3128,9 @@
           'display:flex;gap:10px;align-items:center;padding:9px 8px;border-radius:12px;cursor:pointer;position:relative;' +
           (c.id === store.activeConvId
             ? 'background:rgba(215,244,82,.07);border:1px solid rgba(215,244,82,.2);'
-            : 'border:1px solid transparent;'),
+            : isUnread
+              ? 'background:rgba(215,244,82,.05);border:1px solid rgba(215,244,82,.18);'
+              : 'border:1px solid transparent;'),
       }
     })
 
@@ -3051,11 +3138,11 @@
       'max-width:80%;background:#1A1C20;border:1px solid rgba(255,255,255,.07);border-radius:14px 14px 14px 4px;padding:10px 13px;position:relative;'
     const bubbleOut =
       'max-width:80%;background:rgba(215,244,82,.09);border:1px solid rgba(215,244,82,.2);border-radius:14px 14px 4px 14px;padding:10px 13px;position:relative;'
-    const reactChoices = ['❤️', '😍', '😂', '🔥', '👍', '😢']
-    const reactions = s.reactions || {}
+    const reactChoices = ['👍', '❤️', '😂', '😮', '😢', '🔥']
+    const activeConvId = store.activeConvId
     const messages = store.messages.map((m, i) => {
       const outbound = m.direction === 'outbound'
-      const rx = reactions[i]
+      const rx = ownerReactionEmoji(m.reactions)
       return {
         wrap:
           'display:flex;flex-direction:column;gap:3px;' +
@@ -3073,7 +3160,7 @@
           e: rc,
           pick: (ev) => {
             ev?.stopPropagation?.()
-            logic.setState({ reactions: { ...reactions, [i]: rc }, msgReact: null })
+            void toggleMessageReaction(activeConvId, m, rc)
           },
         })),
         reaction: rx || false,
@@ -3314,11 +3401,13 @@
     const emojiChoices = ['😊', '😍', '🥰', '😘', '💕', '🔥', '😂', '😅', '🙈', '😉', '💋', '🌹', '✨', '👀', '🥂', '💫']
     const emojiPick = emojiChoices.map((em) => ({
       e: em,
-      pick: () => {
+      pick: (ev) => {
+        ev?.stopPropagation?.()
         const input = queryReplyInput()
         if (input) {
           input.value = (input.value || '') + em
           input.dispatchEvent(new Event('input', { bubbles: true }))
+          input.focus()
         }
         logic.setState({ emojiOpen: false })
       },
@@ -3435,6 +3524,7 @@
       emojiOpen: s.emojiOpen,
       toggleEmoji: () => logic.setState({ emojiOpen: !s.emojiOpen, msgReact: null }),
       noteFormOpen: !!s.noteFormOpen,
+      noteFormClosed: !s.noteFormOpen,
       noteTagChips,
       toggleNote: () => logic.setState({ noteFormOpen: !s.noteFormOpen }),
       closeNote: () => {

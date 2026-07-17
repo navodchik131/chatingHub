@@ -367,6 +367,22 @@ const TEMPLATE_PATCHES = [
     '<span onClick="{{ u.copy }}" style="display:flex;width:14px;height:14px;color:#9BA0A6;cursor:pointer;flex:none;" style-hover="color:#D7F452;" dangerouslySetInnerHTML="{{ icoCopy }}"></span></div></sc-for></div></div></sc-for>',
   ],
   [
+    /<sc-if value="\{\{ ch\.hot \}\}" hint-placeholder-val="\{\{ false \}\}"><span style="font-family:'JetBrains Mono';font-size:7\.5px;background:rgba\(251,146,60,.15\);color:#FB923C;padding:1px 5px;border-radius:4px;">24ч\+<\/span><\/sc-if>\s*<\/div>/,
+    `<sc-if value="{{ ch.hot }}" hint-placeholder-val="{{ false }}"><span style="font-family:'JetBrains Mono';font-size:7.5px;background:rgba(251,146,60,.15);color:#FB923C;padding:1px 5px;border-radius:4px;">24ч+</span></sc-if>
+                    <sc-if value="{{ ch.isUnread }}" hint-placeholder-val="{{ false }}"><span style="font-family:'JetBrains Mono';font-size:7.5px;background:rgba(215,244,82,.15);color:#D7F452;padding:1px 5px;border-radius:4px;">{{ ch.newLabel }}</span></sc-if>
+                    <sc-if value="{{ ch.unreadBadge }}" hint-placeholder-val="{{ false }}"><span style="min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:#D7F452;color:#171A05;font-family:'JetBrains Mono';font-size:9px;font-weight:800;display:inline-flex;align-items:center;justify-content:center;">{{ ch.unreadBadge }}</span></sc-if>
+                  </div>`,
+  ],
+  [
+    /<div style="padding:10px 12px;border-top:1px solid rgba\(255,255,255,.07\);display:flex;gap:6px;">\s*<div data-mm-note-analyze style="flex:1;border:1px solid rgba\(255,255,255,.12\);border-radius:9px;padding:7px;text-align:center;font-size:11\.5px;font-weight:700;color:#C084FC;cursor:pointer;" style-hover="border-color:#C084FC;">✦ AI-\{\{ t\.analysis \}\}<\/div>\s*<div data-mm-note-toggle style="flex:1;background:rgba\(215,244,82,.12\);border:1px solid rgba\(215,244,82,.3\);border-radius:9px;padding:7px;text-align:center;font-size:11\.5px;font-weight:700;color:#D7F452;cursor:pointer;" style-hover="background:rgba\(215,244,82,.2\);">\+ \{\{ t\.addNote \}\}<\/div>\s*<\/div>/,
+    `<sc-if value="{{ noteFormClosed }}" hint-placeholder-val="{{ false }}">
+            <div style="padding:10px 12px;border-top:1px solid rgba(255,255,255,.07);display:flex;gap:6px;">
+              <div data-mm-note-analyze style="flex:1;border:1px solid rgba(255,255,255,.12);border-radius:9px;padding:7px;text-align:center;font-size:11.5px;font-weight:700;color:#C084FC;cursor:pointer;" style-hover="border-color:#C084FC;">✦ AI-{{ t.analysis }}</div>
+              <div data-mm-note-toggle style="flex:1;background:rgba(215,244,82,.12);border:1px solid rgba(215,244,82,.3);border-radius:9px;padding:7px;text-align:center;font-size:11.5px;font-weight:700;color:#D7F452;cursor:pointer;" style-hover="background:rgba(215,244,82,.2);">+ {{ t.addNote }}</div>
+            </div>
+            </sc-if>`,
+  ],
+  [
     /<div style="display:flex;gap:8px;"><div style="flex:1;background:rgba\(215,244,82,.12\);border:1px solid rgba\(215,244,82,.3\);border-radius:9px;padding:10px;text-align:center;font-size:12px;font-weight:800;color:#D7F452;cursor:pointer;">\{\{ t\.save \}\}<\/div><\/div>\s*<\/div>\s*<\/sc-if>/,
     `<div style="display:flex;gap:8px;"><div data-mm-char-persona-save style="flex:1;background:rgba(215,244,82,.12);border:1px solid rgba(215,244,82,.3);border-radius:9px;padding:10px;text-align:center;font-size:12px;font-weight:800;color:#D7F452;cursor:pointer;">{{ t.save }}</div></div>
           </div>
