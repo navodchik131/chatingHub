@@ -263,10 +263,13 @@ const TEMPLATE_PATCHES = [
     '<div style="{{ ffImgStyleDone }}"><span style="font-family:\'JetBrains Mono\';font-size:7.5px;background:rgba(0,0,0,.6);color:#fff;padding:2px 6px;border-radius:4px;">{{ ffThumbLabel }}</span>',
   ],
   [
-    /<div style="\{\{ lightboxData\.big \}\}min-height:0;display:flex;align-items:center;justify-content:center;overflow:hidden;">\s*<span style="display:flex;width:48px;height:48px;color:rgba\(255,255,255,\.25\);" dangerouslySetInnerHTML="\{\{ icoImage \}\}"><\/span>\s*<\/div>/,
-    `<div style="{{ lightboxData.big }}min-height:0;display:flex;align-items:center;justify-content:center;overflow:hidden;">
+    /<div style="\{\{ lightboxData\.big \}\}min-height:0;display:flex;align-items:center;justify-content:center;overflow:hidden(?:;position:relative)?;">\s*<sc-if value="\{\{ lightboxData\.hasImage \}\}" hint-placeholder-val="\{\{ false \}\}">\s*<img src="\{\{ lightboxData\.url \}\}"[^>]*>\s*<\/sc-if>\s*<sc-if value="\{\{ lightboxData\.showPlaceholder \}\}" hint-placeholder-val="\{\{ true \}\}">\s*<span style="display:flex;width:48px;height:48px;color:rgba\(255,255,255,\.25\);" dangerouslySetInnerHTML="\{\{ icoImage \}\}"><\/span>\s*<\/sc-if>\s*<\/div>/,
+    `<div style="{{ lightboxData.big }}min-height:0;display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative;">
             <sc-if value="{{ lightboxData.hasImage }}" hint-placeholder-val="{{ false }}">
               <img src="{{ lightboxData.url }}" alt="" style="width:100%;height:100%;max-height:min(calc(92vh - 200px),640px);object-fit:contain;display:block;" />
+            </sc-if>
+            <sc-if value="{{ lightboxData.failed }}" hint-placeholder-val="{{ false }}">
+              <span style="{{ lightboxData.failedWrap }}"><span style="{{ lightboxData.failedBadgeStyle }}">{{ lightboxData.failedBadge }}</span><span style="{{ lightboxData.failedStyle }}">{{ lightboxData.failedLabel }}</span></span>
             </sc-if>
             <sc-if value="{{ lightboxData.showPlaceholder }}" hint-placeholder-val="{{ true }}">
               <span style="display:flex;width:48px;height:48px;color:rgba(255,255,255,.25);" dangerouslySetInnerHTML="{{ icoImage }}"></span>
@@ -278,23 +281,40 @@ const TEMPLATE_PATCHES = [
     '<div onClick="{{ stop }}" style="{{ lightboxData.cardStyle }}">',
   ],
   [
-    /<div style="display:flex;gap:10px;">\s*<div onClick="\{\{ downloadLightbox \}\}"/,
-    '<div style="{{ lightboxData.actionsStyle }}"><div onClick="{{ downloadLightbox }}"',
+    /<div style="display:flex;gap:10px;">\s*<div style="flex:1;display:flex;align-items:center;justify-content:center;gap:8px;background:#D7F452;color:#171A05;border-radius:11px;padding:12px;font-size:13px;font-weight:800;cursor:pointer;" style-hover="background:#E8FA8A;"><span style="display:flex;width:16px;height:16px;" dangerouslySetInnerHTML="\{\{ icoDownload \}\}"><\/span>\{\{ t\.download \}<\/div>\s*<div style="flex:1;display:flex;align-items:center;justify-content:center;gap:8px;background:rgba\(192,132,252,\.12\);border:1px solid rgba\(192,132,252,\.4\);color:#C084FC;border-radius:11px;padding:12px;font-size:13px;font-weight:800;cursor:pointer;" style-hover="background:rgba\(192,132,252,\.2\);"><span style="display:flex;width:16px;height:16px;" dangerouslySetInnerHTML="\{\{ icoGrid2 \}\}"><\/span>\{\{ t\.makeCarousel \}<\/div>\s*<\/div>/,
+    `<sc-if value="{{ lightboxData.showActions }}" hint-placeholder-val="{{ true }}">
+          <div style="{{ lightboxData.actionsStyle }}"><div onClick="{{ downloadLightbox }}" style="flex:1;display:flex;align-items:center;justify-content:center;gap:8px;background:#D7F452;color:#171A05;border-radius:11px;padding:12px;font-size:13px;font-weight:800;cursor:pointer;" style-hover="background:#E8FA8A;"><span style="display:flex;width:16px;height:16px;" dangerouslySetInnerHTML="{{ icoDownload }}"></span>{{ t.download }}</div>
+            <div onClick="{{ makeCarousel }}" style="flex:1;display:flex;align-items:center;justify-content:center;gap:8px;background:rgba(192,132,252,.12);border:1px solid rgba(192,132,252,.4);color:#C084FC;border-radius:11px;padding:12px;font-size:13px;font-weight:800;cursor:pointer;" style-hover="background:rgba(192,132,252,.2);"><span style="display:flex;width:16px;height:16px;" dangerouslySetInnerHTML="{{ icoGrid2 }}"></span>{{ t.makeCarousel }}</div>
+          </div>
+          </sc-if>`,
   ],
   [
-    /<\/div>\s*<\/div>\s*<div style="\{\{ lightboxData\.actionsStyle \}\}">/,
-    '</div><div style="{{ lightboxData.actionsStyle }}">',
-  ],
-  [
-    /<div style="\{\{ af\.bg \}\}position:relative;" style-hover="filter:brightness\(1\.08\);">\s*<span style="display:flex;width:22px;height:22px;color:rgba\(255,255,255,.35\);" dangerouslySetInnerHTML="\{\{ icoImage \}\}"><\/span>\s*<span style="position:absolute;top:7px;right:7px;display:flex;width:15px;height:15px;color:rgba\(255,255,255,.7\);background:rgba\(0,0,0,.4\);border-radius:6px;padding:3px;" dangerouslySetInnerHTML="\{\{ icoZoom \}\}"><\/span>/,
-    `<div style="{{ af.bg }}" style-hover="{{ af.pending ? '' : 'filter:brightness(1.08);' }}">
+    /<div onClick="\{\{ af\.open \}\}" style="border-radius:12px;overflow:hidden;background:#121316;border:1px solid rgba\(255,255,255,\.07\);cursor:pointer;" style-hover="border-color:rgba\(215,244,82,\.4\);">\s*<div style="\{\{ af\.bg \}\}position:relative;" style-hover="filter:brightness\(1\.08\);">\s*<span style="display:flex;width:22px;height:22px;color:rgba\(255,255,255,\.35\);" dangerouslySetInnerHTML="\{\{ icoImage \}\}"><\/span>\s*<span style="position:absolute;top:7px;right:7px;display:flex;width:15px;height:15px;color:rgba\(255,255,255,\.7\);background:rgba\(0,0,0,\.4\);border-radius:6px;padding:3px;" dangerouslySetInnerHTML="\{\{ icoZoom \}\}"><\/span>\s*<\/div>\s*<div style="padding:8px 10px;">\s*<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px;"><span style="font-weight:700;font-size:11px;">\{\{ af\.who \}\}<\/span><span style="font-family:'JetBrains Mono';font-size:8\.5px;color:#5C6066;">\{\{ af\.ratio \}\}<\/span><\/div>\s*<div style="display:flex;gap:8px;"><span style="font-size:10px;font-weight:700;color:#C084FC;cursor:pointer;">→ \{\{ t\.toVideo \}\}<\/span><span style="font-size:10px;font-weight:700;color:#9BA0A6;cursor:pointer;">↓<\/span><\/div>\s*<\/div>\s*<\/div>/,
+    `<div onClick="{{ af.open }}" style="{{ af.cardStyle }}" style-hover="{{ af.cardHover }}">
+                  <div style="{{ af.bg }}" style-hover="{{ af.pending || af.failed ? '' : 'filter:brightness(1.08);' }}">
                     <sc-if value="{{ af.pending }}" hint-placeholder-val="{{ false }}">
                       <span style="{{ af.spinnerWrap }}"><span style="{{ af.spinnerStyle }}"></span></span>
+                    </sc-if>
+                    <sc-if value="{{ af.failed }}" hint-placeholder-val="{{ false }}">
+                      <span style="{{ af.failedWrap }}"><span style="{{ af.failedBadgeStyle }}">{{ af.failedBadge }}</span><span style="{{ af.failedStyle }}">{{ af.failedLabel }}</span></span>
                     </sc-if>
                     <sc-if value="{{ af.showPlaceholder }}" hint-placeholder-val="{{ true }}">
                     <span style="display:flex;width:22px;height:22px;color:rgba(255,255,255,.35);" dangerouslySetInnerHTML="{{ icoImage }}"></span>
                     </sc-if>
-                    <span style="position:absolute;top:7px;right:7px;display:flex;width:15px;height:15px;color:rgba(255,255,255,.7);background:rgba(0,0,0,.4);border-radius:6px;padding:3px;" dangerouslySetInnerHTML="{{ icoZoom }}"></span>`,
+                    <sc-if value="{{ af.showActions }}" hint-placeholder-val="{{ true }}">
+                    <span style="position:absolute;top:7px;right:7px;display:flex;width:15px;height:15px;color:rgba(255,255,255,.7);background:rgba(0,0,0,.4);border-radius:6px;padding:3px;" dangerouslySetInnerHTML="{{ icoZoom }}"></span>
+                    </sc-if>
+                  </div>
+                  <div style="padding:8px 10px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px;"><span style="font-weight:700;font-size:11px;">{{ af.who }}</span><span style="{{ af.ratioStyle }}">{{ af.ratio }}</span></div>
+                    <sc-if value="{{ af.showActions }}" hint-placeholder-val="{{ true }}">
+                    <div style="display:flex;gap:8px;"><span style="font-size:10px;font-weight:700;color:#C084FC;cursor:pointer;">→ {{ t.toVideo }}</span><span style="font-size:10px;font-weight:700;color:#9BA0A6;cursor:pointer;">↓</span></div>
+                    </sc-if>
+                    <sc-if value="{{ af.failed }}" hint-placeholder-val="{{ false }}">
+                    <div style="font-size:10px;font-weight:600;color:#F87171;line-height:1.3;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">{{ af.failedLabel }}</div>
+                    </sc-if>
+                  </div>
+                </div>`,
   ],
   [
     /<span style="font-size:11px;font-weight:700;color:#C084FC;cursor:pointer;" style-hover="color:#D8B4FE;">✦ \{\{ t\.genFromPhoto \}\}<\/span>/,

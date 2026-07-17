@@ -898,6 +898,7 @@
     const failed = (item.status || '').trim() === 'failed'
     const who = item.model_name || '—'
     const ratio = item.output_aspect || '9:16'
+    const errRaw = (item.error_message || '').trim() || (failed ? 'Ошибка генерации' : '')
     const tileBase =
       'aspect-ratio:9/16;border-radius:10px;display:flex;align-items:flex-end;padding:8px;position:relative;overflow:hidden;cursor:pointer;background:'
     const thumbBase =
@@ -909,29 +910,39 @@
     const thumbStyle = (url
       ? thumbBase + 'center/cover no-repeat url("' + url.replace(/"/g, '') + '"),' + G[i % 6]
       : thumbBase + G[i % 6]) + ';'
+    const cardBorder = failed
+      ? 'border-radius:12px;overflow:hidden;background:#121316;border:1px solid rgba(248,113,113,.45);cursor:pointer;'
+      : 'border-radius:12px;overflow:hidden;background:#121316;border:1px solid rgba(255,255,255,.07);cursor:pointer;'
     return {
       id: item.id,
       bg: bgStyle,
       tileStyle: bgStyle,
       thumbStyle,
+      cardStyle: cardBorder,
+      cardHover: failed ? 'border-color:rgba(248,113,113,.7);' : 'border-color:rgba(215,244,82,.4);',
       label: who + ' · ' + ratio,
       who,
-      ratio,
+      ratio: failed ? 'ошибка' : ratio,
+      ratioStyle: failed
+        ? "font-family:'JetBrains Mono';font-size:8.5px;color:#F87171;"
+        : "font-family:'JetBrains Mono';font-size:8.5px;color:#5C6066;",
       url,
       pending,
       spinnerWrap:
         'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(6,7,9,.55);',
       spinnerStyle:
         'width:22px;height:22px;border-radius:50%;border:2.5px solid rgba(215,244,82,.25);border-top-color:#D7F452;animation:mmSpin .8s linear infinite;',
-      showPlaceholder: !url,
+      showPlaceholder: !url && !failed && !pending,
+      showActions: !failed && !pending,
       failed,
       failedWrap:
-        'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(6,7,9,.72);padding:8px;',
+        'position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;background:rgba(40,10,12,.82);padding:10px 8px;',
+      failedBadgeStyle:
+        "font-family:'JetBrains Mono';font-size:8px;letter-spacing:.8px;font-weight:800;color:#F87171;background:rgba(248,113,113,.12);border:1px solid rgba(248,113,113,.35);border-radius:6px;padding:3px 7px;",
+      failedBadge: 'ОШИБКА',
       failedStyle:
-        'font-size:10px;font-weight:700;color:#F87171;text-align:center;line-height:1.35;',
-      failedLabel: failed
-        ? (item.error_message || 'Ошибка генерации').trim().slice(0, 80)
-        : '',
+        'font-size:10px;font-weight:600;color:#FECACA;text-align:center;line-height:1.35;max-height:4.2em;overflow:hidden;word-break:break-word;',
+      failedLabel: errRaw.slice(0, 140),
       open: pending
         ? () => {}
         : () => {
@@ -963,6 +974,8 @@
       store.archiveVideos.find((x) => x.id === id)
     if (!item) return null
     const url = archiveThumbUrl(item)
+    const failed = (item.status || '').trim() === 'failed'
+    const errRaw = (item.error_message || '').trim() || (failed ? 'Ошибка генерации' : '')
     const ratio = item.output_aspect || '9:16'
     const previewWrap =
       'width:100%;aspect-ratio:' +
@@ -974,8 +987,11 @@
       'display:flex;gap:10px;width:100%;flex:none;flex-shrink:0;align-self:stretch;'
     const cardStyle =
       'display:flex;flex-direction:column;align-items:stretch;gap:14px;width:min(92vw,720px);max-height:92vh;flex-shrink:0;'
-    const mode =
-      item.media_kind === 'video'
+    const mode = failed
+      ? lang === 'ru'
+        ? 'Ошибка'
+        : 'Failed'
+      : item.media_kind === 'video'
         ? lang === 'ru'
           ? 'Видео'
           : 'Video'
@@ -992,9 +1008,19 @@
       mode,
       when: fmtDateShort(item.created_at) + ' · ' + fmtTime(item.created_at),
       url: url || '',
-      hasImage: !!url,
+      hasImage: !!url && !failed,
       id: item.id,
-      showPlaceholder: !url,
+      showPlaceholder: !url && !failed,
+      failed,
+      failedLabel: errRaw.slice(0, 400),
+      failedWrap:
+        'position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;background:rgba(40,10,12,.88);padding:24px;',
+      failedBadgeStyle:
+        "font-family:'JetBrains Mono';font-size:10px;letter-spacing:1px;font-weight:800;color:#F87171;background:rgba(248,113,113,.12);border:1px solid rgba(248,113,113,.35);border-radius:8px;padding:5px 10px;",
+      failedBadge: lang === 'ru' ? 'ОШИБКА' : 'FAILED',
+      failedStyle:
+        'font-size:13px;font-weight:600;color:#FECACA;text-align:center;line-height:1.45;max-width:36em;word-break:break-word;',
+      showActions: !failed,
     }
   }
 

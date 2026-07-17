@@ -1328,9 +1328,12 @@ input::placeholder,textarea::placeholder{color:#5C6066;}
             </div>
             <div onClick="{{ closeLightbox }}" style="display:flex;align-items:center;gap:6px;border:1px solid rgba(255,255,255,.14);border-radius:9px;padding:7px 12px;font-size:12px;font-weight:700;color:#9BA0A6;cursor:pointer;" style-hover="color:#F2F3F0;border-color:rgba(255,255,255,.3);">✕ {{ t.close }}</div>
           </div>
-          <div style="{{ lightboxData.big }}min-height:0;display:flex;align-items:center;justify-content:center;overflow:hidden;">
+          <div style="{{ lightboxData.big }}min-height:0;display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative;">
             <sc-if value="{{ lightboxData.hasImage }}" hint-placeholder-val="{{ false }}">
               <img src="{{ lightboxData.url }}" alt="" style="width:100%;height:100%;max-height:min(calc(92vh - 200px),640px);object-fit:contain;display:block;" />
+            </sc-if>
+            <sc-if value="{{ lightboxData.failed }}" hint-placeholder-val="{{ false }}">
+              <span style="{{ lightboxData.failedWrap }}"><span style="{{ lightboxData.failedBadgeStyle }}">{{ lightboxData.failedBadge }}</span><span style="{{ lightboxData.failedStyle }}">{{ lightboxData.failedLabel }}</span></span>
             </sc-if>
             <sc-if value="{{ lightboxData.showPlaceholder }}" hint-placeholder-val="{{ true }}">
               <span style="display:flex;width:48px;height:48px;color:rgba(255,255,255,.25);" dangerouslySetInnerHTML="{{ icoImage }}"></span>
