@@ -245,14 +245,11 @@ input::placeholder,textarea::placeholder{color:#5C6066;}
             </div>
             <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">
               <sc-for list="{{ recentFrames }}" as="f" hint-placeholder-count="4">
-                <div onClick="{{ f.open }}" style="{{ f.tileStyle }}" style-hover="filter:brightness(1.15);">
+                <div style="{{ f.tileStyle }}" style-hover="filter:brightness(1.15);">
                   <span style="font-family:'JetBrains Mono';font-size:8.5px;letter-spacing:1px;color:rgba(255,255,255,.75);">{{ f.label }}</span>
                 </div>
               </sc-for>
             </div>
-            <sc-if value="{{ recentFramesEmpty }}" hint-placeholder-val="{{ true }}">
-              <div style="font-size:11.5px;color:#5C6066;margin-top:10px;">{{ t.recentFramesEmpty }}</div>
-            </sc-if>
             <div style="font-size:10.5px;color:#5C6066;margin-top:10px;">{{ t.framesHint }}</div>
           </div>
         </div>
@@ -345,18 +342,13 @@ input::placeholder,textarea::placeholder{color:#5C6066;}
                     <sc-if value="{{ ch.vip }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;top:-4px;left:-6px;font-family:'JetBrains Mono';font-size:7.5px;background:#D7F452;color:#171A05;font-weight:700;padding:1px 4px;border-radius:5px;">VIP</span></sc-if>
                   </div>
                   <div style="flex:1;min-width:0;">
-                    <div style="display:flex;gap:6px;align-items:baseline;flex-wrap:wrap;min-width:0;">
-                      <span style="{{ ch.nameStyle }}">{{ ch.name }}</span>
-                      <sc-if value="{{ ch.isUnread }}" hint-placeholder-val="{{ false }}"><span style="{{ ch.unreadLabelStyle }}">{{ ch.newLabel }}</span></sc-if>
-                      <span style="font-family:'JetBrains Mono';font-size:8px;letter-spacing:1px;color:{{ ch.platColor }};">{{ ch.platform }}</span>
-                      <sc-if value="{{ ch.unreadBadge }}" hint-placeholder-val="{{ false }}"><span style="{{ ch.unreadBadgeStyle }}">{{ ch.unreadBadge }}</span></sc-if>
-                    </div>
+                    <div style="display:flex;gap:6px;align-items:baseline;flex-wrap:wrap;min-width:0;"><span style="{{ ch.nameStyle }}">{{ ch.name }}</span><sc-if value="{{ ch.isUnread }}" hint-placeholder-val="{{ false }}"><span style="{{ ch.unreadLabelStyle }}">{{ ch.newLabel }}</span></sc-if><span style="font-family:'JetBrains Mono';font-size:8px;letter-spacing:1px;color:{{ ch.platColor }};">{{ ch.platform }}</span><sc-if value="{{ ch.unreadBadge }}" hint-placeholder-val="{{ false }}"><span style="{{ ch.unreadBadgeStyle }}">{{ ch.unreadBadge }}</span></sc-if></div>
                     <sc-if value="{{ ch.blockedTag }}" hint-placeholder-val="{{ false }}">
                       <div style="margin-top:2px;"><span style="{{ ch.blockedTagStyle }}">⛔ {{ ch.blockedTag }}</span></div>
                     </sc-if>
                     <div style="{{ ch.lastStyle }}">{{ ch.last }}</div>
                   </div>
-                  <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;flex:none;">
+                  <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;">
                     <sc-if value="{{ ch.canDelete }}" hint-placeholder-val="{{ false }}">
                       <span onClick="{{ ch.delDialog }}" style="width:22px;height:22px;border-radius:7px;display:flex;align-items:center;justify-content:center;color:#F87171;font-size:12px;cursor:pointer;border:1px solid rgba(248,113,113,.25);" style-hover="background:rgba(248,113,113,.12);">🗑</span>
                     </sc-if>
@@ -392,10 +384,7 @@ input::placeholder,textarea::placeholder{color:#5C6066;}
                 <div style="{{ m.wrap }}">
                   <div style="{{ m.bubble }}">
                     <div style="display:flex;gap:8px;align-items:flex-start;">
-                      <div style="flex:1;min-width:0;">
-                        <sc-if value="{{ m.imageUrl }}" hint-placeholder-val="{{ false }}"><img src="{{ m.imageUrl }}" alt="" style="{{ m.imageStyle }}"></sc-if>
-                        <sc-if value="{{ m.text }}" hint-placeholder-val="{{ false }}"><div style="font-size:13px;line-height:1.5;">{{ m.text }}</div></sc-if>
-                      </div>
+                      <div style="flex:1;font-size:13px;line-height:1.5;">{{ m.text }}</div>
                       <span onClick="{{ m.toggleReact }}" style="opacity:.5;font-size:12px;cursor:pointer;flex:none;margin-top:1px;" style-hover="opacity:1;">☺</span>
                     </div>
                     <sc-if value="{{ m.tr }}" hint-placeholder-val="{{ false }}"><div style="font-size:11.5px;line-height:1.45;color:#8A8F95;margin-top:6px;padding-top:6px;border-top:1px dashed rgba(255,255,255,.1);">{{ m.tr }}</div></sc-if>
@@ -413,12 +402,13 @@ input::placeholder,textarea::placeholder{color:#5C6066;}
                   </sc-if>
                 </div>
               </sc-for>
-              <div id="mm-thread-end" style="height:1px;flex:none;width:100%;margin-top:-1px;"></div>
-              <sc-if value="{{ showScrollDown }}" hint-placeholder-val="{{ false }}">
-              <div onClick="{{ scrollDown }}" data-mm-scroll-down style="position:sticky;bottom:8px;margin-left:auto;margin-top:4px;width:36px;height:36px;border-radius:50%;background:#1A1C20;border:1px solid rgba(255,255,255,.14);display:flex;align-items:center;justify-content:center;font-size:16px;color:#9BA0A6;cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,.4);flex:none;z-index:2;" style-hover="color:#F2F3F0;border-color:rgba(255,255,255,.3);">↓</div>
-              </sc-if>
+            <div id="mm-thread-end" style="height:1px;flex:none;width:100%;margin-top:-1px;" aria-hidden="true"></div>
             </div>
-            <div onClick="{{ stop }}" style="padding:10px 12px;border-top:1px solid rgba(255,255,255,.07);display:flex;flex-direction:column;gap:8px;">
+            <!-- scroll to bottom (shown only when not at end) -->
+            <sc-if value="{{ showScrollDown }}" hint-placeholder-val="{{ false }}">
+            <div onClick="{{ scrollDown }}" data-mm-scroll-down style="position:absolute;right:16px;bottom:88px;z-index:8;width:36px;height:36px;border-radius:50%;background:#1A1C20;border:1px solid rgba(255,255,255,.14);display:flex;align-items:center;justify-content:center;font-size:16px;color:#9BA0A6;cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,.4);" style-hover="color:#F2F3F0;border-color:rgba(255,255,255,.3);">↓</div>
+            </sc-if>
+            <div onClick="{{ stop }}" data-mm-chat-composer style="padding:10px 12px;border-top:1px solid rgba(255,255,255,.07);display:flex;flex-direction:column;gap:8px;position:relative;z-index:4;">
               <sc-if value="{{ emojiOpen }}" hint-placeholder-val="{{ false }}">
                 <div style="background:#1A1C20;border:1px solid rgba(255,255,255,.14);border-radius:14px;padding:10px;display:grid;grid-template-columns:repeat(8,1fr);gap:4px;box-shadow:0 10px 30px rgba(0,0,0,.5);">
                   <sc-for list="{{ emojiPick }}" as="ep" hint-placeholder-count="16">
@@ -437,15 +427,16 @@ input::placeholder,textarea::placeholder{color:#5C6066;}
                 </div>
               </sc-if>
               <div style="display:flex;gap:6px;align-items:flex-end;">
-                <div onClick="{{ pickChatFile }}" data-mm-chat-attach title="{{ t.attach }}" style="width:38px;height:38px;flex:none;border-radius:10px;border:1px solid rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center;color:#9BA0A6;cursor:pointer;" style-hover="color:#D7F452;border-color:rgba(215,244,82,.4);"><span style="display:flex;width:18px;height:18px;" dangerouslySetInnerHTML="{{ icoClip }}"></span></div>
-                <div onClick="{{ toggleEmoji }}" data-mm-chat-emoji style="width:38px;height:38px;flex:none;border-radius:10px;border:1px solid rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center;font-size:18px;cursor:pointer;" style-hover="border-color:rgba(215,244,82,.4);">😊</div>
+                <div data-mm-chat-attach onClick="{{ pickChatFile }}" title="{{ t.attach }}" style="width:38px;height:38px;flex:none;border-radius:10px;border:1px solid rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center;color:#9BA0A6;cursor:pointer;" style-hover="color:#D7F452;border-color:rgba(215,244,82,.4);"><span style="display:flex;width:18px;height:18px;" dangerouslySetInnerHTML="{{ icoClip }}"></span></div>
+                <div data-mm-chat-emoji onClick="{{ toggleEmoji }}" style="width:38px;height:38px;flex:none;border-radius:10px;border:1px solid rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center;font-size:18px;cursor:pointer;" style-hover="border-color:rgba(215,244,82,.4);">😊</div>
                 <textarea data-mm-chat-reply rows="2" value="{{ replyDraft }}" onInput="{{ onReplyInput }}" onKeyDown="{{ onReplyKeyDown }}" placeholder="{{ t.msgPlaceholder }}" style="flex:1;min-height:52px;max-height:140px;background:#0D0E11;border:1px solid rgba(255,255,255,.09);border-radius:10px;padding:9px 12px;color:#F2F3F0;font-family:'Manrope';font-size:13px;resize:none;outline:none;"></textarea>
-                <div onClick="{{ sendReplyClick }}" data-mm-chat-send style="{{ sendBtnStyle }}" style-hover="background:#E8FA8A;"><span style="display:flex;width:17px;height:17px;" dangerouslySetInnerHTML="{{ icoSendArrow }}"></span></div>
+                <div data-mm-chat-send onClick="{{ sendReplyClick }}" style="{{ sendBtnStyle }}" style-hover="background:#E8FA8A;"><span style="display:flex;width:17px;height:17px;" dangerouslySetInnerHTML="{{ icoSendArrow }}"></span></div>
               </div>
               <div style="font-family:'JetBrains Mono';font-size:9px;color:#5C6066;text-align:right;">Enter — отправить · Shift+Enter — новая строка</div>
             </div>
           </div>
           </sc-if>
+
           <!-- notes -->
           <sc-if value="{{ showNotes }}" hint-placeholder-val="{{ false }}">
           <div style="background:#121316;border:1px solid rgba(255,255,255,.07);border-radius:16px;display:flex;flex-direction:column;overflow:hidden;min-height:0;">
@@ -463,13 +454,12 @@ input::placeholder,textarea::placeholder{color:#5C6066;}
               <div style="font-family:'JetBrains Mono';font-size:9px;letter-spacing:1.4px;color:#6B7076;">{{ t.noteTag }}</div>
               <div style="display:flex;gap:5px;flex-wrap:wrap;">
                 <sc-for list="{{ noteTagChips }}" as="nt" hint-placeholder-count="3">
-                  <span data-mm-note-tag style="{{ nt.style }}">{{ nt.label }}</span>
+                  <span data-mm-note-tag onClick="{{ nt.pick }}" style="{{ nt.style }}">{{ nt.label }}</span>
                 </sc-for>
               </div>
               <textarea data-mm-note-text rows="3" value="{{ noteDraft }}" onInput="{{ onNoteInput }}" placeholder="{{ t.noteTextPh }}" style="width:100%;background:#0D0E11;border:1px solid rgba(255,255,255,.09);border-radius:10px;padding:9px 12px;color:#F2F3F0;font-family:'Manrope';font-size:12px;line-height:1.5;resize:vertical;outline:none;"></textarea>
               <div style="display:flex;gap:6px;">
-                <div onClick="{{ saveNote }}" data-mm-note-save style="flex:1;background:rgba(215,244,82,.12);border:1px solid rgba(215,244,82,.3);border-radius:9px;padding:8px;text-align:center;font-size:12px;font-weight:800;color:#D7F452;cursor:pointer;" style-hover="background:rgba(215,244,82,.2);">{{ t.save }}</div>
-                <div onClick="{{ closeNote }}" data-mm-note-cancel style="border:1px solid rgba(255,255,255,.12);border-radius:9px;padding:8px 14px;text-align:center;font-size:12px;font-weight:700;color:#9BA0A6;cursor:pointer;" style-hover="border-color:rgba(255,255,255,.3);">{{ t.opCancel }}</div>
+                <div onClick="{{ saveNote }}" data-mm-note-save style="flex:1;background:rgba(215,244,82,.12);border:1px solid rgba(215,244,82,.3);border-radius:9px;padding:8px;text-align:center;font-size:12px;font-weight:800;color:#D7F452;cursor:pointer;" style-hover="background:rgba(215,244,82,.2);">{{ t.save }}</div><div onClick="{{ closeNote }}" data-mm-note-cancel style="border:1px solid rgba(255,255,255,.12);border-radius:9px;padding:8px 14px;text-align:center;font-size:12px;font-weight:700;color:#9BA0A6;cursor:pointer;" style-hover="border-color:rgba(255,255,255,.3);">{{ t.opCancel }}</div>
               </div>
             </div>
             </sc-if>
@@ -583,12 +573,10 @@ input::placeholder,textarea::placeholder{color:#5C6066;}
               </div>
             </div>
             </sc-if>
-            <sc-if value="{{ curMode.showPrompt }}" hint-placeholder-val="{{ false }}">
             <div>
-              <div style="font-family:'JetBrains Mono';font-size:9.5px;letter-spacing:1.8px;color:#6B7076;margin-bottom:8px;">{{ t.prompt }}</div>
+              <div style="display:flex;justify-content:space-between;margin-bottom:8px;"><span style="font-family:'JetBrains Mono';font-size:9.5px;letter-spacing:1.8px;color:#6B7076;">{{ t.prompt }}</span><span style="font-size:10.5px;color:#5C6066;">{{ t.optional }}</span></div>
               <textarea data-mm-studio-prompt rows="3" placeholder="{{ curMode.promptHint }}" style="width:100%;background:#0D0E11;border:1px solid rgba(255,255,255,.09);border-radius:10px;padding:10px 12px;color:#F2F3F0;font-family:'Manrope';font-size:12.5px;resize:vertical;outline:none;"></textarea>
             </div>
-            </sc-if>
             <sc-if value="{{ showGenError }}" hint-placeholder-val="{{ false }}">
             <div style="background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.35);border-radius:12px;padding:12px 14px;">
               <div style="font-weight:800;font-size:12px;color:#F87171;margin-bottom:7px;">⚠ {{ t.errImgTitle }}</div>
@@ -617,9 +605,6 @@ input::placeholder,textarea::placeholder{color:#5C6066;}
                   <div style="{{ af.bg }}" style-hover="{{ af.pending ? '' : 'filter:brightness(1.08);' }}">
                     <sc-if value="{{ af.pending }}" hint-placeholder-val="{{ false }}">
                       <span style="{{ af.spinnerWrap }}"><span style="{{ af.spinnerStyle }}"></span></span>
-                    </sc-if>
-                    <sc-if value="{{ af.failed }}" hint-placeholder-val="{{ false }}">
-                      <span style="{{ af.failedWrap }}"><span style="{{ af.failedStyle }}">{{ af.failedLabel }}</span></span>
                     </sc-if>
                     <sc-if value="{{ af.showPlaceholder }}" hint-placeholder-val="{{ true }}">
                     <span style="display:flex;width:22px;height:22px;color:rgba(255,255,255,.35);" dangerouslySetInnerHTML="{{ icoImage }}"></span>
@@ -717,28 +702,28 @@ input::placeholder,textarea::placeholder{color:#5C6066;}
               <div style="font-family:'JetBrains Mono';font-size:9.5px;letter-spacing:1.8px;color:#6B7076;margin-bottom:8px;">{{ t.motionPrompt }}</div>
               <textarea rows="2" placeholder="{{ t.motionHint }}" style="width:100%;background:#0D0E11;border:1px solid rgba(255,255,255,.09);border-radius:10px;padding:10px 12px;color:#F2F3F0;font-family:'Manrope';font-size:12.5px;resize:vertical;outline:none;"></textarea>
             </div>
-            <div style="display:flex;flex-direction:column;gap:12px;">
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;">
               <div>
-                <div style="font-family:'JetBrains Mono';font-size:9.5px;letter-spacing:1.8px;color:#6B7076;margin-bottom:8px;">{{ t.format }}</div>
-                <div style="display:flex;gap:6px;flex-wrap:wrap;">
-                  <sc-for list="{{ videoRatioChips }}" as="vr" hint-placeholder-count="5">
-                    <span onClick="{{ vr.pick }}" style="{{ vr.style }}" style-hover="border-color:rgba(255,255,255,.3);">{{ vr.label }}</span>
+                <div style="font-family:'JetBrains Mono';font-size:9px;letter-spacing:1.4px;color:#6B7076;margin-bottom:7px;">{{ t.vidQuality }}</div>
+                <div style="display:flex;gap:5px;flex-wrap:wrap;">
+                  <sc-for list="{{ qualityOpts }}" as="q" hint-placeholder-count="3">
+                    <span onClick="{{ q.pick }}" style="{{ q.style }}">{{ q.label }}</span>
                   </sc-for>
                 </div>
               </div>
               <div>
-                <div style="font-family:'JetBrains Mono';font-size:9.5px;letter-spacing:1.8px;color:#6B7076;margin-bottom:8px;">{{ t.vidQuality }}</div>
-                <div style="display:flex;gap:6px;flex-wrap:wrap;">
-                  <sc-for list="{{ videoQualityChips }}" as="vq" hint-placeholder-count="3">
-                    <span onClick="{{ vq.pick }}" style="{{ vq.style }}" style-hover="border-color:rgba(255,255,255,.3);">{{ vq.label }}</span>
+                <div style="font-family:'JetBrains Mono';font-size:9px;letter-spacing:1.4px;color:#6B7076;margin-bottom:7px;">{{ t.format }}</div>
+                <div style="display:flex;gap:5px;flex-wrap:wrap;">
+                  <sc-for list="{{ vfmtOpts }}" as="vf" hint-placeholder-count="3">
+                    <span onClick="{{ vf.pick }}" style="{{ vf.style }}">{{ vf.label }}</span>
                   </sc-for>
                 </div>
               </div>
               <div>
-                <div style="font-family:'JetBrains Mono';font-size:9.5px;letter-spacing:1.8px;color:#6B7076;margin-bottom:8px;">{{ t.duration }}</div>
-                <div style="display:flex;gap:6px;flex-wrap:wrap;">
-                  <sc-for list="{{ videoDurationChips }}" as="vd" hint-placeholder-count="6">
-                    <span onClick="{{ vd.pick }}" style="{{ vd.style }}" style-hover="border-color:rgba(255,255,255,.3);">{{ vd.label }}</span>
+                <div style="font-family:'JetBrains Mono';font-size:9px;letter-spacing:1.4px;color:#6B7076;margin-bottom:7px;">{{ t.duration }}</div>
+                <div style="display:flex;gap:5px;flex-wrap:wrap;">
+                  <sc-for list="{{ vtimeOpts }}" as="vt" hint-placeholder-count="2">
+                    <span onClick="{{ vt.pick }}" style="{{ vt.style }}">{{ vt.label }}</span>
                   </sc-for>
                 </div>
               </div>
@@ -995,11 +980,10 @@ input::placeholder,textarea::placeholder{color:#5C6066;}
               <div style="display:flex;flex-direction:column;gap:8px;">
                 <sc-for list="{{ donLinks }}" as="dl" hint-placeholder-count="2">
                   <div style="background:#0D0E11;border:1px solid rgba(255,255,255,.07);border-radius:12px;padding:12px 14px;">
-                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap;">
+                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
                       <div style="flex:1;font-weight:700;font-size:12.5px;">{{ dl.title }}</div>
                       <span style="{{ dl.stStyle }}">{{ dl.st }}</span>
                     </div>
-                    <div style="{{ dl.modelBadgeStyle }}">{{ dl.modelBadge }}</div>
                     <div style="display:flex;flex-direction:column;gap:6px;">
                       <sc-for list="{{ dl.urls }}" as="u" hint-placeholder-count="2">
                         <div style="display:flex;align-items:center;gap:9px;background:#121316;border:1px solid rgba(255,255,255,.07);border-radius:9px;padding:8px 10px;">
@@ -1026,34 +1010,25 @@ input::placeholder,textarea::placeholder{color:#5C6066;}
         <sc-if value="{{ isDonCreate }}" hint-placeholder-val="{{ false }}">
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;">
           <div style="background:#121316;border:1px solid rgba(255,255,255,.07);border-radius:16px;padding:18px;display:flex;flex-direction:column;gap:12px;">
-            <div style="font-weight:800;font-size:14px;">{{ donFormTitle }}</div>
+            <div style="font-weight:800;font-size:14px;">{{ t.newDonation }}</div>
             <input data-mm-don-title placeholder="{{ t.donTitle }}" style="background:#0D0E11;border:1px solid rgba(255,255,255,.09);border-radius:10px;padding:10px 12px;color:#F2F3F0;font-family:'Manrope';font-size:12.5px;outline:none;">
             <textarea data-mm-don-desc rows="3" placeholder="{{ t.donDesc }}" style="background:#0D0E11;border:1px solid rgba(255,255,255,.09);border-radius:10px;padding:10px 12px;color:#F2F3F0;font-family:'Manrope';font-size:12.5px;resize:vertical;outline:none;"></textarea>
-            <div>
-              <div style="font-size:11px;color:#9BA0A6;margin-bottom:6px;">{{ t.donCharacter }}</div>
-              <select data-mm-don-model style="width:100%;border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:10px 12px;font-size:12px;color:#F2F3F0;background:#0D0E11;"><option value="">{{ t.donCharacterNone }}</option></select>
-            </div>
             <div style="display:flex;gap:8px;">
               <input data-mm-don-min placeholder="{{ t.minSum }}" style="flex:1;background:#0D0E11;border:1px solid rgba(255,255,255,.09);border-radius:10px;padding:10px 12px;color:#F2F3F0;font-family:'Manrope';font-size:12.5px;outline:none;">
-              <div style="border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:10px 14px;font-size:12px;color:#9BA0A6;">₽</div>
+              <div style="border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:10px 14px;font-size:12px;color:#9BA0A6;">₽ ▾</div>
+              <select data-mm-don-model style="border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:10px 14px;font-size:12px;color:#9BA0A6;background:#0D0E11;"><option value="">Не назначена</option></select>
             </div>
             <div style="display:flex;gap:8px;">
-              <div data-mm-don-draft style="flex:1;border:1px solid rgba(255,255,255,.12);border-radius:9px;padding:9px;text-align:center;font-size:12px;font-weight:700;color:#9BA0A6;cursor:pointer;" style-hover="border-color:rgba(255,255,255,.3);">{{ t.saveDraft }}</div>
+              <div style="flex:1;border:1px solid rgba(255,255,255,.12);border-radius:9px;padding:9px;text-align:center;font-size:12px;font-weight:700;color:#9BA0A6;cursor:pointer;" style-hover="border-color:rgba(255,255,255,.3);">{{ t.saveDraft }}</div>
               <div data-mm-don-create style="flex:1;background:rgba(215,244,82,.12);border:1px solid rgba(215,244,82,.3);border-radius:9px;padding:9px;text-align:center;font-size:12px;font-weight:800;color:#D7F452;cursor:pointer;">{{ t.toModeration }}</div>
             </div>
           </div>
           <div style="background:#121316;border:1px solid rgba(255,255,255,.07);border-radius:16px;padding:18px;">
             <div style="font-weight:800;font-size:14px;margin-bottom:12px;">{{ t.myDonations }}</div>
             <sc-for list="{{ myDonations }}" as="md" hint-placeholder-count="3">
-              <div style="display:flex;align-items:center;gap:12px;padding:10px 4px;border-bottom:1px solid rgba(255,255,255,.05);flex-wrap:wrap;">
-                <div style="flex:1;min-width:160px;">
-                  <div style="font-weight:700;font-size:12.5px;">{{ md.title }}</div>
-                  <div style="font-size:10.5px;color:#9BA0A6;margin-top:3px;">{{ md.modelBadge }}</div>
-                </div>
+              <div style="display:flex;align-items:center;gap:12px;padding:10px 4px;border-bottom:1px solid rgba(255,255,255,.05);">
+                <span style="flex:1;font-weight:700;font-size:12.5px;">{{ md.title }}</span>
                 <span style="{{ md.stStyle }}">{{ md.st }}</span>
-                <sc-if value="{{ md.canEdit }}" hint-placeholder-val="{{ false }}">
-                  <span onClick="{{ md.edit }}" style="font-size:11px;font-weight:700;color:#D7F452;cursor:pointer;">{{ t.donEdit }}</span>
-                </sc-if>
               </div>
             </sc-for>
           </div>
@@ -1404,16 +1379,10 @@ input::placeholder,textarea::placeholder{color:#5C6066;}
             </div>
             <div onClick="{{ closeLightbox }}" style="display:flex;align-items:center;gap:6px;border:1px solid rgba(255,255,255,.14);border-radius:9px;padding:7px 12px;font-size:12px;font-weight:700;color:#9BA0A6;cursor:pointer;" style-hover="color:#F2F3F0;border-color:rgba(255,255,255,.3);">✕ {{ t.close }}</div>
           </div>
-          <div style="{{ lightboxData.previewWrap }}">
-            <sc-if value="{{ lightboxData.showPlaceholder }}" hint-placeholder-val="{{ true }}">
-            <span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.25);" dangerouslySetInnerHTML="{{ icoImage }}"></span>
-            </sc-if>
-            <sc-if value="{{ lightboxData.hasImage }}" hint-placeholder-val="{{ false }}">
-            <img src="{{ lightboxData.url }}" alt="" style="width:100%;height:100%;object-fit:contain;display:block;">
-            </sc-if>
+          <div style="{{ lightboxData.big }}min-height:0;display:flex;align-items:center;justify-content:center;overflow:hidden;">
+            <span style="display:flex;width:48px;height:48px;color:rgba(255,255,255,.25);" dangerouslySetInnerHTML="{{ icoImage }}"></span>
           </div>
-          <div style="{{ lightboxData.actionsStyle }}">
-            <div onClick="{{ downloadLightbox }}" style="flex:1;display:flex;align-items:center;justify-content:center;gap:8px;background:#D7F452;color:#171A05;border-radius:11px;padding:12px;font-size:13px;font-weight:800;cursor:pointer;" style-hover="background:#E8FA8A;"><span style="display:flex;width:16px;height:16px;" dangerouslySetInnerHTML="{{ icoDownload }}"></span>{{ t.download }}</div>
+          <div style="{{ lightboxData.actionsStyle }}"><div onClick="{{ downloadLightbox }}" style="flex:1;display:flex;align-items:center;justify-content:center;gap:8px;background:#D7F452;color:#171A05;border-radius:11px;padding:12px;font-size:13px;font-weight:800;cursor:pointer;" style-hover="background:#E8FA8A;"><span style="display:flex;width:16px;height:16px;" dangerouslySetInnerHTML="{{ icoDownload }}"></span>{{ t.download }}</div>
             <div onClick="{{ makeCarousel }}" style="flex:1;display:flex;align-items:center;justify-content:center;gap:8px;background:rgba(192,132,252,.12);border:1px solid rgba(192,132,252,.4);color:#C084FC;border-radius:11px;padding:12px;font-size:13px;font-weight:800;cursor:pointer;" style-hover="background:rgba(192,132,252,.2);"><span style="display:flex;width:16px;height:16px;" dangerouslySetInnerHTML="{{ icoGrid2 }}"></span>{{ t.makeCarousel }}</div>
           </div>
         </div>
@@ -1459,14 +1428,14 @@ class Component extends DCLogic {
     tier: 'standard', period: 'month', moreOpen: false,
     isMobile: false, chatOpen: 0,
     chatFilter: 'all', chatPlatform: 'all', mobileChat: false,
-    msgReact: null, emojiOpen: false,
-    replyDraft: '', noteFormOpen: false, noteDraft: '', noteTag: 0,
+    msgReact: null, emojiOpen: false, showScrollDown: false, reactions: {},
     contentMode: 'sfw', aiModel: 'nano', carouselCount: 4, slotSource: {},
     hasFirstFrame: 'yes', vidQuality: '1080', vidFormat: '9:16', vidTime: '5',
     charTab: 'photos', lightbox: null,
     showGenError: false, ffState: 'idle', photoMenu: null,
     opRights: { chat: true, studio: true, models: true, keys: false, billing: false },
-    opError: false, mediaStep: null
+    opError: false, mediaStep: null,
+    noteFormOpen: false, noteTag: 0
   };
   _ffTimer = null;
 
@@ -1499,7 +1468,7 @@ class Component extends DCLogic {
       startTitle: 'С чего начать?', startDesc: 'Пять шагов от регистрации до первого дохода.', openGuide: 'Открыть инструкцию',
       guideIntro: 'Короткая пошаговая инструкция: что и зачем делать. К каждому шагу — короткое видео и кнопка перехода в нужный раздел.',
       guideOutro: 'Застряли на каком-то шаге? Полные гайды и частые вопросы — в базе знаний.', guidePlaceholder: 'материал появится здесь',
-      recentDialogs: 'Недавние диалоги', recentFrames: 'Недавние кадры', recentFramesEmpty: 'Пока нет готовых кадров — сгенерируйте в студии', all: 'Все', toStudio: 'В студию',
+      recentDialogs: 'Недавние диалоги', recentFrames: 'Недавние кадры', all: 'Все', toStudio: 'В студию',
       framesHint: 'Кадры хранятся на сервере ~4 дня — скачивайте важное сразу.',
       navOverview: 'Обзор', navDialogs: 'Диалоги', navImages: 'Картинки', navVideo: 'Видео', navCharacters: 'Персонажи',
       navDonations: 'Донаты и выплаты', navBilling: 'Тариф и баланс', navConnections: 'Подключения', navTeam: 'Команда', navWorkflow: 'Workflow',
@@ -1537,8 +1506,7 @@ class Component extends DCLogic {
       payout: 'Вывод средств', payoutHint: 'USDT TRC20/ERC20 или TON. Холд Tribute: донаты 1–15 числа доступны с 16-го. Минимум 500 ₽.',
       requestPayout: 'Заявка на выплату', donLinks: 'Ссылки на донат', lastIncoming: 'Последние входящие',
       holdPolicy: 'Политика холда и модерации —',
-      newDonation: 'Новый донат', editDonation: 'Редактировать донат', donTitle: 'Заголовок', donDesc: 'Описание', minSum: 'Мин. сумма',
-      donCharacter: 'Персонаж', donCharacterNone: 'Не назначен', donEdit: 'Изменить',
+      newDonation: 'Новый донат', donTitle: 'Заголовок', donDesc: 'Описание', minSum: 'Мин. сумма',
       saveDraft: 'Черновик', toModeration: 'На модерацию', myDonations: 'Мои донаты',
       billingDesc: 'Подписка, кредиты и оплата. 1 кредит = 3.6 ₽. Кредиты списываются за генерации.',
       currentPlan: 'Текущий план', balance: 'баланс', cr: 'кр.', referral: 'Реферальная программа',
@@ -1569,7 +1537,7 @@ class Component extends DCLogic {
       startTitle: 'Where to start?', startDesc: 'Five steps from sign-up to first income.', openGuide: 'Open guide',
       guideIntro: 'A short step-by-step: what to do and why. Each step has a quick video and a button to jump to the right section.',
       guideOutro: 'Stuck on a step? Full guides and FAQ are in the knowledge base.', guidePlaceholder: 'media goes here',
-      recentDialogs: 'Recent dialogs', recentFrames: 'Recent frames', recentFramesEmpty: 'No ready frames yet — generate in Studio', all: 'All', toStudio: 'Studio',
+      recentDialogs: 'Recent dialogs', recentFrames: 'Recent frames', all: 'All', toStudio: 'Studio',
       framesHint: 'Frames are stored ~4 days on the server — download what matters.',
       navOverview: 'Overview', navDialogs: 'Dialogs', navImages: 'Images', navVideo: 'Video', navCharacters: 'Characters',
       navDonations: 'Donations & payouts', navBilling: 'Plan & balance', navConnections: 'Connections', navTeam: 'Team', navWorkflow: 'Workflow',
@@ -1607,8 +1575,7 @@ class Component extends DCLogic {
       payout: 'Withdraw', payoutHint: 'USDT TRC20/ERC20 or TON. Tribute hold: donations from the 1st–15th unlock on the 16th. Min 500 ₽.',
       requestPayout: 'Request payout', donLinks: 'Donation links', lastIncoming: 'Recent incoming',
       holdPolicy: 'Hold & moderation policy —',
-      newDonation: 'New donation', editDonation: 'Edit donation', donTitle: 'Title', donDesc: 'Description', minSum: 'Min amount',
-      donCharacter: 'Character', donCharacterNone: 'Unassigned', donEdit: 'Edit',
+      newDonation: 'New donation', donTitle: 'Title', donDesc: 'Description', minSum: 'Min amount',
       saveDraft: 'Draft', toModeration: 'Submit', myDonations: 'My donations',
       billingDesc: 'Subscription, credits and payments. 1 credit = 3.6 ₽. Credits are spent on generations.',
       currentPlan: 'Current plan', balance: 'balance', cr: 'cr.', referral: 'Referral program',
@@ -1675,22 +1642,16 @@ class Component extends DCLogic {
     const stDim = chipBase + 'background:rgba(255,255,255,.06);color:#9BA0A6;border:1px solid rgba(255,255,255,.1);';
 
     // ─── nav ───
-    const go = (page) => () => {
-      if (page === 'workflow') {
-        window.location.assign('/workspace/workflow')
-        return
-      }
-      setS({ page, connDetail: null, charDetail: null, moreOpen: false })
-    };
+    const go = (page) => () => setS({ page, connDetail: null, charDetail: null, moreOpen: false });
     const navItem = (id, label, icon, badge) => ({
       label, icon, badge: badge || false, go: go(id),
       style: 'display:flex;align-items:center;gap:11px;padding:8px 10px;border-radius:10px;font-size:13px;cursor:pointer;' +
         (s.page === id ? 'background:rgba(215,244,82,.1);color:#D7F452;font-weight:800;' : 'color:#B7BBC0;font-weight:600;')
     });
     const navGroups = [
-      { label: t.grpWork, items: [navItem('overview', t.navOverview, icoGrid), navItem('dialogs', t.navDialogs, icoChat)] },
+      { label: t.grpWork, items: [navItem('overview', t.navOverview, icoGrid), navItem('dialogs', t.navDialogs, icoChat, '2')] },
       { label: t.grpStudio, items: [navItem('images', t.navImages, icoImage), navItem('video', t.navVideo, icoFilm), navItem('characters', t.navCharacters, icoStar), navItem('workflow', t.navWorkflow, icoFlow, 'PRO')] },
-      { label: t.grpMoney, items: [navItem('donations', t.navDonations, icoHeart), navItem('billing', t.navBilling, icoCard)] },
+      { label: t.grpMoney, items: [navItem('donations', t.navDonations, icoHeart, '1'), navItem('billing', t.navBilling, icoCard)] },
       { label: t.grpSettings, items: [navItem('connections', t.navConnections, icoPlug), navItem('team', t.navTeam, icoTeam)] }
     ];
     const pageTitles = { overview: t.navOverview, dialogs: t.navDialogs, images: t.navImages, video: t.navVideo, characters: t.navCharacters, workflow: t.navWorkflow, donations: t.navDonations, billing: t.navBilling, connections: t.navConnections, team: t.navTeam };
@@ -1827,15 +1788,25 @@ class Component extends DCLogic {
       { tag: lang === 'ru' ? 'КОНТЕКСТ' : 'CONTEXT', tagStyle: tagBase + 'background:rgba(251,146,60,.15);color:#FB923C;', when: '4 дн.', text: 'Фан хочет реальное видео без единого элемента ИИ в обмен на оплату платья.' },
       { tag: 'AI', tagStyle: tagBase + 'background:rgba(192,132,252,.15);color:#C084FC;', when: '4 дн.', text: 'Извиниться за недопонимание. Предложить конкретную цену и сроки. Лёгкий флирт, не углубляться в спор об ИИ.' }
     ];
+    const noteTagDefs = [
+      { label: lang === 'ru' ? 'ПРОФИЛЬ' : 'PROFILE', col: '#D7F452', bg: 'rgba(215,244,82' },
+      { label: lang === 'ru' ? 'КОНТЕКСТ' : 'CONTEXT', col: '#FB923C', bg: 'rgba(251,146,60' },
+      { label: lang === 'ru' ? 'ВАЖНО' : 'IMPORTANT', col: '#F87171', bg: 'rgba(248,113,113' }
+    ];
+    const noteTagChips = noteTagDefs.map((nt, i) => ({
+      label: nt.label,
+      style: 'font-family:JetBrains Mono;font-size:8.5px;letter-spacing:1px;padding:3px 10px;border-radius:6px;cursor:pointer;' + (s.noteTag === i ? nt.bg + ',.18);color:' + nt.col + ';border:1px solid ' + nt.bg + ',.4);' : 'background:rgba(255,255,255,.05);color:#9BA0A6;border:1px solid rgba(255,255,255,.1);'),
+      pick: () => setS({ noteTag: i })
+    }));
 
     // ─── images data ───
     const modeDefs = [
-      { id: 'ref', title: lang === 'ru' ? 'Кадр по референсу' : 'From reference', desc: lang === 'ru' ? 'Похожий кадр по образцу: поза, свет, стиль' : 'Similar frame from a sample: pose, light, style', icon: icoLayers, cost: '−10 ' + t.cr, longDesc: lang === 'ru' ? 'Загрузите один референс — получите близкий кадр с вашим персонажем. Хорош для повторения удачных поз.' : 'Upload one reference — get a close frame with your character.', slots: [{ label: lang === 'ru' ? 'Референс-кадр' : 'Reference frame', archive: true }], promptHint: '', showPrompt: false, showChar: true, showRatio: true },
-      { id: 'swap', title: 'Face Swap', desc: lang === 'ru' ? 'Лицо персонажа на готовый кадр' : "Character's face onto a frame", icon: icoFace, cost: '−8 ' + t.cr, longDesc: lang === 'ru' ? 'Загрузите один референс-кадр. Лицо выбранного персонажа аккуратно заменит лицо на этом кадре — поза, свет и одежда сохранятся.' : 'Upload one reference frame. The chosen character\'s face replaces the face in it.', slots: [{ label: lang === 'ru' ? 'Референс-кадр' : 'Reference frame', archive: true }], promptHint: '', showPrompt: false, showChar: true, showRatio: true },
-      { id: 'outfit', title: lang === 'ru' ? 'Замена одежды' : 'Outfit swap', desc: lang === 'ru' ? 'Одежда с фото → на персонажа' : 'Clothing from a photo → onto character', icon: icoShirt, cost: '−8 ' + t.cr, longDesc: lang === 'ru' ? 'Загрузите один референс с человеком или вещью. Мы выделим одежду и сгенерируем её на выбранном персонаже на однородном фоне.' : 'Upload one reference with a person or item. We extract the clothing and put it on your character on a clean background.', slots: [{ label: lang === 'ru' ? 'Кадр — где заменить одежду' : 'Frame — outfit to replace', archive: true }, { label: lang === 'ru' ? 'Фото одежды' : 'Clothing photo', archive: false }], promptHint: '', showPrompt: false, showChar: true, showRatio: true },
-      { id: 'location', title: lang === 'ru' ? 'Смена локации' : 'Location swap', desc: lang === 'ru' ? 'Перенести персонажа в новое место' : 'Move the character to a new place', icon: icoPin, cost: '−8 ' + t.cr, longDesc: lang === 'ru' ? 'Загрузите один исходный кадр. Кадр остаётся, фон и окружение меняются: пляж, аэропорт, кафе — что угодно.' : 'Upload one source frame. Frame stays, background changes.', slots: [{ label: lang === 'ru' ? 'Кадр — где сменить локацию' : 'Frame — location to replace', archive: true }, { label: lang === 'ru' ? 'Фото локации' : 'Location photo', archive: false }], promptHint: '', showPrompt: false, showChar: true, showRatio: true },
-      { id: 'prompt', title: lang === 'ru' ? 'Кадр по промпту' : 'From prompt', desc: lang === 'ru' ? 'Свободная генерация с нуля текстом' : 'Free-form generation from text', icon: icoText, cost: '−10 ' + t.cr, longDesc: lang === 'ru' ? 'Опишите сцену словами — персонаж подставится из карточки (внешность, EXIF).' : 'Describe the scene — the character comes from its card.', slots: [], promptHint: lang === 'ru' ? 'Photorealistic 8K still: девушка у окна с кофе, утренний свет…' : 'Photorealistic 8K still: girl by the window with coffee…', showPrompt: true, showChar: true, showRatio: true },
-      { id: 'carousel', title: lang === 'ru' ? 'Карусель' : 'Carousel', desc: lang === 'ru' ? 'Серия кадров из одного фото' : 'A series of frames from one photo', icon: icoGrid2, cost: lang === 'ru' ? '−2 кр/кадр' : '−2 cr/frame', longDesc: lang === 'ru' ? 'Выберите кадр из архива или загрузите готовый, задайте количество кадров — сгенерируем связанную серию (для постов и историй).' : 'Pick a frame from the archive or upload one, set frame count — get a coherent series.', slots: [{ label: lang === 'ru' ? 'Базовый кадр' : 'Base frame', archive: true }], promptHint: '', showPrompt: false, showChar: true, showRatio: true, showCount: true }
+      { id: 'ref', title: lang === 'ru' ? 'Кадр по референсу' : 'From reference', desc: lang === 'ru' ? 'Похожий кадр по образцу: поза, свет, стиль' : 'Similar frame from a sample: pose, light, style', icon: icoLayers, cost: '−10 ' + t.cr, longDesc: lang === 'ru' ? 'Загрузите один референс — получите близкий кадр с вашим персонажем. Хорош для повторения удачных поз.' : 'Upload one reference — get a close frame with your character.', slots: [{ label: lang === 'ru' ? 'Референс-кадр' : 'Reference frame', archive: true }], promptHint: lang === 'ru' ? 'Что изменить относительно референса…' : 'What to change vs the reference…', showChar: true, showRatio: true },
+      { id: 'swap', title: 'Face Swap', desc: lang === 'ru' ? 'Лицо персонажа на готовый кадр' : "Character's face onto a frame", icon: icoFace, cost: '−8 ' + t.cr, longDesc: lang === 'ru' ? 'Загрузите один референс-кадр. Лицо выбранного персонажа аккуратно заменит лицо на этом кадре — поза, свет и одежда сохранятся.' : 'Upload one reference frame. The chosen character\'s face replaces the face in it.', slots: [{ label: lang === 'ru' ? 'Референс-кадр' : 'Reference frame', archive: true }], promptHint: lang === 'ru' ? 'Необязательно — уточнения по выражению лица…' : 'Optional — face expression tweaks…', showChar: true, showRatio: true },
+      { id: 'outfit', title: lang === 'ru' ? 'Замена одежды' : 'Outfit swap', desc: lang === 'ru' ? 'Одежда с фото → на персонажа' : 'Clothing from a photo → onto character', icon: icoShirt, cost: '−8 ' + t.cr, longDesc: lang === 'ru' ? 'Загрузите один референс с человеком или вещью. Мы выделим одежду и сгенерируем её на выбранном персонаже на однородном фоне.' : 'Upload one reference with a person or item. We extract the clothing and put it on your character on a clean background.', slots: [{ label: lang === 'ru' ? 'Кадр — где заменить одежду' : 'Frame — outfit to replace', archive: true }, { label: lang === 'ru' ? 'Фото одежды' : 'Clothing photo', archive: false }], promptHint: lang === 'ru' ? 'Необязательно — цвет, длина, детали…' : 'Optional — colour, length, details…', showChar: true, showRatio: true },
+      { id: 'location', title: lang === 'ru' ? 'Смена локации' : 'Location swap', desc: lang === 'ru' ? 'Перенести персонажа в новое место' : 'Move the character to a new place', icon: icoPin, cost: '−8 ' + t.cr, longDesc: lang === 'ru' ? 'Загрузите один исходный кадр. Кадр остаётся, фон и окружение меняются: пляж, аэропорт, кафе — что угодно.' : 'Upload one source frame. Frame stays, background changes.', slots: [{ label: lang === 'ru' ? 'Кадр — где сменить локацию' : 'Frame — location to replace', archive: true }, { label: lang === 'ru' ? 'Фото локации' : 'Location photo', archive: false }], promptHint: lang === 'ru' ? 'Терраса кафе в Мадриде, вечерний свет…' : 'Café terrace in Madrid, evening light…', showChar: true, showRatio: true },
+      { id: 'prompt', title: lang === 'ru' ? 'Кадр по промпту' : 'From prompt', desc: lang === 'ru' ? 'Свободная генерация с нуля текстом' : 'Free-form generation from text', icon: icoText, cost: '−10 ' + t.cr, longDesc: lang === 'ru' ? 'Опишите сцену словами — персонаж подставится из карточки (внешность, EXIF).' : 'Describe the scene — the character comes from its card.', slots: [], promptHint: lang === 'ru' ? 'Photorealistic 8K still: девушка у окна с кофе, утренний свет…' : 'Photorealistic 8K still: girl by the window with coffee…', showChar: true, showRatio: true },
+      { id: 'carousel', title: lang === 'ru' ? 'Карусель' : 'Carousel', desc: lang === 'ru' ? 'Серия кадров из одного фото' : 'A series of frames from one photo', icon: icoGrid2, cost: lang === 'ru' ? '−8 кр/кадр' : '−8 cr/frame', longDesc: lang === 'ru' ? 'Выберите кадр из архива или загрузите готовый, задайте количество кадров — сгенерируем связанную серию (для постов и историй).' : 'Pick a frame from the archive or upload one, set frame count — get a coherent series.', slots: [{ label: lang === 'ru' ? 'Базовый кадр' : 'Base frame', archive: true }], promptHint: lang === 'ru' ? 'Что меняется от кадра к кадру: ракурс, эмоция…' : 'What changes across frames: angle, emotion…', showChar: true, showRatio: true, showCount: true }
     ];
     const imgModes = modeDefs.map(m => ({
       ...m, pick: () => setS({ imgMode: m.id }),
@@ -1894,10 +1865,7 @@ class Component extends DCLogic {
     const afBase = 'aspect-ratio:9/16;display:flex;align-items:center;justify-content:center;background:';
     const archiveFrames = [0, 1, 2, 3, 4, 5, 6, 7].map(i => ({ bg: afBase + G[i % 6], big: 'flex:1;display:flex;align-items:center;justify-content:center;border-radius:14px;background:' + G[i % 6], who: i % 3 === 0 ? 'Ruby' : 'Mia', ratio: '9:16', open: () => setS({ lightbox: i }) }));
     const lb = s.lightbox;
-    const lbCardStyle = 'display:flex;flex-direction:column;align-items:stretch;gap:14px;width:min(92vw,720px);max-height:92vh;flex-shrink:0;';
-    const lbActionsStyle = 'display:flex;gap:10px;width:100%;flex:none;flex-shrink:0;align-self:stretch;';
-    const lbPreview = 'width:100%;aspect-ratio:9/16;max-height:min(calc(92vh - 200px),640px);flex:none;flex-shrink:0;border-radius:14px;overflow:hidden;position:relative;background:';
-    const lightboxData = lb == null ? null : { previewWrap: lbPreview + G[lb % 6], cardStyle: lbCardStyle, actionsStyle: lbActionsStyle, big: lbPreview + G[lb % 6], who: lb % 3 === 0 ? 'Ruby' : 'Mia', ratio: '9:16', mode: lang === 'ru' ? 'Кадр по промпту' : 'From prompt', when: '12.07 · 14:2' + lb, url: '', hasImage: false, showPlaceholder: true };
+    const lightboxData = lb == null ? null : { big: 'flex:1;min-height:0;display:flex;align-items:center;justify-content:center;border-radius:14px;background:' + G[lb % 6], who: lb % 3 === 0 ? 'Ruby' : 'Mia', ratio: '9:16', mode: lang === 'ru' ? 'Кадр по промпту' : 'From prompt', when: '12.07 · 14:2' + lb };
 
     // ─── video ───
     const vaBase = 'aspect-ratio:9/16;display:flex;align-items:center;justify-content:center;position:relative;background:';
@@ -1907,14 +1875,11 @@ class Component extends DCLogic {
       { id: 'yes', label: lang === 'ru' ? 'Да, есть' : 'Yes, I have', style: ffSeg(s.hasFirstFrame === 'yes'), pick: () => setS({ hasFirstFrame: 'yes' }) },
       { id: 'no', label: lang === 'ru' ? 'Нет — сгенерировать' : 'No — generate it', style: ffSeg(s.hasFirstFrame === 'no'), pick: () => setS({ hasFirstFrame: 'no' }) }
     ];
-    const vidChipOn = "font-family:'JetBrains Mono';font-size:11px;background:rgba(215,244,82,.12);color:#D7F452;border:1px solid rgba(215,244,82,.4);padding:5px 14px;border-radius:8px;cursor:pointer;";
-    const vidChipOff = "font-family:'JetBrains Mono';font-size:11px;border:1px solid rgba(255,255,255,.12);color:#9BA0A6;padding:5px 14px;border-radius:8px;cursor:pointer;";
-    const curRes = s.vidQuality === '1080' ? '1080p' : s.vidQuality === '4k' ? '4K' : '720p';
-    const curDur = parseInt(s.vidTime, 10) || 5;
-    const videoRatioChips = ['9:16', '16:9', '1:1', '4:3', '3:4', '4:5', '21:9'].map(r => ({ label: r, style: s.vidFormat === r ? vidChipOn : vidChipOff, pick: () => setS({ vidFormat: r }) }));
-    const videoQualityChips = ['720p', '1080p', '4K'].map(q => ({ label: q, style: curRes === q ? vidChipOn : vidChipOff, pick: () => setS({ vidQuality: q === '1080p' ? '1080' : q === '4K' ? '4k' : '720' }) }));
-    const videoDurationChips = [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15].map(d => ({ label: lang === 'ru' ? d + ' с' : d + 's', style: curDur === d ? vidChipOn : vidChipOff, pick: () => setS({ vidTime: String(d) }) }));
-    const vidCost = Math.round((s.vidQuality === '4k' ? 80 : s.vidQuality === '1080' ? 40 : 25) * (curDur / 5));
+    const mkOpt = (arr, cur, key) => arr.map(o => ({ label: o.l, sub: o.s || false, style: cur === o.v ? chipOn : chipOff, pick: () => setS({ [key]: o.v }) }));
+    const qualityOpts = mkOpt([{ l: '720p', v: '720' }, { l: '1080p', v: '1080' }, { l: '4K', v: '4k' }], s.vidQuality, 'vidQuality');
+    const vfmtOpts = mkOpt([{ l: '9:16' }, { l: '16:9' }, { l: '1:1' }].map(o => ({ l: o.l, v: o.l })), s.vidFormat, 'vidFormat');
+    const vtimeOpts = mkOpt([{ l: lang === 'ru' ? '5 с' : '5s', v: '5' }, { l: lang === 'ru' ? '10 с' : '10s', v: '10' }], s.vidTime, 'vidTime');
+    const vidCost = (s.vidQuality === '4k' ? 80 : s.vidQuality === '1080' ? 40 : 25) * (s.vidTime === '10' ? 2 : 1);
     const genFirstFrame = () => {
       setS({ ffState: 'loading' });
       clearTimeout(this._ffTimer);
@@ -2178,6 +2143,7 @@ class Component extends DCLogic {
       icoBolt, icoSpark, icoChat, icoUpload, icoCopy, icoImage, icoFilm, icoPlay, icoFlow, icoDownload, icoZoom, icoGrid2, icoClip, icoSendArrow,
       studioCards, recentDialogs, recentFrames,
       chatFilters, platFilters, chats, messages, notes, threadHead, noChats,
+      noteFormOpen: s.noteFormOpen, noteTagChips, toggleNote: () => setS({ noteFormOpen: !s.noteFormOpen }), closeNote: () => setS({ noteFormOpen: false }), saveNote: () => setS({ noteFormOpen: false }),
       emojiPick, emojiOpen: s.emojiOpen, toggleEmoji: () => setS({ emojiOpen: !s.emojiOpen, msgReact: null }),
       backToList: () => setS({ mobileChat: false, msgReact: null, emojiOpen: false }),
       closePops: () => { if (s.msgReact !== null || s.emojiOpen) setS({ msgReact: null, emojiOpen: false }); },
@@ -2191,7 +2157,7 @@ class Component extends DCLogic {
       contentModes, aiModels, countChips,
       showGenError: s.showGenError, imgErrList, triggerGen, genFieldErr,
       ffState: s.ffState, ffIdle: s.ffState === 'idle', ffLoading: s.ffState === 'loading', ffDone: s.ffState === 'done', genFirstFrame, ffImgStyle,
-      firstFrameOpts, videoRatioChips, videoQualityChips, videoDurationChips, vidCost, showFirstFrameSlot: s.hasFirstFrame === 'yes',
+      firstFrameOpts, qualityOpts, vfmtOpts, vtimeOpts, vidCost, showFirstFrameSlot: s.hasFirstFrame === 'yes',
       lightboxData, hasLightbox: lightboxData != null, closeLightbox: () => setS({ lightbox: null }),
       showGenFirst: s.hasFirstFrame === 'no',
       characters, charTabs, charPhotos, photoTagOpts, photoTagMenu, personaFields, exifPresets, exifPresetSel, historyRows,

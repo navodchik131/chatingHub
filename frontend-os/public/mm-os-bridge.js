@@ -122,6 +122,8 @@
     chatterStats: null,
     ws: null,
     busy: false,
+    chatBusy: false,
+    notesBusy: false,
     error: null,
     selectedModelId: null,
     selectedWaveModelId: null,
@@ -1587,6 +1589,8 @@
   }
 
   function scrollThreadToBottom() {
+    const logic = store.logic
+    if (logic && logic.state.showScrollDown) logic.setState({ showScrollDown: false })
     requestAnimationFrame(() => {
       const el = queryThreadScroll()
       if (el) el.scrollTop = el.scrollHeight
@@ -1697,16 +1701,21 @@
 
   async function saveConversationNote() {
     const logic = store.logic
-    if (!logic) return
+    if (!logic || store.notesBusy) return
     const text = readNoteText()
     if (!text) return
     const conv = resolveActiveConv(store.conversations)
-    if (!conv) return
+    if (!conv) {
+      store.error = 'Нет выбранного диалога'
+      logic.forceUpdate()
+      return
+    }
     const noteLang = logic.state.lang || 'ru'
     const td = NOTE_TAG_DEFS[logic.state.noteTag ?? 0] || NOTE_TAG_DEFS[0]
     const label = noteLang === 'ru' ? td.ru : td.en
     const content = '[' + label + '] ' + text
-    store.busy = true
+    store.notesBusy = true
+    store.error = null
     try {
       await API.apiJson('/api/conversations/' + conv.id + '/notes', {
         method: 'POST',
@@ -1718,15 +1727,20 @@
     } catch (e) {
       store.error = e.message || String(e)
     } finally {
-      store.busy = false
+      store.notesBusy = false
       logic.forceUpdate()
     }
   }
 
   async function analyzeConversationNotes() {
     const conv = resolveActiveConv(store.conversations)
-    if (!conv) return
-    store.busy = true
+    if (!conv) {
+      store.error = 'Нет выбранного диалога'
+      store.logic?.forceUpdate()
+      return
+    }
+    if (store.notesBusy) return
+    store.notesBusy = true
     store.error = null
     try {
       const data = await API.apiJson('/api/conversations/' + conv.id + '/notes/analyze', {
@@ -1736,7 +1750,7 @@
     } catch (e) {
       store.error = e.message || String(e)
     } finally {
-      store.busy = false
+      store.notesBusy = false
       store.logic?.forceUpdate()
     }
   }
@@ -2696,39 +2710,45 @@
     document.documentElement.dataset.mmChatShell = '1'
     ensureChatFileInput()
 
+    const eventEl = (e) => {
+      const t = e.target
+      if (!t) return null
+      return t.nodeType === 1 ? t : t.parentElement
+    }
+
     document.addEventListener(
       'click',
       (e) => {
         if (!store.authed) return
-        const dlg = e.target.closest('[data-screen-label="Диалоги"]')
-        if (!dlg) return
+        const el = eventEl(e)
+        if (!el || typeof el.closest !== 'function') return
 
-        if (e.target.closest('[data-mm-scroll-down]')) {
+        if (el.closest('[data-mm-scroll-down]')) {
           e.preventDefault()
           e.stopPropagation()
           scrollThreadToBottom()
           return
         }
-        if (e.target.closest('[data-mm-chat-attach]')) {
+        if (el.closest('[data-mm-chat-attach]')) {
           e.preventDefault()
           e.stopPropagation()
           pickChatFile(e)
           return
         }
-        if (e.target.closest('[data-mm-chat-send]')) {
+        if (el.closest('[data-mm-chat-send]')) {
           e.preventDefault()
           e.stopPropagation()
           void sendReply()
           return
         }
-        if (e.target.closest('[data-mm-chat-emoji]')) {
+        if (el.closest('[data-mm-chat-emoji]')) {
           e.preventDefault()
           e.stopPropagation()
           const logic = store.logic
           if (logic) logic.setState({ emojiOpen: !logic.state.emojiOpen, msgReact: null })
           return
         }
-        const emojiPick = e.target.closest('[data-mm-emoji-pick]')
+        const emojiPick = el.closest('[data-mm-emoji-pick]')
         if (emojiPick) {
           e.preventDefault()
           e.stopPropagation()
@@ -2736,43 +2756,44 @@
           if (em) insertChatEmoji(em)
           return
         }
-        if (e.target.closest('[data-mm-chat-clear-attach]')) {
+        if (el.closest('[data-mm-chat-clear-attach]')) {
           e.preventDefault()
           e.stopPropagation()
           clearChatAttachment(e)
           return
         }
-        if (e.target.closest('[data-mm-note-toggle]')) {
+        if (el.closest('[data-mm-note-toggle], [data-mm-note-add]')) {
           e.preventDefault()
           e.stopPropagation()
           const logic = store.logic
           if (logic) logic.setState({ noteFormOpen: !logic.state.noteFormOpen })
           return
         }
-        if (e.target.closest('[data-mm-note-save]')) {
+        if (el.closest('[data-mm-note-save]')) {
           e.preventDefault()
           e.stopPropagation()
           void saveConversationNote()
           return
         }
-        if (e.target.closest('[data-mm-note-cancel]')) {
+        if (el.closest('[data-mm-note-cancel]')) {
           e.preventDefault()
           e.stopPropagation()
           const logic = store.logic
           if (logic) logic.setState({ noteFormOpen: false, noteDraft: '' })
           return
         }
-        if (e.target.closest('[data-mm-note-analyze]')) {
+        if (el.closest('[data-mm-note-analyze]')) {
           e.preventDefault()
           e.stopPropagation()
           void analyzeConversationNotes()
           return
         }
-        const noteTag = e.target.closest('[data-mm-note-tag]')
+        const noteTag = el.closest('[data-mm-note-tag]')
         if (noteTag) {
           e.preventDefault()
           e.stopPropagation()
-          const tags = dlg.querySelectorAll('[data-mm-note-tag]')
+          const root = noteTag.closest('[data-screen-label="Диалоги"]') || document
+          const tags = root.querySelectorAll('[data-mm-note-tag]')
           const idx = Array.from(tags).indexOf(noteTag)
           if (idx >= 0 && store.logic) store.logic.setState({ noteTag: idx })
         }
@@ -2784,7 +2805,9 @@
       'keydown',
       (e) => {
         if (!store.authed) return
-        const ta = e.target.closest('[data-mm-chat-reply]')
+        const el = eventEl(e)
+        if (!el || typeof el.closest !== 'function') return
+        const ta = el.closest('[data-mm-chat-reply]')
         if (!ta) return
         if (e.key === 'Enter' && !e.shiftKey) {
           e.preventDefault()
@@ -2853,15 +2876,19 @@
   }
 
   async function sendReply() {
-    if (store.busy) return
+    if (store.chatBusy) return
     const conv = resolveActiveConv(store.conversations)
-    if (!conv) return
+    if (!conv) {
+      store.error = 'Нет выбранного диалога'
+      store.logic?.forceUpdate()
+      return
+    }
     const logic = store.logic
     syncReplyDraftFromDom()
     const text = readReplyText()
     const image = store.pendingChatImage
     if (!text && !image) return
-    store.busy = true
+    store.chatBusy = true
     const convId = conv.id
     const fileToSend = image
     let localPreviewUrl
@@ -2924,7 +2951,7 @@
       if (fileToSend) setChatAttachment(fileToSend)
       store.error = e.message || String(e)
     } finally {
-      store.busy = false
+      store.chatBusy = false
       logic?.forceUpdate()
       scrollThreadToBottom()
     }

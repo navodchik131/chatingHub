@@ -354,18 +354,7 @@ const TEMPLATE_PATCHES = [
     /<sc-if value="\{\{ s\.uploadMode \}\}" hint-placeholder-val="\{\{ true \}\}">\s*<div style="aspect-ratio:3\/4;border:1\.5px dashed/,
     '<sc-if value="{{ s.uploadMode }}" hint-placeholder-val="{{ true }}"><div data-mm-slot-upload="{{ s.uploadKey }}" style="aspect-ratio:3/4;border:1.5px dashed',
   ],
-  [
-    /<textarea rows="1" placeholder="\{\{ t\.msgPlaceholder \}\}" style="flex:1;min-height:38px;max-height:120px;background:#0D0E11;border:1px solid rgba\(255,255,255,.09\);border-radius:10px;padding:9px 12px;color:#F2F3F0;font-family:'Manrope';font-size:13px;resize:none;outline:none;"><\/textarea>/,
-    '<textarea data-mm-chat-reply rows="1" placeholder="{{ t.msgPlaceholder }}" style="flex:1;min-height:38px;max-height:120px;background:#0D0E11;border:1px solid rgba(255,255,255,.09);border-radius:10px;padding:9px 12px;color:#F2F3F0;font-family:\'Manrope\';font-size:13px;resize:none;outline:none;"></textarea>',
-  ],
-  [
-    /<div title="\{\{ t\.attach \}\}" style="width:38px;height:38px;flex:none;border-radius:10px;border:1px solid rgba\(255,255,255,.1\);display:flex;align-items:center;justify-content:center;color:#9BA0A6;cursor:pointer;" style-hover="color:#D7F452;border-color:rgba\(215,244,82,.4\);"><span style="display:flex;width:18px;height:18px;" dangerouslySetInnerHTML="\{\{ icoClip \}\}"><\/span><\/div>/,
-    '<div data-mm-chat-attach title="{{ t.attach }}" style="width:38px;height:38px;flex:none;border-radius:10px;border:1px solid rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center;color:#9BA0A6;cursor:pointer;" style-hover="color:#D7F452;border-color:rgba(215,244,82,.4);"><span style="display:flex;width:18px;height:18px;" dangerouslySetInnerHTML="{{ icoClip }}"></span></div>',
-  ],
-  [
-    /<div style="width:38px;height:38px;flex:none;background:#D7F452;color:#171A05;border-radius:10px;display:flex;align-items:center;justify-content:center;cursor:pointer;" style-hover="background:#E8FA8A;"><span style="display:flex;width:17px;height:17px;" dangerouslySetInnerHTML="\{\{ icoSendArrow \}\}"><\/span><\/div>\s*<\/div>\s*<\/sc-if>\s*<!-- notes -->/,
-    '<div data-mm-chat-send style="width:38px;height:38px;flex:none;background:#D7F452;color:#171A05;border-radius:10px;display:flex;align-items:center;justify-content:center;cursor:pointer;" style-hover="background:#E8FA8A;"><span style="display:flex;width:17px;height:17px;" dangerouslySetInnerHTML="{{ icoSendArrow }}"></span></div></div></sc-if><!-- notes -->',
-  ],
+  // (composer block is patched by applyComposerBlock() below — regex was too fragile with style-hover)
   [
     /<span style="display:flex;width:14px;height:14px;color:#9BA0A6;cursor:pointer;flex:none;" style-hover="color:#D7F452;" dangerouslySetInnerHTML="\{\{ icoCopy \}\}"><\/span>\s*<\/div>\s*<\/sc-for>\s*<\/div>\s*<\/div>\s*<\/sc-for>/,
     '<span onClick="{{ u.copy }}" style="display:flex;width:14px;height:14px;color:#9BA0A6;cursor:pointer;flex:none;" style-hover="color:#D7F452;" dangerouslySetInnerHTML="{{ icoCopy }}"></span></div></sc-for></div></div></sc-for>',
@@ -375,8 +364,9 @@ const TEMPLATE_PATCHES = [
     `<sc-if value="{{ ch.hot }}" hint-placeholder-val="{{ false }}"><span style="font-family:'JetBrains Mono';font-size:7.5px;background:rgba(251,146,60,.15);color:#FB923C;padding:1px 5px;border-radius:4px;">24ч+</span></sc-if>
                   </div>`,
   ],
+  // Notes footer from design source (no data-mm attrs yet)
   [
-    /<div style="padding:10px 12px;border-top:1px solid rgba\(255,255,255,.07\);display:flex;gap:6px;">\s*<div data-mm-note-analyze style="flex:1;border:1px solid rgba\(255,255,255,.12\);border-radius:9px;padding:7px;text-align:center;font-size:11\.5px;font-weight:700;color:#C084FC;cursor:pointer;" style-hover="border-color:#C084FC;">✦ AI-\{\{ t\.analysis \}\}<\/div>\s*<div data-mm-note-toggle style="flex:1;background:rgba\(215,244,82,.12\);border:1px solid rgba\(215,244,82,.3\);border-radius:9px;padding:7px;text-align:center;font-size:11\.5px;font-weight:700;color:#D7F452;cursor:pointer;" style-hover="background:rgba\(215,244,82,.2\);">\+ \{\{ t\.addNote \}\}<\/div>\s*<\/div>/,
+    /<div style="padding:10px 12px;border-top:1px solid rgba\(255,255,255,.07\);display:flex;gap:6px;">\s*<div style="flex:1;border:1px solid rgba\(255,255,255,.12\);border-radius:9px;padding:7px;text-align:center;font-size:11\.5px;font-weight:700;color:#C084FC;cursor:pointer;" style-hover="border-color:#C084FC;">✦ AI-\{\{ t\.analysis \}\}<\/div>\s*<div onClick="\{\{ toggleNote \}\}" style="flex:1;background:rgba\(215,244,82,.12\);border:1px solid rgba\(215,244,82,.3\);border-radius:9px;padding:7px;text-align:center;font-size:11\.5px;font-weight:700;color:#D7F452;cursor:pointer;" style-hover="background:rgba\(215,244,82,.2\);">\+ \{\{ t\.addNote \}\}<\/div>\s*<\/div>/,
     `<sc-if value="{{ noteFormClosed }}" hint-placeholder-val="{{ false }}">
             <div style="padding:10px 12px;border-top:1px solid rgba(255,255,255,.07);display:flex;gap:6px;">
               <div onClick="{{ analyzeNotes }}" data-mm-note-analyze style="flex:1;border:1px solid rgba(255,255,255,.12);border-radius:9px;padding:7px;text-align:center;font-size:11.5px;font-weight:700;color:#C084FC;cursor:pointer;" style-hover="border-color:#C084FC;">✦ AI-{{ t.analysis }}</div>
@@ -393,6 +383,12 @@ const TEMPLATE_PATCHES = [
     '<div id="mm-thread-scroll" onClick="{{ closePops }}" style="flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px;">',
   ],
   [
+    /(<\/sc-for>\s*)<\/div>\s*<!-- scroll to bottom/,
+    `$1<div id="mm-thread-end" style="height:1px;flex:none;width:100%;margin-top:-1px;" aria-hidden="true"></div>
+            </div>
+            <!-- scroll to bottom`,
+  ],
+  [
     /<div style="display:flex;gap:6px;align-items:baseline;"><span style="\{\{ ch\.nameStyle \}\}">\{\{ ch\.name \}\}<\/span><span style="font-family:'JetBrains Mono';font-size:8px;letter-spacing:1px;color:\{\{ ch\.platColor \}\};">\{\{ ch\.platform \}\}<\/span><\/div>/,
     `<div style="display:flex;gap:6px;align-items:baseline;flex-wrap:wrap;min-width:0;"><span style="{{ ch.nameStyle }}">{{ ch.name }}</span><sc-if value="{{ ch.isUnread }}" hint-placeholder-val="{{ false }}"><span style="{{ ch.unreadLabelStyle }}">{{ ch.newLabel }}</span></sc-if><span style="font-family:'JetBrains Mono';font-size:8px;letter-spacing:1px;color:{{ ch.platColor }};">{{ ch.platform }}</span><sc-if value="{{ ch.unreadBadge }}" hint-placeholder-val="{{ false }}"><span style="{{ ch.unreadBadgeStyle }}">{{ ch.unreadBadge }}</span></sc-if></div>`,
   ],
@@ -401,50 +397,16 @@ const TEMPLATE_PATCHES = [
     '<div style="{{ ch.lastStyle }}">{{ ch.last }}</div>',
   ],
   [
-    /<textarea data-mm-note-text rows="3" placeholder="\{\{ t\.noteTextPh \}\}" style="width:100%;background:#0D0E11;border:1px solid rgba\(255,255,255,.09\);border-radius:10px;padding:9px 12px;color:#F2F3F0;font-family:'Manrope';font-size:12px;line-height:1.5;resize:vertical;outline:none;"><\/textarea>/,
+    /<textarea rows="3" placeholder="\{\{ t\.noteTextPh \}\}" style="width:100%;background:#0D0E11;border:1px solid rgba\(255,255,255,.09\);border-radius:10px;padding:9px 12px;color:#F2F3F0;font-family:'Manrope';font-size:12px;line-height:1.5;resize:vertical;outline:none;"><\/textarea>/,
     '<textarea data-mm-note-text rows="3" value="{{ noteDraft }}" onInput="{{ onNoteInput }}" placeholder="{{ t.noteTextPh }}" style="width:100%;background:#0D0E11;border:1px solid rgba(255,255,255,.09);border-radius:10px;padding:9px 12px;color:#F2F3F0;font-family:\'Manrope\';font-size:12px;line-height:1.5;resize:vertical;outline:none;"></textarea>',
   ],
   [
-    /<div style="padding:10px 12px;border-top:1px solid rgba\(255,255,255,.07\);display:flex;gap:6px;align-items:flex-end;">\s*<div data-mm-chat-attach title="\{\{ t\.attach \}\}" style="width:38px;height:38px;flex:none;border-radius:10px;border:1px solid rgba\(255,255,255,.1\);display:flex;align-items:center;justify-content:center;color:#9BA0A6;cursor:pointer;" style-hover="color:#D7F452;border-color:rgba\(215,244,82,.4\);"><span style="display:flex;width:18px;height:18px;" dangerouslySetInnerHTML="\{\{ icoClip \}\}"><\/span><\/div>\s*<div onClick="\{\{ toggleEmoji \}\}" style="width:38px;height:38px;flex:none;border-radius:10px;border:1px solid rgba\(255,255,255,.1\);display:flex;align-items:center;justify-content:center;font-size:18px;cursor:pointer;" style-hover="border-color:rgba\(215,244,82,.4\);">😊<\/div>\s*<textarea data-mm-chat-reply rows="1" placeholder="\{\{ t\.msgPlaceholder \}\}" style="flex:1;min-height:38px;max-height:120px;background:#0D0E11;border:1px solid rgba\(255,255,255,.09\);border-radius:10px;padding:9px 12px;color:#F2F3F0;font-family:'Manrope';font-size:13px;resize:none;outline:none;"><\/textarea>\s*<div data-mm-chat-send style="width:38px;height:38px;flex:none;background:#D7F452;color:#171A05;border-radius:10px;display:flex;align-items:center;justify-content:center;cursor:pointer;" style-hover="background:#E8FA8A;"><span style="display:flex;width:17px;height:17px;" dangerouslySetInnerHTML="\{\{ icoSendArrow \}\}"><\/span><\/div>\s*<\/div>/,
-    `<div onClick="{{ stop }}" style="padding:10px 12px;border-top:1px solid rgba(255,255,255,.07);display:flex;flex-direction:column;gap:8px;">
-              <sc-if value="{{ emojiOpen }}" hint-placeholder-val="{{ false }}">
-                <div style="background:#1A1C20;border:1px solid rgba(255,255,255,.14);border-radius:14px;padding:10px;display:grid;grid-template-columns:repeat(8,1fr);gap:4px;box-shadow:0 10px 30px rgba(0,0,0,.5);">
-                  <sc-for list="{{ emojiPick }}" as="ep" hint-placeholder-count="16">
-                    <span data-mm-emoji-pick="{{ ep.e }}" onClick="{{ ep.pick }}" style="font-size:20px;cursor:pointer;text-align:center;padding:3px;border-radius:8px;" style-hover="background:rgba(255,255,255,.08);">{{ ep.e }}</span>
-                  </sc-for>
-                </div>
-              </sc-if>
-              <sc-if value="{{ chatAttachPreview }}" hint-placeholder-val="{{ false }}">
-                <div style="display:flex;align-items:center;gap:10px;background:#0D0E11;border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:8px 10px;">
-                  <img src="{{ chatAttachPreview }}" alt="" style="width:52px;height:52px;object-fit:cover;border-radius:8px;flex:none;">
-                  <div style="flex:1;min-width:0;">
-                    <div style="font-family:'JetBrains Mono';font-size:8.5px;letter-spacing:1px;color:#6B7076;margin-bottom:3px;">{{ t.attach }}</div>
-                    <div style="font-size:12px;color:#F2F3F0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ chatAttachName }}</div>
-                  </div>
-                  <span data-mm-chat-clear-attach onClick="{{ clearChatAttach }}" style="cursor:pointer;color:#9BA0A6;font-size:18px;line-height:1;padding:2px 6px;" style-hover="color:#F87171;">✕</span>
-                </div>
-              </sc-if>
-              <div style="display:flex;gap:6px;align-items:flex-end;">
-                <div data-mm-chat-attach title="{{ t.attach }}" style="width:38px;height:38px;flex:none;border-radius:10px;border:1px solid rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center;color:#9BA0A6;cursor:pointer;" style-hover="color:#D7F452;border-color:rgba(215,244,82,.4);"><span style="display:flex;width:18px;height:18px;" dangerouslySetInnerHTML="{{ icoClip }}"></span></div>
-                <div data-mm-chat-emoji style="width:38px;height:38px;flex:none;border-radius:10px;border:1px solid rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center;font-size:18px;cursor:pointer;" style-hover="border-color:rgba(215,244,82,.4);">😊</div>
-                <textarea data-mm-chat-reply rows="2" value="{{ replyDraft }}" onInput="{{ onReplyInput }}" onKeyDown="{{ onReplyKeyDown }}" placeholder="{{ t.msgPlaceholder }}" style="flex:1;min-height:52px;max-height:140px;background:#0D0E11;border:1px solid rgba(255,255,255,.09);border-radius:10px;padding:9px 12px;color:#F2F3F0;font-family:'Manrope';font-size:13px;resize:none;outline:none;"></textarea>
-                <div data-mm-chat-send style="{{ sendBtnStyle }}" style-hover="background:#E8FA8A;"><span style="display:flex;width:17px;height:17px;" dangerouslySetInnerHTML="{{ icoSendArrow }}"></span></div>
-              </div>
-              <div style="font-family:'JetBrains Mono';font-size:9px;color:#5C6066;text-align:right;">Enter — отправить · Shift+Enter — новая строка</div>
-            </div>`,
+    /<div onClick="\{\{ saveNote \}\}" style="flex:1;background:rgba\(215,244,82,.12\);border:1px solid rgba\(215,244,82,.3\);border-radius:9px;padding:8px;text-align:center;font-size:12px;font-weight:800;color:#D7F452;cursor:pointer;" style-hover="background:rgba\(215,244,82,.2\);">\{\{ t\.save \}\}<\/div>\s*<div onClick="\{\{ closeNote \}\}" style="border:1px solid rgba\(255,255,255,.12\);border-radius:9px;padding:8px 14px;text-align:center;font-size:12px;font-weight:700;color:#9BA0A6;cursor:pointer;" style-hover="border-color:rgba\(255,255,255,.3\);">\{\{ t\.opCancel \}\}<\/div>/,
+    '<div onClick="{{ saveNote }}" data-mm-note-save style="flex:1;background:rgba(215,244,82,.12);border:1px solid rgba(215,244,82,.3);border-radius:9px;padding:8px;text-align:center;font-size:12px;font-weight:800;color:#D7F452;cursor:pointer;" style-hover="background:rgba(215,244,82,.2);">{{ t.save }}</div><div onClick="{{ closeNote }}" data-mm-note-cancel style="border:1px solid rgba(255,255,255,.12);border-radius:9px;padding:8px 14px;text-align:center;font-size:12px;font-weight:700;color:#9BA0A6;cursor:pointer;" style-hover="border-color:rgba(255,255,255,.3);">{{ t.opCancel }}</div>',
   ],
   [
-    /<!-- scroll to bottom -->\s*<div onClick="\{\{ scrollDown \}\}" style="position:absolute;right:16px;bottom:82px;[^"]*">↓<\/div>/,
-    '',
-  ],
-  [
-    /(<\/sc-for>\s*)<\/div>\s*<!-- emoji popover -->/,
-    `$1<div id="mm-thread-end" style="height:1px;flex:none;width:100%;margin-top:-1px;"></div>
-              <sc-if value="{{ showScrollDown }}" hint-placeholder-val="{{ false }}">
-              <div onClick="{{ scrollDown }}" data-mm-scroll-down style="position:sticky;bottom:8px;margin-left:auto;margin-top:4px;width:36px;height:36px;border-radius:50%;background:#1A1C20;border:1px solid rgba(255,255,255,.14);display:flex;align-items:center;justify-content:center;font-size:16px;color:#9BA0A6;cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,.4);flex:none;z-index:2;" style-hover="color:#F2F3F0;border-color:rgba(255,255,255,.3);">↓</div>
-              </sc-if>
-            </div>
-            <!-- emoji popover -->`,
+    /<span onClick="\{\{ nt\.pick \}\}" style="\{\{ nt\.style \}\}">\{\{ nt\.label \}\}<\/span>/,
+    '<span data-mm-note-tag onClick="{{ nt.pick }}" style="{{ nt.style }}">{{ nt.label }}</span>',
   ],
   [
     /<div style="display:flex;gap:8px;"><div style="flex:1;background:rgba\(215,244,82,.12\);border:1px solid rgba\(215,244,82,.3\);border-radius:9px;padding:10px;text-align:center;font-size:12px;font-weight:800;color:#D7F452;cursor:pointer;">\{\{ t\.save \}\}<\/div><\/div>\s*<\/div>\s*<\/sc-if>/,
@@ -466,6 +428,10 @@ const LOGIC_PATCHES = [
     `this._onResize();
     if (window.MMOS_BRIDGE) window.MMOS_BRIDGE.onMount(this);
   }`,
+  ],
+  [
+    /msgReact: null, emojiOpen: false,/,
+    'msgReact: null, emojiOpen: false, showScrollDown: false,',
   ],
   // enrich return
   [
@@ -490,6 +456,67 @@ const LOGIC_PATCHES = [
   ],
 ]
 
+const COMPOSER_BLOCK = `<!-- scroll to bottom (shown only when not at end) -->
+            <sc-if value="{{ showScrollDown }}" hint-placeholder-val="{{ false }}">
+            <div onClick="{{ scrollDown }}" data-mm-scroll-down style="position:absolute;right:16px;bottom:88px;z-index:8;width:36px;height:36px;border-radius:50%;background:#1A1C20;border:1px solid rgba(255,255,255,.14);display:flex;align-items:center;justify-content:center;font-size:16px;color:#9BA0A6;cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,.4);" style-hover="color:#F2F3F0;border-color:rgba(255,255,255,.3);">↓</div>
+            </sc-if>
+            <div onClick="{{ stop }}" data-mm-chat-composer style="padding:10px 12px;border-top:1px solid rgba(255,255,255,.07);display:flex;flex-direction:column;gap:8px;position:relative;z-index:4;">
+              <sc-if value="{{ emojiOpen }}" hint-placeholder-val="{{ false }}">
+                <div style="background:#1A1C20;border:1px solid rgba(255,255,255,.14);border-radius:14px;padding:10px;display:grid;grid-template-columns:repeat(8,1fr);gap:4px;box-shadow:0 10px 30px rgba(0,0,0,.5);">
+                  <sc-for list="{{ emojiPick }}" as="ep" hint-placeholder-count="16">
+                    <span data-mm-emoji-pick="{{ ep.e }}" onClick="{{ ep.pick }}" style="font-size:20px;cursor:pointer;text-align:center;padding:3px;border-radius:8px;" style-hover="background:rgba(255,255,255,.08);">{{ ep.e }}</span>
+                  </sc-for>
+                </div>
+              </sc-if>
+              <sc-if value="{{ chatAttachPreview }}" hint-placeholder-val="{{ false }}">
+                <div style="display:flex;align-items:center;gap:10px;background:#0D0E11;border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:8px 10px;">
+                  <img src="{{ chatAttachPreview }}" alt="" style="width:52px;height:52px;object-fit:cover;border-radius:8px;flex:none;">
+                  <div style="flex:1;min-width:0;">
+                    <div style="font-family:'JetBrains Mono';font-size:8.5px;letter-spacing:1px;color:#6B7076;margin-bottom:3px;">{{ t.attach }}</div>
+                    <div style="font-size:12px;color:#F2F3F0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ chatAttachName }}</div>
+                  </div>
+                  <span data-mm-chat-clear-attach onClick="{{ clearChatAttach }}" style="cursor:pointer;color:#9BA0A6;font-size:18px;line-height:1;padding:2px 6px;" style-hover="color:#F87171;">✕</span>
+                </div>
+              </sc-if>
+              <div style="display:flex;gap:6px;align-items:flex-end;">
+                <div data-mm-chat-attach onClick="{{ pickChatFile }}" title="{{ t.attach }}" style="width:38px;height:38px;flex:none;border-radius:10px;border:1px solid rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center;color:#9BA0A6;cursor:pointer;" style-hover="color:#D7F452;border-color:rgba(215,244,82,.4);"><span style="display:flex;width:18px;height:18px;" dangerouslySetInnerHTML="{{ icoClip }}"></span></div>
+                <div data-mm-chat-emoji onClick="{{ toggleEmoji }}" style="width:38px;height:38px;flex:none;border-radius:10px;border:1px solid rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center;font-size:18px;cursor:pointer;" style-hover="border-color:rgba(215,244,82,.4);">😊</div>
+                <textarea data-mm-chat-reply rows="2" value="{{ replyDraft }}" onInput="{{ onReplyInput }}" onKeyDown="{{ onReplyKeyDown }}" placeholder="{{ t.msgPlaceholder }}" style="flex:1;min-height:52px;max-height:140px;background:#0D0E11;border:1px solid rgba(255,255,255,.09);border-radius:10px;padding:9px 12px;color:#F2F3F0;font-family:'Manrope';font-size:13px;resize:none;outline:none;"></textarea>
+                <div data-mm-chat-send onClick="{{ sendReplyClick }}" style="{{ sendBtnStyle }}" style-hover="background:#E8FA8A;"><span style="display:flex;width:17px;height:17px;" dangerouslySetInnerHTML="{{ icoSendArrow }}"></span></div>
+              </div>
+              <div style="font-family:'JetBrains Mono';font-size:9px;color:#5C6066;text-align:right;">Enter — отправить · Shift+Enter — новая строка</div>
+            </div>
+          </div>
+          </sc-if>
+`
+
+function applyComposerBlock(src) {
+  const startMark = '<!-- scroll to bottom -->'
+  const endMark = '<!-- notes -->'
+  const start = src.indexOf(startMark)
+  if (start < 0) {
+    console.warn('composer block: start marker missing')
+    return src
+  }
+  const end = src.indexOf(endMark, start)
+  if (end < 0) {
+    console.warn('composer block: end marker missing')
+    return src
+  }
+  // Keep mm-thread-end sentinel just before scroll/composer region
+  let before = src.slice(0, start)
+  if (!before.includes('id="mm-thread-end"')) {
+    before = before.replace(
+      /(<\/sc-for>\s*)<\/div>\s*$/,
+      `$1<div id="mm-thread-end" style="height:1px;flex:none;width:100%;margin-top:-1px;" aria-hidden="true"></div>
+            </div>
+            `,
+    )
+  }
+  console.log('composer block: applied')
+  return before + COMPOSER_BLOCK + '\n          ' + src.slice(end)
+}
+
 const indexPath = path.join(osRoot, 'index.html')
 let html = fs.readFileSync(indexPath, 'utf8')
 
@@ -498,6 +525,8 @@ for (const [from, to] of TEMPLATE_PATCHES) {
   if (next === html) console.warn('template patch skipped:', String(from).slice(0, 60))
   html = next
 }
+
+html = applyComposerBlock(html)
 
 for (const [from, to] of LOGIC_PATCHES) {
   const next = html.replace(from, to)
@@ -564,7 +593,7 @@ const FULL_API_PATCHES = [
   ],
   [
     /<div style="flex:1;background:rgba\(215,244,82,.12\);border:1px solid rgba\(215,244,82,.3\);border-radius:9px;padding:7px;text-align:center;font-size:11.5px;font-weight:700;color:#D7F452;cursor:pointer;" style-hover="background:rgba\(215,244,82,.2\);">\+ \{\{ t\.addNote \}\}<\/div>/,
-    '<div data-mm-note-add style="flex:1;background:rgba(215,244,82,.12);border:1px solid rgba(215,244,82,.3);border-radius:9px;padding:7px;text-align:center;font-size:11.5px;font-weight:700;color:#D7F452;cursor:pointer;" style-hover="background:rgba(215,244,82,.2);">+ {{ t.addNote }}</div>',
+    '<div onClick="{{ toggleNote }}" data-mm-note-toggle style="flex:1;background:rgba(215,244,82,.12);border:1px solid rgba(215,244,82,.3);border-radius:9px;padding:7px;text-align:center;font-size:11.5px;font-weight:700;color:#D7F452;cursor:pointer;" style-hover="background:rgba(215,244,82,.2);">+ {{ t.addNote }}</div>',
   ],
   [
     /<input value="https:\/\/model-mate\.online\/login\?ref=N62KMA60" readOnly/,

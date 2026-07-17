@@ -3,7 +3,6 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="icon" href="./assets/favicon.ico" type="image/x-icon">
 <script src="./support.js"></script>
 </head>
 <body>
@@ -391,9 +390,24 @@ input::placeholder,textarea::placeholder{color:#5C6066;}
                 </div>
               </sc-for>
             </div>
+            <sc-if value="{{ noteFormOpen }}" hint-placeholder-val="{{ false }}">
+            <div style="padding:12px;border-top:1px solid rgba(255,255,255,.07);display:flex;flex-direction:column;gap:9px;">
+              <div style="font-family:'JetBrains Mono';font-size:9px;letter-spacing:1.4px;color:#6B7076;">{{ t.noteTag }}</div>
+              <div style="display:flex;gap:5px;flex-wrap:wrap;">
+                <sc-for list="{{ noteTagChips }}" as="nt" hint-placeholder-count="3">
+                  <span onClick="{{ nt.pick }}" style="{{ nt.style }}">{{ nt.label }}</span>
+                </sc-for>
+              </div>
+              <textarea rows="3" placeholder="{{ t.noteTextPh }}" style="width:100%;background:#0D0E11;border:1px solid rgba(255,255,255,.09);border-radius:10px;padding:9px 12px;color:#F2F3F0;font-family:'Manrope';font-size:12px;line-height:1.5;resize:vertical;outline:none;"></textarea>
+              <div style="display:flex;gap:6px;">
+                <div onClick="{{ saveNote }}" style="flex:1;background:rgba(215,244,82,.12);border:1px solid rgba(215,244,82,.3);border-radius:9px;padding:8px;text-align:center;font-size:12px;font-weight:800;color:#D7F452;cursor:pointer;" style-hover="background:rgba(215,244,82,.2);">{{ t.save }}</div>
+                <div onClick="{{ closeNote }}" style="border:1px solid rgba(255,255,255,.12);border-radius:9px;padding:8px 14px;text-align:center;font-size:12px;font-weight:700;color:#9BA0A6;cursor:pointer;" style-hover="border-color:rgba(255,255,255,.3);">{{ t.opCancel }}</div>
+              </div>
+            </div>
+            </sc-if>
             <div style="padding:10px 12px;border-top:1px solid rgba(255,255,255,.07);display:flex;gap:6px;">
               <div style="flex:1;border:1px solid rgba(255,255,255,.12);border-radius:9px;padding:7px;text-align:center;font-size:11.5px;font-weight:700;color:#C084FC;cursor:pointer;" style-hover="border-color:#C084FC;">✦ AI-{{ t.analysis }}</div>
-              <div style="flex:1;background:rgba(215,244,82,.12);border:1px solid rgba(215,244,82,.3);border-radius:9px;padding:7px;text-align:center;font-size:11.5px;font-weight:700;color:#D7F452;cursor:pointer;" style-hover="background:rgba(215,244,82,.2);">+ {{ t.addNote }}</div>
+              <div onClick="{{ toggleNote }}" style="flex:1;background:rgba(215,244,82,.12);border:1px solid rgba(215,244,82,.3);border-radius:9px;padding:7px;text-align:center;font-size:11.5px;font-weight:700;color:#D7F452;cursor:pointer;" style-hover="background:rgba(215,244,82,.2);">+ {{ t.addNote }}</div>
             </div>
           </div>
           </sc-if>
@@ -625,28 +639,28 @@ input::placeholder,textarea::placeholder{color:#5C6066;}
               <div style="font-family:'JetBrains Mono';font-size:9.5px;letter-spacing:1.8px;color:#6B7076;margin-bottom:8px;">{{ t.motionPrompt }}</div>
               <textarea rows="2" placeholder="{{ t.motionHint }}" style="width:100%;background:#0D0E11;border:1px solid rgba(255,255,255,.09);border-radius:10px;padding:10px 12px;color:#F2F3F0;font-family:'Manrope';font-size:12.5px;resize:vertical;outline:none;"></textarea>
             </div>
-            <div style="display:flex;flex-direction:column;gap:12px;">
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;">
               <div>
-                <div style="font-family:'JetBrains Mono';font-size:9.5px;letter-spacing:1.8px;color:#6B7076;margin-bottom:8px;">{{ t.format }}</div>
-                <div style="display:flex;gap:6px;flex-wrap:wrap;">
-                  <sc-for list="{{ videoRatioChips }}" as="vr" hint-placeholder-count="5">
-                    <span onClick="{{ vr.pick }}" style="{{ vr.style }}" style-hover="border-color:rgba(255,255,255,.3);">{{ vr.label }}</span>
+                <div style="font-family:'JetBrains Mono';font-size:9px;letter-spacing:1.4px;color:#6B7076;margin-bottom:7px;">{{ t.vidQuality }}</div>
+                <div style="display:flex;gap:5px;flex-wrap:wrap;">
+                  <sc-for list="{{ qualityOpts }}" as="q" hint-placeholder-count="3">
+                    <span onClick="{{ q.pick }}" style="{{ q.style }}">{{ q.label }}</span>
                   </sc-for>
                 </div>
               </div>
               <div>
-                <div style="font-family:'JetBrains Mono';font-size:9.5px;letter-spacing:1.8px;color:#6B7076;margin-bottom:8px;">{{ t.vidQuality }}</div>
-                <div style="display:flex;gap:6px;flex-wrap:wrap;">
-                  <sc-for list="{{ videoQualityChips }}" as="vq" hint-placeholder-count="3">
-                    <span onClick="{{ vq.pick }}" style="{{ vq.style }}" style-hover="border-color:rgba(255,255,255,.3);">{{ vq.label }}</span>
+                <div style="font-family:'JetBrains Mono';font-size:9px;letter-spacing:1.4px;color:#6B7076;margin-bottom:7px;">{{ t.format }}</div>
+                <div style="display:flex;gap:5px;flex-wrap:wrap;">
+                  <sc-for list="{{ vfmtOpts }}" as="vf" hint-placeholder-count="3">
+                    <span onClick="{{ vf.pick }}" style="{{ vf.style }}">{{ vf.label }}</span>
                   </sc-for>
                 </div>
               </div>
               <div>
-                <div style="font-family:'JetBrains Mono';font-size:9.5px;letter-spacing:1.8px;color:#6B7076;margin-bottom:8px;">{{ t.duration }}</div>
-                <div style="display:flex;gap:6px;flex-wrap:wrap;">
-                  <sc-for list="{{ videoDurationChips }}" as="vd" hint-placeholder-count="6">
-                    <span onClick="{{ vd.pick }}" style="{{ vd.style }}" style-hover="border-color:rgba(255,255,255,.3);">{{ vd.label }}</span>
+                <div style="font-family:'JetBrains Mono';font-size:9px;letter-spacing:1.4px;color:#6B7076;margin-bottom:7px;">{{ t.duration }}</div>
+                <div style="display:flex;gap:5px;flex-wrap:wrap;">
+                  <sc-for list="{{ vtimeOpts }}" as="vt" hint-placeholder-count="2">
+                    <span onClick="{{ vt.pick }}" style="{{ vt.style }}">{{ vt.label }}</span>
                   </sc-for>
                 </div>
               </div>
@@ -1368,7 +1382,8 @@ class Component extends DCLogic {
     charTab: 'photos', lightbox: null,
     showGenError: false, ffState: 'idle', photoMenu: null,
     opRights: { chat: true, studio: true, models: true, keys: false, billing: false },
-    opError: false, mediaStep: null
+    opError: false, mediaStep: null,
+    noteFormOpen: false, noteTag: 0
   };
   _ffTimer = null;
 
@@ -1424,7 +1439,7 @@ class Component extends DCLogic {
       searchDialogs: 'Поиск по диалогам…', persona: 'персонаж', replyLang: 'язык ответа',
       msgPlaceholder: 'Сообщение на русском — уйдёт перевод на язык фана…', send: 'Отправить',
       attach: 'Прикрепить картинку', noDialogs: 'Нет диалогов под фильтр',
-      fanNotes: 'Досье фана', analysis: 'анализ', addNote: 'Заметка',
+      fanNotes: 'Досье фана', analysis: 'анализ', addNote: 'Заметка', noteTag: 'ТЕГ ЗАМЕТКИ', noteTextPh: 'Что важно помнить о фане…',
       imagesDesc: 'Пять способов создать кадр персонажа. Выберите режим — подсказки внутри.',
       videoDesc: 'Оживите готовый кадр: выберите его из архива и опишите движение.',
       charactersDesc: 'Персонажи — это ваши виртуальные модели (девушки): фото-референсы, описание внешности, персона для AI-компаньона и EXIF «как с телефона».',
@@ -1493,7 +1508,7 @@ class Component extends DCLogic {
       searchDialogs: 'Search dialogs…', persona: 'character', replyLang: 'reply language',
       msgPlaceholder: 'Type in Russian — it will be translated for the fan…', send: 'Send',
       attach: 'Attach image', noDialogs: 'No dialogs match the filter',
-      fanNotes: 'Fan dossier', analysis: 'analysis', addNote: 'Note',
+      fanNotes: 'Fan dossier', analysis: 'analysis', addNote: 'Note', noteTag: 'NOTE TAG', noteTextPh: 'What to remember about the fan…',
       imagesDesc: 'Five ways to create a character frame. Pick a mode — hints inside.',
       videoDesc: 'Animate a finished frame: pick it from the archive and describe the motion.',
       charactersDesc: 'Characters are your virtual models: photo references, appearance description, AI companion persona and phone-like EXIF.',
@@ -1583,7 +1598,7 @@ class Component extends DCLogic {
     const navGroups = [
       { label: t.grpWork, items: [navItem('overview', t.navOverview, icoGrid), navItem('dialogs', t.navDialogs, icoChat, '2')] },
       { label: t.grpStudio, items: [navItem('images', t.navImages, icoImage), navItem('video', t.navVideo, icoFilm), navItem('characters', t.navCharacters, icoStar), navItem('workflow', t.navWorkflow, icoFlow, 'PRO')] },
-      { label: t.grpMoney, items: [navItem('donations', t.navDonations, icoHeart), navItem('billing', t.navBilling, icoCard)] },
+      { label: t.grpMoney, items: [navItem('donations', t.navDonations, icoHeart, '1'), navItem('billing', t.navBilling, icoCard)] },
       { label: t.grpSettings, items: [navItem('connections', t.navConnections, icoPlug), navItem('team', t.navTeam, icoTeam)] }
     ];
     const pageTitles = { overview: t.navOverview, dialogs: t.navDialogs, images: t.navImages, video: t.navVideo, characters: t.navCharacters, workflow: t.navWorkflow, donations: t.navDonations, billing: t.navBilling, connections: t.navConnections, team: t.navTeam };
@@ -1720,6 +1735,16 @@ class Component extends DCLogic {
       { tag: lang === 'ru' ? 'КОНТЕКСТ' : 'CONTEXT', tagStyle: tagBase + 'background:rgba(251,146,60,.15);color:#FB923C;', when: '4 дн.', text: 'Фан хочет реальное видео без единого элемента ИИ в обмен на оплату платья.' },
       { tag: 'AI', tagStyle: tagBase + 'background:rgba(192,132,252,.15);color:#C084FC;', when: '4 дн.', text: 'Извиниться за недопонимание. Предложить конкретную цену и сроки. Лёгкий флирт, не углубляться в спор об ИИ.' }
     ];
+    const noteTagDefs = [
+      { label: lang === 'ru' ? 'ПРОФИЛЬ' : 'PROFILE', col: '#D7F452', bg: 'rgba(215,244,82' },
+      { label: lang === 'ru' ? 'КОНТЕКСТ' : 'CONTEXT', col: '#FB923C', bg: 'rgba(251,146,60' },
+      { label: lang === 'ru' ? 'ВАЖНО' : 'IMPORTANT', col: '#F87171', bg: 'rgba(248,113,113' }
+    ];
+    const noteTagChips = noteTagDefs.map((nt, i) => ({
+      label: nt.label,
+      style: 'font-family:JetBrains Mono;font-size:8.5px;letter-spacing:1px;padding:3px 10px;border-radius:6px;cursor:pointer;' + (s.noteTag === i ? nt.bg + ',.18);color:' + nt.col + ';border:1px solid ' + nt.bg + ',.4);' : 'background:rgba(255,255,255,.05);color:#9BA0A6;border:1px solid rgba(255,255,255,.1);'),
+      pick: () => setS({ noteTag: i })
+    }));
 
     // ─── images data ───
     const modeDefs = [
@@ -1728,7 +1753,7 @@ class Component extends DCLogic {
       { id: 'outfit', title: lang === 'ru' ? 'Замена одежды' : 'Outfit swap', desc: lang === 'ru' ? 'Одежда с фото → на персонажа' : 'Clothing from a photo → onto character', icon: icoShirt, cost: '−8 ' + t.cr, longDesc: lang === 'ru' ? 'Загрузите один референс с человеком или вещью. Мы выделим одежду и сгенерируем её на выбранном персонаже на однородном фоне.' : 'Upload one reference with a person or item. We extract the clothing and put it on your character on a clean background.', slots: [{ label: lang === 'ru' ? 'Кадр — где заменить одежду' : 'Frame — outfit to replace', archive: true }, { label: lang === 'ru' ? 'Фото одежды' : 'Clothing photo', archive: false }], promptHint: lang === 'ru' ? 'Необязательно — цвет, длина, детали…' : 'Optional — colour, length, details…', showChar: true, showRatio: true },
       { id: 'location', title: lang === 'ru' ? 'Смена локации' : 'Location swap', desc: lang === 'ru' ? 'Перенести персонажа в новое место' : 'Move the character to a new place', icon: icoPin, cost: '−8 ' + t.cr, longDesc: lang === 'ru' ? 'Загрузите один исходный кадр. Кадр остаётся, фон и окружение меняются: пляж, аэропорт, кафе — что угодно.' : 'Upload one source frame. Frame stays, background changes.', slots: [{ label: lang === 'ru' ? 'Кадр — где сменить локацию' : 'Frame — location to replace', archive: true }, { label: lang === 'ru' ? 'Фото локации' : 'Location photo', archive: false }], promptHint: lang === 'ru' ? 'Терраса кафе в Мадриде, вечерний свет…' : 'Café terrace in Madrid, evening light…', showChar: true, showRatio: true },
       { id: 'prompt', title: lang === 'ru' ? 'Кадр по промпту' : 'From prompt', desc: lang === 'ru' ? 'Свободная генерация с нуля текстом' : 'Free-form generation from text', icon: icoText, cost: '−10 ' + t.cr, longDesc: lang === 'ru' ? 'Опишите сцену словами — персонаж подставится из карточки (внешность, EXIF).' : 'Describe the scene — the character comes from its card.', slots: [], promptHint: lang === 'ru' ? 'Photorealistic 8K still: девушка у окна с кофе, утренний свет…' : 'Photorealistic 8K still: girl by the window with coffee…', showChar: true, showRatio: true },
-      { id: 'carousel', title: lang === 'ru' ? 'Карусель' : 'Carousel', desc: lang === 'ru' ? 'Серия кадров из одного фото' : 'A series of frames from one photo', icon: icoGrid2, cost: lang === 'ru' ? '−2 кр/кадр' : '−2 cr/frame', longDesc: lang === 'ru' ? 'Выберите кадр из архива или загрузите готовый, задайте количество кадров — сгенерируем связанную серию (для постов и историй).' : 'Pick a frame from the archive or upload one, set frame count — get a coherent series.', slots: [{ label: lang === 'ru' ? 'Базовый кадр' : 'Base frame', archive: true }], promptHint: lang === 'ru' ? 'Что меняется от кадра к кадру: ракурс, эмоция…' : 'What changes across frames: angle, emotion…', showChar: true, showRatio: true, showCount: true }
+      { id: 'carousel', title: lang === 'ru' ? 'Карусель' : 'Carousel', desc: lang === 'ru' ? 'Серия кадров из одного фото' : 'A series of frames from one photo', icon: icoGrid2, cost: lang === 'ru' ? '−8 кр/кадр' : '−8 cr/frame', longDesc: lang === 'ru' ? 'Выберите кадр из архива или загрузите готовый, задайте количество кадров — сгенерируем связанную серию (для постов и историй).' : 'Pick a frame from the archive or upload one, set frame count — get a coherent series.', slots: [{ label: lang === 'ru' ? 'Базовый кадр' : 'Base frame', archive: true }], promptHint: lang === 'ru' ? 'Что меняется от кадра к кадру: ракурс, эмоция…' : 'What changes across frames: angle, emotion…', showChar: true, showRatio: true, showCount: true }
     ];
     const imgModes = modeDefs.map(m => ({
       ...m, pick: () => setS({ imgMode: m.id }),
@@ -1797,14 +1822,11 @@ class Component extends DCLogic {
       { id: 'yes', label: lang === 'ru' ? 'Да, есть' : 'Yes, I have', style: ffSeg(s.hasFirstFrame === 'yes'), pick: () => setS({ hasFirstFrame: 'yes' }) },
       { id: 'no', label: lang === 'ru' ? 'Нет — сгенерировать' : 'No — generate it', style: ffSeg(s.hasFirstFrame === 'no'), pick: () => setS({ hasFirstFrame: 'no' }) }
     ];
-    const vidChipOn = "font-family:'JetBrains Mono';font-size:11px;background:rgba(215,244,82,.12);color:#D7F452;border:1px solid rgba(215,244,82,.4);padding:5px 14px;border-radius:8px;cursor:pointer;";
-    const vidChipOff = "font-family:'JetBrains Mono';font-size:11px;border:1px solid rgba(255,255,255,.12);color:#9BA0A6;padding:5px 14px;border-radius:8px;cursor:pointer;";
-    const curRes = s.vidQuality === '1080' ? '1080p' : s.vidQuality === '4k' ? '4K' : '720p';
-    const curDur = parseInt(s.vidTime, 10) || 5;
-    const videoRatioChips = ['9:16', '16:9', '1:1', '4:3', '3:4', '4:5', '21:9'].map(r => ({ label: r, style: s.vidFormat === r ? vidChipOn : vidChipOff, pick: () => setS({ vidFormat: r }) }));
-    const videoQualityChips = ['720p', '1080p', '4K'].map(q => ({ label: q, style: curRes === q ? vidChipOn : vidChipOff, pick: () => setS({ vidQuality: q === '1080p' ? '1080' : q === '4K' ? '4k' : '720' }) }));
-    const videoDurationChips = [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15].map(d => ({ label: lang === 'ru' ? d + ' с' : d + 's', style: curDur === d ? vidChipOn : vidChipOff, pick: () => setS({ vidTime: String(d) }) }));
-    const vidCost = Math.round((s.vidQuality === '4k' ? 80 : s.vidQuality === '1080' ? 40 : 25) * (curDur / 5));
+    const mkOpt = (arr, cur, key) => arr.map(o => ({ label: o.l, sub: o.s || false, style: cur === o.v ? chipOn : chipOff, pick: () => setS({ [key]: o.v }) }));
+    const qualityOpts = mkOpt([{ l: '720p', v: '720' }, { l: '1080p', v: '1080' }, { l: '4K', v: '4k' }], s.vidQuality, 'vidQuality');
+    const vfmtOpts = mkOpt([{ l: '9:16' }, { l: '16:9' }, { l: '1:1' }].map(o => ({ l: o.l, v: o.l })), s.vidFormat, 'vidFormat');
+    const vtimeOpts = mkOpt([{ l: lang === 'ru' ? '5 с' : '5s', v: '5' }, { l: lang === 'ru' ? '10 с' : '10s', v: '10' }], s.vidTime, 'vidTime');
+    const vidCost = (s.vidQuality === '4k' ? 80 : s.vidQuality === '1080' ? 40 : 25) * (s.vidTime === '10' ? 2 : 1);
     const genFirstFrame = () => {
       setS({ ffState: 'loading' });
       clearTimeout(this._ffTimer);
@@ -2068,6 +2090,7 @@ class Component extends DCLogic {
       icoBolt, icoSpark, icoChat, icoUpload, icoCopy, icoImage, icoFilm, icoPlay, icoFlow, icoDownload, icoZoom, icoGrid2, icoClip, icoSendArrow,
       studioCards, recentDialogs, recentFrames,
       chatFilters, platFilters, chats, messages, notes, threadHead, noChats,
+      noteFormOpen: s.noteFormOpen, noteTagChips, toggleNote: () => setS({ noteFormOpen: !s.noteFormOpen }), closeNote: () => setS({ noteFormOpen: false }), saveNote: () => setS({ noteFormOpen: false }),
       emojiPick, emojiOpen: s.emojiOpen, toggleEmoji: () => setS({ emojiOpen: !s.emojiOpen, msgReact: null }),
       backToList: () => setS({ mobileChat: false, msgReact: null, emojiOpen: false }),
       closePops: () => { if (s.msgReact !== null || s.emojiOpen) setS({ msgReact: null, emojiOpen: false }); },
@@ -2081,7 +2104,7 @@ class Component extends DCLogic {
       contentModes, aiModels, countChips,
       showGenError: s.showGenError, imgErrList, triggerGen, genFieldErr,
       ffState: s.ffState, ffIdle: s.ffState === 'idle', ffLoading: s.ffState === 'loading', ffDone: s.ffState === 'done', genFirstFrame, ffImgStyle,
-      firstFrameOpts, videoRatioChips, videoQualityChips, videoDurationChips, vidCost, showFirstFrameSlot: s.hasFirstFrame === 'yes',
+      firstFrameOpts, qualityOpts, vfmtOpts, vtimeOpts, vidCost, showFirstFrameSlot: s.hasFirstFrame === 'yes',
       lightboxData, hasLightbox: lightboxData != null, closeLightbox: () => setS({ lightbox: null }),
       showGenFirst: s.hasFirstFrame === 'no',
       characters, charTabs, charPhotos, photoTagOpts, photoTagMenu, personaFields, exifPresets, exifPresetSel, historyRows,
