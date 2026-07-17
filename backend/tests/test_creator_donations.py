@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import pytest
 
-from app.services.creator_donation_apply import _donation_request_id
+from app.services.creator_donation_apply import (
+    _creator_donation_external_event_id,
+    _donation_request_id,
+)
 from app.services.creator_donations import validate_min_amount_minor, normalize_donation_currency
 
 
@@ -33,3 +36,30 @@ def test_telegram_user_id_large() -> None:
 
     payload = {"telegram_user_id": 8353501632}
     assert _telegram_user_id(payload) == 8353501632
+
+
+def test_creator_donation_external_event_id_differs_per_payment() -> None:
+    base = {
+        "name": "new_donation",
+        "payload": {
+            "donation_request_id": 188864,
+            "amount": 10000,
+            "currency": "rub",
+            "telegram_user_id": 1,
+        },
+    }
+    first = {**base, "sent_at": "2026-07-12T09:39:36.163088457Z"}
+    second = {**base, "sent_at": "2026-07-17T11:04:48.000000000Z", "payload": {**base["payload"], "amount": 20000}}
+    id1 = _creator_donation_external_event_id(first)
+    id2 = _creator_donation_external_event_id(second)
+    assert id1 != id2
+    assert id1 != "creator_donation:0:new_donation:188864"
+    assert id2 != "creator_donation:0:new_donation:188864"
+
+
+def test_creator_donation_external_event_id_uses_payment_id() -> None:
+    body = {
+        "name": "new_donation",
+        "payload": {"donation_id": 999, "donation_request_id": 188864},
+    }
+    assert _creator_donation_external_event_id(body) == "creator_donation:0:new_donation:999"

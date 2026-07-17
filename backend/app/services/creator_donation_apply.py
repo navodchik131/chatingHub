@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 from typing import Any
@@ -12,7 +13,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.connectors.tribute.handlers import (
     _amount_minor_from_payload,
     _currency_from_payload,
-    _external_event_id,
     _norm_event_name,
     _parse_dt,
 )
@@ -41,11 +41,10 @@ def _telegram_user_id(payload: dict[str, Any]) -> int | None:
 
 
 def _donation_request_id(payload: dict[str, Any]) -> int | None:
+    """ID ссылки доната в Tribute (reused для всех платежей по ссылке)."""
     for key in (
         "donation_request_id",
         "donationRequestId",
-        "donation_id",
-        "donationId",
         "request_id",
         "requestId",
     ):
@@ -64,6 +63,29 @@ def _donation_request_id(payload: dict[str, Any]) -> int | None:
     return None
 
 
+def _creator_donation_external_event_id(body: dict[str, Any]) -> str:
+    """Уникальный id платежа. donation_request_id — id ссылки, не использовать для dedup."""
+    name = str(body.get("name") or "")
+    payload = _payload(body)
+    for key in (
+        "id",
+        "donation_id",
+        "donationId",
+        "payment_id",
+        "paymentId",
+        "transaction_id",
+        "transactionId",
+    ):
+        raw = payload.get(key)
+        if raw is not None:
+            return f"creator_donation:0:{name}:{raw}"
+    sent = str(body.get("sent_at") or body.get("created_at") or "")
+    digest = hashlib.sha256(
+        json.dumps(body, sort_keys=True, ensure_ascii=False).encode("utf-8")
+    ).hexdigest()[:32]
+    return f"creator_donation:0:{name}:{sent}:{digest}"
+
+
 async def _store_unmapped_donation_webhook(
     session: AsyncSession,
     *,
@@ -72,8 +94,9 @@ async def _store_unmapped_donation_webhook(
     norm: str,
     payload: dict[str, Any],
 ) -> None:
-    external_id = _external_event_id(0, body)
-    external_id = f"creator_donation_inbox:{external_id}"
+    external_id = _creator_donation_external_event_id(body).replace(
+        "creator_donation:", "creator_donation_inbox:", 1
+    )
     existing = await session.scalar(
         select(CreatorDonationWebhookInbox.id).where(
             CreatorDonationWebhookInbox.external_event_id == external_id
@@ -167,8 +190,7 @@ async def apply_creator_donation_webhook(
 
     currency = _currency_from_payload(payload) or link.currency or "USD"
     occurred_at = _parse_dt(body.get("created_at") or body.get("sent_at"))
-    external_id = _external_event_id(0, body)
-    external_id = f"creator_donation:{external_id}"
+    external_id = _creator_donation_external_event_id(body)
 
     existing = await session.scalar(
         select(CreatorDonationEvent.id).where(
@@ -176,6 +198,12 @@ async def apply_creator_donation_webhook(
         )
     )
     if existing:
+        log.warning(
+            "creator donation webhook duplicate external_id=%s link=%s amount_minor=%s",
+            external_id,
+            link.id,
+            amount_minor,
+        )
         return {"ok": True, "duplicate": external_id}
 
     payer_tg = _telegram_user_id(payload)
