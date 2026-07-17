@@ -113,6 +113,9 @@
     donations: [],
     donationEvents: [],
     donationEditId: null,
+    creatorDonationAlert: null,
+    donationPollTimer: null,
+    _lastPage: null,
     billingPlans: null,
     creditHistory: [],
     referral: null,
@@ -256,6 +259,51 @@
     const rub = (Number(minor) || 0) / 100
     if (c === 'RUB') return rub.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ₽'
     return rub.toFixed(2) + ' ' + c
+  }
+
+  function donationAvailableAtUtc(occurredAt) {
+    const y = occurredAt.getUTCFullYear()
+    const m = occurredAt.getUTCMonth()
+    const d = occurredAt.getUTCDate()
+    if (d <= 15) return new Date(Date.UTC(y, m, 16))
+    return new Date(Date.UTC(y, m + 1, 1))
+  }
+
+  function isDonationAvailableForPayout(occurredAt, now = new Date()) {
+    return now.getTime() >= donationAvailableAtUtc(occurredAt).getTime()
+  }
+
+  function summarizeDonationPayouts(events, now = new Date()) {
+    const totalByCurrency = {}
+    const availableByCurrency = {}
+    const heldByCurrency = {}
+    const paidByCurrency = {}
+    for (const ev of events || []) {
+      if (!ev || ev.amount_minor <= 0) continue
+      const cur = String(ev.currency || 'RUB').toUpperCase()
+      totalByCurrency[cur] = (totalByCurrency[cur] ?? 0) + ev.amount_minor
+      if (ev.payout_status === 'paid') {
+        paidByCurrency[cur] = (paidByCurrency[cur] ?? 0) + ev.amount_minor
+        continue
+      }
+      if (ev.payout_status === 'in_request') continue
+      const at = new Date(ev.occurred_at)
+      if (isDonationAvailableForPayout(at, now)) {
+        availableByCurrency[cur] = (availableByCurrency[cur] ?? 0) + ev.amount_minor
+      } else {
+        heldByCurrency[cur] = (heldByCurrency[cur] ?? 0) + ev.amount_minor
+      }
+    }
+    return { totalByCurrency, availableByCurrency, heldByCurrency, paidByCurrency }
+  }
+
+  function pickCurrencyAmount(map, preferred = 'RUB') {
+    if (!map) return undefined
+    const pref = preferred.toUpperCase()
+    if (map[pref] != null) return map[pref]
+    if (map[pref.toLowerCase()] != null) return map[pref.toLowerCase()]
+    const keys = Object.keys(map)
+    return keys.length ? map[keys[0]] : undefined
   }
 
   function fmtTime(iso) {
@@ -1188,6 +1236,76 @@
     store.chatterStats = await API.apiJson('/api/workspace/chatter-stats/summary').catch(() => null)
   }
 
+  function stopDonationPolling() {
+    if (store.donationPollTimer) {
+      clearInterval(store.donationPollTimer)
+      store.donationPollTimer = null
+    }
+  }
+
+  async function refreshCreatorDonationOverview(opts = {}) {
+    if (!store.me?.is_workspace_owner) return
+    const ownerId = store.me.id
+    const prevLatestId = store.donationOverview?.latest_event_id ?? null
+    const overview = await API.apiJson('/api/creator-donations/overview').catch(() => null)
+    if (!overview) return
+
+    const latestId = overview.latest_event_id
+    const needsFullReload =
+      !!opts.reloadPanels ||
+      !Array.isArray(store.donationEvents) ||
+      !store.donationEvents.length ||
+      (latestId && latestId !== prevLatestId)
+
+    store.donationOverview = overview
+    if (needsFullReload) {
+      store.donations = await API.apiJson('/api/creator-donations').catch(() => [])
+      store.donationEvents = await API.apiJson('/api/creator-donations/events?limit=50').catch(() => [])
+    }
+
+    if (!latestId || !ownerId) {
+      store.creatorDonationAlert = null
+      store.logic?.forceUpdate()
+      return
+    }
+
+    const seenId = readDonationLastSeenEventId(ownerId)
+    if (seenId === 0) {
+      writeDonationLastSeenEventId(ownerId, latestId)
+      store.creatorDonationAlert = null
+      store.logic?.forceUpdate()
+      return
+    }
+
+    if (latestId > seenId && overview.latest_event) {
+      store.creatorDonationAlert = overview.latest_event
+      const lang = store.logic?.state?.lang || 'ru'
+      if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+        const amount = fmtMoney(overview.latest_event.amount_minor, overview.latest_event.currency)
+        try {
+          new Notification(lang === 'ru' ? 'Новый донат ModelMate' : 'New ModelMate donation', {
+            body: lang === 'ru' ? 'Поступило ' + amount : 'Received ' + amount,
+            tag: 'creator-donation-' + latestId,
+          })
+        } catch {
+          /* ignore */
+        }
+      }
+    } else if (store.creatorDonationAlert && latestId <= seenId) {
+      store.creatorDonationAlert = null
+    }
+
+    store.logic?.forceUpdate()
+  }
+
+  function startDonationPolling() {
+    stopDonationPolling()
+    if (!store.me?.is_workspace_owner) return
+    store.donationPollTimer = setInterval(() => {
+      void refreshCreatorDonationOverview({ reloadPanels: false })
+    }, 60_000)
+  }
+
   async function loadIntegrations() {
     store.integrations = await API.apiJson('/api/integrations').catch(() => null)
   }
@@ -1294,6 +1412,8 @@
     }
     showAuth(false)
     await refreshAll()
+    await refreshCreatorDonationOverview({ reloadPanels: false })
+    startDonationPolling()
     connectWs()
     const first = store.conversations[0]
     if (first) {
@@ -3353,6 +3473,11 @@
       donLinks: [],
       incoming: [],
       myDonations: [],
+      hasDonationAlert: false,
+      donationAlertTitle: '',
+      donationAlertBody: '',
+      openDonationAlert: () => {},
+      dismissDonationAlert: () => {},
       history: [],
       members: [],
       templates: [],
@@ -3473,7 +3598,10 @@
       const name = modelNameById(link.studio_model_id)
       return name && name !== '—' ? ' · ' + name : ''
     }
-    return (store.donationEvents || []).slice(0, 10).map((e) => ({
+    const events = (store.donationEvents || []).length
+      ? store.donationEvents
+      : store.donationOverview?.recent_events || []
+    return events.slice(0, 10).map((e) => ({
       sum: '+' + fmtMoney(e.amount_minor, e.currency),
       from:
         (lang === 'ru' ? 'Входящий' : 'Incoming') +
@@ -3750,14 +3878,19 @@
       modelToCharacter(m, i, lang, logic, stActive, stDim, coverBase),
     )
 
-    const donTotal = store.donationOverview?.totals_by_currency?.RUB ?? store.donationOverview?.totals_by_currency?.rub
-    const donAvail = store.donationOverview?.pending_payout_by_currency?.RUB ?? store.donationOverview?.pending_payout_by_currency?.rub
-    const currency = store.donationOverview?.currency || 'RUB'
+    const payoutSummary = summarizeDonationPayouts(store.donationEvents || [])
+    const currency = 'RUB'
+    const donTotal =
+      pickCurrencyAmount(payoutSummary.totalByCurrency, currency) ??
+      pickCurrencyAmount(store.donationOverview?.totals_by_currency, currency)
+    const donAvail = pickCurrencyAmount(payoutSummary.availableByCurrency, currency)
+    const donHeld = pickCurrencyAmount(payoutSummary.heldByCurrency, currency)
+    const donPaid = pickCurrencyAmount(payoutSummary.paidByCurrency, currency)
     const donStats = [
       { label: lang === 'ru' ? 'ВСЕГО' : 'TOTAL', value: fmtMoney(donTotal, currency), color: '#F2F3F0' },
       { label: lang === 'ru' ? 'ДОСТУПНО' : 'AVAILABLE', value: fmtMoney(donAvail, currency), color: '#4ADE80' },
-      { label: lang === 'ru' ? 'НА УДЕРЖАНИИ' : 'ON HOLD', value: fmtMoney(store.donationOverview?.pending_payout_by_currency?.RUB, currency), color: '#FB923C' },
-      { label: lang === 'ru' ? 'ВЫПЛАЧЕНО' : 'PAID OUT', value: '—', color: '#9BA0A6' },
+      { label: lang === 'ru' ? 'НА УДЕРЖАНИИ' : 'ON HOLD', value: fmtMoney(donHeld, currency), color: '#FB923C' },
+      { label: lang === 'ru' ? 'ВЫПЛАЧЕНО' : 'PAID OUT', value: fmtMoney(donPaid, currency), color: '#9BA0A6' },
     ]
 
     const history = (store.creditHistory?.items || store.creditHistory || [])
@@ -3771,8 +3904,17 @@
 
     const ownerId = me?.id
 
+    if (s.page !== store._lastPage) {
+      const prevPage = store._lastPage
+      store._lastPage = s.page
+      if (s.page === 'donations' && isOwner && prevPage !== s.page) {
+        queueMicrotask(() => void refreshCreatorDonationOverview({ reloadPanels: true }))
+      }
+    }
+
     if (s.page === 'donations' && ownerId && store.donationOverview?.latest_event_id) {
       writeDonationLastSeenEventId(ownerId, store.donationOverview.latest_event_id)
+      store.creatorDonationAlert = null
     }
 
     let navGroups = (vals.navGroups || []).map((grp) => ({
@@ -3948,6 +4090,27 @@
       userRolePlan: role + ' · ' + planName,
       donationsKpiTotal: fmtMoney(donTotal, currency),
       donationsKpiPayout: fmtMoney(donAvail, currency),
+      hasDonationAlert: !!store.creatorDonationAlert && isOwner,
+      donationAlertTitle: lang === 'ru' ? 'Новый донат ModelMate' : 'New ModelMate donation',
+      donationAlertBody: store.creatorDonationAlert
+        ? (lang === 'ru' ? 'Поступило ' : 'Received ') +
+          fmtMoney(store.creatorDonationAlert.amount_minor, store.creatorDonationAlert.currency)
+        : '',
+      openDonationAlert: () => {
+        if (ownerId && store.donationOverview?.latest_event_id) {
+          writeDonationLastSeenEventId(ownerId, store.donationOverview.latest_event_id)
+        }
+        store.creatorDonationAlert = null
+        logic.setState({ page: 'donations', donTab: 'overview' })
+        logic.forceUpdate()
+      },
+      dismissDonationAlert: () => {
+        if (ownerId && store.donationOverview?.latest_event_id) {
+          writeDonationLastSeenEventId(ownerId, store.donationOverview.latest_event_id)
+        }
+        store.creatorDonationAlert = null
+        logic.forceUpdate()
+      },
       dialogsTotal,
       dialogsUnreadLabel,
       teamRepliesCount,
@@ -4143,10 +4306,15 @@
       runGenerateVideo: () => void runGenerateVideo(),
       sendReply: () => void sendReply(),
       logout: () => {
+        stopDonationPolling()
         API.setToken(null)
         store.authed = false
         store.me = null
         store.error = null
+        store.creatorDonationAlert = null
+        store.donationOverview = null
+        store.donations = []
+        store.donationEvents = []
         setAuthTab('login')
         showAuth(true)
         logic.forceUpdate()
@@ -4184,6 +4352,7 @@
     enrich,
     store,
     refreshAll,
+    refreshCreatorDonationOverview,
     login,
     register,
     logout: () => API.setToken(null),
