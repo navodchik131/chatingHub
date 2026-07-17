@@ -28,6 +28,7 @@ export function ConversationCategoryTabs({
         const short = conversationCategoryShort(category)
         const count = countForConversationCategory(conversations, category)
         const isActive = category === active
+        const isUnreadTab = category === 'unread'
         return (
           <button
             key={category}
@@ -37,7 +38,7 @@ export function ConversationCategoryTabs({
             title={label}
             className={`conv-category-tab${isActive ? ' active' : ''}${
               count > 0 && category !== 'all' ? ' has-items' : ''
-            }`}
+            }${isUnreadTab && count > 0 && !isActive ? ' has-unread' : ''}`}
             onClick={() => onChange(category)}
           >
             <span className="conv-category-tab__label">{short ?? label}</span>

@@ -255,8 +255,11 @@ async def mark_conversation_read(
     )
     if max_id is None:
         return
+    prev_updated = conv.updated_at
     conv.last_read_message_id = int(max_id)
-    conv.updated_at = datetime.now(timezone.utc)
+    await session.flush()
+    # Чтение диалога не должно менять порядок в списке (onupdate на updated_at).
+    conv.updated_at = prev_updated
 
 
 async def unread_inbound_count(

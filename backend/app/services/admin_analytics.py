@@ -287,7 +287,7 @@ def _usage_event_revenue_rub(kind: str, meta: dict) -> int:
         spec = get_plan_spec(resolve_product_id(str(product)))
         return int(spec.price_rub) if spec else 0
     if kind == "standard_subscription_bonus":
-        if str(meta.get("payment_kind") or "") != "yookassa":
+        if str(meta.get("payment_kind") or "") not in ("yookassa", "tribute"):
             return 0
         if not meta.get("payment_ref"):
             return 0
@@ -361,7 +361,10 @@ async def _build_revenue_stats(session: AsyncSession) -> dict:
                 month_rub += amount
             elif prev_month_start <= created_at < month_start:
                 prev_month_rub += amount
-        if kind in ("tribute_credits_pack", "tribute_subscription_renewed"):
+        if kind in ("tribute_credits_pack", "tribute_subscription_renewed") or (
+            kind == "standard_subscription_bonus"
+            and str(meta.get("payment_kind") or "") == "tribute"
+        ):
             tribute_payments += 1
 
     donations_total_rub = int(

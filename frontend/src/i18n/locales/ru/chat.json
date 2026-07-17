@@ -5,6 +5,10 @@
     "all": {
       "label": "Все"
     },
+    "unread": {
+      "label": "Непрочитанные",
+      "short": "Непроч."
+    },
     "vip": {
       "label": "VIP"
     },

@@ -95,7 +95,12 @@ import {
   studioModelImageKindLabel,
   type StudioModelImageKind,
 } from './i18n/studioLabels'
-import { type ConversationCategory, MANUAL_CATEGORY_VALUES, matchesConversationCategory } from './conversationCategories'
+import {
+  type ConversationCategory,
+  MANUAL_CATEGORY_VALUES,
+  matchesConversationCategory,
+  sortConversationsForInbox,
+} from './conversationCategories'
 import {
   chatPlatformLabel,
   type ChatPlatform,
@@ -1005,8 +1010,10 @@ export default function App() {
 
   const filteredConversations = useMemo(
     () =>
-      platformFilteredConversations.filter((c) =>
-        matchesConversationCategory(c, chatCategoryTab),
+      sortConversationsForInbox(
+        platformFilteredConversations.filter((c) =>
+          matchesConversationCategory(c, chatCategoryTab),
+        ),
       ),
     [platformFilteredConversations, chatCategoryTab],
   )
@@ -9399,7 +9406,7 @@ export default function App() {
           <ul className="conv-list">
             {filteredConversations.map((c) => {
               const unread = c.unread_count ?? 0
-              const hasUnread = unread > 0 && c.id !== selectedId
+              const hasUnread = unread > 0
               const catBadge = conversationCategoryBadgeLabel(c)
               return (
                 <li key={c.id}>
@@ -9407,7 +9414,7 @@ export default function App() {
                     type="button"
                     className={
                       c.id === selectedId
-                        ? 'conv active'
+                        ? `conv active${hasUnread ? ' has-unread' : ''}`
                         : hasUnread
                           ? 'conv has-unread'
                           : c.peer_unavailable
@@ -9420,6 +9427,7 @@ export default function App() {
                   >
                     <span className="conv-avatar-wrap">
                       <ConvAvatarThumb conv={c} />
+                      {hasUnread ? <span className="conv-unread-dot" aria-hidden /> : null}
                       {catBadge ? (
                         <span className={`conv-avatar-badge conv-cat-badge conv-cat-badge--${catBadge.key}`}>
                           {catBadge.label}
@@ -9428,7 +9436,9 @@ export default function App() {
                     </span>
                     <span className="conv-main">
                     <span className="conv-row-top">
-                      <span className="name">{c.user_display_name ?? tc('thread.unnamed')}</span>
+                      <span className={`name${hasUnread ? ' name--unread' : ''}`}>
+                        {c.user_display_name ?? tc('thread.unnamed')}
+                      </span>
                       {(c.outbound_lang || c.user_lang) && (
                         <span
                           className="lang"
@@ -9441,7 +9451,7 @@ export default function App() {
                           {c.outbound_lang ? `${c.outbound_lang}*` : c.user_lang}
                         </span>
                       )}
-                      {unread > 0 ? (
+                      {hasUnread ? (
                         <span className="unread-badge" title={tc('thread.unreadTitle')}>
                           {unread > 99 ? '99+' : unread}
                         </span>
@@ -9459,7 +9469,9 @@ export default function App() {
                       <span className="conv-model-line">{platformLabel(c.platform)}</span>
                     ) : null}
                     {c.last_message_preview && (
-                      <span className="preview">{c.last_message_preview}</span>
+                      <span className={`preview${hasUnread ? ' preview--unread' : ''}`}>
+                        {c.last_message_preview}
+                      </span>
                     )}
                     </span>
                   </button>

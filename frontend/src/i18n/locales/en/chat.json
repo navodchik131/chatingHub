@@ -5,6 +5,10 @@
     "all": {
       "label": "All"
     },
+    "unread": {
+      "label": "Unread",
+      "short": "Unread"
+    },
     "vip": {
       "label": "VIP"
     },

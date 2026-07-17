@@ -265,7 +265,7 @@ async def api_list_conversations(
     convs = await filter_conversations_for_member(session, user, convs)
     outbound_ids = await conversation_ids_with_outbound(session, [c.id for c in convs])
     now = datetime.now(timezone.utc)
-    out: list[ConversationWithPreview] = []
+    rows: list[tuple[ConversationWithPreview, datetime]] = []
     for c in convs:
         last = await get_last_message(session, c.id, oid)
         preview = message_preview_text(last) if last else None
@@ -277,17 +277,25 @@ async def api_list_conversations(
             now=now,
         )
         base = await _conversation_out(session, c, owner_id=oid)
-        out.append(
-            ConversationWithPreview.model_validate(
-                {
-                    **base.model_dump(),
-                    "last_message_preview": preview,
-                    "unread_count": unread,
-                    **flags,
-                }
-            )
+        item = ConversationWithPreview.model_validate(
+            {
+                **base.model_dump(),
+                "last_message_preview": preview,
+                "unread_count": unread,
+                **flags,
+            }
         )
-    return out
+        activity = last.created_at if last and last.created_at else c.updated_at
+        rows.append((item, activity))
+    rows.sort(
+        key=lambda row: (
+            1 if row[0].unread_count > 0 else 0,
+            row[0].unread_count,
+            row[1].timestamp() if row[1].tzinfo else row[1].replace(tzinfo=timezone.utc).timestamp(),
+        ),
+        reverse=True,
+    )
+    return [row[0] for row in rows]
 
 
 @router.post("/conversations/{conv_id}/read")

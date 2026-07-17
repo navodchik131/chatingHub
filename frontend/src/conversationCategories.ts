@@ -1,5 +1,6 @@
 export type ConversationCategory =
   | 'all'
+  | 'unread'
   | 'vip'
   | 'bomzh'
   | 'no_response'
@@ -12,10 +13,12 @@ export interface ConversationCategoryLike {
   peer_unavailable?: boolean
   is_no_response?: boolean
   is_new?: boolean
+  unread_count?: number
 }
 
 export const CONVERSATION_CATEGORY_ORDER: ConversationCategory[] = [
   'all',
+  'unread',
   'vip',
   'bomzh',
   'no_response',
@@ -29,6 +32,7 @@ export const CONVERSATION_CATEGORY_META: Record<
   { label: string; short?: string }
 > = {
   all: { label: 'all' },
+  unread: { label: 'unread' },
   vip: { label: 'vip' },
   bomzh: { label: 'bomzh' },
   no_response: { label: 'no_response' },
@@ -45,6 +49,8 @@ export function matchesConversationCategory(
   switch (category) {
     case 'all':
       return true
+    case 'unread':
+      return (conv.unread_count ?? 0) > 0
     case 'vip':
       return conv.manual_category === 'vip'
     case 'bomzh':
@@ -65,6 +71,23 @@ export function countForConversationCategory(
   category: ConversationCategory,
 ): number {
   return conversations.filter((c) => matchesConversationCategory(c, category)).length
+}
+
+export interface ConversationInboxSortLike {
+  unread_count?: number
+  updated_at: string
+}
+
+/** Непрочитанные сверху, затем по времени последней активности. */
+export function sortConversationsForInbox<T extends ConversationInboxSortLike>(items: T[]): T[] {
+  return [...items].sort((a, b) => {
+    const ua = a.unread_count ?? 0
+    const ub = b.unread_count ?? 0
+    if (ua > 0 && ub === 0) return -1
+    if (ub > 0 && ua === 0) return 1
+    if (ub !== ua) return ub - ua
+    return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+  })
 }
 
 /** @deprecated use conversationCategoryBadgeLabel() from i18n/chatLabels */
