@@ -3625,9 +3625,10 @@
     const messages = store.messages.map((m, i) => {
       const outbound = m.direction === 'outbound'
       const rx = ownerReactionEmoji(m.reactions)
+      const atts = Array.isArray(m.attachments) ? m.attachments : []
       const imageUrl =
         m.localPreviewUrl ||
-        (Array.isArray(m.attachments) && m.attachments[0]?.url) ||
+        (atts.find((a) => a && a.url)?.url) ||
         false
       const text = (m.text_original || '').trim()
       return {
@@ -3638,9 +3639,9 @@
         text: text || false,
         imageUrl,
         imageStyle:
-          'display:block;max-width:220px;max-height:220px;border-radius:10px;margin-bottom:' +
-          (text ? '6px' : '0') +
-          ';object-fit:cover;',
+          'display:block;width:100%;max-width:240px;max-height:280px;border-radius:10px;margin-bottom:' +
+          (text ? '8px' : '0') +
+          ';object-fit:cover;background:#0A0B0D;',
         tr: m.text_translated && m.text_translated !== m.text_original ? m.text_translated : false,
         time:
           fmtDateShort(m.created_at) +

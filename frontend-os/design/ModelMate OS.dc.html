@@ -341,7 +341,14 @@ input::placeholder,textarea::placeholder{color:#5C6066;}
                 <div style="{{ m.wrap }}">
                   <div style="{{ m.bubble }}">
                     <div style="display:flex;gap:8px;align-items:flex-start;">
-                      <div style="flex:1;font-size:13px;line-height:1.5;">{{ m.text }}</div>
+                      <div style="flex:1;font-size:13px;line-height:1.5;min-width:0;">
+                        <sc-if value="{{ m.imageUrl }}" hint-placeholder-val="{{ false }}">
+                          <img src="{{ m.imageUrl }}" alt="" style="{{ m.imageStyle }}" loading="lazy" />
+                        </sc-if>
+                        <sc-if value="{{ m.text }}" hint-placeholder-val="{{ true }}">
+                          <div>{{ m.text }}</div>
+                        </sc-if>
+                      </div>
                       <span onClick="{{ m.toggleReact }}" style="opacity:.5;font-size:12px;cursor:pointer;flex:none;margin-top:1px;" style-hover="opacity:1;">☺</span>
                     </div>
                     <sc-if value="{{ m.tr }}" hint-placeholder-val="{{ false }}"><div style="font-size:11.5px;line-height:1.45;color:#8A8F95;margin-top:6px;padding-top:6px;border-top:1px dashed rgba(255,255,255,.1);">{{ m.tr }}</div></sc-if>

@@ -132,6 +132,20 @@ const TEMPLATE_PATCHES = [
   ],
   // кнопки действий (картинки: triggerGen в макете, логика в bridge)
   [
+    /<div style="display:flex;gap:8px;align-items:flex-start;">\s*<div style="flex:1;font-size:13px;line-height:1\.5;">\{\{ m\.text \}<\/div>\s*<span onClick="\{\{ m\.toggleReact \}\}" style="opacity:\.5;font-size:12px;cursor:pointer;flex:none;margin-top:1px;" style-hover="opacity:1;">☺<\/span>\s*<\/div>/,
+    `<div style="display:flex;gap:8px;align-items:flex-start;">
+                      <div style="flex:1;font-size:13px;line-height:1.5;min-width:0;">
+                        <sc-if value="{{ m.imageUrl }}" hint-placeholder-val="{{ false }}">
+                          <img src="{{ m.imageUrl }}" alt="" style="{{ m.imageStyle }}" loading="lazy" />
+                        </sc-if>
+                        <sc-if value="{{ m.text }}" hint-placeholder-val="{{ true }}">
+                          <div>{{ m.text }}</div>
+                        </sc-if>
+                      </div>
+                      <span onClick="{{ m.toggleReact }}" style="opacity:.5;font-size:12px;cursor:pointer;flex:none;margin-top:1px;" style-hover="opacity:1;">☺</span>
+                    </div>`,
+  ],
+  [
     /<div style="background:#D7F452;color:#171A05;font-weight:800;font-size:12\.5px;border-radius:10px;padding:10px 16px;cursor:pointer;" style-hover="background:#E8FA8A;">{{ t\.send }}<\/div>/,
     `<div onClick="{{ sendReply }}" style="background:#D7F452;color:#171A05;font-weight:800;font-size:12.5px;border-radius:10px;padding:10px 16px;cursor:pointer;" style-hover="background:#E8FA8A;">{{ t.send }}</div>`,
   ],

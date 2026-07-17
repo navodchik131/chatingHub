@@ -384,7 +384,14 @@ input::placeholder,textarea::placeholder{color:#5C6066;}
                 <div style="{{ m.wrap }}">
                   <div style="{{ m.bubble }}">
                     <div style="display:flex;gap:8px;align-items:flex-start;">
-                      <div style="flex:1;font-size:13px;line-height:1.5;">{{ m.text }}</div>
+                      <div style="flex:1;font-size:13px;line-height:1.5;min-width:0;">
+                        <sc-if value="{{ m.imageUrl }}" hint-placeholder-val="{{ false }}">
+                          <img src="{{ m.imageUrl }}" alt="" style="{{ m.imageStyle }}" loading="lazy" />
+                        </sc-if>
+                        <sc-if value="{{ m.text }}" hint-placeholder-val="{{ true }}">
+                          <div>{{ m.text }}</div>
+                        </sc-if>
+                      </div>
                       <span onClick="{{ m.toggleReact }}" style="opacity:.5;font-size:12px;cursor:pointer;flex:none;margin-top:1px;" style-hover="opacity:1;">☺</span>
                     </div>
                     <sc-if value="{{ m.tr }}" hint-placeholder-val="{{ false }}"><div style="font-size:11.5px;line-height:1.45;color:#8A8F95;margin-top:6px;padding-top:6px;border-top:1px dashed rgba(255,255,255,.1);">{{ m.tr }}</div></sc-if>
@@ -1401,11 +1408,10 @@ input::placeholder,textarea::placeholder{color:#5C6066;}
               <span style="display:flex;width:48px;height:48px;color:rgba(255,255,255,.25);" dangerouslySetInnerHTML="{{ icoImage }}"></span>
             </sc-if>
           </div>
-          <sc-if value="{{ lightboxData.showActions }}" hint-placeholder-val="{{ true }}">
-          <div style="{{ lightboxData.actionsStyle }}"><div onClick="{{ downloadLightbox }}" style="flex:1;display:flex;align-items:center;justify-content:center;gap:8px;background:#D7F452;color:#171A05;border-radius:11px;padding:12px;font-size:13px;font-weight:800;cursor:pointer;" style-hover="background:#E8FA8A;"><span style="display:flex;width:16px;height:16px;" dangerouslySetInnerHTML="{{ icoDownload }}"></span>{{ t.download }}</div>
+          <div style="display:flex;gap:10px;">
+            <div onClick="{{ downloadLightbox }}" style="flex:1;display:flex;align-items:center;justify-content:center;gap:8px;background:#D7F452;color:#171A05;border-radius:11px;padding:12px;font-size:13px;font-weight:800;cursor:pointer;" style-hover="background:#E8FA8A;"><span style="display:flex;width:16px;height:16px;" dangerouslySetInnerHTML="{{ icoDownload }}"></span>{{ t.download }}</div>
             <div onClick="{{ makeCarousel }}" style="flex:1;display:flex;align-items:center;justify-content:center;gap:8px;background:rgba(192,132,252,.12);border:1px solid rgba(192,132,252,.4);color:#C084FC;border-radius:11px;padding:12px;font-size:13px;font-weight:800;cursor:pointer;" style-hover="background:rgba(192,132,252,.2);"><span style="display:flex;width:16px;height:16px;" dangerouslySetInnerHTML="{{ icoGrid2 }}"></span>{{ t.makeCarousel }}</div>
           </div>
-          </sc-if>
         </div>
       </div>
     </sc-if>
