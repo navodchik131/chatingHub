@@ -359,3 +359,45 @@ def test_parse_grok_compose_json() -> None:
     assert "seated" in out.wavespeed_scene_prompt
     assert out.reference_scene_lock.startswith("seated")
     assert "blur" in out.negative_prompt
+
+
+def test_nano_face_swap_grok_main_prose_uses_identity_first_prefix() -> None:
+    from app.services.studio_openai import finalize_nano_banana_studio_prompt
+
+    prose = (
+        "Attached model reference photos — Image 1: face likeness and skin tone\n\n"
+        "Close-up selfie outdoors at night under stadium lights."
+    )
+    out = finalize_nano_banana_studio_prompt(
+        prose,
+        studio_mode="face_swap",
+        user_photo_edit_first=False,
+        user_pose_reference_is_last=True,
+        prompt_brief_mode="grok_main_prose",
+    )
+    assert "intentional FACE SWAP" in out
+    assert "LAST" in out
+    assert "LAST_INPUT_IMAGE" in out
+    assert "Attached images = one saved model" not in out
+
+
+def test_wan_face_swap_grok_main_prose_keeps_scene_as_image_1() -> None:
+    """NSFW / WAN / Seedream(nsfw): scene stays first; face_swap prefix wins over grok_main_prose."""
+    from app.services.studio_openai import finalize_wavespeed_studio_prompt
+
+    prose = (
+        "Attached model reference photos — Image 2: face likeness and skin tone\n\n"
+        "Close-up selfie outdoors at night under stadium lights."
+    )
+    out = finalize_wavespeed_studio_prompt(
+        prose,
+        studio_mode="face_swap",
+        user_image_first=True,
+        prompt_brief_mode="grok_main_prose",
+    )
+    assert "[FACE_SWAP — WAN]" in out
+    assert "Image 1" in out
+    assert "SOURCE snapshot" in out
+    assert "model identity wins" not in out.lower() or "FACE_SWAP" in out
+    # Must not fall through to generic model-scene / generate-scene prose prefix alone.
+    assert out.startswith("[FACE_SWAP — WAN]")

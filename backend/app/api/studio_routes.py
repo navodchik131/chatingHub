@@ -4097,7 +4097,15 @@ async def _studio_job_execute_refine_prompt(
                             f"{pub}/api/studio/public-model-image?t={quote(tok, safe='')}"
                         )
                     if imgs_ws_order:
+                        # WAN: scene is Image 1 → identity starts at Image 2 (offset=1).
+                        # Nano Banana reorders to [identity…, scene] → identity starts at Image 1.
                         legend_offset = 1 if user_pose_ref_prepended else 0
+                        if (
+                            wave_profile_n == "regular"
+                            and user_pose_ref_prepended
+                            and mode_n != "photo_edit"
+                        ):
+                            legend_offset = 0
                         ws_identity_legend = wavespeed_identity_image_legend(
                             imgs_ws_order,
                             image_index_offset=legend_offset,

@@ -395,7 +395,14 @@ def finalize_nano_banana_studio_prompt(
     elif brief == "text_scene":
         out = _NANO_TEXT_SCENE_PREFIX.strip() if not p else _NANO_TEXT_SCENE_PREFIX + p
     elif brief == "grok_composed":
-        if mode == "model_scene":
+        if mode == "face_swap":
+            head = _NANO_BANANA_FACE_SWAP_IDENTITY_PREFIX
+            out = head.strip() if not p else head + p
+            if user_pose_reference_is_last:
+                out = out.rstrip() + _nano_banana_pose_last_suffix(
+                    lock_model_hairstyle=lock_model_hairstyle
+                )
+        elif mode == "model_scene":
             head = _NANO_EDIT_ROLE_PREFIX
             out = head.strip() if not p else head + p
         else:
@@ -403,7 +410,25 @@ def finalize_nano_banana_studio_prompt(
     elif brief == "grok_composed_text":
         out = _GROK_TEXT_SCENE_NANO_PREFIX.strip() if not p else _GROK_TEXT_SCENE_NANO_PREFIX + p
     elif brief == "grok_main_prose":
-        out = _GROK_MAIN_PROSE_NANO_PREFIX.strip() if not p else _GROK_MAIN_PROSE_NANO_PREFIX + p
+        # Face Swap on Nano: identity URLs first, scene LAST — must not use the generic
+        # «one saved model / generate scene» prefix (that implies no scene bitmap role).
+        if mode == "face_swap":
+            head = _NANO_BANANA_FACE_SWAP_IDENTITY_PREFIX
+            out = head.strip() if not p else head + p
+        else:
+            out = (
+                _GROK_MAIN_PROSE_NANO_PREFIX.strip()
+                if not p
+                else _GROK_MAIN_PROSE_NANO_PREFIX + p
+            )
+        if user_pose_reference_is_last:
+            out = out.rstrip() + (
+                _nano_banana_pose_last_suffix_no_face(
+                    lock_model_hairstyle=lock_model_hairstyle
+                )
+                if use_no_face_nano
+                else _nano_banana_pose_last_suffix(lock_model_hairstyle=lock_model_hairstyle)
+            )
     else:
         if brief == "compact_pose_image" and mode not in ("face_swap", "photo_edit"):
             head = (
