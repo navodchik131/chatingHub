@@ -14,7 +14,7 @@ from app.connectors.telegram.bot_for_user import (
     telegram_profile_photo_file_id,
 )
 from app.connectors.telegram.media import download_telegram_image
-from app.db.models import Conversation, Message, Platform
+from app.db.models import Conversation, Message, MessageDirection, Platform
 from app.db.repo import get_or_create_conversation, get_user_with_billing
 from app.db.session import SessionLocal
 from app.services.chat_ingest import broadcast_message_updated, persist_inbound_chat_message
@@ -44,6 +44,31 @@ def _telegram_reaction_emojis(reaction_types: list | None) -> list[str]:
         if emoji and emoji in REACTION_EMOJIS and emoji not in out:
             out.append(emoji)
     return out
+
+
+async def _peer_telegram_user_id(session, conv: Conversation) -> str | None:
+    meta_row = await session.scalar(
+        select(Message.meta)
+        .where(
+            Message.conversation_id == conv.id,
+            Message.direction == MessageDirection.inbound,
+            Message.meta.isnot(None),
+        )
+        .order_by(Message.id.asc())
+        .limit(1)
+    )
+    if not meta_row:
+        return None
+    try:
+        data = json.loads(meta_row)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(data, dict):
+        return None
+    uid = data.get("from_user_id")
+    if uid is None:
+        return None
+    return str(uid).strip() or None
 
 
 async def _find_telegram_message_in_chat(
@@ -102,8 +127,8 @@ async def ingest_telegram_message_reaction(
             log.debug("telegram reaction: no user (bot echo), skip chat=%s msg=%s", chat_id, tg_msg_id)
             return
 
-        fan_id = conv.external_topic_id
-        actor = "peer" if str(user.id) == fan_id else "owner"
+        peer_uid = await _peer_telegram_user_id(session, conv)
+        actor = "peer" if peer_uid and str(user.id) == peer_uid else "owner"
         reactions = sync_actor_reactions(
             parse_reactions(row.reactions_json),
             actor=actor,

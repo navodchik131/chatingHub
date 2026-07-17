@@ -392,7 +392,9 @@ function ChatStripItem({
     >
       <span className="chat-strip-item-inner">
         {url ? <img src={url} alt="" /> : <span className="chat-strip-letter">{letter}</span>}
-        {unread > 0 ? <span className="chat-strip-unread" aria-label={tc('strip.unreadAria')} /> : null}
+        {unread > 0 && !active ? (
+          <span className="chat-strip-unread" aria-label={tc('strip.unreadAria')} />
+        ) : null}
       </span>
     </button>
   )
@@ -873,6 +875,8 @@ export default function App() {
   const [convNotes, setConvNotes] = useState<ConversationNote[]>([])
   const [convNotesLoading, setConvNotesLoading] = useState(false)
   const [convNoteDraft, setConvNoteDraft] = useState('')
+  const [convNoteComposeOpen, setConvNoteComposeOpen] = useState(false)
+  const convNoteDraftRef = useRef<HTMLTextAreaElement>(null)
   const [convNotesBusy, setConvNotesBusy] = useState(false)
   const [convNotesAnalyzeBusy, setConvNotesAnalyzeBusy] = useState(false)
   const [threadSettingsOpen, setThreadSettingsOpen] = useState(false)
@@ -2390,6 +2394,29 @@ export default function App() {
     setConversations(data)
   }, [])
 
+  const markConversationRead = useCallback(
+    async (convId: number) => {
+      setConversations((prev) =>
+        prev.map((c) => (c.id === convId ? { ...c, unread_count: 0 } : c)),
+      )
+      try {
+        const r = await apiFetch(`/api/conversations/${convId}/read`, { method: 'POST' })
+        if (!r.ok) void loadConversations()
+      } catch {
+        void loadConversations()
+      }
+    },
+    [loadConversations],
+  )
+
+  const selectConversation = useCallback(
+    (convId: number) => {
+      setSelectedId(convId)
+      void markConversationRead(convId)
+    },
+    [markConversationRead],
+  )
+
   const fetchMessagesPage = useCallback(async (id: number, before?: number) => {
     const p = new URLSearchParams()
     p.set('limit', String(CHAT_MESSAGES_PAGE))
@@ -2589,9 +2616,9 @@ export default function App() {
     const conv = conversations.find((c) => c.id === id)
     if (conv) {
       setChatPlatformTab(conv.platform)
-      setSelectedId(id)
+      selectConversation(id)
     }
-  }, [conversations])
+  }, [conversations, selectConversation])
 
   useEffect(() => {
     if (chatVisiblePlatforms.length === 0) return
@@ -2676,6 +2703,17 @@ export default function App() {
     void loadConvNotes(selectedId)
   }, [convNotesOpen, selectedId, isMobileLayout, loadConvNotes])
 
+  useEffect(() => {
+    setConvNoteComposeOpen(false)
+    setConvNoteDraft('')
+  }, [selectedId])
+
+  useEffect(() => {
+    if (!convNoteComposeOpen) return
+    const id = window.requestAnimationFrame(() => convNoteDraftRef.current?.focus())
+    return () => window.cancelAnimationFrame(id)
+  }, [convNoteComposeOpen])
+
   const convNotesPinned = useMemo(
     () =>
       convNotes.filter(
@@ -2705,11 +2743,6 @@ export default function App() {
     setLoading(true)
     setError(null)
     loadMessages(selectedId)
-      .then(async () => {
-        if (cancelled) return
-        await apiFetch(`/api/conversations/${selectedId}/read`, { method: 'POST' })
-        void loadConversations()
-      })
       .catch((e) => setError(String(e)))
       .finally(() => {
         if (!cancelled) setLoading(false)
@@ -2717,7 +2750,7 @@ export default function App() {
     return () => {
       cancelled = true
     }
-  }, [selectedId, loadMessages, loadConversations])
+  }, [selectedId, loadMessages])
 
   useEffect(() => {
     if (!authed) return
@@ -2768,7 +2801,8 @@ export default function App() {
         if (payload.type === 'new_message') {
           void loadHealth()
           const sid = selectedIdRef.current
-          if (sid != null && sid === payload.conversation_id && payload.message) {
+          const convId = payload.conversation_id
+          if (sid != null && sid === convId && payload.message) {
             const mid = Number(payload.message.id)
             const incoming = payload.message as ChatMessage
             if (
@@ -2792,10 +2826,14 @@ export default function App() {
               }
               return [...next, incoming]
             })
-            void apiFetch(`/api/conversations/${sid}/read`, { method: 'POST' })
-            void loadConvNotes(sid)
+            void (async () => {
+              await markConversationRead(sid)
+              void loadConvNotes(sid)
+              void loadConversations()
+            })()
+          } else {
+            void loadConversations()
           }
-          void loadConversations()
           return
         }
         if (payload.type === 'message_updated') {
@@ -2847,6 +2885,8 @@ export default function App() {
     }
   }, [
     loadConversations,
+    loadConvNotes,
+    markConversationRead,
     loadHealth,
     authed,
     refreshMotionRenders,
@@ -2856,6 +2896,7 @@ export default function App() {
   ])
 
   useEffect(() => {
+    if (!emojiOpen) return
     const onDoc = (e: MouseEvent) => {
       const t = e.target as Node
       if (emojiWrapRef.current?.contains(t)) return
@@ -2863,7 +2904,7 @@ export default function App() {
     }
     document.addEventListener('mousedown', onDoc)
     return () => document.removeEventListener('mousedown', onDoc)
-  }, [])
+  }, [emojiOpen])
 
   /** Мгновенный скролл вниз; несколько попыток — после открытия чата высота ленты на мобильных/PWA дорисовывается с задержкой. */
   const scrollToBottomInstant = useCallback(() => {
@@ -3010,6 +3051,7 @@ export default function App() {
 
   const onEmojiPick = useCallback((data: EmojiClickData) => {
     const emoji = data.emoji
+    setEmojiOpen(false)
     const ta = textareaRef.current
     let start: number
     let end: number
@@ -3081,10 +3123,20 @@ export default function App() {
         return
       }
       setConvNoteDraft('')
+      setConvNoteComposeOpen(false)
       await loadConvNotes(selectedId)
     } finally {
       setConvNotesBusy(false)
     }
+  }
+
+  const openConvNoteCompose = () => {
+    setConvNoteComposeOpen(true)
+  }
+
+  const closeConvNoteCompose = () => {
+    setConvNoteComposeOpen(false)
+    setConvNoteDraft('')
   }
 
   const analyzeConvNotes = async () => {
@@ -5247,7 +5299,7 @@ export default function App() {
   }
 
   const openWorkspaceChat = (convId?: number) => {
-    if (convId != null) setSelectedId(convId)
+    if (convId != null) selectConversation(convId)
     setAppSection('chat')
   }
 
@@ -5315,7 +5367,7 @@ export default function App() {
                   key={c.id}
                   conv={c}
                   active={c.id === selectedId}
-                  onSelect={() => setSelectedId(c.id)}
+                  onSelect={() => selectConversation(c.id)}
                 />
               ))}
             </div>
@@ -9406,16 +9458,17 @@ export default function App() {
           <ul className="conv-list">
             {filteredConversations.map((c) => {
               const unread = c.unread_count ?? 0
-              const hasUnread = unread > 0
+              const isActive = c.id === selectedId
+              const showUnread = unread > 0 && !isActive
               const catBadge = conversationCategoryBadgeLabel(c)
               return (
                 <li key={c.id}>
                   <button
                     type="button"
                     className={
-                      c.id === selectedId
-                        ? `conv active${hasUnread ? ' has-unread' : ''}`
-                        : hasUnread
+                      isActive
+                        ? 'conv active'
+                        : showUnread
                           ? 'conv has-unread'
                           : c.peer_unavailable
                             ? 'conv is-unavailable'
@@ -9423,11 +9476,11 @@ export default function App() {
                               ? 'conv is-blocked'
                               : 'conv'
                     }
-                    onClick={() => setSelectedId(c.id)}
+                    onClick={() => selectConversation(c.id)}
                   >
                     <span className="conv-avatar-wrap">
                       <ConvAvatarThumb conv={c} />
-                      {hasUnread ? <span className="conv-unread-dot" aria-hidden /> : null}
+                      {showUnread ? <span className="conv-unread-dot" aria-hidden /> : null}
                       {catBadge ? (
                         <span className={`conv-avatar-badge conv-cat-badge conv-cat-badge--${catBadge.key}`}>
                           {catBadge.label}
@@ -9436,9 +9489,12 @@ export default function App() {
                     </span>
                     <span className="conv-main">
                     <span className="conv-row-top">
-                      <span className={`name${hasUnread ? ' name--unread' : ''}`}>
+                      <span className={`name${showUnread ? ' name--unread' : ''}`}>
                         {c.user_display_name ?? tc('thread.unnamed')}
                       </span>
+                      {showUnread ? (
+                        <span className="conv-unread-label">{tc('sidebar.unreadLabel')}</span>
+                      ) : null}
                       {(c.outbound_lang || c.user_lang) && (
                         <span
                           className="lang"
@@ -9451,7 +9507,7 @@ export default function App() {
                           {c.outbound_lang ? `${c.outbound_lang}*` : c.user_lang}
                         </span>
                       )}
-                      {hasUnread ? (
+                      {showUnread ? (
                         <span className="unread-badge" title={tc('thread.unreadTitle')}>
                           {unread > 99 ? '99+' : unread}
                         </span>
@@ -9469,7 +9525,7 @@ export default function App() {
                       <span className="conv-model-line">{platformLabel(c.platform)}</span>
                     ) : null}
                     {c.last_message_preview && (
-                      <span className={`preview${hasUnread ? ' preview--unread' : ''}`}>
+                      <span className={`preview${showUnread ? ' preview--unread' : ''}`}>
                         {c.last_message_preview}
                       </span>
                     )}
@@ -10127,81 +10183,21 @@ export default function App() {
                         />
                       </div>
                     ) : null}
-                    <div className="composer-toolbar">
-                      {chatterSnippets.length > 0 ? (
-                        <div className="chatter-snippets-row">
-                          {chatterSnippets.slice(0, 8).map((sn) => (
-                            <button
-                              key={sn.id}
-                              type="button"
-                              className="chatter-snippet-btn"
-                              title={sn.body}
-                              onClick={() => insertChatterSnippet(sn.body)}
-                            >
-                              {sn.title}
-                            </button>
-                          ))}
-                        </div>
-                      ) : null}
-                      <input
-                        ref={chatReplyFileInputRef}
-                        type="file"
-                        accept="image/jpeg,image/png,image/webp,image/gif"
-                        className="chat-composer-file-input"
-                        onChange={(e) => {
-                          const f = e.target.files?.[0]
-                          if (!f) return
-                          setChatReplyFile(f)
-                          setChatReplyArchiveId(null)
-                        }}
-                      />
-                      <button
-                        type="button"
-                        className="icon-btn"
-                        title={tc('composer.photoDeviceTitle')}
-                        onClick={() => chatReplyFileInputRef.current?.click()}
-                      >
-                        <span aria-hidden>📎</span>
-                      </button>
-                      <button
-                        type="button"
-                        className="icon-btn"
-                        title={tc('composer.archiveTitle')}
-                        aria-expanded={chatArchivePickerOpen}
-                        onClick={() => {
-                          setChatArchivePickerOpen((o) => {
-                            const next = !o
-                            if (next) void loadStudioImagePickerArchive()
-                            return next
-                          })
-                        }}
-                      >
-                        <span aria-hidden>🖼</span>
-                      </button>
-                      <button
-                        type="button"
-                        className="icon-btn"
-                        title={tc('composer.emojiTitle')}
-                        aria-expanded={emojiOpen}
-                        aria-haspopup="dialog"
-                        onClick={() => setEmojiOpen((o) => !o)}
-                      >
-                        <span className="icon-emoji" aria-hidden>
-                          🙂
-                        </span>
-                      </button>
-                      {emojiOpen && (
-                        <div className="emoji-popover">
-                          <EmojiPicker
-                            theme={Theme.DARK}
-                            onEmojiClick={onEmojiPick}
-                            width={320}
-                            height={380}
-                            lazyLoadEmojis
-                          />
-                        </div>
-                      )}
-                    </div>
+                    {chatterSnippets.length > 0 ? (
+                      <div className="chatter-snippets-row">
+                        {chatterSnippets.slice(0, 8).map((sn) => (
+                          <button
+                            key={sn.id}
+                            type="button"
+                            className="chatter-snippet-btn"
+                            title={sn.body}
+                            onClick={() => insertChatterSnippet(sn.body)}
+                          >
+                            {sn.title}
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
                     <div className="composer-field">
                     <textarea
                       ref={textareaRef}
@@ -10240,19 +10236,89 @@ export default function App() {
                         }
                       }}
                     />
-                    <div className="composer-actions">
-                      <span className="hint">{tc('composer.shortcut')}</span>
-                      <button
-                        type="button"
-                        className="send-btn"
-                        onClick={() => void sendReply()}
-                        disabled={
-                          Boolean(selected.peer_unavailable) ||
-                          (!draft.trim() && !chatReplyHasAttachment)
-                        }
-                      >
-                        {tc('thread.send')}
-                      </button>
+                    <div className="composer-bottom-bar">
+                      <div className="composer-toolbar">
+                        <label
+                          className="icon-btn icon-btn--file"
+                          title={tc('composer.photoDeviceTitle')}
+                        >
+                          <input
+                            ref={chatReplyFileInputRef}
+                            type="file"
+                            accept="image/jpeg,image/png,image/webp,image/gif"
+                            className="chat-composer-file-input"
+                            disabled={Boolean(selected.peer_unavailable)}
+                            onChange={(e) => {
+                              const f = e.target.files?.[0]
+                              if (!f) return
+                              setChatReplyFile(f)
+                              setChatReplyArchiveId(null)
+                            }}
+                          />
+                          <span aria-hidden>📎</span>
+                        </label>
+                        <button
+                          type="button"
+                          className="icon-btn"
+                          title={tc('composer.archiveTitle')}
+                          aria-expanded={chatArchivePickerOpen}
+                          disabled={Boolean(selected.peer_unavailable)}
+                          onClick={() => {
+                            setChatArchivePickerOpen((o) => {
+                              const next = !o
+                              if (next) void loadStudioImagePickerArchive()
+                              return next
+                            })
+                          }}
+                        >
+                          <span aria-hidden>🖼</span>
+                        </button>
+                        <button
+                          type="button"
+                          className="icon-btn icon-btn--emoji"
+                          title={tc('composer.emojiTitle')}
+                          aria-expanded={emojiOpen}
+                          aria-haspopup="dialog"
+                          disabled={Boolean(selected.peer_unavailable)}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setEmojiOpen((o) => !o)
+                          }}
+                        >
+                          <span className="icon-emoji" aria-hidden>
+                            🙂
+                          </span>
+                        </button>
+                        {emojiOpen ? (
+                          <div
+                            className="emoji-popover"
+                            onMouseDown={(e) => e.stopPropagation()}
+                            onTouchStart={(e) => e.stopPropagation()}
+                          >
+                            <EmojiPicker
+                              theme={Theme.DARK}
+                              onEmojiClick={onEmojiPick}
+                              width={320}
+                              height={380}
+                              lazyLoadEmojis
+                            />
+                          </div>
+                        ) : null}
+                      </div>
+                      <div className="composer-actions">
+                        <span className="hint">{tc('composer.shortcut')}</span>
+                        <button
+                          type="button"
+                          className="send-btn"
+                          onClick={() => void sendReply()}
+                          disabled={
+                            Boolean(selected.peer_unavailable) ||
+                            (!draft.trim() && !chatReplyHasAttachment)
+                          }
+                        >
+                          {tc('thread.send')}
+                        </button>
+                      </div>
                     </div>
                     </div>
                   </div>
@@ -10312,7 +10378,7 @@ export default function App() {
                     <span className="skeleton-line short" />
                   </div>
                 ) : (
-                  <>
+                  <div className="conv-notes-body">
                     {convNotesPinned.length > 0 ? (
                       <div className="conv-notes-pinned">
                         {convNotesPinned.map((n) => (
@@ -10378,42 +10444,71 @@ export default function App() {
                         </article>
                       ))}
                     </div>
-                  </>
+                  </div>
                 )}
 
                 <div className="conv-notes-compose">
-                  <textarea
-                    rows={3}
-                    className="conv-notes-draft"
-                    placeholder={tc('notes.placeholder')}
-                    value={convNoteDraft}
-                    disabled={convNotesBusy}
-                    onChange={(e) => setConvNoteDraft(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-                        e.preventDefault()
-                        void addConvNote()
-                      }
-                    }}
-                  />
-                  <div className="conv-notes-compose-actions">
-                    <button
-                      type="button"
-                      className="conv-notes-analyze-btn"
-                      disabled={convNotesAnalyzeBusy || convNotesLoading}
-                      onClick={() => void analyzeConvNotes()}
-                    >
-                      {convNotesAnalyzeBusy ? tc('notes.analyzing') : tc('notes.analyze')}
-                    </button>
-                    <button
-                      type="button"
-                      className="send-btn conv-notes-add-btn"
-                      disabled={convNotesBusy || !convNoteDraft.trim()}
-                      onClick={() => void addConvNote()}
-                    >
-                      {tc('notes.add')}
-                    </button>
-                  </div>
+                  {convNoteComposeOpen ? (
+                    <>
+                      <textarea
+                        ref={convNoteDraftRef}
+                        rows={3}
+                        className="conv-notes-draft"
+                        placeholder={tc('notes.placeholder')}
+                        value={convNoteDraft}
+                        disabled={convNotesBusy}
+                        onChange={(e) => setConvNoteDraft(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Escape') {
+                            e.preventDefault()
+                            closeConvNoteCompose()
+                            return
+                          }
+                          if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                            e.preventDefault()
+                            void addConvNote()
+                          }
+                        }}
+                      />
+                      <div className="conv-notes-compose-actions">
+                        <button
+                          type="button"
+                          className="conv-notes-cancel-btn"
+                          disabled={convNotesBusy}
+                          onClick={closeConvNoteCompose}
+                        >
+                          {tc('notes.cancel')}
+                        </button>
+                        <button
+                          type="button"
+                          className="send-btn conv-notes-add-btn"
+                          disabled={convNotesBusy || !convNoteDraft.trim()}
+                          onClick={() => void addConvNote()}
+                        >
+                          {tc('notes.save')}
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="conv-notes-compose-actions conv-notes-compose-actions--quick">
+                      <button
+                        type="button"
+                        className="conv-notes-analyze-btn"
+                        disabled={convNotesAnalyzeBusy || convNotesLoading}
+                        onClick={() => void analyzeConvNotes()}
+                      >
+                        {convNotesAnalyzeBusy ? tc('notes.analyzing') : tc('notes.analyzeQuick')}
+                      </button>
+                      <button
+                        type="button"
+                        className="send-btn conv-notes-add-btn"
+                        disabled={convNotesLoading}
+                        onClick={openConvNoteCompose}
+                      >
+                        {tc('notes.addQuick')}
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             </aside>

@@ -235,6 +235,41 @@ async def set_telegram_message_reaction(
     topic_id: int | None = None,
 ) -> bool:
     """emoji=None или пустая строка — снять реакцию бота. True если Telegram принял."""
+    tid = int(topic_id or 0)
+    extras: list[dict[str, int]] = [{}]
+    if tid > 0:
+        extras = [
+            {"direct_messages_topic_id": tid},
+            {},
+            {"message_thread_id": tid},
+        ]
+
+    for extra in extras:
+        try:
+            await _raw_telegram_set_message_reaction(
+                token=token,
+                chat_id=chat_id,
+                telegram_message_id=telegram_message_id,
+                emoji=emoji,
+                extra=extra,
+            )
+            log.info(
+                "setMessageReaction ok chat=%s msg=%s extra=%s emoji=%s",
+                chat_id,
+                telegram_message_id,
+                extra or "plain",
+                emoji or None,
+            )
+            return True
+        except Exception as e:
+            log.info(
+                "setMessageReaction failed chat=%s msg=%s extra=%s: %s",
+                chat_id,
+                telegram_message_id,
+                extra or "plain",
+                e,
+            )
+
     from aiogram.types import ReactionTypeEmoji
 
     proxy = (settings.telegram_proxy or "").strip()
@@ -250,42 +285,13 @@ async def set_telegram_message_reaction(
         return True
     except Exception as e:
         log.info(
-            "setMessageReaction default failed chat=%s msg=%s: %s",
+            "setMessageReaction aiogram failed chat=%s msg=%s: %s",
             chat_id,
             telegram_message_id,
             e,
         )
     finally:
         await bot.session.close()
-
-    tid = int(topic_id or 0)
-    if tid <= 0:
-        return False
-
-    for extra in ({"direct_messages_topic_id": tid}, {"message_thread_id": tid}):
-        try:
-            await _raw_telegram_set_message_reaction(
-                token=token,
-                chat_id=chat_id,
-                telegram_message_id=telegram_message_id,
-                emoji=emoji,
-                extra=extra,
-            )
-            log.info(
-                "setMessageReaction fallback ok chat=%s msg=%s extra=%s",
-                chat_id,
-                telegram_message_id,
-                extra,
-            )
-            return True
-        except Exception as e:
-            log.info(
-                "setMessageReaction fallback failed chat=%s msg=%s extra=%s: %s",
-                chat_id,
-                telegram_message_id,
-                extra,
-                e,
-            )
     return False
 
 

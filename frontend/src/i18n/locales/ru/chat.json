@@ -40,6 +40,7 @@
   },
   "sidebar": {
     "title": "Диалоги",
+    "unreadLabel": "Новое",
     "emptyNoConversations": "Подключите бота или Fanvue в кабинете → Подключения.",
     "emptyCategory": "Нет диалогов в категории «{{category}}».",
     "emptyPlatform": "Нет диалогов в {{platform}}."
@@ -123,8 +124,12 @@
     "emptyProfile": "Профиль пока пуст — нажмите «AI-анализ» или добавьте заметку вручную.",
     "placeholder": "Ваша заметка о пользователе…",
     "analyze": "AI-анализ",
+    "analyzeQuick": "+ AI-анализ",
     "analyzing": "Анализ…",
     "add": "Добавить",
+    "addQuick": "+ Заметка",
+    "save": "Сохранить",
+    "cancel": "Отмена",
     "pin": "Закрепить",
     "unpin": "Открепить",
     "delete": "Удалить"

@@ -40,6 +40,7 @@
   },
   "sidebar": {
     "title": "Chats",
+    "unreadLabel": "New",
     "emptyNoConversations": "Connect a bot or Fanvue in Account → Connections.",
     "emptyCategory": "No chats in category «{{category}}».",
     "emptyPlatform": "No chats on {{platform}}."
@@ -123,8 +124,12 @@
     "emptyProfile": "Profile is empty — run AI analysis or add a note manually.",
     "placeholder": "Your note about this user…",
     "analyze": "AI analysis",
+    "analyzeQuick": "+ AI analysis",
     "analyzing": "Analyzing…",
     "add": "Add",
+    "addQuick": "+ Note",
+    "save": "Save",
+    "cancel": "Cancel",
     "pin": "Pin",
     "unpin": "Unpin",
     "delete": "Delete"

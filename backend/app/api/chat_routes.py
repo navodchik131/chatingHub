@@ -89,6 +89,7 @@ from app.services.chat_ingest import broadcast_message_updated
 from app.services.conversation_categories import conversation_category_flags
 from app.services.chat_message_meta import (
     REACTION_EMOJIS,
+    merge_meta_dict,
     parse_reactions,
     platform_message_id_from_meta,
     reactions_to_json,
@@ -718,13 +719,22 @@ async def api_reply(
         raise HTTPException(status_code=400, detail="unknown platform")
 
     conv.updated_at = datetime.now(timezone.utc)
+    outbound_meta = None
+    if platform_message_id and conv.platform == Platform.telegram:
+        outbound_meta = merge_meta_dict(
+            None,
+            {
+                "message_id": int(platform_message_id),
+                "telegram_message_id": platform_message_id,
+            },
+        )
     row = await add_message(
         session,
         conv.id,
         MessageDirection.outbound,
         stored_original,
         stored_translated,
-        meta=None,
+        meta=outbound_meta,
         reply_to_message_id=reply_to_message_id,
         platform_message_id=platform_message_id,
         sender_user_id=user.id,
@@ -798,6 +808,7 @@ async def api_message_reaction(
     if emoji not in REACTION_EMOJIS:
         raise HTTPException(status_code=400, detail="unsupported emoji")
 
+    old_reactions_json = row.reactions_json
     reactions = toggle_owner_reaction(parse_reactions(row.reactions_json), emoji)
     row.reactions_json = reactions_to_json(reactions)
     telegram_synced: bool | None = None
@@ -830,7 +841,7 @@ async def api_message_reaction(
                     )
                     if not telegram_synced:
                         log.warning(
-                            "telegram reaction saved locally only conv=%s msg=%s "
+                            "telegram reaction rejected conv=%s msg=%s "
                             "chat=%s tg_msg=%s topic=%s emoji=%s",
                             conv.id,
                             row.id,
@@ -839,6 +850,10 @@ async def api_message_reaction(
                             topic_id,
                             emoji if owner_has_emoji else None,
                         )
+                else:
+                    telegram_synced = False
+            else:
+                telegram_synced = False
         else:
             telegram_synced = False
             log.warning(
@@ -846,6 +861,8 @@ async def api_message_reaction(
                 conv.id,
                 row.id,
             )
+        if telegram_synced is False:
+            row.reactions_json = old_reactions_json
 
     await session.commit()
     await session.refresh(row, attribute_names=["attachments"])
