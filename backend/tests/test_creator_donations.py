@@ -24,6 +24,8 @@ def test_donation_request_id_from_payload() -> None:
     payload = {"donation_request_id": 42, "telegram_user_id": 1}
     assert _donation_request_id(payload) == 42
     assert _donation_request_id({"donation": {"donationRequestId": 99}}) == 99
+    assert _donation_request_id({"request_id": 77}) == 77
+    assert _donation_request_id({"goal": {"donation_request_id": 55}}) == 55
 
 
 def test_telegram_user_id_large() -> None:

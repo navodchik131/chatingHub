@@ -14,6 +14,7 @@ from app.db.models import (
     CreatorDonationEvent,
     CreatorDonationLink,
     CreatorDonationPayoutRequest,
+    CreatorDonationWebhookInbox,
     CreatorPayoutSettings,
     User,
 )
@@ -345,6 +346,11 @@ async def admin_donation_stats(session: AsyncSession) -> dict[str, Any]:
     active_links = await session.scalar(
         select(func.count(CreatorDonationLink.id)).where(CreatorDonationLink.status == "active")
     )
+    inbox_unresolved = await session.scalar(
+        select(func.count(CreatorDonationWebhookInbox.id)).where(
+            CreatorDonationWebhookInbox.resolved_link_id.is_(None)
+        )
+    )
 
     return {
         "totals_by_currency": totals,
@@ -357,6 +363,7 @@ async def admin_donation_stats(session: AsyncSession) -> dict[str, Any]:
         "creators": creators,
         "events_count": len(events),
         "active_links": int(active_links or 0),
+        "inbox_unresolved": int(inbox_unresolved or 0),
         "open_payout_requests": int(open_requests or 0),
         "platform_fee_percent": float(PLATFORM_FEE_RATE * 100),
     }

@@ -879,6 +879,7 @@ class AdminCreatorDonationStatsOut(BaseModel):
     creators: list[AdminCreatorDonationStatsCreatorOut] = Field(default_factory=list)
     events_count: int = 0
     active_links: int = 0
+    inbox_unresolved: int = 0
     open_payout_requests: int = 0
     platform_fee_percent: float = 2.0
 

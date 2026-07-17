@@ -207,6 +207,10 @@ async def api_health(session: AsyncSession = Depends(get_session)) -> dict:
         "telegram_login_bot_username": (settings.telegram_login_bot_username or "").strip().lstrip("@")
         or None,
         "tribute_billing_configured": settings.tribute_billing_configured,
+        "tribute_billing_webhook_enabled": settings.tribute_billing_webhook_enabled,
+        "tribute_billing_webhook_secret_configured": bool(
+            (settings.tribute_billing_webhook_secret or "").strip()
+        ),
         "yookassa_configured": settings.yookassa_configured,
         "billing_require_active_subscription": settings.billing_require_active_subscription,
         "billing_price_managed_month_rub": settings.billing_price_managed_month_rub,

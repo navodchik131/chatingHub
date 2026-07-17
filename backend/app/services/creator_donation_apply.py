@@ -41,16 +41,26 @@ def _telegram_user_id(payload: dict[str, Any]) -> int | None:
 
 
 def _donation_request_id(payload: dict[str, Any]) -> int | None:
-    for key in ("donation_request_id", "donationRequestId", "donation_id", "donationId"):
+    for key in (
+        "donation_request_id",
+        "donationRequestId",
+        "donation_id",
+        "donationId",
+        "request_id",
+        "requestId",
+    ):
         raw = payload.get(key)
         if raw is not None:
             try:
                 return int(raw)
             except (TypeError, ValueError):
                 continue
-    nested = payload.get("donation")
-    if isinstance(nested, dict):
-        return _donation_request_id(nested)
+    for nested_key in ("donation", "goal", "contribution", "data"):
+        nested = payload.get(nested_key)
+        if isinstance(nested, dict):
+            found = _donation_request_id(nested)
+            if found is not None:
+                return found
     return None
 
 
@@ -110,33 +120,47 @@ async def apply_creator_donation_webhook(
 
     payload = _payload(body)
     donation_request_id = _donation_request_id(payload)
-    if donation_request_id is None:
-        log.warning(
-            "creator donation webhook: no donation_request_id event=%s payload_keys=%s",
-            name_raw,
-            sorted(payload.keys()),
-        )
-        return {"ok": True, "skipped": "no_donation_request_id"}
+    amount_minor = abs(_amount_minor_from_payload(payload, event_name=norm))
 
-    link = await session.scalar(
-        select(CreatorDonationLink).where(
-            CreatorDonationLink.tribute_donation_request_id == donation_request_id,
-            CreatorDonationLink.status == "active",
+    link = None
+    if donation_request_id is not None:
+        link = await session.scalar(
+            select(CreatorDonationLink).where(
+                CreatorDonationLink.tribute_donation_request_id == donation_request_id,
+                CreatorDonationLink.status == "active",
+            )
         )
-    )
-    if not link:
+
+    if link is None:
         await _store_unmapped_donation_webhook(
             session,
             body=body,
-            donation_request_id=donation_request_id,
+            donation_request_id=donation_request_id or 0,
             norm=norm,
             payload=payload,
         )
-        return {"ok": True, "skipped": "unmapped_donation_request", "donation_request_id": donation_request_id}
+        if donation_request_id is None:
+            log.warning(
+                "creator donation webhook: no donation_request_id event=%s payload_keys=%s (saved to inbox)",
+                name_raw,
+                sorted(payload.keys()),
+            )
+            return {"ok": True, "skipped": "no_donation_request_id", "inboxed": True}
+        return {
+            "ok": True,
+            "skipped": "unmapped_donation_request",
+            "donation_request_id": donation_request_id,
+            "inboxed": True,
+        }
 
-    amount_minor = _amount_minor_from_payload(payload, event_name=norm)
     if amount_minor == 0:
-        return {"ok": True, "skipped": "zero_amount", "event": name_raw}
+        log.warning(
+            "creator donation webhook: zero_amount event=%s link=%s payload=%s",
+            name_raw,
+            link.id,
+            json.dumps(payload, ensure_ascii=False)[:500],
+        )
+        return {"ok": True, "skipped": "zero_amount", "event": name_raw, "link_id": link.id}
 
     if norm in _CREATOR_DONATION_REFUNDS:
         amount_minor = -abs(amount_minor)
