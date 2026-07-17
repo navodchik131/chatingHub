@@ -406,20 +406,45 @@ const TEMPLATE_PATCHES = [
   ],
   [
     /<div style="padding:10px 12px;border-top:1px solid rgba\(255,255,255,.07\);display:flex;gap:6px;align-items:flex-end;">\s*<div data-mm-chat-attach title="\{\{ t\.attach \}\}" style="width:38px;height:38px;flex:none;border-radius:10px;border:1px solid rgba\(255,255,255,.1\);display:flex;align-items:center;justify-content:center;color:#9BA0A6;cursor:pointer;" style-hover="color:#D7F452;border-color:rgba\(215,244,82,.4\);"><span style="display:flex;width:18px;height:18px;" dangerouslySetInnerHTML="\{\{ icoClip \}\}"><\/span><\/div>\s*<div onClick="\{\{ toggleEmoji \}\}" style="width:38px;height:38px;flex:none;border-radius:10px;border:1px solid rgba\(255,255,255,.1\);display:flex;align-items:center;justify-content:center;font-size:18px;cursor:pointer;" style-hover="border-color:rgba\(215,244,82,.4\);">😊<\/div>\s*<textarea data-mm-chat-reply rows="1" placeholder="\{\{ t\.msgPlaceholder \}\}" style="flex:1;min-height:38px;max-height:120px;background:#0D0E11;border:1px solid rgba\(255,255,255,.09\);border-radius:10px;padding:9px 12px;color:#F2F3F0;font-family:'Manrope';font-size:13px;resize:none;outline:none;"><\/textarea>\s*<div data-mm-chat-send style="width:38px;height:38px;flex:none;background:#D7F452;color:#171A05;border-radius:10px;display:flex;align-items:center;justify-content:center;cursor:pointer;" style-hover="background:#E8FA8A;"><span style="display:flex;width:17px;height:17px;" dangerouslySetInnerHTML="\{\{ icoSendArrow \}\}"><\/span><\/div>\s*<\/div>/,
-    `<div onClick="{{ stop }}" style="padding:10px 12px;border-top:1px solid rgba(255,255,255,.07);display:flex;flex-direction:column;gap:6px;">
-              <sc-if value="{{ chatAttachName }}" hint-placeholder-val="{{ false }}">
-                <div style="display:flex;align-items:center;gap:8px;background:rgba(215,244,82,.08);border:1px solid rgba(215,244,82,.22);border-radius:9px;padding:6px 10px;font-size:11.5px;color:#D7F452;">
-                  <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">📎 {{ chatAttachName }}</span>
-                  <span onClick="{{ clearChatAttach }}" style="cursor:pointer;color:#9BA0A6;font-size:14px;line-height:1;" style-hover="color:#F87171;">✕</span>
+    `<div onClick="{{ stop }}" style="padding:10px 12px;border-top:1px solid rgba(255,255,255,.07);display:flex;flex-direction:column;gap:8px;">
+              <sc-if value="{{ emojiOpen }}" hint-placeholder-val="{{ false }}">
+                <div style="background:#1A1C20;border:1px solid rgba(255,255,255,.14);border-radius:14px;padding:10px;display:grid;grid-template-columns:repeat(8,1fr);gap:4px;box-shadow:0 10px 30px rgba(0,0,0,.5);">
+                  <sc-for list="{{ emojiPick }}" as="ep" hint-placeholder-count="16">
+                    <span data-mm-emoji-pick="{{ ep.e }}" onClick="{{ ep.pick }}" style="font-size:20px;cursor:pointer;text-align:center;padding:3px;border-radius:8px;" style-hover="background:rgba(255,255,255,.08);">{{ ep.e }}</span>
+                  </sc-for>
+                </div>
+              </sc-if>
+              <sc-if value="{{ chatAttachPreview }}" hint-placeholder-val="{{ false }}">
+                <div style="display:flex;align-items:center;gap:10px;background:#0D0E11;border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:8px 10px;">
+                  <img src="{{ chatAttachPreview }}" alt="" style="width:52px;height:52px;object-fit:cover;border-radius:8px;flex:none;">
+                  <div style="flex:1;min-width:0;">
+                    <div style="font-family:'JetBrains Mono';font-size:8.5px;letter-spacing:1px;color:#6B7076;margin-bottom:3px;">{{ t.attach }}</div>
+                    <div style="font-size:12px;color:#F2F3F0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ chatAttachName }}</div>
+                  </div>
+                  <span data-mm-chat-clear-attach onClick="{{ clearChatAttach }}" style="cursor:pointer;color:#9BA0A6;font-size:18px;line-height:1;padding:2px 6px;" style-hover="color:#F87171;">✕</span>
                 </div>
               </sc-if>
               <div style="display:flex;gap:6px;align-items:flex-end;">
                 <div data-mm-chat-attach title="{{ t.attach }}" style="width:38px;height:38px;flex:none;border-radius:10px;border:1px solid rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center;color:#9BA0A6;cursor:pointer;" style-hover="color:#D7F452;border-color:rgba(215,244,82,.4);"><span style="display:flex;width:18px;height:18px;" dangerouslySetInnerHTML="{{ icoClip }}"></span></div>
-                <div onClick="{{ toggleEmoji }}" style="width:38px;height:38px;flex:none;border-radius:10px;border:1px solid rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center;font-size:18px;cursor:pointer;" style-hover="border-color:rgba(215,244,82,.4);">😊</div>
-                <textarea data-mm-chat-reply rows="1" value="{{ replyDraft }}" onInput="{{ onReplyInput }}" placeholder="{{ t.msgPlaceholder }}" style="flex:1;min-height:38px;max-height:120px;background:#0D0E11;border:1px solid rgba(255,255,255,.09);border-radius:10px;padding:9px 12px;color:#F2F3F0;font-family:'Manrope';font-size:13px;resize:none;outline:none;"></textarea>
-                <div data-mm-chat-send style="width:38px;height:38px;flex:none;background:#D7F452;color:#171A05;border-radius:10px;display:flex;align-items:center;justify-content:center;cursor:pointer;" style-hover="background:#E8FA8A;"><span style="display:flex;width:17px;height:17px;" dangerouslySetInnerHTML="{{ icoSendArrow }}"></span></div>
+                <div data-mm-chat-emoji style="width:38px;height:38px;flex:none;border-radius:10px;border:1px solid rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center;font-size:18px;cursor:pointer;" style-hover="border-color:rgba(215,244,82,.4);">😊</div>
+                <textarea data-mm-chat-reply rows="2" value="{{ replyDraft }}" onInput="{{ onReplyInput }}" onKeyDown="{{ onReplyKeyDown }}" placeholder="{{ t.msgPlaceholder }}" style="flex:1;min-height:52px;max-height:140px;background:#0D0E11;border:1px solid rgba(255,255,255,.09);border-radius:10px;padding:9px 12px;color:#F2F3F0;font-family:'Manrope';font-size:13px;resize:none;outline:none;"></textarea>
+                <div data-mm-chat-send style="{{ sendBtnStyle }}" style-hover="background:#E8FA8A;"><span style="display:flex;width:17px;height:17px;" dangerouslySetInnerHTML="{{ icoSendArrow }}"></span></div>
               </div>
+              <div style="font-family:'JetBrains Mono';font-size:9px;color:#5C6066;text-align:right;">Enter — отправить · Shift+Enter — новая строка</div>
             </div>`,
+  ],
+  [
+    /<!-- scroll to bottom -->\s*<div onClick="\{\{ scrollDown \}\}" style="position:absolute;right:16px;bottom:82px;[^"]*">↓<\/div>/,
+    '',
+  ],
+  [
+    /(<\/sc-for>\s*)<\/div>\s*<!-- emoji popover -->/,
+    `$1<div id="mm-thread-end" style="height:1px;flex:none;width:100%;margin-top:-1px;"></div>
+              <sc-if value="{{ showScrollDown }}" hint-placeholder-val="{{ false }}">
+              <div onClick="{{ scrollDown }}" data-mm-scroll-down style="position:sticky;bottom:8px;margin-left:auto;margin-top:4px;width:36px;height:36px;border-radius:50%;background:#1A1C20;border:1px solid rgba(255,255,255,.14);display:flex;align-items:center;justify-content:center;font-size:16px;color:#9BA0A6;cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,.4);flex:none;z-index:2;" style-hover="color:#F2F3F0;border-color:rgba(255,255,255,.3);">↓</div>
+              </sc-if>
+            </div>
+            <!-- emoji popover -->`,
   ],
   [
     /<div style="display:flex;gap:8px;"><div style="flex:1;background:rgba\(215,244,82,.12\);border:1px solid rgba\(215,244,82,.3\);border-radius:9px;padding:10px;text-align:center;font-size:12px;font-weight:800;color:#D7F452;cursor:pointer;">\{\{ t\.save \}\}<\/div><\/div>\s*<\/div>\s*<\/sc-if>/,

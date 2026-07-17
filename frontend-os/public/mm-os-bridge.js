@@ -1536,11 +1536,98 @@
     return dlg?.querySelector('[data-mm-chat-reply]') || null
   }
 
+  function readReplyText() {
+    const input = queryReplyInput()
+    const fromDom = (input?.value || '').trim()
+    const fromState = (store.logic?.state?.replyDraft || '').trim()
+    return fromDom || fromState
+  }
+
+  function syncReplyDraftFromDom() {
+    const input = queryReplyInput()
+    const logic = store.logic
+    if (!input || !logic) return
+    const v = input.value ?? ''
+    if (v !== (logic.state.replyDraft || '')) logic.setState({ replyDraft: v })
+  }
+
+  function readNoteText() {
+    const dlg = document.querySelector('[data-screen-label="Диалоги"]')
+    const ta = dlg?.querySelector('[data-mm-note-text]')
+    return (ta?.value || store.logic?.state?.noteDraft || '').trim()
+  }
+
+  function insertChatEmoji(em) {
+    const logic = store.logic
+    if (!logic || !em) return
+    const input = queryReplyInput()
+    const cur = input?.value ?? logic.state.replyDraft ?? ''
+    const next = cur + em
+    if (input) input.value = next
+    logic.setState({ replyDraft: next, emojiOpen: false })
+  }
+
+  function queryThreadScroll() {
+    return document.getElementById('mm-thread-scroll')
+  }
+
+  const THREAD_BOTTOM_THRESHOLD = 64
+
+  function isThreadAtBottom(el, threshold = THREAD_BOTTOM_THRESHOLD) {
+    if (!el) return true
+    return el.scrollHeight - el.scrollTop - el.clientHeight <= threshold
+  }
+
+  function updateThreadScrollDownState() {
+    const logic = store.logic
+    if (!logic) return
+    const atBottom = isThreadAtBottom(queryThreadScroll())
+    const show = !atBottom
+    if (!!logic.state.showScrollDown !== show) logic.setState({ showScrollDown: show })
+  }
+
   function scrollThreadToBottom() {
     requestAnimationFrame(() => {
-      const el = document.getElementById('mm-thread-scroll')
+      const el = queryThreadScroll()
       if (el) el.scrollTop = el.scrollHeight
+      requestAnimationFrame(() => updateThreadScrollDownState())
     })
+  }
+
+  function bindThreadScrollWatch() {
+    const el = queryThreadScroll()
+    if (!el) return
+    if (store.threadScrollEl !== el) {
+      if (store.threadScrollEl && store.threadScrollHandler) {
+        store.threadScrollEl.removeEventListener('scroll', store.threadScrollHandler)
+      }
+      store.threadScrollHandler = () => updateThreadScrollDownState()
+      el.addEventListener('scroll', store.threadScrollHandler, { passive: true })
+      store.threadScrollEl = el
+    }
+    const end = document.getElementById('mm-thread-end')
+    if (end && store.threadEndEl !== end) {
+      store.threadEndObserver?.disconnect()
+      store.threadEndEl = end
+      store.threadEndObserver = new IntersectionObserver(
+        (entries) => {
+          const hit = entries[0]?.isIntersecting ?? true
+          const logic = store.logic
+          if (!logic) return
+          const show = !hit
+          if (!!logic.state.showScrollDown !== show) logic.setState({ showScrollDown: show })
+        },
+        { root: el, rootMargin: '0px 0px 64px 0px', threshold: 0.02 },
+      )
+      store.threadEndObserver.observe(end)
+    }
+    if (el && store.threadResizeEl !== el) {
+      store.threadResizeObserver?.disconnect()
+      store.threadResizeEl = el
+      store.threadResizeObserver = new ResizeObserver(() => updateThreadScrollDownState())
+      store.threadResizeObserver.observe(el)
+    }
+    requestAnimationFrame(() => updateThreadScrollDownState())
   }
 
   function revokeChatAttachPreview() {
@@ -1611,7 +1698,7 @@
   async function saveConversationNote() {
     const logic = store.logic
     if (!logic) return
-    const text = (logic.state.noteDraft || '').trim()
+    const text = readNoteText()
     if (!text) return
     const conv = resolveActiveConv(store.conversations)
     if (!conv) return
@@ -2594,6 +2681,7 @@
     const ta = root.querySelector('[data-mm-chat-reply]')
     if (ta && !ta.dataset.mmReply) {
       ta.dataset.mmReply = '1'
+      ta.addEventListener('input', () => syncReplyDraftFromDom())
       ta.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
           e.preventDefault()
@@ -2601,6 +2689,111 @@
         }
       })
     }
+  }
+
+  function bindChatShell() {
+    if (document.documentElement.dataset.mmChatShell) return
+    document.documentElement.dataset.mmChatShell = '1'
+    ensureChatFileInput()
+
+    document.addEventListener(
+      'click',
+      (e) => {
+        if (!store.authed) return
+        const dlg = e.target.closest('[data-screen-label="Диалоги"]')
+        if (!dlg) return
+
+        if (e.target.closest('[data-mm-scroll-down]')) {
+          e.preventDefault()
+          e.stopPropagation()
+          scrollThreadToBottom()
+          return
+        }
+        if (e.target.closest('[data-mm-chat-attach]')) {
+          e.preventDefault()
+          e.stopPropagation()
+          pickChatFile(e)
+          return
+        }
+        if (e.target.closest('[data-mm-chat-send]')) {
+          e.preventDefault()
+          e.stopPropagation()
+          void sendReply()
+          return
+        }
+        if (e.target.closest('[data-mm-chat-emoji]')) {
+          e.preventDefault()
+          e.stopPropagation()
+          const logic = store.logic
+          if (logic) logic.setState({ emojiOpen: !logic.state.emojiOpen, msgReact: null })
+          return
+        }
+        const emojiPick = e.target.closest('[data-mm-emoji-pick]')
+        if (emojiPick) {
+          e.preventDefault()
+          e.stopPropagation()
+          const em = emojiPick.getAttribute('data-mm-emoji-pick') || emojiPick.textContent?.trim()
+          if (em) insertChatEmoji(em)
+          return
+        }
+        if (e.target.closest('[data-mm-chat-clear-attach]')) {
+          e.preventDefault()
+          e.stopPropagation()
+          clearChatAttachment(e)
+          return
+        }
+        if (e.target.closest('[data-mm-note-toggle]')) {
+          e.preventDefault()
+          e.stopPropagation()
+          const logic = store.logic
+          if (logic) logic.setState({ noteFormOpen: !logic.state.noteFormOpen })
+          return
+        }
+        if (e.target.closest('[data-mm-note-save]')) {
+          e.preventDefault()
+          e.stopPropagation()
+          void saveConversationNote()
+          return
+        }
+        if (e.target.closest('[data-mm-note-cancel]')) {
+          e.preventDefault()
+          e.stopPropagation()
+          const logic = store.logic
+          if (logic) logic.setState({ noteFormOpen: false, noteDraft: '' })
+          return
+        }
+        if (e.target.closest('[data-mm-note-analyze]')) {
+          e.preventDefault()
+          e.stopPropagation()
+          void analyzeConversationNotes()
+          return
+        }
+        const noteTag = e.target.closest('[data-mm-note-tag]')
+        if (noteTag) {
+          e.preventDefault()
+          e.stopPropagation()
+          const tags = dlg.querySelectorAll('[data-mm-note-tag]')
+          const idx = Array.from(tags).indexOf(noteTag)
+          if (idx >= 0 && store.logic) store.logic.setState({ noteTag: idx })
+        }
+      },
+      true,
+    )
+
+    document.addEventListener(
+      'keydown',
+      (e) => {
+        if (!store.authed) return
+        const ta = e.target.closest('[data-mm-chat-reply]')
+        if (!ta) return
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault()
+          e.stopPropagation()
+          void sendReply()
+        }
+      },
+      true,
+    )
   }
 
   function bindNotePanel() {
@@ -2656,13 +2849,16 @@
     bindCharPanel()
     bindChatComposer()
     bindNotePanel()
+    bindThreadScrollWatch()
   }
 
   async function sendReply() {
+    if (store.busy) return
     const conv = resolveActiveConv(store.conversations)
     if (!conv) return
     const logic = store.logic
-    const text = (logic?.state?.replyDraft || '').trim()
+    syncReplyDraftFromDom()
+    const text = readReplyText()
     const image = store.pendingChatImage
     if (!text && !image) return
     store.busy = true
@@ -2685,6 +2881,8 @@
     }
     store.error = null
     logic?.setState({ replyDraft: '', emojiOpen: false })
+    const replyInput = queryReplyInput()
+    if (replyInput) replyInput.value = ''
     revokeChatAttachPreview()
     store.pendingChatImage = null
     store.messages = [...store.messages, optimistic]
@@ -3507,8 +3705,7 @@
       e: em,
       pick: (ev) => {
         ev?.stopPropagation?.()
-        const cur = s.replyDraft || ''
-        logic.setState({ replyDraft: cur + em, emojiOpen: false })
+        insertChatEmoji(em)
       },
     }))
 
@@ -3645,7 +3842,6 @@
         (canSend ? '' : 'opacity:.45;cursor:default;'),
       sendReplyClick: (e) => {
         e?.stopPropagation?.()
-        if (!canSend || store.busy) return
         void sendReply()
       },
       noteFormOpen: !!s.noteFormOpen,
@@ -3672,6 +3868,7 @@
         if (s.msgReact !== null || s.emojiOpen) logic.setState({ msgReact: null, emojiOpen: false })
       },
       scrollDown: () => scrollThreadToBottom(),
+      showScrollDown: !!s.showScrollDown,
       showThread,
       showList,
       isMobileChat,
@@ -3754,6 +3951,7 @@
 
   function onMount(logic) {
     store.logic = logic
+    bindChatShell()
     bindAuthForm()
     showAuth(true)
     void bootAuth()
