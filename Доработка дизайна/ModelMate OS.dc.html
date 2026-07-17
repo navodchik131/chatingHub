@@ -1329,7 +1329,12 @@ input::placeholder,textarea::placeholder{color:#5C6066;}
             <div onClick="{{ closeLightbox }}" style="display:flex;align-items:center;gap:6px;border:1px solid rgba(255,255,255,.14);border-radius:9px;padding:7px 12px;font-size:12px;font-weight:700;color:#9BA0A6;cursor:pointer;" style-hover="color:#F2F3F0;border-color:rgba(255,255,255,.3);">✕ {{ t.close }}</div>
           </div>
           <div style="{{ lightboxData.big }}min-height:0;display:flex;align-items:center;justify-content:center;overflow:hidden;">
-            <span style="display:flex;width:48px;height:48px;color:rgba(255,255,255,.25);" dangerouslySetInnerHTML="{{ icoImage }}"></span>
+            <sc-if value="{{ lightboxData.hasImage }}" hint-placeholder-val="{{ false }}">
+              <img src="{{ lightboxData.url }}" alt="" style="width:100%;height:100%;max-height:min(calc(92vh - 200px),640px);object-fit:contain;display:block;" />
+            </sc-if>
+            <sc-if value="{{ lightboxData.showPlaceholder }}" hint-placeholder-val="{{ true }}">
+              <span style="display:flex;width:48px;height:48px;color:rgba(255,255,255,.25);" dangerouslySetInnerHTML="{{ icoImage }}"></span>
+            </sc-if>
           </div>
           <div style="display:flex;gap:10px;">
             <div style="flex:1;display:flex;align-items:center;justify-content:center;gap:8px;background:#D7F452;color:#171A05;border-radius:11px;padding:12px;font-size:13px;font-weight:800;cursor:pointer;" style-hover="background:#E8FA8A;"><span style="display:flex;width:16px;height:16px;" dangerouslySetInnerHTML="{{ icoDownload }}"></span>{{ t.download }}</div>

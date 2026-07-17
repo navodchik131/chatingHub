@@ -263,6 +263,17 @@ const TEMPLATE_PATCHES = [
     '<div style="{{ ffImgStyleDone }}"><span style="font-family:\'JetBrains Mono\';font-size:7.5px;background:rgba(0,0,0,.6);color:#fff;padding:2px 6px;border-radius:4px;">{{ ffThumbLabel }}</span>',
   ],
   [
+    /<div style="\{\{ lightboxData\.big \}\}min-height:0;display:flex;align-items:center;justify-content:center;overflow:hidden;">\s*<span style="display:flex;width:48px;height:48px;color:rgba\(255,255,255,\.25\);" dangerouslySetInnerHTML="\{\{ icoImage \}\}"><\/span>\s*<\/div>/,
+    `<div style="{{ lightboxData.big }}min-height:0;display:flex;align-items:center;justify-content:center;overflow:hidden;">
+            <sc-if value="{{ lightboxData.hasImage }}" hint-placeholder-val="{{ false }}">
+              <img src="{{ lightboxData.url }}" alt="" style="width:100%;height:100%;max-height:min(calc(92vh - 200px),640px);object-fit:contain;display:block;" />
+            </sc-if>
+            <sc-if value="{{ lightboxData.showPlaceholder }}" hint-placeholder-val="{{ true }}">
+              <span style="display:flex;width:48px;height:48px;color:rgba(255,255,255,.25);" dangerouslySetInnerHTML="{{ icoImage }}"></span>
+            </sc-if>
+          </div>`,
+  ],
+  [
     /<div onClick="\{\{ stop \}\}" style="display:flex;flex-direction:column;gap:14px;max-height:92vh;max-width:min\(92vw,720px\);">/,
     '<div onClick="{{ stop }}" style="{{ lightboxData.cardStyle }}">',
   ],

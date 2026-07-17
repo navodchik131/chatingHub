@@ -681,6 +681,16 @@
   const OPTIMISTIC_ARCHIVE_ID_FLOOR = -1_000_000_000
   let optimisticArchiveSeq = 0
   let archivePollTimer = null
+  let archiveMutQueue = Promise.resolve()
+
+  function withArchiveMut(fn) {
+    const run = archiveMutQueue.then(fn, fn)
+    archiveMutQueue = run.then(
+      () => undefined,
+      () => undefined,
+    )
+    return run
+  }
 
   function isOptimisticArchiveId(id) {
     return id <= OPTIMISTIC_ARCHIVE_ID_FLOOR
@@ -793,7 +803,8 @@
     const tracked = store.archiveImages.filter(
       (g) => isArchivePending(g) || isOptimisticArchiveId(g.id),
     )
-    if (!tracked.length) return false
+    const hasOptimistic = store.archiveImages.some((g) => isOptimisticArchiveId(g.id))
+    if (!tracked.length && !hasOptimistic) return false
 
     const pending = await API.apiJson('/api/studio/generations/pending?media_kind=image').catch(() => ({
       items: [],
@@ -821,26 +832,43 @@
         if (archiveItemPollKey(g) !== archiveItemPollKey(next)) changed = true
         return next
       }
-      const created = Date.parse(g.created_at || '')
-      const ageMs = Number.isFinite(created) ? Date.now() - created : 0
-      if (ageMs < 120_000) return g
+      // Ушла из pending → почти наверняка готова: подтянем готовую запись сразу
       maybeCompletedIds.push(g.id)
       return g
     })
 
-    if (maybeCompletedIds.length) {
+    if (maybeCompletedIds.length || hasOptimistic) {
       const page = await API.apiJson('/api/studio/generations?limit=40&skip=0&media_kind=image').catch(() => ({
         items: [],
       }))
-      const freshById = new Map((page.items || []).map((p) => [p.id, p]))
-      store.archiveImages = store.archiveImages.map((g) => {
-        if (!maybeCompletedIds.includes(g.id)) return g
-        const fresh = freshById.get(g.id)
-        if (!fresh) return g
-        const next = { ...g, ...fresh }
-        if (archiveItemPollKey(g) !== archiveItemPollKey(next)) changed = true
-        return next
-      })
+      const freshItems = page.items || []
+      const freshById = new Map(freshItems.map((p) => [p.id, p]))
+
+      if (maybeCompletedIds.length) {
+        store.archiveImages = store.archiveImages.map((g) => {
+          if (!maybeCompletedIds.includes(g.id)) return g
+          const fresh = freshById.get(g.id)
+          if (!fresh) return g
+          const next = { ...g, ...fresh }
+          if (archiveItemPollKey(g) !== archiveItemPollKey(next)) changed = true
+          return next
+        })
+      }
+
+      // Новые готовые кадры (карусель / параллельные джобы) — подставляем вместо optimistic
+      const known = new Set(store.archiveImages.map((g) => g.id))
+      const newcomers = freshItems.filter((p) => !known.has(p.id) && !isArchivePending(p))
+      if (newcomers.length) {
+        let images = [...store.archiveImages]
+        for (const nr of newcomers) {
+          const optIdx = images.findIndex((g) => isOptimisticArchiveId(g.id))
+          if (optIdx >= 0) images.splice(optIdx, 1)
+          images.unshift(nr)
+          known.add(nr.id)
+          changed = true
+        }
+        store.archiveImages = dedupeArchiveById(images)
+      }
     }
 
     return changed
@@ -858,10 +886,10 @@
         /* тихий опрос */
       }
       if (hasPendingArchive()) {
-        archivePollTimer = setTimeout(tick, 12000)
+        archivePollTimer = setTimeout(tick, 3000)
       }
     }
-    archivePollTimer = setTimeout(tick, 4000)
+    archivePollTimer = setTimeout(tick, 2000)
   }
 
   function archiveToFrame(item, i, logic, I) {
@@ -908,9 +936,6 @@
         ? () => {}
         : () => {
             logic.setState({ lightbox: item.id })
-            if (!url || isArchivePending(item)) {
-              void refreshArchiveImages().then(() => logic.forceUpdate())
-            }
           },
     }
   }
@@ -1193,8 +1218,19 @@
       try {
         const msg = JSON.parse(ev.data)
         if (msg.type === 'studio_generation' || msg.type === 'studio_job') {
-          void loadArchive()
-          void API.apiJson('/api/auth/me').then((m) => { store.me = m; store.logic?.forceUpdate() })
+          void (async () => {
+            try {
+              const changed = await refreshPendingArchiveOnly()
+              if (changed) store.logic?.forceUpdate()
+              if (hasPendingArchive()) scheduleArchivePoll()
+            } catch (_) {
+              /* soft refresh only */
+            }
+            void API.apiJson('/api/auth/me').then((m) => {
+              store.me = m
+              store.logic?.forceUpdate()
+            })
+          })()
         }
         if (msg.type === 'new_message' || msg.type === 'message_updated') {
           if (msg.type === 'new_message' && store.activeConvId) {
@@ -3065,17 +3101,19 @@
       const count = Math.max(2, Math.min(8, Number(s.carouselCount) || 4))
       const model = store.models.find((m) => m.id === modelId)
       const tempIds = []
-      for (let i = 0; i < count; i++) {
-        const { item, tempId } = createOptimisticArchiveItem({
-          mediaKind: 'image',
-          promptExcerpt: prompt || `Карусель ${i + 1}/${count}…`,
-          studioModelId: modelId,
-          modelName: model?.name ?? null,
-          outputAspect: store.selectedAspect,
-        })
-        store.archiveImages = prependOptimisticArchive(store.archiveImages, item)
-        tempIds.push(tempId)
-      }
+      await withArchiveMut(() => {
+        for (let i = 0; i < count; i++) {
+          const { item, tempId } = createOptimisticArchiveItem({
+            mediaKind: 'image',
+            promptExcerpt: prompt || `Карусель ${i + 1}/${count}…`,
+            studioModelId: modelId,
+            modelName: model?.name ?? null,
+            outputAspect: store.selectedAspect,
+          })
+          store.archiveImages = prependOptimisticArchive(store.archiveImages, item)
+          tempIds.push(tempId)
+        }
+      })
       logic.forceUpdate()
       scheduleArchivePoll()
       try {
@@ -3091,23 +3129,46 @@
         if (srcId) fd.append('existing_generation_id', String(srcId))
         else if (uploadFile) fd.append('image', uploadFile, uploadFile.name || 'carousel.jpg')
         const accepted = await API.postStudioJob('/api/studio/carousel', fd)
-        await API.pollStudioJob(accepted.job_id, {
-          maxWaitMs: Math.max(8 * 60 * 1000, count * 4 * 60 * 1000),
+        // Готовые кадры подтягиваем по одному через poll — не ждём весь джоб в UI
+        await withArchiveMut(() => {
+          if (accepted.job_id) {
+            store.archiveImages = store.archiveImages.map((g) =>
+              tempIds.includes(g.id) ? { ...g, job_id: accepted.job_id, status: 'processing' } : g,
+            )
+          }
         })
-        for (const tid of tempIds) {
-          store.archiveImages = removeOptimisticArchive(store.archiveImages, tid)
-        }
-        await refreshArchiveImages()
         scheduleArchivePoll()
-        await API.apiJson('/api/auth/me').then((m) => {
-          store.me = m
-        })
+        logic.forceUpdate()
+        void (async () => {
+          try {
+            await API.pollStudioJob(accepted.job_id, {
+              maxWaitMs: Math.max(8 * 60 * 1000, count * 4 * 60 * 1000),
+              pollMs: 2500,
+            })
+          } catch (e) {
+            store.error = e.message || String(e)
+          } finally {
+            await withArchiveMut(() => {
+              for (const tid of tempIds) {
+                store.archiveImages = removeOptimisticArchive(store.archiveImages, tid)
+              }
+            })
+            await refreshPendingArchiveOnly()
+            store.logic?.forceUpdate()
+            scheduleArchivePoll()
+            await API.apiJson('/api/auth/me').then((m) => {
+              store.me = m
+              store.logic?.forceUpdate()
+            })
+          }
+        })()
       } catch (e) {
-        for (const tid of tempIds) {
-          store.archiveImages = removeOptimisticArchive(store.archiveImages, tid)
-        }
+        await withArchiveMut(() => {
+          for (const tid of tempIds) {
+            store.archiveImages = removeOptimisticArchive(store.archiveImages, tid)
+          }
+        })
         store.error = e.message || String(e)
-      } finally {
         logic.forceUpdate()
       }
       return
@@ -3121,7 +3182,9 @@
       modelName: model?.name ?? null,
       outputAspect: store.selectedAspect,
     })
-    store.archiveImages = prependOptimisticArchive(store.archiveImages, optimistic)
+    await withArchiveMut(() => {
+      store.archiveImages = prependOptimisticArchive(store.archiveImages, optimistic)
+    })
     logic.forceUpdate()
     scheduleArchivePoll()
 
@@ -3149,25 +3212,29 @@
       if (!built) throw new Error('Неизвестный режим генерации')
       const accepted = await startWorkflowScenarioJob(built)
       const realId = coerceJobGenerationId(accepted)
-      if (realId) {
-        store.archiveImages = replaceOptimisticArchiveId(store.archiveImages, tempId, realId, {
-          status: 'processing',
-          job_id: accepted.job_id ?? null,
-        })
-      } else if (accepted.job_id) {
-        store.archiveImages = store.archiveImages.map((g) =>
-          g.id === tempId ? { ...g, job_id: accepted.job_id, status: 'processing' } : g,
-        )
-      } else {
-        store.archiveImages = removeOptimisticArchive(store.archiveImages, tempId)
-      }
+      await withArchiveMut(() => {
+        if (realId) {
+          store.archiveImages = replaceOptimisticArchiveId(store.archiveImages, tempId, realId, {
+            status: 'processing',
+            job_id: accepted.job_id ?? null,
+          })
+        } else if (accepted.job_id) {
+          store.archiveImages = store.archiveImages.map((g) =>
+            g.id === tempId ? { ...g, job_id: accepted.job_id, status: 'processing' } : g,
+          )
+        } else {
+          store.archiveImages = removeOptimisticArchive(store.archiveImages, tempId)
+        }
+      })
       scheduleArchivePoll()
       void API.apiJson('/api/auth/me').then((m) => {
         store.me = m
         logic.forceUpdate()
       })
     } catch (e) {
-      store.archiveImages = removeOptimisticArchive(store.archiveImages, tempId)
+      await withArchiveMut(() => {
+        store.archiveImages = removeOptimisticArchive(store.archiveImages, tempId)
+      })
       store.error = e.message || String(e)
     } finally {
       logic.forceUpdate()
