@@ -142,6 +142,9 @@
     telegramWidgetCleanup: null,
     referralCode: null,
     activeConvId: null,
+    pendingChatImage: null,
+    chatAttachPreviewUrl: null,
+    pendingOutboundId: 0,
   }
 
   const AI_MODEL_MAP = {
@@ -1540,19 +1543,51 @@
     })
   }
 
+  function revokeChatAttachPreview() {
+    if (store.chatAttachPreviewUrl) {
+      URL.revokeObjectURL(store.chatAttachPreviewUrl)
+      store.chatAttachPreviewUrl = null
+    }
+  }
+
+  function setChatAttachment(file) {
+    revokeChatAttachPreview()
+    store.pendingChatImage = file || null
+    if (file) store.chatAttachPreviewUrl = URL.createObjectURL(file)
+    store.logic?.forceUpdate()
+  }
+
+  function ensureChatFileInput() {
+    if (store.chatFileInput) return store.chatFileInput
+    const inp = document.createElement('input')
+    inp.type = 'file'
+    inp.accept = 'image/jpeg,image/png,image/webp,image/gif'
+    inp.style.display = 'none'
+    inp.addEventListener('change', () => {
+      const file = inp.files?.[0] || null
+      inp.value = ''
+      if (file) setChatAttachment(file)
+    })
+    document.body.appendChild(inp)
+    store.chatFileInput = inp
+    return inp
+  }
+
+  function pickChatFile(ev) {
+    ev?.stopPropagation?.()
+    ensureChatFileInput().click()
+  }
+
   function clearReplyDraft() {
+    revokeChatAttachPreview()
     store.pendingChatImage = null
     store.logic?.setState({ replyDraft: '' })
   }
 
-  function clearChatAttachment() {
+  function clearChatAttachment(ev) {
+    ev?.stopPropagation?.()
+    revokeChatAttachPreview()
     store.pendingChatImage = null
-    const attachBtn = document.querySelector('[data-mm-chat-attach]')
-    if (attachBtn) {
-      attachBtn.title = ''
-      attachBtn.style.borderColor = ''
-      attachBtn.style.color = ''
-    }
     store.logic?.forceUpdate()
   }
 
@@ -2566,26 +2601,6 @@
         }
       })
     }
-    const sendBtn = root.querySelector('[data-mm-chat-send]')
-    if (sendBtn && !sendBtn.dataset.mmBound) {
-      sendBtn.dataset.mmBound = '1'
-      sendBtn.addEventListener('click', () => void sendReply())
-    }
-    const attachBtn = root.querySelector('[data-mm-chat-attach]')
-    if (attachBtn && !attachBtn.dataset.mmBound) {
-      attachBtn.dataset.mmBound = '1'
-      attachBtn.addEventListener('click', (e) => {
-        e.stopPropagation()
-        void pickLocalFile('image/*').then((file) => {
-          if (!file) return
-          store.pendingChatImage = file
-          attachBtn.title = file.name || 'photo'
-          attachBtn.style.borderColor = 'rgba(215,244,82,.45)'
-          attachBtn.style.color = '#D7F452'
-          store.logic?.forceUpdate()
-        })
-      })
-    }
   }
 
   function bindNotePanel() {
@@ -2651,32 +2666,69 @@
     const image = store.pendingChatImage
     if (!text && !image) return
     store.busy = true
+    const convId = conv.id
+    const fileToSend = image
+    let localPreviewUrl
+    if (fileToSend) localPreviewUrl = URL.createObjectURL(fileToSend)
+    store.pendingOutboundId -= 1
+    const tempId = store.pendingOutboundId
+    const optimistic = {
+      id: tempId,
+      direction: 'outbound',
+      text_original: text,
+      text_translated: null,
+      created_at: new Date().toISOString(),
+      pending: true,
+      localPreviewUrl,
+      attachments: [],
+      reactions: [],
+    }
+    store.error = null
+    logic?.setState({ replyDraft: '', emojiOpen: false })
+    revokeChatAttachPreview()
+    store.pendingChatImage = null
+    store.messages = [...store.messages, optimistic]
+    logic?.forceUpdate()
+    scrollThreadToBottom()
     try {
-      if (image) {
+      if (fileToSend) {
         const fd = new FormData()
         if (text) fd.append('text', text)
-        fd.append('image', image, image.name || 'photo.jpg')
-        const res = await API.apiFetch('/api/conversations/' + conv.id + '/reply', {
+        fd.append('image', fileToSend, fileToSend.name || 'photo.jpg')
+        const res = await API.apiFetch('/api/conversations/' + convId + '/reply', {
           method: 'POST',
           body: fd,
         })
         const data = await API.readJson(res)
         if (!res.ok) throw new Error(API.formatDetail(data) || 'Не удалось отправить')
+        if (localPreviewUrl) URL.revokeObjectURL(localPreviewUrl)
+        const mid = Number(data.id)
+        store.messages = store.messages
+          .filter((m) => m.id !== tempId)
+          .filter((m) => Number(m.id) !== mid)
+          .concat([data])
       } else {
-        await API.apiJson('/api/conversations/' + conv.id + '/reply', {
+        const data = await API.apiJson('/api/conversations/' + convId + '/reply', {
           method: 'POST',
           body: JSON.stringify({ text }),
         })
+        const mid = Number(data.id)
+        store.messages = store.messages
+          .filter((m) => m.id !== tempId)
+          .filter((m) => Number(m.id) !== mid)
+          .concat([data])
       }
-      clearReplyDraft()
-      clearChatAttachment()
-      logicClearEmoji(logic)
-      await loadMessages(conv.id)
+      await loadMessages(convId)
     } catch (e) {
+      if (localPreviewUrl) URL.revokeObjectURL(localPreviewUrl)
+      store.messages = store.messages.filter((m) => m.id !== tempId)
+      logic?.setState({ replyDraft: text })
+      if (fileToSend) setChatAttachment(fileToSend)
       store.error = e.message || String(e)
     } finally {
       store.busy = false
-      store.logic?.forceUpdate()
+      logic?.forceUpdate()
+      scrollThreadToBottom()
     }
   }
 
@@ -3138,34 +3190,34 @@
       const preview = (c.last_message_preview || '—').slice(0, 80)
       return {
         ...d,
-        last: isUnread
-          ? (lang === 'ru' ? 'Новое: ' : 'New: ') + preview
-          : preview,
+        last: preview,
         lastStyle:
-          'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;' +
-          (isUnread
-            ? 'font-size:11px;color:#D7F452;font-weight:700;'
-            : 'font-size:11px;color:#9BA0A6;'),
-        avStyle: st ? d.avStyleLg + 'filter:grayscale(1);opacity:.6;' : d.avStyleLg,
+          'font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;' +
+          (isUnread ? 'color:#D7F452;font-weight:600;' : 'color:#9BA0A6;'),
+        avStyle: st ? d.avStyle + 'filter:grayscale(1);opacity:.6;' : d.avStyle,
         blockedTag,
         blockedTagStyle,
         nameStyle:
-          'font-weight:700;font-size:12.5px;' +
+          'font-weight:700;font-size:12.5px;flex:none;' +
           (st ? 'color:#9BA0A6;' : isUnread ? 'color:#F2F3F0;' : ''),
         canDelete: !!st,
         isUnread,
         newLabel: isUnread ? (lang === 'ru' ? 'Новое' : 'New') : false,
-        unreadBadge: isUnread ? (unreadCount > 9 ? '9+' : String(unreadCount)) : false,
+        unreadLabelStyle:
+          'font-family:JetBrains Mono;font-size:9px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:2px 7px;border-radius:999px;background:#D7F452;color:#171A05;line-height:1.3;flex:none;',
+        unreadBadge: isUnread ? (unreadCount > 99 ? '99+' : String(unreadCount)) : false,
+        unreadBadgeStyle:
+          'font-family:JetBrains Mono;font-size:9px;font-weight:700;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:#D7F452;color:#171A05;display:inline-flex;align-items:center;justify-content:center;flex:none;',
         delDialog: (e) => {
           e?.stopPropagation?.()
           void deleteConversation(c.id, logic)
         },
         rowStyle:
-          'display:flex;gap:10px;align-items:center;padding:9px 8px;border-radius:12px;cursor:pointer;position:relative;' +
+          'display:flex;gap:8px;align-items:center;padding:7px 6px;border-radius:10px;cursor:pointer;position:relative;' +
           (c.id === store.activeConvId
             ? 'background:rgba(215,244,82,.07);border:1px solid rgba(215,244,82,.2);'
             : isUnread
-              ? 'background:rgba(215,244,82,.05);border:1px solid rgba(215,244,82,.18);'
+              ? 'background:rgba(215,244,82,.06);border:1px solid rgba(215,244,82,.22);box-shadow:inset 2px 0 0 #D7F452;'
               : 'border:1px solid transparent;'),
       }
     })
@@ -3179,14 +3231,28 @@
     const messages = store.messages.map((m, i) => {
       const outbound = m.direction === 'outbound'
       const rx = ownerReactionEmoji(m.reactions)
+      const imageUrl =
+        m.localPreviewUrl ||
+        (Array.isArray(m.attachments) && m.attachments[0]?.url) ||
+        false
+      const text = (m.text_original || '').trim()
       return {
         wrap:
           'display:flex;flex-direction:column;gap:3px;' +
           (outbound ? 'align-items:flex-end;' : 'align-items:flex-start;'),
         bubble: outbound ? bubbleOut : bubbleIn,
-        text: m.text_original || '',
+        text: text || false,
+        imageUrl,
+        imageStyle:
+          'display:block;max-width:220px;max-height:220px;border-radius:10px;margin-bottom:' +
+          (text ? '6px' : '0') +
+          ';object-fit:cover;',
         tr: m.text_translated && m.text_translated !== m.text_original ? m.text_translated : false,
-        time: fmtDateShort(m.created_at) + ' · ' + fmtTime(m.created_at),
+        time:
+          fmtDateShort(m.created_at) +
+          ' · ' +
+          fmtTime(m.created_at) +
+          (m.pending ? (lang === 'ru' ? ' · отправка…' : ' · sending…') : ''),
         toggleReact: (e) => {
           e?.stopPropagation?.()
           logic.setState({ msgReact: s.msgReact === i ? null : i, emojiOpen: false })
@@ -3435,6 +3501,8 @@
     const isMobileChat = isMobile && !!s.mobileChat
     const curMode = mapCurMode(logic, vals)
     const emojiChoices = ['😊', '😍', '🥰', '😘', '💕', '🔥', '😂', '😅', '🙈', '😉', '💋', '🌹', '✨', '👀', '🥂', '💫']
+    const replyDraft = s.replyDraft || ''
+    const canSend = Boolean(replyDraft.trim() || store.pendingChatImage)
     const emojiPick = emojiChoices.map((em) => ({
       e: em,
       pick: (ev) => {
@@ -3557,14 +3625,28 @@
         e?.stopPropagation?.()
         logic.setState({ emojiOpen: !s.emojiOpen, msgReact: null })
       },
-      replyDraft: s.replyDraft || '',
+      replyDraft,
       onReplyInput: (e) => {
         logic.setState({ replyDraft: e?.target?.value ?? '' })
       },
-      chatAttachName: store.pendingChatImage?.name || false,
-      clearChatAttach: (e) => {
+      onReplyKeyDown: (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault()
+          void sendReply()
+        }
+      },
+      pickChatFile: (e) => pickChatFile(e),
+      chatAttachPreview: store.chatAttachPreviewUrl || false,
+      chatAttachName: store.pendingChatImage?.name || '',
+      clearChatAttach: (e) => clearChatAttachment(e),
+      canSend,
+      sendBtnStyle:
+        'width:38px;height:38px;flex:none;background:#D7F452;color:#171A05;border-radius:10px;display:flex;align-items:center;justify-content:center;cursor:pointer;' +
+        (canSend ? '' : 'opacity:.45;cursor:default;'),
+      sendReplyClick: (e) => {
         e?.stopPropagation?.()
-        clearChatAttachment()
+        if (!canSend || store.busy) return
+        void sendReply()
       },
       noteFormOpen: !!s.noteFormOpen,
       noteFormClosed: !s.noteFormOpen,

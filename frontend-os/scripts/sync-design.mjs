@@ -373,8 +373,6 @@ const TEMPLATE_PATCHES = [
   [
     /<sc-if value="\{\{ ch\.hot \}\}" hint-placeholder-val="\{\{ false \}\}"><span style="font-family:'JetBrains Mono';font-size:7\.5px;background:rgba\(251,146,60,.15\);color:#FB923C;padding:1px 5px;border-radius:4px;">24ч\+<\/span><\/sc-if>\s*<\/div>/,
     `<sc-if value="{{ ch.hot }}" hint-placeholder-val="{{ false }}"><span style="font-family:'JetBrains Mono';font-size:7.5px;background:rgba(251,146,60,.15);color:#FB923C;padding:1px 5px;border-radius:4px;">24ч+</span></sc-if>
-                    <sc-if value="{{ ch.isUnread }}" hint-placeholder-val="{{ false }}"><span style="font-family:'JetBrains Mono';font-size:7.5px;background:rgba(215,244,82,.15);color:#D7F452;padding:1px 5px;border-radius:4px;">{{ ch.newLabel }}</span></sc-if>
-                    <sc-if value="{{ ch.unreadBadge }}" hint-placeholder-val="{{ false }}"><span style="min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:#D7F452;color:#171A05;font-family:'JetBrains Mono';font-size:9px;font-weight:800;display:inline-flex;align-items:center;justify-content:center;">{{ ch.unreadBadge }}</span></sc-if>
                   </div>`,
   ],
   [
@@ -393,6 +391,10 @@ const TEMPLATE_PATCHES = [
   [
     /<div id="mm-thread-scroll" style="flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px;">/,
     '<div id="mm-thread-scroll" onClick="{{ closePops }}" style="flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px;">',
+  ],
+  [
+    /<div style="display:flex;gap:6px;align-items:baseline;"><span style="\{\{ ch\.nameStyle \}\}">\{\{ ch\.name \}\}<\/span><span style="font-family:'JetBrains Mono';font-size:8px;letter-spacing:1px;color:\{\{ ch\.platColor \}\};">\{\{ ch\.platform \}\}<\/span><\/div>/,
+    `<div style="display:flex;gap:6px;align-items:baseline;flex-wrap:wrap;min-width:0;"><span style="{{ ch.nameStyle }}">{{ ch.name }}</span><sc-if value="{{ ch.isUnread }}" hint-placeholder-val="{{ false }}"><span style="{{ ch.unreadLabelStyle }}">{{ ch.newLabel }}</span></sc-if><span style="font-family:'JetBrains Mono';font-size:8px;letter-spacing:1px;color:{{ ch.platColor }};">{{ ch.platform }}</span><sc-if value="{{ ch.unreadBadge }}" hint-placeholder-val="{{ false }}"><span style="{{ ch.unreadBadgeStyle }}">{{ ch.unreadBadge }}</span></sc-if></div>`,
   ],
   [
     /<div style="font-size:11px;color:#9BA0A6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">\{\{ ch\.last \}\}<\/div>/,
