@@ -9,6 +9,7 @@ const here = path.dirname(fileURLToPath(import.meta.url))
 const repo = path.resolve(here, '../..')
 const srcDir = path.join(repo, 'Доработка дизайна')
 const osRoot = path.resolve(here, '..')
+const BUILD_STAMP = process.env.BUILD_STAMP || Date.now().toString(36)
 
 const files = [
   ['ModelMate OS.dc.html', 'index.html'],
@@ -78,16 +79,35 @@ const TEMPLATE_PATCHES = [
   [
     /<script src="\.\/support\.js"><\/script>/,
     `<link rel="stylesheet" href="./mm-os-auth.css">
-<script src="./mm-os-api.js"></script>
-<script src="./mm-os-telegram-login.js"></script>
-<script src="./mm-os-studio-scenarios.js"></script>
-<script src="./mm-os-bridge.js"></script>
-<script src="./mm-os-api-full.js"></script>
-<script src="./support.js"></script>`,
+<script src="./mm-os-api.js?v=${BUILD_STAMP}"></script>
+<script src="./mm-os-telegram-login.js?v=${BUILD_STAMP}"></script>
+<script src="./mm-os-studio-scenarios.js?v=${BUILD_STAMP}"></script>
+<script src="./mm-os-bridge.js?v=${BUILD_STAMP}"></script>
+<script src="./mm-os-api-full.js?v=${BUILD_STAMP}"></script>
+<script src="./support.js?v=${BUILD_STAMP}"></script>`,
   ],
   [
     /<body>/,
     `<body>${AUTH_OVERLAY}`,
+  ],
+  [
+    /<\/sc-if>\s*\n\s*<!-- content scroll -->/,
+    `</sc-if>
+
+    <sc-if value="{{ hasDonationAlert }}" hint-placeholder-val="{{ false }}">
+      <div style="flex:none;margin:12px 16px 0;padding:14px 16px;border-radius:14px;background:linear-gradient(120deg,rgba(74,222,128,.12),rgba(240,168,200,.06));border:1px solid rgba(74,222,128,.35);display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+        <div>
+          <div style="font-weight:800;font-size:14px;margin-bottom:4px;">{{ donationAlertTitle }}</div>
+          <div style="font-size:12.5px;color:#9BA0A6;">{{ donationAlertBody }}</div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <div onClick="{{ openDonationAlert }}" style="background:#D7F452;color:#171A05;font-weight:800;font-size:12.5px;border-radius:9px;padding:8px 14px;cursor:pointer;" style-hover="filter:brightness(1.06);">{{ t.donationAlertOpen }}</div>
+          <div onClick="{{ dismissDonationAlert }}" style="border:1px solid rgba(255,255,255,.14);color:#9BA0A6;font-weight:700;font-size:12.5px;border-radius:9px;padding:8px 14px;cursor:pointer;" style-hover="border-color:rgba(255,255,255,.3);">{{ t.donationAlertDismiss }}</div>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- content scroll -->`,
   ],
   // кредиты в сайдбаре и mobile
   [
@@ -173,6 +193,14 @@ const TEMPLATE_PATCHES = [
   [
     /{{ dialogsUnreadLabel }} · 78 {{ t\.teamReplies }}/,
     '{{ dialogsUnreadLabel }} · {{ teamRepliesCount }} {{ t.teamReplies }}',
+  ],
+  [
+    /<sc-if value="\{\{ isDonOverview \}\}" hint-placeholder-val="\{\{ true \}\}">\s*<div>/,
+    `<sc-if value="{{ isDonOverview }}" hint-placeholder-val="{{ true }}">
+        <sc-if value="{{ hasDonationsLoadError }}" hint-placeholder-val="{{ false }}">
+          <div style="margin-bottom:12px;padding:12px 14px;border-radius:12px;background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.35);color:#FCA5A5;font-size:12.5px;line-height:1.5;">{{ donationsLoadError }}</div>
+        </sc-if>
+        <div>`,
   ],
   // диалоги — шапка треда и заметки
   [
@@ -483,6 +511,23 @@ const LOGIC_PATCHES = [
     'noteFormOpen: false, noteDraft: \'\', noteTag: 0, replyDraft: \'\'',
   ],
   [
+    /framesLeft: 'кадров', active: 'АКТИВНА', until: 'до', toPayout: 'к выплате', allRead: 'все прочитаны', teamReplies: 'ответов',/,
+    "framesLeft: 'кадров', active: 'АКТИВНА', until: 'до', toPayout: 'к выплате', allRead: 'все прочитаны', teamReplies: 'ответов',\n      donationAlertOpen: 'Открыть донаты', donationAlertDismiss: 'Закрыть',",
+  ],
+  [
+    /framesLeft: 'frames', active: 'ACTIVE', until: 'until', toPayout: 'payable', allRead: 'all read', teamReplies: 'replies',/,
+    "framesLeft: 'frames', active: 'ACTIVE', until: 'until', toPayout: 'payable', allRead: 'all read', teamReplies: 'replies',\n      donationAlertOpen: 'Open donations', donationAlertDismiss: 'Dismiss',",
+  ],
+  [
+    /const donStats = \[\s*\{ label: lang === 'ru' \? 'ВСЕГО' : 'TOTAL', value: '100,00 ₽'/,
+    `const donStats = [
+      { label: lang === 'ru' ? 'ВСЕГО' : 'TOTAL', value: '—'`,
+  ],
+  [
+    /const incoming = \[\{ sum: '\+100,00 ₽'/,
+    `const incoming = [{ sum: '+—'`,
+  ],
+  [
     /noteFormOpen: s\.noteFormOpen, noteTagChips, toggleNote: \(\) => setS\(\{ noteFormOpen: !s\.noteFormOpen \}\), closeNote: \(\) => setS\(\{ noteFormOpen: false \}\), saveNote: \(\) => setS\(\{ noteFormOpen: false \}\),/,
     `noteFormOpen: s.noteFormOpen, noteFormClosed: !s.noteFormOpen, noteDraft: s.noteDraft || '', noteTagChips,
       toggleNote: () => window.MMOS_BRIDGE?.toggleNoteForm?.(),
@@ -508,6 +553,9 @@ const LOGIC_PATCHES = [
     /teamKpi, members, templates\s*\};\s*\}/,
     `teamKpi, members, templates,
       creditsBalance: '0', userEmailShort: '', userRolePlan: '', donationsKpiTotal: '—', donationsKpiPayout: '—',
+      hasDonationAlert: false, donationAlertTitle: '', donationAlertBody: '',
+      openDonationAlert: () => {}, dismissDonationAlert: () => {},
+      hasDonationsLoadError: false, donationsLoadError: null,
       dialogsUnreadLabel: '', planDisplayName: '—', planUntil: '—', dialogsTotal: '0', teamRepliesCount: '0',
       creditsFramesHint: '', activeChat: { name: '—', initial: '?', vip: false, persona: '—', lang: '—', avStyle: '' },
       notesTitle: '', activeCharName: '—', activeCharInitial: '—',

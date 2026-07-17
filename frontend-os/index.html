@@ -5,12 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="icon" href="./favicon.ico" type="image/x-icon">
 <link rel="stylesheet" href="./mm-os-auth.css">
-<script src="./mm-os-api.js"></script>
-<script src="./mm-os-telegram-login.js"></script>
-<script src="./mm-os-studio-scenarios.js"></script>
-<script src="./mm-os-bridge.js"></script>
-<script src="./mm-os-api-full.js"></script>
-<script src="./support.js"></script>
+<script src="./mm-os-api.js?v=mrosws7y"></script>
+<script src="./mm-os-telegram-login.js?v=mrosws7y"></script>
+<script src="./mm-os-studio-scenarios.js?v=mrosws7y"></script>
+<script src="./mm-os-bridge.js?v=mrosws7y"></script>
+<script src="./mm-os-api-full.js?v=mrosws7y"></script>
+<script src="./support.js?v=mrosws7y"></script>
 </head>
 <body>
 <div id="mm-os-auth" class="mm-os-auth" style="display:none">
@@ -985,6 +985,9 @@ input::placeholder,textarea::placeholder{color:#5C6066;}
           </div>
         </div>
         <sc-if value="{{ isDonOverview }}" hint-placeholder-val="{{ true }}">
+        <sc-if value="{{ hasDonationsLoadError }}" hint-placeholder-val="{{ false }}">
+          <div style="margin-bottom:12px;padding:12px 14px;border-radius:12px;background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.35);color:#FCA5A5;font-size:12.5px;line-height:1.5;">{{ donationsLoadError }}</div>
+        </sc-if>
         <div>
           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:16px;">
             <sc-for list="{{ donStats }}" as="ds" hint-placeholder-count="4">
@@ -1983,7 +1986,7 @@ class Component extends DCLogic {
       { label: t.donTabCreate, pick: () => setS({ donTab: 'create' }), style: s.donTab === 'create' ? chipOn : chipOff }
     ];
     const donStats = [
-      { label: lang === 'ru' ? 'ВСЕГО' : 'TOTAL', value: '100,00 ₽', color: '#F2F3F0' },
+      { label: lang === 'ru' ? 'ВСЕГО' : 'TOTAL', value: '—', color: '#F2F3F0' },
       { label: lang === 'ru' ? 'ДОСТУПНО' : 'AVAILABLE', value: '100,00 ₽', color: '#4ADE80' },
       { label: lang === 'ru' ? 'НА УДЕРЖАНИИ' : 'ON HOLD', value: '0,00 ₽', color: '#FB923C' },
       { label: lang === 'ru' ? 'ВЫПЛАЧЕНО' : 'PAID OUT', value: '0,00 ₽', color: '#9BA0A6' }
@@ -1992,7 +1995,7 @@ class Component extends DCLogic {
       { title: lang === 'ru' ? 'Поддержать Mia 💕' : 'Support Mia 💕', st: 'ACTIVE', stStyle: stActive, urls: [{ kind: 'Telegram', icon: icoTg, col: '#38BDF8', url: 't.me/tribute/app?startapp=N8c' }, { kind: 'Web', icon: icoGlobe, col: '#C084FC', url: 'web.tribute.tg/d/N8c' }] },
       { title: lang === 'ru' ? 'Платье для съёмки' : 'Dress for a shoot', st: lang === 'ru' ? 'МОДЕРАЦИЯ' : 'PENDING', stStyle: stWarn, urls: [{ kind: 'Telegram', icon: icoTg, col: '#38BDF8', url: 't.me/tribute/app?startapp=Dr5' }, { kind: 'Web', icon: icoGlobe, col: '#C084FC', url: 'web.tribute.tg/d/Dr5' }] }
     ];
-    const incoming = [{ sum: '+100,00 ₽', from: lang === 'ru' ? 'Аноним · «Поддержать Mia»' : 'Anonymous · "Support Mia"', when: '12.07 · 14:45' }];
+    const incoming = [{ sum: '+—', from: lang === 'ru' ? 'Аноним · «Поддержать Mia»' : 'Anonymous · "Support Mia"', when: '12.07 · 14:45' }];
     const myDonations = [
       { title: lang === 'ru' ? 'Поддержать Mia 💕' : 'Support Mia 💕', st: 'ACTIVE', stStyle: stActive },
       { title: lang === 'ru' ? 'Платье для съёмки' : 'Dress for a shoot', st: 'PENDING', stStyle: stWarn },
@@ -2228,6 +2231,7 @@ class Component extends DCLogic {
       creditsBalance: '0', userEmailShort: '', userRolePlan: '', donationsKpiTotal: '—', donationsKpiPayout: '—',
       hasDonationAlert: false, donationAlertTitle: '', donationAlertBody: '',
       openDonationAlert: () => {}, dismissDonationAlert: () => {},
+      hasDonationsLoadError: false, donationsLoadError: null,
       dialogsUnreadLabel: '', planDisplayName: '—', planUntil: '—', dialogsTotal: '0', teamRepliesCount: '0',
       creditsFramesHint: '', activeChat: { name: '—', initial: '?', vip: false, persona: '—', lang: '—', avStyle: '' },
       notesTitle: '', activeCharName: '—', activeCharInitial: '—',

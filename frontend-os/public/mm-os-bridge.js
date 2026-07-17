@@ -115,6 +115,8 @@
     donationEditId: null,
     creatorDonationAlert: null,
     donationPollTimer: null,
+    donationVisibilityBound: false,
+    donationsLoadError: null,
     _lastPage: null,
     billingPlans: null,
     creditHistory: [],
@@ -1224,7 +1226,13 @@
 
   async function loadOwnerPanels() {
     if (!store.me?.is_workspace_owner) return
-    store.donationOverview = await API.apiJson('/api/creator-donations/overview').catch(() => null)
+    store.donationsLoadError = null
+    try {
+      store.donationOverview = await API.apiJson('/api/creator-donations/overview')
+    } catch (e) {
+      store.donationOverview = null
+      store.donationsLoadError = e.message || String(e)
+    }
     store.donations = await API.apiJson('/api/creator-donations').catch(() => [])
     store.donationEvents = await API.apiJson('/api/creator-donations/events?limit=50').catch(() => [])
     store.billingPlans = await API.apiJson('/api/billing/plans').catch(() => null)
@@ -1301,9 +1309,18 @@
   function startDonationPolling() {
     stopDonationPolling()
     if (!store.me?.is_workspace_owner) return
+    void refreshCreatorDonationOverview({ reloadPanels: true })
     store.donationPollTimer = setInterval(() => {
       void refreshCreatorDonationOverview({ reloadPanels: false })
-    }, 60_000)
+    }, 15_000)
+    if (!store.donationVisibilityBound) {
+      store.donationVisibilityBound = true
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible' && store.authed && store.me?.is_workspace_owner) {
+          void refreshCreatorDonationOverview({ reloadPanels: true })
+        }
+      })
+    }
   }
 
   async function loadIntegrations() {
@@ -1558,6 +1575,8 @@
       } else {
         showAuth(false)
         await refreshAll()
+        await refreshCreatorDonationOverview({ reloadPanels: false })
+        startDonationPolling()
         connectWs()
         const first = store.conversations[0]
         if (first) void loadMessages(first.id)
@@ -3495,6 +3514,7 @@
       logout: () => {},
       apiError: store.error,
       apiBusy: store.busy,
+      donationsLoadError: store.donationsLoadError,
     }
   }
 
@@ -4302,6 +4322,8 @@
       closeNewOp: operator.closeNewOp,
       apiError: store.error,
       apiBusy: store.busy,
+      donationsLoadError: isOwner ? store.donationsLoadError : null,
+      hasDonationsLoadError: isOwner && !!store.donationsLoadError,
       runGenerate: () => void runGenerate(),
       runGenerateVideo: () => void runGenerateVideo(),
       sendReply: () => void sendReply(),
@@ -4330,6 +4352,9 @@
 
   function onMount(logic) {
     store.logic = logic
+    if (typeof console !== 'undefined' && console.info) {
+      console.info('[MMOS] bridge loaded', { donations: true, pollSec: 15 })
+    }
     bindChatShell()
     bindAuthForm()
     showAuth(true)
