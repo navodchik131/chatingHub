@@ -1699,23 +1699,50 @@
     return list[0]
   }
 
+  function openNoteForm() {
+    const logic = store.logic
+    if (!logic) return
+    logic.setState({ noteFormOpen: true })
+  }
+
+  function closeNoteForm() {
+    const logic = store.logic
+    if (!logic) return
+    logic.setState({ noteFormOpen: false, noteDraft: '' })
+    const ta = document.querySelector('[data-mm-note-text]')
+    if (ta) ta.value = ''
+  }
+
+  function toggleNoteForm() {
+    const logic = store.logic
+    if (!logic) return
+    if (logic.state.noteFormOpen) closeNoteForm()
+    else openNoteForm()
+  }
+
   async function saveConversationNote() {
     const logic = store.logic
     if (!logic || store.notesBusy) return
     const text = readNoteText()
-    if (!text) return
-    const conv = resolveActiveConv(store.conversations)
-    if (!conv) {
-      store.error = 'Нет выбранного диалога'
+    if (!text) {
+      store.error = logic.state.lang === 'en' ? 'Enter note text' : 'Введите текст заметки'
       logic.forceUpdate()
       return
     }
+    const conv = resolveActiveConv(store.conversations)
+    if (!conv) {
+      store.error = logic.state.lang === 'en' ? 'No dialog selected' : 'Нет выбранного диалога'
+      logic.forceUpdate()
+      return
+    }
+    // Как в старом кабинете: в API уходит content; тег — только UI-префикс по желанию
     const noteLang = logic.state.lang || 'ru'
     const td = NOTE_TAG_DEFS[logic.state.noteTag ?? 0] || NOTE_TAG_DEFS[0]
     const label = noteLang === 'ru' ? td.ru : td.en
-    const content = '[' + label + '] ' + text
+    const content = text.startsWith('[') ? text : '[' + label + '] ' + text
     store.notesBusy = true
     store.error = null
+    logic.forceUpdate()
     try {
       await API.apiJson('/api/conversations/' + conv.id + '/notes', {
         method: 'POST',
@@ -1723,7 +1750,7 @@
       })
       const nr = await API.apiJson('/api/conversations/' + conv.id + '/notes')
       store.notes = Array.isArray(nr) ? nr : []
-      logic.setState({ noteFormOpen: false, noteDraft: '' })
+      closeNoteForm()
     } catch (e) {
       store.error = e.message || String(e)
     } finally {
@@ -1733,25 +1760,28 @@
   }
 
   async function analyzeConversationNotes() {
+    const logic = store.logic
     const conv = resolveActiveConv(store.conversations)
     if (!conv) {
-      store.error = 'Нет выбранного диалога'
-      store.logic?.forceUpdate()
+      store.error = logic?.state?.lang === 'en' ? 'No dialog selected' : 'Нет выбранного диалога'
+      logic?.forceUpdate()
       return
     }
     if (store.notesBusy) return
     store.notesBusy = true
     store.error = null
+    logic?.forceUpdate()
     try {
       const data = await API.apiJson('/api/conversations/' + conv.id + '/notes/analyze', {
         method: 'POST',
+        body: '{}',
       })
       store.notes = Array.isArray(data) ? data : []
     } catch (e) {
       store.error = e.message || String(e)
     } finally {
       store.notesBusy = false
-      store.logic?.forceUpdate()
+      logic?.forceUpdate()
     }
   }
 
@@ -2765,8 +2795,7 @@
         if (el.closest('[data-mm-note-toggle], [data-mm-note-add]')) {
           e.preventDefault()
           e.stopPropagation()
-          const logic = store.logic
-          if (logic) logic.setState({ noteFormOpen: !logic.state.noteFormOpen })
+          toggleNoteForm()
           return
         }
         if (el.closest('[data-mm-note-save]')) {
@@ -2778,8 +2807,7 @@
         if (el.closest('[data-mm-note-cancel]')) {
           e.preventDefault()
           e.stopPropagation()
-          const logic = store.logic
-          if (logic) logic.setState({ noteFormOpen: false, noteDraft: '' })
+          closeNoteForm()
           return
         }
         if (el.closest('[data-mm-note-analyze]')) {
@@ -2822,34 +2850,38 @@
   function bindNotePanel() {
     const root = document.querySelector('[data-screen-label="Диалоги"]')
     if (!root) return
-    const logic = store.logic
     const toggle = root.querySelector('[data-mm-note-toggle]')
     if (toggle && !toggle.dataset.mmBound) {
       toggle.dataset.mmBound = '1'
-      toggle.addEventListener('click', () => {
-        if (!logic) return
-        logic.setState({ noteFormOpen: !logic.state.noteFormOpen })
-        logic.forceUpdate()
+      toggle.addEventListener('click', (e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        toggleNoteForm()
       })
     }
     const save = root.querySelector('[data-mm-note-save]')
     if (save && !save.dataset.mmBound) {
       save.dataset.mmBound = '1'
-      save.addEventListener('click', () => void saveConversationNote())
+      save.addEventListener('click', (e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        void saveConversationNote()
+      })
     }
     const cancel = root.querySelector('[data-mm-note-cancel]')
     if (cancel && !cancel.dataset.mmBound) {
       cancel.dataset.mmBound = '1'
-      cancel.addEventListener('click', () => {
-        if (!logic) return
-        logic.setState({ noteFormOpen: false, noteDraft: '' })
-        logic.forceUpdate()
+      cancel.addEventListener('click', (e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        closeNoteForm()
       })
     }
     const analyze = root.querySelector('[data-mm-note-analyze]')
     if (analyze && !analyze.dataset.mmBound) {
       analyze.dataset.mmBound = '1'
       analyze.addEventListener('click', (e) => {
+        e.preventDefault()
         e.stopPropagation()
         void analyzeConversationNotes()
       })
@@ -2857,10 +2889,10 @@
     root.querySelectorAll('[data-mm-note-tag]').forEach((el, i) => {
       if (el.dataset.mmBound) return
       el.dataset.mmBound = '1'
-      el.addEventListener('click', () => {
-        if (!logic) return
-        logic.setState({ noteTag: i })
-        logic.forceUpdate()
+      el.addEventListener('click', (e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        store.logic?.setState({ noteTag: i })
       })
     })
   }
@@ -3159,6 +3191,14 @@
   function emptyVals(vals) {
     return {
       ...vals,
+      noteFormOpen: false,
+      noteFormClosed: true,
+      noteDraft: '',
+      analyzeNotes: () => {},
+      analyzeNotesLabel: '✦ AI-' + (vals.t?.analysis || 'анализ'),
+      toggleNote: () => window.MMOS_BRIDGE?.toggleNoteForm?.(),
+      closeNote: () => window.MMOS_BRIDGE?.closeNoteForm?.(),
+      saveNote: () => void window.MMOS_BRIDGE?.saveConversationNote?.(),
       creditsBalance: '—',
       userEmailShort: '',
       userRolePlan: '',
@@ -3874,22 +3914,32 @@
       noteFormOpen: !!s.noteFormOpen,
       noteFormClosed: !s.noteFormOpen,
       noteDraft: s.noteDraft || '',
+      notesBusy: !!store.notesBusy,
       onNoteInput: (e) => {
         logic.setState({ noteDraft: e?.target?.value ?? '' })
       },
       noteTagChips,
       toggleNote: (e) => {
         e?.stopPropagation?.()
-        logic.setState({ noteFormOpen: !s.noteFormOpen })
+        toggleNoteForm()
       },
-      closeNote: () => {
-        logic.setState({ noteFormOpen: false, noteDraft: '' })
+      closeNote: (e) => {
+        e?.stopPropagation?.()
+        closeNoteForm()
       },
-      saveNote: () => void saveConversationNote(),
+      saveNote: (e) => {
+        e?.stopPropagation?.()
+        void saveConversationNote()
+      },
       analyzeNotes: (e) => {
         e?.stopPropagation?.()
         void analyzeConversationNotes()
       },
+      analyzeNotesLabel: store.notesBusy
+        ? s.lang === 'en'
+          ? 'Analyzing…'
+          : 'Анализ…'
+        : '✦ AI-' + (vals.t?.analysis || 'анализ'),
       backToList: () => logic.setState({ mobileChat: false, msgReact: null, emojiOpen: false }),
       closePops: () => {
         if (s.msgReact !== null || s.emojiOpen) logic.setState({ msgReact: null, emojiOpen: false })
@@ -4005,6 +4055,13 @@
     logout: () => API.setToken(null),
     runGenerate,
     runGenerateVideo,
+    pickChatFile,
+    clearChatAttachment,
     sendReply,
+    toggleNoteForm,
+    openNoteForm,
+    closeNoteForm,
+    saveConversationNote,
+    analyzeConversationNotes,
   }
 })(window)

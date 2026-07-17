@@ -369,7 +369,7 @@ const TEMPLATE_PATCHES = [
     /<div style="padding:10px 12px;border-top:1px solid rgba\(255,255,255,.07\);display:flex;gap:6px;">\s*<div style="flex:1;border:1px solid rgba\(255,255,255,.12\);border-radius:9px;padding:7px;text-align:center;font-size:11\.5px;font-weight:700;color:#C084FC;cursor:pointer;" style-hover="border-color:#C084FC;">✦ AI-\{\{ t\.analysis \}\}<\/div>\s*<div onClick="\{\{ toggleNote \}\}" style="flex:1;background:rgba\(215,244,82,.12\);border:1px solid rgba\(215,244,82,.3\);border-radius:9px;padding:7px;text-align:center;font-size:11\.5px;font-weight:700;color:#D7F452;cursor:pointer;" style-hover="background:rgba\(215,244,82,.2\);">\+ \{\{ t\.addNote \}\}<\/div>\s*<\/div>/,
     `<sc-if value="{{ noteFormClosed }}" hint-placeholder-val="{{ false }}">
             <div style="padding:10px 12px;border-top:1px solid rgba(255,255,255,.07);display:flex;gap:6px;">
-              <div onClick="{{ analyzeNotes }}" data-mm-note-analyze style="flex:1;border:1px solid rgba(255,255,255,.12);border-radius:9px;padding:7px;text-align:center;font-size:11.5px;font-weight:700;color:#C084FC;cursor:pointer;" style-hover="border-color:#C084FC;">✦ AI-{{ t.analysis }}</div>
+              <div onClick="{{ analyzeNotes }}" data-mm-note-analyze style="flex:1;border:1px solid rgba(255,255,255,.12);border-radius:9px;padding:7px;text-align:center;font-size:11.5px;font-weight:700;color:#C084FC;cursor:pointer;" style-hover="border-color:#C084FC;">{{ analyzeNotesLabel }}</div>
               <div onClick="{{ toggleNote }}" data-mm-note-toggle style="flex:1;background:rgba(215,244,82,.12);border:1px solid rgba(215,244,82,.3);border-radius:9px;padding:7px;text-align:center;font-size:11.5px;font-weight:700;color:#D7F452;cursor:pointer;" style-hover="background:rgba(215,244,82,.2);">+ {{ t.addNote }}</div>
             </div>
             </sc-if>`,
@@ -431,7 +431,27 @@ const LOGIC_PATCHES = [
   ],
   [
     /msgReact: null, emojiOpen: false,/,
-    'msgReact: null, emojiOpen: false, showScrollDown: false,',
+    'msgReact: null, emojiOpen: false, showScrollDown: false, replyDraft: \'\', noteDraft: \'\',',
+  ],
+  [
+    /noteFormOpen: false, noteTag: 0/,
+    'noteFormOpen: false, noteDraft: \'\', noteTag: 0, replyDraft: \'\'',
+  ],
+  [
+    /noteFormOpen: s\.noteFormOpen, noteTagChips, toggleNote: \(\) => setS\(\{ noteFormOpen: !s\.noteFormOpen \}\), closeNote: \(\) => setS\(\{ noteFormOpen: false \}\), saveNote: \(\) => setS\(\{ noteFormOpen: false \}\),/,
+    `noteFormOpen: s.noteFormOpen, noteFormClosed: !s.noteFormOpen, noteDraft: s.noteDraft || '', noteTagChips,
+      toggleNote: () => window.MMOS_BRIDGE?.toggleNoteForm?.(),
+      closeNote: () => window.MMOS_BRIDGE?.closeNoteForm?.(),
+      saveNote: () => void window.MMOS_BRIDGE?.saveConversationNote?.(),
+      analyzeNotes: () => void window.MMOS_BRIDGE?.analyzeConversationNotes?.(),
+      analyzeNotesLabel: '✦ AI-' + (t.analysis || 'анализ'),
+      onNoteInput: (e) => setS({ noteDraft: e?.target?.value ?? '' }),
+      replyDraft: s.replyDraft || '',
+      onReplyInput: (e) => setS({ replyDraft: e?.target?.value ?? '' }),
+      onReplyKeyDown: (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void window.MMOS_BRIDGE?.sendReply?.(); } },
+      pickChatFile: (e) => window.MMOS_BRIDGE?.pickChatFile?.(e),
+      sendReplyClick: () => void window.MMOS_BRIDGE?.sendReply?.(),
+      clearChatAttach: (e) => window.MMOS_BRIDGE?.clearChatAttachment?.(e),`,
   ],
   // enrich return
   [
