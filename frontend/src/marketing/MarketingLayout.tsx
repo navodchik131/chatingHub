@@ -1,12 +1,11 @@
 import { useEffect, useReducer, useState } from 'react'
-import { NavLink, Outlet, useSearchParams } from 'react-router-dom'
+import { NavLink, Outlet, useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { getToken } from '../api'
 import { MmButton, MmContainer } from './components/MmUi'
 import { LanguageSwitcher } from './i18n/LanguageSwitcher'
 import { MarketingI18nSync } from './i18n/MarketingI18nSync'
 import { useMarketingPath } from './i18n/useMarketingPath'
-import { WORKSPACE_URL } from './workspaceEntry'
 import './mm-tokens.css'
 import './mm-site.css'
 
@@ -64,9 +63,22 @@ export function MarketingLayout() {
   }, [])
 
   const hasToken = Boolean(getToken())
+  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const billingCopy = useBillingBanner(searchParams.get('billing'))
   const year = new Date().getFullYear()
+
+  useEffect(() => {
+    if (!hasToken) return
+    if (searchParams.get('account') !== 'integrations') return
+    const next = new URLSearchParams()
+    const fanvue = searchParams.get('fanvue')
+    const reason = searchParams.get('reason')
+    if (fanvue) next.set('fanvue', fanvue)
+    if (reason) next.set('reason', reason)
+    const q = next.toString()
+    navigate(`/workspace/connections${q ? `?${q}` : ''}`, { replace: true })
+  }, [hasToken, navigate, searchParams])
 
   const dismissBillingBanner = () => {
     const next = new URLSearchParams(searchParams)
@@ -102,13 +114,13 @@ export function MarketingLayout() {
           <div className="mm-header__actions">
             <LanguageSwitcher />
             {hasToken ? (
-              <a href="/workspace/" className="mm-header__login">
+              <NavLink to="/workspace" className="mm-header__login">
                 {t('layout.headerWorkspace')}
-              </a>
+              </NavLink>
             ) : (
-              <a href={WORKSPACE_URL} className="mm-header__login">
+              <NavLink to={path('/login')} className="mm-header__login">
                 {t('layout.headerLogin')}
-              </a>
+              </NavLink>
             )}
             <MmButton to={hasToken ? '/workspace' : '/login'} size="sm">
               {t('layout.headerCta')}
@@ -175,7 +187,7 @@ export function MarketingLayout() {
                   <NavLink to={path('/faq')}>{t('layout.footerHelpFaq')}</NavLink>
                 </li>
                 <li>
-                  <a href={WORKSPACE_URL}>{t('layout.footerHelpLogin')}</a>
+                  <a href={path('/login')}>{t('layout.footerHelpLogin')}</a>
                 </li>
               </ul>
             </div>

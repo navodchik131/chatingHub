@@ -270,10 +270,16 @@ app.add_middleware(
 )
 app.include_router(api_router)
 
-_frontend_dist = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "..", "..", "frontend", "dist")
+_frontend_root = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "..", "frontend")
 )
-if os.path.isdir(_frontend_dist):
+_frontend_dist = None
+for _spa_dir in ("dist-site", "dist"):
+    _candidate = os.path.join(_frontend_root, _spa_dir)
+    if os.path.isfile(os.path.join(_candidate, "index.html")):
+        _frontend_dist = _candidate
+        break
+if _frontend_dist:
     app.mount(
         "/",
         SPAStaticFiles(directory=_frontend_dist, html=True),

@@ -5,13 +5,13 @@
 ## Стек
 
 - **Backend:** Python, FastAPI, aiogram 3, SQLAlchemy async, PostgreSQL (прод) / SQLite (локально)  
-- **Frontend:** React, TypeScript, Vite  
+- **Frontend:** ModelMate OS (HTML + Vite), nginx в Docker; API — FastAPI  
 - **Перевод:** DeepL (если задан `DEEPL_API_KEY`), иначе публичный LibreTranslate  
 - **SaaS:** регистрация, JWT, кредиты и подписка (ЮKassa), интеграции Telegram/Fanvue на пользователя, шифрование секретов (Fernet)
 
 Подробная архитектура: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-### Docker (PostgreSQL + API со встроенным фронтом)
+### Docker (PostgreSQL + API + кабинет)
 
 Из корня репозитория задайте в `.env` минимум `JWT_SECRET`, `FERNET_KEY`, `PUBLIC_APP_URL` (HTTPS в проде), затем:
 
@@ -19,7 +19,9 @@
 docker compose up --build
 ```
 
-Интерфейс: http://localhost:8080 — сначала **регистрация**, затем в «Кабинете» подключите Telegram и Fanvue.  
+- **API:** http://127.0.0.1:8080/api/health  
+- **Кабинет:** http://127.0.0.1:5180/  
+
 Пример переменных: [deploy/env.example](deploy/env.example).
 
 Локальная SQLite-база из старых версий **несовместима** с новой схемой (нужен `user_id` у диалогов): удалите `backend/data/app.db` или перейдите на PostgreSQL.
@@ -59,32 +61,26 @@ python -m uvicorn app.main:app --reload --reload-dir app --host 127.0.0.1 --port
 
 **Windows:** если появляется `WinError 10013` (доступ к сокету запрещён), часто порт **8000** занят или попал в зарезервированный диапазон (Hyper-V и т.п.). Запустите на другом порту, например **8080** (как в примерах выше).
 
-Во `frontend` создайте файл `.env` со строкой `VITE_BACKEND_PORT=8080`, чтобы прокси Vite ходил на тот же порт.
-
 ### 2. Frontend (разработка)
 
-В другом терминале:
+В другом терминале (нужен запущенный API — см. выше или `docker compose up -d api db`):
 
 ```bash
 cd frontend
 npm install
+npm run sync-design   # при первом запуске или после правок макета
 npm run dev
 ```
 
-Откройте http://127.0.0.1:5173 — запросы проксируются на API (по умолчанию порт 8000, см. `VITE_BACKEND_PORT` в `frontend/.env`).
+Откройте http://127.0.0.1:5174/ — запросы проксируются на API (по умолчанию http://127.0.0.1:8080).
 
-### 3. Один порт (без Vite)
-
-Соберите фронт и откройте только backend (раздаёт и API, и SPA):
+### 3. Docker (рекомендуется)
 
 ```bash
-cd frontend
-npm run build
-cd ../backend
-python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+docker compose up -d --build
 ```
 
-Интерфейс: http://127.0.0.1:8000
+Кабинет: http://127.0.0.1:5180/
 
 ## Telegram
 

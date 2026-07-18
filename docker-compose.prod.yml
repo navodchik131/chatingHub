@@ -1,9 +1,11 @@
-# Production overlay: новый кабинет на https://model-mate.online/workspace/
-# Использование: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
-services:
-  frontend-os:
-    build:
-      args:
-        VITE_BASE_PATH: /workspace/
-    ports:
-      - "127.0.0.1:5180:80"
+# Production overlay: кабинет на https://model-mate.online/workspace/
+# Использование: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+services:
+  frontend:
+    build:
+      args:
+        VITE_BASE_PATH: /workspace/
+        VITE_WORKFLOW_BASE: /workspace/workflow/
+        VITE_CABINET_BASE: /workspace/
+    ports:
+      - "127.0.0.1:5180:80"

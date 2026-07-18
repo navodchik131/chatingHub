@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { resolveWorkspaceUrl, WORKSPACE_URL } from '../marketing/workspaceEntry'
 
 export type AdminTabId =
   | 'overview'
@@ -145,7 +146,7 @@ export function AdminShell({
             ))}
           </nav>
           <div className="admin-sidebar__foot">
-            <a href="/workspace/" className="admin-sidebar__cabinet">
+            <a href={resolveWorkspaceUrl(WORKSPACE_URL)} className="admin-sidebar__cabinet">
               ← {t('header.backToCabinet')}
             </a>
             <div className="admin-sidebar__user">

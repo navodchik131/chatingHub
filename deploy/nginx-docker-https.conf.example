@@ -65,7 +65,7 @@ server {
         proxy_read_timeout 300s;
     }
 
-    # Новый кабинет OS → docker frontend-os :5180 (сборка с VITE_BASE_PATH=/workspace/)
+    # Кабинет OS → docker frontend :5180 (сборка с VITE_BASE_PATH=/workspace/)
     location /workspace/ {
         proxy_pass http://chatinghub_os/;
         proxy_http_version 1.1;

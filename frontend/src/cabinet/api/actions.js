@@ -1,0 +1,469 @@
+import { apiFetch } from '../../api'
+import { postStudioJobStart, waitForStudioJobResult } from '../../studioJobs'
+import { apiJson, normalizePhotoKind } from './helpers'
+
+const OP_BITS = { chat: 1, studio: 2, models: 4, keys: 8, billing: 16 }
+
+export function maskFromOpRights(orR) {
+  let mask = 0
+  for (const [k, bit] of Object.entries(OP_BITS)) {
+    if (orR?.[k]) mask |= bit
+  }
+  return mask
+}
+
+export function rightsFromMask(mask) {
+  const m = Number(mask) || 0
+  return {
+    chat: (m & OP_BITS.chat) === OP_BITS.chat,
+    studio: (m & OP_BITS.studio) === OP_BITS.studio,
+    models: (m & OP_BITS.models) === OP_BITS.models,
+    keys: (m & OP_BITS.keys) === OP_BITS.keys,
+    billing: (m & OP_BITS.billing) === OP_BITS.billing,
+  }
+}
+
+export async function saveWavespeedKey(apiKey) {
+  await apiJson('/api/integrations/wavespeed', {
+    method: 'PUT',
+    body: JSON.stringify({ api_key: apiKey }),
+  })
+}
+
+export async function addTelegramBot(botToken, studioModelId) {
+  const body = { bot_token: botToken }
+  if (studioModelId) body.studio_model_id = Number(studioModelId)
+  await apiJson('/api/integrations/telegram', { method: 'PUT', body: JSON.stringify(body) })
+}
+
+export async function startFanvueOAuth(studioModelId) {
+  const body = {}
+  if (studioModelId) body.studio_model_id = Number(studioModelId)
+  return apiJson('/api/integrations/fanvue/oauth/start', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
+export async function saveTributeKey(apiKey, label, studioModelId) {
+  const body = { api_key: apiKey }
+  if (label) body.label = label
+  if (studioModelId) body.studio_model_id = Number(studioModelId)
+  await apiJson('/api/integrations/tribute', { method: 'PUT', body: JSON.stringify(body) })
+}
+
+export async function saveDonationLink(payload, editingId) {
+  if (editingId) {
+    return apiJson(`/api/creator-donations/${editingId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    })
+  }
+  return apiJson('/api/creator-donations', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function requestDonationPayout(sourceCurrency = 'RUB') {
+  await apiJson('/api/creator-donations/payout-requests', {
+    method: 'POST',
+    body: JSON.stringify({ source_currency: sourceCurrency }),
+  })
+}
+
+export async function savePayoutSettings(walletAddress, asset) {
+  await apiJson('/api/creator-donations/payout-settings', {
+    method: 'PUT',
+    body: JSON.stringify({ wallet_address: walletAddress, asset: asset || 'USDT' }),
+  })
+}
+
+export async function payTributeCheckout(product, creditsQuantity) {
+  const body = product === 'credits_pack' ? { product, credits_quantity: creditsQuantity } : { product }
+  return apiJson('/api/billing/tribute/checkout', { method: 'POST', body: JSON.stringify(body) })
+}
+
+export async function payYookassa(product, creditsQuantity) {
+  const body = product === 'credits_pack' ? { product, credits_quantity: creditsQuantity } : { product }
+  return apiJson('/api/billing/yookassa/payment', { method: 'POST', body: JSON.stringify(body) })
+}
+
+export async function subscribeWithCredits(product) {
+  await apiJson('/api/billing/subscribe-with-credits', {
+    method: 'POST',
+    body: JSON.stringify({ product }),
+  })
+}
+
+export async function addWorkspaceMember(payload) {
+  await apiJson('/api/workspace/members', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function updateWorkspaceMember(memberId, payload) {
+  return apiJson(`/api/workspace/members/${memberId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function deleteWorkspaceMember(memberId) {
+  await apiJson(`/api/workspace/members/${memberId}`, { method: 'DELETE' })
+}
+
+export async function deleteTelegramConnection(connectionId) {
+  return apiJson(`/api/integrations/telegram/${connectionId}`, { method: 'DELETE' })
+}
+
+export async function deleteFanvueConnection(connectionId) {
+  const q = connectionId ? `?connection_id=${connectionId}` : ''
+  return apiJson(`/api/integrations/fanvue${q}`, { method: 'DELETE' })
+}
+
+export async function deleteTributeConnection(connectionId) {
+  const q = connectionId ? `?connection_id=${connectionId}` : ''
+  return apiJson(`/api/integrations/tribute${q}`, { method: 'DELETE' })
+}
+
+export async function fetchCameraPresets() {
+  return apiJson('/api/studio/camera-presets')
+}
+
+export async function uploadPhoneExifReference(modelId, role, file) {
+  const fd = new FormData()
+  fd.append('role', role)
+  fd.append('image', file, file.name || 'photo.jpg')
+  const res = await apiFetch(`/api/studio/models/${modelId}/phone-exif-reference`, { method: 'POST', body: fd })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'Не удалось загрузить EXIF-эталон')
+  return data
+}
+
+export async function deletePhoneExifReference(modelId, role) {
+  return apiJson(`/api/studio/models/${modelId}/phone-exif-reference?role=${role}`, { method: 'DELETE' })
+}
+
+export async function addSnippet(title, body) {
+  await apiJson('/api/workspace/snippets', {
+    method: 'POST',
+    body: JSON.stringify({ title, body }),
+  })
+}
+
+export async function updateSnippet(snippetId, title, body) {
+  await apiJson(`/api/workspace/snippets/${snippetId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ title, body }),
+  })
+}
+
+export async function deleteSnippet(snippetId) {
+  await apiJson(`/api/workspace/snippets/${snippetId}`, { method: 'DELETE' })
+}
+
+export async function deleteConversation(convId) {
+  await apiFetch(`/api/conversations/${convId}`, { method: 'DELETE' })
+}
+
+export async function saveConversationNote(convId, content) {
+  await apiJson(`/api/conversations/${convId}/notes`, {
+    method: 'POST',
+    body: JSON.stringify({ content }),
+  })
+}
+
+export async function analyzeConversationNotes(convId) {
+  return apiJson(`/api/conversations/${convId}/notes/analyze`, {
+    method: 'POST',
+    body: '{}',
+  })
+}
+
+export async function toggleMessageReaction(convId, messageId, emoji) {
+  const res = await apiFetch(`/api/conversations/${convId}/messages/${messageId}/reactions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ emoji }),
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.detail || res.statusText)
+  return data
+}
+
+export async function sendReplyWithImage(convId, text, imageFile) {
+  const fd = new FormData()
+  if (text?.trim()) fd.append('text', text.trim())
+  fd.append('image', imageFile, imageFile.name || 'photo.jpg')
+  const res = await apiFetch(`/api/conversations/${convId}/reply`, { method: 'POST', body: fd })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'Не удалось отправить')
+  return data
+}
+
+export async function refreshArchiveImages() {
+  const data = await apiJson('/api/studio/generations?limit=40&skip=0&media_kind=image')
+  return Array.isArray(data?.items) ? data.items : []
+}
+
+export async function refreshArchiveVideos() {
+  const data = await apiJson('/api/studio/generations?limit=40&skip=0&media_kind=video')
+  return Array.isArray(data?.items) ? data.items : []
+}
+
+export async function postStudioJob(path, body) {
+  const accepted = await postStudioJobStart(path, body)
+  if (accepted.job_id) {
+    await waitForStudioJobResult(accepted.job_id, { maxWaitMs: 15 * 60 * 1000 }).catch(() => {})
+  }
+  return accepted
+}
+
+export async function executeWorkflowGraph(graph, targetNodeId) {
+  const fd = new FormData()
+  fd.append('graph', JSON.stringify(graph))
+  fd.append('target_node_id', targetNodeId)
+  return postStudioJobStart('/api/studio/workflow/execute', { method: 'POST', body: fd })
+}
+
+export async function runCarouselGeneration(params) {
+  const fd = new FormData()
+  fd.append('model_id', String(params.modelId))
+  fd.append('count', String(params.count))
+  fd.append('description', params.prompt || '')
+  fd.append('output_aspect', params.aspect || '9:16')
+  fd.append('studio_wave_profile', params.nsfw ? 'nsfw' : 'regular')
+  if (params.waveModelId) fd.append('workflow_wave_model', params.waveModelId)
+  if (params.wanTier) fd.append('wan_edit_tier', params.wanTier)
+  if (params.existingGenerationId) fd.append('existing_generation_id', String(params.existingGenerationId))
+  else if (params.imageFile) fd.append('image', params.imageFile, params.imageFile.name || 'carousel.jpg')
+  return postStudioJobStart('/api/studio/carousel', { method: 'POST', body: fd })
+}
+
+export async function runMotionFirstFrame(params) {
+  const fd = new FormData()
+  if (params.modelId) fd.append('model_id', String(params.modelId))
+  fd.append('output_aspect', params.aspect || '9:16')
+  fd.append('studio_wave_profile', params.nsfw ? 'nsfw' : 'regular')
+  if (params.videoFile) fd.append('video', params.videoFile)
+  if (params.frameFile) fd.append('first_frame_image', params.frameFile)
+  if (params.existingGenerationId) fd.append('existing_generation_id', String(params.existingGenerationId))
+  if (params.description) fd.append('description', params.description)
+  const accepted = await postStudioJobStart('/api/studio/motion/first-frame', { method: 'POST', body: fd })
+  if (accepted.job_id) {
+    const result = await waitForStudioJobResult(accepted.job_id, { maxWaitMs: 10 * 60 * 1000 })
+    return { accepted, result }
+  }
+  return { accepted, result: null }
+}
+
+export async function runMotionVideo(params) {
+  const fd = new FormData()
+  fd.append('model_id', String(params.modelId))
+  fd.append('prompt', params.prompt)
+  fd.append('output_aspect', params.aspect || '9:16')
+  const raw = String(params.resolution || '1080').toLowerCase()
+  const videoResolution = raw === '4k' || raw === '1080' || raw === '1080p'
+    ? '1080p'
+    : raw === '720' || raw === '720p'
+      ? '720p'
+      : raw === '480' || raw === '480p'
+        ? '480p'
+        : '720p'
+  fd.append('video_resolution', videoResolution)
+  if (params.durationSeconds) fd.append('duration_seconds', String(params.durationSeconds))
+  if (params.motionVideoFileId) fd.append('motion_video_file_id', params.motionVideoFileId)
+  if (params.frameFile) fd.append('image', params.frameFile)
+  if (params.existingGenerationId) fd.append('existing_generation_id', String(params.existingGenerationId))
+  return postStudioJob('/api/studio/motion/render-video', { method: 'POST', body: fd })
+}
+
+export async function uploadWorkflowReference(file) {
+  const fd = new FormData()
+  fd.append('file', file)
+  const res = await apiFetch('/api/studio/workflow/reference', { method: 'POST', body: fd })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.detail || 'Не удалось загрузить референс')
+  if (!data.ref_id) throw new Error('Сервер не вернул ref_id')
+  return data.ref_id
+}
+
+export async function uploadMotionDrivingVideo(file) {
+  const fd = new FormData()
+  fd.append('video', file)
+  const res = await apiFetch('/api/studio/motion/upload-driving-video', { method: 'POST', body: fd })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'Не удалось загрузить видео')
+  const id = String(data.motion_video_file_id || '').trim()
+  if (!id) throw new Error('Сервер не вернул id видео')
+  return id
+}
+
+export async function createStudioModel(name) {
+  const fd = new FormData()
+  fd.append('name', name.trim())
+  fd.append('profile_text', '')
+  const res = await apiFetch('/api/studio/models', { method: 'POST', body: fd })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'Не удалось создать персонажа')
+  return data
+}
+
+export async function patchStudioModel(charId, patch) {
+  return apiJson(`/api/studio/models/${charId}`, { method: 'PATCH', body: JSON.stringify(patch) })
+}
+
+export async function deleteStudioModel(charId) {
+  await apiJson(`/api/studio/models/${charId}`, { method: 'DELETE' })
+}
+
+export async function uploadStudioModelImage(charId, file, kind = 'face') {
+  const fd = new FormData()
+  fd.append('images', file)
+  fd.append('image_kinds', JSON.stringify([normalizePhotoKind(kind)]))
+  const res = await apiFetch(`/api/studio/models/${charId}/images`, { method: 'POST', body: fd })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'Не удалось загрузить фото')
+  return data
+}
+
+export async function deleteStudioModelImage(charId, imageId) {
+  await apiJson(`/api/studio/models/${charId}/images/${imageId}`, { method: 'DELETE' })
+}
+
+export async function patchStudioModelImageKind(charId, imageId, kind) {
+  return apiJson(`/api/studio/models/${charId}/images/${imageId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ kind: normalizePhotoKind(kind) }),
+  })
+}
+
+export async function generateStudioModelProfile(images) {
+  const fd = new FormData()
+  for (const im of images.slice(0, 8)) {
+    const res = await apiFetch(im.url)
+    if (!res.ok) throw new Error('Не удалось прочитать фото модели')
+    const blob = await res.blob()
+    fd.append('images', blob, `model-${im.id}.jpg`)
+  }
+  const res = await apiFetch('/api/studio/models/generate-profile', { method: 'POST', body: fd })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'Генерация не удалась')
+  return data
+}
+
+export function archiveThumbUrl(item) {
+  if (!item) return ''
+  if (item.thumbnail_url) return item.thumbnail_url
+  if (item.url) return item.url
+  if (item.public_url) return item.public_url
+  return ''
+}
+
+/** Ждёт загрузки MMOS_STUDIO_SCENARIOS из public/mm-os-studio-scenarios.js */
+export function ensureStudioScenarios(timeoutMs = 8000) {
+  if (typeof window !== 'undefined' && window.MMOS_STUDIO_SCENARIOS?.buildGraphForMode) {
+    return Promise.resolve(window.MMOS_STUDIO_SCENARIOS)
+  }
+  return new Promise((resolve, reject) => {
+    const started = Date.now()
+    const tick = () => {
+      if (window.MMOS_STUDIO_SCENARIOS?.buildGraphForMode) {
+        resolve(window.MMOS_STUDIO_SCENARIOS)
+        return
+      }
+      if (Date.now() - started > timeoutMs) {
+        reject(new Error('Workflow-сценарии не загружены'))
+        return
+      }
+      setTimeout(tick, 100)
+    }
+    if (!document.querySelector('script[data-mm-scenarios]')) {
+      const el = document.createElement('script')
+      el.src = '/mm-os-studio-scenarios.js'
+      el.dataset.mmScenarios = '1'
+      el.onerror = () => reject(new Error('Не удалось загрузить mm-os-studio-scenarios.js'))
+      document.head.appendChild(el)
+    }
+    tick()
+  })
+}
+
+const AI_MODEL_MAP = {
+  nano: 'nano-banana-pro',
+  gpt: 'gpt-image-2',
+  seedream: 'seedream-v5.0-pro',
+  wan: 'wan-2.7-pro',
+}
+
+function waveModelFromState(s) {
+  const id = AI_MODEL_MAP[s.aiModel] || s.aiModel || 'nano-banana-pro'
+  return { apiId: id, tier: s.wanTier || 'standard' }
+}
+
+function isNsfwMode(s) {
+  return s.contentMode === 'nsfw'
+}
+
+function slotUploadKey(mode, index) {
+  if (mode === 'outfit') return index === 0 ? 'ref' : 'outfit-cloth'
+  if (mode === 'location') return index === 0 ? 'ref' : 'location-photo'
+  if (mode === 'carousel') return 'carousel'
+  return 'ref'
+}
+
+function slotStateKey(mode, index) {
+  return `${mode}:${index}`
+}
+
+function resolveSlotSource(mode, index, uploadFiles, slotArchivePicks) {
+  const uploadKey = slotUploadKey(mode, index)
+  return {
+    file: uploadFiles[uploadKey] || null,
+    archiveId: slotArchivePicks[slotStateKey(mode, index)] ?? null,
+    uploadKey,
+    slotKey: slotStateKey(mode, index),
+  }
+}
+
+export { resolveSlotSource }
+
+/** Генерация изображений через workflow execute (как mm-os-bridge). */
+export async function runImageGeneration({ appState, studioStore, userPrompt }) {
+  const scenarios = await ensureStudioScenarios()
+  const mode = appState.imgMode || 'prompt'
+  const modelId = studioStore.selectedModelId
+  const needsModel = mode === 'ref' || mode === 'swap' || mode === 'prompt'
+  if (needsModel && !modelId) throw new Error('Выберите персонажа')
+
+  const bridgeApi = {
+    apiFetch,
+    readJson: async (r) => r.json().catch(() => ({})),
+    formatDetail: (d) => (typeof d?.detail === 'string' ? d.detail : ''),
+  }
+
+  const helpers = {
+    normalizeWaveModel: (w) => w,
+    waveModelFromState: () => waveModelFromState(appState),
+    isNsfwMode: () => isNsfwMode(appState),
+    slotStateKey,
+    slotUploadKey,
+    resolveSlotSource: (m, i) =>
+      resolveSlotSource(m, i, studioStore.uploadFiles, studioStore.slotArchivePicks),
+    userPrompt,
+  }
+
+  const built = await scenarios.buildGraphForMode(mode, {
+    API: bridgeApi,
+    store: studioStore,
+    archiveThumbUrl,
+    s: appState,
+    modelId,
+    userPrompt,
+    helpers,
+  })
+  if (!built) throw new Error('Неизвестный режим генерации')
+  return executeWorkflowGraph(built.graph, built.targetNodeId)
+}

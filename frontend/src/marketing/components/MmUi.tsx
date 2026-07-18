@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { useMarketingPath } from '../i18n/useMarketingPath'
-import { isWorkspaceAuthPath, WORKSPACE_URL } from '../workspaceEntry'
+import { isWorkspaceAuthPath, resolveWorkspaceUrl, WORKSPACE_URL } from '../workspaceEntry'
 
 export function MmContainer({ children, className = '' }: { children: ReactNode; className?: string }) {
   return <div className={`mm-container ${className}`.trim()}>{children}</div>
@@ -34,9 +34,10 @@ export function MmButton({ children, variant = 'primary', size = 'md', to, href,
     toResolved?.startsWith('/workspace') ||
     (toResolved && isWorkspaceAuthPath(toResolved))
   ) {
-    const workspaceHref = toResolved?.startsWith('/workspace') && toResolved !== '/workspace'
-      ? toResolved
-      : WORKSPACE_URL
+    const workspaceHref =
+      toResolved?.startsWith('/workspace') && toResolved !== '/workspace'
+        ? resolveWorkspaceUrl(toResolved)
+        : resolveWorkspaceUrl(WORKSPACE_URL)
     return (
       <a href={workspaceHref} className={cls}>
         {children}

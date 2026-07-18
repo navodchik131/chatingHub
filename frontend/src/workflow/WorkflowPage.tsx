@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Link } from 'react-router-dom'
 import { apiFetch, getToken } from '../api'
 import { AppLanguageSwitcher } from '../i18n/AppLanguageSwitcher'
 import { hasAllBits, PERM_STUDIO_GENERATE } from '../workspacePermissions'
@@ -23,6 +22,15 @@ import { useWorkflowMobile } from './useWorkflowMobile'
 import type { BillingMeLike } from '../billing/planLabels'
 import type { ProjectGraph, StudioModelOption } from './types'
 import './workflow.css'
+
+function cabinetHref(): string {
+  const fromEnv = import.meta.env.VITE_CABINET_BASE
+  if (typeof fromEnv === 'string' && fromEnv.trim()) {
+    const base = fromEnv.trim()
+    return base.endsWith('/') ? base : `${base}/`
+  }
+  return '/workspace/'
+}
 
 interface UserMe extends BillingMeLike {
   permissions_mask?: number
@@ -253,9 +261,9 @@ export function WorkflowPage() {
         <div className="workflow-gate__card">
           <h1>{t('page.title')}</h1>
           <p>{t('page.signInRequired')}</p>
-          <Link className="workflow-gate__link" to="/login">
+          <a className="workflow-gate__link" href={cabinetHref()}>
             {t('page.signIn')}
-          </Link>
+          </a>
         </div>
       </div>
     )
@@ -267,9 +275,9 @@ export function WorkflowPage() {
         <div className="workflow-gate__card">
           <h1>{t('page.accessDeniedTitle')}</h1>
           <p>{t('page.accessDenied')}</p>
-          <Link className="workflow-gate__link" to="/workspace">
+          <a className="workflow-gate__link" href={cabinetHref()}>
             {t('page.toCabinet')}
-          </Link>
+          </a>
         </div>
       </div>
     )
@@ -311,9 +319,9 @@ export function WorkflowPage() {
                 {t('sidebar.projects')}
               </button>
             ) : null}
-            <Link className="workflow-page__btn" to="/workspace">
+            <a className="workflow-page__btn" href={cabinetHref()}>
               {t('page.backToStudio')}
-            </Link>
+            </a>
           </div>
         </header>
         <div className="workflow-page__body">

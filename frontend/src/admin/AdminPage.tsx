@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Navigate } from 'react-router-dom'
+import { resolveWorkspaceUrl, WORKSPACE_URL } from '../marketing/workspaceEntry'
 import { apiFetch, getToken } from '../api'
 import { AdminCreatorDonationsTab } from './AdminCreatorDonationsTab'
 import { AdminEmailTab } from './AdminEmailTab'
@@ -145,14 +145,15 @@ export function AdminPage() {
     )
   }
   if (gate === 'anon') {
-    return <Navigate to="/workspace/" replace />
+    window.location.replace(resolveWorkspaceUrl(WORKSPACE_URL))
+    return null
   }
   if (gate === 'denied') {
     return (
       <div className="admin-page admin-page--center">
         <h1>{t('gate.deniedTitle')}</h1>
         <p className="muted">{t('gate.deniedHint')}</p>
-        <a href="/workspace/" className="admin-back-link">
+        <a href={resolveWorkspaceUrl(WORKSPACE_URL)} className="admin-back-link">
           {t('gate.backToWorkspace')}
         </a>
       </div>

@@ -1,0 +1,72 @@
+/* Transferred from the prototype's <helmet><style> block. */
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: #0A0B0D;
+  color: #F2F3F0;
+  font-family: 'Manrope', system-ui, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+#root { height: 100vh; }
+
+a { color: #D7F452; text-decoration: none; }
+a:hover { color: #E8FA8A; }
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,.12); border-radius: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+
+input::placeholder, textarea::placeholder { color: #5C6066; }
+
+@keyframes mmFade {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes mmSpin { to { transform: rotate(360deg); } }
+@keyframes mmPulse {
+  0%, 100% { opacity: .4; }
+  50% { opacity: .85; }
+}
+
+/* Quality floor: visible keyboard focus + reduced motion. */
+:focus-visible {
+  outline: 2px solid #D7F452;
+  outline-offset: 2px;
+}
+
+[role="button"]:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* Hoverable — только CSS :hover, без React state (не «залипает» после клика). */
+.mm-hov {
+  box-sizing: border-box;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .mm-hov[data-h-bc]:hover { border-color: var(--mm-h-bc); }
+  .mm-hov[data-h-bg]:hover { background: var(--mm-h-bg); }
+  .mm-hov[data-h-c]:hover { color: var(--mm-h-c); }
+  .mm-hov[data-h-filter]:hover { filter: var(--mm-h-filter); }
+  .mm-hov[data-h-op]:hover { opacity: var(--mm-h-op); }
+  .mm-hov[data-h-tf]:hover { transform: var(--mm-h-tf); }
+}
+
+/* Поля форм уже имеют border — outline даёт «двойную» обводку. */
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: none;
+  border-color: rgba(215, 244, 82, 0.45) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+  }
+}

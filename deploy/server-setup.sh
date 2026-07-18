@@ -50,6 +50,7 @@ if [[ -f package-lock.json ]]; then
 else
   npm install
 fi
+npm run sync-design
 npm run build
 
 echo ""

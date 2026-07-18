@@ -8,6 +8,7 @@ from urllib.parse import urlencode
 
 from aiogram import Bot
 from aiogram.client.session.aiohttp import AiohttpSession
+from aiogram.utils.token import TokenValidationError
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from fastapi.responses import RedirectResponse
 from sqlalchemy import delete, func, select
@@ -485,7 +486,14 @@ async def put_telegram(
 
     proxy = (settings.telegram_proxy or "").strip()
     session_aio = AiohttpSession(proxy=proxy) if proxy else None
-    bot = Bot(token=raw, session=session_aio) if session_aio else Bot(token=raw)
+    bot: Bot | None = None
+    try:
+        bot = Bot(token=raw, session=session_aio) if session_aio else Bot(token=raw)
+    except TokenValidationError as e:
+        raise HTTPException(
+            status_code=400,
+            detail="Неверный формат токена BotFather. Скопируйте токен целиком (123456789:AAH…).",
+        ) from e
     webhook_registered = False
     try:
         me = await bot.get_me()
@@ -507,73 +515,83 @@ async def put_telegram(
             detail=f"Не удалось проверить токен или зарегистрировать webhook: {e}",
         ) from e
     finally:
-        await bot.session.close()
+        if bot is not None:
+            await bot.session.close()
 
     sub = await session.scalar(select(Subscription).where(Subscription.user_id == oid))
     if body.studio_model_id is not None:
         await validate_connection_studio_model(session, oid, body.studio_model_id)
 
-    row: TelegramConnection | None = None
-    if body.connection_id is not None:
-        row = await session.scalar(
-            select(TelegramConnection).where(
-                TelegramConnection.id == body.connection_id,
-                TelegramConnection.user_id == oid,
-            )
-        )
-        if not row:
-            raise HTTPException(status_code=404, detail="Подключение Telegram не найдено")
-    else:
-        existing = list(
-            (
-                await session.scalars(
-                    select(TelegramConnection).where(TelegramConnection.user_id == oid)
+    try:
+        row: TelegramConnection | None = None
+        if body.connection_id is not None:
+            row = await session.scalar(
+                select(TelegramConnection).where(
+                    TelegramConnection.id == body.connection_id,
+                    TelegramConnection.user_id == oid,
                 )
-            ).all()
-        )
-        if len(existing) == 1:
-            row = existing[0]
-        elif len(existing) == 0:
-            await assert_can_add_platform_connection(
-                session, oid, sub, platform=Platform.telegram
             )
+            if not row:
+                raise HTTPException(status_code=404, detail="Подключение Telegram не найдено")
         else:
-            await assert_can_add_platform_connection(
-                session, oid, sub, platform=Platform.telegram
+            existing = list(
+                (
+                    await session.scalars(
+                        select(TelegramConnection).where(TelegramConnection.user_id == oid)
+                    )
+                ).all()
             )
+            if len(existing) == 1:
+                row = existing[0]
+            elif len(existing) == 0:
+                await assert_can_add_platform_connection(
+                    session, oid, sub, platform=Platform.telegram
+                )
+            else:
+                await assert_can_add_platform_connection(
+                    session, oid, sub, platform=Platform.telegram
+                )
 
-    label = (body.label or "").strip() or None
-    if row:
-        row.bot_token_encrypted = enc
-        row.webhook_secret = webhook_secret
-        row.bot_username = me.username
-        row.is_active = True
-        row.webhook_registered = webhook_registered
-        if label is not None:
-            row.label = label
-        if body.studio_model_id is not None:
-            row.studio_model_id = body.studio_model_id
-            await sync_conversations_model_from_connection(
-                session,
-                platform=Platform.telegram,
-                connection_id=row.id,
+        label = (body.label or "").strip() or None
+        if row:
+            row.bot_token_encrypted = enc
+            row.webhook_secret = webhook_secret
+            row.bot_username = me.username
+            row.is_active = True
+            row.webhook_registered = webhook_registered
+            if label is not None:
+                row.label = label
+            if body.studio_model_id is not None:
+                row.studio_model_id = body.studio_model_id
+                await sync_conversations_model_from_connection(
+                    session,
+                    platform=Platform.telegram,
+                    connection_id=row.id,
+                    studio_model_id=body.studio_model_id,
+                )
+        else:
+            row = TelegramConnection(
+                user_id=oid,
+                label=label,
                 studio_model_id=body.studio_model_id,
+                bot_token_encrypted=enc,
+                webhook_secret=webhook_secret,
+                bot_username=me.username,
+                webhook_registered=webhook_registered,
+                is_active=True,
             )
-    else:
-        row = TelegramConnection(
-            user_id=oid,
-            label=label,
-            studio_model_id=body.studio_model_id,
-            bot_token_encrypted=enc,
-            webhook_secret=webhook_secret,
-            bot_username=me.username,
-            webhook_registered=webhook_registered,
-            is_active=True,
-        )
-        session.add(row)
-    await session.commit()
-
-    return await _integration_status(session, user)
+            session.add(row)
+        await session.commit()
+        return await _integration_status(session, user)
+    except HTTPException:
+        raise
+    except Exception as e:
+        await session.rollback()
+        log.exception("put_telegram failed user=%s owner=%s", user.id, oid)
+        raise HTTPException(
+            status_code=500,
+            detail="Не удалось сохранить подключение Telegram. Обновите сервер (миграции БД) или проверьте FERNET_KEY.",
+        ) from e
 
 
 async def _save_fanvue_oauth_tokens(

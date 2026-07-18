@@ -47,11 +47,11 @@ services:
       # Cookies IG-бота на хосте (не в git) — без bind mount контейнер их не видит.
       - ./backend/ig-bot:/app/backend/ig-bot:ro
 
-  # Новый кабинет OS. На production за nginx: /workspace/ (см. deploy/nginx-model-mate.online.conf).
-  frontend-os:
+  # Кабинет ModelMate OS. На production за nginx: /workspace/ (см. deploy/nginx-model-mate.online.conf).
+  frontend:
     build:
       context: .
-      dockerfile: frontend-os/Dockerfile
+      dockerfile: frontend/Dockerfile
     restart: unless-stopped
     ports:
       - "127.0.0.1:5180:80"

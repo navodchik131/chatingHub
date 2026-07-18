@@ -43,6 +43,5 @@ sudo nginx -t && sudo systemctl reload nginx
 ```bash
 cd /opt/chatinghub
 git pull
-cd frontend && npm ci && npm run build
-sudo systemctl restart chatinghub
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build api frontend
 ```

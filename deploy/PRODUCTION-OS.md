@@ -1,12 +1,15 @@
-# Новый кабинет OS на production (model-mate.online)
+# Кабинет OS на production (model-mate.online)
 
 ## Адреса
 
 | Раздел | URL |
 |--------|-----|
-| Маркетинг (лендинг, pricing, login) | https://model-mate.online/ |
-| **Кабинет OS** | https://model-mate.online/workspace/ |
-| Workflow (пока старый редактор) | https://model-mate.online/workspace/workflow |
+| **Лендинг** | https://model-mate.online/ |
+| **Вход** | https://model-mate.online/login → `/workspace/` |
+| **Кабинет** | https://model-mate.online/workspace/ |
+| **Workflow** | https://model-mate.online/workspace/workflow/ |
+| **Админка** | https://model-mate.online/admin |
+| API | https://model-mate.online/api/ |
 | Старый путь (редирект) | https://model-mate.online/os/ → `/workspace/` |
 
 Один API и одна БД. Cookie `chating_token` общий (path=/).
@@ -22,20 +25,20 @@ sudo cp deploy/nginx-model-mate.online.conf /etc/nginx/sites-available/model-mat
 sudo ln -sf /etc/nginx/sites-available/model-mate.online /etc/nginx/sites-enabled/
 sudo nginx -t && sudo systemctl reload nginx
 
-# Собрать: маркетинг (api) + кабинет OS с base /workspace/
-docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build api frontend-os
+# API + кабинет (base /workspace/)
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build api frontend
 ```
 
 ## Обновление после правок
 
-**Только кабинет OS:**
+**Только кабинет:**
 
 ```bash
 git pull
-docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build frontend-os
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build frontend
 ```
 
-**Только маркетинг / favicon:**
+**Только API:**
 
 ```bash
 git pull
@@ -51,13 +54,15 @@ curl -s https://model-mate.online/api/health
 docker compose ps
 ```
 
-## Локальная разработка (без /workspace/)
+## Локальная разработка
 
 ```bash
-docker compose up -d --build          # frontend-os на http://127.0.0.1:5180/ (base /)
+docker compose up -d --build
+# кабинет http://127.0.0.1:5180/  ·  workflow http://127.0.0.1:5180/workflow/
+cd frontend && npm install && npm run sync-design && npm run dev        # кабинет :5174
+cd frontend && npm run dev:site                                          # лендинг :5173
+cd frontend && npm run dev:workflow                                     # workflow :5175
 ```
-
-Маркетинг + старый `/workspace` в dev: `cd frontend && npm run dev` или api на :8080.
 
 ## CORS
 
