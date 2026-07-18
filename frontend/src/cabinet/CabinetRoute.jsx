@@ -1,16 +1,24 @@
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
-import { getToken } from '../api'
+import { AuthCheckingScreen } from '../auth/AuthCheckingScreen'
+import { useAuthSessionGate } from '../auth/useAuthSessionGate'
 import CabinetApp from './App'
 import { CabinetDataProvider } from './api/CabinetDataProvider'
 import './styles/global.css'
 
-/** Защита /workspace/* — без токена на /login. */
+/** Защита /workspace/* — без валидной сессии на /login. */
 export function CabinetRoute() {
   const location = useLocation()
-  if (!getToken()) {
+  const session = useAuthSessionGate()
+
+  if (session === 'checking') {
+    return <AuthCheckingScreen variant="cabinet" />
+  }
+
+  if (session === 'anonymous') {
     const next = encodeURIComponent(location.pathname + location.search)
     return <Navigate to={`/login?next=${next}`} replace />
   }
+
   return (
     <CabinetDataProvider>
       <CabinetApp />

@@ -1,8 +1,9 @@
 import { useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import { AuthCheckingScreen } from '../auth/AuthCheckingScreen'
+import { useAuthSessionGate } from '../auth/useAuthSessionGate'
 import { AuthPanel } from '../AuthPanel'
-import { apiFetch, getToken, setToken } from '../api'
 import '../styles/auth-ui.css'
 
 function safeNext(raw: string | null): string {
@@ -23,22 +24,20 @@ export function LoginPage() {
   const [params] = useSearchParams()
   const next = safeNext(params.get('next'))
   const referralCode = params.get('ref') || params.get('referral') || undefined
+  const session = useAuthSessionGate()
 
   useEffect(() => {
-    const token = getToken()
-    if (!token) return
-    void (async () => {
-      const r = await apiFetch('/api/auth/me')
-      if (r.ok) {
-        navigate(next, { replace: true })
-        return
-      }
-      setToken(null)
-    })()
-  }, [navigate, next])
+    if (session === 'authenticated') {
+      navigate(next, { replace: true })
+    }
+  }, [session, navigate, next])
 
   const onSuccess = () => {
     navigate(next, { replace: true })
+  }
+
+  if (session === 'checking' || session === 'authenticated') {
+    return <AuthCheckingScreen />
   }
 
   return (

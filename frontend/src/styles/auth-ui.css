@@ -26,6 +26,21 @@
   color: #d7f452;
 }
 
+.auth-checking {
+  margin: 0;
+  text-align: center;
+  color: #9ba0a6;
+  font-size: 14px;
+}
+
+.cabinet-auth-check {
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #0a0b0d;
+}
+
 .auth-card {
   width: 100%;
   background: #121316;
