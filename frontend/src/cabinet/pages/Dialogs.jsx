@@ -242,6 +242,10 @@ function Thread() {
   const emojiChoices = EMOJI_CHOICES;
   const langMap = LANG_MAP;
 
+  useEffect(() => () => {
+    if (attachPreview) URL.revokeObjectURL(attachPreview);
+  }, [attachPreview]);
+
   if (!cur) {
     return (
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: color.textGhost, fontSize: 13 }}>
@@ -267,10 +271,6 @@ function Thread() {
     const el = document.getElementById('mm-thread-scroll');
     if (el) el.scrollTop = el.scrollHeight;
   };
-
-  useEffect(() => () => {
-    if (attachPreview) URL.revokeObjectURL(attachPreview);
-  }, [attachPreview]);
 
   const clearAttach = () => {
     if (attachPreview) URL.revokeObjectURL(attachPreview);
