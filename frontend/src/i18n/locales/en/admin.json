@@ -3,7 +3,8 @@
     "checking": "Checking access…",
     "deniedTitle": "Access denied",
     "deniedHint": "Admin panel is for platform administrators only.",
-    "backToWorkspace": "Back to workspace"
+    "backToWorkspace": "Back to workspace",
+    "statsLoadFailed": "Could not load analytics. Check access and refresh the page."
   },
   "header": {
     "eyebrow": "ModelMate · platform",

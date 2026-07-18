@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { AuthPanel } from '../AuthPanel'
-import { getToken } from '../api'
+import { apiFetch, getToken, setToken } from '../api'
 import '../styles/auth-ui.css'
 
 function safeNext(raw: string | null): string {
@@ -25,9 +25,16 @@ export function LoginPage() {
   const referralCode = params.get('ref') || params.get('referral') || undefined
 
   useEffect(() => {
-    if (getToken()) {
-      navigate(next, { replace: true })
-    }
+    const token = getToken()
+    if (!token) return
+    void (async () => {
+      const r = await apiFetch('/api/auth/me')
+      if (r.ok) {
+        navigate(next, { replace: true })
+        return
+      }
+      setToken(null)
+    })()
   }, [navigate, next])
 
   const onSuccess = () => {

@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useCabinetData } from '../api/CabinetDataProvider';
-import { pageFromPathname, pathnameFromPage } from '../CabinetRoute';
+import { pageFromPathname, pathnameFromPage, WORKFLOW_APP_URL } from '../CabinetRoute';
 import { dict } from '../data/i18n';
 import { BREAKPOINT_MOBILE, BREAKPOINT_NARROW } from '../styles/tokens';
 
@@ -83,9 +83,13 @@ export function AppProvider({ children, forceMobile = false }) {
   const setS = (patch) => setState((prev) => ({ ...prev, ...patch }));
 
   const go = (nextPage) => () => {
-    navigate(pathnameFromPage(nextPage));
-    setS({ connDetail: null, charDetail: null, moreOpen: false });
-  };
+    if (nextPage === 'workflow') {
+      window.location.assign(WORKFLOW_APP_URL)
+      return
+    }
+    navigate(pathnameFromPage(nextPage))
+    setS({ connDetail: null, charDetail: null, moreOpen: false })
+  }
 
   useEffect(() => {
     if (cabinet.opRights) {

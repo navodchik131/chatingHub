@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Navigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { resolveWorkspaceUrl, WORKSPACE_URL } from '../marketing/workspaceEntry'
-import { apiFetch, getToken } from '../api'
+import { apiFetch, getToken, setToken } from '../api'
 import { AdminCreatorDonationsTab } from './AdminCreatorDonationsTab'
 import { AdminEmailTab } from './AdminEmailTab'
 import { AdminExifBotTab } from './AdminExifBotTab'
@@ -57,8 +58,12 @@ export function AdminPage() {
 
   const loadStats = useCallback(async () => {
     const r = await apiFetch('/api/admin/stats?chart_days=30')
-    if (r.ok) setStats((await r.json()) as AdminStats)
-  }, [])
+    if (r.ok) {
+      setStats((await r.json()) as AdminStats)
+      return
+    }
+    setError(t('gate.statsLoadFailed'))
+  }, [t])
 
   const loadUsers = useCallback(async (search: string) => {
     const q = new URLSearchParams()
@@ -91,6 +96,7 @@ export function AdminPage() {
     void (async () => {
       const r = await apiFetch('/api/auth/me')
       if (!r.ok) {
+        setToken(null)
         setGate('anon')
         return
       }
@@ -145,8 +151,7 @@ export function AdminPage() {
     )
   }
   if (gate === 'anon') {
-    window.location.replace(resolveWorkspaceUrl(WORKSPACE_URL))
-    return null
+    return <Navigate to="/login?next=%2Fadmin" replace />
   }
   if (gate === 'denied') {
     return (
@@ -184,6 +189,9 @@ export function AdminPage() {
         ) : null}
         {tab === 'overview' && !stats && busy ? (
           <p className="muted admin-fade-in">{t('overview.loadingAnalytics')}</p>
+        ) : null}
+        {tab === 'overview' && !stats && !busy ? (
+          <p className="muted admin-fade-in">{error || t('gate.statsLoadFailed')}</p>
         ) : null}
 
         {tab === 'users' ? (

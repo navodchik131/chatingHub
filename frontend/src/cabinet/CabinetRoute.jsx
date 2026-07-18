@@ -39,8 +39,12 @@ export function pageFromPathname(pathname) {
   return CABINET_PAGES.has(rest) ? rest : 'overview'
 }
 
+/** Отдельная сборка workflow SPA (не страница кабинета). */
+export const WORKFLOW_APP_URL = '/workspace/workflow/'
+
 export function pathnameFromPage(page) {
   if (!page || page === 'overview') return '/workspace'
+  if (page === 'workflow') return WORKFLOW_APP_URL
   return `/workspace/${page}`
 }
 
@@ -50,6 +54,10 @@ export function useCabinetNavigation() {
   const page = pageFromPathname(location.pathname)
 
   const go = (nextPage) => () => {
+    if (nextPage === 'workflow') {
+      window.location.assign(WORKFLOW_APP_URL)
+      return
+    }
     navigate(pathnameFromPage(nextPage))
   }
 
