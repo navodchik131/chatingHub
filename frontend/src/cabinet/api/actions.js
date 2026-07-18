@@ -1,6 +1,6 @@
 import { apiFetch } from '../../api'
 import { postStudioJobStart, waitForStudioJobResult } from '../../studioJobs'
-import { apiJson, normalizePhotoKind } from './helpers'
+import { apiJson, apiJsonOptional, normalizePhotoKind } from './helpers'
 
 const OP_BITS = { chat: 1, studio: 2, models: 4, keys: 8, billing: 16 }
 
