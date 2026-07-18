@@ -9,7 +9,7 @@ import { useApp } from '../hooks/useApp';
 import { color, line, font, G } from '../styles/tokens';
 import { cardPickStyle, modeCardStyle, refThumbStyle, refUploadStyle, borderHoverOff } from '../styles/mixins';
 import { modeDefs } from '../data/catalog';
-import { resolveSlotSource, archiveThumbUrl } from '../api/actions';
+import { resolveSlotSource, archiveThumbUrl, archiveDownloadUrl } from '../api/actions';
 
 const ratios = ['9:16', '16:9', '1:1', '4:3', '3:4'];
 const countOptions = [2, 3, 4, 6, 8];
@@ -43,7 +43,7 @@ export function Lightbox() {
   const close = () => setS({ lightbox: null });
   const model = item ? cabinet.models.find((m) => m.id === item.studio_model_id) : null;
   const thumb = item ? archiveThumbUrl(item) : '';
-  const downloadUrl = item?.url || item?.public_url || thumb;
+  const downloadUrl = item ? archiveDownloadUrl(item) || thumb : '';
   const who = model?.name || '—';
   const when = item?.created_at
     ? new Date(item.created_at).toLocaleString(lang === 'ru' ? 'ru-RU' : 'en-GB')
@@ -508,7 +508,7 @@ export default function Images() {
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(130px,1fr))', gap: 10 }}>
             {(cabinet.archiveImages.length ? cabinet.archiveImages : []).slice(0, 8).map((item, i) => {
-              const thumb = item.thumbnail_url || item.url || item.public_url || '';
+              const thumb = archiveThumbUrl(item);
               const model = cabinet.models.find((m) => m.id === item.studio_model_id);
               return (
               <Hoverable

@@ -54,18 +54,12 @@ server {
         proxy_read_timeout 120s;
     }
 
-    # Workflow (пока старый SPA) → docker api :8080
-    location ^~ /workspace/workflow {
-        proxy_pass http://chatinghub_docker;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_read_timeout 300s;
+    # Workflow → frontend :5180 (React SPA в workspace/workflow/)
+    location = /workspace/workflow {
+        return 301 https://$host/workspace/workflow/;
     }
 
-    # Кабинет OS → docker frontend :5180 (сборка с VITE_BASE_PATH=/workspace/)
+    # Кабинет OS → docker frontend :5180
     location /workspace/ {
         proxy_pass http://chatinghub_os/;
         proxy_http_version 1.1;

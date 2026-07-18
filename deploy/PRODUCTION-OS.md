@@ -54,6 +54,52 @@ curl -s https://model-mate.online/api/health
 docker compose ps
 ```
 
+### Workflow (важно)
+
+Новый workflow — React SPA (~600 байт HTML). Legacy OS — ~219 KB.
+
+```bash
+# снаружи (HTTPS)
+curl -sI https://model-mate.online/workspace/workflow/ | grep -i content-length
+curl -s https://model-mate.online/workspace/workflow/ | head -3
+# ожидается: content-length ~600 и <!doctype html> ... ModelMate Workflow
+
+# напрямую в docker-frontend (обходит host nginx)
+curl -sI http://127.0.0.1:5180/workflow/ | grep -i content-length
+curl -s http://127.0.0.1:5180/workflow/ | head -3
+```
+
+Если `:5180/workflow/` правильный, а HTTPS — 219062: проблема в **host nginx** (старый конфиг).  
+Если оба 219062: **frontend-образ не пересобран** — см. ниже.
+
+## Workflow не открывается (219 KB HTML, `{{lightboxData}}`, ошибки JS)
+
+1. Убедитесь, что код актуален: `git log -1 --oneline` (нужны коммиты с fix workflow nginx).
+2. Пересоберите frontend **без кэша**:
+
+```bash
+git pull
+docker compose -f docker-compose.yml -f docker-compose.prod.yml build --no-cache frontend
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d frontend
+```
+
+3. Host nginx — workflow должен идти в `:5180`, не в `:8080`:
+
+```bash
+sudo cp deploy/nginx-model-mate.online.conf /etc/nginx/sites-available/model-mate.online
+sudo nginx -t && sudo systemctl reload nginx
+grep -A2 'workspace/workflow' /etc/nginx/sites-enabled/model-mate.online
+# не должно быть proxy_pass на 8080 для workflow
+```
+
+4. Проверка внутри контейнера:
+
+```bash
+docker compose exec frontend head -3 /usr/share/nginx/html/workspace/workflow/index.html
+docker compose exec frontend wc -c /usr/share/nginx/html/index.html
+# workflow/index.html — ModelMate Workflow; корневой index.html — ~1500 байт, не 219000
+```
+
 ## Локальная разработка
 
 ```bash

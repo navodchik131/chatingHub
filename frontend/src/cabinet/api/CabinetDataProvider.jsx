@@ -147,8 +147,8 @@ export function CabinetDataProvider({ children }) {
         apiJsonOptional('/api/health', {}, null),
         apiJsonOptional('/api/conversations', {}, []),
         apiJsonOptional('/api/studio/models', {}, []),
-        apiJsonOptional('/api/studio/generations?limit=40&skip=0&media_kind=image', {}, { items: [] }),
-        apiJsonOptional('/api/studio/generations?limit=40&skip=0&media_kind=video', {}, { items: [] }),
+        actions.refreshArchiveImages().catch(() => []),
+        actions.refreshArchiveVideos().catch(() => []),
         apiJsonOptional('/api/integrations', {}, null),
         apiJsonOptional('/api/creator-donations/overview', {}, null),
         apiJsonOptional('/api/creator-donations', {}, []),
@@ -170,8 +170,8 @@ export function CabinetDataProvider({ children }) {
       const modelRows = Array.isArray(modelsData) ? modelsData : []
       setModels(modelRows)
       if (!selectedModelId && modelRows[0]?.id) setSelectedModelId(modelRows[0].id)
-      setArchiveImages(Array.isArray(archiveImg?.items) ? archiveImg.items : [])
-      setArchiveVideos(Array.isArray(archiveVid?.items) ? archiveVid.items : [])
+      setArchiveImages(Array.isArray(archiveImg) ? archiveImg : [])
+      setArchiveVideos(Array.isArray(archiveVid) ? archiveVid : [])
       setIntegrations(integrationsData)
       setDonationOverview(donationOv)
       setDonations(Array.isArray(dons) ? dons : [])
@@ -661,6 +661,17 @@ export function CabinetDataProvider({ children }) {
     }
     window.location.assign('/login')
   }, [])
+
+  useEffect(() => {
+    if (!ready) return
+    const pending =
+      archiveImages.some(actions.isArchivePending) || archiveVideos.some(actions.isArchivePending)
+    if (!pending) return
+    const timer = window.setInterval(() => {
+      void refreshArchive()
+    }, 12_000)
+    return () => window.clearInterval(timer)
+  }, [ready, archiveImages, archiveVideos, refreshArchive])
 
   useEffect(() => {
     void refreshAll()

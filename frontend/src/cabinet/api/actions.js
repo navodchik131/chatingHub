@@ -204,13 +204,60 @@ export async function sendReplyWithImage(convId, text, imageFile) {
 }
 
 export async function refreshArchiveImages() {
-  const data = await apiJson('/api/studio/generations?limit=40&skip=0&media_kind=image')
-  return Array.isArray(data?.items) ? data.items : []
+  const [page, pending] = await Promise.all([
+    apiJsonOptional('/api/studio/generations?limit=40&skip=0&media_kind=image', {}, { items: [] }),
+    apiJsonOptional('/api/studio/generations/pending?media_kind=image', {}, { items: [] }),
+  ])
+  return mergeArchiveItems([...(page.items || []), ...(pending.items || [])])
 }
 
 export async function refreshArchiveVideos() {
-  const data = await apiJson('/api/studio/generations?limit=40&skip=0&media_kind=video')
-  return Array.isArray(data?.items) ? data.items : []
+  const [page, pending] = await Promise.all([
+    apiJsonOptional('/api/studio/generations?limit=40&skip=0&media_kind=video', {}, { items: [] }),
+    apiJsonOptional('/api/studio/generations/pending?media_kind=video', {}, { items: [] }),
+  ])
+  return mergeArchiveItems([...(page.items || []), ...(pending.items || [])])
+}
+
+function dedupeArchiveById(items) {
+  const seen = new Set()
+  return items.filter((g) => {
+    if (seen.has(g.id)) return false
+    seen.add(g.id)
+    return true
+  })
+}
+
+function mergeArchiveItems(incoming) {
+  return dedupeArchiveById(incoming)
+}
+
+export function isArchivePending(item) {
+  if (!item) return false
+  const st = (item.status || '').trim()
+  if (st === 'processing' || st === 'archiving') return true
+  if (st === 'failed' || st === 'ready') return false
+  if (st === 'provider_ready') {
+    if (item.media_kind === 'video') return !(item.video_url || '').trim()
+    return !(item.image_url || '').trim()
+  }
+  return false
+}
+
+export function archiveThumbUrl(item) {
+  if (!item) return ''
+  if (item.media_kind === 'video') {
+    const poster = (item.image_url || '').trim()
+    if (poster) return poster
+    return (item.video_url || '').trim()
+  }
+  return (item.image_url || '').trim()
+}
+
+export function archiveDownloadUrl(item) {
+  if (!item) return ''
+  if (item.media_kind === 'video') return (item.video_url || '').trim()
+  return (item.image_url || '').trim()
 }
 
 export async function postStudioJob(path, body) {
@@ -352,14 +399,6 @@ export async function generateStudioModelProfile(images) {
   const data = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'Генерация не удалась')
   return data
-}
-
-export function archiveThumbUrl(item) {
-  if (!item) return ''
-  if (item.thumbnail_url) return item.thumbnail_url
-  if (item.url) return item.url
-  if (item.public_url) return item.public_url
-  return ''
 }
 
 /** Ждёт загрузки MMOS_STUDIO_SCENARIOS из public/mm-os-studio-scenarios.js */
