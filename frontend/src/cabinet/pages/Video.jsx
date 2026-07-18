@@ -5,7 +5,7 @@ import { Fade, PageTitle, Eyebrow, Chip, SelectPill } from '../components/ui';
 import { useApp } from '../hooks/useApp';
 import { color, line, font, G } from '../styles/tokens';
 import { refUploadStyle, borderHoverOff } from '../styles/mixins';
-import { archiveThumbUrl } from '../api/actions';
+import { archiveThumbUrl, archiveDownloadUrl, isArchivePending } from '../api/actions';
 import { computeMotionVideoCreditCost } from '../../studioMotionPricing';
 
 /** Как на бэкенде: 720/1080/4k → Seedance resolution (4k в API уходит как 1080p). */
@@ -179,6 +179,29 @@ export default function Video() {
                 </Hoverable>
               </div>
               <div style={{ fontSize: 10.5, color: color.textGhost, marginTop: 6 }}>{t.pickFromArchive}</div>
+              {(cabinet.archiveImages || []).slice(0, 8).length > 0 && (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 5, marginTop: 8 }}>
+                  {(cabinet.archiveImages || []).slice(0, 8).map((item, i) => {
+                    const thumb = archiveThumbUrl(item);
+                    const picked = s.carouselPickId === item.id;
+                    return (
+                      <Hoverable
+                        key={item.id || i}
+                        style={{
+                          aspectRatio: '9/16', borderRadius: 8, cursor: 'pointer',
+                          border: picked ? '2px solid rgba(215,244,82,.7)' : '1px solid rgba(255,255,255,.12)',
+                          background: thumb ? `url(${thumb}) center/cover` : G[i % 6],
+                        }}
+                        hover={{ borderColor: 'rgba(215,244,82,.5)' }}
+                        onClick={() => {
+                          setS({ carouselPickId: item.id });
+                          cabinet.setUploadFile('motion-frame', null);
+                        }}
+                      />
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
 
@@ -235,7 +258,13 @@ export default function Video() {
                     border: '1px solid rgba(74,222,128,.3)', borderRadius: 12, padding: '14px 16px',
                   }}
                 >
-                  <div style={{ ...ffImgStyle, display: 'flex', alignItems: 'flex-end', padding: 6 }}>
+                  <div
+                    style={{
+                      ...ffImgStyle,
+                      ...(cabinet.firstFrameUrl ? { background: `center/cover url(${cabinet.firstFrameUrl})` } : {}),
+                      display: 'flex', alignItems: 'flex-end', padding: 6,
+                    }}
+                  >
                     <span
                       style={{
                         fontFamily: font.mono, fontSize: 7.5, background: 'rgba(0,0,0,.6)',
@@ -330,15 +359,20 @@ export default function Video() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(150px,1fr))', gap: 10 }}>
             {(cabinet.archiveVideos || []).slice(0, 8).map((item, i) => {
               const thumb = archiveThumbUrl(item);
+              const downloadUrl = archiveDownloadUrl(item);
+              const pending = isArchivePending(item);
+              const failed = (item.status || '').trim() === 'failed';
               const model = (cabinet.models || []).find((m) => m.id === item.studio_model_id);
               return (
               <Hoverable
                 key={item.id || i}
                 style={{
                   borderRadius: 12, overflow: 'hidden', background: color.surface,
-                  border: `1px solid ${line.hair}`, cursor: 'pointer',
+                  border: `1px solid ${failed ? 'rgba(248,113,113,.45)' : line.hair}`,
+                  cursor: pending || failed ? 'default' : 'pointer',
+                  opacity: pending ? 0.88 : 1,
                 }}
-                hover={{ borderColor: borderHoverOff }}
+                hover={pending || failed ? {} : { borderColor: borderHoverOff }}
               >
                 <div
                   style={{
@@ -346,6 +380,29 @@ export default function Video() {
                     position: 'relative', background: thumb ? `url(${thumb}) center/cover` : G[(i + 2) % 6],
                   }}
                 >
+                  {pending && (
+                    <div
+                      style={{
+                        position: 'absolute', inset: 0, background: 'rgba(0,0,0,.45)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontFamily: font.mono, fontSize: 9, fontWeight: 700, color: color.orange,
+                      }}
+                    >
+                      {lang === 'ru' ? 'ГЕНЕРАЦИЯ…' : 'GENERATING…'}
+                    </div>
+                  )}
+                  {failed && (
+                    <div
+                      style={{
+                        position: 'absolute', inset: 0, background: 'rgba(248,113,113,.25)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontFamily: font.mono, fontSize: 9, fontWeight: 700, color: color.red,
+                      }}
+                    >
+                      {lang === 'ru' ? 'ОШИБКА' : 'FAILED'}
+                    </div>
+                  )}
+                  {!pending && !failed && (
                   <div
                     style={{
                       width: 36, height: 36, borderRadius: '50%', background: 'rgba(0,0,0,.45)',
@@ -354,11 +411,12 @@ export default function Video() {
                   >
                     <span style={{ display: 'flex', width: 14, height: 14, color: '#fff', marginLeft: 2 }}><IcoPlay /></span>
                   </div>
+                  )}
                 </div>
                 <div style={{ padding: '8px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ fontWeight: 700, fontSize: 11 }}>{model?.name || '—'}</span>
-                  {item.url && (
-                    <a href={item.url} download style={{ fontSize: 10, fontWeight: 700, color: color.textDim, textDecoration: 'none' }}>↓ MP4</a>
+                  {downloadUrl && !pending && (
+                    <a href={downloadUrl} download style={{ fontSize: 10, fontWeight: 700, color: color.textDim, textDecoration: 'none' }}>↓ MP4</a>
                   )}
                 </div>
               </Hoverable>

@@ -4,7 +4,7 @@ import { Fade, PageTitle, Eyebrow, Panel, StatusChip } from '../components/ui';
 import { useApp } from '../hooks/useApp';
 import { color, line, font } from '../styles/tokens';
 import { segOn, segOff, borderHoverOff } from '../styles/mixins';
-import { fmtCredits } from '../api/helpers';
+import { fmtCredits, fmtMoney } from '../api/helpers';
 import { mapUsageBars, mapCreditHistory } from '../api/mappers';
 import { copyText } from '../utils/clipboard';
 
@@ -17,7 +17,7 @@ function normalizePlan(raw) {
 
 export default function Billing() {
   const { t, lang, s, setS, cabinet } = useApp();
-  const { me, billingPlans, creditHistory, referral } = cabinet;
+  const { me, billingPlans, creditHistory, referral, tributeEarnings } = cabinet;
   const yookassaAvailable = Boolean(me?.online_payment_available);
   const tributeAvailable = Boolean(me?.tribute_billing_available);
   const defaultPayMethod = yookassaAvailable ? 'yookassa' : (tributeAvailable ? 'tribute' : 'credits');
@@ -58,6 +58,9 @@ export default function Billing() {
       };
     });
   const referralLink = referral?.referral_link || '—';
+  const tributeAmount = tributeEarnings?.display_minor != null
+    ? fmtMoney(tributeEarnings.display_minor, tributeEarnings.currency || 'RUB')
+    : null;
 
   return (
     <Fade data-screen-label="Тариф и баланс">
@@ -161,6 +164,16 @@ export default function Billing() {
           </div>
         </Panel>
       </div>
+
+      {tributeAmount && (
+        <Panel style={{ padding: '16px 18px', marginBottom: 20, maxWidth: 480 }}>
+          <Eyebrow size={9} style={{ marginBottom: 10 }}>{t.tributeEarningsTitle}</Eyebrow>
+          <div style={{ fontFamily: font.display, fontWeight: 600, fontSize: 22, color: color.purple, marginBottom: 6 }}>
+            {tributeAmount}
+          </div>
+          <div style={{ fontSize: 11.5, color: color.textDim }}>{t.tributeEarningsHint}</div>
+        </Panel>
+      )}
 
       {/* plans */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>

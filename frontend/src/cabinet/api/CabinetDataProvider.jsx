@@ -1,7 +1,40 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { apiFetch, getToken, setToken } from '../../api'
+import {
+  createOptimisticStudioArchiveItem,
+  isOptimisticStudioArchiveId,
+  mergeStudioArchiveItems,
+  prependOptimisticStudioArchive,
+  removeOptimisticStudioArchive,
+  replaceOptimisticStudioArchiveId,
+} from '../../studioArchive'
+import { coerceJobGenerationId, waitForStudioJobResult } from '../../studioJobs'
 import { apiJson, apiJsonOptional, isPlausibleTelegramBotToken } from './helpers'
+import { refreshPendingArchiveImages, refreshPendingArchiveVideos } from './archivePoll'
+import { mapGenModelsFromApi, waveModelParamsFromState } from './studioHelpers'
 import * as actions from './actions'
+
+function applyJobToOptimisticArchive(current, tempIds, accepted) {
+  const realId = coerceJobGenerationId(accepted)
+  let next = current
+  if (realId && tempIds.length === 1) {
+    return replaceOptimisticStudioArchiveId(next, tempIds[0], realId, {
+      status: 'processing',
+      job_id: accepted?.job_id ?? null,
+    })
+  }
+  if (accepted?.job_id) {
+    return next.map((g) =>
+      tempIds.includes(g.id)
+        ? { ...g, job_id: accepted.job_id, status: 'processing' }
+        : g,
+    )
+  }
+  for (const tid of tempIds) {
+    next = removeOptimisticStudioArchive(next, tid)
+  }
+  return next
+}
 
 const CabinetCtx = createContext(null)
 
@@ -63,6 +96,10 @@ export function CabinetDataProvider({ children }) {
   const [slotArchivePicks, setSlotArchivePicks] = useState({})
   const [motionVideoFileId, setMotionVideoFileId] = useState(null)
   const [firstFrameGenId, setFirstFrameGenId] = useState(null)
+  const [firstFrameUrl, setFirstFrameUrl] = useState(null)
+  const [tributeEarnings, setTributeEarnings] = useState(null)
+  const [donationsLoadError, setDonationsLoadError] = useState(null)
+  const [creatorDonationAlert, setCreatorDonationAlert] = useState(null)
   const [donationEditId, setDonationEditId] = useState(null)
   const wsRef = useRef(null)
 
@@ -81,9 +118,17 @@ export function CabinetDataProvider({ children }) {
   }, [])
 
   const loadConversations = useCallback(async () => {
-    const rows = await apiJson('/api/conversations')
-    setConversations(Array.isArray(rows) ? rows : [])
-    return rows
+    try {
+      const rows = await apiJson('/api/conversations')
+      setConversations(Array.isArray(rows) ? rows : [])
+      return rows
+    } catch (e) {
+      if (String(e?.message || '').includes('403')) {
+        setConversations([])
+        return []
+      }
+      throw e
+    }
   }, [])
 
   const loadMessages = useCallback(async (convId) => {
@@ -105,14 +150,32 @@ export function CabinetDataProvider({ children }) {
     }
   }, [])
 
-  const refreshArchive = useCallback(async () => {
+  const refreshArchiveFull = useCallback(async () => {
+    const localImgPending = archiveImages.filter(
+      (g) => isOptimisticStudioArchiveId(g.id) || actions.isArchivePending(g),
+    )
+    const localVidPending = archiveVideos.filter(
+      (g) => isOptimisticStudioArchiveId(g.id) || actions.isArchivePending(g),
+    )
     const [imgs, vids] = await Promise.all([
       actions.refreshArchiveImages(),
       actions.refreshArchiveVideos(),
     ])
-    setArchiveImages(imgs)
-    setArchiveVideos(vids)
-  }, [])
+    setArchiveImages(mergeStudioArchiveItems(imgs, localImgPending))
+    setArchiveVideos(mergeStudioArchiveItems(vids, localVidPending))
+  }, [archiveImages, archiveVideos])
+
+  const refreshArchivePending = useCallback(async () => {
+    const [imgResult, vidResult] = await Promise.all([
+      refreshPendingArchiveImages(archiveImages),
+      refreshPendingArchiveVideos(archiveVideos),
+    ])
+    if (imgResult.changed) setArchiveImages(imgResult.items)
+    if (vidResult.changed) setArchiveVideos(vidResult.items)
+    return imgResult.changed || vidResult.changed
+  }, [archiveImages, archiveVideos])
+
+  const refreshArchive = refreshArchiveFull
 
   const refreshAll = useCallback(async () => {
     if (!getToken()) {
@@ -142,6 +205,7 @@ export function CabinetDataProvider({ children }) {
         stats,
         modelOpts,
         camPresets,
+        tributeSummary,
       ] = await Promise.all([
         apiJson('/api/auth/me'),
         apiJsonOptional('/api/health', {}, null),
@@ -162,6 +226,7 @@ export function CabinetDataProvider({ children }) {
         apiJsonOptional('/api/workspace/chatter-stats/summary', {}, null),
         apiJsonOptional('/api/studio/workflow/model-options', {}, null),
         apiJsonOptional('/api/studio/camera-presets', {}, []),
+        apiJsonOptional('/api/tribute/earnings/summary', {}, null),
       ])
 
       setMe(meData)
@@ -173,7 +238,17 @@ export function CabinetDataProvider({ children }) {
       setArchiveImages(Array.isArray(archiveImg) ? archiveImg : [])
       setArchiveVideos(Array.isArray(archiveVid) ? archiveVid : [])
       setIntegrations(integrationsData)
-      setDonationOverview(donationOv)
+      if (meData?.is_workspace_owner) {
+        if (donationOv) {
+          setDonationOverview(donationOv)
+          setDonationsLoadError(null)
+        } else {
+          setDonationsLoadError('Не удалось загрузить донаты')
+        }
+      } else {
+        setDonationOverview(donationOv)
+        setDonationsLoadError(null)
+      }
       setDonations(Array.isArray(dons) ? dons : [])
       setDonationEvents(Array.isArray(donEvents) ? donEvents : [])
       setBillingPlans(plans)
@@ -183,8 +258,9 @@ export function CabinetDataProvider({ children }) {
       setMembers(Array.isArray(mems) ? mems : [])
       setSnippets(Array.isArray(snips) ? snips : [])
       setChatterStats(stats)
-      setGenModels(Array.isArray(modelOpts?.image_models) ? modelOpts.image_models : [])
+      setGenModels(mapGenModelsFromApi(modelOpts))
       setCameraPresets(Array.isArray(camPresets) ? camPresets : [])
+      setTributeEarnings(tributeSummary)
     } catch (e) {
       setError(e.message || String(e))
     } finally {
@@ -196,7 +272,21 @@ export function CabinetDataProvider({ children }) {
   const sendReply = useCallback(
     async (convId, text, replyToMessageId, imageFile) => {
       if (!convId || (!text?.trim() && !imageFile)) return
-      await run(async () => {
+      const tempId = -Date.now()
+      const previewUrl = imageFile ? URL.createObjectURL(imageFile) : null
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: tempId,
+          direction: 'outbound',
+          text_original: text?.trim() || '',
+          created_at: new Date().toISOString(),
+          pending: true,
+          attachments: previewUrl ? [{ url: previewUrl }] : [],
+        },
+      ])
+      setError(null)
+      try {
         if (imageFile) {
           await actions.sendReplyWithImage(convId, text, imageFile)
         } else {
@@ -209,9 +299,14 @@ export function CabinetDataProvider({ children }) {
         }
         await loadMessages(convId)
         await loadConversations()
-      })
+      } catch (e) {
+        setMessages((prev) => prev.filter((m) => Number(m.id) !== tempId))
+        setError(e?.message || String(e))
+      } finally {
+        if (previewUrl) URL.revokeObjectURL(previewUrl)
+      }
     },
-    [run, loadConversations, loadMessages],
+    [loadConversations, loadMessages],
   )
 
   const saveNote = useCallback(
@@ -435,7 +530,47 @@ export function CabinetDataProvider({ children }) {
 
   const generateImages = useCallback(
     async (appState, userPrompt) => {
-      await run(async () => {
+      const mode = appState.imgMode || 'prompt'
+      const model = models.find((m) => Number(m.id) === Number(selectedModelId))
+      const promptExcerpt = (userPrompt || '').trim() || 'Генерация…'
+      let tempIds = []
+      let optimisticItems = []
+
+      if (mode === 'carousel') {
+        const count = Math.max(2, Math.min(8, Number(appState.carouselCount) || 4))
+        for (let i = 0; i < count; i += 1) {
+          const { item, tempId } = createOptimisticStudioArchiveItem({
+            mediaKind: 'image',
+            promptExcerpt: promptExcerpt || `Карусель ${i + 1}/${count}…`,
+            studioModelId: selectedModelId,
+            modelName: model?.name ?? null,
+            outputAspect: selectedAspect,
+          })
+          tempIds.push(tempId)
+          optimisticItems.push(item)
+        }
+      } else {
+        const { item, tempId } = createOptimisticStudioArchiveItem({
+          mediaKind: 'image',
+          promptExcerpt,
+          studioModelId: selectedModelId || null,
+          modelName: model?.name ?? null,
+          outputAspect: selectedAspect,
+        })
+        tempIds = [tempId]
+        optimisticItems = [item]
+      }
+
+      setArchiveImages((prev) => {
+        let next = prev
+        for (const item of optimisticItems) {
+          next = prependOptimisticStudioArchive(next, item)
+        }
+        return next
+      })
+      setError(null)
+
+      try {
         const studioStore = {
           selectedModelId,
           selectedAspect,
@@ -444,34 +579,62 @@ export function CabinetDataProvider({ children }) {
           archiveImages,
           models,
         }
-        const mode = appState.imgMode || 'prompt'
+        let accepted
         if (mode === 'carousel') {
           if (!selectedModelId) throw new Error('Выберите персонажа')
           const src = actions.resolveSlotSource('carousel', 0, uploadFiles, slotArchivePicks)
-          await actions.runCarouselGeneration({
+          accepted = await actions.runCarouselGeneration({
             modelId: selectedModelId,
             count: Math.max(2, Math.min(8, Number(appState.carouselCount) || 4)),
             prompt: userPrompt,
             aspect: selectedAspect,
             nsfw: appState.contentMode === 'nsfw',
-            waveModelId: appState.aiModel,
+            ...waveModelParamsFromState(appState),
             existingGenerationId: src?.archiveId,
             imageFile: src?.file,
           })
         } else {
-          await actions.runImageGeneration({ appState, studioStore, userPrompt })
+          accepted = await actions.runImageGeneration({ appState, studioStore, userPrompt })
         }
-        await refreshArchive()
-        const m = await apiJson('/api/auth/me')
-        setMe(m)
-      })
+        setArchiveImages((prev) => applyJobToOptimisticArchive(prev, tempIds, accepted))
+        void refreshArchivePending()
+        void apiJson('/api/auth/me').then(setMe)
+        if (accepted?.job_id) {
+          const jobId = accepted.job_id
+          const cleanupIds = [...tempIds]
+          void waitForStudioJobResult(jobId, {
+            maxWaitMs: mode === 'carousel'
+              ? Math.max(8 * 60 * 1000, (Number(appState.carouselCount) || 4) * 4 * 60 * 1000)
+              : 15 * 60 * 1000,
+          }).catch(() => {}).finally(() => {
+            setArchiveImages((prev) => {
+              let next = prev
+              for (const tid of cleanupIds) {
+                next = removeOptimisticStudioArchive(next, tid)
+              }
+              return next
+            })
+            void refreshArchiveFull()
+          })
+        }
+      } catch (e) {
+        setArchiveImages((prev) => {
+          let next = prev
+          for (const tid of tempIds) {
+            next = removeOptimisticStudioArchive(next, tid)
+          }
+          return next
+        })
+        setError(e?.message || String(e))
+      }
     },
-    [run, selectedModelId, selectedAspect, uploadFiles, slotArchivePicks, archiveImages, models, refreshArchive],
+    [selectedModelId, selectedAspect, uploadFiles, slotArchivePicks, archiveImages, models, refreshArchiveFull, refreshArchivePending],
   )
 
   const generateFirstFrame = useCallback(
     async (appState, description) => {
-      await run(async () => {
+      setError(null)
+      try {
         const { result } = await actions.runMotionFirstFrame({
           modelId: selectedModelId,
           aspect: selectedAspect,
@@ -482,20 +645,46 @@ export function CabinetDataProvider({ children }) {
           description,
         })
         if (result?.generation_id) setFirstFrameGenId(result.generation_id)
-        await refreshArchive()
+        const url = (result?.generated_image_url || result?.image_url || '').trim()
+        if (url) setFirstFrameUrl(url)
+        else if (result?.generation_id) {
+          const hit = archiveImages.find((g) => Number(g.id) === Number(result.generation_id))
+          const thumb = hit ? actions.archiveThumbUrl(hit) : ''
+          if (thumb) setFirstFrameUrl(thumb)
+        }
+        await refreshArchiveFull()
         setMe(await apiJson('/api/auth/me'))
         return result
-      })
+      } catch (e) {
+        setError(e?.message || String(e))
+        throw e
+      }
     },
-    [run, selectedModelId, selectedAspect, uploadFiles, firstFrameGenId, refreshArchive],
+    [selectedModelId, selectedAspect, uploadFiles, firstFrameGenId, archiveImages, refreshArchiveFull],
   )
 
   const generateVideo = useCallback(
     async (appState, prompt) => {
-      await run(async () => {
-        if (!selectedModelId) throw new Error('Выберите персонажа')
-        if (!prompt?.trim()) throw new Error('Опишите движение')
-        await actions.runMotionVideo({
+      if (!selectedModelId) {
+        setError('Выберите персонажа')
+        return
+      }
+      if (!prompt?.trim()) {
+        setError('Опишите движение')
+        return
+      }
+      const model = models.find((m) => Number(m.id) === Number(selectedModelId))
+      const { item, tempId } = createOptimisticStudioArchiveItem({
+        mediaKind: 'video',
+        promptExcerpt: prompt.trim(),
+        studioModelId: selectedModelId,
+        modelName: model?.name ?? null,
+        outputAspect: appState.vidFormat || selectedAspect,
+      })
+      setArchiveVideos((prev) => prependOptimisticStudioArchive(prev, item))
+      setError(null)
+      try {
+        const accepted = await actions.runMotionVideo({
           modelId: selectedModelId,
           prompt: prompt.trim(),
           aspect: appState.vidFormat || selectedAspect,
@@ -505,11 +694,15 @@ export function CabinetDataProvider({ children }) {
           frameFile: uploadFiles['motion-frame'],
           existingGenerationId: appState.carouselPickId || firstFrameGenId,
         })
-        await refreshArchive()
+        setArchiveVideos((prev) => applyJobToOptimisticArchive(prev, [tempId], accepted))
+        void refreshArchivePending()
         setMe(await apiJson('/api/auth/me'))
-      })
+      } catch (e) {
+        setArchiveVideos((prev) => removeOptimisticStudioArchive(prev, tempId))
+        setError(e?.message || String(e))
+      }
     },
-    [run, selectedModelId, selectedAspect, uploadFiles, motionVideoFileId, firstFrameGenId, refreshArchive],
+    [selectedModelId, selectedAspect, uploadFiles, motionVideoFileId, firstFrameGenId, models, refreshArchivePending],
   )
 
   const setUploadFile = useCallback((key, file) => {
@@ -668,10 +861,61 @@ export function CabinetDataProvider({ children }) {
       archiveImages.some(actions.isArchivePending) || archiveVideos.some(actions.isArchivePending)
     if (!pending) return
     const timer = window.setInterval(() => {
-      void refreshArchive()
-    }, 12_000)
+      void refreshArchivePending()
+    }, 3_000)
     return () => window.clearInterval(timer)
-  }, [ready, archiveImages, archiveVideos, refreshArchive])
+  }, [ready, archiveImages, archiveVideos, refreshArchivePending])
+
+  const refreshDonationOverview = useCallback(async (opts = {}) => {
+    if (!me?.is_workspace_owner) return
+    const overview = await apiJsonOptional('/api/creator-donations/overview', {}, null)
+    if (!overview) {
+      setDonationsLoadError('Не удалось загрузить донаты')
+      return
+    }
+    setDonationsLoadError(null)
+    const prevLatestId = donationOverview?.latest_event_id ?? null
+    const latestId = overview.latest_event_id
+    const needsFullReload =
+      !!opts.reloadPanels ||
+      !Array.isArray(donationEvents) ||
+      !donationEvents.length ||
+      (latestId && latestId !== prevLatestId)
+
+    setDonationOverview(overview)
+    if (needsFullReload) {
+      const [dons, donEvents] = await Promise.all([
+        apiJsonOptional('/api/creator-donations', {}, []),
+        apiJsonOptional('/api/creator-donations/events?limit=50', {}, []),
+      ])
+      setDonations(Array.isArray(dons) ? dons : [])
+      setDonationEvents(Array.isArray(donEvents) ? donEvents : [])
+    }
+
+    if (latestId && overview.latest_event && latestId !== prevLatestId) {
+      setCreatorDonationAlert(overview.latest_event)
+    } else if (!latestId || latestId === prevLatestId) {
+      setCreatorDonationAlert(null)
+    }
+  }, [me, donationOverview, donationEvents])
+
+  useEffect(() => {
+    if (!ready || !me?.is_workspace_owner) return
+    void refreshDonationOverview({ reloadPanels: true })
+    const timer = window.setInterval(() => {
+      void refreshDonationOverview({ reloadPanels: false })
+    }, 15_000)
+    const onVis = () => {
+      if (document.visibilityState === 'visible') {
+        void refreshDonationOverview({ reloadPanels: true })
+      }
+    }
+    document.addEventListener('visibilitychange', onVis)
+    return () => {
+      window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', onVis)
+    }
+  }, [ready, me?.is_workspace_owner, refreshDonationOverview])
 
   useEffect(() => {
     void refreshAll()
@@ -692,15 +936,30 @@ export function CabinetDataProvider({ children }) {
       ws.addEventListener('message', (ev) => {
         try {
           const msg = JSON.parse(ev.data)
-          if (msg?.type === 'conversation_updated' || msg?.type === 'message_created') {
+          if (
+            msg?.type === 'new_message' ||
+            msg?.type === 'message_updated' ||
+            msg?.type === 'conversation_updated' ||
+            msg?.type === 'message_created'
+          ) {
+            if (msg?.type === 'new_message' && activeConvId) {
+              setConversations((prev) =>
+                prev.map((c) => (Number(c.id) === Number(activeConvId) ? { ...c, unread_count: 0 } : c)),
+              )
+            }
             void loadConversations()
             if (activeConvId && Number(msg.conversation_id) === Number(activeConvId)) {
               void loadMessages(activeConvId)
             }
           }
-          if (msg?.type === 'credits_updated' || msg?.type === 'studio_generation_updated') {
+          if (
+            msg?.type === 'credits_updated' ||
+            msg?.type === 'studio_generation_updated' ||
+            msg?.type === 'studio_job' ||
+            msg?.type === 'studio_generation'
+          ) {
             void apiJson('/api/auth/me').then(setMe)
-            void refreshArchive()
+            void refreshArchivePending()
           }
         } catch {
           /* ignore */
@@ -720,7 +979,7 @@ export function CabinetDataProvider({ children }) {
         /* ignore */
       }
     }
-  }, [ready, activeConvId, loadConversations, loadMessages, refreshArchive])
+  }, [ready, activeConvId, loadConversations, loadMessages, refreshArchivePending])
 
   const value = useMemo(
     () => ({
@@ -762,11 +1021,20 @@ export function CabinetDataProvider({ children }) {
       motionVideoFileId,
       setMotionVideoFileId,
       firstFrameGenId,
+      firstFrameUrl,
+      setFirstFrameUrl,
+      tributeEarnings,
+      donationsLoadError,
+      creatorDonationAlert,
+      setCreatorDonationAlert,
       donationEditId,
       setDonationEditId,
       opRights: opRightsFromMe(me),
       refreshAll,
       refreshArchive,
+      refreshArchiveFull,
+      refreshArchivePending,
+      refreshDonationOverview,
       loadConversations,
       loadMessages,
       sendReply,
@@ -837,10 +1105,17 @@ export function CabinetDataProvider({ children }) {
       slotArchivePicks,
       motionVideoFileId,
       firstFrameGenId,
+      firstFrameUrl,
+      tributeEarnings,
+      donationsLoadError,
+      creatorDonationAlert,
       donationEditId,
       setDonationEditId,
       refreshAll,
       refreshArchive,
+      refreshArchiveFull,
+      refreshArchivePending,
+      refreshDonationOverview,
       loadConversations,
       loadMessages,
       sendReply,

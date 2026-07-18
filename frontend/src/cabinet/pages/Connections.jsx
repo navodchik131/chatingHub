@@ -10,6 +10,7 @@ import { connDefs, connFieldSets } from '../data/catalog';
 import { mapConnectionStatus, mapIntegrationConnections, mapIntegrationCurrent } from '../api/mappers';
 import { copyText } from '../utils/clipboard';
 import { isPlausibleTelegramBotToken } from '../api/helpers';
+import { goToAdmin } from '../../marketing/workspaceEntry';
 
 const connIcons = { tg: IcoTg, wave: IcoWave, heart: IcoHeart, gift: IcoGift, cam: IcoCam, bell: IcoBell };
 
@@ -41,6 +42,24 @@ function ConnectionList() {
         <PageTitle style={{ marginBottom: 5 }}>{t.navConnections}</PageTitle>
         <div style={{ fontSize: 12.5, color: color.textDim }}>{t.connectionsDesc}</div>
       </div>
+
+      {cabinet.me?.is_platform_admin && (
+        <Hoverable
+          style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+            marginBottom: 14, padding: '12px 16px', borderRadius: 12,
+            border: '1px solid rgba(251,146,60,.35)', background: 'rgba(251,146,60,.08)', cursor: 'pointer',
+          }}
+          hover={{ borderColor: 'rgba(251,146,60,.6)' }}
+          onClick={goToAdmin}
+        >
+          <div>
+            <div style={{ fontWeight: 800, fontSize: 13.5, color: color.orange }}>{t.adminPanel}</div>
+            <div style={{ fontSize: 11.5, color: color.textDim }}>{t.adminPanelDesc}</div>
+          </div>
+          <span style={{ color: color.orange }}>→</span>
+        </Hoverable>
+      )}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(280px,1fr))', gap: 12 }}>
         {connDefs(lang).map((c) => {

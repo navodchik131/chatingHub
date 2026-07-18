@@ -9,7 +9,8 @@ import { useApp } from '../hooks/useApp';
 import { color, line, font, G } from '../styles/tokens';
 import { cardPickStyle, modeCardStyle, refThumbStyle, refUploadStyle, borderHoverOff } from '../styles/mixins';
 import { modeDefs } from '../data/catalog';
-import { resolveSlotSource, archiveThumbUrl, archiveDownloadUrl } from '../api/actions';
+import { resolveSlotSource, archiveThumbUrl, archiveDownloadUrl, isArchivePending } from '../api/actions';
+import { validateStudioForm, syncRefArchivePicks } from '../api/studioHelpers';
 
 const ratios = ['9:16', '16:9', '1:1', '4:3', '3:4'];
 const countOptions = [2, 3, 4, 6, 8];
@@ -194,7 +195,7 @@ function Slot({ slot, index }) {
                 background: thumb ? `url(${thumb}) center/cover` : G[i % 6],
               }}
               hover={thumbSt.hover}
-              onClick={() => cabinet.setSlotArchivePicks((prev) => ({ ...prev, [key]: item.id }))}
+              onClick={() => cabinet.setSlotArchivePicks((prev) => syncRefArchivePicks(prev, mode, index, item.id))}
             />
           );})}
         </div>
@@ -260,28 +261,32 @@ export default function Images() {
   const charNames = (cabinet.models || []).map((m) => m.name).filter(Boolean);
 
   const handleGenerate = () => {
-    const needsModel = ['ref', 'swap', 'prompt', 'carousel'].includes(curMode.id);
-    if (needsModel && !cabinet.selectedModelId) {
-      setS({ showGenError: true });
+    const studioStore = {
+      selectedModelId: cabinet.selectedModelId,
+      uploadFiles: cabinet.uploadFiles,
+      slotArchivePicks: cabinet.slotArchivePicks,
+    };
+    const errs = validateStudioForm(s, studioStore, t);
+    if (errs.length) {
+      setS({ showGenError: true, genErrors: errs });
       return;
     }
-    if (curMode.id === 'prompt' && !(s.studioPrompt || '').trim()) {
-      setS({ showGenError: true });
-      return;
-    }
-    setS({ showGenError: false });
+    setS({ showGenError: false, genErrors: [] });
     void cabinet.generateImages(s, s.studioPrompt || '');
   };
+
+  const imgErrList = s.showGenError && Array.isArray(s.genErrors) && s.genErrors.length
+    ? s.genErrors
+    : [t.errNoRef, t.errNoPrompt, t.errNoChar];
 
   const studioGrid = isMobile
     ? { display: 'grid', gridTemplateColumns: '1fr', gap: 14 }
     : { display: 'grid', gridTemplateColumns: '340px 1fr', gap: 16, alignItems: 'start' };
 
-  // imgErrList shown when generate clicked without required inputs.
-  const imgErrList = [];
-  if (curMode.slots.length) imgErrList.push(t.errNoRef);
-  if (curMode.id === 'prompt') imgErrList.push(t.errNoPrompt);
-  imgErrList.push(t.errNoChar);
+  const pickContentMode = (contentMode) => {
+    const list = modelsByMode(lang, cabinet.genModels)[contentMode] || [];
+    setS({ contentMode, aiModel: list[0]?.id || (contentMode === 'nsfw' ? 'wan-2.7' : 'nano-banana-pro') });
+  };
 
   const cmSeg = (on, tone) => ({
     flex: 1, textAlign: 'center', fontSize: 12, fontWeight: 800,
@@ -349,13 +354,13 @@ export default function Images() {
             <div style={{ display: 'flex', gap: 6, background: color.bgPanel, border: `1px solid ${line.soft}`, borderRadius: 11, padding: 4 }}>
               <div
                 style={cmSeg(s.contentMode === 'sfw', { background: color.green, color: color.greenInk })}
-                onClick={() => setS({ contentMode: 'sfw', aiModel: 'nano' })}
+                onClick={() => pickContentMode('sfw')}
               >
                 SFW · {lang === 'ru' ? 'обычный' : 'safe'}
               </div>
               <div
                 style={cmSeg(s.contentMode === 'nsfw', { background: color.pink, color: '#2A0A1C' })}
-                onClick={() => setS({ contentMode: 'nsfw', aiModel: 'seedream' })}
+                onClick={() => pickContentMode('nsfw')}
               >
                 NSFW · 18+
               </div>
@@ -509,16 +514,22 @@ export default function Images() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(130px,1fr))', gap: 10 }}>
             {(cabinet.archiveImages.length ? cabinet.archiveImages : []).slice(0, 8).map((item, i) => {
               const thumb = archiveThumbUrl(item);
+              const pending = isArchivePending(item);
+              const failed = (item.status || '').trim() === 'failed';
               const model = cabinet.models.find((m) => m.id === item.studio_model_id);
               return (
               <Hoverable
                 key={item.id || i}
                 style={{
                   borderRadius: 12, overflow: 'hidden', background: color.surface,
-                  border: `1px solid ${line.hair}`, cursor: 'pointer',
+                  border: `1px solid ${failed ? 'rgba(248,113,113,.45)' : line.hair}`,
+                  cursor: pending || failed ? 'default' : 'pointer',
+                  opacity: pending ? 0.88 : 1,
                 }}
-                hover={{ borderColor: borderHoverOff }}
-                onClick={() => setS({ lightbox: item.id ?? i })}
+                hover={pending || failed ? {} : { borderColor: borderHoverOff }}
+                onClick={() => {
+                  if (!pending && !failed) setS({ lightbox: item.id ?? i });
+                }}
               >
                 <div
                   style={{
@@ -527,22 +538,69 @@ export default function Images() {
                     background: thumb ? `center/cover no-repeat url(${thumb})` : G[i % 6],
                   }}
                 >
-                  {!thumb && (
+                  {!thumb && !pending && !failed && (
                     <span style={{ display: 'flex', width: 22, height: 22, color: 'rgba(255,255,255,.35)' }}><IcoImage /></span>
                   )}
-                  <span
-                    style={{
-                      position: 'absolute', top: 7, right: 7, display: 'flex', width: 15, height: 15,
-                      color: 'rgba(255,255,255,.7)', background: 'rgba(0,0,0,.4)', borderRadius: 6, padding: 3,
-                    }}
-                  >
-                    <IcoZoom />
-                  </span>
+                  {pending && (
+                    <div
+                      style={{
+                        position: 'absolute', inset: 0, display: 'flex', alignItems: 'center',
+                        justifyContent: 'center', background: 'rgba(6,7,9,.55)',
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: 22, height: 22, borderRadius: '50%',
+                          border: '2.5px solid rgba(215,244,82,.25)', borderTopColor: color.lime,
+                          animation: 'mmSpin .8s linear infinite',
+                        }}
+                      />
+                    </div>
+                  )}
+                  {failed && (
+                    <div
+                      style={{
+                        position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
+                        alignItems: 'center', justifyContent: 'center', gap: 6,
+                        background: 'rgba(40,10,12,.82)', padding: '10px 8px',
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontFamily: font.mono, fontSize: 8, letterSpacing: '.8px', fontWeight: 800,
+                          color: color.red, background: 'rgba(248,113,113,.12)',
+                          border: '1px solid rgba(248,113,113,.35)', borderRadius: 6, padding: '3px 7px',
+                        }}
+                      >
+                        {lang === 'ru' ? 'ОШИБКА' : 'FAILED'}
+                      </span>
+                      <span
+                        style={{
+                          fontSize: 10, fontWeight: 600, color: '#FECACA', textAlign: 'center',
+                          lineHeight: 1.35, maxHeight: '4.2em', overflow: 'hidden', wordBreak: 'break-word',
+                        }}
+                      >
+                        {(item.error_message || '').trim().slice(0, 140) || (lang === 'ru' ? 'Ошибка генерации' : 'Generation failed')}
+                      </span>
+                    </div>
+                  )}
+                  {!pending && !failed && (
+                    <span
+                      style={{
+                        position: 'absolute', top: 7, right: 7, display: 'flex', width: 15, height: 15,
+                        color: 'rgba(255,255,255,.7)', background: 'rgba(0,0,0,.4)', borderRadius: 6, padding: 3,
+                      }}
+                    >
+                      <IcoZoom />
+                    </span>
+                  )}
                 </div>
                 <div style={{ padding: '8px 10px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
                     <span style={{ fontWeight: 700, fontSize: 11 }}>{model?.name || '—'}</span>
-                    <span style={{ fontFamily: font.mono, fontSize: 8.5, color: color.textGhost }}>{item.aspect_ratio || '9:16'}</span>
+                    <span style={{ fontFamily: font.mono, fontSize: 8.5, color: failed ? color.red : color.textGhost }}>
+                      {failed ? (lang === 'ru' ? 'ошибка' : 'failed') : (item.aspect_ratio || item.output_aspect || '9:16')}
+                    </span>
                   </div>
                 </div>
               </Hoverable>

@@ -52,6 +52,8 @@ export function mapMessage(m) {
     attachmentUrl: firstAttachmentUrl(m.attachments),
     attachments: m.attachments || [],
     pending: Boolean(m.pending),
+    replyPreview: m.reply_preview || null,
+    replyToId: m.reply_to_message_id || null,
   }
 }
 
@@ -73,7 +75,13 @@ export function mapNote(n, lang) {
 export function mapCharacter(m, lang) {
   const name = m.name || '—'
   const initial = (name[0] || '?').toUpperCase()
-  const active = m.status !== 'draft'
+  const profile = (m.profile_text || '').trim()
+  const hasPhotos = (m.images || []).length > 0
+  const active = profile.length > 0 || hasPhotos
+  const tags = []
+  if (hasPhotos) tags.push('PHOTOS ✓')
+  if (profile) tags.push('PROFILE ✓')
+  if (!tags.length) tags.push(`ID ${m.id}`)
   return {
     id: String(m.id),
     name,
@@ -81,10 +89,22 @@ export function mapCharacter(m, lang) {
     grad: AV_GRADIENTS[(m.id || 0) % AV_GRADIENTS.length],
     status: active ? (lang === 'ru' ? 'АКТИВНА' : 'ACTIVE') : lang === 'ru' ? 'ЧЕРНОВИК' : 'DRAFT',
     tone: active ? 'active' : 'dim',
-    blurb: m.description || (lang === 'ru' ? 'Персонаж студии' : 'Studio character'),
-    tags: [m.platform || 'TELEGRAM'].filter(Boolean),
+    blurb: profile.slice(0, 120) || (lang === 'ru' ? 'Заполните внешность и фото' : 'Fill appearance and photos'),
+    tags,
     raw: m,
   }
+}
+
+export function mapCharHistory(charId, archiveImages, lang) {
+  return (archiveImages || [])
+    .filter((item) => Number(item.studio_model_id) === Number(charId))
+    .slice(0, 12)
+    .map((item) => ({
+      icon: item.media_kind === 'video' ? 'film' : 'image',
+      what: (item.prompt || item.description || '—').slice(0, 72),
+      when: fmtDateShort(item.created_at, lang),
+      tag: item.output_aspect || '9:16',
+    }))
 }
 
 export function modelNameById(models, id) {

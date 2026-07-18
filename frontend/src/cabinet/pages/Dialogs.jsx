@@ -45,9 +45,11 @@ function ChatList() {
   ];
 
   const curFilter = filterDefs.find((f) => f.id === s.chatFilter) || filterDefs[0];
+  const searchQ = (s.chatSearchQuery || '').trim().toLowerCase();
   const visible = dialogsRaw
     .map((c, i) => ({ c, i }))
-    .filter(({ c }) => curFilter.test(c) && (s.chatPlatform === 'all' || c.platform === s.chatPlatform));
+    .filter(({ c }) => curFilter.test(c) && (s.chatPlatform === 'all' || c.platform === s.chatPlatform))
+    .filter(({ c }) => !searchQ || c.name.toLowerCase().includes(searchQ) || c.last.toLowerCase().includes(searchQ));
 
   return (
     <div
@@ -59,6 +61,8 @@ function ChatList() {
       <div style={{ padding: '12px 12px 8px', display: 'flex', flexDirection: 'column', gap: 8 }}>
         <input
           placeholder={t.searchDialogs}
+          value={s.chatSearchQuery || ''}
+          onChange={(e) => setS({ chatSearchQuery: e.target.value })}
           style={{ ...inputSt, borderRadius: 9, padding: '8px 12px' }}
           aria-label={t.searchDialogs}
         />
@@ -275,11 +279,15 @@ function Thread() {
     if (attachRef.current) attachRef.current.value = '';
   };
 
+  const replyTarget = s.replyToMessageId
+    ? msgDefs.find((m) => m.id === s.replyToMessageId)
+    : null;
+
   const handleSend = () => {
     const text = (s.replyDraft || '').trim();
     if ((!text && !attachFile) || !cur?.id) return;
-    void cabinet.sendReply(cur.id, text, null, attachFile).then(() => {
-      setS({ replyDraft: '', emojiOpen: false, msgReact: null });
+    void cabinet.sendReply(cur.id, text, s.replyToMessageId || null, attachFile).then(() => {
+      setS({ replyDraft: '', emojiOpen: false, msgReact: null, replyToMessageId: null });
       clearAttach();
       scrollDown();
     });
@@ -368,6 +376,16 @@ function Thread() {
           return (
             <div key={m.id ?? i} style={{ display: 'flex', flexDirection: 'column', gap: 3, alignItems: out ? 'flex-end' : 'flex-start' }}>
               <div style={{ ...(out ? bubbleOut : bubbleIn), opacity: m.pending ? 0.7 : 1 }}>
+                {m.replyPreview && (
+                  <div
+                    style={{
+                      fontSize: 11, color: color.textDim, marginBottom: 8, paddingBottom: 8,
+                      borderBottom: '1px solid rgba(255,255,255,.08)', lineHeight: 1.4,
+                    }}
+                  >
+                    ↩ {m.replyPreview}
+                  </div>
+                )}
                 <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
                   <div style={{ flex: 1, fontSize: 13, lineHeight: 1.5 }}>
                     {m.attachmentUrl && (
@@ -396,6 +414,21 @@ function Thread() {
                     aria-label="React"
                   >
                     ☺
+                  </Hoverable>
+                  )}
+                  {!m.pending && !out && (
+                  <Hoverable
+                    as="span"
+                    style={{ opacity: 0.5, fontSize: 11, cursor: 'pointer', flex: 'none', marginTop: 1 }}
+                    hover={{ opacity: 1, color: color.lime }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setS({ replyToMessageId: m.id, msgReact: null, emojiOpen: false });
+                    }}
+                    aria-label={t.replyTo}
+                    title={t.replyTo}
+                  >
+                    ↩
                   </Hoverable>
                   )}
                 </div>
@@ -500,6 +533,21 @@ function Thread() {
       )}
 
       {/* composer */}
+      {replyTarget && (
+        <div style={{ padding: '8px 12px 0', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ flex: 1, fontSize: 11, color: color.textDim, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {t.replyTo}: {replyTarget.text || '—'}
+          </div>
+          <Hoverable
+            as="span"
+            style={{ fontSize: 11, fontWeight: 700, color: color.red, cursor: 'pointer' }}
+            hover={{ opacity: 0.8 }}
+            onClick={() => setS({ replyToMessageId: null })}
+          >
+            {t.cancelReply}
+          </Hoverable>
+        </div>
+      )}
       {attachPreview && (
         <div style={{ padding: '8px 12px 0', display: 'flex', alignItems: 'center', gap: 10 }}>
           <img src={attachPreview} alt="" style={{ width: 56, height: 56, borderRadius: 8, objectFit: 'cover' }} />

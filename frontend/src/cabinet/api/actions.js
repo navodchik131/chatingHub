@@ -1,5 +1,12 @@
 import { apiFetch } from '../../api'
+import { mergeVideoArchiveWithMotionRenders } from '../../studioArchive'
 import { postStudioJobStart, waitForStudioJobResult } from '../../studioJobs'
+import MMOS_STUDIO_SCENARIOS from '../../studio/mmOsStudioScenarios.js'
+import {
+  isNsfwMode,
+  normalizeWaveModel,
+  waveModelFromState,
+} from './studioHelpers'
 import { apiJson, apiJsonOptional, normalizePhotoKind } from './helpers'
 
 const OP_BITS = { chat: 1, studio: 2, models: 4, keys: 8, billing: 16 }
@@ -212,11 +219,14 @@ export async function refreshArchiveImages() {
 }
 
 export async function refreshArchiveVideos() {
-  const [page, pending] = await Promise.all([
+  const [page, pending, motion] = await Promise.all([
     apiJsonOptional('/api/studio/generations?limit=40&skip=0&media_kind=video', {}, { items: [] }),
     apiJsonOptional('/api/studio/generations/pending?media_kind=video', {}, { items: [] }),
+    apiJsonOptional('/api/studio/motion/renders?limit=40&skip=0', {}, []),
   ])
-  return mergeArchiveItems([...(page.items || []), ...(pending.items || [])])
+  const merged = mergeArchiveItems([...(page.items || []), ...(pending.items || [])])
+  const motionRows = Array.isArray(motion?.items) ? motion.items : Array.isArray(motion) ? motion : []
+  return mergeVideoArchiveWithMotionRenders(merged, motionRows)
 }
 
 function dedupeArchiveById(items) {
@@ -401,49 +411,12 @@ export async function generateStudioModelProfile(images) {
   return data
 }
 
-/** Ждёт загрузки MMOS_STUDIO_SCENARIOS из public/mm-os-studio-scenarios.js */
-export function ensureStudioScenarios(timeoutMs = 8000) {
-  if (typeof window !== 'undefined' && window.MMOS_STUDIO_SCENARIOS?.buildGraphForMode) {
-    return Promise.resolve(window.MMOS_STUDIO_SCENARIOS)
+/** Workflow-сценарии студии (встроены в SPA-бандл). */
+export function ensureStudioScenarios() {
+  if (MMOS_STUDIO_SCENARIOS?.buildGraphForMode) {
+    return Promise.resolve(MMOS_STUDIO_SCENARIOS)
   }
-  return new Promise((resolve, reject) => {
-    const started = Date.now()
-    const tick = () => {
-      if (window.MMOS_STUDIO_SCENARIOS?.buildGraphForMode) {
-        resolve(window.MMOS_STUDIO_SCENARIOS)
-        return
-      }
-      if (Date.now() - started > timeoutMs) {
-        reject(new Error('Workflow-сценарии не загружены'))
-        return
-      }
-      setTimeout(tick, 100)
-    }
-    if (!document.querySelector('script[data-mm-scenarios]')) {
-      const el = document.createElement('script')
-      el.src = '/mm-os-studio-scenarios.js'
-      el.dataset.mmScenarios = '1'
-      el.onerror = () => reject(new Error('Не удалось загрузить mm-os-studio-scenarios.js'))
-      document.head.appendChild(el)
-    }
-    tick()
-  })
-}
-
-const AI_MODEL_MAP = {
-  nano: 'nano-banana-pro',
-  gpt: 'gpt-image-2',
-  seedream: 'seedream-v5.0-pro',
-  wan: 'wan-2.7-pro',
-}
-
-function waveModelFromState(s) {
-  const id = AI_MODEL_MAP[s.aiModel] || s.aiModel || 'nano-banana-pro'
-  return { apiId: id, tier: s.wanTier || 'standard' }
-}
-
-function isNsfwMode(s) {
-  return s.contentMode === 'nsfw'
+  return Promise.reject(new Error('Workflow-сценарии не загружены'))
 }
 
 function slotUploadKey(mode, index) {
@@ -484,7 +457,7 @@ export async function runImageGeneration({ appState, studioStore, userPrompt }) 
   }
 
   const helpers = {
-    normalizeWaveModel: (w) => w,
+    normalizeWaveModel,
     waveModelFromState: () => waveModelFromState(appState),
     isNsfwMode: () => isNsfwMode(appState),
     slotStateKey,

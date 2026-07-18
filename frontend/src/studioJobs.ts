@@ -9,6 +9,16 @@ export interface StudioJobAccepted {
   message?: string
 }
 
+export function coerceJobGenerationId(accepted: StudioJobAccepted | null | undefined): number | null {
+  const raw = accepted?.generation_id
+  if (typeof raw === 'number' && Number.isFinite(raw) && raw > 0) return raw
+  if (typeof raw === 'string' && raw.trim()) {
+    const n = Number(raw)
+    if (Number.isFinite(n) && n > 0) return n
+  }
+  return null
+}
+
 /** POST студии: 202 — задача в фоне, без ожидания WaveSpeed. */
 export async function postStudioJobStart(
   path: string,

@@ -2,10 +2,13 @@ import Hoverable from './Hoverable';
 import { IcoBolt } from './Icons';
 import { useApp } from '../hooks/useApp';
 import { navGroups } from '../data/nav';
+import { filterNavGroups } from '../data/navAccess';
 import { color, line, font } from '../styles/tokens';
 import { borderHoverOff } from '../styles/mixins';
 import { fmtCredits } from '../api/helpers';
 import { computeNavBadges } from '../api/mappers';
+import { assetUrl } from '../utils/assets';
+import { goToAdmin } from '../../marketing/workspaceEntry';
 
 const NavItem = ({ item, active, onClick }) => (
   <Hoverable
@@ -44,6 +47,7 @@ export default function Sidebar() {
   const me = cabinet.me;
   const credits = fmtCredits(me?.credits_balance);
   const badges = computeNavBadges(cabinet, me);
+  const groups = filterNavGroups(navGroups(t, badges), me, cabinet.opRights);
   const email = me?.email || '—';
   const userInitial = (email[0] || '?').toUpperCase();
   const planLabel = me?.plan_display_name || me?.plan_tier || '—';
@@ -65,7 +69,7 @@ export default function Sidebar() {
           }}
         >
           <img
-            src="/assets/logo-m.png"
+            src={assetUrl('assets/logo-m.png')}
             alt="ModelMate"
             style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
           />
@@ -82,7 +86,7 @@ export default function Sidebar() {
 
       {/* nav groups */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '6px 10px 10px', display: 'flex', flexDirection: 'column', gap: 2 }}>
-        {navGroups(t, badges).map((grp) => (
+        {groups.map((grp) => (
           <div key={grp.label} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             <div
               style={{
@@ -97,6 +101,21 @@ export default function Sidebar() {
             ))}
           </div>
         ))}
+        {me?.is_platform_admin && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: 4 }}>
+            <Hoverable
+              style={{
+                display: 'flex', alignItems: 'center', gap: 11,
+                padding: '8px 10px', borderRadius: 10, fontSize: 13, cursor: 'pointer',
+                color: color.orange, fontWeight: 700,
+              }}
+              hover={{ background: 'rgba(255,255,255,.05)' }}
+              onClick={goToAdmin}
+            >
+              <span style={{ flex: 1 }}>{t.adminPanel}</span>
+            </Hoverable>
+          </div>
+        )}
       </div>
 
       {/* credits + user */}

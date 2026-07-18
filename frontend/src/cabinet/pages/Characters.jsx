@@ -7,7 +7,7 @@ import {
 import { useApp } from '../hooks/useApp';
 import { color, line, font, G } from '../styles/tokens';
 import { fieldLbl, inputSt, borderHoverOff, borderHoverLime, selectSt } from '../styles/mixins';
-import { mapCharacter } from '../api/mappers';
+import { mapCharacter, mapCharHistory } from '../api/mappers';
 import { photoTagDefs, photoKindShortLabel, normalizePhotoKind } from '../api/helpers';
 
 function CharacterCreateModal({ open, name, setName, onClose, onCreate, t, lang }) {
@@ -77,8 +77,6 @@ const personaFieldDefs = (lang) => [
   { lbl: lang === 'ru' ? 'ПРЕДЫСТОРИЯ' : 'BACKSTORY', val: '', ph: '', area: true, half: false },
 ];
 
-
-const historyRowsData = () => [];
 
 function useActiveChar() {
   const { s, cabinet } = useApp();
@@ -607,12 +605,16 @@ function TabExif() {
 
 /* ── detail: history ─────────────────────────────────────── */
 function TabHistory() {
-  const { t, lang } = useApp();
+  const { t, lang, s, cabinet } = useApp();
+  const rows = mapCharHistory(s.charDetail, cabinet.archiveImages, lang);
 
   return (
     <Panel style={{ padding: '16px 18px', maxWidth: 640 }}>
       <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 12 }}>{t.charHistoryTitle}</div>
-      {historyRowsData().map((hr, i) => {
+      {rows.length === 0 && (
+        <div style={{ fontSize: 12, color: color.textDim }}>{lang === 'ru' ? 'Пока нет генераций' : 'No generations yet'}</div>
+      )}
+      {rows.map((hr, i) => {
         const Icon = histIcons[hr.icon];
         return (
           <div

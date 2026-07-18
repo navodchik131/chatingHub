@@ -7,6 +7,7 @@ import { borderHoverOff } from '../styles/mixins';
 import { guideDefs } from '../data/catalog';
 import { fmtCredits, fmtMoney, fmtToday } from '../api/helpers';
 import { mapDialogRow } from '../api/mappers';
+import { sumOutboundMessages } from '../api/studioHelpers';
 import { archiveThumbUrl } from '../api/actions';
 
 const KpiCard = ({ children, onClick, accent }) => (
@@ -42,7 +43,7 @@ export default function Overview() {
     ? fmtMoney(donationOverview.total_minor, donationOverview.currency)
     : '—';
   const dialogCount = conversations.length;
-  const teamReplies = chatterStats?.self?.outbound_messages ?? chatterStats?.self_row?.outbound_messages ?? 0;
+  const teamReplies = sumOutboundMessages(chatterStats);
   const unreadTotal = conversations.reduce((a, c) => a + (c.unread_count || 0), 0);
   const helloName = (me?.email || '').split('@')[0] || '—';
   const hello = lang === 'ru' ? `С возвращением, ${helloName}` : `Welcome back, ${helloName}`;

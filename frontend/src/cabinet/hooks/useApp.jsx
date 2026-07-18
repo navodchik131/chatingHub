@@ -22,8 +22,11 @@ const initial = {
   msgReact: null,
   emojiOpen: false,
   contentMode: 'sfw',
-  aiModel: 'nano',
+  aiModel: 'nano-banana-pro',
   carouselCount: 4,
+  carouselPickId: null,
+  chatSearchQuery: '',
+  replyToMessageId: null,
   slotSource: {},
   hasFirstFrame: 'yes',
   vidQuality: '1080',
@@ -90,12 +93,6 @@ export function AppProvider({ children, forceMobile = false }) {
     navigate(pathnameFromPage(nextPage))
     setS({ connDetail: null, charDetail: null, moreOpen: false })
   }
-
-  useEffect(() => {
-    if (cabinet.opRights) {
-      setS({ opRights: cabinet.opRights });
-    }
-  }, [cabinet.opRights]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
