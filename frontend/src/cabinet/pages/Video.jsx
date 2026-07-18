@@ -6,6 +6,7 @@ import { useApp } from '../hooks/useApp';
 import { color, line, font, G } from '../styles/tokens';
 import { refUploadStyle, borderHoverOff } from '../styles/mixins';
 import { archiveThumbUrl, archiveDownloadUrl, isArchivePending } from '../api/actions';
+import { sameStudioModelId } from '../api/studioHelpers';
 import { computeMotionVideoCreditCost } from '../../studioMotionPricing';
 
 /** Как на бэкенде: 720/1080/4k → Seedance resolution (4k в API уходит как 1080p). */
@@ -17,7 +18,7 @@ function vidQualityToResolution(vidQuality) {
 }
 
 export default function Video() {
-  const { t, lang, s, setS, isMobile, cabinet } = useApp();
+  const { t, lang, s, setS, isMobile, go, cabinet } = useApp();
   const videoRef = useRef(null);
   const frameRef = useRef(null);
   const timer = useRef(null);
@@ -88,13 +89,25 @@ export default function Video() {
                 <SelectPill
                   key={m.id}
                   accent="pink"
-                  on={cabinet.selectedModelId === m.id}
+                  on={sameStudioModelId(cabinet.selectedModelId, m.id)}
                   onClick={() => cabinet.setSelectedModelId(m.id)}
                 >
-                  {m.name}
+                  {m.name || `#${m.id}`}
                 </SelectPill>
               ))}
             </div>
+            {!(cabinet.models || []).length && (
+              <div style={{ fontSize: 12, color: color.textDim, marginTop: 4 }}>
+                {cabinet.modelsLoadError || (
+                  <>
+                    {lang === 'ru' ? 'Нет персонажей — ' : 'No characters — '}
+                    <span style={{ color: color.lime, fontWeight: 700, cursor: 'pointer' }} onClick={go('characters')}>
+                      {lang === 'ru' ? 'создайте в «Персонажи»' : 'create in Characters'}
+                    </span>
+                  </>
+                )}
+              </div>
+            )}
           </div>
 
           {/* reference video */}

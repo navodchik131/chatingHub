@@ -82,6 +82,18 @@ export function enginesForNsfw(nsfw, genModels) {
     }))
 }
 
+export function normalizeStudioModelId(id) {
+  if (id == null || id === '') return null
+  const n = Number(id)
+  return Number.isFinite(n) ? n : null
+}
+
+export function sameStudioModelId(a, b) {
+  const na = normalizeStudioModelId(a)
+  const nb = normalizeStudioModelId(b)
+  return na != null && nb != null && na === nb
+}
+
 function slotHasSource(mode, index, uploadFiles, slotArchivePicks) {
   const src = resolveSlot(mode, index, uploadFiles, slotArchivePicks)
   return Boolean(src.file || src.archiveId != null)

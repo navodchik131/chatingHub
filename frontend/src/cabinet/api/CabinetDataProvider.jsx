@@ -11,7 +11,7 @@ import {
 import { coerceJobGenerationId, waitForStudioJobResult } from '../../studioJobs'
 import { apiJson, apiJsonOptional, isPlausibleTelegramBotToken } from './helpers'
 import { refreshPendingArchiveImages, refreshPendingArchiveVideos } from './archivePoll'
-import { mapGenModelsFromApi, waveModelParamsFromState } from './studioHelpers'
+import { mapGenModelsFromApi, normalizeStudioModelId, sameStudioModelId, waveModelParamsFromState } from './studioHelpers'
 import * as actions from './actions'
 
 function applyJobToOptimisticArchive(current, tempIds, accepted) {
@@ -101,7 +101,9 @@ export function CabinetDataProvider({ children }) {
   const [donationsLoadError, setDonationsLoadError] = useState(null)
   const [creatorDonationAlert, setCreatorDonationAlert] = useState(null)
   const [donationEditId, setDonationEditId] = useState(null)
+  const [modelsLoadError, setModelsLoadError] = useState(null)
   const wsRef = useRef(null)
+  const refreshAllInFlightRef = useRef(false)
   const archiveImagesRef = useRef(archiveImages)
   const archiveVideosRef = useRef(archiveVideos)
   const donationOverviewRef = useRef(donationOverview)
@@ -191,6 +193,8 @@ export function CabinetDataProvider({ children }) {
       setReady(true)
       return
     }
+    if (refreshAllInFlightRef.current) return
+    refreshAllInFlightRef.current = true
     if (showBusy) setBusy(true)
     setError(null)
     try {
@@ -219,7 +223,7 @@ export function CabinetDataProvider({ children }) {
         apiJson('/api/auth/me'),
         apiJsonOptional('/api/health', {}, null),
         apiJsonOptional('/api/conversations', {}, []),
-        apiJsonOptional('/api/studio/models', {}, []),
+        apiJsonOptional('/api/studio/models', {}, null),
         actions.refreshArchiveImages().catch(() => []),
         actions.refreshArchiveVideos().catch(() => []),
         apiJsonOptional('/api/integrations', {}, null),
@@ -241,9 +245,17 @@ export function CabinetDataProvider({ children }) {
       setMe(meData)
       setHealth(healthData)
       setConversations(Array.isArray(convs) ? convs : [])
-      const modelRows = Array.isArray(modelsData) ? modelsData : []
-      setModels(modelRows)
-      setSelectedModelId((prev) => (prev != null ? prev : modelRows[0]?.id ?? null))
+      if (modelsData != null) {
+        const modelRows = Array.isArray(modelsData) ? modelsData : []
+        setModels(modelRows)
+        setModelsLoadError(null)
+        setSelectedModelId((prev) => {
+          if (prev != null && modelRows.some((m) => sameStudioModelId(m.id, prev))) return prev
+          return modelRows[0]?.id ?? null
+        })
+      } else {
+        setModelsLoadError('Не удалось загрузить персонажей')
+      }
       setArchiveImages(Array.isArray(archiveImg) ? archiveImg : [])
       setArchiveVideos(Array.isArray(archiveVid) ? archiveVid : [])
       setIntegrations(integrationsData)
@@ -273,9 +285,14 @@ export function CabinetDataProvider({ children }) {
     } catch (e) {
       setError(e.message || String(e))
     } finally {
+      refreshAllInFlightRef.current = false
       if (showBusy) setBusy(false)
       setReady(true)
     }
+  }, [])
+
+  const pickStudioModel = useCallback((id) => {
+    setSelectedModelId(normalizeStudioModelId(id))
   }, [])
 
   const sendReply = useCallback(
@@ -1019,7 +1036,8 @@ export function CabinetDataProvider({ children }) {
       setActiveConvId,
       genModels,
       selectedModelId,
-      setSelectedModelId,
+      setSelectedModelId: pickStudioModel,
+      modelsLoadError,
       selectedAspect,
       setSelectedAspect,
       uploadFiles,
@@ -1107,6 +1125,8 @@ export function CabinetDataProvider({ children }) {
       activeConvId,
       genModels,
       selectedModelId,
+      pickStudioModel,
+      modelsLoadError,
       selectedAspect,
       uploadFiles,
       uploadPreviewUrls,

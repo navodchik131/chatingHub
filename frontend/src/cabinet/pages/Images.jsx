@@ -10,7 +10,7 @@ import { color, line, font, G } from '../styles/tokens';
 import { cardPickStyle, modeCardStyle, refThumbStyle, refUploadStyle, borderHoverOff } from '../styles/mixins';
 import { modeDefs } from '../data/catalog';
 import { resolveSlotSource, archiveThumbUrl, archiveDownloadUrl, isArchivePending } from '../api/actions';
-import { validateStudioForm, syncRefArchivePicks, enginesForNsfw } from '../api/studioHelpers';
+import { validateStudioForm, syncRefArchivePicks, enginesForNsfw, sameStudioModelId } from '../api/studioHelpers';
 
 const ratios = ['9:16', '16:9', '1:1', '4:3', '3:4'];
 const countOptions = [2, 3, 4, 6, 8];
@@ -240,7 +240,7 @@ function Slot({ slot, index }) {
 }
 
 export default function Images() {
-  const { t, lang, s, setS, isMobile, cabinet } = useApp();
+  const { t, lang, s, setS, isMobile, go, cabinet } = useApp();
 
   const modes = modeDefs(lang, t.cr);
   const curMode = modes.find((m) => m.id === s.imgMode) || modes[0];
@@ -396,13 +396,32 @@ export default function Images() {
                 <SelectPill
                   key={m.id}
                   accent="pink"
-                  on={cabinet.selectedModelId === m.id}
+                  on={sameStudioModelId(cabinet.selectedModelId, m.id)}
                   onClick={() => cabinet.setSelectedModelId(m.id)}
                 >
-                  {m.name}
+                  {m.name || `#${m.id}`}
                 </SelectPill>
               ))}
             </div>
+            {!(cabinet.models || []).length && (
+              <div style={{ fontSize: 12, color: color.textDim, lineHeight: 1.55, marginTop: 4 }}>
+                {cabinet.modelsLoadError ? (
+                  <span style={{ color: color.orange }}>{cabinet.modelsLoadError}</span>
+                ) : (
+                  <>
+                    {lang === 'ru' ? 'Нет персонажей — ' : 'No characters — '}
+                    <Hoverable
+                      as="span"
+                      style={{ color: color.lime, fontWeight: 700, cursor: 'pointer' }}
+                      hover={{ color: color.limeHi }}
+                      onClick={go('characters')}
+                    >
+                      {lang === 'ru' ? 'создайте в «Персонажи»' : 'create in Characters'}
+                    </Hoverable>
+                  </>
+                )}
+              </div>
+            )}
           </div>
 
           {/* format */}
