@@ -244,7 +244,7 @@ export default function Images() {
 
   const modes = modeDefs(lang, t.cr);
   const curMode = modes.find((m) => m.id === s.imgMode) || modes[0];
-  const models = modelsByMode(lang, cabinet.genModels)[s.contentMode] || [];
+  const models = enginesForNsfw(s.contentMode === 'nsfw', cabinet.genModels);
   const charNames = (cabinet.models || []).map((m) => m.name).filter(Boolean);
 
   const handleGenerate = () => {
