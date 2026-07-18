@@ -10,23 +10,10 @@ import { color, line, font, G } from '../styles/tokens';
 import { cardPickStyle, modeCardStyle, refThumbStyle, refUploadStyle, borderHoverOff } from '../styles/mixins';
 import { modeDefs } from '../data/catalog';
 import { resolveSlotSource, archiveThumbUrl, archiveDownloadUrl, isArchivePending } from '../api/actions';
-import { validateStudioForm, syncRefArchivePicks } from '../api/studioHelpers';
+import { validateStudioForm, syncRefArchivePicks, enginesForNsfw } from '../api/studioHelpers';
 
 const ratios = ['9:16', '16:9', '1:1', '4:3', '3:4'];
 const countOptions = [2, 3, 4, 6, 8];
-
-const modelsByMode = (lang, genModels) => ({
-  sfw: (genModels || []).filter((m) => !m.nsfw).slice(0, 4).map((m) => ({
-    id: m.id || m.model_id,
-    name: m.label || m.name || '—',
-    note: m.note || '',
-  })),
-  nsfw: (genModels || []).filter((m) => m.nsfw).slice(0, 4).map((m) => ({
-    id: m.id || m.model_id,
-    name: m.label || m.name || '—',
-    note: m.note || '',
-  })),
-});
 
 const modeIcons = {
   layers: IcoLayers, face: IcoFace, shirt: IcoShirt, pin: IcoPin, text: IcoText, grid2: IcoGrid2,
@@ -284,7 +271,7 @@ export default function Images() {
     : { display: 'grid', gridTemplateColumns: '340px 1fr', gap: 16, alignItems: 'start' };
 
   const pickContentMode = (contentMode) => {
-    const list = modelsByMode(lang, cabinet.genModels)[contentMode] || [];
+    const list = enginesForNsfw(contentMode === 'nsfw', cabinet.genModels);
     setS({ contentMode, aiModel: list[0]?.id || (contentMode === 'nsfw' ? 'wan-2.7' : 'nano-banana-pro') });
   };
 

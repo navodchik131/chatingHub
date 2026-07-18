@@ -102,6 +102,15 @@ export function CabinetDataProvider({ children }) {
   const [creatorDonationAlert, setCreatorDonationAlert] = useState(null)
   const [donationEditId, setDonationEditId] = useState(null)
   const wsRef = useRef(null)
+  const archiveImagesRef = useRef(archiveImages)
+  const archiveVideosRef = useRef(archiveVideos)
+  const donationOverviewRef = useRef(donationOverview)
+  const donationEventsRef = useRef(donationEvents)
+
+  useEffect(() => { archiveImagesRef.current = archiveImages }, [archiveImages])
+  useEffect(() => { archiveVideosRef.current = archiveVideos }, [archiveVideos])
+  useEffect(() => { donationOverviewRef.current = donationOverview }, [donationOverview])
+  useEffect(() => { donationEventsRef.current = donationEvents }, [donationEvents])
 
   const run = useCallback(async (fn) => {
     setBusy(true)
@@ -151,10 +160,10 @@ export function CabinetDataProvider({ children }) {
   }, [])
 
   const refreshArchiveFull = useCallback(async () => {
-    const localImgPending = archiveImages.filter(
+    const localImgPending = archiveImagesRef.current.filter(
       (g) => isOptimisticStudioArchiveId(g.id) || actions.isArchivePending(g),
     )
-    const localVidPending = archiveVideos.filter(
+    const localVidPending = archiveVideosRef.current.filter(
       (g) => isOptimisticStudioArchiveId(g.id) || actions.isArchivePending(g),
     )
     const [imgs, vids] = await Promise.all([
@@ -163,26 +172,26 @@ export function CabinetDataProvider({ children }) {
     ])
     setArchiveImages(mergeStudioArchiveItems(imgs, localImgPending))
     setArchiveVideos(mergeStudioArchiveItems(vids, localVidPending))
-  }, [archiveImages, archiveVideos])
+  }, [])
 
   const refreshArchivePending = useCallback(async () => {
     const [imgResult, vidResult] = await Promise.all([
-      refreshPendingArchiveImages(archiveImages),
-      refreshPendingArchiveVideos(archiveVideos),
+      refreshPendingArchiveImages(archiveImagesRef.current),
+      refreshPendingArchiveVideos(archiveVideosRef.current),
     ])
     if (imgResult.changed) setArchiveImages(imgResult.items)
     if (vidResult.changed) setArchiveVideos(vidResult.items)
     return imgResult.changed || vidResult.changed
-  }, [archiveImages, archiveVideos])
+  }, [])
 
   const refreshArchive = refreshArchiveFull
 
-  const refreshAll = useCallback(async () => {
+  const refreshAll = useCallback(async ({ busy: showBusy = false } = {}) => {
     if (!getToken()) {
       setReady(true)
       return
     }
-    setBusy(true)
+    if (showBusy) setBusy(true)
     setError(null)
     try {
       const [
@@ -234,7 +243,7 @@ export function CabinetDataProvider({ children }) {
       setConversations(Array.isArray(convs) ? convs : [])
       const modelRows = Array.isArray(modelsData) ? modelsData : []
       setModels(modelRows)
-      if (!selectedModelId && modelRows[0]?.id) setSelectedModelId(modelRows[0].id)
+      setSelectedModelId((prev) => (prev != null ? prev : modelRows[0]?.id ?? null))
       setArchiveImages(Array.isArray(archiveImg) ? archiveImg : [])
       setArchiveVideos(Array.isArray(archiveVid) ? archiveVid : [])
       setIntegrations(integrationsData)
@@ -264,10 +273,10 @@ export function CabinetDataProvider({ children }) {
     } catch (e) {
       setError(e.message || String(e))
     } finally {
-      setBusy(false)
+      if (showBusy) setBusy(false)
       setReady(true)
     }
-  }, [selectedModelId])
+  }, [])
 
   const sendReply = useCallback(
     async (convId, text, replyToMessageId, imageFile) => {
@@ -862,7 +871,7 @@ export function CabinetDataProvider({ children }) {
     if (!pending) return
     const timer = window.setInterval(() => {
       void refreshArchivePending()
-    }, 3_000)
+    }, 5_000)
     return () => window.clearInterval(timer)
   }, [ready, archiveImages, archiveVideos, refreshArchivePending])
 
@@ -874,12 +883,12 @@ export function CabinetDataProvider({ children }) {
       return
     }
     setDonationsLoadError(null)
-    const prevLatestId = donationOverview?.latest_event_id ?? null
+    const prevLatestId = donationOverviewRef.current?.latest_event_id ?? null
     const latestId = overview.latest_event_id
     const needsFullReload =
       !!opts.reloadPanels ||
-      !Array.isArray(donationEvents) ||
-      !donationEvents.length ||
+      !Array.isArray(donationEventsRef.current) ||
+      !donationEventsRef.current.length ||
       (latestId && latestId !== prevLatestId)
 
     setDonationOverview(overview)
@@ -897,7 +906,7 @@ export function CabinetDataProvider({ children }) {
     } else if (!latestId || latestId === prevLatestId) {
       setCreatorDonationAlert(null)
     }
-  }, [me, donationOverview, donationEvents])
+  }, [me?.is_workspace_owner])
 
   useEffect(() => {
     if (!ready || !me?.is_workspace_owner) return
@@ -918,7 +927,7 @@ export function CabinetDataProvider({ children }) {
   }, [ready, me?.is_workspace_owner, refreshDonationOverview])
 
   useEffect(() => {
-    void refreshAll()
+    void refreshAll({ busy: true })
   }, [refreshAll])
 
   useEffect(() => {

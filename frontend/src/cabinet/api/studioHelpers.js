@@ -27,8 +27,8 @@ export const FALLBACK_GEN_MODELS = [
   { id: 'wan-2.7-pro', label: 'Wan 2.7 Pro', nsfw: true, note: '' },
 ]
 
-const REGULAR_ENGINE_IDS = ['nano-banana-pro', 'gpt-image-2', 'seedream-v5.0-pro']
-const NSFW_ENGINE_IDS = ['wan-2.7', 'wan-2.7-pro']
+export const REGULAR_ENGINE_IDS = ['nano-banana-pro', 'gpt-image-2', 'seedream-v5.0-pro']
+export const NSFW_ENGINE_IDS = ['wan-2.7', 'wan-2.7-pro', 'seedream-v5.0-pro']
 
 export function isNsfwMode(s) {
   return s?.contentMode === 'nsfw' || !!s?.nsfw
@@ -65,6 +65,21 @@ export function mapGenModelsFromApi(modelOpts) {
     nsfw: Boolean(m.nsfw_only),
     note: m.note || '',
   }))
+}
+
+/** Как mm-os-bridge enginesForNsfw: Seedream доступен и в NSFW-режиме. */
+export function enginesForNsfw(nsfw, genModels) {
+  const allowed = nsfw ? NSFW_ENGINE_IDS : REGULAR_ENGINE_IDS
+  const source = genModels?.length ? genModels : FALLBACK_GEN_MODELS
+  const byId = new Map(source.map((m) => [m.id, m]))
+  return allowed
+    .map((id) => byId.get(id))
+    .filter(Boolean)
+    .map((m) => ({
+      id: m.id,
+      name: m.label || m.name || m.id,
+      note: m.note || '',
+    }))
 }
 
 function slotHasSource(mode, index, uploadFiles, slotArchivePicks) {
