@@ -245,6 +245,9 @@ export function CabinetDataProvider({ children }) {
       setMe(meData)
       setHealth(healthData)
       setConversations(Array.isArray(convs) ? convs : [])
+      if (meData?.workflow_demo_limited) {
+        void actions.resolveDemoWorkflowWorkspaceId()
+      }
       if (modelsData != null) {
         const modelRows = Array.isArray(modelsData) ? modelsData : []
         setModels(modelRows)
@@ -620,7 +623,12 @@ export function CabinetDataProvider({ children }) {
             imageFile: src?.file,
           })
         } else {
-          accepted = await actions.runImageGeneration({ appState, studioStore, userPrompt })
+          accepted = await actions.runImageGeneration({
+            appState,
+            studioStore,
+            userPrompt,
+            workflowDemoLimited: Boolean(me?.workflow_demo_limited),
+          })
         }
         setArchiveImages((prev) => applyJobToOptimisticArchive(prev, tempIds, accepted))
         void refreshArchivePending()
@@ -628,20 +636,30 @@ export function CabinetDataProvider({ children }) {
         if (accepted?.job_id) {
           const jobId = accepted.job_id
           const cleanupIds = [...tempIds]
+          const maxWaitMs = mode === 'carousel'
+            ? Math.max(8 * 60 * 1000, (Number(appState.carouselCount) || 4) * 4 * 60 * 1000)
+            : 15 * 60 * 1000
           void waitForStudioJobResult(jobId, {
-            maxWaitMs: mode === 'carousel'
-              ? Math.max(8 * 60 * 1000, (Number(appState.carouselCount) || 4) * 4 * 60 * 1000)
-              : 15 * 60 * 1000,
-          }).catch(() => {}).finally(() => {
-            setArchiveImages((prev) => {
-              let next = prev
-              for (const tid of cleanupIds) {
-                next = removeOptimisticStudioArchive(next, tid)
-              }
-              return next
-            })
-            void refreshArchiveFull()
+            maxWaitMs,
+            onStatus: () => {
+              void refreshArchivePending()
+            },
           })
+            .catch((e) => {
+              setError(e?.message || String(e))
+            })
+            .finally(async () => {
+              await refreshArchivePending()
+              setArchiveImages((prev) => {
+                let next = prev
+                for (const tid of cleanupIds) {
+                  next = removeOptimisticStudioArchive(next, tid)
+                }
+                return next
+              })
+              await refreshArchivePending()
+              void refreshArchiveFull()
+            })
         }
       } catch (e) {
         setArchiveImages((prev) => {
@@ -654,7 +672,7 @@ export function CabinetDataProvider({ children }) {
         setError(e?.message || String(e))
       }
     },
-    [selectedModelId, selectedAspect, uploadFiles, slotArchivePicks, archiveImages, models, refreshArchiveFull, refreshArchivePending],
+    [selectedModelId, selectedAspect, uploadFiles, slotArchivePicks, archiveImages, models, me?.workflow_demo_limited, refreshArchiveFull, refreshArchivePending],
   )
 
   const generateFirstFrame = useCallback(
@@ -888,7 +906,7 @@ export function CabinetDataProvider({ children }) {
     if (!pending) return
     const timer = window.setInterval(() => {
       void refreshArchivePending()
-    }, 5_000)
+    }, 3_000)
     return () => window.clearInterval(timer)
   }, [ready, archiveImages, archiveVideos, refreshArchivePending])
 

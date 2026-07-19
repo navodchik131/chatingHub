@@ -42,8 +42,8 @@ export default function Video() {
     : { display: 'grid', gridTemplateColumns: '340px 1fr', gap: 16, alignItems: 'start' };
 
   const ffSeg = (on) => ({
-    flex: 1, textAlign: 'center', fontSize: 12.5, fontWeight: 800,
-    borderRadius: 9, padding: 9, cursor: 'pointer', boxSizing: 'border-box',
+    flex: 1, textAlign: 'center', fontSize: 12, fontWeight: 800, lineHeight: 1.35,
+    borderRadius: 9, padding: '9px 10px', cursor: 'pointer', boxSizing: 'border-box',
     border: `1px solid ${on ? 'transparent' : line.strong}`,
     ...(on ? { background: color.lime, color: color.limeInk } : { color: color.textDim }),
   });
@@ -149,10 +149,10 @@ export default function Video() {
             <div style={{ fontSize: 13, fontWeight: 800, marginBottom: 10 }}>{t.hasFirstFrame}</div>
             <div style={{ display: 'flex', gap: 8 }}>
               <div style={ffSeg(s.hasFirstFrame === 'yes')} onClick={() => setS({ hasFirstFrame: 'yes' })}>
-                {lang === 'ru' ? 'Да, есть' : 'Yes, I have'}
+                {t.ffYes}
               </div>
               <div style={ffSeg(s.hasFirstFrame === 'no')} onClick={() => setS({ hasFirstFrame: 'no' })}>
-                {lang === 'ru' ? 'Нет — сгенерировать' : 'No — generate it'}
+                {t.ffNo}
               </div>
             </div>
           </div>

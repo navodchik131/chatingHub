@@ -278,10 +278,28 @@ export async function postStudioJob(path, body) {
   return accepted
 }
 
-export async function executeWorkflowGraph(graph, targetNodeId) {
+let cachedDemoWorkflowWorkspaceId = null
+
+/** Демо-тариф: backend требует workspace_id (проект «Смена модели»). */
+export async function resolveDemoWorkflowWorkspaceId() {
+  if (cachedDemoWorkflowWorkspaceId != null) return cachedDemoWorkflowWorkspaceId
+  const list = await apiJsonOptional('/api/studio/workflow/workspaces', {}, [])
+  const id = Array.isArray(list) && list[0]?.id != null ? Number(list[0].id) : null
+  if (id) cachedDemoWorkflowWorkspaceId = id
+  return id
+}
+
+export async function executeWorkflowGraph(graph, targetNodeId, opts = {}) {
   const fd = new FormData()
   fd.append('graph', JSON.stringify(graph))
   fd.append('target_node_id', targetNodeId)
+  if (opts.workflowDemoLimited) {
+    const wsId = opts.workspaceId ?? (await resolveDemoWorkflowWorkspaceId())
+    if (!wsId) {
+      throw new Error('Не найден workflow-проект для демо-тарифа. Обновите страницу.')
+    }
+    fd.append('workspace_id', String(wsId))
+  }
   return postStudioJobStart('/api/studio/workflow/execute', { method: 'POST', body: fd })
 }
 
@@ -443,7 +461,7 @@ function resolveSlotSource(mode, index, uploadFiles, slotArchivePicks) {
 export { resolveSlotSource }
 
 /** Генерация изображений через workflow execute (как mm-os-bridge). */
-export async function runImageGeneration({ appState, studioStore, userPrompt }) {
+export async function runImageGeneration({ appState, studioStore, userPrompt, workflowDemoLimited = false, workspaceId = null }) {
   const scenarios = await ensureStudioScenarios()
   const mode = appState.imgMode || 'prompt'
   const modelId = studioStore.selectedModelId
@@ -477,5 +495,5 @@ export async function runImageGeneration({ appState, studioStore, userPrompt }) 
     helpers,
   })
   if (!built) throw new Error('Неизвестный режим генерации')
-  return executeWorkflowGraph(built.graph, built.targetNodeId)
+  return executeWorkflowGraph(built.graph, built.targetNodeId, { workflowDemoLimited, workspaceId })
 }
