@@ -24,7 +24,7 @@ function DonOverview() {
     setAsset(ps?.payout_asset || 'USDT');
   }, [ps?.wallet_address, ps?.payout_asset]);
 
-  const donStatsData = mapDonationStats(cabinet.donationOverview, lang);
+  const donStatsData = mapDonationStats(cabinet.donationOverview, lang, cabinet.donationEvents);
   const donLinksData = (cabinet.donations || []).map((d) => ({
     id: d.id,
     title: d.title || '—',

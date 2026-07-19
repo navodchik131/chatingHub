@@ -19,6 +19,16 @@ const modeIcons = {
   layers: IcoLayers, face: IcoFace, shirt: IcoShirt, pin: IcoPin, text: IcoText, grid2: IcoGrid2,
 };
 
+function aspectCss(ratio) {
+  const r = String(ratio || '9:16').trim();
+  if (r === '16:9') return '16 / 9';
+  if (r === '1:1') return '1 / 1';
+  if (r === '4:3') return '4 / 3';
+  if (r === '3:4') return '3 / 4';
+  if (r === '4:5') return '4 / 5';
+  return '9 / 16';
+}
+
 /** Archive lightbox — shared by the Images page. */
 export function Lightbox() {
   const { t, lang, lightbox, setS, go, cabinet } = useApp();
@@ -33,6 +43,7 @@ export function Lightbox() {
   const thumb = item ? archiveThumbUrl(item) : '';
   const downloadUrl = item ? archiveDownloadUrl(item) || thumb : '';
   const who = model?.name || '—';
+  const ratio = item?.aspect_ratio || item?.output_aspect || '9:16';
   const when = item?.created_at
     ? new Date(item.created_at).toLocaleString(lang === 'ru' ? 'ru-RU' : 'en-GB')
     : '—';
@@ -60,13 +71,16 @@ export function Lightbox() {
     <Overlay onClose={close}>
       <div
         onClick={(e) => e.stopPropagation()}
-        style={{ display: 'flex', flexDirection: 'column', gap: 14, maxHeight: '92vh', maxWidth: 'min(92vw,720px)' }}
+        style={{
+          display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: 14,
+          width: 'min(96vw, 1200px)', maxHeight: '92vh', flexShrink: 0,
+        }}
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
           <div>
             <div style={{ fontWeight: 800, fontSize: 15 }}>{who}</div>
             <div style={{ fontSize: 11, color: color.textDim }}>
-              {item?.prompt || (lang === 'ru' ? 'Кадр студии' : 'Studio frame')} · {item?.aspect_ratio || '9:16'} · {when}
+              {item?.prompt || (lang === 'ru' ? 'Кадр студии' : 'Studio frame')} · {ratio} · {when}
             </div>
           </div>
           <CloseButton onClick={close} label={t.close} />
@@ -74,12 +88,30 @@ export function Lightbox() {
 
         <div
           style={{
-            flex: 1, minHeight: 280, display: 'flex', alignItems: 'center', justifyContent: 'center',
-            borderRadius: 14, overflow: 'hidden',
-            background: thumb ? `center/contain no-repeat url(${thumb}) ${color.bgPanel}` : G[(item?.id || 0) % 6],
+            width: '100%',
+            aspectRatio: aspectCss(ratio),
+            maxHeight: 'min(calc(92vh - 180px), 85vh)',
+            flexShrink: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderRadius: 14,
+            overflow: 'hidden',
+            background: thumb ? color.bgPanel : G[(item?.id || 0) % 6],
           }}
         >
-          {!thumb && (
+          {thumb ? (
+            <img
+              src={thumb}
+              alt=""
+              style={{
+                width: '100%',
+                height: '100%',
+                objectFit: 'contain',
+                display: 'block',
+              }}
+            />
+          ) : (
             <span style={{ display: 'flex', width: 48, height: 48, color: 'rgba(255,255,255,.25)' }}><IcoImage /></span>
           )}
         </div>

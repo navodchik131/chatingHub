@@ -6,6 +6,7 @@ import {
   platformLabel,
   ownerReactionEmoji,
   firstAttachmentUrl,
+  resolveDonationBalances,
 } from './helpers'
 
 export function displayName(c) {
@@ -303,17 +304,13 @@ export function mapConnectionStatus(integrations, connId, lang) {
   return null
 }
 
-export function mapDonationStats(overview, lang) {
-  const cur = overview?.currency || 'RUB'
-  const total = overview?.total_minor ?? 0
-  const available = overview?.available_minor ?? 0
-  const held = overview?.held_minor ?? 0
-  const paid = overview?.paid_out_minor ?? 0
+export function mapDonationStats(overview, lang, events = []) {
+  const { currency, total, available, held, paid } = resolveDonationBalances(overview, events)
   return [
-    { label: lang === 'ru' ? 'ВСЕГО' : 'TOTAL', value: fmtMoney(total, cur), color: '#F2F3F0' },
-    { label: lang === 'ru' ? 'ДОСТУПНО' : 'AVAILABLE', value: fmtMoney(available, cur), color: '#4ADE80' },
-    { label: lang === 'ru' ? 'НА УДЕРЖАНИИ' : 'ON HOLD', value: fmtMoney(held, cur), color: '#FB923C' },
-    { label: lang === 'ru' ? 'ВЫПЛАЧЕНО' : 'PAID OUT', value: fmtMoney(paid, cur), color: '#9BA0A6' },
+    { label: lang === 'ru' ? 'ВСЕГО' : 'TOTAL', value: fmtMoney(total, currency), color: '#F2F3F0' },
+    { label: lang === 'ru' ? 'ДОСТУПНО' : 'AVAILABLE', value: fmtMoney(available, currency), color: '#4ADE80' },
+    { label: lang === 'ru' ? 'НА УДЕРЖАНИИ' : 'ON HOLD', value: fmtMoney(held, currency), color: '#FB923C' },
+    { label: lang === 'ru' ? 'ВЫПЛАЧЕНО' : 'PAID OUT', value: fmtMoney(paid, currency), color: '#9BA0A6' },
   ]
 }
 

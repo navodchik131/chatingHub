@@ -27,6 +27,73 @@ export function fmtCredits(n) {
   return String(Math.max(0, Math.round(Number(n) || 0)))
 }
 
+export function pickCurrencyAmount(map, preferred = 'RUB') {
+  if (!map) return undefined
+  const pref = String(preferred || 'RUB').toUpperCase()
+  if (map[pref] != null) return map[pref]
+  if (map[pref.toLowerCase()] != null) return map[pref.toLowerCase()]
+  const keys = Object.keys(map)
+  return keys.length ? map[keys[0]] : undefined
+}
+
+function donationAvailableAtUtc(occurredAt) {
+  const y = occurredAt.getUTCFullYear()
+  const m = occurredAt.getUTCMonth()
+  const d = occurredAt.getUTCDate()
+  if (d <= 15) return new Date(Date.UTC(y, m, 16))
+  return new Date(Date.UTC(y, m + 1, 1))
+}
+
+export function isDonationAvailableForPayout(occurredAt, now = new Date()) {
+  const at = occurredAt instanceof Date ? occurredAt : new Date(occurredAt)
+  if (Number.isNaN(at.getTime())) return false
+  return now.getTime() >= donationAvailableAtUtc(at).getTime()
+}
+
+/** Разбивка сумм по статусу выплаты — как в mm-os-bridge. */
+export function summarizeDonationPayouts(events, now = new Date()) {
+  const totalByCurrency = {}
+  const availableByCurrency = {}
+  const heldByCurrency = {}
+  const paidByCurrency = {}
+  for (const ev of events || []) {
+    if (!ev || ev.amount_minor <= 0) continue
+    const cur = String(ev.currency || 'RUB').toUpperCase()
+    totalByCurrency[cur] = (totalByCurrency[cur] ?? 0) + ev.amount_minor
+    if (ev.payout_status === 'paid') {
+      paidByCurrency[cur] = (paidByCurrency[cur] ?? 0) + ev.amount_minor
+      continue
+    }
+    if (ev.payout_status === 'in_request') continue
+    const at = new Date(ev.occurred_at)
+    if (isDonationAvailableForPayout(at, now)) {
+      availableByCurrency[cur] = (availableByCurrency[cur] ?? 0) + ev.amount_minor
+    } else {
+      heldByCurrency[cur] = (heldByCurrency[cur] ?? 0) + ev.amount_minor
+    }
+  }
+  return { totalByCurrency, availableByCurrency, heldByCurrency, paidByCurrency }
+}
+
+export function resolveDonationBalances(overview, events, preferredCurrency = 'RUB') {
+  const payoutSummary = summarizeDonationPayouts(events)
+  const currency = (
+    pickCurrencyAmount(overview?.totals_by_currency, preferredCurrency) != null
+      ? preferredCurrency
+      : Object.keys(overview?.totals_by_currency || {})[0]
+        || Object.keys(payoutSummary.totalByCurrency)[0]
+        || preferredCurrency
+  ).toUpperCase()
+  const total =
+    pickCurrencyAmount(payoutSummary.totalByCurrency, currency)
+    ?? pickCurrencyAmount(overview?.totals_by_currency, currency)
+    ?? 0
+  const available = pickCurrencyAmount(payoutSummary.availableByCurrency, currency) ?? 0
+  const held = pickCurrencyAmount(payoutSummary.heldByCurrency, currency) ?? 0
+  const paid = pickCurrencyAmount(payoutSummary.paidByCurrency, currency) ?? 0
+  return { currency, total, available, held, paid }
+}
+
 export function fmtMoney(minor, currency = 'RUB') {
   const c = String(currency || 'RUB').toUpperCase()
   const rub = (Number(minor) || 0) / 100

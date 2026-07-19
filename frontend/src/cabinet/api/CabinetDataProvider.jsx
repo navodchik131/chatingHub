@@ -9,7 +9,7 @@ import {
   replaceOptimisticStudioArchiveId,
 } from '../../studioArchive'
 import { coerceJobGenerationId, waitForStudioJobResult } from '../../studioJobs'
-import { apiJson, apiJsonOptional, isPlausibleTelegramBotToken } from './helpers'
+import { apiJson, apiJsonOptional, isPlausibleTelegramBotToken, resolveDonationBalances } from './helpers'
 import { refreshPendingArchiveImages, refreshPendingArchiveVideos } from './archivePoll'
 import { mapGenModelsFromApi, normalizeStudioModelId, sameStudioModelId, waveModelParamsFromState } from './studioHelpers'
 import * as actions from './actions'
@@ -449,11 +449,14 @@ export function CabinetDataProvider({ children }) {
 
   const requestPayout = useCallback(async () => {
     await run(async () => {
-      const cur = (donationOverview?.currency || 'RUB').toUpperCase()
-      await actions.requestDonationPayout(cur)
+      const { currency } = resolveDonationBalances(
+        donationOverviewRef.current,
+        donationEventsRef.current,
+      )
+      await actions.requestDonationPayout(currency)
       await refreshAll()
     })
-  }, [run, refreshAll, donationOverview])
+  }, [run, refreshAll])
 
   const savePayoutSettings = useCallback(
     async (walletAddress, payoutAsset) => {

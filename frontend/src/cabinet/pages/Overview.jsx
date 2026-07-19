@@ -5,7 +5,7 @@ import { useApp } from '../hooks/useApp';
 import { color, line, font, avG } from '../styles/tokens';
 import { borderHoverOff } from '../styles/mixins';
 import { guideDefs } from '../data/catalog';
-import { fmtCredits, fmtMoney, fmtToday } from '../api/helpers';
+import { fmtCredits, fmtMoney, fmtToday, resolveDonationBalances } from '../api/helpers';
 import { mapDialogRow } from '../api/mappers';
 import { sumOutboundMessages } from '../api/studioHelpers';
 import { archiveThumbUrl } from '../api/actions';
@@ -30,18 +30,15 @@ const KpiCard = ({ children, onClick, accent }) => (
 
 export default function Overview() {
   const { t, lang, go, cabinet } = useApp();
-  const { me, conversations, donationOverview, archiveImages, chatterStats } = cabinet;
+  const { me, conversations, donationOverview, donationEvents, archiveImages, chatterStats } = cabinet;
 
   const credits = fmtCredits(me?.credits_balance);
   const planName = me?.plan_display_name || me?.plan_tier || '—';
   const recentDialogs = conversations.slice(0, 4).map((c, i) => mapDialogRow(c, i));
   const recentFrames = archiveImages.slice(0, 4);
-  const donationAvail = donationOverview?.available_minor != null
-    ? fmtMoney(donationOverview.available_minor, donationOverview.currency)
-    : '—';
-  const donationTotal = donationOverview?.total_minor != null
-    ? fmtMoney(donationOverview.total_minor, donationOverview.currency)
-    : '—';
+  const donationBalances = resolveDonationBalances(donationOverview, donationEvents)
+  const donationAvail = fmtMoney(donationBalances.available, donationBalances.currency)
+  const donationTotal = fmtMoney(donationBalances.total, donationBalances.currency)
   const dialogCount = conversations.length;
   const teamReplies = sumOutboundMessages(chatterStats);
   const unreadTotal = conversations.reduce((a, c) => a + (c.unread_count || 0), 0);
