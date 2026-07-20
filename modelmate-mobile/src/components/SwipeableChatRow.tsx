@@ -1,6 +1,6 @@
 import { ReactNode, useEffect } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { StyleSheet, Text, View } from 'react-native';
+import { Gesture, GestureDetector, Pressable } from 'react-native-gesture-handler';
 import Animated, {
   runOnJS,
   useAnimatedStyle,
@@ -38,10 +38,18 @@ export function SwipeableChatRow({
 
   const close = () => onOpenChange(false);
   const openRow = () => onOpenChange(true);
+  const handlePress = () => {
+    if (open) {
+      close();
+      return;
+    }
+    onPress();
+  };
 
   const pan = Gesture.Pan()
-    .activeOffsetX([-12, 12])
-    .failOffsetY([-14, 14])
+    .enabled(enabled)
+    .activeOffsetX([-16, 16])
+    .failOffsetY([-10, 10])
     .onUpdate((e) => {
       if (e.translationX < 0) {
         translateX.value = Math.max(e.translationX, -ACTION_W);
@@ -59,12 +67,24 @@ export function SwipeableChatRow({
       }
     });
 
+  const tap = Gesture.Tap()
+    .maxDuration(250)
+    .onEnd(() => {
+      runOnJS(handlePress)();
+    });
+
+  const gesture = enabled ? Gesture.Race(pan, tap) : Gesture.Tap().onEnd(() => runOnJS(onPress)());
+
   const rowStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: translateX.value }],
   }));
 
   if (!enabled) {
-    return <Pressable onPress={onPress}>{children}</Pressable>;
+    return (
+      <GestureDetector gesture={gesture}>
+        <View>{children}</View>
+      </GestureDetector>
+    );
   }
 
   return (
@@ -78,19 +98,9 @@ export function SwipeableChatRow({
       >
         <Text style={styles.actionText}>В{'\n'}папку</Text>
       </Pressable>
-      <GestureDetector gesture={pan}>
+      <GestureDetector gesture={gesture}>
         <Animated.View style={[styles.row, rowStyle]}>
-          <Pressable
-            onPress={() => {
-              if (open) {
-                close();
-                return;
-              }
-              onPress();
-            }}
-          >
-            {children}
-          </Pressable>
+          {children}
         </Animated.View>
       </GestureDetector>
     </View>

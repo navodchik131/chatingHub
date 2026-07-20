@@ -1071,10 +1071,12 @@ function Notes() {
     { label: lang === 'ru' ? 'ВАЖНО' : 'IMPORTANT', col: '#F87171', bg: 'rgba(248,113,113' },
   ];
   const convId = cabinet.activeConvId;
-  const curName = cabinet.conversations.find((c) => c.id === convId)?.user_display_name || '—';
+  const curName = cabinet.conversations.find((c) => Number(c.id) === Number(convId))?.user_display_name || '—';
   const rawNotes = cabinet.activeNotes;
-  const notesLoading = Boolean(convId) && !Array.isArray(rawNotes);
-  const notes = Array.isArray(rawNotes) ? rawNotes.map((n) => mapNote(n, lang)) : [];
+  const notesError = cabinet.activeNotesError;
+  const hasNotesCache = Array.isArray(rawNotes);
+  const notesLoading = Boolean(convId) && !hasNotesCache && !notesError;
+  const notes = hasNotesCache ? rawNotes.map((n) => mapNote(n, lang)) : [];
 
   useEffect(() => {
     if (!convId) return;
@@ -1106,6 +1108,10 @@ function Notes() {
           <div style={{ fontSize: 12, color: color.textGhost, textAlign: 'center', padding: 24 }}>
             {lang === 'ru' ? 'Загрузка…' : 'Loading…'}
           </div>
+        ) : notesError && !notes.length ? (
+          <div style={{ fontSize: 12, color: '#F87171', textAlign: 'center', padding: 24, lineHeight: 1.5 }}>
+            {notesError}
+          </div>
         ) : notes.length ? notes.map((n, i) => (
           <div key={Array.isArray(rawNotes) && rawNotes[i]?.id != null ? rawNotes[i].id : i} style={{ background: color.bgPanel, border: `1px solid ${line.hair}`, borderRadius: 12, padding: '10px 12px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
@@ -1123,6 +1129,11 @@ function Notes() {
           </div>
         )) : (
           <div style={{ fontSize: 12, color: color.textGhost, textAlign: 'center', padding: 24 }}>{lang === 'ru' ? 'Заметок пока нет' : 'No notes yet'}</div>
+        )}
+        {notesError && notes.length > 0 && (
+          <div style={{ fontSize: 11, color: '#F87171', textAlign: 'center', padding: '4px 0 0' }}>
+            {lang === 'ru' ? `Не удалось обновить: ${notesError}` : `Refresh failed: ${notesError}`}
+          </div>
         )}
       </div>
 

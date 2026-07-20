@@ -278,20 +278,17 @@ export function ScreenRouter() {
     };
 
     return (
-      <ScreenScroll>
-        <TopBar
-          title="Диалоги"
-          onBack={nav.stack.length > 1 ? pop : undefined}
-          right={(
-            <Pressable
-              onPress={() => push('newfolder')}
-              style={s.folderAddBtn}
-              hitSlop={8}
-            >
-              <IcoPlus size={20} stroke={color.lime} />
-            </Pressable>
-          )}
-        />
+      <ScreenScroll contentStyle={s.dialogsScroll}>
+        <View style={s.dialogsHeader}>
+          <Text style={s.dialogsTitle}>Диалоги</Text>
+          <Pressable
+            onPress={() => push('newfolder')}
+            style={s.folderAddBtn}
+            hitSlop={8}
+          >
+            <IcoPlus size={20} stroke={color.lime} />
+          </Pressable>
+        </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.folderTabs}>
           {folderTabs.map((f) => {
             const active = activeFolderId === f.id;
@@ -314,42 +311,34 @@ export function ScreenRouter() {
             </Pressable>
           </View>
         ) : null}
-        <Card style={s.listPad}>
-          {shown.map(({ d, i }, idx) => {
-            const row = (
-              <ChatRow
-                name={d.name}
-                platform={d.plat}
-                message={d.msg}
-                gradIndex={d.gradIndex}
-                vip={d.vip}
-                unread={d.unread}
-              />
-            );
-            return (
-              <View key={d.id ?? i}>
-                {idx > 0 ? <View style={s.divider} /> : null}
-                {swipeEnabled && d.id != null ? (
-                  <SwipeableChatRow
-                    rowId={d.id}
-                    open={nav.swipeOpenDialogId === d.id}
-                    onOpenChange={(open) => patch({ swipeOpenDialogId: open ? d.id! : null })}
-                    onPress={() => openThread(i)}
-                    onFolderPress={() => {
-                      patch({ folderPickerConvId: d.id!, stack: [...nav.stack, 'folder-picker'] });
-                    }}
-                    enabled={swipeEnabled}
-                  >
-                    {row}
-                  </SwipeableChatRow>
-                ) : (
-                  row
-                )}
-              </View>
-            );
-          })}
+        <View style={s.dialogList}>
+          {shown.map(({ d, i }, idx) => (
+            <View key={d.id ?? i}>
+              {idx > 0 ? <View style={s.divider} /> : null}
+              <SwipeableChatRow
+                rowId={d.id ?? i}
+                open={d.id != null && nav.swipeOpenDialogId === d.id}
+                onOpenChange={(open) => patch({ swipeOpenDialogId: open && d.id != null ? d.id : null })}
+                onPress={() => openThread(i)}
+                onFolderPress={() => {
+                  if (d.id == null) return;
+                  patch({ folderPickerConvId: d.id, stack: [...nav.stack, 'folder-picker'] });
+                }}
+                enabled={swipeEnabled && d.id != null}
+              >
+                <ChatRow
+                  name={d.name}
+                  platform={d.plat}
+                  message={d.msg}
+                  gradIndex={d.gradIndex}
+                  vip={d.vip}
+                  unread={d.unread}
+                />
+              </SwipeableChatRow>
+            </View>
+          ))}
           {!shown.length ? <Text style={s.charSub}>Нет диалогов</Text> : null}
-        </Card>
+        </View>
       </ScreenScroll>
     );
   }
@@ -1595,6 +1584,20 @@ const s = StyleSheet.create({
   errorBanner: { color: color.red, fontSize: 12, marginBottom: 8, paddingHorizontal: 4 },
   kpiRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 4 },
   listPad: { paddingVertical: 4 },
+  dialogsScroll: { gap: 0, paddingTop: 0 },
+  dialogsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingBottom: 10,
+  },
+  dialogsTitle: {
+    fontFamily: font.display,
+    fontSize: 26,
+    fontWeight: '800',
+    color: color.text,
+  },
+  dialogList: { paddingTop: 4 },
   folderAddBtn: {
     width: 38,
     height: 38,
@@ -1603,11 +1606,11 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  folderTabs: { gap: 22, paddingHorizontal: 2, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.07)' },
-  folderTab: { paddingVertical: 9, paddingHorizontal: 4, borderBottomWidth: 2.5, borderBottomColor: 'transparent' },
+  folderTabs: { gap: 22, paddingHorizontal: 2, paddingBottom: 10, marginBottom: 4, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.07)' },
+  folderTab: { paddingVertical: 10, paddingHorizontal: 2, borderBottomWidth: 2.5, borderBottomColor: 'transparent', marginBottom: -1 },
   folderTabActive: { borderBottomColor: color.lime },
   folderTabText: { fontSize: 15, fontWeight: '600', color: color.muted },
-  folderTabTextActive: { fontWeight: '800', color: color.lime },
+  folderTabTextActive: { fontWeight: '800', color: color.text },
   folderActions: { flexDirection: 'row', gap: 8, marginBottom: 8 },
   folderActionBtn: {
     paddingHorizontal: 12,

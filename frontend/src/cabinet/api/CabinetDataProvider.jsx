@@ -73,6 +73,7 @@ export function CabinetDataProvider({ children }) {
   const [conversationFolders, setConversationFolders] = useState([])
   const [messages, setMessages] = useState([])
   const [notesByConvId, setNotesByConvId] = useState({})
+  const [notesErrorsByConvId, setNotesErrorsByConvId] = useState({})
   const [models, setModels] = useState([])
   const [archiveImages, setArchiveImages] = useState([])
   const [archiveVideos, setArchiveVideos] = useState([])
@@ -105,6 +106,7 @@ export function CabinetDataProvider({ children }) {
   const [modelsLoadError, setModelsLoadError] = useState(null)
   const wsRef = useRef(null)
   const activeConvIdRef = useRef(activeConvId)
+  const notesByConvIdRef = useRef(notesByConvId)
   const refreshAllInFlightRef = useRef(false)
   const archiveImagesRef = useRef(archiveImages)
   const archiveVideosRef = useRef(archiveVideos)
@@ -116,16 +118,37 @@ export function CabinetDataProvider({ children }) {
   useEffect(() => { donationOverviewRef.current = donationOverview }, [donationOverview])
   useEffect(() => { donationEventsRef.current = donationEvents }, [donationEvents])
   useEffect(() => { activeConvIdRef.current = activeConvId }, [activeConvId])
+  useEffect(() => { notesByConvIdRef.current = notesByConvId }, [notesByConvId])
+
+  const notesConvKey = useCallback((convId) => Number(convId), [])
 
   const activeNotes = useMemo(() => {
     if (activeConvId == null) return undefined
-    return notesByConvId[activeConvId]
-  }, [activeConvId, notesByConvId])
+    return notesByConvId[notesConvKey(activeConvId)]
+  }, [activeConvId, notesByConvId, notesConvKey])
+
+  const activeNotesError = useMemo(() => {
+    if (activeConvId == null) return null
+    return notesErrorsByConvId[notesConvKey(activeConvId)] || null
+  }, [activeConvId, notesErrorsByConvId, notesConvKey])
 
   const patchNotesForConv = useCallback((convId, items) => {
-    if (!convId) return
-    setNotesByConvId((prev) => ({ ...prev, [convId]: Array.isArray(items) ? items : [] }))
-  }, [])
+    const key = notesConvKey(convId)
+    if (!key) return
+    setNotesByConvId((prev) => ({ ...prev, [key]: Array.isArray(items) ? items : [] }))
+    setNotesErrorsByConvId((prev) => {
+      if (!prev[key]) return prev
+      const next = { ...prev }
+      delete next[key]
+      return next
+    })
+  }, [notesConvKey])
+
+  const setNotesErrorForConv = useCallback((convId, message) => {
+    const key = notesConvKey(convId)
+    if (!key || !message) return
+    setNotesErrorsByConvId((prev) => ({ ...prev, [key]: message }))
+  }, [notesConvKey])
 
   const mergeInboundMessage = useCallback((prev, incoming) => {
     const id = Number(incoming?.id)
@@ -208,16 +231,29 @@ export function CabinetDataProvider({ children }) {
   }, [])
 
   const loadNotes = useCallback(async (convId) => {
-    if (!convId) return
+    const key = notesConvKey(convId)
+    if (!key) return
+    const hadCache = Array.isArray(notesByConvIdRef.current[key])
+    if (!hadCache) {
+      setNotesErrorsByConvId((prev) => {
+        if (!prev[key]) return prev
+        const next = { ...prev }
+        delete next[key]
+        return next
+      })
+    }
     try {
       const noteRows = await actions.fetchConversationNotes(convId, { autoRefresh: false })
-      patchNotesForConv(convId, noteRows)
+      patchNotesForConv(key, noteRows)
     } catch (e) {
-      if (Number(activeConvIdRef.current) === Number(convId)) {
-        setError(e.message || String(e))
+      const msg = e?.message || String(e)
+      if (!hadCache) {
+        setNotesErrorForConv(key, msg)
+      } else if (Number(activeConvIdRef.current) === key) {
+        setNotesErrorForConv(key, msg)
       }
     }
-  }, [patchNotesForConv])
+  }, [notesConvKey, patchNotesForConv, setNotesErrorForConv])
 
   const loadConversationFolders = useCallback(async () => {
     try {
@@ -434,12 +470,25 @@ export function CabinetDataProvider({ children }) {
 
   const analyzeNotes = useCallback(
     async (convId) => {
-      await run(async () => {
-        const data = await actions.analyzeConversationNotes(convId)
-        patchNotesForConv(convId, data)
+      const key = notesConvKey(convId)
+      if (!key) return
+      setBusy(true)
+      setNotesErrorsByConvId((prev) => {
+        if (!prev[key]) return prev
+        const next = { ...prev }
+        delete next[key]
+        return next
       })
+      try {
+        const data = await actions.analyzeConversationNotes(convId)
+        patchNotesForConv(key, data)
+      } catch (e) {
+        setNotesErrorForConv(key, e?.message || String(e))
+      } finally {
+        setBusy(false)
+      }
     },
-    [run, patchNotesForConv],
+    [notesConvKey, patchNotesForConv, setNotesErrorForConv],
   )
 
   const toggleReaction = useCallback(
@@ -1199,7 +1248,9 @@ export function CabinetDataProvider({ children }) {
       conversationFolders,
       messages,
       activeNotes,
+      activeNotesError,
       notesByConvId,
+      notesErrorsByConvId,
       models,
       archiveImages,
       archiveVideos,
@@ -1299,7 +1350,9 @@ export function CabinetDataProvider({ children }) {
       conversationFolders,
       messages,
       activeNotes,
+      activeNotesError,
       notesByConvId,
+      notesErrorsByConvId,
       models,
       archiveImages,
       archiveVideos,

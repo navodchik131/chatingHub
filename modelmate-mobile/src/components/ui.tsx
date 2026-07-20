@@ -4,11 +4,19 @@ import { Image, Pressable, ScrollView, StyleProp, StyleSheet, Text, View, ViewSt
 import { color, font, gradients } from '@/src/styles/tokens';
 import { IcoBack, IcoChevron } from '@/src/components/Icons';
 
-export function ScreenScroll({ children, style }: { children: ReactNode; style?: StyleProp<ViewStyle> }) {
+export function ScreenScroll({
+  children,
+  style,
+  contentStyle,
+}: {
+  children: ReactNode;
+  style?: StyleProp<ViewStyle>;
+  contentStyle?: StyleProp<ViewStyle>;
+}) {
   return (
     <ScrollView
       style={[styles.scroll, style]}
-      contentContainerStyle={styles.scrollContent}
+      contentContainerStyle={[styles.scrollContent, contentStyle]}
       showsVerticalScrollIndicator={false}
     >
       {children}
@@ -227,9 +235,10 @@ export function ChatRow({
   onFolderPress?: () => void;
 }) {
   const platColor = platform === 'FANVUE' ? color.pink : color.blue;
+  const RowWrap = onPress ? Pressable : View;
   return (
-    <Pressable style={styles.chatRow} onPress={onPress}>
-      <Avatar letter={name[0]} index={gradIndex} size={38} />
+    <RowWrap style={styles.chatRow} onPress={onPress}>
+      <Avatar letter={name[0]} index={gradIndex} size={44} />
       <View style={styles.chatMain}>
         <View style={styles.chatNameRow}>
           <Text style={styles.chatName}>{name}</Text>
@@ -248,11 +257,13 @@ export function ChatRow({
         <Text style={[styles.chatPlat, { color: platColor }]}>{platform}</Text>
         {unread ? (
           <View style={styles.unreadBadge}>
-            <Text style={styles.unreadText}>{unread}</Text>
+            <Text style={styles.unreadText}>{unread > 99 ? '99+' : unread}</Text>
           </View>
-        ) : null}
+        ) : (
+          <View style={styles.unreadSpacer} />
+        )}
       </View>
-    </Pressable>
+    </RowWrap>
   );
 }
 
@@ -366,23 +377,25 @@ const styles = StyleSheet.create({
   modeText: { flex: 1 },
   modeTitle: { fontFamily: font.bodyExtra, fontSize: 13, color: color.text },
   modeDesc: { fontSize: 10.5, color: color.muted, marginTop: 2 },
-  chatRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 9, paddingHorizontal: 4 },
+  chatRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 2 },
   chatMain: { flex: 1, minWidth: 0 },
   chatNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  chatName: { fontFamily: font.bodyExtra, fontSize: 13, color: color.text },
-  chatMsg: { fontSize: 11.5, color: color.muted, marginTop: 2 },
-  chatRight: { alignItems: 'flex-end', gap: 4 },
+  chatName: { fontFamily: font.bodyExtra, fontSize: 14.5, color: color.text },
+  chatMsg: { fontSize: 12, color: color.muted, marginTop: 3 },
+  chatRight: { alignItems: 'flex-end', justifyContent: 'space-between', minHeight: 44, gap: 6 },
   folderBtn: { paddingHorizontal: 4, paddingVertical: 2 },
   folderBtnText: { fontSize: 14 },
-  chatPlat: { fontFamily: font.mono, fontSize: 8 },
+  chatPlat: { fontFamily: font.mono, fontSize: 8.5, letterSpacing: 0.8, fontWeight: '700' },
   unreadBadge: {
-    width: 18,
+    minWidth: 18,
     height: 18,
     borderRadius: 9,
+    paddingHorizontal: 4,
     backgroundColor: color.lime,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  unreadSpacer: { height: 18 },
   unreadText: { fontFamily: font.monoBold, fontSize: 9, color: color.limeText, fontWeight: '800' },
   bubbleWrap: { flexDirection: 'row', justifyContent: 'flex-start' },
   bubbleWrapOut: { justifyContent: 'flex-end' },

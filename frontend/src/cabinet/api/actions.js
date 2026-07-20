@@ -212,7 +212,8 @@ export async function removeConversationFromFolder(folderId, convId) {
 
 export async function fetchConversationNotes(convId, { autoRefresh = false } = {}) {
   const q = autoRefresh ? '?auto_refresh=true' : '?auto_refresh=false'
-  return apiJsonOptional(`/api/conversations/${convId}/notes${q}`, {}, [])
+  const data = await apiJson(`/api/conversations/${convId}/notes${q}`)
+  return Array.isArray(data) ? data : []
 }
 
 export async function saveConversationNote(convId, content) {
