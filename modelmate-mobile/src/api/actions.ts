@@ -478,6 +478,34 @@ export async function runImageGeneration(params: {
   return executeWorkflowGraph(built.graph, built.targetNodeId, params.workflowDemoLimited);
 }
 
+export async function runMotionFirstFrame(params: {
+  modelId: number;
+  aspect: string;
+  nsfw: boolean;
+  videoFile?: LocalFile;
+  frameFile?: LocalFile;
+  existingGenerationId?: number | null;
+  description?: string;
+}) {
+  const fd = new FormData();
+  fd.append('model_id', String(params.modelId));
+  fd.append('output_aspect', params.aspect || '9:16');
+  fd.append('studio_wave_profile', params.nsfw ? 'nsfw' : 'regular');
+  if (params.videoFile) appendLocalFile(fd, 'video', params.videoFile);
+  if (params.frameFile) appendLocalFile(fd, 'first_frame_image', params.frameFile);
+  if (params.existingGenerationId) {
+    fd.append('existing_generation_id', String(params.existingGenerationId));
+  }
+  if (params.description) fd.append('description', params.description);
+  fd.append('auto_motion_prompt', '1');
+  const accepted = await postStudioJobStart('/api/studio/motion/first-frame', { method: 'POST', body: fd });
+  if (accepted.job_id) {
+    const result = await waitForStudioJobResult(accepted.job_id, { maxWaitMs: 10 * 60 * 1000 });
+    return { accepted, result };
+  }
+  return { accepted, result: null };
+}
+
 export async function runMotionVideo(params: {
   modelId: number;
   prompt: string;
@@ -485,15 +513,17 @@ export async function runMotionVideo(params: {
   resolution: string;
   durationSeconds: number;
   motionVideoFileId?: string;
+  firstFrameGenerationId?: number | null;
+  autoMotionPrompt?: boolean;
   frameFile?: LocalFile;
 }) {
   const fd = new FormData();
   fd.append('model_id', String(params.modelId));
-  fd.append('prompt', params.prompt);
+  fd.append('prompt', params.prompt || '');
   fd.append('output_aspect', params.aspect || '9:16');
   const raw = String(params.resolution || '1080').toLowerCase();
   const videoResolution =
-    raw === '1080' || raw === '1080p'
+    raw === '1080' || raw === '1080p' || raw === '4k'
       ? '1080p'
       : raw === '720' || raw === '720p'
         ? '720p'
@@ -503,6 +533,10 @@ export async function runMotionVideo(params: {
   fd.append('video_resolution', videoResolution);
   fd.append('duration_seconds', String(params.durationSeconds));
   if (params.motionVideoFileId) fd.append('motion_video_file_id', params.motionVideoFileId);
+  if (params.firstFrameGenerationId) {
+    fd.append('first_frame_generation_id', String(params.firstFrameGenerationId));
+  }
+  if (params.autoMotionPrompt) fd.append('auto_motion_prompt', '1');
   if (params.frameFile) appendLocalFile(fd, 'image', params.frameFile);
   const accepted = await postStudioJobStart('/api/studio/motion/render-video', { method: 'POST', body: fd });
   if (accepted.job_id) {

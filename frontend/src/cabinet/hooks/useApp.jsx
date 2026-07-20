@@ -45,6 +45,8 @@ const initial = {
   lightbox: null,
   showGenError: false,
   ffState: 'idle',
+  ffPreviewOpen: false,
+  vidLightbox: null,
   photoMenu: null,
   opError: false,
   opEditId: null,

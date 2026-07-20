@@ -1,6 +1,6 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect } from 'react';
-import { ActivityIndicator, Image, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Image, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { TextInput } from 'react-native-gesture-handler';
 import {
   IcoBack,
@@ -143,6 +143,11 @@ export function ScreenRouter() {
     igBotUsers,
     health,
     motionVideoFileId,
+    setMotionVideoFileId,
+    firstFrameUrl,
+    generateFirstFrame,
+    setUploadFile,
+    uploadFiles,
     error: appError,
     busy: appBusy,
     startGeneration,
@@ -715,6 +720,9 @@ export function ScreenRouter() {
 
   if (cur === 'video') {
     const st = nav.genStatus.video;
+    const motionControl = (nav.vidMode || 'motion-control') === 'motion-control';
+    const engines = enginesForMode(nav.contentMode);
+    const engineLabel = engines.includes(nav.aiEngine) ? nav.aiEngine : engines[0];
     const vidCost = computeVideoGenerationCost({
       duration: nav.vidDuration,
       quality: nav.vidQuality,
@@ -722,74 +730,161 @@ export function ScreenRouter() {
       health,
       me,
     });
+    const ffPreviewUrl = firstFrameUrl || '';
+    const patchFf = (ffState: typeof nav.ffState) => patch({ ffState });
+
     return (
       <ScreenScroll>
         <TopBar title="Видео" onBack={pop} />
-        <SectionLabel>ПЕРСОНАЖ</SectionLabel>
-        <ChipPicker items={modelNames} value={nav.vidChar} onChange={(c) => patch({ vidChar: c })} />
-        <SectionLabel>РЕФЕРЕНСНОЕ ВИДЕО</SectionLabel>
-        <DropSlotWide
-          label="Загрузить видео"
-          onPress={async () => {
-            try {
-              const file = await pickVideo();
-              if (file) {
-                const { uploadMotionDrivingVideo } = await import('@/src/api/actions');
-                const id = await uploadMotionDrivingVideo(file);
-                setMotionVideoFileId(id);
-              }
-            } catch {
-              /* ignore */
-            }
-          }}
-        />
-        <SectionLabel>ПЕРВЫЙ КАДР ЕСТЬ?</SectionLabel>
         <View style={s.rowGap8}>
           <Pressable
-            style={[s.limeHalf, !nav.vidHasFirstFrame && s.ghostHalf]}
-            onPress={() => patch({ vidHasFirstFrame: true })}
+            style={[s.vidModeCard, motionControl && s.vidModeCardOn]}
+            onPress={() => patch({ vidMode: 'motion-control' })}
           >
-            <Text style={[s.limeHalfText, !nav.vidHasFirstFrame && s.ghostHalfText]}>Да</Text>
+            <Text style={[s.vidModeTitle, motionControl && s.vidModeTitleOn]}>Motion control</Text>
+            <Text style={s.vidModeDesc}>Повтор движения из референс-ролика</Text>
           </Pressable>
-          <Pressable
-            style={[s.ghostHalf, nav.vidHasFirstFrame && s.limeHalf]}
-            onPress={() => patch({ vidHasFirstFrame: false })}
-          >
-            <Text style={[s.ghostHalfText, nav.vidHasFirstFrame && s.limeHalfText]}>Нет — сгенерировать</Text>
+          <Pressable style={[s.vidModeCard, s.vidModeCardDisabled]} disabled>
+            <View style={s.vidModeHead}>
+              <Text style={s.vidModeTitle}>По промпту</Text>
+              <Text style={s.vidModeBadge}>В разработке</Text>
+            </View>
+            <Text style={s.vidModeDesc}>Видео из текстового описания</Text>
           </Pressable>
         </View>
-        <SectionLabel>КАЧЕСТВО</SectionLabel>
-        <ChipPicker
-          items={[...VID_QUALITIES]}
-          value={nav.vidQuality}
-          onChange={(q) => patch({ vidQuality: q })}
-        />
-        <SectionLabel>ФОРМАТ</SectionLabel>
-        <ChipPicker
-          items={[...IMG_FORMATS]}
-          value={nav.vidFormat}
-          onChange={(f) => patch({ vidFormat: f })}
-        />
-        <SectionLabel>ДЛИТЕЛЬНОСТЬ</SectionLabel>
-        <NumberChipPicker
-          items={[...VID_DURATIONS]}
-          value={nav.vidDuration}
-          onChange={(d) => patch({ vidDuration: d })}
-          suffix="с"
-        />
-        <LimeButton title="Создать видео" cost={vidCost} icon={<IcoFilm size={16} stroke={color.limeText} />} onPress={() => runGen('video')} />
-        {st === 'loading' ? <GenLoadingCard title="Рендерим видео…" sub="~20 c" /> : null}
-        {st === 'done' ? (
-          <Card style={s.gap10}>
-            <LinearGradient colors={[...gradients[1]]} style={s.videoPreview}>
-              <View style={s.playCircle}><IcoFilm size={13} stroke="#fff" /></View>
-            </LinearGradient>
-            <View style={s.rowGap7}>
-              <View style={s.limeFlex}><Text style={s.limeHalfText}>Скачать MP4</Text></View>
-              <Pressable style={s.regenFlex} onPress={() => runGen('video')}><Text style={s.regenText}>↻ Ещё раз</Text></Pressable>
+
+        {motionControl ? (
+          <>
+            <SectionLabel>ПЕРСОНАЖ</SectionLabel>
+            <ChipPicker items={modelNames} value={nav.vidChar} onChange={(c) => patch({ vidChar: c })} />
+            <SectionLabel>ТИП КОНТЕНТА</SectionLabel>
+            <SegmentedToggle
+              left="SFW"
+              right="NSFW"
+              activeLeft={nav.contentMode === 'sfw'}
+              onLeft={() => patch({ contentMode: 'sfw', aiEngine: 'Nano Banana Pro' })}
+              onRight={() => patch({ contentMode: 'nsfw', aiEngine: 'Seedream 5 Pro' })}
+            />
+            <SectionLabel>AI-ДВИЖОК</SectionLabel>
+            <ChipPicker
+              items={engines}
+              value={engineLabel}
+              onChange={(e) => patch({ aiEngine: e })}
+            />
+            <SectionLabel>РЕФЕРЕНСНОЕ ВИДЕО</SectionLabel>
+            <DropSlotWide
+              label={uploadFiles['motion-video']?.name || (motionVideoFileId ? 'Видео загружено' : 'Загрузить видео')}
+              onPress={async () => {
+                try {
+                  const file = await pickVideo();
+                  if (file) {
+                    setUploadFile('motion-video', file);
+                    const { uploadMotionDrivingVideo } = await import('@/src/api/actions');
+                    const id = await uploadMotionDrivingVideo(file);
+                    setMotionVideoFileId(id);
+                  }
+                } catch {
+                  /* ignore */
+                }
+              }}
+            />
+            <SectionLabel>ПЕРВЫЙ КАДР ЕСТЬ?</SectionLabel>
+            <View style={s.rowGap8}>
+              <Pressable
+                style={[s.limeHalf, !nav.vidHasFirstFrame && s.ghostHalf]}
+                onPress={() => patch({ vidHasFirstFrame: true, ffState: 'idle' })}
+              >
+                <Text style={[s.limeHalfText, !nav.vidHasFirstFrame && s.ghostHalfText]}>Да</Text>
+              </Pressable>
+              <Pressable
+                style={[s.ghostHalf, !nav.vidHasFirstFrame && s.limeHalf]}
+                onPress={() => patch({ vidHasFirstFrame: false, ffState: 'idle' })}
+              >
+                <Text style={[s.ghostHalfText, !nav.vidHasFirstFrame && s.limeHalfText]}>Нет — сгенерировать</Text>
+              </Pressable>
             </View>
+            {!nav.vidHasFirstFrame ? (
+              nav.ffState === 'idle' ? (
+                <Pressable
+                  style={s.ffGenBtn}
+                  onPress={() => {
+                    void generateFirstFrame(nav, patchFf).catch(() => {});
+                  }}
+                >
+                  <Text style={s.ffGenBtnText}>✦ Сгенерировать первый кадр · −10 кр.</Text>
+                </Pressable>
+              ) : nav.ffState === 'loading' ? (
+                <GenLoadingCard title="Генерируем первый кадр…" sub={`${engineLabel} · ~15 c`} />
+              ) : (
+                <Card style={s.gap10}>
+                  <Pressable onPress={() => ffPreviewUrl && patch({ ffPreviewOpen: true })}>
+                    {ffPreviewUrl ? (
+                      <Image source={{ uri: ffPreviewUrl }} style={s.ffThumb} resizeMode="cover" />
+                    ) : (
+                      <LinearGradient colors={[...gradients[2]]} style={s.ffThumb} />
+                    )}
+                  </Pressable>
+                  <Text style={s.ffDoneText}>✓ Первый кадр готов</Text>
+                  <Pressable onPress={() => void generateFirstFrame(nav, patchFf).catch(() => {})}>
+                    <Text style={s.regenText}>↻ Перегенерировать</Text>
+                  </Pressable>
+                </Card>
+              )
+            ) : null}
+            <SectionLabel>КАЧЕСТВО</SectionLabel>
+            <ChipPicker
+              items={[...VID_QUALITIES]}
+              value={nav.vidQuality}
+              onChange={(q) => patch({ vidQuality: q })}
+            />
+            <SectionLabel>ФОРМАТ</SectionLabel>
+            <ChipPicker
+              items={[...IMG_FORMATS]}
+              value={nav.vidFormat}
+              onChange={(f) => patch({ vidFormat: f })}
+            />
+            <SectionLabel>ДЛИТЕЛЬНОСТЬ</SectionLabel>
+            <NumberChipPicker
+              items={[...VID_DURATIONS]}
+              value={nav.vidDuration}
+              onChange={(d) => patch({ vidDuration: d })}
+              suffix="с"
+            />
+            <LimeButton title="Создать видео" cost={vidCost} icon={<IcoFilm size={16} stroke={color.limeText} />} onPress={() => runGen('video')} />
+            {st === 'loading' ? <GenLoadingCard title="Рендерим видео…" sub="~20 c" /> : null}
+            {st === 'done' ? (
+              <Card style={s.gap10}>
+                <LinearGradient colors={[...gradients[1]]} style={s.videoPreview}>
+                  <View style={s.playCircle}><IcoFilm size={13} stroke="#fff" /></View>
+                </LinearGradient>
+                <View style={s.rowGap7}>
+                  <View style={s.limeFlex}><Text style={s.limeHalfText}>Скачать MP4</Text></View>
+                  <Pressable style={s.regenFlex} onPress={() => runGen('video')}><Text style={s.regenText}>↻ Ещё раз</Text></Pressable>
+                </View>
+              </Card>
+            ) : null}
+          </>
+        ) : (
+          <Card style={s.vidSoonCard}>
+            <Text style={s.vidSoonText}>В разработке</Text>
           </Card>
-        ) : null}
+        )}
+
+        <Modal visible={nav.ffPreviewOpen && Boolean(ffPreviewUrl)} transparent animationType="fade" onRequestClose={() => patch({ ffPreviewOpen: false })}>
+          <Pressable style={s.ffModalBackdrop} onPress={() => patch({ ffPreviewOpen: false })}>
+            <View style={s.ffModalBody}>
+              <View style={s.ffModalHead}>
+                <Text style={s.ffModalTitle}>{nav.vidChar} · {nav.vidFormat}</Text>
+                <Pressable onPress={() => patch({ ffPreviewOpen: false })}>
+                  <Text style={s.ffModalClose}>✕</Text>
+                </Pressable>
+              </View>
+              {ffPreviewUrl ? (
+                <Image source={{ uri: ffPreviewUrl }} style={s.ffModalImg} resizeMode="contain" />
+              ) : null}
+            </View>
+          </Pressable>
+        </Modal>
       </ScreenScroll>
     );
   }
@@ -1640,4 +1735,32 @@ const s = StyleSheet.create({
   historyRow: { flexDirection: 'row', justifyContent: 'space-between' },
   historyLabel: { fontSize: 11.5, color: color.text },
   historyCost: { fontSize: 11.5, color: color.dim },
+  vidModeCard: {
+    flex: 1,
+    backgroundColor: color.card,
+    borderWidth: 1,
+    borderColor: color.border,
+    borderRadius: 12,
+    padding: 12,
+    gap: 4,
+  },
+  vidModeCardOn: { borderColor: 'rgba(215,244,82,0.35)', backgroundColor: 'rgba(215,244,82,0.06)' },
+  vidModeCardDisabled: { opacity: 0.55 },
+  vidModeHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
+  vidModeTitle: { fontFamily: font.bodyExtra, fontSize: 13, color: color.text },
+  vidModeTitleOn: { color: color.lime },
+  vidModeDesc: { fontSize: 10.5, color: color.muted, lineHeight: 15 },
+  vidModeBadge: { fontFamily: font.mono, fontSize: 8, color: color.dim, backgroundColor: 'rgba(255,255,255,0.06)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 5 },
+  vidSoonCard: { paddingVertical: 28, alignItems: 'center' },
+  vidSoonText: { fontSize: 12.5, color: color.muted },
+  ffGenBtn: { backgroundColor: 'rgba(192,132,252,0.12)', borderWidth: 1, borderColor: 'rgba(192,132,252,0.35)', borderRadius: 12, paddingVertical: 14, paddingHorizontal: 16 },
+  ffGenBtnText: { fontFamily: font.bodyExtra, fontSize: 13, color: color.purple, textAlign: 'center' },
+  ffThumb: { width: '100%', aspectRatio: 9 / 16, borderRadius: 10 },
+  ffDoneText: { fontFamily: font.bodyExtra, fontSize: 13, color: color.green },
+  ffModalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', padding: 16 },
+  ffModalBody: { backgroundColor: color.card, borderRadius: 14, padding: 12, gap: 10, maxHeight: '90%' },
+  ffModalHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  ffModalTitle: { fontFamily: font.bodyExtra, fontSize: 14, color: color.text },
+  ffModalClose: { fontSize: 18, color: color.muted, paddingHorizontal: 8 },
+  ffModalImg: { width: '100%', aspectRatio: 9 / 16, borderRadius: 10 },
 });

@@ -1,6 +1,6 @@
 import { apiJsonOptional } from './helpers'
-import { isArchivePending } from './actions'
-import { isOptimisticStudioArchiveId } from '../../studioArchive'
+import { isArchivePending, refreshArchiveVideos } from './actions'
+import { isOptimisticStudioArchiveId, mergeStudioArchiveItems } from '../../studioArchive'
 
 function archiveItemPollKey(item) {
   if (!item) return ''
@@ -96,7 +96,8 @@ export async function refreshPendingArchiveImages(current) {
 
 export async function refreshPendingArchiveVideos(current) {
   const tracked = current.filter((g) => isArchivePending(g) || isOptimisticStudioArchiveId(g.id))
-  if (!tracked.length) return { items: current, changed: false }
+  const hasOptimistic = current.some((g) => isOptimisticStudioArchiveId(g.id))
+  if (!tracked.length && !hasOptimistic) return { items: current, changed: false }
 
   const pending = await apiJsonOptional('/api/studio/generations/pending?media_kind=video', {}, { items: [] })
   const pendingItems = pending.items || []
@@ -105,7 +106,16 @@ export async function refreshPendingArchiveVideos(current) {
   const maybeCompletedIds = []
 
   let next = current.map((g) => {
-    if (!isArchivePending(g) && !isOptimisticStudioArchiveId(g.id)) return g
+    if (isOptimisticStudioArchiveId(g.id)) {
+      const byJob = g.job_id != null ? pendingItems.find((p) => p.job_id === g.job_id) : null
+      if (byJob) {
+        const merged = { ...g, ...byJob, id: byJob.id }
+        if (archiveItemPollKey(g) !== archiveItemPollKey(merged)) changed = true
+        return merged
+      }
+      return g
+    }
+    if (!isArchivePending(g)) return g
     const upd = pendingById.get(g.id)
     if (upd) {
       const merged = { ...g, ...upd }
@@ -116,21 +126,37 @@ export async function refreshPendingArchiveVideos(current) {
     return g
   })
 
-  if (maybeCompletedIds.length) {
-    const page = await apiJsonOptional(
-      '/api/studio/generations?limit=40&skip=0&media_kind=video',
-      {},
-      { items: [] },
-    )
-    const freshById = new Map((page.items || []).map((p) => [p.id, p]))
-    next = next.map((g) => {
-      if (!maybeCompletedIds.includes(g.id)) return g
-      const fresh = freshById.get(g.id)
-      if (!fresh) return g
-      const merged = { ...g, ...fresh }
-      if (archiveItemPollKey(g) !== archiveItemPollKey(merged)) changed = true
-      return merged
-    })
+  if (maybeCompletedIds.length || hasOptimistic) {
+    const freshList = await refreshArchiveVideos()
+    const freshById = new Map(freshList.map((p) => [p.id, p]))
+
+    if (maybeCompletedIds.length) {
+      next = next.map((g) => {
+        if (!maybeCompletedIds.includes(g.id)) return g
+        const fresh = freshById.get(g.id)
+        if (!fresh) return g
+        const merged = { ...g, ...fresh }
+        if (archiveItemPollKey(g) !== archiveItemPollKey(merged)) changed = true
+        return merged
+      })
+    }
+
+    const known = new Set(next.map((g) => g.id))
+    const newcomers = freshList.filter((p) => !known.has(p.id) && !isArchivePending(p))
+    if (newcomers.length) {
+      let videos = [...next]
+      for (const nr of newcomers) {
+        const optIdx = videos.findIndex((g) => isOptimisticStudioArchiveId(g.id))
+        if (optIdx >= 0) videos.splice(optIdx, 1)
+        videos.unshift(nr)
+        known.add(nr.id)
+        changed = true
+      }
+      next = dedupeById(videos)
+    } else if (changed) {
+      next = mergeStudioArchiveItems(next, freshList.filter((p) => !isArchivePending(p)))
+      changed = true
+    }
   }
 
   return { items: dedupeById(next), changed }

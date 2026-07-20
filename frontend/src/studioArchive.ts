@@ -172,19 +172,33 @@ export function mergeVideoArchiveWithMotionRenders(
       .map((g) => (g.video_url || '').trim())
       .filter(Boolean),
   )
-  const videoGenIds = new Set(
-    generations.filter((g) => g.media_kind === 'video').map((g) => g.id),
-  )
+  const enriched = generations.map((g) => ({ ...g }))
 
   const extra: StudioArchiveItem[] = []
   for (const r of motionRenders) {
     const url = (r.video_url || '').trim()
-    if (!url || seenUrls.has(url)) continue
+    if (!url) continue
+    const frame = (r.frame_image_url || '').trim()
     const gid = r.studio_generation_id
-    if (gid != null && videoGenIds.has(gid)) continue
+
+    if (gid != null) {
+      const idx = enriched.findIndex((g) => g.id === gid && g.media_kind === 'video')
+      if (idx >= 0) {
+        const cur = enriched[idx]
+        if (frame && !(cur.image_url || '').trim()) {
+          enriched[idx] = { ...cur, image_url: frame }
+        }
+        if (!(cur.video_url || '').trim()) {
+          enriched[idx] = { ...enriched[idx], video_url: url, status: 'ready' }
+        }
+        seenUrls.add(url)
+        continue
+      }
+    }
+
+    if (seenUrls.has(url)) continue
     seenUrls.add(url)
 
-    const frame = (r.frame_image_url || '').trim()
     extra.push({
       id: motionRenderArchiveId(r.id),
       created_at: r.created_at,
@@ -201,7 +215,7 @@ export function mergeVideoArchiveWithMotionRenders(
     })
   }
 
-  const merged = [...generations, ...extra]
+  const merged = [...enriched, ...extra]
   merged.sort((a, b) => {
     const ta = Date.parse(a.created_at) || 0
     const tb = Date.parse(b.created_at) || 0

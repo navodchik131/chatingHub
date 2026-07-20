@@ -406,6 +406,13 @@ def _studio_generation_to_out(
             StudioGenerationStatus.ARCHIVING,
         ) and src.startswith("https://"):
             image_url = src
+        if st in (
+            StudioGenerationStatus.PROVIDER_READY,
+            StudioGenerationStatus.READY,
+        ) and not image_url:
+            preview = (row.source_url or "").strip()
+            if preview.startswith("https://") and not preview.lower().endswith((".mp4", ".webm", ".mov")):
+                image_url = preview
     elif generation_has_archive_file(row) and st == StudioGenerationStatus.READY:
         image_url = _studio_archive_image_url(owner_id, row.id, arch_base)
     elif st == StudioGenerationStatus.PROVIDER_READY:
@@ -1244,6 +1251,36 @@ async def api_list_studio_generations(
         item = _studio_generation_to_out(r, arch_base=base, owner_id=oid, name_by_id=name_by_id)
         if item is not None:
             out_items.append(item)
+
+    video_need_poster = [
+        it for it in out_items
+        if it.media_kind == "video" and not (it.image_url or "").strip()
+    ]
+    if video_need_poster and base:
+        gids = [it.id for it in video_need_poster]
+        stmt_mr = (
+            select(StudioMotionRender)
+            .where(StudioMotionRender.user_id == oid)
+            .where(StudioMotionRender.studio_generation_id.in_(gids))
+        )
+        mr_rows = list((await session.execute(stmt_mr)).scalars().all())
+        frame_by_gid: dict[int, str] = {}
+        for mr in mr_rows:
+            gid = mr.studio_generation_id
+            if gid is None or gid in frame_by_gid:
+                continue
+            tok = create_generation_image_access_token(user_id=oid, generation_id=gid)
+            frame_by_gid[gid] = (
+                f"{base.rstrip('/')}/api/studio/public-generation-image?t={quote(tok, safe='')}"
+            )
+        if frame_by_gid:
+            out_items = [
+                it.model_copy(update={"image_url": frame_by_gid[it.id]})
+                if it.media_kind == "video" and not (it.image_url or "").strip() and it.id in frame_by_gid
+                else it
+                for it in out_items
+            ]
+
     return StudioGenerationsPageOut(items=out_items, has_more=has_more)
 
 

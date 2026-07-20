@@ -1,13 +1,13 @@
 import { useEffect, useRef, useMemo } from 'react';
 import Hoverable from '../components/Hoverable';
-import { IcoFilm, IcoSpark, IcoUpload, IcoPlay, IcoText } from '../components/Icons';
-import { Fade, PageTitle, Eyebrow, Chip, SelectPill } from '../components/ui';
+import { IcoFilm, IcoSpark, IcoUpload, IcoPlay, IcoText, IcoZoom } from '../components/Icons';
+import { Fade, PageTitle, Eyebrow, Chip, SelectPill, Overlay, CloseButton } from '../components/ui';
 import { useApp } from '../hooks/useApp';
 import { color, line, font, G } from '../styles/tokens';
-import { modeCardStyle, refUploadStyle, borderHoverOff } from '../styles/mixins';
+import { modeCardStyle, refUploadStyle, borderHoverOff, cardPickStyle } from '../styles/mixins';
 import { videoModeDefs } from '../data/catalog';
-import { archiveThumbUrl, archiveDownloadUrl, isArchivePending } from '../api/actions';
-import { sameStudioModelId } from '../api/studioHelpers';
+import { archiveThumbUrl, archiveDownloadUrl, archiveVideoUrl, isArchivePending } from '../api/actions';
+import { sameStudioModelId, enginesForNsfw } from '../api/studioHelpers';
 import { computeMotionVideoCreditCost } from '../../studioMotionPricing';
 
 const vidModeIcons = { film: IcoFilm, text: IcoText };
@@ -18,6 +18,15 @@ function vidQualityToResolution(vidQuality) {
   if (v === '1080' || v === '1080p' || v === '4k') return '1080p';
   if (v === '480' || v === '480p') return '480p';
   return '720p';
+}
+
+function aspectCss(ratio) {
+  const r = String(ratio || '9:16').trim();
+  if (r === '16:9') return '16 / 9';
+  if (r === '1:1') return '1 / 1';
+  if (r === '4:3') return '4 / 3';
+  if (r === '3:4') return '3 / 4';
+  return '9 / 16';
 }
 
 export default function Video() {
@@ -43,6 +52,32 @@ export default function Video() {
   const vidModes = videoModeDefs(lang);
   const curVidMode = vidModes.find((m) => m.id === s.vidMode) || vidModes[0];
   const motionControl = s.vidMode === 'motion-control';
+  const engineModels = enginesForNsfw(s.contentMode === 'nsfw', cabinet.genModels);
+  const activeEngine = engineModels.find((m) => m.id === s.aiModel) || engineModels[0];
+  const ffPreviewUrl = cabinet.firstFrameUrl
+    || cabinet.uploadPreviewUrls?.['motion-frame']
+    || '';
+  const ffRatio = s.vidFormat || cabinet.selectedAspect || '9:16';
+  const ffWho = cabinet.models.find((m) => sameStudioModelId(m.id, cabinet.selectedModelId))?.name || '—';
+
+  const pickContentMode = (contentMode) => {
+    const list = enginesForNsfw(contentMode === 'nsfw', cabinet.genModels);
+    setS({
+      contentMode,
+      aiModel: list[0]?.id || (contentMode === 'nsfw' ? 'wan-2.7' : 'nano-banana-pro'),
+    });
+  };
+
+  const cmSeg = (on, tone) => ({
+    flex: 1, textAlign: 'center', fontSize: 12, fontWeight: 800,
+    borderRadius: 8, padding: '8px 10px', cursor: 'pointer', boxSizing: 'border-box',
+    border: '1px solid transparent',
+    ...(on ? tone : { color: color.textDim }),
+  });
+
+  const openFfPreview = () => {
+    if (ffPreviewUrl) setS({ ffPreviewOpen: true });
+  };
 
   const studioGrid = isMobile
     ? { display: 'grid', gridTemplateColumns: '1fr', gap: 14 }
@@ -173,6 +208,48 @@ export default function Video() {
                 )}
               </div>
             )}
+          </div>
+
+          <div>
+            <Eyebrow>{t.contentType}</Eyebrow>
+            <div style={{ display: 'flex', gap: 6, background: color.bgPanel, border: `1px solid ${line.soft}`, borderRadius: 11, padding: 4 }}>
+              <div
+                style={cmSeg(s.contentMode === 'sfw', { background: color.green, color: color.greenInk })}
+                onClick={() => pickContentMode('sfw')}
+              >
+                SFW · {lang === 'ru' ? 'обычный' : 'safe'}
+              </div>
+              <div
+                style={cmSeg(s.contentMode === 'nsfw', { background: color.pink, color: '#2A0A1C' })}
+                onClick={() => pickContentMode('nsfw')}
+              >
+                NSFW · 18+
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <Eyebrow>{t.aiModel}</Eyebrow>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {engineModels.map((m) => {
+                const on = s.aiModel === m.id;
+                const pickSt = cardPickStyle(on);
+                return (
+                  <Hoverable
+                    key={m.id}
+                    style={pickSt.base}
+                    hover={pickSt.hover}
+                    onClick={() => setS({ aiModel: m.id })}
+                    aria-pressed={on}
+                  >
+                    <div style={{ fontWeight: 800, fontSize: 12.5, marginBottom: 2, ...(on ? { color: color.lime } : {}) }}>
+                      {m.name}
+                    </div>
+                    <div style={{ fontSize: 10, color: color.textDim }}>{m.note}</div>
+                  </Hoverable>
+                );
+              })}
+            </div>
           </div>
 
           {/* reference video */}
@@ -324,7 +401,7 @@ export default function Video() {
                   </div>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontWeight: 800, fontSize: 13, color: color.purple, marginBottom: 3 }}>{t.genFirstFrame2}</div>
-                    <div style={{ fontSize: 11, color: color.textDim }}>Seedream 5 Pro · ~15 c</div>
+                    <div style={{ fontSize: 11, color: color.textDim }}>{activeEngine?.name || 'Seedream 5 Pro'} · ~15 c</div>
                   </div>
                 </div>
               )}
@@ -336,22 +413,36 @@ export default function Video() {
                     border: '1px solid rgba(74,222,128,.3)', borderRadius: 12, padding: '14px 16px',
                   }}
                 >
-                  <div
+                  <Hoverable
                     style={{
                       ...ffImgStyle,
+                      position: 'relative',
                       ...(cabinet.firstFrameUrl ? { background: `center/cover url(${cabinet.firstFrameUrl})` } : {}),
-                      display: 'flex', alignItems: 'flex-end', padding: 6,
+                      display: 'flex', alignItems: 'flex-end', padding: 6, cursor: ffPreviewUrl ? 'zoom-in' : 'default',
                     }}
+                    hover={ffPreviewUrl ? { boxShadow: '0 0 0 2px rgba(215,244,82,.35)' } : {}}
+                    onClick={openFfPreview}
+                    title={lang === 'ru' ? 'Увеличить' : 'Enlarge'}
                   >
+                    {ffPreviewUrl && (
+                      <span
+                        style={{
+                          position: 'absolute', top: 4, right: 4, display: 'flex', width: 14, height: 14,
+                          color: '#fff', background: 'rgba(0,0,0,.55)', borderRadius: 4, padding: 2,
+                        }}
+                      >
+                        <IcoZoom />
+                      </span>
+                    )}
                     <span
                       style={{
                         fontFamily: font.mono, fontSize: 7.5, background: 'rgba(0,0,0,.6)',
                         color: '#fff', padding: '2px 6px', borderRadius: 4,
                       }}
                     >
-                      {(cabinet.models.find((m) => m.id === cabinet.selectedModelId)?.name || '—')} · {cabinet.selectedAspect || '9:16'}
+                      {ffWho} · {ffRatio}
                     </span>
-                  </div>
+                  </Hoverable>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontWeight: 800, fontSize: 13, color: color.green, marginBottom: 6 }}>✓ {t.ffDone}</div>
                     <Hoverable
@@ -438,28 +529,68 @@ export default function Video() {
           <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 10 }}>{t.archive}</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(150px,1fr))', gap: 10 }}>
             {(cabinet.archiveVideos || []).slice(0, 8).map((item, i) => {
-              const thumb = archiveThumbUrl(item);
-              const downloadUrl = archiveDownloadUrl(item);
+              const poster = archiveThumbUrl(item);
+              const videoUrl = archiveVideoUrl(item);
+              const downloadUrl = archiveDownloadUrl(item) || videoUrl;
               const pending = isArchivePending(item);
               const failed = (item.status || '').trim() === 'failed';
               const model = (cabinet.models || []).find((m) => m.id === item.studio_model_id);
+              const ratio = item.output_aspect || '9:16';
               return (
               <Hoverable
                 key={item.id || i}
                 style={{
                   borderRadius: 12, overflow: 'hidden', background: color.surface,
                   border: `1px solid ${failed ? 'rgba(248,113,113,.45)' : line.hair}`,
-                  cursor: pending || failed ? 'default' : 'pointer',
+                  cursor: pending || failed || !videoUrl ? 'default' : 'pointer',
                   opacity: pending ? 0.88 : 1,
                 }}
-                hover={pending || failed ? {} : { borderColor: borderHoverOff }}
+                hover={pending || failed || !videoUrl ? {} : { borderColor: borderHoverOff }}
+                onClick={() => {
+                  if (!pending && !failed && videoUrl) {
+                    setS({
+                      vidLightbox: {
+                        url: videoUrl,
+                        who: model?.name || '—',
+                        ratio,
+                        downloadUrl,
+                      },
+                    });
+                  }
+                }}
               >
                 <div
                   style={{
                     aspectRatio: '9/16', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    position: 'relative', background: thumb ? `url(${thumb}) center/cover` : G[(i + 2) % 6],
+                    position: 'relative', overflow: 'hidden',
+                    background: (!videoUrl && poster) ? `url(${poster}) center/cover` : G[(i + 2) % 6],
                   }}
                 >
+                  {videoUrl && !pending && !failed && (
+                    <video
+                      src={videoUrl}
+                      muted
+                      playsInline
+                      preload="metadata"
+                      style={{
+                        position: 'absolute', inset: 0, width: '100%', height: '100%',
+                        objectFit: 'cover', display: 'block', pointerEvents: 'none',
+                      }}
+                      onLoadedMetadata={(e) => {
+                        try { e.currentTarget.currentTime = 0.05; } catch { /* ignore */ }
+                      }}
+                    />
+                  )}
+                  {poster && !videoUrl && !pending && !failed && (
+                    <img
+                      src={poster}
+                      alt=""
+                      style={{
+                        position: 'absolute', inset: 0, width: '100%', height: '100%',
+                        objectFit: 'cover', display: 'block', pointerEvents: 'none',
+                      }}
+                    />
+                  )}
                   {pending && (
                     <div
                       style={{
@@ -485,6 +616,7 @@ export default function Video() {
                   {!pending && !failed && (
                   <div
                     style={{
+                      position: 'relative', zIndex: 1,
                       width: 36, height: 36, borderRadius: '50%', background: 'rgba(0,0,0,.45)',
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                     }}
@@ -496,7 +628,16 @@ export default function Video() {
                 <div style={{ padding: '8px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ fontWeight: 700, fontSize: 11 }}>{model?.name || '—'}</span>
                   {downloadUrl && !pending && (
-                    <a href={downloadUrl} download style={{ fontSize: 10, fontWeight: 700, color: color.textDim, textDecoration: 'none' }}>↓ MP4</a>
+                    <a
+                      href={downloadUrl}
+                      download
+                      target="_blank"
+                      rel="noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      style={{ fontSize: 10, fontWeight: 700, color: color.textDim, textDecoration: 'none' }}
+                    >
+                      ↓ MP4
+                    </a>
                   )}
                 </div>
               </Hoverable>
@@ -504,6 +645,84 @@ export default function Video() {
           </div>
         </div>
       </div>
+
+      {s.ffPreviewOpen && ffPreviewUrl && (
+        <Overlay onClose={() => setS({ ffPreviewOpen: false })}>
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: 14,
+              width: 'min(96vw, 720px)', maxHeight: '92vh',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+              <div>
+                <div style={{ fontWeight: 800, fontSize: 15 }}>{ffWho}</div>
+                <div style={{ fontSize: 11, color: color.textDim }}>
+                  {t.firstFrame} · {ffRatio}
+                </div>
+              </div>
+              <CloseButton onClick={() => setS({ ffPreviewOpen: false })} label={t.close} />
+            </div>
+            <div
+              style={{
+                width: '100%', aspectRatio: aspectCss(ffRatio),
+                maxHeight: 'min(calc(92vh - 120px), 85vh)',
+                borderRadius: 14, overflow: 'hidden', background: color.bgPanel,
+              }}
+            >
+              <img
+                src={ffPreviewUrl}
+                alt=""
+                style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }}
+              />
+            </div>
+          </div>
+        </Overlay>
+      )}
+
+      {s.vidLightbox?.url && (
+        <Overlay onClose={() => setS({ vidLightbox: null })}>
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: 14,
+              width: 'min(96vw, 900px)', maxHeight: '92vh',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+              <div>
+                <div style={{ fontWeight: 800, fontSize: 15 }}>{s.vidLightbox.who}</div>
+                <div style={{ fontSize: 11, color: color.textDim }}>{s.vidLightbox.ratio || '9:16'}</div>
+              </div>
+              <CloseButton onClick={() => setS({ vidLightbox: null })} label={t.close} />
+            </div>
+            <video
+              src={s.vidLightbox.url}
+              controls
+              autoPlay
+              playsInline
+              style={{
+                width: '100%', maxHeight: 'min(calc(92vh - 140px), 80vh)',
+                borderRadius: 14, background: '#000', display: 'block',
+              }}
+            />
+            {s.vidLightbox.downloadUrl && (
+              <a
+                href={s.vidLightbox.downloadUrl}
+                target="_blank"
+                rel="noreferrer"
+                style={{
+                  alignSelf: 'center', fontSize: 12, fontWeight: 700, color: color.lime,
+                  textDecoration: 'none', padding: '8px 16px',
+                }}
+              >
+                ↓ {lang === 'ru' ? 'Скачать MP4' : 'Download MP4'}
+              </a>
+            )}
+          </div>
+        </Overlay>
+      )}
     </Fade>
   );
 }

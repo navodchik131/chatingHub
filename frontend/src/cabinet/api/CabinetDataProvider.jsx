@@ -826,7 +826,7 @@ export function CabinetDataProvider({ children }) {
       try {
         const { result } = await actions.runMotionFirstFrame({
           modelId: selectedModelId,
-          aspect: selectedAspect,
+          aspect: appState.vidFormat || selectedAspect,
           nsfw: appState.contentMode === 'nsfw',
           videoFile: uploadFiles['motion-video'],
           frameFile: uploadFiles['motion-frame'],
@@ -894,14 +894,14 @@ export function CabinetDataProvider({ children }) {
           autoMotionPrompt: motionControl && Boolean(motionVideoFileId),
         })
         setArchiveVideos((prev) => applyJobToOptimisticArchive(prev, [tempId], accepted))
-        void refreshArchivePending()
+        await refreshArchiveFull()
         setMe(await apiJson('/api/auth/me'))
       } catch (e) {
         setArchiveVideos((prev) => removeOptimisticStudioArchive(prev, tempId))
         setError(e?.message || String(e))
       }
     },
-    [selectedModelId, selectedAspect, uploadFiles, motionVideoFileId, firstFrameGenId, models, refreshArchivePending],
+    [selectedModelId, selectedAspect, uploadFiles, motionVideoFileId, firstFrameGenId, models, refreshArchiveFull],
   )
 
   const setUploadFile = useCallback((key, file) => {

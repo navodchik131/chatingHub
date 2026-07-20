@@ -88,6 +88,9 @@ type AppDataValue = {
   setUploadFile: (key: string, file: LocalFile | undefined) => void;
   motionVideoFileId: string | null;
   setMotionVideoFileId: (id: string | null) => void;
+  firstFrameGenId: number | null;
+  firstFrameUrl: string;
+  generateFirstFrame: (nav: NavigationState, patchFfState: (state: NavigationState['ffState']) => void) => Promise<void>;
   genResults: Record<string, { imageUrl: string }>;
   bootstrap: () => Promise<void>;
   refreshAll: () => Promise<void>;
@@ -172,6 +175,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const [igBotUsers, setIgBotUsers] = useState<AppDataValue['igBotUsers']>([]);
   const [uploadFiles, setUploadFilesState] = useState<Record<string, LocalFile | undefined>>({});
   const [motionVideoFileId, setMotionVideoFileId] = useState<string | null>(null);
+  const [firstFrameGenId, setFirstFrameGenId] = useState<number | null>(null);
+  const [firstFrameUrl, setFirstFrameUrl] = useState('');
   const [genResults, setGenResults] = useState<Record<string, { imageUrl: string }>>({});
   const refreshLock = useRef(false);
   const activeThreadConvIdRef = useRef<number | null>(null);
@@ -533,13 +538,18 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
         if (key === 'video') {
           if (!modelId) throw new Error('Выберите персонажа');
+          const motionControl = (nav.vidMode || 'motion-control') === 'motion-control';
+          if (motionControl && !motionVideoFileId) throw new Error('Загрузите референс-видео');
           const accepted = await actions.runMotionVideo({
             modelId,
-            prompt: nav.imgPrompt || 'Cinematic motion',
+            prompt: motionControl ? '' : (nav.imgPrompt || 'Cinematic motion'),
             aspect: nav.vidFormat,
             resolution: nav.vidQuality,
             durationSeconds: nav.vidDuration,
             motionVideoFileId: motionVideoFileId || undefined,
+            firstFrameGenerationId: firstFrameGenId,
+            autoMotionPrompt: motionControl && Boolean(motionVideoFileId),
+            frameFile: uploadFiles['motion-frame'],
           });
           generationId = accepted.generation_id ?? null;
         } else if (key.startsWith('img:')) {
@@ -586,7 +596,54 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         setError(e instanceof Error ? e.message : String(e));
       }
     },
-    [rawModels, rawArchiveImages, uploadFiles, motionVideoFileId, me],
+    [rawModels, rawArchiveImages, uploadFiles, motionVideoFileId, firstFrameGenId, me],
+  );
+
+  const generateFirstFrame = useCallback(
+    async (nav: NavigationState, patchFfState: (state: NavigationState['ffState']) => void) => {
+      const modelId = modelIdByName(rawModels, nav.vidChar);
+      if (!modelId) throw new Error('Выберите персонажа');
+      if (!uploadFiles['motion-video'] && !motionVideoFileId) {
+        throw new Error('Загрузите референс-видео');
+      }
+      patchFfState('loading');
+      setError(null);
+      try {
+        const { result } = await actions.runMotionFirstFrame({
+          modelId,
+          aspect: nav.vidFormat,
+          nsfw: nav.contentMode === 'nsfw',
+          videoFile: uploadFiles['motion-video'],
+          frameFile: uploadFiles['motion-frame'],
+          existingGenerationId: firstFrameGenId,
+          description: '',
+        });
+        if (result?.generation_id) setFirstFrameGenId(Number(result.generation_id));
+        const url = resolveMediaUrl(
+          String(result?.generated_image_url || result?.image_url || ''),
+        );
+        if (url) setFirstFrameUrl(url);
+        else if (result?.generation_id) {
+          const archive = await actions.refreshArchiveImages();
+          setRawArchiveImages(archive);
+          const hit = archive.find((g) => Number(g.id) === Number(result.generation_id));
+          const thumb = archiveThumbUrl(hit);
+          if (thumb) setFirstFrameUrl(thumb);
+        } else {
+          await refreshArchive();
+        }
+        patchFfState('done');
+        if (me) {
+          const freshMe = (await actions.fetchMe()) as UserMeOut;
+          setMe(freshMe);
+        }
+      } catch (e) {
+        patchFfState('idle');
+        setError(e instanceof Error ? e.message : String(e));
+        throw e;
+      }
+    },
+    [rawModels, uploadFiles, motionVideoFileId, firstFrameGenId, me, refreshArchive],
   );
 
   const saveCharacterFields = useCallback(async (charId: number, fields: NavigationState['charFields']) => {
@@ -807,6 +864,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       setUploadFile,
       motionVideoFileId,
       setMotionVideoFileId,
+      firstFrameGenId,
+      firstFrameUrl,
+      generateFirstFrame,
       genResults,
       bootstrap,
       refreshAll,
@@ -876,6 +936,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       uploadFiles,
       setUploadFile,
       motionVideoFileId,
+      firstFrameGenId,
+      firstFrameUrl,
+      generateFirstFrame,
       genResults,
       bootstrap,
       refreshAll,

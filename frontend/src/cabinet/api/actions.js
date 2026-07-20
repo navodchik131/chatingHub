@@ -297,11 +297,14 @@ export function isArchivePending(item) {
 export function archiveThumbUrl(item) {
   if (!item) return ''
   if (item.media_kind === 'video') {
-    const poster = (item.image_url || '').trim()
-    if (poster) return poster
-    return (item.video_url || '').trim()
+    return (item.image_url || '').trim()
   }
   return (item.image_url || '').trim()
+}
+
+export function archiveVideoUrl(item) {
+  if (!item || item.media_kind !== 'video') return ''
+  return (item.video_url || '').trim()
 }
 
 export function archiveDownloadUrl(item) {

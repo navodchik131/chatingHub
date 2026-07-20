@@ -45,6 +45,9 @@ export type NavigationState = {
   vidDuration: number;
   vidChar: string;
   vidHasFirstFrame: boolean;
+  vidMode: 'motion-control' | 'prompt';
+  ffState: 'idle' | 'loading' | 'done';
+  ffPreviewOpen: boolean;
   connChar: string;
   newCharName: string;
   charFields: Record<string, string>;
@@ -107,7 +110,10 @@ export const defaultNavState: NavigationState = {
   vidFormat: '9:16',
   vidDuration: 5,
   vidChar: 'Mia',
-  vidHasFirstFrame: true,
+  vidHasFirstFrame: false,
+  vidMode: 'motion-control',
+  ffState: 'idle',
+  ffPreviewOpen: false,
   connChar: 'Mia',
   newCharName: '',
   charFields: {
