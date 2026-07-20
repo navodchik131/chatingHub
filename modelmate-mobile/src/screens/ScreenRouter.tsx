@@ -172,8 +172,6 @@ export function ScreenRouter() {
     saveAdminSubscription,
     adjustAdminCredits,
     sendBroadcast,
-    setUploadFile,
-    setMotionVideoFileId,
     genResults,
     refreshAll,
     refreshArchive,
