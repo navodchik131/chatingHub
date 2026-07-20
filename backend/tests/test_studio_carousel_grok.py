@@ -16,6 +16,29 @@ def test_parse_carousel_grok_prompts_json() -> None:
     assert out == ["First shot angle", "Second pose", "Third frame"]
 
 
+def test_parse_carousel_grok_prompts_with_master_read() -> None:
+    raw = """{
+      "master_read": {
+        "camera": "left three-quarter eye-level",
+        "pose": "weight on right hip, hand in hair",
+        "gaze": "looking at lens",
+        "expression": "soft smile",
+        "framing": "medium close-up",
+        "instagram_opportunity": "add right 3Q and over-shoulder"
+      },
+      "prompts": ["Right three-quarter, gaze off-camera. Same person as master", "Over-shoulder back view. Partial face must match master", "Closer crop, softer expression. Same person as master"]
+    }"""
+    out = parse_carousel_grok_prompts(raw, count=3)
+    assert len(out) == 3
+    assert "Right three-quarter" in out[0]
+    assert "Over-shoulder" in out[1]
+
+
+def test_parse_carousel_grok_prompts_json_with_noise() -> None:
+    raw = 'Here you go:\n{"prompts": ["A", "B"]}\nThanks!'
+    out = parse_carousel_grok_prompts(raw, count=2)
+    assert out == ["A", "B"]
+
 def test_parse_carousel_grok_prompts_numbered_lines() -> None:
     raw = """Prompt 1: Low angle full body, weight on left leg.
 Prompt 2: Closer portrait, soft gaze to camera.
@@ -35,6 +58,7 @@ def test_build_carousel_grok_wave_prompt_includes_lock() -> None:
     assert "Ruby in a kitchen" in body
     assert "Camera slightly higher" in body
     assert "IDENTITY_REINFORCE" in body
+    assert "APPLY_SHOT" in body
 
 
 def test_static_carousel_variations_count() -> None:
