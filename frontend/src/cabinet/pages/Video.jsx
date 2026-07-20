@@ -66,7 +66,7 @@ export default function Video() {
   }, [cabinet.health, cabinet.motionVideoFileId, s.vidTime, s.vidQuality]);
   const ffImgStyle = { width: 70, aspectRatio: '9/16', borderRadius: 10, flex: 'none', background: G[3] };
 
-  const qualityOpts = [{ l: '720p', v: '720' }, { l: '1080p', v: '1080' }, { l: '4K', v: '4k' }];
+  const qualityOpts = [{ l: '480p', v: '480' }, { l: '720p', v: '720' }, { l: '1080p', v: '1080' }, { l: '4K', v: '4k' }];
   const vfmtOpts = ['9:16', '16:9', '1:1', '4:3', '3:4'];
   const vtimeOpts = Array.from({ length: 12 }, (_, i) => {
     const sec = i + 4;

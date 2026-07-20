@@ -1070,13 +1070,17 @@ function Notes() {
     { label: lang === 'ru' ? 'КОНТЕКСТ' : 'CONTEXT', col: '#FB923C', bg: 'rgba(251,146,60' },
     { label: lang === 'ru' ? 'ВАЖНО' : 'IMPORTANT', col: '#F87171', bg: 'rgba(248,113,113' },
   ];
-  const notes = cabinet.notes.map((n) => mapNote(n, lang));
-  const curName = cabinet.conversations.find((c) => c.id === cabinet.activeConvId)?.user_display_name || '—';
   const convId = cabinet.activeConvId;
+  const curName = cabinet.conversations.find((c) => c.id === convId)?.user_display_name || '—';
+  const rawNotes = cabinet.activeNotes;
+  const notesLoading = Boolean(convId) && !Array.isArray(rawNotes);
+  const notes = Array.isArray(rawNotes) ? rawNotes.map((n) => mapNote(n, lang)) : [];
 
   useEffect(() => {
-    if (convId) void cabinet.loadNotes(convId);
-  }, [convId, cabinet]);
+    if (!convId) return;
+    void cabinet.loadNotes(convId);
+    setS({ noteFormOpen: false, noteDraft: '' });
+  }, [convId, cabinet.loadNotes, setS]);
 
   const saveNoteClick = () => {
     if (!convId) return;
@@ -1098,8 +1102,12 @@ function Notes() {
       </div>
 
       <div style={{ flex: 1, overflowY: 'auto', padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {notes.length ? notes.map((n, i) => (
-          <div key={i} style={{ background: color.bgPanel, border: `1px solid ${line.hair}`, borderRadius: 12, padding: '10px 12px' }}>
+        {notesLoading ? (
+          <div style={{ fontSize: 12, color: color.textGhost, textAlign: 'center', padding: 24 }}>
+            {lang === 'ru' ? 'Загрузка…' : 'Loading…'}
+          </div>
+        ) : notes.length ? notes.map((n, i) => (
+          <div key={Array.isArray(rawNotes) && rawNotes[i]?.id != null ? rawNotes[i].id : i} style={{ background: color.bgPanel, border: `1px solid ${line.hair}`, borderRadius: 12, padding: '10px 12px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
               <span
                 style={{

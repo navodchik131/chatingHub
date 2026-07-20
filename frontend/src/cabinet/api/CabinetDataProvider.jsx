@@ -72,7 +72,7 @@ export function CabinetDataProvider({ children }) {
   const [conversations, setConversations] = useState([])
   const [conversationFolders, setConversationFolders] = useState([])
   const [messages, setMessages] = useState([])
-  const [notes, setNotes] = useState([])
+  const [notesByConvId, setNotesByConvId] = useState({})
   const [models, setModels] = useState([])
   const [archiveImages, setArchiveImages] = useState([])
   const [archiveVideos, setArchiveVideos] = useState([])
@@ -116,6 +116,16 @@ export function CabinetDataProvider({ children }) {
   useEffect(() => { donationOverviewRef.current = donationOverview }, [donationOverview])
   useEffect(() => { donationEventsRef.current = donationEvents }, [donationEvents])
   useEffect(() => { activeConvIdRef.current = activeConvId }, [activeConvId])
+
+  const activeNotes = useMemo(() => {
+    if (activeConvId == null) return undefined
+    return notesByConvId[activeConvId]
+  }, [activeConvId, notesByConvId])
+
+  const patchNotesForConv = useCallback((convId, items) => {
+    if (!convId) return
+    setNotesByConvId((prev) => ({ ...prev, [convId]: Array.isArray(items) ? items : [] }))
+  }, [])
 
   const mergeInboundMessage = useCallback((prev, incoming) => {
     const id = Number(incoming?.id)
@@ -183,11 +193,11 @@ export function CabinetDataProvider({ children }) {
 
   const loadMessages = useCallback(async (convId) => {
     if (!convId) return
+    setActiveConvId(convId)
     try {
       const msgs = await apiJson(`/api/conversations/${convId}/messages?limit=50`)
+      if (Number(activeConvIdRef.current) !== Number(convId)) return
       setMessages(Array.isArray(msgs) ? msgs : [])
-      setNotes([])
-      setActiveConvId(convId)
       void apiFetch(`/api/conversations/${convId}/read`, { method: 'POST' })
       setConversations((prev) =>
         prev.map((c) => (c.id === convId ? { ...c, unread_count: 0 } : c)),
@@ -201,11 +211,13 @@ export function CabinetDataProvider({ children }) {
     if (!convId) return
     try {
       const noteRows = await actions.fetchConversationNotes(convId, { autoRefresh: false })
-      setNotes(Array.isArray(noteRows) ? noteRows : [])
+      patchNotesForConv(convId, noteRows)
     } catch (e) {
-      setError(e.message || String(e))
+      if (Number(activeConvIdRef.current) === Number(convId)) {
+        setError(e.message || String(e))
+      }
     }
-  }, [])
+  }, [patchNotesForConv])
 
   const loadConversationFolders = useCallback(async () => {
     try {
@@ -414,20 +426,20 @@ export function CabinetDataProvider({ children }) {
       await run(async () => {
         await actions.saveConversationNote(convId, payload)
         const nr = await actions.fetchConversationNotes(convId, { autoRefresh: false })
-        setNotes(Array.isArray(nr) ? nr : [])
+        patchNotesForConv(convId, nr)
       })
     },
-    [run],
+    [run, patchNotesForConv],
   )
 
   const analyzeNotes = useCallback(
     async (convId) => {
       await run(async () => {
         const data = await actions.analyzeConversationNotes(convId)
-        setNotes(Array.isArray(data) ? data : [])
+        patchNotesForConv(convId, data)
       })
     },
-    [run],
+    [run, patchNotesForConv],
   )
 
   const toggleReaction = useCallback(
@@ -1186,7 +1198,8 @@ export function CabinetDataProvider({ children }) {
       conversations,
       conversationFolders,
       messages,
-      notes,
+      activeNotes,
+      notesByConvId,
       models,
       archiveImages,
       archiveVideos,
@@ -1285,7 +1298,8 @@ export function CabinetDataProvider({ children }) {
       conversations,
       conversationFolders,
       messages,
-      notes,
+      activeNotes,
+      notesByConvId,
       models,
       archiveImages,
       archiveVideos,
