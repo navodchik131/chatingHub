@@ -1,6 +1,6 @@
 import * as LocalAuthentication from 'expo-local-authentication';
 import { useEffect, useState } from 'react';
-import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { CheckRow } from '@/src/components/forms';
 import { IcoFaceId, IcoFinger } from '@/src/components/Icons';
 import { Card, ScreenScroll, TopBar } from '@/src/components/ui';
@@ -105,22 +105,54 @@ export function SettingsBiometricScreen({ onBack }: { onBack: () => void }) {
 }
 
 export function SettingsPushScreen({ onBack }: { onBack: () => void }) {
-  const { pushEnabled, pushError, setPushEnabled, t } = useAppSettings();
+  const {
+    pushEnabled,
+    pushRegistered,
+    pushError,
+    pushBusy,
+    setPushEnabled,
+    syncPushRegistration,
+    refreshPushStatus,
+    t,
+  } = useAppSettings();
+
+  useEffect(() => {
+    void refreshPushStatus();
+  }, [refreshPushStatus]);
+
+  const statusLine = pushEnabled
+    ? pushRegistered
+      ? 'Уведомления включены и зарегистрированы на сервере.'
+      : 'Разрешение получено. Регистрация push-токена…'
+    : 'Уведомления выключены.';
 
   return (
     <ScreenScroll>
       <TopBar title={t.settingsPush} onBack={onBack} />
       <Text style={styles.hint}>{t.settingsPushHint}</Text>
-      {pushError ? (
-        <Text style={styles.warn}>{pushError}</Text>
-      ) : null}
       <Card>
         <CheckRow
           label={pushEnabled ? t.settingsPushEnabled : t.settingsPushDisabled}
           checked={pushEnabled}
           onToggle={() => void setPushEnabled(!pushEnabled)}
         />
+        {pushBusy ? (
+          <View style={styles.busyRow}>
+            <ActivityIndicator color={color.lime} size="small" />
+            <Text style={styles.subHint}>Настраиваем уведомления…</Text>
+          </View>
+        ) : (
+          <Text style={styles.subHint}>{statusLine}</Text>
+        )}
+        {pushEnabled && !pushRegistered && !pushBusy ? (
+          <Pressable style={styles.testBtn} onPress={() => void syncPushRegistration()}>
+            <Text style={styles.testBtnText}>Повторить регистрацию</Text>
+          </Pressable>
+        ) : null}
       </Card>
+      {pushError ? (
+        <Text style={styles.warn}>{pushError}</Text>
+      ) : null}
     </ScreenScroll>
   );
 }
@@ -137,7 +169,8 @@ function SettingsLink({ label, onPress, last }: { label: string; onPress: () => 
 const styles = StyleSheet.create({
   hint: { fontSize: 11.5, color: color.muted, paddingHorizontal: 4, paddingBottom: 10 },
   subHint: { fontSize: 10.5, color: color.dim, paddingTop: 4, paddingBottom: 8 },
-  warn: { fontSize: 12, color: color.orange, lineHeight: 18 },
+  busyRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingTop: 4 },
+  warn: { fontSize: 12, color: color.orange, lineHeight: 18, paddingHorizontal: 4, paddingTop: 8 },
   linkRow: {
     flexDirection: 'row',
     alignItems: 'center',

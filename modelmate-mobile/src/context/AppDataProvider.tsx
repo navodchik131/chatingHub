@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
 } from 'react';
+import { AppState } from 'react-native';
 import * as actions from '@/src/api/actions';
 import { refreshPendingArchiveImages } from '@/src/api/archivePoll';
 import { isArchivePending, archiveThumbUrl } from '@/src/api/media';
@@ -107,6 +108,8 @@ type AppDataValue = {
   register: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   loadThread: (convId: number) => Promise<void>;
+  clearActiveThread: () => void;
+  refreshConversations: () => Promise<void>;
   sendThreadMessage: (convId: number, text: string) => Promise<void>;
   loadConversationFolders: () => Promise<void>;
   createConversationFolder: (name: string, conversationIds?: number[]) => Promise<void>;
@@ -192,6 +195,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const [genResults, setGenResults] = useState<Record<string, { imageUrl: string }>>({});
   const refreshLock = useRef(false);
   const activeThreadConvIdRef = useRef<number | null>(null);
+  const rawConversationsRef = useRef<ConversationOut[]>([]);
 
   const mergeInboundMessage = useCallback((prev: MessageOut[], incoming: MessageOut) => {
     const id = Number(incoming?.id);
@@ -208,17 +212,28 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     return [...withoutPending, { ...incoming, pending: false }];
   }, []);
 
-  const patchConversationPreview = useCallback((convId: number, message: MessageOut, bumpUnread = false) => {
+  const patchConversationPreview = useCallback((
+    convId: number,
+    message: MessageOut,
+    opts: { bumpUnread?: boolean; clearUnread?: boolean } = {},
+  ) => {
+    const { bumpUnread = false, clearUnread = false } = opts;
     const preview = (message.text_original || message.text_translated || '').trim() || '📷';
     setRawConversations((prev) => {
+      const found = prev.some((c) => Number(c.id) === Number(convId));
+      if (!found) return prev;
       const next = prev.map((c) => {
         if (Number(c.id) !== Number(convId)) return c;
-        const unread = bumpUnread ? Number(c.unread_count || 0) + 1 : 0;
+        const unread = bumpUnread
+          ? Number(c.unread_count || 0) + 1
+          : clearUnread
+            ? 0
+            : Number(c.unread_count || 0);
         return {
           ...c,
           last_message_preview: preview,
           last_message_at: message.created_at || c.last_message_at,
-          unread_count: bumpUnread ? unread : 0,
+          unread_count: unread,
         };
       });
       return next.sort((a, b) => {
@@ -239,9 +254,22 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     rawArchiveImagesRef.current = rawArchiveImages;
   }, [rawArchiveImages]);
 
+  useEffect(() => {
+    rawConversationsRef.current = rawConversations;
+  }, [rawConversations]);
+
   const refreshArchive = useCallback(async () => {
     const archive = await actions.refreshArchiveImages();
     setRawArchiveImages(archive);
+  }, []);
+
+  const refreshConversations = useCallback(async () => {
+    try {
+      const convs = (await actions.fetchConversations()) as ConversationOut[];
+      if (Array.isArray(convs)) setRawConversations(convs);
+    } catch {
+      /* ignore polling errors */
+    }
   }, []);
 
   const refreshAll = useCallback(async () => {
@@ -406,6 +434,10 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const clearActiveThread = useCallback(() => {
+    activeThreadConvIdRef.current = null;
+  }, []);
+
   const sendThreadMessage = useCallback(async (convId: number, text: string) => {
     const trimmed = text.trim();
     if (!trimmed) return;
@@ -424,7 +456,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       const sent = (await actions.sendReply(convId, trimmed)) as MessageOut;
       if (sent?.id) {
         setRawMessages((prev) => mergeInboundMessage(prev, sent));
-        patchConversationPreview(convId, sent);
+        patchConversationPreview(convId, sent, { clearUnread: false });
       } else {
         await loadThread(convId);
       }
@@ -511,6 +543,12 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     void connectRealtime((msg) => {
       const convId = Number(msg?.conversation_id);
       const activeId = Number(activeThreadConvIdRef.current);
+
+      if (msg?.type === 'conversation_updated') {
+        void refreshConversations();
+        return;
+      }
+
       if (
         msg?.type === 'new_message' ||
         msg?.type === 'message_updated' ||
@@ -518,14 +556,27 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       ) {
         const payload = msg.message as MessageOut | undefined;
         if (payload?.id && convId) {
-          if (activeId && convId === activeId) {
+          const isInbound = payload.direction === 'inbound';
+          const inOpenThread = activeId > 0 && convId === activeId;
+          if (inOpenThread) {
             setRawMessages((prev) => mergeInboundMessage(prev, payload));
-            patchConversationPreview(convId, payload);
+            if (isInbound) {
+              patchConversationPreview(convId, payload, { clearUnread: true });
+            } else {
+              patchConversationPreview(convId, payload);
+            }
+          } else if (isInbound) {
+            patchConversationPreview(convId, payload, { bumpUnread: true });
           } else {
-            patchConversationPreview(convId, payload, true);
+            patchConversationPreview(convId, payload);
           }
+          void refreshConversations();
+        } else if (convId) {
+          void refreshConversations();
         }
+        return;
       }
+
       if (
         msg?.type === 'studio_generation_updated' ||
         msg?.type === 'studio_job' ||
@@ -541,7 +592,21 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     return () => {
       conn?.close();
     };
-  }, [ready, authenticated, mergeInboundMessage, patchConversationPreview, refreshArchive]);
+  }, [ready, authenticated, mergeInboundMessage, patchConversationPreview, refreshArchive, refreshConversations]);
+
+  useEffect(() => {
+    if (!ready || !authenticated) return;
+    const timer = setInterval(() => {
+      void refreshConversations();
+    }, 8000);
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void refreshConversations();
+    });
+    return () => {
+      clearInterval(timer);
+      sub.remove();
+    };
+  }, [ready, authenticated, refreshConversations]);
 
   const startGeneration = useCallback(
     async (
@@ -923,6 +988,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       register,
       logout,
       loadThread,
+      clearActiveThread,
+      refreshConversations,
       sendThreadMessage,
       loadConversationFolders,
       createConversationFolder,
@@ -1000,6 +1067,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       register,
       logout,
       loadThread,
+      clearActiveThread,
+      refreshConversations,
       sendThreadMessage,
       loadConversationFolders,
       createConversationFolder,

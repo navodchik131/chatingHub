@@ -15,7 +15,7 @@ import { TextInput } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { fmtThreadDayKey, fmtThreadDayLabel } from '@/src/api/helpers';
 import { Avatar } from '@/src/components/ui';
-import { IcoBack, IcoSend } from '@/src/components/Icons';
+import { IcoBack, IcoSend, IcoThemeGrid } from '@/src/components/Icons';
 import { useAppSettings } from '@/src/context/AppSettingsContext';
 import { CHAT_THEMES, chatThemeById, type ChatThemeId } from '@/src/styles/chatThemes';
 import { color, font } from '@/src/styles/tokens';
@@ -240,8 +240,8 @@ export function ThreadView({
           </View>
           <Text style={styles.headSub}>{subtitle}</Text>
         </View>
-        <Pressable style={styles.headMenu} onPress={() => setThemePickerOpen(true)} hitSlop={8}>
-          <Text style={styles.headMenuText}>▦</Text>
+        <Pressable style={styles.headThemeBtn} onPress={() => setThemePickerOpen(true)} hitSlop={8}>
+          <IcoThemeGrid size={25} stroke={color.muted} />
         </Pressable>
       </View>
 
@@ -339,16 +339,7 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   vipText: { fontFamily: font.monoBold, fontSize: 8, color: color.limeText, fontWeight: '700' },
-  headMenu: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headMenuText: { fontSize: 16, color: color.muted },
+  headThemeBtn: { padding: 8, margin: -8 },
   scroll: { flex: 1 },
   scrollContent: { paddingHorizontal: 16, paddingVertical: 16, gap: 11 },
   dayWrap: { alignItems: 'center', marginVertical: 6 },

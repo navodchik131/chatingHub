@@ -225,3 +225,24 @@ export function IcoFaceId({ size, stroke }: IconProps) {
     </IconBase>
   );
 }
+
+/** 2×2 grid — кнопка выбора темы чата (ModelMate Mobile.dc.html). */
+export function IcoThemeGrid({ size = 25, stroke = color.muted }: IconProps) {
+  return (
+    <Svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke={stroke}
+      strokeWidth={1.8}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <Rect x="3" y="3" width="7" height="7" rx="2" />
+      <Rect x="14" y="3" width="7" height="7" rx="2" />
+      <Rect x="3" y="14" width="7" height="7" rx="2" />
+      <Rect x="14" y="14" width="7" height="7" rx="2" />
+    </Svg>
+  );
+}

@@ -235,16 +235,17 @@ export function ChatRow({
   onFolderPress?: () => void;
 }) {
   const platColor = platform === 'FANVUE' ? color.pink : color.blue;
+  const hasUnread = (unread ?? 0) > 0;
   const RowWrap = onPress ? Pressable : View;
   return (
     <RowWrap style={styles.chatRow} onPress={onPress}>
       <Avatar letter={name[0]} index={gradIndex} size={60} />
       <View style={styles.chatMain}>
         <View style={styles.chatNameRow}>
-          <Text style={styles.chatName}>{name}</Text>
+          <Text style={[styles.chatName, hasUnread && styles.chatNameUnread]}>{name}</Text>
           {vip ? <Pill text="VIP" bg={color.lime} fg={color.limeText} /> : null}
         </View>
-        <Text style={styles.chatMsg} numberOfLines={1}>
+        <Text style={[styles.chatMsg, hasUnread && styles.chatMsgUnread]} numberOfLines={1}>
           {message}
         </Text>
       </View>
@@ -379,7 +380,9 @@ const styles = StyleSheet.create({
   chatMain: { flex: 1, minWidth: 0 },
   chatNameRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
   chatName: { fontFamily: font.bodyExtra, fontSize: 18.5, color: color.text },
+  chatNameUnread: { color: color.lime },
   chatMsg: { fontSize: 16, color: color.muted, lineHeight: 21 },
+  chatMsgUnread: { color: color.text, fontFamily: font.bodySemi, fontWeight: '600' },
   chatRight: { alignItems: 'flex-end', justifyContent: 'space-between', minHeight: 60, gap: 7 },
   folderBtn: { paddingHorizontal: 4, paddingVertical: 2 },
   folderBtnText: { fontSize: 14 },

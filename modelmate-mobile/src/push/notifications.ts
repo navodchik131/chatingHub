@@ -16,6 +16,14 @@ Notifications.setNotificationHandler({
 
 let registeredToken: string | null = null;
 
+export type PushSetupResult = {
+  ok: boolean;
+  permissionGranted: boolean;
+  tokenRegistered: boolean;
+  reason?: string;
+  token?: string;
+};
+
 export async function ensureNotificationChannel() {
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync('messages', {
@@ -28,21 +36,40 @@ export async function ensureNotificationChannel() {
   }
 }
 
-export async function registerMobilePush(): Promise<{ ok: boolean; reason?: string; token?: string }> {
-  if (!Device.isDevice) {
-    return { ok: false, reason: 'Push работает только на реальном устройстве, не в эмуляторе.' };
-  }
+export async function isPushPermissionGranted(): Promise<boolean> {
+  const { status } = await Notifications.getPermissionsAsync();
+  return status === 'granted';
+}
 
+export async function registerMobilePush(): Promise<PushSetupResult> {
   await ensureNotificationChannel();
 
   const { status: existing } = await Notifications.getPermissionsAsync();
   let finalStatus = existing;
   if (existing !== 'granted') {
-    const req = await Notifications.requestPermissionsAsync();
+    const req = await Notifications.requestPermissionsAsync({
+      ios: { allowAlert: true, allowBadge: true, allowSound: true },
+    });
     finalStatus = req.status;
   }
-  if (finalStatus !== 'granted') {
-    return { ok: false, reason: 'Разрешите уведомления в настройках телефона.' };
+
+  const permissionGranted = finalStatus === 'granted';
+  if (!permissionGranted) {
+    return {
+      ok: false,
+      permissionGranted: false,
+      tokenRegistered: false,
+      reason: 'Разрешите уведомления в настройках телефона.',
+    };
+  }
+
+  if (!Device.isDevice) {
+    return {
+      ok: true,
+      permissionGranted: true,
+      tokenRegistered: false,
+      reason: 'Разрешение получено. Доставка push работает только на физическом устройстве, не в эмуляторе.',
+    };
   }
 
   const projectId =
@@ -51,26 +78,48 @@ export async function registerMobilePush(): Promise<{ ok: boolean; reason?: stri
     Constants.expoConfig?.extra?.projectId;
 
   if (!projectId) {
-    return { ok: false, reason: 'Не найден EAS projectId для push-токена.' };
+    return {
+      ok: false,
+      permissionGranted: true,
+      tokenRegistered: false,
+      reason: 'Не найден EAS projectId. Пересоберите приложение через EAS.',
+    };
   }
 
-  const tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
-  const expoToken = tokenData.data;
-  if (!expoToken) {
-    return { ok: false, reason: 'Не удалось получить push-токен.' };
+  try {
+    const tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
+    const expoToken = tokenData.data;
+    if (!expoToken) {
+      return {
+        ok: false,
+        permissionGranted: true,
+        tokenRegistered: false,
+        reason: 'Не удалось получить push-токен Expo.',
+      };
+    }
+
+    await apiJson('/api/push/mobile/register', {
+      method: 'POST',
+      body: JSON.stringify({
+        expo_token: expoToken,
+        platform: Platform.OS,
+        device_name: Device.modelName || undefined,
+      }),
+    });
+
+    registeredToken = expoToken;
+    return { ok: true, permissionGranted: true, tokenRegistered: true, token: expoToken };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return {
+      ok: false,
+      permissionGranted: true,
+      tokenRegistered: false,
+      reason: msg.includes('401') || msg.includes('403')
+        ? 'Войдите в аккаунт, затем включите уведомления снова.'
+        : `Не удалось зарегистрировать push: ${msg}`,
+    };
   }
-
-  await apiJson('/api/push/mobile/register', {
-    method: 'POST',
-    body: JSON.stringify({
-      expo_token: expoToken,
-      platform: Platform.OS,
-      device_name: Device.modelName || undefined,
-    }),
-  });
-
-  registeredToken = expoToken;
-  return { ok: true, token: expoToken };
 }
 
 export async function unregisterMobilePush(): Promise<void> {
@@ -86,11 +135,10 @@ export async function unregisterMobilePush(): Promise<void> {
   registeredToken = null;
 }
 
-export async function syncMobilePushEnabled(enabled: boolean): Promise<{ ok: boolean; reason?: string }> {
+export async function syncMobilePushEnabled(enabled: boolean): Promise<PushSetupResult> {
   if (enabled) {
-    const result = await registerMobilePush();
-    return { ok: result.ok, reason: result.reason };
+    return registerMobilePush();
   }
   await unregisterMobilePush();
-  return { ok: true };
+  return { ok: true, permissionGranted: false, tokenRegistered: false };
 }

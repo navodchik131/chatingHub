@@ -156,6 +156,8 @@ export function ScreenRouter() {
     busy: appBusy,
     startGeneration,
     loadThread,
+    clearActiveThread,
+    refreshConversations,
     sendThreadMessage,
     createConversationFolder,
     renameConversationFolder,
@@ -188,8 +190,16 @@ export function ScreenRouter() {
   useEffect(() => {
     if (cur === 'thread' && threadConvId) {
       void loadThread(threadConvId);
+      return;
     }
-  }, [cur, threadConvId, loadThread]);
+    clearActiveThread();
+  }, [cur, threadConvId, loadThread, clearActiveThread]);
+
+  useEffect(() => {
+    if (cur === 'dialogs' || cur === 'overview') {
+      void refreshConversations();
+    }
+  }, [cur, refreshConversations]);
 
   useEffect(() => {
     if (!cur.startsWith('character:')) return;

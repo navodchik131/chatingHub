@@ -1,7 +1,9 @@
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { font } from '@/src/styles/tokens';
 
 const logo = require('../../assets/logo-m.jpeg');
+const TAGLINE = 'AI OFM · лучшее приложение для ai креаторов';
 
 export function SplashScreen({
   ready,
@@ -9,15 +11,53 @@ export function SplashScreen({
 }: {
   ready: boolean;
   onContinue: () => void;
+  /** @deprecated kept for API compat */
+  onSkip?: () => void;
 }) {
+  const [text, setText] = useState('');
+  const [typingDone, setTypingDone] = useState(false);
+  const continuedRef = useRef(false);
+
+  const finish = useCallback(() => {
+    if (continuedRef.current || !ready) return;
+    continuedRef.current = true;
+    onContinue();
+  }, [ready, onContinue]);
+
+  useEffect(() => {
+    let i = 0;
+    const timer = setInterval(() => {
+      i += 1;
+      setText(TAGLINE.slice(0, i));
+      if (i >= TAGLINE.length) {
+        clearInterval(timer);
+        setTypingDone(true);
+      }
+    }, 34);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (!ready || !typingDone) return;
+    const timer = setTimeout(finish, 500);
+    return () => clearTimeout(timer);
+  }, [ready, typingDone, finish]);
+
+  useEffect(() => {
+    if (!ready) return;
+    const safety = setTimeout(finish, 4500);
+    return () => clearTimeout(safety);
+  }, [ready, finish]);
+
   return (
-    <Pressable style={styles.root} onPress={ready ? onContinue : undefined}>
+    <Pressable style={styles.root} onPress={finish}>
       <View style={styles.logoWrap}>
         <Image source={logo} style={styles.logo} resizeMode="cover" />
       </View>
       <Text style={styles.title}>ModelMate</Text>
       <Text style={styles.subtitle}>
-        AI OFM · единственное приложение для ведения моделей
+        {text}
+        {!typingDone ? <Text style={styles.cursor}>|</Text> : null}
       </Text>
     </Pressable>
   );
@@ -56,5 +96,10 @@ const styles = StyleSheet.create({
     color: '#8a8f95',
     textAlign: 'center',
     lineHeight: 16,
+    minHeight: 32,
+  },
+  cursor: {
+    color: '#8a8f95',
+    opacity: 0.85,
   },
 });
