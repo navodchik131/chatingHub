@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect } from 'react';
+import { useRef, useState, useEffect, useCallback } from 'react';
 import Hoverable from '../components/Hoverable';
 import { IcoClip, IcoSendArrow } from '../components/Icons';
 import { Fade, PageTitle, Avatar } from '../components/ui';
@@ -23,6 +23,33 @@ const noteToneMap = {
   orange: { background: 'rgba(251,146,60,.15)', color: color.orange },
   purple: { background: 'rgba(192,132,252,.15)', color: color.purple },
 };
+
+const threadScrollBg = {
+  backgroundColor: '#141824',
+  backgroundImage: [
+    'radial-gradient(circle at 15% 20%, rgba(140,110,255,.10), transparent 40%)',
+    'radial-gradient(circle at 85% 75%, rgba(56,189,248,.08), transparent 45%)',
+    'radial-gradient(circle at 50% 50%, rgba(255,255,255,.03) 1px, transparent 1px)',
+  ].join(', '),
+  backgroundSize: 'auto, auto, 22px 22px',
+};
+
+const folderPill = (on) => ({
+  fontSize: 12,
+  fontWeight: 700,
+  padding: '5px 13px',
+  borderRadius: 20,
+  cursor: 'pointer',
+  flex: 'none',
+  whiteSpace: 'nowrap',
+  ...(on
+    ? { background: color.lime, color: color.limeInk, border: '1px solid transparent' }
+    : {
+        background: 'rgba(255,255,255,.06)',
+        color: color.textMuted,
+        border: '1px solid rgba(255,255,255,.1)',
+      }),
+});
 
 /* ── list pane ───────────────────────────────────────────── */
 function ChatList() {
@@ -136,23 +163,41 @@ function ChatList() {
       }}
     >
       <div style={{ padding: '12px 12px 8px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <input
-            placeholder={t.searchDialogs}
-            value={s.chatSearchQuery || ''}
-            onChange={(e) => setS({ chatSearchQuery: e.target.value })}
-            style={{ ...inputSt, borderRadius: 9, padding: '8px 12px', flex: 1 }}
-            aria-label={t.searchDialogs}
-          />
+        <input
+          placeholder={t.searchDialogs}
+          value={s.chatSearchQuery || ''}
+          onChange={(e) => setS({ chatSearchQuery: e.target.value })}
+          style={{ ...inputSt, borderRadius: 9, padding: '8px 12px', width: '100%' }}
+          aria-label={t.searchDialogs}
+        />
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+          {folderTabs.map((f) => {
+            const on = activeFolderId === f.id;
+            return (
+              <Hoverable
+                as="span"
+                key={f.id}
+                style={folderPill(on)}
+                hover={on ? {} : { borderColor: borderHoverOff, color: color.text }}
+                onClick={() => setS({ activeFolderId: f.id })}
+                onContextMenu={(e) => {
+                  if (f.id === 'all') return;
+                  e.preventDefault();
+                  openFolderEdit(Number(f.id));
+                }}
+              >
+                {f.label}{f.id !== 'all' && f.count ? ` · ${f.count}` : ''}
+              </Hoverable>
+            );
+          })}
           <Hoverable
             as="span"
             style={{
-              width: 36, height: 36, borderRadius: 10, flex: 'none',
-              background: 'rgba(215,244,82,.1)', border: '1px solid rgba(215,244,82,.25)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              cursor: 'pointer', fontSize: 18, color: color.lime, fontWeight: 700,
+              fontSize: 14, fontWeight: 800, color: color.lime,
+              border: '1px dashed rgba(215,244,82,.4)', borderRadius: 20,
+              padding: '3px 10px', cursor: 'pointer', flex: 'none',
             }}
-            hover={{ background: 'rgba(215,244,82,.18)' }}
+            hover={{ background: 'rgba(215,244,82,.08)' }}
             onClick={() => setS({ folderFormOpen: true, folderFormName: '', folderFormSelected: [] })}
             aria-label={lang === 'ru' ? 'Новая папка' : 'New folder'}
           >
@@ -181,48 +226,6 @@ function ChatList() {
             );
           })}
         </div>
-        <div style={{ display: 'flex', gap: 14, overflowX: 'auto', borderBottom: `1px solid ${line.hair}`, paddingBottom: 2, alignItems: 'flex-end' }}>
-          {folderTabs.map((f) => {
-            const on = activeFolderId === f.id;
-            return (
-              <Hoverable
-                as="span"
-                key={f.id}
-                style={{
-                  padding: '6px 2px', flex: 'none', cursor: 'pointer',
-                  borderBottom: `2.5px solid ${on ? color.lime : 'transparent'}`,
-                  fontSize: 13, fontWeight: on ? 800 : 600, color: on ? color.lime : color.textMuted,
-                  whiteSpace: 'nowrap',
-                }}
-                hover={{ color: on ? color.lime : color.text }}
-                onClick={() => setS({ activeFolderId: f.id })}
-                onContextMenu={(e) => {
-                  if (f.id === 'all') return;
-                  e.preventDefault();
-                  openFolderEdit(Number(f.id));
-                }}
-              >
-                {f.label}{f.id !== 'all' ? ` · ${f.count}` : ''}
-              </Hoverable>
-            );
-          })}
-        </div>
-        {activeFolderId !== 'all' && activeFolder && (
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <Hoverable
-              as="span"
-              style={{
-                fontFamily: font.mono, fontSize: 9.5, padding: '4px 10px', borderRadius: 8,
-                border: `1px solid rgba(192,132,252,.3)`, color: color.purple, cursor: 'pointer',
-                background: 'rgba(192,132,252,.08)',
-              }}
-              hover={{ background: 'rgba(192,132,252,.15)' }}
-              onClick={() => openFolderEdit(activeFolder.id)}
-            >
-              {lang === 'ru' ? 'Изменить папку' : 'Edit folder'}
-            </Hoverable>
-          </div>
-        )}
       </div>
 
       <div style={{ flex: 1, overflowY: 'auto', padding: '4px 8px 8px' }}>
@@ -565,6 +568,9 @@ function ChatList() {
 function Thread() {
   const { t, lang, s, setS, isMobile, cabinet } = useApp();
   const attachRef = useRef(null);
+  const scrollRef = useRef(null);
+  const stickToBottomRef = useRef(true);
+  const [showScrollDown, setShowScrollDown] = useState(false);
   const [attachFile, setAttachFile] = useState(null);
   const [attachPreview, setAttachPreview] = useState(null);
   const dialogsRaw = cabinet.conversations.map((c, i) => mapDialogRow(c, i));
@@ -574,7 +580,6 @@ function Thread() {
   const companionLabel = formatCompanionMode(rawConv?.effective_companion_mode, lang);
   const curSt = cur?.status || false;
   const msgDefs = cabinet.messages.map(mapMessage);
-  const notesData = cabinet.notes.map((n) => mapNote(n, lang));
   const reactChoices = REACT_CHOICES;
   const emojiChoices = EMOJI_CHOICES;
   const langMap = LANG_MAP;
@@ -582,6 +587,64 @@ function Thread() {
   useEffect(() => () => {
     if (attachPreview) URL.revokeObjectURL(attachPreview);
   }, [attachPreview]);
+
+  const updateScrollState = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const threshold = 72;
+    const dist = el.scrollHeight - el.scrollTop - el.clientHeight;
+    const atBottom = dist <= threshold;
+    stickToBottomRef.current = atBottom;
+    setShowScrollDown(!atBottom && el.scrollHeight > el.clientHeight + threshold);
+  }, []);
+
+  const scrollToBottom = useCallback((behavior = 'auto') => {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior });
+    stickToBottomRef.current = true;
+    setShowScrollDown(false);
+  }, []);
+
+  useEffect(() => {
+    stickToBottomRef.current = true;
+    setShowScrollDown(false);
+    const raf = requestAnimationFrame(() => scrollToBottom('auto'));
+    const t1 = window.setTimeout(() => scrollToBottom('auto'), 50);
+    const t2 = window.setTimeout(() => scrollToBottom('auto'), 250);
+    const t3 = window.setTimeout(() => scrollToBottom('auto'), 800);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
+      window.clearTimeout(t3);
+    };
+  }, [cabinet.activeConvId, scrollToBottom]);
+
+  useEffect(() => {
+    if (stickToBottomRef.current) {
+      requestAnimationFrame(() => scrollToBottom('auto'));
+    } else {
+      updateScrollState();
+    }
+  }, [msgDefs.length, scrollToBottom, updateScrollState]);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const onScroll = () => updateScrollState();
+    el.addEventListener('scroll', onScroll, { passive: true });
+    const ro = new ResizeObserver(() => {
+      if (stickToBottomRef.current) scrollToBottom('auto');
+      else updateScrollState();
+    });
+    ro.observe(el);
+    updateScrollState();
+    return () => {
+      el.removeEventListener('scroll', onScroll);
+      ro.disconnect();
+    };
+  }, [updateScrollState, scrollToBottom, cabinet.activeConvId]);
 
   if (!cur) {
     return (
@@ -592,22 +655,25 @@ function Thread() {
   }
 
   const bubbleIn = {
-    maxWidth: '80%', background: color.raised, border: `1px solid ${line.hair}`,
+    maxWidth: '80%', background: 'rgba(38,42,52,.92)', border: '1px solid rgba(255,255,255,.06)',
     borderRadius: '14px 14px 14px 4px', padding: '10px 13px', position: 'relative',
   };
   const bubbleOut = {
-    maxWidth: '80%', background: 'rgba(215,244,82,.09)', border: '1px solid rgba(215,244,82,.2)',
-    borderRadius: '14px 14px 4px 14px', padding: '10px 13px', position: 'relative',
+    maxWidth: '80%',
+    background: 'linear-gradient(135deg, #5A8DFF, #3D6EF0)',
+    border: 'none',
+    boxShadow: '0 2px 8px rgba(61,110,240,.35)',
+    borderRadius: '14px 14px 4px 14px',
+    padding: '10px 13px',
+    position: 'relative',
+    color: '#fff',
   };
 
   const closePops = () => {
     if (s.msgReact !== null || s.emojiOpen) setS({ msgReact: null, emojiOpen: false });
   };
 
-  const scrollDown = () => {
-    const el = document.getElementById('mm-thread-scroll');
-    if (el) el.scrollTop = el.scrollHeight;
-  };
+  const scrollDown = () => scrollToBottom('smooth');
 
   const clearAttach = () => {
     if (attachPreview) URL.revokeObjectURL(attachPreview);
@@ -704,8 +770,11 @@ function Thread() {
 
       {/* messages */}
       <div
-        id="mm-thread-scroll"
-        style={{ flex: 1, overflowY: 'auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}
+        ref={scrollRef}
+        style={{
+          flex: 1, overflowY: 'auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 12,
+          ...threadScrollBg,
+        }}
       >
         {msgDefs.map((m, i) => {
           const rx = m.ownerReaction;
@@ -724,12 +793,16 @@ function Thread() {
                   </div>
                 )}
                 <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                  <div style={{ flex: 1, fontSize: 13, lineHeight: 1.5 }}>
+                  <div style={{ flex: 1, fontSize: out ? 12.5 : 13, lineHeight: 1.5, color: out ? '#fff' : color.text }}>
                     {m.attachmentUrl && (
                       <a href={m.attachmentUrl} target="_blank" rel="noreferrer" style={{ display: 'block', marginBottom: m.text ? 8 : 0 }}>
                         <img
                           src={m.attachmentUrl}
                           alt=""
+                          onLoad={() => {
+                            if (stickToBottomRef.current) scrollToBottom('auto');
+                            else updateScrollState();
+                          }}
                           style={{
                             display: 'block', width: '100%', maxWidth: 240, maxHeight: 280,
                             borderRadius: 10, objectFit: 'cover', background: color.bgPanel,
@@ -772,14 +845,25 @@ function Thread() {
                 {m.tr && (
                   <div
                     style={{
-                      fontSize: 11.5, lineHeight: 1.45, color: color.textFaint, marginTop: 6,
-                      paddingTop: 6, borderTop: '1px dashed rgba(255,255,255,.1)',
+                      fontSize: out ? 13 : 11.5,
+                      lineHeight: 1.45,
+                      marginTop: 6,
+                      paddingTop: 6,
+                      borderTop: out ? '1px dashed rgba(255,255,255,.35)' : '1px dashed rgba(255,255,255,.1)',
+                      color: out ? 'rgba(255,255,255,.92)' : '#C9CDD1',
                     }}
                   >
                     {m.tr}
                   </div>
                 )}
-                <div style={{ fontFamily: font.mono, fontSize: 8.5, color: color.textGhost, marginTop: 6 }}>
+                <div
+                  style={{
+                    fontFamily: font.mono,
+                    fontSize: 8.5,
+                    marginTop: 6,
+                    color: out ? 'rgba(255,255,255,.75)' : color.textGhost,
+                  }}
+                >
                   {m.time}{m.pending ? (lang === 'ru' ? ' · отправка…' : ' · sending…') : ''}
                 </div>
 
@@ -828,19 +912,21 @@ function Thread() {
       </div>
 
       {/* scroll to bottom */}
-      <Hoverable
-        style={{
-          position: 'absolute', right: 16, bottom: 82, width: 36, height: 36, borderRadius: '50%',
-          background: color.raised, border: `1px solid ${line.strong}`, display: 'flex',
-          alignItems: 'center', justifyContent: 'center', fontSize: 16, color: color.textDim,
-          cursor: 'pointer', boxShadow: '0 6px 18px rgba(0,0,0,.4)',
-        }}
-        hover={{ color: color.text, borderColor: borderHoverOff }}
-        onClick={scrollDown}
-        aria-label="Scroll to latest"
-      >
-        ↓
-      </Hoverable>
+      {showScrollDown && (
+        <Hoverable
+          style={{
+            position: 'absolute', right: 16, bottom: 82, width: 36, height: 36, borderRadius: '50%',
+            background: color.raised, border: `1px solid ${line.strong}`, display: 'flex',
+            alignItems: 'center', justifyContent: 'center', fontSize: 16, color: color.textDim,
+            cursor: 'pointer', boxShadow: '0 6px 18px rgba(0,0,0,.4)', zIndex: 4,
+          }}
+          hover={{ color: color.text, borderColor: borderHoverOff }}
+          onClick={scrollDown}
+          aria-label="Scroll to latest"
+        >
+          ↓
+        </Hoverable>
+      )}
 
       {/* emoji picker */}
       {s.emojiOpen && (
@@ -1124,7 +1210,9 @@ function Notes() {
 
 /* ── page ────────────────────────────────────────────────── */
 export default function Dialogs() {
-  const { t, s, isMobile, isNarrow } = useApp();
+  const { t, s, isMobile, isNarrow, cabinet } = useApp();
+  const tgCount = cabinet.conversations.filter((c) => String(c.platform).toUpperCase() === 'TELEGRAM').length;
+  const fvCount = cabinet.conversations.filter((c) => String(c.platform).toUpperCase() === 'FANVUE').length;
 
   const showThread = !isMobile || s.mobileChat;
   const showList = !isMobile || !s.mobileChat;
@@ -1150,7 +1238,7 @@ export default function Dialogs() {
               padding: '3px 10px', borderRadius: 20,
             }}
           >
-            TELEGRAM 8
+            TELEGRAM {tgCount}
           </span>
           <span
             style={{
@@ -1159,7 +1247,7 @@ export default function Dialogs() {
               padding: '3px 10px', borderRadius: 20,
             }}
           >
-            FANVUE 1
+            FANVUE {fvCount}
           </span>
         </div>
       </div>
