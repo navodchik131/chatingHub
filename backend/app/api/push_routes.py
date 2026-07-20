@@ -6,9 +6,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.deps import get_current_user
 from app.config import settings
 from app.db.models import User
-from app.db.repo import delete_push_subscription, upsert_push_subscription
+from app.db.repo import (
+    delete_mobile_push_token,
+    delete_push_subscription,
+    upsert_mobile_push_token,
+    upsert_push_subscription,
+)
 from app.db.session import get_session
-from app.schemas import PushSubscribeIn, PushUnsubscribeIn
+from app.schemas import MobilePushRegisterIn, MobilePushUnregisterIn, PushSubscribeIn, PushUnsubscribeIn
 from app.services.workspace import PERM_CHAT, assert_permission, workspace_owner_id
 
 router = APIRouter(prefix="/push", tags=["push"])
@@ -55,5 +60,37 @@ async def push_unsubscribe(
     assert_permission(user, PERM_CHAT)
     oid = workspace_owner_id(user)
     await delete_push_subscription(session, oid, body.endpoint)
+    await session.commit()
+    return {"ok": "true"}
+
+
+@router.post("/mobile/register")
+async def mobile_push_register(
+    body: MobilePushRegisterIn,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> dict[str, str]:
+    assert_permission(user, PERM_CHAT)
+    oid = workspace_owner_id(user)
+    await upsert_mobile_push_token(
+        session,
+        oid,
+        body.expo_token,
+        platform=(body.platform or "")[:16] or None,
+        device_name=(body.device_name or "")[:128] or None,
+    )
+    await session.commit()
+    return {"ok": "true"}
+
+
+@router.post("/mobile/unregister")
+async def mobile_push_unregister(
+    body: MobilePushUnregisterIn,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> dict[str, str]:
+    assert_permission(user, PERM_CHAT)
+    oid = workspace_owner_id(user)
+    await delete_mobile_push_token(session, oid, body.expo_token)
     await session.commit()
     return {"ok": "true"}

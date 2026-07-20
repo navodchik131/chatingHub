@@ -337,3 +337,64 @@ async def delete_push_subscription_by_id(
     row = await session.get(PushSubscription, sub_id)
     if row:
         await session.delete(row)
+
+
+async def list_mobile_push_tokens(
+    session: AsyncSession, user_id: int
+) -> list:
+    from app.db.models import MobilePushToken
+
+    r = await session.execute(
+        select(MobilePushToken).where(MobilePushToken.user_id == user_id)
+    )
+    return list(r.scalars().all())
+
+
+async def upsert_mobile_push_token(
+    session: AsyncSession,
+    user_id: int,
+    expo_token: str,
+    platform: str | None = None,
+    device_name: str | None = None,
+) -> None:
+    from app.db.models import MobilePushToken
+
+    stmt = select(MobilePushToken).where(MobilePushToken.expo_token == expo_token)
+    row = (await session.execute(stmt)).scalar_one_or_none()
+    if row:
+        row.user_id = user_id
+        row.platform = platform
+        row.device_name = device_name
+        return
+    session.add(
+        MobilePushToken(
+            user_id=user_id,
+            expo_token=expo_token,
+            platform=platform,
+            device_name=device_name,
+        )
+    )
+
+
+async def delete_mobile_push_token(
+    session: AsyncSession, user_id: int, expo_token: str
+) -> bool:
+    from app.db.models import MobilePushToken
+
+    stmt = select(MobilePushToken).where(
+        MobilePushToken.user_id == user_id,
+        MobilePushToken.expo_token == expo_token,
+    )
+    row = (await session.execute(stmt)).scalar_one_or_none()
+    if not row:
+        return False
+    await session.delete(row)
+    return True
+
+
+async def delete_mobile_push_token_by_id(session: AsyncSession, token_id: int) -> None:
+    from app.db.models import MobilePushToken
+
+    row = await session.get(MobilePushToken, token_id)
+    if row:
+        await session.delete(row)

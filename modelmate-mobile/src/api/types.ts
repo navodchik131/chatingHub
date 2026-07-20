@@ -61,13 +61,23 @@ export type MessageOut = {
   pending?: boolean;
 };
 
+export type CompanionPersonaOut = {
+  age?: string | null;
+  city?: string | null;
+  country?: string | null;
+  personality?: string | null;
+  speaking_style?: string | null;
+};
+
 export type StudioModelOut = {
   id: number;
   name: string;
   profile_text?: string;
-  companion_persona?: string;
+  companion_persona?: CompanionPersonaOut | string;
   images?: { id: number; kind: string; url: string }[];
-  camera_preset_id?: number | null;
+  camera_preset_id?: string | number | null;
+  export_lat?: number | null;
+  export_lon?: number | null;
 };
 
 export type StudioGenerationOut = {
@@ -121,11 +131,43 @@ export type CreatorDonationLinkOut = {
   telegram_link?: string;
 };
 
+export type CreatorDonationOverviewOut = {
+  totals_by_currency?: Record<string, number>;
+  pending_payout_by_currency?: Record<string, number>;
+  donations_count?: number;
+  active_links?: number;
+};
+
+export type CreatorDonationEventOut = {
+  id: number;
+  amount_minor: number;
+  currency?: string;
+  donor_label?: string;
+  occurred_at?: string;
+  payout_status?: string;
+  donation_link_title?: string;
+};
+
+export type ChatterStatsMemberOut = {
+  user_id?: number;
+  outbound_messages?: number;
+  conversations_replied?: number;
+  median_reply_seconds?: number | null;
+};
+
+export type ChatterStatsSummaryOut = {
+  self?: ChatterStatsMemberOut;
+  self_row?: ChatterStatsMemberOut;
+  members?: ChatterStatsMemberOut[];
+};
+
 export type WorkspaceMemberOut = {
   id: number;
   member_login: string;
   permissions_mask: number;
   allowed_studio_model_ids?: number[];
+  is_active?: boolean;
+  tribute_share_percent?: number | null;
 };
 
 export type AdminUserRow = {

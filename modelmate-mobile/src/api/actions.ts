@@ -157,6 +157,10 @@ export async function fetchChatterStats() {
   return apiJsonOptional('/api/workspace/chatter-stats/summary', {}, null);
 }
 
+export async function fetchDonationEvents() {
+  return apiJsonOptional('/api/creator-donations/events?limit=50', {}, []);
+}
+
 export async function fetchDonationOverview() {
   return apiJsonOptional('/api/creator-donations/overview', {}, null);
 }
@@ -195,6 +199,14 @@ export async function saveDonationLink(payload: Record<string, unknown>, editing
 
 export async function addWorkspaceMember(payload: Record<string, unknown>) {
   return apiJson('/api/workspace/members', { method: 'POST', body: JSON.stringify(payload) });
+}
+
+export async function updateWorkspaceMember(memberId: number, payload: Record<string, unknown>) {
+  return apiJson(`/api/workspace/members/${memberId}`, { method: 'PATCH', body: JSON.stringify(payload) });
+}
+
+export async function deleteWorkspaceMember(memberId: number) {
+  return apiJson(`/api/workspace/members/${memberId}`, { method: 'DELETE' });
 }
 
 export async function createStudioModel(name: string) {
@@ -259,6 +271,14 @@ export async function saveTelegramBot(token: string, studioModelId?: number) {
 
 export async function deleteTelegramConnection(connectionId: number) {
   return apiJson(`/api/integrations/telegram/${connectionId}`, { method: 'DELETE' });
+}
+
+export async function deleteFanvueConnection(connectionId: number) {
+  return apiJson(`/api/integrations/fanvue?connection_id=${connectionId}`, { method: 'DELETE' });
+}
+
+export async function deleteTributeConnection(connectionId: number) {
+  return apiJson(`/api/integrations/tribute?connection_id=${connectionId}`, { method: 'DELETE' });
 }
 
 export async function saveTributeKey(apiKey: string, studioModelId?: number) {

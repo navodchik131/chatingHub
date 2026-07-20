@@ -187,6 +187,11 @@ class User(Base):
         back_populates="user",
         cascade="all, delete-orphan",
     )
+    mobile_push_tokens: Mapped[list["MobilePushToken"]] = relationship(
+        "MobilePushToken",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
     workflow_workspaces: Mapped[list["WorkflowWorkspace"]] = relationship(
         "WorkflowWorkspace",
         back_populates="owner",
@@ -1153,6 +1158,30 @@ class PushSubscription(Base):
     )
 
     user: Mapped[User] = relationship("User", back_populates="push_subscriptions")
+
+
+class MobilePushToken(Base):
+    """Expo push token для мобильного приложения."""
+
+    __tablename__ = "mobile_push_tokens"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    expo_token: Mapped[str] = mapped_column(String(512), unique=True, index=True)
+    platform: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    device_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    user: Mapped[User] = relationship("User", back_populates="mobile_push_tokens")
 
 
 class WorkspaceMemberStudioModel(Base):

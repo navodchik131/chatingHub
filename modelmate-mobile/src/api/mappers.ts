@@ -1,5 +1,7 @@
 import type {
+  ChatterStatsSummaryOut,
   ConversationOut,
+  CreatorDonationEventOut,
   CreatorDonationLinkOut,
   IntegrationStatusOut,
   MessageOut,
@@ -9,7 +11,7 @@ import type {
   WorkspaceMemberOut,
 } from '@/src/api/types';
 import { resolveMediaUrl } from '@/src/api/config';
-import { fmtDateShort, fmtMoney, fmtTime, platformLabel, photoKindShortLabel } from '@/src/api/helpers';
+import { fmtDateShort, fmtMoney, fmtTime, platformLabel, photoKindShortLabel, rightsFromMask } from '@/src/api/helpers';
 import { archiveThumbUrl, isArchivePending } from '@/src/api/media';
 import { gradients } from '@/src/styles/tokens';
 
@@ -42,6 +44,8 @@ export function mapMessage(m: MessageOut) {
     side: outbound ? ('out' as const) : ('in' as const),
     text: m.text_original || '',
     tr,
+    time: fmtTime(m.created_at),
+    created_at: m.created_at,
     pending: Boolean(m.pending),
   };
 }
@@ -128,32 +132,123 @@ export function mapOverviewKpis(me: UserMeOut | null, conversations: Conversatio
 }
 
 export function mapDonationRow(d: CreatorDonationLinkOut) {
+  const status =
+    d.status === 'active'
+      ? 'ACTIVE'
+      : d.status === 'moderation'
+        ? 'МОДЕРАЦИЯ'
+        : d.status.toUpperCase();
   return {
     id: d.id,
     title: d.title,
-    status: d.status === 'active' ? 'ACTIVE' : d.status === 'moderation' ? 'МОДЕРАЦИЯ' : d.status.toUpperCase(),
+    status,
+    webLink: d.web_link || '',
+    telegramLink: d.telegram_link || '',
+    minAmount: d.min_amount_minor != null ? fmtMoney(d.min_amount_minor, d.currency || 'RUB') : '',
+    description: d.description || '',
   };
 }
 
-export function mapTeamMember(m: WorkspaceMemberOut, index: number) {
+export function mapDonationEventRow(ev: CreatorDonationEventOut) {
+  return {
+    id: ev.id,
+    label: ev.donor_label || ev.donation_link_title || 'Донат',
+    amount: fmtMoney(ev.amount_minor, ev.currency || 'RUB'),
+    time: fmtTime(ev.occurred_at),
+  };
+}
+
+function modelNameById(models: StudioModelOut[], id?: number | null): string {
+  if (!id) return '—';
+  return models.find((m) => m.id === id)?.name || '—';
+}
+
+export function mapIntegrationConnections(
+  platformId: string,
+  integrations: IntegrationStatusOut | null,
+  models: StudioModelOut[],
+) {
+  if (!integrations) return [];
+  if (platformId === 'tg') {
+    return (integrations.telegram_connections || []).map((c) => ({
+      id: c.id,
+      name: c.bot_username ? `@${c.bot_username}` : c.label || `#${c.id}`,
+      meta: [
+        c.webhook_registered ? 'webhook активен' : 'webhook ?',
+        modelNameById(models, c.studio_model_id),
+      ].join(' · '),
+      studioModelId: c.studio_model_id,
+    }));
+  }
+  if (platformId === 'fv') {
+    return (integrations.fanvue_connections || []).map((c) => ({
+      id: c.id,
+      name: c.creator_uuid ? `${String(c.creator_uuid).slice(0, 8)}…` : c.label || `#${c.id}`,
+      meta: [
+        c.oauth_connected ? 'OAuth' : 'OAuth ?',
+        modelNameById(models, c.studio_model_id),
+      ].join(' · '),
+      studioModelId: c.studio_model_id,
+    }));
+  }
+  if (platformId === 'tr') {
+    return (integrations.tribute_connections || []).map((c) => ({
+      id: c.id,
+      name: c.label || 'Tribute',
+      meta: modelNameById(models, c.studio_model_id),
+      studioModelId: c.studio_model_id,
+    }));
+  }
+  return [];
+}
+
+export function mapTeamMember(
+  m: WorkspaceMemberOut,
+  index: number,
+  models: StudioModelOut[] = [],
+  chatterStats?: ChatterStatsSummaryOut | null,
+) {
   const letter = (m.member_login[0] || '?').toUpperCase();
+  const st = (chatterStats?.members || []).find((s) => Number(s.user_id) === Number(m.id)) || {};
+  const names = (m.allowed_studio_model_ids || [])
+    .map((id) => modelNameById(models, id))
+    .filter((n) => n !== '—')
+    .join(', ');
+  const sec = st.median_reply_seconds;
+  const meta = [
+    m.is_active === false ? 'выкл' : 'активен',
+    names ? `персонажи: ${names}` : '',
+    st.outbound_messages != null ? `${st.outbound_messages} ответов` : '',
+    sec != null ? `SLA ${Math.floor(sec / 60)}м ${sec % 60}с` : '',
+  ].filter(Boolean).join(' · ');
   return {
     id: m.id,
     letter,
     name: m.member_login,
-    sub: `ID ${m.id}`,
+    sub: meta || `ID ${m.id}`,
     gradIndex: index % gradients.length,
+    rights: rightsFromMask(m.permissions_mask),
+    raw: m,
   };
 }
 
 export function mapCharPhotoTags(images: StudioModelOut['images']) {
-  return (images || []).slice(0, 3).map((img, i) => ({
+  return (images || []).map((img, i) => ({
     id: img.id,
     label: photoKindShortLabel(img.kind),
     gradIndex: i % gradients.length,
     url: resolveMediaUrl(img.url),
     kind: img.kind,
   }));
+}
+
+export function mapTeamKpi(chatterStats: ChatterStatsSummaryOut | null | undefined) {
+  const self = chatterStats?.self || chatterStats?.self_row || {};
+  const sec = self.median_reply_seconds;
+  return {
+    replies: String(self.outbound_messages ?? 0),
+    sla: sec != null ? `${Math.floor(sec / 60)}м ${sec % 60}с` : '—',
+  };
 }
 
 export function mapAdminUser(u: { id: number; email: string; role?: string; billing_plan?: string; credits_balance?: number; subscription_status?: string }) {

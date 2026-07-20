@@ -60,6 +60,7 @@ export type NavigationState = {
   connToken: string;
   opLogin: string;
   opPassword: string;
+  opEditId: number | null;
   adminSubUntil: string;
 };
 
@@ -138,6 +139,7 @@ export const defaultNavState: NavigationState = {
   connToken: '',
   opLogin: '',
   opPassword: '',
+  opEditId: null,
   adminSubUntil: '',
 };
 

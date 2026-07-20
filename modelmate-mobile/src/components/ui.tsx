@@ -238,7 +238,7 @@ export function ChatRow({
   const RowWrap = onPress ? Pressable : View;
   return (
     <RowWrap style={styles.chatRow} onPress={onPress}>
-      <Avatar letter={name[0]} index={gradIndex} size={44} />
+      <Avatar letter={name[0]} index={gradIndex} size={60} />
       <View style={styles.chatMain}>
         <View style={styles.chatNameRow}>
           <Text style={styles.chatName}>{name}</Text>
@@ -259,9 +259,7 @@ export function ChatRow({
           <View style={styles.unreadBadge}>
             <Text style={styles.unreadText}>{unread > 99 ? '99+' : unread}</Text>
           </View>
-        ) : (
-          <View style={styles.unreadSpacer} />
-        )}
+        ) : null}
       </View>
     </RowWrap>
   );
@@ -377,26 +375,26 @@ const styles = StyleSheet.create({
   modeText: { flex: 1 },
   modeTitle: { fontFamily: font.bodyExtra, fontSize: 13, color: color.text },
   modeDesc: { fontSize: 10.5, color: color.muted, marginTop: 2 },
-  chatRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 2 },
+  chatRow: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 16, paddingHorizontal: 4 },
   chatMain: { flex: 1, minWidth: 0 },
-  chatNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  chatName: { fontFamily: font.bodyExtra, fontSize: 14.5, color: color.text },
-  chatMsg: { fontSize: 12, color: color.muted, marginTop: 3 },
-  chatRight: { alignItems: 'flex-end', justifyContent: 'space-between', minHeight: 44, gap: 6 },
+  chatNameRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
+  chatName: { fontFamily: font.bodyExtra, fontSize: 18.5, color: color.text },
+  chatMsg: { fontSize: 16, color: color.muted, lineHeight: 21 },
+  chatRight: { alignItems: 'flex-end', justifyContent: 'space-between', minHeight: 60, gap: 7 },
   folderBtn: { paddingHorizontal: 4, paddingVertical: 2 },
   folderBtnText: { fontSize: 14 },
-  chatPlat: { fontFamily: font.mono, fontSize: 8.5, letterSpacing: 0.8, fontWeight: '700' },
+  chatPlat: { fontFamily: font.mono, fontSize: 10.5, letterSpacing: 0.6, fontWeight: '700' },
   unreadBadge: {
-    minWidth: 18,
-    height: 18,
-    borderRadius: 9,
-    paddingHorizontal: 4,
+    minWidth: 26,
+    height: 26,
+    borderRadius: 13,
+    paddingHorizontal: 6,
     backgroundColor: color.lime,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  unreadSpacer: { height: 18 },
-  unreadText: { fontFamily: font.monoBold, fontSize: 9, color: color.limeText, fontWeight: '800' },
+  unreadSpacer: { height: 0 },
+  unreadText: { fontFamily: font.monoBold, fontSize: 13, color: color.limeText, fontWeight: '800' },
   bubbleWrap: { flexDirection: 'row', justifyContent: 'flex-start' },
   bubbleWrapOut: { justifyContent: 'flex-end' },
   bubble: { maxWidth: '78%', paddingHorizontal: 12, paddingVertical: 9, borderRadius: 14, borderWidth: 1 },

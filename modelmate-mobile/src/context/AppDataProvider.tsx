@@ -12,16 +12,18 @@ import * as actions from '@/src/api/actions';
 import { refreshPendingArchiveImages } from '@/src/api/archivePoll';
 import { isArchivePending, archiveThumbUrl } from '@/src/api/media';
 import { resolveMediaUrl } from '@/src/api/config';
-import { fmtMoney, maskFromOpRights, photoTagsRu } from '@/src/api/helpers';
+import { charFieldsFromModel, fmtMoney, maskFromOpRights, photoTagsRu, resolveDonationBalances } from '@/src/api/helpers';
 import {
   mapAdminUser,
   mapArchiveTile,
   mapCharacter,
   mapDialogRow,
+  mapDonationEventRow,
   mapDonationRow,
   mapIntegrationCards,
   mapMessage,
   mapOverviewKpis,
+  mapTeamKpi,
   mapTeamMember,
   userDisplayName,
 } from '@/src/api/mappers';
@@ -31,7 +33,10 @@ import type {
   AdminStats,
   ConversationFolderOut,
   ConversationOut,
+  CreatorDonationEventOut,
   CreatorDonationLinkOut,
+  CreatorDonationOverviewOut,
+  ChatterStatsSummaryOut,
   IntegrationStatusOut,
   HealthOut,
   LocalFile,
@@ -56,6 +61,7 @@ type AppDataValue = {
   userName: string;
   userEmail: string;
   conversations: ReturnType<typeof mapDialogRow>[];
+  totalUnread: number;
   rawConversations: ConversationOut[];
   conversationFolders: ConversationFolderOut[];
   messages: ReturnType<typeof mapMessage>[];
@@ -72,6 +78,8 @@ type AppDataValue = {
   creditPacks: [string, string][];
   creditHistory: { label: string; amount: string; positive: boolean }[];
   donations: ReturnType<typeof mapDonationRow>[];
+  donationEvents: ReturnType<typeof mapDonationEventRow>[];
+  donationBalances: { total: number; available: number; held: number; paid: number; currency: string };
   donationAvailableMinor: number;
   payoutWallet: string;
   members: ReturnType<typeof mapTeamMember>[];
@@ -114,8 +122,10 @@ type AppDataValue = {
   requestPayout: () => Promise<void>;
   saveDonationDraft: (fields: NavigationState['donationFields'], charName: string) => Promise<void>;
   addOperator: (login: string, password: string, opRights: Record<string, boolean>) => Promise<void>;
+  updateOperator: (memberId: number, login: string, password: string, opRights: Record<string, boolean>) => Promise<void>;
+  deleteOperator: (memberId: number) => Promise<void>;
   saveConnection: (platformId: string, token: string, charName: string) => Promise<void>;
-  disconnectConnection: (platformId: string) => Promise<void>;
+  disconnectConnection: (platformId: string, connectionId: number) => Promise<void>;
   openBillingCheckout: (product: string) => Promise<string | null>;
   loadAdmin: () => Promise<void>;
   searchAdminUsers: (q: string) => Promise<void>;
@@ -163,10 +173,12 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const [billingPlansApi, setBillingPlansApi] = useState<unknown>(null);
   const [creditHistoryRaw, setCreditHistoryRaw] = useState<unknown[]>([]);
   const [rawDonations, setRawDonations] = useState<CreatorDonationLinkOut[]>([]);
+  const [rawDonationEvents, setRawDonationEvents] = useState<CreatorDonationEventOut[]>([]);
+  const [donationOverviewRaw, setDonationOverviewRaw] = useState<CreatorDonationOverviewOut | null>(null);
   const [donationAvailableMinor, setDonationAvailableMinor] = useState(0);
   const [payoutWallet, setPayoutWallet] = useState('');
   const [rawMembers, setRawMembers] = useState<WorkspaceMemberOut[]>([]);
-  const [chatterStatsRaw, setChatterStatsRaw] = useState<{ replies_per_month?: number; sla_percent?: number } | null>(null);
+  const [chatterStatsRaw, setChatterStatsRaw] = useState<ChatterStatsSummaryOut | null>(null);
   const [adminStats, setAdminStats] = useState<AdminStats | null>(null);
   const [adminUsersRaw, setAdminUsersRaw] = useState<ReturnType<typeof mapAdminUser>[]>([]);
   const [exifBotStats, setExifBotStats] = useState<AppDataValue['exifBotStats']>(null);
@@ -253,6 +265,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         healthData,
         donationOv,
         dons,
+        donationEvents,
         plans,
         history,
         payout,
@@ -266,13 +279,14 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         actions.refreshArchiveImages(),
         actions.fetchIntegrations() as Promise<IntegrationStatusOut | null>,
         actions.fetchHealth(),
-        actions.fetchDonationOverview() as Promise<{ available_minor?: number } | null>,
+        actions.fetchDonationOverview() as Promise<CreatorDonationOverviewOut | null>,
         actions.fetchDonations() as Promise<CreatorDonationLinkOut[]>,
+        actions.fetchDonationEvents() as Promise<CreatorDonationEventOut[]>,
         actions.fetchBillingPlans(),
         actions.fetchCreditHistory() as Promise<{ items?: unknown[] }>,
         actions.fetchPayoutSettings() as Promise<{ wallet_address?: string } | null>,
         actions.fetchMembers() as Promise<WorkspaceMemberOut[]>,
-        actions.fetchChatterStats() as Promise<{ replies_per_month?: number; sla_percent?: number } | null>,
+        actions.fetchChatterStats() as Promise<ChatterStatsSummaryOut | null>,
       ]);
 
       setMe(meData);
@@ -283,8 +297,11 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       setRawArchiveImages(Array.isArray(archiveImg) ? archiveImg : []);
       setRawIntegrations(integrationsData);
       setHealth(healthData);
-      setDonationAvailableMinor(Number(donationOv?.available_minor || 0));
+      setDonationOverviewRaw(donationOv);
+      const balances = resolveDonationBalances(donationOv, Array.isArray(donationEvents) ? donationEvents : []);
+      setDonationAvailableMinor(balances.available);
       setRawDonations(Array.isArray(dons) ? dons : []);
+      setRawDonationEvents(Array.isArray(donationEvents) ? donationEvents : []);
       setBillingPlansApi(plans);
       setCreditHistoryRaw(Array.isArray(history?.items) ? history.items : []);
       setPayoutWallet(String(payout?.wallet_address || ''));
@@ -374,14 +391,17 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
   const loadThread = useCallback(async (convId: number) => {
     activeThreadConvIdRef.current = convId;
+    setRawMessages([]);
     try {
       const msgs = (await actions.fetchMessages(convId)) as MessageOut[];
+      if (activeThreadConvIdRef.current !== convId) return;
       setRawMessages(Array.isArray(msgs) ? msgs : []);
       await actions.markConversationRead(convId);
       setRawConversations((prev) =>
         prev.map((c) => (c.id === convId ? { ...c, unread_count: 0 } : c)),
       );
     } catch (e) {
+      if (activeThreadConvIdRef.current !== convId) return;
       setError(e instanceof Error ? e.message : String(e));
     }
   }, []);
@@ -647,15 +667,22 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   );
 
   const saveCharacterFields = useCallback(async (charId: number, fields: NavigationState['charFields']) => {
+    const [agePart, ...cityParts] = (fields.ageCity || '').split(',').map((s) => s.trim());
+    const cityPart = cityParts.join(', ').trim();
+    const geoParts = (fields.geo || '').split(',').map((s) => s.trim());
+    const lat = geoParts[0] ? parseFloat(geoParts[0]) : undefined;
+    const lon = geoParts[1] ? parseFloat(geoParts[1]) : undefined;
     await actions.patchStudioModel(charId, {
       profile_text: fields.appearance,
-      companion_persona: JSON.stringify({
-        ageCity: fields.ageCity,
-        character: fields.character,
-        chatStyle: fields.chatStyle,
-        camera: fields.camera,
-        geo: fields.geo,
-      }),
+      companion_persona: {
+        age: agePart || undefined,
+        city: cityPart || undefined,
+        personality: fields.character || undefined,
+        speaking_style: fields.chatStyle || undefined,
+      },
+      ...(lat != null && !Number.isNaN(lat) ? { export_lat: lat } : {}),
+      ...(lon != null && !Number.isNaN(lon) ? { export_lon: lon } : {}),
+      ...(fields.camera ? { camera_preset_id: fields.camera } : {}),
     });
     await refreshAll();
   }, [refreshAll]);
@@ -693,13 +720,15 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
   const saveDonationDraft = useCallback(async (fields: NavigationState['donationFields'], charName: string) => {
     const modelId = modelIdByName(rawModels, charName);
-    const min = parseInt(fields.min.replace(/\D/g, ''), 10) || 10000;
+    const rub = parseFloat((fields.min || '').replace(',', '.'));
+    const min = Number.isFinite(rub) && rub > 0 ? Math.round(rub * 100) : 10000;
     await actions.saveDonationLink({
       title: fields.title,
       description: fields.desc,
       min_amount_minor: min,
       studio_model_id: modelId,
       currency: 'RUB',
+      submit: true,
     });
     await refreshAll();
   }, [rawModels, refreshAll]);
@@ -713,6 +742,21 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     await refreshAll();
   }, [refreshAll]);
 
+  const updateOperator = useCallback(async (memberId: number, login: string, password: string, opRights: Record<string, boolean>) => {
+    const payload: Record<string, unknown> = {
+      member_login: login,
+      permissions_mask: maskFromOpRights(opRights),
+    };
+    if (password.trim()) payload.password = password;
+    await actions.updateWorkspaceMember(memberId, payload);
+    await refreshAll();
+  }, [refreshAll]);
+
+  const deleteOperator = useCallback(async (memberId: number) => {
+    await actions.deleteWorkspaceMember(memberId);
+    await refreshAll();
+  }, [refreshAll]);
+
   const saveConnection = useCallback(async (platformId: string, token: string, charName: string) => {
     const modelId = modelIdByName(rawModels, charName);
     if (platformId === 'tg') await actions.saveTelegramBot(token, modelId ?? undefined);
@@ -720,12 +764,12 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     await refreshAll();
   }, [rawModels, refreshAll]);
 
-  const disconnectConnection = useCallback(async (platformId: string) => {
-    if (platformId === 'tg' && rawIntegrations?.telegram_connections?.[0]?.id) {
-      await actions.deleteTelegramConnection(rawIntegrations.telegram_connections[0].id);
-    }
+  const disconnectConnection = useCallback(async (platformId: string, connectionId: number) => {
+    if (platformId === 'tg') await actions.deleteTelegramConnection(connectionId);
+    else if (platformId === 'fv') await actions.deleteFanvueConnection(connectionId);
+    else if (platformId === 'tr') await actions.deleteTributeConnection(connectionId);
     await refreshAll();
-  }, [rawIntegrations, refreshAll]);
+  }, [refreshAll]);
 
   const openBillingCheckout = useCallback(async (product: string) => {
     try {
@@ -803,17 +847,18 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
   const { userName, userEmail } = userDisplayName(me);
   const conversations = rawConversations.map(mapDialogRow);
+  const totalUnread = rawConversations.reduce((sum, c) => sum + (c.unread_count || 0), 0);
   const messages = rawMessages.map(mapMessage);
   const models = rawModels.map(mapCharacter);
   const modelNames = rawModels.map((m) => m.name);
   const archiveTiles = rawArchiveImages.map((g, i) => mapArchiveTile(g, i, rawModels));
   const connectionsList = mapIntegrationCards(rawIntegrations);
-  const overviewKpis = mapOverviewKpis(me, rawConversations, donationAvailableMinor);
+  const donationBalances = resolveDonationBalances(donationOverviewRaw, rawDonationEvents);
+  const overviewKpis = mapOverviewKpis(me, rawConversations, donationBalances.available);
   const donations = rawDonations.map(mapDonationRow);
-  const members = rawMembers.map(mapTeamMember);
-  const chatterStats = chatterStatsRaw
-    ? { replies: String(chatterStatsRaw.replies_per_month ?? '—'), sla: `${chatterStatsRaw.sla_percent ?? '—'}%` }
-    : null;
+  const donationEvents = rawDonationEvents.map(mapDonationEventRow);
+  const members = rawMembers.map((m, i) => mapTeamMember(m, i, rawModels, chatterStatsRaw));
+  const chatterStats = mapTeamKpi(chatterStatsRaw);
 
   const creditHistory = (creditHistoryRaw as { description?: string; amount?: number }[]).slice(0, 10).map((row) => ({
     label: row.description || 'Операция',
@@ -832,6 +877,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       userName,
       userEmail,
       conversations,
+      totalUnread,
       rawConversations,
       conversationFolders,
       messages,
@@ -848,6 +894,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       creditPacks: defaultCreditPacks,
       creditHistory,
       donations,
+      donationEvents,
+      donationBalances,
       donationAvailableMinor,
       payoutWallet,
       members,
@@ -890,6 +938,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       requestPayout,
       saveDonationDraft,
       addOperator,
+      updateOperator,
+      deleteOperator,
       saveConnection,
       disconnectConnection,
       openBillingCheckout,
@@ -909,6 +959,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       userName,
       userEmail,
       conversations,
+      totalUnread,
       rawConversations,
       conversationFolders,
       messages,
@@ -923,6 +974,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       overviewKpis,
       creditHistory,
       donations,
+      donationEvents,
+      donationBalances,
       donationAvailableMinor,
       payoutWallet,
       members,
@@ -962,6 +1015,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       requestPayout,
       saveDonationDraft,
       addOperator,
+      updateOperator,
+      deleteOperator,
       saveConnection,
       disconnectConnection,
       openBillingCheckout,

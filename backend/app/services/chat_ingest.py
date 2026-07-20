@@ -12,6 +12,7 @@ from app.db.repo import add_message
 from app.services.chat_attachment import save_chat_image_bytes
 from app.services.chat_messages import add_message_attachment, message_to_out
 from app.services.realtime import hub
+from app.services.expo_push import notify_inbound_message_mobile
 from app.services.webpush import notify_inbound_message
 
 log = logging.getLogger(__name__)
@@ -95,6 +96,12 @@ async def persist_inbound_chat_message(
             title=f"{display} · {conv.platform.value}",
             body=preview or "Новое сообщение",
         )
+        await notify_inbound_message_mobile(
+            owner_user_id,
+            conversation_id=conv_id,
+            title=f"{display} · {conv.platform.value}",
+            body=preview or "Новое сообщение",
+        )
     return conv_id, payload
 
 
@@ -124,6 +131,12 @@ async def broadcast_inbound_after_commit(
     else:
         preview = preview[:200]
     await notify_inbound_message(
+        owner_user_id,
+        conversation_id=conv_id,
+        title=f"{display} · {conv.platform.value}",
+        body=preview or "Новое сообщение",
+    )
+    await notify_inbound_message_mobile(
         owner_user_id,
         conversation_id=conv_id,
         title=f"{display} · {conv.platform.value}",

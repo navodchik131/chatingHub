@@ -17,6 +17,13 @@ export const color = {
   dim: '#6B7076',
   bubbleIn: '#1A1C20',
   inputBg: '#0D0E11',
+  threadBg: '#141824',
+  bubbleInBg: 'rgba(38,42,52,0.92)',
+  bubbleOutStart: '#5A8DFF',
+  bubbleOutEnd: '#3D6EF0',
+  bubbleOutShadow: 'rgba(61,110,240,0.35)',
+  composerBg: '#121316',
+  composerField: '#15161A',
 } as const;
 
 export const font = {

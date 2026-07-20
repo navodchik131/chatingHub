@@ -25,7 +25,7 @@ export function SettingsMainScreen({ onBack, onOpenLanguage, onOpenBiometric, on
       <Card>
         <SettingsLink label={settingsLanguageRow(locale, t)} onPress={onOpenLanguage} />
         <SettingsLink label={t.settingsBiometric} onPress={onOpenBiometric} />
-        <SettingsLink label={t.settingsPush} onPress={onOpenPush} />
+        <SettingsLink label={t.settingsPush} onPress={onOpenPush} last />
       </Card>
     </ScreenScroll>
   );
@@ -105,12 +105,15 @@ export function SettingsBiometricScreen({ onBack }: { onBack: () => void }) {
 }
 
 export function SettingsPushScreen({ onBack }: { onBack: () => void }) {
-  const { pushEnabled, setPushEnabled, t } = useAppSettings();
+  const { pushEnabled, pushError, setPushEnabled, t } = useAppSettings();
 
   return (
     <ScreenScroll>
       <TopBar title={t.settingsPush} onBack={onBack} />
       <Text style={styles.hint}>{t.settingsPushHint}</Text>
+      {pushError ? (
+        <Text style={styles.warn}>{pushError}</Text>
+      ) : null}
       <Card>
         <CheckRow
           label={pushEnabled ? t.settingsPushEnabled : t.settingsPushDisabled}
@@ -122,9 +125,9 @@ export function SettingsPushScreen({ onBack }: { onBack: () => void }) {
   );
 }
 
-function SettingsLink({ label, onPress }: { label: string; onPress: () => void }) {
+function SettingsLink({ label, onPress, last }: { label: string; onPress: () => void; last?: boolean }) {
   return (
-    <Pressable style={styles.linkRow} onPress={onPress}>
+    <Pressable style={[styles.linkRow, last && styles.linkRowLast]} onPress={onPress}>
       <Text style={styles.linkLabel}>{label}</Text>
       <Text style={styles.linkChevron}>›</Text>
     </Pressable>
@@ -142,6 +145,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255,255,255,0.06)',
   },
+  linkRowLast: { borderBottomWidth: 0 },
   linkLabel: { flex: 1, fontFamily: font.bodySemi, fontSize: 13, color: color.text },
   linkChevron: { fontSize: 18, color: color.dim, paddingLeft: 8 },
   testBtn: {

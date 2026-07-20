@@ -14,6 +14,7 @@
     "android": {
       "package": "app.modelmate.mobile",
       "usesCleartextTraffic": true,
+      "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "backgroundColor": "#0A0B0D",
         "foregroundImage": "./assets/logo-m.jpeg"
@@ -35,7 +36,15 @@
         }
       ],
       "expo-local-authentication",
-      "expo-image"
+      "expo-image",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/logo-m.jpeg",
+          "color": "#D7F452",
+          "defaultChannel": "messages"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

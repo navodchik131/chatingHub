@@ -1159,6 +1159,32 @@ class PushUnsubscribeIn(BaseModel):
         return s
 
 
+class MobilePushRegisterIn(BaseModel):
+    expo_token: str
+    platform: str | None = None
+    device_name: str | None = None
+
+    @field_validator("expo_token")
+    @classmethod
+    def strip_token(cls, v: object) -> str:
+        s = str(v or "").strip()
+        if not s.startswith("ExponentPushToken") and not s.startswith("ExpoPushToken"):
+            raise ValueError("invalid expo push token")
+        return s
+
+
+class MobilePushUnregisterIn(BaseModel):
+    expo_token: str
+
+    @field_validator("expo_token")
+    @classmethod
+    def strip_token(cls, v: object) -> str:
+        s = str(v or "").strip()
+        if len(s) < 8:
+            raise ValueError("invalid expo push token")
+        return s
+
+
 # --- Admin ---
 
 

@@ -23,6 +23,7 @@ export function FieldLabel({ children }: { children: string }) {
 type InputProps = {
   value: string;
   onChangeText?: (text: string) => void;
+  onBlur?: TextInputProps['onBlur'];
   placeholder?: string;
   secureTextEntry?: boolean;
   keyboardType?: TextInputProps['keyboardType'];
@@ -34,6 +35,7 @@ type InputProps = {
 export function TextField({
   value,
   onChangeText,
+  onBlur,
   placeholder,
   secureTextEntry,
   keyboardType,
@@ -45,6 +47,7 @@ export function TextField({
     <TextInput
       value={value}
       onChangeText={onChangeText}
+      onBlur={onBlur}
       placeholder={placeholder}
       placeholderTextColor={color.dim}
       secureTextEntry={secureTextEntry}

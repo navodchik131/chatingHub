@@ -379,6 +379,31 @@ async def init_db() -> None:
         await conn.run_sync(_migrate_roadmap_v1)
         await conn.run_sync(_migrate_exif_bot_tables)
         await conn.run_sync(_migrate_ig_bot_tables)
+        await conn.run_sync(_migrate_mobile_push_tokens)
+
+
+def _migrate_mobile_push_tokens(sync_conn) -> None:
+    from sqlalchemy import inspect
+
+    insp = inspect(sync_conn)
+    if insp.has_table("mobile_push_tokens"):
+        return
+    sync_conn.exec_driver_sql(
+        """
+        CREATE TABLE mobile_push_tokens (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            expo_token VARCHAR(512) NOT NULL UNIQUE,
+            platform VARCHAR(16),
+            device_name VARCHAR(128),
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    sync_conn.exec_driver_sql(
+        "CREATE INDEX IF NOT EXISTS ix_mobile_push_tokens_user_id ON mobile_push_tokens(user_id)"
+    )
 
 
 def _migrate_ig_bot_tables(sync_conn) -> None:

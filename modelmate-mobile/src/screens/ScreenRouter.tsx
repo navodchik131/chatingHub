@@ -45,7 +45,6 @@ import {
   ChatRow,
   Kpi,
   MenuRow,
-  MessageBubble,
   Pill,
   ProgressBar,
   ScreenScroll,
@@ -80,9 +79,10 @@ import { color, font, gradients } from '@/src/styles/tokens';
 import { pickImage, pickVideo } from '@/src/utils/mediaPicker';
 import { RemoteImage } from '@/src/components/RemoteImage';
 import { SwipeableChatRow } from '@/src/components/SwipeableChatRow';
+import { ThreadView } from '@/src/components/ThreadView';
 import { resolveMediaUrl } from '@/src/api/config';
-import { fmtDateShort, fmtMoney, fmtRub } from '@/src/api/helpers';
-import { mapCharPhotoTags } from '@/src/api/mappers';
+import { charFieldsFromModel, fmtDateShort, fmtMoney, fmtRub } from '@/src/api/helpers';
+import { mapCharPhotoTags, mapIntegrationConnections } from '@/src/api/mappers';
 import {
   computeCarouselModeCardCost,
   computeImageGenerationCost,
@@ -114,7 +114,7 @@ function connIcon(kind: string, rgb: string) {
 export function ScreenRouter() {
   const nav = useNav();
   const app = useAppData();
-  const { t } = useAppSettings();
+  const { t, locale } = useAppSettings();
   const {
     userName,
     userEmail,
@@ -123,14 +123,18 @@ export function ScreenRouter() {
     conversationFolders,
     messages,
     models,
+    rawModels,
     modelNames,
     archiveTiles,
     connectionsList,
+    rawIntegrations,
     overviewKpis,
     billingPlans,
     creditPacks,
     creditHistory,
     donations,
+    donationEvents,
+    donationBalances,
     donationAvailableMinor,
     payoutWallet,
     members,
@@ -165,6 +169,8 @@ export function ScreenRouter() {
     requestPayout,
     saveDonationDraft,
     addOperator,
+    updateOperator,
+    deleteOperator,
     saveConnection,
     disconnectConnection,
     openBillingCheckout,
@@ -177,13 +183,21 @@ export function ScreenRouter() {
     refreshArchive,
   } = app;
   const { cur, pop, push, resetTo, openThread, startGen, regen, patch, chatIdx } = nav;
+  const threadConvId = conversations[chatIdx]?.id ?? null;
 
   useEffect(() => {
-    if (cur === 'thread') {
-      const conv = conversations[chatIdx];
-      if (conv?.id) void loadThread(conv.id);
+    if (cur === 'thread' && threadConvId) {
+      void loadThread(threadConvId);
     }
-  }, [cur, chatIdx, conversations, loadThread]);
+  }, [cur, threadConvId, loadThread]);
+
+  useEffect(() => {
+    if (!cur.startsWith('character:')) return;
+    const id = cur.slice(10);
+    const raw = models.find((m) => m.id === id)?.raw;
+    if (!raw) return;
+    patch({ charFields: charFieldsFromModel(raw) });
+  }, [cur, models, patch]);
 
   useEffect(() => {
     if (cur === 'archive' || cur === 'archive-item') void refreshArchive();
@@ -317,8 +331,7 @@ export function ScreenRouter() {
         ) : null}
         <View style={s.dialogList}>
           {shown.map(({ d, i }, idx) => (
-            <View key={d.id ?? i}>
-              {idx > 0 ? <View style={s.divider} /> : null}
+            <View key={d.id ?? i} style={s.dialogRowWrap}>
               <SwipeableChatRow
                 rowId={d.id ?? i}
                 open={d.id != null && nav.swipeOpenDialogId === d.id}
@@ -487,56 +500,24 @@ export function ScreenRouter() {
       );
     }
     return (
-      <View style={s.flex1}>
-        <View style={s.threadHead}>
-          <Pressable onPress={pop} hitSlop={8}><IcoBack size={18} stroke={color.muted} /></Pressable>
-          <Avatar letter={d.name[0]} index={d.gradIndex} size={32} />
-          <View style={s.flex1}>
-            <Text style={s.threadName}>{d.name}</Text>
-            <Text style={s.threadSub}>{d.plat}{d.vip ? ' · VIP' : ''}</Text>
-          </View>
-        </View>
-        <ScrollView style={s.flex1} contentContainerStyle={s.threadMsgs}>
-          {messages.map((m) => (
-            <MessageBubble key={m.id} text={m.text} out={m.side === 'out'} translation={m.tr || undefined} />
-          ))}
-        </ScrollView>
-        <View style={s.composer}>
-          <View style={s.attach}><Text>📎</Text></View>
-          <TextInput
-            style={s.input}
-            placeholder="Сообщение…"
-            placeholderTextColor={color.dim}
-            keyboardAppearance="dark"
-            selectionColor={color.lime}
-            value={nav.threadDraft}
-            onChangeText={(t) => patch({ threadDraft: t })}
-            autoCorrect={false}
-            spellCheck={false}
-            autoComplete="off"
-            onSubmitEditing={() => {
-              if (d.id && nav.threadDraft.trim()) {
-                const text = nav.threadDraft;
-                patch({ threadDraft: '' });
-                void sendThreadMessage(d.id, text);
-              }
-            }}
-            returnKeyType="send"
-          />
-          <Pressable
-            style={s.send}
-            onPress={() => {
-              if (d.id && nav.threadDraft.trim()) {
-                const text = nav.threadDraft;
-                patch({ threadDraft: '' });
-                void sendThreadMessage(d.id, text);
-              }
-            }}
-          >
-            <IcoSend size={15} stroke={color.limeText} />
-          </Pressable>
-        </View>
-      </View>
+      <ThreadView
+        name={d.name}
+        platform={d.plat}
+        vip={d.vip}
+        gradIndex={d.gradIndex}
+        messages={messages}
+        draft={nav.threadDraft}
+        onDraftChange={(value) => patch({ threadDraft: value })}
+        onBack={pop}
+        lang={locale}
+        onSend={() => {
+          if (d.id && nav.threadDraft.trim()) {
+            const text = nav.threadDraft;
+            patch({ threadDraft: '' });
+            void sendThreadMessage(d.id, text);
+          }
+        }}
+      />
     );
   }
 
@@ -1035,7 +1016,20 @@ export function ScreenRouter() {
                   </LinearGradient>
                 )
               ))}
-              <Pressable style={s.photoAdd} onPress={() => patch({ photoTagPick: !nav.photoTagPick })}><Text style={s.photoAddText}>+</Text></Pressable>
+              <Pressable
+                style={s.photoAdd}
+                onPress={async () => {
+                  try {
+                    const file = await pickImage();
+                    if (file) setUploadFile('charPhoto', file);
+                    patch({ photoTagPick: true });
+                  } catch {
+                    patch({ photoTagPick: true });
+                  }
+                }}
+              >
+                <Text style={s.photoAddText}>+</Text>
+              </Pressable>
             </View>
             {nav.photoTagPick ? (
               <Card style={[s.gap8, s.limeBorder]}>
@@ -1127,9 +1121,37 @@ export function ScreenRouter() {
   if (cur.startsWith('connection:')) {
     const id = cur.slice(11);
     const c = connectionsList.find((x) => x.id === id) ?? connectionsList[0];
+    const existing = mapIntegrationConnections(id, rawIntegrations, rawModels);
+    const defaultChar = existing[0]?.studioModelId
+      ? rawModels.find((m) => m.id === existing[0].studioModelId)?.name || modelNames[0]
+      : modelNames[0];
     return (
       <ScreenScroll>
         <TopBar title={c.name} onBack={pop} />
+        {existing.length ? (
+          <>
+            <SectionLabel>АКТИВНЫЕ ПОДКЛЮЧЕНИЯ</SectionLabel>
+            <Card style={s.gap8}>
+              {existing.map((row) => (
+                <View key={row.id} style={s.connExistingRow}>
+                  <View style={s.flex1}>
+                    <Text style={s.opLabel}>{row.name}</Text>
+                    <Text style={s.charSub}>{row.meta}</Text>
+                  </View>
+                  <Pressable
+                    style={s.redOutlineSmall}
+                    onPress={() => void disconnectConnection(id, row.id).then(pop)}
+                  >
+                    <Text style={s.redText}>Удалить</Text>
+                  </Pressable>
+                </View>
+              ))}
+            </Card>
+          </>
+        ) : (
+          <Card><Text style={s.charSub}>Нет активных подключений</Text></Card>
+        )}
+        <SectionLabel>ДОБАВИТЬ / ОБНОВИТЬ</SectionLabel>
         <Card style={s.gap10}>
           <FieldLabel>API-КЛЮЧ / ТОКЕН</FieldLabel>
           <TextField
@@ -1140,16 +1162,16 @@ export function ScreenRouter() {
           <FieldLabel>ПЕРСОНАЖ</FieldLabel>
           <ChipPicker
             items={modelNames}
-            value={nav.connChar}
-            onChange={(c) => patch({ connChar: c })}
+            value={nav.connChar || defaultChar}
+            onChange={(v) => patch({ connChar: v })}
           />
         </Card>
         <View style={s.rowGap8}>
-          <Pressable style={s.limeFlex} onPress={() => void saveConnection(id, nav.connToken, nav.connChar)}>
+          <Pressable
+            style={s.limeFlex}
+            onPress={() => void saveConnection(id, nav.connToken, nav.connChar || defaultChar).then(() => patch({ connToken: '' }))}
+          >
             <Text style={s.limeHalfText}>Сохранить</Text>
-          </Pressable>
-          <Pressable style={s.redOutline} onPress={() => void disconnectConnection(id)}>
-            <Text style={s.redText}>Отключить</Text>
           </Pressable>
         </View>
       </ScreenScroll>
@@ -1240,8 +1262,8 @@ export function ScreenRouter() {
       <ScreenScroll>
         <TopBar title="Донаты и выплаты" onBack={pop} />
         <View style={s.kpiRow}>
-          <Kpi label="ВСЕГО" value={fmtMoney(donationAvailableMinor)} />
-          <Kpi label="ДОСТУПНО" value={fmtMoney(donationAvailableMinor)} accent={color.green} />
+          <Kpi label="ВСЕГО" value={fmtMoney(donationBalances.total, donationBalances.currency)} />
+          <Kpi label="ДОСТУПНО" value={fmtMoney(donationBalances.available, donationBalances.currency)} accent={color.green} />
         </View>
         <SectionLabel>ВЫВОД СРЕДСТВ</SectionLabel>
         <Card style={s.gap9}>
@@ -1249,21 +1271,52 @@ export function ScreenRouter() {
           <TextField
             value={nav.donationFields.usdt || payoutWallet}
             onChangeText={(t) => patch({ donationFields: { ...nav.donationFields, usdt: t } })}
+            onBlur={() => {
+              const wallet = (nav.donationFields.usdt || payoutWallet).trim();
+              if (wallet) void savePayoutWallet(wallet);
+            }}
           />
           <Pressable style={s.pinkBtn} onPress={() => void requestPayout()}>
             <Text style={s.pinkBtnTitle}>Заявка на выплату</Text>
-            <Text style={s.pinkBtnCost}>{fmtMoney(Math.max(0, donationAvailableMinor - 200))}</Text>
+            <Text style={s.pinkBtnCost}>{fmtMoney(Math.max(0, donationBalances.available - 20000), donationBalances.currency)}</Text>
           </Pressable>
         </Card>
         <SectionLabel>ССЫЛКИ НА ДОНАТ</SectionLabel>
         <Card style={s.gap8}>
           {donations.map((d) => (
-            <View key={d.id} style={s.between}>
-              <Text style={s.opLabel}>{d.title}</Text>
-              <Pill text={d.status} bg={d.status === 'ACTIVE' ? 'rgba(74,222,128,0.12)' : 'rgba(251,146,60,0.12)'} fg={d.status === 'ACTIVE' ? color.green : color.orange} />
+            <View key={d.id} style={s.donationRow}>
+              <View style={s.flex1}>
+                <View style={s.between}>
+                  <Text style={s.opLabel}>{d.title}</Text>
+                  <Pill text={d.status} bg={d.status === 'ACTIVE' ? 'rgba(74,222,128,0.12)' : 'rgba(251,146,60,0.12)'} fg={d.status === 'ACTIVE' ? color.green : color.orange} />
+                </View>
+                {d.minAmount ? <Text style={s.charSub}>Мин. {d.minAmount}</Text> : null}
+                {d.webLink ? (
+                  <Pressable onPress={() => void Linking.openURL(d.webLink)}>
+                    <Text style={s.linkText} numberOfLines={1}>{d.webLink}</Text>
+                  </Pressable>
+                ) : null}
+                {d.telegramLink ? (
+                  <Pressable onPress={() => void Linking.openURL(d.telegramLink)}>
+                    <Text style={s.linkText} numberOfLines={1}>{d.telegramLink}</Text>
+                  </Pressable>
+                ) : null}
+              </View>
             </View>
           ))}
           {!donations.length ? <Text style={s.charSub}>Нет донатов</Text> : null}
+        </Card>
+        <SectionLabel>ПОСЛЕДНИЕ ПОСТУПЛЕНИЯ</SectionLabel>
+        <Card style={s.gap8}>
+          {donationEvents.length ? donationEvents.slice(0, 10).map((ev) => (
+            <View key={ev.id} style={s.between}>
+              <View style={s.flex1}>
+                <Text style={s.opLabel}>{ev.label}</Text>
+                <Text style={s.charSub}>{ev.time}</Text>
+              </View>
+              <Text style={s.greenText}>{ev.amount}</Text>
+            </View>
+          )) : <Text style={s.charSub}>Пока нет поступлений</Text>}
         </Card>
         <DashedAddButton title="+ Новый донат" onPress={() => push('new-donation')} />
       </ScreenScroll>
@@ -1323,26 +1376,50 @@ export function ScreenRouter() {
         </View>
         <SectionLabel>УЧАСТНИКИ</SectionLabel>
         {members.map((m) => (
-          <Card key={m.id}>
+          <Card
+            key={m.id}
+            onPress={() => {
+              patch({
+                opEditId: m.id,
+                opLogin: m.name,
+                opPassword: '',
+                opRights: m.rights,
+              });
+              push('newoperator');
+            }}
+          >
             <View style={s.rowCenter}>
               <Avatar letter={m.letter} index={m.gradIndex} size={32} />
               <View style={s.flex1}><Text style={s.opLabel}>{m.name}</Text><Text style={s.charSub}>{m.sub}</Text></View>
+              <IcoChevron size={14} stroke={color.dim} />
             </View>
           </Card>
         ))}
-        <DashedAddButton title="+ Добавить оператора" onPress={() => push('newoperator')} />
+        <DashedAddButton
+          title="+ Добавить оператора"
+          onPress={() => {
+            patch({
+              opEditId: null,
+              opLogin: '',
+              opPassword: '',
+              opRights: { chat: true, studio: true, models: false, keys: false, billing: false },
+            });
+            push('newoperator');
+          }}
+        />
       </ScreenScroll>
     );
   }
 
   if (cur === 'newoperator') {
+    const editing = nav.opEditId != null;
     return (
       <ScreenScroll>
-        <TopBar title="Новый оператор" onBack={pop} />
+        <TopBar title={editing ? 'Редактировать оператора' : 'Новый оператор'} onBack={pop} />
         <Card style={s.gap9}>
           <FieldLabel>ЛОГИН</FieldLabel>
           <TextField value={nav.opLogin} onChangeText={(t) => patch({ opLogin: t })} autoCapitalize="none" />
-          <FieldLabel>ПАРОЛЬ</FieldLabel>
+          <FieldLabel>{editing ? 'НОВЫЙ ПАРОЛЬ (необязательно)' : 'ПАРОЛЬ'}</FieldLabel>
           <TextField value={nav.opPassword} onChangeText={(t) => patch({ opPassword: t })} secureTextEntry />
         </Card>
         <SectionLabel>ПРАВА ДОСТУПА</SectionLabel>
@@ -1351,7 +1428,29 @@ export function ScreenRouter() {
             <CheckRow key={r.k} label={r.l} checked={!!nav.opRights[r.k]} onToggle={() => patch({ opRights: { ...nav.opRights, [r.k]: !nav.opRights[r.k] } })} />
           ))}
         </Card>
-        <LimeButton title="Создать участника" onPress={() => void addOperator(nav.opLogin, nav.opPassword, nav.opRights).then(pop)} />
+        <LimeButton
+          title={editing ? 'Сохранить изменения' : 'Создать участника'}
+          onPress={() => {
+            const action = editing && nav.opEditId
+              ? updateOperator(nav.opEditId, nav.opLogin, nav.opPassword, nav.opRights)
+              : addOperator(nav.opLogin, nav.opPassword, nav.opRights);
+            void action.then(() => {
+              patch({ opEditId: null, opLogin: '', opPassword: '' });
+              pop();
+            });
+          }}
+        />
+        {editing && nav.opEditId ? (
+          <Pressable
+            style={[s.redOutline, { marginTop: 12 }]}
+            onPress={() => void deleteOperator(nav.opEditId!).then(() => {
+              patch({ opEditId: null, opLogin: '', opPassword: '' });
+              pop();
+            })}
+          >
+            <Text style={s.redText}>Удалить участника</Text>
+          </Pressable>
+        ) : null}
       </ScreenScroll>
     );
   }
@@ -1602,7 +1701,11 @@ const s = StyleSheet.create({
     fontWeight: '800',
     color: color.text,
   },
-  dialogList: { paddingTop: 4 },
+  dialogList: { paddingTop: 0 },
+  dialogRowWrap: {
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.045)',
+  },
   folderAddBtn: {
     width: 38,
     height: 38,
@@ -1611,10 +1714,10 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  folderTabs: { gap: 22, paddingHorizontal: 2, paddingBottom: 10, marginBottom: 4, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.07)' },
-  folderTab: { paddingVertical: 10, paddingHorizontal: 2, borderBottomWidth: 2.5, borderBottomColor: 'transparent', marginBottom: -1 },
+  folderTabs: { gap: 22, paddingHorizontal: 18, paddingBottom: 10, marginBottom: 0, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.07)' },
+  folderTab: { paddingVertical: 12, paddingHorizontal: 2, borderBottomWidth: 2.5, borderBottomColor: 'transparent', marginBottom: -1 },
   folderTabActive: { borderBottomColor: color.lime },
-  folderTabText: { fontSize: 15, fontWeight: '600', color: color.muted },
+  folderTabText: { fontSize: 17, fontWeight: '600', color: color.muted },
   folderTabTextActive: { fontWeight: '800', color: color.text },
   folderActions: { flexDirection: 'row', gap: 8, marginBottom: 8 },
   folderActionBtn: {
@@ -1726,6 +1829,10 @@ const s = StyleSheet.create({
   pinkBtn: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: color.pink, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, marginTop: 4 },
   pinkBtnTitle: { flex: 1, fontFamily: font.bodyExtra, fontSize: 12.5, color: '#2A0A1C' },
   pinkBtnCost: { fontFamily: font.mono, fontSize: 10.5, color: '#5E2140' },
+  donationRow: { paddingVertical: 4, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.06)' },
+  linkText: { fontSize: 11, color: color.blue, marginTop: 4 },
+  connExistingRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 6 },
+  redOutlineSmall: { paddingHorizontal: 10, paddingVertical: 7, borderRadius: 8, borderWidth: 1, borderColor: 'rgba(248,113,113,0.3)' },
   redOutline: { paddingHorizontal: 16, paddingVertical: 11, borderRadius: 10, borderWidth: 1, borderColor: 'rgba(248,113,113,0.3)' },
   adminHead: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingBottom: 12, paddingHorizontal: 4 },
   adminTitle: { flex: 1, fontFamily: font.display, fontSize: 17, color: color.text },
