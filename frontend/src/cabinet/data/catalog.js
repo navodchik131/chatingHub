@@ -62,6 +62,33 @@ export const modeDefs = (lang, cr) => [
   },
 ];
 
+export const videoModeDefs = (lang) => [
+  {
+    id: 'motion-control',
+    icon: 'film',
+    title: 'Motion control',
+    desc: lang === 'ru'
+      ? 'Повтор движения из референс-видео на вашем персонаже'
+      : 'Replay motion from a reference clip on your character',
+    longDesc: lang === 'ru'
+      ? 'Загрузите референс-видео и первый кадр — движение и промпт определятся автоматически, как в Workflow.'
+      : 'Upload a reference clip and first frame — motion and prompt are detected automatically, like in Workflow.',
+  },
+  {
+    id: 'prompt',
+    icon: 'text',
+    title: lang === 'ru' ? 'По промпту' : 'By prompt',
+    desc: lang === 'ru'
+      ? 'Видео из текстового описания сцены'
+      : 'Video from a text scene description',
+    longDesc: lang === 'ru'
+      ? 'Опишите сцену — модель оживит кадр по вашему тексту.'
+      : 'Describe the scene — the model animates the frame from your text.',
+    disabled: true,
+    badge: lang === 'ru' ? 'В разработке' : 'In development',
+  },
+];
+
 export const guideDefs = (lang) => [
   {
     title: lang === 'ru' ? 'Создать персонажа' : 'Create a character',

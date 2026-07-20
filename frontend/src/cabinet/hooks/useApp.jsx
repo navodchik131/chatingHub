@@ -37,6 +37,7 @@ const initial = {
   replyToMessageId: null,
   slotSource: {},
   hasFirstFrame: 'yes',
+  vidMode: 'motion-control',
   vidQuality: '1080',
   vidFormat: '9:16',
   vidTime: '5',

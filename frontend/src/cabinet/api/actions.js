@@ -366,6 +366,7 @@ export async function runMotionFirstFrame(params) {
   if (params.frameFile) fd.append('first_frame_image', params.frameFile)
   if (params.existingGenerationId) fd.append('existing_generation_id', String(params.existingGenerationId))
   if (params.description) fd.append('description', params.description)
+  if (params.autoMotionPrompt !== false) fd.append('auto_motion_prompt', '1')
   const accepted = await postStudioJobStart('/api/studio/motion/first-frame', { method: 'POST', body: fd })
   if (accepted.job_id) {
     const result = await waitForStudioJobResult(accepted.job_id, { maxWaitMs: 10 * 60 * 1000 })
@@ -377,7 +378,7 @@ export async function runMotionFirstFrame(params) {
 export async function runMotionVideo(params) {
   const fd = new FormData()
   fd.append('model_id', String(params.modelId))
-  fd.append('prompt', params.prompt)
+  fd.append('prompt', params.prompt || '')
   fd.append('output_aspect', params.aspect || '9:16')
   const raw = String(params.resolution || '1080').toLowerCase()
   const videoResolution = raw === '4k' || raw === '1080' || raw === '1080p'
@@ -390,8 +391,10 @@ export async function runMotionVideo(params) {
   fd.append('video_resolution', videoResolution)
   if (params.durationSeconds) fd.append('duration_seconds', String(params.durationSeconds))
   if (params.motionVideoFileId) fd.append('motion_video_file_id', params.motionVideoFileId)
-  if (params.frameFile) fd.append('image', params.frameFile)
-  if (params.existingGenerationId) fd.append('existing_generation_id', String(params.existingGenerationId))
+  if (params.firstFrameGenerationId) {
+    fd.append('first_frame_generation_id', String(params.firstFrameGenerationId))
+  }
+  if (params.autoMotionPrompt) fd.append('auto_motion_prompt', '1')
   return postStudioJob('/api/studio/motion/render-video', { method: 'POST', body: fd })
 }
 

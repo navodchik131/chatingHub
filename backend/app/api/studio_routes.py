@@ -5357,7 +5357,9 @@ async def api_studio_motion_render_video(
         raise HTTPException(status_code=400, detail="Некорректный model_id") from None
     await require_studio_model_access(session, user, mid)
 
-    if not (prompt or "").strip():
+    mv_id_early = str(motion_video_file_id or "").strip()
+    auto_mp = _truthy_wavespeed_flag(auto_motion_prompt)
+    if not (prompt or "").strip() and not (auto_mp and mv_id_early):
         raise HTTPException(status_code=400, detail="Опишите сцену, движение и при необходимости одежду.")
 
     try:
@@ -5576,7 +5578,8 @@ async def _studio_job_execute_motion_render_video(
             )
 
     if not prompt.strip() and not workflow_source:
-        raise RuntimeError("Опишите сцену и движение для видео.")
+        if not (_truthy_wavespeed_flag(auto_motion_prompt) and mv_id):
+            raise RuntimeError("Опишите сцену и движение для видео.")
 
     sub_b, llm_row, ws_row, plan, _credits, _demo = await load_owner_studio_billing(session, oid)
     _require_studio_subscription(user, sub_b, credits_balance=_credits, demo_generations_remaining=_demo)

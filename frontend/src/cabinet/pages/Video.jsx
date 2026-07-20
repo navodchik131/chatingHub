@@ -1,13 +1,16 @@
 import { useEffect, useRef, useMemo } from 'react';
 import Hoverable from '../components/Hoverable';
-import { IcoFilm, IcoSpark, IcoUpload, IcoPlay } from '../components/Icons';
+import { IcoFilm, IcoSpark, IcoUpload, IcoPlay, IcoText } from '../components/Icons';
 import { Fade, PageTitle, Eyebrow, Chip, SelectPill } from '../components/ui';
 import { useApp } from '../hooks/useApp';
 import { color, line, font, G } from '../styles/tokens';
-import { refUploadStyle, borderHoverOff } from '../styles/mixins';
+import { modeCardStyle, refUploadStyle, borderHoverOff } from '../styles/mixins';
+import { videoModeDefs } from '../data/catalog';
 import { archiveThumbUrl, archiveDownloadUrl, isArchivePending } from '../api/actions';
 import { sameStudioModelId } from '../api/studioHelpers';
 import { computeMotionVideoCreditCost } from '../../studioMotionPricing';
+
+const vidModeIcons = { film: IcoFilm, text: IcoText };
 
 /** Как на бэкенде: 720/1080/4k → Seedance resolution (4k в API уходит как 1080p). */
 function vidQualityToResolution(vidQuality) {
@@ -28,14 +31,18 @@ export default function Video() {
   const genFirstFrame = () => {
     setS({ ffState: 'loading' });
     void cabinet
-      .generateFirstFrame(s, s.motionPrompt || '')
+      .generateFirstFrame(s, '')
       .then(() => setS({ ffState: 'done' }))
       .catch(() => setS({ ffState: 'idle' }));
   };
 
   const handleGenerateVideo = () => {
-    void cabinet.generateVideo(s, s.motionPrompt || '');
+    void cabinet.generateVideo(s);
   };
+
+  const vidModes = videoModeDefs(lang);
+  const curVidMode = vidModes.find((m) => m.id === s.vidMode) || vidModes[0];
+  const motionControl = s.vidMode === 'motion-control';
 
   const studioGrid = isMobile
     ? { display: 'grid', gridTemplateColumns: '1fr', gap: 14 }
@@ -73,6 +80,58 @@ export default function Video() {
         <div style={{ fontSize: 12.5, color: color.textDim }}>{t.videoDesc}</div>
       </div>
 
+      {/* mode cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: 10, marginBottom: 18 }}>
+        {vidModes.map((m) => {
+          const on = s.vidMode === m.id;
+          const Icon = vidModeIcons[m.icon];
+          const modeSt = modeCardStyle(on);
+          const disabled = Boolean(m.disabled);
+          return (
+            <Hoverable
+              key={m.id}
+              style={{
+                ...modeSt.base,
+                ...(disabled ? { opacity: 0.55, cursor: 'not-allowed' } : {}),
+              }}
+              hover={disabled ? {} : modeSt.hover}
+              onClick={() => {
+                if (!disabled) setS({ vidMode: m.id });
+              }}
+              aria-pressed={on}
+              aria-disabled={disabled}
+            >
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 10 }}>
+                <div
+                  style={{
+                    width: 36, height: 36, borderRadius: 11, display: 'flex',
+                    alignItems: 'center', justifyContent: 'center',
+                    ...(on
+                      ? { background: 'rgba(215,244,82,.15)', color: color.lime }
+                      : { background: 'rgba(255,255,255,.06)', color: color.textDim }),
+                  }}
+                >
+                  <span style={{ display: 'flex', width: 18, height: 18 }}><Icon /></span>
+                </div>
+                {m.badge && (
+                  <span
+                    style={{
+                      fontFamily: font.mono, fontSize: 8.5, letterSpacing: '0.6px', fontWeight: 700,
+                      background: 'rgba(255,255,255,.06)', border: `1px solid ${line.strong}`,
+                      borderRadius: 6, padding: '3px 7px', color: color.textDim, whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {m.badge}
+                  </span>
+                )}
+              </div>
+              <div style={{ fontWeight: 800, fontSize: 13.5, marginBottom: 4 }}>{m.title}</div>
+              <div style={{ fontSize: 11, color: color.textDim, lineHeight: 1.45 }}>{m.desc}</div>
+            </Hoverable>
+          );
+        })}
+      </div>
+
       <div style={studioGrid}>
         {/* form */}
         <div
@@ -81,7 +140,13 @@ export default function Video() {
             padding: 18, display: 'flex', flexDirection: 'column', gap: 16, height: 'fit-content',
           }}
         >
-          {/* character */}
+          <div>
+            <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 3 }}>{curVidMode.title}</div>
+            <div style={{ fontSize: 11.5, color: color.textDim, lineHeight: 1.5 }}>{curVidMode.longDesc}</div>
+          </div>
+
+          {motionControl && (
+          <>
           <div>
             <Eyebrow>{t.character}</Eyebrow>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -305,23 +370,23 @@ export default function Video() {
             </div>
           )}
 
-          {/* motion prompt */}
-          <div>
-            <Eyebrow>{t.motionPrompt}</Eyebrow>
-            <textarea
-              rows={2}
-              placeholder={t.motionHint}
-              aria-label={t.motionPrompt}
-              value={s.motionPrompt || ''}
-              onChange={(e) => setS({ motionPrompt: e.target.value })}
-              style={{
-                width: '100%', background: color.bgPanel, border: `1px solid ${line.soft}`,
-                borderRadius: 10, padding: '10px 12px', color: color.text,
-                fontFamily: font.body, fontSize: 12.5, resize: 'vertical', outline: 'none',
-              }}
-            />
-          </div>
+          </>
+          )}
 
+          {!motionControl && (
+            <div
+              style={{
+                border: `1px dashed ${line.strong}`, borderRadius: 12, padding: '24px 16px',
+                textAlign: 'center', color: color.textDim, fontSize: 12.5, lineHeight: 1.5,
+              }}
+            >
+              {t.inDevelopment}
+            </div>
+          )}
+
+          {motionControl && (
+          <>
+          {/* motion prompt — скрыто: промпт генерируется на сервере из референс-видео */}
           {/* quality / format / duration */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             <div>
@@ -364,6 +429,8 @@ export default function Video() {
               −{vidCost} {t.cr}
             </span>
           </Hoverable>
+          </>
+          )}
         </div>
 
         {/* archive */}

@@ -841,19 +841,29 @@ export function CabinetDataProvider({ children }) {
   )
 
   const generateVideo = useCallback(
-    async (appState, prompt) => {
+    async (appState) => {
       if (!selectedModelId) {
         setError('Выберите персонажа')
         return
       }
-      if (!prompt?.trim()) {
+      const motionControl = (appState.vidMode || 'motion-control') === 'motion-control'
+      if (motionControl && !motionVideoFileId) {
+        setError('Загрузите референс-видео')
+        return
+      }
+      const prompt = (appState.motionPrompt || '').trim()
+      if (!motionControl && !prompt) {
         setError('Опишите движение')
         return
       }
+      const ffGenId = appState.carouselPickId || firstFrameGenId
       const model = models.find((m) => Number(m.id) === Number(selectedModelId))
+      const promptExcerpt = motionControl
+        ? 'Motion control'
+        : prompt
       const { item, tempId } = createOptimisticStudioArchiveItem({
         mediaKind: 'video',
-        promptExcerpt: prompt.trim(),
+        promptExcerpt,
         studioModelId: selectedModelId,
         modelName: model?.name ?? null,
         outputAspect: appState.vidFormat || selectedAspect,
@@ -863,13 +873,13 @@ export function CabinetDataProvider({ children }) {
       try {
         const accepted = await actions.runMotionVideo({
           modelId: selectedModelId,
-          prompt: prompt.trim(),
+          prompt: motionControl ? '' : prompt,
           aspect: appState.vidFormat || selectedAspect,
           resolution: appState.vidQuality || '1080',
           durationSeconds: Number(appState.vidTime) || 5,
           motionVideoFileId,
-          frameFile: uploadFiles['motion-frame'],
-          existingGenerationId: appState.carouselPickId || firstFrameGenId,
+          firstFrameGenerationId: ffGenId,
+          autoMotionPrompt: motionControl && Boolean(motionVideoFileId),
         })
         setArchiveVideos((prev) => applyJobToOptimisticArchive(prev, [tempId], accepted))
         void refreshArchivePending()
