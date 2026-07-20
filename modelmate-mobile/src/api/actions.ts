@@ -324,6 +324,13 @@ export async function adjustAdminUserCredits(userId: number, delta: number) {
   });
 }
 
+export async function resetAdminUserPassword(userId: number, password: string) {
+  return apiJson(`/api/admin/users/${userId}/password`, {
+    method: 'POST',
+    body: JSON.stringify({ password }),
+  });
+}
+
 export async function sendAdminCampaign(subject: string) {
   return apiJson('/api/admin/email/campaigns', {
     method: 'POST',

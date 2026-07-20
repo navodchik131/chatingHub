@@ -54,6 +54,7 @@ export type NavigationState = {
   donationFields: Record<string, string>;
   donationCharIdx: number;
   adminCreditsDelta: string;
+  adminNewPassword: string;
   adminSearch: string;
   broadcastSubject: string;
   imgPrompt: string;
@@ -133,6 +134,7 @@ export const defaultNavState: NavigationState = {
   },
   donationCharIdx: 0,
   adminCreditsDelta: '',
+  adminNewPassword: '',
   adminSearch: '',
   broadcastSubject: '',
   imgPrompt: '',

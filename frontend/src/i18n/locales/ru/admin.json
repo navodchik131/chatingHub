@@ -204,7 +204,11 @@
     "platformAdmin": "Администратор платформы",
     "creditDeltaPlaceholder": "+/- кредиты",
     "apply": "Применить",
-    "creditDeltaError": "Укажите целое число кредитов (не 0)."
+    "creditDeltaError": "Укажите целое число кредитов (не 0).",
+    "newPassword": "Новый пароль",
+    "newPasswordPlaceholder": "Минимум 8 символов",
+    "savePassword": "Сохранить пароль",
+    "passwordTooShort": "Пароль должен быть не короче 8 символов."
   },
   "drill": {
     "showList": "Показать список",

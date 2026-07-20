@@ -204,7 +204,11 @@
     "platformAdmin": "Platform administrator",
     "creditDeltaPlaceholder": "+/- credits",
     "apply": "Apply",
-    "creditDeltaError": "Enter a whole number of credits (not 0)."
+    "creditDeltaError": "Enter a whole number of credits (not 0).",
+    "newPassword": "New password",
+    "newPasswordPlaceholder": "At least 8 characters",
+    "savePassword": "Save password",
+    "passwordTooShort": "Password must be at least 8 characters."
   },
   "drill": {
     "showList": "Show list",

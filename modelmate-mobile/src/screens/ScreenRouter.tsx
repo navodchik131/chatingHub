@@ -179,6 +179,7 @@ export function ScreenRouter() {
     searchAdminUsers,
     saveAdminSubscription,
     adjustAdminCredits,
+    resetAdminPassword,
     sendBroadcast,
     genResults,
     refreshAll,
@@ -1567,6 +1568,7 @@ export function ScreenRouter() {
     return (
       <ScreenScroll>
         <TopBar title={u.email.split('@')[0]} onBack={pop} />
+        {appError ? <Text style={s.errorBanner}>{appError}</Text> : null}
         <Card style={s.gap8}>
           <View style={s.between}><Text style={s.opLabel}>Роль</Text><Text style={s.bold}>{u.role}</Text></View>
           <View style={s.between}><Text style={s.opLabel}>Тариф</Text><Text style={s.bold}>{u.plan}</Text></View>
@@ -1600,6 +1602,26 @@ export function ScreenRouter() {
           <Text style={s.savePhotoText}>Сохранить подписку</Text>
         </Pressable>
         <SectionLabel>ДОСТУП И КРЕДИТЫ</SectionLabel>
+        <Card style={s.gap8}>
+          <FieldLabel>НОВЫЙ ПАРОЛЬ</FieldLabel>
+          <TextField
+            value={nav.adminNewPassword}
+            onChangeText={(t) => patch({ adminNewPassword: t })}
+            placeholder="Минимум 8 символов"
+            secureTextEntry
+          />
+          <Pressable
+            style={s.savePhoto}
+            disabled={nav.adminNewPassword.trim().length < 8}
+            onPress={() => {
+              void resetAdminPassword(u.id, nav.adminNewPassword).then(() => {
+                patch({ adminNewPassword: '' });
+              });
+            }}
+          >
+            <Text style={s.savePhotoText}>Сохранить пароль</Text>
+          </Pressable>
+        </Card>
         <Card style={s.rowGap8}>
           <View style={s.flex1}>
             <TextField

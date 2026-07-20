@@ -34,6 +34,7 @@ export function AdminUserPanel({
 }) {
   const { t } = useTranslation('admin')
   const [creditDelta, setCreditDelta] = useState('')
+  const [newPassword, setNewPassword] = useState('')
   const isOwner = user.parent_user_id == null
   const periodKey = `admin-panel-period-${user.id}-${user.subscription_period_end ?? 'none'}`
 
@@ -81,6 +82,31 @@ export function AdminUserPanel({
       return
     }
     onUpdated((await r.json()) as AdminUserRow)
+  }
+
+  const resetPassword = async () => {
+    const password = newPassword.trim()
+    if (password.length < 8) {
+      onError(t('userPanel.passwordTooShort'))
+      return
+    }
+    onError(null)
+    onBusy(true)
+    try {
+      const r = await apiFetch(`/api/admin/users/${user.id}/password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password }),
+      })
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        onError(formatHttpApiError(r, j))
+        return
+      }
+      setNewPassword('')
+    } finally {
+      onBusy(false)
+    }
   }
 
   const applyCredits = async () => {
@@ -283,6 +309,25 @@ export function AdminUserPanel({
             {t('userPanel.platformAdmin')}
           </label>
         ) : null}
+        <label className="admin-field">
+          <span>{t('userPanel.newPassword')}</span>
+          <input
+            type="password"
+            autoComplete="new-password"
+            placeholder={t('userPanel.newPasswordPlaceholder')}
+            value={newPassword}
+            disabled={busy}
+            onChange={(e) => setNewPassword(e.target.value)}
+          />
+        </label>
+        <button
+          type="button"
+          className="ghost-btn"
+          disabled={busy || newPassword.trim().length < 8}
+          onClick={() => void resetPassword()}
+        >
+          {t('userPanel.savePassword')}
+        </button>
         <div className="admin-credit-row">
           <input
             type="text"

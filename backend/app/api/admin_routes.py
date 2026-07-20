@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.auth.deps import get_platform_admin
+from app.auth.passwords import hash_password
 from app.db.models import (
     Conversation,
     CreditAccount,
@@ -21,6 +22,7 @@ from app.db.session import get_session
 from app.schemas import (
     AdminCreditsIn,
     AdminCreditsOut,
+    AdminPasswordResetIn,
     AdminSegmentOut,
     AdminStatsOut,
     AdminSubscriptionPatchIn,
@@ -268,6 +270,21 @@ async def admin_patch_user(
         owner_models=owner_models,
         owner_gens=owner_gens,
     )
+
+
+@router.post("/admin/users/{user_id}/password")
+async def admin_user_password(
+    user_id: int,
+    body: AdminPasswordResetIn,
+    session: AsyncSession = Depends(get_session),
+    _: User = Depends(get_platform_admin),
+) -> dict[str, bool]:
+    u = await session.get(User, user_id)
+    if not u:
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
+    u.hashed_password = hash_password(body.password)
+    await session.commit()
+    return {"ok": True}
 
 
 @router.post("/admin/users/{user_id}/credits", response_model=AdminCreditsOut)

@@ -1349,6 +1349,10 @@ class AdminUserPatchIn(BaseModel):
     is_platform_admin: bool | None = None
 
 
+class AdminPasswordResetIn(BaseModel):
+    password: str = Field(min_length=8, max_length=128)
+
+
 class AdminCreditsIn(BaseModel):
     delta: int
     note: str | None = Field(default=None, max_length=2000)

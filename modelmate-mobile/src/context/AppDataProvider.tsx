@@ -134,6 +134,7 @@ type AppDataValue = {
   searchAdminUsers: (q: string) => Promise<void>;
   saveAdminSubscription: (userId: number, payload: Record<string, unknown>) => Promise<void>;
   adjustAdminCredits: (userId: number, deltaText: string) => Promise<void>;
+  resetAdminPassword: (userId: number, password: string) => Promise<void>;
   sendBroadcast: (subject: string) => Promise<void>;
 };
 
@@ -906,6 +907,21 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     await searchAdminUsers('');
   }, [searchAdminUsers]);
 
+  const resetAdminPassword = useCallback(async (userId: number, password: string) => {
+    const trimmed = password.trim();
+    if (trimmed.length < 8) {
+      setError('Пароль должен быть не короче 8 символов');
+      return;
+    }
+    setError(null);
+    try {
+      await actions.resetAdminUserPassword(userId, trimmed);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      throw e;
+    }
+  }, []);
+
   const sendBroadcast = useCallback(async (subject: string) => {
     await actions.sendAdminCampaign(subject);
   }, []);
@@ -1014,6 +1030,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       searchAdminUsers,
       saveAdminSubscription,
       adjustAdminCredits,
+      resetAdminPassword,
       sendBroadcast,
     }),
     [
@@ -1093,6 +1110,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       searchAdminUsers,
       saveAdminSubscription,
       adjustAdminCredits,
+      resetAdminPassword,
       sendBroadcast,
     ],
   );
