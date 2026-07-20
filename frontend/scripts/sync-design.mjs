@@ -335,7 +335,7 @@ const TEMPLATE_PATCHES = [
     `<div onClick="{{ af.open }}" style="{{ af.cardStyle }}" style-hover="{{ af.cardHover }}">
                   <div style="{{ af.bg }}" style-hover="{{ af.pending || af.failed ? '' : 'filter:brightness(1.08);' }}">
                     <sc-if value="{{ af.pending }}" hint-placeholder-val="{{ false }}">
-                      <span style="{{ af.spinnerWrap }}"><span style="{{ af.spinnerStyle }}"></span></span>
+                      <span style="{{ af.spinnerWrap }}"><span class="mm-spin" style="{{ af.spinnerStyle }}"></span></span>
                     </sc-if>
                     <sc-if value="{{ af.failed }}" hint-placeholder-val="{{ false }}">
                       <span style="{{ af.failedWrap }}"><span style="{{ af.failedBadgeStyle }}">{{ af.failedBadge }}</span><span style="{{ af.failedStyle }}">{{ af.failedLabel }}</span></span>

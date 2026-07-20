@@ -766,6 +766,47 @@ class Conversation(Base):
         return bool(self.telegram_photo_file_id)
 
 
+class ConversationFolder(Base):
+    """Пользовательские папки диалогов (как в Telegram)."""
+
+    __tablename__ = "conversation_folders"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    name: Mapped[str] = mapped_column(String(64))
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+    items: Mapped[list["ConversationFolderItem"]] = relationship(
+        "ConversationFolderItem",
+        back_populates="folder",
+        cascade="all, delete-orphan",
+    )
+
+
+class ConversationFolderItem(Base):
+    __tablename__ = "conversation_folder_items"
+    __table_args__ = (
+        UniqueConstraint("folder_id", "conversation_id", name="uq_folder_conv"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    folder_id: Mapped[int] = mapped_column(
+        ForeignKey("conversation_folders.id", ondelete="CASCADE"), index=True
+    )
+    conversation_id: Mapped[int] = mapped_column(
+        ForeignKey("conversations.id", ondelete="CASCADE"), index=True
+    )
+
+    folder: Mapped["ConversationFolder"] = relationship(
+        "ConversationFolder", back_populates="items"
+    )
+
+
 class ConversationNote(Base):
     __tablename__ = "conversation_notes"
 

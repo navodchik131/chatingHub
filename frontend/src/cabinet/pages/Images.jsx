@@ -587,10 +587,10 @@ export default function Images() {
                       }}
                     >
                       <div
+                        className="mm-spin"
                         style={{
                           width: 22, height: 22, borderRadius: '50%',
                           border: '2.5px solid rgba(215,244,82,.25)', borderTopColor: color.lime,
-                          animation: 'mmSpin .8s linear infinite',
                         }}
                       />
                     </div>

@@ -1,0 +1,38 @@
+export const color = {
+  bg: '#0A0B0D',
+  card: '#121316',
+  card2: '#15161A',
+  tabBar: '#0D0E11',
+  border: 'rgba(255,255,255,0.07)',
+  lime: '#D7F452',
+  limeText: '#171A05',
+  purple: '#C084FC',
+  pink: '#F0A8C8',
+  blue: '#38BDF8',
+  green: '#4ADE80',
+  orange: '#FB923C',
+  red: '#F87171',
+  text: '#F2F3F0',
+  muted: '#9BA0A6',
+  dim: '#6B7076',
+  bubbleIn: '#1A1C20',
+  inputBg: '#0D0E11',
+} as const;
+
+export const font = {
+  display: 'Unbounded_600SemiBold',
+  displayBold: 'Unbounded_700Bold',
+  body: 'Manrope_400Regular',
+  bodyMedium: 'Manrope_500Medium',
+  bodySemi: 'Manrope_600SemiBold',
+  bodyBold: 'Manrope_700Bold',
+  bodyExtra: 'Manrope_800ExtraBold',
+  mono: 'JetBrainsMono_500Medium',
+  monoBold: 'JetBrainsMono_700Bold',
+} as const;
+
+export const gradients = [
+  ['#F472B6', '#C084FC'],
+  ['#4ADE80', '#38BDF8'],
+  ['#38BDF8', '#818CF8'],
+] as const;

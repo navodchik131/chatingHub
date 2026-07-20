@@ -69,7 +69,7 @@ export default function Sidebar() {
           }}
         >
           <img
-            src={assetUrl('assets/logo-m.png')}
+            src={assetUrl('assets/logo-m.jpeg')}
             alt="ModelMate"
             style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
           />

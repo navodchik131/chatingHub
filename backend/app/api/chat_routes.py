@@ -30,6 +30,7 @@ from app.db.models import (
     BotResponseEventStatus,
     CompanionBotMode,
     Conversation,
+    ConversationFolder,
     FanvueConnection,
     Message,
     MessageAttachment,
@@ -58,6 +59,9 @@ from app.schemas import (
     ConversationNoteCreateIn,
     ConversationNoteOut,
     ConversationNotePatchIn,
+    ConversationFolderCreateIn,
+    ConversationFolderOut,
+    ConversationFolderPatchIn,
     ConversationOut,
     ConversationPatchIn,
     ConversationWithPreview,
@@ -87,6 +91,14 @@ from app.services.chat_outbound import (
 )
 from app.services.chat_ingest import broadcast_message_updated
 from app.services.conversation_categories import conversation_category_flags
+from app.services.conversation_folders import (
+    add_conversation_to_folder,
+    create_conversation_folder,
+    delete_conversation_folder,
+    list_conversation_folders,
+    remove_conversation_from_folder,
+    update_conversation_folder,
+)
 from app.services.chat_message_meta import (
     REACTION_EMOJIS,
     merge_meta_dict,
@@ -301,6 +313,143 @@ async def api_list_conversations(
         reverse=True,
     )
     return [row[0] for row in rows]
+
+
+def _folder_out(folder, conv_ids: list[int]) -> ConversationFolderOut:
+    return ConversationFolderOut(
+        id=folder.id,
+        name=folder.name,
+        sort_order=folder.sort_order,
+        conversation_ids=conv_ids,
+    )
+
+
+@router.get("/conversation-folders", response_model=list[ConversationFolderOut])
+async def api_list_conversation_folders(
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> list[ConversationFolderOut]:
+    assert_permission(user, PERM_CHAT)
+    await _require_chat_plan(session, user)
+    oid = workspace_owner_id(user)
+    rows = await list_conversation_folders(session, owner_id=oid)
+    return [_folder_out(f, ids) for f, ids in rows]
+
+
+@router.post("/conversation-folders", response_model=ConversationFolderOut)
+async def api_create_conversation_folder(
+    body: ConversationFolderCreateIn,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> ConversationFolderOut:
+    assert_permission(user, PERM_CHAT)
+    await _require_chat_plan(session, user)
+    oid = workspace_owner_id(user)
+    try:
+        folder, conv_ids = await create_conversation_folder(
+            session,
+            owner_id=oid,
+            name=body.name,
+            conversation_ids=body.conversation_ids,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    await session.commit()
+    return _folder_out(folder, conv_ids)
+
+
+@router.patch("/conversation-folders/{folder_id}", response_model=ConversationFolderOut)
+async def api_patch_conversation_folder(
+    folder_id: int,
+    body: ConversationFolderPatchIn,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> ConversationFolderOut:
+    assert_permission(user, PERM_CHAT)
+    await _require_chat_plan(session, user)
+    oid = workspace_owner_id(user)
+    try:
+        folder, conv_ids = await update_conversation_folder(
+            session,
+            owner_id=oid,
+            folder_id=folder_id,
+            name=body.name if "name" in body.model_fields_set else None,
+            sort_order=body.sort_order if "sort_order" in body.model_fields_set else None,
+            conversation_ids=body.conversation_ids if "conversation_ids" in body.model_fields_set else None,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404 if "не найден" in str(e).lower() else 400, detail=str(e)) from e
+    await session.commit()
+    return _folder_out(folder, conv_ids)
+
+
+@router.delete("/conversation-folders/{folder_id}", status_code=204)
+async def api_delete_conversation_folder(
+    folder_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> None:
+    assert_permission(user, PERM_CHAT)
+    await _require_chat_plan(session, user)
+    oid = workspace_owner_id(user)
+    try:
+        await delete_conversation_folder(session, owner_id=oid, folder_id=folder_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    await session.commit()
+
+
+@router.post(
+    "/conversation-folders/{folder_id}/conversations/{conv_id}",
+    response_model=ConversationFolderOut,
+)
+async def api_add_conversation_to_folder(
+    folder_id: int,
+    conv_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> ConversationFolderOut:
+    assert_permission(user, PERM_CHAT)
+    await _require_chat_plan(session, user)
+    oid = workspace_owner_id(user)
+    await require_conversation_chat_access(session, user, conv_id, oid)
+    try:
+        conv_ids = await add_conversation_to_folder(
+            session, owner_id=oid, folder_id=folder_id, conversation_id=conv_id
+        )
+        folder = await session.get(ConversationFolder, folder_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404 if "не найден" in str(e).lower() else 400, detail=str(e)) from e
+    await session.commit()
+    if not folder:
+        raise HTTPException(status_code=404, detail="Папка не найдена")
+    return _folder_out(folder, conv_ids)
+
+
+@router.delete(
+    "/conversation-folders/{folder_id}/conversations/{conv_id}",
+    response_model=ConversationFolderOut,
+)
+async def api_remove_conversation_from_folder(
+    folder_id: int,
+    conv_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> ConversationFolderOut:
+    assert_permission(user, PERM_CHAT)
+    await _require_chat_plan(session, user)
+    oid = workspace_owner_id(user)
+    try:
+        conv_ids = await remove_conversation_from_folder(
+            session, owner_id=oid, folder_id=folder_id, conversation_id=conv_id
+        )
+        folder = await session.get(ConversationFolder, folder_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    await session.commit()
+    if not folder:
+        raise HTTPException(status_code=404, detail="Папка не найдена")
+    return _folder_out(folder, conv_ids)
 
 
 @router.post("/conversations/{conv_id}/read")
@@ -892,6 +1041,7 @@ async def api_message_reaction(
 @router.get("/conversations/{conv_id}/notes", response_model=list[ConversationNoteOut])
 async def api_list_conversation_notes(
     conv_id: int,
+    auto_refresh: bool = Query(default=False),
     session: AsyncSession = Depends(get_session),
     user: User = Depends(get_current_user),
 ) -> list[ConversationNoteOut]:
@@ -900,7 +1050,7 @@ async def api_list_conversation_notes(
     oid = workspace_owner_id(user)
     conv = await require_conversation_chat_access(session, user, conv_id, oid)
     items = await list_conversation_notes(
-        session, conv=conv, viewer=user, owner_id=oid, auto_refresh=True
+        session, conv=conv, viewer=user, owner_id=oid, auto_refresh=auto_refresh
     )
     return [ConversationNoteOut.model_validate(x) for x in items]
 

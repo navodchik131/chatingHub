@@ -990,7 +990,7 @@
       spinnerWrap:
         'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(6,7,9,.55);',
       spinnerStyle:
-        'width:22px;height:22px;border-radius:50%;border:2.5px solid rgba(215,244,82,.25);border-top-color:#D7F452;animation:mmSpin .8s linear infinite;',
+        'width:22px;height:22px;border-radius:50%;border:2.5px solid rgba(215,244,82,.25);border-top-color:#D7F452;',
       showPlaceholder: !url && !failed && !pending,
       showActions: !failed && !pending,
       failed,

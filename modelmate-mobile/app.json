@@ -1,0 +1,49 @@
+{
+  "expo": {
+    "name": "ModelMate",
+    "slug": "modelmate",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/logo-m.jpeg",
+    "scheme": "modelmate",
+    "userInterfaceStyle": "dark",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "app.modelmate.mobile"
+    },
+    "android": {
+      "package": "app.modelmate.mobile",
+      "usesCleartextTraffic": true,
+      "adaptiveIcon": {
+        "backgroundColor": "#0A0B0D",
+        "foregroundImage": "./assets/logo-m.jpeg"
+      }
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static",
+      "favicon": "./assets/logo-m.jpeg"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/logo-m.jpeg",
+          "resizeMode": "contain",
+          "backgroundColor": "#0A0B0D"
+        }
+      ],
+      "expo-local-authentication",
+      "expo-image"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "caddfb30-23d5-405d-90d2-c326ce37aca3"
+      }
+    }
+  }
+}

@@ -175,6 +175,46 @@ export async function deleteConversation(convId) {
   await apiFetch(`/api/conversations/${convId}`, { method: 'DELETE' })
 }
 
+export async function fetchConversationFolders() {
+  return apiJsonOptional('/api/conversation-folders', {}, [])
+}
+
+export async function createConversationFolder(name, conversationIds = []) {
+  return apiJson('/api/conversation-folders', {
+    method: 'POST',
+    body: JSON.stringify({ name, conversation_ids: conversationIds }),
+  })
+}
+
+export async function patchConversationFolder(folderId, patch) {
+  return apiJson(`/api/conversation-folders/${folderId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(patch),
+  })
+}
+
+export async function deleteConversationFolder(folderId) {
+  await apiFetch(`/api/conversation-folders/${folderId}`, { method: 'DELETE' })
+}
+
+export async function addConversationToFolder(folderId, convId) {
+  return apiJson(`/api/conversation-folders/${folderId}/conversations/${convId}`, {
+    method: 'POST',
+    body: '{}',
+  })
+}
+
+export async function removeConversationFromFolder(folderId, convId) {
+  return apiJson(`/api/conversation-folders/${folderId}/conversations/${convId}`, {
+    method: 'DELETE',
+  })
+}
+
+export async function fetchConversationNotes(convId, { autoRefresh = false } = {}) {
+  const q = autoRefresh ? '?auto_refresh=true' : '?auto_refresh=false'
+  return apiJsonOptional(`/api/conversations/${convId}/notes${q}`, {}, [])
+}
+
 export async function saveConversationNote(convId, content) {
   await apiJson(`/api/conversations/${convId}/notes`, {
     method: 'POST',

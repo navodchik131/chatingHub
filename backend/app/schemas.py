@@ -106,6 +106,24 @@ class ConversationWithPreview(ConversationOut):
     is_new: bool = False
 
 
+class ConversationFolderOut(BaseModel):
+    id: int
+    name: str
+    sort_order: int = 0
+    conversation_ids: list[int] = []
+
+
+class ConversationFolderCreateIn(BaseModel):
+    name: str
+    conversation_ids: list[int] = []
+
+
+class ConversationFolderPatchIn(BaseModel):
+    name: str | None = None
+    sort_order: int | None = None
+    conversation_ids: list[int] | None = None
+
+
 class ReplyIn(BaseModel):
     text: str
     reply_to_message_id: int | None = None

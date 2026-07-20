@@ -27,7 +27,7 @@ export function MobileTopBar() {
           boxShadow: 'inset 0 0 0 1px rgba(255,255,255,.08)',
         }}
       >
-        <img src={assetUrl('assets/logo-m.png')} alt="ModelMate" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+        <img src={assetUrl('assets/logo-m.jpeg')} alt="ModelMate" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
       </div>
       <div style={{ fontWeight: 800, fontSize: 14, flex: 1 }}>{pageTitles(t)[page]}</div>
       <Hoverable

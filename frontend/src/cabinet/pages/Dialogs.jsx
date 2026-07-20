@@ -1,7 +1,7 @@
 import { useRef, useState, useEffect } from 'react';
 import Hoverable from '../components/Hoverable';
 import { IcoClip, IcoSendArrow } from '../components/Icons';
-import { Fade, PageTitle, Avatar, Chip } from '../components/ui';
+import { Fade, PageTitle, Avatar } from '../components/ui';
 import { useApp } from '../hooks/useApp';
 import { color, line, font, avG } from '../styles/tokens';
 import { LANG_MAP, REACT_CHOICES, EMOJI_CHOICES } from '../api/helpers';
@@ -31,25 +31,102 @@ function ChatList() {
 
   const count = (fn) => dialogsRaw.filter((c) => fn(c)).length;
 
-  const filterDefs = [
-    { id: 'all', label: lang === 'ru' ? 'Все' : 'All', n: dialogsRaw.length, test: () => true },
-    { id: 'vip', label: 'VIP', n: count((c) => c.vip), test: (c) => c.vip },
-    { id: 'hot', label: '24ч+', n: count((c) => c.hot), test: (c) => c.hot },
-    { id: 'new', label: lang === 'ru' ? 'Новые' : 'New', n: count((c) => c.isNew), test: (c) => c.isNew },
-  ];
-
   const platDefs = [
     { id: 'all', label: lang === 'ru' ? 'Все площадки' : 'All', col: color.textDim, bg: 'rgba(255,255,255,.05)', bd: line.mid },
     { id: 'TELEGRAM', label: `Telegram ${count((c) => c.platform === 'TELEGRAM')}`, col: color.blue, bg: 'rgba(56,189,248,.12)', bd: 'rgba(56,189,248,.35)' },
     { id: 'FANVUE', label: `Fanvue ${count((c) => c.platform === 'FANVUE')}`, col: color.pink, bg: 'rgba(240,168,200,.12)', bd: 'rgba(240,168,200,.35)' },
   ];
 
-  const curFilter = filterDefs.find((f) => f.id === s.chatFilter) || filterDefs[0];
+  const folderTabs = [
+    { id: 'all', label: lang === 'ru' ? 'Все' : 'All', count: dialogsRaw.length },
+    ...cabinet.conversationFolders.map((f) => ({
+      id: String(f.id),
+      label: f.name,
+      count: (f.conversation_ids || []).length,
+    })),
+  ];
+
+  const activeFolderId = s.activeFolderId || 'all';
+  const activeFolder = cabinet.conversationFolders.find((f) => String(f.id) === activeFolderId);
+  const folderConvSet = activeFolderId === 'all'
+    ? null
+    : new Set((activeFolder?.conversation_ids || []).map(Number));
+
   const searchQ = (s.chatSearchQuery || '').trim().toLowerCase();
   const visible = dialogsRaw
     .map((c, i) => ({ c, i }))
-    .filter(({ c }) => curFilter.test(c) && (s.chatPlatform === 'all' || c.platform === s.chatPlatform))
+    .filter(({ c }) => !folderConvSet || folderConvSet.has(Number(c.id)))
+    .filter(({ c }) => s.chatPlatform === 'all' || c.platform === s.chatPlatform)
     .filter(({ c }) => !searchQ || c.name.toLowerCase().includes(searchQ) || c.last.toLowerCase().includes(searchQ));
+
+  const toggleFolderMember = (convId) => {
+    const id = Number(convId);
+    const selected = new Set((s.folderFormSelected || []).map(Number));
+    if (selected.has(id)) selected.delete(id);
+    else selected.add(id);
+    setS({ folderFormSelected: [...selected] });
+  };
+
+  const createFolder = () => {
+    const name = (s.folderFormName || '').trim();
+    if (!name) return;
+    void cabinet.createConversationFolder(name, s.folderFormSelected || []).then(() => {
+      setS({ folderFormOpen: false, folderFormName: '', folderFormSelected: [] });
+    });
+  };
+
+  const pickFolderForConv = (folderId) => {
+    const convId = s.folderPickerConvId;
+    if (!convId || !folderId) return;
+    void cabinet.addConversationToFolder(folderId, convId).then(() => {
+      setS({ folderPickerConvId: null });
+    });
+  };
+
+  const openFolderEdit = (folderId) => {
+    const folder = cabinet.conversationFolders.find((f) => Number(f.id) === Number(folderId));
+    if (!folder) return;
+    setS({
+      folderEditId: folder.id,
+      folderEditName: folder.name,
+      folderEditSelected: [...(folder.conversation_ids || [])],
+    });
+  };
+
+  const toggleFolderEditMember = (convId) => {
+    const id = Number(convId);
+    const selected = new Set((s.folderEditSelected || []).map(Number));
+    if (selected.has(id)) selected.delete(id);
+    else selected.add(id);
+    setS({ folderEditSelected: [...selected] });
+  };
+
+  const saveFolderEdit = () => {
+    const id = s.folderEditId;
+    const name = (s.folderEditName || '').trim();
+    if (!id || !name) return;
+    void Promise.all([
+      cabinet.renameConversationFolder(id, name),
+      cabinet.setFolderMembers(id, s.folderEditSelected || []),
+    ]).then(() => {
+      setS({ folderEditId: null, folderEditName: '', folderEditSelected: [] });
+    });
+  };
+
+  const deleteFolderEdit = () => {
+    const id = s.folderEditId;
+    if (!id) return;
+    const ok = window.confirm(lang === 'ru' ? 'Удалить папку?' : 'Delete folder?');
+    if (!ok) return;
+    void cabinet.deleteConversationFolder(id).then(() => {
+      setS({
+        folderEditId: null,
+        folderEditName: '',
+        folderEditSelected: [],
+        activeFolderId: 'all',
+      });
+    });
+  };
 
   return (
     <div
@@ -59,13 +136,29 @@ function ChatList() {
       }}
     >
       <div style={{ padding: '12px 12px 8px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <input
-          placeholder={t.searchDialogs}
-          value={s.chatSearchQuery || ''}
-          onChange={(e) => setS({ chatSearchQuery: e.target.value })}
-          style={{ ...inputSt, borderRadius: 9, padding: '8px 12px' }}
-          aria-label={t.searchDialogs}
-        />
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <input
+            placeholder={t.searchDialogs}
+            value={s.chatSearchQuery || ''}
+            onChange={(e) => setS({ chatSearchQuery: e.target.value })}
+            style={{ ...inputSt, borderRadius: 9, padding: '8px 12px', flex: 1 }}
+            aria-label={t.searchDialogs}
+          />
+          <Hoverable
+            as="span"
+            style={{
+              width: 36, height: 36, borderRadius: 10, flex: 'none',
+              background: 'rgba(215,244,82,.1)', border: '1px solid rgba(215,244,82,.25)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              cursor: 'pointer', fontSize: 18, color: color.lime, fontWeight: 700,
+            }}
+            hover={{ background: 'rgba(215,244,82,.18)' }}
+            onClick={() => setS({ folderFormOpen: true, folderFormName: '', folderFormSelected: [] })}
+            aria-label={lang === 'ru' ? 'Новая папка' : 'New folder'}
+          >
+            +
+          </Hoverable>
+        </div>
         <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
           {platDefs.map((p) => {
             const on = s.chatPlatform === p.id;
@@ -88,13 +181,48 @@ function ChatList() {
             );
           })}
         </div>
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          {filterDefs.map((f) => (
-            <Chip key={f.id} on={s.chatFilter === f.id} onClick={() => setS({ chatFilter: f.id })}>
-              {f.label} · {f.n}
-            </Chip>
-          ))}
+        <div style={{ display: 'flex', gap: 14, overflowX: 'auto', borderBottom: `1px solid ${line.hair}`, paddingBottom: 2, alignItems: 'flex-end' }}>
+          {folderTabs.map((f) => {
+            const on = activeFolderId === f.id;
+            return (
+              <Hoverable
+                as="span"
+                key={f.id}
+                style={{
+                  padding: '6px 2px', flex: 'none', cursor: 'pointer',
+                  borderBottom: `2.5px solid ${on ? color.lime : 'transparent'}`,
+                  fontSize: 13, fontWeight: on ? 800 : 600, color: on ? color.lime : color.textMuted,
+                  whiteSpace: 'nowrap',
+                }}
+                hover={{ color: on ? color.lime : color.text }}
+                onClick={() => setS({ activeFolderId: f.id })}
+                onContextMenu={(e) => {
+                  if (f.id === 'all') return;
+                  e.preventDefault();
+                  openFolderEdit(Number(f.id));
+                }}
+              >
+                {f.label}{f.id !== 'all' ? ` · ${f.count}` : ''}
+              </Hoverable>
+            );
+          })}
         </div>
+        {activeFolderId !== 'all' && activeFolder && (
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <Hoverable
+              as="span"
+              style={{
+                fontFamily: font.mono, fontSize: 9.5, padding: '4px 10px', borderRadius: 8,
+                border: `1px solid rgba(192,132,252,.3)`, color: color.purple, cursor: 'pointer',
+                background: 'rgba(192,132,252,.08)',
+              }}
+              hover={{ background: 'rgba(192,132,252,.15)' }}
+              onClick={() => openFolderEdit(activeFolder.id)}
+            >
+              {lang === 'ru' ? 'Изменить папку' : 'Edit folder'}
+            </Hoverable>
+          </div>
+        )}
       </div>
 
       <div style={{ flex: 1, overflowY: 'auto', padding: '4px 8px 8px' }}>
@@ -204,6 +332,23 @@ function ChatList() {
                     🗑
                   </Hoverable>
                 )}
+                {!isMobile && cabinet.conversationFolders.length > 0 && (
+                  <Hoverable
+                    as="span"
+                    style={{
+                      fontFamily: font.mono, fontSize: 8, padding: '2px 6px', borderRadius: 5,
+                      background: 'rgba(192,132,252,.12)', color: color.purple, cursor: 'pointer',
+                      border: '1px solid rgba(192,132,252,.25)',
+                    }}
+                    hover={{ background: 'rgba(192,132,252,.2)' }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setS({ folderPickerConvId: c.id });
+                    }}
+                  >
+                    {lang === 'ru' ? 'В папку' : 'Folder'}
+                  </Hoverable>
+                )}
                 <span style={{ fontFamily: font.mono, fontSize: 9, color: color.textGhost }}>{c.lang}</span>
                 {c.hot && (
                   <span
@@ -220,6 +365,198 @@ function ChatList() {
           );
         })}
       </div>
+
+      {s.folderFormOpen && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,.55)', zIndex: 200,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+          }}
+          onClick={() => setS({ folderFormOpen: false })}
+        >
+          <div
+            style={{
+              width: 'min(420px, 100%)', background: color.surface, border: `1px solid ${line.hair}`,
+              borderRadius: 16, padding: 16, maxHeight: '80vh', overflow: 'auto',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 12 }}>
+              {lang === 'ru' ? 'Новая папка' : 'New folder'}
+            </div>
+            <input
+              placeholder={lang === 'ru' ? 'Название папки' : 'Folder name'}
+              value={s.folderFormName || ''}
+              onChange={(e) => setS({ folderFormName: e.target.value })}
+              style={{ ...inputSt, borderRadius: 9, padding: '8px 12px', width: '100%', marginBottom: 12 }}
+            />
+            <div style={{ fontFamily: font.mono, fontSize: 9, letterSpacing: '1.2px', color: color.textMuted, marginBottom: 8 }}>
+              {lang === 'ru' ? 'ДОБАВИТЬ ЧАТЫ' : 'ADD CHATS'}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
+              {dialogsRaw.map((c) => {
+                const checked = (s.folderFormSelected || []).includes(c.id);
+                return (
+                  <Hoverable
+                    key={c.id}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px',
+                      borderRadius: 10, cursor: 'pointer',
+                      border: `1px solid ${checked ? 'rgba(215,244,82,.35)' : line.hair}`,
+                      background: checked ? 'rgba(215,244,82,.07)' : color.bgPanel,
+                    }}
+                    onClick={() => toggleFolderMember(c.id)}
+                  >
+                    <Avatar size={28} grad={avG[c.av % 5]}>{c.name[0]}</Avatar>
+                    <span style={{ flex: 1, fontSize: 12.5, fontWeight: 600 }}>{c.name}</span>
+                    <span style={{ fontSize: 14, color: checked ? color.lime : color.textGhost }}>{checked ? '✓' : ''}</span>
+                  </Hoverable>
+                );
+              })}
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <Hoverable
+                style={{
+                  flex: 1, textAlign: 'center', padding: 10, borderRadius: 10,
+                  background: color.lime, color: color.limeInk, fontWeight: 800, cursor: 'pointer',
+                }}
+                onClick={createFolder}
+              >
+                {lang === 'ru' ? 'Создать' : 'Create'}
+              </Hoverable>
+              <Hoverable
+                style={{
+                  padding: '10px 16px', borderRadius: 10, border: `1px solid ${line.mid}`,
+                  color: color.textDim, fontWeight: 700, cursor: 'pointer',
+                }}
+                onClick={() => setS({ folderFormOpen: false })}
+              >
+                {t.opCancel}
+              </Hoverable>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {s.folderEditId && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,.55)', zIndex: 200,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+          }}
+          onClick={() => setS({ folderEditId: null, folderEditName: '', folderEditSelected: [] })}
+        >
+          <div
+            style={{
+              width: 'min(420px, 100%)', background: color.surface, border: `1px solid ${line.hair}`,
+              borderRadius: 16, padding: 16, maxHeight: '80vh', overflow: 'auto',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 12 }}>
+              {lang === 'ru' ? 'Редактировать папку' : 'Edit folder'}
+            </div>
+            <input
+              placeholder={lang === 'ru' ? 'Название папки' : 'Folder name'}
+              value={s.folderEditName || ''}
+              onChange={(e) => setS({ folderEditName: e.target.value })}
+              style={{ ...inputSt, borderRadius: 9, padding: '8px 12px', width: '100%', marginBottom: 12 }}
+            />
+            <div style={{ fontFamily: font.mono, fontSize: 9, letterSpacing: '1.2px', color: color.textMuted, marginBottom: 8 }}>
+              {lang === 'ru' ? 'ЧАТЫ В ПАПКЕ' : 'CHATS IN FOLDER'}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
+              {dialogsRaw.map((c) => {
+                const checked = (s.folderEditSelected || []).map(Number).includes(Number(c.id));
+                return (
+                  <Hoverable
+                    key={c.id}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px',
+                      borderRadius: 10, cursor: 'pointer',
+                      border: `1px solid ${checked ? 'rgba(215,244,82,.35)' : line.hair}`,
+                      background: checked ? 'rgba(215,244,82,.07)' : color.bgPanel,
+                    }}
+                    onClick={() => toggleFolderEditMember(c.id)}
+                  >
+                    <Avatar size={28} grad={avG[c.av % 5]}>{c.name[0]}</Avatar>
+                    <span style={{ flex: 1, fontSize: 12.5, fontWeight: 600 }}>{c.name}</span>
+                    <span style={{ fontSize: 14, color: checked ? color.lime : color.textGhost }}>{checked ? '✓' : ''}</span>
+                  </Hoverable>
+                );
+              })}
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+              <Hoverable
+                style={{
+                  flex: 1, textAlign: 'center', padding: 10, borderRadius: 10,
+                  background: color.lime, color: color.limeInk, fontWeight: 800, cursor: 'pointer',
+                }}
+                onClick={saveFolderEdit}
+              >
+                {t.save}
+              </Hoverable>
+              <Hoverable
+                style={{
+                  padding: '10px 16px', borderRadius: 10, border: `1px solid ${line.mid}`,
+                  color: color.textDim, fontWeight: 700, cursor: 'pointer',
+                }}
+                onClick={() => setS({ folderEditId: null, folderEditName: '', folderEditSelected: [] })}
+              >
+                {t.opCancel}
+              </Hoverable>
+            </div>
+            <Hoverable
+              style={{
+                textAlign: 'center', padding: 10, borderRadius: 10,
+                border: '1px solid rgba(248,113,113,.35)', color: color.red,
+                fontWeight: 700, cursor: 'pointer', background: 'rgba(248,113,113,.08)',
+              }}
+              hover={{ background: 'rgba(248,113,113,.15)' }}
+              onClick={deleteFolderEdit}
+            >
+              {lang === 'ru' ? 'Удалить папку' : 'Delete folder'}
+            </Hoverable>
+          </div>
+        </div>
+      )}
+
+      {s.folderPickerConvId && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,.55)', zIndex: 200,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+          }}
+          onClick={() => setS({ folderPickerConvId: null })}
+        >
+          <div
+            style={{
+              width: 'min(360px, 100%)', background: color.surface, border: `1px solid ${line.hair}`,
+              borderRadius: 16, padding: 16,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 12 }}>
+              {lang === 'ru' ? 'Добавить в папку' : 'Add to folder'}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {cabinet.conversationFolders.map((f) => (
+                <Hoverable
+                  key={f.id}
+                  style={{
+                    padding: '10px 12px', borderRadius: 10, cursor: 'pointer',
+                    border: `1px solid ${line.hair}`, background: color.bgPanel, fontWeight: 700,
+                  }}
+                  hover={{ borderColor: borderHoverOff }}
+                  onClick={() => pickFolderForConv(f.id)}
+                >
+                  {f.name}
+                </Hoverable>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -650,6 +987,10 @@ function Notes() {
   const notes = cabinet.notes.map((n) => mapNote(n, lang));
   const curName = cabinet.conversations.find((c) => c.id === cabinet.activeConvId)?.user_display_name || '—';
   const convId = cabinet.activeConvId;
+
+  useEffect(() => {
+    if (convId) void cabinet.loadNotes(convId);
+  }, [convId, cabinet]);
 
   const saveNoteClick = () => {
     if (!convId) return;

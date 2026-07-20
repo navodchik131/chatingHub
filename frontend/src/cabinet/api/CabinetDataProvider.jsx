@@ -70,6 +70,7 @@ export function CabinetDataProvider({ children }) {
   const [me, setMe] = useState(null)
   const [health, setHealth] = useState(null)
   const [conversations, setConversations] = useState([])
+  const [conversationFolders, setConversationFolders] = useState([])
   const [messages, setMessages] = useState([])
   const [notes, setNotes] = useState([])
   const [models, setModels] = useState([])
@@ -103,6 +104,7 @@ export function CabinetDataProvider({ children }) {
   const [donationEditId, setDonationEditId] = useState(null)
   const [modelsLoadError, setModelsLoadError] = useState(null)
   const wsRef = useRef(null)
+  const activeConvIdRef = useRef(activeConvId)
   const refreshAllInFlightRef = useRef(false)
   const archiveImagesRef = useRef(archiveImages)
   const archiveVideosRef = useRef(archiveVideos)
@@ -113,6 +115,43 @@ export function CabinetDataProvider({ children }) {
   useEffect(() => { archiveVideosRef.current = archiveVideos }, [archiveVideos])
   useEffect(() => { donationOverviewRef.current = donationOverview }, [donationOverview])
   useEffect(() => { donationEventsRef.current = donationEvents }, [donationEvents])
+  useEffect(() => { activeConvIdRef.current = activeConvId }, [activeConvId])
+
+  const mergeInboundMessage = useCallback((prev, incoming) => {
+    const id = Number(incoming?.id)
+    if (!id) return prev
+    const idx = prev.findIndex((m) => Number(m.id) === id)
+    if (idx >= 0) {
+      const next = [...prev]
+      next[idx] = { ...next[idx], ...incoming, pending: false }
+      return next
+    }
+    const withoutPending = prev.filter(
+      (m) => !(m.pending && m.direction === 'outbound' && m.text_original === incoming.text_original),
+    )
+    return [...withoutPending, { ...incoming, pending: false }]
+  }, [])
+
+  const patchConversationPreview = useCallback((convId, message, { bumpUnread = false } = {}) => {
+    const preview = (message?.text_original || message?.text_translated || '').trim() || '📷'
+    setConversations((prev) => {
+      const next = prev.map((c) => {
+        if (Number(c.id) !== Number(convId)) return c
+        const unread = bumpUnread ? Number(c.unread_count || 0) + 1 : 0
+        return {
+          ...c,
+          last_message_preview: preview,
+          last_message_at: message?.created_at || c.last_message_at,
+          unread_count: bumpUnread ? unread : 0,
+        }
+      })
+      return next.sort((a, b) => {
+        const ta = new Date(a.last_message_at || 0).getTime()
+        const tb = new Date(b.last_message_at || 0).getTime()
+        return tb - ta
+      })
+    })
+  }, [])
 
   const run = useCallback(async (fn) => {
     setBusy(true)
@@ -145,12 +184,9 @@ export function CabinetDataProvider({ children }) {
   const loadMessages = useCallback(async (convId) => {
     if (!convId) return
     try {
-      const [msgs, noteRows] = await Promise.all([
-        apiJson(`/api/conversations/${convId}/messages?limit=50`),
-        apiJsonOptional(`/api/conversations/${convId}/notes`, {}, []),
-      ])
+      const msgs = await apiJson(`/api/conversations/${convId}/messages?limit=50`)
       setMessages(Array.isArray(msgs) ? msgs : [])
-      setNotes(Array.isArray(noteRows) ? noteRows : [])
+      setNotes([])
       setActiveConvId(convId)
       void apiFetch(`/api/conversations/${convId}/read`, { method: 'POST' })
       setConversations((prev) =>
@@ -158,6 +194,30 @@ export function CabinetDataProvider({ children }) {
       )
     } catch (e) {
       setError(e.message || String(e))
+    }
+  }, [])
+
+  const loadNotes = useCallback(async (convId) => {
+    if (!convId) return
+    try {
+      const noteRows = await actions.fetchConversationNotes(convId, { autoRefresh: false })
+      setNotes(Array.isArray(noteRows) ? noteRows : [])
+    } catch (e) {
+      setError(e.message || String(e))
+    }
+  }, [])
+
+  const loadConversationFolders = useCallback(async () => {
+    try {
+      const rows = await actions.fetchConversationFolders()
+      setConversationFolders(Array.isArray(rows) ? rows : [])
+      return rows
+    } catch (e) {
+      if (String(e?.message || '').includes('403')) {
+        setConversationFolders([])
+        return []
+      }
+      throw e
     }
   }, [])
 
@@ -202,6 +262,7 @@ export function CabinetDataProvider({ children }) {
         meData,
         healthData,
         convs,
+        folders,
         modelsData,
         archiveImg,
         archiveVid,
@@ -223,6 +284,7 @@ export function CabinetDataProvider({ children }) {
         apiJson('/api/auth/me'),
         apiJsonOptional('/api/health', {}, null),
         apiJsonOptional('/api/conversations', {}, []),
+        apiJsonOptional('/api/conversation-folders', {}, []),
         apiJsonOptional('/api/studio/models', {}, null),
         actions.refreshArchiveImages().catch(() => []),
         actions.refreshArchiveVideos().catch(() => []),
@@ -245,6 +307,7 @@ export function CabinetDataProvider({ children }) {
       setMe(meData)
       setHealth(healthData)
       setConversations(Array.isArray(convs) ? convs : [])
+      setConversationFolders(Array.isArray(folders) ? folders : [])
       if (meData?.workflow_demo_limited) {
         void actions.resolveDemoWorkflowWorkspaceId()
       }
@@ -316,18 +379,23 @@ export function CabinetDataProvider({ children }) {
       ])
       setError(null)
       try {
+        let sent
         if (imageFile) {
-          await actions.sendReplyWithImage(convId, text, imageFile)
+          sent = await actions.sendReplyWithImage(convId, text, imageFile)
         } else {
           const body = { text: text.trim() }
           if (replyToMessageId) body.reply_to_message_id = replyToMessageId
-          await apiJson(`/api/conversations/${convId}/reply`, {
+          sent = await apiJson(`/api/conversations/${convId}/reply`, {
             method: 'POST',
             body: JSON.stringify(body),
           })
         }
-        await loadMessages(convId)
-        await loadConversations()
+        if (sent?.id) {
+          setMessages((prev) => mergeInboundMessage(prev, sent))
+          patchConversationPreview(convId, sent)
+        } else {
+          await loadMessages(convId)
+        }
       } catch (e) {
         setMessages((prev) => prev.filter((m) => Number(m.id) !== tempId))
         setError(e?.message || String(e))
@@ -335,7 +403,7 @@ export function CabinetDataProvider({ children }) {
         if (previewUrl) URL.revokeObjectURL(previewUrl)
       }
     },
-    [loadConversations, loadMessages],
+    [loadMessages, mergeInboundMessage, patchConversationPreview],
   )
 
   const saveNote = useCallback(
@@ -345,7 +413,7 @@ export function CabinetDataProvider({ children }) {
       const payload = text.startsWith('[') ? text : `[${tagLabel}] ${text}`
       await run(async () => {
         await actions.saveConversationNote(convId, payload)
-        const nr = await apiJson(`/api/conversations/${convId}/notes`)
+        const nr = await actions.fetchConversationNotes(convId, { autoRefresh: false })
         setNotes(Array.isArray(nr) ? nr : [])
       })
     },
@@ -474,9 +542,71 @@ export function CabinetDataProvider({ children }) {
         await actions.deleteConversation(convId)
         if (Number(activeConvId) === Number(convId)) setActiveConvId(null)
         await loadConversations()
+        await loadConversationFolders()
       })
     },
-    [run, activeConvId, loadConversations],
+    [run, activeConvId, loadConversations, loadConversationFolders],
+  )
+
+  const createConversationFolder = useCallback(
+    async (name, conversationIds = []) => {
+      return run(async () => {
+        const row = await actions.createConversationFolder(name, conversationIds)
+        await loadConversationFolders()
+        return row
+      })
+    },
+    [run, loadConversationFolders],
+  )
+
+  const renameConversationFolder = useCallback(
+    async (folderId, name) => {
+      await run(async () => {
+        await actions.patchConversationFolder(folderId, { name })
+        await loadConversationFolders()
+      })
+    },
+    [run, loadConversationFolders],
+  )
+
+  const deleteConversationFolder = useCallback(
+    async (folderId) => {
+      await run(async () => {
+        await actions.deleteConversationFolder(folderId)
+        await loadConversationFolders()
+      })
+    },
+    [run, loadConversationFolders],
+  )
+
+  const setFolderMembers = useCallback(
+    async (folderId, conversationIds) => {
+      await run(async () => {
+        await actions.patchConversationFolder(folderId, { conversation_ids: conversationIds })
+        await loadConversationFolders()
+      })
+    },
+    [run, loadConversationFolders],
+  )
+
+  const addConversationToFolder = useCallback(
+    async (folderId, convId) => {
+      await run(async () => {
+        await actions.addConversationToFolder(folderId, convId)
+        await loadConversationFolders()
+      })
+    },
+    [run, loadConversationFolders],
+  )
+
+  const removeConversationFromFolder = useCallback(
+    async (folderId, convId) => {
+      await run(async () => {
+        await actions.removeConversationFromFolder(folderId, convId)
+        await loadConversationFolders()
+      })
+    },
+    [run, loadConversationFolders],
   )
 
   const updateSnippet = useCallback(
@@ -983,21 +1113,28 @@ export function CabinetDataProvider({ children }) {
       ws.addEventListener('message', (ev) => {
         try {
           const msg = JSON.parse(ev.data)
+          const convId = Number(msg?.conversation_id)
+          const activeId = Number(activeConvIdRef.current)
           if (
             msg?.type === 'new_message' ||
             msg?.type === 'message_updated' ||
-            msg?.type === 'conversation_updated' ||
             msg?.type === 'message_created'
           ) {
-            if (msg?.type === 'new_message' && activeConvId) {
-              setConversations((prev) =>
-                prev.map((c) => (Number(c.id) === Number(activeConvId) ? { ...c, unread_count: 0 } : c)),
-              )
+            const payload = msg.message
+            if (payload?.id && convId) {
+              if (activeId && convId === activeId) {
+                setMessages((prev) => mergeInboundMessage(prev, payload))
+                patchConversationPreview(convId, payload)
+              } else {
+                patchConversationPreview(convId, payload, { bumpUnread: true })
+              }
+            } else if (convId && activeId === convId) {
+              void loadMessages(activeId)
+            } else {
+              void loadConversations()
             }
+          } else if (msg?.type === 'conversation_updated') {
             void loadConversations()
-            if (activeConvId && Number(msg.conversation_id) === Number(activeConvId)) {
-              void loadMessages(activeConvId)
-            }
           }
           if (
             msg?.type === 'credits_updated' ||
@@ -1026,7 +1163,7 @@ export function CabinetDataProvider({ children }) {
         /* ignore */
       }
     }
-  }, [ready, activeConvId, loadConversations, loadMessages, refreshArchivePending])
+  }, [ready, loadConversations, loadMessages, refreshArchivePending, mergeInboundMessage, patchConversationPreview])
 
   const value = useMemo(
     () => ({
@@ -1037,6 +1174,7 @@ export function CabinetDataProvider({ children }) {
       me,
       health,
       conversations,
+      conversationFolders,
       messages,
       notes,
       models,
@@ -1084,7 +1222,9 @@ export function CabinetDataProvider({ children }) {
       refreshArchivePending,
       refreshDonationOverview,
       loadConversations,
+      loadConversationFolders,
       loadMessages,
+      loadNotes,
       sendReply,
       saveNote,
       analyzeNotes,
@@ -1095,6 +1235,12 @@ export function CabinetDataProvider({ children }) {
       requestPayout,
       savePayoutSettings,
       deleteConversation,
+      createConversationFolder,
+      renameConversationFolder,
+      deleteConversationFolder,
+      setFolderMembers,
+      addConversationToFolder,
+      removeConversationFromFolder,
       payBilling,
       saveIntegration,
       createMember,
@@ -1127,6 +1273,7 @@ export function CabinetDataProvider({ children }) {
       me,
       health,
       conversations,
+      conversationFolders,
       messages,
       notes,
       models,
@@ -1167,7 +1314,9 @@ export function CabinetDataProvider({ children }) {
       refreshArchivePending,
       refreshDonationOverview,
       loadConversations,
+      loadConversationFolders,
       loadMessages,
+      loadNotes,
       sendReply,
       saveNote,
       analyzeNotes,
@@ -1178,6 +1327,12 @@ export function CabinetDataProvider({ children }) {
       requestPayout,
       savePayoutSettings,
       deleteConversation,
+      createConversationFolder,
+      renameConversationFolder,
+      deleteConversationFolder,
+      setFolderMembers,
+      addConversationToFolder,
+      removeConversationFromFolder,
       payBilling,
       saveIntegration,
       createMember,
