@@ -1,5 +1,5 @@
 import Hoverable from './Hoverable';
-import { IcoBolt } from './Icons';
+import { IcoBolt, IcoLogout } from './Icons';
 import { useApp } from '../hooks/useApp';
 import { mobileNavDefs, moreItemDefs, pageTitles } from '../data/nav';
 import { filterMobileNavDefs, canAccessPage } from '../data/navAccess';
@@ -145,6 +145,26 @@ export function MoreSheet() {
             <span style={{ color: color.textGhost }}>→</span>
           </Hoverable>
         ))}
+        <Hoverable
+          style={{
+            display: 'flex', alignItems: 'center', gap: 12,
+            padding: '12px 10px', borderRadius: 12, cursor: 'pointer',
+            marginTop: 4, borderTop: `1px solid ${line.hair}`,
+          }}
+          hover={{ background: 'rgba(248,113,113,.08)' }}
+          onClick={() => {
+            setS({ moreOpen: false });
+            cabinet.logout();
+          }}
+        >
+          <span style={{ display: 'flex', width: 18, height: 18, color: color.red }}>
+            <IcoLogout />
+          </span>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 700, fontSize: 13.5, color: color.red }}>{t.logout}</div>
+            <div style={{ fontSize: 11, color: color.textMuted }}>{t.logoutDesc}</div>
+          </div>
+        </Hoverable>
       </div>
     </div>
   );

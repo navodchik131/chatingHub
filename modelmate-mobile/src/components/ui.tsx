@@ -143,20 +143,22 @@ export function MenuRow({
   label,
   iconColor,
   badge,
+  danger,
   onPress,
 }: {
   icon: ReactNode;
   label: string;
   iconColor?: string;
   badge?: string;
+  danger?: boolean;
   onPress?: () => void;
 }) {
   return (
     <Pressable style={styles.menuRow} onPress={onPress}>
       <View style={styles.menuIcon}>{icon}</View>
-      <Text style={styles.menuLabel}>{label}</Text>
+      <Text style={[styles.menuLabel, danger && styles.menuLabelDanger]}>{label}</Text>
       {badge ? <Pill text={badge} bg="rgba(251,146,60,0.12)" fg={color.orange} /> : null}
-      <IcoChevron size={14} stroke={color.dim} />
+      {!danger ? <IcoChevron size={14} stroke={color.dim} /> : null}
     </Pressable>
   );
 }
@@ -354,6 +356,7 @@ const styles = StyleSheet.create({
   menuRow: { flexDirection: 'row', alignItems: 'center', gap: 11, paddingVertical: 11, paddingHorizontal: 4 },
   menuIcon: { width: 20, alignItems: 'center' },
   menuLabel: { flex: 1, fontSize: 13, fontFamily: font.bodySemi, color: color.text },
+  menuLabelDanger: { color: color.red, fontFamily: font.bodyBold, fontWeight: '700' },
   shortcutRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   shortcutIcon: {
     width: 36,

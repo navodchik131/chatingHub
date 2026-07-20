@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import Hoverable from '../components/Hoverable';
 import { IcoCopy, IcoBolt } from '../components/Icons';
 import { Fade, PageTitle, Eyebrow, Panel, StatusChip } from '../components/ui';
@@ -7,6 +8,8 @@ import { segOn, segOff, borderHoverOff } from '../styles/mixins';
 import { fmtCredits, fmtMoney } from '../api/helpers';
 import { mapUsageBars, mapCreditHistory } from '../api/mappers';
 import { copyText } from '../utils/clipboard';
+import { fetchUsdRate, formatPlanPrice, getCachedRubPerUsd } from '../utils/money';
+import { cabinetPlanFeatures } from '../utils/planFeatures';
 
 function normalizePlan(raw) {
   const p = String(raw || 'standard').toLowerCase();
@@ -18,23 +21,44 @@ function normalizePlan(raw) {
 export default function Billing() {
   const { t, lang, s, setS, cabinet } = useApp();
   const { me, billingPlans, creditHistory, referral, tributeEarnings } = cabinet;
-  const yookassaAvailable = Boolean(me?.online_payment_available);
+  const yookassaAvailable = Boolean(me?.online_payment_available) && lang === 'ru';
   const tributeAvailable = Boolean(me?.tribute_billing_available);
   const defaultPayMethod = yookassaAvailable ? 'yookassa' : (tributeAvailable ? 'tribute' : 'credits');
+  const [rubPerUsd, setRubPerUsd] = useState(getCachedRubPerUsd);
   const tierOrder = { solo: 0, pro: 1, studio: 2 };
   const catalogPlans = billingPlans?.catalog?.plans || [];
   const tierPlans = catalogPlans
     .filter((p) => p.billing_plan === s.tier && p.period === s.period)
     .sort((a, b) => (tierOrder[a.tier] ?? 9) - (tierOrder[b.tier] ?? 9));
-  const plans = tierPlans.map((p) => ({
-    name: p.title || p.title_ru || p.product,
-    price: String(p.price_rub ?? p.price ?? 0),
-    tag: me?.plan_tier === p.tier && normalizePlan(me?.billing_plan) === p.billing_plan
-      ? (lang === 'ru' ? 'ВАШ' : 'YOURS')
-      : p.tier === 'pro' ? (lang === 'ru' ? 'ПОПУЛЯРНЫЙ' : 'POPULAR') : undefined,
-    desc: `${p.limits?.max_users ?? '—'} ops · ${p.limits?.max_models ?? '—'} chars`,
-    product: p.product,
-  }));
+
+  useEffect(() => {
+    if (lang !== 'en') return undefined;
+    let cancelled = false;
+    void fetchUsdRate().then((rate) => {
+      if (!cancelled) setRubPerUsd(rate);
+    });
+    return () => { cancelled = true; };
+  }, [lang]);
+
+  const plans = tierPlans.map((p) => {
+    const billing = normalizePlan(p.billing_plan);
+    const monthlyCredits = p.managed_monthly_credits ?? 0;
+    return {
+      name: p.title || p.title_ru || p.product,
+      priceLabel: formatPlanPrice(p.price_rub ?? p.price ?? 0, lang, rubPerUsd),
+      tag: me?.plan_tier === p.tier && normalizePlan(me?.billing_plan) === billing
+        ? (lang === 'ru' ? 'ВАШ' : 'YOURS')
+        : p.tier === 'pro' ? (lang === 'ru' ? 'ПОПУЛЯРНЫЙ' : 'POPULAR') : undefined,
+      features: cabinetPlanFeatures(
+        lang,
+        p.tier,
+        billing === 'pro' ? 'pro' : 'standard',
+        s.period,
+        monthlyCredits,
+      ),
+      product: p.product,
+    };
+  });
   const perLabel = s.period === 'month' ? (lang === 'ru' ? 'мес' : 'mo') : (lang === 'ru' ? 'год' : 'yr');
   const credits = fmtCredits(me?.credits_balance);
   const planName = me?.plan_display_name || me?.plan_tier || '—';
@@ -51,7 +75,7 @@ export default function Billing() {
       const price = Math.round(qty * bulk);
       return {
         cr: String(qty),
-        price: `${price.toLocaleString(lang === 'ru' ? 'ru-RU' : 'en-GB')} ₽`,
+        price: formatPlanPrice(price, lang, rubPerUsd),
         bonus: qty >= 600 ? '+15%' : qty >= 300 ? '+10%' : qty >= 150 ? '+5%' : null,
         product: x.product,
         creditsQty: qty,
@@ -67,6 +91,9 @@ export default function Billing() {
       <div style={{ marginBottom: 16 }}>
         <PageTitle style={{ marginBottom: 5 }}>{t.navBilling}</PageTitle>
         <div style={{ fontSize: 12.5, color: color.textDim }}>{t.billingDesc}</div>
+        {lang === 'en' ? (
+          <div style={{ fontSize: 11, color: color.textMuted, marginTop: 4 }}>{t.fxHint}</div>
+        ) : null}
       </div>
 
       {/* current plan + balance + referral */}
@@ -190,7 +217,7 @@ export default function Billing() {
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(240px,1fr))', gap: 12, marginBottom: 20 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(240px,1fr))', gap: 12, marginBottom: 20, alignItems: 'stretch' }}>
         {plans.map((p) => (
           <div
             key={p.product || p.name}
@@ -198,18 +225,37 @@ export default function Billing() {
               background: color.surface,
               border: `1px solid ${p.tag ? 'rgba(215,244,82,.35)' : line.hair}`,
               borderRadius: 16, padding: '16px 18px',
+              display: 'flex', flexDirection: 'column', height: '100%', minHeight: 320,
             }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
               <span style={{ fontFamily: font.display, fontWeight: 600, fontSize: 16 }}>{p.name}</span>
               {p.tag && <StatusChip tone="active">{p.tag}</StatusChip>}
             </div>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 5, marginBottom: 10 }}>
-              <span style={{ fontFamily: font.display, fontWeight: 700, fontSize: 22 }}>{p.price} ₽</span>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 5, marginBottom: 12 }}>
+              <span style={{ fontFamily: font.display, fontWeight: 700, fontSize: 22 }}>{p.priceLabel}</span>
               <span style={{ fontSize: 11, color: color.textMuted }}>/ {perLabel}</span>
             </div>
-            <div style={{ fontSize: 11.5, color: color.textDim, lineHeight: 1.5, marginBottom: 14 }}>{p.desc}</div>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            <ul
+              style={{
+                listStyle: 'none', margin: '0 0 14px', padding: 0, flex: 1,
+                display: 'flex', flexDirection: 'column', gap: 7,
+              }}
+            >
+              {p.features.map((lineText) => (
+                <li
+                  key={lineText}
+                  style={{
+                    fontSize: 12, color: color.textDim, lineHeight: 1.35,
+                    display: 'flex', gap: 8, alignItems: 'flex-start',
+                  }}
+                >
+                  <span style={{ color: color.lime, fontWeight: 800, lineHeight: 1.35 }}>✓</span>
+                  <span>{lineText}</span>
+                </li>
+              ))}
+            </ul>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 'auto' }}>
               {yookassaAvailable && (
               <Hoverable
                 style={{
@@ -226,14 +272,14 @@ export default function Billing() {
               {tributeAvailable && (
               <Hoverable
                 style={{
-                  flex: 1, minWidth: 100, background: 'rgba(192,132,252,.12)', border: '1px solid rgba(192,132,252,.35)',
+                  flex: 1, minWidth: 100, background: 'rgba(74,222,128,.1)', border: '1px solid rgba(74,222,128,.35)',
                   borderRadius: 9, padding: 8, textAlign: 'center', fontSize: 11.5,
-                  fontWeight: 800, color: color.purple, cursor: 'pointer',
+                  fontWeight: 800, color: color.green, cursor: 'pointer',
                 }}
-                hover={{ background: 'rgba(192,132,252,.2)' }}
+                hover={{ background: 'rgba(74,222,128,.18)' }}
                 onClick={() => p.product && void cabinet.payBilling('tribute', p.product)}
               >
-                {t.payTribute}
+                {t.payCardUsd}
               </Hoverable>
               )}
               <Hoverable

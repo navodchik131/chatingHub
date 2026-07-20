@@ -32,6 +32,7 @@ export type Strings = {
   settingsPushDisabled: string;
   settingsSaved: string;
   adminPanel: string;
+  logout: string;
 };
 
 const RU: Strings = {
@@ -66,6 +67,7 @@ const RU: Strings = {
   settingsPushDisabled: 'Уведомления выключены',
   settingsSaved: 'Сохранено',
   adminPanel: 'Admin-панель',
+  logout: 'Выйти',
 };
 
 const EN: Strings = {
@@ -100,6 +102,7 @@ const EN: Strings = {
   settingsPushDisabled: 'Notifications disabled',
   settingsSaved: 'Saved',
   adminPanel: 'Admin panel',
+  logout: 'Sign out',
 };
 
 export const dict: Record<AppLocale, Strings> = { ru: RU, en: EN };

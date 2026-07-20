@@ -32,6 +32,43 @@ npm start
 | Профиль | Тариф, Донаты, Подключения, Команда, Настройки |
 | Admin | обзор, пользователи, рассылки, EXIF/IG боты, донаты |
 
+## Push-уведомления (Android)
+
+На Android Expo Push работает через **Firebase Cloud Messaging (FCM)**. Без настройки FCM токен не регистрируется (ошибка `FirebaseApp is not initialized`).
+
+### 1. Firebase + `google-services.json`
+
+1. [Firebase Console](https://console.firebase.google.com/) → создайте проект (или выберите существующий).
+2. **Add app → Android**, package name: **`app.modelmate.mobile`** (как в `app.json`).
+3. Скачайте **`google-services.json`** и положите в `modelmate-mobile/google-services.json`  
+   (шаблон: `google-services.json.example`).
+
+### 2. FCM V1 ключ в EAS (отправка push с сервера)
+
+1. Firebase → **Project settings → Service accounts → Generate new private key** (JSON).
+2. [expo.dev](https://expo.dev) → проект **modelmate** → **Credentials** → Android → **`app.modelmate.mobile`**
+3. **FCM V1 service account key** → загрузите JSON.
+
+Или через CLI:
+
+```bash
+cd modelmate-mobile
+npx eas-cli credentials
+# Android → preview (или production) → Google Service Account → FCM V1 → Upload key
+```
+
+### 3. Пересборка APK
+
+После добавления `google-services.json` и FCM-ключа в EAS:
+
+```bash
+npm run build:apk
+```
+
+Старый APK без Firebase **не сможет** получать push — нужна новая сборка.
+
+Подробнее: [Expo — FCM credentials](https://docs.expo.dev/push-notifications/fcm-credentials/)
+
 ## API (FastAPI)
 
 1. Скопируйте `.env.example` → `.env` и укажите URL бэкенда:

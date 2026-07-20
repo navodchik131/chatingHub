@@ -117,7 +117,9 @@ export async function registerMobilePush(): Promise<PushSetupResult> {
       tokenRegistered: false,
       reason: msg.includes('401') || msg.includes('403')
         ? 'Войдите в аккаунт, затем включите уведомления снова.'
-        : `Не удалось зарегистрировать push: ${msg}`,
+        : msg.includes('Firebase') || msg.includes('googleServicesFile')
+          ? 'Нужна настройка Firebase (FCM): добавьте google-services.json и пересоберите APK. См. README → Push-уведомления.'
+          : `Не удалось зарегистрировать push: ${msg}`,
     };
   }
 }

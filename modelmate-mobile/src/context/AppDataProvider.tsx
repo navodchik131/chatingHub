@@ -402,6 +402,12 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   }, [refreshAll]);
 
   const logout = useCallback(async () => {
+    try {
+      const { unregisterMobilePush } = await import('@/src/push/notifications');
+      await unregisterMobilePush();
+    } catch {
+      /* ignore */
+    }
     await setToken(null);
     setAuthenticated(false);
     setMe(null);

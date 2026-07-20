@@ -1,5 +1,5 @@
 import Hoverable from './Hoverable';
-import { IcoBolt } from './Icons';
+import { IcoBolt, IcoLogout } from './Icons';
 import { useApp } from '../hooks/useApp';
 import { navGroups } from '../data/nav';
 import { filterNavGroups } from '../data/navAccess';
@@ -171,6 +171,21 @@ export default function Sidebar() {
             {langLabel}
           </Hoverable>
         </div>
+
+        <Hoverable
+          style={{
+            display: 'flex', alignItems: 'center', gap: 10,
+            padding: '9px 10px', borderRadius: 10, cursor: 'pointer',
+            color: color.red, fontWeight: 700, fontSize: 13,
+          }}
+          hover={{ background: 'rgba(248,113,113,.1)' }}
+          onClick={() => cabinet.logout()}
+        >
+          <span style={{ display: 'flex', width: 17, height: 17, flex: 'none', color: color.red }}>
+            <IcoLogout />
+          </span>
+          <span style={{ flex: 1 }}>{t.logout}</span>
+        </Hoverable>
       </div>
     </nav>
   );

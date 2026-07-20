@@ -12,6 +12,7 @@ import {
   IcoFilm,
   IcoHeart,
   IcoImage,
+  IcoLogout,
   IcoPlug,
   IcoPlus,
   IcoSend,
@@ -184,6 +185,7 @@ export function ScreenRouter() {
     genResults,
     refreshAll,
     refreshArchive,
+    logout,
   } = app;
   const { cur, pop, push, resetTo, openThread, startGen, regen, patch, chatIdx } = nav;
   const threadConvId = conversations[chatIdx]?.id ?? null;
@@ -1215,6 +1217,16 @@ export function ScreenRouter() {
           <MenuRow icon={<IcoShield size={17} stroke={color.orange} />} label={t.adminPanel} badge="ADMIN" onPress={() => resetTo('admin')} />
           <MenuRow icon={<IcoCog size={17} stroke={color.muted} />} label={t.settingsTitle} onPress={() => push('settings')} />
         </Card>
+        <Card>
+          <MenuRow
+            danger
+            icon={<IcoLogout size={17} stroke={color.red} />}
+            label={t.logout}
+            onPress={() => {
+              void logout().then(() => patch({ stack: ['auth'] }));
+            }}
+          />
+        </Card>
       </ScreenScroll>
     );
   }
@@ -1751,15 +1763,23 @@ const s = StyleSheet.create({
   folderTabActive: { borderBottomColor: color.lime },
   folderTabText: { fontSize: 17, fontWeight: '600', color: color.muted },
   folderTabTextActive: { fontWeight: '800', color: color.text },
-  folderActions: { flexDirection: 'row', gap: 8, marginBottom: 8 },
-  folderActionBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
+  folderActions: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingHorizontal: 18,
+    paddingTop: 10,
+    paddingBottom: 10,
   },
-  folderActionText: { fontSize: 11.5, fontWeight: '700', color: color.purple },
+  folderActionBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(167,139,250,0.35)',
+    backgroundColor: 'rgba(167,139,250,0.08)',
+    alignSelf: 'flex-start',
+  },
+  folderActionText: { fontSize: 12.5, fontWeight: '700', color: color.purple },
   menuPickRow: { paddingVertical: 12, paddingHorizontal: 4, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.06)' },
   menuPickText: { fontSize: 14.5, fontWeight: '700', color: color.text },
   divider: { height: 1, backgroundColor: 'rgba(255,255,255,0.05)' },

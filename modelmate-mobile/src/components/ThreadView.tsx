@@ -10,6 +10,8 @@ import {
   StyleSheet,
   Text,
   View,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
 } from 'react-native';
 import { TextInput } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -46,6 +48,8 @@ type ThreadViewProps = {
 type ListItem =
   | { kind: 'day'; key: string; label: string }
   | { kind: 'msg'; key: string; msg: ThreadMessage };
+
+const NEAR_BOTTOM_PX = 100;
 
 function ThreadDaySeparator({ label }: { label: string }) {
   return (
@@ -178,6 +182,10 @@ export function ThreadView({
 }: ThreadViewProps) {
   const insets = useSafeAreaInsets();
   const scrollRef = useRef<ScrollView>(null);
+  const nearBottomRef = useRef(true);
+  const didInitialScrollRef = useRef(false);
+  const prevCountRef = useRef(0);
+  const [keyboardPad, setKeyboardPad] = useState(0);
   const [themePickerOpen, setThemePickerOpen] = useState(false);
   const { chatTheme, setChatTheme } = useAppSettings();
   const theme = chatThemeById(chatTheme);
@@ -206,22 +214,69 @@ export function ThreadView({
     });
   };
 
+  const scrollToBottomIfNear = (animated = true) => {
+    if (!nearBottomRef.current) return;
+    scrollToBottom(animated);
+  };
+
+  const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
+    const distanceFromBottom =
+      contentSize.height - layoutMeasurement.height - contentOffset.y;
+    nearBottomRef.current = distanceFromBottom <= NEAR_BOTTOM_PX;
+  };
+
   useLayoutEffect(() => {
-    scrollToBottom(false);
-  }, [items]);
+    const count = messages.length;
+    const grew = count > prevCountRef.current;
+    const last = messages[count - 1];
+    const ownPending = Boolean(last?.pending && last.side === 'out');
+    prevCountRef.current = count;
+
+    if (!didInitialScrollRef.current && count > 0) {
+      didInitialScrollRef.current = true;
+      nearBottomRef.current = true;
+      scrollToBottom(false);
+      return;
+    }
+
+    if (ownPending) {
+      nearBottomRef.current = true;
+      scrollToBottom(true);
+      return;
+    }
+
+    if (grew) scrollToBottomIfNear(true);
+  }, [messages]);
 
   useEffect(() => {
-    const sub = Keyboard.addListener('keyboardDidShow', () => scrollToBottom(true));
-    return () => sub.remove();
-  }, []);
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSub = Keyboard.addListener(showEvent, (e) => {
+      // Android: app.json uses resize, but Expo Go / some devices still overlap —
+      // lift composer by keyboard height. iOS uses KeyboardAvoidingView.
+      if (Platform.OS === 'android') {
+        setKeyboardPad(Math.max(0, e.endCoordinates.height - insets.bottom));
+      } else {
+        setKeyboardPad(0);
+      }
+      scrollToBottomIfNear(true);
+    });
+    const hideSub = Keyboard.addListener(hideEvent, () => setKeyboardPad(0));
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, [insets.bottom]);
 
   const platformLabel = platform.toUpperCase();
   const subtitle = vip ? `${platformLabel} • VIP` : platformLabel;
+  const composerPadBottom = keyboardPad > 0 ? 10 + keyboardPad : Math.max(10, insets.bottom);
 
   return (
     <KeyboardAvoidingView
       style={styles.root}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}
     >
       <View style={styles.head}>
@@ -251,7 +306,10 @@ export function ThreadView({
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
-        onContentSizeChange={() => scrollToBottom(false)}
+        keyboardDismissMode="interactive"
+        onScroll={onScroll}
+        scrollEventThrottle={16}
+        onContentSizeChange={() => scrollToBottomIfNear(false)}
       >
         {items.map((item) => {
           if (item.kind === 'day') {
@@ -272,7 +330,7 @@ export function ThreadView({
         })}
       </ScrollView>
 
-      <View style={[styles.composer, { paddingBottom: Math.max(10, insets.bottom) }]}>
+      <View style={[styles.composer, { paddingBottom: composerPadBottom }]}>
         <Pressable style={styles.sideBtn} hitSlop={6}>
           <Text style={styles.sideBtnIcon}>📎</Text>
         </Pressable>
@@ -289,7 +347,10 @@ export function ThreadView({
             spellCheck={false}
             autoComplete="off"
             multiline
-            onFocus={() => scrollToBottom(true)}
+            onFocus={() => {
+              nearBottomRef.current = true;
+              scrollToBottom(true);
+            }}
             returnKeyType="send"
           />
           <Pressable style={styles.emojiBtn} hitSlop={6}>
@@ -298,7 +359,10 @@ export function ThreadView({
         </View>
         <Pressable
           style={[styles.sendBtn, !draft.trim() && styles.sendBtnDim]}
-          onPress={onSend}
+          onPress={() => {
+            nearBottomRef.current = true;
+            onSend();
+          }}
           disabled={!draft.trim()}
         >
           <IcoSend size={20} stroke={color.limeText} />

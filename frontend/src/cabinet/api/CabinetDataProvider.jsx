@@ -1105,7 +1105,7 @@ export function CabinetDataProvider({ children }) {
       }
       wsRef.current = null
     }
-    window.location.assign('/login')
+    window.location.assign('/')
   }, [])
 
   useEffect(() => {

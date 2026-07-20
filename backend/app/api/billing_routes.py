@@ -56,6 +56,14 @@ def _rub_amount_str(amount_rub: int) -> str:
     return f"{max(0, int(amount_rub))}.00"
 
 
+@router.get("/fx/usd")
+async def billing_fx_usd() -> dict:
+    """Курс USD для отображения цен (обновляется утром и вечером по МСК)."""
+    from app.services.fx_rate import get_usd_rate
+
+    return await get_usd_rate()
+
+
 @router.get("/plans", response_model=BillingPlansOut)
 async def billing_plans() -> BillingPlansOut:
     items: list[BillingPlanItemOut] = []

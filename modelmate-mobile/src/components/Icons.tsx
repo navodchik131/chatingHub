@@ -246,3 +246,15 @@ export function IcoThemeGrid({ size = 25, stroke = color.muted }: IconProps) {
     </Svg>
   );
 }
+
+/** Приоткрытая дверь + стрелка наружу — выход из аккаунта. */
+export function IcoLogout({ size, stroke }: IconProps) {
+  return (
+    <IconBase size={size} stroke={stroke}>
+      <Path d="M3 21V5a2 2 0 0 1 2-2h7v18H5a2 2 0 0 1-2-2z" />
+      <Path d="M12 3l7 2.2v13.6L12 21" />
+      <Path d="M15.5 12H22" />
+      <Path d="M19.5 9.5L22 12l-2.5 2.5" />
+    </IconBase>
+  );
+}

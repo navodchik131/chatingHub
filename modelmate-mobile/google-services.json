@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "764914836128",
+    "project_id": "modelmate-mobile",
+    "storage_bucket": "modelmate-mobile.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:764914836128:android:a7a34945df3227699b5fc5",
+        "android_client_info": {
+          "package_name": "app.modelmate.mobile"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCXcPPYeAqS8LD0yudrT92tmu6UPKD3EpE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
