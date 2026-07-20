@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useCabinetData } from '../api/CabinetDataProvider';
 import { pageFromPathname, pathnameFromPage, WORKFLOW_APP_URL } from '../CabinetRoute';
@@ -94,16 +94,28 @@ export function AppProvider({ children, forceMobile = false }) {
 
   const lang = state.lang || (typeof localStorage !== 'undefined' && localStorage.getItem('i18nextLng')?.startsWith('en') ? 'en' : 'ru');
 
-  const setS = (patch) => setState((prev) => ({ ...prev, ...patch }));
+  const setS = useCallback((patch) => {
+    setState((prev) => {
+      let changed = false
+      for (const k of Object.keys(patch)) {
+        if (prev[k] !== patch[k]) {
+          changed = true
+          break
+        }
+      }
+      if (!changed) return prev
+      return { ...prev, ...patch }
+    })
+  }, [])
 
-  const go = (nextPage) => () => {
+  const go = useCallback((nextPage) => () => {
     if (nextPage === 'workflow') {
       window.location.assign(WORKFLOW_APP_URL)
       return
     }
     navigate(pathnameFromPage(nextPage))
     setS({ connDetail: null, charDetail: null, moreOpen: false })
-  }
+  }, [navigate, setS])
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -131,7 +143,7 @@ export function AppProvider({ children, forceMobile = false }) {
       isNarrow,
       cabinet,
     }),
-    [state, page, lang, isMobile, isNarrow, cabinet, t],
+    [state, page, lang, isMobile, isNarrow, cabinet, t, setS, go],
   );
 
   return <AppCtx.Provider value={value}>{children}</AppCtx.Provider>;

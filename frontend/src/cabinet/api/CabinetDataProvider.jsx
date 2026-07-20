@@ -107,6 +107,7 @@ export function CabinetDataProvider({ children }) {
   const wsRef = useRef(null)
   const activeConvIdRef = useRef(activeConvId)
   const notesByConvIdRef = useRef(notesByConvId)
+  const notesLoadInFlightRef = useRef(new Set())
   const refreshAllInFlightRef = useRef(false)
   const archiveImagesRef = useRef(archiveImages)
   const archiveVideosRef = useRef(archiveVideos)
@@ -233,6 +234,8 @@ export function CabinetDataProvider({ children }) {
   const loadNotes = useCallback(async (convId) => {
     const key = notesConvKey(convId)
     if (!key) return
+    if (notesLoadInFlightRef.current.has(key)) return
+    notesLoadInFlightRef.current.add(key)
     const hadCache = Array.isArray(notesByConvIdRef.current[key])
     if (!hadCache) {
       setNotesErrorsByConvId((prev) => {
@@ -252,6 +255,8 @@ export function CabinetDataProvider({ children }) {
       } else if (Number(activeConvIdRef.current) === key) {
         setNotesErrorForConv(key, msg)
       }
+    } finally {
+      notesLoadInFlightRef.current.delete(key)
     }
   }, [notesConvKey, patchNotesForConv, setNotesErrorForConv])
 

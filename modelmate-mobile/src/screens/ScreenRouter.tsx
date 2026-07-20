@@ -234,16 +234,20 @@ export function ScreenRouter() {
           <StudioShortcut icon={<IcoFilm size={17} stroke={color.purple} />} iconBg="rgba(192,132,252,0.12)" iconColor={color.purple} title="Видео" subtitle="Оживить кадр" />
         </Pressable>
         <SectionLabel>НЕДАВНИЕ ДИАЛОГИ</SectionLabel>
-        <Card style={s.listPad}>
+        <Card style={s.recentList}>
           {conversations.slice(0, 2).map((d, i) => (
-            <Pressable key={d.id} onPress={() => openThread(i)} style={s.recentRow}>
-              <Avatar letter={d.name[0]} index={d.gradIndex} size={30} />
-              <View style={s.flex1}>
-                <Text style={s.recentName}>{d.name}</Text>
-                <Text style={s.recentMsg} numberOfLines={1}>{d.msg}</Text>
-              </View>
-              <Pill text={d.plat} bg="rgba(56,189,248,0.12)" fg={color.blue} />
-            </Pressable>
+            <View key={d.id}>
+              {i > 0 ? <View style={s.divider} /> : null}
+              <ChatRow
+                name={d.name}
+                platform={d.plat}
+                message={d.msg}
+                gradIndex={d.gradIndex}
+                vip={d.vip}
+                unread={d.unread}
+                onPress={() => openThread(i)}
+              />
+            </View>
           ))}
         </Card>
       </ScreenScroll>
@@ -1584,6 +1588,7 @@ const s = StyleSheet.create({
   errorBanner: { color: color.red, fontSize: 12, marginBottom: 8, paddingHorizontal: 4 },
   kpiRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 4 },
   listPad: { paddingVertical: 4 },
+  recentList: { paddingVertical: 6, paddingHorizontal: 10 },
   dialogsScroll: { gap: 0, paddingTop: 0 },
   dialogsHeader: {
     flexDirection: 'row',
@@ -1623,9 +1628,6 @@ const s = StyleSheet.create({
   menuPickRow: { paddingVertical: 12, paddingHorizontal: 4, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.06)' },
   menuPickText: { fontSize: 14.5, fontWeight: '700', color: color.text },
   divider: { height: 1, backgroundColor: 'rgba(255,255,255,0.05)' },
-  recentRow: { flexDirection: 'row', gap: 9, alignItems: 'center' },
-  recentName: { fontFamily: font.bodyBold, fontSize: 12.5, color: color.text },
-  recentMsg: { fontSize: 11, color: color.muted },
   threadHead: { flexDirection: 'row', alignItems: 'center', gap: 9, paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: color.border },
   threadName: { fontFamily: font.bodyExtra, fontSize: 14, color: color.text },
   threadSub: { fontSize: 10, color: color.muted },
