@@ -7,6 +7,15 @@ export function withVideoDownloadParam(url) {
   return `${src}${src.includes('?') ? '&' : '?'}download=1`
 }
 
+function isIosWebKit() {
+  if (typeof navigator === 'undefined') return false
+  const ua = navigator.userAgent || ''
+  const platform = navigator.platform || ''
+  const touchPoints = Number(navigator.maxTouchPoints || 0)
+  const iosDevice = /iPhone|iPad|iPod/i.test(ua) || (platform === 'MacIntel' && touchPoints > 1)
+  return iosDevice && /WebKit/i.test(ua)
+}
+
 export async function downloadArchiveBlob(url, filename) {
   const src = withVideoDownloadParam(url)
   if (!src) throw new Error('Файл недоступен для скачивания')
@@ -20,6 +29,16 @@ export async function downloadArchiveBlob(url, filename) {
   }
 
   if (blob) {
+    if (isIosWebKit()) {
+      const directLink = document.createElement('a')
+      directLink.href = src
+      directLink.rel = 'noopener noreferrer'
+      document.body.appendChild(directLink)
+      directLink.click()
+      document.body.removeChild(directLink)
+      return
+    }
+
     const objectUrl = URL.createObjectURL(blob)
     try {
       const a = document.createElement('a')
@@ -31,6 +50,11 @@ export async function downloadArchiveBlob(url, filename) {
     } finally {
       window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000)
     }
+    return
+  }
+
+  if (isIosWebKit()) {
+    window.location.assign(src)
     return
   }
 

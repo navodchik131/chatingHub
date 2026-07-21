@@ -3006,6 +3006,14 @@
     return src + (src.includes('?') ? '&' : '?') + 'download=1'
   }
 
+  function isIosWebKit() {
+    const ua = navigator.userAgent || ''
+    const platform = navigator.platform || ''
+    const touchPoints = Number(navigator.maxTouchPoints || 0)
+    const iosDevice = /iPhone|iPad|iPod/i.test(ua) || (platform === 'MacIntel' && touchPoints > 1)
+    return iosDevice && /WebKit/i.test(ua)
+  }
+
   function archiveVideoUrl(item) {
     return (item?.video_url || '').trim()
   }
@@ -3030,6 +3038,15 @@
       if (res.ok) blob = await res.blob()
     } catch (_) {}
     if (blob) {
+      if (isIosWebKit()) {
+        const directLink = document.createElement('a')
+        directLink.href = src
+        directLink.rel = 'noopener noreferrer'
+        document.body.appendChild(directLink)
+        directLink.click()
+        document.body.removeChild(directLink)
+        return
+      }
       const file = new File([blob], defaultName, {
         type: blob.type || (isVideo ? 'video/mp4' : 'image/png'),
       })
@@ -3057,6 +3074,10 @@
       } finally {
         window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60000)
       }
+      return
+    }
+    if (isIosWebKit()) {
+      window.location.assign(src)
       return
     }
     window.open(src, '_blank', 'noopener,noreferrer')

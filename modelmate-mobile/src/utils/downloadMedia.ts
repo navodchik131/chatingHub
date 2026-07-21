@@ -1,5 +1,5 @@
 import * as FileSystem from 'expo-file-system/legacy';
-import * as Sharing from 'expo-sharing';
+import * as MediaLibrary from 'expo-media-library';
 import { apiUrl, resolveMediaUrl } from '@/src/api/config';
 import { getToken } from '@/src/api/token';
 
@@ -40,11 +40,10 @@ export async function downloadMedia(
     throw new Error(`Не удалось скачать файл (${result.status})`);
   }
 
-  if (!(await Sharing.isAvailableAsync())) {
-    throw new Error('Сохранение недоступно на этом устройстве');
+  const permission = await MediaLibrary.requestPermissionsAsync();
+  if (!permission.granted) {
+    throw new Error('Нет доступа к галерее. Разрешите сохранение в настройках приложения.');
   }
-  await Sharing.shareAsync(result.uri, {
-    mimeType: opts?.mimeType || result.headers?.['content-type'] || undefined,
-    dialogTitle: 'Сохранить файл',
-  });
+
+  await MediaLibrary.saveToLibraryAsync(result.uri);
 }

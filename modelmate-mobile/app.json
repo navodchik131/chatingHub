@@ -46,7 +46,14 @@
           "defaultChannel": "messages"
         }
       ],
-      "expo-sharing"
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "ModelMate сохраняет сгенерированные фото и видео в галерею.",
+          "savePhotosPermission": "ModelMate сохраняет сгенерированные фото и видео в галерею.",
+          "isAccessMediaLocationEnabled": false
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
