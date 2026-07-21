@@ -176,3 +176,51 @@ def face_swap_role_hints() -> dict[str, str]:
 
 def is_face_swap_scenario(scenario_type: str | None) -> bool:
     return (scenario_type or "").strip() == "scenarioFaceSwap"
+
+
+def is_detail_edit_scenario(scenario_type: str | None) -> bool:
+    return (scenario_type or "").strip() == "scenarioDetailEdit"
+
+
+def is_detail_edit_ref_role(role: str | None) -> bool:
+    """Кадр, который точечно редактируем (не смена сцены / не face swap)."""
+    return "frame to edit" in (role or "").lower()
+
+
+def is_detail_donor_ref_role(role: str | None) -> bool:
+    low = (role or "").lower()
+    return "detail" in low or "element reference" in low
+
+
+def workflow_refs_indicate_detail_edit(
+    references: list[Any] | tuple[Any, ...] | None,
+    *,
+    scenario_type: str | None = None,
+) -> bool:
+    """Detail-edit: явный scenarioDetailEdit или роль «frame to edit» на референсе."""
+    if is_detail_edit_scenario(scenario_type):
+        return True
+    for ref in references or ():
+        role = getattr(ref, "role", None)
+        if role is None and isinstance(ref, dict):
+            role = ref.get("role")
+        if is_detail_edit_ref_role(str(role or "")):
+            return True
+    return False
+
+
+def enrich_description_for_detail_edit(description: str) -> str:
+    base = (description or "").strip()
+    hint = (
+        "SCENARIO — detail edit (in-place retouch of one frame):\n"
+        "PRIORITY 1 — photo-base / frame-to-edit reference is the FULL edit canvas: keep the same person, "
+        "pose, camera, crop, lighting, background and overall composition unless USER_NOTES explicitly change them.\n"
+        "PRIORITY 2 — apply ONLY the local change described in USER_NOTES (color, prop, garment detail, "
+        "small object, minor retouch).\n"
+        "If a detail / element reference is attached, use it ONLY as the look of that element — "
+        "do NOT replace the whole scene with it.\n"
+        "FORBIDDEN: new location, reframe, re-pose, new identity, face-swap, inventing a different shot."
+    )
+    if not base:
+        return hint
+    return f"{base}\n\n{hint}"

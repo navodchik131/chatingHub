@@ -795,6 +795,16 @@ FACE / MODEL SWAP SCENARIO (strict):
 - Do NOT copy the scene-reference person's identity. Do NOT re-pose or reframe. Rebuild one coherent individual from MODEL in the locked scene.
 """
 
+_WORKFLOW_DETAIL_EDIT_SYSTEM_ADDON = """
+DETAIL EDIT SCENARIO (strict in-place retouch):
+- The photo-base / frame-to-edit reference is the FULL canvas: keep the same person, pose, camera, crop, lighting, background and composition.
+- USER_NOTES describe the ONLY local change (color, prop, garment detail, small object, minor retouch).
+- If a detail / element reference is attached, use it ONLY for that element's appearance — never replace the whole scene with it.
+- Write a WaveSpeed edit prompt that mutates only the requested detail on the SAME photograph.
+- FORBIDDEN: new location, reframe, re-pose, new identity, face-swap, inventing a different shot.
+- Do NOT use MODEL studio photos — identity comes from the frame being edited.
+"""
+
 
 def _workflow_ref_caption(ref: WorkflowGrokUserRef, index: int) -> str:
     role = (ref.role or "").strip() or "reference"
@@ -804,7 +814,16 @@ def _workflow_ref_caption(ref: WorkflowGrokUserRef, index: int) -> str:
     if (ref.file_name or "").strip():
         parts.append(f"File: {ref.file_name.strip()}")
     low = role.lower()
-    if any(h in low for h in ("location", "environment", "background")):
+    if "frame to edit" in low:
+        parts.append(
+            "EDIT CANVAS — keep this exact photo's person, pose, camera, crop, light and background; "
+            "change only what USER_NOTES request."
+        )
+    elif any(h in low for h in ("detail", "element reference")):
+        parts.append(
+            "DETAIL DONOR ONLY — look/style of the element described in USER_NOTES; never replace the whole scene."
+        )
+    elif any(h in low for h in ("location", "environment", "background")):
         parts.append(
             "BACKGROUND DONOR ONLY — architecture/ground/sky/light; never copy people from this image."
         )
@@ -845,12 +864,15 @@ async def grok_compose_studio_workflow_multi_ref(
     notes = (user_notes or "").strip()
     location_change = (scenario_type or "").strip() == "scenarioLocationChange"
     face_swap = (scenario_type or "").strip() == "scenarioFaceSwap"
-    if location_change:
+    detail_edit = (scenario_type or "").strip() == "scenarioDetailEdit" or any(
+        "frame to edit" in (ref.role or "").lower() for ref in user_refs
+    )
+    if location_change or detail_edit:
         model_images = []
         profile = "{}"
     hair_rule = (
-        "Hairstyle locked from photo-base workflow reference — do not change length, color, or style."
-        if location_change
+        "Hairstyle locked from photo-base / frame-to-edit reference — do not change unless USER_NOTES ask."
+        if location_change or detail_edit
         else (
             "Hairstyle from identity source (MODEL photos or identity workflow ref) — "
             "scene reference must not override hair identity."
@@ -871,13 +893,21 @@ async def grok_compose_studio_workflow_multi_ref(
         system += _WORKFLOW_LOCATION_CHANGE_SYSTEM_ADDON
     if face_swap:
         system += _WORKFLOW_FACE_SWAP_SYSTEM_ADDON
+    if detail_edit:
+        system += _WORKFLOW_DETAIL_EDIT_SYSTEM_ADDON
     vis_block = _grok_visibility_user_block(
         visibility=visibility,
         reference_scene_description=reference_scene_description,
     )
 
     model_rule = ""
-    if location_change:
+    if detail_edit:
+        model_rule = (
+            "DETAIL EDIT: identity, pose, camera, crop, background and light come ONLY from the "
+            "photo-base / frame-to-edit USER_WORKFLOW_REFERENCE. Optional detail refs supply the look of "
+            "the element named in USER_NOTES only. MODEL studio photos are NOT used.\n\n"
+        )
+    elif location_change:
         model_rule = (
             "LOCATION CHANGE: identity, pose, camera, crop, wardrobe, and hair come ONLY from the "
             "photo-base USER_WORKFLOW_REFERENCE. Location refs supply background only. "

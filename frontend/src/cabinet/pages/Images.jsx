@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useRef, useMemo } from 'react';
 import Hoverable from '../components/Hoverable';
 import {
   IcoLayers, IcoFace, IcoShirt, IcoPin, IcoText, IcoGrid2, IcoEdit,
@@ -11,10 +11,34 @@ import { cardPickStyle, modeCardStyle, refThumbStyle, refUploadStyle, borderHove
 import { modeDefs } from '../data/catalog';
 import { resolveSlotSource, archiveThumbUrl, archiveDownloadUrl, isArchivePending } from '../api/actions';
 import { downloadArchiveBlob } from '../api/archiveDownload';
-import { validateStudioForm, syncRefArchivePicks, enginesForNsfw, sameStudioModelId } from '../api/studioHelpers';
+import {
+  validateStudioForm, syncRefArchivePicks, enginesForNsfw, sameStudioModelId,
+  normalizeWaveModel, waveModelFromState, isNsfwMode,
+} from '../api/studioHelpers';
+import { quoteStudioImageCredits } from '../../studioImagePricing';
+import { normalizeBillingPlan } from '../../billing/planCatalog';
 
 const ratios = ['9:16', '16:9', '1:1', '4:3', '3:4'];
 const countOptions = [2, 3, 4, 6, 8];
+
+function carouselCreditLabels(appState, lang) {
+  const nsfw = isNsfwMode(appState);
+  const wave = normalizeWaveModel(waveModelFromState(appState), nsfw);
+  const per = quoteStudioImageCredits({
+    waveModelId: wave.apiId,
+    waveProfile: appState.contentMode === 'sfw' ? 'regular' : 'nsfw',
+    wanEditTier: wave.tier,
+    grokPipeline: 'light',
+    studioMode: 'photo_edit',
+    workflow: false,
+  });
+  const frames = Math.max(2, Math.min(8, Number(appState.carouselCount) || 4));
+  const total = per * frames;
+  if (lang === 'ru') {
+    return { perLabel: `−${per} кр/кадр`, totalLabel: `−${total} кр` };
+  }
+  return { perLabel: `−${per} cr/frame`, totalLabel: `−${total} cr` };
+}
 
 const modeIcons = {
   layers: IcoLayers, face: IcoFace, shirt: IcoShirt, pin: IcoPin, text: IcoText, grid2: IcoGrid2, edit: IcoEdit,
@@ -268,8 +292,21 @@ function Slot({ slot, index }) {
 export default function Images() {
   const { t, lang, s, setS, isMobile, go, cabinet } = useApp();
 
-  const modes = modeDefs(lang, t.cr);
+  const carouselCosts = useMemo(() => carouselCreditLabels(s, lang), [s.contentMode, s.aiModel, s.carouselCount, lang]);
+  const isPro = normalizeBillingPlan(cabinet.me?.billing_plan) === 'pro';
+  const modes = useMemo(() => {
+    const defs = modeDefs(lang, t.cr);
+    return defs.map((m) => {
+      if (m.id !== 'carousel') return m;
+      if (isPro) return { ...m, cost: 'Pro' };
+      return { ...m, cost: carouselCosts.perLabel };
+    });
+  }, [lang, t.cr, carouselCosts.perLabel, isPro]);
   const curMode = modes.find((m) => m.id === s.imgMode) || modes[0];
+  const generateCostLabel =
+    s.imgMode === 'carousel'
+      ? (isPro ? 'Pro' : carouselCosts.totalLabel)
+      : curMode.cost;
   const displaySlots = s.imgMode === 'edit' && s.needsRef === 'yes'
     ? [...curMode.slots, { label: t.refImage, archive: false }]
     : curMode.slots;
@@ -542,7 +579,7 @@ export default function Images() {
           >
             <span style={{ display: 'flex', width: 17, height: 17, color: color.limeInk }}><IcoSpark /></span>
             <span style={{ flex: 1, fontWeight: 800, fontSize: 14, color: color.limeInk }}>{t.generate}</span>
-            <span style={{ fontFamily: font.mono, fontSize: 11, fontWeight: 600, color: color.limeInkSoft }}>{curMode.cost}</span>
+            <span style={{ fontFamily: font.mono, fontSize: 11, fontWeight: 600, color: color.limeInkSoft }}>{generateCostLabel}</span>
           </Hoverable>
         </div>
 

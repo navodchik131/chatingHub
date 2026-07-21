@@ -2920,15 +2920,31 @@ async def _accept_studio_refine_job_from_workflow(
     )
     _ = primary_bytes, primary_mime
 
+    from app.services.studio_workflow_scenarios import (
+        enrich_description_for_detail_edit,
+        workflow_refs_indicate_detail_edit,
+    )
+
+    plan_refs = [ref_item for _b, _m, ref_item in reference_images]
+    detail_edit = bool(reference_images) and workflow_refs_indicate_detail_edit(
+        plan_refs, scenario_type=plan.scenario_type
+    )
+    plan_description = plan.description
+    if detail_edit:
+        plan_description = enrich_description_for_detail_edit(plan_description)
+
     if reference_images:
         dual_ref_identity = is_workflow_dual_ref_identity_mode(
             scenario_type=plan.scenario_type,
             model_id=plan.model_id,
-            references=[ref_item for _b, _m, ref_item in reference_images],
+            references=plan_refs,
         )
         if plan.scenario_type == "scenarioLocationChange":
             # Identity + pose from photo-base ref; location refs = background only.
             studio_mode = "grok_compose"
+        elif detail_edit:
+            # Точечный edit кадра: Grok пишет промпт, WaveSpeed получает только photo-base.
+            studio_mode = "photo_edit"
         elif plan.scenario_type == "scenarioFaceSwap" or dual_ref_identity:
             # face_swap: scene ref must be Image 1 in WaveSpeed (pose/camera/background lock).
             studio_mode = "face_swap"
@@ -2946,13 +2962,13 @@ async def _accept_studio_refine_job_from_workflow(
         or is_workflow_dual_ref_identity_mode(
             scenario_type=plan.scenario_type,
             model_id=plan.model_id,
-            references=[ref_item for _b, _m, ref_item in reference_images],
+            references=plan_refs,
         )
     )
-    effective_model_id = None if location_change else plan.model_id
+    effective_model_id = None if (location_change or detail_edit) else plan.model_id
 
     params: dict[str, Any] = {
-        "description": plan.description,
+        "description": plan_description,
         "model_id": str(effective_model_id) if effective_model_id is not None else "",
         "existing_generation_id": "",
         "output_aspect": plan.output_aspect,
@@ -2961,14 +2977,19 @@ async def _accept_studio_refine_job_from_workflow(
         "studio_wave_profile": plan.studio_wave_profile,
         "generate_wavespeed": "1",
         "wavespeed_single_reference": (
-            "0"
-            if location_change or face_swap
-            else ("1" if reference_images else "0")
+            "1"
+            if detail_edit
+            else (
+                "0"
+                if location_change or face_swap
+                else ("1" if reference_images else "0")
+            )
         ),
         "send_pose_reference_to_wavespeed": (
             "1"
             if location_change
             or face_swap
+            or detail_edit
             or not (reference_images and plan.model_id is not None)
             else "0"
         ),
@@ -2977,9 +2998,12 @@ async def _accept_studio_refine_job_from_workflow(
         "include_realism_engine": "1" if plan.realism_enabled else "0",
         "workflow_selfie_capture": "1" if plan.selfie_capture_enabled else "0",
         "workflow_source": "1",
+        "workflow_detail_edit": "1" if detail_edit else "0",
         "workflow_wave_model": plan.workflow_wave_model,
         "workflow_wave_resolution": plan.output_resolution,
-        "workflow_scenario_type": plan.scenario_type or "",
+        "workflow_scenario_type": (
+            "scenarioDetailEdit" if detail_edit and not plan.scenario_type else (plan.scenario_type or "")
+        ),
     }
     if workflow_first_frame:
         params["workflow_first_frame"] = "1"
@@ -3497,10 +3521,27 @@ async def _studio_job_execute_refine_prompt(
                     )
                     for ref_bytes, ref_mime, meta in workflow_ref_loaded
                 ]
+                workflow_scenario = (
+                    str(p.get("workflow_scenario_type") or "").strip() or None
+                )
+                detail_edit_job = _truthy_send_pose_reference_to_wavespeed(
+                    p.get("workflow_detail_edit")
+                ) or any(
+                    "frame to edit" in str(meta.get("role") or "").lower()
+                    for _b, _m, meta in workflow_ref_loaded
+                )
+                if detail_edit_job and not workflow_scenario:
+                    workflow_scenario = "scenarioDetailEdit"
                 composed = await grok_compose_studio_workflow_multi_ref(
                     user_refs=user_refs,
-                    model_images=imgs_model if mid is not None else [],
-                    model_profile_text=model_profile_text,
+                    model_images=(
+                        []
+                        if detail_edit_job
+                        else (imgs_model if mid is not None else [])
+                    ),
+                    model_profile_text=(
+                        None if detail_edit_job else model_profile_text
+                    ),
                     wave_profile=wave_profile_n,
                     user_notes=desc,
                     lock_hairstyle=effective_lock_hairstyle,
@@ -3509,7 +3550,7 @@ async def _studio_job_execute_refine_prompt(
                     reference_scene_description=(
                         prompt_plan.reference_scene_description if prompt_plan else None
                     ),
-                    scenario_type=str(p.get("workflow_scenario_type") or "").strip() or None,
+                    scenario_type=workflow_scenario,
                 )
                 refined = composed.wavespeed_scene_prompt
                 reference_scene = composed.reference_scene_lock or None
@@ -4028,7 +4069,21 @@ async def _studio_job_execute_refine_prompt(
             workflow_prompt_only_t2i = False
             if workflow_ref_loaded and send_pose_to_ws:
                 try:
-                    for ref_bytes, ref_mime, _meta in workflow_ref_loaded:
+                    refs_for_ws = workflow_ref_loaded
+                    if _truthy_send_pose_reference_to_wavespeed(
+                        p.get("workflow_detail_edit")
+                    ) or any(
+                        "frame to edit" in str(meta.get("role") or "").lower()
+                        for _b, _m, meta in workflow_ref_loaded
+                    ):
+                        # Detail-edit: в WaveSpeed только кадр для правки, без detail-ref.
+                        base_only = [
+                            (ref_bytes, ref_mime, meta)
+                            for ref_bytes, ref_mime, meta in workflow_ref_loaded
+                            if "frame to edit" in str(meta.get("role") or "").lower()
+                        ]
+                        refs_for_ws = base_only or workflow_ref_loaded[:1]
+                    for ref_bytes, ref_mime, _meta in refs_for_ws:
                         fid = save_pose_reference_bytes(
                             owner_id=oid,
                             raw=ref_bytes,

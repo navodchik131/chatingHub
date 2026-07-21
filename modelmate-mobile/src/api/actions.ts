@@ -473,6 +473,7 @@ function slotUploadKey(mode: string, index: number) {
   if (mode === 'outfit') return index === 0 ? 'ref' : 'outfit-cloth';
   if (mode === 'loc' || mode === 'location') return index === 0 ? 'ref' : 'location-photo';
   if (mode === 'carousel') return 'carousel';
+  if (mode === 'edit') return index === 0 ? 'edit-frame' : 'edit-ref';
   return 'ref';
 }
 
@@ -514,6 +515,7 @@ export async function runImageGeneration(params: {
     aiEngine: String(params.navState.aiEngine || ''),
     imgFormat: String(params.navState.imgFormat || '9:16'),
     studioPrompt: String(params.navState.imgPrompt || ''),
+    needsRef: String(params.navState.editNeedsRef || '') === 'yes' ? 'yes' : 'no',
   };
 
   const store = {
@@ -557,24 +559,18 @@ export async function runImageGeneration(params: {
   }
 
   if (mode === 'edit') {
-    const needsRef = String(params.navState.editNeedsRef || '') === 'yes';
-    const frameFile = params.uploadFiles['edit-frame'] ?? params.uploadFiles.ref;
-    if (!frameFile) throw new Error('Загрузите кадр для изменения');
-    if (!String(params.navState.imgPrompt || '').trim()) throw new Error('Опишите, что нужно изменить');
-    if (needsRef && !modelId) throw new Error('Выберите персонажа');
-    const fd = new FormData();
-    fd.append('studio_mode', 'photo_edit');
-    fd.append('description', String(params.navState.imgPrompt || ''));
-    fd.append('output_aspect', String(params.navState.imgFormat || '9:16'));
-    fd.append('studio_wave_profile', isNsfwMode(appState) ? 'nsfw' : 'regular');
-    const wave = normalizeWaveModel(waveModelFromState(appState), isNsfwMode(appState));
-    fd.append('workflow_wave_model', wave.apiId);
-    if (wave.tier) fd.append('wan_edit_tier', wave.tier);
-    appendLocalFile(fd, 'image', frameFile);
-    if (needsRef && modelId) fd.append('model_id', String(modelId));
-    const refFile = params.uploadFiles['edit-ref'];
-    if (needsRef && refFile) appendLocalFile(fd, 'inpaint_mask', refFile);
-    return postStudioJobStart('/api/studio/refine-prompt', { method: 'POST', body: fd });
+    if (!params.uploadFiles['edit-frame'] && !params.uploadFiles.ref) {
+      throw new Error('Загрузите кадр для изменения');
+    }
+    if (!String(params.navState.imgPrompt || '').trim()) {
+      throw new Error('Опишите, что нужно изменить');
+    }
+    if (
+      String(params.navState.editNeedsRef || '') === 'yes' &&
+      !params.uploadFiles['edit-ref']
+    ) {
+      throw new Error('Загрузите референс детали');
+    }
   }
 
   const built = await MMOS_STUDIO_SCENARIOS.buildGraphForMode(mode, {

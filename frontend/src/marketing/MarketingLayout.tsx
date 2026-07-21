@@ -73,8 +73,10 @@ export function MarketingLayout() {
     if (searchParams.get('account') !== 'integrations') return
     const next = new URLSearchParams()
     const fanvue = searchParams.get('fanvue')
+    const instagram = searchParams.get('instagram')
     const reason = searchParams.get('reason')
     if (fanvue) next.set('fanvue', fanvue)
+    if (instagram) next.set('instagram', instagram)
     if (reason) next.set('reason', reason)
     const q = next.toString()
     navigate(`/workspace/connections${q ? `?${q}` : ''}`, { replace: true })

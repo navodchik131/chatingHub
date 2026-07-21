@@ -53,6 +53,15 @@ export async function startFanvueOAuth(studioModelId) {
   })
 }
 
+export async function startInstagramOAuth(studioModelId) {
+  const body = {}
+  if (studioModelId) body.studio_model_id = Number(studioModelId)
+  return apiJson('/api/integrations/instagram/oauth/start', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
 export async function saveTributeKey(apiKey, label, studioModelId) {
   const body = { api_key: apiKey }
   if (label) body.label = label
@@ -129,6 +138,11 @@ export async function deleteTelegramConnection(connectionId) {
 export async function deleteFanvueConnection(connectionId) {
   const q = connectionId ? `?connection_id=${connectionId}` : ''
   return apiJson(`/api/integrations/fanvue${q}`, { method: 'DELETE' })
+}
+
+export async function deleteInstagramConnection(connectionId) {
+  const q = connectionId ? `?connection_id=${connectionId}` : ''
+  return apiJson(`/api/integrations/instagram${q}`, { method: 'DELETE' })
 }
 
 export async function deleteTributeConnection(connectionId) {
@@ -562,7 +576,7 @@ export async function runImageGeneration({ appState, studioStore, userPrompt, wo
   const scenarios = await ensureStudioScenarios()
   const mode = appState.imgMode || 'prompt'
   const modelId = studioStore.selectedModelId
-  const needsModel = mode === 'ref' || mode === 'swap' || mode === 'prompt' || mode === 'edit'
+  const needsModel = mode === 'ref' || mode === 'swap' || mode === 'prompt'
   if (needsModel && !modelId) throw new Error('Выберите персонажа')
 
   const bridgeApi = {

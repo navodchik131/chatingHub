@@ -122,6 +122,9 @@ function ConnectionDetail() {
     if (data.id === 'fanvue') {
       return lang === 'ru' ? 'Fanvue подключён.' : 'Fanvue connected.';
     }
+    if (data.id === 'ig') {
+      return lang === 'ru' ? 'Instagram подключён.' : 'Instagram connected.';
+    }
     return lang === 'ru' ? 'Сохранено.' : 'Saved.';
   };
 
@@ -146,6 +149,8 @@ function ConnectionDetail() {
       if (ok) setForm({ token: '' });
     } else if (data.id === 'fanvue') {
       ok = await cabinet.saveIntegration('fanvue', { modelId: form.modelId });
+    } else if (data.id === 'ig') {
+      ok = await cabinet.saveIntegration('ig', { modelId: form.modelId });
     } else if (data.id === 'tribute') {
       if (!form.apiKey?.trim()) return;
       ok = await cabinet.saveIntegration('tribute', {
@@ -166,11 +171,13 @@ function ConnectionDetail() {
     void cabinet.disconnectIntegration(data.id, connectionId);
   };
 
-  const hasCopy = ['fanvue', 'tribute'].includes(data.id);
+  const hasCopy = ['fanvue', 'tribute', 'ig'].includes(data.id);
   const Icon = connIcons[data.icon];
-  const disabled = data.id === 'ig' || data.id === 'push';
+  const disabled = data.id === 'push';
   const fanvueOAuthReady = ig?.fanvue_oauth_available !== false;
   const fanvueConnected = Boolean(ig?.fanvue_oauth_connected);
+  const instagramOAuthReady = ig?.instagram_oauth_available !== false;
+  const instagramConnected = (ig?.instagram_connections || []).length > 0;
 
   const webhookCopyUrl = () => {
     if (data.id === 'fanvue') {
@@ -178,6 +185,9 @@ function ConnectionDetail() {
     }
     if (data.id === 'tribute') {
       return ig?.tribute_connections?.[0]?.webhook_url || null;
+    }
+    if (data.id === 'ig') {
+      return ig?.instagram_webhook_url || null;
     }
     return null;
   };
@@ -191,7 +201,7 @@ function ConnectionDetail() {
     <div>
       <BackLink onClick={() => setS({ connDetail: null, connFlash: null })}>{t.allConnections}</BackLink>
 
-      {s.connFlash && ['fanvue', 'wavespeed', 'tg', 'tribute'].includes(data.id) && (
+      {s.connFlash && ['fanvue', 'ig', 'wavespeed', 'tg', 'tribute'].includes(data.id) && (
         <NoteBlock
           style={{
             marginBottom: 12,
@@ -314,6 +324,30 @@ function ConnectionDetail() {
                 />
               </>
             )}
+            {data.id === 'ig' && (
+              <>
+                {!instagramOAuthReady && (
+                  <NoteBlock style={{ gridColumn: '1 / -1' }}>
+                    {lang === 'ru'
+                      ? 'OAuth Instagram недоступен на сервере — нужны INSTAGRAM_APP_ID, INSTAGRAM_APP_SECRET и INSTAGRAM_WEBHOOK_VERIFY_TOKEN.'
+                      : 'Instagram OAuth is not configured on the server.'}
+                  </NoteBlock>
+                )}
+                {instagramConnected && (
+                  <NoteBlock style={{ gridColumn: '1 / -1', borderColor: 'rgba(74,222,128,.35)', background: 'rgba(74,222,128,.08)' }}>
+                    {lang === 'ru' ? 'Instagram уже подключён. Можно переподключить аккаунт.' : 'Instagram is connected. You can reconnect the account.'}
+                  </NoteBlock>
+                )}
+                <ModelSelect
+                  label={lang === 'ru' ? 'ПЕРСОНАЖ' : 'CHARACTER'}
+                  value={form.modelId}
+                  options={modelOptions}
+                  lang={lang}
+                  onChange={(e) => setForm({ modelId: e.target.value })}
+                  style={{ gridColumn: '1 / -1' }}
+                />
+              </>
+            )}
             {data.id === 'tribute' && (
               <>
                 <Field label="TRIBUTE API KEY" value={form.apiKey} onChange={(e) => setForm({ apiKey: e.target.value })} style={{ gridColumn: '1 / -1' }} />
@@ -327,7 +361,7 @@ function ConnectionDetail() {
                 />
               </>
             )}
-            {['wavespeed', 'tg', 'fanvue', 'tribute'].includes(data.id) ? null : cfs.fields.map((f, i) => {
+            {['wavespeed', 'tg', 'fanvue', 'ig', 'tribute'].includes(data.id) ? null : cfs.fields.map((f, i) => {
               const wrap = f.half ? undefined : { gridColumn: '1 / -1' };
               if (f.kind === 'text') {
                 return <Field key={i} label={f.lbl} value={f.val} placeholder={f.ph} style={wrap} />;
@@ -371,8 +405,22 @@ function ConnectionDetail() {
                   ? { background: 'rgba(255,255,255,.06)', color: color.textGhost }
                   : { background: 'linear-gradient(120deg,#C084FC,#F0A8C8)', color: color.purpleInk }),
               }}
-              hover={disabled || (data.id === 'fanvue' && !fanvueOAuthReady) ? {} : { filter: 'brightness(1.08)' }}
-              onClick={disabled || cabinet.busy || (data.id === 'fanvue' && !fanvueOAuthReady) ? undefined : () => void handleSave()}
+              hover={
+                disabled
+                || cabinet.busy
+                || (data.id === 'fanvue' && !fanvueOAuthReady)
+                || (data.id === 'ig' && !instagramOAuthReady)
+                  ? {}
+                  : { filter: 'brightness(1.08)' }
+              }
+              onClick={
+                disabled
+                || cabinet.busy
+                || (data.id === 'fanvue' && !fanvueOAuthReady)
+                || (data.id === 'ig' && !instagramOAuthReady)
+                  ? undefined
+                  : () => void handleSave()
+              }
             >
               {cabinet.busy
                 ? (lang === 'ru' ? 'Сохранение…' : 'Saving…')
@@ -380,6 +428,10 @@ function ConnectionDetail() {
                 ? (fanvueConnected
                   ? (lang === 'ru' ? 'Переподключить Fanvue' : 'Reconnect Fanvue')
                   : (lang === 'ru' ? 'OAuth Fanvue' : 'Fanvue OAuth'))
+                : data.id === 'ig'
+                ? (instagramConnected
+                  ? (lang === 'ru' ? 'Переподключить Instagram' : 'Reconnect Instagram')
+                  : (lang === 'ru' ? 'Подключить Instagram' : 'Connect Instagram'))
                 : cfs.prim}
             </Hoverable>
             {hasCopy && (

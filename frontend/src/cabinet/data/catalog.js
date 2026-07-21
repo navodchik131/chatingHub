@@ -156,9 +156,11 @@ export const connDefs = (lang) => [
   {
     id: 'ig', name: 'Instagram', icon: 'cam', tone: 'dim',
     iconCol: { background: 'rgba(255,255,255,.07)', color: '#9BA0A6' },
-    st: lang === 'ru' ? 'В РАЗРАБОТКЕ' : 'COMING SOON',
-    desc: lang === 'ru' ? 'Диалоги Instagram — скоро. Существующие коннекты видны в списке' : 'Instagram dialogs — soon. Existing connects remain visible',
-    help: lang === 'ru' ? 'Раздел в разработке — интерфейс ограничен.' : 'Under development — limited UI.',
+    st: '…',
+    desc: lang === 'ru' ? 'Direct-сообщения Instagram в диалогах ModelMate' : 'Instagram Direct messages in ModelMate dialogs',
+    help: lang === 'ru'
+      ? 'Подключите Professional-аккаунт (Business/Creator) через Instagram Login. Входящие Direct приходят по webhook, ответы — из Диалогов. Окно ответа Instagram — 24 часа после последнего сообщения фана.'
+      : 'Connect a Professional account (Business/Creator) via Instagram Login. Incoming DMs arrive via webhook; reply from Dialogs. Instagram reply window is 24h after the fan’s last message.',
   },
   {
     id: 'push', name: lang === 'ru' ? 'Уведомления' : 'Notifications', icon: 'bell', tone: 'dim',
@@ -235,10 +237,12 @@ export const connFieldSets = (lang) => {
     },
     ig: {
       title: 'Instagram',
-      prim: lang === 'ru' ? 'Добавить Instagram' : 'Add Instagram',
-      disabled: true,
+      prim: lang === 'ru' ? 'Подключить Instagram' : 'Connect Instagram',
       fields: [
-        F.note(lang === 'ru' ? 'Интеграция Instagram Direct пока в разработке. Подключение аккаунта временно недоступно — мы сообщим, когда функция будет готова. Окно ответа — 24 часа после последнего сообщения фана.' : "Instagram Direct integration is under development. Reply window is 24h after the fan's last message."),
+        F.select(lang === 'ru' ? 'ПЕРСОНАЖ' : 'CHARACTER', notAssigned, [notAssigned], true),
+        F.note(lang === 'ru'
+          ? 'Нужен Instagram Professional (Business или Creator). После OAuth Direct-сообщения появятся в Диалогах. Окно ответа — 24 часа.'
+          : 'Requires Instagram Professional (Business or Creator). After OAuth, Direct messages appear in Dialogs. Reply window is 24h.'),
       ],
       list: [],
     },

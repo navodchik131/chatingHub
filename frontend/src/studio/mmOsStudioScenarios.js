@@ -248,7 +248,7 @@ function buildPromptOnlyGraph(modelId, opts) {
   return { graph, targetNodeId }
 }
 
-function buildDetailEditGraph(baseRefId, detailRefId, modelId, opts) {
+function buildDetailEditGraph(baseRefId, detailRefId, _modelId, opts) {
   const targetNodeId = 'imageGeneration-1'
   const realism = realismBlock(targetNodeId, 'realism-in', opts.realismEnabled !== false)
   const nodes = [
@@ -282,10 +282,7 @@ function buildDetailEditGraph(baseRefId, detailRefId, modelId, opts) {
       edge('e-ref-detail-gen', 'reference-detail', targetNodeId, 'reference-out', 'reference-in'),
     )
   }
-  if (modelId) {
-    nodes.push(node('model-1', 'model', { modelId }))
-    edges.push(edge('e-model-gen', 'model-1', targetNodeId, 'model-out', 'model-in'))
-  }
+  // Персонаж кабинета не нужен: identity берётся из кадра; WaveSpeed получает только photo-base.
   return { graph: { nodes, edges }, targetNodeId }
 }
 
@@ -384,7 +381,7 @@ async function buildGraphForMode(mode, ctx) {
           }
       detailRefId = await resolveRefId(API, store, archiveThumbUrlFn, slot1)
     }
-    return buildDetailEditGraph(baseRefId, detailRefId, modelId, opts)
+    return buildDetailEditGraph(baseRefId, detailRefId, null, opts)
   }
   return null
 }

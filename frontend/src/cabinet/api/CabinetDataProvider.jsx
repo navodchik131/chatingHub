@@ -571,6 +571,7 @@ export function CabinetDataProvider({ children }) {
       await run(async () => {
         if (type === 'tg') await actions.deleteTelegramConnection(connectionId)
         else if (type === 'fanvue') await actions.deleteFanvueConnection(connectionId)
+        else if (type === 'ig') await actions.deleteInstagramConnection(connectionId)
         else if (type === 'tribute') await actions.deleteTributeConnection(connectionId)
         else throw new Error('Отключение недоступно для этой интеграции')
         await refreshAll()
@@ -611,6 +612,12 @@ export function CabinetDataProvider({ children }) {
         else if (type === 'tg') status = await actions.addTelegramBot(fields.token, fields.modelId)
         else if (type === 'fanvue') {
           const data = await actions.startFanvueOAuth(fields.modelId)
+          const url = data.authorize_url || data.url
+          if (url) window.location.href = url
+          else throw new Error('OAuth URL не получен')
+          return true
+        } else if (type === 'ig') {
+          const data = await actions.startInstagramOAuth(fields.modelId)
           const url = data.authorize_url || data.url
           if (url) window.location.href = url
           else throw new Error('OAuth URL не получен')

@@ -166,6 +166,16 @@ export function mapIntegrationConnections(platformId, integrations, models, lang
       meta: modelLabel(c.studio_model_id),
     }))
   }
+  if (platformId === 'ig') {
+    return (ig.instagram_connections || []).map((c) => ({
+      id: c.id,
+      name: c.instagram_username ? `@${c.instagram_username}` : (c.label || `#${c.id}`),
+      meta: [
+        c.oauth_connected ? 'OAuth' : (lang === 'ru' ? 'OAuth ?' : 'OAuth ?'),
+        modelLabel(c.studio_model_id),
+      ].join(' · '),
+    }))
+  }
   return []
 }
 
@@ -207,6 +217,16 @@ export function mapIntegrationCurrent(platformId, integrations, models, lang) {
       ...(c?.label ? [{ k: lang === 'ru' ? 'Метка' : 'Label', v: c.label }] : []),
       ...(c ? [{ k: lang === 'ru' ? 'Персонаж' : 'Character', v: modelLabel(c.studio_model_id) }] : []),
       { k: lang === 'ru' ? 'Статус' : 'Status', v: ig.tribute_configured ? (lang === 'ru' ? 'настроен' : 'configured') : '—' },
+    ]
+  }
+  if (platformId === 'ig') {
+    const rows = ig.instagram_connections || []
+    if (!rows.length) return []
+    const c = rows[0]
+    return [
+      { k: lang === 'ru' ? 'Аккаунт' : 'Account', v: c.instagram_username ? `@${c.instagram_username}` : '—' },
+      { k: lang === 'ru' ? 'Персонаж' : 'Character', v: modelLabel(c.studio_model_id) },
+      { k: 'OAuth', v: c.oauth_connected ? (lang === 'ru' ? 'активен' : 'active') : '—' },
     ]
   }
   if (platformId === 'push') {
@@ -266,6 +286,7 @@ export function mapConnectionStatus(integrations, connId, lang) {
   const tgN = (ig.telegram_connections || []).length
   const fvN = (ig.fanvue_connections || []).length
   const trN = (ig.tribute_connections || []).length
+  const igN = (ig.instagram_connections || []).length
   if (connId === 'tg') {
     return {
       st: tgN ? `${tgN} ${lang === 'ru' ? 'БОТА' : 'BOTS'}` : lang === 'ru' ? 'НЕ НАСТРОЕН' : 'NOT SET',
@@ -296,7 +317,15 @@ export function mapConnectionStatus(integrations, connId, lang) {
       tone: ok ? 'active' : 'warn',
     }
   }
-  if (connId === 'ig') return { st: lang === 'ru' ? 'В РАЗРАБОТКЕ' : 'COMING SOON', tone: 'dim' }
+  if (connId === 'ig') {
+    if (!ig.instagram_oauth_available && !igN) {
+      return { st: lang === 'ru' ? 'НЕ НАСТРОЕН НА СЕРВЕРЕ' : 'SERVER NOT SET', tone: 'warn' }
+    }
+    return {
+      st: igN ? lang === 'ru' ? 'ПОДКЛЮЧЁН' : 'CONNECTED' : lang === 'ru' ? 'НЕ НАСТРОЕН' : 'NOT SET',
+      tone: igN ? 'active' : 'warn',
+    }
+  }
   if (connId === 'push') {
     const on = typeof Notification !== 'undefined' && Notification.permission === 'granted'
     return { st: on ? lang === 'ru' ? 'ВКЛЮЧЕНЫ' : 'ON' : lang === 'ru' ? 'ВЫКЛ' : 'OFF', tone: on ? 'active' : 'dim' }

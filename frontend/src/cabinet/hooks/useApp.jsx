@@ -121,9 +121,16 @@ export function AppProvider({ children, forceMobile = false }) {
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const fanvue = params.get('fanvue');
-    if (page !== 'connections' || !fanvue) return;
-    setS({ connDetail: 'fanvue', connFlash: fanvue === 'connected' ? 'ok' : 'error' });
-    params.delete('fanvue');
+    const instagram = params.get('instagram');
+    if (page !== 'connections' || (!fanvue && !instagram)) return;
+    if (fanvue) {
+      setS({ connDetail: 'fanvue', connFlash: fanvue === 'connected' ? 'ok' : 'error' });
+      params.delete('fanvue');
+    }
+    if (instagram) {
+      setS({ connDetail: 'ig', connFlash: instagram === 'connected' ? 'ok' : 'error' });
+      params.delete('instagram');
+    }
     params.delete('reason');
     const rest = params.toString();
     navigate({ pathname: location.pathname, search: rest ? `?${rest}` : '' }, { replace: true });

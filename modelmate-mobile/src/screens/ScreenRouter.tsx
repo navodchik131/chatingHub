@@ -173,8 +173,6 @@ export function ScreenRouter() {
     connectionsList,
     rawIntegrations,
     overviewKpis,
-    billingPlans,
-    creditPacks,
     creditHistory,
     donations,
     donationEvents,
@@ -219,7 +217,6 @@ export function ScreenRouter() {
     deleteOperator,
     saveConnection,
     disconnectConnection,
-    openBillingCheckout,
     searchAdminUsers,
     saveAdminSubscription,
     adjustAdminCredits,
@@ -1478,7 +1475,6 @@ export function ScreenRouter() {
   }
 
   if (cur === 'billing') {
-    const plans = nav.billTier === 'pro' ? billingPlans.pro : billingPlans.standard;
     return (
       <ScreenScroll>
         <TopBar title="Тариф и баланс" onBack={pop} />
@@ -1486,33 +1482,6 @@ export function ScreenRouter() {
           <View style={s.between}><Text style={s.planTitle}>{me?.plan_display_name || me?.billing_plan || '—'}</Text><Pill text={(me?.subscription_status || 'active').toUpperCase()} bg="rgba(74,222,128,0.12)" fg={color.green} /></View>
           <Text style={s.charSub}>{me?.credits_balance ?? 0} кредитов{me?.subscription_expires_at ? ` · до ${fmtDateShort(me.subscription_expires_at)}` : ''}</Text>
         </Card>
-        <SectionLabel>СМЕНИТЬ ПЛАН</SectionLabel>
-        <SegmentedToggle left="Standard" right="Pro" activeLeft={nav.billTier === 'standard'} onLeft={() => patch({ billTier: 'standard' })} onRight={() => patch({ billTier: 'pro' })} />
-        {plans.map((p, i) => (
-          <Card key={p[0]}>
-            <View style={s.between}>
-              <View><Text style={s.planName}>{p[0]}</Text><Text style={s.charSub}>{p[1]} ₽/мес</Text></View>
-              <Pressable
-                style={[s.payBtn, i === 1 && s.payBtnActive]}
-                onPress={async () => {
-                  const url = await openBillingCheckout(p[0].toLowerCase().replace(/\s+/g, '_'));
-                  if (url) void Linking.openURL(url);
-                }}
-              >
-                <Text style={[s.payBtnText, i === 1 && s.payBtnTextActive]}>Оплатить</Text>
-              </Pressable>
-            </View>
-          </Card>
-        ))}
-        <SectionLabel>ПАКЕТЫ КРЕДИТОВ</SectionLabel>
-        <View style={s.grid2}>
-          {creditPacks.map(([amt, price]) => (
-            <Card key={amt}>
-              <Text style={s.creditAmt}>{amt}</Text>
-              <Text style={s.charSub}>{price}</Text>
-            </Card>
-          ))}
-        </View>
         <SectionLabel>ИСТОРИЯ ОПЕРАЦИЙ</SectionLabel>
         <Card style={s.gap8}>
           {creditHistory.length ? creditHistory.map((row) => (
