@@ -288,8 +288,8 @@ def test_assemble_reference_prompt_motion_video_swap_short():
     assert "MODEL REPLACEMENT" in p
     assert "@Image1" in p
     assert "@Video1" in p
-    assert "camera" in p.lower()
-    assert "cinematic quality" in p.lower()
+    assert "Motion reference only" in p
+    assert "Object control" in p
     assert "замени персонажа" not in p.lower()
 
 
@@ -299,8 +299,8 @@ def test_build_seedance_motion_video_swap_prompt_includes_guide_blocks():
     p = build_seedance_motion_video_swap_prompt("Slow turn toward camera.")
     assert "MODEL REPLACEMENT" in p
     assert "@Video1" in p
-    assert "Camera:" in p
-    assert "Cinematic quality" in p
+    assert "Strict priority rules" in p
+    assert "Object control" in p
     assert "Slow turn toward camera." in p
 
 

@@ -22,9 +22,18 @@ MAX_SEEDANCE_VIDEO_MODEL_IDENTITY_WITH_BODY = 3
 SEEDANCE_T2V_PROMPT_MAX_CHARS = 3000
 
 SEEDANCE_MOTION_VIDEO_SWAP_PROMPT = (
-    "MODEL REPLACEMENT: @Image1 is the lead character for the full clip — face, hair, and identity. "
-    "Fully replicate @Video1's choreography, timing, gestures, body dynamics, and camera movement. "
-    "Do not copy the reference performer's face, skin, hair, or body shape from @Video1."
+    "MODEL REPLACEMENT: @Image1 is the lead character and the ONLY reference for appearance.\n\n"
+    "Strict priority rules:\n"
+    "- Take face, hair, exact hairstyle, skin tone, skin texture, body shape, body proportions, "
+    "breast size and shape, waist, hips, limbs, tattoos (if any) EXCLUSIVELY from @Image1.\n"
+    "- Completely ignore and replace the original performer's face, body, skin, and all visual details from @Video1.\n"
+    "- Do not transfer any tattoos, marks, moles, skin imperfections or body features from the video reference.\n\n"
+    "Motion reference only:\n"
+    "- Replicate ONLY camera movements, framing, angles, timing, choreography, body dynamics, "
+    "hand gestures, speed and movement patterns from @Video1.\n"
+    "- Do not copy the original performer's appearance or objects if they conflict with @Image1.\n\n"
+    "Object control: Replace any object in the video with the equivalent object shown in @Image1.\n\n"
+    "High priority: Perfect face consistency, stable identity, natural body proportions matching @Image1."
 )
 
 _SEEDANCE_MOTION_CAMERA_LINE = (
@@ -194,12 +203,8 @@ def build_seedance_motion_video_swap_prompt(
     *,
     max_chars: int | None = None,
 ) -> str:
-    """Промпт для Seedance T2V: @Image1 = identity, @Video1 = motion + camera (Seedance 2.0 guide)."""
-    parts = [
-        SEEDANCE_MOTION_VIDEO_SWAP_PROMPT,
-        _SEEDANCE_MOTION_CAMERA_LINE,
-        _SEEDANCE_QUALITY_LOCK,
-    ]
+    """Промпт для Seedance T2V motion control: @Image1 = identity, @Video1 = motion only."""
+    parts = [SEEDANCE_MOTION_VIDEO_SWAP_PROMPT]
     notes = seedance_optional_user_notes(user_notes)
     if notes:
         parts.append(notes)
