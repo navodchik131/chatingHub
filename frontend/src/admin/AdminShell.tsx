@@ -10,6 +10,7 @@ export type AdminTabId =
   | 'exif_bot'
   | 'ig_bot'
   | 'creator_donations'
+  | 'tickets'
 
 type NavItem = {
   id: AdminTabId
@@ -81,6 +82,14 @@ const NAV_ICONS: Record<AdminTabId, ReactNode> = {
       </svg>
     </NavIcon>
   ),
+  tickets: (
+    <NavIcon>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+        <circle cx="12" cy="12" r="9" />
+        <path d="M12 8v4l3 2" />
+      </svg>
+    </NavIcon>
+  ),
 }
 
 export function AdminShell({
@@ -117,6 +126,7 @@ export function AdminShell({
     { id: 'exif_bot', label: t('tabs.exifBot'), icon: NAV_ICONS.exif_bot },
     { id: 'ig_bot', label: t('tabs.igBot'), icon: NAV_ICONS.ig_bot },
     { id: 'creator_donations', label: t('tabs.creatorDonations'), icon: NAV_ICONS.creator_donations },
+    { id: 'tickets', label: t('tabs.tickets'), icon: NAV_ICONS.tickets },
   ]
 
   const initial = (meEmail || '?').trim().charAt(0).toUpperCase()

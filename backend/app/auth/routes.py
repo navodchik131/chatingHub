@@ -15,8 +15,10 @@ from app.db.session import get_session
 from app.schemas import (
     CompleteOwnerEmailIn,
     LoginIn,
+    PasswordChangeIn,
     PlanLimitsOut,
     PlanUsageOut,
+    ProfilePatchIn,
     RegisterIn,
     TelegramLoginIn,
     TokenOut,
@@ -201,6 +203,41 @@ async def complete_email(
     )
     await session.commit()
     return TokenOut(access_token=create_access_token(str(user.id)))
+
+
+@router.patch("/profile", response_model=UserMeOut)
+async def patch_profile(
+    body: ProfilePatchIn,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> UserMeOut:
+    if not is_workspace_owner(user):
+        raise HTTPException(status_code=403, detail="Изменение email только для владельца")
+    normalized = body.email.lower().strip()
+    if not is_real_owner_email(normalized):
+        raise HTTPException(status_code=400, detail="Укажите рабочий email")
+    dup = await session.scalar(
+        select(User.id).where(User.email == normalized, User.id != user.id)
+    )
+    if dup:
+        raise HTTPException(status_code=400, detail="Email уже зарегистрирован")
+    user.email = normalized
+    user.auth_email_verified = True
+    await session.commit()
+    return await me(user=user, session=session)
+
+
+@router.post("/password")
+async def change_password(
+    body: PasswordChangeIn,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> dict:
+    if not verify_password(body.current_password, user.hashed_password):
+        raise HTTPException(status_code=400, detail="Неверный текущий пароль")
+    user.hashed_password = hash_password(body.new_password)
+    await session.commit()
+    return {"ok": True}
 
 
 @router.get("/me", response_model=UserMeOut)

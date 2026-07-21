@@ -7,6 +7,7 @@ import { color, line, font, G } from '../styles/tokens';
 import { modeCardStyle, refUploadStyle, borderHoverOff, cardPickStyle } from '../styles/mixins';
 import { videoModeDefs } from '../data/catalog';
 import { archiveThumbUrl, archiveDownloadUrl, archiveVideoUrl, isArchivePending } from '../api/actions';
+import { downloadArchiveBlob } from '../api/archiveDownload';
 import { sameStudioModelId, enginesForNsfw } from '../api/studioHelpers';
 import { computeMotionVideoCreditCost } from '../../studioMotionPricing';
 
@@ -92,13 +93,13 @@ export default function Video() {
 
   const vidCost = useMemo(() => {
     const duration = Number(s.vidTime) || 5;
-    const hasReferenceVideo = Boolean(cabinet.motionVideoFileId);
+    const hasReferenceVideo = motionControl && Boolean(cabinet.motionVideoFileId);
     const pricing = cabinet.health?.studio_motion_video_pricing;
     return computeMotionVideoCreditCost(duration, hasReferenceVideo, pricing, {
       variant: 'standard',
       resolution: vidQualityToResolution(s.vidQuality),
     });
-  }, [cabinet.health, cabinet.motionVideoFileId, s.vidTime, s.vidQuality]);
+  }, [cabinet.health, cabinet.motionVideoFileId, s.vidTime, s.vidQuality, motionControl]);
   const ffImgStyle = { width: 70, aspectRatio: '9/16', borderRadius: 10, flex: 'none', background: G[3] };
 
   const qualityOpts = [{ l: '480p', v: '480' }, { l: '720p', v: '720' }, { l: '1080p', v: '1080' }, { l: '4K', v: '4k' }];
@@ -465,14 +466,136 @@ export default function Video() {
           )}
 
           {!motionControl && (
-            <div
-              style={{
-                border: `1px dashed ${line.strong}`, borderRadius: 12, padding: '24px 16px',
-                textAlign: 'center', color: color.textDim, fontSize: 12.5, lineHeight: 1.5,
-              }}
-            >
-              {t.inDevelopment}
-            </div>
+            <>
+              <div>
+                <Eyebrow>{t.character}</Eyebrow>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {(cabinet.models || []).map((m) => (
+                    <SelectPill
+                      key={m.id}
+                      accent="pink"
+                      on={sameStudioModelId(cabinet.selectedModelId, m.id)}
+                      onClick={() => cabinet.setSelectedModelId(m.id)}
+                    >
+                      {m.name || `#${m.id}`}
+                    </SelectPill>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <Eyebrow>{t.sourceFrame}</Eyebrow>
+                <input
+                  ref={frameRef}
+                  type="file"
+                  accept="image/*"
+                  style={{ display: 'none' }}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) cabinet.setUploadFile('motion-frame', file);
+                    e.target.value = '';
+                  }}
+                />
+                <Hoverable
+                  style={{
+                    borderRadius: 12, padding: 16,
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, cursor: 'pointer',
+                    ...refUploadStyle(Boolean(cabinet.uploadFiles['motion-frame'] || ffPreviewUrl)).base,
+                  }}
+                  hover={refUploadStyle(Boolean(cabinet.uploadFiles['motion-frame'] || ffPreviewUrl)).hover}
+                  onClick={() => frameRef.current?.click()}
+                >
+                  <span style={{ display: 'flex', width: 22, height: 22, color: color.textMuted }}><IcoUpload /></span>
+                  <span style={{ fontSize: 11.5, fontWeight: 700, color: color.textDim, textAlign: 'center' }}>
+                    {cabinet.uploadFiles['motion-frame']?.name || (lang === 'ru' ? 'Загрузите первый кадр' : 'Upload first frame')}
+                  </span>
+                </Hoverable>
+                {(cabinet.archiveImages || []).length > 0 && (
+                  <div style={{ marginTop: 10 }}>
+                    <div style={{ fontSize: 10.5, fontWeight: 700, color: color.textDim, marginBottom: 6 }}>{t.srcArchive}</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 6 }}>
+                      {(cabinet.archiveImages || []).slice(0, 4).map((item, i) => {
+                        const thumb = archiveThumbUrl(item);
+                        const picked = s.carouselPickId === item.id;
+                        const pickSt = cardPickStyle(picked);
+                        return (
+                          <Hoverable
+                            key={item.id}
+                            style={{
+                              ...pickSt.base,
+                              aspectRatio: '3/4',
+                              background: thumb ? `center/cover url(${thumb})` : G[i % 6],
+                            }}
+                            hover={pickSt.hover}
+                            onClick={() => {
+                              setS({ carouselPickId: item.id });
+                              cabinet.setUploadFile('motion-frame', null);
+                            }}
+                          />
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <Eyebrow>{t.motionPrompt}</Eyebrow>
+                <textarea
+                  rows={3}
+                  value={s.motionPrompt || ''}
+                  onChange={(e) => setS({ motionPrompt: e.target.value })}
+                  placeholder={t.motionHint}
+                  style={{
+                    width: '100%', background: color.bgPanel, border: `1px solid ${line.soft}`,
+                    borderRadius: 10, padding: '10px 12px', color: color.text,
+                    fontFamily: font.body, fontSize: 12.5, resize: 'vertical', outline: 'none', boxSizing: 'border-box',
+                  }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <div>
+                  <Eyebrow size={9} spacing="1.4px" style={{ marginBottom: 7 }}>{t.vidQuality}</Eyebrow>
+                  <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                    {qualityOpts.map((q) => (
+                      <Chip key={q.v} on={s.vidQuality === q.v} onClick={() => setS({ vidQuality: q.v })}>{q.l}</Chip>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <Eyebrow size={9} spacing="1.4px" style={{ marginBottom: 7 }}>{t.format}</Eyebrow>
+                  <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                    {vfmtOpts.map((v) => (
+                      <Chip key={v} on={s.vidFormat === v} onClick={() => setS({ vidFormat: v })}>{v}</Chip>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <Eyebrow size={9} spacing="1.4px" style={{ marginBottom: 7 }}>{t.duration}</Eyebrow>
+                  <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                    {vtimeOpts.map((v) => (
+                      <Chip key={v.v} on={s.vidTime === v.v} onClick={() => setS({ vidTime: v.v })}>{v.l}</Chip>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <Hoverable
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 12, background: color.lime,
+                  borderRadius: 12, padding: '12px 16px', cursor: 'pointer',
+                }}
+                hover={{ background: color.limeHi }}
+                onClick={handleGenerateVideo}
+              >
+                <span style={{ display: 'flex', width: 17, height: 17, color: color.limeInk }}><IcoFilm /></span>
+                <span style={{ flex: 1, fontWeight: 800, fontSize: 14, color: color.limeInk }}>{t.generateVideo}</span>
+                <span style={{ fontFamily: font.mono, fontSize: 11, fontWeight: 600, color: color.limeInkSoft }}>
+                  −{vidCost} {t.cr}
+                </span>
+              </Hoverable>
+            </>
           )}
 
           {motionControl && (
@@ -528,7 +651,7 @@ export default function Video() {
         <div>
           <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 10 }}>{t.archive}</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(150px,1fr))', gap: 10 }}>
-            {(cabinet.archiveVideos || []).slice(0, 8).map((item, i) => {
+            {(cabinet.archiveVideos || []).map((item, i) => {
               const poster = archiveThumbUrl(item);
               const videoUrl = archiveVideoUrl(item);
               const downloadUrl = archiveDownloadUrl(item) || videoUrl;
@@ -628,21 +751,35 @@ export default function Video() {
                 <div style={{ padding: '8px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ fontWeight: 700, fontSize: 11 }}>{model?.name || '—'}</span>
                   {downloadUrl && !pending && (
-                    <a
-                      href={downloadUrl}
-                      download
-                      target="_blank"
-                      rel="noreferrer"
-                      onClick={(e) => e.stopPropagation()}
-                      style={{ fontSize: 10, fontWeight: 700, color: color.textDim, textDecoration: 'none' }}
+                    <Hoverable
+                      as="span"
+                      style={{ fontSize: 10, fontWeight: 700, color: color.textDim, cursor: 'pointer' }}
+                      hover={{ color: color.lime }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void downloadArchiveBlob(downloadUrl, `modelmate-video-${item.id}.mp4`);
+                      }}
                     >
                       ↓ MP4
-                    </a>
+                    </Hoverable>
                   )}
                 </div>
               </Hoverable>
             );})}
           </div>
+          {cabinet.archiveVideosHasMore && (
+            <Hoverable
+              style={{
+                marginTop: 12, display: 'inline-flex', alignItems: 'center', gap: 8,
+                fontSize: 12.5, fontWeight: 700, color: color.lime, cursor: 'pointer',
+                border: '1px solid rgba(215,244,82,.35)', borderRadius: 10, padding: '8px 16px',
+              }}
+              hover={{ background: 'rgba(215,244,82,.08)' }}
+              onClick={() => void cabinet.loadMoreArchiveVideos()}
+            >
+              {t.showMore}
+            </Hoverable>
+          )}
         </div>
       </div>
 
@@ -708,17 +845,19 @@ export default function Video() {
               }}
             />
             {s.vidLightbox.downloadUrl && (
-              <a
-                href={s.vidLightbox.downloadUrl}
-                target="_blank"
-                rel="noreferrer"
+              <Hoverable
                 style={{
                   alignSelf: 'center', fontSize: 12, fontWeight: 700, color: color.lime,
-                  textDecoration: 'none', padding: '8px 16px',
+                  padding: '8px 16px', cursor: 'pointer',
                 }}
+                hover={{ color: color.limeHi }}
+                onClick={() => void downloadArchiveBlob(
+                  s.vidLightbox.downloadUrl,
+                  `modelmate-video-${s.vidLightbox.id || 'clip'}.mp4`,
+                )}
               >
                 ↓ {lang === 'ru' ? 'Скачать MP4' : 'Download MP4'}
-              </a>
+              </Hoverable>
             )}
           </div>
         </Overlay>

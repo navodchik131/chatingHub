@@ -1383,3 +1383,129 @@
   opacity: 0.45;
   cursor: not-allowed;
 }
+
+.admin-tickets__toolbar {
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.admin-tickets__grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 360px) 1fr;
+  gap: 16px;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .admin-tickets__grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.admin-tickets__rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.admin-tickets__row {
+  width: 100%;
+  text-align: left;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.02);
+  padding: 10px 12px;
+  cursor: pointer;
+  color: inherit;
+}
+
+.admin-tickets__row.is-active {
+  border-color: rgba(215, 244, 82, 0.45);
+  background: rgba(215, 244, 82, 0.06);
+}
+
+.admin-tickets__row-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: flex-start;
+  margin-bottom: 4px;
+}
+
+.admin-tickets__subject {
+  font-weight: 700;
+  font-size: 0.92rem;
+  line-height: 1.35;
+}
+
+.admin-tickets__detail-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  margin-bottom: 14px;
+}
+
+.admin-tickets__thread {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 14px;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.admin-tickets__msg {
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.admin-tickets__msg.is-staff {
+  border-color: rgba(215, 244, 82, 0.25);
+  background: rgba(215, 244, 82, 0.06);
+}
+
+.admin-tickets__msg-meta {
+  margin-bottom: 6px;
+}
+
+.admin-tickets__reply {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.admin-input--textarea {
+  min-height: 96px;
+  resize: vertical;
+}
+
+.admin-input--compact {
+  max-width: 180px;
+}
+
+.admin-btn {
+  align-self: flex-start;
+  padding: 0.45rem 0.85rem;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.admin-btn--primary {
+  border: none;
+  background: #d7f452;
+  color: #171a05;
+}

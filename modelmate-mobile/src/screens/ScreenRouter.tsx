@@ -1,5 +1,5 @@
 import { LinearGradient } from 'expo-linear-gradient';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, Image, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { TextInput } from 'react-native-gesture-handler';
 import {
@@ -12,6 +12,7 @@ import {
   IcoFilm,
   IcoHeart,
   IcoImage,
+  IcoLifebuoy,
   IcoLogout,
   IcoPlug,
   IcoPlus,
@@ -20,6 +21,7 @@ import {
   IcoStar,
   IcoUser,
   IcoUsers,
+  IcoWand,
 } from '@/src/components/Icons';
 import {
   CheckRow,
@@ -82,8 +84,10 @@ import { RemoteImage } from '@/src/components/RemoteImage';
 import { SwipeableChatRow } from '@/src/components/SwipeableChatRow';
 import { ThreadView } from '@/src/components/ThreadView';
 import { resolveMediaUrl } from '@/src/api/config';
-import { charFieldsFromModel, fmtDateShort, fmtMoney, fmtRub } from '@/src/api/helpers';
+import { charFieldsFromModel, fmtDateShort, fmtMoney, fmtRub, fmtTime } from '@/src/api/helpers';
 import { mapCharPhotoTags, mapIntegrationConnections } from '@/src/api/mappers';
+import { downloadMedia } from '@/src/utils/downloadMedia';
+import type { SupportTicketOut } from '@/src/api/types';
 import {
   computeCarouselModeCardCost,
   computeImageGenerationCost,
@@ -92,12 +96,33 @@ import {
 
 const adminPlanChips = ['Solo', 'Studio', 'Agency', 'Pro Solo', 'Pro Pro'];
 
+const TICKET_TYPES = ['Общие вопросы', 'Технические проблемы', 'Оплата', 'Подписки'];
+
+function ticketStatusLabel(status: string) {
+  switch (status) {
+    case 'answered': return 'Получен ответ';
+    case 'closed': return 'Завершено';
+    case 'in_review': return 'На рассмотрении';
+    default: return 'На рассмотрении';
+  }
+}
+
+function ticketStatusColor(status: string) {
+  switch (status) {
+    case 'answered': return color.purple;
+    case 'closed': return color.green;
+    case 'in_review': return color.orange;
+    default: return color.orange;
+  }
+}
+
 function modeIcon(kind: string, rgb: string, size = 16) {
   const stroke = `rgb(${rgb})`;
   switch (kind) {
     case 'user': return <IcoUser size={size} stroke={stroke} />;
     case 'star': return <IcoStar size={size} stroke={stroke} />;
     case 'bolt': return <IcoBolt size={size} stroke={stroke} />;
+    case 'wand': return <IcoWand size={size} stroke={stroke} />;
     default: return <IcoImage size={size} stroke={stroke} />;
   }
 }
@@ -115,6 +140,7 @@ function connIcon(kind: string, rgb: string) {
 export function ScreenRouter() {
   const nav = useNav();
   const app = useAppData();
+  const [activeTicket, setActiveTicket] = useState<SupportTicketOut | null>(null);
   const { t, locale } = useAppSettings();
   const {
     userName,
@@ -127,6 +153,18 @@ export function ScreenRouter() {
     rawModels,
     modelNames,
     archiveTiles,
+    archiveHasMore,
+    loadMoreArchive,
+    archiveVideoTiles,
+    videoArchiveHasMore,
+    loadMoreVideoArchive,
+    supportTickets,
+    refreshSupportTickets,
+    createSupportTicket,
+    fetchSupportTicket,
+    saveProfileEmail,
+    changeUserPassword,
+    uploadExifReference,
     connectionsList,
     rawIntegrations,
     overviewKpis,
@@ -185,6 +223,7 @@ export function ScreenRouter() {
     genResults,
     refreshAll,
     refreshArchive,
+    refreshArchiveVideos,
     logout,
   } = app;
   const { cur, pop, push, resetTo, openThread, startGen, regen, patch, chatIdx } = nav;
@@ -216,6 +255,28 @@ export function ScreenRouter() {
     if (cur === 'archive' || cur === 'archive-item') void refreshArchive();
   }, [cur, refreshArchive]);
 
+  useEffect(() => {
+    if (cur === 'video-archive' || cur === 'video-item') void refreshArchiveVideos();
+  }, [cur, refreshArchiveVideos]);
+
+  useEffect(() => {
+    if (cur === 'support' || cur.startsWith('ticket:')) void refreshSupportTickets();
+  }, [cur, refreshSupportTickets]);
+
+  useEffect(() => {
+    if (!cur.startsWith('ticket:')) {
+      setActiveTicket(null);
+      return;
+    }
+    const id = Number(cur.slice(7));
+    if (!id) return;
+    void fetchSupportTicket(id).then(setActiveTicket).catch(() => setActiveTicket(null));
+  }, [cur, fetchSupportTicket]);
+
+  useEffect(() => {
+    if (cur === 'profileEdit') patch({ profileEditEmail: userEmail });
+  }, [cur, userEmail, patch]);
+
   const patchGenStatus = (key: string, status: 'loading' | 'done' | null) => {
     if (status === null) {
       const next = { ...nav.genStatus };
@@ -232,6 +293,7 @@ export function ScreenRouter() {
   };
 
   const slotFileKey = (modeId: string, label: string, index: number) => {
+    if (modeId === 'edit') return index === 0 ? 'edit-frame' : 'edit-ref';
     if (modeId === 'outfit') return index === 0 ? 'ref' : 'outfit-cloth';
     if (modeId === 'loc') return index === 0 ? 'ref' : 'location-photo';
     if (modeId === 'carousel') return 'carousel';
@@ -541,6 +603,7 @@ export function ScreenRouter() {
         <StudioRow icon={<IcoImage size={16} stroke="rgb(215,244,82)" />} tintRgb="215,244,82" title="Картинки" desc="6 режимов генерации" onPress={() => push('images')} />
         <StudioRow icon={<IcoFilm size={16} stroke="rgb(192,132,252)" />} tintRgb="192,132,252" title="Видео" desc="Оживить кадр" onPress={() => push('video')} />
         <StudioRow icon={<IcoBolt size={16} stroke="rgb(74,222,128)" />} tintRgb="74,222,128" title="Архив" desc="Все сгенерированные кадры" onPress={() => push('archive')} />
+        <StudioRow icon={<IcoFilm size={16} stroke="rgb(56,189,248)" />} tintRgb="56,189,248" title="Архив видео" desc="Все сгенерированные видео" onPress={() => push('video-archive')} />
       </ScreenScroll>
     );
   }
@@ -551,7 +614,12 @@ export function ScreenRouter() {
         <TopBar title="Картинки" onBack={pop} />
         {modeDefs.map((m) => {
           const modeCost = m.id === 'carousel'
-            ? computeCarouselModeCardCost(health, me)
+            ? computeCarouselModeCardCost({
+                contentMode: nav.contentMode,
+                aiEngine: nav.aiEngine,
+                health,
+                me,
+              })
             : computeImageGenerationCost({
                 modeId: m.id,
                 contentMode: nav.contentMode,
@@ -628,11 +696,42 @@ export function ScreenRouter() {
               </View>
             </>
           ) : null}
-          {modeId === 'prompt' ? (
+          {modeId === 'prompt' || modeId === 'edit' ? (
             <TextAreaField
               value={nav.imgPrompt}
               onChangeText={(t) => patch({ imgPrompt: t })}
+              placeholder={modeId === 'edit' ? 'Например: добавь солнцезащитные очки, убери фон…' : undefined}
             />
+          ) : null}
+          {modeId === 'edit' ? (
+            <>
+              <Text style={s.editNeedsRefLabel}>Нужен референс?</Text>
+              <View style={s.rowGap8}>
+                <Pressable
+                  style={[s.limeHalf, nav.editNeedsRef !== 'yes' && s.ghostHalf]}
+                  onPress={() => patch({ editNeedsRef: 'yes' })}
+                >
+                  <Text style={[s.limeHalfText, nav.editNeedsRef !== 'yes' && s.ghostHalfText]}>Да</Text>
+                </Pressable>
+                <Pressable
+                  style={[s.ghostHalf, nav.editNeedsRef === 'yes' && s.limeHalf]}
+                  onPress={() => patch({ editNeedsRef: 'no' })}
+                >
+                  <Text style={[s.ghostHalfText, nav.editNeedsRef === 'yes' && s.limeHalfText]}>Нет</Text>
+                </Pressable>
+              </View>
+              {nav.editNeedsRef === 'yes' ? (
+                <DropSlot
+                  label="Референс-изображение"
+                  onPress={async () => {
+                    try {
+                      const file = await pickImage();
+                      if (file) setUploadFile('edit-ref', file);
+                    } catch { /* ignore */ }
+                  }}
+                />
+              ) : null}
+            </>
           ) : null}
           {modeId === 'carousel' ? (
             <>
@@ -682,12 +781,18 @@ export function ScreenRouter() {
             </Pressable>
           ))}
         </View>
+        {archiveHasMore ? (
+          <Pressable style={s.showMoreBtn} onPress={() => void loadMoreArchive()}>
+            <Text style={s.showMoreText}>Показать ещё</Text>
+          </Pressable>
+        ) : null}
       </ScreenScroll>
     );
   }
 
   if (cur === 'archive-item') {
     const t = archiveTiles[nav.archiveIdx] ?? archiveTiles[0];
+    const downloadUrl = t?.raw?.image_url || t?.imageUrl;
     return (
       <ScreenScroll>
         <TopBar title="Кадр" onBack={pop} />
@@ -696,7 +801,14 @@ export function ScreenRouter() {
           <Text style={s.lightboxBadge}>{t.who}</Text>
         </View>
         <View style={s.rowGap8}>
-          <Pressable style={s.limeHalf}><Text style={s.limeHalfText}>Скачать</Text></Pressable>
+          <Pressable
+            style={s.limeHalf}
+            onPress={() => {
+              if (downloadUrl) void downloadMedia(downloadUrl, { filename: 'frame.jpg', mimeType: 'image/jpeg' }).catch(() => {});
+            }}
+          >
+            <Text style={s.limeHalfText}>Скачать</Text>
+          </Pressable>
           <Pressable style={s.purpleHalf}><Text style={s.purpleHalfText}>В видео</Text></Pressable>
         </View>
       </ScreenScroll>
@@ -705,18 +817,20 @@ export function ScreenRouter() {
 
   if (cur === 'video') {
     const st = nav.genStatus.video;
-    const motionControl = (nav.vidMode || 'motion-control') === 'motion-control';
+    const promptMode = nav.vidMode === 'prompt';
+    const motionControl = !promptMode && (nav.vidMode || 'motion-control') === 'motion-control';
     const engines = enginesForMode(nav.contentMode);
     const engineLabel = engines.includes(nav.aiEngine) ? nav.aiEngine : engines[0];
     const vidCost = computeVideoGenerationCost({
       duration: nav.vidDuration,
       quality: nav.vidQuality,
-      hasReferenceVideo: Boolean(motionVideoFileId),
+      hasReferenceVideo: promptMode ? false : Boolean(motionVideoFileId),
       health,
       me,
     });
     const ffPreviewUrl = firstFrameUrl || '';
     const patchFf = (ffState: typeof nav.ffState) => patch({ ffState });
+    const videoResultUrl = genResults.video?.videoUrl || genResults.video?.imageUrl;
 
     return (
       <ScreenScroll>
@@ -729,19 +843,38 @@ export function ScreenRouter() {
             <Text style={[s.vidModeTitle, motionControl && s.vidModeTitleOn]}>Motion control</Text>
             <Text style={s.vidModeDesc}>Повтор движения из референс-ролика</Text>
           </Pressable>
-          <Pressable style={[s.vidModeCard, s.vidModeCardDisabled]} disabled>
-            <View style={s.vidModeHead}>
-              <Text style={s.vidModeTitle}>По промпту</Text>
-              <Text style={s.vidModeBadge}>В разработке</Text>
-            </View>
+          <Pressable
+            style={[s.vidModeCard, promptMode && s.vidModeCardOn]}
+            onPress={() => patch({ vidMode: 'prompt' })}
+          >
+            <Text style={[s.vidModeTitle, promptMode && s.vidModeTitleOn]}>По промпту</Text>
             <Text style={s.vidModeDesc}>Видео из текстового описания</Text>
           </Pressable>
         </View>
 
-        {motionControl ? (
+        <SectionLabel>ПЕРСОНАЖ</SectionLabel>
+        <ChipPicker items={modelNames} value={nav.vidChar} onChange={(c) => patch({ vidChar: c })} />
+
+        {promptMode ? (
           <>
-            <SectionLabel>ПЕРСОНАЖ</SectionLabel>
-            <ChipPicker items={modelNames} value={nav.vidChar} onChange={(c) => patch({ vidChar: c })} />
+            <SectionLabel>ПЕРВЫЙ КАДР</SectionLabel>
+            <DropSlotWide
+              label={uploadFiles['motion-frame']?.name || 'Загрузить изображение'}
+              onPress={async () => {
+                try {
+                  const file = await pickImage();
+                  if (file) setUploadFile('motion-frame', file);
+                } catch { /* ignore */ }
+              }}
+            />
+            <TextAreaField
+              value={nav.imgPrompt}
+              onChangeText={(t) => patch({ imgPrompt: t })}
+              placeholder="She slowly turns to camera and smiles…"
+            />
+          </>
+        ) : (
+          <>
             <SectionLabel>ТИП КОНТЕНТА</SectionLabel>
             <SegmentedToggle
               left="SFW"
@@ -816,44 +949,54 @@ export function ScreenRouter() {
                 </Card>
               )
             ) : null}
-            <SectionLabel>КАЧЕСТВО</SectionLabel>
-            <ChipPicker
-              items={[...VID_QUALITIES]}
-              value={nav.vidQuality}
-              onChange={(q) => patch({ vidQuality: q })}
-            />
-            <SectionLabel>ФОРМАТ</SectionLabel>
-            <ChipPicker
-              items={[...IMG_FORMATS]}
-              value={nav.vidFormat}
-              onChange={(f) => patch({ vidFormat: f })}
-            />
-            <SectionLabel>ДЛИТЕЛЬНОСТЬ</SectionLabel>
-            <NumberChipPicker
-              items={[...VID_DURATIONS]}
-              value={nav.vidDuration}
-              onChange={(d) => patch({ vidDuration: d })}
-              suffix="с"
-            />
-            <LimeButton title="Создать видео" cost={vidCost} icon={<IcoFilm size={16} stroke={color.limeText} />} onPress={() => runGen('video')} />
-            {st === 'loading' ? <GenLoadingCard title="Рендерим видео…" sub="~20 c" /> : null}
-            {st === 'done' ? (
-              <Card style={s.gap10}>
-                <LinearGradient colors={[...gradients[1]]} style={s.videoPreview}>
-                  <View style={s.playCircle}><IcoFilm size={13} stroke="#fff" /></View>
-                </LinearGradient>
-                <View style={s.rowGap7}>
-                  <View style={s.limeFlex}><Text style={s.limeHalfText}>Скачать MP4</Text></View>
-                  <Pressable style={s.regenFlex} onPress={() => runGen('video')}><Text style={s.regenText}>↻ Ещё раз</Text></Pressable>
-                </View>
-              </Card>
-            ) : null}
           </>
-        ) : (
-          <Card style={s.vidSoonCard}>
-            <Text style={s.vidSoonText}>В разработке</Text>
-          </Card>
         )}
+
+        <SectionLabel>КАЧЕСТВО</SectionLabel>
+        <ChipPicker
+          items={[...VID_QUALITIES]}
+          value={nav.vidQuality}
+          onChange={(q) => patch({ vidQuality: q })}
+        />
+        <SectionLabel>ФОРМАТ</SectionLabel>
+        <ChipPicker
+          items={[...IMG_FORMATS]}
+          value={nav.vidFormat}
+          onChange={(f) => patch({ vidFormat: f })}
+        />
+        <SectionLabel>ДЛИТЕЛЬНОСТЬ</SectionLabel>
+        <NumberChipPicker
+          items={[...VID_DURATIONS]}
+          value={nav.vidDuration}
+          onChange={(d) => patch({ vidDuration: d })}
+          suffix="с"
+        />
+        <LimeButton title="Создать видео" cost={vidCost} icon={<IcoFilm size={16} stroke={color.limeText} />} onPress={() => runGen('video')} />
+        {st === 'loading' ? <GenLoadingCard title="Рендерим видео…" sub="~20 c" /> : null}
+        {st === 'done' ? (
+          <Card style={s.gap10}>
+            {videoResultUrl ? (
+              <RemoteImage uri={videoResultUrl} style={s.videoPreview} gradIndex={1} contentFit="cover" />
+            ) : (
+              <LinearGradient colors={[...gradients[1]]} style={s.videoPreview}>
+                <View style={s.playCircle}><IcoFilm size={13} stroke="#fff" /></View>
+              </LinearGradient>
+            )}
+            <View style={s.rowGap7}>
+              <Pressable
+                style={s.limeFlex}
+                onPress={() => {
+                  if (videoResultUrl) {
+                    void downloadMedia(videoResultUrl, { filename: 'video.mp4', mimeType: 'video/mp4' }).catch(() => {});
+                  }
+                }}
+              >
+                <Text style={s.limeHalfText}>Скачать MP4</Text>
+              </Pressable>
+              <Pressable style={s.regenFlex} onPress={() => runGen('video')}><Text style={s.regenText}>↻ Ещё раз</Text></Pressable>
+            </View>
+          </Card>
+        ) : null}
 
         <Modal visible={nav.ffPreviewOpen && Boolean(ffPreviewUrl)} transparent animationType="fade" onRequestClose={() => patch({ ffPreviewOpen: false })}>
           <Pressable style={s.ffModalBackdrop} onPress={() => patch({ ffPreviewOpen: false })}>
@@ -989,6 +1132,38 @@ export function ScreenRouter() {
         ) : null}
         {ct === 'exif' ? (
           <Card style={s.gap9}>
+            <Text style={s.charSub}>EXIF применяется к сохранённым кадрам студии. Загрузите эталоны с телефона или задайте пресет.</Text>
+            <FieldLabel>ЭТАЛОНЫ EXIF С ТЕЛЕФОНА</FieldLabel>
+            <View style={s.exifRefRow}>
+              <View style={s.flex1}>
+                <FieldLabel>ФРОНТАЛЬНАЯ КАМЕРА</FieldLabel>
+                <DropSlot
+                  label={raw?.phone_exif_selfie_ready ? (raw.phone_exif_selfie_summary || 'Загружено') : 'Выберите файл'}
+                  onPress={async () => {
+                    if (!charIdNum) return;
+                    try {
+                      const file = await pickImage();
+                      if (file) await uploadExifReference(charIdNum, 'selfie', file);
+                    } catch { /* ignore */ }
+                  }}
+                />
+                <Text style={s.exifHint}>JPEG из галереи</Text>
+              </View>
+              <View style={s.flex1}>
+                <FieldLabel>ОСНОВНАЯ КАМЕРА</FieldLabel>
+                <DropSlot
+                  label={raw?.phone_exif_main_ready ? (raw.phone_exif_main_summary || 'Загружено') : 'Выберите файл'}
+                  onPress={async () => {
+                    if (!charIdNum) return;
+                    try {
+                      const file = await pickImage();
+                      if (file) await uploadExifReference(charIdNum, 'main', file);
+                    } catch { /* ignore */ }
+                  }}
+                />
+                <Text style={s.exifHint}>Фото с основной камеры</Text>
+              </View>
+            </View>
             <FieldLabel>ПРЕСЕТ КАМЕРЫ</FieldLabel>
             <TextField
               value={nav.charFields.camera}
@@ -999,6 +1174,14 @@ export function ScreenRouter() {
               value={nav.charFields.geo}
               onChangeText={(t) => patch({ charFields: { ...nav.charFields, geo: t } })}
             />
+            <Pressable
+              style={s.savePhoto}
+              onPress={() => {
+                if (charIdNum) void saveCharacterFields(charIdNum, nav.charFields);
+              }}
+            >
+              <Text style={s.savePhotoText}>Сохранить</Text>
+            </Pressable>
           </Card>
         ) : null}
         {ct === 'history' ? (
@@ -1211,6 +1394,11 @@ export function ScreenRouter() {
           <MenuRow icon={<IcoPlug size={17} stroke={color.muted} />} label={t.navConnections} onPress={() => push('connections')} />
           <MenuRow icon={<IcoUsers size={17} stroke={color.muted} />} label={t.navTeam} onPress={() => push('team')} />
           <MenuRow icon={<IcoStar size={17} stroke={color.muted} />} label={t.navCharacters} onPress={() => push('characters')} />
+        </Card>
+        <SectionLabel>АККАУНТ</SectionLabel>
+        <Card>
+          <MenuRow icon={<IcoUser size={17} stroke={color.muted} />} label="Редактировать профиль" onPress={() => push('profileEdit')} />
+          <MenuRow icon={<IcoLifebuoy size={17} stroke={color.muted} />} label="Поддержка" onPress={() => push('support')} />
         </Card>
         <SectionLabel>{t.sectionSystem}</SectionLabel>
         <Card>
@@ -1499,6 +1687,234 @@ export function ScreenRouter() {
 
   if (cur === 'settings-push') {
     return <SettingsPushScreen onBack={pop} />;
+  }
+
+  if (cur === 'profileEdit') {
+    return (
+      <ScreenScroll>
+        <TopBar title="Редактировать профиль" onBack={pop} />
+        {appError ? <Text style={s.errorBanner}>{appError}</Text> : null}
+        <SectionLabel>EMAIL</SectionLabel>
+        <Card style={s.gap9}>
+          <TextField
+            value={nav.profileEditEmail}
+            onChangeText={(t) => patch({ profileEditEmail: t })}
+            keyboardType="email-address"
+          />
+          <Pressable
+            style={s.savePhoto}
+            onPress={() => void saveProfileEmail(nav.profileEditEmail.trim())}
+          >
+            <Text style={s.savePhotoText}>Сохранить</Text>
+          </Pressable>
+        </Card>
+        <SectionLabel>СМЕНА ПАРОЛЯ</SectionLabel>
+        <Card style={s.gap9}>
+          <TextField
+            value={nav.profileCurrentPassword}
+            onChangeText={(t) => patch({ profileCurrentPassword: t })}
+            placeholder="Текущий пароль"
+            secureTextEntry
+          />
+          <TextField
+            value={nav.profileNewPassword}
+            onChangeText={(t) => patch({ profileNewPassword: t })}
+            placeholder="Новый пароль"
+            secureTextEntry
+          />
+          <TextField
+            value={nav.profileConfirmPassword}
+            onChangeText={(t) => patch({ profileConfirmPassword: t })}
+            placeholder="Повторите пароль"
+            secureTextEntry
+          />
+          <Pressable
+            style={s.savePhoto}
+            onPress={() => {
+              const next = nav.profileNewPassword;
+              if (next.length < 8 || next !== nav.profileConfirmPassword) return;
+              void changeUserPassword(nav.profileCurrentPassword, next).then(() => {
+                patch({
+                  profileCurrentPassword: '',
+                  profileNewPassword: '',
+                  profileConfirmPassword: '',
+                });
+              });
+            }}
+          >
+            <Text style={s.savePhotoText}>Сменить пароль</Text>
+          </Pressable>
+        </Card>
+      </ScreenScroll>
+    );
+  }
+
+  if (cur === 'support') {
+    return (
+      <ScreenScroll>
+        <TopBar title="Поддержка" onBack={pop} />
+        <Text style={s.charSub}>Создавайте обращения и следите за статусом ответа.</Text>
+        <Pressable style={s.supportNewBtn} onPress={() => patch({ ticketFormOpen: !nav.ticketFormOpen })}>
+          <Text style={s.supportNewBtnText}>+ Новое обращение</Text>
+        </Pressable>
+        {nav.ticketFormOpen ? (
+          <Card style={s.gap10}>
+            <SectionLabel>ТИП ОБРАЩЕНИЯ</SectionLabel>
+            <ChipRowInteractive
+              items={TICKET_TYPES}
+              activeIndex={nav.ticketTypeIdx}
+              onSelect={(i) => patch({ ticketTypeIdx: i })}
+            />
+            <TextField
+              value={nav.ticketSubject}
+              onChangeText={(t) => patch({ ticketSubject: t })}
+              placeholder="Тема обращения"
+            />
+            <TextAreaField
+              value={nav.ticketMessage}
+              onChangeText={(t) => patch({ ticketMessage: t })}
+              placeholder="Сообщение"
+              rows={4}
+            />
+            <Pressable
+              style={s.savePhoto}
+              onPress={() => {
+                const subject = nav.ticketSubject.trim();
+                const message = nav.ticketMessage.trim();
+                if (!subject || !message) return;
+                void createSupportTicket({
+                  type: TICKET_TYPES[nav.ticketTypeIdx] || TICKET_TYPES[0],
+                  subject,
+                  message,
+                }).then(() => {
+                  patch({
+                    ticketFormOpen: false,
+                    ticketSubject: '',
+                    ticketMessage: '',
+                  });
+                });
+              }}
+            >
+              <Text style={s.savePhotoText}>Отправить</Text>
+            </Pressable>
+          </Card>
+        ) : null}
+        <SectionLabel>ВАШИ ОБРАЩЕНИЯ</SectionLabel>
+        {supportTickets.map((tk) => (
+          <Card key={tk.id} onPress={() => push(`ticket:${tk.id}`)}>
+            <View style={s.between}>
+              <Text style={[s.opLabel, s.flex1]} numberOfLines={2}>{tk.subject}</Text>
+              <Pill
+                text={ticketStatusLabel(tk.status)}
+                bg="rgba(255,255,255,0.06)"
+                fg={ticketStatusColor(tk.status)}
+              />
+            </View>
+            <Text style={s.charSub}>{tk.type}</Text>
+          </Card>
+        ))}
+        {!supportTickets.length ? <Text style={s.charSub}>Пока нет обращений</Text> : null}
+      </ScreenScroll>
+    );
+  }
+
+  if (cur.startsWith('ticket:')) {
+    const tk = activeTicket;
+    if (!tk) {
+      return (
+        <ScreenScroll>
+          <TopBar title="Обращение" onBack={pop} />
+          <ActivityIndicator color={color.lime} style={{ marginTop: 24 }} />
+        </ScreenScroll>
+      );
+    }
+    const thread = [
+      { me: true, text: tk.message, when: fmtTime(tk.created_at) },
+      ...(tk.replies || []).map((r) => ({
+        me: !r.is_staff,
+        text: r.message,
+        when: fmtTime(r.created_at),
+      })),
+    ];
+    return (
+      <ScreenScroll>
+        <TopBar title="Обращение" onBack={pop} />
+        <Card style={s.gap8}>
+          <View style={s.between}>
+            <Text style={s.planTitle}>{tk.subject}</Text>
+            <Pill text={ticketStatusLabel(tk.status)} bg="rgba(255,255,255,0.06)" fg={ticketStatusColor(tk.status)} />
+          </View>
+          <Text style={s.charSub}>{tk.type}</Text>
+        </Card>
+        {thread.map((m, i) => (
+          <View key={`${m.when}-${i}`} style={[s.ticketBubbleWrap, m.me ? s.ticketBubbleOut : s.ticketBubbleIn]}>
+            <View style={[s.ticketBubble, m.me ? s.ticketBubbleMe : s.ticketBubbleStaff]}>
+              <Text style={s.ticketBubbleText}>{m.text}</Text>
+              <Text style={s.ticketBubbleTime}>{m.when}</Text>
+            </View>
+          </View>
+        ))}
+      </ScreenScroll>
+    );
+  }
+
+  if (cur === 'video-archive') {
+    return (
+      <ScreenScroll>
+        <TopBar title="Архив видео" onBack={pop} />
+        <Card style={s.warnCard}><Text style={s.warnText}>⏳ хранится ~4 дня</Text></Card>
+        <View style={s.grid2}>
+          {archiveVideoTiles.map((t, i) => (
+            <View key={t.id ?? i} style={s.archTile}>
+              <Pressable onPress={() => { patch({ videoArchiveIdx: i }); push('video-item'); }}>
+                <View style={s.videoTilePreview}>
+                  <RemoteImage uri={t.imageUrl} style={s.archImg} gradIndex={t.gradIndex} pending={t.pending} />
+                  <View style={s.playCircleSmall}><IcoFilm size={12} stroke="#fff" /></View>
+                </View>
+                <Text style={s.archWho}>{t.who}</Text>
+              </Pressable>
+              <Pressable
+                style={s.videoTileDownload}
+                onPress={() => {
+                  const url = t.raw?.video_url || t.videoUrl;
+                  if (url) void downloadMedia(url, { filename: 'video.mp4', mimeType: 'video/mp4' }).catch(() => {});
+                }}
+              >
+                <Text style={s.videoTileDownloadText}>Скачать</Text>
+              </Pressable>
+            </View>
+          ))}
+        </View>
+        {videoArchiveHasMore ? (
+          <Pressable style={s.showMoreBtn} onPress={() => void loadMoreVideoArchive()}>
+            <Text style={s.showMoreText}>Показать ещё</Text>
+          </Pressable>
+        ) : null}
+      </ScreenScroll>
+    );
+  }
+
+  if (cur === 'video-item') {
+    const t = archiveVideoTiles[nav.videoArchiveIdx] ?? archiveVideoTiles[0];
+    const videoUrl = t?.raw?.video_url || t?.videoUrl;
+    return (
+      <ScreenScroll>
+        <TopBar title="Видео" onBack={pop} />
+        <View style={s.lightboxWrap}>
+          <RemoteImage uri={t?.imageUrl} style={s.lightbox} gradIndex={t?.gradIndex ?? 0} pending={t?.pending} />
+          <View style={s.playCircle}><IcoFilm size={13} stroke="#fff" /></View>
+          <Text style={s.lightboxBadge}>{t?.who}</Text>
+        </View>
+        <Pressable
+          style={s.limeHalf}
+          onPress={() => {
+            if (videoUrl) void downloadMedia(videoUrl, { filename: 'video.mp4', mimeType: 'video/mp4' }).catch(() => {});
+          }}
+        >
+          <Text style={s.limeHalfText}>Скачать MP4</Text>
+        </Pressable>
+      </ScreenScroll>
+    );
   }
 
   if (cur === 'admin') {
@@ -1925,4 +2341,52 @@ const s = StyleSheet.create({
   ffModalTitle: { fontFamily: font.bodyExtra, fontSize: 14, color: color.text },
   ffModalClose: { fontSize: 18, color: color.muted, paddingHorizontal: 8 },
   ffModalImg: { width: '100%', aspectRatio: 9 / 16, borderRadius: 10 },
+  showMoreBtn: {
+    marginTop: 4,
+    alignItems: 'center',
+    paddingVertical: 13,
+    borderRadius: 11,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+  },
+  showMoreText: { fontFamily: font.bodyBold, fontSize: 13, color: color.muted },
+  editNeedsRefLabel: { fontFamily: font.bodyExtra, fontSize: 12.5, color: color.text, marginBottom: 8 },
+  exifRefRow: { flexDirection: 'row', gap: 8 },
+  exifHint: { fontSize: 9.5, color: color.dim, marginTop: 5 },
+  supportNewBtn: {
+    alignSelf: 'flex-start',
+    backgroundColor: color.lime,
+    borderRadius: 12,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    marginBottom: 8,
+  },
+  supportNewBtnText: { fontFamily: font.bodyExtra, fontSize: 14, color: color.limeText },
+  ticketBubbleWrap: { marginBottom: 8 },
+  ticketBubbleOut: { alignItems: 'flex-end' },
+  ticketBubbleIn: { alignItems: 'flex-start' },
+  ticketBubble: { maxWidth: '82%', borderRadius: 14, paddingHorizontal: 14, paddingVertical: 11 },
+  ticketBubbleMe: { backgroundColor: 'rgba(215,244,82,0.1)', borderWidth: 1, borderColor: 'rgba(215,244,82,0.25)', borderBottomRightRadius: 4 },
+  ticketBubbleStaff: { backgroundColor: '#1A1C20', borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', borderBottomLeftRadius: 4 },
+  ticketBubbleText: { fontSize: 14, lineHeight: 20, color: color.text },
+  ticketBubbleTime: { fontFamily: font.mono, fontSize: 10, color: color.dim, marginTop: 6 },
+  videoTilePreview: { position: 'relative' },
+  playCircleSmall: {
+    position: 'absolute',
+    top: '40%',
+    alignSelf: 'center',
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  videoTileDownload: {
+    paddingVertical: 8,
+    alignItems: 'center',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.06)',
+  },
+  videoTileDownloadText: { fontFamily: font.bodyBold, fontSize: 11, color: color.lime },
 });

@@ -40,6 +40,8 @@ export const CABINET_PAGES = new Set([
   'team',
   'newOperator',
   'workflow',
+  'support',
+  'profile',
 ])
 
 export function pageFromPathname(pathname) {

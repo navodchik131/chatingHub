@@ -97,11 +97,7 @@ export async function sendReply(convId: number, text: string) {
 
 export async function refreshArchiveImages() {
   const [page, pending] = await Promise.all([
-    apiJsonOptional<{ items: StudioGenerationOut[] }>(
-      '/api/studio/generations?limit=40&skip=0&media_kind=image',
-      {},
-      { items: [] },
-    ),
+    fetchArchiveImagesPage(0),
     apiJsonOptional<{ items: StudioGenerationOut[] }>(
       '/api/studio/generations/pending?media_kind=image',
       {},
@@ -111,13 +107,22 @@ export async function refreshArchiveImages() {
   return dedupeArchive([...(page.items || []), ...(pending.items || [])]);
 }
 
+export async function fetchArchiveImagesPage(skip = 0, limit = 40) {
+  return apiJsonOptional<{ items: StudioGenerationOut[] }>(
+    `/api/studio/generations?limit=${limit}&skip=${skip}&media_kind=image`,
+    {},
+    { items: [] },
+  );
+}
+
+export async function loadMoreArchiveImages(skip: number, limit = 40) {
+  const page = await fetchArchiveImagesPage(skip, limit);
+  return page.items || [];
+}
+
 export async function refreshArchiveVideos() {
   const [page, pending, motion] = await Promise.all([
-    apiJsonOptional<{ items: StudioGenerationOut[] }>(
-      '/api/studio/generations?limit=40&skip=0&media_kind=video',
-      {},
-      { items: [] },
-    ),
+    fetchArchiveVideosPage(0),
     apiJsonOptional<{ items: StudioGenerationOut[] }>(
       '/api/studio/generations/pending?media_kind=video',
       {},
@@ -131,6 +136,19 @@ export async function refreshArchiveVideos() {
   ]);
   const motionItems = Array.isArray(motion?.items) ? motion.items : [];
   return dedupeArchive([...(page.items || []), ...(pending.items || []), ...motionItems]);
+}
+
+export async function fetchArchiveVideosPage(skip = 0, limit = 40) {
+  return apiJsonOptional<{ items: StudioGenerationOut[] }>(
+    `/api/studio/generations?limit=${limit}&skip=${skip}&media_kind=video`,
+    {},
+    { items: [] },
+  );
+}
+
+export async function loadMoreArchiveVideos(skip: number, limit = 40) {
+  const page = await fetchArchiveVideosPage(skip, limit);
+  return page.items || [];
 }
 
 export async function fetchModels() {
@@ -231,6 +249,45 @@ export async function uploadStudioModelImage(charId: number, file: LocalFile, ki
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'Не удалось загрузить фото');
   return data;
+}
+
+export async function uploadPhoneExifReference(modelId: number, role: 'selfie' | 'main', file: LocalFile) {
+  const fd = new FormData();
+  fd.append('role', role);
+  fd.append('image', { uri: file.uri, name: file.name, type: file.type } as unknown as Blob);
+  const res = await apiFetch(`/api/studio/models/${modelId}/phone-exif-reference`, { method: 'POST', body: fd });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'Не удалось загрузить EXIF-эталон');
+  return data;
+}
+
+export async function fetchSupportTickets() {
+  return apiJsonOptional<import('@/src/api/types').SupportTicketListItemOut[]>('/api/support/tickets', {}, []);
+}
+
+export async function fetchSupportTicket(ticketId: number) {
+  return apiJson<import('@/src/api/types').SupportTicketOut>(`/api/support/tickets/${ticketId}`);
+}
+
+export async function createSupportTicket(payload: { type: string; subject: string; message: string }) {
+  return apiJson<import('@/src/api/types').SupportTicketOut>('/api/support/tickets', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function patchProfileEmail(email: string) {
+  return apiJson('/api/auth/profile', {
+    method: 'PATCH',
+    body: JSON.stringify({ email: email.trim() }),
+  });
+}
+
+export async function changePassword(currentPassword: string, newPassword: string) {
+  return apiJson('/api/auth/password', {
+    method: 'POST',
+    body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+  });
 }
 
 export async function generateStudioModelProfile(model: StudioModelOut) {
@@ -492,6 +549,27 @@ export async function runImageGeneration(params: {
     return postStudioJobStart('/api/studio/carousel', { method: 'POST', body: fd });
   }
 
+  if (mode === 'edit') {
+    const needsRef = String(params.navState.editNeedsRef || '') === 'yes';
+    const frameFile = params.uploadFiles['edit-frame'] ?? params.uploadFiles.ref;
+    if (!frameFile) throw new Error('Загрузите кадр для изменения');
+    if (!String(params.navState.imgPrompt || '').trim()) throw new Error('Опишите, что нужно изменить');
+    if (needsRef && !modelId) throw new Error('Выберите персонажа');
+    const fd = new FormData();
+    fd.append('studio_mode', 'photo_edit');
+    fd.append('description', String(params.navState.imgPrompt || ''));
+    fd.append('output_aspect', String(params.navState.imgFormat || '9:16'));
+    fd.append('studio_wave_profile', isNsfwMode(appState) ? 'nsfw' : 'regular');
+    const wave = normalizeWaveModel(waveModelFromState(appState), isNsfwMode(appState));
+    fd.append('workflow_wave_model', wave.apiId);
+    if (wave.tier) fd.append('wan_edit_tier', wave.tier);
+    appendLocalFile(fd, 'image', frameFile);
+    if (needsRef && modelId) fd.append('model_id', String(modelId));
+    const refFile = params.uploadFiles['edit-ref'];
+    if (needsRef && refFile) appendLocalFile(fd, 'inpaint_mask', refFile);
+    return postStudioJobStart('/api/studio/refine-prompt', { method: 'POST', body: fd });
+  }
+
   const built = await MMOS_STUDIO_SCENARIOS.buildGraphForMode(mode, {
     API: bridgeApi,
     store,
@@ -542,6 +620,7 @@ export async function runMotionVideo(params: {
   motionVideoFileId?: string;
   firstFrameGenerationId?: number | null;
   autoMotionPrompt?: boolean;
+  promptOnlyMode?: boolean;
   frameFile?: LocalFile;
 }) {
   const fd = new FormData();
@@ -559,6 +638,7 @@ export async function runMotionVideo(params: {
           : '720p';
   fd.append('video_resolution', videoResolution);
   fd.append('duration_seconds', String(params.durationSeconds));
+  if (params.promptOnlyMode) fd.append('prompt_only_mode', '1');
   if (params.motionVideoFileId) fd.append('motion_video_file_id', params.motionVideoFileId);
   if (params.firstFrameGenerationId) {
     fd.append('first_frame_generation_id', String(params.firstFrameGenerationId));

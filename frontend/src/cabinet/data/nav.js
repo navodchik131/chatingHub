@@ -1,6 +1,6 @@
 import {
   IcoGrid, IcoChat, IcoImage, IcoFilm, IcoStar, IcoFlow,
-  IcoHeart, IcoCard, IcoPlug, IcoTeam, IcoSpark, IcoLayers,
+  IcoHeart, IcoCard, IcoPlug, IcoTeam, IcoSpark, IcoLayers, IcoLifeBuoy, IcoUser,
 } from '../components/Icons';
 
 /** Sidebar groups — badges come from live cabinet data via computeNavBadges. */
@@ -33,6 +33,8 @@ export const navGroups = (t, badges = {}) => [
     items: [
       { id: 'connections', label: t.navConnections, Icon: IcoPlug },
       { id: 'team', label: t.navTeam, Icon: IcoTeam },
+      { id: 'support', label: t.navSupport, Icon: IcoLifeBuoy },
+      { id: 'profile', label: t.navProfile, Icon: IcoUser },
     ],
   },
 ];
@@ -41,7 +43,7 @@ export const pageTitles = (t) => ({
   overview: t.navOverview, dialogs: t.navDialogs, images: t.navImages,
   video: t.navVideo, characters: t.navCharacters, workflow: t.navWorkflow,
   donations: t.navDonations, billing: t.navBilling, connections: t.navConnections,
-  team: t.navTeam,
+  team: t.navTeam, support: t.navSupport, profile: t.navProfile,
 });
 
 /** Bottom bar on mobile — each entry can light up for several pages. */
@@ -61,4 +63,6 @@ export const moreItemDefs = (t, lang) => [
   { label: t.navBilling, desc: t.billingDesc, Icon: IcoCard, go: 'billing' },
   { label: t.navConnections, desc: t.connectionsDesc, Icon: IcoPlug, go: 'connections' },
   { label: t.navTeam, desc: t.teamDesc, Icon: IcoTeam, go: 'team' },
+  { label: t.navSupport, desc: t.supportDesc, Icon: IcoLifeBuoy, go: 'support' },
+  { label: t.navProfile, desc: t.profileDesc, Icon: IcoUser, go: 'profile' },
 ];

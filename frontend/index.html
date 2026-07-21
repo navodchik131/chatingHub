@@ -542,6 +542,15 @@ input::placeholder,textarea::placeholder{color:#5C6066;}
                 </sc-for>
               </div>
             </div>
+            <sc-if value="{{ isEditMode }}" hint-placeholder-val="{{ false }}">
+            <div>
+              <div style="font-size:13px;font-weight:800;margin-bottom:10px;">{{ t.needRefQ }}</div>
+              <div style="display:flex;gap:8px;">
+                <div onClick="{{ setNeedsRefNo }}" style="flex:1;text-align:center;font-size:12px;font-weight:800;border-radius:9px;padding:9px;cursor:pointer;{{ needsRefNo ? 'background:#D7F452;color:#171A05;' : 'border:1px solid rgba(255,255,255,.12);color:#9BA0A6;' }}">{{ lang === 'ru' ? 'Нет' : 'No' }}</div>
+                <div onClick="{{ setNeedsRefYes }}" style="flex:1;text-align:center;font-size:12px;font-weight:800;border-radius:9px;padding:9px;cursor:pointer;{{ needsRefYes ? 'background:#D7F452;color:#171A05;' : 'border:1px solid rgba(255,255,255,.12);color:#9BA0A6;' }}">{{ lang === 'ru' ? 'Да' : 'Yes' }}</div>
+              </div>
+            </div>
+            </sc-if>
             <div style="display:flex;gap:10px;align-items:stretch;">
               <sc-for list="{{ curMode.slots }}" as="s" hint-placeholder-count="2">
                 <div style="flex:1;display:flex;flex-direction:column;gap:6px;">
@@ -651,6 +660,9 @@ input::placeholder,textarea::placeholder{color:#5C6066;}
                 </div>
               </sc-for>
             </div>
+            <sc-if value="{{ archiveImagesHasMore }}" hint-placeholder-val="{{ false }}">
+              <div onClick="{{ loadMoreArchiveImages }}" style="margin-top:12px;display:inline-flex;font-size:12.5px;font-weight:700;color:#D7F452;cursor:pointer;border:1px solid rgba(215,244,82,.35);border-radius:10px;padding:8px 16px;" style-hover="background:rgba(215,244,82,.08);">{{ t.showMore }}</div>
+            </sc-if>
           </div>
         </div>
       </div>
@@ -771,18 +783,21 @@ input::placeholder,textarea::placeholder{color:#5C6066;}
             <div style="font-weight:800;font-size:14px;margin-bottom:10px;">{{ t.archive }}</div>
             <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;">
               <sc-for list="{{ videoArchive }}" as="va" hint-placeholder-count="4">
-                <div style="border-radius:12px;overflow:hidden;background:#121316;border:1px solid rgba(255,255,255,.07);cursor:pointer;" style-hover="border-color:rgba(255,255,255,.2);">
+                <div onClick="{{ va.open }}" style="border-radius:12px;overflow:hidden;background:#121316;border:1px solid rgba(255,255,255,.07);cursor:pointer;" style-hover="border-color:rgba(255,255,255,.2);">
                   <div style="{{ va.bg }}">
                     <div style="width:36px;height:36px;border-radius:50%;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;"><span style="display:flex;width:14px;height:14px;color:#fff;margin-left:2px;" dangerouslySetInnerHTML="{{ icoPlay }}"></span></div>
                     <span style="position:absolute;bottom:8px;right:8px;font-family:'JetBrains Mono';font-size:9px;background:rgba(0,0,0,.55);color:#fff;padding:2px 6px;border-radius:5px;">{{ va.dur }}</span>
                   </div>
                   <div style="padding:8px 10px;display:flex;justify-content:space-between;align-items:center;">
                     <span style="font-weight:700;font-size:11px;">{{ va.who }}</span>
-                    <span style="font-size:10px;font-weight:700;color:#9BA0A6;cursor:pointer;">↓ MP4</span>
+                    <span onClick="{{ va.download }}" style="font-size:10px;font-weight:700;color:#9BA0A6;cursor:pointer;" style-hover="color:#D7F452;">↓ MP4</span>
                   </div>
                 </div>
               </sc-for>
             </div>
+            <sc-if value="{{ archiveVideosHasMore }}" hint-placeholder-val="{{ false }}">
+              <div onClick="{{ loadMoreArchiveVideos }}" style="margin-top:12px;display:inline-flex;font-size:12.5px;font-weight:700;color:#D7F452;cursor:pointer;border:1px solid rgba(215,244,82,.35);border-radius:10px;padding:8px 16px;" style-hover="background:rgba(215,244,82,.08);">{{ t.showMore }}</div>
+            </sc-if>
           </div>
         </div>
       </div>
@@ -1468,13 +1483,13 @@ input::placeholder,textarea::placeholder{color:#5C6066;}
 <script type="text/x-dc" data-dc-script data-props="{&quot;forceMobile&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: false, &quot;tsType&quot;: &quot;boolean&quot;, &quot;section&quot;: &quot;Просмотр&quot;}}">
 class Component extends DCLogic {
   state = {
-    page: 'overview', lang: 'ru', imgMode: 'ref',
+    page: 'overview', lang: 'ru', imgMode: 'ref', vidMode: 'motion-control',
     connDetail: null, charDetail: null, donTab: 'overview',
     tier: 'standard', period: 'month', moreOpen: false,
     isMobile: false, chatOpen: 0,
     chatFilter: 'all', chatPlatform: 'all', mobileChat: false,
     msgReact: null, emojiOpen: false, showScrollDown: false, replyDraft: '', noteDraft: '', showScrollDown: false, replyDraft: '', noteDraft: '', reactions: {},
-    contentMode: 'sfw', aiModel: 'nano', carouselCount: 4, slotSource: {},
+    contentMode: 'sfw', aiModel: 'nano', carouselCount: 4, slotSource: {}, needsRef: 'no',
     hasFirstFrame: 'yes', vidQuality: '1080', vidFormat: '9:16', vidTime: '5',
     charTab: 'photos', lightbox: null,
     showGenError: false, ffState: 'idle', photoMenu: null,
@@ -1568,7 +1583,7 @@ class Component extends DCLogic {
       addOperator: 'Оператор', replies: 'ответы', edit: 'Настроить',
       templates: 'Шаблоны ответов', addTemplate: 'Шаблон',
       character: 'ПЕРСОНАЖ', format: 'ФОРМАТ КАДРА', prompt: 'ПРОМПТ', optional: 'необязательно',
-      generate: 'Сгенерировать', archive: 'Архив', retention: 'хранится ~4 дня',
+      generate: 'Сгенерировать', archive: 'Архив', retention: 'хранится ~4 дня', showMore: 'Показать ещё', needRefQ: 'Нужен референс?',
       toVideo: 'в видео', sourceFrame: 'ИСХОДНЫЙ КАДР', orUpload: '…или загрузите свой файл',
       motionPrompt: 'ДВИЖЕНИЕ', motionHint: 'She slowly turns to camera and smiles…', duration: 'ДЛИТЕЛЬНОСТЬ',
       generateVideo: 'Создать видео', save: 'Сохранить', delete: 'Удалить',
@@ -1638,7 +1653,7 @@ class Component extends DCLogic {
       addOperator: 'Operator', replies: 'replies', edit: 'Configure',
       templates: 'Reply templates', addTemplate: 'Template',
       character: 'CHARACTER', format: 'FRAME FORMAT', prompt: 'PROMPT', optional: 'optional',
-      generate: 'Generate', archive: 'Archive', retention: 'stored ~4 days',
+      generate: 'Generate', archive: 'Archive', retention: 'stored ~4 days', showMore: 'Show more', needRefQ: 'Need a reference?',
       toVideo: 'to video', sourceFrame: 'SOURCE FRAME', orUpload: '…or upload your own file',
       motionPrompt: 'MOTION', motionHint: 'She slowly turns to camera and smiles…', duration: 'DURATION',
       generateVideo: 'Create video', save: 'Save', delete: 'Delete',
@@ -1666,6 +1681,7 @@ class Component extends DCLogic {
     const icoPin = this.I('<path d="M12 21s-6.5-5.6-6.5-10.5A6.5 6.5 0 0 1 12 4a6.5 6.5 0 0 1 6.5 6.5C18.5 15.4 12 21 12 21z"/><circle cx="12" cy="10.5" r="2.3"/>');
     const icoText = this.I('<path d="M4 6h16M4 12h16M4 18h9"/>');
     const icoGrid2 = this.I('<rect x="3" y="3" width="7" height="18" rx="2"/><rect x="14" y="3" width="7" height="18" rx="2"/>');
+    const icoEdit = this.I('<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4 12.5-12.5z"/>');
     const icoFlow = this.I('<rect x="3" y="4" width="6" height="5" rx="1.5"/><rect x="15" y="4" width="6" height="5" rx="1.5"/><rect x="9" y="15" width="6" height="5" rx="1.5"/><path d="M6 9v2.5a2 2 0 0 0 2 2h1M18 9v2.5a2 2 0 0 1-2 2h-1"/>');
     const icoDownload = this.I('<path d="M12 4v11"/><path d="M7.5 10.5L12 15l4.5-4.5"/><path d="M4 18.5h16"/>');
     const icoZoom = this.I('<circle cx="11" cy="11" r="7"/><path d="M16 16l4.5 4.5M8.5 11h5M11 8.5v5"/>');
@@ -1860,6 +1876,7 @@ class Component extends DCLogic {
       { id: 'outfit', title: lang === 'ru' ? 'Замена одежды' : 'Outfit swap', desc: lang === 'ru' ? 'Одежда с фото → на персонажа' : 'Clothing from a photo → onto character', icon: icoShirt, cost: '−8 ' + t.cr, longDesc: lang === 'ru' ? 'Загрузите один референс с человеком или вещью. Мы выделим одежду и сгенерируем её на выбранном персонаже на однородном фоне.' : 'Upload one reference with a person or item. We extract the clothing and put it on your character on a clean background.', slots: [{ label: lang === 'ru' ? 'Кадр — где заменить одежду' : 'Frame — outfit to replace', archive: true }, { label: lang === 'ru' ? 'Фото одежды' : 'Clothing photo', archive: false }], promptHint: lang === 'ru' ? 'Необязательно — цвет, длина, детали…' : 'Optional — colour, length, details…', showChar: true, showRatio: true },
       { id: 'location', title: lang === 'ru' ? 'Смена локации' : 'Location swap', desc: lang === 'ru' ? 'Перенести персонажа в новое место' : 'Move the character to a new place', icon: icoPin, cost: '−8 ' + t.cr, longDesc: lang === 'ru' ? 'Загрузите один исходный кадр. Кадр остаётся, фон и окружение меняются: пляж, аэропорт, кафе — что угодно.' : 'Upload one source frame. Frame stays, background changes.', slots: [{ label: lang === 'ru' ? 'Кадр — где сменить локацию' : 'Frame — location to replace', archive: true }, { label: lang === 'ru' ? 'Фото локации' : 'Location photo', archive: false }], promptHint: lang === 'ru' ? 'Терраса кафе в Мадриде, вечерний свет…' : 'Café terrace in Madrid, evening light…', showChar: true, showRatio: true },
       { id: 'prompt', title: lang === 'ru' ? 'Кадр по промпту' : 'From prompt', desc: lang === 'ru' ? 'Свободная генерация с нуля текстом' : 'Free-form generation from text', icon: icoText, cost: '−10 ' + t.cr, longDesc: lang === 'ru' ? 'Опишите сцену словами — персонаж подставится из карточки (внешность, EXIF).' : 'Describe the scene — the character comes from its card.', slots: [], promptHint: lang === 'ru' ? 'Photorealistic 8K still: девушка у окна с кофе, утренний свет…' : 'Photorealistic 8K still: girl by the window with coffee…', showChar: true, showRatio: true },
+      { id: 'edit', title: lang === 'ru' ? 'Изменить детали' : 'Edit details', desc: lang === 'ru' ? 'Точечно изменить или добавить элемент на кадре' : 'Tweak or add an element on the frame', icon: icoEdit, cost: '−8 ' + t.cr, longDesc: lang === 'ru' ? 'Загрузите кадр (или выберите из архива) и опишите, что изменить или добавить — остальное сохранится.' : 'Upload or pick a frame and describe what to change or add.', slots: [{ label: lang === 'ru' ? 'Кадр для изменения' : 'Frame to edit', archive: true }], promptHint: lang === 'ru' ? 'Например: добавь солнцезащитные очки, убери фон…' : 'e.g. add sunglasses, remove background…', showChar: true, showRatio: true, isEdit: true },
       { id: 'carousel', title: lang === 'ru' ? 'Карусель' : 'Carousel', desc: lang === 'ru' ? 'Серия кадров из одного фото' : 'A series of frames from one photo', icon: icoGrid2, cost: lang === 'ru' ? '−8 кр/кадр' : '−8 cr/frame', longDesc: lang === 'ru' ? 'Выберите кадр из архива или загрузите готовый, задайте количество кадров — сгенерируем связанную серию (для постов и историй).' : 'Pick a frame from the archive or upload one, set frame count — get a coherent series.', slots: [{ label: lang === 'ru' ? 'Базовый кадр' : 'Base frame', archive: true }], promptHint: lang === 'ru' ? 'Что меняется от кадра к кадру: ракурс, эмоция…' : 'What changes across frames: angle, emotion…', showChar: true, showRatio: true, showCount: true }
     ];
     const imgModes = modeDefs.map(m => ({

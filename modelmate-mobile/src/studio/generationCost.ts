@@ -22,6 +22,7 @@ function mobileModeToStudioMode(modeId: string): string {
   if (modeId === 'loc') return 'location';
   if (modeId === 'ref') return 'model_scene';
   if (modeId === 'prompt') return 'model_scene';
+  if (modeId === 'edit') return 'photo_edit';
   return modeId;
 }
 
@@ -53,8 +54,17 @@ export function computeImageGenerationCost(params: {
   if (pro) return 'Pro';
 
   if (params.modeId === 'carousel') {
-    const perFrame = Number(params.health?.studio_carousel_credit_cost);
-    const per = Number.isFinite(perFrame) && perFrame >= 0 ? perFrame : 2;
+    const nsfw = isNsfwMode({ contentMode: params.contentMode });
+    const wave = normalizeWaveModel(waveModelFromState({ aiEngine: params.aiEngine, contentMode: params.contentMode }), nsfw);
+    const waveProfile = params.contentMode === 'sfw' ? 'regular' : 'nsfw';
+    const per = quoteStudioImageCredits({
+      waveModelId: wave.apiId,
+      waveProfile,
+      wanEditTier: wave.tier,
+      grokPipeline: 'light',
+      studioMode: 'photo_edit',
+      workflow: false,
+    });
     const frames = Math.max(2, Math.min(8, Number(params.carouselCount) || 3));
     return formatGenerationCostLabel(per * frames);
   }
@@ -94,10 +104,26 @@ export function computeImageGenerationCost(params: {
   return formatGenerationCostLabel(Number(label));
 }
 
-export function computeCarouselModeCardCost(health?: HealthOut | null, me?: UserMeOut | null): string {
-  if (isProPlan(me?.billing_plan)) return 'Pro';
-  const perFrame = Number(health?.studio_carousel_credit_cost);
-  const per = Number.isFinite(perFrame) && perFrame >= 0 ? perFrame : 2;
+export function computeCarouselModeCardCost(params: {
+  contentMode?: ContentMode;
+  aiEngine?: string;
+  health?: HealthOut | null;
+  me?: UserMeOut | null;
+}): string {
+  if (isProPlan(params.me?.billing_plan)) return 'Pro';
+  const nsfw = isNsfwMode({ contentMode: params.contentMode ?? 'sfw' });
+  const wave = normalizeWaveModel(
+    waveModelFromState({ aiEngine: params.aiEngine ?? 'Nano Banana Pro', contentMode: params.contentMode ?? 'sfw' }),
+    nsfw,
+  );
+  const per = quoteStudioImageCredits({
+    waveModelId: wave.apiId,
+    waveProfile: params.contentMode === 'nsfw' ? 'nsfw' : 'regular',
+    wanEditTier: wave.tier,
+    grokPipeline: 'light',
+    studioMode: 'photo_edit',
+    workflow: false,
+  });
   return formatGenerationCostLabel(per, { perFrame: true });
 }
 

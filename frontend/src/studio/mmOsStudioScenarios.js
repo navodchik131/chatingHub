@@ -48,6 +48,15 @@ const OUTFIT_DEFAULT_PROMPT =
   'Keep same person, pose, face, background, camera, and lighting.\n' +
   'без сумки яндекса'
 
+const DETAIL_BASE_ROLE = 'photo base / frame to edit'
+const DETAIL_BASE_DESC = 'Кадр, который редактируем — сохраняем композицию, позу и свет.'
+const DETAIL_REF_ROLE = 'detail / element reference'
+const DETAIL_REF_DESC = 'Опциональный референс детали, которую нужно добавить или изменить.'
+const DETAIL_DEFAULT_PROMPT =
+  'Edit the photo-base reference according to the user prompt.\n' +
+  'Keep identity, pose, camera, lighting and background unless the prompt asks to change them.\n' +
+  'If a detail reference is provided, use it only for the element described in the prompt.'
+
 function node(id, type, data) {
   return { id, type, position: { x: 0, y: 0 }, data: data || {} }
 }
@@ -239,6 +248,47 @@ function buildPromptOnlyGraph(modelId, opts) {
   return { graph, targetNodeId }
 }
 
+function buildDetailEditGraph(baseRefId, detailRefId, modelId, opts) {
+  const targetNodeId = 'imageGeneration-1'
+  const realism = realismBlock(targetNodeId, 'realism-in', opts.realismEnabled !== false)
+  const nodes = [
+    ...realism.nodes,
+    node('refDescription-base', 'refDescription', {
+      role: DETAIL_BASE_ROLE,
+      description: DETAIL_BASE_DESC,
+    }),
+    node('reference-base', 'reference', { refId: baseRefId }),
+    node('prompt-1', 'prompt', {
+      prompt: mergePrompt(DETAIL_DEFAULT_PROMPT, opts.userPrompt),
+    }),
+    node(targetNodeId, 'imageGeneration', imageGenData(opts)),
+  ]
+  const edges = [
+    ...realism.edges,
+    edge('e-desc-base', 'refDescription-base', 'reference-base', 'description-out', 'description-in'),
+    edge('e-ref-base-gen', 'reference-base', targetNodeId, 'reference-out', 'reference-in'),
+    edge('e-prompt-gen', 'prompt-1', targetNodeId, 'prompt-out', 'prompt-in'),
+  ]
+  if (detailRefId) {
+    nodes.push(
+      node('refDescription-detail', 'refDescription', {
+        role: DETAIL_REF_ROLE,
+        description: DETAIL_REF_DESC,
+      }),
+      node('reference-detail', 'reference', { refId: detailRefId }),
+    )
+    edges.push(
+      edge('e-desc-detail', 'refDescription-detail', 'reference-detail', 'description-out', 'description-in'),
+      edge('e-ref-detail-gen', 'reference-detail', targetNodeId, 'reference-out', 'reference-in'),
+    )
+  }
+  if (modelId) {
+    nodes.push(node('model-1', 'model', { modelId }))
+    edges.push(edge('e-model-gen', 'model-1', targetNodeId, 'model-out', 'model-in'))
+  }
+  return { graph: { nodes, edges }, targetNodeId }
+}
+
 async function uploadWorkflowReference(API, file) {
   const fd = new FormData()
   fd.append('file', file)
@@ -322,6 +372,20 @@ async function buildGraphForMode(mode, ctx) {
     const clothesRefId = await resolveRefId(API, store, archiveThumbUrlFn, slot1)
     return buildOutfitChangeGraph(baseRefId, clothesRefId, opts)
   }
+  if (mode === 'edit') {
+    const baseRefId = await resolveRefId(API, store, archiveThumbUrlFn, slot0)
+    let detailRefId = null
+    if (s?.needsRef === 'yes') {
+      const slot1 = helpers.resolveSlotSource
+        ? helpers.resolveSlotSource('edit', 1)
+        : {
+            file: store.uploadFiles['edit-detail'],
+            archiveId: store.slotArchivePicks[helpers.slotStateKey('edit', 1)],
+          }
+      detailRefId = await resolveRefId(API, store, archiveThumbUrlFn, slot1)
+    }
+    return buildDetailEditGraph(baseRefId, detailRefId, modelId, opts)
+  }
   return null
 }
 
@@ -332,6 +396,7 @@ const MMOS_STUDIO_SCENARIOS = {
   buildLocationChangeGraph,
   buildOutfitChangeGraph,
   buildPromptOnlyGraph,
+  buildDetailEditGraph,
   buildGraphForMode,
   resolveRefId,
   genOptionsFromState,

@@ -52,6 +52,15 @@ export const modeDefs = (lang, cr) => [
     showChar: true, showRatio: true,
   },
   {
+    id: 'edit', icon: 'edit', cost: `−8 ${cr}`,
+    title: lang === 'ru' ? 'Изменить детали' : 'Edit details',
+    desc: lang === 'ru' ? 'Точечно изменить или добавить элемент на кадре' : 'Tweak or add an element on the frame',
+    longDesc: lang === 'ru' ? 'Загрузите кадр (или выберите из архива) и опишите, что изменить или добавить — остальное сохранится.' : 'Upload or pick a frame and describe what to change or add.',
+    slots: [{ label: lang === 'ru' ? 'Кадр для изменения' : 'Frame to edit', archive: true }],
+    promptHint: lang === 'ru' ? 'Например: добавь солнцезащитные очки, убери фон…' : 'e.g. add sunglasses, remove background…',
+    showChar: true, showRatio: true, isEdit: true,
+  },
+  {
     id: 'carousel', icon: 'grid2', cost: lang === 'ru' ? '−8 кр/кадр' : '−8 cr/frame',
     title: lang === 'ru' ? 'Карусель' : 'Carousel',
     desc: lang === 'ru' ? 'Серия кадров из одного фото' : 'A series of frames from one photo',
@@ -84,8 +93,6 @@ export const videoModeDefs = (lang) => [
     longDesc: lang === 'ru'
       ? 'Опишите сцену — модель оживит кадр по вашему тексту.'
       : 'Describe the scene — the model animates the frame from your text.',
-    disabled: true,
-    badge: lang === 'ru' ? 'В разработке' : 'In development',
   },
 ];
 

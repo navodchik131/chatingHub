@@ -1530,3 +1530,69 @@ class AdminIgBotUserRow(BaseModel):
 
 class AdminIgBotUserDetailOut(AdminIgBotUserRow):
     pass
+
+
+class ProfilePatchIn(BaseModel):
+    email: EmailStr
+
+
+class PasswordChangeIn(BaseModel):
+    current_password: str = Field(min_length=1, max_length=128)
+    new_password: str = Field(min_length=8, max_length=128)
+
+
+class SupportTicketCreateIn(BaseModel):
+    type: str = Field(default="general", min_length=1, max_length=64)
+    subject: str = Field(min_length=1, max_length=500)
+    message: str = Field(min_length=1, max_length=20000)
+
+
+class SupportTicketReplyOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    is_staff: bool
+    message: str
+    created_at: datetime
+
+
+class SupportTicketOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    type: str
+    subject: str
+    message: str
+    status: str
+    created_at: datetime
+    updated_at: datetime
+    replies: list[SupportTicketReplyOut] = Field(default_factory=list)
+
+
+class SupportTicketListItemOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    type: str
+    subject: str
+    status: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class AdminSupportTicketListItemOut(SupportTicketListItemOut):
+    user_id: int
+    user_email: str
+
+
+class AdminSupportTicketOut(SupportTicketOut):
+    user_id: int
+    user_email: str
+
+
+class AdminSupportTicketReplyIn(BaseModel):
+    message: str = Field(min_length=1, max_length=20000)
+
+
+class AdminSupportTicketStatusPatchIn(BaseModel):
+    status: Literal["submitted", "in_review", "answered", "closed"]

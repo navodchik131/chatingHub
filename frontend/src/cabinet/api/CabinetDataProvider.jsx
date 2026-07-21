@@ -77,6 +77,11 @@ export function CabinetDataProvider({ children }) {
   const [models, setModels] = useState([])
   const [archiveImages, setArchiveImages] = useState([])
   const [archiveVideos, setArchiveVideos] = useState([])
+  const [archiveImagesHasMore, setArchiveImagesHasMore] = useState(false)
+  const [archiveVideosHasMore, setArchiveVideosHasMore] = useState(false)
+  const [archiveImagesSkip, setArchiveImagesSkip] = useState(0)
+  const [archiveVideosSkip, setArchiveVideosSkip] = useState(0)
+  const [supportTickets, setSupportTickets] = useState([])
   const [integrations, setIntegrations] = useState(null)
   const [donationOverview, setDonationOverview] = useState(null)
   const [donations, setDonations] = useState([])
@@ -281,13 +286,39 @@ export function CabinetDataProvider({ children }) {
     const localVidPending = archiveVideosRef.current.filter(
       (g) => isOptimisticStudioArchiveId(g.id) || actions.isArchivePending(g),
     )
-    const [imgs, vids] = await Promise.all([
-      actions.refreshArchiveImages(),
-      actions.refreshArchiveVideos(),
+    const [imgPage, vidPage] = await Promise.all([
+      actions.refreshArchiveImages(0),
+      actions.refreshArchiveVideos(0),
     ])
-    setArchiveImages(mergeStudioArchiveItems(imgs, localImgPending))
-    setArchiveVideos(mergeStudioArchiveItems(vids, localVidPending))
+    setArchiveImages(mergeStudioArchiveItems(imgPage.items, localImgPending))
+    setArchiveVideos(mergeStudioArchiveItems(vidPage.items, localVidPending))
+    setArchiveImagesHasMore(imgPage.has_more)
+    setArchiveVideosHasMore(vidPage.has_more)
+    setArchiveImagesSkip(imgPage.items.length)
+    setArchiveVideosSkip(vidPage.items.length)
   }, [])
+
+  const loadMoreArchiveImages = useCallback(async () => {
+    const { items, has_more } = await actions.refreshArchiveImages(archiveImagesSkip)
+    if (!items.length) {
+      setArchiveImagesHasMore(has_more)
+      return
+    }
+    setArchiveImages((prev) => mergeStudioArchiveItems([...prev, ...items]))
+    setArchiveImagesHasMore(has_more)
+    setArchiveImagesSkip((skip) => skip + items.length)
+  }, [archiveImagesSkip])
+
+  const loadMoreArchiveVideos = useCallback(async () => {
+    const { items, has_more } = await actions.refreshArchiveVideos(archiveVideosSkip)
+    if (!items.length) {
+      setArchiveVideosHasMore(has_more)
+      return
+    }
+    setArchiveVideos((prev) => mergeStudioArchiveItems([...prev, ...items]))
+    setArchiveVideosHasMore(has_more)
+    setArchiveVideosSkip((skip) => skip + items.length)
+  }, [archiveVideosSkip])
 
   const refreshArchivePending = useCallback(async () => {
     const [imgResult, vidResult] = await Promise.all([
@@ -339,8 +370,8 @@ export function CabinetDataProvider({ children }) {
         apiJsonOptional('/api/conversations', {}, []),
         apiJsonOptional('/api/conversation-folders', {}, []),
         apiJsonOptional('/api/studio/models', {}, null),
-        actions.refreshArchiveImages().catch(() => []),
-        actions.refreshArchiveVideos().catch(() => []),
+        actions.refreshArchiveImages(0).catch(() => ({ items: [], has_more: false })),
+        actions.refreshArchiveVideos(0).catch(() => ({ items: [], has_more: false })),
         apiJsonOptional('/api/integrations', {}, null),
         apiJsonOptional('/api/creator-donations/overview', {}, null),
         apiJsonOptional('/api/creator-donations', {}, []),
@@ -375,8 +406,12 @@ export function CabinetDataProvider({ children }) {
       } else {
         setModelsLoadError('Не удалось загрузить персонажей')
       }
-      setArchiveImages(Array.isArray(archiveImg) ? archiveImg : [])
-      setArchiveVideos(Array.isArray(archiveVid) ? archiveVid : [])
+      setArchiveImages(Array.isArray(archiveImg?.items) ? archiveImg.items : [])
+      setArchiveVideos(Array.isArray(archiveVid?.items) ? archiveVid.items : [])
+      setArchiveImagesHasMore(Boolean(archiveImg?.has_more))
+      setArchiveVideosHasMore(Boolean(archiveVid?.has_more))
+      setArchiveImagesSkip(Array.isArray(archiveImg?.items) ? archiveImg.items.length : 0)
+      setArchiveVideosSkip(Array.isArray(archiveVid?.items) ? archiveVid.items.length : 0)
       setIntegrations(integrationsData)
       if (meData?.is_workspace_owner) {
         if (donationOv) {
@@ -908,25 +943,28 @@ export function CabinetDataProvider({ children }) {
 
   const generateVideo = useCallback(
     async (appState) => {
+      const promptMode = (appState.vidMode || 'motion-control') === 'prompt'
       if (!selectedModelId) {
         setError('Выберите персонажа')
         return
       }
-      const motionControl = (appState.vidMode || 'motion-control') === 'motion-control'
+      const motionControl = !promptMode
       if (motionControl && !motionVideoFileId) {
         setError('Загрузите референс-видео')
         return
       }
-      const prompt = (appState.motionPrompt || '').trim()
-      if (!motionControl && !prompt) {
+      const prompt = (appState.motionPrompt || appState.studioPrompt || '').trim()
+      if (promptMode && !prompt) {
         setError('Опишите движение')
         return
       }
-      const ffGenId = appState.carouselPickId || firstFrameGenId
+      let ffGenId = appState.carouselPickId || firstFrameGenId
+      if (promptMode && !ffGenId && !uploadFiles['motion-frame']) {
+        setError('Загрузите или выберите первый кадр')
+        return
+      }
       const model = models.find((m) => Number(m.id) === Number(selectedModelId))
-      const promptExcerpt = motionControl
-        ? 'Motion control'
-        : prompt
+      const promptExcerpt = motionControl ? 'Motion control' : prompt
       const { item, tempId } = createOptimisticStudioArchiveItem({
         mediaKind: 'video',
         promptExcerpt,
@@ -937,15 +975,28 @@ export function CabinetDataProvider({ children }) {
       setArchiveVideos((prev) => prependOptimisticStudioArchive(prev, item))
       setError(null)
       try {
+        if (promptMode && !ffGenId && uploadFiles['motion-frame']) {
+          const { result } = await actions.runMotionFirstFrame({
+            modelId: selectedModelId,
+            aspect: appState.vidFormat || selectedAspect,
+            nsfw: appState.contentMode === 'nsfw',
+            frameFile: uploadFiles['motion-frame'],
+            description: prompt,
+            autoMotionPrompt: false,
+          })
+          ffGenId = result?.generation_id || null
+          if (!ffGenId) throw new Error('Не удалось загрузить первый кадр')
+        }
         const accepted = await actions.runMotionVideo({
           modelId: selectedModelId,
           prompt: motionControl ? '' : prompt,
           aspect: appState.vidFormat || selectedAspect,
           resolution: appState.vidQuality || '1080',
           durationSeconds: Number(appState.vidTime) || 5,
-          motionVideoFileId,
+          motionVideoFileId: motionControl ? motionVideoFileId : null,
           firstFrameGenerationId: ffGenId,
           autoMotionPrompt: motionControl && Boolean(motionVideoFileId),
+          promptOnlyMode: promptMode,
         })
         setArchiveVideos((prev) => applyJobToOptimisticArchive(prev, [tempId], accepted))
         await refreshArchiveFull()
@@ -1091,6 +1142,45 @@ export function CabinetDataProvider({ children }) {
   const generateCharacterProfile = useCallback(
     async (images) => {
       return run(async () => actions.generateStudioModelProfile(images))
+    },
+    [run],
+  )
+
+  const loadSupportTickets = useCallback(async () => {
+    const rows = await actions.fetchSupportTickets()
+    setSupportTickets(Array.isArray(rows) ? rows : [])
+    return rows
+  }, [])
+
+  const createSupportTicket = useCallback(
+    async (payload) => {
+      return run(async () => {
+        const row = await actions.createSupportTicket(payload)
+        await loadSupportTickets()
+        return row
+      })
+    },
+    [run, loadSupportTickets],
+  )
+
+  const fetchSupportTicketDetail = useCallback(async (ticketId) => {
+    return actions.fetchSupportTicket(ticketId)
+  }, [])
+
+  const saveProfileEmail = useCallback(
+    async (email) => {
+      await run(async () => {
+        const meData = await actions.patchProfileEmail(email)
+        setMe(meData)
+        return meData
+      })
+    },
+    [run],
+  )
+
+  const changeAccountPassword = useCallback(
+    async (currentPassword, newPassword) => {
+      await run(async () => actions.changePassword(currentPassword, newPassword))
     },
     [run],
   )
@@ -1259,6 +1349,11 @@ export function CabinetDataProvider({ children }) {
       models,
       archiveImages,
       archiveVideos,
+      archiveImagesHasMore,
+      archiveVideosHasMore,
+      loadMoreArchiveImages,
+      loadMoreArchiveVideos,
+      supportTickets,
       integrations,
       donationOverview,
       donations,
@@ -1343,6 +1438,11 @@ export function CabinetDataProvider({ children }) {
       deletePhoneExif,
       saveCharacterExif,
       generateCharacterProfile,
+      loadSupportTickets,
+      createSupportTicket,
+      fetchSupportTicketDetail,
+      saveProfileEmail,
+      changeAccountPassword,
       logout,
     }),
     [
@@ -1361,6 +1461,11 @@ export function CabinetDataProvider({ children }) {
       models,
       archiveImages,
       archiveVideos,
+      archiveImagesHasMore,
+      archiveVideosHasMore,
+      loadMoreArchiveImages,
+      loadMoreArchiveVideos,
+      supportTickets,
       integrations,
       donationOverview,
       donations,
@@ -1438,6 +1543,11 @@ export function CabinetDataProvider({ children }) {
       deletePhoneExif,
       saveCharacterExif,
       generateCharacterProfile,
+      loadSupportTickets,
+      createSupportTicket,
+      fetchSupportTicketDetail,
+      saveProfileEmail,
+      changeAccountPassword,
       logout,
     ],
   )

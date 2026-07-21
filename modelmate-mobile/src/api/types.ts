@@ -78,6 +78,10 @@ export type StudioModelOut = {
   camera_preset_id?: string | number | null;
   export_lat?: number | null;
   export_lon?: number | null;
+  phone_exif_selfie_ready?: boolean;
+  phone_exif_main_ready?: boolean;
+  phone_exif_selfie_summary?: string | null;
+  phone_exif_main_summary?: string | null;
 };
 
 export type StudioGenerationOut = {
@@ -196,6 +200,27 @@ export type AdminStats = {
   revenue_month_rub?: number;
   top_plans?: AdminPlanShare[];
   engagement?: AdminEngagementStats;
+};
+
+export type SupportTicketReplyOut = {
+  id: number;
+  is_staff: boolean;
+  message: string;
+  created_at: string;
+};
+
+export type SupportTicketListItemOut = {
+  id: number;
+  type: string;
+  subject: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type SupportTicketOut = SupportTicketListItemOut & {
+  message: string;
+  replies: SupportTicketReplyOut[];
 };
 
 export type LocalFile = {

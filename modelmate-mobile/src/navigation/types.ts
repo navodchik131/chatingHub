@@ -58,6 +58,16 @@ export type NavigationState = {
   adminSearch: string;
   broadcastSubject: string;
   imgPrompt: string;
+  editNeedsRef: 'yes' | 'no';
+  ticketFormOpen: boolean;
+  ticketTypeIdx: number;
+  ticketSubject: string;
+  ticketMessage: string;
+  profileEditEmail: string;
+  profileCurrentPassword: string;
+  profileNewPassword: string;
+  profileConfirmPassword: string;
+  videoArchiveIdx: number;
   connToken: string;
   opLogin: string;
   opPassword: string;
@@ -138,6 +148,16 @@ export const defaultNavState: NavigationState = {
   adminSearch: '',
   broadcastSubject: '',
   imgPrompt: '',
+  editNeedsRef: 'no',
+  ticketFormOpen: false,
+  ticketTypeIdx: 0,
+  ticketSubject: '',
+  ticketMessage: '',
+  profileEditEmail: '',
+  profileCurrentPassword: '',
+  profileNewPassword: '',
+  profileConfirmPassword: '',
+  videoArchiveIdx: 0,
   connToken: '',
   opLogin: '',
   opPassword: '',
@@ -163,6 +183,8 @@ export function hideTabBar(stack: string[]): boolean {
   if (cur === 'auth' || cur === 'splash' || cur === 'thread') return true;
   if (cur === 'newfolder' || cur === 'folder-picker' || cur === 'folder-edit') return true;
   if (cur === 'settings' || cur.startsWith('settings-')) return true;
+  if (cur === 'profileEdit' || cur === 'support' || cur.startsWith('ticket:')) return true;
+  if (cur === 'video-archive' || cur === 'video-item') return true;
   if (root === 'admin' || cur === 'admin' || cur.startsWith('admin-')) return true;
   return false;
 }

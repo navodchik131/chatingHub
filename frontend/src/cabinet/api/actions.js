@@ -1,5 +1,6 @@
 import { apiFetch } from '../../api'
 import { mergeVideoArchiveWithMotionRenders } from '../../studioArchive'
+import { withVideoDownloadParam } from './archiveDownload'
 import { postStudioJobStart, waitForStudioJobResult } from '../../studioJobs'
 import MMOS_STUDIO_SCENARIOS from '../../studio/mmOsStudioScenarios.js'
 import {
@@ -251,23 +252,41 @@ export async function sendReplyWithImage(convId, text, imageFile) {
   return data
 }
 
-export async function refreshArchiveImages() {
+const ARCHIVE_PAGE_LIMIT = 40
+
+export async function refreshArchiveImages(skip = 0) {
   const [page, pending] = await Promise.all([
-    apiJsonOptional('/api/studio/generations?limit=40&skip=0&media_kind=image', {}, { items: [] }),
-    apiJsonOptional('/api/studio/generations/pending?media_kind=image', {}, { items: [] }),
+    apiJsonOptional(
+      `/api/studio/generations?limit=${ARCHIVE_PAGE_LIMIT}&skip=${skip}&media_kind=image`,
+      {},
+      { items: [], has_more: false },
+    ),
+    skip === 0
+      ? apiJsonOptional('/api/studio/generations/pending?media_kind=image', {}, { items: [] })
+      : Promise.resolve({ items: [] }),
   ])
-  return mergeArchiveItems([...(page.items || []), ...(pending.items || [])])
+  const items = mergeArchiveItems([...(page.items || []), ...(pending.items || [])])
+  return { items, has_more: Boolean(page.has_more) }
 }
 
-export async function refreshArchiveVideos() {
+export async function refreshArchiveVideos(skip = 0) {
   const [page, pending, motion] = await Promise.all([
-    apiJsonOptional('/api/studio/generations?limit=40&skip=0&media_kind=video', {}, { items: [] }),
-    apiJsonOptional('/api/studio/generations/pending?media_kind=video', {}, { items: [] }),
-    apiJsonOptional('/api/studio/motion/renders?limit=40&skip=0', {}, []),
+    apiJsonOptional(
+      `/api/studio/generations?limit=${ARCHIVE_PAGE_LIMIT}&skip=${skip}&media_kind=video`,
+      {},
+      { items: [], has_more: false },
+    ),
+    skip === 0
+      ? apiJsonOptional('/api/studio/generations/pending?media_kind=video', {}, { items: [] })
+      : Promise.resolve({ items: [] }),
+    skip === 0
+      ? apiJsonOptional(`/api/studio/motion/renders?limit=${ARCHIVE_PAGE_LIMIT}&skip=0`, {}, [])
+      : Promise.resolve([]),
   ])
   const merged = mergeArchiveItems([...(page.items || []), ...(pending.items || [])])
   const motionRows = Array.isArray(motion?.items) ? motion.items : Array.isArray(motion) ? motion : []
-  return mergeVideoArchiveWithMotionRenders(merged, motionRows)
+  const items = mergeVideoArchiveWithMotionRenders(merged, motionRows)
+  return { items, has_more: Boolean(page.has_more) }
 }
 
 function dedupeArchiveById(items) {
@@ -310,7 +329,7 @@ export function archiveVideoUrl(item) {
 
 export function archiveDownloadUrl(item) {
   if (!item) return ''
-  if (item.media_kind === 'video') return (item.video_url || '').trim()
+  if (item.media_kind === 'video') return withVideoDownloadParam((item.video_url || '').trim())
   return (item.image_url || '').trim()
 }
 
@@ -399,7 +418,37 @@ export async function runMotionVideo(params) {
     fd.append('first_frame_generation_id', String(params.firstFrameGenerationId))
   }
   if (params.autoMotionPrompt) fd.append('auto_motion_prompt', '1')
+  if (params.promptOnlyMode) fd.append('prompt_only_mode', '1')
   return postStudioJob('/api/studio/motion/render-video', { method: 'POST', body: fd })
+}
+
+export async function fetchSupportTickets() {
+  return apiJsonOptional('/api/support/tickets', {}, [])
+}
+
+export async function fetchSupportTicket(ticketId) {
+  return apiJson(`/api/support/tickets/${ticketId}`)
+}
+
+export async function createSupportTicket(payload) {
+  return apiJson('/api/support/tickets', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function patchProfileEmail(email) {
+  return apiJson('/api/auth/profile', {
+    method: 'PATCH',
+    body: JSON.stringify({ email }),
+  })
+}
+
+export async function changePassword(currentPassword, newPassword) {
+  await apiJson('/api/auth/password', {
+    method: 'POST',
+    body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+  })
 }
 
 export async function uploadWorkflowReference(file) {
@@ -488,6 +537,7 @@ function slotUploadKey(mode, index) {
   if (mode === 'outfit') return index === 0 ? 'ref' : 'outfit-cloth'
   if (mode === 'location') return index === 0 ? 'ref' : 'location-photo'
   if (mode === 'carousel') return 'carousel'
+  if (mode === 'edit') return index === 0 ? 'ref' : 'edit-detail'
   return 'ref'
 }
 
@@ -512,7 +562,7 @@ export async function runImageGeneration({ appState, studioStore, userPrompt, wo
   const scenarios = await ensureStudioScenarios()
   const mode = appState.imgMode || 'prompt'
   const modelId = studioStore.selectedModelId
-  const needsModel = mode === 'ref' || mode === 'swap' || mode === 'prompt'
+  const needsModel = mode === 'ref' || mode === 'swap' || mode === 'prompt' || mode === 'edit'
   if (needsModel && !modelId) throw new Error('Выберите персонажа')
 
   const bridgeApi = {

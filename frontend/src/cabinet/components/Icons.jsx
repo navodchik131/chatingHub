@@ -253,3 +253,25 @@ export const IcoLogout = () => (
     <path d="M19.5 9.5L22 12l-2.5 2.5" />
   </Svg>
 );
+
+export const IcoLifeBuoy = () => (
+  <Svg>
+    <circle cx="12" cy="12" r="8.5" />
+    <circle cx="12" cy="12" r="3.2" />
+    <path d="M12 3.5v3.2M12 17.3v3.2M3.5 12h3.2M17.3 12h3.2M5.8 5.8l2.3 2.3M15.9 15.9l2.3 2.3M18.2 5.8l-2.3 2.3M8.1 15.9l-2.3 2.3" />
+  </Svg>
+);
+
+export const IcoUser = () => (
+  <Svg>
+    <circle cx="12" cy="8.5" r="3.4" />
+    <path d="M5 20c.8-3.2 3.2-5 7-5s6.2 1.8 7 5" />
+  </Svg>
+);
+
+export const IcoEdit = () => (
+  <Svg>
+    <path d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17v3z" />
+    <path d="M13.5 6.5l3 3" />
+  </Svg>
+);

@@ -35,6 +35,7 @@ export const threadMessages = [
 export const modeDefs = [
   { id: 'ref', color: '215,244,82', title: 'Кадр по референсу', desc: 'Похожий кадр по образцу', icon: 'image' as const },
   { id: 'swap', color: '240,168,200', title: 'Face Swap', desc: 'Лицо персонажа на кадр', icon: 'user' as const },
+  { id: 'edit', color: '192,132,252', title: 'Изменить детали', desc: 'Точечно изменить или добавить элемент', icon: 'wand' as const },
   { id: 'outfit', color: '192,132,252', title: 'Замена одежды', desc: 'Одежда с фото на модель', icon: 'star' as const },
   { id: 'loc', color: '56,189,248', title: 'Смена локации', desc: 'Новый фон и окружение', icon: 'image' as const },
   { id: 'prompt', color: '250,204,21', title: 'Кадр по промпту', desc: 'Свободная генерация текстом', icon: 'bolt' as const },
@@ -44,6 +45,7 @@ export const modeDefs = [
 export const slotLabels: Record<string, string[]> = {
   ref: ['Референс-кадр'],
   swap: ['Референс-кадр'],
+  edit: ['Кадр для изменения'],
   outfit: ['Кадр', 'Фото одежды'],
   loc: ['Кадр', 'Фото локации'],
   prompt: [],

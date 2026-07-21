@@ -116,6 +116,11 @@
     models: [],
     archiveImages: [],
     archiveVideos: [],
+    archiveImagesHasMore: false,
+    archiveVideosHasMore: false,
+    archiveImagesSkip: 0,
+    archiveVideosSkip: 0,
+    supportTickets: [],
     motionRenders: [],
     integrations: null,
     tributeEarnings: null,
@@ -371,6 +376,7 @@
     if (mode === 'outfit') return index === 0 ? 'ref' : 'outfit-cloth'
     if (mode === 'location') return index === 0 ? 'ref' : 'location-photo'
     if (mode === 'carousel') return 'carousel'
+    if (mode === 'edit') return index === 0 ? 'ref' : 'edit-detail'
     return 'ref'
   }
 
@@ -470,8 +476,24 @@
   }
 
   function carouselPerFrameCost() {
-    const n = Number(store.health?.studio_carousel_credit_cost)
-    return Number.isFinite(n) && n >= 0 ? n : 2
+    const s = store.logic?.state || {}
+    const nsfw = s.contentMode === 'nsfw' || !!s.nsfw
+    const AI_MAP = { nano: 'nano-banana-pro', gpt: 'gpt-image-2', seedream: 'seedream-v5.0-pro', wan: 'wan-2.7' }
+    let model = AI_MAP[s.aiModel] || s.aiModel || (nsfw ? 'wan-2.7' : 'nano-banana-pro')
+    if (model === 'wan-2.7-pro') model = 'wan-2.7'
+    const WS_BASE = {
+      'nano-banana-2': 1,
+      'nano-banana-pro': 2,
+      'gpt-image-2': 2,
+      'seedream-v5.0-pro': 2,
+      'wan-2.7': 2,
+    }
+    let base = WS_BASE[model] ?? 2
+    if (model === 'wan-2.7' && (s.aiModel === 'wan' || String(s.aiModel || '').includes('pro'))) {
+      const tier = String(s.aiModel || '').includes('pro') ? 'pro' : 'standard'
+      if (tier === 'pro') base += 1
+    }
+    return Math.max(1, base + 1)
   }
 
   function fmtCarouselGenerateCost(lang, count) {
@@ -512,6 +534,22 @@
         archiveMini: mkArchiveMiniGrid(logic, sk),
       }
     })
+    if (mode === 'edit' && s.needsRef === 'yes') {
+      const sk = slotStateKey('edit', 1)
+      const src = (s.slotSource && s.slotSource[sk]) || 'upload'
+      slots.push({
+        label: lang === 'ru' ? 'Референс-изображение' : 'Reference image',
+        archive: false,
+        uploadKey: 'edit-detail',
+        fromArchive: false,
+        uploadMode: true,
+        upStyle: segSm(src === 'upload'),
+        arStyle: segSm(src === 'archive'),
+        setUpload: () => logic.setState({ slotSource: { ...(s.slotSource || {}), [sk]: 'upload' } }),
+        setArchive: () => logic.setState({ slotSource: { ...(s.slotSource || {}), [sk]: 'archive' } }),
+        archiveMini: mkArchiveMiniGrid(logic, sk),
+      })
+    }
     const out = { ...base, slots }
     if (mode === 'carousel') {
       out.cost = fmtCarouselGenerateCost(lang, s.carouselCount)
@@ -844,17 +882,58 @@
     ].join('|')
   }
 
-  async function refreshArchiveImages() {
+  async function refreshArchiveImages(skip = 0) {
     const localPending = store.archiveImages.filter(
       (g) => isOptimisticArchiveId(g.id) || isArchivePending(g),
     )
     const [page, pending] = await Promise.all([
-      API.apiJson('/api/studio/generations?limit=40&skip=0&media_kind=image').catch(() => ({ items: [] })),
-      API.apiJson('/api/studio/generations/pending?media_kind=image').catch(() => ({ items: [] })),
+      API.apiJson('/api/studio/generations?limit=40&skip=' + skip + '&media_kind=image').catch(() => ({ items: [], has_more: false })),
+      skip === 0 ? API.apiJson('/api/studio/generations/pending?media_kind=image').catch(() => ({ items: [] })) : Promise.resolve({ items: [] }),
     ])
     let images = mergeArchiveItems(page.items || [], pending.items || [])
-    images = mergeArchiveItems(images, localPending)
-    store.archiveImages = images
+    if (skip > 0) {
+      const known = new Set(store.archiveImages.map((g) => g.id))
+      images = images.filter((item) => !known.has(item.id))
+      store.archiveImages = mergeArchiveItems(store.archiveImages, images)
+    } else {
+      images = mergeArchiveItems(images, localPending)
+      store.archiveImages = images
+    }
+    store.archiveImagesSkip = skip + (page.items || []).length
+    store.archiveImagesHasMore = !!page.has_more
+  }
+
+  async function loadMoreArchiveImages() {
+    if (!store.archiveImagesHasMore) return
+    await refreshArchiveImages(store.archiveImagesSkip)
+    store.logic?.forceUpdate()
+  }
+
+  async function refreshArchiveVideos(skip = 0) {
+    const localPending = store.archiveVideos.filter(
+      (g) => isOptimisticArchiveId(g.id) || isArchivePending(g),
+    )
+    const [page, pending] = await Promise.all([
+      API.apiJson('/api/studio/generations?limit=40&skip=' + skip + '&media_kind=video').catch(() => ({ items: [], has_more: false })),
+      skip === 0 ? API.apiJson('/api/studio/generations/pending?media_kind=video').catch(() => ({ items: [] })) : Promise.resolve({ items: [] }),
+    ])
+    let videos = mergeArchiveItems(page.items || [], pending.items || [])
+    if (skip > 0) {
+      const known = new Set(store.archiveVideos.map((g) => g.id))
+      videos = videos.filter((item) => !known.has(item.id))
+      store.archiveVideos = mergeArchiveItems(store.archiveVideos, videos)
+    } else {
+      videos = mergeArchiveItems(videos, localPending)
+      store.archiveVideos = videos
+    }
+    store.archiveVideosSkip = skip + (page.items || []).length
+    store.archiveVideosHasMore = !!page.has_more
+  }
+
+  async function loadMoreArchiveVideos() {
+    if (!store.archiveVideosHasMore) return
+    await refreshArchiveVideos(store.archiveVideosSkip)
+    store.logic?.forceUpdate()
   }
 
   /** Опрос только незавершённых карточек — без полной перезагрузки архива. */
@@ -1088,7 +1167,7 @@
     const t = vals.t
     const errs = []
     const mode = s.imgMode || 'prompt'
-    const slotCounts = { ref: 1, swap: 1, outfit: 2, location: 2, prompt: 0, carousel: 1 }
+    const slotCounts = { ref: 1, swap: 1, outfit: 2, location: 2, prompt: 0, carousel: 1, edit: 1 }
     const slotN = slotCounts[mode] ?? 0
     const hasCarouselSrc =
       !!resolveCarouselUploadFile(s) ||
@@ -1100,6 +1179,10 @@
     if (mode === 'outfit' && !slotHasSource('outfit', 1)) errs.push(t.errNoRef)
     if (mode === 'location' && !slotHasSource('location', 1)) errs.push(t.errNoRef)
     if (mode === 'prompt' && !resolveStudioPrompt('prompt')) errs.push(t.errNoPrompt)
+    if (mode === 'edit') {
+      if (!resolveStudioPrompt('edit')) errs.push(t.errNoPrompt)
+      if (s.needsRef === 'yes' && !slotHasSource('edit', 1)) errs.push(t.errNoRef)
+    }
     if (mode !== 'outfit' && mode !== 'location' && !store.selectedModelId) errs.push(t.errNoChar)
     return errs
   }
@@ -1202,10 +1285,8 @@
   }
 
   async function loadArchive() {
-    await refreshArchiveImages()
-    const vid = await API.apiJson('/api/studio/generations?limit=40&skip=0&media_kind=video').catch(() => ({ items: [] }))
-    const vidPending = await API.apiJson('/api/studio/generations/pending?media_kind=video').catch(() => ({ items: [] }))
-    store.archiveVideos = mergeArchiveItems(vid.items || [], vidPending.items || [])
+    await refreshArchiveImages(0)
+    await refreshArchiveVideos(0)
     const motion = await API.apiJson('/api/studio/motion/renders?limit=40&skip=0').catch(() => [])
     store.motionRenders = Array.isArray(motion) ? motion : motion.items || []
     if (hasPendingArchive()) scheduleArchivePoll()
@@ -2917,8 +2998,26 @@
     return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
   }
 
+  function withVideoDownloadParam(url) {
+    const src = String(url || '').trim()
+    if (!src) return ''
+    if (!src.includes('public-generation-video')) return src
+    if (/[?&]download=/.test(src)) return src
+    return src + (src.includes('?') ? '&' : '?') + 'download=1'
+  }
+
+  function archiveVideoUrl(item) {
+    return (item?.video_url || '').trim()
+  }
+
+  function archiveDownloadUrl(item) {
+    if (!item) return ''
+    if (item.media_kind === 'video') return withVideoDownloadParam(archiveVideoUrl(item))
+    return (item.image_url || '').trim()
+  }
+
   async function downloadArchiveUrl(url, id, isVideo) {
-    const src = (url || '').trim()
+    const src = withVideoDownloadParam((url || '').trim())
     if (!src) {
       store.error = 'Файл недоступен для скачивания'
       store.logic?.forceUpdate()
@@ -2975,7 +3074,7 @@
         store.archiveVideos.find((x) => x.id === id)
       if (item) {
         isVideo = item.media_kind === 'video'
-        url = (isVideo ? item.video_url || item.image_url : item.image_url) || ''
+        url = (isVideo ? archiveDownloadUrl(item) || item.video_url || item.image_url : item.image_url) || ''
       }
     } else if (id) {
       const item = store.archiveVideos.find((x) => x.id === id)
@@ -3252,7 +3351,7 @@
     const mode = s.imgMode || 'prompt'
     const prompt = resolveStudioPrompt(mode)
     const modelId = store.selectedModelId
-    const needsModel = mode === 'ref' || mode === 'swap' || mode === 'prompt'
+    const needsModel = mode === 'ref' || mode === 'swap' || mode === 'prompt' || mode === 'edit'
     if (needsModel && !modelId) {
       store.error = 'Выберите персонажа'
       logic.forceUpdate()
@@ -3418,7 +3517,8 @@
   async function runGenerateVideo() {
     if (store.busy) return
     const s = store.logic?.state || {}
-    const motion = (queryMotionTextarea()?.value || '').trim()
+    const promptMode = (s.vidMode || 'motion-control') === 'prompt'
+    const motion = (queryMotionTextarea()?.value || s.motionPrompt || '').trim()
     if (!motion) {
       store.error = 'Опишите движение'
       store.logic?.forceUpdate()
@@ -3430,18 +3530,27 @@
       store.logic?.forceUpdate()
       return
     }
+    if (!promptMode && !store.motionVideoFileId) {
+      store.error = 'Загрузите референс-видео'
+      store.logic?.forceUpdate()
+      return
+    }
     store.busy = true
     try {
       const fd = new FormData()
       fd.append('model_id', String(modelId))
       fd.append('prompt', motion)
-      fd.append('output_aspect', store.selectedAspect)
+      fd.append('output_aspect', s.vidFormat || store.selectedAspect)
       if (store.videoResolution) {
         const vr = String(store.videoResolution)
         fd.append('video_resolution', vr === '4K' || vr === '4k' ? '1080p' : vr)
       }
       if (store.videoDuration) fd.append('duration_seconds', String(store.videoDuration))
-      if (store.motionVideoFileId) fd.append('motion_video_file_id', store.motionVideoFileId)
+      if (promptMode) {
+        fd.append('prompt_only_mode', '1')
+      } else if (store.motionVideoFileId) {
+        fd.append('motion_video_file_id', store.motionVideoFileId)
+      }
       const frameFile = store.uploadFiles['motion-frame']
       if (frameFile) fd.append('image', frameFile)
       const archId = s.carouselPickId || resolveLightboxId(s)
@@ -3868,12 +3977,33 @@
           open: () => logic.setState({ page: 'images', lightbox: item.id }),
         }
       })
-    const videoArchive = store.archiveVideos.slice(0, 4).map((item, i) => ({
-      bg: 'aspect-ratio:9/16;display:flex;align-items:center;justify-content:center;position:relative;background:center/cover no-repeat url("' +
-        (item.image_url || '').replace(/"/g, '') + '"),' + G[(i + 2) % 6],
-      who: item.model_name || '—',
-      dur: '5s',
-    }))
+    const vaBase = 'aspect-ratio:9/16;display:flex;align-items:center;justify-content:center;position:relative;background:'
+    const videoArchive = store.archiveVideos.map((item, i) => {
+      const poster = archiveThumbUrl(item)
+      const videoUrl = archiveVideoUrl(item)
+      const downloadUrl = archiveDownloadUrl(item) || videoUrl
+      const pending = isArchivePending(item)
+      const failed = (item.status || '').trim() === 'failed'
+      const bgCore = poster
+        ? 'center/cover no-repeat url("' + poster.replace(/"/g, '') + '"),' + G[(i + 2) % 6]
+        : G[(i + 2) % 6]
+      return {
+        bg: vaBase + bgCore,
+        who: item.model_name || '—',
+        dur: (item.duration_seconds ? item.duration_seconds + 's' : '5s'),
+        pending,
+        failed,
+        download: downloadUrl
+          ? (ev) => {
+              ev?.stopPropagation?.()
+              void downloadArchiveUrl(downloadUrl, item.id, true)
+            }
+          : null,
+        open: pending || failed || !videoUrl
+          ? () => {}
+          : () => logic.setState({ lightbox: item.id }),
+      }
+    })
 
     const chipOn =
       "font-family:'JetBrains Mono';font-size:10px;background:rgba(215,244,82,.12);color:#D7F452;border:1px solid rgba(215,244,82,.4);padding:3px 10px;border-radius:20px;cursor:pointer;"
@@ -4156,6 +4286,15 @@
       chatFilters,
       archiveFrames,
       videoArchive,
+      archiveImagesHasMore: !!store.archiveImagesHasMore,
+      archiveVideosHasMore: !!store.archiveVideosHasMore,
+      loadMoreArchiveImages: () => void loadMoreArchiveImages(),
+      loadMoreArchiveVideos: () => void loadMoreArchiveVideos(),
+      needsRefYes: s.needsRef === 'yes',
+      needsRefNo: s.needsRef !== 'yes',
+      setNeedsRefYes: () => logic.setState({ needsRef: 'yes' }),
+      setNeedsRefNo: () => logic.setState({ needsRef: 'no' }),
+      isEditMode: s.imgMode === 'edit',
       charChips,
       modelChips: engine.modelChips,
       modelHint: engine.modelHint,

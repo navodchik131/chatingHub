@@ -15,7 +15,7 @@
       "package": "app.modelmate.mobile",
       "googleServicesFile": "./google-services.json",
       "usesCleartextTraffic": true,
-      "softwareKeyboardLayoutMode": "pan",
+      "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "backgroundColor": "#0A0B0D",
         "foregroundImage": "./assets/logo-m.jpeg"
@@ -45,7 +45,8 @@
           "color": "#D7F452",
           "defaultChannel": "messages"
         }
-      ]
+      ],
+      "expo-sharing"
     ],
     "experiments": {
       "typedRoutes": true

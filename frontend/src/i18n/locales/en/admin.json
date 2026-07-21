@@ -22,7 +22,8 @@
     "emailTitle": "Email campaigns",
     "exifBotTitle": "EXIF bot",
     "igBotTitle": "IG bot",
-    "creatorDonationsTitle": "Creator donations"
+    "creatorDonationsTitle": "Creator donations",
+    "ticketsTitle": "Support tickets"
   },
   "tabs": {
     "overview": "Overview",
@@ -30,7 +31,8 @@
     "email": "Email campaigns",
     "exifBot": "EXIF bot",
     "igBot": "IG bot",
-    "creatorDonations": "Creator donations"
+    "creatorDonations": "Creator donations",
+    "tickets": "Support"
   },
   "common": {
     "search": "Search",
@@ -397,6 +399,26 @@
       "markPaid": "Completed",
       "reject": "Reject",
       "rejectNotes": "Rejection reason (optional):"
+    }
+  },
+  "tickets": {
+    "listTitle": "Tickets",
+    "empty": "No tickets yet",
+    "selectHint": "Select a ticket on the left",
+    "allStatuses": "All statuses",
+    "initial": "Initial message",
+    "staff": "Support",
+    "user": "User",
+    "replyPlaceholder": "Reply to the user…",
+    "sendReply": "Send reply",
+    "loadFailed": "Failed to load tickets",
+    "replyFailed": "Failed to send reply",
+    "statusFailed": "Failed to update status",
+    "status": {
+      "submitted": "Submitted",
+      "in_review": "In review",
+      "answered": "Answered",
+      "closed": "Closed"
     }
   }
 }

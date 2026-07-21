@@ -36,6 +36,7 @@ const initial = {
   chatSearchQuery: '',
   replyToMessageId: null,
   slotSource: {},
+  needsRef: 'no',
   hasFirstFrame: 'yes',
   vidMode: 'motion-control',
   vidQuality: '1080',

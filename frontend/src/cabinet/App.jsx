@@ -16,6 +16,8 @@ import Billing from './pages/Billing';
 import Connections from './pages/Connections';
 import Team, { NewOperator } from './pages/Team';
 import Workflow from './pages/Workflow';
+import Support from './pages/Support';
+import Profile from './pages/Profile';
 import ApiStatusBar from './components/ApiStatusBar';
 
 const pages = {
@@ -31,6 +33,8 @@ const pages = {
   team: Team,
   newOperator: NewOperator,
   workflow: Workflow,
+  support: Support,
+  profile: Profile,
 };
 
 function DonationAlertBanner() {

@@ -44,6 +44,8 @@ import type {
   MessageOut,
   StudioGenerationOut,
   StudioModelOut,
+  SupportTicketListItemOut,
+  SupportTicketOut,
   UserMeOut,
   WorkspaceMemberOut,
 } from '@/src/api/types';
@@ -71,6 +73,22 @@ type AppDataValue = {
   modelNames: string[];
   archiveTiles: ReturnType<typeof mapArchiveTile>[];
   rawArchiveImages: StudioGenerationOut[];
+  archiveSkip: number;
+  archiveHasMore: boolean;
+  loadMoreArchive: () => Promise<void>;
+  archiveVideoTiles: ReturnType<typeof mapArchiveTile>[];
+  rawArchiveVideos: StudioGenerationOut[];
+  videoArchiveSkip: number;
+  videoArchiveHasMore: boolean;
+  refreshArchiveVideos: () => Promise<void>;
+  loadMoreVideoArchive: () => Promise<void>;
+  supportTickets: SupportTicketListItemOut[];
+  refreshSupportTickets: () => Promise<void>;
+  createSupportTicket: (payload: { type: string; subject: string; message: string }) => Promise<void>;
+  fetchSupportTicket: (ticketId: number) => Promise<SupportTicketOut>;
+  saveProfileEmail: (email: string) => Promise<void>;
+  changeUserPassword: (current: string, next: string) => Promise<void>;
+  uploadExifReference: (charId: number, role: 'selfie' | 'main', file: LocalFile) => Promise<void>;
   connectionsList: ReturnType<typeof mapIntegrationCards>;
   rawIntegrations: IntegrationStatusOut | null;
   health: HealthOut | null;
@@ -100,7 +118,7 @@ type AppDataValue = {
   firstFrameGenId: number | null;
   firstFrameUrl: string;
   generateFirstFrame: (nav: NavigationState, patchFfState: (state: NavigationState['ffState']) => void) => Promise<void>;
-  genResults: Record<string, { imageUrl: string }>;
+  genResults: Record<string, { imageUrl?: string; videoUrl?: string }>;
   bootstrap: () => Promise<void>;
   refreshAll: () => Promise<void>;
   refreshArchive: () => Promise<void>;
@@ -171,6 +189,12 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const [rawMessages, setRawMessages] = useState<MessageOut[]>([]);
   const [rawModels, setRawModels] = useState<StudioModelOut[]>([]);
   const [rawArchiveImages, setRawArchiveImages] = useState<StudioGenerationOut[]>([]);
+  const [archiveSkip, setArchiveSkip] = useState(0);
+  const [archiveHasMore, setArchiveHasMore] = useState(true);
+  const [rawArchiveVideos, setRawArchiveVideos] = useState<StudioGenerationOut[]>([]);
+  const [videoArchiveSkip, setVideoArchiveSkip] = useState(0);
+  const [videoArchiveHasMore, setVideoArchiveHasMore] = useState(true);
+  const [supportTickets, setSupportTickets] = useState<SupportTicketListItemOut[]>([]);
   const rawArchiveImagesRef = useRef<StudioGenerationOut[]>([]);
   const [rawIntegrations, setRawIntegrations] = useState<IntegrationStatusOut | null>(null);
   const [health, setHealth] = useState<HealthOut | null>(null);
@@ -193,7 +217,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const [motionVideoFileId, setMotionVideoFileId] = useState<string | null>(null);
   const [firstFrameGenId, setFirstFrameGenId] = useState<number | null>(null);
   const [firstFrameUrl, setFirstFrameUrl] = useState('');
-  const [genResults, setGenResults] = useState<Record<string, { imageUrl: string }>>({});
+  const [genResults, setGenResults] = useState<Record<string, { imageUrl?: string; videoUrl?: string }>>({});
   const refreshLock = useRef(false);
   const activeThreadConvIdRef = useRef<number | null>(null);
   const rawConversationsRef = useRef<ConversationOut[]>([]);
@@ -262,6 +286,58 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const refreshArchive = useCallback(async () => {
     const archive = await actions.refreshArchiveImages();
     setRawArchiveImages(archive);
+    const pageCount = archive.filter((g) => g.status !== 'processing' && g.status !== 'archiving').length;
+    setArchiveSkip(Math.max(archive.length, pageCount));
+    setArchiveHasMore(archive.length >= 40);
+  }, []);
+
+  const loadMoreArchive = useCallback(async () => {
+    const items = await actions.loadMoreArchiveImages(archiveSkip);
+    if (!items.length) {
+      setArchiveHasMore(false);
+      return;
+    }
+    setRawArchiveImages((prev) => {
+      const seen = new Set(prev.map((g) => g.id));
+      return [...prev, ...items.filter((g) => !seen.has(g.id))];
+    });
+    setArchiveSkip((prev) => prev + items.length);
+    setArchiveHasMore(items.length >= 40);
+  }, [archiveSkip]);
+
+  const refreshArchiveVideos = useCallback(async () => {
+    const archive = await actions.refreshArchiveVideos();
+    setRawArchiveVideos(archive);
+    setVideoArchiveSkip(archive.length);
+    setVideoArchiveHasMore(archive.length >= 40);
+  }, []);
+
+  const loadMoreVideoArchive = useCallback(async () => {
+    const items = await actions.loadMoreArchiveVideos(videoArchiveSkip);
+    if (!items.length) {
+      setVideoArchiveHasMore(false);
+      return;
+    }
+    setRawArchiveVideos((prev) => {
+      const seen = new Set(prev.map((g) => g.id));
+      return [...prev, ...items.filter((g) => !seen.has(g.id))];
+    });
+    setVideoArchiveSkip((prev) => prev + items.length);
+    setVideoArchiveHasMore(items.length >= 40);
+  }, [videoArchiveSkip]);
+
+  const refreshSupportTickets = useCallback(async () => {
+    const rows = await actions.fetchSupportTickets();
+    setSupportTickets(Array.isArray(rows) ? rows : []);
+  }, []);
+
+  const createSupportTicket = useCallback(async (payload: { type: string; subject: string; message: string }) => {
+    await actions.createSupportTicket(payload);
+    await refreshSupportTickets();
+  }, [refreshSupportTickets]);
+
+  const fetchSupportTicket = useCallback(async (ticketId: number) => {
+    return actions.fetchSupportTicket(ticketId);
   }, []);
 
   const refreshConversations = useCallback(async () => {
@@ -349,6 +425,20 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       refreshLock.current = false;
     }
   }, []);
+
+  const saveProfileEmail = useCallback(async (email: string) => {
+    await actions.patchProfileEmail(email);
+    await refreshAll();
+  }, [refreshAll]);
+
+  const changeUserPassword = useCallback(async (current: string, next: string) => {
+    await actions.changePassword(current, next);
+  }, []);
+
+  const uploadExifReference = useCallback(async (charId: number, role: 'selfie' | 'main', file: LocalFile) => {
+    await actions.uploadPhoneExifReference(charId, role, file);
+    await refreshAll();
+  }, [refreshAll]);
 
   const bootstrap = useCallback(async () => {
     setReady(false);
@@ -591,6 +681,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         msg?.type === 'credits_updated'
       ) {
         void refreshArchive();
+        void refreshArchiveVideos();
         void actions.fetchMe().then((m) => setMe(m as UserMeOut));
       }
     }).then((c) => {
@@ -599,7 +690,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     return () => {
       conn?.close();
     };
-  }, [ready, authenticated, mergeInboundMessage, patchConversationPreview, refreshArchive, refreshConversations]);
+  }, [ready, authenticated, mergeInboundMessage, patchConversationPreview, refreshArchive, refreshArchiveVideos, refreshConversations]);
 
   useEffect(() => {
     if (!ready || !authenticated) return;
@@ -630,17 +721,22 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
         if (key === 'video') {
           if (!modelId) throw new Error('Выберите персонажа');
-          const motionControl = (nav.vidMode || 'motion-control') === 'motion-control';
+          const promptOnly = (nav.vidMode || 'motion-control') === 'prompt';
+          const motionControl = !promptOnly && (nav.vidMode || 'motion-control') === 'motion-control';
+          if (promptOnly && !uploadFiles['motion-frame']) {
+            throw new Error('Загрузите первый кадр');
+          }
           if (motionControl && !motionVideoFileId) throw new Error('Загрузите референс-видео');
           const accepted = await actions.runMotionVideo({
             modelId,
-            prompt: motionControl ? '' : (nav.imgPrompt || 'Cinematic motion'),
+            prompt: promptOnly ? (nav.imgPrompt || '') : (motionControl ? '' : (nav.imgPrompt || 'Cinematic motion')),
             aspect: nav.vidFormat,
             resolution: nav.vidQuality,
             durationSeconds: nav.vidDuration,
-            motionVideoFileId: motionVideoFileId || undefined,
-            firstFrameGenerationId: firstFrameGenId,
+            motionVideoFileId: motionControl ? (motionVideoFileId || undefined) : undefined,
+            firstFrameGenerationId: motionControl ? firstFrameGenId : null,
             autoMotionPrompt: motionControl && Boolean(motionVideoFileId),
+            promptOnlyMode: promptOnly,
             frameFile: uploadFiles['motion-frame'],
           });
           generationId = accepted.generation_id ?? null;
@@ -672,10 +768,14 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         const hit =
           generationId != null
             ? archive.find((g) => Number(g.id) === Number(generationId))
-            : archive.find((g) => !isArchivePending(g) && Boolean((g.image_url || '').trim()));
+            : archive.find((g) => !isArchivePending(g) && Boolean((g.image_url || g.video_url || '').trim()));
         const imageUrl = archiveThumbUrl(hit) || directImageUrl;
-        if (imageUrl) {
-          setGenResults((prev) => ({ ...prev, [key]: { imageUrl } }));
+        const videoUrl = hit?.video_url ? resolveMediaUrl(hit.video_url) : '';
+        if (imageUrl || videoUrl) {
+          setGenResults((prev) => ({
+            ...prev,
+            [key]: { imageUrl: imageUrl || undefined, videoUrl: videoUrl || undefined },
+          }));
         }
 
         patchGenStatus(key, 'done');
@@ -688,7 +788,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         setError(e instanceof Error ? e.message : String(e));
       }
     },
-    [rawModels, rawArchiveImages, uploadFiles, motionVideoFileId, firstFrameGenId, me],
+    [rawModels, rawArchiveImages, uploadFiles, motionVideoFileId, firstFrameGenId, me, refreshArchive, refreshArchiveVideos],
   );
 
   const generateFirstFrame = useCallback(
@@ -939,6 +1039,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const models = rawModels.map(mapCharacter);
   const modelNames = rawModels.map((m) => m.name);
   const archiveTiles = rawArchiveImages.map((g, i) => mapArchiveTile(g, i, rawModels));
+  const archiveVideoTiles = rawArchiveVideos.map((g, i) => mapArchiveTile(g, i, rawModels));
   const connectionsList = mapIntegrationCards(rawIntegrations);
   const donationBalances = resolveDonationBalances(donationOverviewRaw, rawDonationEvents);
   const overviewKpis = mapOverviewKpis(me, rawConversations, donationBalances.available);
@@ -973,6 +1074,22 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       modelNames: modelNames.length ? modelNames : ['Mia', 'Ruby'],
       archiveTiles,
       rawArchiveImages,
+      archiveSkip,
+      archiveHasMore,
+      loadMoreArchive,
+      archiveVideoTiles,
+      rawArchiveVideos,
+      videoArchiveSkip,
+      videoArchiveHasMore,
+      refreshArchiveVideos,
+      loadMoreVideoArchive,
+      supportTickets,
+      refreshSupportTickets,
+      createSupportTicket,
+      fetchSupportTicket,
+      saveProfileEmail,
+      changeUserPassword,
+      uploadExifReference,
       connectionsList,
       rawIntegrations,
       health,
@@ -1058,6 +1175,22 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       modelNames,
       archiveTiles,
       rawArchiveImages,
+      archiveSkip,
+      archiveHasMore,
+      loadMoreArchive,
+      archiveVideoTiles,
+      rawArchiveVideos,
+      videoArchiveSkip,
+      videoArchiveHasMore,
+      refreshArchiveVideos,
+      loadMoreVideoArchive,
+      supportTickets,
+      refreshSupportTickets,
+      createSupportTicket,
+      fetchSupportTicket,
+      saveProfileEmail,
+      changeUserPassword,
+      uploadExifReference,
       connectionsList,
       rawIntegrations,
       health,

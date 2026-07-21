@@ -92,6 +92,17 @@ export const RU = {
   motionPrompt: 'ДВИЖЕНИЕ', motionHint: 'She slowly turns to camera and smiles…', duration: 'ДЛИТЕЛЬНОСТЬ',
   generateVideo: 'Создать видео', save: 'Сохранить', delete: 'Удалить',
   srcUpload: 'Загрузить', srcArchive: 'Из архива', pickFromArchive: 'Выбрать кадр из архива',
+  showMore: 'Показать ещё', needRefQ: 'Нужен референс?', refImage: 'Референс-изображение',
+  navSupport: 'Поддержка', navProfile: 'Профиль',
+  supportDesc: 'Создавайте обращения в поддержку и следите за статусом ответа.',
+  newTicket: 'Новое обращение', myTickets: 'Ваши обращения', ticketType: 'ТИП ОБРАЩЕНИЯ',
+  ticketSubject: 'ТЕМА ОБРАЩЕНИЯ', ticketMessage: 'СООБЩЕНИЕ', sendTicket: 'Отправить',
+  typeGeneral: 'Общие вопросы', typeTech: 'Технические проблемы', typePay: 'Оплата', typeSub: 'Подписки',
+  stSent: 'Отправлено', stReview: 'На рассмотрении', stAnswered: 'Получен ответ', stDone: 'Завершено',
+  noTickets: 'Пока нет обращений — создайте первое.',
+  profileDesc: 'Данные аккаунта, email и пароль.', accountData: 'Данные аккаунта', email: 'EMAIL',
+  editProfile: 'Редактировать', changePassword: 'Сменить пароль',
+  curPassword: 'ТЕКУЩИЙ ПАРОЛЬ', newPassword: 'НОВЫЙ ПАРОЛЬ', confirmPassword: 'ПОВТОРИТЕ ПАРОЛЬ',
 };
 
 export const EN = {
@@ -186,6 +197,17 @@ export const EN = {
   motionPrompt: 'MOTION', motionHint: 'She slowly turns to camera and smiles…', duration: 'DURATION',
   generateVideo: 'Create video', save: 'Save', delete: 'Delete',
   srcUpload: 'Upload', srcArchive: 'From archive', pickFromArchive: 'Pick a frame from archive',
+  showMore: 'Show more', needRefQ: 'Need a reference?', refImage: 'Reference image',
+  navSupport: 'Support', navProfile: 'Profile',
+  supportDesc: 'Create support tickets and track reply status.',
+  newTicket: 'New ticket', myTickets: 'Your tickets', ticketType: 'TICKET TYPE',
+  ticketSubject: 'SUBJECT', ticketMessage: 'MESSAGE', sendTicket: 'Send',
+  typeGeneral: 'General', typeTech: 'Technical issues', typePay: 'Payment', typeSub: 'Subscriptions',
+  stSent: 'Submitted', stReview: 'In review', stAnswered: 'Answered', stDone: 'Closed',
+  noTickets: 'No tickets yet — create your first one.',
+  profileDesc: 'Account details, email and password.', accountData: 'Account details', email: 'EMAIL',
+  editProfile: 'Edit', changePassword: 'Change password',
+  curPassword: 'CURRENT PASSWORD', newPassword: 'NEW PASSWORD', confirmPassword: 'CONFIRM PASSWORD',
 };
 
 export const dict = { ru: RU, en: EN };

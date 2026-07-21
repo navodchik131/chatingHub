@@ -253,10 +253,10 @@ export function ThreadView({
     const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
     const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
     const showSub = Keyboard.addListener(showEvent, (e) => {
-      // Android: app.json uses resize, but Expo Go / some devices still overlap —
-      // lift composer by keyboard height. iOS uses KeyboardAvoidingView.
       if (Platform.OS === 'android') {
-        setKeyboardPad(Math.max(0, e.endCoordinates.height - insets.bottom));
+        // resize mode in app.json + extra lift for gesture nav / OEM quirks
+        const lift = Math.max(0, e.endCoordinates.height - insets.bottom + 12);
+        setKeyboardPad(lift);
       } else {
         setKeyboardPad(0);
       }
@@ -271,12 +271,12 @@ export function ThreadView({
 
   const platformLabel = platform.toUpperCase();
   const subtitle = vip ? `${platformLabel} • VIP` : platformLabel;
-  const composerPadBottom = keyboardPad > 0 ? 10 + keyboardPad : Math.max(10, insets.bottom);
+  const composerPadBottom = keyboardPad > 0 ? 12 + keyboardPad : Math.max(12, insets.bottom);
 
   return (
     <KeyboardAvoidingView
       style={styles.root}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}
     >
       <View style={styles.head}>

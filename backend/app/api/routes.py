@@ -6,6 +6,7 @@ from fastapi import APIRouter
 
 from app.api.analytics_routes import router as analytics_router
 from app.api.admin_creator_donation_routes import router as admin_creator_donation_router
+from app.api.admin_support_routes import router as admin_support_router
 from app.api.admin_routes import router as admin_router
 from app.api.admin_email_routes import router as admin_email_router
 from app.api.admin_exif_bot_routes import router as admin_exif_bot_router
@@ -18,6 +19,7 @@ from app.api.integrations_routes import router as integrations_router
 from app.api.push_routes import router as push_router
 from app.api.studio_routes import router as studio_router
 from app.api.studio_workflow_routes import router as studio_workflow_router
+from app.api.support_routes import router as support_router
 from app.api.tribute_routes import router as tribute_router
 from app.api.webhooks_routes import router as webhooks_router
 from app.api.workspace_routes import router as workspace_router
@@ -36,8 +38,10 @@ router.include_router(billing_router)
 router.include_router(referral_router)
 router.include_router(studio_router)
 router.include_router(studio_workflow_router)
+router.include_router(support_router)
 router.include_router(analytics_router)
 router.include_router(admin_router)
+router.include_router(admin_support_router)
 router.include_router(admin_creator_donation_router)
 router.include_router(admin_email_router)
 router.include_router(admin_exif_bot_router)

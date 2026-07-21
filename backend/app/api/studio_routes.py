@@ -15,7 +15,7 @@ import anyio
 import httpx
 
 from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, Query, Request, UploadFile
-from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -260,6 +260,7 @@ from app.services.wavespeed_client import (
     gpt_image_2_edit_image_url,
     grok_imagine_video_v15_image_to_video_url,
     nano_banana_pro_edit_image_url,
+    seedance_20_image_to_video_url,
     seedance_20_text_to_video_url,
     seedance_studio_video_edit_video_url,
     seedream_v45_bootstrap_edit_image_url,
@@ -1014,12 +1015,13 @@ async def public_studio_pose_reference(t: str) -> FileResponse:
     return FileResponse(path, media_type=mime)
 
 
-@router.get("/studio/public-generation-video")
+@router.get("/studio/public-generation-video", response_model=None)
 async def public_studio_generation_video(
     t: str,
+    download: int = Query(default=0),
     session: AsyncSession = Depends(get_session),
-) -> FileResponse:
-    """Видео из архива: локальный файл или редирект на CDN (provider_ready)."""
+) -> FileResponse | StreamingResponse | Response:
+    """Видео из архива: локальный файл, редирект на CDN или прокси-скачивание."""
     try:
         uid, gid = decode_generation_image_access_token(t)
     except ValueError:
@@ -1038,9 +1040,34 @@ async def public_studio_generation_video(
             raise HTTPException(status_code=404, detail="Не найдено") from None
         if abs_path.is_file():
             mime = row.content_type or mimetypes.guess_type(abs_path.name)[0] or "video/mp4"
+            if download:
+                return FileResponse(
+                    abs_path,
+                    media_type=mime,
+                    filename=abs_path.name,
+                    content_disposition_type="attachment",
+                )
             return FileResponse(abs_path, media_type=mime)
     src = (row.source_url or "").strip()
     if src.startswith("https://"):
+        mime = row.content_type or mimetypes.guess_type(src)[0] or "video/mp4"
+        ext = mimetypes.guess_extension(mime) or ".mp4"
+        filename = f"video-{gid}{ext}"
+        if download:
+            timeout = float(settings.studio_archive_download_timeout_seconds)
+
+            async def _stream_cdn() -> Any:
+                async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+                    async with client.stream("GET", src) as resp:
+                        resp.raise_for_status()
+                        async for chunk in resp.aiter_bytes(chunk_size=65536):
+                            yield chunk
+
+            return StreamingResponse(
+                _stream_cdn(),
+                media_type=mime,
+                headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+            )
         from fastapi.responses import RedirectResponse
 
         return RedirectResponse(url=src, status_code=302)
@@ -1929,7 +1956,18 @@ async def _studio_job_execute_carousel(
 
     scene_context = master_text or user_notes
 
-    cost_one = apply_studio_credit_cost(plan, settings.credit_cost_studio_carousel_shot)
+    billing_wave_model = (
+        workflow_wave_model
+        if workflow_wave_model
+        else effective_wave_model_for_billing(None, wave_profile=wave_profile_n)
+    )
+    cost_one = resolve_image_credit_cost(
+        plan,
+        wave_model_id=billing_wave_model or None,
+        wan_edit_tier=wan_tier_n,
+        grok_pipeline="light",
+        legacy_base=settings.credit_cost_studio_carousel_shot,
+    )
     items: list[StudioCarouselItemOut] = []
     last_msg: str | None = None
     arch_base = _public_app_base(None)
@@ -5379,6 +5417,8 @@ async def api_studio_motion_render_video(
     seedance_variant: str = Form("standard"),
     video_resolution: str = Form(""),
     auto_motion_prompt: str = Form("0"),
+    video_provider: str = Form("seedance_t2v"),
+    prompt_only_mode: str = Form("0"),
     session: AsyncSession = Depends(get_session),
     user: User = Depends(get_current_user),
 ) -> StudioMotionVideoOut | JSONResponse:
@@ -5388,6 +5428,11 @@ async def api_studio_motion_render_video(
     sub_b, _llm, ws_row, plan, _credits, _demo = await load_owner_studio_billing(session, oid)
     _require_studio_subscription(user, sub_b, credits_balance=_credits, demo_generations_remaining=_demo)
 
+    vp = str(video_provider or "seedance_t2v").strip().lower()
+    if vp not in ("seedance_t2v", "grok_imagine_i2v", "seedance_i2v"):
+        vp = "seedance_t2v"
+    prompt_only = _truthy_wavespeed_flag(prompt_only_mode) or vp == "seedance_i2v"
+
     try:
         mid = int(str(model_id).strip())
     except ValueError:
@@ -5396,8 +5441,30 @@ async def api_studio_motion_render_video(
 
     mv_id_early = str(motion_video_file_id or "").strip()
     auto_mp = _truthy_wavespeed_flag(auto_motion_prompt)
+    ff_gid_early: int | None = None
+    raw_ff_early = (first_frame_generation_id or "").strip()
+    if raw_ff_early:
+        try:
+            ff_gid_early = int(raw_ff_early)
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail="Некорректный first_frame_generation_id",
+            ) from None
+
     if not (prompt or "").strip() and not (auto_mp and mv_id_early):
         raise HTTPException(status_code=400, detail="Опишите сцену, движение и при необходимости одежду.")
+    if prompt_only and not mv_id_early:
+        if not ff_gid_early:
+            raise HTTPException(
+                status_code=400,
+                detail="Для режима prompt-only нужен первый кадр (first_frame_generation_id).",
+            )
+        if not (prompt or "").strip():
+            raise HTTPException(
+                status_code=400,
+                detail="Для режима prompt-only нужен текстовый промпт.",
+            )
 
     try:
         aspect_key = normalize_aspect_key(output_aspect)
@@ -5424,7 +5491,7 @@ async def api_studio_motion_render_video(
     sm = (await session.execute(stmt)).scalar_one_or_none()
     if not sm:
         raise HTTPException(status_code=404, detail="Модель не найдена")
-    if not sort_model_images_for_seedance_t2v(list(sm.images)):
+    if not prompt_only and not sort_model_images_for_seedance_t2v(list(sm.images)):
         raise HTTPException(
             status_code=400,
             detail="У модели нет фото для Seedance. Добавьте развёртку (turnaround) или другие снимки в кабинете модели.",
@@ -5460,9 +5527,9 @@ async def api_studio_motion_render_video(
         if vpath is None or not vpath.is_file():
             raise HTTPException(status_code=404, detail="Референс-видео не найдено.")
 
-    ff_gid: int | None = None
+    ff_gid: int | None = ff_gid_early
     raw_ff = (first_frame_generation_id or "").strip()
-    if raw_ff:
+    if raw_ff and ff_gid is None:
         try:
             ff_gid = int(raw_ff)
         except ValueError:
@@ -5470,6 +5537,7 @@ async def api_studio_motion_render_video(
                 status_code=400,
                 detail="Некорректный first_frame_generation_id",
             ) from None
+    if ff_gid is not None:
         ff_row = await session.get(StudioGeneration, ff_gid)
         if not ff_row or ff_row.user_id != oid:
             raise HTTPException(status_code=404, detail="Первый кадр (архив) не найден")
@@ -5523,6 +5591,8 @@ async def api_studio_motion_render_video(
                 "seedance_variant": seedance_v,
                 "video_resolution": video_res,
                 "auto_motion_prompt": (auto_motion_prompt or "0").strip(),
+                "video_provider": vp,
+                "prompt_only_mode": "1" if prompt_only else "0",
             },
             placeholder={
                 "studio_model_id": mid,
@@ -5574,8 +5644,9 @@ async def _studio_job_execute_motion_render_video(
         "yes",
     )
     video_provider = str(params.get("video_provider") or "seedance_t2v").strip().lower()
-    if video_provider not in ("seedance_t2v", "grok_imagine_i2v"):
+    if video_provider not in ("seedance_t2v", "grok_imagine_i2v", "seedance_i2v"):
         video_provider = "seedance_t2v"
+    prompt_only_mode = _truthy_wavespeed_flag(str(params.get("prompt_only_mode") or ""))
     boardstory_mode = _truthy_wavespeed_flag(str(params.get("boardstory_mode") or ""))
     prompt_from_compose = _truthy_wavespeed_flag(str(params.get("prompt_from_compose") or ""))
     send_video_reference = str(
@@ -5636,7 +5707,8 @@ async def _studio_job_execute_motion_render_video(
     if not sm:
         raise RuntimeError("Модель не найдена")
 
-    if video_provider != "grok_imagine_i2v":
+    skip_model_ref_check = video_provider == "seedance_i2v" or prompt_only_mode
+    if video_provider != "grok_imagine_i2v" and not skip_model_ref_check:
         if mv_id and send_video_reference:
             model_ref_ok = filter_model_images_for_seedance_video_face_only(list(sm.images))
             if not model_ref_ok:
@@ -5696,6 +5768,13 @@ async def _studio_job_execute_motion_render_video(
         if not ff_url:
             raise RuntimeError("Не удалось подготовить URL первого кадра")
         n_start = 1
+
+    use_seedance_i2v = (
+        not mv_id
+        and ff_url
+        and prompt.strip()
+        and (prompt_only_mode or video_provider == "seedance_i2v")
+    )
 
     if outfit_gid is not None:
         try:
@@ -5844,7 +5923,38 @@ async def _studio_job_execute_motion_render_video(
         # Swap по референс-видео: Seedance T2V + reference_videos (standard → fast API, mini → mini T2V)
         use_boardstory_video_edit = False
 
-        if boardstory_mode:
+        if use_seedance_i2v:
+            seed_prompt = prompt.strip()
+            neg = (negative_prompt or "").strip()
+            if neg:
+                seed_prompt = f"{seed_prompt}\n\nAvoid: {neg}"
+            prompt_source = "prompt_only_i2v"
+            try:
+                video_url = await seedance_20_image_to_video_url(
+                    api_key=ws_key,
+                    image_url=ff_url,
+                    prompt=seed_prompt,
+                    aspect_ratio=ar_t2v,
+                    resolution=video_res,
+                    duration=ds_effective,
+                    generate_audio=_truthy_wavespeed_flag(generate_audio),
+                )
+                motion_provider = "seedance_i2v"
+                msg = None
+                log.info(
+                    "motion_render_video seedance i2v ok job=%s prompt=%s",
+                    job.id,
+                    prompt_source,
+                )
+            except RuntimeError as e:
+                msg = str(e)
+                video_url = None
+                log.warning(
+                    "motion_render_video seedance i2v failed job=%s: %s",
+                    job.id,
+                    msg[:240],
+                )
+        elif boardstory_mode:
             if use_boardstory_video_edit:
                 model_imgs = filter_model_images_for_boardstory_video_edit(list(sm.images))
                 model_urls = model_reference_public_urls(
@@ -6141,59 +6251,60 @@ async def _studio_job_execute_motion_render_video(
                 soft_identity=False,
             )
 
-        try:
-            if use_boardstory_video_edit:
-                ar_edit = aspect_ratio_for_seedance_video_edit(output_aspect)
-                video_res_edit = (
-                    video_res
-                    if video_res in ("720p", "1080p")
-                    else settings.wavespeed_studio_video_edit_resolution or "720p"
+        if not use_seedance_i2v:
+            try:
+                if use_boardstory_video_edit:
+                    ar_edit = aspect_ratio_for_seedance_video_edit(output_aspect)
+                    video_res_edit = (
+                        video_res
+                        if video_res in ("720p", "1080p")
+                        else settings.wavespeed_studio_video_edit_resolution or "720p"
+                    )
+                    video_url = await seedance_studio_video_edit_video_url(
+                        api_key=ws_key,
+                        video_url=motion_vid_url,
+                        reference_image_urls=ref_images,
+                        prompt=seed_prompt,
+                        aspect_ratio=ar_edit,
+                        resolution=video_res_edit,
+                        duration=ds_effective,
+                        keep_original_sound=not _truthy_wavespeed_flag(generate_audio),
+                        variant=seedance_v,
+                    )
+                    motion_provider = "seedance_video_edit"
+                else:
+                    video_url = await seedance_20_text_to_video_url(
+                        api_key=ws_key,
+                        prompt=seed_prompt,
+                        reference_images=ref_images or None,
+                        reference_videos=ref_videos or None,
+                        aspect_ratio=ar_t2v,
+                        resolution=video_res,
+                        duration=ds_effective,
+                        generate_audio=_truthy_wavespeed_flag(generate_audio),
+                        variant=seedance_v,
+                    )
+                    motion_provider = "seedance_t2v"
+                msg = None
+                log.info(
+                    "motion_render_video ok job=%s provider=%s imgs=%s vids=%s prompt=%s",
+                    job.id,
+                    motion_provider,
+                    len(ref_images),
+                    len(ref_videos),
+                    prompt_source,
                 )
-                video_url = await seedance_studio_video_edit_video_url(
-                    api_key=ws_key,
-                    video_url=motion_vid_url,
-                    reference_image_urls=ref_images,
-                    prompt=seed_prompt,
-                    aspect_ratio=ar_edit,
-                    resolution=video_res_edit,
-                    duration=ds_effective,
-                    keep_original_sound=not _truthy_wavespeed_flag(generate_audio),
-                    variant=seedance_v,
+            except RuntimeError as e:
+                msg = str(e)
+                video_url = None
+                log.warning(
+                    "motion_render_video failed job=%s boardstory=%s imgs=%s vids=%s: %s",
+                    job.id,
+                    boardstory_mode,
+                    len(ref_images),
+                    len(ref_videos),
+                    msg[:240],
                 )
-                motion_provider = "seedance_video_edit"
-            else:
-                video_url = await seedance_20_text_to_video_url(
-                    api_key=ws_key,
-                    prompt=seed_prompt,
-                    reference_images=ref_images or None,
-                    reference_videos=ref_videos or None,
-                    aspect_ratio=ar_t2v,
-                    resolution=video_res,
-                    duration=ds_effective,
-                    generate_audio=_truthy_wavespeed_flag(generate_audio),
-                    variant=seedance_v,
-                )
-                motion_provider = "seedance_t2v"
-            msg = None
-            log.info(
-                "motion_render_video ok job=%s provider=%s imgs=%s vids=%s prompt=%s",
-                job.id,
-                motion_provider,
-                len(ref_images),
-                len(ref_videos),
-                prompt_source,
-            )
-        except RuntimeError as e:
-            msg = str(e)
-            video_url = None
-            log.warning(
-                "motion_render_video failed job=%s boardstory=%s imgs=%s vids=%s: %s",
-                job.id,
-                boardstory_mode,
-                len(ref_images),
-                len(ref_videos),
-                msg[:240],
-            )
 
     gen_placeholder = await find_studio_generation_by_job_id(session, job.id)
     ph_id = params.get("placeholder_generation_id")

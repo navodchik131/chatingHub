@@ -22,7 +22,8 @@
     "emailTitle": "Рассылки",
     "exifBotTitle": "EXIF-бот",
     "igBotTitle": "IG-бот",
-    "creatorDonationsTitle": "Донаты креаторов"
+    "creatorDonationsTitle": "Донаты креаторов",
+    "ticketsTitle": "Обращения в поддержку"
   },
   "tabs": {
     "overview": "Обзор",
@@ -30,7 +31,8 @@
     "email": "Рассылки",
     "exifBot": "EXIF-бот",
     "igBot": "IG-бот",
-    "creatorDonations": "Донаты креаторов"
+    "creatorDonations": "Донаты креаторов",
+    "tickets": "Поддержка"
   },
   "common": {
     "search": "Найти",
@@ -397,6 +399,26 @@
       "markPaid": "Выполнено",
       "reject": "Отклонить",
       "rejectNotes": "Причина отклонения (необязательно):"
+    }
+  },
+  "tickets": {
+    "listTitle": "Обращения",
+    "empty": "Обращений пока нет",
+    "selectHint": "Выберите обращение слева",
+    "allStatuses": "Все статусы",
+    "initial": "Первое сообщение",
+    "staff": "Поддержка",
+    "user": "Пользователь",
+    "replyPlaceholder": "Ответ пользователю…",
+    "sendReply": "Отправить ответ",
+    "loadFailed": "Не удалось загрузить обращения",
+    "replyFailed": "Не удалось отправить ответ",
+    "statusFailed": "Не удалось обновить статус",
+    "status": {
+      "submitted": "Отправлено",
+      "in_review": "На рассмотрении",
+      "answered": "Получен ответ",
+      "closed": "Завершено"
     }
   }
 }

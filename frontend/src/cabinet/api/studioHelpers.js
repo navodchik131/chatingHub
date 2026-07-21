@@ -9,6 +9,7 @@ function slotUploadKey(mode, index) {
   if (mode === 'outfit') return index === 0 ? 'ref' : 'outfit-cloth'
   if (mode === 'location') return index === 0 ? 'ref' : 'location-photo'
   if (mode === 'carousel') return 'carousel'
+  if (mode === 'edit') return index === 0 ? 'ref' : 'edit-detail'
   return 'ref'
 }
 
@@ -103,7 +104,7 @@ function slotHasSource(mode, index, uploadFiles, slotArchivePicks) {
 export function validateStudioForm(appState, studioStore, t) {
   const errs = []
   const mode = appState.imgMode || 'prompt'
-  const slotCounts = { ref: 1, swap: 1, outfit: 2, location: 2, prompt: 0, carousel: 1 }
+  const slotCounts = { ref: 1, swap: 1, outfit: 2, location: 2, prompt: 0, carousel: 1, edit: 1 }
   const slotN = slotCounts[mode] ?? 0
   const { uploadFiles, slotArchivePicks, selectedModelId } = studioStore
 
@@ -118,6 +119,10 @@ export function validateStudioForm(appState, studioStore, t) {
   if (mode === 'outfit' && !slotHasSource('outfit', 1, uploadFiles, slotArchivePicks)) errs.push(t.errNoRef)
   if (mode === 'location' && !slotHasSource('location', 1, uploadFiles, slotArchivePicks)) errs.push(t.errNoRef)
   if (mode === 'prompt' && !(appState.studioPrompt || '').trim()) errs.push(t.errNoPrompt)
+  if (mode === 'edit') {
+    if (!(appState.studioPrompt || '').trim()) errs.push(t.errNoPrompt)
+    if (appState.needsRef === 'yes' && !slotHasSource('edit', 1, uploadFiles, slotArchivePicks)) errs.push(t.errNoRef)
+  }
   if (mode !== 'outfit' && mode !== 'location' && !selectedModelId) errs.push(t.errNoChar)
 
   return errs

@@ -1,7 +1,7 @@
 import { useRef } from 'react';
 import Hoverable from '../components/Hoverable';
 import {
-  IcoLayers, IcoFace, IcoShirt, IcoPin, IcoText, IcoGrid2,
+  IcoLayers, IcoFace, IcoShirt, IcoPin, IcoText, IcoGrid2, IcoEdit,
   IcoSpark, IcoUpload, IcoImage, IcoZoom, IcoDownload,
 } from '../components/Icons';
 import { Fade, PageTitle, Eyebrow, Chip, SelectPill, Overlay, CloseButton } from '../components/ui';
@@ -10,13 +10,14 @@ import { color, line, font, G } from '../styles/tokens';
 import { cardPickStyle, modeCardStyle, refThumbStyle, refUploadStyle, borderHoverOff } from '../styles/mixins';
 import { modeDefs } from '../data/catalog';
 import { resolveSlotSource, archiveThumbUrl, archiveDownloadUrl, isArchivePending } from '../api/actions';
+import { downloadArchiveBlob } from '../api/archiveDownload';
 import { validateStudioForm, syncRefArchivePicks, enginesForNsfw, sameStudioModelId } from '../api/studioHelpers';
 
 const ratios = ['9:16', '16:9', '1:1', '4:3', '3:4'];
 const countOptions = [2, 3, 4, 6, 8];
 
 const modeIcons = {
-  layers: IcoLayers, face: IcoFace, shirt: IcoShirt, pin: IcoPin, text: IcoText, grid2: IcoGrid2,
+  layers: IcoLayers, face: IcoFace, shirt: IcoShirt, pin: IcoPin, text: IcoText, grid2: IcoGrid2, edit: IcoEdit,
 };
 
 function aspectCss(ratio) {
@@ -50,14 +51,7 @@ export function Lightbox() {
 
   const handleDownload = () => {
     if (!downloadUrl) return;
-    const a = document.createElement('a');
-    a.href = downloadUrl;
-    a.download = `modelmate-${item?.id || 'frame'}.jpg`;
-    a.target = '_blank';
-    a.rel = 'noreferrer';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    void downloadArchiveBlob(downloadUrl, `modelmate-${item?.id || 'frame'}.jpg`);
   };
 
   const handleCarousel = () => {
@@ -276,6 +270,9 @@ export default function Images() {
 
   const modes = modeDefs(lang, t.cr);
   const curMode = modes.find((m) => m.id === s.imgMode) || modes[0];
+  const displaySlots = s.imgMode === 'edit' && s.needsRef === 'yes'
+    ? [...curMode.slots, { label: t.refImage, archive: false }]
+    : curMode.slots;
   const models = enginesForNsfw(s.contentMode === 'nsfw', cabinet.genModels);
   const charNames = (cabinet.models || []).map((m) => m.name).filter(Boolean);
 
@@ -411,10 +408,24 @@ export default function Images() {
             </div>
           </div>
 
+          {s.imgMode === 'edit' && (
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 800, marginBottom: 10 }}>{t.needRefQ}</div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <Chip on={s.needsRef === 'no'} onClick={() => setS({ needsRef: 'no' })}>
+                  {lang === 'ru' ? 'Нет' : 'No'}
+                </Chip>
+                <Chip on={s.needsRef === 'yes'} onClick={() => setS({ needsRef: 'yes' })}>
+                  {lang === 'ru' ? 'Да' : 'Yes'}
+                </Chip>
+              </div>
+            </div>
+          )}
+
           {/* slots */}
-          {curMode.slots.length > 0 && (
+          {displaySlots.length > 0 && (
             <div style={{ display: 'flex', gap: 10, alignItems: 'stretch' }}>
-              {curMode.slots.map((sl, i) => (
+              {displaySlots.map((sl, i) => (
                 <Slot key={i} slot={sl} index={i} />
               ))}
             </div>
@@ -550,7 +561,7 @@ export default function Images() {
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(130px,1fr))', gap: 10 }}>
-            {(cabinet.archiveImages.length ? cabinet.archiveImages : []).slice(0, 8).map((item, i) => {
+            {(cabinet.archiveImages.length ? cabinet.archiveImages : []).map((item, i) => {
               const thumb = archiveThumbUrl(item);
               const pending = isArchivePending(item);
               const failed = (item.status || '').trim() === 'failed';
@@ -649,6 +660,19 @@ export default function Images() {
               </div>
             )}
           </div>
+          {cabinet.archiveImagesHasMore && (
+            <Hoverable
+              style={{
+                marginTop: 12, display: 'inline-flex', alignItems: 'center', gap: 8,
+                fontSize: 12.5, fontWeight: 700, color: color.lime, cursor: 'pointer',
+                border: '1px solid rgba(215,244,82,.35)', borderRadius: 10, padding: '8px 16px',
+              }}
+              hover={{ background: 'rgba(215,244,82,.08)' }}
+              onClick={() => void cabinet.loadMoreArchiveImages()}
+            >
+              {t.showMore}
+            </Hoverable>
+          )}
         </div>
       </div>
     </Fade>

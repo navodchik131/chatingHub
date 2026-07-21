@@ -197,6 +197,11 @@ class User(Base):
         back_populates="owner",
         cascade="all, delete-orphan",
     )
+    support_tickets: Mapped[list["SupportTicket"]] = relationship(
+        "SupportTicket",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
 
 
 class Subscription(Base):
@@ -1500,6 +1505,62 @@ class EmailCampaign(Base):
         back_populates="campaign",
         cascade="all, delete-orphan",
     )
+
+
+class SupportTicketStatus(str, enum.Enum):
+    submitted = "submitted"
+    in_review = "in_review"
+    answered = "answered"
+    closed = "closed"
+
+
+class SupportTicket(Base):
+    __tablename__ = "support_tickets"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    type: Mapped[str] = mapped_column(String(64), default="general")
+    subject: Mapped[str] = mapped_column(String(500))
+    message: Mapped[str] = mapped_column(Text)
+    status: Mapped[SupportTicketStatus] = mapped_column(
+        Enum(SupportTicketStatus, native_enum=False, length=16),
+        default=SupportTicketStatus.submitted,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    user: Mapped[User] = relationship("User", back_populates="support_tickets")
+    replies: Mapped[list["SupportTicketReply"]] = relationship(
+        "SupportTicketReply",
+        back_populates="ticket",
+        order_by="SupportTicketReply.created_at",
+        cascade="all, delete-orphan",
+    )
+
+
+class SupportTicketReply(Base):
+    __tablename__ = "support_ticket_replies"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    ticket_id: Mapped[int] = mapped_column(
+        ForeignKey("support_tickets.id", ondelete="CASCADE"), index=True
+    )
+    is_staff: Mapped[bool] = mapped_column(Boolean, default=False)
+    message: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+    ticket: Mapped[SupportTicket] = relationship("SupportTicket", back_populates="replies")
 
 
 class EmailCampaignRecipient(Base):

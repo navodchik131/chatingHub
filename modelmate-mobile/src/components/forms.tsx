@@ -2,7 +2,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { ReactNode } from 'react';
 import {
   ActivityIndicator,
-  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -15,6 +14,7 @@ import { TextInput } from 'react-native-gesture-handler';
 import { RemoteImage } from '@/src/components/RemoteImage';
 import { IcoUpload } from '@/src/components/Icons';
 import { color, font, gradients } from '@/src/styles/tokens';
+import { downloadMedia } from '@/src/utils/downloadMedia';
 
 export function FieldLabel({ children }: { children: string }) {
   return <Text style={styles.fieldLabel}>{children}</Text>;
@@ -284,11 +284,13 @@ export function GenLoadingCard({ title, sub }: { title: string; sub: string }) {
 
 export function GenResultCard({
   imageUrl,
+  videoUrl,
   gradIndex,
   badge,
   onRegen,
 }: {
   imageUrl?: string;
+  videoUrl?: string;
   gradIndex: number;
   badge: string;
   onRegen?: () => void;
@@ -299,6 +301,7 @@ export function GenResultCard({
   ) : (
     <LinearGradient colors={[a, b]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.genPreview} />
   );
+  const downloadUrl = videoUrl || imageUrl;
 
   return (
     <View style={styles.genResult}>
@@ -312,11 +315,16 @@ export function GenResultCard({
         <Pressable
           style={styles.genDownload}
           onPress={() => {
-            if (imageUrl) void Linking.openURL(imageUrl);
+            if (downloadUrl) {
+              void downloadMedia(downloadUrl, {
+                filename: videoUrl ? 'video.mp4' : 'image.jpg',
+                mimeType: videoUrl ? 'video/mp4' : 'image/jpeg',
+              }).catch(() => {});
+            }
           }}
-          disabled={!imageUrl}
+          disabled={!downloadUrl}
         >
-          <Text style={styles.genDownloadText}>Скачать</Text>
+          <Text style={styles.genDownloadText}>{videoUrl ? 'Скачать MP4' : 'Скачать'}</Text>
         </Pressable>
         <Pressable style={styles.genRegen} onPress={onRegen}>
           <Text style={styles.genRegenText}>↻ Ещё раз</Text>
