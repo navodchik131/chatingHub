@@ -149,6 +149,14 @@ _WAVESPEED_PHOTO_EDIT_USER_FIRST_PREFIX = (
     "Do **not** zoom/reframe drastically unless USER_TEXT asks; preserve shot scale when unspecified.\n\n"
 )
 
+_WAVESPEED_PHOTO_EDIT_WITH_DETAIL_PREFIX = (
+    "[EDIT_BASE + DETAIL_REF] **Image 1** = the user's existing photograph — the full edit canvas. "
+    "Keep the same person, pose, camera, crop, lighting, background and overall composition unless USER_TEXT asks otherwise.\n"
+    "**Image 2** = detail / element reference — apply ONLY the look of the element described in USER_TEXT "
+    "(color, shape, texture, garment piece, prop, logo). Do **not** replace the whole scene with Image 2.\n"
+    "When JSON/USER_TEXT names a detail reference, explicitly cite **Image 2** / detail reference in the edit instructions.\n\n"
+)
+
 _WAVESPEED_NO_FACE_SUFFIX = (
     "\n\n[FRAMING] Do not show the subject's face or head unless the reference crop / JSON brief clearly includes them. "
     "Prefer crops on legs, feet, lower body, hands, or torso without head. "
@@ -228,6 +236,7 @@ def finalize_wavespeed_studio_prompt(
     prompt_brief_mode: str = "full",
     skip_no_face_suffix: bool = False,
     visibility: "IdentityVisibility | None" = None,
+    photo_edit_detail_ref_attached: bool = False,
 ) -> str:
     """Сборка финального текстового промпта для WaveSpeed в зависимости от режима студии."""
     from app.services.studio_reference_analysis import (
@@ -243,11 +252,12 @@ def finalize_wavespeed_studio_prompt(
     headless = vis.headless_crop if vis is not None else mode == "no_face"
     if user_image_first:
         if mode == "photo_edit":
-            out = (
-                _WAVESPEED_PHOTO_EDIT_USER_FIRST_PREFIX.strip()
-                if not p
-                else _WAVESPEED_PHOTO_EDIT_USER_FIRST_PREFIX + p
+            edit_prefix = (
+                _WAVESPEED_PHOTO_EDIT_WITH_DETAIL_PREFIX
+                if photo_edit_detail_ref_attached
+                else _WAVESPEED_PHOTO_EDIT_USER_FIRST_PREFIX
             )
+            out = edit_prefix.strip() if not p else edit_prefix + p
         elif mode == "face_swap":
             out = wavespeed_prompt_with_face_swap_first(
                 p,
@@ -368,6 +378,7 @@ def finalize_nano_banana_studio_prompt(
     prompt_brief_mode: str = "full",
     skip_no_face_suffix: bool = False,
     visibility: "IdentityVisibility | None" = None,
+    photo_edit_detail_ref_attached: bool = False,
 ) -> str:
     """
     Nano Banana Pro: порядок URL другой, чем у WAN (сначала лицо модели, поза пользователя — в конце).
@@ -387,11 +398,12 @@ def finalize_nano_banana_studio_prompt(
     use_no_face_nano = headless or face_hidden or (vis is None and mode == "no_face")
 
     if user_photo_edit_first and mode == "photo_edit":
-        out = (
-            _WAVESPEED_PHOTO_EDIT_USER_FIRST_PREFIX.strip()
-            if not p
-            else _WAVESPEED_PHOTO_EDIT_USER_FIRST_PREFIX + p
+        edit_prefix = (
+            _WAVESPEED_PHOTO_EDIT_WITH_DETAIL_PREFIX
+            if photo_edit_detail_ref_attached
+            else _WAVESPEED_PHOTO_EDIT_USER_FIRST_PREFIX
         )
+        out = edit_prefix.strip() if not p else edit_prefix + p
     elif brief == "text_scene":
         out = _NANO_TEXT_SCENE_PREFIX.strip() if not p else _NANO_TEXT_SCENE_PREFIX + p
     elif brief == "grok_composed":
@@ -1522,6 +1534,7 @@ def assemble_wavespeed_image_edit_prompt(
     skip_no_face_suffix: bool = False,
     selfie_capture: bool = False,
     visibility: "IdentityVisibility | None" = None,
+    photo_edit_detail_ref_attached: bool = False,
 ) -> str:
     """Позитивный промпт для WaveSpeed; negative в JSON (text scene) или суффикс [NEGATIVE_PROMPT] (prose)."""
     from app.services.studio_prompt_bundle import (
@@ -1563,6 +1576,7 @@ def assemble_wavespeed_image_edit_prompt(
             prompt_brief_mode=brief,
             skip_no_face_suffix=skip_no_face_suffix,
             visibility=visibility,
+            photo_edit_detail_ref_attached=photo_edit_detail_ref_attached,
         )
     else:
         prompt = finalize_wavespeed_studio_prompt(
@@ -1573,6 +1587,7 @@ def assemble_wavespeed_image_edit_prompt(
             prompt_brief_mode=brief,
             skip_no_face_suffix=skip_no_face_suffix,
             visibility=visibility,
+            photo_edit_detail_ref_attached=photo_edit_detail_ref_attached,
         )
     return append_negative_to_wavespeed_prompt(
         prompt, negative, brief_mode=brief

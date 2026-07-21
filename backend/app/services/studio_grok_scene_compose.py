@@ -800,6 +800,7 @@ DETAIL EDIT SCENARIO (strict in-place retouch):
 - The photo-base / frame-to-edit reference is the FULL canvas: keep the same person, pose, camera, crop, lighting, background and composition.
 - USER_NOTES describe the ONLY local change (color, prop, garment detail, small object, minor retouch).
 - If a detail / element reference is attached, use it ONLY for that element's appearance — never replace the whole scene with it.
+- WaveSpeed receives Image 1 = edit canvas and Image 2 = detail reference when present — your output prompt MUST explicitly cite Image 2 / detail reference for that element.
 - Write a WaveSpeed edit prompt that mutates only the requested detail on the SAME photograph.
 - FORBIDDEN: new location, reframe, re-pose, new identity, face-swap, inventing a different shot.
 - Do NOT use MODEL studio photos — identity comes from the frame being edited.

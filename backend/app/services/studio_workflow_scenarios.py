@@ -218,9 +218,41 @@ def enrich_description_for_detail_edit(description: str) -> str:
         "PRIORITY 2 — apply ONLY the local change described in USER_NOTES (color, prop, garment detail, "
         "small object, minor retouch).\n"
         "If a detail / element reference is attached, use it ONLY as the look of that element — "
-        "do NOT replace the whole scene with it.\n"
+        "do NOT replace the whole scene with it. WaveSpeed receives Image 1 = edit canvas, Image 2 = detail ref "
+        "when present — the composed prompt MUST explicitly cite Image 2 / detail reference for that element.\n"
         "FORBIDDEN: new location, reframe, re-pose, new identity, face-swap, inventing a different shot."
     )
     if not base:
         return hint
     return f"{base}\n\n{hint}"
+
+
+def order_detail_edit_refs_for_wavespeed(
+    refs: list[tuple[Any, Any, Any]] | tuple[Any, Any, Any],
+) -> list[tuple[Any, Any, Any]]:
+    """WaveSpeed: сначала кадр для правки, затем опциональный detail-ref."""
+    items = list(refs)
+    if not items:
+        return []
+
+    def _role(meta: Any) -> str:
+        if isinstance(meta, dict):
+            return str(meta.get("role") or "")
+        return str(getattr(meta, "role", "") or "")
+
+    base = [r for r in items if is_detail_edit_ref_role(_role(r[2]))]
+    detail = [r for r in items if is_detail_donor_ref_role(_role(r[2]))]
+    seen = {id(r) for r in base + detail}
+    other = [r for r in items if id(r) not in seen]
+    ordered = (base or [items[0]]) + detail + other
+    return ordered
+
+
+def workflow_detail_ref_attached(
+    refs: list[tuple[Any, Any, Any]] | tuple[Any, Any, Any] | None,
+) -> bool:
+    for _b, _m, meta in refs or ():
+        role = meta.get("role") if isinstance(meta, dict) else getattr(meta, "role", "")
+        if is_detail_donor_ref_role(str(role or "")):
+            return True
+    return False

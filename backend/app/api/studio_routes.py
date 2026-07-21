@@ -2922,6 +2922,8 @@ async def _accept_studio_refine_job_from_workflow(
 
     from app.services.studio_workflow_scenarios import (
         enrich_description_for_detail_edit,
+        order_detail_edit_refs_for_wavespeed,
+        workflow_detail_ref_attached,
         workflow_refs_indicate_detail_edit,
     )
 
@@ -4070,19 +4072,14 @@ async def _studio_job_execute_refine_prompt(
             if workflow_ref_loaded and send_pose_to_ws:
                 try:
                     refs_for_ws = workflow_ref_loaded
-                    if _truthy_send_pose_reference_to_wavespeed(
+                    detail_edit_ws = _truthy_send_pose_reference_to_wavespeed(
                         p.get("workflow_detail_edit")
                     ) or any(
                         "frame to edit" in str(meta.get("role") or "").lower()
                         for _b, _m, meta in workflow_ref_loaded
-                    ):
-                        # Detail-edit: в WaveSpeed только кадр для правки, без detail-ref.
-                        base_only = [
-                            (ref_bytes, ref_mime, meta)
-                            for ref_bytes, ref_mime, meta in workflow_ref_loaded
-                            if "frame to edit" in str(meta.get("role") or "").lower()
-                        ]
-                        refs_for_ws = base_only or workflow_ref_loaded[:1]
+                    )
+                    if detail_edit_ws:
+                        refs_for_ws = order_detail_edit_refs_for_wavespeed(workflow_ref_loaded)
                     for ref_bytes, ref_mime, _meta in refs_for_ws:
                         fid = save_pose_reference_bytes(
                             owner_id=oid,
@@ -4306,6 +4303,15 @@ async def _studio_job_execute_refine_prompt(
                     selfie_capture=workflow_selfie_capture,
                     skip_no_face_suffix=skip_no_face_suffix,
                     visibility=prompt_plan.visibility if prompt_plan else None,
+                    photo_edit_detail_ref_attached=bool(
+                        mode_n == "photo_edit"
+                        and user_pose_ref_prepended
+                        and (
+                            workflow_detail_ref_attached(workflow_ref_loaded)
+                            if workflow_ref_loaded
+                            else False
+                        )
+                    ),
                 )
                 if workflow_first_frame:
                     from app.services.studio_model_bootstrap import append_workflow_first_frame_face_grid
