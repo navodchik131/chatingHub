@@ -285,11 +285,11 @@ def test_assemble_reference_prompt_motion_video_swap_short():
         n_model_images=1,
         n_motion_videos=1,
     )
-    assert "MODEL REPLACEMENT" in p
+    assert "SUBJECT" in p
     assert "@Image1" in p
     assert "@Video1" in p
-    assert "Motion reference only" in p
-    assert "Object control" in p
+    assert "IDENTITY LOCK" in p
+    assert "SCENE:" in p
     assert "замени персонажа" not in p.lower()
 
 
@@ -297,10 +297,10 @@ def test_build_seedance_motion_video_swap_prompt_includes_guide_blocks():
     from app.services.studio_seedance_t2v import build_seedance_motion_video_swap_prompt
 
     p = build_seedance_motion_video_swap_prompt("Slow turn toward camera.")
-    assert "MODEL REPLACEMENT" in p
+    assert "SUBJECT" in p
     assert "@Video1" in p
-    assert "Strict priority rules" in p
-    assert "Object control" in p
+    assert "MOTION — from @Video1" in p
+    assert "IDENTITY LOCK" in p
     assert "Slow turn toward camera." in p
 
 

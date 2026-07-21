@@ -22,18 +22,20 @@ MAX_SEEDANCE_VIDEO_MODEL_IDENTITY_WITH_BODY = 3
 SEEDANCE_T2V_PROMPT_MAX_CHARS = 3000
 
 SEEDANCE_MOTION_VIDEO_SWAP_PROMPT = (
-    "MODEL REPLACEMENT: @Image1 is the lead character and the ONLY reference for appearance.\n\n"
-    "Strict priority rules:\n"
-    "- Take face, hair, exact hairstyle, skin tone, skin texture, body shape, body proportions, "
-    "breast size and shape, waist, hips, limbs, tattoos (if any) EXCLUSIVELY from @Image1.\n"
-    "- Completely ignore and replace the original performer's face, body, skin, and all visual details from @Video1.\n"
-    "- Do not transfer any tattoos, marks, moles, skin imperfections or body features from the video reference.\n\n"
-    "Motion reference only:\n"
-    "- Replicate ONLY camera movements, framing, angles, timing, choreography, body dynamics, "
-    "hand gestures, speed and movement patterns from @Video1.\n"
-    "- Do not copy the original performer's appearance or objects if they conflict with @Image1.\n\n"
-    "Object control: Replace any object in the video with the equivalent object shown in @Image1.\n\n"
-    "High priority: Perfect face consistency, stable identity, natural body proportions matching @Image1."
+    "SUBJECT — from @Image1 (single source of truth):\n"
+    "Animate the exact person shown in @Image1. Preserve their face, hairstyle, skin tone and texture, "
+    "body shape and proportions, and every visible detail exactly as in the reference frame. "
+    "@Image1 defines all appearance — the video defines none of it.\n\n"
+    "MOTION — from @Video1 (reference only):\n"
+    "Reproduce the camera movement, framing, angles, shot timing, choreography, body dynamics, "
+    "hand gestures, movement speed and rhythm from @Video1. Apply this motion to the @Image1 subject "
+    "as if @Image1 were the opening frame brought to life.\n\n"
+    "IDENTITY LOCK:\n"
+    "Keep facial identity and body proportions consistent and stable across the entire sequence. "
+    "When motion and appearance conflict, appearance always follows @Image1, motion always follows @Video1.\n\n"
+    "SCENE:\n"
+    "Match the environment, lighting mood and objects to @Image1's frame. Keep whatever appears in @Image1 as-is; "
+    "ignore any conflicting objects, marks or details from the video."
 )
 
 _SEEDANCE_MOTION_CAMERA_LINE = (
