@@ -33,9 +33,15 @@ SEEDANCE_MOTION_VIDEO_SWAP_PROMPT = (
     "IDENTITY LOCK:\n"
     "Keep facial identity and body proportions consistent and stable across the entire sequence. "
     "When motion and appearance conflict, appearance always follows @Image1, motion always follows @Video1.\n\n"
-    "SCENE:\n"
-    "Match the environment, lighting mood and objects to @Image1's frame. Keep whatever appears in @Image1 as-is; "
-    "ignore any conflicting objects, marks or details from the video."
+    "OBJECT PERSISTENCE:\n"
+    "The object held by the subject is defined by @Image1. If it leaves the frame and returns, or is occluded "
+    "and reappears, it must return as the exact same @Image1 object — never the object from @Video1. "
+    "The object's identity stays locked for the entire sequence regardless of visibility.\n\n"
+    "SKIN & BODY PERSISTENCE:\n"
+    "The subject's skin is clean and matches @Image1 everywhere. Body areas not visible in the first frame — "
+    "revealed by camera movement or new angles — must stay consistent with @Image1's clean skin. "
+    "Do not add tattoos, marks, moles or any features that were not present in @Image1. "
+    "No detail from @Video1's performer appears on any newly revealed area."
 )
 
 _SEEDANCE_MOTION_CAMERA_LINE = (

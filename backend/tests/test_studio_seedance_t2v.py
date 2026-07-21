@@ -289,7 +289,8 @@ def test_assemble_reference_prompt_motion_video_swap_short():
     assert "@Image1" in p
     assert "@Video1" in p
     assert "IDENTITY LOCK" in p
-    assert "SCENE:" in p
+    assert "OBJECT PERSISTENCE" in p
+    assert "SKIN & BODY PERSISTENCE" in p
     assert "замени персонажа" not in p.lower()
 
 
@@ -300,7 +301,8 @@ def test_build_seedance_motion_video_swap_prompt_includes_guide_blocks():
     assert "SUBJECT" in p
     assert "@Video1" in p
     assert "MOTION — from @Video1" in p
-    assert "IDENTITY LOCK" in p
+    assert "OBJECT PERSISTENCE" in p
+    assert "SKIN & BODY PERSISTENCE" in p
     assert "Slow turn toward camera." in p
 
 
