@@ -69,6 +69,7 @@ export type NavigationState = {
   profileConfirmPassword: string;
   videoArchiveIdx: number;
   connToken: string;
+  connFlash: 'ok' | 'error' | null;
   opLogin: string;
   opPassword: string;
   opEditId: number | null;
@@ -159,6 +160,7 @@ export const defaultNavState: NavigationState = {
   profileConfirmPassword: '',
   videoArchiveIdx: 0,
   connToken: '',
+  connFlash: null,
   opLogin: '',
   opPassword: '',
   opEditId: null,

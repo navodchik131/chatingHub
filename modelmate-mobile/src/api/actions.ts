@@ -323,7 +323,14 @@ export async function generateStudioModelProfile(model: StudioModelOut) {
 export async function saveTelegramBot(token: string, studioModelId?: number) {
   const body: Record<string, unknown> = { bot_token: token };
   if (studioModelId) body.studio_model_id = studioModelId;
-  return apiJson('/api/integrations/telegram', { method: 'PUT', body: JSON.stringify(body) });
+  return apiJson<import('@/src/api/types').IntegrationStatusOut>('/api/integrations/telegram', { method: 'PUT', body: JSON.stringify(body) });
+}
+
+export async function saveWavespeedKey(apiKey: string) {
+  return apiJson<import('@/src/api/types').IntegrationStatusOut>('/api/integrations/wavespeed', {
+    method: 'PUT',
+    body: JSON.stringify({ api_key: apiKey }),
+  });
 }
 
 export async function deleteTelegramConnection(connectionId: number) {
@@ -341,7 +348,7 @@ export async function deleteTributeConnection(connectionId: number) {
 export async function saveTributeKey(apiKey: string, studioModelId?: number) {
   const body: Record<string, unknown> = { api_key: apiKey };
   if (studioModelId) body.studio_model_id = studioModelId;
-  return apiJson('/api/integrations/tribute', { method: 'PUT', body: JSON.stringify(body) });
+  return apiJson<import('@/src/api/types').IntegrationStatusOut>('/api/integrations/tribute', { method: 'PUT', body: JSON.stringify(body) });
 }
 
 export async function payYookassa(product: string, creditsQuantity?: number) {

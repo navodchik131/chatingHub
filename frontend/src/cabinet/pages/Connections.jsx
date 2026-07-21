@@ -109,10 +109,28 @@ function ConnectionDetail() {
   const current = mapIntegrationCurrent(data.id, ig, cabinet.models, lang);
   const list = mapIntegrationConnections(data.id, ig, cabinet.models, lang);
 
-  const handleSave = () => {
+  const flashSuccessMessage = () => {
+    if (data.id === 'wavespeed') {
+      return lang === 'ru' ? 'Ключ WaveSpeed сохранён.' : 'WaveSpeed key saved.';
+    }
+    if (data.id === 'tg') {
+      return lang === 'ru' ? 'Telegram-бот подключён.' : 'Telegram bot connected.';
+    }
+    if (data.id === 'tribute') {
+      return lang === 'ru' ? 'Tribute API настроен.' : 'Tribute API configured.';
+    }
+    if (data.id === 'fanvue') {
+      return lang === 'ru' ? 'Fanvue подключён.' : 'Fanvue connected.';
+    }
+    return lang === 'ru' ? 'Сохранено.' : 'Saved.';
+  };
+
+  const handleSave = async () => {
+    let ok = false;
     if (data.id === 'wavespeed') {
       if (!form.apiKey?.trim()) return;
-      void cabinet.saveIntegration('wavespeed', { apiKey: form.apiKey.trim() });
+      ok = await cabinet.saveIntegration('wavespeed', { apiKey: form.apiKey.trim() });
+      if (ok) setForm({ apiKey: '' });
     } else if (data.id === 'tg') {
       const token = form.token?.trim() || '';
       if (!token) return;
@@ -124,17 +142,20 @@ function ConnectionDetail() {
         );
         return;
       }
-      void cabinet.saveIntegration('tg', { token, modelId: form.modelId });
+      ok = await cabinet.saveIntegration('tg', { token, modelId: form.modelId });
+      if (ok) setForm({ token: '' });
     } else if (data.id === 'fanvue') {
-      void cabinet.saveIntegration('fanvue', { modelId: form.modelId });
+      ok = await cabinet.saveIntegration('fanvue', { modelId: form.modelId });
     } else if (data.id === 'tribute') {
       if (!form.apiKey?.trim()) return;
-      void cabinet.saveIntegration('tribute', {
+      ok = await cabinet.saveIntegration('tribute', {
         apiKey: form.apiKey.trim(),
         label: form.label?.trim(),
         modelId: form.modelId,
       });
+      if (ok) setForm({ apiKey: '' });
     }
+    setS({ connFlash: ok ? 'ok' : 'error' });
   };
 
   const handleDisconnect = (connectionId) => {
@@ -170,7 +191,7 @@ function ConnectionDetail() {
     <div>
       <BackLink onClick={() => setS({ connDetail: null, connFlash: null })}>{t.allConnections}</BackLink>
 
-      {s.connFlash && data.id === 'fanvue' && (
+      {s.connFlash && ['fanvue', 'wavespeed', 'tg', 'tribute'].includes(data.id) && (
         <NoteBlock
           style={{
             marginBottom: 12,
@@ -180,8 +201,8 @@ function ConnectionDetail() {
           }}
         >
           {s.connFlash === 'ok'
-            ? (lang === 'ru' ? 'Fanvue подключён.' : 'Fanvue connected.')
-            : (lang === 'ru' ? 'Не удалось подключить Fanvue.' : 'Fanvue connection failed.')}
+            ? flashSuccessMessage()
+            : (lang === 'ru' ? 'Не удалось сохранить. Проверьте ключ и попробуйте снова.' : 'Could not save. Check the key and try again.')}
         </NoteBlock>
       )}
 
@@ -351,9 +372,11 @@ function ConnectionDetail() {
                   : { background: 'linear-gradient(120deg,#C084FC,#F0A8C8)', color: color.purpleInk }),
               }}
               hover={disabled || (data.id === 'fanvue' && !fanvueOAuthReady) ? {} : { filter: 'brightness(1.08)' }}
-              onClick={disabled || (data.id === 'fanvue' && !fanvueOAuthReady) ? undefined : handleSave}
+              onClick={disabled || cabinet.busy || (data.id === 'fanvue' && !fanvueOAuthReady) ? undefined : () => void handleSave()}
             >
-              {data.id === 'fanvue'
+              {cabinet.busy
+                ? (lang === 'ru' ? 'Сохранение…' : 'Saving…')
+                : data.id === 'fanvue'
                 ? (fanvueConnected
                   ? (lang === 'ru' ? 'Переподключить Fanvue' : 'Reconnect Fanvue')
                   : (lang === 'ru' ? 'OAuth Fanvue' : 'Fanvue OAuth'))

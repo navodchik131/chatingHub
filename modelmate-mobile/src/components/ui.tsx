@@ -1,6 +1,7 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { ReactNode } from 'react';
-import { Image, Pressable, ScrollView, StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
+import { Pressable, ScrollView, StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
+import { Image } from 'expo-image';
 import { color, font, gradients } from '@/src/styles/tokens';
 import { IcoBack, IcoChevron } from '@/src/components/Icons';
 
@@ -102,6 +103,8 @@ export function Avatar({
       <Image
         source={{ uri: imageUrl }}
         style={[styles.avatar, { width: size, height: size, borderRadius: size / 2 }]}
+        cachePolicy="memory-disk"
+        contentFit="cover"
       />
     );
   }

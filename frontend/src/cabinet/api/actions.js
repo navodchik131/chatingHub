@@ -32,7 +32,7 @@ export function rightsFromMask(mask) {
 }
 
 export async function saveWavespeedKey(apiKey) {
-  await apiJson('/api/integrations/wavespeed', {
+  return apiJson('/api/integrations/wavespeed', {
     method: 'PUT',
     body: JSON.stringify({ api_key: apiKey }),
   })
@@ -41,7 +41,7 @@ export async function saveWavespeedKey(apiKey) {
 export async function addTelegramBot(botToken, studioModelId) {
   const body = { bot_token: botToken }
   if (studioModelId) body.studio_model_id = Number(studioModelId)
-  await apiJson('/api/integrations/telegram', { method: 'PUT', body: JSON.stringify(body) })
+  return apiJson('/api/integrations/telegram', { method: 'PUT', body: JSON.stringify(body) })
 }
 
 export async function startFanvueOAuth(studioModelId) {
@@ -57,7 +57,7 @@ export async function saveTributeKey(apiKey, label, studioModelId) {
   const body = { api_key: apiKey }
   if (label) body.label = label
   if (studioModelId) body.studio_model_id = Number(studioModelId)
-  await apiJson('/api/integrations/tribute', { method: 'PUT', body: JSON.stringify(body) })
+  return apiJson('/api/integrations/tribute', { method: 'PUT', body: JSON.stringify(body) })
 }
 
 export async function saveDonationLink(payload, editingId) {

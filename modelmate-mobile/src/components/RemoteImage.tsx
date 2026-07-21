@@ -43,6 +43,7 @@ export function RemoteImage({
         source={{ uri: resolved }}
         style={StyleSheet.absoluteFill}
         contentFit={contentFit}
+        cachePolicy="memory-disk"
         recyclingKey={resolved}
         onError={() => setFailed(true)}
       />

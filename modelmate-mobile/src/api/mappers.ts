@@ -90,7 +90,11 @@ export function mapIntegrationCards(integrations: IntegrationStatusOut | null) {
   cards.push({
     id: 'ws',
     name: 'WaveSpeed',
-    status: integrations.wavespeed_configured ? 'ПЛАТФОРМА' : 'НЕ НАСТРОЕН',
+    status: !integrations.wavespeed_configured
+      ? 'НЕ НАСТРОЕН'
+      : integrations.wavespeed_managed_by_platform
+        ? 'КЛЮЧ ПЛАТФОРМЫ'
+        : 'СВОЙ КЛЮЧ',
     icon: 'bolt' as const,
     color: '215,244,82',
   });
@@ -198,6 +202,56 @@ export function mapIntegrationConnections(
       meta: modelNameById(models, c.studio_model_id),
       studioModelId: c.studio_model_id,
     }));
+  }
+  return [];
+}
+
+export function mapIntegrationCurrent(
+  platformId: string,
+  integrations: IntegrationStatusOut | null,
+  models: StudioModelOut[] = [],
+) {
+  const ig = integrations;
+  if (!ig) return [] as { k: string; v: string }[];
+  const modelLabel = (id?: number | null) => modelNameById(models, id);
+  if (platformId === 'ws' && ig.wavespeed_configured) {
+    return [
+      {
+        k: 'Режим',
+        v: ig.wavespeed_managed_by_platform ? 'ключ платформы' : 'свой ключ',
+      },
+      { k: 'Статус', v: 'настроен' },
+    ];
+  }
+  if (platformId === 'tg') {
+    const bots = ig.telegram_connections || [];
+    if (!bots.length) return [];
+    const c = bots[0];
+    return [
+      { k: 'Бот', v: c.bot_username ? `@${c.bot_username}` : '—' },
+      { k: 'Webhook', v: c.webhook_registered ? 'активен' : '?' },
+      { k: 'Персонаж', v: modelLabel(c.studio_model_id) },
+    ];
+  }
+  if (platformId === 'fv') {
+    const rows = ig.fanvue_connections || [];
+    if (!rows.length) return [];
+    const c = rows[0];
+    return [
+      { k: 'Аккаунт', v: c.creator_uuid ? `${String(c.creator_uuid).slice(0, 12)}…` : '—' },
+      { k: 'Персонаж', v: modelLabel(c.studio_model_id) },
+      { k: 'OAuth', v: c.oauth_connected ? 'активен' : '—' },
+    ];
+  }
+  if (platformId === 'tr') {
+    const rows = ig.tribute_connections || [];
+    if (!rows.length && !ig.tribute_configured) return [];
+    const c = rows[0];
+    return [
+      ...(c?.label ? [{ k: 'Метка', v: c.label }] : []),
+      ...(c ? [{ k: 'Персонаж', v: modelLabel(c.studio_model_id) }] : []),
+      { k: 'Статус', v: ig.tribute_configured ? 'настроен' : '—' },
+    ];
   }
   return [];
 }

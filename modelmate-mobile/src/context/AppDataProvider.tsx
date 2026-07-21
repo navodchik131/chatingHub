@@ -84,7 +84,7 @@ type AppDataValue = {
   loadMoreVideoArchive: () => Promise<void>;
   supportTickets: SupportTicketListItemOut[];
   refreshSupportTickets: () => Promise<void>;
-  createSupportTicket: (payload: { type: string; subject: string; message: string }) => Promise<void>;
+  createSupportTicket: (payload: { type: string; subject: string; message: string }) => Promise<SupportTicketOut>;
   fetchSupportTicket: (ticketId: number) => Promise<SupportTicketOut>;
   saveProfileEmail: (email: string) => Promise<void>;
   changeUserPassword: (current: string, next: string) => Promise<void>;
@@ -145,7 +145,7 @@ type AppDataValue = {
   addOperator: (login: string, password: string, opRights: Record<string, boolean>) => Promise<void>;
   updateOperator: (memberId: number, login: string, password: string, opRights: Record<string, boolean>) => Promise<void>;
   deleteOperator: (memberId: number) => Promise<void>;
-  saveConnection: (platformId: string, token: string, charName: string) => Promise<void>;
+  saveConnection: (platformId: string, token: string, charName: string) => Promise<boolean>;
   disconnectConnection: (platformId: string, connectionId: number) => Promise<void>;
   openBillingCheckout: (product: string) => Promise<string | null>;
   loadAdmin: () => Promise<void>;
@@ -177,6 +177,26 @@ const defaultCreditPacks: [string, string][] = [
   ['1 500 кр.', '2 990 ₽'],
   ['5 000 кр.', '8 990 ₽'],
 ];
+
+function reuseModelImageUrls(
+  prevModels: StudioModelOut[],
+  nextModels: StudioModelOut[],
+): StudioModelOut[] {
+  if (!prevModels.length || !nextModels.length) return nextModels;
+  const urlByImageId = new Map<number, string>();
+  for (const model of prevModels) {
+    for (const image of model.images || []) {
+      if (image?.id && image?.url) urlByImageId.set(image.id, image.url);
+    }
+  }
+  return nextModels.map((model) => ({
+    ...model,
+    images: (model.images || []).map((image) => ({
+      ...image,
+      url: urlByImageId.get(image.id) || image.url,
+    })),
+  }));
+}
 
 export function AppDataProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
@@ -332,8 +352,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const createSupportTicket = useCallback(async (payload: { type: string; subject: string; message: string }) => {
-    await actions.createSupportTicket(payload);
+    const row = await actions.createSupportTicket(payload);
     await refreshSupportTickets();
+    return row;
   }, [refreshSupportTickets]);
 
   const fetchSupportTicket = useCallback(async (ticketId: number) => {
@@ -398,7 +419,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       setAuthenticated(true);
       setRawConversations(Array.isArray(convs) ? convs : []);
       setConversationFolders(Array.isArray(folders) ? folders : []);
-      setRawModels(Array.isArray(modelsData) ? modelsData : []);
+      setRawModels((prev) => reuseModelImageUrls(prev, Array.isArray(modelsData) ? modelsData : []));
       setRawArchiveImages(Array.isArray(archiveImg) ? archiveImg : []);
       setRawIntegrations(integrationsData);
       setHealth(healthData);
@@ -931,9 +952,41 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
   const saveConnection = useCallback(async (platformId: string, token: string, charName: string) => {
     const modelId = modelIdByName(rawModels, charName);
-    if (platformId === 'tg') await actions.saveTelegramBot(token, modelId ?? undefined);
-    if (platformId === 'tr') await actions.saveTributeKey(token, modelId ?? undefined);
-    await refreshAll();
+    setError(null);
+    try {
+      let status: IntegrationStatusOut | null = null;
+      if (platformId === 'tg') {
+        const trimmed = token.trim();
+        if (!trimmed) {
+          setError('Укажите токен Telegram-бота');
+          return false;
+        }
+        status = await actions.saveTelegramBot(trimmed, modelId ?? undefined);
+      } else if (platformId === 'tr') {
+        const trimmed = token.trim();
+        if (!trimmed) {
+          setError('Введите API-ключ Tribute');
+          return false;
+        }
+        status = await actions.saveTributeKey(trimmed, modelId ?? undefined);
+      } else if (platformId === 'ws') {
+        const trimmed = token.trim();
+        if (!trimmed) {
+          setError('Введите API-ключ WaveSpeed');
+          return false;
+        }
+        status = await actions.saveWavespeedKey(trimmed);
+      } else {
+        setError('Сохранение недоступно для этой интеграции');
+        return false;
+      }
+      if (status) setRawIntegrations(status);
+      await refreshAll();
+      return true;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      return false;
+    }
   }, [rawModels, refreshAll]);
 
   const disconnectConnection = useCallback(async (platformId: string, connectionId: number) => {

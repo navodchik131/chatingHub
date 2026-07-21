@@ -85,7 +85,7 @@ import { SwipeableChatRow } from '@/src/components/SwipeableChatRow';
 import { ThreadView } from '@/src/components/ThreadView';
 import { resolveMediaUrl } from '@/src/api/config';
 import { charFieldsFromModel, fmtDateShort, fmtMoney, fmtRub, fmtTime } from '@/src/api/helpers';
-import { mapCharPhotoTags, mapIntegrationConnections } from '@/src/api/mappers';
+import { mapCharPhotoTags, mapIntegrationConnections, mapIntegrationCurrent } from '@/src/api/mappers';
 import { downloadMedia } from '@/src/utils/downloadMedia';
 import type { SupportTicketOut } from '@/src/api/types';
 import {
@@ -96,7 +96,12 @@ import {
 
 const adminPlanChips = ['Solo', 'Studio', 'Agency', 'Pro Solo', 'Pro Pro'];
 
-const TICKET_TYPES = ['Общие вопросы', 'Технические проблемы', 'Оплата', 'Подписки'];
+const TICKET_TYPES = [
+  { id: 'general', label: 'Общие вопросы' },
+  { id: 'technical', label: 'Технические проблемы' },
+  { id: 'payment', label: 'Оплата' },
+  { id: 'subscription', label: 'Подписки' },
+];
 
 function ticketStatusLabel(status: string) {
   switch (status) {
@@ -1318,12 +1323,47 @@ export function ScreenRouter() {
     const id = cur.slice(11);
     const c = connectionsList.find((x) => x.id === id) ?? connectionsList[0];
     const existing = mapIntegrationConnections(id, rawIntegrations, rawModels);
+    const current = mapIntegrationCurrent(id, rawIntegrations, rawModels);
     const defaultChar = existing[0]?.studioModelId
       ? rawModels.find((m) => m.id === existing[0].studioModelId)?.name || modelNames[0]
       : modelNames[0];
+    const isWs = id === 'ws';
+    const needsCharacter = id === 'tg' || id === 'tr';
+    const saveLabel = isWs ? 'Сохранить ключ' : 'Сохранить';
+    const successText = isWs
+      ? 'Ключ WaveSpeed сохранён.'
+      : id === 'tg'
+        ? 'Telegram-бот подключён.'
+        : id === 'tr'
+          ? 'Tribute API настроен.'
+          : 'Сохранено.';
     return (
       <ScreenScroll>
-        <TopBar title={c.name} onBack={pop} />
+        <TopBar title={c.name} onBack={() => { patch({ connFlash: null }); pop(); }} />
+        {appError ? <Text style={s.errorBanner}>{appError}</Text> : null}
+        {nav.connFlash === 'ok' ? (
+          <Card style={s.connOkCard}>
+            <Text style={s.connOkText}>{successText}</Text>
+          </Card>
+        ) : null}
+        {nav.connFlash === 'error' ? (
+          <Card style={s.connErrCard}>
+            <Text style={s.connErrText}>Не удалось сохранить. Проверьте ключ и попробуйте снова.</Text>
+          </Card>
+        ) : null}
+        {current.length ? (
+          <>
+            <SectionLabel>ТЕКУЩАЯ НАСТРОЙКА</SectionLabel>
+            <Card style={s.gap8}>
+              {current.map((row) => (
+                <View key={row.k} style={s.between}>
+                  <Text style={s.charSub}>{row.k}</Text>
+                  <Text style={s.opLabel}>{row.v}</Text>
+                </View>
+              ))}
+            </Card>
+          </>
+        ) : null}
         {existing.length ? (
           <>
             <SectionLabel>АКТИВНЫЕ ПОДКЛЮЧЕНИЯ</SectionLabel>
@@ -1336,7 +1376,7 @@ export function ScreenRouter() {
                   </View>
                   <Pressable
                     style={s.redOutlineSmall}
-                    onPress={() => void disconnectConnection(id, row.id).then(pop)}
+                    onPress={() => void disconnectConnection(id, row.id).then(() => pop())}
                   >
                     <Text style={s.redText}>Удалить</Text>
                   </Pressable>
@@ -1344,30 +1384,48 @@ export function ScreenRouter() {
               ))}
             </Card>
           </>
-        ) : (
+        ) : !current.length ? (
           <Card><Text style={s.charSub}>Нет активных подключений</Text></Card>
-        )}
-        <SectionLabel>ДОБАВИТЬ / ОБНОВИТЬ</SectionLabel>
+        ) : null}
+        <SectionLabel>{isWs ? 'API-КЛЮЧ' : 'ДОБАВИТЬ / ОБНОВИТЬ'}</SectionLabel>
         <Card style={s.gap10}>
-          <FieldLabel>API-КЛЮЧ / ТОКЕН</FieldLabel>
+          <FieldLabel>{isWs ? 'API-КЛЮЧ WAVESPEED' : 'API-КЛЮЧ / ТОКЕН'}</FieldLabel>
           <TextField
             value={nav.connToken}
-            onChangeText={(t) => patch({ connToken: t })}
+            onChangeText={(t) => patch({ connToken: t, connFlash: null })}
+            placeholder={isWs ? 'Вставьте ключ из wavespeed.ai' : undefined}
             secureTextEntry
           />
-          <FieldLabel>ПЕРСОНАЖ</FieldLabel>
-          <ChipPicker
-            items={modelNames}
-            value={nav.connChar || defaultChar}
-            onChange={(v) => patch({ connChar: v })}
-          />
+          {isWs ? (
+            <Text style={s.charSub}>
+              На Pro нужен ваш API-ключ WaveSpeed. На Standard платформа может использовать свой ключ.
+            </Text>
+          ) : null}
+          {needsCharacter ? (
+            <>
+              <FieldLabel>ПЕРСОНАЖ</FieldLabel>
+              <ChipPicker
+                items={modelNames}
+                value={nav.connChar || defaultChar}
+                onChange={(v) => patch({ connChar: v })}
+              />
+            </>
+          ) : null}
         </Card>
         <View style={s.rowGap8}>
           <Pressable
-            style={s.limeFlex}
-            onPress={() => void saveConnection(id, nav.connToken, nav.connChar || defaultChar).then(() => patch({ connToken: '' }))}
+            style={[s.limeFlex, appBusy && s.saveDisabled]}
+            disabled={appBusy}
+            onPress={() => {
+              void saveConnection(id, nav.connToken, nav.connChar || defaultChar).then((ok) => {
+                patch({
+                  connFlash: ok ? 'ok' : 'error',
+                  connToken: ok ? '' : nav.connToken,
+                });
+              });
+            }}
           >
-            <Text style={s.limeHalfText}>Сохранить</Text>
+            <Text style={s.limeHalfText}>{appBusy ? 'Сохранение…' : saveLabel}</Text>
           </Pressable>
         </View>
       </ScreenScroll>
@@ -1753,6 +1811,7 @@ export function ScreenRouter() {
     return (
       <ScreenScroll>
         <TopBar title="Поддержка" onBack={pop} />
+        {appError ? <Text style={s.errorBanner}>{appError}</Text> : null}
         <Text style={s.charSub}>Создавайте обращения и следите за статусом ответа.</Text>
         <Pressable style={s.supportNewBtn} onPress={() => patch({ ticketFormOpen: !nav.ticketFormOpen })}>
           <Text style={s.supportNewBtnText}>+ Новое обращение</Text>
@@ -1761,7 +1820,7 @@ export function ScreenRouter() {
           <Card style={s.gap10}>
             <SectionLabel>ТИП ОБРАЩЕНИЯ</SectionLabel>
             <ChipRowInteractive
-              items={TICKET_TYPES}
+              items={TICKET_TYPES.map((x) => x.label)}
               activeIndex={nav.ticketTypeIdx}
               onSelect={(i) => patch({ ticketTypeIdx: i })}
             />
@@ -1783,15 +1842,17 @@ export function ScreenRouter() {
                 const message = nav.ticketMessage.trim();
                 if (!subject || !message) return;
                 void createSupportTicket({
-                  type: TICKET_TYPES[nav.ticketTypeIdx] || TICKET_TYPES[0],
+                  type: TICKET_TYPES[nav.ticketTypeIdx]?.id || TICKET_TYPES[0].id,
                   subject,
                   message,
-                }).then(() => {
+                }).then((row) => {
                   patch({
                     ticketFormOpen: false,
+                    ticketTypeIdx: 0,
                     ticketSubject: '',
                     ticketMessage: '',
                   });
+                  if (row?.id) push(`ticket:${row.id}`);
                 });
               }}
             >
@@ -2299,7 +2360,11 @@ const s = StyleSheet.create({
   pinkBtnCost: { fontFamily: font.mono, fontSize: 10.5, color: '#5E2140' },
   donationRow: { paddingVertical: 4, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.06)' },
   linkText: { fontSize: 11, color: color.blue, marginTop: 4 },
-  connExistingRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 6 },
+  connErrCard: { backgroundColor: 'rgba(248,113,113,0.08)', borderColor: 'rgba(248,113,113,0.25)' },
+  connErrText: { fontSize: 12, color: color.red, lineHeight: 18 },
+  connOkCard: { backgroundColor: 'rgba(74,222,128,0.08)', borderColor: 'rgba(74,222,128,0.25)' },
+  connOkText: { fontSize: 12, color: color.green, lineHeight: 18 },
+  saveDisabled: { opacity: 0.6 },
   redOutlineSmall: { paddingHorizontal: 10, paddingVertical: 7, borderRadius: 8, borderWidth: 1, borderColor: 'rgba(248,113,113,0.3)' },
   redOutline: { paddingHorizontal: 16, paddingVertical: 11, borderRadius: 10, borderWidth: 1, borderColor: 'rgba(248,113,113,0.3)' },
   adminHead: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingBottom: 12, paddingHorizontal: 4 },

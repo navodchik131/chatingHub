@@ -63,6 +63,25 @@ function opRightsFromMe(me) {
   }
 }
 
+function reuseModelImageUrls(prevModels, nextModels) {
+  if (!Array.isArray(prevModels) || !prevModels.length || !Array.isArray(nextModels) || !nextModels.length) {
+    return Array.isArray(nextModels) ? nextModels : []
+  }
+  const urlByImageId = new Map()
+  prevModels.forEach((model) => {
+    ;(model?.images || []).forEach((img) => {
+      if (img?.id && img?.url) urlByImageId.set(Number(img.id), img.url)
+    })
+  })
+  return nextModels.map((model) => ({
+    ...model,
+    images: (model?.images || []).map((img) => ({
+      ...img,
+      url: urlByImageId.get(Number(img.id)) || img.url,
+    })),
+  }))
+}
+
 export function CabinetDataProvider({ children }) {
   const [ready, setReady] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -397,7 +416,7 @@ export function CabinetDataProvider({ children }) {
       }
       if (modelsData != null) {
         const modelRows = Array.isArray(modelsData) ? modelsData : []
-        setModels(modelRows)
+        setModels((prev) => reuseModelImageUrls(prev, modelRows))
         setModelsLoadError(null)
         setSelectedModelId((prev) => {
           if (prev != null && modelRows.some((m) => sameStudioModelId(m.id, prev))) return prev
@@ -561,35 +580,55 @@ export function CabinetDataProvider({ children }) {
   )
   const saveIntegration = useCallback(
     async (type, fields) => {
+      if (type === 'wavespeed') {
+        if (!(fields.apiKey || '').trim()) {
+          setError('Введите API-ключ WaveSpeed')
+          return false
+        }
+      }
       if (type === 'tg') {
         const token = (fields.token || '').trim()
         if (!token) {
           setError('Укажите токен Telegram-бота')
-          return
+          return false
         }
         if (!isPlausibleTelegramBotToken(token)) {
           setError(
             'Неверный формат токена BotFather. Скопируйте токен целиком (123456789:AAH…).',
           )
-          return
+          return false
         }
       }
-      await run(async () => {
-        if (type === 'wavespeed') await actions.saveWavespeedKey(fields.apiKey)
-        else if (type === 'tg') await actions.addTelegramBot(fields.token, fields.modelId)
+      if (type === 'tribute' && !(fields.apiKey || '').trim()) {
+        setError('Введите API-ключ Tribute')
+        return false
+      }
+      setBusy(true)
+      setError(null)
+      try {
+        let status = null
+        if (type === 'wavespeed') status = await actions.saveWavespeedKey(fields.apiKey)
+        else if (type === 'tg') status = await actions.addTelegramBot(fields.token, fields.modelId)
         else if (type === 'fanvue') {
           const data = await actions.startFanvueOAuth(fields.modelId)
           const url = data.authorize_url || data.url
           if (url) window.location.href = url
           else throw new Error('OAuth URL не получен')
-          return
+          return true
         } else if (type === 'tribute') {
-          await actions.saveTributeKey(fields.apiKey, fields.label, fields.modelId)
+          status = await actions.saveTributeKey(fields.apiKey, fields.label, fields.modelId)
         }
+        if (status) setIntegrations(status)
         await refreshAll()
-      })
+        return true
+      } catch (e) {
+        setError(e?.message || String(e))
+        return false
+      } finally {
+        setBusy(false)
+      }
     },
-    [run, refreshAll],
+    [refreshAll],
   )
 
   const saveDonation = useCallback(

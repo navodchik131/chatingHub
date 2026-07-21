@@ -84,7 +84,16 @@ async def create_support_ticket(
     session.add(row)
     await session.commit()
     await session.refresh(row)
-    return _ticket_out(row)
+    return SupportTicketOut(
+        id=row.id,
+        type=row.type,
+        subject=row.subject,
+        message=row.message,
+        status=row.status.value,
+        created_at=row.created_at,
+        updated_at=row.updated_at,
+        replies=[],
+    )
 
 
 @router.get("/tickets/{ticket_id}", response_model=SupportTicketOut)
