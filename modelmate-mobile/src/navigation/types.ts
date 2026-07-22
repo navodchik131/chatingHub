@@ -46,6 +46,7 @@ export type NavigationState = {
   vidChar: string;
   vidHasFirstFrame: boolean;
   vidMode: 'motion-control' | 'prompt';
+  vidGenerateAudio: boolean;
   ffState: 'idle' | 'loading' | 'done';
   ffPreviewOpen: boolean;
   connChar: string;
@@ -125,6 +126,7 @@ export const defaultNavState: NavigationState = {
   vidChar: 'Mia',
   vidHasFirstFrame: false,
   vidMode: 'motion-control',
+  vidGenerateAudio: true,
   ffState: 'idle',
   ffPreviewOpen: false,
   connChar: 'Mia',

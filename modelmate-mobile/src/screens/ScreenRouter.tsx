@@ -973,6 +973,25 @@ export function ScreenRouter() {
           onChange={(d) => patch({ vidDuration: d })}
           suffix="с"
         />
+        {motionControl ? (
+          <>
+            <SectionLabel>ЗВУК С РЕФЕРЕНС-ВИДЕО</SectionLabel>
+            <View style={s.rowGap8}>
+              <Pressable
+                style={[s.limeHalf, nav.vidGenerateAudio === false && s.ghostHalf]}
+                onPress={() => patch({ vidGenerateAudio: true })}
+              >
+                <Text style={[s.limeHalfText, nav.vidGenerateAudio === false && s.ghostHalfText]}>Да</Text>
+              </Pressable>
+              <Pressable
+                style={[s.ghostHalf, nav.vidGenerateAudio !== false && s.limeHalf]}
+                onPress={() => patch({ vidGenerateAudio: false })}
+              >
+                <Text style={[s.ghostHalfText, nav.vidGenerateAudio !== false && s.limeHalfText]}>Нет</Text>
+              </Pressable>
+            </View>
+          </>
+        ) : null}
         <LimeButton title="Создать видео" cost={vidCost} icon={<IcoFilm size={16} stroke={color.limeText} />} onPress={() => runGen('video')} />
         {st === 'loading' ? <GenLoadingCard title="Рендерим видео…" sub="~20 c" /> : null}
         {st === 'done' ? (

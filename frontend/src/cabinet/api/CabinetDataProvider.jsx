@@ -1043,6 +1043,7 @@ export function CabinetDataProvider({ children }) {
           firstFrameGenerationId: ffGenId,
           autoMotionPrompt: motionControl && Boolean(motionVideoFileId),
           promptOnlyMode: promptMode,
+          generateAudio: appState.vidGenerateAudio !== false,
         })
         setArchiveVideos((prev) => applyJobToOptimisticArchive(prev, [tempId], accepted))
         await refreshArchiveFull()

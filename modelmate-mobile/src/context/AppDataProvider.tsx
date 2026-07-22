@@ -758,6 +758,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
             firstFrameGenerationId: motionControl ? firstFrameGenId : null,
             autoMotionPrompt: motionControl && Boolean(motionVideoFileId),
             promptOnlyMode: promptOnly,
+            generateAudio: nav.vidGenerateAudio !== false,
             frameFile: uploadFiles['motion-frame'],
           });
           generationId = accepted.generation_id ?? null;

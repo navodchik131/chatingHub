@@ -627,6 +627,13 @@ export default function Video() {
                 ))}
               </div>
             </div>
+            <div>
+              <Eyebrow size={9} spacing="1.4px" style={{ marginBottom: 7 }}>{t.vidRefSound}</Eyebrow>
+              <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                <Chip on={s.vidGenerateAudio !== false} onClick={() => setS({ vidGenerateAudio: true })}>{t.yes}</Chip>
+                <Chip on={s.vidGenerateAudio === false} onClick={() => setS({ vidGenerateAudio: false })}>{t.no}</Chip>
+              </div>
+            </div>
           </div>
 
           <Hoverable

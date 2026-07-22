@@ -624,6 +624,7 @@ export async function runMotionVideo(params: {
   firstFrameGenerationId?: number | null;
   autoMotionPrompt?: boolean;
   promptOnlyMode?: boolean;
+  generateAudio?: boolean;
   frameFile?: LocalFile;
 }) {
   const fd = new FormData();
@@ -647,6 +648,7 @@ export async function runMotionVideo(params: {
     fd.append('first_frame_generation_id', String(params.firstFrameGenerationId));
   }
   if (params.autoMotionPrompt) fd.append('auto_motion_prompt', '1');
+  fd.append('generate_audio', params.generateAudio === false ? '0' : '1');
   if (params.frameFile) appendLocalFile(fd, 'image', params.frameFile);
   const accepted = await postStudioJobStart('/api/studio/motion/render-video', { method: 'POST', body: fd });
   if (accepted.job_id) {

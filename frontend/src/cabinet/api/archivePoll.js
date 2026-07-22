@@ -127,7 +127,8 @@ export async function refreshPendingArchiveVideos(current) {
   })
 
   if (maybeCompletedIds.length || hasOptimistic) {
-    const freshList = await refreshArchiveVideos()
+    const freshPage = await refreshArchiveVideos()
+    const freshList = freshPage.items || []
     const freshById = new Map(freshList.map((p) => [p.id, p]))
 
     if (maybeCompletedIds.length) {

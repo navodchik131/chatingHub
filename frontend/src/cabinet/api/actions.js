@@ -433,6 +433,7 @@ export async function runMotionVideo(params) {
   }
   if (params.autoMotionPrompt) fd.append('auto_motion_prompt', '1')
   if (params.promptOnlyMode) fd.append('prompt_only_mode', '1')
+  fd.append('generate_audio', params.generateAudio === false ? '0' : '1')
   return postStudioJob('/api/studio/motion/render-video', { method: 'POST', body: fd })
 }
 

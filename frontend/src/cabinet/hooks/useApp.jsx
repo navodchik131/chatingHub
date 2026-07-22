@@ -42,6 +42,7 @@ const initial = {
   vidQuality: '1080',
   vidFormat: '9:16',
   vidTime: '5',
+  vidGenerateAudio: true,
   charTab: 'photos',
   lightbox: null,
   showGenError: false,
