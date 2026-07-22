@@ -41,12 +41,14 @@ export function mapDialogRow(c, index) {
 
 export function mapMessage(m) {
   const outbound = m.direction === 'outbound'
-  const tr = outbound && m.text_translated && m.text_translated !== m.text_original
+  const translated = (m.text_translated || '').trim()
+  const original = (m.text_original || '').trim()
+  const tr = translated && translated !== original ? translated : false
   return {
     id: m.id,
     side: outbound ? 'out' : 'in',
-    text: m.text_original || '',
-    tr: tr ? m.text_translated : false,
+    text: original || '',
+    tr,
     time: fmtTime(m.created_at),
     reactions: m.reactions || [],
     ownerReaction: ownerReactionEmoji(m.reactions),

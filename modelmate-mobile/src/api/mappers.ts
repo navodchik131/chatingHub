@@ -35,14 +35,13 @@ export function mapDialogRow(c: ConversationOut, index: number) {
 
 export function mapMessage(m: MessageOut) {
   const outbound = m.direction === 'outbound';
-  const tr =
-    outbound && m.text_translated && m.text_translated !== m.text_original
-      ? m.text_translated
-      : null;
+  const translated = (m.text_translated || '').trim();
+  const original = (m.text_original || '').trim();
+  const tr = translated && translated !== original ? translated : null;
   return {
     id: m.id,
     side: outbound ? ('out' as const) : ('in' as const),
-    text: m.text_original || '',
+    text: original || '',
     tr,
     time: fmtTime(m.created_at),
     created_at: m.created_at,
