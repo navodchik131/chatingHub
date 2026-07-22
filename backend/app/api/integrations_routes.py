@@ -32,7 +32,7 @@ from app.connectors.instagram.oauth import (
     fetch_instagram_profile,
     generate_oauth_state as generate_instagram_oauth_state,
     instagram_oauth_configured,
-    resolve_instagram_account_id,
+    resolve_instagram_profile_ids,
     subscribe_instagram_webhooks,
 )
 from app.db.models import (
@@ -1011,6 +1011,7 @@ async def _save_instagram_oauth_tokens(
     *,
     user_id: int,
     instagram_user_id: str,
+    instagram_alt_user_id: str | None = None,
     instagram_username: str | None,
     token_payload: dict,
     connection_id: int | None = None,
@@ -1051,6 +1052,7 @@ async def _save_instagram_oauth_tokens(
     now = datetime.now(timezone.utc)
     if row:
         row.instagram_user_id = instagram_user_id
+        row.instagram_alt_user_id = instagram_alt_user_id
         row.instagram_username = instagram_username
         row.access_token_encrypted = enc_access
         row.token_expires_at = expires_at
@@ -1079,6 +1081,7 @@ async def _save_instagram_oauth_tokens(
             label=label,
             studio_model_id=studio_model_id,
             instagram_user_id=instagram_user_id,
+            instagram_alt_user_id=instagram_alt_user_id,
             instagram_username=instagram_username,
             access_token_encrypted=enc_access,
             token_expires_at=expires_at,
@@ -1179,15 +1182,22 @@ async def instagram_oauth_callback(
         token_payload = await exchange_instagram_authorization_code(code=code.strip())
         access = str(token_payload.get("access_token") or "").strip()
         profile = await fetch_instagram_profile(access)
-        ig_user_id = resolve_instagram_account_id(profile, token_payload)
+        ig_user_id, ig_alt_user_id = resolve_instagram_profile_ids(profile, token_payload)
         if not ig_user_id:
             raise InstagramOAuthError("Instagram profile missing id")
         username = str(profile.get("username") or "").strip() or None
+        log.info(
+            "instagram oauth profile ids primary=%s alt=%s username=%s",
+            ig_user_id[:16],
+            (ig_alt_user_id or "")[:16] or "—",
+            username or "—",
+        )
         await subscribe_instagram_webhooks(access, fields="messages")
         await _save_instagram_oauth_tokens(
             session,
             user_id=user_id,
             instagram_user_id=ig_user_id,
+            instagram_alt_user_id=ig_alt_user_id,
             instagram_username=username,
             token_payload=token_payload,
             connection_id=oauth_connection_id,

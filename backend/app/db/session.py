@@ -1064,6 +1064,22 @@ def _migrate_instagram_connections(sync_conn) -> None:
             )
         )
 
+    if insp.has_table("instagram_connections"):
+        ig_cols = {c["name"] for c in insp.get_columns("instagram_connections")}
+        if "instagram_alt_user_id" not in ig_cols:
+            sync_conn.execute(
+                text(
+                    "ALTER TABLE instagram_connections "
+                    "ADD COLUMN instagram_alt_user_id VARCHAR(64)"
+                )
+            )
+            sync_conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_instagram_connections_instagram_alt_user_id "
+                    "ON instagram_connections(instagram_alt_user_id)"
+                )
+            )
+
     if not insp.has_table("instagram_oauth_states"):
         if dialect == "sqlite":
             sync_conn.execute(

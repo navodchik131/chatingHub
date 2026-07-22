@@ -167,21 +167,33 @@ async def refresh_instagram_access_token(access_token: str) -> dict[str, Any]:
     return payload
 
 
+def resolve_instagram_profile_ids(
+    profile: dict[str, Any],
+    token_payload: dict[str, Any] | None = None,
+) -> tuple[str, str | None]:
+    """Return primary Graph API id and optional alternate id from /me.
+
+    Meta returns two identifiers (`id` and `user_id`); webhooks may use either.
+    """
+    payload = token_payload or {}
+    candidates: list[str] = []
+    for raw in (profile.get("id"), profile.get("user_id"), payload.get("user_id")):
+        value = str(raw or "").strip()
+        if value and value != "0" and value not in candidates:
+            candidates.append(value)
+    if not candidates:
+        return "", None
+    primary = candidates[0]
+    alt = candidates[1] if len(candidates) > 1 else None
+    return primary, alt
+
+
 def resolve_instagram_account_id(
     profile: dict[str, Any],
     token_payload: dict[str, Any] | None = None,
 ) -> str:
-    """Instagram-scoped professional account id (matches webhook entry.id)."""
-    payload = token_payload or {}
-    for raw in (
-        profile.get("user_id"),
-        profile.get("id"),
-        payload.get("user_id"),
-    ):
-        value = str(raw or "").strip()
-        if value and value != "0":
-            return value
-    return ""
+    primary, _alt = resolve_instagram_profile_ids(profile, token_payload)
+    return primary
 
 
 async def subscribe_instagram_webhooks(

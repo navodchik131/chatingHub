@@ -6,7 +6,7 @@ import json
 import logging
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.connectors.instagram.client import download_instagram_media
@@ -20,6 +20,49 @@ from app.services.platform_connections import connection_studio_model_id
 from app.services.translation import translate_to_russian
 
 log = logging.getLogger(__name__)
+
+
+def _instagram_account_match(account_id: str):
+    return or_(
+        InstagramConnection.instagram_user_id == account_id,
+        InstagramConnection.instagram_alt_user_id == account_id,
+    )
+
+
+async def _resolve_instagram_connection(
+    session: AsyncSession,
+    entry: dict[str, Any],
+) -> InstagramConnection | None:
+    ig_account_id = str(entry.get("id") or "").strip()
+    if ig_account_id and ig_account_id != "0":
+        conn = await session.scalar(
+            select(InstagramConnection).where(_instagram_account_match(ig_account_id))
+        )
+        if conn:
+            return conn
+
+    for event in entry.get("messaging") or []:
+        if not isinstance(event, dict):
+            continue
+        recipient = event.get("recipient") or {}
+        if not isinstance(recipient, dict):
+            continue
+        recipient_id = str(recipient.get("id") or "").strip()
+        if not recipient_id or recipient_id == "0":
+            continue
+        conn = await session.scalar(
+            select(InstagramConnection).where(_instagram_account_match(recipient_id))
+        )
+        if conn:
+            log.info(
+                "instagram webhook: matched account via recipient.id=%s",
+                recipient_id[:16],
+            )
+            return conn
+
+    if ig_account_id and ig_account_id != "0":
+        log.info("instagram webhook: unknown account %s", ig_account_id[:16])
+    return None
 
 
 async def instagram_message_exists(
@@ -69,7 +112,8 @@ async def ingest_instagram_messaging_event(
         return {"ok": True, "skipped": "missing_sender"}
 
     ig_account_id = (conn.instagram_user_id or "").strip()
-    if igsid == ig_account_id:
+    ig_alt_account_id = (conn.instagram_alt_user_id or "").strip()
+    if igsid in {ig_account_id, ig_alt_account_id}:
         return {"ok": True, "skipped": "self_message"}
 
     mid = str(msg.get("mid") or "").strip()
@@ -160,33 +204,50 @@ async def ingest_instagram_webhook_body(
     session: AsyncSession,
     body: dict[str, Any],
 ) -> dict[str, Any]:
-    if str(body.get("object") or "").lower() != "instagram":
+    obj = str(body.get("object") or "").lower()
+    entries = body.get("entry") or []
+    if obj != "instagram":
+        log.info("instagram webhook: skip object=%s", obj or "—")
         return {"ok": True, "skipped": "not_instagram"}
 
+    log.info("instagram webhook: entries=%s", len(entries))
     processed = 0
-    for entry in body.get("entry") or []:
+    saved = 0
+    for entry in entries:
         if not isinstance(entry, dict):
             continue
-        ig_account_id = str(entry.get("id") or "").strip()
-        if not ig_account_id or ig_account_id == "0":
-            log.info("instagram webhook: skip test/empty account id=%s", ig_account_id or "—")
-            continue
-        conn = await session.scalar(
-            select(InstagramConnection).where(
-                InstagramConnection.instagram_user_id == ig_account_id
-            )
+        messaging = entry.get("messaging") or []
+        entry_id = str(entry.get("id") or "").strip()
+        log.info(
+            "instagram webhook: entry_id=%s messaging_events=%s",
+            entry_id or "—",
+            len(messaging) if isinstance(messaging, list) else 0,
         )
+        if not entry_id or entry_id == "0":
+            if not messaging:
+                log.info("instagram webhook: skip test/empty entry")
+                continue
+        conn = await _resolve_instagram_connection(session, entry)
         if not conn:
-            log.info("instagram webhook: unknown account %s", ig_account_id[:16])
             continue
-        for event in entry.get("messaging") or []:
+        for event in messaging:
             if not isinstance(event, dict):
                 continue
             try:
-                await ingest_instagram_messaging_event(session, conn, event)
+                result = await ingest_instagram_messaging_event(session, conn, event)
                 processed += 1
+                if result.get("conversation_id"):
+                    saved += 1
+                    log.info(
+                        "instagram webhook: saved conversation_id=%s",
+                        result.get("conversation_id"),
+                    )
+                elif result.get("skipped"):
+                    log.info("instagram webhook: event skipped: %s", result.get("skipped"))
             except Exception:
                 log.exception(
-                    "instagram ingest failed account=%s", ig_account_id[:8]
+                    "instagram ingest failed account=%s",
+                    (conn.instagram_user_id or "")[:16],
                 )
-    return {"ok": True, "processed": processed}
+    log.info("instagram webhook: processed=%s saved=%s", processed, saved)
+    return {"ok": True, "processed": processed, "saved": saved}

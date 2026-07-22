@@ -401,6 +401,9 @@ class InstagramConnection(Base):
         index=True,
     )
     instagram_user_id: Mapped[str] = mapped_column(String(64), index=True)
+    instagram_alt_user_id: Mapped[str | None] = mapped_column(
+        String(64), nullable=True, index=True
+    )
     instagram_username: Mapped[str | None] = mapped_column(String(128), nullable=True)
     access_token_encrypted: Mapped[str] = mapped_column(Text)
     token_expires_at: Mapped[datetime | None] = mapped_column(
