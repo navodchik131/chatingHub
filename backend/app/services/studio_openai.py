@@ -1650,8 +1650,14 @@ async def generate_model_profile_json_from_images(
     """Один vision-запрос: несколько фото одного человека → JSON model_profile."""
     if not image_items:
         raise RuntimeError("Нет изображений")
-    from app.services.studio_grok_motion import grok_motion_studio_credentials
-    from app.services.studio_grok_scene_compose import grok_scene_compose_configured
+    from app.services.studio_grok_motion import (
+        _grok_fps_stills_model,
+        grok_motion_studio_credentials,
+    )
+    from app.services.studio_grok_scene_compose import (
+        _grok_scene_compose_model,
+        grok_scene_compose_configured,
+    )
 
     system = load_model_profile_gen_system()
     if not system.strip():
@@ -1677,21 +1683,50 @@ async def generate_model_profile_json_from_images(
         user_content.append(
             {"type": "image_url", "image_url": {"url": f"data:{m};base64,{b64}"}}
         )
+    messages = [
+        {"role": "system", "content": system},
+        {"role": "user", "content": user_content},
+    ]
+
+    async def _vision_call(*, model: str, creds: StudioOpenAiCredentials | None) -> str:
+        return await chat_completion_openai_compatible_text(
+            model=model,
+            messages=messages,
+            max_tokens=8192,
+            temperature=0.35,
+            credentials=creds,
+            timeout_seconds=180.0,
+        )
+
+    raw_text: str | None = None
     if grok_scene_compose_configured():
-        creds = credentials or grok_motion_studio_credentials()
-        model = (settings.grok_scene_compose_model or "").strip() or "grok-2-vision-1212"
-    else:
-        creds = credentials
-        model = (settings.openai_studio_model_vision or "").strip() or settings.openai_studio_model
-    raw_text = await chat_completion_openai_compatible_text(
-        model=model,
-        messages=[
-            {"role": "system", "content": system},
-            {"role": "user", "content": user_content},
-        ],
-        max_tokens=8192,
-        temperature=0.35,
-        credentials=creds,
-        timeout_seconds=180.0,
-    )
+        grok_model = _grok_scene_compose_model()
+        try:
+            raw_text = await _vision_call(
+                model=grok_model,
+                creds=grok_motion_studio_credentials(),
+            )
+        except RuntimeError as e:
+            err = str(e).lower()
+            if "model not found" not in err and "404" not in err:
+                raise
+            log.warning(
+                "model_profile_gen: Grok vision model %s unavailable (%s), fallback to LLM vision",
+                grok_model,
+                str(e)[:200],
+            )
+
+    if raw_text is None:
+        if not credentials:
+            if grok_scene_compose_configured():
+                raise RuntimeError(
+                    "Grok vision недоступен, а резервный LLM не настроен. "
+                    "Задайте OPENAI_STUDIO_MODEL_VISION или GROK_SCENE_COMPOSE_MODEL."
+                )
+            raise RuntimeError("LLM credentials не настроены")
+        fallback_model = (settings.openai_studio_model_vision or "").strip() or settings.openai_studio_model
+        if grok_scene_compose_configured() and not fallback_model:
+            fallback_model = _grok_fps_stills_model()
+        raw_text = await _vision_call(model=fallback_model, creds=credentials)
+
     return _normalize_model_profile_json_output(raw_text)

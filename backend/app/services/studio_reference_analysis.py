@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 
 from app.config import BACKEND_DIR, settings
 from app.db.models import UserStudioModelImage
-from app.services.studio_grok_motion import grok_motion_studio_credentials
+from app.services.studio_grok_motion import _grok_fps_stills_model, grok_motion_studio_credentials
 from app.services.studio_grok_scene_compose import grok_scene_compose_configured
 from app.services.studio_openai import (
     StudioOpenAiCredentials,
@@ -420,7 +420,7 @@ async def analyze_reference_image(
         creds = grok_motion_studio_credentials() if grok_scene_compose_configured() else None
 
     if grok_scene_compose_configured():
-        model = (settings.grok_scene_compose_model or "").strip() or "grok-2-vision-1212"
+        model = (settings.grok_scene_compose_model or "").strip() or _grok_fps_stills_model()
     else:
         model = (settings.openai_studio_model_vision or "").strip() or settings.openai_studio_model
 

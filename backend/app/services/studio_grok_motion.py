@@ -125,7 +125,7 @@ def _grok_fps_stills_model() -> str:
         m = (raw or "").strip()
         if m:
             return m
-    return "grok-2-vision-1212"
+    return "grok-4"
 
 
 def _grok_full_video_responses_model() -> str:
