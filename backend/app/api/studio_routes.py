@@ -3103,6 +3103,10 @@ async def _studio_job_execute_refine_prompt(
         normalize_workflow_image_resolution,
         workflow_wavespeed_size_for_resolution,
     )
+    from app.services.studio_workflow_scenarios import (
+        order_detail_edit_refs_for_wavespeed,
+        workflow_detail_ref_attached,
+    )
 
     workflow_wave_resolution = normalize_workflow_image_resolution(
         workflow_wave_model or "wan-2.7",
@@ -4072,10 +4076,6 @@ async def _studio_job_execute_refine_prompt(
             workflow_prompt_only_t2i = False
             if workflow_ref_loaded and send_pose_to_ws:
                 try:
-                    from app.services.studio_workflow_scenarios import (
-                        order_detail_edit_refs_for_wavespeed,
-                    )
-
                     refs_for_ws = workflow_ref_loaded
                     detail_edit_ws = _truthy_send_pose_reference_to_wavespeed(
                         p.get("workflow_detail_edit")
