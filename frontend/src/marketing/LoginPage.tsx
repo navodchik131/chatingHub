@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useCallback, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { AuthCheckingScreen } from '../auth/AuthCheckingScreen'
@@ -32,9 +32,9 @@ export function LoginPage() {
     }
   }, [session, navigate, next])
 
-  const onSuccess = () => {
+  const onSuccess = useCallback(() => {
     navigate(next, { replace: true })
-  }
+  }, [navigate, next])
 
   if (session === 'checking' || session === 'authenticated') {
     return <AuthCheckingScreen />

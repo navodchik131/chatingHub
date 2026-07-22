@@ -19,12 +19,19 @@ type Props = {
 export function TelegramLoginButton({ botUsername, mode, referralCode, onSuccess, onError }: Props) {
   const { t } = useTranslation('auth')
   const hostRef = useRef<HTMLDivElement>(null)
+  const onSuccessRef = useRef(onSuccess)
+  const onErrorRef = useRef(onError)
   const [busy, setBusy] = useState(false)
+
+  onSuccessRef.current = onSuccess
+  onErrorRef.current = onError
 
   useEffect(() => {
     const el = hostRef.current
     if (!el || !botUsername.trim()) return
 
+    // Mount once per bot/mode/referral — do not depend on parent callbacks
+    // or every keystroke remounts the iframe and causes flicker.
     const cleanup = mountTelegramLoginWidget(el, botUsername, (user: TelegramLoginUser) => {
       void (async () => {
         setBusy(true)
@@ -33,21 +40,21 @@ export function TelegramLoginButton({ botUsername, mode, referralCode, onSuccess
           const r = await postTelegramAuth(path, user, mode === 'login' ? referralCode : null)
           if (!r.ok) {
             const j = await r.json().catch(() => ({}))
-            onError?.(formatHttpApiError(r, j))
+            onErrorRef.current?.(formatHttpApiError(r, j))
             return
           }
           if (mode === 'login') {
             const data = (await r.json()) as { access_token: string }
             setToken(data.access_token)
           }
-          await onSuccess()
+          await onSuccessRef.current()
         } finally {
           setBusy(false)
         }
       })()
     })
     return cleanup
-  }, [botUsername, mode, onError, onSuccess, referralCode])
+  }, [botUsername, mode, referralCode])
 
   return (
     <div className="telegram-login-wrap">

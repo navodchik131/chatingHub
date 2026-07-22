@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -43,18 +44,15 @@ async def get_or_create_conversation(
     instagram_connection_id: int | None = None,
     studio_model_id: int | None = None,
 ) -> Conversation:
+    # Unique key is (user_id, platform, external_chat_id, external_topic_id).
+    # Do not filter by connection_id here — reconnects change connection ids and would
+    # miss the row, then INSERT hits uq_conv_user_platform_chat_topic.
     stmt = select(Conversation).where(
         Conversation.user_id == user_id,
         Conversation.platform == platform,
         Conversation.external_chat_id == external_chat_id,
         Conversation.external_topic_id == external_topic_id,
     )
-    if platform == Platform.telegram and telegram_connection_id is not None:
-        stmt = stmt.where(Conversation.telegram_connection_id == telegram_connection_id)
-    elif platform == Platform.fanvue and fanvue_connection_id is not None:
-        stmt = stmt.where(Conversation.fanvue_connection_id == fanvue_connection_id)
-    elif platform == Platform.instagram and instagram_connection_id is not None:
-        stmt = stmt.where(Conversation.instagram_connection_id == instagram_connection_id)
     r = await session.execute(stmt)
     conv = r.scalar_one_or_none()
     now = datetime.now(timezone.utc)
@@ -67,11 +65,11 @@ async def get_or_create_conversation(
             and conv.telegram_photo_file_id != telegram_photo_file_id
         ):
             conv.telegram_photo_file_id = telegram_photo_file_id
-        if telegram_connection_id and not conv.telegram_connection_id:
+        if telegram_connection_id and conv.telegram_connection_id != telegram_connection_id:
             conv.telegram_connection_id = telegram_connection_id
-        if fanvue_connection_id and not conv.fanvue_connection_id:
+        if fanvue_connection_id and conv.fanvue_connection_id != fanvue_connection_id:
             conv.fanvue_connection_id = fanvue_connection_id
-        if instagram_connection_id and not conv.instagram_connection_id:
+        if instagram_connection_id and conv.instagram_connection_id != instagram_connection_id:
             conv.instagram_connection_id = instagram_connection_id
         if studio_model_id is not None and conv.studio_model_id != studio_model_id:
             conv.studio_model_id = studio_model_id
@@ -100,7 +98,25 @@ async def get_or_create_conversation(
         updated_at=now,
     )
     session.add(conv)
-    await session.flush()
+    try:
+        await session.flush()
+    except IntegrityError:
+        await session.rollback()
+        existing = await session.scalar(stmt)
+        if existing is not None:
+            if telegram_connection_id and existing.telegram_connection_id != telegram_connection_id:
+                existing.telegram_connection_id = telegram_connection_id
+            if fanvue_connection_id and existing.fanvue_connection_id != fanvue_connection_id:
+                existing.fanvue_connection_id = fanvue_connection_id
+            if instagram_connection_id and existing.instagram_connection_id != instagram_connection_id:
+                existing.instagram_connection_id = instagram_connection_id
+            if studio_model_id is not None and existing.studio_model_id != studio_model_id:
+                existing.studio_model_id = studio_model_id
+            if user_display_name and existing.user_display_name != user_display_name:
+                existing.user_display_name = user_display_name
+            existing.updated_at = datetime.now(timezone.utc)
+            return existing
+        raise
     return conv
 
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { apiFetch, setToken } from './api'
 import { formatHttpApiError } from './apiErrors'
@@ -66,11 +66,18 @@ export function AuthPanel({
     }
   }
 
-  const onTelegramSuccess = async () => {
+  const onTelegramSuccess = useCallback(async () => {
     setErr(null)
     markFirstGenWizardPending()
     await onSuccess(true)
-  }
+  }, [onSuccess])
+
+  const onTelegramLoginSuccess = useCallback(async () => {
+    setErr(null)
+    await onSuccess(false)
+  }, [onSuccess])
+
+  const showTelegram = Boolean(tgBotUsername) && (tab === 'register' || !memberLogin.trim())
 
   return (
     <div className="auth-card">
@@ -103,29 +110,21 @@ export function AuthPanel({
           </button>
         </div>
         {err ? <div className="banner error">{err}</div> : null}
-        {tgBotUsername && tab === 'register' ? (
-          <>
+        {tgBotUsername ? (
+          <div
+            className="telegram-login-slot"
+            hidden={!showTelegram}
+            aria-hidden={!showTelegram}
+          >
             <TelegramLoginButton
               botUsername={tgBotUsername}
               mode="login"
               referralCode={referralCode}
-              onSuccess={onTelegramSuccess}
+              onSuccess={tab === 'register' ? onTelegramSuccess : onTelegramLoginSuccess}
               onError={setErr}
             />
             <p className="auth-hint auth-hint--center">{t('orEmail')}</p>
-          </>
-        ) : null}
-        {tgBotUsername && tab === 'login' && !memberLogin.trim() ? (
-          <>
-            <TelegramLoginButton
-              botUsername={tgBotUsername}
-              mode="login"
-              referralCode={referralCode}
-              onSuccess={() => onSuccess(false)}
-              onError={setErr}
-            />
-            <p className="auth-hint auth-hint--center">{t('orEmail')}</p>
-          </>
+          </div>
         ) : null}
         <label className="auth-label">
           <span className="auth-label-text">{t('email')}</span>
