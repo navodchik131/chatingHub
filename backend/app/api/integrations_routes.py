@@ -32,6 +32,8 @@ from app.connectors.instagram.oauth import (
     fetch_instagram_profile,
     generate_oauth_state as generate_instagram_oauth_state,
     instagram_oauth_configured,
+    resolve_instagram_account_id,
+    subscribe_instagram_webhooks,
 )
 from app.db.models import (
     CompanionJob,
@@ -1177,10 +1179,11 @@ async def instagram_oauth_callback(
         token_payload = await exchange_instagram_authorization_code(code=code.strip())
         access = str(token_payload.get("access_token") or "").strip()
         profile = await fetch_instagram_profile(access)
-        ig_user_id = str(profile.get("id") or profile.get("user_id") or token_payload.get("user_id") or "").strip()
+        ig_user_id = resolve_instagram_account_id(profile, token_payload)
         if not ig_user_id:
             raise InstagramOAuthError("Instagram profile missing id")
         username = str(profile.get("username") or "").strip() or None
+        await subscribe_instagram_webhooks(access, fields="messages")
         await _save_instagram_oauth_tokens(
             session,
             user_id=user_id,

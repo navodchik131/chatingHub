@@ -167,6 +167,63 @@ async def refresh_instagram_access_token(access_token: str) -> dict[str, Any]:
     return payload
 
 
+def resolve_instagram_account_id(
+    profile: dict[str, Any],
+    token_payload: dict[str, Any] | None = None,
+) -> str:
+    """Instagram-scoped professional account id (matches webhook entry.id)."""
+    payload = token_payload or {}
+    for raw in (
+        profile.get("user_id"),
+        profile.get("id"),
+        payload.get("user_id"),
+    ):
+        value = str(raw or "").strip()
+        if value and value != "0":
+            return value
+    return ""
+
+
+async def subscribe_instagram_webhooks(
+    access_token: str,
+    *,
+    fields: str = "messages",
+) -> dict[str, Any]:
+    """Enable per-account webhook delivery after Instagram Login OAuth."""
+    token = (access_token or "").strip()
+    if not token:
+        raise InstagramOAuthError("empty access token")
+    ver = _graph_version()
+    params = {
+        "subscribed_fields": fields,
+        "access_token": token,
+    }
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        r = await client.post(
+            f"https://graph.instagram.com/v{ver}/me/subscribed_apps",
+            params=params,
+        )
+    if r.status_code >= 400:
+        log.warning(
+            "instagram subscribed_apps failed: %s %s",
+            r.status_code,
+            r.text[:800],
+        )
+        raise InstagramOAuthError(
+            "Instagram webhook subscription failed",
+            status=r.status_code,
+            body=r.text[:2000],
+        )
+    try:
+        payload = r.json()
+    except Exception as e:
+        raise InstagramOAuthError("Instagram subscribed_apps response is not JSON") from e
+    if not isinstance(payload, dict):
+        raise InstagramOAuthError("Instagram subscribed_apps response must be a JSON object")
+    log.info("instagram subscribed_apps ok fields=%s success=%s", fields, payload.get("success"))
+    return payload
+
+
 async def fetch_instagram_profile(access_token: str) -> dict[str, Any]:
     token = (access_token or "").strip()
     if not token:

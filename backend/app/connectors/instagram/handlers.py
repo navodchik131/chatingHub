@@ -168,7 +168,8 @@ async def ingest_instagram_webhook_body(
         if not isinstance(entry, dict):
             continue
         ig_account_id = str(entry.get("id") or "").strip()
-        if not ig_account_id:
+        if not ig_account_id or ig_account_id == "0":
+            log.info("instagram webhook: skip test/empty account id=%s", ig_account_id or "—")
             continue
         conn = await session.scalar(
             select(InstagramConnection).where(
@@ -176,7 +177,7 @@ async def ingest_instagram_webhook_body(
             )
         )
         if not conn:
-            log.info("instagram webhook: unknown account %s", ig_account_id[:8])
+            log.info("instagram webhook: unknown account %s", ig_account_id[:16])
             continue
         for event in entry.get("messaging") or []:
             if not isinstance(event, dict):
