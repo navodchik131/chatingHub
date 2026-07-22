@@ -56,13 +56,13 @@ function Spinner({ size = 64, ratio = '1/1' }) {
       }}
     >
       <div
+        className="mm-spin"
         style={{
           width: 22,
           height: 22,
           borderRadius: '50%',
           border: '2.5px solid rgba(192,132,252,.25)',
           borderTopColor: color.purple,
-          animation: 'mmSpin .8s linear infinite',
         }}
       />
     </div>
