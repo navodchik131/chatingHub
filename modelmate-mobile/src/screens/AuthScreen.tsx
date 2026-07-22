@@ -1,19 +1,55 @@
 import * as LocalAuthentication from 'expo-local-authentication';
+import { useEffect, useState } from 'react';
 import { Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { FieldLabel, TextField } from '@/src/components/forms';
 import { IcoShield, IcoTelegram } from '@/src/components/Icons';
+import { fetchTelegramLoginBotUsername } from '@/src/auth/telegramLoginMobile';
 import { useAppData } from '@/src/context/AppDataProvider';
 import { useNav } from '@/src/context/NavigationContext';
 import { color, font } from '@/src/styles/tokens';
 
+type AuthMode = 'login' | 'register';
+
 export function AuthScreen() {
   const { authEmail, authPassword, patch, resetTo } = useNav();
-  const { login, busy, error, clearError } = useAppData();
+  const { login, register, loginWithTelegram, busy, error, clearError } = useAppData();
+  const [mode, setMode] = useState<AuthMode>('login');
+  const [tgAvailable, setTgAvailable] = useState(false);
 
-  const enterApp = async () => {
+  useEffect(() => {
+    void fetchTelegramLoginBotUsername().then((bot) => setTgAvailable(Boolean(bot)));
+  }, []);
+
+  const switchMode = (next: AuthMode) => {
+    clearError();
+    setMode(next);
+  };
+
+  const submitEmail = async () => {
+    clearError();
+    const email = authEmail.trim();
+    if (!email) {
+      return;
+    }
+    if (authPassword.length < 8) {
+      return;
+    }
+    try {
+      if (mode === 'login') {
+        await login(email, authPassword);
+      } else {
+        await register(email, authPassword);
+      }
+      resetTo('overview');
+    } catch {
+      /* error in context */
+    }
+  };
+
+  const submitTelegram = async () => {
     clearError();
     try {
-      await login(authEmail, authPassword);
+      await loginWithTelegram();
       resetTo('overview');
     } catch {
       /* error in context */
@@ -21,22 +57,27 @@ export function AuthScreen() {
   };
 
   const loginWithBiometric = async () => {
+    if (mode === 'register') return;
     const hasHardware = await LocalAuthentication.hasHardwareAsync();
     if (!hasHardware) {
-      await enterApp();
+      await submitEmail();
       return;
     }
     const enrolled = await LocalAuthentication.isEnrolledAsync();
     if (!enrolled) {
-      await enterApp();
+      await submitEmail();
       return;
     }
     const result = await LocalAuthentication.authenticateAsync({
       promptMessage: 'Войти в ModelMate',
       cancelLabel: 'Отмена',
     });
-    if (result.success) await enterApp();
+    if (result.success) await submitEmail();
   };
+
+  const canSubmit = authEmail.trim().length > 0 && authPassword.length >= 8;
+  const primaryLabel =
+    mode === 'login' ? (busy ? 'Вход…' : 'Войти') : busy ? 'Регистрация…' : 'Зарегистрироваться';
 
   return (
     <KeyboardAvoidingView
@@ -55,7 +96,36 @@ export function AuthScreen() {
           <Text style={styles.brand}>ModelMate</Text>
         </View>
 
+        <View style={styles.tabs}>
+          <Pressable
+            style={[styles.tab, mode === 'login' && styles.tabActive]}
+            onPress={() => switchMode('login')}
+            disabled={busy}
+          >
+            <Text style={[styles.tabText, mode === 'login' && styles.tabTextActive]}>Вход</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.tab, mode === 'register' && styles.tabActive]}
+            onPress={() => switchMode('register')}
+            disabled={busy}
+          >
+            <Text style={[styles.tabText, mode === 'register' && styles.tabTextActive]}>Регистрация</Text>
+          </Pressable>
+        </View>
+
         {error ? <Text style={styles.error}>{error}</Text> : null}
+
+        {tgAvailable ? (
+          <>
+            <Pressable style={styles.tgBtn} onPress={submitTelegram} disabled={busy}>
+              <IcoTelegram size={17} stroke={color.blue} />
+              <Text style={styles.tgText}>
+                {mode === 'login' ? 'Войти через Telegram' : 'Зарегистрироваться через Telegram'}
+              </Text>
+            </Pressable>
+            <Text style={styles.or}>или email</Text>
+          </>
+        ) : null}
 
         <View style={styles.form}>
           <View>
@@ -74,29 +144,37 @@ export function AuthScreen() {
               onChangeText={(t) => patch({ authPassword: t })}
               secureTextEntry
             />
+            {mode === 'register' ? (
+              <Text style={styles.hint}>Минимум 8 символов</Text>
+            ) : null}
           </View>
         </View>
 
-        <Pressable style={[styles.loginBtn, busy && styles.loginBtnDisabled]} onPress={enterApp} disabled={busy}>
-          <Text style={styles.loginBtnText}>{busy ? 'Вход…' : 'Войти'}</Text>
+        <Pressable
+          style={[styles.loginBtn, (busy || !canSubmit) && styles.loginBtnDisabled]}
+          onPress={submitEmail}
+          disabled={busy || !canSubmit}
+        >
+          <Text style={styles.loginBtnText}>{primaryLabel}</Text>
         </Pressable>
 
-        <Text style={styles.or}>или</Text>
+        {mode === 'login' ? (
+          <Pressable style={styles.bioBtn} onPress={loginWithBiometric} disabled={busy || !canSubmit}>
+            <IcoShield size={17} stroke={color.lime} />
+            <Text style={styles.bioText}>Войти по Face ID / отпечатку</Text>
+          </Pressable>
+        ) : null}
 
-        <Pressable style={styles.tgBtn} onPress={enterApp} disabled={busy}>
-          <IcoTelegram size={17} stroke={color.blue} />
-          <Text style={styles.tgText}>Войти через Telegram</Text>
+        <Pressable
+          onPress={() => switchMode(mode === 'login' ? 'register' : 'login')}
+          disabled={busy}
+          style={styles.regPress}
+        >
+          <Text style={styles.reg}>
+            {mode === 'login' ? 'Нет аккаунта? ' : 'Уже есть аккаунт? '}
+            <Text style={styles.regLink}>{mode === 'login' ? 'Зарегистрироваться' : 'Войти'}</Text>
+          </Text>
         </Pressable>
-
-        <Pressable style={styles.bioBtn} onPress={loginWithBiometric} disabled={busy}>
-          <IcoShield size={17} stroke={color.lime} />
-          <Text style={styles.bioText}>Войти по Face ID / отпечатку</Text>
-        </Pressable>
-
-        <Text style={styles.reg}>
-          Нет аккаунта?{' '}
-          <Text style={styles.regLink}>Зарегистрироваться</Text>
-        </Text>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -109,9 +187,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 24,
     paddingVertical: 28,
-    gap: 22,
+    gap: 18,
   },
-  logoBlock: { alignItems: 'center', gap: 10, marginBottom: 6 },
+  logoBlock: { alignItems: 'center', gap: 10, marginBottom: 2 },
   logoWrap: {
     width: 56,
     height: 56,
@@ -125,15 +203,32 @@ const styles = StyleSheet.create({
   },
   logo: { width: '100%', height: '100%' },
   brand: { fontFamily: font.displayBold, fontSize: 18, color: color.text },
+  tabs: {
+    flexDirection: 'row',
+    gap: 8,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderRadius: 12,
+    padding: 4,
+  },
+  tab: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 9,
+    borderRadius: 9,
+  },
+  tabActive: { backgroundColor: 'rgba(255,255,255,0.08)' },
+  tabText: { fontFamily: font.bodyBold, fontSize: 12.5, color: color.muted },
+  tabTextActive: { color: color.text },
   error: { color: color.red, fontSize: 12, textAlign: 'center' },
   form: { gap: 10 },
+  hint: { marginTop: 4, fontSize: 10.5, color: color.dim },
   loginBtn: {
     alignItems: 'center',
     paddingVertical: 13,
     borderRadius: 12,
     backgroundColor: color.lime,
   },
-  loginBtnDisabled: { opacity: 0.6 },
+  loginBtnDisabled: { opacity: 0.45 },
   loginBtnText: { fontFamily: font.bodyExtra, fontSize: 13.5, color: color.limeText },
   or: { textAlign: 'center', fontSize: 11, color: color.dim },
   tgBtn: {
@@ -159,6 +254,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.14)',
   },
   bioText: { fontFamily: font.bodyBold, fontSize: 12.5, color: color.text },
-  reg: { textAlign: 'center', fontSize: 11.5, color: color.muted, marginTop: 4 },
+  regPress: { marginTop: 2 },
+  reg: { textAlign: 'center', fontSize: 11.5, color: color.muted },
   regLink: { color: color.lime, fontWeight: '700' },
 });

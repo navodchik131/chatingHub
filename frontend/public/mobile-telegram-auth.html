@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Telegram Login — ModelMate</title>
+    <style>
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 16px;
+        background: #0a0b0d;
+        color: #e8eaed;
+        font-family: system-ui, sans-serif;
+      }
+      #tg-host {
+        min-height: 48px;
+      }
+      p {
+        margin: 0;
+        font-size: 13px;
+        color: #9aa0a6;
+        text-align: center;
+        max-width: 280px;
+      }
+    </style>
+  </head>
+  <body>
+    <p>Войдите через Telegram, чтобы вернуться в приложение ModelMate.</p>
+    <div id="tg-host"></div>
+    <script>
+      ;(function () {
+        var params = new URLSearchParams(window.location.search)
+        var bot = String(params.get('bot') || '')
+          .trim()
+          .replace(/^@/, '')
+        var returnTo = String(params.get('return') || 'modelmate://telegram-auth').trim()
+        var host = document.getElementById('tg-host')
+
+        if (!bot) {
+          host.innerHTML = '<p style="color:#f87171">Bot username missing</p>'
+          return
+        }
+
+        function redirectWithUser(user) {
+          var url
+          try {
+            url = new URL(returnTo)
+          } catch (e) {
+            url = new URL('modelmate://telegram-auth')
+          }
+          url.searchParams.set('id', String(user.id))
+          url.searchParams.set('auth_date', String(user.auth_date))
+          url.searchParams.set('hash', String(user.hash))
+          if (user.first_name) url.searchParams.set('first_name', user.first_name)
+          if (user.last_name) url.searchParams.set('last_name', user.last_name)
+          if (user.username) url.searchParams.set('username', user.username)
+          if (user.photo_url) url.searchParams.set('photo_url', user.photo_url)
+          window.location.replace(url.toString())
+        }
+
+        var callbackName = 'onTelegramAuth_' + Math.random().toString(36).slice(2)
+        window[callbackName] = redirectWithUser
+
+        var script = document.createElement('script')
+        script.async = true
+        script.src = 'https://telegram.org/js/telegram-widget.js?22'
+        script.setAttribute('data-telegram-login', bot)
+        script.setAttribute('data-size', 'large')
+        script.setAttribute('data-userpic', 'false')
+        script.setAttribute('data-request-access', 'write')
+        script.setAttribute('data-onauth', callbackName + '(user)')
+        host.appendChild(script)
+      })()
+    </script>
+  </body>
+</html>

@@ -1,7 +1,13 @@
 import { apiFetch, apiJson, apiJsonOptional } from '@/src/api/client';
 import { normalizePhotoKind } from '@/src/api/helpers';
 import { postStudioJobStart, waitForStudioJobResult } from '@/src/api/studioJobs';
-import type { LocalFile, HealthOut, StudioGenerationOut, StudioModelOut } from '@/src/api/types';
+import type {
+  LocalFile,
+  HealthOut,
+  StudioGenerationOut,
+  StudioModelOut,
+  TelegramLoginUser,
+} from '@/src/api/types';
 import { apiUrl, getApiBaseUrl } from '@/src/api/config';
 import { archiveThumbUrl } from '@/src/api/media';
 import MMOS_STUDIO_SCENARIOS from '@/src/studio/mmOsStudioScenarios';
@@ -33,6 +39,13 @@ export async function register(email: string, password: string) {
   return apiJson<{ access_token: string; token_type: string }>('/api/auth/register', {
     method: 'POST',
     body: JSON.stringify({ email: email.trim(), password }),
+  });
+}
+
+export async function loginTelegram(user: TelegramLoginUser) {
+  return apiJson<{ access_token: string; token_type: string }>('/api/auth/telegram', {
+    method: 'POST',
+    body: JSON.stringify(user),
   });
 }
 

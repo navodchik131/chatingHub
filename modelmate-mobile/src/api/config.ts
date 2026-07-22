@@ -12,6 +12,13 @@ export function getApiBaseUrl(): string {
   return DEFAULT_DEV;
 }
 
+/** Публичный сайт (статика, Telegram OAuth bridge). По умолчанию = API host. */
+export function getSiteBaseUrl(): string {
+  const fromEnv = process.env.EXPO_PUBLIC_SITE_URL?.trim();
+  if (fromEnv) return fromEnv.replace(/\/$/, '');
+  return getApiBaseUrl().replace(/\/api\/?$/, '');
+}
+
 export function apiUrl(path: string): string {
   if (/^https?:\/\//i.test(path)) return path;
   const base = getApiBaseUrl();

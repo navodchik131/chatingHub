@@ -124,6 +124,7 @@ type AppDataValue = {
   refreshArchive: () => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string) => Promise<void>;
+  loginWithTelegram: () => Promise<void>;
   logout: () => Promise<void>;
   loadThread: (convId: number) => Promise<void>;
   clearActiveThread: () => void;
@@ -503,6 +504,22 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     try {
       const data = await actions.register(email, password);
       await setToken(data.access_token);
+      await refreshAll();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      throw e;
+    } finally {
+      setBusy(false);
+    }
+  }, [refreshAll]);
+
+  const loginWithTelegram = useCallback(async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const { signInWithTelegram } = await import('@/src/auth/telegramLoginMobile');
+      const token = await signInWithTelegram();
+      await setToken(token);
       await refreshAll();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -1179,6 +1196,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       refreshArchive,
       login,
       register,
+      loginWithTelegram,
       logout,
       loadThread,
       clearActiveThread,
@@ -1275,6 +1293,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       refreshArchive,
       login,
       register,
+      loginWithTelegram,
       logout,
       loadThread,
       clearActiveThread,

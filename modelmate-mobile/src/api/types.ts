@@ -98,10 +98,23 @@ export type StudioGenerationOut = {
   error_message?: string;
 };
 
+export type TelegramLoginUser = {
+  id: number;
+  first_name?: string;
+  last_name?: string;
+  username?: string;
+  photo_url?: string;
+  auth_date: number;
+  hash: string;
+  referral_code?: string;
+};
+
 export type HealthOut = {
   studio_carousel_credit_cost?: number;
   studio_motion_video_pricing?: Record<string, unknown>;
   studio_image_pricing?: Record<string, unknown>;
+  telegram_login_configured?: boolean;
+  telegram_login_bot_username?: string | null;
 };
 
 export type IntegrationStatusOut = {
