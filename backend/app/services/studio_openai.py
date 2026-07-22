@@ -1677,6 +1677,23 @@ def _load_model_profile_template_dict() -> dict:
     return data
 
 
+def _collect_model_profile_unfilled_paths(obj, path: str = "model_profile") -> list[str]:
+    """Пути полей, где остались placeholder <FILL…> (кроме name на верхнем уровне)."""
+    out: list[str] = []
+    if isinstance(obj, dict):
+        for key, val in obj.items():
+            child = f"{path}.{key}"
+            if key in ("name", "_note"):
+                continue
+            out.extend(_collect_model_profile_unfilled_paths(val, child))
+    elif isinstance(obj, list):
+        for idx, val in enumerate(obj):
+            out.extend(_collect_model_profile_unfilled_paths(val, f"{path}[{idx}]"))
+    elif isinstance(obj, str) and "<FILL" in obj.upper():
+        out.append(path)
+    return out
+
+
 def _model_profile_section_complete(profile: dict) -> bool:
     if not isinstance(profile, dict):
         return False
@@ -1686,7 +1703,7 @@ def _model_profile_section_complete(profile: dict) -> bool:
 def _model_profile_filled(profile: dict) -> bool:
     if not _model_profile_section_complete(profile):
         return False
-    return "<FILL" not in json.dumps(profile, ensure_ascii=False)
+    return not _collect_model_profile_unfilled_paths(profile)
 
 
 def _deep_merge_model_profile(base: dict, overlay: dict) -> dict:
@@ -1702,7 +1719,8 @@ def _deep_merge_model_profile(base: dict, overlay: dict) -> dict:
     return out
 
 
-def _normalize_model_profile_json_output(raw_text: str, *, template: dict | None = None) -> str:
+def _merge_model_profile_response(raw_text: str, *, template: dict | None = None) -> tuple[dict, list[str]]:
+    """Парсит ответ модели, мержит со скелетом, возвращает (data, unfilled_paths)."""
     t = _strip_code_fences(raw_text)
     try:
         data = json.loads(t)
@@ -1721,10 +1739,18 @@ def _normalize_model_profile_json_output(raw_text: str, *, template: dict | None
     if tpl_profile:
         data["model_profile"] = _deep_merge_model_profile(tpl_profile, profile)
 
-    if not _model_profile_filled(data["model_profile"]):
+    unfilled = _collect_model_profile_unfilled_paths(data["model_profile"])
+    return data, unfilled
+
+
+def _normalize_model_profile_json_output(raw_text: str, *, template: dict | None = None) -> str:
+    data, unfilled = _merge_model_profile_response(raw_text, template=template)
+    if unfilled:
+        preview = ", ".join(unfilled[:12])
+        suffix = "…" if len(unfilled) > 12 else ""
         raise RuntimeError(
-            "Модель вернула неполный профиль (нет face/eyes/body или остались пустые поля). "
-            "Повторите генерацию или проверьте, что на сервере доступен model_profile_template.json."
+            f"Модель вернула неполный профиль ({len(unfilled)} пустых полей: {preview}{suffix}). "
+            "Повторите генерацию."
         )
     return json.dumps(data, ensure_ascii=False, indent=2)
 
@@ -1786,35 +1812,101 @@ async def generate_model_profile_json_from_images(
             timeout_seconds=180.0,
         )
 
-    raw_text: str | None = None
-    if grok_scene_compose_configured():
-        grok_model = _grok_scene_compose_model()
-        try:
-            raw_text = await _vision_call(
-                model=grok_model,
-                creds=grok_motion_studio_credentials(),
-            )
-        except RuntimeError as e:
-            err = str(e).lower()
-            if "model not found" not in err and "404" not in err:
-                raise
-            log.warning(
-                "model_profile_gen: Grok vision model %s unavailable (%s), fallback to LLM vision",
-                grok_model,
-                str(e)[:200],
-            )
-
-    if raw_text is None:
+    def _resolve_vision_model_and_creds() -> tuple[str, StudioOpenAiCredentials | None]:
+        if grok_scene_compose_configured():
+            return _grok_scene_compose_model(), grok_motion_studio_credentials()
         if not credentials:
-            if grok_scene_compose_configured():
-                raise RuntimeError(
-                    "Grok vision недоступен, а резервный LLM не настроен. "
-                    "Задайте OPENAI_STUDIO_MODEL_VISION или GROK_SCENE_COMPOSE_MODEL."
-                )
             raise RuntimeError("LLM credentials не настроены")
         fallback_model = (settings.openai_studio_model_vision or "").strip() or settings.openai_studio_model
-        if grok_scene_compose_configured() and not fallback_model:
-            fallback_model = _grok_fps_stills_model()
-        raw_text = await _vision_call(model=fallback_model, creds=credentials)
+        return fallback_model, credentials
 
-    return _normalize_model_profile_json_output(raw_text, template=template_dict)
+    vision_model, vision_creds = _resolve_vision_model_and_creds()
+    fallback_model = ""
+    fallback_creds = credentials
+    if credentials:
+        fallback_model = (settings.openai_studio_model_vision or "").strip() or settings.openai_studio_model
+    elif grok_scene_compose_configured():
+        fallback_model = _grok_fps_stills_model()
+
+    max_attempts = 3
+    last_unfilled: list[str] = []
+    raw_text = ""
+
+    for attempt in range(max_attempts):
+        use_model = vision_model
+        use_creds = vision_creds
+        if attempt > 0 and fallback_model and fallback_model != vision_model and fallback_creds:
+            use_model = fallback_model
+            use_creds = fallback_creds
+
+        try:
+            raw_text = await _vision_call(model=use_model, creds=use_creds)
+        except RuntimeError as e:
+            err = str(e).lower()
+            if attempt == 0 and ("model not found" in err or "404" in err):
+                log.warning(
+                    "model_profile_gen: vision model %s unavailable (%s), fallback",
+                    use_model,
+                    str(e)[:200],
+                )
+                if not fallback_model or not fallback_creds:
+                    if grok_scene_compose_configured():
+                        raise RuntimeError(
+                            "Grok vision недоступен, а резервный LLM не настроен. "
+                            "Задайте OPENAI_STUDIO_MODEL_VISION или GROK_SCENE_COMPOSE_MODEL."
+                        ) from e
+                    raise
+                use_model = fallback_model
+                use_creds = fallback_creds
+                raw_text = await _vision_call(model=use_model, creds=use_creds)
+            else:
+                raise
+
+        try:
+            data, unfilled = _merge_model_profile_response(raw_text, template=template_dict)
+        except RuntimeError:
+            if attempt >= max_attempts - 1:
+                raise
+            messages.extend([
+                {"role": "assistant", "content": raw_text},
+                {
+                    "role": "user",
+                    "content": (
+                        "Invalid or incomplete JSON. Return ONLY one complete JSON object with top-level "
+                        '"model_profile". Fill EVERY field from the schema — no <FILL> placeholders, '
+                        "all sections (face, eyes, nose, lips, skin, hair, body, distinctive_marks, "
+                        "signature_traits, always_avoid, default_style, default_mood, identity_lock_keywords)."
+                    ),
+                },
+            ])
+            continue
+
+        if not unfilled:
+            return json.dumps(data, ensure_ascii=False, indent=2)
+
+        last_unfilled = unfilled
+        log.warning(
+            "model_profile_gen: attempt %s/%s incomplete (%s fields), retrying",
+            attempt + 1,
+            max_attempts,
+            len(unfilled),
+        )
+        preview = ", ".join(unfilled[:10])
+        messages.extend([
+            {"role": "assistant", "content": raw_text},
+            {
+                "role": "user",
+                "content": (
+                    f"Your JSON still has {len(unfilled)} unfilled placeholder fields "
+                    f"(e.g. {preview}). Return the FULL model_profile JSON again — same schema, "
+                    "every nested field filled from the photos, no <FILL> tokens, no markdown."
+                ),
+            },
+        ])
+
+    preview = ", ".join(last_unfilled[:12])
+    suffix = "…" if len(last_unfilled) > 12 else ""
+    raise RuntimeError(
+        f"Модель вернула неполный профиль ({len(last_unfilled)} пустых полей: {preview}{suffix}). "
+        "Повторите генерацию."
+    )

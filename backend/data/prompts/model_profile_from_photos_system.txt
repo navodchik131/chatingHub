@@ -15,6 +15,6 @@ You will receive a **JSON schema template** (same keys and nesting every time). 
 Output requirements:
 - Return **only** a single JSON object. No markdown, no code fences, no text before or after.
 - Top-level key must be `"model_profile"`.
-- If `name` is unknown, use `"<FILL_NAME>"` or a short generic label — not a celebrity name.
+- If `name` is unknown, use a short descriptive English label (e.g. "Young woman with freckles") — not a celebrity name.
 
 The result will be stored and combined with scene/reference prompts — identity only, not the shot.
