@@ -4072,6 +4072,10 @@ async def _studio_job_execute_refine_prompt(
             workflow_prompt_only_t2i = False
             if workflow_ref_loaded and send_pose_to_ws:
                 try:
+                    from app.services.studio_workflow_scenarios import (
+                        order_detail_edit_refs_for_wavespeed,
+                    )
+
                     refs_for_ws = workflow_ref_loaded
                     detail_edit_ws = _truthy_send_pose_reference_to_wavespeed(
                         p.get("workflow_detail_edit")
@@ -4098,10 +4102,13 @@ async def _studio_job_execute_refine_prompt(
                     log.warning(
                         "studio workflow: не удалось сохранить референсы для WaveSpeed: %s",
                         e,
+                        exc_info=True,
                     )
+                    slim = str(e).strip().replace("\n", " ")[:180]
                     wavespeed_message = (
                         "Не удалось подготовить референсы workflow для WaveSpeed. "
                         "Повторите или перезагрузите файлы."
+                        + (f" ({type(e).__name__}: {slim})" if slim else "")
                     )
             elif image_bytes and send_pose_to_ws:
                 try:
