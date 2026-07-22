@@ -1600,16 +1600,50 @@ _DEFAULT_MODEL_PROFILE_GEN_SYSTEM = (
 )
 
 
+def _model_profile_prompt_candidates(configured_rel: str, default_filename: str) -> list:
+    """data/prompts (Docker volume) → _bundled_prompts (образ) — как у Grok compose."""
+    rel = (configured_rel or "").strip()
+    name = default_filename
+    if rel:
+        name = (BACKEND_DIR / rel).resolve().name
+    ordered = [
+        (BACKEND_DIR / rel).resolve() if rel else None,
+        (BACKEND_DIR / "data" / "prompts" / name).resolve(),
+        (BACKEND_DIR / "_bundled_prompts" / name).resolve(),
+    ]
+    seen: set = set()
+    out = []
+    for item in ordered:
+        if item is None or item in seen:
+            continue
+        seen.add(item)
+        out.append(item)
+    return out
+
+
+_MODEL_PROFILE_REQUIRED_SECTIONS = (
+    "face",
+    "eyes",
+    "nose",
+    "lips",
+    "skin",
+    "hair",
+    "body",
+    "signature_traits",
+    "always_avoid",
+)
+
+
 def load_model_profile_gen_system() -> str:
     rel = _relative_prompt_path(
         settings.image_studio_model_profile_gen_system_path,
         "data/prompts/model_profile_from_photos_system.txt",
     )
-    path = (BACKEND_DIR / rel).resolve()
-    if path.is_file():
-        t = path.read_text(encoding="utf-8").strip()
-        if t:
-            return t
+    for path in _model_profile_prompt_candidates(rel, "model_profile_from_photos_system.txt"):
+        if path.is_file():
+            t = path.read_text(encoding="utf-8").strip()
+            if t:
+                return t
     inline = (settings.image_studio_model_profile_gen_system_inline or "").strip()
     if inline:
         return inline
@@ -1622,16 +1656,53 @@ def load_model_profile_json_template() -> str:
         settings.image_studio_model_profile_template_path,
         "data/prompts/model_profile_template.json",
     )
-    path = (BACKEND_DIR / rel).resolve()
-    if path.is_file():
-        t = path.read_text(encoding="utf-8").strip()
-        if t:
-            return t
+    for path in _model_profile_prompt_candidates(rel, "model_profile_template.json"):
+        if path.is_file():
+            t = path.read_text(encoding="utf-8").strip()
+            if t:
+                return t
     log.warning("model_profile_gen: template file missing, using minimal schema")
     return '{"model_profile":{"name":"<FILL_NAME>","identity_lock_keywords":"<FILL>"}}'
 
 
-def _normalize_model_profile_json_output(raw_text: str) -> str:
+def _load_model_profile_template_dict() -> dict:
+    try:
+        data = json.loads(load_model_profile_json_template())
+    except json.JSONDecodeError:
+        return {"model_profile": {}}
+    if not isinstance(data, dict):
+        return {"model_profile": {}}
+    if "model_profile" not in data:
+        return {"model_profile": data}
+    return data
+
+
+def _model_profile_section_complete(profile: dict) -> bool:
+    if not isinstance(profile, dict):
+        return False
+    return all(k in profile for k in _MODEL_PROFILE_REQUIRED_SECTIONS)
+
+
+def _model_profile_filled(profile: dict) -> bool:
+    if not _model_profile_section_complete(profile):
+        return False
+    return "<FILL" not in json.dumps(profile, ensure_ascii=False)
+
+
+def _deep_merge_model_profile(base: dict, overlay: dict) -> dict:
+    out: dict = {}
+    for key, base_val in base.items():
+        ov = overlay.get(key)
+        if ov is None:
+            out[key] = base_val
+        elif isinstance(base_val, dict) and isinstance(ov, dict):
+            out[key] = _deep_merge_model_profile(base_val, ov)
+        else:
+            out[key] = ov
+    return out
+
+
+def _normalize_model_profile_json_output(raw_text: str, *, template: dict | None = None) -> str:
     t = _strip_code_fences(raw_text)
     try:
         data = json.loads(t)
@@ -1641,6 +1712,20 @@ def _normalize_model_profile_json_output(raw_text: str) -> str:
         raise RuntimeError("Ответ должен быть JSON-объектом")
     if "model_profile" not in data:
         data = {"model_profile": data}
+    profile = data.get("model_profile")
+    if not isinstance(profile, dict):
+        raise RuntimeError("model_profile должен быть объектом")
+
+    tpl = template if template is not None else _load_model_profile_template_dict()
+    tpl_profile = tpl.get("model_profile") if isinstance(tpl.get("model_profile"), dict) else {}
+    if tpl_profile:
+        data["model_profile"] = _deep_merge_model_profile(tpl_profile, profile)
+
+    if not _model_profile_filled(data["model_profile"]):
+        raise RuntimeError(
+            "Модель вернула неполный профиль (нет face/eyes/body или остались пустые поля). "
+            "Повторите генерацию или проверьте, что на сервере доступен model_profile_template.json."
+        )
     return json.dumps(data, ensure_ascii=False, indent=2)
 
 
@@ -1663,12 +1748,15 @@ async def generate_model_profile_json_from_images(
     if not system.strip():
         raise RuntimeError("Пустой системный промпт генерации профиля")
     template = load_model_profile_json_template()
+    template_dict = _load_model_profile_template_dict()
     user_content: list[dict] = [
         {
             "type": "text",
             "text": (
                 "These reference photos show one person. Fill the JSON schema template below "
-                "with traits from THIS person only. Keep the exact same keys and nesting.\n\n"
+                "with traits from THIS person only. Keep the exact same keys and nesting — "
+                "every section (face, eyes, nose, lips, skin, hair, body, distinctive_marks, "
+                "signature_traits, always_avoid, default_style, default_mood) must be filled.\n\n"
                 f"Number of images: {len(image_items)}.\n\n"
                 "JSON SCHEMA TEMPLATE (replace every placeholder value):\n"
                 f"{template}"
@@ -1729,4 +1817,4 @@ async def generate_model_profile_json_from_images(
             fallback_model = _grok_fps_stills_model()
         raw_text = await _vision_call(model=fallback_model, creds=credentials)
 
-    return _normalize_model_profile_json_output(raw_text)
+    return _normalize_model_profile_json_output(raw_text, template=template_dict)
