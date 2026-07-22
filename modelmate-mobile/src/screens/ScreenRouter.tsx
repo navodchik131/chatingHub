@@ -81,6 +81,7 @@ import {
 import { color, font, gradients } from '@/src/styles/tokens';
 import { pickImage, pickVideo } from '@/src/utils/mediaPicker';
 import { RemoteImage } from '@/src/components/RemoteImage';
+import { CharacterGenPanel } from '@/src/components/CharacterGenPanel';
 import { SwipeableChatRow } from '@/src/components/SwipeableChatRow';
 import { ThreadView } from '@/src/components/ThreadView';
 import { resolveMediaUrl } from '@/src/api/config';
@@ -1217,6 +1218,9 @@ export function ScreenRouter() {
         ) : null}
         {ct === 'photos' || !ct ? (
           <>
+            {charIdNum ? (
+              <CharacterGenPanel charId={charIdNum} onSaved={() => app.refreshAll()} />
+            ) : null}
             <SectionLabel>ФОТО-РЕФЕРЕНСЫ</SectionLabel>
             <View style={s.grid3}>
               {charPhotos.map((p) => (

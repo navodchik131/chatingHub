@@ -251,6 +251,7 @@ from app.services.studio_boardstory_opening_frame import generate_boardstory_ope
 from app.services.studio_model_bootstrap import (
     MODEL_SHEET_ASPECT_KEY,
     humanize_wavespeed_provider_error,
+    resolve_body_compose_prompt,
     resolve_face_merge_prompt,
     resolve_model_sheet_prompt,
     wavespeed_image_url_for_bootstrap,
@@ -263,8 +264,8 @@ from app.services.wavespeed_client import (
     seedance_20_image_to_video_url,
     seedance_20_text_to_video_url,
     seedance_studio_video_edit_video_url,
-    seedream_v45_bootstrap_edit_image_url,
     seedream_v45_edit_image_url,
+    seedream_v50_pro_edit_image_url,
     wavespeed_image_upscale_url,
     wavespeed_video_upscaler_pro_url,
     z_image_turbo_inpaint_image_url,
@@ -6479,7 +6480,7 @@ async def api_model_bootstrap_face_merge(
     ref_form: UploadFile = File(..., description="Референс 1: волосы и форма лица"),
     ref_face: UploadFile = File(..., description="Референс 2: лицо для наложения"),
     prompt: str = Form(""),
-    output_aspect: str = Form("9:16"),
+    output_aspect: str = Form("3:4"),
     model_id: str | None = Form(None),
     session: AsyncSession = Depends(get_session),
     user: User = Depends(get_current_user),
@@ -6540,6 +6541,117 @@ async def api_model_bootstrap_face_merge(
         content=StudioJobAcceptedOut(
             job_id=job.id,
             job_type="model_bootstrap_face_merge",
+            generation_id=gen_row.id,
+        ).model_dump(),
+    )
+
+
+@router.post(
+    "/studio/model-bootstrap/body-compose",
+    response_model=StudioModelBootstrapOut,
+    responses={202: {"model": StudioJobAcceptedOut}},
+)
+async def api_model_bootstrap_body_compose(
+    request: Request,
+    ref_body: UploadFile = File(..., description="Референс тела"),
+    ref_face: UploadFile | None = File(None, description="Лицо (файл)"),
+    face_generation_id: str = Form(""),
+    prompt: str = Form(""),
+    output_aspect: str = Form("3:4"),
+    model_id: str | None = Form(None),
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> StudioModelBootstrapOut | JSONResponse:
+    _ = request
+    assert_permission(user, PERM_STUDIO_GENERATE)
+    oid = workspace_owner_id(user)
+    _require_public_https_for_wavespeed()
+
+    body_raw = await ref_body.read()
+    if not body_raw:
+        raise HTTPException(status_code=400, detail="Загрузите референс тела.")
+    if len(body_raw) > MAX_IMAGE_BYTES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Файл слишком большой (макс. {MAX_IMAGE_BYTES // (1024 * 1024)} МБ)",
+        )
+
+    face_raw: bytes | None = None
+    face_mime = ""
+    face_gen_id: int | None = None
+    if ref_face is not None and (ref_face.filename or "").strip():
+        face_raw = await ref_face.read()
+        if face_raw:
+            if len(face_raw) > MAX_IMAGE_BYTES:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Файл лица слишком большой (макс. {MAX_IMAGE_BYTES // (1024 * 1024)} МБ)",
+                )
+            face_mime = (ref_face.content_type or "").strip()
+
+    fg_raw = (face_generation_id or "").strip()
+    if fg_raw:
+        try:
+            face_gen_id = int(fg_raw)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Некорректный face_generation_id") from None
+        if face_raw:
+            raise HTTPException(
+                status_code=400,
+                detail="Укажите либо ref_face, либо face_generation_id",
+            )
+    elif not face_raw:
+        raise HTTPException(status_code=400, detail="Загрузите лицо или укажите face_generation_id")
+
+    try:
+        aspect_key = normalize_aspect_key(output_aspect)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    mid = _parse_optional_model_id(model_id)
+    if face_gen_id is not None:
+        gen_face = await session.get(StudioGeneration, face_gen_id)
+        if gen_face is None or gen_face.user_id != oid:
+            raise HTTPException(status_code=404, detail="Генерация лица не найдена")
+        if mid is not None and gen_face.studio_model_id not in (None, mid):
+            await require_studio_model_access(session, user, mid)
+
+    resolved_prompt = resolve_body_compose_prompt(prompt)
+    params: dict[str, Any] = {
+        "output_aspect": aspect_key,
+        "prompt": resolved_prompt,
+        "model_id": mid,
+        "ref_body_mime": (ref_body.content_type or "").strip(),
+        "face_generation_id": face_gen_id,
+        "ref_face_mime": face_mime,
+    }
+    job = await studio_jobs.create_studio_job(
+        session,
+        owner_id=oid,
+        actor_user_id=user.id,
+        job_type="model_bootstrap_body_compose",
+        params=params,
+    )
+    params["ref_body_path"] = studio_jobs.save_studio_job_file(job.id, "ref_body.bin", body_raw)
+    if face_raw:
+        params["ref_face_path"] = studio_jobs.save_studio_job_file(job.id, "ref_face.bin", face_raw)
+    gen_row = await reserve_studio_generation_for_job(
+        session,
+        owner_id=oid,
+        studio_job_id=job.id,
+        studio_model_id=mid,
+        output_aspect=aspect_key,
+        content_type="image/png",
+        prompt_excerpt=resolved_prompt[:2000],
+    )
+    params["placeholder_generation_id"] = gen_row.id
+    await studio_jobs.update_studio_job_params(session, job, params)
+    studio_jobs.schedule_studio_job(job.id)
+    return JSONResponse(
+        status_code=202,
+        content=StudioJobAcceptedOut(
+            job_id=job.id,
+            job_type="model_bootstrap_body_compose",
             generation_id=gen_row.id,
         ).model_dump(),
     )
@@ -6683,7 +6795,7 @@ async def _studio_job_execute_model_bootstrap_face_merge(
     _require_studio_subscription(user, sub_b, credits_balance=_credits, demo_generations_remaining=_demo)
     ws_key = studio_wavespeed_api_key(plan=plan, ws_row=ws_row, owner_subscription=sub_b, demo_generations_remaining=_demo)
 
-    aspect_key = normalize_aspect_key(str(p.get("output_aspect") or "9:16"))
+    aspect_key = normalize_aspect_key(str(p.get("output_aspect") or "3:4"))
     prompt = resolve_face_merge_prompt(str(p.get("prompt") or ""))
     mid = p.get("model_id")
     if mid is not None:
@@ -6719,11 +6831,11 @@ async def _studio_job_execute_model_bootstrap_face_merge(
     billing = await ensure_can_consume_credits(session, user, cost)
 
     try:
-        ws_res = await seedream_v45_bootstrap_edit_image_url(
+        ws_res = await nano_banana_pro_edit_image_url(
             api_key=ws_key,
             image_urls=[url1, url2],
             prompt=prompt,
-            size=None,
+            aspect_ratio=aspect_key,
         )
     except RuntimeError as e:
         raise RuntimeError(humanize_wavespeed_provider_error(str(e))) from e
@@ -6749,6 +6861,120 @@ async def _studio_job_execute_model_bootstrap_face_merge(
         user,
         billing,
         "studio_model_bootstrap_face_merge",
+        cost,
+        {"studio_model_id": mid, "generation_id": gen_row.id if gen_row else None},
+    )
+    await session.commit()
+
+    return StudioModelBootstrapOut(
+        refined_prompt=prompt,
+        generated_image_url=out_url,
+        generation_id=gen_row.id if gen_row else None,
+        wavespeed_message=None,
+    ).model_dump()
+
+
+async def _studio_job_execute_model_bootstrap_body_compose(
+    session: AsyncSession,
+    job: StudioJob,
+    user: User,
+) -> dict[str, Any]:
+    p = studio_jobs.job_params(job)
+    oid = workspace_owner_id(user)
+    pub = _public_https_base_runtime()
+
+    sub_b, _, ws_row, plan, _credits, _demo = await load_owner_studio_billing(session, oid)
+    _require_studio_subscription(user, sub_b, credits_balance=_credits, demo_generations_remaining=_demo)
+    ws_key = studio_wavespeed_api_key(plan=plan, ws_row=ws_row, owner_subscription=sub_b, demo_generations_remaining=_demo)
+
+    aspect_key = normalize_aspect_key(str(p.get("output_aspect") or "3:4"))
+    prompt = resolve_body_compose_prompt(str(p.get("prompt") or ""))
+    mid = p.get("model_id")
+    if mid is not None:
+        try:
+            mid = int(mid)
+        except (TypeError, ValueError):
+            mid = None
+
+    body_raw = studio_jobs.load_studio_job_file(str(p.get("ref_body_path") or ""))
+    if not body_raw:
+        raise RuntimeError("Файл референса тела не найден в задаче.")
+
+    url_body = await wavespeed_image_url_for_bootstrap(
+        api_key=ws_key,
+        owner_id=oid,
+        pub=pub,
+        raw=body_raw,
+        content_type=str(p.get("ref_body_mime") or "image/jpeg"),
+        label="ref_body",
+    )
+
+    face_gen_id = p.get("face_generation_id")
+    url_face: str | None = None
+    if face_gen_id is not None:
+        try:
+            fg_id = int(face_gen_id)
+        except (TypeError, ValueError):
+            fg_id = None
+        if fg_id is not None:
+            gen_face = await session.get(StudioGeneration, fg_id)
+            if gen_face is None or gen_face.user_id != oid:
+                raise RuntimeError("Генерация лица не найдена")
+            url_face = await wavespeed_url_for_bootstrap_generation(
+                api_key=ws_key,
+                owner_id=oid,
+                pub=pub,
+                row=gen_face,
+            )
+    if not url_face:
+        face_raw = studio_jobs.load_studio_job_file(str(p.get("ref_face_path") or ""))
+        if not face_raw:
+            raise RuntimeError("Файл лица не найден в задаче.")
+        url_face = await wavespeed_image_url_for_bootstrap(
+            api_key=ws_key,
+            owner_id=oid,
+            pub=pub,
+            raw=face_raw,
+            content_type=str(p.get("ref_face_mime") or "image/jpeg"),
+            label="ref_face",
+        )
+
+    gen_row = await find_studio_generation_by_job_id(session, job.id)
+    cost = apply_studio_credit_cost(plan, settings.credit_cost_studio_prompt_refine)
+    billing = await ensure_can_consume_credits(session, user, cost)
+
+    try:
+        # Prompt: IMAGE 1 = face, IMAGE 2 = body
+        ws_res = await seedream_v50_pro_edit_image_url(
+            api_key=ws_key,
+            image_urls=[url_face, url_body],
+            prompt=prompt,
+            aspect_ratio=aspect_key,
+        )
+    except RuntimeError as e:
+        raise RuntimeError(humanize_wavespeed_provider_error(str(e))) from e
+
+    arch_base = _public_app_base(None)
+    _, preview_url = await studio_finish_image_generation(
+        session,
+        gen_row=gen_row,
+        owner_id=oid,
+        studio_model_id=mid,
+        output_aspect=aspect_key,
+        refined_prompt=prompt,
+        source_url=ws_res.url,
+        wavespeed_task_id=ws_res.task_id,
+    )
+
+    out_url = preview_url
+    if gen_row is not None and gen_row.status == StudioGenerationStatus.READY:
+        out_url = _studio_archive_image_url(oid, gen_row.id, arch_base)
+
+    await record_usage(
+        session,
+        user,
+        billing,
+        "studio_model_bootstrap_body_compose",
         cost,
         {"studio_model_id": mid, "generation_id": gen_row.id if gen_row else None},
     )

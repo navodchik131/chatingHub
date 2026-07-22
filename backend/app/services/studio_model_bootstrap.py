@@ -17,11 +17,79 @@ from app.services.wavespeed_client import format_wavespeed_user_error, wavespeed
 log = logging.getLogger(__name__)
 
 DEFAULT_FACE_MERGE_PROMPT = (
-    "Integrate a face into an existing scene. Substitute the face in the reference image "
-    "with the face from the donor image. The objective is a seamless merge: the new face must "
-    "inherit the exact expression, pose, and lighting interaction from the reference, while its "
-    "color attributes (hair and eyes) are adapted from the donor for a perfectly harmonious and "
-    "natural result."
+    "Take the two reference faces I provided and blend them into ONE completely new, unique woman — "
+    "she should look like a real person who could be the result of mixing these two faces, not a copy of either one. "
+    "Merge their eye shape, nose, lips, jawline, cheekbones and skin tone naturally so the final face is a believable "
+    "new individual with her own identity.\n\n"
+    "Generate a single hyper-realistic studio portrait of her:\n\n"
+    "POSE & FRAMING:\n"
+    "- Body at a subtle 3/4 angle, but head and gaze turned straight toward the camera, looking directly into the lens.\n"
+    "- Framed from the head to mid-torso, centered and well-composed.\n\n"
+    "BACKGROUND & LIGHT:\n"
+    "- Smooth neutral grey seamless studio backdrop, evenly lit.\n"
+    "- Soft professional studio lighting with gentle directional shadows and natural depth on the face, "
+    "subtle rim light separating hair from the background.\n\n"
+    "SKIN (very important — must look real):\n"
+    "- Realistic human skin with visible fine pores, natural micro-texture and subtle imperfections.\n"
+    "- Delicate peach-fuzz visible on the cheeks and jaw in the light, faint natural skin tone variation, "
+    "no uniform flat color.\n"
+    "- Natural asymmetry, real subsurface scattering giving the skin a soft living translucency.\n"
+    "- Absolutely NO plastic, waxy, airbrushed or AI-smooth skin.\n\n"
+    "EYES (must look alive):\n"
+    "- Crisp detailed irises with fine radial fibers and natural depth, clear defined limbal ring.\n"
+    "- Realistic catchlights reflecting the studio light, moist natural eye surface.\n"
+    "- Individual lower and upper lashes, natural tear line, soft realistic under-eye texture.\n\n"
+    "HAIR (detailed structure):\n"
+    "- Individual strands visible with natural flyaways, realistic strand-by-strand detail and depth.\n"
+    "- Natural shine and directional flow, soft volume at the roots, defined texture rather than a solid mass.\n"
+    "- Realistic hairline with fine baby hairs framing the face.\n\n"
+    "QUALITY:\n"
+    "- Photorealistic, shot like a professional DSLR portrait with an 85mm lens at f/2, shallow natural depth of field.\n"
+    "- Sharp tack-focus on the eyes, ultra-detailed, high resolution, natural color grading.\n"
+    "- Calm confident expression, natural light makeup.\n\n"
+    "Do NOT copy either reference face exactly. Do NOT create a collage or two faces. "
+    "Avoid plastic skin, over-retouching, distorted proportions or extra faces."
+)
+
+DEFAULT_BODY_COMPOSE_PROMPT = (
+    "I provided two reference images. Use them like this:\n"
+    "- IMAGE 1 (the face photo): take the FACE and head from here — the facial features, bone structure, "
+    "skin tone, hair and overall identity of the face must come entirely from Image 1.\n"
+    "- IMAGE 2 (the full-body photo): take the BODY from here — the body shape, proportions, build, "
+    "figure and posture come from Image 2.\n\n"
+    "Combine them into ONE seamless, believable real woman: the face from Image 1 placed naturally on the body "
+    "from Image 2, with skin tone and lighting matched perfectly so there is no visible seam or mismatch "
+    "between face, neck and body. She must look like a single real person photographed in one shot.\n\n"
+    "Generate a single hyper-realistic full-body studio portrait of her:\n\n"
+    "POSE & FRAMING:\n"
+    "- Full body visible from head to feet, standing upright.\n"
+    "- She faces straight toward the camera, head and gaze directed forward into the lens, "
+    "natural relaxed confident stance.\n"
+    "- Well-composed, centered, full figure in frame with a little space above the head and below the feet.\n\n"
+    "BACKGROUND & LIGHT:\n"
+    "- Smooth neutral grey seamless studio backdrop, evenly lit.\n"
+    "- Soft professional studio lighting with gentle directional shadows, natural depth, "
+    "subtle rim light separating her from the background.\n\n"
+    "SKIN (must look real):\n"
+    "- Realistic human skin with visible fine pores, natural micro-texture and subtle imperfections.\n"
+    "- Delicate peach-fuzz catching the light, faint natural tone variation, real subsurface scattering, "
+    "natural asymmetry.\n"
+    "- Consistent realistic skin texture across face, neck, arms and body.\n"
+    "- Absolutely NO plastic, waxy, airbrushed or AI-smooth skin.\n\n"
+    "EYES (must look alive):\n"
+    "- Crisp detailed irises with fine radial fibers, clear limbal ring, realistic catchlights, moist natural surface.\n"
+    "- Individual upper and lower lashes, natural tear line.\n\n"
+    "HAIR (detailed structure):\n"
+    "- Individual strands with natural flyaways, strand-by-strand detail, natural shine and flow, soft root volume.\n"
+    "- Realistic hairline with fine baby hairs framing the face.\n\n"
+    "QUALITY:\n"
+    "- Photorealistic, shot like a professional full-body DSLR portrait with a 50mm lens, "
+    "sharp detail across the whole figure.\n"
+    "- Tack-sharp focus on the face and eyes, ultra-detailed, high resolution, natural color grading.\n"
+    "- Calm confident expression, natural light makeup.\n\n"
+    "Do NOT change the identity of the face from Image 1. Keep the body proportions faithful to Image 2. "
+    "Avoid plastic skin, distorted or extra limbs, warped hands, mismatched skin tone between face and body, "
+    "extra faces or collage look."
 )
 
 DEFAULT_MODEL_SHEET_PROMPT = (
@@ -83,6 +151,11 @@ MODEL_SHEET_ASPECT_KEY = "16:9"
 def resolve_face_merge_prompt(user_prompt: str | None) -> str:
     p = (user_prompt or "").strip()
     return p if p else DEFAULT_FACE_MERGE_PROMPT
+
+
+def resolve_body_compose_prompt(user_prompt: str | None) -> str:
+    p = (user_prompt or "").strip()
+    return p if p else DEFAULT_BODY_COMPOSE_PROMPT
 
 
 def resolve_model_sheet_prompt(user_prompt: str | None) -> str:

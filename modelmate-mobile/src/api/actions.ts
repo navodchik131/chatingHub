@@ -292,10 +292,15 @@ export async function changePassword(currentPassword: string, newPassword: strin
 
 export async function generateStudioModelProfile(model: StudioModelOut) {
   const images = model.images || [];
-  if (!images.length) throw new Error('Сначала загрузите фото персонажа');
+  const preferred = images.filter((im) => {
+    const k = normalizePhotoKind(im.image_kind || '');
+    return k === 'face' || k === 'body';
+  });
+  const pool = preferred.length ? preferred : images;
+  if (!pool.length) throw new Error('Сначала загрузите фото персонажа');
   const fd = new FormData();
   let appended = 0;
-  for (const im of images.slice(0, 8)) {
+  for (const im of pool.slice(0, 8)) {
     const path = im.url.startsWith('http') ? im.url.replace(getApiBaseUrl(), '') : im.url;
     const res = await apiFetch(path.startsWith('/') ? path : im.url);
     if (!res.ok) continue;
@@ -659,4 +664,61 @@ export async function runMotionVideo(params: {
 
 export async function pollStudioJob(jobId: number) {
   return waitForStudioJobResult(jobId, { maxWaitMs: 15 * 60 * 1000 });
+}
+
+export async function uploadStudioModelImageFromUrl(charId: number, imageUrl: string, kind: string) {
+  const path = imageUrl.startsWith('http') ? imageUrl.replace(getApiBaseUrl(), '') : imageUrl;
+  const res = await apiFetch(path.startsWith('/') ? path : imageUrl);
+  if (!res.ok) throw new Error('Не удалось загрузить изображение');
+  const blob = await res.blob();
+  const reader = new FileReader();
+  const dataUrl = await new Promise<string>((resolve, reject) => {
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+  const file = {
+    uri: dataUrl,
+    name: `gen-${Date.now()}.jpg`,
+    type: blob.type || 'image/jpeg',
+  } as LocalFile;
+  return uploadStudioModelImage(charId, file, kind);
+}
+
+export async function runModelBootstrapFaceMerge(params: {
+  modelId?: number;
+  face1: LocalFile;
+  face2: LocalFile;
+  aspect?: string;
+}) {
+  const fd = new FormData();
+  appendLocalFile(fd, 'ref_form', params.face1);
+  appendLocalFile(fd, 'ref_face', params.face2);
+  fd.append('output_aspect', params.aspect || '3:4');
+  if (params.modelId) fd.append('model_id', String(params.modelId));
+  const accepted = await postStudioJobStart('/api/studio/model-bootstrap/face-merge', { method: 'POST', body: fd });
+  if (accepted.job_id) {
+    const result = await waitForStudioJobResult(accepted.job_id, { maxWaitMs: 10 * 60 * 1000 });
+    return { accepted, result };
+  }
+  return { accepted, result: null };
+}
+
+export async function runModelBootstrapBodyCompose(params: {
+  modelId?: number;
+  bodyRef: LocalFile;
+  faceGenerationId?: number | null;
+  aspect?: string;
+}) {
+  const fd = new FormData();
+  appendLocalFile(fd, 'ref_body', params.bodyRef);
+  fd.append('output_aspect', params.aspect || '3:4');
+  if (params.modelId) fd.append('model_id', String(params.modelId));
+  if (params.faceGenerationId) fd.append('face_generation_id', String(params.faceGenerationId));
+  const accepted = await postStudioJobStart('/api/studio/model-bootstrap/body-compose', { method: 'POST', body: fd });
+  if (accepted.job_id) {
+    const result = await waitForStudioJobResult(accepted.job_id, { maxWaitMs: 10 * 60 * 1000 });
+    return { accepted, result };
+  }
+  return { accepted, result: null };
 }

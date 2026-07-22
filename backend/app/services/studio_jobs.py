@@ -31,6 +31,7 @@ STUDIO_JOB_TYPES = frozenset(
         "upscale",
         "carousel",
         "model_bootstrap_face_merge",
+        "model_bootstrap_body_compose",
         "model_bootstrap_sheet",
     }
 )

@@ -1126,6 +1126,16 @@ export function CabinetDataProvider({ children }) {
     [run, refreshAll],
   )
 
+  const uploadCharacterPhotoFromUrl = useCallback(
+    async (charId, imageUrl, kind) => {
+      await run(async () => {
+        await actions.uploadStudioModelImageFromUrl(charId, imageUrl, kind)
+        await refreshAll()
+      })
+    },
+    [run, refreshAll],
+  )
+
   const deleteCharacterPhoto = useCallback(
     async (charId, imageId) => {
       await run(async () => {
@@ -1478,6 +1488,7 @@ export function CabinetDataProvider({ children }) {
       saveCharacterProfile,
       saveCharacterPersona,
       uploadCharacterPhoto,
+      uploadCharacterPhotoFromUrl,
       deleteCharacterPhoto,
       updateCharacterPhotoKind,
       deleteCharacter,
@@ -1583,6 +1594,7 @@ export function CabinetDataProvider({ children }) {
       saveCharacterProfile,
       saveCharacterPersona,
       uploadCharacterPhoto,
+      uploadCharacterPhotoFromUrl,
       deleteCharacterPhoto,
       updateCharacterPhotoKind,
       deleteCharacter,

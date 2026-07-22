@@ -34,6 +34,7 @@ _STUDIO_GENERATION_USAGE_KINDS = frozenset(
         "studio_video_upscale",
         "studio_carousel_shot",
         "studio_model_bootstrap_face_merge",
+        "studio_model_bootstrap_body_compose",
         "studio_model_bootstrap_sheet",
     }
 )

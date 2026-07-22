@@ -9,6 +9,7 @@ import { color, line, font, G } from '../styles/tokens';
 import { fieldLbl, inputSt, borderHoverOff, borderHoverLime, selectSt } from '../styles/mixins';
 import { mapCharacter, mapCharHistory } from '../api/mappers';
 import { photoTagDefs, photoKindShortLabel, normalizePhotoKind } from '../api/helpers';
+import CharacterGenPanel from '../components/CharacterGenPanel';
 
 function CharacterCreateModal({ open, name, setName, onClose, onCreate, t, lang }) {
   if (!open) return null;
@@ -189,6 +190,7 @@ function TabPhotos() {
   const { charId, model, cabinet } = useActiveChar();
   const uploadRef = useRef(null);
   const [profileText, setProfileText] = useState('');
+  const [profileGenState, setProfileGenState] = useState('idle');
   const [selectedPhotoKind, setSelectedPhotoKind] = useState('face');
   const tagOpts = photoTagDefs(lang);
   const images = model?.images || [];
@@ -204,6 +206,7 @@ function TabPhotos() {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(280px,1fr))', gap: 12 }}>
       <Panel style={{ padding: '16px 18px' }}>
+        <CharacterGenPanel charId={charId} cabinet={cabinet} />
         <div style={{ fontWeight: 800, fontSize: 13.5, marginBottom: 10 }}>{t.charPhotos}</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, marginBottom: 10 }}>
           {images.map((im, i) => (
@@ -339,13 +342,20 @@ function TabPhotos() {
             style={{ fontSize: 11, fontWeight: 700, color: color.purple, cursor: 'pointer' }}
             hover={{ color: color.purpleHi }}
             onClick={() => {
-              if (!images.length) return;
-              void cabinet.generateCharacterProfile(images).then((data) => {
-                if (data?.profile_text) setProfileText(String(data.profile_text));
+              const tagged = images.filter((im) => {
+                const k = normalizePhotoKind(im.kind);
+                return k === 'face' || k === 'body';
               });
+              const pool = tagged.length ? tagged : images;
+              if (!pool.length) return;
+              setProfileGenState('loading');
+              void cabinet.generateCharacterProfile(pool).then((data) => {
+                if (data?.profile_text) setProfileText(String(data.profile_text));
+                setProfileGenState('done');
+              }).catch(() => setProfileGenState('idle'));
             }}
           >
-            ✦ {t.genFromPhoto}
+            {profileGenState === 'loading' ? '…' : profileGenState === 'done' ? t.profileGenDone : `✦ ${t.genFromPhoto}`}
           </Hoverable>
         </div>
         <textarea

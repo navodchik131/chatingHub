@@ -527,8 +527,13 @@ export async function patchStudioModelImageKind(charId, imageId, kind) {
 }
 
 export async function generateStudioModelProfile(images) {
+  const preferred = images.filter((im) => {
+    const k = normalizePhotoKind(im.kind)
+    return k === 'face' || k === 'body'
+  })
+  const pool = preferred.length ? preferred : images
   const fd = new FormData()
-  for (const im of images.slice(0, 8)) {
+  for (const im of pool.slice(0, 8)) {
     const res = await apiFetch(im.url)
     if (!res.ok) throw new Error('Не удалось прочитать фото модели')
     const blob = await res.blob()
@@ -538,6 +543,49 @@ export async function generateStudioModelProfile(images) {
   const data = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'Генерация не удалась')
   return data
+}
+
+export async function uploadStudioModelImageFromUrl(charId, imageUrl, kind = 'face') {
+  const res = await apiFetch(imageUrl)
+  if (!res.ok) throw new Error('Не удалось загрузить изображение')
+  const blob = await res.blob()
+  const file = new File([blob], `gen-${Date.now()}.jpg`, { type: blob.type || 'image/jpeg' })
+  return uploadStudioModelImage(charId, file, kind)
+}
+
+export async function runModelBootstrapFaceMerge({ modelId, face1, face2, aspect = '3:4' }) {
+  const fd = new FormData()
+  fd.append('ref_form', face1)
+  fd.append('ref_face', face2)
+  fd.append('output_aspect', aspect || '3:4')
+  if (modelId) fd.append('model_id', String(modelId))
+  const accepted = await postStudioJobStart('/api/studio/model-bootstrap/face-merge', { method: 'POST', body: fd })
+  if (accepted.job_id) {
+    const result = await waitForStudioJobResult(accepted.job_id, { maxWaitMs: 10 * 60 * 1000 })
+    return { accepted, result }
+  }
+  return { accepted, result: null }
+}
+
+export async function runModelBootstrapBodyCompose({
+  modelId,
+  bodyRef,
+  faceFile,
+  faceGenerationId,
+  aspect = '3:4',
+}) {
+  const fd = new FormData()
+  fd.append('ref_body', bodyRef)
+  fd.append('output_aspect', aspect || '3:4')
+  if (modelId) fd.append('model_id', String(modelId))
+  if (faceFile) fd.append('ref_face', faceFile)
+  if (faceGenerationId) fd.append('face_generation_id', String(faceGenerationId))
+  const accepted = await postStudioJobStart('/api/studio/model-bootstrap/body-compose', { method: 'POST', body: fd })
+  if (accepted.job_id) {
+    const result = await waitForStudioJobResult(accepted.job_id, { maxWaitMs: 10 * 60 * 1000 })
+    return { accepted, result }
+  }
+  return { accepted, result: null }
 }
 
 /** Workflow-сценарии студии (встроены в SPA-бандл). */

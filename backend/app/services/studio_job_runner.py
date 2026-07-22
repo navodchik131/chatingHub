@@ -22,6 +22,7 @@ async def execute_studio_job(session: AsyncSession, job: StudioJob, user: User) 
         "upscale": sr._studio_job_execute_upscale,
         "carousel": sr._studio_job_execute_carousel,
         "model_bootstrap_face_merge": sr._studio_job_execute_model_bootstrap_face_merge,
+        "model_bootstrap_body_compose": sr._studio_job_execute_model_bootstrap_body_compose,
         "model_bootstrap_sheet": sr._studio_job_execute_model_bootstrap_sheet,
     }
     fn = handlers.get(job.job_type)
