@@ -225,6 +225,11 @@ export function CabinetDataProvider({ children }) {
     }
   }, [])
 
+  const clearBusy = useCallback(() => {
+    setBusy(false)
+    refreshAllInFlightRef.current = false
+  }, [])
+
   const loadConversations = useCallback(async () => {
     try {
       const rows = await apiJson('/api/conversations')
@@ -604,7 +609,10 @@ export function CabinetDataProvider({ children }) {
         setError('Введите API-ключ Tribute')
         return false
       }
-      setBusy(true)
+      const isOAuthRedirect = type === 'fanvue' || type === 'ig'
+      if (!isOAuthRedirect) {
+        setBusy(true)
+      }
       setError(null)
       try {
         let status = null
@@ -613,13 +621,13 @@ export function CabinetDataProvider({ children }) {
         else if (type === 'fanvue') {
           const data = await actions.startFanvueOAuth(fields.modelId)
           const url = data.authorize_url || data.url
-          if (url) window.location.href = url
+          if (url) window.location.assign(url)
           else throw new Error('OAuth URL не получен')
           return true
         } else if (type === 'ig') {
           const data = await actions.startInstagramOAuth(fields.modelId)
           const url = data.authorize_url || data.url
-          if (url) window.location.href = url
+          if (url) window.location.assign(url)
           else throw new Error('OAuth URL не получен')
           return true
         } else if (type === 'tribute') {
@@ -632,7 +640,9 @@ export function CabinetDataProvider({ children }) {
         setError(e?.message || String(e))
         return false
       } finally {
-        setBusy(false)
+        if (!isOAuthRedirect) {
+          setBusy(false)
+        }
       }
     },
     [refreshAll],
@@ -1322,6 +1332,16 @@ export function CabinetDataProvider({ children }) {
   }, [refreshAll])
 
   useEffect(() => {
+    const onPageShow = (event) => {
+      if (!event.persisted) return
+      clearBusy()
+      void refreshAll()
+    }
+    window.addEventListener('pageshow', onPageShow)
+    return () => window.removeEventListener('pageshow', onPageShow)
+  }, [clearBusy, refreshAll])
+
+  useEffect(() => {
     const token = getToken()
     if (!token || !ready) return
 
@@ -1394,6 +1414,7 @@ export function CabinetDataProvider({ children }) {
       busy,
       error,
       setError,
+      clearBusy,
       me,
       health,
       conversations,
@@ -1608,6 +1629,7 @@ export function CabinetDataProvider({ children }) {
       saveProfileEmail,
       changeAccountPassword,
       logout,
+      clearBusy,
     ],
   )
 

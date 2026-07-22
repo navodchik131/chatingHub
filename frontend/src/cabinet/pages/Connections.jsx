@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import Hoverable from '../components/Hoverable';
 import { IcoTg, IcoWave, IcoHeart, IcoGift, IcoCam, IcoBell, IcoCopy } from '../components/Icons';
 import {
@@ -103,6 +104,8 @@ function ConnectionDetail() {
   const modelOptions = (cabinet.models || []).map((m) => ({ id: String(m.id), name: m.name }));
 
   const form = s.connForms?.[data.id] || { token: '', apiKey: '', label: '', modelId: modelOptions[0]?.id || '' };
+  const [oauthBusy, setOauthBusy] = useState(false);
+  const saving = cabinet.busy || oauthBusy;
   const setForm = (patch) =>
     setS({ connForms: { ...s.connForms, [data.id]: { ...form, ...patch } } });
 
@@ -148,9 +151,19 @@ function ConnectionDetail() {
       ok = await cabinet.saveIntegration('tg', { token, modelId: form.modelId });
       if (ok) setForm({ token: '' });
     } else if (data.id === 'fanvue') {
-      ok = await cabinet.saveIntegration('fanvue', { modelId: form.modelId });
+      setOauthBusy(true);
+      try {
+        ok = await cabinet.saveIntegration('fanvue', { modelId: form.modelId });
+      } finally {
+        setOauthBusy(false);
+      }
     } else if (data.id === 'ig') {
-      ok = await cabinet.saveIntegration('ig', { modelId: form.modelId });
+      setOauthBusy(true);
+      try {
+        ok = await cabinet.saveIntegration('ig', { modelId: form.modelId });
+      } finally {
+        setOauthBusy(false);
+      }
     } else if (data.id === 'tribute') {
       if (!form.apiKey?.trim()) return;
       ok = await cabinet.saveIntegration('tribute', {
@@ -160,7 +173,9 @@ function ConnectionDetail() {
       });
       if (ok) setForm({ apiKey: '' });
     }
-    setS({ connFlash: ok ? 'ok' : 'error' });
+    if (!['fanvue', 'ig'].includes(data.id)) {
+      setS({ connFlash: ok ? 'ok' : 'error' });
+    }
   };
 
   const handleDisconnect = (connectionId) => {
@@ -407,7 +422,7 @@ function ConnectionDetail() {
               }}
               hover={
                 disabled
-                || cabinet.busy
+                || saving
                 || (data.id === 'fanvue' && !fanvueOAuthReady)
                 || (data.id === 'ig' && !instagramOAuthReady)
                   ? {}
@@ -415,14 +430,14 @@ function ConnectionDetail() {
               }
               onClick={
                 disabled
-                || cabinet.busy
+                || saving
                 || (data.id === 'fanvue' && !fanvueOAuthReady)
                 || (data.id === 'ig' && !instagramOAuthReady)
                   ? undefined
                   : () => void handleSave()
               }
             >
-              {cabinet.busy
+              {saving
                 ? (lang === 'ru' ? 'Сохранение…' : 'Saving…')
                 : data.id === 'fanvue'
                 ? (fanvueConnected

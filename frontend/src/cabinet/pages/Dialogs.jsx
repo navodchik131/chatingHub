@@ -8,6 +8,35 @@ import { LANG_MAP, REACT_CHOICES, EMOJI_CHOICES } from '../api/helpers';
 import { mapDialogRow, mapMessage, mapNote, modelNameById, formatCompanionMode } from '../api/mappers';
 import { inputSt, borderHoverOff } from '../styles/mixins';
 
+function platformMeta(platform) {
+  const x = String(platform || '').toUpperCase();
+  if (x === 'FANVUE') {
+    return {
+      id: 'FANVUE',
+      short: 'Fanvue',
+      col: color.pink,
+      bg: 'rgba(240,168,200,.12)',
+      bd: 'rgba(240,168,200,.35)',
+    };
+  }
+  if (x === 'INSTAGRAM') {
+    return {
+      id: 'INSTAGRAM',
+      short: 'Instagram',
+      col: '#F472B6',
+      bg: 'rgba(244,114,182,.12)',
+      bd: 'rgba(244,114,182,.35)',
+    };
+  }
+  return {
+    id: 'TELEGRAM',
+    short: 'Telegram',
+    col: color.blue,
+    bg: 'rgba(56,189,248,.12)',
+    bd: 'rgba(56,189,248,.35)',
+  };
+}
+
 function handleDeleteDialog(c, lang, cabinet) {
   const ok = window.confirm(
     lang === 'ru'
@@ -60,9 +89,10 @@ function ChatList() {
 
   const platDefs = [
     { id: 'all', label: lang === 'ru' ? 'Все площадки' : 'All', col: color.textDim, bg: 'rgba(255,255,255,.05)', bd: line.mid },
-    { id: 'TELEGRAM', label: `Telegram ${count((c) => c.platform === 'TELEGRAM')}`, col: color.blue, bg: 'rgba(56,189,248,.12)', bd: 'rgba(56,189,248,.35)' },
-    { id: 'FANVUE', label: `Fanvue ${count((c) => c.platform === 'FANVUE')}`, col: color.pink, bg: 'rgba(240,168,200,.12)', bd: 'rgba(240,168,200,.35)' },
-  ];
+    { id: 'TELEGRAM', label: `Telegram ${count((c) => c.platform === 'TELEGRAM')}`, ...platformMeta('TELEGRAM') },
+    { id: 'FANVUE', label: `Fanvue ${count((c) => c.platform === 'FANVUE')}`, ...platformMeta('FANVUE') },
+    { id: 'INSTAGRAM', label: `Instagram ${count((c) => c.platform === 'INSTAGRAM')}`, ...platformMeta('INSTAGRAM') },
+  ].map(({ id, label, col, bg, bd }) => ({ id, label, col, bg, bd }));
 
   const folderTabs = [
     { id: 'all', label: lang === 'ru' ? 'Все' : 'All', count: dialogsRaw.length },
@@ -278,7 +308,7 @@ function ChatList() {
                   <span
                     style={{
                       fontFamily: font.mono, fontSize: 8, letterSpacing: '1px',
-                      color: c.platform === 'FANVUE' ? color.pink : color.blue,
+                      color: platformMeta(c.platform).col,
                     }}
                   >
                     {c.platform}
@@ -737,7 +767,7 @@ function Thread() {
             )}
           </div>
           <div style={{ fontSize: 10.5, color: color.textDim }}>
-            {cur.platform === 'FANVUE' ? 'Fanvue' : 'Telegram'} · {t.persona}:{' '}
+            {platformMeta(cur.platform).short} · {t.persona}:{' '}
             <span style={{ color: color.pink, fontWeight: 700 }}>{personaName}</span>
             {cur.lang ? ` · ${t.replyLang}: ${langMap[cur.lang.replace('*', '')] || cur.lang}` : ''}
           </div>
@@ -1232,6 +1262,7 @@ export default function Dialogs() {
   const { t, s, isMobile, isNarrow, cabinet } = useApp();
   const tgCount = cabinet.conversations.filter((c) => String(c.platform).toUpperCase() === 'TELEGRAM').length;
   const fvCount = cabinet.conversations.filter((c) => String(c.platform).toUpperCase() === 'FANVUE').length;
+  const igCount = cabinet.conversations.filter((c) => String(c.platform).toUpperCase() === 'INSTAGRAM').length;
 
   const showThread = !isMobile || s.mobileChat;
   const showList = !isMobile || !s.mobileChat;
@@ -1267,6 +1298,15 @@ export default function Dialogs() {
             }}
           >
             FANVUE {fvCount}
+          </span>
+          <span
+            style={{
+              fontFamily: font.mono, fontSize: 10, background: 'rgba(244,114,182,.1)',
+              color: '#F472B6', border: '1px solid rgba(244,114,182,.3)',
+              padding: '3px 10px', borderRadius: 20,
+            }}
+          >
+            INSTAGRAM {igCount}
           </span>
         </div>
       </div>

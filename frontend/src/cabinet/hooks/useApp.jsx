@@ -132,10 +132,12 @@ export function AppProvider({ children, forceMobile = false }) {
       setS({ connDetail: 'ig', connFlash: instagram === 'connected' ? 'ok' : 'error' });
       params.delete('instagram');
     }
+    cabinet.clearBusy();
+    void cabinet.refreshAll();
     params.delete('reason');
     const rest = params.toString();
     navigate({ pathname: location.pathname, search: rest ? `?${rest}` : '' }, { replace: true });
-  }, [page, location.pathname, location.search, navigate]);
+  }, [page, location.pathname, location.search, navigate, cabinet, setS]);
 
   const t = dict[lang];
 
