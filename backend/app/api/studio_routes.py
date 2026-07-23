@@ -1104,7 +1104,13 @@ async def public_studio_generation_image(
             await session.commit()
         raise HTTPException(status_code=404, detail="Файл отсутствует на сервере") from None
     mime = row.content_type or mimetypes.guess_type(abs_path.name)[0] or "image/png"
-    return FileResponse(abs_path, media_type=mime)
+    return FileResponse(
+        abs_path,
+        media_type=mime,
+        headers={
+            "Cache-Control": "private, max-age=86400, immutable",
+        },
+    )
 
 
 @router.get("/studio/public-motion-video")

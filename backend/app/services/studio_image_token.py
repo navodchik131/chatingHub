@@ -22,8 +22,14 @@ def create_model_image_access_token(*, user_id: int, image_id: int, minutes: int
 def create_generation_image_access_token(
     *, user_id: int, generation_id: int, days: int = 30
 ) -> str:
-    """JWT для <img src> и публичной выдачи архивной картинки (без Bearer)."""
-    expire = datetime.now(timezone.utc) + timedelta(days=days)
+    """JWT для <img src> и публичной выдачи архивной картинки (без Bearer).
+
+    Expiry is rounded to a daily UTC bucket so repeated API polls produce the same
+    token (stable URL → browser cache keeps thumbnails).
+    """
+    now = datetime.now(timezone.utc)
+    day_bucket = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    expire = day_bucket + timedelta(days=max(1, int(days)))
     payload = {
         "typ": "studio_gen_img",
         "uid": user_id,

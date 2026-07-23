@@ -3,6 +3,7 @@ import { apiFetch, getToken, setToken } from '../../api'
 import {
   createOptimisticStudioArchiveItem,
   isOptimisticStudioArchiveId,
+  mergeArchiveItemPreserveMedia,
   mergeStudioArchiveItems,
   prependOptimisticStudioArchive,
   removeOptimisticStudioArchive,
@@ -314,8 +315,18 @@ export function CabinetDataProvider({ children }) {
       actions.refreshArchiveImages(0),
       actions.refreshArchiveVideos(0),
     ])
-    setArchiveImages(mergeStudioArchiveItems(imgPage.items, localImgPending))
-    setArchiveVideos(mergeStudioArchiveItems(vidPage.items, localVidPending))
+    const prevImgById = new Map(archiveImagesRef.current.map((g) => [g.id, g]))
+    const prevVidById = new Map(archiveVideosRef.current.map((g) => [g.id, g]))
+    const imgMerged = (imgPage.items || []).map((item) => {
+      const prev = prevImgById.get(item.id)
+      return prev ? mergeArchiveItemPreserveMedia(prev, item) : item
+    })
+    const vidMerged = (vidPage.items || []).map((item) => {
+      const prev = prevVidById.get(item.id)
+      return prev ? mergeArchiveItemPreserveMedia(prev, item) : item
+    })
+    setArchiveImages(mergeStudioArchiveItems(imgMerged, localImgPending))
+    setArchiveVideos(mergeStudioArchiveItems(vidMerged, localVidPending))
     setArchiveImagesHasMore(imgPage.has_more)
     setArchiveVideosHasMore(vidPage.has_more)
     setArchiveImagesSkip(imgPage.items.length)
@@ -947,8 +958,9 @@ export function CabinetDataProvider({ children }) {
                 }
                 return next
               })
+              // Incremental patch only — full archive reload would rotate JWT image URLs
+              // and force the browser to re-download every thumbnail.
               await refreshArchivePending()
-              void refreshArchiveFull()
             })
         }
       } catch (e) {
@@ -962,7 +974,7 @@ export function CabinetDataProvider({ children }) {
         setError(e?.message || String(e))
       }
     },
-    [selectedModelId, selectedAspect, uploadFiles, slotArchivePicks, archiveImages, models, me?.workflow_demo_limited, refreshArchiveFull, refreshArchivePending],
+    [selectedModelId, selectedAspect, uploadFiles, slotArchivePicks, archiveImages, models, me?.workflow_demo_limited, refreshArchivePending],
   )
 
   const generateFirstFrame = useCallback(

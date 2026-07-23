@@ -621,9 +621,22 @@ export default function Images() {
                   style={{
                     aspectRatio: '9/16', display: 'flex', alignItems: 'center',
                     justifyContent: 'center', position: 'relative',
-                    background: thumb ? `center/cover no-repeat url(${thumb})` : G[i % 6],
+                    background: thumb ? color.bgPanel : G[i % 6],
+                    overflow: 'hidden',
                   }}
                 >
+                  {thumb ? (
+                    <img
+                      src={thumb}
+                      alt=""
+                      loading="lazy"
+                      decoding="async"
+                      style={{
+                        position: 'absolute', inset: 0, width: '100%', height: '100%',
+                        objectFit: 'cover', display: 'block',
+                      }}
+                    />
+                  ) : null}
                   {!thumb && !pending && !failed && (
                     <span style={{ display: 'flex', width: 22, height: 22, color: 'rgba(255,255,255,.35)' }}><IcoImage /></span>
                   )}

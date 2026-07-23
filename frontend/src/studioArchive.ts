@@ -236,6 +236,37 @@ export function dedupeStudioArchiveById(items: StudioArchiveItem[]): StudioArchi
   return out
 }
 
+/** Keep prior signed media URL when only the JWT query changed (browser cache). */
+export function preferStableArchiveMediaUrl(prev: string | null | undefined, next: string | null | undefined): string {
+  const p = (prev || '').trim()
+  const n = (next || '').trim()
+  if (!n) return p
+  if (!p) return n
+  if (p === n) return p
+  const pBase = p.split('?')[0]
+  const nBase = n.split('?')[0]
+  if (
+    pBase === nBase &&
+    (pBase.includes('/api/studio/public-generation-image') ||
+      pBase.includes('/api/studio/public-generation-video'))
+  ) {
+    return p
+  }
+  return n
+}
+
+export function mergeArchiveItemPreserveMedia(
+  prev: StudioArchiveItem,
+  next: StudioArchiveItem,
+): StudioArchiveItem {
+  return {
+    ...prev,
+    ...next,
+    image_url: preferStableArchiveMediaUrl(prev.image_url, next.image_url),
+    video_url: preferStableArchiveMediaUrl(prev.video_url, next.video_url) || null,
+  }
+}
+
 /** Слить pending-статусы в список архива (по id). */
 export function mergeStudioArchiveItems(
   current: StudioArchiveItem[],
@@ -243,7 +274,10 @@ export function mergeStudioArchiveItems(
 ): StudioArchiveItem[] {
   if (!pending.length) return dedupeStudioArchiveById(current)
   const byId = new Map(pending.map((p) => [p.id, p]))
-  const merged = current.map((g) => byId.get(g.id) ?? g)
+  const merged = current.map((g) => {
+    const upd = byId.get(g.id)
+    return upd ? mergeArchiveItemPreserveMedia(g, upd) : g
+  })
   const seen = new Set(merged.map((g) => g.id))
   for (const p of pending) {
     if (!seen.has(p.id)) merged.unshift(p)

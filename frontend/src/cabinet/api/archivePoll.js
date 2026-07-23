@@ -1,6 +1,10 @@
 import { apiJsonOptional } from './helpers'
 import { isArchivePending, refreshArchiveVideos } from './actions'
-import { isOptimisticStudioArchiveId, mergeStudioArchiveItems } from '../../studioArchive'
+import {
+  isOptimisticStudioArchiveId,
+  mergeArchiveItemPreserveMedia,
+  mergeStudioArchiveItems,
+} from '../../studioArchive'
 
 function archiveItemPollKey(item) {
   if (!item) return ''
@@ -39,7 +43,7 @@ export async function refreshPendingArchiveImages(current) {
     if (isOptimisticStudioArchiveId(g.id)) {
       const byJob = g.job_id != null ? pendingItems.find((p) => p.job_id === g.job_id) : null
       if (byJob) {
-        const merged = { ...g, ...byJob, id: byJob.id }
+        const merged = mergeArchiveItemPreserveMedia(g, { ...g, ...byJob, id: byJob.id })
         if (archiveItemPollKey(g) !== archiveItemPollKey(merged)) changed = true
         return merged
       }
@@ -48,7 +52,7 @@ export async function refreshPendingArchiveImages(current) {
     if (!isArchivePending(g)) return g
     const upd = pendingById.get(g.id)
     if (upd) {
-      const merged = { ...g, ...upd }
+      const merged = mergeArchiveItemPreserveMedia(g, { ...g, ...upd })
       if (archiveItemPollKey(g) !== archiveItemPollKey(merged)) changed = true
       return merged
     }
@@ -70,7 +74,7 @@ export async function refreshPendingArchiveImages(current) {
         if (!maybeCompletedIds.includes(g.id)) return g
         const fresh = freshById.get(g.id)
         if (!fresh) return g
-        const merged = { ...g, ...fresh }
+        const merged = mergeArchiveItemPreserveMedia(g, { ...g, ...fresh })
         if (archiveItemPollKey(g) !== archiveItemPollKey(merged)) changed = true
         return merged
       })
@@ -109,7 +113,7 @@ export async function refreshPendingArchiveVideos(current) {
     if (isOptimisticStudioArchiveId(g.id)) {
       const byJob = g.job_id != null ? pendingItems.find((p) => p.job_id === g.job_id) : null
       if (byJob) {
-        const merged = { ...g, ...byJob, id: byJob.id }
+        const merged = mergeArchiveItemPreserveMedia(g, { ...g, ...byJob, id: byJob.id })
         if (archiveItemPollKey(g) !== archiveItemPollKey(merged)) changed = true
         return merged
       }
@@ -118,7 +122,7 @@ export async function refreshPendingArchiveVideos(current) {
     if (!isArchivePending(g)) return g
     const upd = pendingById.get(g.id)
     if (upd) {
-      const merged = { ...g, ...upd }
+      const merged = mergeArchiveItemPreserveMedia(g, { ...g, ...upd })
       if (archiveItemPollKey(g) !== archiveItemPollKey(merged)) changed = true
       return merged
     }
@@ -136,7 +140,7 @@ export async function refreshPendingArchiveVideos(current) {
         if (!maybeCompletedIds.includes(g.id)) return g
         const fresh = freshById.get(g.id)
         if (!fresh) return g
-        const merged = { ...g, ...fresh }
+        const merged = mergeArchiveItemPreserveMedia(g, { ...g, ...fresh })
         if (archiveItemPollKey(g) !== archiveItemPollKey(merged)) changed = true
         return merged
       })
