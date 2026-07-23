@@ -5,9 +5,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from app.services.studio_prompt_bundle import (
+    _compact_body_proportions_clause,
     _merge_grok_scene_negative,
     _profile_identity_fields,
+    _truncate_profile_clause,
+    extract_creative_notes_from_workflow_description,
     grok_figure_anchor_from_profile,
+    strip_soft_dof_from_scene_prose,
 )
 from app.services.studio_reference_analysis import (
     IdentityVisibility,
@@ -85,7 +89,7 @@ def build_deterministic_scene_prose(
 
     bg = (analysis.background_summary or "").strip()
     if bg:
-        sentences.append(_finish_sentence(bg))
+        sentences.append(_finish_sentence(strip_soft_dof_from_scene_prose(bg)))
 
     light = (analysis.lighting_summary or "").strip()
     if light:
@@ -93,27 +97,27 @@ def build_deterministic_scene_prose(
 
     camera = (analysis.camera_summary or "").strip()
     if camera and camera.lower() not in (capture or "").lower():
-        sentences.append(_finish_sentence(camera))
+        sentences.append(_finish_sentence(strip_soft_dof_from_scene_prose(camera)))
 
     notes = (analysis.scene_notes or "").strip()
     if notes and len(notes) < 400:
-        sentences.append(_finish_sentence(notes))
+        sentences.append(_finish_sentence(strip_soft_dof_from_scene_prose(notes)))
 
-    extra = (user_notes or "").strip()
+    extra = extract_creative_notes_from_workflow_description(user_notes)
     if extra:
-        sentences.append(_finish_sentence(extra))
+        sentences.append(_finish_sentence(strip_soft_dof_from_scene_prose(extra)))
 
     out = " ".join(s for s in sentences if s).strip()
     if not out:
         out = _action_sentence(pronoun, "holds the same pose and framing as the reference crop")
-    return out
+    return strip_soft_dof_from_scene_prose(out)
 
 
 def build_deterministic_identity_line(
     model_profile_text: str | None,
     visibility: IdentityVisibility,
 ) -> str:
-    """Одна строка identity из профиля — только для видимых регионов."""
+    """Короткая identity-строка — без чеклиста из 20 «Oval; Smooth; Full…»."""
     raw = (model_profile_text or "").strip()
     if not raw:
         return grok_figure_anchor_from_profile(None, visibility=visibility)
@@ -131,21 +135,31 @@ def build_deterministic_identity_line(
         prof = mp if isinstance(mp, dict) else data
     fields = _profile_identity_fields(prof if isinstance(prof, dict) else None)
 
-    parts: list[str] = []
-    if visibility.include_face and fields.get("face"):
-        parts.append(fields["face"])
+    bits: list[str] = []
+    subj = (fields.get("subject") or "").strip()
+    if subj:
+        bits.append(subj)
     if visibility.include_hair and fields.get("hair"):
-        parts.append(fields["hair"])
+        hair = _compact_body_proportions_clause(fields["hair"], max_parts=2, max_len=80)
+        # subject уже содержит color — добавим только то, чего там нет (длина/стиль).
+        if hair and hair.lower() not in (subj or "").lower():
+            extra_hair_parts = [
+                p.strip()
+                for p in hair.split(",")
+                if p.strip() and p.strip().lower() not in (subj or "").lower()
+            ]
+            if extra_hair_parts:
+                bits.append(", ".join(extra_hair_parts[:2]))
+    # face_features-чеклист не кладём: likeness с model thumbnails, каталог только размывает сцену.
     if visibility.include_body_proportions and fields.get("body_proportions"):
-        parts.append(fields["body_proportions"])
-    elif visibility.include_body_proportions and fields.get("subject"):
-        parts.append(fields["subject"])
+        body = _compact_body_proportions_clause(fields["body_proportions"])
+        if body:
+            bits.append(f"Build: {body}")
 
-    if parts:
-        mention = ", ".join(parts)[:680]
-        return (
-            f"Model identity on visible anatomy: {mention}. "
-            "Same person on all visible skin."
+    if bits:
+        return _truncate_profile_clause(
+            f"{'; '.join(bits)}. Same person on all visible skin.",
+            240,
         )
     return grok_figure_anchor_from_profile(model_profile_text, visibility=visibility)
 

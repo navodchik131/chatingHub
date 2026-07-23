@@ -68,8 +68,21 @@ _SOFT_DOF_PHRASE_RE = re.compile(
     r"shallow\s+depth\s+of\s+field|portrait[\s-]?mode\s+bokeh|"
     r"background\s+(?:softly\s+)?(?:blurred|out\s+of\s+focus)|"
     r"blurred\s+(?:indoor\s+)?background|out[- ]of[- ]focus\s+background|"
-    r"soft\s+bokeh|dreamy\s+bokeh"
+    r"soft\s+bokeh|dreamy\s+bokeh|"
+    r"blurred\s+(?:white\s+)?(?:shelving(?:\s+unit)?|shelf|shelves|backdrop|wall|furniture)|"
+    r"(?:shelving(?:\s+unit)?|shelf|shelves|backdrop|furniture)\s+(?:softly\s+)?(?:blurred|out\s+of\s+focus)"
     r")\b",
+    re.I,
+)
+
+_WORKFLOW_META_BLOCK_RE = re.compile(
+    r"(?:^|\n\n)(?:SCENE_DIRECTION|REFERENCE_CONTEXT)[^\n]*\n.*?(?=(?:\n\n(?:SCENE_DIRECTION|REFERENCE_CONTEXT|Photoreal phone look|Capture realism:|\[NEGATIVE_PROMPT\])|\Z))",
+    re.I | re.S,
+)
+
+_PO_REFU_BOILERPLATE_RE = re.compile(
+    r"PRIORITY:\s*match\s+USER_SCENE_REFERENCE[\s\S]*?"
+    r"(?:reference wins for pose/camera/light/crop\.?|\Z)",
     re.I,
 )
 
@@ -436,6 +449,38 @@ def strip_soft_dof_from_scene_prose(prose: str) -> str:
     t = re.sub(r"\s{2,}", " ", t)
     t = re.sub(r"\s+,", ",", t)
     return t.strip()
+
+
+def extract_creative_notes_from_workflow_description(raw: str | None) -> str:
+    """Из workflow USER_NOTES взять только креативный текст сцены — без REFERENCE_CONTEXT."""
+    text = (raw or "").strip()
+    if not text:
+        return ""
+    # Только блок SCENE_DIRECTION, если есть.
+    m = re.search(
+        r"SCENE_DIRECTION:\s*(.*?)(?=\n\nREFERENCE_CONTEXT\b|\Z)",
+        text,
+        flags=re.I | re.S,
+    )
+    if m:
+        text = m.group(1).strip()
+    else:
+        # Убрать REFERENCE_CONTEXT целиком, если пришло без заголовка SCENE_DIRECTION.
+        text = re.split(r"\n\nREFERENCE_CONTEXT\b", text, maxsplit=1, flags=re.I)[0].strip()
+        text = re.sub(r"^SCENE_DIRECTION:\s*", "", text, flags=re.I).strip()
+    text = _PO_REFU_BOILERPLATE_RE.sub("", text).strip()
+    text = re.sub(r"\n{3,}", "\n\n", text).strip()
+    return text
+
+
+def strip_workflow_meta_from_wavespeed_prose(prose: str) -> str:
+    """Не пускать SCENE_DIRECTION / REFERENCE_CONTEXT в финальный WaveSpeed prompt."""
+    t = (prose or "").strip()
+    if not t:
+        return t
+    t = _WORKFLOW_META_BLOCK_RE.sub("", t)
+    t = re.sub(r"\n{3,}", "\n\n", t).strip()
+    return t
 
 
 def append_phone_candid_photo_coda(prompt: str, *, brief_mode: str = "full") -> str:
@@ -987,7 +1032,9 @@ def prepare_positive_prompt_json(
     mode = (brief_mode or "full").strip().lower()
     if mode == "grok_main_prose":
         prose = strip_soft_dof_from_scene_prose(
-            strip_donor_identity_from_scene_prose((refined_text or "").strip())
+            strip_workflow_meta_from_wavespeed_prose(
+                strip_donor_identity_from_scene_prose((refined_text or "").strip())
+            )
         )
         lim = int(settings.grok_scene_compose_output_max_chars)
         re_prose = PHONE_CANDID_PHOTO_CODA if include_realism_engine else ""
@@ -1019,7 +1066,9 @@ def prepare_positive_prompt_json(
     if mode == "deterministic_compose":
         from app.services.studio_deterministic_compose import build_deterministic_identity_line
 
-        prose = strip_soft_dof_from_scene_prose((refined_text or "").strip())
+        prose = strip_soft_dof_from_scene_prose(
+            strip_workflow_meta_from_wavespeed_prose((refined_text or "").strip())
+        )
         lim = int(settings.grok_scene_compose_output_max_chars)
         re_prose = PHONE_CANDID_PHOTO_CODA if include_realism_engine else ""
         reserve = len(re_prose) + 2 if re_prose else 0
