@@ -7,9 +7,21 @@ from jose import JWTError, jwt
 from app.config import settings
 
 
-def create_model_image_access_token(*, user_id: int, image_id: int, minutes: int = 20) -> str:
-    """Краткоживущий JWT, чтобы WaveSpeed мог скачать референс по публичному URL."""
-    expire = datetime.now(timezone.utc) + timedelta(minutes=minutes)
+def create_model_image_access_token(
+    *, user_id: int, image_id: int, days: int = 30, minutes: int | None = None
+) -> str:
+    """JWT for <img src> / WaveSpeed public model-image URLs.
+
+    Expiry is rounded to a daily UTC bucket so repeated /studio/models responses
+    produce the same token (stable URL → browser / expo-image cache).
+    Legacy ``minutes`` still works for one-off short links if callers pass it.
+    """
+    now = datetime.now(timezone.utc)
+    if minutes is not None:
+        expire = now + timedelta(minutes=max(1, int(minutes)))
+    else:
+        day_bucket = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        expire = day_bucket + timedelta(days=max(1, int(days)))
     payload = {
         "typ": "studio_model_img",
         "uid": user_id,

@@ -11,7 +11,7 @@ import {
 import { AppState } from 'react-native';
 import * as actions from '@/src/api/actions';
 import { refreshPendingArchiveImages } from '@/src/api/archivePoll';
-import { isArchivePending, archiveThumbUrl } from '@/src/api/media';
+import { isArchivePending, archiveThumbUrl, preferStableMediaUrl } from '@/src/api/media';
 import { resolveMediaUrl } from '@/src/api/config';
 import { charFieldsFromModel, fmtMoney, maskFromOpRights, photoTagsRu, resolveDonationBalances } from '@/src/api/helpers';
 import {
@@ -194,7 +194,7 @@ function reuseModelImageUrls(
     ...model,
     images: (model.images || []).map((image) => ({
       ...image,
-      url: urlByImageId.get(image.id) || image.url,
+      url: preferStableMediaUrl(urlByImageId.get(image.id), image.url) || image.url,
     })),
   }));
 }

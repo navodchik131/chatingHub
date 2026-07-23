@@ -999,7 +999,14 @@ async def public_studio_model_image(
             status_code=404, detail="Файл изображения отсутствует на сервере"
         ) from None
     mime = mimetypes.guess_type(abs_path.name)[0] or "application/octet-stream"
-    return FileResponse(abs_path, media_type=mime)
+    # No ``immutable``: model photos can be replaced under the same image id.
+    return FileResponse(
+        abs_path,
+        media_type=mime,
+        headers={
+            "Cache-Control": "private, max-age=86400",
+        },
+    )
 
 
 @router.get("/studio/public-pose-reference")

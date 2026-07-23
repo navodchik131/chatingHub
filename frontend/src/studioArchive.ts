@@ -248,7 +248,8 @@ export function preferStableArchiveMediaUrl(prev: string | null | undefined, nex
   if (
     pBase === nBase &&
     (pBase.includes('/api/studio/public-generation-image') ||
-      pBase.includes('/api/studio/public-generation-video'))
+      pBase.includes('/api/studio/public-generation-video') ||
+      pBase.includes('/api/studio/public-model-image'))
   ) {
     return p
   }

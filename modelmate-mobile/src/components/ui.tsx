@@ -104,6 +104,7 @@ export function Avatar({
         source={{ uri: imageUrl }}
         style={[styles.avatar, { width: size, height: size, borderRadius: size / 2 }]}
         cachePolicy="memory-disk"
+        recyclingKey={imageUrl.split('?')[0] || imageUrl}
         contentFit="cover"
       />
     );

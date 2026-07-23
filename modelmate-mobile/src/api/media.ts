@@ -1,6 +1,26 @@
 import { resolveMediaUrl } from '@/src/api/config';
 import type { StudioGenerationOut } from '@/src/api/types';
 
+/** Keep prior signed media URL when only the JWT query changed (disk/browser cache). */
+export function preferStableMediaUrl(prev?: string | null, next?: string | null): string {
+  const p = (prev || '').trim();
+  const n = (next || '').trim();
+  if (!n) return p;
+  if (!p) return n;
+  if (p === n) return p;
+  const pBase = p.split('?')[0];
+  const nBase = n.split('?')[0];
+  if (
+    pBase === nBase &&
+    (pBase.includes('/api/studio/public-generation-image') ||
+      pBase.includes('/api/studio/public-generation-video') ||
+      pBase.includes('/api/studio/public-model-image'))
+  ) {
+    return p;
+  }
+  return n;
+}
+
 export function isArchivePending(item: StudioGenerationOut | null | undefined): boolean {
   if (!item) return false;
   const st = (item.status || '').trim();

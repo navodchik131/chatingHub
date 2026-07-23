@@ -5,6 +5,7 @@ import {
   isOptimisticStudioArchiveId,
   mergeArchiveItemPreserveMedia,
   mergeStudioArchiveItems,
+  preferStableArchiveMediaUrl,
   prependOptimisticStudioArchive,
   removeOptimisticStudioArchive,
   replaceOptimisticStudioArchiveId,
@@ -78,7 +79,7 @@ function reuseModelImageUrls(prevModels, nextModels) {
     ...model,
     images: (model?.images || []).map((img) => ({
       ...img,
-      url: urlByImageId.get(Number(img.id)) || img.url,
+      url: preferStableArchiveMediaUrl(urlByImageId.get(Number(img.id)), img.url) || img.url,
     })),
   }))
 }

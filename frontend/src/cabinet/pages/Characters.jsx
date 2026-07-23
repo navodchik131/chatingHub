@@ -215,10 +215,23 @@ function TabPhotos() {
               style={{
                 aspectRatio: '3/4', borderRadius: 10, display: 'flex', flexDirection: 'column',
                 alignItems: 'stretch', justifyContent: 'space-between', padding: 6,
-                position: 'relative', background: im.url ? `url(${im.url}) center/cover` : G[i % G.length],
+                position: 'relative', overflow: 'hidden',
+                background: im.url ? color.bgPanel : G[i % G.length],
               }}
             >
-              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              {im.url ? (
+                <img
+                  src={im.url}
+                  alt=""
+                  loading="lazy"
+                  decoding="async"
+                  style={{
+                    position: 'absolute', inset: 0, width: '100%', height: '100%',
+                    objectFit: 'cover', display: 'block',
+                  }}
+                />
+              ) : null}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', position: 'relative', zIndex: 1 }}>
                 <Hoverable
                   as="span"
                   style={{
@@ -237,6 +250,7 @@ function TabPhotos() {
                 style={{
                   fontFamily: font.mono, fontSize: 7.5, background: 'rgba(0,0,0,.6)',
                   color: '#fff', padding: '2px 6px', borderRadius: 4, alignSelf: 'flex-start',
+                  position: 'relative', zIndex: 1,
                 }}
               >
                 {photoKindShortLabel(lang, im.kind)}
@@ -245,7 +259,7 @@ function TabPhotos() {
               {String(s.photoMenu) === String(im.id) && (
                 <div
                   style={{
-                    position: 'absolute', inset: 0, background: 'rgba(6,7,9,.92)', borderRadius: 10,
+                    position: 'absolute', inset: 0, zIndex: 2, background: 'rgba(6,7,9,.92)', borderRadius: 10,
                     padding: 8, display: 'flex', flexDirection: 'column', gap: 3, overflowY: 'auto',
                   }}
                 >
