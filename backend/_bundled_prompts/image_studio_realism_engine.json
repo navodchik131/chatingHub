@@ -1,14 +1,14 @@
 {
-  "_comment": "CANONICAL — server overwrites model output for this block if present on disk",
-  "skin_realism": "visible pores, subsurface scattering, natural skin texture, slight uneven skin tone, tiny blemishes, fine peach fuzz, slight skin redness, believable cheek/nose forehead shine and oily skin highlights where light hits; no beauty-blur plastic skin; no pore erasure; subtle sweat or skin oil acceptable in warm lit scenes — no runway retouch",
-  "eye_realism": "natural catchlights in eyes, detailed iris, moist eyes, slight redness in eye corners, relaxed eyes, candid micro-expression; gaze follows the scene (not a blank AI stare); mild facial asymmetry acceptable",
-  "hair_realism": "individual stray hairs, flyaways, natural strand separation, slight frizz, realistic hair shine (not glossy CGI), wispy strands on skin near hairline acceptable",
-  "fabric_realism": "visible fabric weave, wrinkled clothes, worn fabric, creases, natural wrinkles, lint, occasional pet hair or dust on clothing, realistic fabric drape, casual imperfection",
-  "environment_realism": "minor everyday clutter, lived-in environment, small dust particles in light beams, slight smudges on surfaces, scratches on used objects, realistic shadow imperfections, natural wear and tear; background feels incidental not art-directed",
-  "photo_realism": "shot on smartphone, amateur phone photo, mild ISO grain, photographic noise, slight handshake, shallow depth of field when plausible, mild chromatic aberration and lens distortion at edges, subtle vignette, occasional highlight clipping, mild motion micro-blur on moving hair or gestures; plausible mild JPEG softness (not CGI sharp-clarity); imperfect focus transitions; believable white balance; no tripod catalog polish unless USER_TEXT specifies",
-  "color_grading": "natural unedited colors, slight warmth or coolness depending on light source, no Instagram filter, no HDR oversaturation — avoid influencer tone curve",
-  "capture_authenticity": "reads as someone's real camera roll — candid snapshot credibility, incidental framing; never stock-photo glossy or campaign retouch vibe unless USER explicitly asks",
-  "capture_triggers_phone": "amateur snapshot, casual phone camera roll energy, imperfect lighting, handheld natural asymmetry — never studio glamour unless USER asks",
-  "character_rendering": "preserve the identity reference person's natural facial proportions and micro-asymmetry — not a generic model face; no beauty-filter morphology; no enlarged eyes vs identity; no V-line jaw slimming or sculpted filler look unless USER explicitly asks",
-  "imperfection_level": "subtle but unmistakably physical — ordinary real life caught on sensor, never a sterile render — match selfie, tripod, mirror, third-party equally (only capture story changes)"
+  "_comment": "CANONICAL — server overwrites model output for this block if present on disk. Keep short: edit models dilute long realism lists.",
+  "skin_realism": "visible pores on nose forehead cheeks, uneven tone with redness around nostrils and on elbows, fine vellus hair on cheeks catching light, natural oil sheen on T-zone only, faint under-eye shadows and fine lines, dry patches on lips with gloss only at center, subtle skin creases at neck armpit or belly when posing",
+  "eye_realism": "natural catchlights, detailed iris, moist eyes, slight redness in corners, candid micro-expression, mild facial asymmetry",
+  "hair_realism": "loose flyaways and breakage catching light, individual strand separation, slight frizz, realistic hair shine not CGI gloss",
+  "fabric_realism": "visible weave, wrinkles, creases, lint, casual fabric drape",
+  "environment_realism": "lived-in clutter, wall texture readable, dust in light beams, incidental background not art-directed",
+  "photo_realism": "shot on smartphone main camera ~24mm f/1.8, deep depth of field with background details sharp, mild ISO luminance noise especially in shadows, slight chromatic aberration at edges, mild handshake tilt, imperfect autofocus, clipped highlight on forehead or nose when lit hard, JPEG compression softness, uncentered candid crop",
+  "color_grading": "mixed white balance when plausible (warm lamp + cool window), colour spill from walls or clothes onto skin, natural unedited colors — no Instagram filter",
+  "capture_authenticity": "reads as a real camera-roll snapshot — candid, unretouched, amateur",
+  "capture_triggers_phone": "arm's-length or friend-shot phone energy, available light only unless flash fits the scene, never studio glamour or catalog polish",
+  "character_rendering": "preserve identity-reference facial proportions and micro-asymmetry; no beauty-filter morphology, no enlarged eyes or V-line jaw slimming unless USER asks",
+  "imperfection_level": "ordinary physical sensor capture — shadow noise and small flaws present, never sterile CGI clarity"
 }

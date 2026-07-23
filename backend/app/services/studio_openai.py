@@ -846,6 +846,7 @@ def phone_candid_scene_triggers(scene_text: str | None) -> str:
 def format_realism_engine_for_prose_prompt(scene_text: str | None = None) -> str:
     """
     Канонический realism_engine → компактный descriptive блок для prose-промптов (не JSON).
+    Только ключевые поля — длинный каталог realism размывает внимание edit-моделей.
     """
     re_obj = load_canonical_realism_engine()
     if not re_obj:
@@ -853,15 +854,10 @@ def format_realism_engine_for_prose_prompt(scene_text: str | None = None) -> str
     parts: list[str] = []
     for key in (
         "skin_realism",
-        "eye_realism",
-        "hair_realism",
-        "fabric_realism",
-        "environment_realism",
         "photo_realism",
+        "hair_realism",
         "color_grading",
-        "capture_authenticity",
         "capture_triggers_phone",
-        "character_rendering",
         "imperfection_level",
     ):
         val = re_obj.get(key)

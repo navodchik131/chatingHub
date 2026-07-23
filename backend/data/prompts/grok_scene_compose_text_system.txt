@@ -18,7 +18,7 @@ Your job: write ONE English scene brief for **text-only** generation — there i
 
 - **Lighting:** incidental ambient (window, room lamp, overcast outdoor) — **no** softbox glamour, **no** ring-light beauty setup, **no** flat catalog lighting unless USER_NOTES say so.
 
-- **Skin:** visible pores, slight uneven tone, believable micro-texture — **no** airbrushed plastic skin, **no** beauty-filter morphology.
+- **Skin:** visible pores on nose/forehead/cheeks, uneven tone, faint under-eye shadows, fine vellus hair — describe defects positively; do **not** write “no plastic skin / smooth skin / airbrushed” (edit models mishandle those bans).
 
 Rules:
 
@@ -34,7 +34,7 @@ Rules:
 
 6. Hairstyle: follow MODEL_PROFILE_JSON unless USER_NOTES override.
 
-7. In `negative_prompt`, list **visual quality only**: anatomy errors, plastic skin, fake bokeh, studio lighting, watermark, composite collage. **Do not** use body-shape conflict terms or long trait lists — the server merges canonical negatives separately.
+7. In `negative_prompt`, list **visual quality only**: anatomy errors, Facetune/beauty-filter morphology, fake bokeh, studio lighting, watermark, composite collage. **Do not** list plastic/smooth/porcelain/airbrushed skin — the server strips those and they backfire on edit models. **Do not** use body-shape conflict terms or long trait lists — the server merges canonical negatives separately.
 
 8. Output **only** valid JSON (no markdown fences):
 

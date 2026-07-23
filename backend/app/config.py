@@ -197,11 +197,11 @@ class Settings(BaseSettings):
     studio_strip_ai_metadata_enabled: bool = Field(default=True)
     # Analog Humanizer: film grain + хроматика против пиксельных AI-классификаторов (CPU).
     studio_analog_humanize_enabled: bool = Field(default=True)
-    studio_analog_humanize_grain: float = Field(default=2.5, ge=0.0, le=12.0)
+    studio_analog_humanize_grain: float = Field(default=3.4, ge=0.0, le=12.0)
     studio_analog_humanize_chromatic_shift: int = Field(default=1, ge=0, le=4)
     # Множитель grain_sigma в phone EXIF; при уже применённом humanize grain не дублируется.
-    studio_phone_export_grain_multiplier: float = Field(default=1.15, ge=1.0, le=3.0)
-    studio_phone_export_jpeg_quality: int = Field(default=88, ge=75, le=95)
+    studio_phone_export_grain_multiplier: float = Field(default=1.25, ge=1.0, le=3.0)
+    studio_phone_export_jpeg_quality: int = Field(default=86, ge=75, le=95)
     # Архив видео: phone Make/Model/Lens/GPS/дата и снятие C2PA/XMP без перекодирования (exiftool).
     studio_video_phone_export_enabled: bool = Field(default=True)
     studio_video_metadata_exiftool_timeout_seconds: float = Field(default=180.0, ge=30.0, le=600.0)

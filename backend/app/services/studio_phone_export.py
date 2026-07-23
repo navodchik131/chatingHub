@@ -44,11 +44,28 @@ def _build_gps_ifd(lat: float, lon: float) -> dict[int, Any]:
     }
 
 
+def _lift_black_point(rgb: Image.Image, lift: float = 6.0) -> Image.Image:
+    """Phone JPEGs rarely crush to absolute black — lift the floor slightly."""
+    import numpy as np
+
+    arr = np.asarray(rgb, dtype=np.float32)
+    lift = max(0.0, float(lift))
+    arr = np.clip(arr * ((255.0 - lift) / 255.0) + lift, 0.0, 255.0).astype(np.uint8)
+    return Image.fromarray(arr, "RGB")
+
+
 def _add_grain_sharpen(rgb: Image.Image, sigma: float) -> Image.Image:
     import numpy as np
 
     arr = np.asarray(rgb, dtype=np.float32)
-    noise = np.random.default_rng().standard_normal(arr.shape, dtype=np.float64) * float(sigma)
+    # Heavier luminance noise in shadows (clean AI blacks are a tell).
+    luma = arr.mean(axis=2, keepdims=True)
+    shadow_w = (1.0 - luma / 255.0) * 0.7 + 0.35
+    noise = (
+        np.random.default_rng().standard_normal(arr.shape, dtype=np.float64)
+        * float(sigma)
+        * shadow_w
+    )
     arr = np.clip(arr + noise.astype(np.float32), 0.0, 255.0).astype(np.uint8)
     im = Image.fromarray(arr, "RGB")
     return im.filter(ImageFilter.UnsharpMask(radius=0.8, percent=100, threshold=3))
@@ -82,7 +99,7 @@ def apply_phone_export_to_jpeg(
         im = src.convert("RGBA")
         bg = Image.new("RGB", im.size, (255, 255, 255))
         bg.paste(im, mask=im.split()[3] if im.mode == "RGBA" else None)
-        rgb = bg
+        rgb = _lift_black_point(bg)
     except Exception as e:
         log.warning("phone export: decode failed: %s", e)
         return None

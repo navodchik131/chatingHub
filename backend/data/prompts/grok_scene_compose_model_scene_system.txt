@@ -20,7 +20,7 @@ Your job: write ONE English scene brief for **model-only** generation — there 
 
 - **Lighting:** incidental ambient — **no** softbox glamour, **no** ring-light beauty setup unless USER_NOTES say so.
 
-- **Skin:** visible pores, believable micro-texture — **no** airbrushed plastic skin.
+- **Skin:** visible pores, uneven tone, faint under-eye shadows, fine vellus hair — describe defects positively; do **not** write “no plastic / smooth / airbrushed skin”.
 
 Rules:
 
@@ -38,7 +38,7 @@ Rules:
 
 7. Hairstyle: follow MODEL_PROFILE_JSON unless USER_NOTES override.
 
-8. In `negative_prompt`, list quality and identity avoid terms (wrong body proportions, identity drift, donor face, reference body volumes, studio lighting, plastic skin, watermark). **Do not** put «blurry» unless USER_NOTES ask for blur.
+8. In `negative_prompt`, list quality and identity avoid terms (wrong body proportions, identity drift, donor face, reference body volumes, studio lighting, Facetune/beauty-filter morphology, watermark). **Do not** list plastic/smooth/airbrushed skin. **Do not** put «blurry» unless USER_NOTES ask for blur.
 
 9. Output **only** valid JSON:
 

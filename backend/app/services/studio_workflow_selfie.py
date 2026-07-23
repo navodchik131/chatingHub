@@ -63,5 +63,5 @@ def must_keep_for_selfie(*, with_pose_reference: bool) -> list[str]:
     return [
         "One real person; identity from model reference images on visible skin",
         "Arm-length front-camera selfie POV from extended arm — NOT friend/rear-camera shot",
-        "Phone selfie realism per realism_engine — natural grain, no plastic skin",
+        "Phone selfie realism per realism_engine — pores, uneven tone, deep focus, shadow noise",
     ]

@@ -99,8 +99,7 @@
       "reference sitter skin texture or tan pattern on model identity",
       "composite collage look",
       "two different people's skin in one frame",
-      "plastic skin",
-      "airbrushed look",
+      "Facetune or beauty-filter morphology",
       "studio lighting",
       "fake bokeh",
       "perfect symmetrical face",
@@ -116,5 +115,5 @@
       "<FILL — scene-specific>"
     ]
   },
-  "negative_prompt": "deformed hands, extra fingers, fused fingers, bad anatomy, duplicate limbs, watermark, text, logo, unreadable muddy mess, uncanny symmetry, Facetune, beauty-filter face, influencer glamour, plastic skin, airbrushed, CGI, 3d render, heavy fake bokeh, stock photo, catalog lighting, TikTok reshaped eyes or jaw"
+  "negative_prompt": "deformed hands, extra fingers, fused fingers, bad anatomy, duplicate limbs, watermark, text, logo, unreadable muddy mess, uncanny symmetry, Facetune, beauty-filter face, influencer glamour, CGI, 3d render, heavy fake bokeh, stock photo, catalog lighting, TikTok reshaped eyes or jaw"
 }

@@ -16,14 +16,25 @@ from app.services.studio_openai import (
 
 log = logging.getLogger(__name__)
 
+# Не включать plastic/smooth/porcelain skin: у edit-моделей (Nano Banana / GPT Image /
+# Seedream) negative часто игнорируется или подмешивается в позитив и усиливает «глянец».
 _CANONICAL_STUDIO_NEGATIVE = (
     "deformed hands, extra fingers, fused fingers, missing fingers, bad anatomy, "
     "duplicate limbs, extra arms, malformed joints, watermark, text, logo, "
-    "uncanny symmetry, Facetune, beauty-filter face, influencer glamour, plastic skin, "
-    "smooth skin, porcelain skin, waxy skin, doll skin, airbrushed, dead eyes, glassy eyes, "
-    "empty stare, CGI, 3d render, heavy fake bokeh, stock photo, catalog lighting, "
-    "TikTok reshaped eyes or jaw, composite collage, face pasted on wrong body, "
-    "mismatched skin tone face vs body"
+    "uncanny symmetry, Facetune, beauty-filter face, influencer glamour, "
+    "dead eyes, glassy eyes, empty stare, CGI, 3d render, heavy fake bokeh, "
+    "stock photo, catalog lighting, TikTok reshaped eyes or jaw, composite collage, "
+    "face pasted on wrong body, mismatched skin tone face vs body"
+)
+
+# Слова про «запрет гладкой кожи» — выкидываем из любого negative (Grok / profile always_avoid).
+_SKIN_TEXTURE_BAN_NEGATIVE_RE = re.compile(
+    r"\b("
+    r"plastic\s*skin|smooth\s*skin|porcelain\s*skin|waxy\s*skin|doll\s*skin|"
+    r"airbrushed(?:\s*(?:skin|look|face))?|airbrush(?:ed)?|"
+    r"beauty[- ]?blur|pore\s*eras(?:e|ure)|over[- ]?retouch(?:ed|ing)?"
+    r")\b",
+    re.I,
 )
 
 _SCENE_FROM_REF_LITERAL = "from_pose_reference_input_image_only"
@@ -36,7 +47,7 @@ PRIORITY_IDENTITY_OVER_POSE = (
 _COMPACT_MUST_KEEP = [
     "One real person; face, skin, hair, and body shape from identity images (2+)",
     "Pose, framing, background, light, and wardrobe/coverage from pose reference (image 1) only",
-    "Natural phone snapshot; unified skin grain on visible skin",
+    "Natural phone snapshot; visible pores and uneven tone; deep focus, readable background",
 ]
 
 # Только композитные артефакты — не body-shape (конфликт решается в основном промпте).
@@ -160,6 +171,19 @@ def _strip_body_shape_from_negative(raw: str) -> str:
     return ", ".join(kept)
 
 
+def _strip_skin_texture_bans_from_negative(raw: str) -> str:
+    """Убрать anti-plastic / smooth-skin термины — edit-модели часто читают их как позитив."""
+    if not raw or not str(raw).strip():
+        return ""
+    kept: list[str] = []
+    for piece in re.split(r"[,;\n]+", str(raw)):
+        t = piece.strip()
+        if not t or _SKIN_TEXTURE_BAN_NEGATIVE_RE.search(t):
+            continue
+        kept.append(t)
+    return ", ".join(kept)
+
+
 def _prepend_priority_rule(prose: str) -> str:
     body = (prose or "").strip()
     if not body:
@@ -178,6 +202,8 @@ def _merge_negative_parts(*parts: str | None) -> str:
         for piece in re.split(r"[,;\n]+", str(block)):
             t = piece.strip().lower()
             if not t or t in seen:
+                continue
+            if _SKIN_TEXTURE_BAN_NEGATIVE_RE.search(t) or _BODY_SHAPE_NEGATIVE_RE.search(t):
                 continue
             seen.add(t)
             out.append(piece.strip())
@@ -212,6 +238,8 @@ def _is_scene_specific_avoid_term(term: str) -> bool:
 def _keep_avoid_term(term: str) -> bool:
     t = term.strip().lower()
     if not t or _is_scene_specific_avoid_term(term):
+        return False
+    if _SKIN_TEXTURE_BAN_NEGATIVE_RE.search(t):
         return False
     if any(h in t for h in _QUALITY_AVOID_HINTS):
         return True
@@ -842,7 +870,7 @@ def build_grok_scene_positive_json(
         must_keep = [
             "One real person; identity from model reference images on visible skin",
             "Scene pose, room, and light from scene_brief only",
-            "Phone snapshot realism per realism_engine — natural grain, no plastic skin",
+            "Phone snapshot: pores, uneven tone, deep focus, shadow noise",
         ]
 
     data: dict[str, Any] = {
