@@ -50,6 +50,29 @@ _COMPACT_MUST_KEEP = [
     "Natural phone snapshot; visible pores and uneven tone; deep focus, readable background",
 ]
 
+    # Короткий хвост в КОНЕЦ prose-промпта — у edit-моделей конец весит больше,
+    # чем длинный realism_engine в середине после FACE_SWAP-префикса.
+PHONE_CANDID_PHOTO_CODA = (
+    "Photoreal phone look — deep focus with background details sharp; "
+    "visible skin pores and uneven tone, natural oil sheen where light hits, "
+    "fine vellus hair catching sidelight, loose flyaways; mixed white balance, "
+    "clipped highlight where sun hits, luminance noise in shadows, "
+    "slight chromatic aberration, minor handheld tilt, JPEG compression; "
+    "candid unretouched amateur snapshot."
+)
+
+_SOFT_DOF_PHRASE_RE = re.compile(
+    r"\b("
+    r"softly\s+blurred|heavily\s+blurred|heavy\s+(?:fake\s+)?bokeh|"
+    r"creamy\s+(?:bokeh|background|blur)|"
+    r"shallow\s+depth\s+of\s+field|portrait[\s-]?mode\s+bokeh|"
+    r"background\s+(?:softly\s+)?(?:blurred|out\s+of\s+focus)|"
+    r"blurred\s+(?:indoor\s+)?background|out[- ]of[- ]focus\s+background|"
+    r"soft\s+bokeh|dreamy\s+bokeh"
+    r")\b",
+    re.I,
+)
+
 # Только композитные артефакты — не body-shape (конфликт решается в основном промпте).
 _GROK_COMPOSE_COMPOSITE_NEGATIVE = (
     "face pasted on wrong body, disconnected neck, composite collage, face swap artifact, floating head"
@@ -396,6 +419,45 @@ def _truncate_profile_clause(text: str, max_len: int = 520) -> str:
     return cut + "…"
 
 
+def _compact_body_proportions_clause(body: str, *, max_parts: int = 3, max_len: int = 140) -> str:
+    """Сжать чеклист пропорций в короткую фразу — иначе съедает вес сцены/кожи."""
+    parts = [p.strip(" .") for p in re.split(r"[;|]+", body or "") if p.strip(" .")]
+    if not parts:
+        return ""
+    return _truncate_profile_clause(", ".join(parts[:max_parts]), max_len)
+
+
+def strip_soft_dof_from_scene_prose(prose: str) -> str:
+    """Убрать портретный soft-bokeh из Grok-сцены — телефон = deep focus."""
+    t = (prose or "").strip()
+    if not t:
+        return t
+    t = _SOFT_DOF_PHRASE_RE.sub("background details readable and mostly sharp", t)
+    t = re.sub(r"\s{2,}", " ", t)
+    t = re.sub(r"\s+,", ",", t)
+    return t.strip()
+
+
+def append_phone_candid_photo_coda(prompt: str, *, brief_mode: str = "full") -> str:
+    """Гарантированный короткий photoreal-хвост в конце prose-промпта."""
+    mode = (brief_mode or "full").strip().lower()
+    if mode in ("grok_composed", "grok_composed_text"):
+        return (prompt or "").rstrip()
+    base = (prompt or "").rstrip()
+    if not base:
+        return PHONE_CANDID_PHOTO_CODA
+    if "Photoreal phone look —" in base:
+        return base
+    # Длинный Capture realism в середине после FACE_SWAP почти не читается — заменяем хвостом.
+    if "\n\nCapture realism:" in base:
+        base = base.split("\n\nCapture realism:", 1)[0].rstrip()
+    elif base.startswith("Capture realism:"):
+        base = ""
+    if base:
+        return f"{base}\n\n{PHONE_CANDID_PHOTO_CODA}"
+    return PHONE_CANDID_PHOTO_CODA
+
+
 def grok_figure_anchor_from_profile(
     model_profile_text: str | None,
     visibility: "IdentityVisibility | None" = None,
@@ -430,18 +492,17 @@ def grok_figure_anchor_from_profile(
         mp = data.get("model_profile")
         prof = mp if isinstance(mp, dict) else data
     fields = _profile_identity_fields(prof if isinstance(prof, dict) else None)
-    body = (fields.get("body_proportions") or "").strip()
+    body = _compact_body_proportions_clause(fields.get("body_proportions") or "")
     subj = (fields.get("subject") or "").strip()
-    bits = [b for b in (body, subj) if b]
+    bits = [b for b in (subj, body) if b]
     if bits and vis is not None and regions:
-        joined = _truncate_profile_clause("; ".join(bits))
+        joined = _truncate_profile_clause("; ".join(bits), 220)
         region_hint = ", ".join(sorted(regions))
-        return (
-            f"Visible regions [{region_hint}]: model proportions are {joined}."
-        )
+        return f"Visible regions [{region_hint}]: {joined}."
     if bits:
-        joined = _truncate_profile_clause("; ".join(bits))
-        return f"Model body proportions: {joined}."
+        if subj and body:
+            return _truncate_profile_clause(f"{subj}. Build: {body}.", 240)
+        return _truncate_profile_clause("; ".join(bits), 220)
     return scoped_default()
 
 
@@ -833,7 +894,7 @@ def build_grok_scene_positive_json(
     Grok prose → JSON с realism_engine.
     with_pose_reference: Grok+референс позы (pose lock из input image, identity из refs 2+).
     Иначе: «По промту» без pose bitmap.
-    negative_prompt внутри JSON; суффикс [NEGATIVE_PROMPT] не добавляем.
+    negative не кладём в JSON/prompt — WaveSpeed edit лучше без negative-вставки.
     """
     prose = _prepend_priority_rule((grok_prose or "").strip())
     negative = _merge_grok_scene_negative(
@@ -877,7 +938,6 @@ def build_grok_scene_positive_json(
         "scene_brief": prose,
         "photography": photography,
         "constraints": {"must_keep": must_keep},
-        "negative_prompt": negative,
     }
     if re_obj is not None:
         data["realism_engine"] = re_obj
@@ -926,16 +986,11 @@ def prepare_positive_prompt_json(
     """
     mode = (brief_mode or "full").strip().lower()
     if mode == "grok_main_prose":
-        prose = strip_donor_identity_from_scene_prose((refined_text or "").strip())
+        prose = strip_soft_dof_from_scene_prose(
+            strip_donor_identity_from_scene_prose((refined_text or "").strip())
+        )
         lim = int(settings.grok_scene_compose_output_max_chars)
-        scene_ctx = " ".join(
-            x for x in ((refined_text or "").strip(), (reference_scene_description or "").strip()) if x
-        )
-        re_prose = (
-            format_realism_engine_for_prose_prompt(scene_text=scene_ctx or None)
-            if include_realism_engine
-            else ""
-        )
+        re_prose = PHONE_CANDID_PHOTO_CODA if include_realism_engine else ""
         reserve = len(re_prose) + 2 if re_prose else 0
         scene_budget = max(400, lim - reserve)
         if len(prose) > scene_budget:
@@ -964,16 +1019,9 @@ def prepare_positive_prompt_json(
     if mode == "deterministic_compose":
         from app.services.studio_deterministic_compose import build_deterministic_identity_line
 
-        prose = (refined_text or "").strip()
+        prose = strip_soft_dof_from_scene_prose((refined_text or "").strip())
         lim = int(settings.grok_scene_compose_output_max_chars)
-        scene_ctx = " ".join(
-            x for x in (prose, (reference_scene_description or "").strip()) if x
-        )
-        re_prose = (
-            format_realism_engine_for_prose_prompt(scene_text=scene_ctx or None)
-            if include_realism_engine
-            else ""
-        )
+        re_prose = PHONE_CANDID_PHOTO_CODA if include_realism_engine else ""
         reserve = len(re_prose) + 2 if re_prose else 0
         scene_budget = max(400, lim - reserve)
         if len(prose) > scene_budget:
@@ -1061,15 +1109,12 @@ def append_negative_to_wavespeed_prompt(
     *,
     brief_mode: str = "full",
 ) -> str:
+    """WaveSpeed image-edit имеет только ``prompt`` — отдельного negative нет.
+
+    Вклеивать ``[NEGATIVE_PROMPT] …`` в тот же текст вредно для Nano Banana / GPT Image /
+    Seedream / WAN: модели плохо держат отрицание и часто «подхватывают» слова вроде
+    smooth/plastic/Facetune как позитив. Claude-style briefs работают лучше без negative.
+    ``negative`` оставляем в сигнатуре для логов/совместимости, в prompt не пишем.
     """
-    WaveSpeed image-edit API принимает только поле ``prompt`` — отдельного negative нет.
-    Для JSON-брифов Grok (grok_composed / grok_composed_text) negative уже в ключе negative_prompt.
-    """
-    mode = (brief_mode or "full").strip().lower()
-    if mode in ("grok_composed_text", "grok_composed"):
-        return (prompt or "").rstrip()
-    neg = (negative or "").strip()
-    if not neg:
-        return prompt
-    base = (prompt or "").rstrip()
-    return f"{base}\n\n[NEGATIVE_PROMPT] {neg}"
+    _ = negative, brief_mode
+    return (prompt or "").rstrip()

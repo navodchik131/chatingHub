@@ -235,12 +235,11 @@ def test_grok_main_system_prefers_photo_brief_not_catalog() -> None:
     assert "Model identity" in positive
     assert PRIORITY_IDENTITY_OVER_POSE in positive
     assert "Seated on sofa" in positive
-    assert "Capture realism:" in positive
-    assert "catchlights" in positive.lower() or "pores" in positive.lower()
+    assert "Photoreal phone look" in positive or "Capture realism:" in positive
+    assert "pores" in positive.lower() or "vellus" in positive.lower() or "grain" in positive.lower()
     assert "on-camera phone flash" not in positive.lower()
-    assert "porcelain skin" in neg
     ws = append_negative_to_wavespeed_prompt(positive, neg, brief_mode="grok_main_prose")
-    assert "[NEGATIVE_PROMPT]" in ws
+    assert "[NEGATIVE_PROMPT]" not in ws
     assert '"realism_engine"' not in ws
 
 
@@ -325,9 +324,10 @@ def test_grok_compose_pose_ref_json_has_realism_engine_and_no_suffix_negative() 
     ws = append_negative_to_wavespeed_prompt(positive, neg, brief_mode="grok_composed")
     assert "[NEGATIVE_PROMPT]" not in ws
     assert "realism_engine" in ws
-    assert "reference sitter body" not in data["negative_prompt"].lower()
-    assert "wrong bust" not in data["negative_prompt"].lower()
-    assert "deformed" in data["negative_prompt"].lower()
+    assert "negative_prompt" not in data
+    assert "deformed" in neg.lower()
+    assert "reference sitter body" not in neg.lower()
+    assert "wrong bust" not in neg.lower()
 
 
 def test_grok_text_scene_json_has_realism_engine_and_no_suffix_negative() -> None:
@@ -340,8 +340,8 @@ def test_grok_text_scene_json_has_realism_engine_and_no_suffix_negative() -> Non
     assert "scene_brief" in data
     assert data.get("realism_engine") is not None
     assert "photo_realism" in json.dumps(data["realism_engine"])
-    assert data.get("negative_prompt")
-    assert "heavy fake bokeh" in data["negative_prompt"] or "bokeh" in data["negative_prompt"]
+    assert "negative_prompt" not in data
+    assert "bokeh" in neg.lower() or "wrong person" in neg.lower()
     ws = append_negative_to_wavespeed_prompt(positive, neg, brief_mode="grok_composed_text")
     assert "[NEGATIVE_PROMPT]" not in ws
     assert "realism_engine" in ws

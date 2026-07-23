@@ -96,7 +96,8 @@ def test_deterministic_compose_wavespeed_pipeline():
     from app.services.studio_prompt_bundle import append_negative_to_wavespeed_prompt
 
     full = append_negative_to_wavespeed_prompt(ws, neg, brief_mode="deterministic_compose")
-    assert "[NEGATIVE_PROMPT]" in full
+    assert "[NEGATIVE_PROMPT]" not in full
+    assert full == ws.rstrip()
 
 
 def test_build_studio_prompt_plan_enables_deterministic_path():

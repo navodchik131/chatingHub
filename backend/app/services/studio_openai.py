@@ -1532,9 +1532,10 @@ def assemble_wavespeed_image_edit_prompt(
     visibility: "IdentityVisibility | None" = None,
     photo_edit_detail_ref_attached: bool = False,
 ) -> str:
-    """Позитивный промпт для WaveSpeed; negative в JSON (text scene) или суффикс [NEGATIVE_PROMPT] (prose)."""
+    """Позитивный промпт для WaveSpeed (без negative-суффикса — API его не поддерживает)."""
     from app.services.studio_prompt_bundle import (
         append_negative_to_wavespeed_prompt,
+        append_phone_candid_photo_coda,
         prepare_positive_prompt_json,
     )
     from app.services.studio_reference_analysis import IdentityVisibility
@@ -1585,6 +1586,8 @@ def assemble_wavespeed_image_edit_prompt(
             visibility=visibility,
             photo_edit_detail_ref_attached=photo_edit_detail_ref_attached,
         )
+    if include_realism_engine:
+        prompt = append_phone_candid_photo_coda(prompt, brief_mode=brief)
     return append_negative_to_wavespeed_prompt(
         prompt, negative, brief_mode=brief
     )
