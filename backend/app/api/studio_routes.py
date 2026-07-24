@@ -187,6 +187,7 @@ from app.services.studio_motion_grok_pipeline import (
     describe_motion_still_for_ui,
     extract_video_first_frame_or_raise,
     grok_compose_motion_first_frame,
+    motion_face_swap_wavespeed_image_urls,
     motion_grok_timeline_from_video_path,
     motion_model_scene_wavespeed_image_urls,
 )
@@ -4375,12 +4376,21 @@ async def _studio_job_execute_refine_prompt(
                             on_task_submitted=_on_wavespeed_task_submitted,
                         )
                     else:
-                        ws_res = await seedream_v45_edit_image_url(
+                        from app.services.studio_workflow_image_resolution import (
+                            default_workflow_image_resolution,
+                        )
+
+                        ws_res = await workflow_edit_image_url(
                             api_key=ws_key,
+                            wave_model_id="seedream-v5.0-pro",
                             image_urls=image_urls,
                             prompt=wavespeed_prompt,
-                            size=size_for_ws,
+                            aspect_ratio=aspect_key,
                             wan_edit_tier=wan_tier_n,
+                            wave_profile=wave_profile_n,
+                            reference_scene_description=reference_scene,
+                            size=size_for_ws,
+                            resolution=default_workflow_image_resolution("seedream-v5.0-pro"),
                             on_task_submitted=_on_wavespeed_task_submitted,
                         )
                     generated_image_url = ws_res.url
@@ -4923,7 +4933,8 @@ async def _studio_job_execute_motion_first_frame(
         marker = _GROK_MOTION_MARKER if settings.studio_grok_motion_timeline_enabled else _CLIP_MOTION_MARKER
         motion_auto_for_db += "\n\n" + marker + "\n" + motion_clip_summary.strip()
 
-    mode_n = "model_scene"
+    # Первый кадр motion: face_swap — сцена из видео + identity модели (не model_scene).
+    mode_n = "face_swap"
     skip_ws = gen_arch_row is not None or persist_uploaded_final
     ws_key = _studio_refine_wavespeed_preflight(
         do_wavespeed=not skip_ws,
@@ -5022,13 +5033,14 @@ async def _studio_job_execute_motion_first_frame(
         user_pose_ref_prepended = False
         pose_ct = first_frame_media if first_frame_media.startswith("image/") else "image/jpeg"
         try:
-            image_urls = motion_model_scene_wavespeed_image_urls(
+            image_urls = motion_face_swap_wavespeed_image_urls(
                 pub=pub,
                 owner_id=oid,
                 pose_bytes=first_frame,
                 pose_mime=pose_ct,
                 sm=sm_loaded,
                 wave_profile=wave_profile_n,
+                reference_scene=reference_scene or None,
                 save_pose_reference_bytes=save_pose_reference_bytes,
                 create_pose_reference_access_token=create_pose_reference_access_token,
                 create_model_image_access_token=create_model_image_access_token,
@@ -5082,12 +5094,22 @@ async def _studio_job_execute_motion_first_frame(
                         reference_scene_description=reference_scene,
                     )
                 else:
-                    ws_res = await seedream_v45_edit_image_url(
+                    from app.services.studio_workflow_image_resolution import (
+                        default_workflow_image_resolution,
+                    )
+                    from app.services.wavespeed_client import workflow_edit_image_url
+
+                    ws_res = await workflow_edit_image_url(
                         api_key=ws_key,
+                        wave_model_id="seedream-v5.0-pro",
                         image_urls=image_urls,
                         prompt=wavespeed_prompt,
-                        size=size_for_ws,
+                        aspect_ratio=aspect_key,
                         wan_edit_tier=wan_tier_n,
+                        wave_profile=wave_profile_n,
+                        reference_scene_description=reference_scene,
+                        size=size_for_ws,
+                        resolution=default_workflow_image_resolution("seedream-v5.0-pro"),
                     )
                 generated_image_url = ws_res.url
                 wavespeed_task_id = ws_res.task_id or wavespeed_task_id

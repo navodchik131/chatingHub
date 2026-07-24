@@ -70,6 +70,44 @@ async def grok_compose_motion_first_frame(
     )
 
 
+def motion_face_swap_wavespeed_image_urls(
+    *,
+    pub: str,
+    owner_id: int,
+    pose_bytes: bytes,
+    pose_mime: str,
+    sm: UserStudioModel,
+    wave_profile: str,
+    reference_scene: str | None,
+    save_pose_reference_bytes,
+    create_pose_reference_access_token,
+    create_model_image_access_token,
+) -> list[str]:
+    """Реф сцены (кадр видео) + identity модели — как «Подмена лица» / face_swap."""
+    from urllib.parse import quote
+
+    from app.services.studio_prompt_bundle import reference_pose_is_nude_or_minimal_coverage
+
+    imgs_model = sort_model_images_for_studio(list(sm.images))
+    imgs_for_ws = model_images_for_wavespeed_profile(imgs_model, wave_profile)
+    image_urls: list[str] = []
+    fid_pose = save_pose_reference_bytes(
+        owner_id=owner_id,
+        raw=pose_bytes,
+        content_type=pose_mime if pose_mime.startswith("image/") else "image/jpeg",
+    )
+    ptok = create_pose_reference_access_token(user_id=owner_id, file_id=fid_pose)
+    image_urls.append(f"{pub}/api/studio/public-pose-reference?t={quote(ptok, safe='')}")
+    pose_nude = reference_pose_is_nude_or_minimal_coverage(reference_scene)
+    for im in select_grok_compose_wavespeed_identity_images(
+        imgs_for_ws,
+        pose_reference_nude=pose_nude,
+    ):
+        tok = create_model_image_access_token(user_id=owner_id, image_id=im.id)
+        image_urls.append(f"{pub}/api/studio/public-model-image?t={quote(tok, safe='')}")
+    return image_urls
+
+
 def motion_model_scene_wavespeed_image_urls(
     *,
     pub: str,

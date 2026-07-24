@@ -65,7 +65,7 @@ export default function Video() {
     const list = enginesForNsfw(contentMode === 'nsfw', cabinet.genModels);
     setS({
       contentMode,
-      aiModel: list[0]?.id || (contentMode === 'nsfw' ? 'wan-2.7' : 'nano-banana-pro'),
+      aiModel: list[0]?.id || (contentMode === 'nsfw' ? 'seedream-v5.0-pro' : 'nano-banana-pro'),
     });
   };
 

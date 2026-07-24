@@ -214,9 +214,9 @@ class Settings(BaseSettings):
     wavespeed_image_poll_interval_seconds: float = Field(default=2.5, ge=1.0, le=15.0)
 
     wavespeed_api_base: str = Field(default="https://api.wavespeed.ai")
-    # POST image-edit: WAN 2.7 по умолчанию; Pro / Seedream — см. .env.example
+    # POST image-edit: Seedream V5 Pro по умолчанию; WAN — явно в .env или выбор UI wan-2.7
     wavespeed_seedream_edit_path: str = Field(
-        default="/api/v3/alibaba/wan-2.7/image-edit",
+        default="/api/v3/bytedance/seedream-v5.0-pro/edit",
     )
     # Для API Seedream v5 (jpeg | png); для WAN не используется; пусто — по умолчанию API
     wavespeed_seedream_output_format: str = Field(default="")

@@ -19,7 +19,7 @@ def _wavespeed_base() -> str:
 
 
 def _seedream_edit_post_path() -> str:
-    p = (settings.wavespeed_seedream_edit_path or "").strip() or "/api/v3/alibaba/wan-2.7/image-edit"
+    p = (settings.wavespeed_seedream_edit_path or "").strip() or SEEDREAM_V50_PRO_EDIT_PATH
     return p if p.startswith("/") else f"/{p}"
 
 
@@ -41,7 +41,7 @@ def resolve_studio_image_edit_post_path(*, wan_edit_tier: str | None) -> str:
     Если в настройках указан WAN 2.7 image-edit — подменяем путь по запросу UI (standard | pro).
     Для Seedream и любых не-WAN путей возвращаем путь из .env без изменений.
     """
-    cfg = (settings.wavespeed_seedream_edit_path or "").strip() or WAN_27_IMAGE_EDIT_STANDARD_PATH
+    cfg = (settings.wavespeed_seedream_edit_path or "").strip() or SEEDREAM_V50_PRO_EDIT_PATH
     configured = cfg if cfg.startswith("/") else f"/{cfg}"
     if not _is_wan_27_image_edit_path(configured):
         return configured

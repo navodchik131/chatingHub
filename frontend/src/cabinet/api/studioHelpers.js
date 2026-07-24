@@ -29,7 +29,7 @@ export const FALLBACK_GEN_MODELS = [
 ]
 
 export const REGULAR_ENGINE_IDS = ['nano-banana-pro', 'gpt-image-2', 'seedream-v5.0-pro']
-export const NSFW_ENGINE_IDS = ['wan-2.7', 'wan-2.7-pro', 'seedream-v5.0-pro']
+export const NSFW_ENGINE_IDS = ['seedream-v5.0-pro', 'wan-2.7', 'wan-2.7-pro']
 
 export function isNsfwMode(s) {
   return s?.contentMode === 'nsfw' || !!s?.nsfw
@@ -38,7 +38,7 @@ export function isNsfwMode(s) {
 export function waveModelFromState(s) {
   const mapped = AI_MODEL_MAP[s?.aiModel]
   if (mapped) return mapped
-  return s?.aiModel || (isNsfwMode(s) ? 'wan-2.7' : 'nano-banana-pro')
+  return s?.aiModel || (isNsfwMode(s) ? 'seedream-v5.0-pro' : 'nano-banana-pro')
 }
 
 export function normalizeWaveModel(id, nsfw) {
@@ -49,7 +49,7 @@ export function normalizeWaveModel(id, nsfw) {
   if (REGULAR_ENGINE_IDS.includes(mapped) || NSFW_ENGINE_IDS.includes(mapped)) {
     return { apiId: mapped, tier: 'standard' }
   }
-  return { apiId: nsfw ? 'wan-2.7' : 'nano-banana-pro', tier: 'standard' }
+  return { apiId: nsfw ? 'seedream-v5.0-pro' : 'nano-banana-pro', tier: 'standard' }
 }
 
 export function waveModelParamsFromState(appState) {

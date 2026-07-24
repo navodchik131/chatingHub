@@ -51,7 +51,7 @@ export function waveModelFromState(s: { aiModel?: string; aiEngine?: string; con
   const key = s?.aiEngine || s?.aiModel;
   const mapped = key ? AI_MODEL_MAP[key] : undefined;
   if (mapped) return mapped;
-  return isNsfwMode(s) ? 'wan-2.7-pro' : 'nano-banana-pro';
+  return isNsfwMode(s) ? 'seedream-v5.0-pro' : 'nano-banana-pro';
 }
 
 export function normalizeWaveModel(id: string, nsfw: boolean) {
@@ -62,7 +62,7 @@ export function normalizeWaveModel(id: string, nsfw: boolean) {
   if (['nano-banana-pro', 'gpt-image-2', 'seedream-v5.0-pro'].includes(mapped)) {
     return { apiId: mapped, tier: 'standard' };
   }
-  return { apiId: nsfw ? 'wan-2.7' : 'nano-banana-pro', tier: 'standard' };
+  return { apiId: nsfw ? 'seedream-v5.0-pro' : 'nano-banana-pro', tier: 'standard' };
 }
 
 export function normalizeStudioModelId(id: unknown): number | null {
