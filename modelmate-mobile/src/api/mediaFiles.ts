@@ -1,32 +1,54 @@
 import { Platform } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
+import { File as ExpoFile } from 'expo-file-system';
 import { apiUrl, resolveMediaUrl } from '@/src/api/config';
 import { getToken } from '@/src/api/token';
 import type { LocalFile } from '@/src/api/types';
 
-/** React Native FormData принимает только { uri, name, type }, не Blob/File. */
-export function appendFormDataFile(fd: FormData, field: string, file: LocalFile): void {
-  fd.append(field, {
-    uri: file.uri,
-    name: file.name || 'upload.bin',
-    type: file.type || 'application/octet-stream',
-  } as never);
+/**
+ * Expo 57 подменяет global fetch на expo/fetch — он не понимает RN-объект { uri, name, type }.
+ * Для native используем expo-file-system File (совместим с expo/fetch FormData).
+ */
+export async function appendFormDataFile(fd: FormData, field: string, file: LocalFile): Promise<void> {
+  const uri = (file.uri || '').trim();
+  if (!uri) throw new Error('Файл не выбран');
+
+  if (Platform.OS === 'web') {
+    const response = await fetch(uri);
+    const blob = await response.blob();
+    const name = file.name || 'upload.bin';
+    const type = file.type || blob.type || 'application/octet-stream';
+    fd.append(field, new window.File([blob], name, { type }));
+    return;
+  }
+
+  fd.append(field, new ExpoFile(uri) as never);
 }
 
-/** content:// и ph:// на Android копируем в cache — иначе fetch/FormData падает. */
+/** content:// и ph:// на Android копируем в cache — иначе File/FormData не прочитает файл. */
 export async function prepareUploadFile(file: LocalFile): Promise<LocalFile> {
-  const uri = file.uri || '';
-  if (
-    Platform.OS === 'web'
-    || uri.startsWith('file://')
-    || (!uri.startsWith('content://') && !uri.startsWith('ph://'))
-  ) {
-    return file;
+  if (Platform.OS === 'web') return file;
+
+  let uri = (file.uri || '').trim();
+  if (!uri) throw new Error('Файл не выбран');
+
+  const needsCopy =
+    uri.startsWith('content://')
+    || uri.startsWith('ph://')
+    || uri.startsWith('assets-library://');
+
+  if (needsCopy) {
+    const safeName = (file.name || 'upload.jpg').replace(/[^\w.\-]+/g, '_');
+    const dest = `${FileSystem.cacheDirectory}upload-${Date.now()}-${safeName}`;
+    await FileSystem.copyAsync({ from: uri, to: dest });
+    return { ...file, uri: dest };
   }
-  const safeName = (file.name || 'upload.jpg').replace(/[^\w.\-]+/g, '_');
-  const dest = `${FileSystem.cacheDirectory}upload-${Date.now()}-${safeName}`;
-  await FileSystem.copyAsync({ from: uri, to: dest });
-  return { ...file, uri: dest };
+
+  if (!uri.startsWith('file://') && uri.startsWith('/')) {
+    uri = `file://${uri}`;
+  }
+
+  return { ...file, uri };
 }
 
 function resolveFetchUrl(url: string): string {
@@ -35,7 +57,7 @@ function resolveFetchUrl(url: string): string {
   return apiUrl(resolved.startsWith('/') ? resolved : `/${resolved}`);
 }
 
-/** Скачивает удалённое изображение во временный файл для FormData в React Native. */
+/** Скачивает удалённое изображение во временный файл для FormData. */
 export async function remoteImageToLocalFile(url: string, name: string): Promise<LocalFile> {
   const fullUrl = resolveFetchUrl(url);
   const token = await getToken();

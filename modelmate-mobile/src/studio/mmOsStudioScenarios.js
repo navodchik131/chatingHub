@@ -289,19 +289,7 @@ async function uploadWorkflowReference(API, file) {
   if (API.uploadWorkflowReference) {
     return API.uploadWorkflowReference(file)
   }
-  const fd = new FormData()
-  if (file && file.uri) {
-    fd.append('file', { uri: file.uri, name: file.name || 'photo.jpg', type: file.type || 'image/jpeg' })
-  } else if (typeof File !== 'undefined' && file instanceof File) {
-    fd.append('file', file)
-  } else {
-    throw new Error('Unsupported file for upload')
-  }
-  const res = await API.apiFetch('/api/studio/workflow/reference', { method: 'POST', body: fd })
-  const data = await API.readJson(res)
-  if (!res.ok) throw new Error(API.formatDetail(data) || 'Не удалось загрузить референс')
-  if (!data.ref_id) throw new Error('Сервер не вернул ref_id')
-  return data.ref_id
+  throw new Error('Загрузка референса недоступна')
 }
 
 async function resolveRefId(API, store, archiveThumbUrlFn, source) {
@@ -311,18 +299,11 @@ async function resolveRefId(API, store, archiveThumbUrlFn, source) {
     if (!item) throw new Error('Кадр не найден в архиве')
     const url = archiveThumbUrlFn(item)
     if (!url) throw new Error('Нет изображения для кадра из архива')
-    if (API.remoteImageToLocalFile) {
-      const local = await API.remoteImageToLocalFile(url, `archive-${source.archiveId}.jpg`)
-      return uploadWorkflowReference(API, local)
+    if (!API.remoteImageToLocalFile) {
+      throw new Error('Загрузка из архива недоступна в этой среде')
     }
-    const res = await API.apiFetch(url)
-    if (!res.ok) throw new Error('Не удалось загрузить кадр из архива')
-    const blob = await res.blob()
-    if (typeof File !== 'undefined') {
-      const fileObj = new File([blob], `archive-${source.archiveId}.jpg`, { type: blob.type || 'image/jpeg' })
-      return uploadWorkflowReference(API, fileObj)
-    }
-    throw new Error('Загрузка из архива недоступна в этой среде')
+    const local = await API.remoteImageToLocalFile(url, `archive-${source.archiveId}.jpg`)
+    return uploadWorkflowReference(API, local)
   }
   throw new Error('Загрузите файл или выберите кадр из архива')
 }

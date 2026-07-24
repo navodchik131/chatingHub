@@ -318,7 +318,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     const msg = e instanceof Error ? e.message : String(e);
     if (!msg.trim()) return;
     setError(msg);
-    if (options?.alert !== false) {
+    if (options?.alert) {
       showUserError(msg, t.errorTitle);
     }
   }, [t.errorTitle]);

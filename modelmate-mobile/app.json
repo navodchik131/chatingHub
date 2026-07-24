@@ -2,7 +2,7 @@
   "expo": {
     "name": "ModelMate",
     "slug": "modelmate",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "orientation": "portrait",
     "icon": "./assets/logo-m.jpeg",
     "scheme": "modelmate",
@@ -13,7 +13,7 @@
     },
     "android": {
       "package": "app.modelmate.mobile",
-      "versionCode": 3,
+      "versionCode": 4,
       "googleServicesFile": "./google-services.json",
       "usesCleartextTraffic": true,
       "softwareKeyboardLayoutMode": "resize",
