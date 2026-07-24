@@ -1,0 +1,16 @@
+# EAS Build запускается из modelmate-mobile, но архивируется корень git-репозитория.
+# Загружаем только мобильное приложение (~20 MB вместо ~350 MB).
+
+/*
+!/modelmate-mobile
+!/modelmate-mobile/**
+
+# На сервере EAS сам ставит зависимости
+modelmate-mobile/node_modules
+modelmate-mobile/.expo
+modelmate-mobile/android
+modelmate-mobile/ios
+modelmate-mobile/.eas-inspect
+modelmate-mobile/web-build
+modelmate-mobile/dist
+modelmate-mobile/dist-web
