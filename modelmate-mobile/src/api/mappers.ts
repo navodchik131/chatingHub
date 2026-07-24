@@ -117,21 +117,45 @@ export function mapIntegrationCards(integrations: IntegrationStatusOut | null) {
   return cards;
 }
 
-export function mapOverviewKpis(me: UserMeOut | null, conversations: ConversationOut[], donationAvailableMinor?: number) {
+export function mapOverviewKpis(
+  me: UserMeOut | null,
+  conversations: ConversationOut[],
+  donationAvailableMinor?: number,
+  locale: 'ru' | 'en' = 'ru',
+) {
   const credits = me?.credits_balance ?? 0;
   const plan = me?.plan_display_name || me?.billing_plan || '—';
   const subUntil = me?.subscription_expires_at ? fmtDateShort(me.subscription_expires_at) : '—';
   const dialogs = conversations.length;
   const unread = conversations.reduce((a, c) => a + (c.unread_count || 0), 0);
+  const replies = me?.plan_usage?.dialogs_this_month ?? 0;
+  const frames = Math.floor(credits / 10);
+  const status = (me?.subscription_status || '').toLowerCase();
+  const planSub =
+    subUntil !== '—'
+      ? locale === 'en'
+        ? `until ${subUntil}`
+        : `до ${subUntil}`
+      : status === 'active'
+        ? locale === 'en'
+          ? 'active'
+          : 'активна'
+        : me?.subscription_status || '';
   return {
     credits: String(Math.round(credits)),
-    creditsSub: `≈${Math.floor(credits / 10)} кадр`,
+    creditsSub: locale === 'en' ? `≈${frames} frames` : `≈${frames} кадр`,
     plan,
-    planSub: subUntil !== '—' ? `до ${subUntil}` : me?.subscription_status || '',
+    planSub,
     donations: donationAvailableMinor != null ? fmtMoney(donationAvailableMinor) : '—',
-    donationsSub: 'к выплате',
+    donationsSub: locale === 'en' ? 'to payout' : 'к выплате',
     dialogs: String(dialogs),
-    dialogsSub: unread ? `${unread} непрочит.` : `${me?.plan_usage?.dialogs_this_month ?? 0} ответов`,
+    dialogsSub: unread
+      ? locale === 'en'
+        ? `${unread} unread`
+        : `${unread} непрочит.`
+      : locale === 'en'
+        ? `${replies} replies`
+        : `${replies} ответов`,
   };
 }
 

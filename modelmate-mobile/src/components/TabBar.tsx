@@ -11,6 +11,7 @@ import {
 import { useAppData } from '@/src/context/AppDataProvider';
 import { useAppSettings } from '@/src/context/AppSettingsContext';
 import { useNav } from '@/src/context/NavigationContext';
+import { AppErrorBanner } from '@/src/components/AppErrorBanner';
 import { tabRoot } from '@/src/navigation/types';
 import { color, font } from '@/src/styles/tokens';
 
@@ -62,6 +63,7 @@ export function AppShell({ children, showTabBar }: { children: ReactNode; showTa
   return (
     <View style={styles.shell}>
       <View style={styles.content}>{children}</View>
+      <AppErrorBanner bottomInset={showTabBar ? 78 : 12} />
       {showTabBar ? <TabBar /> : null}
     </View>
   );

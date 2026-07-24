@@ -1,6 +1,7 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
+  Image,
   Keyboard,
   KeyboardAvoidingView,
   Modal,
@@ -43,6 +44,8 @@ type ThreadViewProps = {
   onBack: () => void;
   onSend: () => void;
   onAttach?: () => void;
+  attachmentUri?: string | null;
+  onClearAttachment?: () => void;
   onEmoji?: (emoji: string) => void;
   lang?: 'ru' | 'en';
 };
@@ -181,6 +184,8 @@ export function ThreadView({
   onBack,
   onSend,
   onAttach,
+  attachmentUri,
+  onClearAttachment,
   onEmoji,
   lang = 'ru',
 }: ThreadViewProps) {
@@ -276,6 +281,7 @@ export function ThreadView({
   const platformLabel = platform.toUpperCase();
   const subtitle = vip ? `${platformLabel} • VIP` : platformLabel;
   const composerPadBottom = keyboardPad > 0 ? 12 + keyboardPad : Math.max(12, insets.bottom);
+  const canSend = Boolean(draft.trim() || attachmentUri);
 
   return (
     <KeyboardAvoidingView
@@ -335,6 +341,18 @@ export function ThreadView({
       </ScrollView>
 
       <View style={[styles.composer, { paddingBottom: composerPadBottom }]}>
+        {attachmentUri ? (
+          <View style={styles.attachPreviewRow}>
+            <Image source={{ uri: attachmentUri }} style={styles.attachPreview} />
+            <Pressable style={styles.attachRemove} onPress={onClearAttachment} hitSlop={8}>
+              <Text style={styles.attachRemoveText}>×</Text>
+            </Pressable>
+            <Text style={styles.attachHint}>
+              {lang === 'ru' ? 'Фото прикреплено — нажмите отправить' : 'Photo attached — tap send'}
+            </Text>
+          </View>
+        ) : null}
+        <View style={styles.composerRow}>
         <Pressable style={styles.sideBtn} hitSlop={6} onPress={onAttach}>
           <Text style={styles.sideBtnIcon}>📎</Text>
         </Pressable>
@@ -362,15 +380,17 @@ export function ThreadView({
           </Pressable>
         </View>
         <Pressable
-          style={[styles.sendBtn, !draft.trim() && styles.sendBtnDim]}
+          style={[styles.sendBtn, !canSend && styles.sendBtnDim]}
           onPress={() => {
+            if (!canSend) return;
             nearBottomRef.current = true;
             onSend();
           }}
-          disabled={!draft.trim()}
+          disabled={!canSend}
         >
           <IcoSend size={20} stroke={color.limeText} />
         </Pressable>
+        </View>
       </View>
 
       <ThemePicker
@@ -464,15 +484,40 @@ const styles = StyleSheet.create({
   bubbleTimeOut: { color: 'rgba(255,255,255,0.8)' },
   bubbleChecks: { fontSize: 11, color: 'rgba(255,255,255,0.85)', letterSpacing: -1 },
   composer: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 10,
+    gap: 8,
     paddingHorizontal: 16,
     paddingTop: 12,
     borderTopWidth: 1,
     borderTopColor: color.border,
     backgroundColor: color.composerBg,
   },
+  composerRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 10,
+  },
+  attachPreviewRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingBottom: 4,
+  },
+  attachPreview: {
+    width: 56,
+    height: 56,
+    borderRadius: 10,
+    backgroundColor: '#2A2D33',
+  },
+  attachRemove: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  attachRemoveText: { color: color.text, fontSize: 18, lineHeight: 20 },
+  attachHint: { flex: 1, fontSize: 12, color: color.muted },
   sideBtn: {
     width: 48,
     height: 48,

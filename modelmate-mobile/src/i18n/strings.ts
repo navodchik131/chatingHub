@@ -222,6 +222,16 @@ export type Strings = {
   errUploadRefVideo: string;
   errGenPending: string;
   errGenFailed: string;
+  errorTitle: string;
+  errorDismiss: string;
+  errEnterPrompt: string;
+  errUploadReference: string;
+  errUploadSceneRef: string;
+  errUploadOutfitCloth: string;
+  errUploadLocationRef: string;
+  errUploadEditFrame: string;
+  errUploadEditDetailRef: string;
+  errPromptOnlyVideo: string;
   folderCreate: string;
   folderCreateFirst: string;
   dialogNotFound: string;
@@ -488,6 +498,16 @@ const RU: Strings = {
   errUploadRefVideo: 'Загрузите референс-видео',
   errGenPending: 'Генерация создана, но результат ещё не готов. Проверьте архив через минуту.',
   errGenFailed: 'Не удалось получить результат генерации.',
+  errorTitle: 'Ошибка',
+  errorDismiss: 'Понятно',
+  errEnterPrompt: 'Опишите, что нужно сгенерировать',
+  errUploadReference: 'Загрузите или выберите референс из архива',
+  errUploadSceneRef: 'Загрузите кадр сцены (референс позы и ракурса)',
+  errUploadOutfitCloth: 'Загрузите референс одежды',
+  errUploadLocationRef: 'Загрузите референс локации',
+  errUploadEditFrame: 'Загрузите кадр, который нужно изменить',
+  errUploadEditDetailRef: 'Загрузите референс детали',
+  errPromptOnlyVideo: 'Опишите движение в текстовом поле',
   folderCreate: 'Создать папку',
   folderCreateFirst: 'Сначала создайте папку',
   dialogNotFound: 'Диалог не найден',
@@ -754,6 +774,16 @@ const EN: Strings = {
   errUploadRefVideo: 'Upload a reference video',
   errGenPending: 'Generation started but result is not ready yet. Check archive in a minute.',
   errGenFailed: 'Could not get generation result.',
+  errorTitle: 'Error',
+  errorDismiss: 'Got it',
+  errEnterPrompt: 'Describe what you want to generate',
+  errUploadReference: 'Upload or pick a reference from archive',
+  errUploadSceneRef: 'Upload a scene frame (pose and camera reference)',
+  errUploadOutfitCloth: 'Upload a clothing reference',
+  errUploadLocationRef: 'Upload a location reference',
+  errUploadEditFrame: 'Upload the frame to edit',
+  errUploadEditDetailRef: 'Upload a detail reference',
+  errPromptOnlyVideo: 'Describe the motion in the text field',
   folderCreate: 'Create folder',
   folderCreateFirst: 'Create a folder first',
   dialogNotFound: 'Dialog not found',

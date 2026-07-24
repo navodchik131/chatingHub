@@ -1,7 +1,33 @@
+import { Platform } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
 import { apiUrl, resolveMediaUrl } from '@/src/api/config';
 import { getToken } from '@/src/api/token';
 import type { LocalFile } from '@/src/api/types';
+
+/** React Native FormData принимает только { uri, name, type }, не Blob/File. */
+export function appendFormDataFile(fd: FormData, field: string, file: LocalFile): void {
+  fd.append(field, {
+    uri: file.uri,
+    name: file.name || 'upload.bin',
+    type: file.type || 'application/octet-stream',
+  } as never);
+}
+
+/** content:// и ph:// на Android копируем в cache — иначе fetch/FormData падает. */
+export async function prepareUploadFile(file: LocalFile): Promise<LocalFile> {
+  const uri = file.uri || '';
+  if (
+    Platform.OS === 'web'
+    || uri.startsWith('file://')
+    || (!uri.startsWith('content://') && !uri.startsWith('ph://'))
+  ) {
+    return file;
+  }
+  const safeName = (file.name || 'upload.jpg').replace(/[^\w.\-]+/g, '_');
+  const dest = `${FileSystem.cacheDirectory}upload-${Date.now()}-${safeName}`;
+  await FileSystem.copyAsync({ from: uri, to: dest });
+  return { ...file, uri: dest };
+}
 
 function resolveFetchUrl(url: string): string {
   const resolved = resolveMediaUrl(url);

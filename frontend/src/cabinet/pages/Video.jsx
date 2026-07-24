@@ -212,6 +212,15 @@ export default function Video() {
           </div>
 
           <div>
+            <Eyebrow size={9} spacing="1.4px" style={{ marginBottom: 7 }}>{t.format}</Eyebrow>
+            <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+              {vfmtOpts.map((v) => (
+                <Chip key={v} on={s.vidFormat === v} onClick={() => setS({ vidFormat: v })}>{v}</Chip>
+              ))}
+            </div>
+          </div>
+
+          <div>
             <Eyebrow>{t.contentType}</Eyebrow>
             <div style={{ display: 'flex', gap: 6, background: color.bgPanel, border: `1px solid ${line.soft}`, borderRadius: 11, padding: 4 }}>
               <div
@@ -484,6 +493,15 @@ export default function Video() {
               </div>
 
               <div>
+                <Eyebrow size={9} spacing="1.4px" style={{ marginBottom: 7 }}>{t.format}</Eyebrow>
+                <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                  {vfmtOpts.map((v) => (
+                    <Chip key={v} on={s.vidFormat === v} onClick={() => setS({ vidFormat: v })}>{v}</Chip>
+                  ))}
+                </div>
+              </div>
+
+              <div>
                 <Eyebrow>{t.sourceFrame}</Eyebrow>
                 <input
                   ref={frameRef}
@@ -564,14 +582,6 @@ export default function Video() {
                   </div>
                 </div>
                 <div>
-                  <Eyebrow size={9} spacing="1.4px" style={{ marginBottom: 7 }}>{t.format}</Eyebrow>
-                  <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
-                    {vfmtOpts.map((v) => (
-                      <Chip key={v} on={s.vidFormat === v} onClick={() => setS({ vidFormat: v })}>{v}</Chip>
-                    ))}
-                  </div>
-                </div>
-                <div>
                   <Eyebrow size={9} spacing="1.4px" style={{ marginBottom: 7 }}>{t.duration}</Eyebrow>
                   <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
                     {vtimeOpts.map((v) => (
@@ -600,22 +610,13 @@ export default function Video() {
 
           {motionControl && (
           <>
-          {/* motion prompt — скрыто: промпт генерируется на сервере из референс-видео */}
-          {/* quality / format / duration */}
+          {/* quality / duration / audio */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             <div>
               <Eyebrow size={9} spacing="1.4px" style={{ marginBottom: 7 }}>{t.vidQuality}</Eyebrow>
               <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
                 {qualityOpts.map((q) => (
                   <Chip key={q.v} on={s.vidQuality === q.v} onClick={() => setS({ vidQuality: q.v })}>{q.l}</Chip>
-                ))}
-              </div>
-            </div>
-            <div>
-              <Eyebrow size={9} spacing="1.4px" style={{ marginBottom: 7 }}>{t.format}</Eyebrow>
-              <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
-                {vfmtOpts.map((v) => (
-                  <Chip key={v} on={s.vidFormat === v} onClick={() => setS({ vidFormat: v })}>{v}</Chip>
                 ))}
               </div>
             </div>

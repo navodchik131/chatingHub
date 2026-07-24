@@ -81,6 +81,7 @@ import {
 } from '@/src/navigation/types';
 import { color, font, gradients } from '@/src/styles/tokens';
 import { pickImage, pickVideo } from '@/src/utils/mediaPicker';
+import type { LocalFile } from '@/src/api/types';
 import { RemoteImage } from '@/src/components/RemoteImage';
 import { CharacterGenPanel } from '@/src/components/CharacterGenPanel';
 import { SwipeableChatRow } from '@/src/components/SwipeableChatRow';
@@ -247,7 +248,12 @@ export function ScreenRouter() {
   const { cur, pop, push, resetTo, openThread, startGen, regen, patch, chatIdx } = nav;
   const [ticketReply, setTicketReply] = useState('');
   const [charNameEdit, setCharNameEdit] = useState('');
+  const [threadAttachment, setThreadAttachment] = useState<LocalFile | null>(null);
   const threadConvId = conversations[chatIdx]?.id ?? null;
+
+  useEffect(() => {
+    if (cur !== 'thread') setThreadAttachment(null);
+  }, [cur]);
 
   useEffect(() => {
     if (cur === 'thread' && threadConvId) {
@@ -607,23 +613,31 @@ export function ScreenRouter() {
         onDraftChange={(value) => patch({ threadDraft: value })}
         onBack={pop}
         lang={locale}
+        attachmentUri={threadAttachment?.uri ?? null}
+        onClearAttachment={() => setThreadAttachment(null)}
         onSend={() => {
-          if (d.id && nav.threadDraft.trim()) {
-            const text = nav.threadDraft;
-            patch({ threadDraft: '' });
+          if (!d.id) return;
+          const text = nav.threadDraft.trim();
+          const file = threadAttachment;
+          if (!text && !file) return;
+          patch({ threadDraft: '' });
+          setThreadAttachment(null);
+          if (file) {
+            void sendThreadImage(d.id, text, file).catch(() => {});
+          } else {
             void sendThreadMessage(d.id, text);
           }
         }}
         onAttach={async () => {
-          if (!d.id) return;
           try {
             const file = await pickImage();
-            if (file) {
-              const caption = nav.threadDraft.trim();
-              patch({ threadDraft: '' });
-              await sendThreadImage(d.id, caption, file);
-            }
-          } catch { /* cancel or error */ }
+            if (file) setThreadAttachment(file);
+          } catch (e) {
+            Alert.alert(
+              locale === 'en' ? 'Photo' : 'Фото',
+              e instanceof Error ? e.message : String(e),
+            );
+          }
         }}
         onEmoji={(emoji) => patch({ threadDraft: `${nav.threadDraft}${emoji}` })}
       />
@@ -725,16 +739,16 @@ export function ScreenRouter() {
                       <Text style={s.slotLabel}>{l}</Text>
                       <View style={s.rowGap8}>
                         <Pressable
-                          style={[s.limeHalf, src !== 'upload' && s.ghostHalf]}
+                          style={src === 'upload' ? s.limeHalf : s.ghostHalf}
                           onPress={() => setSlotSource(slotKey, 'upload')}
                         >
-                          <Text style={[s.limeHalfText, src !== 'upload' && s.ghostHalfText]}>{t.studioSrcUpload}</Text>
+                          <Text style={src === 'upload' ? s.limeHalfText : s.ghostHalfText}>{t.studioSrcUpload}</Text>
                         </Pressable>
                         <Pressable
-                          style={[s.ghostHalf, src !== 'archive' && s.limeHalf]}
+                          style={src === 'archive' ? s.limeHalf : s.ghostHalf}
                           onPress={() => setSlotSource(slotKey, 'archive')}
                         >
-                          <Text style={[s.ghostHalfText, src !== 'archive' && s.limeHalfText]}>{t.studioSrcArchive}</Text>
+                          <Text style={src === 'archive' ? s.limeHalfText : s.ghostHalfText}>{t.studioSrcArchive}</Text>
                         </Pressable>
                       </View>
                       {src === 'archive' ? (
@@ -783,16 +797,16 @@ export function ScreenRouter() {
               <Text style={s.editNeedsRefLabel}>{t.studioEditNeedsRef}</Text>
               <View style={s.rowGap8}>
                 <Pressable
-                  style={[s.limeHalf, nav.editNeedsRef !== 'yes' && s.ghostHalf]}
+                  style={nav.editNeedsRef === 'yes' ? s.limeHalf : s.ghostHalf}
                   onPress={() => patch({ editNeedsRef: 'yes' })}
                 >
-                  <Text style={[s.limeHalfText, nav.editNeedsRef !== 'yes' && s.ghostHalfText]}>{t.studioYes}</Text>
+                  <Text style={nav.editNeedsRef === 'yes' ? s.limeHalfText : s.ghostHalfText}>{t.studioYes}</Text>
                 </Pressable>
                 <Pressable
-                  style={[s.ghostHalf, nav.editNeedsRef === 'yes' && s.limeHalf]}
+                  style={nav.editNeedsRef === 'no' ? s.limeHalf : s.ghostHalf}
                   onPress={() => patch({ editNeedsRef: 'no' })}
                 >
-                  <Text style={[s.ghostHalfText, nav.editNeedsRef === 'yes' && s.limeHalfText]}>{t.studioNo}</Text>
+                  <Text style={nav.editNeedsRef === 'no' ? s.limeHalfText : s.ghostHalfText}>{t.studioNo}</Text>
                 </Pressable>
               </View>
               {nav.editNeedsRef === 'yes' ? (
@@ -949,6 +963,13 @@ export function ScreenRouter() {
         <SectionLabel>{t.studioCharacter}</SectionLabel>
         <ChipPicker items={modelNames} value={nav.vidChar} onChange={(c) => patch({ vidChar: c })} />
 
+        <SectionLabel>{t.studioFormat}</SectionLabel>
+        <ChipPicker
+          items={[...IMG_FORMATS]}
+          value={nav.vidFormat}
+          onChange={(f) => patch({ vidFormat: f })}
+        />
+
         {promptMode ? (
           <>
             <SectionLabel>{t.studioFirstFrame}</SectionLabel>
@@ -1078,12 +1099,6 @@ export function ScreenRouter() {
           items={[...VID_QUALITIES]}
           value={nav.vidQuality}
           onChange={(q) => patch({ vidQuality: q })}
-        />
-        <SectionLabel>{t.studioFormat}</SectionLabel>
-        <ChipPicker
-          items={[...IMG_FORMATS]}
-          value={nav.vidFormat}
-          onChange={(f) => patch({ vidFormat: f })}
         />
         <SectionLabel>{t.studioDuration}</SectionLabel>
         <NumberChipPicker
@@ -1239,10 +1254,32 @@ export function ScreenRouter() {
             size={36}
             imageUrl={charPhotos[0]?.url || undefined}
           />
-          <View>
+          <View style={s.flex1}>
             <Text style={s.charTitle}>{name}</Text>
             <Text style={s.charSub}>{model?.sub ?? '—'}</Text>
           </View>
+          {charIdNum ? (
+            <Pressable
+              style={s.charMenuBtn}
+              hitSlop={10}
+              onPress={() => {
+                Alert.alert(t.charDelete, t.charDeleteConfirm, [
+                  { text: t.commonCancel, style: 'cancel' },
+                  {
+                    text: t.commonDelete,
+                    style: 'destructive',
+                    onPress: () => {
+                      void deleteCharacter(charIdNum).then(() => {
+                        resetTo('characters');
+                      });
+                    },
+                  },
+                ]);
+              }}
+            >
+              <Text style={s.charMenuIcon}>⋯</Text>
+            </Pressable>
+          ) : null}
         </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.tabRow}>
           <TabChip label={t.charTabPhotos} active={ct === 'photos'} onPress={() => patch({ charTab: 'photos' })} />
@@ -1465,27 +1502,6 @@ export function ScreenRouter() {
               </Pressable>
             </Card>
           </>
-        ) : null}
-        {charIdNum ? (
-          <Pressable
-            style={s.redOutlineSmall}
-            onPress={() => {
-              Alert.alert(t.charDelete, t.charDeleteConfirm, [
-                { text: t.commonCancel, style: 'cancel' },
-                {
-                  text: t.commonDelete,
-                  style: 'destructive',
-                  onPress: () => {
-                    void deleteCharacter(charIdNum).then(() => {
-                      resetTo('characters');
-                    });
-                  },
-                },
-              ]);
-            }}
-          >
-            <Text style={s.redText}>{t.charDelete}</Text>
-          </Pressable>
         ) : null}
       </ScreenScroll>
     );
@@ -2526,6 +2542,16 @@ const s = StyleSheet.create({
   charName: { fontFamily: font.bodyExtra, fontSize: 13, color: color.text },
   charSub: { fontSize: 10.5, color: color.muted },
   charHead: { flexDirection: 'row', alignItems: 'center', gap: 9, paddingBottom: 12, paddingHorizontal: 4 },
+  charMenuBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  charMenuIcon: { color: color.muted, fontSize: 22, lineHeight: 24, marginTop: -2 },
   charTitle: { fontFamily: font.bodyExtra, fontSize: 15, color: color.text },
   tabRow: { flexDirection: 'row', gap: 6, paddingBottom: 2 },
   grid3: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },

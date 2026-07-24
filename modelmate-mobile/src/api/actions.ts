@@ -9,7 +9,7 @@ import type {
   TelegramLoginUser,
 } from '@/src/api/types';
 import { apiUrl, getApiBaseUrl, resolveMediaUrl } from '@/src/api/config';
-import { remoteImageToLocalFile } from '@/src/api/mediaFiles';
+import { appendFormDataFile, prepareUploadFile, remoteImageToLocalFile } from '@/src/api/mediaFiles';
 import { archiveThumbUrl } from '@/src/api/media';
 import MMOS_STUDIO_SCENARIOS from '@/src/studio/mmOsStudioScenarios';
 import {
@@ -257,7 +257,7 @@ export async function patchStudioModel(id: number, patch: Record<string, unknown
 
 export async function uploadStudioModelImage(charId: number, file: LocalFile, kind: string) {
   const fd = new FormData();
-  fd.append('images', { uri: file.uri, name: file.name, type: file.type } as unknown as Blob);
+  appendFormDataFile(fd, 'images', await prepareUploadFile(file));
   fd.append('image_kinds', JSON.stringify([normalizePhotoKind(kind)]));
   const res = await apiFetch(`/api/studio/models/${charId}/images`, { method: 'POST', body: fd });
   const data = await res.json().catch(() => ({}));
@@ -268,7 +268,7 @@ export async function uploadStudioModelImage(charId: number, file: LocalFile, ki
 export async function uploadPhoneExifReference(modelId: number, role: 'selfie' | 'main', file: LocalFile) {
   const fd = new FormData();
   fd.append('role', role);
-  fd.append('image', { uri: file.uri, name: file.name, type: file.type } as unknown as Blob);
+  appendFormDataFile(fd, 'image', await prepareUploadFile(file));
   const res = await apiFetch(`/api/studio/models/${modelId}/phone-exif-reference`, { method: 'POST', body: fd });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'Не удалось загрузить EXIF-эталон');
@@ -307,7 +307,7 @@ export async function changePassword(currentPassword: string, newPassword: strin
 export async function sendReplyWithImage(convId: number, text: string, imageFile: LocalFile) {
   const fd = new FormData();
   if (text.trim()) fd.append('text', text.trim());
-  appendLocalFile(fd, 'image', imageFile);
+  appendLocalFile(fd, 'image', await prepareUploadFile(imageFile));
   const res = await apiFetch(`/api/conversations/${convId}/reply`, { method: 'POST', body: fd });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'Не удалось отправить');
@@ -354,7 +354,7 @@ export async function generateStudioModelProfile(model: StudioModelOut) {
     if (!url) continue;
     try {
       const file = await remoteImageToLocalFile(url, `model-${im.id}.jpg`);
-      fd.append('images', file as unknown as Blob);
+      appendFormDataFile(fd, 'images', file);
       appended += 1;
     } catch {
       /* skip unreadable */
@@ -466,12 +466,12 @@ export async function fetchIgBotUsers() {
 }
 
 function appendLocalFile(fd: FormData, field: string, file: LocalFile) {
-  fd.append(field, { uri: file.uri, name: file.name, type: file.type } as unknown as Blob);
+  appendFormDataFile(fd, field, file);
 }
 
 export async function uploadWorkflowReference(file: LocalFile): Promise<string> {
   const fd = new FormData();
-  appendLocalFile(fd, 'file', file);
+  appendLocalFile(fd, 'file', await prepareUploadFile(file));
   const res = await apiFetch('/api/studio/workflow/reference', { method: 'POST', body: fd });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'Не удалось загрузить референс');
@@ -481,7 +481,7 @@ export async function uploadWorkflowReference(file: LocalFile): Promise<string> 
 
 export async function uploadMotionDrivingVideo(file: LocalFile): Promise<string> {
   const fd = new FormData();
-  appendLocalFile(fd, 'video', file);
+  appendLocalFile(fd, 'video', await prepareUploadFile(file));
   const res = await apiFetch('/api/studio/motion/upload-driving-video', { method: 'POST', body: fd });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'Не удалось загрузить видео');
@@ -547,6 +547,93 @@ function resolveSlotSource(
   };
 }
 
+function slotHasContent(
+  mode: string,
+  index: number,
+  uploadFiles: Record<string, LocalFile | undefined>,
+  slotArchivePicks: Record<string, number | undefined>,
+  slotSource: Record<string, string | undefined>,
+): boolean {
+  const m = mode === 'loc' ? 'location' : mode;
+  const slotKey = slotStateKey(m, index);
+  const uploadKey = slotUploadKey(m, index);
+  const src = slotSource[slotKey] || 'upload';
+  if (src === 'archive') return slotArchivePicks[slotKey] != null;
+  return Boolean(uploadFiles[uploadKey]);
+}
+
+export function validateImageGeneration(params: {
+  modeId: string;
+  navState: Record<string, unknown>;
+  uploadFiles: Record<string, LocalFile | undefined>;
+  slotArchivePicks: Record<string, number | undefined>;
+  slotSource: Record<string, string | undefined>;
+  selectedModelId: number | null;
+  labels: {
+    errSelectCharacter: string;
+    errEnterPrompt: string;
+    errUploadReference: string;
+    errUploadSceneRef: string;
+    errUploadOutfitCloth: string;
+    errUploadLocationRef: string;
+    errUploadEditFrame: string;
+    errUploadEditDetailRef: string;
+  };
+}): string | null {
+  const mode = params.modeId === 'loc' ? 'location' : params.modeId;
+  const t = params.labels;
+  const { navState, uploadFiles, slotArchivePicks, slotSource, selectedModelId } = params;
+
+  const needsModel = mode === 'ref' || mode === 'swap' || mode === 'prompt';
+  if (needsModel && !selectedModelId) return t.errSelectCharacter;
+
+  if (mode === 'prompt' && !String(navState.imgPrompt || '').trim()) {
+    return t.errEnterPrompt;
+  }
+
+  if (mode === 'swap' || mode === 'ref') {
+    if (!slotHasContent(mode, 0, uploadFiles, slotArchivePicks, slotSource)) {
+      return mode === 'swap' ? t.errUploadSceneRef : t.errUploadReference;
+    }
+  }
+
+  if (mode === 'carousel') {
+    if (!slotHasContent('carousel', 0, uploadFiles, slotArchivePicks, slotSource)) {
+      return t.errUploadReference;
+    }
+  }
+
+  if (mode === 'outfit') {
+    if (!slotHasContent('outfit', 0, uploadFiles, slotArchivePicks, slotSource)) {
+      return t.errUploadReference;
+    }
+    if (!slotHasContent('outfit', 1, uploadFiles, slotArchivePicks, slotSource)) {
+      return t.errUploadOutfitCloth;
+    }
+  }
+
+  if (mode === 'location') {
+    if (!slotHasContent('location', 0, uploadFiles, slotArchivePicks, slotSource)) {
+      return t.errUploadReference;
+    }
+    if (!slotHasContent('location', 1, uploadFiles, slotArchivePicks, slotSource)) {
+      return t.errUploadLocationRef;
+    }
+  }
+
+  if (mode === 'edit') {
+    if (!slotHasContent('edit', 0, uploadFiles, slotArchivePicks, slotSource)) {
+      return t.errUploadEditFrame;
+    }
+    if (!String(navState.imgPrompt || '').trim()) return t.errEnterPrompt;
+    if (String(navState.editNeedsRef || '') === 'yes' && !uploadFiles['edit-ref']) {
+      return t.errUploadEditDetailRef;
+    }
+  }
+
+  return null;
+}
+
 export async function runImageGeneration(params: {
   modeId: string;
   navState: Record<string, unknown>;
@@ -581,6 +668,8 @@ export async function runImageGeneration(params: {
     apiFetch,
     readJson: async (r: Response) => r.json().catch(() => ({})),
     formatDetail: (d: { detail?: unknown }) => (typeof d?.detail === 'string' ? d.detail : ''),
+    uploadWorkflowReference,
+    remoteImageToLocalFile,
   };
 
   const helpers = {
@@ -605,7 +694,7 @@ export async function runImageGeneration(params: {
     fd.append('workflow_wave_model', wave.apiId);
     if (wave.tier) fd.append('wan_edit_tier', wave.tier);
     const carouselFile = params.uploadFiles.carousel;
-    if (carouselFile) appendLocalFile(fd, 'image', carouselFile);
+    if (carouselFile) appendLocalFile(fd, 'image', await prepareUploadFile(carouselFile));
     return postStudioJobStart('/api/studio/carousel', { method: 'POST', body: fd });
   }
 
@@ -652,8 +741,8 @@ export async function runMotionFirstFrame(params: {
   fd.append('model_id', String(params.modelId));
   fd.append('output_aspect', params.aspect || '9:16');
   fd.append('studio_wave_profile', params.nsfw ? 'nsfw' : 'regular');
-  if (params.videoFile) appendLocalFile(fd, 'video', params.videoFile);
-  if (params.frameFile) appendLocalFile(fd, 'first_frame_image', params.frameFile);
+  if (params.videoFile) appendLocalFile(fd, 'video', await prepareUploadFile(params.videoFile));
+  if (params.frameFile) appendLocalFile(fd, 'first_frame_image', await prepareUploadFile(params.frameFile));
   if (params.existingGenerationId) {
     fd.append('existing_generation_id', String(params.existingGenerationId));
   }
@@ -703,7 +792,7 @@ export async function runMotionVideo(params: {
   }
   if (params.autoMotionPrompt) fd.append('auto_motion_prompt', '1');
   fd.append('generate_audio', params.generateAudio === false ? '0' : '1');
-  if (params.frameFile) appendLocalFile(fd, 'image', params.frameFile);
+  if (params.frameFile) appendLocalFile(fd, 'image', await prepareUploadFile(params.frameFile));
   const accepted = await postStudioJobStart('/api/studio/motion/render-video', { method: 'POST', body: fd });
   return accepted;
 }
@@ -724,8 +813,8 @@ export async function runModelBootstrapFaceMerge(params: {
   aspect?: string;
 }) {
   const fd = new FormData();
-  appendLocalFile(fd, 'ref_form', params.face1);
-  appendLocalFile(fd, 'ref_face', params.face2);
+  appendLocalFile(fd, 'ref_form', await prepareUploadFile(params.face1));
+  appendLocalFile(fd, 'ref_face', await prepareUploadFile(params.face2));
   fd.append('output_aspect', params.aspect || '3:4');
   if (params.modelId) fd.append('model_id', String(params.modelId));
   const accepted = await postStudioJobStart('/api/studio/model-bootstrap/face-merge', { method: 'POST', body: fd });
@@ -743,7 +832,7 @@ export async function runModelBootstrapBodyCompose(params: {
   aspect?: string;
 }) {
   const fd = new FormData();
-  appendLocalFile(fd, 'ref_body', params.bodyRef);
+  appendLocalFile(fd, 'ref_body', await prepareUploadFile(params.bodyRef));
   fd.append('output_aspect', params.aspect || '3:4');
   if (params.modelId) fd.append('model_id', String(params.modelId));
   if (params.faceGenerationId) fd.append('face_generation_id', String(params.faceGenerationId));

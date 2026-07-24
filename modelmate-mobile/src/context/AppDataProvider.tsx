@@ -9,8 +9,10 @@ import {
   useState,
 } from 'react';
 import { useAppSettings } from '@/src/context/AppSettingsContext';
+import { showUserError } from '@/src/utils/userNotice';
 import { AppState } from 'react-native';
 import * as actions from '@/src/api/actions';
+import { validateImageGeneration } from '@/src/api/actions';
 import { refreshPendingArchiveImages } from '@/src/api/archivePoll';
 import { isArchivePending, archiveThumbUrl, preferStableMediaUrl } from '@/src/api/media';
 import { resolveMediaUrl } from '@/src/api/config';
@@ -312,6 +314,15 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
   const clearError = useCallback(() => setError(null), []);
 
+  const reportError = useCallback((e: unknown, options?: { alert?: boolean }) => {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (!msg.trim()) return;
+    setError(msg);
+    if (options?.alert !== false) {
+      showUserError(msg, t.errorTitle);
+    }
+  }, [t.errorTitle]);
+
   const setUploadFile = useCallback((key: string, file: LocalFile | undefined) => {
     setUploadFilesState((prev) => ({ ...prev, [key]: file }));
   }, []);
@@ -411,7 +422,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       await actions.replySupportTicket(ticketId, trimmed);
       await refreshSupportTickets();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      reportError(e);
       throw e;
     }
   }, [refreshSupportTickets]);
@@ -545,7 +556,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       await setToken(data.access_token);
       await refreshAll();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      reportError(e);
       throw e;
     } finally {
       setBusy(false);
@@ -560,7 +571,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       await setToken(data.access_token);
       await refreshAll();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      reportError(e);
       throw e;
     } finally {
       setBusy(false);
@@ -576,7 +587,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       await setToken(token);
       await refreshAll();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      reportError(e);
       throw e;
     } finally {
       setBusy(false);
@@ -602,7 +613,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       const rows = (await actions.fetchConversationFolders()) as ConversationFolderOut[];
       setConversationFolders(Array.isArray(rows) ? rows : []);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      reportError(e);
     }
   }, []);
 
@@ -619,7 +630,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       );
     } catch (e) {
       if (activeThreadConvIdRef.current !== convId) return;
-      setError(e instanceof Error ? e.message : String(e));
+      reportError(e);
     }
   }, []);
 
@@ -651,7 +662,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       }
     } catch (e) {
       setRawMessages((prev) => prev.filter((m) => m.id !== tempId));
-      setError(e instanceof Error ? e.message : String(e));
+      reportError(e);
       throw e;
     }
   }, [loadThread, mergeInboundMessage, patchConversationPreview]);
@@ -676,7 +687,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       }
     } catch (e) {
       setRawMessages((prev) => prev.filter((m) => m.id !== tempId));
-      setError(e instanceof Error ? e.message : String(e));
+      reportError(e);
       throw e;
     }
   }, [loadThread, mergeInboundMessage, patchConversationPreview]);
@@ -688,7 +699,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       await actions.createConversationFolder(name, conversationIds);
       await loadConversationFolders();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      reportError(e);
       throw e;
     } finally {
       setBusy(false);
@@ -702,7 +713,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       await actions.patchConversationFolder(folderId, { name });
       await loadConversationFolders();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      reportError(e);
       throw e;
     } finally {
       setBusy(false);
@@ -716,7 +727,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       await actions.deleteConversationFolder(folderId);
       await loadConversationFolders();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      reportError(e);
       throw e;
     } finally {
       setBusy(false);
@@ -730,7 +741,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       await actions.patchConversationFolder(folderId, { conversation_ids: conversationIds });
       await loadConversationFolders();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      reportError(e);
       throw e;
     } finally {
       setBusy(false);
@@ -744,7 +755,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       await actions.addConversationToFolder(folderId, convId);
       await loadConversationFolders();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      reportError(e);
       throw e;
     } finally {
       setBusy(false);
@@ -829,8 +840,68 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       nav: NavigationState,
       patchGenStatus: (key: GenKey, status: 'loading' | 'done' | null) => void,
     ) => {
-      patchGenStatus(key, 'loading');
       setError(null);
+
+      const modelId = modelIdByName(rawModels, nav.imgChar || nav.vidChar);
+
+      if (key === 'video') {
+        const promptOnly = (nav.vidMode || 'motion-control') === 'prompt';
+        const motionControl = !promptOnly && (nav.vidMode || 'motion-control') === 'motion-control';
+        if (!modelId) {
+          reportError(new Error(t.errSelectCharacter));
+          return;
+        }
+        if (promptOnly) {
+          if (!uploadFiles['motion-frame'] && !firstFrameGenId) {
+            reportError(new Error(t.errUploadFirstFrame));
+            return;
+          }
+          if (!String(nav.imgPrompt || '').trim()) {
+            reportError(new Error(t.errPromptOnlyVideo));
+            return;
+          }
+        }
+        if (motionControl) {
+          if (!motionVideoFileId) {
+            reportError(new Error(t.errUploadRefVideo));
+            return;
+          }
+          if (nav.vidHasFirstFrame && !firstFrameGenId && !uploadFiles['motion-frame']) {
+            reportError(new Error(t.errUploadFirstFrame));
+            return;
+          }
+          if (!nav.vidHasFirstFrame && !firstFrameGenId) {
+            reportError(new Error(t.errUploadFirstFrame));
+            return;
+          }
+        }
+      } else if (key.startsWith('img:')) {
+        const modeId = key.slice(4);
+        const validationMsg = validateImageGeneration({
+          modeId,
+          navState: nav as unknown as Record<string, unknown>,
+          uploadFiles,
+          slotArchivePicks,
+          slotSource,
+          selectedModelId: modelId,
+          labels: {
+            errSelectCharacter: t.errSelectCharacter,
+            errEnterPrompt: t.errEnterPrompt,
+            errUploadReference: t.errUploadReference,
+            errUploadSceneRef: t.errUploadSceneRef,
+            errUploadOutfitCloth: t.errUploadOutfitCloth,
+            errUploadLocationRef: t.errUploadLocationRef,
+            errUploadEditFrame: t.errUploadEditFrame,
+            errUploadEditDetailRef: t.errUploadEditDetailRef,
+          },
+        });
+        if (validationMsg) {
+          reportError(new Error(validationMsg));
+          return;
+        }
+      }
+
+      patchGenStatus(key, 'loading');
 
       const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -895,7 +966,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       };
 
       try {
-        const modelId = modelIdByName(rawModels, nav.imgChar || nav.vidChar);
         let generationId: number | null = null;
         let directImageUrl = '';
         let directVideoUrl = '';
@@ -904,17 +974,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           if (!modelId) throw new Error(t.errSelectCharacter);
           const promptOnly = (nav.vidMode || 'motion-control') === 'prompt';
           const motionControl = !promptOnly && (nav.vidMode || 'motion-control') === 'motion-control';
-          if (promptOnly && !uploadFiles['motion-frame'] && !firstFrameGenId) {
-            throw new Error(t.errUploadFirstFrame);
-          }
-          if (motionControl && !motionVideoFileId) throw new Error(t.errUploadRefVideo);
-          if (motionControl && nav.vidHasFirstFrame && !firstFrameGenId && !uploadFiles['motion-frame']) {
-            throw new Error(t.errUploadFirstFrame);
-          }
-          if (motionControl && !nav.vidHasFirstFrame && !firstFrameGenId) {
-            throw new Error(t.errUploadFirstFrame);
-          }
-          let ffGenId = motionControl ? firstFrameGenId : null;
+          let ffGenId: number | null = motionControl ? firstFrameGenId : null;
           if (motionControl && !ffGenId && uploadFiles['motion-frame']) {
             const { result } = await actions.runMotionFirstFrame({
               modelId,
@@ -924,7 +984,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
               autoMotionPrompt: false,
               useStillAsFinal: true,
             });
-            ffGenId = result?.generation_id ?? null;
+            const gid = result?.generation_id;
+            ffGenId = gid != null ? Number(gid) : null;
             if (!ffGenId) throw new Error(t.errUploadFirstFrame);
           }
           const accepted = await actions.runMotionVideo({
@@ -989,10 +1050,10 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         }
       } catch (e) {
         patchGenStatus(key, null);
-        setError(e instanceof Error ? e.message : String(e));
+        reportError(e);
       }
     },
-    [rawModels, rawArchiveImages, uploadFiles, slotArchivePicks, motionVideoFileId, firstFrameGenId, me, t],
+    [rawModels, rawArchiveImages, uploadFiles, slotArchivePicks, slotSource, motionVideoFileId, firstFrameGenId, me, t, reportError],
   );
 
   const generateFirstFrame = useCallback(
@@ -1035,7 +1096,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         }
       } catch (e) {
         patchFfState('idle');
-        setError(e instanceof Error ? e.message : String(e));
+        reportError(e);
         throw e;
       }
     },
@@ -1064,14 +1125,20 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   }, [refreshAll]);
 
   const createCharacter = useCallback(async (name: string, photoTagIdx: number, photoFile?: LocalFile) => {
-    const created = (await actions.createStudioModel(name)) as StudioModelOut;
+    const trimmed = name.trim();
+    if (!trimmed) {
+      const err = new Error('Укажите имя персонажа');
+      reportError(err);
+      throw err;
+    }
+    const created = (await actions.createStudioModel(trimmed)) as StudioModelOut;
     if (photoFile && created.id) {
       const kinds = ['face', 'turnaround', 'body', 'genitals', 'other'];
       await actions.uploadStudioModelImage(created.id, photoFile, kinds[photoTagIdx] || 'face');
     }
     await refreshAll();
     return created.id;
-  }, [refreshAll]);
+  }, [refreshAll, reportError]);
 
   const renameCharacter = useCallback(async (charId: number, name: string) => {
     const trimmed = name.trim();
@@ -1158,21 +1225,21 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       if (platformId === 'tg') {
         const trimmed = token.trim();
         if (!trimmed) {
-          setError('Укажите токен Telegram-бота');
+          reportError(new Error('Укажите токен Telegram-бота'));
           return false;
         }
         status = await actions.saveTelegramBot(trimmed, modelId ?? undefined);
       } else if (platformId === 'tr') {
         const trimmed = token.trim();
         if (!trimmed) {
-          setError('Введите API-ключ Tribute');
+          reportError(new Error('Введите API-ключ Tribute'));
           return false;
         }
         status = await actions.saveTributeKey(trimmed, modelId ?? undefined);
       } else if (platformId === 'ws') {
         const trimmed = token.trim();
         if (!trimmed) {
-          setError('Введите API-ключ WaveSpeed');
+          reportError(new Error('Введите API-ключ WaveSpeed'));
           return false;
         }
         status = await actions.saveWavespeedKey(trimmed);
@@ -1183,17 +1250,17 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           await refreshAll();
           return true;
         }
-        if (result === 'error') setError('Не удалось подключить Fanvue');
+        if (result === 'error') reportError(new Error('Не удалось подключить Fanvue'));
         return false;
       } else {
-        setError('Сохранение недоступно для этой интеграции');
+        reportError(new Error('Сохранение недоступно для этой интеграции'));
         return false;
       }
       if (status) setRawIntegrations(status);
       await refreshAll();
       return true;
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      reportError(e);
       return false;
     }
   }, [rawModels, refreshAll]);
@@ -1218,7 +1285,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       await actions.payYookassa(product);
       return null;
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      reportError(e);
       return null;
     }
   }, [me]);
@@ -1279,13 +1346,14 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     const trimmed = password.trim();
     if (trimmed.length < 8) {
       setError('Пароль должен быть не короче 8 символов');
+      showUserError('Пароль должен быть не короче 8 символов', t.errorTitle);
       return;
     }
     setError(null);
     try {
       await actions.resetAdminUserPassword(userId, trimmed);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      reportError(e);
       throw e;
     }
   }, []);
@@ -1304,7 +1372,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const archiveVideoTiles = rawArchiveVideos.map((g, i) => mapArchiveTile(g, i, rawModels));
   const connectionsList = mapIntegrationCards(rawIntegrations);
   const donationBalances = resolveDonationBalances(donationOverviewRaw, rawDonationEvents);
-  const overviewKpis = mapOverviewKpis(me, rawConversations, donationBalances.available);
+  const overviewKpis = mapOverviewKpis(me, rawConversations, donationBalances.available, locale);
   const donations = rawDonations.map(mapDonationRow);
   const donationEvents = rawDonationEvents.map(mapDonationEventRow);
   const members = rawMembers.map((m, i) => mapTeamMember(m, i, rawModels, chatterStatsRaw));
