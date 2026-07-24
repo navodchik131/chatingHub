@@ -1032,6 +1032,14 @@ export function CabinetDataProvider({ children }) {
         setError('Загрузите или выберите первый кадр')
         return
       }
+      if (motionControl && appState.hasFirstFrame === 'no' && !firstFrameGenId) {
+        setError('Сначала сгенерируйте первый кадр')
+        return
+      }
+      if (motionControl && appState.hasFirstFrame === 'yes' && !ffGenId && !uploadFiles['motion-frame']) {
+        setError('Загрузите или выберите первый кадр из архива')
+        return
+      }
       const model = models.find((m) => Number(m.id) === Number(selectedModelId))
       const promptExcerpt = motionControl ? 'Motion control' : prompt
       const { item, tempId } = createOptimisticStudioArchiveItem({
@@ -1044,14 +1052,15 @@ export function CabinetDataProvider({ children }) {
       setArchiveVideos((prev) => prependOptimisticStudioArchive(prev, item))
       setError(null)
       try {
-        if (promptMode && !ffGenId && uploadFiles['motion-frame']) {
+        if (!ffGenId && uploadFiles['motion-frame']) {
           const { result } = await actions.runMotionFirstFrame({
             modelId: selectedModelId,
             aspect: appState.vidFormat || selectedAspect,
             nsfw: appState.contentMode === 'nsfw',
             frameFile: uploadFiles['motion-frame'],
-            description: prompt,
+            description: promptMode ? prompt : '',
             autoMotionPrompt: false,
+            useStillAsFinal: motionControl,
           })
           ffGenId = result?.generation_id || null
           if (!ffGenId) throw new Error('Не удалось загрузить первый кадр')

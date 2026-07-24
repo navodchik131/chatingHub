@@ -5811,15 +5811,24 @@ async def _studio_job_execute_motion_render_video(
     if not sm:
         raise RuntimeError("Модель не найдена")
 
+    first_frame_gen_id_early: int | None = None
+    if first_frame_gid is not None:
+        try:
+            first_frame_gen_id_early = int(first_frame_gid)
+        except (TypeError, ValueError):
+            first_frame_gen_id_early = None
+
     skip_model_ref_check = video_provider == "seedance_i2v" or prompt_only_mode
     if video_provider != "grok_imagine_i2v" and not skip_model_ref_check:
         if mv_id and send_video_reference:
-            model_ref_ok = filter_model_images_for_seedance_video_face_only(list(sm.images))
-            if not model_ref_ok:
-                raise RuntimeError(
-                    "У модели нет фото лица для swap по видео. "
-                    "Добавьте снимок «Лицо / идентичность» в кабинете модели."
-                )
+            if first_frame_gen_id_early is None:
+                model_ref_ok = filter_model_images_for_seedance_video_face_only(list(sm.images))
+                if not model_ref_ok:
+                    raise RuntimeError(
+                        "У модели нет фото лица для swap по видео. "
+                        "Добавьте снимок «Лицо / идентичность» в кабинете модели "
+                        "или сгенерируйте/выберите первый кадр."
+                    )
         else:
             model_ref_ok = (
                 filter_model_images_for_boardstory(list(sm.images))
@@ -6274,19 +6283,22 @@ async def _studio_job_execute_motion_render_video(
                 except (TypeError, ValueError):
                     sheet_gen_id = None
 
-            model_imgs = (
-                filter_model_images_for_seedance_video_face_only(list(sm.images))
-                if motion_vid_url and send_video_reference
-                else filter_model_images_for_seedance_video(
+            if motion_vid_url and send_video_reference:
+                if ff_url:
+                    model_imgs = []
+                else:
+                    model_imgs = filter_model_images_for_seedance_video_face_only(list(sm.images))
+                    if not model_imgs:
+                        raise RuntimeError(
+                            "У модели нет фото лица для swap по видео. "
+                            "Добавьте снимок «Лицо / идентичность» в кабинете модели "
+                            "или сгенерируйте/выберите первый кадр."
+                        )
+            else:
+                model_imgs = filter_model_images_for_seedance_video(
                     list(sm.images),
                     minimal=False,
                     include_body=False,
-                )
-            )
-            if motion_vid_url and send_video_reference and not model_imgs:
-                raise RuntimeError(
-                    "У модели нет фото лица для swap по видео. "
-                    "Добавьте снимок «Лицо / идентичность» в кабинете модели."
                 )
             n_outfit = 0
             if sheet_gen_id is not None:

@@ -914,6 +914,19 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           if (motionControl && !nav.vidHasFirstFrame && !firstFrameGenId) {
             throw new Error(t.errUploadFirstFrame);
           }
+          let ffGenId = motionControl ? firstFrameGenId : null;
+          if (motionControl && !ffGenId && uploadFiles['motion-frame']) {
+            const { result } = await actions.runMotionFirstFrame({
+              modelId,
+              aspect: nav.vidFormat,
+              nsfw: nav.contentMode === 'nsfw',
+              frameFile: uploadFiles['motion-frame'],
+              autoMotionPrompt: false,
+              useStillAsFinal: true,
+            });
+            ffGenId = result?.generation_id ?? null;
+            if (!ffGenId) throw new Error(t.errUploadFirstFrame);
+          }
           const accepted = await actions.runMotionVideo({
             modelId,
             prompt: promptOnly ? (nav.imgPrompt || '') : (motionControl ? '' : (nav.imgPrompt || 'Cinematic motion')),
@@ -921,11 +934,10 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
             resolution: nav.vidQuality,
             durationSeconds: nav.vidDuration,
             motionVideoFileId: motionControl ? (motionVideoFileId || undefined) : undefined,
-            firstFrameGenerationId: motionControl ? firstFrameGenId : null,
+            firstFrameGenerationId: motionControl ? ffGenId : null,
             autoMotionPrompt: motionControl && Boolean(motionVideoFileId),
             promptOnlyMode: promptOnly,
             generateAudio: nav.vidGenerateAudio !== false,
-            frameFile: uploadFiles['motion-frame'],
           });
           generationId = accepted.generation_id ?? null;
           if (accepted.job_id) {

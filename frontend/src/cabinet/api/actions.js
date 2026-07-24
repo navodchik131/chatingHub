@@ -404,6 +404,8 @@ export async function runMotionFirstFrame(params) {
   if (params.existingGenerationId) fd.append('existing_generation_id', String(params.existingGenerationId))
   if (params.description) fd.append('description', params.description)
   if (params.autoMotionPrompt !== false) fd.append('auto_motion_prompt', '1')
+  else fd.append('auto_motion_prompt', '0')
+  if (params.useStillAsFinal) fd.append('use_still_as_final', '1')
   const accepted = await postStudioJobStart('/api/studio/motion/first-frame', { method: 'POST', body: fd })
   if (accepted.job_id) {
     const result = await waitForStudioJobResult(accepted.job_id, { maxWaitMs: 10 * 60 * 1000 })

@@ -645,6 +645,8 @@ export async function runMotionFirstFrame(params: {
   frameFile?: LocalFile;
   existingGenerationId?: number | null;
   description?: string;
+  autoMotionPrompt?: boolean;
+  useStillAsFinal?: boolean;
 }) {
   const fd = new FormData();
   fd.append('model_id', String(params.modelId));
@@ -656,7 +658,8 @@ export async function runMotionFirstFrame(params: {
     fd.append('existing_generation_id', String(params.existingGenerationId));
   }
   if (params.description) fd.append('description', params.description);
-  fd.append('auto_motion_prompt', '1');
+  fd.append('auto_motion_prompt', params.autoMotionPrompt === false ? '0' : '1');
+  if (params.useStillAsFinal) fd.append('use_still_as_final', '1');
   const accepted = await postStudioJobStart('/api/studio/motion/first-frame', { method: 'POST', body: fd });
   if (accepted.job_id) {
     const result = await waitForStudioJobResult(accepted.job_id, { maxWaitMs: 10 * 60 * 1000 });
