@@ -305,6 +305,41 @@ export function ScreenRouter() {
     if (cur === 'profileEdit') patch({ profileEditEmail: userEmail });
   }, [cur, userEmail, patch]);
 
+  useEffect(() => {
+    if (!modelNames.length) {
+      const clears: Partial<typeof nav> = {};
+      if (nav.imgChar) clears.imgChar = '';
+      if (nav.vidChar) clears.vidChar = '';
+      if (nav.connChar) clears.connChar = '';
+      if (Object.keys(clears).length) patch(clears);
+      return;
+    }
+    const fixes: Partial<typeof nav> = {};
+    if (!modelNames.includes(nav.imgChar)) fixes.imgChar = modelNames[0];
+    if (!modelNames.includes(nav.vidChar)) fixes.vidChar = modelNames[0];
+    if (!modelNames.includes(nav.connChar)) fixes.connChar = modelNames[0];
+    if (Object.keys(fixes).length) patch(fixes);
+  }, [modelNames, nav.imgChar, nav.vidChar, nav.connChar, patch]);
+
+  const openNewCharacter = () => {
+    resetTo('characters');
+    push('new-character');
+  };
+
+  const renderCharacterPicker = (value: string, onChange: (name: string) => void) => {
+    if (!modelNames.length) {
+      return (
+        <View style={s.gap8}>
+          <Text style={s.charSub}>{t.studioNoCharacters}</Text>
+          <Pressable onPress={openNewCharacter}>
+            <Text style={s.linkAccent}>+ {t.studioCreateCharacter}</Text>
+          </Pressable>
+        </View>
+      );
+    }
+    return <ChipPicker items={modelNames} value={value} onChange={onChange} />;
+  };
+
   const patchGenStatus = (key: string, status: 'loading' | 'done' | null) => {
     if (status === null) {
       const next = { ...nav.genStatus };
@@ -834,7 +869,7 @@ export function ScreenRouter() {
             </>
           ) : null}
           <SectionLabel>{t.studioCharacter}</SectionLabel>
-          <ChipPicker items={modelNames} value={nav.imgChar} onChange={(c) => patch({ imgChar: c })} />
+          {renderCharacterPicker(nav.imgChar, (c) => patch({ imgChar: c }))}
           <SectionLabel>{t.studioFormat}</SectionLabel>
           <ChipPicker
             items={[...IMG_FORMATS]}
@@ -961,7 +996,7 @@ export function ScreenRouter() {
         </View>
 
         <SectionLabel>{t.studioCharacter}</SectionLabel>
-        <ChipPicker items={modelNames} value={nav.vidChar} onChange={(c) => patch({ vidChar: c })} />
+        {renderCharacterPicker(nav.vidChar, (c) => patch({ vidChar: c }))}
 
         <SectionLabel>{t.studioFormat}</SectionLabel>
         <ChipPicker
@@ -1532,8 +1567,8 @@ export function ScreenRouter() {
     const existing = mapIntegrationConnections(id, rawIntegrations, rawModels);
     const current = mapIntegrationCurrent(id, rawIntegrations, rawModels);
     const defaultChar = existing[0]?.studioModelId
-      ? rawModels.find((m) => m.id === existing[0].studioModelId)?.name || modelNames[0]
-      : modelNames[0];
+      ? rawModels.find((m) => m.id === existing[0].studioModelId)?.name || modelNames[0] || ''
+      : modelNames[0] || '';
     const isWs = id === 'ws';
     const isFanvue = id === 'fv';
     const needsCharacter = id === 'tg' || id === 'tr' || isFanvue;
@@ -1618,11 +1653,7 @@ export function ScreenRouter() {
           {needsCharacter ? (
             <>
               <FieldLabel>{t.connCharacter}</FieldLabel>
-              <ChipPicker
-                items={modelNames}
-                value={nav.connChar || defaultChar}
-                onChange={(v) => patch({ connChar: v })}
-              />
+              {renderCharacterPicker(nav.connChar || defaultChar, (v) => patch({ connChar: v }))}
             </>
           ) : null}
         </Card>
@@ -1799,11 +1830,15 @@ export function ScreenRouter() {
             onChangeText={(t) => patch({ donationFields: { ...nav.donationFields, min: t } })}
           />
           <FieldLabel>{t.connCharacter}</FieldLabel>
-          <ChipRowInteractive
-            items={modelNames}
-            activeIndex={nav.donationCharIdx}
-            onSelect={(i) => patch({ donationCharIdx: i })}
-          />
+          {modelNames.length ? (
+            <ChipRowInteractive
+              items={modelNames}
+              activeIndex={nav.donationCharIdx}
+              onSelect={(i) => patch({ donationCharIdx: i })}
+            />
+          ) : (
+            <Text style={s.charSub}>{t.studioNoCharacters}</Text>
+          )}
         </Card>
         <View style={s.rowGap8}>
           <GhostButton title={t.commonDraft} onPress={pop} />
@@ -2541,6 +2576,7 @@ const s = StyleSheet.create({
   rowCenter: { flexDirection: 'row', gap: 10, alignItems: 'center' },
   charName: { fontFamily: font.bodyExtra, fontSize: 13, color: color.text },
   charSub: { fontSize: 10.5, color: color.muted },
+  linkAccent: { fontFamily: font.bodySemi, fontSize: 12, fontWeight: '700', color: color.lime },
   charHead: { flexDirection: 'row', alignItems: 'center', gap: 9, paddingBottom: 12, paddingHorizontal: 4 },
   charMenuBtn: {
     width: 36,

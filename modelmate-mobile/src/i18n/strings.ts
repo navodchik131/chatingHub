@@ -61,6 +61,8 @@ export type Strings = {
   studioReference: string;
   studioReferences: string;
   studioCharacter: string;
+  studioNoCharacters: string;
+  studioCreateCharacter: string;
   studioFormat: string;
   studioGenerate: string;
   studioGenerating: string;
@@ -337,6 +339,8 @@ const RU: Strings = {
   studioReference: 'РЕФЕРЕНС',
   studioReferences: 'РЕФЕРЕНСЫ',
   studioCharacter: 'ПЕРСОНАЖ',
+  studioNoCharacters: 'У вас пока нет персонажей. Создайте первого, чтобы генерировать контент.',
+  studioCreateCharacter: 'Создать персонажа',
   studioFormat: 'ФОРМАТ',
   studioGenerate: 'Сгенерировать',
   studioGenerating: 'Генерируем…',
@@ -613,6 +617,8 @@ const EN: Strings = {
   studioReference: 'REFERENCE',
   studioReferences: 'REFERENCES',
   studioCharacter: 'CHARACTER',
+  studioNoCharacters: 'You have no characters yet. Create one to start generating content.',
+  studioCreateCharacter: 'Create character',
   studioFormat: 'FORMAT',
   studioGenerate: 'Generate',
   studioGenerating: 'Generating…',

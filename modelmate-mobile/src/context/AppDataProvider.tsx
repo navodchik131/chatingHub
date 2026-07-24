@@ -1401,7 +1401,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       messages,
       models,
       rawModels,
-      modelNames: modelNames.length ? modelNames : ['Mia', 'Ruby'],
+      modelNames,
       archiveTiles,
       rawArchiveImages,
       archiveSkip,
