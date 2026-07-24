@@ -74,7 +74,7 @@ export type StudioModelOut = {
   name: string;
   profile_text?: string;
   companion_persona?: CompanionPersonaOut | string;
-  images?: { id: number; kind: string; url: string }[];
+  images?: { id: number; kind: string; url: string; image_kind?: string }[];
   camera_preset_id?: string | number | null;
   export_lat?: number | null;
   export_lon?: number | null;
@@ -124,6 +124,7 @@ export type IntegrationStatusOut = {
   instagram_connections?: PlatformConnectionOut[];
   wavespeed_configured?: boolean;
   wavespeed_managed_by_platform?: boolean;
+  tribute_configured?: boolean;
 };
 
 export type PlatformConnectionOut = {

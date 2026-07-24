@@ -1590,6 +1590,10 @@ class AdminSupportTicketOut(SupportTicketOut):
     user_email: str
 
 
+class SupportTicketUserReplyIn(BaseModel):
+    message: str = Field(min_length=1, max_length=20000)
+
+
 class AdminSupportTicketReplyIn(BaseModel):
     message: str = Field(min_length=1, max_length=20000)
 

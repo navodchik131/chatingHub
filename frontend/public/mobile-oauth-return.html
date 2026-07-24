@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ModelMate</title>
+    <style>
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #0a0b0d;
+        color: #e8eaed;
+        font-family: system-ui, sans-serif;
+        padding: 24px;
+        text-align: center;
+      }
+      p { margin: 0; font-size: 14px; color: #9aa0a6; }
+    </style>
+  </head>
+  <body>
+    <p id="msg">Returning to ModelMate…</p>
+    <script>
+      ;(function () {
+        var params = new URLSearchParams(window.location.search)
+        var provider = String(params.get('provider') || 'oauth').trim()
+        var status = String(params.get('status') || 'error').trim()
+        var returnTo = String(params.get('return') || 'modelmate://oauth-return').trim()
+        var url
+        try {
+          url = new URL(returnTo)
+        } catch (e) {
+          url = new URL('modelmate://oauth-return')
+        }
+        url.searchParams.set('provider', provider)
+        url.searchParams.set('status', status)
+        var reason = params.get('reason')
+        if (reason) url.searchParams.set('reason', String(reason))
+        window.location.replace(url.toString())
+      })()
+    </script>
+  </body>
+</html>

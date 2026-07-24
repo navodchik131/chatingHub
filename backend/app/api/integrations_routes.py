@@ -756,6 +756,11 @@ async def fanvue_oauth_callback(
     if not pending:
         return RedirectResponse(url=fail, status_code=302)
 
+    mobile_oauth = (pending.label or "").strip() == "__mobile__"
+    if mobile_oauth:
+        fail = f"{base}/mobile-oauth-return.html?provider=fanvue&status=error"
+        ok = f"{base}/mobile-oauth-return.html?provider=fanvue&status=connected"
+
     created = pending.created_at
     if created.tzinfo is None:
         created = created.replace(tzinfo=timezone.utc)
@@ -767,7 +772,7 @@ async def fanvue_oauth_callback(
     user_id = pending.user_id
     code_verifier = pending.code_verifier
     oauth_connection_id = pending.connection_id
-    oauth_label = pending.label
+    oauth_label = None if mobile_oauth else pending.label
     oauth_studio_model_id = pending.studio_model_id
     await session.execute(delete(FanvueOAuthState).where(FanvueOAuthState.state == state))
     await session.commit()
@@ -795,10 +800,14 @@ async def fanvue_oauth_callback(
         saved_conn_id = saved.id
     except FanvueOAuthError as e:
         log.warning("fanvue oauth callback failed user=%s: %s", user_id, e)
+        if mobile_oauth:
+            return RedirectResponse(url=fail, status_code=302)
         q = urlencode({"account": "integrations", "fanvue": "error"})
         return RedirectResponse(url=f"{base}/?{q}", status_code=302)
     except Exception:
         log.exception("fanvue oauth callback failed user=%s", user_id)
+        if mobile_oauth:
+            return RedirectResponse(url=fail, status_code=302)
         q = urlencode({"account": "integrations", "fanvue": "error"})
         return RedirectResponse(url=f"{base}/?{q}", status_code=302)
 

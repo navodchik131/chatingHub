@@ -8,11 +8,17 @@ import {
   useRef,
   useState,
 } from 'react';
+import { useAppSettings } from '@/src/context/AppSettingsContext';
 import { AppState } from 'react-native';
 import * as actions from '@/src/api/actions';
 import { refreshPendingArchiveImages } from '@/src/api/archivePoll';
 import { isArchivePending, archiveThumbUrl, preferStableMediaUrl } from '@/src/api/media';
 import { resolveMediaUrl } from '@/src/api/config';
+import {
+  extractStudioJobGenerationId,
+  extractStudioJobImageUrl,
+  extractStudioJobVideoUrl,
+} from '@/src/studio/studioHelpers';
 import { charFieldsFromModel, fmtMoney, maskFromOpRights, photoTagsRu, resolveDonationBalances } from '@/src/api/helpers';
 import {
   mapAdminUser,
@@ -86,6 +92,7 @@ type AppDataValue = {
   refreshSupportTickets: () => Promise<void>;
   createSupportTicket: (payload: { type: string; subject: string; message: string }) => Promise<SupportTicketOut>;
   fetchSupportTicket: (ticketId: number) => Promise<SupportTicketOut>;
+  replySupportTicket: (ticketId: number, message: string) => Promise<void>;
   saveProfileEmail: (email: string) => Promise<void>;
   changeUserPassword: (current: string, next: string) => Promise<void>;
   uploadExifReference: (charId: number, role: 'selfie' | 'main', file: LocalFile) => Promise<void>;
@@ -113,10 +120,16 @@ type AppDataValue = {
   photoTagsExtended: string[];
   uploadFiles: Record<string, LocalFile | undefined>;
   setUploadFile: (key: string, file: LocalFile | undefined) => void;
+  slotArchivePicks: Record<string, number>;
+  setSlotArchivePick: (slotKey: string, generationId: number | null) => void;
+  slotSource: Record<string, 'upload' | 'archive'>;
+  setSlotSource: (slotKey: string, source: 'upload' | 'archive') => void;
   motionVideoFileId: string | null;
   setMotionVideoFileId: (id: string | null) => void;
   firstFrameGenId: number | null;
+  setFirstFrameGenId: (id: number | null) => void;
   firstFrameUrl: string;
+  setFirstFrameUrl: (url: string) => void;
   generateFirstFrame: (nav: NavigationState, patchFfState: (state: NavigationState['ffState']) => void) => Promise<void>;
   genResults: Record<string, { imageUrl?: string; videoUrl?: string }>;
   bootstrap: () => Promise<void>;
@@ -130,6 +143,7 @@ type AppDataValue = {
   clearActiveThread: () => void;
   refreshConversations: () => Promise<void>;
   sendThreadMessage: (convId: number, text: string) => Promise<void>;
+  sendThreadImage: (convId: number, text: string, file: LocalFile) => Promise<void>;
   loadConversationFolders: () => Promise<void>;
   createConversationFolder: (name: string, conversationIds?: number[]) => Promise<void>;
   renameConversationFolder: (folderId: number, name: string) => Promise<void>;
@@ -139,6 +153,9 @@ type AppDataValue = {
   startGeneration: (key: GenKey, nav: NavigationState, patchGenStatus: (key: GenKey, status: 'loading' | 'done' | null) => void) => Promise<void>;
   saveCharacterFields: (charId: number, fields: NavigationState['charFields']) => Promise<void>;
   createCharacter: (name: string, photoTagIdx: number, photoFile?: LocalFile) => Promise<number>;
+  renameCharacter: (charId: number, name: string) => Promise<void>;
+  deleteCharacter: (charId: number) => Promise<void>;
+  deleteCharacterPhoto: (charId: number, imageId: number) => Promise<void>;
   generateCharacterProfile: (charId: number) => Promise<string>;
   savePayoutWallet: (wallet: string) => Promise<void>;
   requestPayout: () => Promise<void>;
@@ -200,6 +217,7 @@ function reuseModelImageUrls(
 }
 
 export function AppDataProvider({ children }: { children: ReactNode }) {
+  const { t, locale } = useAppSettings();
   const [ready, setReady] = useState(false);
   const [authenticated, setAuthenticated] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -235,9 +253,11 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const [exifBotUsers, setExifBotUsers] = useState<AppDataValue['exifBotUsers']>([]);
   const [igBotUsers, setIgBotUsers] = useState<AppDataValue['igBotUsers']>([]);
   const [uploadFiles, setUploadFilesState] = useState<Record<string, LocalFile | undefined>>({});
+  const [slotArchivePicks, setSlotArchivePicksState] = useState<Record<string, number>>({});
+  const [slotSource, setSlotSourceState] = useState<Record<string, 'upload' | 'archive'>>({});
   const [motionVideoFileId, setMotionVideoFileId] = useState<string | null>(null);
-  const [firstFrameGenId, setFirstFrameGenId] = useState<number | null>(null);
-  const [firstFrameUrl, setFirstFrameUrl] = useState('');
+  const [firstFrameGenId, setFirstFrameGenIdState] = useState<number | null>(null);
+  const [firstFrameUrl, setFirstFrameUrlState] = useState('');
   const [genResults, setGenResults] = useState<Record<string, { imageUrl?: string; videoUrl?: string }>>({});
   const refreshLock = useRef(false);
   const activeThreadConvIdRef = useRef<number | null>(null);
@@ -294,6 +314,27 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
   const setUploadFile = useCallback((key: string, file: LocalFile | undefined) => {
     setUploadFilesState((prev) => ({ ...prev, [key]: file }));
+  }, []);
+
+  const setSlotArchivePick = useCallback((slotKey: string, generationId: number | null) => {
+    setSlotArchivePicksState((prev) => {
+      const next = { ...prev };
+      if (generationId == null) delete next[slotKey];
+      else next[slotKey] = generationId;
+      return next;
+    });
+  }, []);
+
+  const setSlotSource = useCallback((slotKey: string, source: 'upload' | 'archive') => {
+    setSlotSourceState((prev) => ({ ...prev, [slotKey]: source }));
+  }, []);
+
+  const setFirstFrameGenId = useCallback((id: number | null) => {
+    setFirstFrameGenIdState(id);
+  }, []);
+
+  const setFirstFrameUrl = useCallback((url: string) => {
+    setFirstFrameUrlState(url);
   }, []);
 
   useEffect(() => {
@@ -361,6 +402,19 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const fetchSupportTicket = useCallback(async (ticketId: number) => {
     return actions.fetchSupportTicket(ticketId);
   }, []);
+
+  const replySupportTicket = useCallback(async (ticketId: number, message: string) => {
+    const trimmed = message.trim();
+    if (!trimmed) return;
+    setError(null);
+    try {
+      await actions.replySupportTicket(ticketId, trimmed);
+      await refreshSupportTickets();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      throw e;
+    }
+  }, [refreshSupportTickets]);
 
   const refreshConversations = useCallback(async () => {
     try {
@@ -602,7 +656,32 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     }
   }, [loadThread, mergeInboundMessage, patchConversationPreview]);
 
-  const createConversationFolder = useCallback(async (name: string, conversationIds: number[] = []) => {
+  const sendThreadImage = useCallback(async (convId: number, text: string, file: LocalFile) => {
+    const tempId = -Date.now();
+    const optimistic: MessageOut = {
+      id: tempId,
+      direction: 'outbound',
+      text_original: text.trim() || '📷',
+      created_at: new Date().toISOString(),
+      pending: true,
+    };
+    setRawMessages((prev) => [...prev, optimistic]);
+    try {
+      const sent = (await actions.sendReplyWithImage(convId, text, file)) as MessageOut;
+      if (sent?.id) {
+        setRawMessages((prev) => mergeInboundMessage(prev, sent));
+        patchConversationPreview(convId, sent, { clearUnread: false });
+      } else {
+        await loadThread(convId);
+      }
+    } catch (e) {
+      setRawMessages((prev) => prev.filter((m) => m.id !== tempId));
+      setError(e instanceof Error ? e.message : String(e));
+      throw e;
+    }
+  }, [loadThread, mergeInboundMessage, patchConversationPreview]);
+
+  const createConversationFolder = useCallback(async (name: string, conversationIds?: number[]) => {
     setBusy(true);
     setError(null);
     try {
@@ -752,19 +831,89 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     ) => {
       patchGenStatus(key, 'loading');
       setError(null);
+
+      const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+      const resolveFromArchive = async (
+        generationId: number | null,
+        directImageUrl: string,
+        directVideoUrl: string,
+      ) => {
+        let archive = await actions.refreshArchiveImages();
+        setRawArchiveImages(archive);
+
+        const pickHit = (items: typeof archive) => {
+          if (generationId != null) {
+            return items.find((g) => Number(g.id) === Number(generationId));
+          }
+          return undefined;
+        };
+
+        let hit = pickHit(archive);
+        let imageUrl = directImageUrl;
+        let videoUrl = directVideoUrl;
+
+        if (!imageUrl && !videoUrl && hit) {
+          imageUrl = archiveThumbUrl(hit) || '';
+          videoUrl = hit.video_url ? resolveMediaUrl(hit.video_url) : '';
+        }
+
+        if ((!imageUrl && !videoUrl) && generationId != null) {
+          for (let attempt = 0; attempt < 8; attempt += 1) {
+            if (attempt > 0) await sleep(2500);
+            archive = await actions.refreshArchiveImages();
+            setRawArchiveImages(archive);
+            hit = pickHit(archive);
+            if (!hit || isArchivePending(hit)) continue;
+            imageUrl = archiveThumbUrl(hit) || '';
+            videoUrl = hit.video_url ? resolveMediaUrl(hit.video_url) : '';
+            if (imageUrl || videoUrl) break;
+          }
+        }
+
+        if (!videoUrl && generationId != null) {
+          let videoArchive = await actions.refreshArchiveVideos();
+          setRawArchiveVideos(videoArchive);
+          let vHit = videoArchive.find((g) => Number(g.id) === Number(generationId));
+          if (vHit && !isArchivePending(vHit)) {
+            videoUrl = vHit.video_url ? resolveMediaUrl(vHit.video_url) : videoUrl;
+            if (!imageUrl) imageUrl = archiveThumbUrl(vHit) || '';
+          } else {
+            for (let attempt = 0; attempt < 8 && !videoUrl; attempt += 1) {
+              if (attempt > 0) await sleep(2500);
+              videoArchive = await actions.refreshArchiveVideos();
+              setRawArchiveVideos(videoArchive);
+              vHit = videoArchive.find((g) => Number(g.id) === Number(generationId));
+              if (!vHit || isArchivePending(vHit)) continue;
+              videoUrl = vHit.video_url ? resolveMediaUrl(vHit.video_url) : '';
+              if (!imageUrl) imageUrl = archiveThumbUrl(vHit) || '';
+            }
+          }
+        }
+
+        return { imageUrl, videoUrl };
+      };
+
       try {
         const modelId = modelIdByName(rawModels, nav.imgChar || nav.vidChar);
         let generationId: number | null = null;
         let directImageUrl = '';
+        let directVideoUrl = '';
 
         if (key === 'video') {
-          if (!modelId) throw new Error('Выберите персонажа');
+          if (!modelId) throw new Error(t.errSelectCharacter);
           const promptOnly = (nav.vidMode || 'motion-control') === 'prompt';
           const motionControl = !promptOnly && (nav.vidMode || 'motion-control') === 'motion-control';
-          if (promptOnly && !uploadFiles['motion-frame']) {
-            throw new Error('Загрузите первый кадр');
+          if (promptOnly && !uploadFiles['motion-frame'] && !firstFrameGenId) {
+            throw new Error(t.errUploadFirstFrame);
           }
-          if (motionControl && !motionVideoFileId) throw new Error('Загрузите референс-видео');
+          if (motionControl && !motionVideoFileId) throw new Error(t.errUploadRefVideo);
+          if (motionControl && nav.vidHasFirstFrame && !firstFrameGenId && !uploadFiles['motion-frame']) {
+            throw new Error(t.errUploadFirstFrame);
+          }
+          if (motionControl && !nav.vidHasFirstFrame && !firstFrameGenId) {
+            throw new Error(t.errUploadFirstFrame);
+          }
           const accepted = await actions.runMotionVideo({
             modelId,
             prompt: promptOnly ? (nav.imgPrompt || '') : (motionControl ? '' : (nav.imgPrompt || 'Cinematic motion')),
@@ -779,43 +928,47 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
             frameFile: uploadFiles['motion-frame'],
           });
           generationId = accepted.generation_id ?? null;
+          if (accepted.job_id) {
+            const jobResult = (await actions.pollStudioJob(accepted.job_id)) as Record<string, unknown>;
+            generationId = extractStudioJobGenerationId(jobResult) ?? generationId;
+            directVideoUrl = resolveMediaUrl(extractStudioJobVideoUrl(jobResult));
+            if (!directVideoUrl) {
+              directImageUrl = resolveMediaUrl(extractStudioJobImageUrl(jobResult));
+            }
+          }
         } else if (key.startsWith('img:')) {
           const modeId = key.slice(4);
           const accepted = await actions.runImageGeneration({
             modeId,
             navState: nav as unknown as Record<string, unknown>,
             uploadFiles,
-            slotArchivePicks: {},
+            slotArchivePicks,
             selectedModelId: modelId,
             archiveImages: rawArchiveImages,
             workflowDemoLimited: me?.workflow_demo_limited,
           });
           generationId = accepted.generation_id ?? null;
           if (accepted.job_id) {
-            const jobResult = (await actions.pollStudioJob(accepted.job_id)) as {
-              generation_id?: number;
-              image_url?: string;
-            };
-            generationId = jobResult.generation_id ?? generationId;
-            if (jobResult.image_url) directImageUrl = resolveMediaUrl(jobResult.image_url);
+            const jobResult = (await actions.pollStudioJob(accepted.job_id)) as Record<string, unknown>;
+            generationId = extractStudioJobGenerationId(jobResult) ?? generationId;
+            directImageUrl = resolveMediaUrl(extractStudioJobImageUrl(jobResult));
           }
         }
 
-        const archive = await actions.refreshArchiveImages();
-        setRawArchiveImages(archive);
+        const { imageUrl, videoUrl } = await resolveFromArchive(
+          generationId,
+          directImageUrl,
+          directVideoUrl,
+        );
 
-        const hit =
-          generationId != null
-            ? archive.find((g) => Number(g.id) === Number(generationId))
-            : archive.find((g) => !isArchivePending(g) && Boolean((g.image_url || g.video_url || '').trim()));
-        const imageUrl = archiveThumbUrl(hit) || directImageUrl;
-        const videoUrl = hit?.video_url ? resolveMediaUrl(hit.video_url) : '';
-        if (imageUrl || videoUrl) {
-          setGenResults((prev) => ({
-            ...prev,
-            [key]: { imageUrl: imageUrl || undefined, videoUrl: videoUrl || undefined },
-          }));
+        if (!imageUrl && !videoUrl) {
+          throw new Error(generationId ? t.errGenPending : t.errGenFailed);
         }
+
+        setGenResults((prev) => ({
+          ...prev,
+          [key]: { imageUrl: imageUrl || undefined, videoUrl: videoUrl || undefined },
+        }));
 
         patchGenStatus(key, 'done');
         if (me) {
@@ -827,7 +980,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         setError(e instanceof Error ? e.message : String(e));
       }
     },
-    [rawModels, rawArchiveImages, uploadFiles, motionVideoFileId, firstFrameGenId, me, refreshArchive, refreshArchiveVideos],
+    [rawModels, rawArchiveImages, uploadFiles, slotArchivePicks, motionVideoFileId, firstFrameGenId, me, t],
   );
 
   const generateFirstFrame = useCallback(
@@ -849,11 +1002,11 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           existingGenerationId: firstFrameGenId,
           description: '',
         });
-        if (result?.generation_id) setFirstFrameGenId(Number(result.generation_id));
+        if (result?.generation_id) setFirstFrameGenIdState(Number(result.generation_id));
         const url = resolveMediaUrl(
           String(result?.generated_image_url || result?.image_url || ''),
         );
-        if (url) setFirstFrameUrl(url);
+        if (url) setFirstFrameUrlState(url);
         else if (result?.generation_id) {
           const archive = await actions.refreshArchiveImages();
           setRawArchiveImages(archive);
@@ -906,6 +1059,23 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     }
     await refreshAll();
     return created.id;
+  }, [refreshAll]);
+
+  const renameCharacter = useCallback(async (charId: number, name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed) throw new Error('Укажите имя персонажа');
+    await actions.patchStudioModel(charId, { name: trimmed });
+    await refreshAll();
+  }, [refreshAll]);
+
+  const deleteCharacter = useCallback(async (charId: number) => {
+    await actions.deleteStudioModel(charId);
+    await refreshAll();
+  }, [refreshAll]);
+
+  const deleteCharacterPhoto = useCallback(async (charId: number, imageId: number) => {
+    await actions.deleteStudioModelImage(charId, imageId);
+    await refreshAll();
   }, [refreshAll]);
 
   const generateCharacterProfile = useCallback(async (charId: number) => {
@@ -994,6 +1164,15 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           return false;
         }
         status = await actions.saveWavespeedKey(trimmed);
+      } else if (platformId === 'fv') {
+        const { connectFanvue } = await import('@/src/auth/fanvueOAuthMobile');
+        const result = await connectFanvue(modelId ?? undefined);
+        if (result === 'connected') {
+          await refreshAll();
+          return true;
+        }
+        if (result === 'error') setError('Не удалось подключить Fanvue');
+        return false;
       } else {
         setError('Сохранение недоступно для этой интеграции');
         return false;
@@ -1107,7 +1286,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const conversations = rawConversations.map(mapDialogRow);
   const totalUnread = rawConversations.reduce((sum, c) => sum + (c.unread_count || 0), 0);
   const messages = rawMessages.map(mapMessage);
-  const models = rawModels.map(mapCharacter);
+  const models = rawModels.map((m, i) => mapCharacter(m, i, locale));
   const modelNames = rawModels.map((m) => m.name);
   const archiveTiles = rawArchiveImages.map((g, i) => mapArchiveTile(g, i, rawModels));
   const archiveVideoTiles = rawArchiveVideos.map((g, i) => mapArchiveTile(g, i, rawModels));
@@ -1158,6 +1337,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       refreshSupportTickets,
       createSupportTicket,
       fetchSupportTicket,
+      replySupportTicket,
       saveProfileEmail,
       changeUserPassword,
       uploadExifReference,
@@ -1185,10 +1365,16 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       photoTagsExtended: photoTagsRu(),
       uploadFiles,
       setUploadFile,
+      slotArchivePicks,
+      setSlotArchivePick,
+      slotSource,
+      setSlotSource,
       motionVideoFileId,
       setMotionVideoFileId,
       firstFrameGenId,
+      setFirstFrameGenId,
       firstFrameUrl,
+      setFirstFrameUrl,
       generateFirstFrame,
       genResults,
       bootstrap,
@@ -1202,6 +1388,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       clearActiveThread,
       refreshConversations,
       sendThreadMessage,
+      sendThreadImage,
       loadConversationFolders,
       createConversationFolder,
       renameConversationFolder,
@@ -1211,6 +1398,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       startGeneration,
       saveCharacterFields,
       createCharacter,
+      renameCharacter,
+      deleteCharacter,
+      deleteCharacterPhoto,
       generateCharacterProfile,
       savePayoutWallet,
       requestPayout,
@@ -1260,6 +1450,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       refreshSupportTickets,
       createSupportTicket,
       fetchSupportTicket,
+      replySupportTicket,
       saveProfileEmail,
       changeUserPassword,
       uploadExifReference,
@@ -1299,6 +1490,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       clearActiveThread,
       refreshConversations,
       sendThreadMessage,
+      sendThreadImage,
       loadConversationFolders,
       createConversationFolder,
       renameConversationFolder,
@@ -1308,6 +1500,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       startGeneration,
       saveCharacterFields,
       createCharacter,
+      renameCharacter,
+      deleteCharacter,
+      deleteCharacterPhoto,
       generateCharacterProfile,
       savePayoutWallet,
       requestPayout,

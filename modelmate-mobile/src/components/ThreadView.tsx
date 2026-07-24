@@ -42,6 +42,8 @@ type ThreadViewProps = {
   onDraftChange: (value: string) => void;
   onBack: () => void;
   onSend: () => void;
+  onAttach?: () => void;
+  onEmoji?: (emoji: string) => void;
   lang?: 'ru' | 'en';
 };
 
@@ -178,6 +180,8 @@ export function ThreadView({
   onDraftChange,
   onBack,
   onSend,
+  onAttach,
+  onEmoji,
   lang = 'ru',
 }: ThreadViewProps) {
   const insets = useSafeAreaInsets();
@@ -331,7 +335,7 @@ export function ThreadView({
       </ScrollView>
 
       <View style={[styles.composer, { paddingBottom: composerPadBottom }]}>
-        <Pressable style={styles.sideBtn} hitSlop={6}>
+        <Pressable style={styles.sideBtn} hitSlop={6} onPress={onAttach}>
           <Text style={styles.sideBtnIcon}>📎</Text>
         </Pressable>
         <View style={styles.composerField}>
@@ -353,7 +357,7 @@ export function ThreadView({
             }}
             returnKeyType="send"
           />
-          <Pressable style={styles.emojiBtn} hitSlop={6}>
+          <Pressable style={styles.emojiBtn} hitSlop={6} onPress={() => onEmoji?.('😊')}>
             <Text style={styles.emojiIcon}>😊</Text>
           </Pressable>
         </View>

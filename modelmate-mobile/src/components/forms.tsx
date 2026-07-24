@@ -1,3 +1,4 @@
+import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ReactNode } from 'react';
 import {
@@ -214,20 +215,48 @@ export function SegmentedToggle({
   );
 }
 
-export function DropSlot({ label, onPress }: { label: string; onPress?: () => void }) {
+export function DropSlot({
+  label,
+  previewUri,
+  onPress,
+}: {
+  label: string;
+  previewUri?: string;
+  onPress?: () => void;
+}) {
   return (
-    <Pressable style={styles.dropSlot} onPress={onPress}>
-      <IcoUpload size={16} stroke={color.dim} />
-      <Text style={styles.dropLabel}>{label}</Text>
+    <Pressable style={[styles.dropSlot, previewUri ? styles.dropSlotFilled : null]} onPress={onPress}>
+      {previewUri ? (
+        <Image source={{ uri: previewUri }} style={styles.dropPreview} contentFit="cover" />
+      ) : (
+        <IcoUpload size={16} stroke={color.dim} />
+      )}
+      <Text style={styles.dropLabel} numberOfLines={2}>
+        {label}
+      </Text>
     </Pressable>
   );
 }
 
-export function DropSlotWide({ label, onPress }: { label: string; onPress?: () => void }) {
+export function DropSlotWide({
+  label,
+  previewUri,
+  onPress,
+}: {
+  label: string;
+  previewUri?: string;
+  onPress?: () => void;
+}) {
   return (
-    <Pressable style={styles.dropSlotWide} onPress={onPress}>
-      <IcoUpload size={17} stroke={color.dim} />
-      <Text style={styles.dropLabelWide}>{label}</Text>
+    <Pressable style={[styles.dropSlotWide, previewUri ? styles.dropSlotWideFilled : null]} onPress={onPress}>
+      {previewUri ? (
+        <Image source={{ uri: previewUri }} style={styles.dropPreviewWide} contentFit="cover" />
+      ) : (
+        <IcoUpload size={17} stroke={color.dim} />
+      )}
+      <Text style={styles.dropLabelWide} numberOfLines={2}>
+        {label}
+      </Text>
     </Pressable>
   );
 }
@@ -287,13 +316,21 @@ export function GenResultCard({
   videoUrl,
   gradIndex,
   badge,
+  downloadLabel = 'Скачать',
+  downloadMp4Label = 'Скачать MP4',
+  regenLabel = '↻ Ещё раз',
   onRegen,
+  onDownloadError,
 }: {
   imageUrl?: string;
   videoUrl?: string;
   gradIndex: number;
   badge: string;
+  downloadLabel?: string;
+  downloadMp4Label?: string;
+  regenLabel?: string;
   onRegen?: () => void;
+  onDownloadError?: (error: unknown) => void;
 }) {
   const [a, b] = gradients[gradIndex % gradients.length];
   const preview = imageUrl ? (
@@ -319,15 +356,17 @@ export function GenResultCard({
               void downloadMedia(downloadUrl, {
                 filename: videoUrl ? 'video.mp4' : 'image.jpg',
                 mimeType: videoUrl ? 'video/mp4' : 'image/jpeg',
-              }).catch(() => {});
+              }).catch((e) => {
+                if (onDownloadError) onDownloadError(e);
+              });
             }
           }}
           disabled={!downloadUrl}
         >
-          <Text style={styles.genDownloadText}>{videoUrl ? 'Скачать MP4' : 'Скачать'}</Text>
+          <Text style={styles.genDownloadText}>{videoUrl ? downloadMp4Label : downloadLabel}</Text>
         </Pressable>
         <Pressable style={styles.genRegen} onPress={onRegen}>
-          <Text style={styles.genRegenText}>↻ Ещё раз</Text>
+          <Text style={styles.genRegenText}>{regenLabel}</Text>
         </Pressable>
       </View>
     </View>
@@ -417,8 +456,30 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 5,
+    overflow: 'hidden',
   },
-  dropLabel: { fontSize: 9, fontWeight: '700', color: color.muted, textAlign: 'center', paddingHorizontal: 6 },
+  dropSlotFilled: {
+    borderStyle: 'solid',
+    borderColor: 'rgba(215,244,82,0.35)',
+  },
+  dropPreview: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 22,
+    borderTopLeftRadius: 10,
+    borderTopRightRadius: 10,
+  },
+  dropLabel: {
+    position: 'absolute',
+    bottom: 4,
+    fontSize: 9,
+    fontWeight: '700',
+    color: color.muted,
+    textAlign: 'center',
+    paddingHorizontal: 6,
+  },
   dropSlotWide: {
     height: 110,
     borderWidth: 1.5,
@@ -429,8 +490,31 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
+    overflow: 'hidden',
   },
-  dropLabelWide: { fontSize: 11, fontWeight: '700', color: color.muted },
+  dropSlotWideFilled: {
+    borderStyle: 'solid',
+    borderColor: 'rgba(215,244,82,0.35)',
+  },
+  dropPreviewWide: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    borderRadius: 10,
+  },
+  dropLabelWide: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: color.text,
+    zIndex: 1,
+    backgroundColor: 'rgba(10,11,13,0.72)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    maxWidth: '90%',
+  },
   limeBtn: {
     flexDirection: 'row',
     alignItems: 'center',

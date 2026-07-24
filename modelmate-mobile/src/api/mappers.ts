@@ -49,14 +49,15 @@ export function mapMessage(m: MessageOut) {
   };
 }
 
-export function mapCharacter(m: StudioModelOut, index: number) {
+export function mapCharacter(m: StudioModelOut, index: number, locale: 'ru' | 'en' = 'ru') {
   const name = m.name || '—';
-  const profile = (m.profile_text || '').trim();
   const hasPhotos = (m.images || []).length > 0;
+  const draft = locale === 'en' ? 'Draft' : 'Черновик';
+  const ready = locale === 'en' ? 'Ready' : 'Готов';
   return {
     id: String(m.id),
     name,
-    sub: hasPhotos ? 'Telegram · Fanvue' : 'Черновик',
+    sub: hasPhotos ? ready : draft,
     gradIndex: index % gradients.length,
     raw: m,
   };

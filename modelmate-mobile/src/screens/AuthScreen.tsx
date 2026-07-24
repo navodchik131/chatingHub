@@ -5,6 +5,7 @@ import { FieldLabel, TextField } from '@/src/components/forms';
 import { IcoShield, IcoTelegram } from '@/src/components/Icons';
 import { fetchTelegramLoginBotUsername } from '@/src/auth/telegramLoginMobile';
 import { useAppData } from '@/src/context/AppDataProvider';
+import { useAppSettings } from '@/src/context/AppSettingsContext';
 import { useNav } from '@/src/context/NavigationContext';
 import { color, font } from '@/src/styles/tokens';
 
@@ -13,6 +14,7 @@ type AuthMode = 'login' | 'register';
 export function AuthScreen() {
   const { authEmail, authPassword, patch, resetTo } = useNav();
   const { login, register, loginWithTelegram, busy, error, clearError } = useAppData();
+  const { t } = useAppSettings();
   const [mode, setMode] = useState<AuthMode>('login');
   const [tgAvailable, setTgAvailable] = useState(false);
 
@@ -69,15 +71,21 @@ export function AuthScreen() {
       return;
     }
     const result = await LocalAuthentication.authenticateAsync({
-      promptMessage: 'Войти в ModelMate',
-      cancelLabel: 'Отмена',
+      promptMessage: 'ModelMate',
+      cancelLabel: 'Cancel',
     });
     if (result.success) await submitEmail();
   };
 
   const canSubmit = authEmail.trim().length > 0 && authPassword.length >= 8;
   const primaryLabel =
-    mode === 'login' ? (busy ? 'Вход…' : 'Войти') : busy ? 'Регистрация…' : 'Зарегистрироваться';
+    mode === 'login'
+      ? busy
+        ? t.authEntering
+        : t.authEnter
+      : busy
+        ? t.authRegistering
+        : t.authRegisterBtn;
 
   return (
     <KeyboardAvoidingView
@@ -102,14 +110,14 @@ export function AuthScreen() {
             onPress={() => switchMode('login')}
             disabled={busy}
           >
-            <Text style={[styles.tabText, mode === 'login' && styles.tabTextActive]}>Вход</Text>
+            <Text style={[styles.tabText, mode === 'login' && styles.tabTextActive]}>{t.authLogin}</Text>
           </Pressable>
           <Pressable
             style={[styles.tab, mode === 'register' && styles.tabActive]}
             onPress={() => switchMode('register')}
             disabled={busy}
           >
-            <Text style={[styles.tabText, mode === 'register' && styles.tabTextActive]}>Регистрация</Text>
+            <Text style={[styles.tabText, mode === 'register' && styles.tabTextActive]}>{t.authRegister}</Text>
           </Pressable>
         </View>
 
@@ -120,16 +128,16 @@ export function AuthScreen() {
             <Pressable style={styles.tgBtn} onPress={submitTelegram} disabled={busy}>
               <IcoTelegram size={17} stroke={color.blue} />
               <Text style={styles.tgText}>
-                {mode === 'login' ? 'Войти через Telegram' : 'Зарегистрироваться через Telegram'}
+                {mode === 'login' ? t.authTelegramLogin : t.authTelegramRegister}
               </Text>
             </Pressable>
-            <Text style={styles.or}>или email</Text>
+            <Text style={styles.or}>{t.authOrEmail}</Text>
           </>
         ) : null}
 
         <View style={styles.form}>
           <View>
-            <FieldLabel>EMAIL</FieldLabel>
+            <FieldLabel>{t.authEmail}</FieldLabel>
             <TextField
               value={authEmail}
               onChangeText={(t) => patch({ authEmail: t })}
@@ -138,14 +146,14 @@ export function AuthScreen() {
             />
           </View>
           <View>
-            <FieldLabel>ПАРОЛЬ</FieldLabel>
+            <FieldLabel>{t.authPassword}</FieldLabel>
             <TextField
               value={authPassword}
               onChangeText={(t) => patch({ authPassword: t })}
               secureTextEntry
             />
             {mode === 'register' ? (
-              <Text style={styles.hint}>Минимум 8 символов</Text>
+              <Text style={styles.hint}>{t.authPasswordHint}</Text>
             ) : null}
           </View>
         </View>
@@ -161,7 +169,7 @@ export function AuthScreen() {
         {mode === 'login' ? (
           <Pressable style={styles.bioBtn} onPress={loginWithBiometric} disabled={busy || !canSubmit}>
             <IcoShield size={17} stroke={color.lime} />
-            <Text style={styles.bioText}>Войти по Face ID / отпечатку</Text>
+            <Text style={styles.bioText}>{t.authBiometric}</Text>
           </Pressable>
         ) : null}
 
@@ -171,8 +179,8 @@ export function AuthScreen() {
           style={styles.regPress}
         >
           <Text style={styles.reg}>
-            {mode === 'login' ? 'Нет аккаунта? ' : 'Уже есть аккаунт? '}
-            <Text style={styles.regLink}>{mode === 'login' ? 'Зарегистрироваться' : 'Войти'}</Text>
+            {mode === 'login' ? t.authNoAccount : t.authHasAccount}
+            <Text style={styles.regLink}>{mode === 'login' ? t.authRegisterBtn : t.authEnter}</Text>
           </Text>
         </Pressable>
       </ScrollView>

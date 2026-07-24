@@ -1,3 +1,37 @@
+export function extractStudioJobImageUrl(result: Record<string, unknown> | null | undefined): string {
+  if (!result) return '';
+  const direct = String(result.generated_image_url || result.image_url || '').trim();
+  if (direct) return direct;
+  const items = result.items;
+  if (Array.isArray(items) && items[0] && typeof items[0] === 'object') {
+    const first = items[0] as Record<string, unknown>;
+    return String(first.image_url || first.generated_image_url || '').trim();
+  }
+  return '';
+}
+
+export function extractStudioJobVideoUrl(result: Record<string, unknown> | null | undefined): string {
+  if (!result) return '';
+  const direct = String(result.video_url || '').trim();
+  if (direct) return direct;
+  return '';
+}
+
+export function extractStudioJobGenerationId(
+  result: Record<string, unknown> | null | undefined,
+): number | null {
+  if (!result) return null;
+  if (result.generation_id != null && Number.isFinite(Number(result.generation_id))) {
+    return Number(result.generation_id);
+  }
+  const items = result.items;
+  if (Array.isArray(items) && items[0] && typeof items[0] === 'object') {
+    const gid = (items[0] as Record<string, unknown>).generation_id;
+    if (gid != null && Number.isFinite(Number(gid))) return Number(gid);
+  }
+  return null;
+}
+
 const AI_MODEL_MAP: Record<string, string> = {
   nano: 'nano-banana-pro',
   gpt: 'gpt-image-2',

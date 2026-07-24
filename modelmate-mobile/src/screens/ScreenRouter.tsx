@@ -1,6 +1,6 @@
 import { LinearGradient } from 'expo-linear-gradient';
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, Image, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, Alert, Image, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { TextInput } from 'react-native-gesture-handler';
 import {
   IcoBack,
@@ -60,10 +60,11 @@ import { useAppData } from '@/src/context/AppDataProvider';
 import { useAppSettings } from '@/src/context/AppSettingsContext';
 import { useNav } from '@/src/context/NavigationContext';
 import {
-  modeDefs,
-  rightsDefs,
-  slotLabels,
-} from '@/src/data/mock';
+  getRightsDefs,
+  getTicketTypes,
+  ticketStatusLabel as ticketStatusForLocale,
+} from '@/src/i18n/screenContent';
+import { getModeDefs, getSlotLabels } from '@/src/i18n/studioContent';
 import { AuthScreen } from '@/src/screens/AuthScreen';
 import {
   SettingsBiometricScreen,
@@ -85,8 +86,11 @@ import { CharacterGenPanel } from '@/src/components/CharacterGenPanel';
 import { SwipeableChatRow } from '@/src/components/SwipeableChatRow';
 import { ThreadView } from '@/src/components/ThreadView';
 import { resolveMediaUrl } from '@/src/api/config';
+import { archiveThumbUrl } from '@/src/api/media';
 import { charFieldsFromModel, fmtDateShort, fmtMoney, fmtRub, fmtTime } from '@/src/api/helpers';
 import { mapCharPhotoTags, mapIntegrationConnections, mapIntegrationCurrent } from '@/src/api/mappers';
+import { StudioSlotInput } from '@/src/components/StudioSlotInput';
+import { slotStateKey } from '@/src/api/actions';
 import { downloadMedia } from '@/src/utils/downloadMedia';
 import type { SupportTicketOut } from '@/src/api/types';
 import {
@@ -96,22 +100,6 @@ import {
 } from '@/src/studio/generationCost';
 
 const adminPlanChips = ['Solo', 'Studio', 'Agency', 'Pro Solo', 'Pro Pro'];
-
-const TICKET_TYPES = [
-  { id: 'general', label: 'Общие вопросы' },
-  { id: 'technical', label: 'Технические проблемы' },
-  { id: 'payment', label: 'Оплата' },
-  { id: 'subscription', label: 'Подписки' },
-];
-
-function ticketStatusLabel(status: string) {
-  switch (status) {
-    case 'answered': return 'Получен ответ';
-    case 'closed': return 'Завершено';
-    case 'in_review': return 'На рассмотрении';
-    default: return 'На рассмотрении';
-  }
-}
 
 function ticketStatusColor(status: string) {
   switch (status) {
@@ -148,6 +136,11 @@ export function ScreenRouter() {
   const app = useAppData();
   const [activeTicket, setActiveTicket] = useState<SupportTicketOut | null>(null);
   const { t, locale } = useAppSettings();
+  const slotModeKey = (modeId: string) => (modeId === 'loc' ? 'location' : modeId);
+  const localizedModeDefs = useMemo(() => getModeDefs(locale), [locale]);
+  const localizedSlotLabels = useMemo(() => getSlotLabels(locale), [locale]);
+  const ticketTypes = useMemo(() => getTicketTypes(locale), [locale]);
+  const rightsLabels = useMemo(() => getRightsDefs(locale), [locale]);
   const {
     userName,
     userEmail,
@@ -168,6 +161,7 @@ export function ScreenRouter() {
     refreshSupportTickets,
     createSupportTicket,
     fetchSupportTicket,
+    replySupportTicket,
     saveProfileEmail,
     changeUserPassword,
     uploadExifReference,
@@ -192,16 +186,26 @@ export function ScreenRouter() {
     motionVideoFileId,
     setMotionVideoFileId,
     firstFrameUrl,
+    firstFrameGenId,
+    setFirstFrameGenId,
+    setFirstFrameUrl,
     generateFirstFrame,
     setUploadFile,
     uploadFiles,
+    slotArchivePicks,
+    setSlotArchivePick,
+    slotSource,
+    setSlotSource,
+    rawArchiveImages,
     error: appError,
+    clearError,
     busy: appBusy,
     startGeneration,
     loadThread,
     clearActiveThread,
     refreshConversations,
     sendThreadMessage,
+    sendThreadImage,
     createConversationFolder,
     renameConversationFolder,
     deleteConversationFolder,
@@ -209,6 +213,9 @@ export function ScreenRouter() {
     addConversationToFolder,
     saveCharacterFields,
     createCharacter,
+    renameCharacter,
+    deleteCharacter,
+    deleteCharacterPhoto,
     generateCharacterProfile,
     savePayoutWallet,
     requestPayout,
@@ -229,7 +236,17 @@ export function ScreenRouter() {
     refreshArchiveVideos,
     logout,
   } = app;
+  const downloadOrError = (url: string, opts?: { filename?: string; mimeType?: string }) => {
+    void downloadMedia(url, opts).catch((e) => {
+      Alert.alert(
+        t.downloadFailed,
+        e instanceof Error ? e.message : String(e),
+      );
+    });
+  };
   const { cur, pop, push, resetTo, openThread, startGen, regen, patch, chatIdx } = nav;
+  const [ticketReply, setTicketReply] = useState('');
+  const [charNameEdit, setCharNameEdit] = useState('');
   const threadConvId = conversations[chatIdx]?.id ?? null;
 
   useEffect(() => {
@@ -249,7 +266,9 @@ export function ScreenRouter() {
   useEffect(() => {
     if (!cur.startsWith('character:')) return;
     const id = cur.slice(10);
-    const raw = models.find((m) => m.id === id)?.raw;
+    const model = models.find((m) => m.id === id);
+    const raw = model?.raw;
+    if (model?.name) setCharNameEdit(model.name);
     if (!raw) return;
     patch({ charFields: charFieldsFromModel(raw) });
   }, [cur, models, patch]);
@@ -310,22 +329,22 @@ export function ScreenRouter() {
   if (cur === 'overview') {
     return (
       <ScreenScroll>
-        <TopBar title={`Привет, ${userName} 👋`} />
+        <TopBar title={`${t.overviewHello} ${userName} 👋`} />
         {appError ? <Text style={s.errorBanner}>{appError}</Text> : null}
         <View style={s.kpiRow}>
-          <Kpi label="КРЕДИТЫ" value={overviewKpis.credits} accent={color.lime} sub={overviewKpis.creditsSub} />
-          <Kpi label="ПОДПИСКА" value={overviewKpis.plan} accent={color.green} sub={overviewKpis.planSub} />
-          <Kpi label="ДОНАТЫ" value={overviewKpis.donations} accent={color.pink} sub={overviewKpis.donationsSub} />
-          <Kpi label="ДИАЛОГИ" value={overviewKpis.dialogs} sub={overviewKpis.dialogsSub} />
+          <Kpi label={t.kpiCredits} value={overviewKpis.credits} accent={color.lime} sub={overviewKpis.creditsSub} />
+          <Kpi label={t.kpiPlan} value={overviewKpis.plan} accent={color.green} sub={overviewKpis.planSub} />
+          <Kpi label={t.kpiDonations} value={overviewKpis.donations} accent={color.pink} sub={overviewKpis.donationsSub} />
+          <Kpi label={t.kpiDialogs} value={overviewKpis.dialogs} sub={overviewKpis.dialogsSub} />
         </View>
-        <SectionLabel>СТУДИЯ — ЧТО СДЕЛАТЬ?</SectionLabel>
+        <SectionLabel>{t.sectionStudioWhat}</SectionLabel>
         <Pressable onPress={() => push('images')}>
-          <StudioShortcut icon={<IcoImage size={17} stroke={color.lime} />} iconBg="rgba(215,244,82,0.12)" iconColor={color.lime} title="Картинки" subtitle="6 режимов генерации" />
+          <StudioShortcut icon={<IcoImage size={17} stroke={color.lime} />} iconBg="rgba(215,244,82,0.12)" iconColor={color.lime} title={t.studioImages} subtitle={t.studioImagesDesc} />
         </Pressable>
         <Pressable onPress={() => push('video')}>
-          <StudioShortcut icon={<IcoFilm size={17} stroke={color.purple} />} iconBg="rgba(192,132,252,0.12)" iconColor={color.purple} title="Видео" subtitle="Оживить кадр" />
+          <StudioShortcut icon={<IcoFilm size={17} stroke={color.purple} />} iconBg="rgba(192,132,252,0.12)" iconColor={color.purple} title={t.studioVideo} subtitle={t.studioVideoDesc} />
         </Pressable>
-        <SectionLabel>НЕДАВНИЕ ДИАЛОГИ</SectionLabel>
+        <SectionLabel>{t.sectionRecentDialogs}</SectionLabel>
         <Card style={s.recentList}>
           {conversations.slice(0, 2).map((d, i) => (
             <View key={d.id}>
@@ -348,7 +367,7 @@ export function ScreenRouter() {
 
   if (cur === 'dialogs') {
     const folderTabs = [
-      { id: 'all' as const, label: 'Все' },
+      { id: 'all' as const, label: t.commonAll },
       ...conversationFolders.map((f) => ({ id: f.id as number, label: f.name })),
     ];
     const activeFolderId = nav.dialogFolderId;
@@ -376,7 +395,7 @@ export function ScreenRouter() {
     return (
       <ScreenScroll contentStyle={s.dialogsScroll}>
         <View style={s.dialogsHeader}>
-          <Text style={s.dialogsTitle}>Диалоги</Text>
+          <Text style={s.dialogsTitle}>{t.navDialogs}</Text>
           <Pressable
             onPress={() => push('newfolder')}
             style={s.folderAddBtn}
@@ -403,7 +422,7 @@ export function ScreenRouter() {
         {activeFolderId !== 'all' && activeFolder ? (
           <View style={s.folderActions}>
             <Pressable style={s.folderActionBtn} onPress={() => openFolderEdit(activeFolder.id)}>
-              <Text style={s.folderActionText}>Изменить</Text>
+              <Text style={s.folderActionText}>{t.commonModify}</Text>
             </Pressable>
           </View>
         ) : null}
@@ -432,7 +451,7 @@ export function ScreenRouter() {
               </SwipeableChatRow>
             </View>
           ))}
-          {!shown.length ? <Text style={s.charSub}>Нет диалогов</Text> : null}
+          {!shown.length ? <Text style={s.charSub}>{t.noDialogs}</Text> : null}
         </View>
       </ScreenScroll>
     );
@@ -449,21 +468,21 @@ export function ScreenRouter() {
     if (!folderId) {
       return (
         <ScreenScroll>
-          <TopBar title="Папка" onBack={pop} />
-          <Text style={s.charSub}>Папка не найдена</Text>
+          <TopBar title={t.folderTitle} onBack={pop} />
+          <Text style={s.charSub}>{t.folderNotFound}</Text>
         </ScreenScroll>
       );
     }
     return (
       <ScreenScroll>
-        <TopBar title="Редактировать папку" onBack={pop} />
-        <FieldLabel>НАЗВАНИЕ ПАПКИ</FieldLabel>
+        <TopBar title={t.folderEditTitle} onBack={pop} />
+        <FieldLabel>{t.folderNameLabel}</FieldLabel>
         <TextField
           value={nav.folderEditName}
           onChangeText={(t) => patch({ folderEditName: t })}
-          placeholder="Название"
+          placeholder={t.folderNamePlaceholder}
         />
-        <SectionLabel>ЧАТЫ В ПАПКЕ</SectionLabel>
+        <SectionLabel>{t.folderChatsInFolder}</SectionLabel>
         <Card style={s.gap8}>
           {conversations.map((d) => (
             <CheckRow
@@ -475,7 +494,7 @@ export function ScreenRouter() {
           ))}
         </Card>
         <LimeButton
-          title="Сохранить"
+          title={t.commonSave}
           onPress={() => {
             const name = nav.folderEditName.trim();
             if (!name) return;
@@ -486,7 +505,7 @@ export function ScreenRouter() {
           }}
         />
         <GhostButton
-          title="Удалить папку"
+          title={t.commonDelete}
           onPress={() => {
             void deleteConversationFolder(folderId).then(() => {
               patch({ dialogFolderId: 'all', folderEditId: null });
@@ -507,14 +526,14 @@ export function ScreenRouter() {
     };
     return (
       <ScreenScroll>
-        <TopBar title="Новая папка" onBack={pop} />
-        <FieldLabel>НАЗВАНИЕ ПАПКИ</FieldLabel>
+        <TopBar title={t.folderNewTitle} onBack={pop} />
+        <FieldLabel>{t.folderNameLabel}</FieldLabel>
         <TextField
           value={nav.newFolderName}
           onChangeText={(t) => patch({ newFolderName: t })}
-          placeholder="Например: Постоянные"
+          placeholder={t.folderNameExample}
         />
-        <SectionLabel>ДОБАВИТЬ ЧАТЫ В ПАПКУ</SectionLabel>
+        <SectionLabel>{t.folderAddChats}</SectionLabel>
         <Card style={s.gap8}>
           {conversations.map((d) => (
             <CheckRow
@@ -526,7 +545,7 @@ export function ScreenRouter() {
           ))}
         </Card>
         <LimeButton
-          title="Создать папку"
+          title={t.folderCreate}
           onPress={() => {
             const name = nav.newFolderName.trim();
             if (!name) return;
@@ -543,7 +562,7 @@ export function ScreenRouter() {
   if (cur === 'folder-picker') {
     return (
       <ScreenScroll>
-        <TopBar title="Добавить в папку" onBack={pop} />
+        <TopBar title={t.folderAddTitle} onBack={pop} />
         <Card style={s.gap8}>
           {conversationFolders.map((f) => (
             <Pressable
@@ -561,7 +580,7 @@ export function ScreenRouter() {
               <Text style={s.menuPickText}>{f.name}</Text>
             </Pressable>
           ))}
-          {!conversationFolders.length ? <Text style={s.charSub}>Сначала создайте папку</Text> : null}
+          {!conversationFolders.length ? <Text style={s.charSub}>{t.folderCreateFirst}</Text> : null}
         </Card>
       </ScreenScroll>
     );
@@ -572,8 +591,8 @@ export function ScreenRouter() {
     if (!d) {
       return (
         <ScreenScroll>
-          <TopBar title="Диалог" onBack={pop} />
-          <Text style={s.charSub}>Диалог не найден</Text>
+          <TopBar title={t.dialogTitle} onBack={pop} />
+          <Text style={s.charSub}>{t.dialogNotFound}</Text>
         </ScreenScroll>
       );
     }
@@ -595,6 +614,18 @@ export function ScreenRouter() {
             void sendThreadMessage(d.id, text);
           }
         }}
+        onAttach={async () => {
+          if (!d.id) return;
+          try {
+            const file = await pickImage();
+            if (file) {
+              const caption = nav.threadDraft.trim();
+              patch({ threadDraft: '' });
+              await sendThreadImage(d.id, caption, file);
+            }
+          } catch { /* cancel or error */ }
+        }}
+        onEmoji={(emoji) => patch({ threadDraft: `${nav.threadDraft}${emoji}` })}
       />
     );
   }
@@ -602,11 +633,11 @@ export function ScreenRouter() {
   if (cur === 'studio') {
     return (
       <ScreenScroll>
-        <TopBar title="Студия" onBack={nav.stack.length > 1 ? pop : undefined} />
-        <StudioRow icon={<IcoImage size={16} stroke="rgb(215,244,82)" />} tintRgb="215,244,82" title="Картинки" desc="6 режимов генерации" onPress={() => push('images')} />
-        <StudioRow icon={<IcoFilm size={16} stroke="rgb(192,132,252)" />} tintRgb="192,132,252" title="Видео" desc="Оживить кадр" onPress={() => push('video')} />
-        <StudioRow icon={<IcoBolt size={16} stroke="rgb(74,222,128)" />} tintRgb="74,222,128" title="Архив" desc="Все сгенерированные кадры" onPress={() => push('archive')} />
-        <StudioRow icon={<IcoFilm size={16} stroke="rgb(56,189,248)" />} tintRgb="56,189,248" title="Архив видео" desc="Все сгенерированные видео" onPress={() => push('video-archive')} />
+        <TopBar title={t.studioTitle} onBack={nav.stack.length > 1 ? pop : undefined} />
+        <StudioRow icon={<IcoImage size={16} stroke="rgb(215,244,82)" />} tintRgb="215,244,82" title={t.studioImages} desc={t.studioImagesDesc} onPress={() => push('images')} />
+        <StudioRow icon={<IcoFilm size={16} stroke="rgb(192,132,252)" />} tintRgb="192,132,252" title={t.studioVideo} desc={t.studioVideoDesc} onPress={() => push('video')} />
+        <StudioRow icon={<IcoBolt size={16} stroke="rgb(74,222,128)" />} tintRgb="74,222,128" title={t.studioArchive} desc={t.studioArchiveDesc} onPress={() => push('archive')} />
+        <StudioRow icon={<IcoFilm size={16} stroke="rgb(56,189,248)" />} tintRgb="56,189,248" title={t.studioVideoArchive} desc={t.studioVideoArchiveDesc} onPress={() => push('video-archive')} />
       </ScreenScroll>
     );
   }
@@ -614,8 +645,8 @@ export function ScreenRouter() {
   if (cur === 'images') {
     return (
       <ScreenScroll>
-        <TopBar title="Картинки" onBack={pop} />
-        {modeDefs.map((m) => {
+        <TopBar title={t.studioImages} onBack={pop} />
+        {localizedModeDefs.map((m) => {
           const modeCost = m.id === 'carousel'
             ? computeCarouselModeCardCost({
                 contentMode: nav.contentMode,
@@ -647,8 +678,8 @@ export function ScreenRouter() {
 
   if (cur.startsWith('mode:')) {
     const modeId = cur.slice(5);
-    const m = modeDefs.find((x) => x.id === modeId) ?? modeDefs[0];
-    const slots = slotLabels[modeId] ?? [];
+    const m = localizedModeDefs.find((x) => x.id === modeId) ?? localizedModeDefs[0];
+    const slots = localizedSlotLabels[modeId] ?? [];
     const key = `img:${modeId}`;
     const st = nav.genStatus[key];
     const engines = enginesForMode(nav.contentMode);
@@ -664,6 +695,7 @@ export function ScreenRouter() {
     return (
       <ScreenScroll>
         <TopBar title={m.title} onBack={pop} />
+        {appError ? <Text style={s.errorBanner}>{appError}</Text> : null}
         <Card style={s.gap10}>
           <SegmentedToggle
             left="SFW"
@@ -672,7 +704,7 @@ export function ScreenRouter() {
             onLeft={() => patch({ contentMode: 'sfw', aiEngine: 'Nano Banana Pro' })}
             onRight={() => patch({ contentMode: 'nsfw', aiEngine: 'Seedream 5 Pro' })}
           />
-          <SectionLabel>AI-ДВИЖОК</SectionLabel>
+          <SectionLabel>{t.studioAiEngine}</SectionLabel>
           <ChipPicker
             items={engines}
             value={engineLabel}
@@ -680,22 +712,62 @@ export function ScreenRouter() {
           />
           {slots.length ? (
             <>
-              <SectionLabel>{slots.length > 1 ? 'РЕФЕРЕНСЫ' : 'РЕФЕРЕНС'}</SectionLabel>
-              <View style={s.slotRow}>
-                {slots.map((l, idx) => (
-                  <DropSlot
-                    key={l}
-                    label={l}
-                    onPress={async () => {
-                      try {
-                        const file = await pickImage();
-                        if (file) setUploadFile(slotFileKey(modeId, l, idx), file);
-                      } catch (e) {
-                        /* ignore cancel */
-                      }
-                    }}
-                  />
-                ))}
+              <SectionLabel>{slots.length > 1 ? t.studioReferences : t.studioReference}</SectionLabel>
+              <View style={s.slotCol}>
+                {slots.map((l, idx) => {
+                  const fileKey = slotFileKey(modeId, l, idx);
+                  const mKey = slotModeKey(modeId);
+                  const slotKey = slotStateKey(mKey, idx);
+                  const src = slotSource[slotKey] || 'upload';
+                  const archiveId = slotArchivePicks[slotKey] ?? null;
+                  return (
+                    <View key={l} style={s.slotBlock}>
+                      <Text style={s.slotLabel}>{l}</Text>
+                      <View style={s.rowGap8}>
+                        <Pressable
+                          style={[s.limeHalf, src !== 'upload' && s.ghostHalf]}
+                          onPress={() => setSlotSource(slotKey, 'upload')}
+                        >
+                          <Text style={[s.limeHalfText, src !== 'upload' && s.ghostHalfText]}>{t.studioSrcUpload}</Text>
+                        </Pressable>
+                        <Pressable
+                          style={[s.ghostHalf, src !== 'archive' && s.limeHalf]}
+                          onPress={() => setSlotSource(slotKey, 'archive')}
+                        >
+                          <Text style={[s.ghostHalfText, src !== 'archive' && s.limeHalfText]}>{t.studioSrcArchive}</Text>
+                        </Pressable>
+                      </View>
+                      {src === 'archive' ? (
+                        <StudioSlotInput
+                          items={rawArchiveImages}
+                          selectedId={archiveId}
+                          onSelect={(id) => setSlotArchivePick(slotKey, id)}
+                          uploadLabel={t.studioUploadImage}
+                          onUpload={async () => {
+                            try {
+                              const file = await pickImage();
+                              if (file) {
+                                setSlotSource(slotKey, 'upload');
+                                setUploadFile(fileKey, file);
+                              }
+                            } catch { /* ignore */ }
+                          }}
+                        />
+                      ) : (
+                        <DropSlot
+                          label={l}
+                          previewUri={uploadFiles[fileKey]?.uri}
+                          onPress={async () => {
+                            try {
+                              const file = await pickImage();
+                              if (file) setUploadFile(fileKey, file);
+                            } catch { /* ignore */ }
+                          }}
+                        />
+                      )}
+                    </View>
+                  );
+                })}
               </View>
             </>
           ) : null}
@@ -703,29 +775,30 @@ export function ScreenRouter() {
             <TextAreaField
               value={nav.imgPrompt}
               onChangeText={(t) => patch({ imgPrompt: t })}
-              placeholder={modeId === 'edit' ? 'Например: добавь солнцезащитные очки, убери фон…' : undefined}
+              placeholder={modeId === 'edit' ? t.studioEditPromptPlaceholder : undefined}
             />
           ) : null}
           {modeId === 'edit' ? (
             <>
-              <Text style={s.editNeedsRefLabel}>Нужен референс?</Text>
+              <Text style={s.editNeedsRefLabel}>{t.studioEditNeedsRef}</Text>
               <View style={s.rowGap8}>
                 <Pressable
                   style={[s.limeHalf, nav.editNeedsRef !== 'yes' && s.ghostHalf]}
                   onPress={() => patch({ editNeedsRef: 'yes' })}
                 >
-                  <Text style={[s.limeHalfText, nav.editNeedsRef !== 'yes' && s.ghostHalfText]}>Да</Text>
+                  <Text style={[s.limeHalfText, nav.editNeedsRef !== 'yes' && s.ghostHalfText]}>{t.studioYes}</Text>
                 </Pressable>
                 <Pressable
                   style={[s.ghostHalf, nav.editNeedsRef === 'yes' && s.limeHalf]}
                   onPress={() => patch({ editNeedsRef: 'no' })}
                 >
-                  <Text style={[s.ghostHalfText, nav.editNeedsRef === 'yes' && s.limeHalfText]}>Нет</Text>
+                  <Text style={[s.ghostHalfText, nav.editNeedsRef === 'yes' && s.limeHalfText]}>{t.studioNo}</Text>
                 </Pressable>
               </View>
               {nav.editNeedsRef === 'yes' ? (
                 <DropSlot
-                  label="Референс-изображение"
+                  label={localizedSlotLabels.edit?.[1] || t.studioReference}
+                  previewUri={uploadFiles['edit-ref']?.uri}
                   onPress={async () => {
                     try {
                       const file = await pickImage();
@@ -738,7 +811,7 @@ export function ScreenRouter() {
           ) : null}
           {modeId === 'carousel' ? (
             <>
-              <SectionLabel>КОЛИЧЕСТВО КАДРОВ</SectionLabel>
+              <SectionLabel>{t.studioCarouselCount}</SectionLabel>
               <NumberChipPicker
                 items={[...CAROUSEL_COUNTS]}
                 value={nav.carouselCount}
@@ -746,24 +819,29 @@ export function ScreenRouter() {
               />
             </>
           ) : null}
-          <SectionLabel>ПЕРСОНАЖ</SectionLabel>
+          <SectionLabel>{t.studioCharacter}</SectionLabel>
           <ChipPicker items={modelNames} value={nav.imgChar} onChange={(c) => patch({ imgChar: c })} />
-          <SectionLabel>ФОРМАТ</SectionLabel>
+          <SectionLabel>{t.studioFormat}</SectionLabel>
           <ChipPicker
             items={[...IMG_FORMATS]}
             value={nav.imgFormat}
             onChange={(f) => patch({ imgFormat: f })}
           />
         </Card>
-        <LimeButton title="Сгенерировать" cost={imgCost} onPress={() => runGen(key)} />
-        {st === 'loading' ? <GenLoadingCard title="Генерируем…" sub={`${engineLabel} · ~10 c`} /> : null}
+        <LimeButton title={t.studioGenerate} cost={imgCost} onPress={() => runGen(key)} />
+        {st === 'loading' ? <GenLoadingCard title={t.studioGenerating} sub={`${engineLabel} · ${t.studioGeneratingSub}`} /> : null}
         {st === 'done' ? (
           <Card>
             <GenResultCard
               imageUrl={genResults[key]?.imageUrl}
-              gradIndex={modeDefs.findIndex((x) => x.id === modeId)}
-              badge={`Результат · ${nav.imgFormat}`}
+              gradIndex={localizedModeDefs.findIndex((x) => x.id === modeId)}
+              badge={`${t.studioResult} · ${nav.imgFormat}`}
+              downloadLabel={t.studioDownload}
+              regenLabel={t.studioRegen}
               onRegen={() => runGen(key)}
+              onDownloadError={(e) => {
+                Alert.alert(t.downloadFailed, e instanceof Error ? e.message : String(e));
+              }}
             />
           </Card>
         ) : null}
@@ -774,19 +852,19 @@ export function ScreenRouter() {
   if (cur === 'archive') {
     return (
       <ScreenScroll>
-        <TopBar title="Архив" onBack={pop} />
-        <Card style={s.warnCard}><Text style={s.warnText}>⏳ хранится ~4 дня</Text></Card>
+        <TopBar title={t.studioArchive} onBack={pop} />
+        <Card style={s.warnCard}><Text style={s.warnText}>{t.archiveRetention}</Text></Card>
         <View style={s.grid2}>
-          {archiveTiles.map((t, i) => (
-            <Pressable key={t.id ?? i} style={s.archTile} onPress={() => { patch({ archiveIdx: i }); push('archive-item'); }}>
-              <RemoteImage uri={t.imageUrl} style={s.archImg} gradIndex={t.gradIndex} pending={t.pending} />
-              <Text style={s.archWho}>{t.who}</Text>
+          {archiveTiles.map((tile, i) => (
+            <Pressable key={tile.id ?? i} style={s.archTile} onPress={() => { patch({ archiveIdx: i }); push('archive-item'); }}>
+              <RemoteImage uri={tile.imageUrl} style={s.archImg} gradIndex={tile.gradIndex} pending={tile.pending} />
+              <Text style={s.archWho}>{tile.who}</Text>
             </Pressable>
           ))}
         </View>
         {archiveHasMore ? (
           <Pressable style={s.showMoreBtn} onPress={() => void loadMoreArchive()}>
-            <Text style={s.showMoreText}>Показать ещё</Text>
+            <Text style={s.showMoreText}>{t.commonShowMore}</Text>
           </Pressable>
         ) : null}
       </ScreenScroll>
@@ -794,25 +872,37 @@ export function ScreenRouter() {
   }
 
   if (cur === 'archive-item') {
-    const t = archiveTiles[nav.archiveIdx] ?? archiveTiles[0];
-    const downloadUrl = t?.raw?.image_url || t?.imageUrl;
+    const tile = archiveTiles[nav.archiveIdx] ?? archiveTiles[0];
+    const downloadUrl = tile?.raw?.image_url || tile?.imageUrl;
     return (
       <ScreenScroll>
-        <TopBar title="Кадр" onBack={pop} />
+        <TopBar title={t.archiveItemTitle} onBack={pop} />
         <View style={s.lightboxWrap}>
-          <RemoteImage uri={t.imageUrl} style={s.lightbox} gradIndex={t.gradIndex} pending={t.pending} />
-          <Text style={s.lightboxBadge}>{t.who}</Text>
+          <RemoteImage uri={tile.imageUrl} style={s.lightbox} gradIndex={tile.gradIndex} pending={tile.pending} />
+          <Text style={s.lightboxBadge}>{tile.who}</Text>
         </View>
         <View style={s.rowGap8}>
           <Pressable
             style={s.limeHalf}
             onPress={() => {
-              if (downloadUrl) void downloadMedia(downloadUrl, { filename: 'frame.jpg', mimeType: 'image/jpeg' }).catch(() => {});
+              if (downloadUrl) downloadOrError(downloadUrl, { filename: 'frame.jpg', mimeType: 'image/jpeg' });
             }}
           >
-            <Text style={s.limeHalfText}>Скачать</Text>
+            <Text style={s.limeHalfText}>{t.studioDownload}</Text>
           </Pressable>
-          <Pressable style={s.purpleHalf}><Text style={s.purpleHalfText}>В видео</Text></Pressable>
+          <Pressable
+            style={s.purpleHalf}
+            onPress={() => {
+              if (tile?.id) {
+                setFirstFrameGenId(tile.id);
+                setFirstFrameUrl(tile.imageUrl || archiveThumbUrl(tile.raw) || '');
+                patch({ vidHasFirstFrame: true, vidMode: 'motion-control', ffState: 'idle' });
+                push('video');
+              }
+            }}
+          >
+            <Text style={s.purpleHalfText}>{t.archiveToVideo}</Text>
+          </Pressable>
         </View>
       </ScreenScroll>
     );
@@ -837,32 +927,34 @@ export function ScreenRouter() {
 
     return (
       <ScreenScroll>
-        <TopBar title="Видео" onBack={pop} />
+        <TopBar title={t.studioVideo} onBack={pop} />
+        {appError ? <Text style={s.errorBanner}>{appError}</Text> : null}
         <View style={s.rowGap8}>
           <Pressable
             style={[s.vidModeCard, motionControl && s.vidModeCardOn]}
             onPress={() => patch({ vidMode: 'motion-control' })}
           >
-            <Text style={[s.vidModeTitle, motionControl && s.vidModeTitleOn]}>Motion control</Text>
-            <Text style={s.vidModeDesc}>Повтор движения из референс-ролика</Text>
+            <Text style={[s.vidModeTitle, motionControl && s.vidModeTitleOn]}>{t.studioMotionControl}</Text>
+            <Text style={s.vidModeDesc}>{t.studioMotionControlDesc}</Text>
           </Pressable>
           <Pressable
             style={[s.vidModeCard, promptMode && s.vidModeCardOn]}
             onPress={() => patch({ vidMode: 'prompt' })}
           >
-            <Text style={[s.vidModeTitle, promptMode && s.vidModeTitleOn]}>По промпту</Text>
-            <Text style={s.vidModeDesc}>Видео из текстового описания</Text>
+            <Text style={[s.vidModeTitle, promptMode && s.vidModeTitleOn]}>{t.studioPromptMode}</Text>
+            <Text style={s.vidModeDesc}>{t.studioPromptModeDesc}</Text>
           </Pressable>
         </View>
 
-        <SectionLabel>ПЕРСОНАЖ</SectionLabel>
+        <SectionLabel>{t.studioCharacter}</SectionLabel>
         <ChipPicker items={modelNames} value={nav.vidChar} onChange={(c) => patch({ vidChar: c })} />
 
         {promptMode ? (
           <>
-            <SectionLabel>ПЕРВЫЙ КАДР</SectionLabel>
+            <SectionLabel>{t.studioFirstFrame}</SectionLabel>
             <DropSlotWide
-              label={uploadFiles['motion-frame']?.name || 'Загрузить изображение'}
+              label={uploadFiles['motion-frame']?.name || t.studioUploadImage}
+              previewUri={uploadFiles['motion-frame']?.uri}
               onPress={async () => {
                 try {
                   const file = await pickImage();
@@ -878,7 +970,7 @@ export function ScreenRouter() {
           </>
         ) : (
           <>
-            <SectionLabel>ТИП КОНТЕНТА</SectionLabel>
+            <SectionLabel>{t.studioContentType}</SectionLabel>
             <SegmentedToggle
               left="SFW"
               right="NSFW"
@@ -886,15 +978,16 @@ export function ScreenRouter() {
               onLeft={() => patch({ contentMode: 'sfw', aiEngine: 'Nano Banana Pro' })}
               onRight={() => patch({ contentMode: 'nsfw', aiEngine: 'Seedream 5 Pro' })}
             />
-            <SectionLabel>AI-ДВИЖОК</SectionLabel>
+            <SectionLabel>{t.studioAiEngine}</SectionLabel>
             <ChipPicker
               items={engines}
               value={engineLabel}
               onChange={(e) => patch({ aiEngine: e })}
             />
-            <SectionLabel>РЕФЕРЕНСНОЕ ВИДЕО</SectionLabel>
+            <SectionLabel>{t.studioReferenceVideo}</SectionLabel>
             <DropSlotWide
-              label={uploadFiles['motion-video']?.name || (motionVideoFileId ? 'Видео загружено' : 'Загрузить видео')}
+              label={uploadFiles['motion-video']?.name || (motionVideoFileId ? t.studioVideoUploaded : t.studioUploadVideo)}
+              previewUri={uploadFiles['motion-video']?.uri}
               onPress={async () => {
                 try {
                   const file = await pickVideo();
@@ -904,38 +997,63 @@ export function ScreenRouter() {
                     const id = await uploadMotionDrivingVideo(file);
                     setMotionVideoFileId(id);
                   }
-                } catch {
-                  /* ignore */
+                } catch (e) {
+                  Alert.alert(
+                    locale === 'en' ? 'Upload failed' : 'Ошибка загрузки',
+                    e instanceof Error ? e.message : String(e),
+                  );
                 }
               }}
             />
-            <SectionLabel>ПЕРВЫЙ КАДР ЕСТЬ?</SectionLabel>
+            <SectionLabel>{t.studioHasFirstFrame}</SectionLabel>
             <View style={s.rowGap8}>
               <Pressable
                 style={[s.limeHalf, !nav.vidHasFirstFrame && s.ghostHalf]}
                 onPress={() => patch({ vidHasFirstFrame: true, ffState: 'idle' })}
               >
-                <Text style={[s.limeHalfText, !nav.vidHasFirstFrame && s.ghostHalfText]}>Да</Text>
+                <Text style={[s.limeHalfText, !nav.vidHasFirstFrame && s.ghostHalfText]}>{t.studioYes}</Text>
               </Pressable>
               <Pressable
                 style={[s.ghostHalf, !nav.vidHasFirstFrame && s.limeHalf]}
                 onPress={() => patch({ vidHasFirstFrame: false, ffState: 'idle' })}
               >
-                <Text style={[s.ghostHalfText, !nav.vidHasFirstFrame && s.limeHalfText]}>Нет — сгенерировать</Text>
+                <Text style={[s.ghostHalfText, !nav.vidHasFirstFrame && s.limeHalfText]}>{t.studioYesGenerate}</Text>
               </Pressable>
             </View>
+            {nav.vidHasFirstFrame ? (
+              <>
+                <SectionLabel>{t.studioFirstFrame}</SectionLabel>
+                <StudioSlotInput
+                  items={rawArchiveImages}
+                  selectedId={firstFrameGenId}
+                  onSelect={(id) => {
+                    setFirstFrameGenId(id);
+                    const hit = rawArchiveImages.find((g) => g.id === id);
+                    if (hit) setFirstFrameUrl(archiveThumbUrl(hit) || '');
+                  }}
+                  uploadLabel={t.studioUploadImage}
+                  previewUri={uploadFiles['motion-frame']?.uri}
+                  onUpload={async () => {
+                    try {
+                      const file = await pickImage();
+                      if (file) setUploadFile('motion-frame', file);
+                    } catch { /* ignore */ }
+                  }}
+                />
+              </>
+            ) : null}
             {!nav.vidHasFirstFrame ? (
               nav.ffState === 'idle' ? (
                 <Pressable
                   style={s.ffGenBtn}
                   onPress={() => {
-                    void generateFirstFrame(nav, patchFf).catch(() => {});
-                  }}
+                  void generateFirstFrame(nav, patchFf);
+                }}
                 >
-                  <Text style={s.ffGenBtnText}>✦ Сгенерировать первый кадр · −10 кр.</Text>
+                  <Text style={s.ffGenBtnText}>{t.studioGenerateFirstFrameBtn}</Text>
                 </Pressable>
               ) : nav.ffState === 'loading' ? (
-                <GenLoadingCard title="Генерируем первый кадр…" sub={`${engineLabel} · ~15 c`} />
+                <GenLoadingCard title={t.studioGeneratingFirstFrame} sub={`${engineLabel} · ~15 ${t.studioSecondsSuffix}`} />
               ) : (
                 <Card style={s.gap10}>
                   <Pressable onPress={() => ffPreviewUrl && patch({ ffPreviewOpen: true })}>
@@ -945,9 +1063,9 @@ export function ScreenRouter() {
                       <LinearGradient colors={[...gradients[2]]} style={s.ffThumb} />
                     )}
                   </Pressable>
-                  <Text style={s.ffDoneText}>✓ Первый кадр готов</Text>
-                  <Pressable onPress={() => void generateFirstFrame(nav, patchFf).catch(() => {})}>
-                    <Text style={s.regenText}>↻ Перегенерировать</Text>
+                  <Text style={s.ffDoneText}>{t.studioFirstFrameReady}</Text>
+                  <Pressable onPress={() => void generateFirstFrame(nav, patchFf)}>
+                    <Text style={s.regenText}>{t.studioRegenerateFirstFrame}</Text>
                   </Pressable>
                 </Card>
               )
@@ -955,46 +1073,46 @@ export function ScreenRouter() {
           </>
         )}
 
-        <SectionLabel>КАЧЕСТВО</SectionLabel>
+        <SectionLabel>{t.studioQuality}</SectionLabel>
         <ChipPicker
           items={[...VID_QUALITIES]}
           value={nav.vidQuality}
           onChange={(q) => patch({ vidQuality: q })}
         />
-        <SectionLabel>ФОРМАТ</SectionLabel>
+        <SectionLabel>{t.studioFormat}</SectionLabel>
         <ChipPicker
           items={[...IMG_FORMATS]}
           value={nav.vidFormat}
           onChange={(f) => patch({ vidFormat: f })}
         />
-        <SectionLabel>ДЛИТЕЛЬНОСТЬ</SectionLabel>
+        <SectionLabel>{t.studioDuration}</SectionLabel>
         <NumberChipPicker
           items={[...VID_DURATIONS]}
           value={nav.vidDuration}
           onChange={(d) => patch({ vidDuration: d })}
-          suffix="с"
+          suffix={t.studioSecondsSuffix}
         />
         {motionControl ? (
           <>
-            <SectionLabel>ЗВУК С РЕФЕРЕНС-ВИДЕО</SectionLabel>
+            <SectionLabel>{t.studioReferenceAudio}</SectionLabel>
             <View style={s.rowGap8}>
               <Pressable
                 style={[s.limeHalf, nav.vidGenerateAudio === false && s.ghostHalf]}
                 onPress={() => patch({ vidGenerateAudio: true })}
               >
-                <Text style={[s.limeHalfText, nav.vidGenerateAudio === false && s.ghostHalfText]}>Да</Text>
+                <Text style={[s.limeHalfText, nav.vidGenerateAudio === false && s.ghostHalfText]}>{t.studioYes}</Text>
               </Pressable>
               <Pressable
                 style={[s.ghostHalf, nav.vidGenerateAudio !== false && s.limeHalf]}
                 onPress={() => patch({ vidGenerateAudio: false })}
               >
-                <Text style={[s.ghostHalfText, nav.vidGenerateAudio !== false && s.limeHalfText]}>Нет</Text>
+                <Text style={[s.ghostHalfText, nav.vidGenerateAudio !== false && s.limeHalfText]}>{t.studioNo}</Text>
               </Pressable>
             </View>
           </>
         ) : null}
-        <LimeButton title="Создать видео" cost={vidCost} icon={<IcoFilm size={16} stroke={color.limeText} />} onPress={() => runGen('video')} />
-        {st === 'loading' ? <GenLoadingCard title="Рендерим видео…" sub="~20 c" /> : null}
+        <LimeButton title={t.studioCreateVideo} cost={vidCost} icon={<IcoFilm size={16} stroke={color.limeText} />} onPress={() => runGen('video')} />
+        {st === 'loading' ? <GenLoadingCard title={t.studioRenderingVideo} sub={`~20 ${t.studioSecondsSuffix}`} /> : null}
         {st === 'done' ? (
           <Card style={s.gap10}>
             {videoResultUrl ? (
@@ -1008,14 +1126,12 @@ export function ScreenRouter() {
               <Pressable
                 style={s.limeFlex}
                 onPress={() => {
-                  if (videoResultUrl) {
-                    void downloadMedia(videoResultUrl, { filename: 'video.mp4', mimeType: 'video/mp4' }).catch(() => {});
-                  }
+                  if (videoResultUrl) downloadOrError(videoResultUrl, { filename: 'video.mp4', mimeType: 'video/mp4' });
                 }}
               >
-                <Text style={s.limeHalfText}>Скачать MP4</Text>
+                <Text style={s.limeHalfText}>{t.studioDownloadMp4}</Text>
               </Pressable>
-              <Pressable style={s.regenFlex} onPress={() => runGen('video')}><Text style={s.regenText}>↻ Ещё раз</Text></Pressable>
+              <Pressable style={s.regenFlex} onPress={() => runGen('video')}><Text style={s.regenText}>{t.studioRegen}</Text></Pressable>
             </View>
           </Card>
         ) : null}
@@ -1042,7 +1158,7 @@ export function ScreenRouter() {
   if (cur === 'characters') {
     return (
       <ScreenScroll>
-        <TopBar title="Персонажи" onBack={nav.stack.length > 1 ? pop : undefined} />
+        <TopBar title={t.navCharacters} onBack={nav.stack.length > 1 ? pop : undefined} />
         {models.map((c) => (
           <Card key={c.id} onPress={() => { patch({ charId: c.id, charTab: 'photos' }); push(`character:${c.id}`); }}>
             <View style={s.rowCenter}>
@@ -1060,7 +1176,7 @@ export function ScreenRouter() {
             </View>
           </Card>
         ))}
-        <DashedAddButton title="+ Новый персонаж" onPress={() => push('new-character')} />
+        <DashedAddButton title={`+ ${t.charNewTitle}`} onPress={() => push('new-character')} />
       </ScreenScroll>
     );
   }
@@ -1068,14 +1184,15 @@ export function ScreenRouter() {
   if (cur === 'new-character') {
     return (
       <ScreenScroll>
-        <TopBar title="Новый персонаж" onBack={pop} />
+        <TopBar title={t.charNewTitle} onBack={pop} />
         <Card style={s.gap9}>
-          <FieldLabel>ИМЯ ПЕРСОНАЖА</FieldLabel>
+          <FieldLabel>{t.charNameLabel}</FieldLabel>
           <TextField value={nav.newCharName} onChangeText={(t) => patch({ newCharName: t })} />
         </Card>
-        <SectionLabel>ПЕРВОЕ ФОТО</SectionLabel>
+        <SectionLabel>{t.charFirstPhoto}</SectionLabel>
         <DropSlot
-          label="Загрузить фото"
+          label={t.studioUploadImage}
+          previewUri={uploadFiles.newCharPhoto?.uri}
           onPress={async () => {
             try {
               const file = await pickImage();
@@ -1083,14 +1200,14 @@ export function ScreenRouter() {
             } catch { /* ignore */ }
           }}
         />
-        <SectionLabel>ТЕГ ФОТО</SectionLabel>
+        <SectionLabel>{t.charPhotoTag}</SectionLabel>
         <ChipRowInteractive
           items={app.photoTags}
           activeIndex={nav.photoTagIdx}
           onSelect={(i) => patch({ photoTagIdx: i })}
         />
         <LimeButton
-          title="Создать персонажа"
+          title={t.charCreate}
           onPress={async () => {
             try {
               const id = await createCharacter(nav.newCharName, nav.photoTagIdx, app.uploadFiles.newCharPhoto);
@@ -1124,43 +1241,62 @@ export function ScreenRouter() {
           />
           <View>
             <Text style={s.charTitle}>{name}</Text>
-            <Text style={s.charSub}>Telegram · Fanvue</Text>
+            <Text style={s.charSub}>{model?.sub ?? '—'}</Text>
           </View>
         </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.tabRow}>
-          <TabChip label="Фото" active={ct === 'photos'} onPress={() => patch({ charTab: 'photos' })} />
-          <TabChip label="Персона" active={ct === 'persona'} onPress={() => patch({ charTab: 'persona' })} />
-          <TabChip label="EXIF" active={ct === 'exif'} onPress={() => patch({ charTab: 'exif' })} />
-          <TabChip label="История" active={ct === 'history'} onPress={() => patch({ charTab: 'history' })} />
+          <TabChip label={t.charTabPhotos} active={ct === 'photos'} onPress={() => patch({ charTab: 'photos' })} />
+          <TabChip label={t.charTabPersona} active={ct === 'persona'} onPress={() => patch({ charTab: 'persona' })} />
+          <TabChip label={t.charTabExif} active={ct === 'exif'} onPress={() => patch({ charTab: 'exif' })} />
+          <TabChip label={t.charTabHistory} active={ct === 'history'} onPress={() => patch({ charTab: 'history' })} />
         </ScrollView>
         {ct === 'persona' ? (
           <Card style={s.gap9}>
-            <FieldLabel>ВОЗРАСТ / ГОРОД</FieldLabel>
+            <FieldLabel>{t.charRenameLabel}</FieldLabel>
+            <TextField value={charNameEdit} onChangeText={setCharNameEdit} />
+            <Pressable
+              style={s.savePhoto}
+              onPress={() => {
+                if (!charIdNum) return;
+                void renameCharacter(charIdNum, charNameEdit);
+              }}
+            >
+              <Text style={s.savePhotoText}>{t.charRenameSave}</Text>
+            </Pressable>
+            <FieldLabel>{t.charAgeCity}</FieldLabel>
             <TextField
               value={nav.charFields.ageCity}
               onChangeText={(t) => patch({ charFields: { ...nav.charFields, ageCity: t } })}
             />
-            <FieldLabel>ХАРАКТЕР</FieldLabel>
+            <FieldLabel>{t.charCharacter}</FieldLabel>
             <TextField
               value={nav.charFields.character}
               onChangeText={(t) => patch({ charFields: { ...nav.charFields, character: t } })}
             />
-            <FieldLabel>СТИЛЬ ПЕРЕПИСКИ</FieldLabel>
+            <FieldLabel>{t.charChatStyle}</FieldLabel>
             <TextField
               value={nav.charFields.chatStyle}
               onChangeText={(t) => patch({ charFields: { ...nav.charFields, chatStyle: t } })}
             />
+            <Pressable
+              style={s.savePhoto}
+              onPress={() => {
+                if (charIdNum) void saveCharacterFields(charIdNum, nav.charFields);
+              }}
+            >
+              <Text style={s.savePhotoText}>{t.commonSave}</Text>
+            </Pressable>
           </Card>
         ) : null}
         {ct === 'exif' ? (
           <Card style={s.gap9}>
-            <Text style={s.charSub}>EXIF применяется к сохранённым кадрам студии. Загрузите эталоны с телефона или задайте пресет.</Text>
-            <FieldLabel>ЭТАЛОНЫ EXIF С ТЕЛЕФОНА</FieldLabel>
+            <Text style={s.charSub}>{t.charExifDesc}</Text>
+            <FieldLabel>{t.charExifPhoneRefs}</FieldLabel>
             <View style={s.exifRefRow}>
               <View style={s.flex1}>
-                <FieldLabel>ФРОНТАЛЬНАЯ КАМЕРА</FieldLabel>
+                <FieldLabel>{t.charFrontCamera}</FieldLabel>
                 <DropSlot
-                  label={raw?.phone_exif_selfie_ready ? (raw.phone_exif_selfie_summary || 'Загружено') : 'Выберите файл'}
+                  label={raw?.phone_exif_selfie_ready ? (raw.phone_exif_selfie_summary || t.commonUploaded) : t.commonSelectFile}
                   onPress={async () => {
                     if (!charIdNum) return;
                     try {
@@ -1169,12 +1305,12 @@ export function ScreenRouter() {
                     } catch { /* ignore */ }
                   }}
                 />
-                <Text style={s.exifHint}>JPEG из галереи</Text>
+                <Text style={s.exifHint}>{t.charJpegHint}</Text>
               </View>
               <View style={s.flex1}>
-                <FieldLabel>ОСНОВНАЯ КАМЕРА</FieldLabel>
+                <FieldLabel>{t.charMainCamera}</FieldLabel>
                 <DropSlot
-                  label={raw?.phone_exif_main_ready ? (raw.phone_exif_main_summary || 'Загружено') : 'Выберите файл'}
+                  label={raw?.phone_exif_main_ready ? (raw.phone_exif_main_summary || t.commonUploaded) : t.commonSelectFile}
                   onPress={async () => {
                     if (!charIdNum) return;
                     try {
@@ -1183,15 +1319,15 @@ export function ScreenRouter() {
                     } catch { /* ignore */ }
                   }}
                 />
-                <Text style={s.exifHint}>Фото с основной камеры</Text>
+                <Text style={s.exifHint}>{t.charMainCameraHint}</Text>
               </View>
             </View>
-            <FieldLabel>ПРЕСЕТ КАМЕРЫ</FieldLabel>
+            <FieldLabel>{t.charCameraPreset}</FieldLabel>
             <TextField
               value={nav.charFields.camera}
               onChangeText={(t) => patch({ charFields: { ...nav.charFields, camera: t } })}
             />
-            <FieldLabel>ГЕО (ШИРОТА/ДОЛГОТА)</FieldLabel>
+            <FieldLabel>{t.charGeo}</FieldLabel>
             <TextField
               value={nav.charFields.geo}
               onChangeText={(t) => patch({ charFields: { ...nav.charFields, geo: t } })}
@@ -1202,7 +1338,7 @@ export function ScreenRouter() {
                 if (charIdNum) void saveCharacterFields(charIdNum, nav.charFields);
               }}
             >
-              <Text style={s.savePhotoText}>Сохранить</Text>
+              <Text style={s.savePhotoText}>{t.commonSave}</Text>
             </Pressable>
           </Card>
         ) : null}
@@ -1213,7 +1349,7 @@ export function ScreenRouter() {
                 <Text style={s.historyLabel}>{h.who}</Text>
                 <Text style={s.historyCost}>{h.raw?.prompt_excerpt || 'gen'}</Text>
               </View>
-            )) : <Text style={s.charSub}>Пока нет генераций</Text>}
+            )) : <Text style={s.charSub}>{t.charNoGenerations}</Text>}
           </Card>
         ) : null}
         {ct === 'photos' || !ct ? (
@@ -1221,16 +1357,30 @@ export function ScreenRouter() {
             {charIdNum ? (
               <CharacterGenPanel charId={charIdNum} onSaved={() => app.refreshAll()} />
             ) : null}
-            <SectionLabel>ФОТО-РЕФЕРЕНСЫ</SectionLabel>
+            <SectionLabel>{t.charPhotoRefs}</SectionLabel>
             <View style={s.grid3}>
               {charPhotos.map((p) => (
                 p.url ? (
-                  <View key={p.id} style={s.photoTileWrap}>
+                  <Pressable
+                    key={p.id}
+                    style={s.photoTileWrap}
+                    onLongPress={() => {
+                      if (!charIdNum || !p.id) return;
+                      Alert.alert(t.charDelete, t.charDeletePhotoConfirm, [
+                        { text: t.commonCancel, style: 'cancel' },
+                        {
+                          text: t.commonDelete,
+                          style: 'destructive',
+                          onPress: () => void deleteCharacterPhoto(charIdNum, p.id),
+                        },
+                      ]);
+                    }}
+                  >
                     <RemoteImage uri={p.url} style={StyleSheet.absoluteFill} gradIndex={p.gradIndex} />
                     <View style={s.photoTileOverlay}>
                       <Text style={s.photoTag}>{p.label}</Text>
                     </View>
-                  </View>
+                  </Pressable>
                 ) : (
                   <LinearGradient key={p.id} colors={[...gradients[p.gradIndex % gradients.length]]} style={s.photoTile}>
                     <Text style={s.photoTag}>{p.label}</Text>
@@ -1254,7 +1404,7 @@ export function ScreenRouter() {
             </View>
             {nav.photoTagPick ? (
               <Card style={[s.gap8, s.limeBorder]}>
-                <Text style={s.pickTitle}>Загрузить фото и выбрать тег</Text>
+                <Text style={s.pickTitle}>{t.charUploadPickTag}</Text>
                 <ChipRowInteractive
                   items={app.photoTagsExtended}
                   activeIndex={nav.photoTagIdx}
@@ -1274,18 +1424,18 @@ export function ScreenRouter() {
                     await app.refreshAll();
                   }}
                 >
-                  <Text style={s.savePhotoText}>Сохранить фото</Text>
+                  <Text style={s.savePhotoText}>{t.charUploadPhoto}</Text>
                 </Pressable>
               </Card>
             ) : null}
-            <SectionLabel>ОПИСАНИЕ ВНЕШНОСТИ</SectionLabel>
+            <SectionLabel>{t.charAppearance}</SectionLabel>
             <Card style={s.gap10}>
               <TextAreaField
                 value={nav.charFields.appearance}
                 onChangeText={(t) => patch({ charFields: { ...nav.charFields, appearance: t } })}
               />
               {nav.descGen === 'loading' ? (
-                <View style={s.descLoading}><ActivityIndicator color={color.purple} size="small" /><Text style={s.descLoadingText}>Анализируем фото…</Text></View>
+                <View style={s.descLoading}><ActivityIndicator color={color.purple} size="small" /><Text style={s.descLoadingText}>{t.charAnalyzing}</Text></View>
               ) : (
                 <Pressable
                   onPress={async () => {
@@ -1302,7 +1452,7 @@ export function ScreenRouter() {
                     }
                   }}
                 >
-                  <Text style={s.genFromPhoto}>{nav.descGen === 'done' ? '✓ Описание обновлено из фото' : '✦ Сгенерировать из фото'}</Text>
+                  <Text style={s.genFromPhoto}>{nav.descGen === 'done' ? t.charDescUpdated : t.charGenFromPhoto}</Text>
                 </Pressable>
               )}
               <Pressable
@@ -1311,10 +1461,31 @@ export function ScreenRouter() {
                   if (charIdNum) void saveCharacterFields(charIdNum, nav.charFields);
                 }}
               >
-                <Text style={s.savePhotoText}>Сохранить</Text>
+                <Text style={s.savePhotoText}>{t.commonSave}</Text>
               </Pressable>
             </Card>
           </>
+        ) : null}
+        {charIdNum ? (
+          <Pressable
+            style={s.redOutlineSmall}
+            onPress={() => {
+              Alert.alert(t.charDelete, t.charDeleteConfirm, [
+                { text: t.commonCancel, style: 'cancel' },
+                {
+                  text: t.commonDelete,
+                  style: 'destructive',
+                  onPress: () => {
+                    void deleteCharacter(charIdNum).then(() => {
+                      resetTo('characters');
+                    });
+                  },
+                },
+              ]);
+            }}
+          >
+            <Text style={s.redText}>{t.charDelete}</Text>
+          </Pressable>
         ) : null}
       </ScreenScroll>
     );
@@ -1323,7 +1494,7 @@ export function ScreenRouter() {
   if (cur === 'connections') {
     return (
       <ScreenScroll>
-        <TopBar title="Подключения" onBack={pop} />
+        <TopBar title={t.navConnections} onBack={pop} />
         {connectionsList.map((c) => (
           <Card key={c.id} onPress={() => push(`connection:${c.id}`)}>
             <View style={s.rowCenter}>
@@ -1348,15 +1519,18 @@ export function ScreenRouter() {
       ? rawModels.find((m) => m.id === existing[0].studioModelId)?.name || modelNames[0]
       : modelNames[0];
     const isWs = id === 'ws';
-    const needsCharacter = id === 'tg' || id === 'tr';
-    const saveLabel = isWs ? 'Сохранить ключ' : 'Сохранить';
+    const isFanvue = id === 'fv';
+    const needsCharacter = id === 'tg' || id === 'tr' || isFanvue;
+    const saveLabel = isFanvue ? t.connConnectFanvue : isWs ? t.connSaveKey : t.commonSave;
     const successText = isWs
-      ? 'Ключ WaveSpeed сохранён.'
+      ? t.connWsSaved
       : id === 'tg'
-        ? 'Telegram-бот подключён.'
+        ? t.connTgSaved
         : id === 'tr'
-          ? 'Tribute API настроен.'
-          : 'Сохранено.';
+          ? t.connTrSaved
+          : isFanvue
+            ? t.connFvSaved
+            : t.settingsSaved;
     return (
       <ScreenScroll>
         <TopBar title={c.name} onBack={() => { patch({ connFlash: null }); pop(); }} />
@@ -1368,12 +1542,12 @@ export function ScreenRouter() {
         ) : null}
         {nav.connFlash === 'error' ? (
           <Card style={s.connErrCard}>
-            <Text style={s.connErrText}>Не удалось сохранить. Проверьте ключ и попробуйте снова.</Text>
+            <Text style={s.connErrText}>{t.connSaveFailed}</Text>
           </Card>
         ) : null}
         {current.length ? (
           <>
-            <SectionLabel>ТЕКУЩАЯ НАСТРОЙКА</SectionLabel>
+            <SectionLabel>{t.connCurrentSetup}</SectionLabel>
             <Card style={s.gap8}>
               {current.map((row) => (
                 <View key={row.k} style={s.between}>
@@ -1386,10 +1560,10 @@ export function ScreenRouter() {
         ) : null}
         {existing.length ? (
           <>
-            <SectionLabel>АКТИВНЫЕ ПОДКЛЮЧЕНИЯ</SectionLabel>
+            <SectionLabel>{t.connActive}</SectionLabel>
             <Card style={s.gap8}>
               {existing.map((row) => (
-                <View key={row.id} style={s.connExistingRow}>
+                <View key={row.id} style={s.rowCenter}>
                   <View style={s.flex1}>
                     <Text style={s.opLabel}>{row.name}</Text>
                     <Text style={s.charSub}>{row.meta}</Text>
@@ -1398,32 +1572,36 @@ export function ScreenRouter() {
                     style={s.redOutlineSmall}
                     onPress={() => void disconnectConnection(id, row.id).then(() => pop())}
                   >
-                    <Text style={s.redText}>Удалить</Text>
+                    <Text style={s.redText}>{t.connRemove}</Text>
                   </Pressable>
                 </View>
               ))}
             </Card>
           </>
         ) : !current.length ? (
-          <Card><Text style={s.charSub}>Нет активных подключений</Text></Card>
+          <Card><Text style={s.charSub}>{t.connNoActive}</Text></Card>
         ) : null}
-        <SectionLabel>{isWs ? 'API-КЛЮЧ' : 'ДОБАВИТЬ / ОБНОВИТЬ'}</SectionLabel>
+        <SectionLabel>{isFanvue ? t.connConnectFanvue : isWs ? t.connApiKey : t.connAddUpdate}</SectionLabel>
         <Card style={s.gap10}>
-          <FieldLabel>{isWs ? 'API-КЛЮЧ WAVESPEED' : 'API-КЛЮЧ / ТОКЕН'}</FieldLabel>
-          <TextField
-            value={nav.connToken}
-            onChangeText={(t) => patch({ connToken: t, connFlash: null })}
-            placeholder={isWs ? 'Вставьте ключ из wavespeed.ai' : undefined}
-            secureTextEntry
-          />
+          {!isFanvue ? (
+            <>
+              <FieldLabel>{isWs ? t.connApiKeyWs : t.connApiKeyToken}</FieldLabel>
+              <TextField
+                value={nav.connToken}
+                onChangeText={(t) => patch({ connToken: t, connFlash: null })}
+                placeholder={isWs ? t.connApiKeyPlaceholder : undefined}
+                secureTextEntry
+              />
+            </>
+          ) : (
+            <Text style={s.charSub}>{t.connConnectFanvue}</Text>
+          )}
           {isWs ? (
-            <Text style={s.charSub}>
-              На Pro нужен ваш API-ключ WaveSpeed. На Standard платформа может использовать свой ключ.
-            </Text>
+            <Text style={s.charSub}>{t.connWsHint}</Text>
           ) : null}
           {needsCharacter ? (
             <>
-              <FieldLabel>ПЕРСОНАЖ</FieldLabel>
+              <FieldLabel>{t.connCharacter}</FieldLabel>
               <ChipPicker
                 items={modelNames}
                 value={nav.connChar || defaultChar}
@@ -1445,7 +1623,7 @@ export function ScreenRouter() {
               });
             }}
           >
-            <Text style={s.limeHalfText}>{appBusy ? 'Сохранение…' : saveLabel}</Text>
+            <Text style={s.limeHalfText}>{appBusy ? t.commonSaving : saveLabel}</Text>
           </Pressable>
         </View>
       </ScreenScroll>
@@ -1473,10 +1651,10 @@ export function ScreenRouter() {
           <MenuRow icon={<IcoUsers size={17} stroke={color.muted} />} label={t.navTeam} onPress={() => push('team')} />
           <MenuRow icon={<IcoStar size={17} stroke={color.muted} />} label={t.navCharacters} onPress={() => push('characters')} />
         </Card>
-        <SectionLabel>АККАУНТ</SectionLabel>
+        <SectionLabel>{t.sectionAccount}</SectionLabel>
         <Card>
-          <MenuRow icon={<IcoUser size={17} stroke={color.muted} />} label="Редактировать профиль" onPress={() => push('profileEdit')} />
-          <MenuRow icon={<IcoLifebuoy size={17} stroke={color.muted} />} label="Поддержка" onPress={() => push('support')} />
+          <MenuRow icon={<IcoUser size={17} stroke={color.muted} />} label={t.profileEditTitle} onPress={() => push('profileEdit')} />
+          <MenuRow icon={<IcoLifebuoy size={17} stroke={color.muted} />} label={t.supportTitle} onPress={() => push('support')} />
         </Card>
         <SectionLabel>{t.sectionSystem}</SectionLabel>
         <Card>
@@ -1500,19 +1678,19 @@ export function ScreenRouter() {
   if (cur === 'billing') {
     return (
       <ScreenScroll>
-        <TopBar title="Тариф и баланс" onBack={pop} />
+        <TopBar title={t.navBilling} onBack={pop} />
         <Card style={s.gap6}>
           <View style={s.between}><Text style={s.planTitle}>{me?.plan_display_name || me?.billing_plan || '—'}</Text><Pill text={(me?.subscription_status || 'active').toUpperCase()} bg="rgba(74,222,128,0.12)" fg={color.green} /></View>
-          <Text style={s.charSub}>{me?.credits_balance ?? 0} кредитов{me?.subscription_expires_at ? ` · до ${fmtDateShort(me.subscription_expires_at)}` : ''}</Text>
+          <Text style={s.charSub}>{me?.credits_balance ?? 0} {t.billingCredits}{me?.subscription_expires_at ? ` · ${t.billingUntil} ${fmtDateShort(me.subscription_expires_at)}` : ''}</Text>
         </Card>
-        <SectionLabel>ИСТОРИЯ ОПЕРАЦИЙ</SectionLabel>
+        <SectionLabel>{t.billingHistory}</SectionLabel>
         <Card style={s.gap8}>
           {creditHistory.length ? creditHistory.map((row) => (
             <View key={row.label} style={s.between}>
               <Text style={s.opLabel}>{row.label}</Text>
               <Text style={row.positive ? s.greenText : s.redText}>{row.amount}</Text>
             </View>
-          )) : <Text style={s.charSub}>История пуста</Text>}
+          )) : <Text style={s.charSub}>{t.billingHistoryEmpty}</Text>}
         </Card>
       </ScreenScroll>
     );
@@ -1521,14 +1699,14 @@ export function ScreenRouter() {
   if (cur === 'donations') {
     return (
       <ScreenScroll>
-        <TopBar title="Донаты и выплаты" onBack={pop} />
+        <TopBar title={t.navDonations} onBack={pop} />
         <View style={s.kpiRow}>
-          <Kpi label="ВСЕГО" value={fmtMoney(donationBalances.total, donationBalances.currency)} />
-          <Kpi label="ДОСТУПНО" value={fmtMoney(donationBalances.available, donationBalances.currency)} accent={color.green} />
+          <Kpi label={t.donationsTotal} value={fmtMoney(donationBalances.total, donationBalances.currency)} />
+          <Kpi label={t.donationsAvailable} value={fmtMoney(donationBalances.available, donationBalances.currency)} accent={color.green} />
         </View>
-        <SectionLabel>ВЫВОД СРЕДСТВ</SectionLabel>
+        <SectionLabel>{t.donationsWithdraw}</SectionLabel>
         <Card style={s.gap9}>
-          <FieldLabel>АДРЕС USDT (TRC20)</FieldLabel>
+          <FieldLabel>{t.donationsUsdt}</FieldLabel>
           <TextField
             value={nav.donationFields.usdt || payoutWallet}
             onChangeText={(t) => patch({ donationFields: { ...nav.donationFields, usdt: t } })}
@@ -1538,11 +1716,11 @@ export function ScreenRouter() {
             }}
           />
           <Pressable style={s.pinkBtn} onPress={() => void requestPayout()}>
-            <Text style={s.pinkBtnTitle}>Заявка на выплату</Text>
+            <Text style={s.pinkBtnTitle}>{t.donationsPayout}</Text>
             <Text style={s.pinkBtnCost}>{fmtMoney(Math.max(0, donationBalances.available - 20000), donationBalances.currency)}</Text>
           </Pressable>
         </Card>
-        <SectionLabel>ССЫЛКИ НА ДОНАТ</SectionLabel>
+        <SectionLabel>{t.donationsLinks}</SectionLabel>
         <Card style={s.gap8}>
           {donations.map((d) => (
             <View key={d.id} style={s.donationRow}>
@@ -1551,7 +1729,7 @@ export function ScreenRouter() {
                   <Text style={s.opLabel}>{d.title}</Text>
                   <Pill text={d.status} bg={d.status === 'ACTIVE' ? 'rgba(74,222,128,0.12)' : 'rgba(251,146,60,0.12)'} fg={d.status === 'ACTIVE' ? color.green : color.orange} />
                 </View>
-                {d.minAmount ? <Text style={s.charSub}>Мин. {d.minAmount}</Text> : null}
+                {d.minAmount ? <Text style={s.charSub}>{t.donationsMin} {d.minAmount}</Text> : null}
                 {d.webLink ? (
                   <Pressable onPress={() => void Linking.openURL(d.webLink)}>
                     <Text style={s.linkText} numberOfLines={1}>{d.webLink}</Text>
@@ -1565,9 +1743,9 @@ export function ScreenRouter() {
               </View>
             </View>
           ))}
-          {!donations.length ? <Text style={s.charSub}>Нет донатов</Text> : null}
+          {!donations.length ? <Text style={s.charSub}>{t.donationsNone}</Text> : null}
         </Card>
-        <SectionLabel>ПОСЛЕДНИЕ ПОСТУПЛЕНИЯ</SectionLabel>
+        <SectionLabel>{t.donationsRecent}</SectionLabel>
         <Card style={s.gap8}>
           {donationEvents.length ? donationEvents.slice(0, 10).map((ev) => (
             <View key={ev.id} style={s.between}>
@@ -1577,9 +1755,9 @@ export function ScreenRouter() {
               </View>
               <Text style={s.greenText}>{ev.amount}</Text>
             </View>
-          )) : <Text style={s.charSub}>Пока нет поступлений</Text>}
+          )) : <Text style={s.charSub}>{t.donationsNoEvents}</Text>}
         </Card>
-        <DashedAddButton title="+ Новый донат" onPress={() => push('new-donation')} />
+        <DashedAddButton title={`+ ${t.donationNew}`} onPress={() => push('new-donation')} />
       </ScreenScroll>
     );
   }
@@ -1587,24 +1765,24 @@ export function ScreenRouter() {
   if (cur === 'new-donation') {
     return (
       <ScreenScroll>
-        <TopBar title="Новый донат" onBack={pop} />
+        <TopBar title={t.donationNew} onBack={pop} />
         <Card style={s.gap9}>
-          <FieldLabel>ЗАГОЛОВОК</FieldLabel>
+          <FieldLabel>{t.donationTitle}</FieldLabel>
           <TextField
             value={nav.donationFields.title}
             onChangeText={(t) => patch({ donationFields: { ...nav.donationFields, title: t } })}
           />
-          <FieldLabel>ОПИСАНИЕ</FieldLabel>
+          <FieldLabel>{t.donationDesc}</FieldLabel>
           <TextField
             value={nav.donationFields.desc}
             onChangeText={(t) => patch({ donationFields: { ...nav.donationFields, desc: t } })}
           />
-          <FieldLabel>МИН. СУММА</FieldLabel>
+          <FieldLabel>{t.donationMinAmount}</FieldLabel>
           <TextField
             value={nav.donationFields.min}
             onChangeText={(t) => patch({ donationFields: { ...nav.donationFields, min: t } })}
           />
-          <FieldLabel>ПЕРСОНАЖ</FieldLabel>
+          <FieldLabel>{t.connCharacter}</FieldLabel>
           <ChipRowInteractive
             items={modelNames}
             activeIndex={nav.donationCharIdx}
@@ -1612,7 +1790,7 @@ export function ScreenRouter() {
           />
         </Card>
         <View style={s.rowGap8}>
-          <GhostButton title="Черновик" onPress={pop} />
+          <GhostButton title={t.commonDraft} onPress={pop} />
           <Pressable
             style={s.limeFlex}
             onPress={async () => {
@@ -1620,7 +1798,7 @@ export function ScreenRouter() {
               pop();
             }}
           >
-            <Text style={s.limeHalfText}>На модерацию</Text>
+            <Text style={s.limeHalfText}>{t.donationModeration}</Text>
           </Pressable>
         </View>
       </ScreenScroll>
@@ -1630,12 +1808,12 @@ export function ScreenRouter() {
   if (cur === 'team') {
     return (
       <ScreenScroll>
-        <TopBar title="Команда" onBack={pop} />
+        <TopBar title={t.navTeam} onBack={pop} />
         <View style={s.kpiRow}>
-          <Kpi label="ОТВЕТЫ / МЕС" value={chatterStats?.replies ?? '—'} />
+          <Kpi label={t.teamRepliesMonth} value={chatterStats?.replies ?? '—'} />
           <Kpi label="SLA" value={chatterStats?.sla ?? '—'} accent={color.green} />
         </View>
-        <SectionLabel>УЧАСТНИКИ</SectionLabel>
+        <SectionLabel>{t.teamMembers}</SectionLabel>
         {members.map((m) => (
           <Card
             key={m.id}
@@ -1657,7 +1835,7 @@ export function ScreenRouter() {
           </Card>
         ))}
         <DashedAddButton
-          title="+ Добавить оператора"
+          title={t.teamAddOperator}
           onPress={() => {
             patch({
               opEditId: null,
@@ -1676,21 +1854,21 @@ export function ScreenRouter() {
     const editing = nav.opEditId != null;
     return (
       <ScreenScroll>
-        <TopBar title={editing ? 'Редактировать оператора' : 'Новый оператор'} onBack={pop} />
+        <TopBar title={editing ? t.teamEditOperator : t.teamNewOperator} onBack={pop} />
         <Card style={s.gap9}>
-          <FieldLabel>ЛОГИН</FieldLabel>
+          <FieldLabel>{t.teamLogin}</FieldLabel>
           <TextField value={nav.opLogin} onChangeText={(t) => patch({ opLogin: t })} autoCapitalize="none" />
-          <FieldLabel>{editing ? 'НОВЫЙ ПАРОЛЬ (необязательно)' : 'ПАРОЛЬ'}</FieldLabel>
+          <FieldLabel>{editing ? t.teamNewPasswordOptional : t.teamPassword}</FieldLabel>
           <TextField value={nav.opPassword} onChangeText={(t) => patch({ opPassword: t })} secureTextEntry />
         </Card>
-        <SectionLabel>ПРАВА ДОСТУПА</SectionLabel>
+        <SectionLabel>{t.teamAccessRights}</SectionLabel>
         <Card style={s.gap8}>
-          {rightsDefs.map((r) => (
+          {rightsLabels.map((r) => (
             <CheckRow key={r.k} label={r.l} checked={!!nav.opRights[r.k]} onToggle={() => patch({ opRights: { ...nav.opRights, [r.k]: !nav.opRights[r.k] } })} />
           ))}
         </Card>
         <LimeButton
-          title={editing ? 'Сохранить изменения' : 'Создать участника'}
+          title={editing ? t.teamSaveChanges : t.teamCreateMember}
           onPress={() => {
             const action = editing && nav.opEditId
               ? updateOperator(nav.opEditId, nav.opLogin, nav.opPassword, nav.opRights)
@@ -1709,7 +1887,7 @@ export function ScreenRouter() {
               pop();
             })}
           >
-            <Text style={s.redText}>Удалить участника</Text>
+            <Text style={s.redText}>{t.teamDeleteMember}</Text>
           </Pressable>
         ) : null}
       </ScreenScroll>
@@ -1742,7 +1920,7 @@ export function ScreenRouter() {
   if (cur === 'profileEdit') {
     return (
       <ScreenScroll>
-        <TopBar title="Редактировать профиль" onBack={pop} />
+        <TopBar title={t.profileEditTitle} onBack={pop} />
         {appError ? <Text style={s.errorBanner}>{appError}</Text> : null}
         <SectionLabel>EMAIL</SectionLabel>
         <Card style={s.gap9}>
@@ -1755,27 +1933,27 @@ export function ScreenRouter() {
             style={s.savePhoto}
             onPress={() => void saveProfileEmail(nav.profileEditEmail.trim())}
           >
-            <Text style={s.savePhotoText}>Сохранить</Text>
+            <Text style={s.savePhotoText}>{t.commonSave}</Text>
           </Pressable>
         </Card>
-        <SectionLabel>СМЕНА ПАРОЛЯ</SectionLabel>
+        <SectionLabel>{t.profileChangePassword}</SectionLabel>
         <Card style={s.gap9}>
           <TextField
             value={nav.profileCurrentPassword}
             onChangeText={(t) => patch({ profileCurrentPassword: t })}
-            placeholder="Текущий пароль"
+            placeholder={t.profileCurrentPassword}
             secureTextEntry
           />
           <TextField
             value={nav.profileNewPassword}
             onChangeText={(t) => patch({ profileNewPassword: t })}
-            placeholder="Новый пароль"
+            placeholder={t.profileNewPassword}
             secureTextEntry
           />
           <TextField
             value={nav.profileConfirmPassword}
             onChangeText={(t) => patch({ profileConfirmPassword: t })}
-            placeholder="Повторите пароль"
+            placeholder={t.profileConfirmPassword}
             secureTextEntry
           />
           <Pressable
@@ -1792,7 +1970,7 @@ export function ScreenRouter() {
               });
             }}
           >
-            <Text style={s.savePhotoText}>Сменить пароль</Text>
+            <Text style={s.savePhotoText}>{t.profileChangePasswordBtn}</Text>
           </Pressable>
         </Card>
       </ScreenScroll>
@@ -1802,29 +1980,29 @@ export function ScreenRouter() {
   if (cur === 'support') {
     return (
       <ScreenScroll>
-        <TopBar title="Поддержка" onBack={pop} />
+        <TopBar title={t.supportTitle} onBack={pop} />
         {appError ? <Text style={s.errorBanner}>{appError}</Text> : null}
-        <Text style={s.charSub}>Создавайте обращения и следите за статусом ответа.</Text>
+        <Text style={s.charSub}>{t.supportDesc}</Text>
         <Pressable style={s.supportNewBtn} onPress={() => patch({ ticketFormOpen: !nav.ticketFormOpen })}>
-          <Text style={s.supportNewBtnText}>+ Новое обращение</Text>
+          <Text style={s.supportNewBtnText}>{t.supportNewTicket}</Text>
         </Pressable>
         {nav.ticketFormOpen ? (
           <Card style={s.gap10}>
-            <SectionLabel>ТИП ОБРАЩЕНИЯ</SectionLabel>
+            <SectionLabel>{t.supportTicketType}</SectionLabel>
             <ChipRowInteractive
-              items={TICKET_TYPES.map((x) => x.label)}
+              items={ticketTypes.map((x) => x.label)}
               activeIndex={nav.ticketTypeIdx}
               onSelect={(i) => patch({ ticketTypeIdx: i })}
             />
             <TextField
               value={nav.ticketSubject}
               onChangeText={(t) => patch({ ticketSubject: t })}
-              placeholder="Тема обращения"
+              placeholder={t.supportSubject}
             />
             <TextAreaField
               value={nav.ticketMessage}
               onChangeText={(t) => patch({ ticketMessage: t })}
-              placeholder="Сообщение"
+              placeholder={t.supportMessage}
               rows={4}
             />
             <Pressable
@@ -1834,7 +2012,7 @@ export function ScreenRouter() {
                 const message = nav.ticketMessage.trim();
                 if (!subject || !message) return;
                 void createSupportTicket({
-                  type: TICKET_TYPES[nav.ticketTypeIdx]?.id || TICKET_TYPES[0].id,
+                  type: ticketTypes[nav.ticketTypeIdx]?.id || ticketTypes[0].id,
                   subject,
                   message,
                 }).then((row) => {
@@ -1848,17 +2026,17 @@ export function ScreenRouter() {
                 });
               }}
             >
-              <Text style={s.savePhotoText}>Отправить</Text>
+              <Text style={s.savePhotoText}>{t.supportSend}</Text>
             </Pressable>
           </Card>
         ) : null}
-        <SectionLabel>ВАШИ ОБРАЩЕНИЯ</SectionLabel>
+        <SectionLabel>{t.supportYourTickets}</SectionLabel>
         {supportTickets.map((tk) => (
           <Card key={tk.id} onPress={() => push(`ticket:${tk.id}`)}>
             <View style={s.between}>
               <Text style={[s.opLabel, s.flex1]} numberOfLines={2}>{tk.subject}</Text>
               <Pill
-                text={ticketStatusLabel(tk.status)}
+                text={ticketStatusForLocale(tk.status, locale)}
                 bg="rgba(255,255,255,0.06)"
                 fg={ticketStatusColor(tk.status)}
               />
@@ -1866,7 +2044,7 @@ export function ScreenRouter() {
             <Text style={s.charSub}>{tk.type}</Text>
           </Card>
         ))}
-        {!supportTickets.length ? <Text style={s.charSub}>Пока нет обращений</Text> : null}
+        {!supportTickets.length ? <Text style={s.charSub}>{t.supportNoTickets}</Text> : null}
       </ScreenScroll>
     );
   }
@@ -1876,7 +2054,7 @@ export function ScreenRouter() {
     if (!tk) {
       return (
         <ScreenScroll>
-          <TopBar title="Обращение" onBack={pop} />
+          <TopBar title={t.ticketTitle} onBack={pop} />
           <ActivityIndicator color={color.lime} style={{ marginTop: 24 }} />
         </ScreenScroll>
       );
@@ -1891,11 +2069,11 @@ export function ScreenRouter() {
     ];
     return (
       <ScreenScroll>
-        <TopBar title="Обращение" onBack={pop} />
+        <TopBar title={t.ticketTitle} onBack={pop} />
         <Card style={s.gap8}>
           <View style={s.between}>
             <Text style={s.planTitle}>{tk.subject}</Text>
-            <Pill text={ticketStatusLabel(tk.status)} bg="rgba(255,255,255,0.06)" fg={ticketStatusColor(tk.status)} />
+            <Pill text={ticketStatusForLocale(tk.status, locale)} bg="rgba(255,255,255,0.06)" fg={ticketStatusColor(tk.status)} />
           </View>
           <Text style={s.charSub}>{tk.type}</Text>
         </Card>
@@ -1907,6 +2085,35 @@ export function ScreenRouter() {
             </View>
           </View>
         ))}
+        {tk.status !== 'closed' ? (
+          <Card style={s.gap8}>
+            {appError ? <Text style={s.errorBanner}>{appError}</Text> : null}
+            <TextAreaField
+              value={ticketReply}
+              onChangeText={(text) => {
+                setTicketReply(text);
+                if (appError) clearError();
+              }}
+              placeholder={t.ticketReplyPlaceholder}
+            />
+            <Pressable
+              style={[s.limeFlex, (!ticketReply.trim() || appBusy) && s.saveDisabled]}
+              disabled={!ticketReply.trim() || appBusy}
+              onPress={() => {
+                void replySupportTicket(tk.id, ticketReply)
+                  .then(async () => {
+                    setTicketReply('');
+                    clearError();
+                    const updated = await fetchSupportTicket(tk.id);
+                    setActiveTicket(updated);
+                  })
+                  .catch(() => {});
+              }}
+            >
+              <Text style={s.limeHalfText}>{appBusy ? t.commonSaving : t.commonSend}</Text>
+            </Pressable>
+          </Card>
+        ) : null}
       </ScreenScroll>
     );
   }
@@ -1914,33 +2121,33 @@ export function ScreenRouter() {
   if (cur === 'video-archive') {
     return (
       <ScreenScroll>
-        <TopBar title="Архив видео" onBack={pop} />
-        <Card style={s.warnCard}><Text style={s.warnText}>⏳ хранится ~4 дня</Text></Card>
+        <TopBar title={t.studioVideoArchive} onBack={pop} />
+        <Card style={s.warnCard}><Text style={s.warnText}>{t.archiveRetention}</Text></Card>
         <View style={s.grid2}>
-          {archiveVideoTiles.map((t, i) => (
-            <View key={t.id ?? i} style={s.archTile}>
+          {archiveVideoTiles.map((tile, i) => (
+            <View key={tile.id ?? i} style={s.archTile}>
               <Pressable onPress={() => { patch({ videoArchiveIdx: i }); push('video-item'); }}>
                 <View style={s.videoTilePreview}>
-                  <RemoteImage uri={t.imageUrl} style={s.archImg} gradIndex={t.gradIndex} pending={t.pending} />
+                  <RemoteImage uri={tile.imageUrl} style={s.archImg} gradIndex={tile.gradIndex} pending={tile.pending} />
                   <View style={s.playCircleSmall}><IcoFilm size={12} stroke="#fff" /></View>
                 </View>
-                <Text style={s.archWho}>{t.who}</Text>
+                <Text style={s.archWho}>{tile.who}</Text>
               </Pressable>
               <Pressable
                 style={s.videoTileDownload}
                 onPress={() => {
-                  const url = t.raw?.video_url || t.videoUrl;
-                  if (url) void downloadMedia(url, { filename: 'video.mp4', mimeType: 'video/mp4' }).catch(() => {});
+                  const url = tile.raw?.video_url || tile.videoUrl;
+                  if (url) downloadOrError(url, { filename: 'video.mp4', mimeType: 'video/mp4' });
                 }}
               >
-                <Text style={s.videoTileDownloadText}>Скачать</Text>
+                <Text style={s.videoTileDownloadText}>{t.studioDownload}</Text>
               </Pressable>
             </View>
           ))}
         </View>
         {videoArchiveHasMore ? (
           <Pressable style={s.showMoreBtn} onPress={() => void loadMoreVideoArchive()}>
-            <Text style={s.showMoreText}>Показать ещё</Text>
+            <Text style={s.showMoreText}>{t.commonShowMore}</Text>
           </Pressable>
         ) : null}
       </ScreenScroll>
@@ -1948,23 +2155,23 @@ export function ScreenRouter() {
   }
 
   if (cur === 'video-item') {
-    const t = archiveVideoTiles[nav.videoArchiveIdx] ?? archiveVideoTiles[0];
-    const videoUrl = t?.raw?.video_url || t?.videoUrl;
+    const tile = archiveVideoTiles[nav.videoArchiveIdx] ?? archiveVideoTiles[0];
+    const videoUrl = tile?.raw?.video_url || tile?.videoUrl;
     return (
       <ScreenScroll>
-        <TopBar title="Видео" onBack={pop} />
+        <TopBar title={t.studioVideo} onBack={pop} />
         <View style={s.lightboxWrap}>
-          <RemoteImage uri={t?.imageUrl} style={s.lightbox} gradIndex={t?.gradIndex ?? 0} pending={t?.pending} />
+          <RemoteImage uri={tile?.imageUrl} style={s.lightbox} gradIndex={tile?.gradIndex ?? 0} pending={tile?.pending} />
           <View style={s.playCircle}><IcoFilm size={13} stroke="#fff" /></View>
-          <Text style={s.lightboxBadge}>{t?.who}</Text>
+          <Text style={s.lightboxBadge}>{tile?.who}</Text>
         </View>
         <Pressable
           style={s.limeHalf}
           onPress={() => {
-            if (videoUrl) void downloadMedia(videoUrl, { filename: 'video.mp4', mimeType: 'video/mp4' }).catch(() => {});
+            if (videoUrl) downloadOrError(videoUrl, { filename: 'video.mp4', mimeType: 'video/mp4' });
           }}
         >
-          <Text style={s.limeHalfText}>Скачать MP4</Text>
+          <Text style={s.limeHalfText}>{t.studioDownloadMp4}</Text>
         </Pressable>
       </ScreenScroll>
     );
@@ -2277,6 +2484,9 @@ const s = StyleSheet.create({
   gap8: { gap: 8 },
   gap6: { gap: 6 },
   slotRow: { flexDirection: 'row', gap: 8 },
+  slotCol: { gap: 12 },
+  slotBlock: { gap: 8 },
+  slotLabel: { fontFamily: font.body, fontSize: 11, fontWeight: '700', color: color.muted },
   promptBox: { backgroundColor: color.inputBg, borderWidth: 1, borderColor: 'rgba(255,255,255,0.09)', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10 },
   promptText: { fontSize: 11.5, color: color.dim },
   warnCard: { backgroundColor: 'rgba(251,146,60,0.06)', borderColor: 'rgba(251,146,60,0.25)' },

@@ -8,7 +8,8 @@ import type {
   StudioModelOut,
   TelegramLoginUser,
 } from '@/src/api/types';
-import { apiUrl, getApiBaseUrl } from '@/src/api/config';
+import { apiUrl, getApiBaseUrl, resolveMediaUrl } from '@/src/api/config';
+import { remoteImageToLocalFile } from '@/src/api/mediaFiles';
 import { archiveThumbUrl } from '@/src/api/media';
 import MMOS_STUDIO_SCENARIOS from '@/src/studio/mmOsStudioScenarios';
 import {
@@ -303,10 +304,45 @@ export async function changePassword(currentPassword: string, newPassword: strin
   });
 }
 
+export async function sendReplyWithImage(convId: number, text: string, imageFile: LocalFile) {
+  const fd = new FormData();
+  if (text.trim()) fd.append('text', text.trim());
+  appendLocalFile(fd, 'image', imageFile);
+  const res = await apiFetch(`/api/conversations/${convId}/reply`, { method: 'POST', body: fd });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'Не удалось отправить');
+  return data;
+}
+
+export async function startFanvueOAuth(studioModelId?: number, label?: string) {
+  const body: Record<string, unknown> = {};
+  if (studioModelId) body.studio_model_id = studioModelId;
+  if (label) body.label = label;
+  return apiJson<{ authorize_url: string }>('/api/integrations/fanvue/oauth/start', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
+export async function deleteStudioModel(charId: number) {
+  await apiJson(`/api/studio/models/${charId}`, { method: 'DELETE' });
+}
+
+export async function deleteStudioModelImage(charId: number, imageId: number) {
+  await apiJson(`/api/studio/models/${charId}/images/${imageId}`, { method: 'DELETE' });
+}
+
+export async function replySupportTicket(ticketId: number, message: string) {
+  return apiJson(`/api/support/tickets/${ticketId}/reply`, {
+    method: 'POST',
+    body: JSON.stringify({ message }),
+  });
+}
+
 export async function generateStudioModelProfile(model: StudioModelOut) {
   const images = model.images || [];
   const preferred = images.filter((im) => {
-    const k = normalizePhotoKind(im.image_kind || '');
+    const k = normalizePhotoKind(String(im.image_kind || im.kind || ''));
     return k === 'face' || k === 'body';
   });
   const pool = preferred.length ? preferred : images;
@@ -314,22 +350,15 @@ export async function generateStudioModelProfile(model: StudioModelOut) {
   const fd = new FormData();
   let appended = 0;
   for (const im of pool.slice(0, 8)) {
-    const path = im.url.startsWith('http') ? im.url.replace(getApiBaseUrl(), '') : im.url;
-    const res = await apiFetch(path.startsWith('/') ? path : im.url);
-    if (!res.ok) continue;
-    const blob = await res.blob();
-    const reader = new FileReader();
-    const dataUrl = await new Promise<string>((resolve, reject) => {
-      reader.onload = () => resolve(String(reader.result));
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
-    fd.append('images', {
-      uri: dataUrl,
-      name: `model-${im.id}.jpg`,
-      type: blob.type || 'image/jpeg',
-    } as unknown as Blob);
-    appended += 1;
+    const url = im.url ? resolveMediaUrl(im.url) : '';
+    if (!url) continue;
+    try {
+      const file = await remoteImageToLocalFile(url, `model-${im.id}.jpg`);
+      fd.append('images', file as unknown as Blob);
+      appended += 1;
+    } catch {
+      /* skip unreadable */
+    }
   }
   if (!appended) throw new Error('Не удалось прочитать фото модели');
   const res = await apiFetch('/api/studio/models/generate-profile', { method: 'POST', body: fd });
@@ -487,7 +516,7 @@ export async function executeWorkflowGraph(
   return postStudioJobStart('/api/studio/workflow/execute', { method: 'POST', body: fd });
 }
 
-function slotUploadKey(mode: string, index: number) {
+export function slotUploadKey(mode: string, index: number) {
   if (mode === 'outfit') return index === 0 ? 'ref' : 'outfit-cloth';
   if (mode === 'loc' || mode === 'location') return index === 0 ? 'ref' : 'location-photo';
   if (mode === 'carousel') return 'carousel';
@@ -495,8 +524,12 @@ function slotUploadKey(mode: string, index: number) {
   return 'ref';
 }
 
-function slotStateKey(mode: string, index: number) {
+export function slotStateKey(mode: string, index: number) {
   return `${mode}:${index}`;
+}
+
+function slotStateKeyInternal(mode: string, index: number) {
+  return slotStateKey(mode, index);
 }
 
 function resolveSlotSource(
@@ -669,9 +702,6 @@ export async function runMotionVideo(params: {
   fd.append('generate_audio', params.generateAudio === false ? '0' : '1');
   if (params.frameFile) appendLocalFile(fd, 'image', params.frameFile);
   const accepted = await postStudioJobStart('/api/studio/motion/render-video', { method: 'POST', body: fd });
-  if (accepted.job_id) {
-    await waitForStudioJobResult(accepted.job_id, { maxWaitMs: 15 * 60 * 1000 }).catch(() => {});
-  }
   return accepted;
 }
 
@@ -680,21 +710,7 @@ export async function pollStudioJob(jobId: number) {
 }
 
 export async function uploadStudioModelImageFromUrl(charId: number, imageUrl: string, kind: string) {
-  const path = imageUrl.startsWith('http') ? imageUrl.replace(getApiBaseUrl(), '') : imageUrl;
-  const res = await apiFetch(path.startsWith('/') ? path : imageUrl);
-  if (!res.ok) throw new Error('Не удалось загрузить изображение');
-  const blob = await res.blob();
-  const reader = new FileReader();
-  const dataUrl = await new Promise<string>((resolve, reject) => {
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
-  });
-  const file = {
-    uri: dataUrl,
-    name: `gen-${Date.now()}.jpg`,
-    type: blob.type || 'image/jpeg',
-  } as LocalFile;
+  const file = await remoteImageToLocalFile(resolveMediaUrl(imageUrl), `gen-${Date.now()}.jpg`);
   return uploadStudioModelImage(charId, file, kind);
 }
 

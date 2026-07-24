@@ -11,6 +11,7 @@ import {
   uploadStudioModelImageFromUrl,
 } from '@/src/api/actions';
 import { resolveMediaUrl } from '@/src/api/config';
+import { useAppSettings } from '@/src/context/AppSettingsContext';
 
 type Stage = 'face-form' | 'face-loading' | 'face-result' | 'body-form' | 'body-loading' | 'body-result' | 'done';
 
@@ -21,6 +22,7 @@ export function CharacterGenPanel({
   charId: number;
   onSaved: () => Promise<void> | void;
 }) {
+  const { t } = useAppSettings();
   const [open, setOpen] = useState(false);
   const [stage, setStage] = useState<Stage>('face-form');
   const [error, setError] = useState<string | null>(null);
@@ -46,17 +48,18 @@ export function CharacterGenPanel({
 
   const runFace = async () => {
     if (!face1 || !face2) {
-      setError('Загрузите 2 фото лиц');
+      setError(t.charBootstrapErrTwoFaces);
       return;
     }
     setError(null);
     setStage('face-loading');
     try {
       const { result } = await runModelBootstrapFaceMerge({ modelId: charId, face1, face2, aspect: '3:4' });
-      const url = result?.generated_image_url || '';
-      if (!url) throw new Error('Не удалось получить изображение лица');
+      const url = String(result?.generated_image_url || result?.image_url || '');
+      if (!url) throw new Error(t.charBootstrapErrFaceResult);
       setFaceResultUrl(url);
-      setFaceGenerationId(result?.generation_id ?? null);
+      const genId = result?.generation_id;
+      setFaceGenerationId(typeof genId === 'number' ? genId : genId != null ? Number(genId) : null);
       setStage('face-result');
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -78,7 +81,7 @@ export function CharacterGenPanel({
 
   const runBody = async () => {
     if (!bodyFile) {
-      setError('Загрузите референс тела');
+      setError(t.charBootstrapErrBodyRef);
       return;
     }
     setError(null);
@@ -90,8 +93,8 @@ export function CharacterGenPanel({
         faceGenerationId,
         aspect: '3:4',
       });
-      const url = result?.generated_image_url || '';
-      if (!url) throw new Error('Не удалось получить изображение тела');
+      const url = String(result?.generated_image_url || result?.image_url || '');
+      if (!url) throw new Error(t.charBootstrapErrBodyResult);
       setBodyResultUrl(url);
       setStage('body-result');
     } catch (e) {
@@ -151,7 +154,7 @@ export function CharacterGenPanel({
     <>
       <Pressable onPress={() => setOpen((v) => !v)} style={{ flexDirection: 'row', alignItems: 'center', gap: 9, marginBottom: open ? 10 : 12 }}>
         <IcoWand size={17} stroke={color.purple} />
-        <Text style={{ fontWeight: '800', fontSize: 14, flex: 1, color: color.text }}>✦ Сгенерировать изображение?</Text>
+        <Text style={{ fontWeight: '800', fontSize: 14, flex: 1, color: color.text }}>{t.charBootstrapTitle}</Text>
         <Text style={{ color: color.muted, fontSize: 12 }}>{open ? '▲' : '▼'}</Text>
       </Pressable>
 
@@ -161,19 +164,19 @@ export function CharacterGenPanel({
 
           {stage === 'face-form' ? (
             <>
-              <Text style={{ fontWeight: '700', fontSize: 13, color: color.text }}>Соберём новое лицо</Text>
+              <Text style={{ fontWeight: '700', fontSize: 13, color: color.text }}>{t.charBootstrapFaceTitle}</Text>
               <Text style={{ fontSize: 11.5, color: color.muted, lineHeight: 18 }}>
-                Загрузите 2 фото лиц — мы соберём из них новое уникальное лицо для персонажа.
+                {t.charBootstrapFaceDesc}
               </Text>
               <Text style={{ fontSize: 10.5, color: '#FB923C', lineHeight: 18 }}>
-                ⚠ Берите качественные фото в хорошем разрешении — от этого зависит результат.
+                {t.charBootstrapFaceWarn}
               </Text>
               <View style={{ flexDirection: 'row', gap: 8, justifyContent: 'space-between' }}>
-                {uploadSlot('Лицо 1', '3/4', face1, () => void pickSlot('face1'))}
-                {uploadSlot('Лицо 2', '3/4', face2, () => void pickSlot('face2'))}
+                {uploadSlot(t.charBootstrapFace1, '3/4', face1, () => void pickSlot('face1'))}
+                {uploadSlot(t.charBootstrapFace2, '3/4', face2, () => void pickSlot('face2'))}
               </View>
               <Pressable onPress={() => void runFace()}>
-                <Text style={purpleBtn}>Сгенерировать</Text>
+                <Text style={purpleBtn}>{t.charBootstrapGenerate}</Text>
               </Pressable>
             </>
           ) : null}
@@ -182,15 +185,15 @@ export function CharacterGenPanel({
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
               <ActivityIndicator color={color.purple} />
               <View>
-                <Text style={{ fontWeight: '800', fontSize: 12.5, color: color.purple }}>Собираем лицо…</Text>
-                <Text style={{ fontSize: 10.5, color: color.muted }}>Nano Banana Pro · ~12 c</Text>
+                <Text style={{ fontWeight: '800', fontSize: 12.5, color: color.purple }}>{t.charBootstrapFaceLoading}</Text>
+                <Text style={{ fontSize: 10.5, color: color.muted }}>{t.charBootstrapFaceLoadingSub}</Text>
               </View>
             </View>
           ) : null}
 
           {stage === 'face-result' ? (
             <>
-              <Text style={{ fontWeight: '700', fontSize: 13, color: color.text }}>Результат</Text>
+              <Text style={{ fontWeight: '700', fontSize: 13, color: color.text }}>{t.charBootstrapResult}</Text>
               <Pressable onPress={() => setLightboxUrl(resolveMediaUrl(faceResultUrl))}>
                 <Image
                   source={{ uri: resolveMediaUrl(faceResultUrl) }}
@@ -201,12 +204,12 @@ export function CharacterGenPanel({
               <View style={{ flexDirection: 'row', gap: 7 }}>
                 <Pressable style={{ flex: 1 }} onPress={() => void runFace()}>
                   <Text style={{ textAlign: 'center', padding: 9, borderRadius: 9, borderWidth: 1, borderColor: 'rgba(255,255,255,.14)', color: color.muted, fontWeight: '700', fontSize: 12 }}>
-                    ↻ Перегенерировать
+                    {t.charBootstrapRegenerate}
                   </Text>
                 </Pressable>
                 <Pressable style={{ flex: 1 }} onPress={() => void useFace()}>
                   <Text style={{ textAlign: 'center', padding: 9, borderRadius: 9, backgroundColor: 'rgba(215,244,82,.12)', borderWidth: 1, borderColor: 'rgba(215,244,82,.35)', color: color.lime, fontWeight: '800', fontSize: 12 }}>
-                    ✓ Использовать эту
+                    {t.charBootstrapUseThis}
                   </Text>
                 </Pressable>
               </View>
@@ -217,19 +220,19 @@ export function CharacterGenPanel({
             <View style={{ borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,.08)', paddingTop: 12, gap: 10 }}>
               {stage !== 'done' ? (
                 <Text style={{ fontFamily: font.mono, fontSize: 8.5, alignSelf: 'flex-start', backgroundColor: 'rgba(215,244,82,.15)', color: color.lime, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 5 }}>
-                  ✓ Лицо сохранено
+                  {t.charBootstrapFaceSaved}
                 </Text>
               ) : null}
 
               {stage === 'body-form' ? (
                 <>
-                  <Text style={{ fontWeight: '700', fontSize: 13, color: color.text }}>Теперь тело</Text>
+                  <Text style={{ fontWeight: '700', fontSize: 13, color: color.text }}>{t.charBootstrapBodyTitle}</Text>
                   <Text style={{ fontSize: 11.5, color: color.muted, lineHeight: 18 }}>
-                    Загрузите референс тела, какое хотите видеть у модели — мы соберём фото с этим лицом и телом.
+                    {t.charBootstrapBodyDesc}
                   </Text>
-                  {uploadSlot('Тело', '3/4', bodyFile, () => void pickSlot('body'), 150)}
+                  {uploadSlot(t.charBootstrapBody, '3/4', bodyFile, () => void pickSlot('body'), 150)}
                   <Pressable onPress={() => void runBody()}>
-                    <Text style={purpleBtn}>Сгенерировать</Text>
+                    <Text style={purpleBtn}>{t.charBootstrapGenerate}</Text>
                   </Pressable>
                 </>
               ) : null}
@@ -238,15 +241,15 @@ export function CharacterGenPanel({
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
                   <ActivityIndicator color={color.purple} />
                   <View>
-                    <Text style={{ fontWeight: '800', fontSize: 12.5, color: color.purple }}>Собираем тело…</Text>
-                    <Text style={{ fontSize: 10.5, color: color.muted }}>Seedream 5 Pro · ~15 c</Text>
+                    <Text style={{ fontWeight: '800', fontSize: 12.5, color: color.purple }}>{t.charBootstrapBodyLoading}</Text>
+                    <Text style={{ fontSize: 10.5, color: color.muted }}>{t.charBootstrapBodyLoadingSub}</Text>
                   </View>
                 </View>
               ) : null}
 
               {stage === 'body-result' ? (
                 <>
-                  <Text style={{ fontWeight: '700', fontSize: 13, color: color.text }}>Результат</Text>
+                  <Text style={{ fontWeight: '700', fontSize: 13, color: color.text }}>{t.charBootstrapResult}</Text>
                   <Pressable onPress={() => setLightboxUrl(resolveMediaUrl(bodyResultUrl))}>
                     <Image
                       source={{ uri: resolveMediaUrl(bodyResultUrl) }}
@@ -257,12 +260,12 @@ export function CharacterGenPanel({
                   <View style={{ flexDirection: 'row', gap: 7 }}>
                     <Pressable style={{ flex: 1 }} onPress={() => void runBody()}>
                       <Text style={{ textAlign: 'center', padding: 9, borderRadius: 9, borderWidth: 1, borderColor: 'rgba(255,255,255,.14)', color: color.muted, fontWeight: '700', fontSize: 12 }}>
-                        ↻ Перегенерировать
+                        {t.charBootstrapRegenerate}
                       </Text>
                     </Pressable>
                     <Pressable style={{ flex: 1 }} onPress={() => void saveBody()}>
                       <Text style={{ textAlign: 'center', padding: 9, borderRadius: 9, backgroundColor: 'rgba(215,244,82,.12)', borderWidth: 1, borderColor: 'rgba(215,244,82,.35)', color: color.lime, fontWeight: '800', fontSize: 12 }}>
-                        💾 Сохранить
+                        {t.charBootstrapSave}
                       </Text>
                     </Pressable>
                   </View>
@@ -271,7 +274,7 @@ export function CharacterGenPanel({
 
               {stage === 'done' ? (
                 <Text style={{ fontFamily: font.mono, fontSize: 11, color: color.green }}>
-                  ✓ Лицо и тело сохранены в галерею персонажа
+                  {t.charBootstrapDone}
                 </Text>
               ) : null}
             </View>
