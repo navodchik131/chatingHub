@@ -21,7 +21,7 @@ import {
   extractStudioJobImageUrl,
   extractStudioJobVideoUrl,
 } from '@/src/studio/studioHelpers';
-import { charFieldsFromModel, fmtMoney, maskFromOpRights, photoTagsRu, resolveDonationBalances } from '@/src/api/helpers';
+import { charFieldsFromModel, fmtMoney, maskFromOpRights, photoTagKindByIndex, photoTagLabels, resolveDonationBalances } from '@/src/api/helpers';
 import {
   mapAdminUser,
   mapArchiveTile,
@@ -1133,8 +1133,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     }
     const created = (await actions.createStudioModel(trimmed)) as StudioModelOut;
     if (photoFile && created.id) {
-      const kinds = ['face', 'turnaround', 'body', 'genitals', 'other'];
-      await actions.uploadStudioModelImage(created.id, photoFile, kinds[photoTagIdx] || 'face');
+      await actions.uploadStudioModelImage(created.id, photoFile, photoTagKindByIndex(photoTagIdx));
     }
     await refreshAll();
     return created.id;
@@ -1441,8 +1440,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       igBotStats,
       exifBotUsers,
       igBotUsers,
-      photoTags: photoTagsRu().slice(0, 3),
-      photoTagsExtended: photoTagsRu(),
+      photoTags: photoTagLabels(locale),
+      photoTagsExtended: photoTagLabels(locale),
       uploadFiles,
       setUploadFile,
       slotArchivePicks,

@@ -88,7 +88,7 @@ import { SwipeableChatRow } from '@/src/components/SwipeableChatRow';
 import { ThreadView } from '@/src/components/ThreadView';
 import { resolveMediaUrl } from '@/src/api/config';
 import { archiveThumbUrl } from '@/src/api/media';
-import { charFieldsFromModel, fmtDateShort, fmtMoney, fmtRub, fmtTime } from '@/src/api/helpers';
+import { charFieldsFromModel, fmtDateShort, fmtMoney, fmtRub, fmtTime, photoTagKindByIndex } from '@/src/api/helpers';
 import { mapCharPhotoTags, mapIntegrationConnections, mapIntegrationCurrent } from '@/src/api/mappers';
 import { StudioSlotInput } from '@/src/components/StudioSlotInput';
 import { slotStateKey } from '@/src/api/actions';
@@ -249,7 +249,12 @@ export function ScreenRouter() {
   const [ticketReply, setTicketReply] = useState('');
   const [charNameEdit, setCharNameEdit] = useState('');
   const [threadAttachment, setThreadAttachment] = useState<LocalFile | null>(null);
+  const [newCharDraftId, setNewCharDraftId] = useState<number | null>(null);
   const threadConvId = conversations[chatIdx]?.id ?? null;
+
+  useEffect(() => {
+    if (cur !== 'new-character') setNewCharDraftId(null);
+  }, [cur]);
 
   useEffect(() => {
     if (cur !== 'thread') setThreadAttachment(null);
@@ -1232,6 +1237,14 @@ export function ScreenRouter() {
   }
 
   if (cur === 'new-character') {
+    const ensureNewCharacter = async (): Promise<number> => {
+      if (newCharDraftId) return newCharDraftId;
+      const id = await createCharacter(nav.newCharName, nav.photoTagIdx, uploadFiles.newCharPhoto);
+      setNewCharDraftId(id);
+      if (uploadFiles.newCharPhoto) setUploadFile('newCharPhoto', undefined);
+      return id;
+    };
+
     return (
       <ScreenScroll>
         <TopBar title={t.charNewTitle} onBack={pop} />
@@ -1239,6 +1252,12 @@ export function ScreenRouter() {
           <FieldLabel>{t.charNameLabel}</FieldLabel>
           <TextField value={nav.newCharName} onChangeText={(t) => patch({ newCharName: t })} />
         </Card>
+        <CharacterGenPanel
+          charId={newCharDraftId}
+          ensureCharId={ensureNewCharacter}
+          defaultOpen
+          onSaved={() => app.refreshAll()}
+        />
         <SectionLabel>{t.charFirstPhoto}</SectionLabel>
         <DropSlot
           label={t.studioUploadImage}
@@ -1260,8 +1279,8 @@ export function ScreenRouter() {
           title={t.charCreate}
           onPress={async () => {
             try {
-              const id = await createCharacter(nav.newCharName, nav.photoTagIdx, app.uploadFiles.newCharPhoto);
-              patch({ charId: String(id), charTab: 'photos' });
+              const id = await ensureNewCharacter();
+              patch({ charId: String(id), charTab: 'photos', newCharName: '' });
               push(`character:${id}`);
             } catch { /* error in app */ }
           }}
@@ -1489,9 +1508,8 @@ export function ScreenRouter() {
                       patch({ photoTagPick: false });
                       return;
                     }
-                    const kinds = ['face', 'turnaround', 'body', 'genitals', 'other'];
                     const { uploadStudioModelImage } = await import('@/src/api/actions');
-                    await uploadStudioModelImage(charIdNum, app.uploadFiles.charPhoto, kinds[nav.photoTagIdx] || 'face');
+                    await uploadStudioModelImage(charIdNum, app.uploadFiles.charPhoto, photoTagKindByIndex(nav.photoTagIdx));
                     patch({ photoTagPick: false });
                     await app.refreshAll();
                   }}

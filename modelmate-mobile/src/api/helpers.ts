@@ -69,11 +69,11 @@ export function platformLabel(p?: string): string {
 export const STUDIO_MODEL_IMAGE_KINDS = ['face', 'turnaround', 'body', 'genitals', 'other'] as const;
 
 export const PHOTO_TAG_DEFS = [
-  { kind: 'face', shortRu: 'Лицо' },
-  { kind: 'turnaround', shortRu: 'Развёртка' },
-  { kind: 'body', shortRu: 'Тело' },
-  { kind: 'genitals', shortRu: 'Интим' },
-  { kind: 'other', shortRu: 'Общий' },
+  { kind: 'face', shortRu: 'Лицо', shortEn: 'Face' },
+  { kind: 'turnaround', shortRu: 'Развёртка', shortEn: 'Turnaround' },
+  { kind: 'body', shortRu: 'Тело', shortEn: 'Body' },
+  { kind: 'genitals', shortRu: 'Интим', shortEn: 'Intimate' },
+  { kind: 'other', shortRu: 'Общий', shortEn: 'Other' },
 ];
 
 export function normalizePhotoKind(kind: string): string {
@@ -82,7 +82,11 @@ export function normalizePhotoKind(kind: string): string {
 }
 
 export function photoTagsRu(): string[] {
-  return PHOTO_TAG_DEFS.map((d) => d.shortRu);
+  return photoTagLabels('ru');
+}
+
+export function photoTagLabels(locale: 'ru' | 'en'): string[] {
+  return PHOTO_TAG_DEFS.map((d) => (locale === 'ru' ? d.shortRu : d.shortEn));
 }
 
 export function photoTagKindByIndex(index: number): string {

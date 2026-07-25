@@ -17,13 +17,17 @@ type Stage = 'face-form' | 'face-loading' | 'face-result' | 'body-form' | 'body-
 
 export function CharacterGenPanel({
   charId,
+  ensureCharId,
+  defaultOpen = false,
   onSaved,
 }: {
-  charId: number;
+  charId?: number | null;
+  ensureCharId?: () => Promise<number>;
+  defaultOpen?: boolean;
   onSaved: () => Promise<void> | void;
 }) {
   const { t } = useAppSettings();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
   const [stage, setStage] = useState<Stage>('face-form');
   const [error, setError] = useState<string | null>(null);
   const [face1, setFace1] = useState<LocalFile | null>(null);
@@ -33,6 +37,12 @@ export function CharacterGenPanel({
   const [faceGenerationId, setFaceGenerationId] = useState<number | null>(null);
   const [bodyResultUrl, setBodyResultUrl] = useState('');
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+
+  const resolveCharId = async (): Promise<number> => {
+    if (charId) return charId;
+    if (ensureCharId) return ensureCharId();
+    throw new Error(t.errSelectCharacter);
+  };
 
   const pickSlot = async (slot: 'face1' | 'face2' | 'body') => {
     try {
@@ -54,7 +64,8 @@ export function CharacterGenPanel({
     setError(null);
     setStage('face-loading');
     try {
-      const { result } = await runModelBootstrapFaceMerge({ modelId: charId, face1, face2, aspect: '3:4' });
+      const modelId = await resolveCharId();
+      const { result } = await runModelBootstrapFaceMerge({ modelId, face1, face2, aspect: '3:4' });
       const url = String(result?.generated_image_url || result?.image_url || '');
       if (!url) throw new Error(t.charBootstrapErrFaceResult);
       setFaceResultUrl(url);
@@ -71,7 +82,8 @@ export function CharacterGenPanel({
     if (!faceResultUrl) return;
     setError(null);
     try {
-      await uploadStudioModelImageFromUrl(charId, faceResultUrl, 'face');
+      const modelId = await resolveCharId();
+      await uploadStudioModelImageFromUrl(modelId, faceResultUrl, 'face');
       await onSaved();
       setStage('body-form');
     } catch (e) {
@@ -87,8 +99,9 @@ export function CharacterGenPanel({
     setError(null);
     setStage('body-loading');
     try {
+      const modelId = await resolveCharId();
       const { result } = await runModelBootstrapBodyCompose({
-        modelId: charId,
+        modelId,
         bodyRef: bodyFile,
         faceGenerationId,
         aspect: '3:4',
@@ -107,7 +120,8 @@ export function CharacterGenPanel({
     if (!bodyResultUrl) return;
     setError(null);
     try {
-      await uploadStudioModelImageFromUrl(charId, bodyResultUrl, 'body');
+      const modelId = await resolveCharId();
+      await uploadStudioModelImageFromUrl(modelId, bodyResultUrl, 'body');
       await onSaved();
       setStage('done');
     } catch (e) {
