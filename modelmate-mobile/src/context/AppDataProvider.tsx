@@ -9,7 +9,7 @@ import {
   useState,
 } from 'react';
 import { useAppSettings } from '@/src/context/AppSettingsContext';
-import { showUserError } from '@/src/utils/userNotice';
+import { showUserError, showUserInfo } from '@/src/utils/userNotice';
 import { AppState } from 'react-native';
 import * as actions from '@/src/api/actions';
 import { validateImageGeneration } from '@/src/api/actions';
@@ -98,6 +98,7 @@ type AppDataValue = {
   saveProfileEmail: (email: string) => Promise<void>;
   changeUserPassword: (current: string, next: string) => Promise<void>;
   uploadExifReference: (charId: number, role: 'selfie' | 'main', file: LocalFile) => Promise<void>;
+  uploadCharacterPhoto: (charId: number, file: LocalFile, kind: string) => Promise<void>;
   connectionsList: ReturnType<typeof mapIntegrationCards>;
   rawIntegrations: IntegrationStatusOut | null;
   health: HealthOut | null;
@@ -323,6 +324,24 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     }
   }, [t.errorTitle]);
 
+  const withBusyAction = useCallback(
+    async <T,>(fn: () => Promise<T>, opts?: { saved?: boolean }): Promise<T> => {
+      setBusy(true);
+      setError(null);
+      try {
+        const result = await fn();
+        if (opts?.saved) showUserInfo(t.settingsSaved);
+        return result;
+      } catch (e) {
+        reportError(e);
+        throw e;
+      } finally {
+        setBusy(false);
+      }
+    },
+    [reportError, t.settingsSaved],
+  );
+
   const setUploadFile = useCallback((key: string, file: LocalFile | undefined) => {
     setUploadFilesState((prev) => ({ ...prev, [key]: file }));
   }, []);
@@ -405,10 +424,12 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const createSupportTicket = useCallback(async (payload: { type: string; subject: string; message: string }) => {
-    const row = await actions.createSupportTicket(payload);
-    await refreshSupportTickets();
-    return row;
-  }, [refreshSupportTickets]);
+    return withBusyAction(async () => {
+      const row = await actions.createSupportTicket(payload);
+      await refreshSupportTickets();
+      return row;
+    });
+  }, [refreshSupportTickets, withBusyAction]);
 
   const fetchSupportTicket = useCallback(async (ticketId: number) => {
     return actions.fetchSupportTicket(ticketId);
@@ -417,15 +438,11 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const replySupportTicket = useCallback(async (ticketId: number, message: string) => {
     const trimmed = message.trim();
     if (!trimmed) return;
-    setError(null);
-    try {
+    await withBusyAction(async () => {
       await actions.replySupportTicket(ticketId, trimmed);
       await refreshSupportTickets();
-    } catch (e) {
-      reportError(e);
-      throw e;
-    }
-  }, [refreshSupportTickets]);
+    });
+  }, [refreshSupportTickets, withBusyAction]);
 
   const refreshConversations = useCallback(async () => {
     try {
@@ -514,18 +531,31 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const saveProfileEmail = useCallback(async (email: string) => {
-    await actions.patchProfileEmail(email);
-    await refreshAll();
-  }, [refreshAll]);
+    await withBusyAction(async () => {
+      await actions.patchProfileEmail(email);
+      await refreshAll();
+    }, { saved: true });
+  }, [refreshAll, withBusyAction]);
 
   const changeUserPassword = useCallback(async (current: string, next: string) => {
-    await actions.changePassword(current, next);
-  }, []);
+    await withBusyAction(async () => {
+      await actions.changePassword(current, next);
+    }, { saved: true });
+  }, [withBusyAction]);
 
   const uploadExifReference = useCallback(async (charId: number, role: 'selfie' | 'main', file: LocalFile) => {
-    await actions.uploadPhoneExifReference(charId, role, file);
-    await refreshAll();
-  }, [refreshAll]);
+    await withBusyAction(async () => {
+      await actions.uploadPhoneExifReference(charId, role, file);
+      await refreshAll();
+    }, { saved: true });
+  }, [refreshAll, withBusyAction]);
+
+  const uploadCharacterPhoto = useCallback(async (charId: number, file: LocalFile, kind: string) => {
+    await withBusyAction(async () => {
+      await actions.uploadStudioModelImage(charId, file, kind);
+      await refreshAll();
+    }, { saved: true });
+  }, [refreshAll, withBusyAction]);
 
   const bootstrap = useCallback(async () => {
     setReady(false);
@@ -693,74 +723,39 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   }, [loadThread, mergeInboundMessage, patchConversationPreview]);
 
   const createConversationFolder = useCallback(async (name: string, conversationIds?: number[]) => {
-    setBusy(true);
-    setError(null);
-    try {
+    await withBusyAction(async () => {
       await actions.createConversationFolder(name, conversationIds);
       await loadConversationFolders();
-    } catch (e) {
-      reportError(e);
-      throw e;
-    } finally {
-      setBusy(false);
-    }
-  }, [loadConversationFolders]);
+    }, { saved: true });
+  }, [loadConversationFolders, withBusyAction]);
 
   const renameConversationFolder = useCallback(async (folderId: number, name: string) => {
-    setBusy(true);
-    setError(null);
-    try {
+    await withBusyAction(async () => {
       await actions.patchConversationFolder(folderId, { name });
       await loadConversationFolders();
-    } catch (e) {
-      reportError(e);
-      throw e;
-    } finally {
-      setBusy(false);
-    }
-  }, [loadConversationFolders]);
+    }, { saved: true });
+  }, [loadConversationFolders, withBusyAction]);
 
   const deleteConversationFolder = useCallback(async (folderId: number) => {
-    setBusy(true);
-    setError(null);
-    try {
+    await withBusyAction(async () => {
       await actions.deleteConversationFolder(folderId);
       await loadConversationFolders();
-    } catch (e) {
-      reportError(e);
-      throw e;
-    } finally {
-      setBusy(false);
-    }
-  }, [loadConversationFolders]);
+    });
+  }, [loadConversationFolders, withBusyAction]);
 
   const setFolderMembers = useCallback(async (folderId: number, conversationIds: number[]) => {
-    setBusy(true);
-    setError(null);
-    try {
+    await withBusyAction(async () => {
       await actions.patchConversationFolder(folderId, { conversation_ids: conversationIds });
       await loadConversationFolders();
-    } catch (e) {
-      reportError(e);
-      throw e;
-    } finally {
-      setBusy(false);
-    }
-  }, [loadConversationFolders]);
+    }, { saved: true });
+  }, [loadConversationFolders, withBusyAction]);
 
   const addConversationToFolder = useCallback(async (folderId: number, convId: number) => {
-    setBusy(true);
-    setError(null);
-    try {
+    await withBusyAction(async () => {
       await actions.addConversationToFolder(folderId, convId);
       await loadConversationFolders();
-    } catch (e) {
-      reportError(e);
-      throw e;
-    } finally {
-      setBusy(false);
-    }
-  }, [loadConversationFolders]);
+    }, { saved: true });
+  }, [loadConversationFolders, withBusyAction]);
 
   useEffect(() => {
     if (!ready || !authenticated) return;
@@ -1104,121 +1099,142 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   );
 
   const saveCharacterFields = useCallback(async (charId: number, fields: NavigationState['charFields']) => {
-    const [agePart, ...cityParts] = (fields.ageCity || '').split(',').map((s) => s.trim());
-    const cityPart = cityParts.join(', ').trim();
-    const geoParts = (fields.geo || '').split(',').map((s) => s.trim());
-    const lat = geoParts[0] ? parseFloat(geoParts[0]) : undefined;
-    const lon = geoParts[1] ? parseFloat(geoParts[1]) : undefined;
-    await actions.patchStudioModel(charId, {
-      profile_text: fields.appearance,
-      companion_persona: {
-        age: agePart || undefined,
-        city: cityPart || undefined,
-        personality: fields.character || undefined,
-        speaking_style: fields.chatStyle || undefined,
-      },
-      ...(lat != null && !Number.isNaN(lat) ? { export_lat: lat } : {}),
-      ...(lon != null && !Number.isNaN(lon) ? { export_lon: lon } : {}),
-      ...(fields.camera ? { camera_preset_id: fields.camera } : {}),
-    });
-    await refreshAll();
-  }, [refreshAll]);
+    await withBusyAction(async () => {
+      const [agePart, ...cityParts] = (fields.ageCity || '').split(',').map((s) => s.trim());
+      const cityPart = cityParts.join(', ').trim();
+      const geoParts = (fields.geo || '').split(',').map((s) => s.trim());
+      const lat = geoParts[0] ? parseFloat(geoParts[0]) : undefined;
+      const lon = geoParts[1] ? parseFloat(geoParts[1]) : undefined;
+      await actions.patchStudioModel(charId, {
+        profile_text: fields.appearance,
+        companion_persona: {
+          age: agePart || undefined,
+          city: cityPart || undefined,
+          personality: fields.character || undefined,
+          speaking_style: fields.chatStyle || undefined,
+        },
+        ...(lat != null && !Number.isNaN(lat) ? { export_lat: lat } : {}),
+        ...(lon != null && !Number.isNaN(lon) ? { export_lon: lon } : {}),
+        ...(fields.camera ? { camera_preset_id: fields.camera } : {}),
+      });
+      await refreshAll();
+    }, { saved: true });
+  }, [refreshAll, withBusyAction]);
 
   const createCharacter = useCallback(async (name: string, photoTagIdx: number, photoFile?: LocalFile) => {
-    const trimmed = name.trim();
-    if (!trimmed) {
-      const err = new Error('Укажите имя персонажа');
-      reportError(err);
-      throw err;
-    }
-    const created = (await actions.createStudioModel(trimmed)) as StudioModelOut;
-    if (photoFile && created.id) {
-      await actions.uploadStudioModelImage(created.id, photoFile, photoTagKindByIndex(photoTagIdx));
-    }
-    await refreshAll();
-    return created.id;
-  }, [refreshAll, reportError]);
+    return withBusyAction(async () => {
+      const trimmed = name.trim();
+      if (!trimmed) throw new Error('Укажите имя персонажа');
+      const created = (await actions.createStudioModel(trimmed)) as StudioModelOut;
+      if (photoFile && created.id) {
+        await actions.uploadStudioModelImage(created.id, photoFile, photoTagKindByIndex(photoTagIdx));
+      }
+      await refreshAll();
+      return created.id;
+    });
+  }, [refreshAll, withBusyAction]);
 
   const renameCharacter = useCallback(async (charId: number, name: string) => {
-    const trimmed = name.trim();
-    if (!trimmed) throw new Error('Укажите имя персонажа');
-    await actions.patchStudioModel(charId, { name: trimmed });
-    await refreshAll();
-  }, [refreshAll]);
+    await withBusyAction(async () => {
+      const trimmed = name.trim();
+      if (!trimmed) throw new Error('Укажите имя персонажа');
+      await actions.patchStudioModel(charId, { name: trimmed });
+      await refreshAll();
+    }, { saved: true });
+  }, [refreshAll, withBusyAction]);
 
   const deleteCharacter = useCallback(async (charId: number) => {
-    await actions.deleteStudioModel(charId);
-    await refreshAll();
-  }, [refreshAll]);
+    await withBusyAction(async () => {
+      await actions.deleteStudioModel(charId);
+      await refreshAll();
+    });
+  }, [refreshAll, withBusyAction]);
 
   const deleteCharacterPhoto = useCallback(async (charId: number, imageId: number) => {
-    await actions.deleteStudioModelImage(charId, imageId);
-    await refreshAll();
-  }, [refreshAll]);
+    await withBusyAction(async () => {
+      await actions.deleteStudioModelImage(charId, imageId);
+      await refreshAll();
+    });
+  }, [refreshAll, withBusyAction]);
 
   const generateCharacterProfile = useCallback(async (charId: number) => {
-    const model = rawModels.find((m) => m.id === charId);
-    if (!model) throw new Error('Персонаж не найден');
-    const data = (await actions.generateStudioModelProfile(model)) as { profile_text?: string };
-    if (data.profile_text) {
-      await actions.patchStudioModel(charId, { profile_text: data.profile_text });
-    }
-    await refreshAll();
-    return data.profile_text || '';
-  }, [rawModels, refreshAll]);
+    return withBusyAction(async () => {
+      const model = rawModels.find((m) => m.id === charId);
+      if (!model) throw new Error('Персонаж не найден');
+      const data = (await actions.generateStudioModelProfile(model)) as { profile_text?: string };
+      if (data.profile_text) {
+        await actions.patchStudioModel(charId, { profile_text: data.profile_text });
+      }
+      await refreshAll();
+      return data.profile_text || '';
+    });
+  }, [rawModels, refreshAll, withBusyAction]);
 
   const savePayoutWallet = useCallback(async (wallet: string) => {
-    await actions.savePayoutSettings(wallet);
-    setPayoutWallet(wallet);
-  }, []);
+    await withBusyAction(async () => {
+      await actions.savePayoutSettings(wallet);
+      setPayoutWallet(wallet);
+    }, { saved: true });
+  }, [withBusyAction]);
 
   const requestPayout = useCallback(async () => {
-    await actions.requestDonationPayout('RUB');
-    await refreshAll();
-  }, [refreshAll]);
+    await withBusyAction(async () => {
+      await actions.requestDonationPayout('RUB');
+      await refreshAll();
+    });
+  }, [refreshAll, withBusyAction]);
 
   const saveDonationDraft = useCallback(async (fields: NavigationState['donationFields'], charName: string) => {
-    const modelId = modelIdByName(rawModels, charName);
-    const rub = parseFloat((fields.min || '').replace(',', '.'));
-    const min = Number.isFinite(rub) && rub > 0 ? Math.round(rub * 100) : 10000;
-    await actions.saveDonationLink({
-      title: fields.title,
-      description: fields.desc,
-      min_amount_minor: min,
-      studio_model_id: modelId,
-      currency: 'RUB',
-      submit: true,
+    await withBusyAction(async () => {
+      const modelId = modelIdByName(rawModels, charName);
+      const rub = parseFloat((fields.min || '').replace(',', '.'));
+      const min = Number.isFinite(rub) && rub > 0 ? Math.round(rub * 100) : 10000;
+      await actions.saveDonationLink({
+        title: fields.title,
+        description: fields.desc,
+        min_amount_minor: min,
+        studio_model_id: modelId,
+        currency: 'RUB',
+        submit: true,
+      });
+      await refreshAll();
     });
-    await refreshAll();
-  }, [rawModels, refreshAll]);
+  }, [rawModels, refreshAll, withBusyAction]);
 
   const addOperator = useCallback(async (login: string, password: string, opRights: Record<string, boolean>) => {
-    await actions.addWorkspaceMember({
-      member_login: login,
-      password,
-      permissions_mask: maskFromOpRights(opRights),
-    });
-    await refreshAll();
-  }, [refreshAll]);
+    await withBusyAction(async () => {
+      await actions.addWorkspaceMember({
+        member_login: login,
+        password,
+        permissions_mask: maskFromOpRights(opRights),
+      });
+      await refreshAll();
+    }, { saved: true });
+  }, [refreshAll, withBusyAction]);
 
   const updateOperator = useCallback(async (memberId: number, login: string, password: string, opRights: Record<string, boolean>) => {
-    const payload: Record<string, unknown> = {
-      member_login: login,
-      permissions_mask: maskFromOpRights(opRights),
-    };
-    if (password.trim()) payload.password = password;
-    await actions.updateWorkspaceMember(memberId, payload);
-    await refreshAll();
-  }, [refreshAll]);
+    await withBusyAction(async () => {
+      const payload: Record<string, unknown> = {
+        member_login: login,
+        permissions_mask: maskFromOpRights(opRights),
+      };
+      if (password.trim()) payload.password = password;
+      await actions.updateWorkspaceMember(memberId, payload);
+      await refreshAll();
+    }, { saved: true });
+  }, [refreshAll, withBusyAction]);
 
   const deleteOperator = useCallback(async (memberId: number) => {
-    await actions.deleteWorkspaceMember(memberId);
-    await refreshAll();
-  }, [refreshAll]);
+    await withBusyAction(async () => {
+      await actions.deleteWorkspaceMember(memberId);
+      await refreshAll();
+    });
+  }, [refreshAll, withBusyAction]);
 
   const saveConnection = useCallback(async (platformId: string, token: string, charName: string) => {
     const modelId = modelIdByName(rawModels, charName);
     setError(null);
+    setBusy(true);
     try {
       let status: IntegrationStatusOut | null = null;
       if (platformId === 'tg') {
@@ -1261,15 +1277,19 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     } catch (e) {
       reportError(e);
       return false;
+    } finally {
+      setBusy(false);
     }
-  }, [rawModels, refreshAll]);
+  }, [rawModels, refreshAll, reportError]);
 
   const disconnectConnection = useCallback(async (platformId: string, connectionId: number) => {
-    if (platformId === 'tg') await actions.deleteTelegramConnection(connectionId);
-    else if (platformId === 'fv') await actions.deleteFanvueConnection(connectionId);
-    else if (platformId === 'tr') await actions.deleteTributeConnection(connectionId);
-    await refreshAll();
-  }, [refreshAll]);
+    await withBusyAction(async () => {
+      if (platformId === 'tg') await actions.deleteTelegramConnection(connectionId);
+      else if (platformId === 'fv') await actions.deleteFanvueConnection(connectionId);
+      else if (platformId === 'tr') await actions.deleteTributeConnection(connectionId);
+      await refreshAll();
+    });
+  }, [refreshAll, withBusyAction]);
 
   const openBillingCheckout = useCallback(async (product: string) => {
     try {
@@ -1330,36 +1350,37 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const saveAdminSubscription = useCallback(async (userId: number, payload: Record<string, unknown>) => {
-    await actions.patchAdminUserSubscription(userId, payload);
-    await searchAdminUsers('');
-  }, [searchAdminUsers]);
+    await withBusyAction(async () => {
+      await actions.patchAdminUserSubscription(userId, payload);
+      await searchAdminUsers('');
+    }, { saved: true });
+  }, [searchAdminUsers, withBusyAction]);
 
   const adjustAdminCredits = useCallback(async (userId: number, deltaText: string) => {
-    const delta = parseInt(deltaText.replace(/[^-\d]/g, ''), 10);
-    if (!Number.isFinite(delta) || delta === 0) throw new Error('Укажите изменение кредитов');
-    await actions.adjustAdminUserCredits(userId, delta);
-    await searchAdminUsers('');
-  }, [searchAdminUsers]);
+    await withBusyAction(async () => {
+      const delta = parseInt(deltaText.replace(/[^-\d]/g, ''), 10);
+      if (!Number.isFinite(delta) || delta === 0) throw new Error('Укажите изменение кредитов');
+      await actions.adjustAdminUserCredits(userId, delta);
+      await searchAdminUsers('');
+    }, { saved: true });
+  }, [searchAdminUsers, withBusyAction]);
 
   const resetAdminPassword = useCallback(async (userId: number, password: string) => {
     const trimmed = password.trim();
     if (trimmed.length < 8) {
-      setError('Пароль должен быть не короче 8 символов');
-      showUserError('Пароль должен быть не короче 8 символов', t.errorTitle);
+      reportError(new Error('Пароль должен быть не короче 8 символов'), { alert: true });
       return;
     }
-    setError(null);
-    try {
+    await withBusyAction(async () => {
       await actions.resetAdminUserPassword(userId, trimmed);
-    } catch (e) {
-      reportError(e);
-      throw e;
-    }
-  }, []);
+    }, { saved: true });
+  }, [withBusyAction, reportError]);
 
   const sendBroadcast = useCallback(async (subject: string) => {
-    await actions.sendAdminCampaign(subject);
-  }, []);
+    await withBusyAction(async () => {
+      await actions.sendAdminCampaign(subject);
+    }, { saved: true });
+  }, [withBusyAction]);
 
   const { userName, userEmail } = userDisplayName(me);
   const conversations = rawConversations.map(mapDialogRow);
@@ -1420,6 +1441,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       saveProfileEmail,
       changeUserPassword,
       uploadExifReference,
+      uploadCharacterPhoto,
       connectionsList,
       rawIntegrations,
       health,
@@ -1533,6 +1555,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       saveProfileEmail,
       changeUserPassword,
       uploadExifReference,
+      uploadCharacterPhoto,
       connectionsList,
       rawIntegrations,
       health,

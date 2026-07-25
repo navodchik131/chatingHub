@@ -48,6 +48,7 @@ type ThreadViewProps = {
   onClearAttachment?: () => void;
   onEmoji?: (emoji: string) => void;
   lang?: 'ru' | 'en';
+  sending?: boolean;
 };
 
 type ListItem =
@@ -188,6 +189,7 @@ export function ThreadView({
   onClearAttachment,
   onEmoji,
   lang = 'ru',
+  sending = false,
 }: ThreadViewProps) {
   const insets = useSafeAreaInsets();
   const scrollRef = useRef<ScrollView>(null);
@@ -281,7 +283,7 @@ export function ThreadView({
   const platformLabel = platform.toUpperCase();
   const subtitle = vip ? `${platformLabel} • VIP` : platformLabel;
   const composerPadBottom = keyboardPad > 0 ? 12 + keyboardPad : Math.max(12, insets.bottom);
-  const canSend = Boolean(draft.trim() || attachmentUri);
+  const canSend = Boolean(draft.trim() || attachmentUri) && !sending;
 
   return (
     <KeyboardAvoidingView

@@ -24,6 +24,7 @@ import {
   IcoWand,
 } from '@/src/components/Icons';
 import {
+  ActionButton,
   CheckRow,
   ChipPicker,
   ChipRowInteractive,
@@ -166,6 +167,7 @@ export function ScreenRouter() {
     saveProfileEmail,
     changeUserPassword,
     uploadExifReference,
+    uploadCharacterPhoto,
     connectionsList,
     rawIntegrations,
     overviewKpis,
@@ -250,6 +252,8 @@ export function ScreenRouter() {
   const [charNameEdit, setCharNameEdit] = useState('');
   const [threadAttachment, setThreadAttachment] = useState<LocalFile | null>(null);
   const [newCharDraftId, setNewCharDraftId] = useState<number | null>(null);
+  const [motionVideoUploading, setMotionVideoUploading] = useState(false);
+  const [charPhotoUploading, setCharPhotoUploading] = useState(false);
   const threadConvId = conversations[chatIdx]?.id ?? null;
 
   useEffect(() => {
@@ -541,22 +545,28 @@ export function ScreenRouter() {
         </Card>
         <LimeButton
           title={t.commonSave}
+          loading={appBusy}
+          loadingTitle={t.commonSaving}
+          disabled={appBusy}
           onPress={() => {
             const name = nav.folderEditName.trim();
             if (!name) return;
             void Promise.all([
               renameConversationFolder(folderId, name),
               setFolderMembers(folderId, nav.folderEditSelected),
-            ]).then(() => pop());
+            ]).then(() => pop()).catch(() => {});
           }}
         />
         <GhostButton
           title={t.commonDelete}
+          loading={appBusy}
+          loadingTitle={t.commonSaving}
+          disabled={appBusy}
           onPress={() => {
             void deleteConversationFolder(folderId).then(() => {
               patch({ dialogFolderId: 'all', folderEditId: null });
               pop();
-            });
+            }).catch(() => {});
           }}
         />
       </ScreenScroll>
@@ -592,13 +602,16 @@ export function ScreenRouter() {
         </Card>
         <LimeButton
           title={t.folderCreate}
+          loading={appBusy}
+          loadingTitle={t.commonSaving}
+          disabled={appBusy}
           onPress={() => {
             const name = nav.newFolderName.trim();
             if (!name) return;
             void createConversationFolder(name, nav.newFolderSelected).then(() => {
               patch({ newFolderName: '', newFolderSelected: [] });
               pop();
-            });
+            }).catch(() => {});
           }}
         />
       </ScreenScroll>
@@ -634,6 +647,7 @@ export function ScreenRouter() {
 
   if (cur === 'thread') {
     const d = conversations[chatIdx] ?? conversations[0];
+    const threadSending = messages.some((m) => m.pending && m.side === 'out');
     if (!d) {
       return (
         <ScreenScroll>
@@ -656,7 +670,7 @@ export function ScreenRouter() {
         attachmentUri={threadAttachment?.uri ?? null}
         onClearAttachment={() => setThreadAttachment(null)}
         onSend={() => {
-          if (!d.id) return;
+          if (!d.id || threadSending) return;
           const text = nav.threadDraft.trim();
           const file = threadAttachment;
           if (!text && !file) return;
@@ -665,9 +679,10 @@ export function ScreenRouter() {
           if (file) {
             void sendThreadImage(d.id, text, file).catch(() => {});
           } else {
-            void sendThreadMessage(d.id, text);
+            void sendThreadMessage(d.id, text).catch(() => {});
           }
         }}
+        sending={threadSending}
         onAttach={async () => {
           try {
             const file = await pickImage();
@@ -882,7 +897,14 @@ export function ScreenRouter() {
             onChange={(f) => patch({ imgFormat: f })}
           />
         </Card>
-        <LimeButton title={t.studioGenerate} cost={imgCost} onPress={() => runGen(key)} />
+        <LimeButton
+          title={t.studioGenerate}
+          loadingTitle={t.studioGenerating}
+          loading={st === 'loading'}
+          disabled={st === 'loading'}
+          cost={imgCost}
+          onPress={() => runGen(key)}
+        />
         {st === 'loading' ? <GenLoadingCard title={t.studioGenerating} sub={`${engineLabel} · ${t.studioGeneratingSub}`} /> : null}
         {st === 'done' ? (
           <Card>
@@ -1046,19 +1068,31 @@ export function ScreenRouter() {
               onChange={(e) => patch({ aiEngine: e })}
             />
             <SectionLabel>{t.studioReferenceVideo}</SectionLabel>
+            {motionVideoUploading ? (
+              <View style={s.descLoading}>
+                <ActivityIndicator color={color.purple} size="small" />
+                <Text style={s.descLoadingText}>{t.studioUploadingVideo}</Text>
+              </View>
+            ) : null}
             <DropSlotWide
               label={uploadFiles['motion-video']?.name || (motionVideoFileId ? t.studioVideoUploaded : t.studioUploadVideo)}
               previewUri={uploadFiles['motion-video']?.uri}
               onPress={async () => {
+                if (motionVideoUploading) return;
                 try {
                   const file = await pickVideo();
-                  if (file) {
-                    setUploadFile('motion-video', file);
+                  if (!file) return;
+                  setUploadFile('motion-video', file);
+                  setMotionVideoUploading(true);
+                  try {
                     const { uploadMotionDrivingVideo } = await import('@/src/api/actions');
                     const id = await uploadMotionDrivingVideo(file);
                     setMotionVideoFileId(id);
+                  } finally {
+                    setMotionVideoUploading(false);
                   }
                 } catch (e) {
+                  setMotionVideoUploading(false);
                   Alert.alert(
                     locale === 'en' ? 'Upload failed' : 'Ошибка загрузки',
                     e instanceof Error ? e.message : String(e),
@@ -1166,7 +1200,15 @@ export function ScreenRouter() {
             </View>
           </>
         ) : null}
-        <LimeButton title={t.studioCreateVideo} cost={vidCost} icon={<IcoFilm size={16} stroke={color.limeText} />} onPress={() => runGen('video')} />
+        <LimeButton
+          title={t.studioCreateVideo}
+          loadingTitle={t.studioRenderingVideo}
+          loading={st === 'loading'}
+          disabled={st === 'loading'}
+          cost={vidCost}
+          icon={<IcoFilm size={16} stroke={color.limeText} />}
+          onPress={() => runGen('video')}
+        />
         {st === 'loading' ? <GenLoadingCard title={t.studioRenderingVideo} sub={`~20 ${t.studioSecondsSuffix}`} /> : null}
         {st === 'done' ? (
           <Card style={s.gap10}>
@@ -1186,7 +1228,9 @@ export function ScreenRouter() {
               >
                 <Text style={s.limeHalfText}>{t.studioDownloadMp4}</Text>
               </Pressable>
-              <Pressable style={s.regenFlex} onPress={() => runGen('video')}><Text style={s.regenText}>{t.studioRegen}</Text></Pressable>
+              <Pressable style={s.regenFlex} onPress={() => runGen('video')}>
+                <Text style={s.regenText}>{t.studioRegen}</Text>
+              </Pressable>
             </View>
           </Card>
         ) : null}
@@ -1248,6 +1292,7 @@ export function ScreenRouter() {
     return (
       <ScreenScroll>
         <TopBar title={t.charNewTitle} onBack={pop} />
+        {appError ? <Text style={s.errorBanner}>{appError}</Text> : null}
         <Card style={s.gap9}>
           <FieldLabel>{t.charNameLabel}</FieldLabel>
           <TextField value={nav.newCharName} onChangeText={(t) => patch({ newCharName: t })} />
@@ -1277,6 +1322,9 @@ export function ScreenRouter() {
         />
         <LimeButton
           title={t.charCreate}
+          loading={appBusy}
+          loadingTitle={t.commonSaving}
+          disabled={appBusy}
           onPress={async () => {
             try {
               const id = await ensureNewCharacter();
@@ -1335,6 +1383,7 @@ export function ScreenRouter() {
             </Pressable>
           ) : null}
         </View>
+        {appError ? <Text style={s.errorBanner}>{appError}</Text> : null}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.tabRow}>
           <TabChip label={t.charTabPhotos} active={ct === 'photos'} onPress={() => patch({ charTab: 'photos' })} />
           <TabChip label={t.charTabPersona} active={ct === 'persona'} onPress={() => patch({ charTab: 'persona' })} />
@@ -1345,15 +1394,16 @@ export function ScreenRouter() {
           <Card style={s.gap9}>
             <FieldLabel>{t.charRenameLabel}</FieldLabel>
             <TextField value={charNameEdit} onChangeText={setCharNameEdit} />
-            <Pressable
-              style={s.savePhoto}
+            <ActionButton
+              title={t.charRenameSave}
+              loadingTitle={t.commonSaving}
+              loading={appBusy}
+              disabled={appBusy || !charIdNum}
               onPress={() => {
                 if (!charIdNum) return;
                 void renameCharacter(charIdNum, charNameEdit);
               }}
-            >
-              <Text style={s.savePhotoText}>{t.charRenameSave}</Text>
-            </Pressable>
+            />
             <FieldLabel>{t.charAgeCity}</FieldLabel>
             <TextField
               value={nav.charFields.ageCity}
@@ -1369,19 +1419,26 @@ export function ScreenRouter() {
               value={nav.charFields.chatStyle}
               onChangeText={(t) => patch({ charFields: { ...nav.charFields, chatStyle: t } })}
             />
-            <Pressable
-              style={s.savePhoto}
+            <ActionButton
+              title={t.commonSave}
+              loadingTitle={t.commonSaving}
+              loading={appBusy}
+              disabled={appBusy || !charIdNum}
               onPress={() => {
                 if (charIdNum) void saveCharacterFields(charIdNum, nav.charFields);
               }}
-            >
-              <Text style={s.savePhotoText}>{t.commonSave}</Text>
-            </Pressable>
+            />
           </Card>
         ) : null}
         {ct === 'exif' ? (
           <Card style={s.gap9}>
             <Text style={s.charSub}>{t.charExifDesc}</Text>
+            {appBusy ? (
+              <View style={s.descLoading}>
+                <ActivityIndicator color={color.purple} size="small" />
+                <Text style={s.descLoadingText}>{t.commonSaving}</Text>
+              </View>
+            ) : null}
             <FieldLabel>{t.charExifPhoneRefs}</FieldLabel>
             <View style={s.exifRefRow}>
               <View style={s.flex1}>
@@ -1423,14 +1480,15 @@ export function ScreenRouter() {
               value={nav.charFields.geo}
               onChangeText={(t) => patch({ charFields: { ...nav.charFields, geo: t } })}
             />
-            <Pressable
-              style={s.savePhoto}
+            <ActionButton
+              title={t.commonSave}
+              loadingTitle={t.commonSaving}
+              loading={appBusy}
+              disabled={appBusy || !charIdNum}
               onPress={() => {
                 if (charIdNum) void saveCharacterFields(charIdNum, nav.charFields);
               }}
-            >
-              <Text style={s.savePhotoText}>{t.commonSave}</Text>
-            </Pressable>
+            />
           </Card>
         ) : null}
         {ct === 'history' ? (
@@ -1501,21 +1559,25 @@ export function ScreenRouter() {
                   activeIndex={nav.photoTagIdx}
                   onSelect={(i) => patch({ photoTagIdx: i })}
                 />
-                <Pressable
-                  style={s.savePhoto}
+                <ActionButton
+                  title={t.charUploadPhoto}
+                  loadingTitle={t.commonSaving}
+                  loading={charPhotoUploading || appBusy}
+                  disabled={charPhotoUploading || appBusy || !charIdNum || !app.uploadFiles.charPhoto}
                   onPress={async () => {
-                    if (!charIdNum || !app.uploadFiles.charPhoto) {
+                    if (!charIdNum || !app.uploadFiles.charPhoto || charPhotoUploading) return;
+                    setCharPhotoUploading(true);
+                    try {
+                      await uploadCharacterPhoto(charIdNum, app.uploadFiles.charPhoto, photoTagKindByIndex(nav.photoTagIdx));
+                      setUploadFile('charPhoto', undefined);
                       patch({ photoTagPick: false });
-                      return;
+                    } catch {
+                      /* error in app */
+                    } finally {
+                      setCharPhotoUploading(false);
                     }
-                    const { uploadStudioModelImage } = await import('@/src/api/actions');
-                    await uploadStudioModelImage(charIdNum, app.uploadFiles.charPhoto, photoTagKindByIndex(nav.photoTagIdx));
-                    patch({ photoTagPick: false });
-                    await app.refreshAll();
                   }}
-                >
-                  <Text style={s.savePhotoText}>{t.charUploadPhoto}</Text>
-                </Pressable>
+                />
               </Card>
             ) : null}
             <SectionLabel>{t.charAppearance}</SectionLabel>
@@ -1524,35 +1586,39 @@ export function ScreenRouter() {
                 value={nav.charFields.appearance}
                 onChangeText={(t) => patch({ charFields: { ...nav.charFields, appearance: t } })}
               />
-              {nav.descGen === 'loading' ? (
-                <View style={s.descLoading}><ActivityIndicator color={color.purple} size="small" /><Text style={s.descLoadingText}>{t.charAnalyzing}</Text></View>
+              {appBusy ? (
+                <View style={s.descLoading}>
+                  <ActivityIndicator color={color.purple} size="small" />
+                  <Text style={s.descLoadingText}>{t.charAnalyzing}</Text>
+                </View>
               ) : (
                 <Pressable
-                  onPress={async () => {
+                  disabled={!charIdNum}
+                  onPress={() => {
                     if (!charIdNum) return;
-                    patch({ descGen: 'loading' });
-                    try {
-                      const text = await generateCharacterProfile(charIdNum);
-                      patch({
-                        descGen: 'done',
-                        charFields: { ...nav.charFields, appearance: text || nav.charFields.appearance },
-                      });
-                    } catch {
-                      patch({ descGen: 'idle' });
-                    }
+                    void generateCharacterProfile(charIdNum)
+                      .then((text) => {
+                        if (text) {
+                          patch({
+                            charFields: { ...nav.charFields, appearance: text },
+                          });
+                        }
+                      })
+                      .catch(() => {});
                   }}
                 >
-                  <Text style={s.genFromPhoto}>{nav.descGen === 'done' ? t.charDescUpdated : t.charGenFromPhoto}</Text>
+                  <Text style={[s.genFromPhoto, !charIdNum && { opacity: 0.5 }]}>{t.charGenFromPhoto}</Text>
                 </Pressable>
               )}
-              <Pressable
-                style={s.savePhoto}
+              <ActionButton
+                title={t.commonSave}
+                loadingTitle={t.commonSaving}
+                loading={appBusy}
+                disabled={appBusy || !charIdNum}
                 onPress={() => {
                   if (charIdNum) void saveCharacterFields(charIdNum, nav.charFields);
                 }}
-              >
-                <Text style={s.savePhotoText}>{t.commonSave}</Text>
-              </Pressable>
+              />
             </Card>
           </>
         ) : null}
@@ -1676,8 +1742,10 @@ export function ScreenRouter() {
           ) : null}
         </Card>
         <View style={s.rowGap8}>
-          <Pressable
-            style={[s.limeFlex, appBusy && s.saveDisabled]}
+          <LimeButton
+            title={saveLabel}
+            loading={appBusy}
+            loadingTitle={t.commonSaving}
             disabled={appBusy}
             onPress={() => {
               void saveConnection(id, nav.connToken, nav.connChar || defaultChar).then((ok) => {
@@ -1687,9 +1755,7 @@ export function ScreenRouter() {
                 });
               });
             }}
-          >
-            <Text style={s.limeHalfText}>{appBusy ? t.commonSaving : saveLabel}</Text>
-          </Pressable>
+          />
         </View>
       </ScreenScroll>
     );
@@ -1765,6 +1831,7 @@ export function ScreenRouter() {
     return (
       <ScreenScroll>
         <TopBar title={t.navDonations} onBack={pop} />
+        {appError ? <Text style={s.errorBanner}>{appError}</Text> : null}
         <View style={s.kpiRow}>
           <Kpi label={t.donationsTotal} value={fmtMoney(donationBalances.total, donationBalances.currency)} />
           <Kpi label={t.donationsAvailable} value={fmtMoney(donationBalances.available, donationBalances.currency)} accent={color.green} />
@@ -1780,10 +1847,14 @@ export function ScreenRouter() {
               if (wallet) void savePayoutWallet(wallet);
             }}
           />
-          <Pressable style={s.pinkBtn} onPress={() => void requestPayout()}>
-            <Text style={s.pinkBtnTitle}>{t.donationsPayout}</Text>
-            <Text style={s.pinkBtnCost}>{fmtMoney(Math.max(0, donationBalances.available - 20000), donationBalances.currency)}</Text>
-          </Pressable>
+          <LimeButton
+            title={t.donationsPayout}
+            cost={fmtMoney(Math.max(0, donationBalances.available - 20000), donationBalances.currency)}
+            loading={appBusy}
+            loadingTitle={t.commonSaving}
+            disabled={appBusy}
+            onPress={() => void requestPayout()}
+          />
         </Card>
         <SectionLabel>{t.donationsLinks}</SectionLabel>
         <Card style={s.gap8}>
@@ -1831,6 +1902,7 @@ export function ScreenRouter() {
     return (
       <ScreenScroll>
         <TopBar title={t.donationNew} onBack={pop} />
+        {appError ? <Text style={s.errorBanner}>{appError}</Text> : null}
         <Card style={s.gap9}>
           <FieldLabel>{t.donationTitle}</FieldLabel>
           <TextField
@@ -1859,16 +1931,21 @@ export function ScreenRouter() {
           )}
         </Card>
         <View style={s.rowGap8}>
-          <GhostButton title={t.commonDraft} onPress={pop} />
-          <Pressable
-            style={s.limeFlex}
+          <GhostButton title={t.commonDraft} onPress={pop} disabled={appBusy} />
+          <LimeButton
+            title={t.donationModeration}
+            loading={appBusy}
+            loadingTitle={t.commonSaving}
+            disabled={appBusy}
             onPress={async () => {
-              await saveDonationDraft(nav.donationFields, modelNames[nav.donationCharIdx] || modelNames[0]);
-              pop();
+              try {
+                await saveDonationDraft(nav.donationFields, modelNames[nav.donationCharIdx] || modelNames[0]);
+                pop();
+              } catch {
+                /* error in app */
+              }
             }}
-          >
-            <Text style={s.limeHalfText}>{t.donationModeration}</Text>
-          </Pressable>
+          />
         </View>
       </ScreenScroll>
     );
@@ -1924,6 +2001,7 @@ export function ScreenRouter() {
     return (
       <ScreenScroll>
         <TopBar title={editing ? t.teamEditOperator : t.teamNewOperator} onBack={pop} />
+        {appError ? <Text style={s.errorBanner}>{appError}</Text> : null}
         <Card style={s.gap9}>
           <FieldLabel>{t.teamLogin}</FieldLabel>
           <TextField value={nav.opLogin} onChangeText={(t) => patch({ opLogin: t })} autoCapitalize="none" />
@@ -1938,6 +2016,9 @@ export function ScreenRouter() {
         </Card>
         <LimeButton
           title={editing ? t.teamSaveChanges : t.teamCreateMember}
+          loading={appBusy}
+          loadingTitle={t.commonSaving}
+          disabled={appBusy}
           onPress={() => {
             const action = editing && nav.opEditId
               ? updateOperator(nav.opEditId, nav.opLogin, nav.opPassword, nav.opRights)
@@ -1945,19 +2026,20 @@ export function ScreenRouter() {
             void action.then(() => {
               patch({ opEditId: null, opLogin: '', opPassword: '' });
               pop();
-            });
+            }).catch(() => {});
           }}
         />
         {editing && nav.opEditId ? (
-          <Pressable
-            style={[s.redOutline, { marginTop: 12 }]}
+          <GhostButton
+            title={t.teamDeleteMember}
+            loading={appBusy}
+            loadingTitle={t.commonSaving}
+            disabled={appBusy}
             onPress={() => void deleteOperator(nav.opEditId!).then(() => {
               patch({ opEditId: null, opLogin: '', opPassword: '' });
               pop();
-            })}
-          >
-            <Text style={s.redText}>{t.teamDeleteMember}</Text>
-          </Pressable>
+            }).catch(() => {})}
+          />
         ) : null}
       </ScreenScroll>
     );
@@ -1998,12 +2080,13 @@ export function ScreenRouter() {
             onChangeText={(t) => patch({ profileEditEmail: t })}
             keyboardType="email-address"
           />
-          <Pressable
-            style={s.savePhoto}
+          <ActionButton
+            title={t.commonSave}
+            loadingTitle={t.commonSaving}
+            loading={appBusy}
+            disabled={appBusy || !nav.profileEditEmail.trim()}
             onPress={() => void saveProfileEmail(nav.profileEditEmail.trim())}
-          >
-            <Text style={s.savePhotoText}>{t.commonSave}</Text>
-          </Pressable>
+          />
         </Card>
         <SectionLabel>{t.profileChangePassword}</SectionLabel>
         <Card style={s.gap9}>
@@ -2025,22 +2108,30 @@ export function ScreenRouter() {
             placeholder={t.profileConfirmPassword}
             secureTextEntry
           />
-          <Pressable
-            style={s.savePhoto}
+          <ActionButton
+            title={t.profileChangePasswordBtn}
+            loadingTitle={t.commonSaving}
+            loading={appBusy}
+            disabled={appBusy}
             onPress={() => {
               const next = nav.profileNewPassword;
-              if (next.length < 8 || next !== nav.profileConfirmPassword) return;
+              if (next.length < 8) {
+                Alert.alert(t.errorTitle, t.authPasswordHint);
+                return;
+              }
+              if (next !== nav.profileConfirmPassword) {
+                Alert.alert(t.errorTitle, t.errPasswordMismatch);
+                return;
+              }
               void changeUserPassword(nav.profileCurrentPassword, next).then(() => {
                 patch({
                   profileCurrentPassword: '',
                   profileNewPassword: '',
                   profileConfirmPassword: '',
                 });
-              });
+              }).catch(() => {});
             }}
-          >
-            <Text style={s.savePhotoText}>{t.profileChangePasswordBtn}</Text>
-          </Pressable>
+          />
         </Card>
       </ScreenScroll>
     );
@@ -2074,12 +2165,18 @@ export function ScreenRouter() {
               placeholder={t.supportMessage}
               rows={4}
             />
-            <Pressable
-              style={s.savePhoto}
+            <ActionButton
+              title={t.supportSend}
+              loadingTitle={t.commonSaving}
+              loading={appBusy}
+              disabled={appBusy}
               onPress={() => {
                 const subject = nav.ticketSubject.trim();
                 const message = nav.ticketMessage.trim();
-                if (!subject || !message) return;
+                if (!subject || !message) {
+                  Alert.alert(t.errorTitle, t.errFillTicket);
+                  return;
+                }
                 void createSupportTicket({
                   type: ticketTypes[nav.ticketTypeIdx]?.id || ticketTypes[0].id,
                   subject,
@@ -2092,11 +2189,9 @@ export function ScreenRouter() {
                     ticketMessage: '',
                   });
                   if (row?.id) push(`ticket:${row.id}`);
-                });
+                }).catch(() => {});
               }}
-            >
-              <Text style={s.savePhotoText}>{t.supportSend}</Text>
-            </Pressable>
+            />
           </Card>
         ) : null}
         <SectionLabel>{t.supportYourTickets}</SectionLabel>
@@ -2165,8 +2260,10 @@ export function ScreenRouter() {
               }}
               placeholder={t.ticketReplyPlaceholder}
             />
-            <Pressable
-              style={[s.limeFlex, (!ticketReply.trim() || appBusy) && s.saveDisabled]}
+            <LimeButton
+              title={t.commonSend}
+              loading={appBusy}
+              loadingTitle={t.commonSaving}
               disabled={!ticketReply.trim() || appBusy}
               onPress={() => {
                 void replySupportTicket(tk.id, ticketReply)
@@ -2178,9 +2275,7 @@ export function ScreenRouter() {
                   })
                   .catch(() => {});
               }}
-            >
-              <Text style={s.limeHalfText}>{appBusy ? t.commonSaving : t.commonSend}</Text>
-            </Pressable>
+            />
           </Card>
         ) : null}
       </ScreenScroll>
@@ -2348,16 +2443,17 @@ export function ScreenRouter() {
             onChangeText={(t) => patch({ adminSubUntil: t })}
           />
         </Card>
-        <Pressable
-          style={s.savePhoto}
+        <ActionButton
+          title="Сохранить подписку"
+          loadingTitle={t.commonSaving}
+          loading={appBusy}
+          disabled={appBusy}
           onPress={() => void saveAdminSubscription(u.id, {
             plan: adminPlanChips[nav.adminPlanIdx],
             active: nav.adminSubActive,
             expires_at: nav.adminSubUntil,
           })}
-        >
-          <Text style={s.savePhotoText}>Сохранить подписку</Text>
-        </Pressable>
+        />
         <SectionLabel>ДОСТУП И КРЕДИТЫ</SectionLabel>
         <Card style={s.gap8}>
           <FieldLabel>НОВЫЙ ПАРОЛЬ</FieldLabel>
@@ -2367,17 +2463,17 @@ export function ScreenRouter() {
             placeholder="Минимум 8 символов"
             secureTextEntry
           />
-          <Pressable
-            style={s.savePhoto}
-            disabled={nav.adminNewPassword.trim().length < 8}
+          <ActionButton
+            title="Сохранить пароль"
+            loadingTitle={t.commonSaving}
+            loading={appBusy}
+            disabled={appBusy || nav.adminNewPassword.trim().length < 8}
             onPress={() => {
               void resetAdminPassword(u.id, nav.adminNewPassword).then(() => {
                 patch({ adminNewPassword: '' });
-              });
+              }).catch(() => {});
             }}
-          >
-            <Text style={s.savePhotoText}>Сохранить пароль</Text>
-          </Pressable>
+          />
         </Card>
         <Card style={s.rowGap8}>
           <View style={s.flex1}>
@@ -2386,9 +2482,13 @@ export function ScreenRouter() {
               onChangeText={(t) => patch({ adminCreditsDelta: t })}
             />
           </View>
-          <Pressable style={s.okBtn} onPress={() => void adjustAdminCredits(u.id, nav.adminCreditsDelta)}>
-            <Text style={s.okText}>OK</Text>
-          </Pressable>
+          <ActionButton
+            title="OK"
+            loadingTitle={t.commonSaving}
+            loading={appBusy}
+            disabled={appBusy}
+            onPress={() => void adjustAdminCredits(u.id, nav.adminCreditsDelta).catch(() => {})}
+          />
         </Card>
       </ScreenScroll>
     );
@@ -2398,6 +2498,7 @@ export function ScreenRouter() {
     return (
       <ScreenScroll>
         <TopBar title="Рассылки" onBack={pop} />
+        {appError ? <Text style={s.errorBanner}>{appError}</Text> : null}
         <SectionLabel>СЕГМЕНТ</SectionLabel>
         <Card style={s.gap8}>
           <View style={s.between}><Text style={[s.opLabel, { color: color.lime }]}>Без активности (зомби)</Text><Text style={s.opLabel}>114</Text></View>
@@ -2411,9 +2512,13 @@ export function ScreenRouter() {
             onChangeText={(t) => patch({ broadcastSubject: t })}
           />
         </Card>
-        <Pressable style={s.savePhoto} onPress={() => void sendBroadcast(nav.broadcastSubject)}>
-          <Text style={s.savePhotoText}>Отправить кампанию</Text>
-        </Pressable>
+        <ActionButton
+          title="Отправить кампанию"
+          loadingTitle={t.commonSaving}
+          loading={appBusy}
+          disabled={appBusy || !nav.broadcastSubject.trim()}
+          onPress={() => void sendBroadcast(nav.broadcastSubject).catch(() => {})}
+        />
       </ScreenScroll>
     );
   }

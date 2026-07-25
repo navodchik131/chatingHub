@@ -13,7 +13,7 @@ import {
 import { resolveMediaUrl } from '@/src/api/config';
 import { useAppSettings } from '@/src/context/AppSettingsContext';
 
-type Stage = 'face-form' | 'face-loading' | 'face-result' | 'body-form' | 'body-loading' | 'body-result' | 'done';
+type Stage = 'face-form' | 'face-loading' | 'face-result' | 'face-saving' | 'body-form' | 'body-loading' | 'body-result' | 'body-saving' | 'done';
 
 export function CharacterGenPanel({
   charId,
@@ -81,6 +81,7 @@ export function CharacterGenPanel({
   const useFace = async () => {
     if (!faceResultUrl) return;
     setError(null);
+    setStage('face-saving');
     try {
       const modelId = await resolveCharId();
       await uploadStudioModelImageFromUrl(modelId, faceResultUrl, 'face');
@@ -88,6 +89,7 @@ export function CharacterGenPanel({
       setStage('body-form');
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
+      setStage('face-result');
     }
   };
 
@@ -119,6 +121,7 @@ export function CharacterGenPanel({
   const saveBody = async () => {
     if (!bodyResultUrl) return;
     setError(null);
+    setStage('body-saving');
     try {
       const modelId = await resolveCharId();
       await uploadStudioModelImageFromUrl(modelId, bodyResultUrl, 'body');
@@ -126,6 +129,7 @@ export function CharacterGenPanel({
       setStage('done');
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
+      setStage('body-result');
     }
   };
 
@@ -189,7 +193,7 @@ export function CharacterGenPanel({
                 {uploadSlot(t.charBootstrapFace1, '3/4', face1, () => void pickSlot('face1'))}
                 {uploadSlot(t.charBootstrapFace2, '3/4', face2, () => void pickSlot('face2'))}
               </View>
-              <Pressable onPress={() => void runFace()}>
+              <Pressable onPress={() => void runFace()} disabled={stage !== 'face-form'} style={{ opacity: stage !== 'face-form' ? 0.55 : 1 }}>
                 <Text style={purpleBtn}>{t.charBootstrapGenerate}</Text>
               </Pressable>
             </>
@@ -205,6 +209,13 @@ export function CharacterGenPanel({
             </View>
           ) : null}
 
+          {stage === 'face-saving' ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              <ActivityIndicator color={color.purple} />
+              <Text style={{ fontWeight: '800', fontSize: 12.5, color: color.purple }}>{t.commonSaving}</Text>
+            </View>
+          ) : null}
+
           {stage === 'face-result' ? (
             <>
               <Text style={{ fontWeight: '700', fontSize: 13, color: color.text }}>{t.charBootstrapResult}</Text>
@@ -216,12 +227,12 @@ export function CharacterGenPanel({
                 />
               </Pressable>
               <View style={{ flexDirection: 'row', gap: 7 }}>
-                <Pressable style={{ flex: 1 }} onPress={() => void runFace()}>
+                <Pressable style={{ flex: 1 }} onPress={() => void runFace()} disabled={stage !== 'face-result'}>
                   <Text style={{ textAlign: 'center', padding: 9, borderRadius: 9, borderWidth: 1, borderColor: 'rgba(255,255,255,.14)', color: color.muted, fontWeight: '700', fontSize: 12 }}>
                     {t.charBootstrapRegenerate}
                   </Text>
                 </Pressable>
-                <Pressable style={{ flex: 1 }} onPress={() => void useFace()}>
+                <Pressable style={{ flex: 1 }} onPress={() => void useFace()} disabled={stage !== 'face-result'}>
                   <Text style={{ textAlign: 'center', padding: 9, borderRadius: 9, backgroundColor: 'rgba(215,244,82,.12)', borderWidth: 1, borderColor: 'rgba(215,244,82,.35)', color: color.lime, fontWeight: '800', fontSize: 12 }}>
                     {t.charBootstrapUseThis}
                   </Text>
@@ -230,7 +241,7 @@ export function CharacterGenPanel({
             </>
           ) : null}
 
-          {(stage === 'body-form' || stage === 'body-loading' || stage === 'body-result' || stage === 'done') ? (
+          {(stage === 'body-form' || stage === 'body-loading' || stage === 'body-result' || stage === 'body-saving' || stage === 'done') ? (
             <View style={{ borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,.08)', paddingTop: 12, gap: 10 }}>
               {stage !== 'done' ? (
                 <Text style={{ fontFamily: font.mono, fontSize: 8.5, alignSelf: 'flex-start', backgroundColor: 'rgba(215,244,82,.15)', color: color.lime, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 5 }}>
@@ -245,7 +256,7 @@ export function CharacterGenPanel({
                     {t.charBootstrapBodyDesc}
                   </Text>
                   {uploadSlot(t.charBootstrapBody, '3/4', bodyFile, () => void pickSlot('body'), 150)}
-                  <Pressable onPress={() => void runBody()}>
+                  <Pressable onPress={() => void runBody()} disabled={stage !== 'body-form'} style={{ opacity: stage !== 'body-form' ? 0.55 : 1 }}>
                     <Text style={purpleBtn}>{t.charBootstrapGenerate}</Text>
                   </Pressable>
                 </>
@@ -258,6 +269,13 @@ export function CharacterGenPanel({
                     <Text style={{ fontWeight: '800', fontSize: 12.5, color: color.purple }}>{t.charBootstrapBodyLoading}</Text>
                     <Text style={{ fontSize: 10.5, color: color.muted }}>{t.charBootstrapBodyLoadingSub}</Text>
                   </View>
+                </View>
+              ) : null}
+
+              {stage === 'body-saving' ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                  <ActivityIndicator color={color.purple} />
+                  <Text style={{ fontWeight: '800', fontSize: 12.5, color: color.purple }}>{t.commonSaving}</Text>
                 </View>
               ) : null}
 

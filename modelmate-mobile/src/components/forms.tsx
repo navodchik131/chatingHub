@@ -266,25 +266,89 @@ export function LimeButton({
   cost,
   onPress,
   icon,
+  disabled,
+  loading,
+  loadingTitle,
 }: {
   title: string;
   cost?: string;
   onPress?: () => void;
   icon?: ReactNode;
+  disabled?: boolean;
+  loading?: boolean;
+  loadingTitle?: string;
 }) {
+  const inactive = disabled || loading;
   return (
-    <Pressable style={styles.limeBtn} onPress={onPress}>
-      {icon}
-      <Text style={styles.limeBtnTitle}>{title}</Text>
-      {cost ? <Text style={styles.limeBtnCost}>{cost}</Text> : null}
+    <Pressable
+      style={[styles.limeBtn, inactive && styles.limeBtnDisabled]}
+      onPress={onPress}
+      disabled={inactive}
+    >
+      {loading ? <ActivityIndicator color={color.limeText} size="small" /> : icon}
+      <Text style={styles.limeBtnTitle}>{loading ? (loadingTitle || title) : title}</Text>
+      {cost && !loading ? <Text style={styles.limeBtnCost}>{cost}</Text> : null}
     </Pressable>
   );
 }
 
-export function GhostButton({ title, onPress }: { title: string; onPress?: () => void }) {
+/** Компактная action-кнопка (сохранить, отправить и т.п.) с loading/disabled. */
+export function ActionButton({
+  title,
+  loadingTitle,
+  onPress,
+  disabled,
+  loading,
+}: {
+  title: string;
+  loadingTitle?: string;
+  onPress?: () => void;
+  disabled?: boolean;
+  loading?: boolean;
+}) {
+  const inactive = disabled || loading;
   return (
-    <Pressable style={styles.ghostBtn} onPress={onPress}>
-      <Text style={styles.ghostBtnText}>{title}</Text>
+    <Pressable
+      style={[styles.actionBtn, inactive && styles.actionBtnDisabled]}
+      onPress={onPress}
+      disabled={inactive}
+    >
+      {loading ? (
+        <View style={styles.actionBtnRow}>
+          <ActivityIndicator color={color.limeText} size="small" />
+          <Text style={styles.actionBtnText}>{loadingTitle || title}</Text>
+        </View>
+      ) : (
+        <Text style={styles.actionBtnText}>{title}</Text>
+      )}
+    </Pressable>
+  );
+}
+
+export function GhostButton({
+  title,
+  onPress,
+  disabled,
+  loading,
+  loadingTitle,
+}: {
+  title: string;
+  onPress?: () => void;
+  disabled?: boolean;
+  loading?: boolean;
+  loadingTitle?: string;
+}) {
+  const inactive = disabled || loading;
+  return (
+    <Pressable style={[styles.ghostBtn, inactive && styles.ghostBtnDisabled]} onPress={onPress} disabled={inactive}>
+      {loading ? (
+        <View style={styles.actionBtnRow}>
+          <ActivityIndicator color={color.muted} size="small" />
+          <Text style={styles.ghostBtnText}>{loadingTitle || title}</Text>
+        </View>
+      ) : (
+        <Text style={styles.ghostBtnText}>{title}</Text>
+      )}
     </Pressable>
   );
 }
@@ -320,6 +384,8 @@ export function GenResultCard({
   downloadMp4Label = 'Скачать MP4',
   regenLabel = '↻ Ещё раз',
   onRegen,
+  regenDisabled,
+  regenLoading,
   onDownloadError,
 }: {
   imageUrl?: string;
@@ -330,6 +396,8 @@ export function GenResultCard({
   downloadMp4Label?: string;
   regenLabel?: string;
   onRegen?: () => void;
+  regenDisabled?: boolean;
+  regenLoading?: boolean;
   onDownloadError?: (error: unknown) => void;
 }) {
   const [a, b] = gradients[gradIndex % gradients.length];
@@ -365,8 +433,16 @@ export function GenResultCard({
         >
           <Text style={styles.genDownloadText}>{videoUrl ? downloadMp4Label : downloadLabel}</Text>
         </Pressable>
-        <Pressable style={styles.genRegen} onPress={onRegen}>
-          <Text style={styles.genRegenText}>{regenLabel}</Text>
+        <Pressable
+          style={[styles.genRegen, (regenDisabled || regenLoading) && styles.genRegenDisabled]}
+          onPress={onRegen}
+          disabled={regenDisabled || regenLoading || !onRegen}
+        >
+          {regenLoading ? (
+            <ActivityIndicator color={color.muted} size="small" />
+          ) : (
+            <Text style={styles.genRegenText}>{regenLabel}</Text>
+          )}
         </Pressable>
       </View>
     </View>
@@ -524,8 +600,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 13,
   },
+  limeBtnDisabled: { opacity: 0.55 },
   limeBtnTitle: { flex: 1, fontFamily: font.bodyExtra, fontSize: 13.5, color: color.limeText },
   limeBtnCost: { fontFamily: font.mono, fontSize: 11, color: '#3D4213' },
+  actionBtn: {
+    alignItems: 'center',
+    paddingVertical: 9,
+    borderRadius: 9,
+    backgroundColor: color.lime,
+  },
+  actionBtnDisabled: { opacity: 0.55 },
+  actionBtnRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  actionBtnText: { fontFamily: font.bodyExtra, fontSize: 12, color: color.limeText },
   ghostBtn: {
     flex: 1,
     alignItems: 'center',
@@ -534,6 +620,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.12)',
   },
+  ghostBtnDisabled: { opacity: 0.55 },
   ghostBtnText: { fontFamily: font.bodyBold, fontSize: 12.5, color: color.muted },
   dashedBtn: {
     alignItems: 'center',
@@ -595,6 +682,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.12)',
   },
+  genRegenDisabled: { opacity: 0.55 },
   genRegenText: { fontFamily: font.bodyBold, fontSize: 11.5, color: color.muted },
   checkRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 4 },
   checkLabel: { fontSize: 12, color: color.text },

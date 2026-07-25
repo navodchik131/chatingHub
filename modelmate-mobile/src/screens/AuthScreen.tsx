@@ -1,6 +1,6 @@
 import * as LocalAuthentication from 'expo-local-authentication';
 import { useEffect, useState } from 'react';
-import { Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View, ActivityIndicator } from 'react-native';
 import { FieldLabel, TextField } from '@/src/components/forms';
 import { IcoShield, IcoTelegram } from '@/src/components/Icons';
 import { fetchTelegramLoginBotUsername } from '@/src/auth/telegramLoginMobile';
@@ -8,6 +8,7 @@ import { useAppData } from '@/src/context/AppDataProvider';
 import { useAppSettings } from '@/src/context/AppSettingsContext';
 import { useNav } from '@/src/context/NavigationContext';
 import { color, font } from '@/src/styles/tokens';
+import { showUserError } from '@/src/utils/userNotice';
 
 type AuthMode = 'login' | 'register';
 
@@ -31,9 +32,11 @@ export function AuthScreen() {
     clearError();
     const email = authEmail.trim();
     if (!email) {
+      showUserError(t.errFillEmail, t.errorTitle);
       return;
     }
     if (authPassword.length < 8) {
+      showUserError(t.authPasswordHint, t.errorTitle);
       return;
     }
     try {
@@ -126,7 +129,7 @@ export function AuthScreen() {
         {tgAvailable ? (
           <>
             <Pressable style={styles.tgBtn} onPress={submitTelegram} disabled={busy}>
-              <IcoTelegram size={17} stroke={color.blue} />
+              {busy ? <ActivityIndicator color={color.blue} size="small" /> : <IcoTelegram size={17} stroke={color.blue} />}
               <Text style={styles.tgText}>
                 {mode === 'login' ? t.authTelegramLogin : t.authTelegramRegister}
               </Text>
@@ -163,6 +166,7 @@ export function AuthScreen() {
           onPress={submitEmail}
           disabled={busy || !canSubmit}
         >
+          {busy ? <ActivityIndicator color={color.limeText} size="small" /> : null}
           <Text style={styles.loginBtnText}>{primaryLabel}</Text>
         </Pressable>
 
@@ -231,7 +235,10 @@ const styles = StyleSheet.create({
   form: { gap: 10 },
   hint: { marginTop: 4, fontSize: 10.5, color: color.dim },
   loginBtn: {
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
     paddingVertical: 13,
     borderRadius: 12,
     backgroundColor: color.lime,

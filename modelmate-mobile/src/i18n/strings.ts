@@ -48,6 +48,10 @@ export type Strings = {
   authBiometric: string;
   authNoAccount: string;
   authHasAccount: string;
+  errFillEmail: string;
+  errPasswordMismatch: string;
+  errFillTicket: string;
+  studioUploadingVideo: string;
   studioTitle: string;
   studioImages: string;
   studioImagesDesc: string;
@@ -326,6 +330,10 @@ const RU: Strings = {
   authBiometric: 'Войти по Face ID / отпечатку',
   authNoAccount: 'Нет аккаунта? ',
   authHasAccount: 'Уже есть аккаунт? ',
+  errFillEmail: 'Укажите email',
+  errPasswordMismatch: 'Пароли не совпадают',
+  errFillTicket: 'Заполните тему и сообщение',
+  studioUploadingVideo: 'Загрузка видео…',
   studioTitle: 'Студия',
   studioImages: 'Картинки',
   studioImagesDesc: '6 режимов генерации',
@@ -604,6 +612,10 @@ const EN: Strings = {
   authBiometric: 'Sign in with Face ID / fingerprint',
   authNoAccount: 'No account? ',
   authHasAccount: 'Already have an account? ',
+  errFillEmail: 'Enter your email',
+  errPasswordMismatch: 'Passwords do not match',
+  errFillTicket: 'Fill in subject and message',
+  studioUploadingVideo: 'Uploading video…',
   studioTitle: 'Studio',
   studioImages: 'Images',
   studioImagesDesc: '6 generation modes',
