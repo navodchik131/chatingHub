@@ -3508,6 +3508,8 @@ async def _studio_job_execute_refine_prompt(
     reference_scene: str | None = None
     prompt_brief_mode = "full"
     grok_negative_extra: str | None = None
+    workflow_scenario: str | None = str(p.get("workflow_scenario_type") or "").strip() or None
+    location_donor_description: str | None = None
     try:
         if workflow_source and workflow_ref_loaded:
             from app.services.studio_deterministic_compose import compose_studio_scene_deterministic
@@ -3553,7 +3555,6 @@ async def _studio_job_execute_refine_prompt(
                 )
                 if detail_edit_job and not workflow_scenario:
                     workflow_scenario = "scenarioDetailEdit"
-                location_donor_description: str | None = None
                 if workflow_scenario == "scenarioLocationChange":
                     from app.services.studio_reference_analysis import (
                         analyze_workflow_location_donors,
@@ -4306,7 +4307,7 @@ async def _studio_job_execute_refine_prompt(
                             image_urls = image_urls[:9]
 
                     pose_is_last_after_reorder = False
-                    if wave_profile_n == "regular":
+                    if wave_profile_n == "regular" and workflow_scenario != "scenarioLocationChange":
                         pose_is_last_after_reorder = bool(
                             user_pose_ref_prepended
                             and mode_n != "photo_edit"
@@ -4319,6 +4320,21 @@ async def _studio_job_execute_refine_prompt(
                         )
                 else:
                     pose_is_last_after_reorder = False
+                from app.services.studio_workflow_scenarios import (
+                    LOCATION_CHANGE_DEFAULT_NEGATIVE,
+                    build_location_change_wavespeed_geometry_block,
+                    is_location_change_scenario,
+                )
+
+                location_geometry_block: str | None = None
+                ws_extra_negative = grok_negative_extra
+                if is_location_change_scenario(workflow_scenario):
+                    location_geometry_block = build_location_change_wavespeed_geometry_block(
+                        reference_scene,
+                        location_donor_description,
+                    )
+                    parts = [x.strip() for x in (grok_negative_extra, LOCATION_CHANGE_DEFAULT_NEGATIVE) if x and x.strip()]
+                    ws_extra_negative = ", ".join(parts) if parts else None
                 wavespeed_prompt = assemble_wavespeed_image_edit_prompt(
                     refined,
                     studio_mode=mode_n,
@@ -4329,7 +4345,7 @@ async def _studio_job_execute_refine_prompt(
                     model_profile_text=model_profile_text,
                     wave_profile=wave_profile_n,
                     reference_scene_description=reference_scene,
-                    extra_negative=grok_negative_extra,
+                    extra_negative=ws_extra_negative,
                     output_aspect_key=aspect_key,
                     wavespeed_identity_legend=ws_identity_legend,
                     include_realism_engine=include_realism_engine,
@@ -4345,6 +4361,8 @@ async def _studio_job_execute_refine_prompt(
                             else False
                         )
                     ),
+                    workflow_scenario_type=workflow_scenario,
+                    location_geometry_block=location_geometry_block,
                 )
                 if workflow_first_frame:
                     from app.services.studio_model_bootstrap import append_workflow_first_frame_face_grid

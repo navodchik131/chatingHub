@@ -181,6 +181,54 @@ def is_location_change_scenario(scenario_type: str | None) -> bool:
     return (scenario_type or "").strip() == "scenarioLocationChange"
 
 
+LOCATION_CHANGE_WAVESPEED_PREFIX = (
+    "[LOCATION CHANGE — reconstruct environment; NOT flat background paste]\n"
+    "Image 1 = photo-base EDIT CANVAS: keep this exact person (face, skin, hair, body, clothes, props), "
+    "pose, gaze, camera height/angle/distance, crop, horizon, floor plane, subject scale, and key light on skin.\n"
+    "Image 2+ = location MATERIAL/MOOD references ONLY — place type, materials, palette, atmosphere. "
+    "Never copy people, camera angle, framing, or perspective from Image 2+.\n\n"
+    "MANDATORY: Rebuild the whole environment around the locked subject as one real photograph:\n"
+    "• Re-project walls, floor, ceiling, sky, and props to Image 1 vanishing lines and horizon.\n"
+    "• Reshape location elements from Image 2+ to match Image 1 camera angle — do NOT paste Image 2 flat behind the subject.\n"
+    "• Align floor plane and ground contact; add believable contact shadows under feet/hands.\n"
+    "• Keep key light direction on the subject from Image 1; shift ambient color/warmth toward Image 2 mood only.\n"
+    "• Match background depth-of-field / blur to Image 1.\n\n"
+)
+
+LOCATION_CHANGE_WAVESPEED_SUFFIX = (
+    "\n\n[LOCATION CHANGE ENFORCEMENT] One coherent photograph — no cutout composite, no sticker subject, "
+    "no flat pasted backdrop, no location-ref camera copied, no floating feet, no mismatched horizon or lighting direction."
+)
+
+LOCATION_CHANGE_DEFAULT_NEGATIVE = (
+    "cutout composite, pasted background, flat backdrop, wrong perspective, mismatched horizon, "
+    "floating subject, sticker person, location reference camera copied, people from location reference, "
+    "face swap, reframe, re-pose, inconsistent shadows, wrong floor angle"
+)
+
+
+def build_location_change_wavespeed_geometry_block(
+    reference_scene_description: str | None,
+    location_donor_description: str | None,
+) -> str:
+    parts: list[str] = []
+    ref = (reference_scene_description or "").strip()
+    if ref:
+        parts.append(
+            "LOCKED FRAME GEOMETRY (Image 1 analysis — rewrite environment to match this):\n" + ref
+        )
+    loc = (location_donor_description or "").strip()
+    if loc:
+        parts.append(loc)
+    if not parts:
+        return ""
+    parts.append(
+        "Rebuild background perspective, floor angle, ambient fill, and environmental light to fit the locked "
+        "frame geometry while using the location materials above — not a flat swap."
+    )
+    return "\n\n".join(parts) + "\n\n"
+
+
 def enrich_description_for_face_swap(description: str) -> str:
     base = (description or "").strip()
     hint = (

@@ -199,6 +199,25 @@ _GROK_MAIN_PROSE_WAN_PREFIX = (
     "One model from attached reference photos. Recreate the scene described below.\n\n"
 )
 
+_LOCATION_CHANGE_WAN_PREFIX = (
+    "[LOCATION CHANGE — reconstruct environment; NOT flat background paste]\n"
+    "Image 1 = photo-base EDIT CANVAS: keep this exact person (face, skin, hair, body, clothes, props), "
+    "pose, gaze, camera height/angle/distance, crop, horizon, floor plane, subject scale, and key light on skin.\n"
+    "Image 2+ = location MATERIAL/MOOD references ONLY — place type, materials, palette, atmosphere. "
+    "Never copy people, camera angle, framing, or perspective from Image 2+.\n\n"
+    "MANDATORY: Rebuild the whole environment around the locked subject as one real photograph:\n"
+    "• Re-project walls, floor, ceiling, sky, and props to Image 1 vanishing lines and horizon.\n"
+    "• Reshape location elements from Image 2+ to match Image 1 camera angle — do NOT paste Image 2 flat behind the subject.\n"
+    "• Align floor plane and ground contact; add believable contact shadows under feet/hands.\n"
+    "• Keep key light direction on the subject from Image 1; shift ambient color/warmth toward Image 2 mood only.\n"
+    "• Match background depth-of-field / blur to Image 1.\n\n"
+)
+
+_LOCATION_CHANGE_WAN_SUFFIX = (
+    "\n\n[LOCATION CHANGE ENFORCEMENT] One coherent photograph — no cutout composite, no sticker subject, "
+    "no flat pasted backdrop, no location-ref camera copied, no floating feet, no mismatched horizon or lighting direction."
+)
+
 _GROK_MAIN_PROSE_NANO_PREFIX = (
     "Attached images = one saved model. Generate the scene described below.\n\n"
 )
@@ -237,6 +256,8 @@ def finalize_wavespeed_studio_prompt(
     skip_no_face_suffix: bool = False,
     visibility: "IdentityVisibility | None" = None,
     photo_edit_detail_ref_attached: bool = False,
+    workflow_scenario_type: str | None = None,
+    location_geometry_block: str | None = None,
 ) -> str:
     """Сборка финального текстового промпта для WaveSpeed в зависимости от режима студии."""
     from app.services.studio_reference_analysis import (
@@ -250,6 +271,20 @@ def finalize_wavespeed_studio_prompt(
     vis: IdentityVisibility | None = visibility
     prefix_kind = visibility_pose_prefix_kind(vis)
     headless = vis.headless_crop if vis is not None else mode == "no_face"
+    location_change = (workflow_scenario_type or "").strip() == "scenarioLocationChange"
+    geo = (location_geometry_block or "").strip()
+    if geo:
+        geo = geo + "\n\n"
+    if location_change:
+        out = (
+            (_LOCATION_CHANGE_WAN_PREFIX + geo + p).strip()
+            if p or geo
+            else (_LOCATION_CHANGE_WAN_PREFIX + geo).strip()
+        )
+        out = out + _LOCATION_CHANGE_WAN_SUFFIX
+        if headless and brief != "compact_pose_image" and not skip_no_face_suffix:
+            out = out.rstrip() + _WAVESPEED_NO_FACE_SUFFIX
+        return out
     if user_image_first:
         if mode == "photo_edit":
             edit_prefix = (
@@ -379,6 +414,8 @@ def finalize_nano_banana_studio_prompt(
     skip_no_face_suffix: bool = False,
     visibility: "IdentityVisibility | None" = None,
     photo_edit_detail_ref_attached: bool = False,
+    workflow_scenario_type: str | None = None,
+    location_geometry_block: str | None = None,
 ) -> str:
     """
     Nano Banana Pro: порядок URL другой, чем у WAN (сначала лицо модели, поза пользователя — в конце).
@@ -392,10 +429,25 @@ def finalize_nano_banana_studio_prompt(
     p = (refined_prompt or "").strip()
     vis: IdentityVisibility | None = visibility
     headless = vis.headless_crop if vis is not None else mode == "no_face"
+    location_change = (workflow_scenario_type or "").strip() == "scenarioLocationChange"
+    geo = (location_geometry_block or "").strip()
+    if geo:
+        geo = geo + "\n\n"
     face_hidden = (
         vis is not None and not vis.include_face and vis.head_in_reference and not vis.headless_crop
     )
     use_no_face_nano = headless or face_hidden or (vis is None and mode == "no_face")
+
+    if location_change:
+        out = (
+            (_LOCATION_CHANGE_WAN_PREFIX + geo + p).strip()
+            if p or geo
+            else (_LOCATION_CHANGE_WAN_PREFIX + geo).strip()
+        )
+        out = out + _LOCATION_CHANGE_WAN_SUFFIX
+        if use_no_face_nano and brief != "compact_pose_image" and not skip_no_face_suffix:
+            out = out.rstrip() + _WAVESPEED_NO_FACE_SUFFIX
+        return out
 
     if user_photo_edit_first and mode == "photo_edit":
         edit_prefix = (
@@ -422,8 +474,6 @@ def finalize_nano_banana_studio_prompt(
     elif brief == "grok_composed_text":
         out = _GROK_TEXT_SCENE_NANO_PREFIX.strip() if not p else _GROK_TEXT_SCENE_NANO_PREFIX + p
     elif brief == "grok_main_prose":
-        # Face Swap on Nano: identity URLs first, scene LAST — must not use the generic
-        # «one saved model / generate scene» prefix (that implies no scene bitmap role).
         if mode == "face_swap":
             head = _NANO_BANANA_FACE_SWAP_IDENTITY_PREFIX
             out = head.strip() if not p else head + p
@@ -1531,6 +1581,8 @@ def assemble_wavespeed_image_edit_prompt(
     selfie_capture: bool = False,
     visibility: "IdentityVisibility | None" = None,
     photo_edit_detail_ref_attached: bool = False,
+    workflow_scenario_type: str | None = None,
+    location_geometry_block: str | None = None,
 ) -> str:
     """Позитивный промпт для WaveSpeed (без negative-суффикса — API его не поддерживает)."""
     from app.services.studio_prompt_bundle import (
@@ -1574,6 +1626,8 @@ def assemble_wavespeed_image_edit_prompt(
             skip_no_face_suffix=skip_no_face_suffix,
             visibility=visibility,
             photo_edit_detail_ref_attached=photo_edit_detail_ref_attached,
+            workflow_scenario_type=workflow_scenario_type,
+            location_geometry_block=location_geometry_block,
         )
     else:
         prompt = finalize_wavespeed_studio_prompt(
@@ -1585,6 +1639,8 @@ def assemble_wavespeed_image_edit_prompt(
             skip_no_face_suffix=skip_no_face_suffix,
             visibility=visibility,
             photo_edit_detail_ref_attached=photo_edit_detail_ref_attached,
+            workflow_scenario_type=workflow_scenario_type,
+            location_geometry_block=location_geometry_block,
         )
     if include_realism_engine:
         prompt = append_phone_candid_photo_coda(prompt, brief_mode=brief)
