@@ -3553,6 +3553,16 @@ async def _studio_job_execute_refine_prompt(
                 )
                 if detail_edit_job and not workflow_scenario:
                     workflow_scenario = "scenarioDetailEdit"
+                location_donor_description: str | None = None
+                if workflow_scenario == "scenarioLocationChange":
+                    from app.services.studio_reference_analysis import (
+                        analyze_workflow_location_donors,
+                    )
+
+                    location_donor_description = await analyze_workflow_location_donors(
+                        workflow_ref_loaded,
+                        credentials=llm_creds,
+                    )
                 composed = await grok_compose_studio_workflow_multi_ref(
                     user_refs=user_refs,
                     model_images=(
@@ -3571,6 +3581,7 @@ async def _studio_job_execute_refine_prompt(
                     reference_scene_description=(
                         prompt_plan.reference_scene_description if prompt_plan else None
                     ),
+                    location_donor_description=location_donor_description,
                     scenario_type=workflow_scenario,
                 )
                 refined = composed.wavespeed_scene_prompt

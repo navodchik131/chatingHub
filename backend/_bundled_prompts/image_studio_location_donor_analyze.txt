@@ -1,0 +1,22 @@
+Analyze the attached LOCATION / ENVIRONMENT reference photo for a location-change image edit.
+The edit will keep a subject from a separate photo-base frame and REBUILD the environment around them.
+Output ONLY valid JSON (no markdown, no commentary).
+
+Schema:
+{
+  "place_type": "string — e.g. luxury hotel lobby, tropical beach, urban street, gym, bedroom",
+  "key_elements": ["string — architecture, furniture, vegetation, signage, water, sky features, etc."],
+  "materials_palette": "string — dominant materials, textures, colors",
+  "time_of_day": "string — morning / afternoon / golden hour / night / overcast, etc.",
+  "weather": "string — clear / cloudy / rain / snow / indoor, etc.",
+  "ambient_mood": "string — cozy, luxury, gritty, vacation, minimalist, etc.",
+  "lighting_character": "string — soft window light, neon, harsh sun, warm tungsten, etc.",
+  "scene_notes": "string — 4-8 sentences English prose: what place this is and what visual elements to rebuild behind a subject. Do NOT describe camera angle, lens, framing, horizon, or where a person would stand in THIS photo."
+}
+
+Rules:
+- Extract place identity, materials, atmosphere, and lighting MOOD only.
+- Do NOT describe camera height, angle, distance, vanishing points, or composition of this reference.
+- Do NOT describe people, faces, bodies, or subject placement in this image.
+- key_elements should list reusable environment pieces (floor type, walls, sky, props), not the whole bitmap layout.
+- scene_notes must end with: "Do not copy this image's camera or framing — re-project these elements to match the photo-base frame geometry."

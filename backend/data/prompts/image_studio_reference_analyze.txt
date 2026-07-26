@@ -14,6 +14,10 @@ Schema:
   "camera_summary": "string — distance, height, angle, lens feel, capture type",
   "capture_type": "string — e.g. friend shot, mirror selfie, tripod, gym snapshot",
   "wardrobe_coverage": "string — nude | topless | clothed | partial — match visible crop",
+  "ground_plane_notes": "string — floor/ground angle, where subject feet contact ground, visible ground area",
+  "perspective_vanishing": "string — horizon line, vanishing direction, wall/floor lines relative to camera",
+  "background_depth": "string — depth layers, background blur/bokeh level, foreground vs distant elements",
+  "subject_scale_in_frame": "string — how much of frame the subject occupies; headroom and legroom",
   "scene_notes": "string — 4-8 sentences English prose for downstream prompt; state explicitly when face/head are NOT in frame"
 }
 

@@ -1163,7 +1163,31 @@ def test_location_change_enrich_description_strict():
 
     hint = enrich_description_for_location_change("")
     assert "FORBIDDEN" in hint
-    assert "photo-base" in hint.lower()
+    assert "reconstruct" in hint.lower()
+    assert "photo-base" in hint.lower() or "image 1" in hint.lower()
+
+
+def test_location_donor_ref_role_and_format():
+    from app.services.studio_reference_analysis import (
+        LocationDonorAnalysis,
+        format_location_donor_for_grok,
+    )
+    from app.services.studio_workflow_scenarios import is_location_donor_ref_role
+
+    assert is_location_donor_ref_role("location / environment")
+    assert not is_location_donor_ref_role("photo base / model")
+    text = format_location_donor_for_grok(
+        [
+            LocationDonorAnalysis(
+                place_type="tropical beach",
+                key_elements=["sand", "palm trees", "turquoise water"],
+                ambient_mood="vacation",
+            )
+        ]
+    )
+    assert "LOCATION_MATERIALS" in text
+    assert "tropical beach" in text
+    assert "re-project" in text.lower()
 
 
 def test_scenario_face_swap_enriches_and_requires_model():

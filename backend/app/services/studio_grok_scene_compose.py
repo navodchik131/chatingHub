@@ -781,11 +781,14 @@ class WorkflowGrokUserRef:
 
 
 _WORKFLOW_LOCATION_CHANGE_SYSTEM_ADDON = """
-LOCATION CHANGE SCENARIO (strict):
-- The photo-base / subject reference is the FULL in-place edit target: keep face, hair, skin, body, clothes, props, pose, camera, crop EXACTLY.
-- Location / environment references are BACKGROUND DONORS ONLY — replace pixels behind and around the subject; never copy people from them.
-- Do NOT reframe, re-pose, or change hairstyle/outfit. Do NOT paste location-ref people into the shot.
-- Ignore MODEL studio photos for identity when USER_NOTES say location change — photo-base reference is WHO.
+LOCATION CHANGE SCENARIO (reconstruct environment — NOT paste background):
+- Image 1 / photo-base reference is the FULL edit canvas: keep face, hair, skin, body, clothes, props, pose, camera, crop, horizon, floor plane, and subject scale EXACTLY.
+- Image 2+ / location references are MATERIAL + MOOD donors ONLY — rebuild place elements re-projected to Image 1 geometry; never copy location-ref camera, framing, perspective, or people.
+- Write a WaveSpeed edit prompt that reconstructs the environment around the locked subject on the SAME photograph geometry.
+- Match key light on the subject from Image 1; ambient color/mood may come from location materials.
+- Place feet on the new ground with contact shadows — no floating subject.
+- In ---NEGATIVE--- include: cutout composite, pasted background, wrong perspective, mismatched horizon, floating subject, location ref camera copied, people from location ref, face-swap, reframe, re-pose.
+- Ignore MODEL studio photos — photo-base reference is WHO and HOW the frame is shot.
 """
 
 _WORKFLOW_FACE_SWAP_SYSTEM_ADDON = """
@@ -826,11 +829,13 @@ def _workflow_ref_caption(ref: WorkflowGrokUserRef, index: int) -> str:
         )
     elif any(h in low for h in ("location", "environment", "background")):
         parts.append(
-            "BACKGROUND DONOR ONLY — architecture/ground/sky/light; never copy people from this image."
+            "LOCATION MATERIAL DONOR — place type, materials, palette, mood, ambient light; "
+            "re-project to photo-base geometry; never copy this image's camera, framing, or people."
         )
     elif any(h in low for h in ("photo base", "photo_base", "subject", "model")):
         parts.append(
-            "PHOTO BASE — keep this person's identity, hair, outfit, pose, camera, crop; do not copy this background."
+            "PHOTO BASE / Image 1 — keep identity, hair, outfit, pose, camera, crop, horizon, floor plane; "
+            "do not copy this background — rebuild environment around this geometry."
         )
     elif any(h in low for h in ("scene", "pose", "camera", "framing")):
         parts.append(
@@ -854,6 +859,7 @@ async def grok_compose_studio_workflow_multi_ref(
     credentials: StudioOpenAiCredentials | None = None,
     visibility: "IdentityVisibility | None" = None,
     reference_scene_description: str | None = None,
+    location_donor_description: str | None = None,
     scenario_type: str | None = None,
 ) -> GrokSceneComposeResult:
     """Workflow: несколько референсов с ролями + опционально фото модели из кабинета."""
@@ -910,9 +916,10 @@ async def grok_compose_studio_workflow_multi_ref(
         )
     elif location_change:
         model_rule = (
-            "LOCATION CHANGE: identity, pose, camera, crop, wardrobe, and hair come ONLY from the "
-            "photo-base USER_WORKFLOW_REFERENCE. Location refs supply background only. "
-            "MODEL studio photos are NOT used.\n\n"
+            "LOCATION CHANGE: Image 1 / photo-base defines identity, pose, camera, crop, horizon, floor plane, "
+            "and light on subject. Image 2+ location refs supply place materials/mood only — re-project them. "
+            "WaveSpeed receives all attached workflow images; your PROMPT must cite Image 1 as edit canvas and "
+            "Image 2+ as material references. MODEL studio photos are NOT used.\n\n"
         )
     elif face_swap:
         if labeled:
@@ -938,6 +945,10 @@ async def grok_compose_studio_workflow_multi_ref(
             "whose Role is photo base / model / subject; other refs are donors only.\n\n"
         )
 
+    location_block = ""
+    if location_change and (location_donor_description or "").strip():
+        location_block = f"\n\n{location_donor_description.strip()}"
+
     user_parts: list[dict] = [
         {
             "type": "text",
@@ -949,7 +960,7 @@ async def grok_compose_studio_workflow_multi_ref(
                 f"MODEL_PROFILE_JSON:\n{profile}\n\n"
                 f"USER_NOTES:\n{notes or '(none)'}\n\n"
                 "Attached images: MODEL studio photos first (if any), then USER_WORKFLOW_REFERENCE images in order."
-                f"{vis_block}"
+                f"{vis_block}{location_block}"
             ),
         },
     ]

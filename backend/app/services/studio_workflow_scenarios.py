@@ -116,30 +116,64 @@ def outfit_change_role_hints() -> dict[str, str]:
 
 def enrich_description_for_location_change(description: str) -> str:
     base = (description or "").strip()
-    hint = (
-        "SCENARIO — location change (strict in-place background swap):\n"
-        "PRIORITY 1 — photo-base reference defines EVERYTHING about the subject: face, skin, "
-        "hair style and color, body, wardrobe, props, pose, limb angles, gaze, camera geometry, "
-        "selfie arm / crop, subject scale in frame. Do NOT change any of these.\n"
-        "PRIORITY 2 — location / environment reference(s) donate ONLY background pixels: "
-        "architecture, ground, sky, distant objects, ambient light and weather behind the subject.\n"
-        "FORBIDDEN: copying people from location refs; new hairstyle or outfit; re-pose or reframe; "
-        "inventing a different place; face-swap; studio MODEL photos overriding photo-base identity.\n"
-        "If text conflicts, photo-base wins for subject geometry; location refs win only for background."
-    )
+    hint = LOCATION_CHANGE_SCENARIO_HINT
     if not base:
         return hint
     return f"{base}\n\n{hint}"
 
 
+LOCATION_CHANGE_DEFAULT_PROMPT = (
+    "Reconstruct the environment around the subject in Image 1 (photo-base reference).\n"
+    "Keep the exact person, identity, pose, wardrobe, crop, and camera geometry from Image 1 — "
+    "do not reframe or re-pose.\n\n"
+    "Build a new environment inspired by Image 2 (location reference): its place type, materials, "
+    "colors, atmosphere, and lighting mood — but re-projected to match Image 1's camera height, "
+    "angle, horizon line, floor plane, and subject scale.\n\n"
+    "Place the subject's feet on the new ground with consistent contact shadows and grounding.\n"
+    "Match key light direction from Image 1 onto skin and clothes; ambient fill and color cast may "
+    "come from the new location's mood.\n\n"
+    "Image 2 is a MATERIAL/MOOD reference only — do NOT copy its camera angle, framing, perspective, "
+    "or any people from it.\n"
+    "Avoid cutout-composite, pasted-background, or floating-subject look."
+)
+
+LOCATION_CHANGE_SCENARIO_HINT = (
+    "SCENARIO — location change (reconstruct environment, not paste background):\n"
+    "PRIORITY 1 — photo-base reference (Image 1) defines EVERYTHING about the subject AND frame geometry: "
+    "face, skin, hair, body, wardrobe, props, pose, limb angles, gaze, camera height/angle/distance, "
+    "crop edges, horizon, floor plane, subject scale, depth of field.\n"
+    "PRIORITY 2 — location reference(s) (Image 2+) supply place identity ONLY: architecture, materials, "
+    "palette, time of day, weather mood, ambient light character — re-project these elements behind "
+    "the subject to match Image 1 perspective; never copy location-ref camera or people.\n"
+    "WaveSpeed receives Image 1 = photo-base edit canvas, Image 2+ = location material references.\n"
+    "FORBIDDEN: cutout composite, pasted background, wrong perspective, mismatched horizon, floating "
+    "subject, copying people from location refs, re-pose, reframe, new hairstyle/outfit, face-swap.\n"
+    "If text conflicts, photo-base wins for subject and camera geometry; location refs win only for "
+    "place materials and atmosphere."
+)
+
+
+def is_location_donor_ref_role(role: str | None) -> bool:
+    r = (role or "").strip().lower()
+    if not r:
+        return False
+    return any(h in r for h in ("location", "environment", "background"))
+
+
 def location_change_role_hints() -> dict[str, str]:
     return {
-        "photo base": "full source photo — identity, pose, camera, crop, wardrobe, hair (DO NOT copy background)",
-        "photo_base": "full source photo — identity, pose, camera, crop, wardrobe, hair (DO NOT copy background)",
-        "model": "same as photo base when no studio model node — full subject anchor",
-        "location": "background / environment donor ONLY — no people",
-        "environment": "background / environment donor ONLY — no people",
-        "scene": "background / environment donor ONLY — no people",
+        "photo base": (
+            "geometry lock — identity, pose, camera, crop, scale, floor contact, light on subject "
+            "(DO NOT copy this background)"
+        ),
+        "photo_base": (
+            "geometry lock — identity, pose, camera, crop, scale, floor contact, light on subject "
+            "(DO NOT copy this background)"
+        ),
+        "model": "same as photo base — full subject + frame geometry anchor",
+        "location": "place materials / mood donor — re-project to Image 1 geometry; no people; no camera copy",
+        "environment": "place materials / mood donor — re-project to Image 1 geometry; no people; no camera copy",
+        "scene": "place materials / mood donor — re-project to Image 1 geometry; no people; no camera copy",
     }
 
 

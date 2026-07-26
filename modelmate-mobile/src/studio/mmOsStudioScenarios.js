@@ -30,14 +30,21 @@ const PO_REFU_SCENE_DESC =
 
 const LOCATION_BASE_ROLE = 'photo base / model'
 const LOCATION_BASE_DESC =
-  'Кого переносим — identity + pose + camera + crop. Фон и локацию НЕ копировать.'
+  'Image 1 — geometry lock: identity, pose, camera, crop, horizon, floor plane, scale, light on subject. ' +
+  'Do NOT copy this background — rebuild environment around this frame.'
 const LOCATION_ENV_ROLE = 'location / environment'
 const LOCATION_ENV_DESC =
-  'Целевая локация — фон, окружение, атмосфера и освещение сцены. Без человека.'
+  'Image 2 — place materials/mood donor: architecture, palette, atmosphere, ambient light character. ' +
+  'Re-project to Image 1 geometry. No people. Do NOT copy this image camera or framing.'
 const LOCATION_DEFAULT_PROMPT =
-  'Replace background and environment with location reference(s).\n' +
-  'Keep same person, identity, pose, wardrobe, camera angle, framing, and crop as photo-base reference.\n' +
-  'Adapt scene lighting to the new location while preserving subject geometry.'
+  'Reconstruct the environment around the subject in Image 1 (photo-base reference).\n' +
+  'Keep the exact person, identity, pose, wardrobe, crop, and camera geometry from Image 1 — do not reframe or re-pose.\n\n' +
+  'Build a new environment inspired by Image 2 (location reference): its place type, materials, colors, atmosphere, and lighting mood — ' +
+  "but re-projected to match Image 1's camera height, angle, horizon line, floor plane, and subject scale.\n\n" +
+  "Place the subject's feet on the new ground with consistent contact shadows and grounding.\n" +
+  'Match key light direction from Image 1 onto skin and clothes; ambient fill and color cast may come from the new location mood.\n\n' +
+  'Image 2 is a MATERIAL/MOOD reference only — do NOT copy its camera angle, framing, perspective, or any people from it.\n' +
+  'Avoid cutout-composite, pasted-background, or floating-subject look.'
 
 const OUTFIT_BASE_ROLE = 'photo base / model'
 const OUTFIT_BASE_DESC = 'Кого и какой кадр редактируем — identity + pose + фон'

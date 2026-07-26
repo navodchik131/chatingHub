@@ -56,6 +56,10 @@ class ReferenceAnalysis(BaseModel):
     camera_summary: str = ""
     capture_type: str = ""
     wardrobe_coverage: str = ""
+    ground_plane_notes: str = ""
+    perspective_vanishing: str = ""
+    background_depth: str = ""
+    subject_scale_in_frame: str = ""
     scene_notes: str = ""
 
     def normalized_regions(self) -> set[str]:
@@ -114,6 +118,29 @@ def load_reference_analyze_prompt() -> str:
     return ""
 
 
+def load_location_donor_analyze_prompt() -> str:
+    path = (BACKEND_DIR / "data/prompts/image_studio_location_donor_analyze.txt").resolve()
+    if path.is_file():
+        text = path.read_text(encoding="utf-8").strip()
+        if text:
+            return text
+    bundled = (BACKEND_DIR / "_bundled_prompts/image_studio_location_donor_analyze.txt").resolve()
+    if bundled.is_file():
+        return bundled.read_text(encoding="utf-8").strip()
+    return ""
+
+
+class LocationDonorAnalysis(BaseModel):
+    place_type: str = ""
+    key_elements: list[str] = Field(default_factory=list)
+    materials_palette: str = ""
+    time_of_day: str = ""
+    weather: str = ""
+    ambient_mood: str = ""
+    lighting_character: str = ""
+    scene_notes: str = ""
+
+
 def build_identity_visibility(
     analysis: ReferenceAnalysis,
     *,
@@ -163,6 +190,10 @@ def format_reference_scene_from_analysis(analysis: ReferenceAnalysis) -> str:
         f"CAMERA_DISTANCE: {analysis.camera_summary or '(unspecified)'}",
         f"CAPTURE_TYPE: {analysis.capture_type or '(unspecified)'}",
         f"WARDROBE_COVERAGE: {analysis.wardrobe_coverage or '(unspecified)'}",
+        f"GROUND_PLANE: {analysis.ground_plane_notes or '(unspecified)'}",
+        f"PERSPECTIVE: {analysis.perspective_vanishing or '(unspecified)'}",
+        f"BACKGROUND_DEPTH: {analysis.background_depth or '(unspecified)'}",
+        f"SUBJECT_SCALE: {analysis.subject_scale_in_frame or '(unspecified)'}",
         f"VISIBLE_REGIONS: {', '.join(sorted(analysis.normalized_regions())) or 'none listed'}",
     ]
     if not analysis.face_in_frame:
@@ -462,6 +493,130 @@ def parse_reference_analysis_json(raw: str | None) -> ReferenceAnalysis | None:
         return ReferenceAnalysis.model_validate(json.loads(raw))
     except (json.JSONDecodeError, ValueError):
         return None
+
+
+def format_location_donor_for_grok(analyses: list[LocationDonorAnalysis]) -> str:
+    if not analyses:
+        return ""
+    blocks: list[str] = []
+    for i, item in enumerate(analyses, 1):
+        lines = [f"Location donor {i}:"]
+        if (item.place_type or "").strip():
+            lines.append(f"  PLACE_TYPE: {item.place_type.strip()}")
+        if item.key_elements:
+            elems = ", ".join(str(x).strip() for x in item.key_elements if str(x).strip())
+            if elems:
+                lines.append(f"  KEY_ELEMENTS: {elems}")
+        if (item.materials_palette or "").strip():
+            lines.append(f"  MATERIALS: {item.materials_palette.strip()}")
+        if (item.time_of_day or "").strip():
+            lines.append(f"  TIME_OF_DAY: {item.time_of_day.strip()}")
+        if (item.weather or "").strip():
+            lines.append(f"  WEATHER: {item.weather.strip()}")
+        if (item.ambient_mood or "").strip():
+            lines.append(f"  MOOD: {item.ambient_mood.strip()}")
+        if (item.lighting_character or "").strip():
+            lines.append(f"  LIGHTING_MOOD: {item.lighting_character.strip()}")
+        if (item.scene_notes or "").strip():
+            lines.append(f"  NOTES: {item.scene_notes.strip()}")
+        blocks.append("\n".join(lines))
+    header = (
+        "LOCATION_MATERIALS (from location reference analysis — NOT camera geometry):\n"
+        "Rebuild these place elements re-projected to match photo-base REFERENCE_ANALYSIS geometry.\n"
+        "Do NOT copy location reference camera angle, framing, or people.\n\n"
+    )
+    return header + "\n\n".join(blocks)
+
+
+async def analyze_location_donor_image(
+    *,
+    image_bytes: bytes,
+    image_media_type: str | None,
+    credentials: StudioOpenAiCredentials | None = None,
+) -> LocationDonorAnalysis:
+    import base64
+
+    instruction = load_location_donor_analyze_prompt()
+    if not instruction:
+        raise RuntimeError(
+            "Промпт анализа location ref пуст: image_studio_location_donor_analyze.txt"
+        )
+
+    creds = credentials
+    if creds is None:
+        creds = grok_motion_studio_credentials() if grok_scene_compose_configured() else None
+
+    if grok_scene_compose_configured():
+        model = (settings.grok_scene_compose_model or "").strip() or _grok_fps_stills_model()
+    else:
+        model = (settings.openai_studio_model_vision or "").strip() or settings.openai_studio_model
+
+    b64 = base64.standard_b64encode(image_bytes).decode("ascii")
+    mime = (image_media_type or "image/jpeg").split(";")[0].strip()
+    if mime not in ("image/jpeg", "image/png", "image/gif", "image/webp"):
+        mime = "image/jpeg"
+
+    raw = await chat_completion_openai_compatible_text(
+        model=model,
+        messages=[
+            {
+                "role": "system",
+                "content": "Return only valid JSON matching the requested schema.",
+            },
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": instruction},
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": f"data:{mime};base64,{b64}"},
+                    },
+                ],
+            },
+        ],
+        max_tokens=2048,
+        temperature=0.25,
+        credentials=creds,
+        timeout_seconds=120.0,
+    )
+    data = json.loads(_strip_code_fences(raw))
+    if not isinstance(data, dict):
+        raise RuntimeError("location donor analysis must be a JSON object")
+    return LocationDonorAnalysis.model_validate(data)
+
+
+async def analyze_workflow_location_donors(
+    workflow_ref_loaded: list[tuple[Any, Any, Any]],
+    *,
+    credentials: StudioOpenAiCredentials | None = None,
+) -> str | None:
+    from app.services.studio_workflow_scenarios import is_location_donor_ref_role
+
+    donors: list[tuple[bytes, str | None]] = []
+    for ref_bytes, ref_mime, meta in workflow_ref_loaded:
+        role = str((meta or {}).get("role") or "")
+        if is_location_donor_ref_role(role):
+            donors.append((ref_bytes, ref_mime))
+    if not donors and len(workflow_ref_loaded) >= 2:
+        donors = [(b, m) for b, m, _ in workflow_ref_loaded[1:]]
+    if not donors:
+        return None
+
+    analyses: list[LocationDonorAnalysis] = []
+    for ref_bytes, ref_mime in donors:
+        try:
+            analyses.append(
+                await analyze_location_donor_image(
+                    image_bytes=ref_bytes,
+                    image_media_type=ref_mime,
+                    credentials=credentials,
+                )
+            )
+        except Exception as exc:
+            log.warning("location donor analysis failed: %s", exc)
+    if not analyses:
+        return None
+    return format_location_donor_for_grok(analyses)
 
 
 def filter_model_profile_for_visibility(
