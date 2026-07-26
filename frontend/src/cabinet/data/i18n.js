@@ -116,6 +116,8 @@ export const RU = {
   stSent: 'Отправлено', stReview: 'На рассмотрении', stAnswered: 'Получен ответ', stDone: 'Завершено',
   noTickets: 'Пока нет обращений — создайте первое.',
   profileDesc: 'Данные аккаунта, email и пароль.', accountData: 'Данные аккаунта', email: 'EMAIL',
+  settingsSimplifiedUi: 'Упрощённый интерфейс',
+  settingsSimplifiedUiHint: 'Скрывает SFW/NSFW и выбор модели. Генерации идут через Seedream 5 Pro (NSFW).',
   editProfile: 'Редактировать', changePassword: 'Сменить пароль',
   curPassword: 'ТЕКУЩИЙ ПАРОЛЬ', newPassword: 'НОВЫЙ ПАРОЛЬ', confirmPassword: 'ПОВТОРИТЕ ПАРОЛЬ',
 };
@@ -236,6 +238,8 @@ export const EN = {
   stSent: 'Submitted', stReview: 'In review', stAnswered: 'Answered', stDone: 'Closed',
   noTickets: 'No tickets yet — create your first one.',
   profileDesc: 'Account details, email and password.', accountData: 'Account details', email: 'EMAIL',
+  settingsSimplifiedUi: 'Simplified interface',
+  settingsSimplifiedUiHint: 'Hides SFW/NSFW and model picker. Generations use Seedream 5 Pro (NSFW).',
   editProfile: 'Edit', changePassword: 'Change password',
   curPassword: 'CURRENT PASSWORD', newPassword: 'NEW PASSWORD', confirmPassword: 'CONFIRM PASSWORD',
 };

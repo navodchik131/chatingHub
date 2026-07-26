@@ -23,6 +23,7 @@ from app.schemas import (
     TelegramLoginIn,
     TokenOut,
     UserMeOut,
+    UserPreferencesPatchIn,
 )
 from app.services.admin_access import user_is_platform_admin
 from app.services.auth_provision import provision_workspace_owner
@@ -308,4 +309,17 @@ async def me(
         public_email=_public_email_for(owner_for_identity),
         telegram_login_available=settings.telegram_login_configured,
         tribute_billing_available=settings.tribute_billing_configured,
+        ui_simplified=bool(getattr(user, "ui_simplified", True)),
     )
+
+
+@router.patch("/preferences", response_model=UserMeOut)
+async def patch_preferences(
+    body: UserPreferencesPatchIn,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> UserMeOut:
+    if body.ui_simplified is not None:
+        user.ui_simplified = bool(body.ui_simplified)
+    await session.commit()
+    return await me(user=user, session=session)

@@ -122,6 +122,8 @@ class User(Base):
     telegram_linked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     """false — вход через TG без подтверждённого email (нужно дозаполнить)."""
     auth_email_verified: Mapped[bool] = mapped_column(Boolean, default=True)
+    """Упрощённый UI студии: скрыть SFW/NSFW и выбор модели; всегда NSFW + Seedream."""
+    ui_simplified: Mapped[bool] = mapped_column(Boolean, default=True)
 
     parent: Mapped[User | None] = relationship(
         "User",

@@ -11,17 +11,34 @@ import { color, font } from '@/src/styles/tokens';
 
 type Props = {
   onBack: () => void;
+  simplifiedUi: boolean;
+  onToggleSimplified: (enabled: boolean) => void;
   onOpenLanguage: () => void;
   onOpenBiometric: () => void;
   onOpenPush: () => void;
 };
 
-export function SettingsMainScreen({ onBack, onOpenLanguage, onOpenBiometric, onOpenPush }: Props) {
+export function SettingsMainScreen({
+  onBack,
+  simplifiedUi,
+  onToggleSimplified,
+  onOpenLanguage,
+  onOpenBiometric,
+  onOpenPush,
+}: Props) {
   const { locale, t } = useAppSettings();
 
   return (
     <ScreenScroll>
       <TopBar title={t.settingsTitle} onBack={onBack} />
+      <Card style={{ gap: 8, marginBottom: 12 }}>
+        <CheckRow
+          label={t.settingsSimplifiedUi}
+          checked={simplifiedUi}
+          onToggle={() => onToggleSimplified(!simplifiedUi)}
+        />
+        <Text style={styles.hint}>{t.settingsSimplifiedUiHint}</Text>
+      </Card>
       <Card>
         <SettingsLink label={settingsLanguageRow(locale, t)} onPress={onOpenLanguage} />
         <SettingsLink label={t.settingsBiometric} onPress={onOpenBiometric} />

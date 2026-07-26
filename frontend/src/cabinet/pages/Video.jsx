@@ -8,7 +8,7 @@ import { modeCardStyle, refUploadStyle, borderHoverOff, cardPickStyle } from '..
 import { videoModeDefs } from '../data/catalog';
 import { archiveThumbUrl, archiveDownloadUrl, archiveVideoUrl, isArchivePending } from '../api/actions';
 import { downloadArchiveBlob } from '../api/archiveDownload';
-import { sameStudioModelId, enginesForNsfw } from '../api/studioHelpers';
+import { sameStudioModelId, enginesForNsfw, isUiSimplified } from '../api/studioHelpers';
 import { computeMotionVideoCreditCost } from '../../studioMotionPricing';
 
 const vidModeIcons = { film: IcoFilm, text: IcoText };
@@ -32,6 +32,7 @@ function aspectCss(ratio) {
 
 export default function Video() {
   const { t, lang, s, setS, isMobile, go, cabinet } = useApp();
+  const simplifiedUi = isUiSimplified(cabinet.me);
   const videoRef = useRef(null);
   const frameRef = useRef(null);
   const timer = useRef(null);
@@ -220,6 +221,7 @@ export default function Video() {
             </div>
           </div>
 
+          {!simplifiedUi ? (
           <div>
             <Eyebrow>{t.contentType}</Eyebrow>
             <div style={{ display: 'flex', gap: 6, background: color.bgPanel, border: `1px solid ${line.soft}`, borderRadius: 11, padding: 4 }}>
@@ -237,7 +239,9 @@ export default function Video() {
               </div>
             </div>
           </div>
+          ) : null}
 
+          {!simplifiedUi ? (
           <div>
             <Eyebrow>{t.aiModel}</Eyebrow>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -261,6 +265,7 @@ export default function Video() {
               })}
             </div>
           </div>
+          ) : null}
 
           {/* reference video */}
           <div>

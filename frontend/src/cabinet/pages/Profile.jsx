@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import Hoverable from '../components/Hoverable';
-import { Fade, PageTitle, Eyebrow } from '../components/ui';
+import { Fade, PageTitle, Eyebrow, Toggle } from '../components/ui';
 import { useApp } from '../hooks/useApp';
 import { color, line, font } from '../styles/tokens';
 
 export default function Profile() {
   const { t, lang, cabinet } = useApp();
   const me = cabinet.me;
+  const simplifiedUi = me?.ui_simplified !== false;
   const [profileEditOpen, setProfileEditOpen] = useState(false);
   const [pwChangeOpen, setPwChangeOpen] = useState(false);
   const [email, setEmail] = useState('');
@@ -59,6 +60,18 @@ export default function Profile() {
         <div style={{ marginBottom: 16 }}>
           <PageTitle style={{ marginBottom: 5 }}>{t.navProfile}</PageTitle>
           <div style={{ fontSize: 12.5, color: color.textDim }}>{t.profileDesc}</div>
+        </div>
+
+        <div style={card}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+            <div>
+              <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 4 }}>{t.settingsSimplifiedUi}</div>
+              <div style={{ fontSize: 11.5, color: color.textDim, lineHeight: 1.45 }}>{t.settingsSimplifiedUiHint}</div>
+            </div>
+            <Hoverable onClick={() => void cabinet.saveUiSimplified(!simplifiedUi)}>
+              <Toggle on={simplifiedUi} />
+            </Hoverable>
+          </div>
         </div>
 
         <div style={card}>

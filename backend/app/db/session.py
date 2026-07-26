@@ -361,6 +361,7 @@ async def init_db() -> None:
         await conn.run_sync(_migrate_trialing_to_credits_demo)
         await conn.run_sync(_migrate_user_email_marketing_opt_out)
         await conn.run_sync(_migrate_user_telegram_identity)
+        await conn.run_sync(_migrate_user_ui_simplified)
         await conn.run_sync(_migrate_tribute_processed_events)
         await conn.run_sync(_migrate_email_campaigns_tables)
         await conn.run_sync(_migrate_fanvue_oauth_columns)
@@ -1974,6 +1975,22 @@ def _migrate_user_telegram_identity(sync_conn) -> None:
                 f"ALTER TABLE users ADD COLUMN auth_email_verified BOOLEAN NOT NULL DEFAULT {bool_true}"
             )
         )
+
+
+def _migrate_user_ui_simplified(sync_conn) -> None:
+    from sqlalchemy import inspect, text
+
+    insp = inspect(sync_conn)
+    if not insp.has_table("users"):
+        return
+    cols = {c["name"] for c in insp.get_columns("users")}
+    if "ui_simplified" in cols:
+        return
+    dialect = sync_conn.dialect.name
+    bool_true = "1" if dialect == "sqlite" else "true"
+    sync_conn.execute(
+        text(f"ALTER TABLE users ADD COLUMN ui_simplified BOOLEAN NOT NULL DEFAULT {bool_true}")
+    )
 
 
 def _migrate_tribute_processed_events(sync_conn) -> None:

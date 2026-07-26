@@ -31,6 +31,8 @@ export type Strings = {
   settingsPushEnabled: string;
   settingsPushDisabled: string;
   settingsSaved: string;
+  settingsSimplifiedUi: string;
+  settingsSimplifiedUiHint: string;
   adminPanel: string;
   logout: string;
   authLogin: string;
@@ -313,6 +315,8 @@ const RU: Strings = {
   settingsPushEnabled: 'Уведомления включены',
   settingsPushDisabled: 'Уведомления выключены',
   settingsSaved: 'Сохранено',
+  settingsSimplifiedUi: 'Упрощённый интерфейс',
+  settingsSimplifiedUiHint: 'Скрывает SFW/NSFW и выбор модели. Генерации идут через Seedream 5 Pro (NSFW).',
   adminPanel: 'Admin-панель',
   logout: 'Выйти',
   authLogin: 'Вход',
@@ -546,7 +550,7 @@ const RU: Strings = {
   charBootstrapFace2: 'Лицо 2',
   charBootstrapGenerate: 'Сгенерировать',
   charBootstrapFaceLoading: 'Собираем лицо…',
-  charBootstrapFaceLoadingSub: 'Nano Banana Pro · ~12 c',
+  charBootstrapFaceLoadingSub: 'Seedream 5 Pro · ~12 c',
   charBootstrapResult: 'Результат',
   charBootstrapRegenerate: '↻ Перегенерировать',
   charBootstrapUseThis: '✓ Использовать эту',
@@ -595,6 +599,8 @@ const EN: Strings = {
   settingsPushEnabled: 'Notifications enabled',
   settingsPushDisabled: 'Notifications disabled',
   settingsSaved: 'Saved',
+  settingsSimplifiedUi: 'Simplified interface',
+  settingsSimplifiedUiHint: 'Hides SFW/NSFW and model picker. Generations use Seedream 5 Pro (NSFW).',
   adminPanel: 'Admin panel',
   logout: 'Sign out',
   authLogin: 'Sign in',
@@ -828,7 +834,7 @@ const EN: Strings = {
   charBootstrapFace2: 'Face 2',
   charBootstrapGenerate: 'Generate',
   charBootstrapFaceLoading: 'Building face…',
-  charBootstrapFaceLoadingSub: 'Nano Banana Pro · ~12 s',
+  charBootstrapFaceLoadingSub: 'Seedream 5 Pro · ~12 s',
   charBootstrapResult: 'Result',
   charBootstrapRegenerate: '↻ Regenerate',
   charBootstrapUseThis: '✓ Use this one',

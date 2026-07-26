@@ -13,7 +13,7 @@ import { resolveSlotSource, archiveThumbUrl, archiveDownloadUrl, isArchivePendin
 import { downloadArchiveBlob } from '../api/archiveDownload';
 import {
   validateStudioForm, syncRefArchivePicks, enginesForNsfw, sameStudioModelId,
-  normalizeWaveModel, waveModelFromState, isNsfwMode,
+  normalizeWaveModel, waveModelFromState, isNsfwMode, isUiSimplified, effectiveStudioState,
 } from '../api/studioHelpers';
 import { quoteStudioImageCredits } from '../../studioImagePricing';
 import { normalizeBillingPlan } from '../../billing/planCatalog';
@@ -291,8 +291,13 @@ function Slot({ slot, index }) {
 
 export default function Images() {
   const { t, lang, s, setS, isMobile, go, cabinet } = useApp();
+  const simplifiedUi = isUiSimplified(cabinet.me);
+  const studioState = effectiveStudioState(s, cabinet.me);
 
-  const carouselCosts = useMemo(() => carouselCreditLabels(s, lang), [s.contentMode, s.aiModel, s.carouselCount, lang]);
+  const carouselCosts = useMemo(
+    () => carouselCreditLabels(studioState, lang),
+    [studioState.contentMode, studioState.aiModel, studioState.carouselCount, lang],
+  );
   const isPro = normalizeBillingPlan(cabinet.me?.billing_plan) === 'pro';
   const modes = useMemo(() => {
     const defs = modeDefs(lang, t.cr);
@@ -402,6 +407,7 @@ export default function Images() {
           </div>
 
           {/* content type */}
+          {!simplifiedUi ? (
           <div>
             <Eyebrow>{t.contentType}</Eyebrow>
             <div style={{ display: 'flex', gap: 6, background: color.bgPanel, border: `1px solid ${line.soft}`, borderRadius: 11, padding: 4 }}>
@@ -419,8 +425,10 @@ export default function Images() {
               </div>
             </div>
           </div>
+          ) : null}
 
           {/* AI model */}
+          {!simplifiedUi ? (
           <div>
             <Eyebrow>{t.aiModel}</Eyebrow>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -444,6 +452,7 @@ export default function Images() {
               })}
             </div>
           </div>
+          ) : null}
 
           {s.imgMode === 'edit' && (
             <div>

@@ -293,6 +293,11 @@ class UserMeOut(BaseModel):
     public_email: str | None = None
     telegram_login_available: bool = False
     tribute_billing_available: bool = False
+    ui_simplified: bool = True
+
+
+class UserPreferencesPatchIn(BaseModel):
+    ui_simplified: bool | None = None
 
 
 class WorkspaceMemberCreateIn(BaseModel):

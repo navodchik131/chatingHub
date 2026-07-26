@@ -25,6 +25,7 @@ export type UserMeOut = {
     dialogs_this_month?: number;
     limits?: Record<string, number>;
   };
+  ui_simplified?: boolean;
 };
 
 export type ConversationOut = {

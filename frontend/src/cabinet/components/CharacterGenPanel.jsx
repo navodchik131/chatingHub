@@ -280,7 +280,7 @@ export default function CharacterGenPanel({ charId, cabinet }) {
               <Spinner size={64} ratio="3/4" />
               <div>
                 <div style={{ fontWeight: 800, fontSize: 13, color: color.purple, marginBottom: 3 }}>{t.genFaceLoading}</div>
-                <div style={{ fontSize: 11, color: color.textDim }}>Nano Banana Pro · ~12 c</div>
+                <div style={{ fontSize: 11, color: color.textDim }}>Seedream 5 Pro · ~12 c</div>
               </div>
             </div>
           )}

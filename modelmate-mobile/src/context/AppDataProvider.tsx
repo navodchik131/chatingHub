@@ -58,6 +58,7 @@ import type {
   WorkspaceMemberOut,
 } from '@/src/api/types';
 import { modelIdByName } from '@/src/studio/studioHelpers';
+import { effectiveNavState, isUiSimplified } from '@/src/studio/simplifiedUi';
 import type { NavigationState } from '@/src/navigation/types';
 
 type GenKey = string;
@@ -96,6 +97,7 @@ type AppDataValue = {
   fetchSupportTicket: (ticketId: number) => Promise<SupportTicketOut>;
   replySupportTicket: (ticketId: number, message: string) => Promise<void>;
   saveProfileEmail: (email: string) => Promise<void>;
+  saveUiSimplified: (enabled: boolean) => Promise<void>;
   changeUserPassword: (current: string, next: string) => Promise<void>;
   uploadExifReference: (charId: number, role: 'selfie' | 'main', file: LocalFile) => Promise<void>;
   uploadCharacterPhoto: (charId: number, file: LocalFile, kind: string) => Promise<void>;
@@ -537,6 +539,13 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     }, { saved: true });
   }, [refreshAll, withBusyAction]);
 
+  const saveUiSimplified = useCallback(async (enabled: boolean) => {
+    await withBusyAction(async () => {
+      const fresh = await actions.patchUserPreferences({ ui_simplified: enabled });
+      setMe(fresh);
+    }, { saved: true });
+  }, [withBusyAction]);
+
   const changeUserPassword = useCallback(async (current: string, next: string) => {
     await withBusyAction(async () => {
       await actions.changePassword(current, next);
@@ -836,8 +845,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       patchGenStatus: (key: GenKey, status: 'loading' | 'done' | null) => void,
     ) => {
       setError(null);
+      const effNav = effectiveNavState(nav, isUiSimplified(me));
 
-      const modelId = modelIdByName(rawModels, nav.imgChar || nav.vidChar);
+      const modelId = modelIdByName(rawModels, effNav.imgChar || effNav.vidChar);
 
       if (key === 'video') {
         const promptOnly = (nav.vidMode || 'motion-control') === 'prompt';
@@ -874,7 +884,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         const modeId = key.slice(4);
         const validationMsg = validateImageGeneration({
           modeId,
-          navState: nav as unknown as Record<string, unknown>,
+          navState: effNav as unknown as Record<string, unknown>,
           uploadFiles,
           slotArchivePicks,
           slotSource,
@@ -973,8 +983,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           if (motionControl && !ffGenId && uploadFiles['motion-frame']) {
             const { result } = await actions.runMotionFirstFrame({
               modelId,
-              aspect: nav.vidFormat,
-              nsfw: nav.contentMode === 'nsfw',
+              aspect: effNav.vidFormat,
+              nsfw: effNav.contentMode === 'nsfw',
               frameFile: uploadFiles['motion-frame'],
               autoMotionPrompt: false,
               useStillAsFinal: true,
@@ -985,8 +995,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           }
           const accepted = await actions.runMotionVideo({
             modelId,
-            prompt: promptOnly ? (nav.imgPrompt || '') : (motionControl ? '' : (nav.imgPrompt || 'Cinematic motion')),
-            aspect: nav.vidFormat,
+            prompt: promptOnly ? (effNav.imgPrompt || '') : (motionControl ? '' : (effNav.imgPrompt || 'Cinematic motion')),
+            aspect: effNav.vidFormat,
             resolution: nav.vidQuality,
             durationSeconds: nav.vidDuration,
             motionVideoFileId: motionControl ? (motionVideoFileId || undefined) : undefined,
@@ -1008,7 +1018,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           const modeId = key.slice(4);
           const accepted = await actions.runImageGeneration({
             modeId,
-            navState: nav as unknown as Record<string, unknown>,
+            navState: effNav as unknown as Record<string, unknown>,
             uploadFiles,
             slotArchivePicks,
             selectedModelId: modelId,
@@ -1060,11 +1070,12 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       }
       patchFfState('loading');
       setError(null);
+      const effNav = effectiveNavState(nav, isUiSimplified(me));
       try {
         const { result } = await actions.runMotionFirstFrame({
           modelId,
-          aspect: nav.vidFormat,
-          nsfw: nav.contentMode === 'nsfw',
+          aspect: effNav.vidFormat,
+          nsfw: effNav.contentMode === 'nsfw',
           videoFile: uploadFiles['motion-video'],
           frameFile: uploadFiles['motion-frame'],
           existingGenerationId: firstFrameGenId,
@@ -1439,6 +1450,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       fetchSupportTicket,
       replySupportTicket,
       saveProfileEmail,
+      saveUiSimplified,
       changeUserPassword,
       uploadExifReference,
       uploadCharacterPhoto,
@@ -1553,6 +1565,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       fetchSupportTicket,
       replySupportTicket,
       saveProfileEmail,
+      saveUiSimplified,
       changeUserPassword,
       uploadExifReference,
       uploadCharacterPhoto,

@@ -7,6 +7,7 @@ import type {
   StudioGenerationOut,
   StudioModelOut,
   TelegramLoginUser,
+  UserMeOut,
 } from '@/src/api/types';
 import { apiUrl, getApiBaseUrl, resolveMediaUrl } from '@/src/api/config';
 import { appendFormDataFile, prepareUploadFile, remoteImageToLocalFile } from '@/src/api/mediaFiles';
@@ -294,6 +295,13 @@ export async function patchProfileEmail(email: string) {
   return apiJson('/api/auth/profile', {
     method: 'PATCH',
     body: JSON.stringify({ email: email.trim() }),
+  });
+}
+
+export async function patchUserPreferences(payload: { ui_simplified?: boolean }) {
+  return apiJson<UserMeOut>('/api/auth/preferences', {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
   });
 }
 

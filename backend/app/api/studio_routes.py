@@ -6885,7 +6885,7 @@ async def _studio_job_execute_model_bootstrap_face_merge(
     billing = await ensure_can_consume_credits(session, user, cost)
 
     try:
-        ws_res = await nano_banana_pro_edit_image_url(
+        ws_res = await seedream_v50_pro_edit_image_url(
             api_key=ws_key,
             image_urls=[url1, url2],
             prompt=prompt,

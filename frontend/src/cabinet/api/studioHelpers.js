@@ -31,6 +31,18 @@ export const FALLBACK_GEN_MODELS = [
 export const REGULAR_ENGINE_IDS = ['nano-banana-pro', 'gpt-image-2', 'seedream-v5.0-pro']
 export const NSFW_ENGINE_IDS = ['seedream-v5.0-pro', 'wan-2.7', 'wan-2.7-pro']
 
+export const SIMPLIFIED_CONTENT_MODE = 'nsfw'
+export const SIMPLIFIED_AI_MODEL = 'seedream-v5.0-pro'
+
+export function isUiSimplified(me) {
+  return me?.ui_simplified !== false
+}
+
+export function effectiveStudioState(appState, me) {
+  if (!isUiSimplified(me)) return appState
+  return { ...appState, contentMode: SIMPLIFIED_CONTENT_MODE, aiModel: SIMPLIFIED_AI_MODEL }
+}
+
 export function isNsfwMode(s) {
   return s?.contentMode === 'nsfw' || !!s?.nsfw
 }

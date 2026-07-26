@@ -80,6 +80,7 @@ import {
   VID_DURATIONS,
   VID_QUALITIES,
 } from '@/src/navigation/types';
+import { effectiveStudioNav, isUiSimplified } from '@/src/studio/simplifiedUi';
 import { color, font, gradients } from '@/src/styles/tokens';
 import { pickImage, pickVideo } from '@/src/utils/mediaPicker';
 import type { LocalFile } from '@/src/api/types';
@@ -165,6 +166,7 @@ export function ScreenRouter() {
     fetchSupportTicket,
     replySupportTicket,
     saveProfileEmail,
+    saveUiSimplified,
     changeUserPassword,
     uploadExifReference,
     uploadCharacterPhoto,
@@ -255,6 +257,11 @@ export function ScreenRouter() {
   const [motionVideoUploading, setMotionVideoUploading] = useState(false);
   const [charPhotoUploading, setCharPhotoUploading] = useState(false);
   const threadConvId = conversations[chatIdx]?.id ?? null;
+  const simplifiedUi = isUiSimplified(me);
+  const studioOpts = useMemo(
+    () => effectiveStudioNav(nav, simplifiedUi),
+    [nav.contentMode, nav.aiEngine, simplifiedUi],
+  );
 
   useEffect(() => {
     if (cur !== 'new-character') setNewCharDraftId(null);
@@ -718,15 +725,15 @@ export function ScreenRouter() {
         {localizedModeDefs.map((m) => {
           const modeCost = m.id === 'carousel'
             ? computeCarouselModeCardCost({
-                contentMode: nav.contentMode,
-                aiEngine: nav.aiEngine,
+                contentMode: studioOpts.contentMode,
+                aiEngine: studioOpts.aiEngine,
                 health,
                 me,
               })
             : computeImageGenerationCost({
                 modeId: m.id,
-                contentMode: nav.contentMode,
-                aiEngine: nav.aiEngine,
+                contentMode: studioOpts.contentMode,
+                aiEngine: studioOpts.aiEngine,
                 health,
                 me,
               });
@@ -751,11 +758,11 @@ export function ScreenRouter() {
     const slots = localizedSlotLabels[modeId] ?? [];
     const key = `img:${modeId}`;
     const st = nav.genStatus[key];
-    const engines = enginesForMode(nav.contentMode);
-    const engineLabel = engines.includes(nav.aiEngine) ? nav.aiEngine : engines[0];
+    const engines = enginesForMode(studioOpts.contentMode);
+    const engineLabel = engines.includes(studioOpts.aiEngine) ? studioOpts.aiEngine : engines[0];
     const imgCost = computeImageGenerationCost({
       modeId,
-      contentMode: nav.contentMode,
+      contentMode: studioOpts.contentMode,
       aiEngine: engineLabel,
       carouselCount: nav.carouselCount,
       health,
@@ -766,19 +773,23 @@ export function ScreenRouter() {
         <TopBar title={m.title} onBack={pop} />
         {appError ? <Text style={s.errorBanner}>{appError}</Text> : null}
         <Card style={s.gap10}>
-          <SegmentedToggle
-            left="SFW"
-            right="NSFW"
-            activeLeft={nav.contentMode === 'sfw'}
-            onLeft={() => patch({ contentMode: 'sfw', aiEngine: 'Nano Banana Pro' })}
-            onRight={() => patch({ contentMode: 'nsfw', aiEngine: 'Seedream 5 Pro' })}
-          />
-          <SectionLabel>{t.studioAiEngine}</SectionLabel>
-          <ChipPicker
-            items={engines}
-            value={engineLabel}
-            onChange={(e) => patch({ aiEngine: e })}
-          />
+          {!simplifiedUi ? (
+            <>
+              <SegmentedToggle
+                left="SFW"
+                right="NSFW"
+                activeLeft={nav.contentMode === 'sfw'}
+                onLeft={() => patch({ contentMode: 'sfw', aiEngine: 'Nano Banana Pro' })}
+                onRight={() => patch({ contentMode: 'nsfw', aiEngine: 'Seedream 5 Pro' })}
+              />
+              <SectionLabel>{t.studioAiEngine}</SectionLabel>
+              <ChipPicker
+                items={engines}
+                value={engineLabel}
+                onChange={(e) => patch({ aiEngine: e })}
+              />
+            </>
+          ) : null}
           {slots.length ? (
             <>
               <SectionLabel>{slots.length > 1 ? t.studioReferences : t.studioReference}</SectionLabel>
@@ -988,8 +999,8 @@ export function ScreenRouter() {
     const st = nav.genStatus.video;
     const promptMode = nav.vidMode === 'prompt';
     const motionControl = !promptMode && (nav.vidMode || 'motion-control') === 'motion-control';
-    const engines = enginesForMode(nav.contentMode);
-    const engineLabel = engines.includes(nav.aiEngine) ? nav.aiEngine : engines[0];
+    const engines = enginesForMode(studioOpts.contentMode);
+    const engineLabel = engines.includes(studioOpts.aiEngine) ? studioOpts.aiEngine : engines[0];
     const vidCost = computeVideoGenerationCost({
       duration: nav.vidDuration,
       quality: nav.vidQuality,
@@ -1053,20 +1064,24 @@ export function ScreenRouter() {
           </>
         ) : (
           <>
-            <SectionLabel>{t.studioContentType}</SectionLabel>
-            <SegmentedToggle
-              left="SFW"
-              right="NSFW"
-              activeLeft={nav.contentMode === 'sfw'}
-              onLeft={() => patch({ contentMode: 'sfw', aiEngine: 'Nano Banana Pro' })}
-              onRight={() => patch({ contentMode: 'nsfw', aiEngine: 'Seedream 5 Pro' })}
-            />
-            <SectionLabel>{t.studioAiEngine}</SectionLabel>
-            <ChipPicker
-              items={engines}
-              value={engineLabel}
-              onChange={(e) => patch({ aiEngine: e })}
-            />
+            {!simplifiedUi ? (
+              <>
+                <SectionLabel>{t.studioContentType}</SectionLabel>
+                <SegmentedToggle
+                  left="SFW"
+                  right="NSFW"
+                  activeLeft={nav.contentMode === 'sfw'}
+                  onLeft={() => patch({ contentMode: 'sfw', aiEngine: 'Nano Banana Pro' })}
+                  onRight={() => patch({ contentMode: 'nsfw', aiEngine: 'Seedream 5 Pro' })}
+                />
+                <SectionLabel>{t.studioAiEngine}</SectionLabel>
+                <ChipPicker
+                  items={engines}
+                  value={engineLabel}
+                  onChange={(e) => patch({ aiEngine: e })}
+                />
+              </>
+            ) : null}
             <SectionLabel>{t.studioReferenceVideo}</SectionLabel>
             {motionVideoUploading ? (
               <View style={s.descLoading}>
@@ -2049,6 +2064,8 @@ export function ScreenRouter() {
     return (
       <SettingsMainScreen
         onBack={pop}
+        simplifiedUi={simplifiedUi}
+        onToggleSimplified={(enabled) => void saveUiSimplified(enabled)}
         onOpenLanguage={() => push('settings-language')}
         onOpenBiometric={() => push('settings-biometric')}
         onOpenPush={() => push('settings-push')}

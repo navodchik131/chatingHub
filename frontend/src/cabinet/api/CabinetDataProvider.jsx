@@ -13,7 +13,7 @@ import {
 import { coerceJobGenerationId, waitForStudioJobResult } from '../../studioJobs'
 import { apiJson, apiJsonOptional, isPlausibleTelegramBotToken, resolveDonationBalances } from './helpers'
 import { refreshPendingArchiveImages, refreshPendingArchiveVideos } from './archivePoll'
-import { mapGenModelsFromApi, normalizeStudioModelId, sameStudioModelId, waveModelParamsFromState } from './studioHelpers'
+import { mapGenModelsFromApi, normalizeStudioModelId, sameStudioModelId, waveModelParamsFromState, effectiveStudioState } from './studioHelpers'
 import * as actions from './actions'
 
 function applyJobToOptimisticArchive(current, tempIds, accepted) {
@@ -861,14 +861,15 @@ export function CabinetDataProvider({ children }) {
 
   const generateImages = useCallback(
     async (appState, userPrompt) => {
-      const mode = appState.imgMode || 'prompt'
+      const effState = effectiveStudioState(appState, me)
+      const mode = effState.imgMode || 'prompt'
       const model = models.find((m) => Number(m.id) === Number(selectedModelId))
       const promptExcerpt = (userPrompt || '').trim() || 'Генерация…'
       let tempIds = []
       let optimisticItems = []
 
       if (mode === 'carousel') {
-        const count = Math.max(2, Math.min(8, Number(appState.carouselCount) || 4))
+        const count = Math.max(2, Math.min(8, Number(effState.carouselCount) || 4))
         for (let i = 0; i < count; i += 1) {
           const { item, tempId } = createOptimisticStudioArchiveItem({
             mediaKind: 'image',
@@ -916,17 +917,17 @@ export function CabinetDataProvider({ children }) {
           const src = actions.resolveSlotSource('carousel', 0, uploadFiles, slotArchivePicks)
           accepted = await actions.runCarouselGeneration({
             modelId: selectedModelId,
-            count: Math.max(2, Math.min(8, Number(appState.carouselCount) || 4)),
+            count: Math.max(2, Math.min(8, Number(effState.carouselCount) || 4)),
             prompt: userPrompt,
             aspect: selectedAspect,
-            nsfw: appState.contentMode === 'nsfw',
-            ...waveModelParamsFromState(appState),
+            nsfw: effState.contentMode === 'nsfw',
+            ...waveModelParamsFromState(effState),
             existingGenerationId: src?.archiveId,
             imageFile: src?.file,
           })
         } else {
           accepted = await actions.runImageGeneration({
-            appState,
+            appState: effState,
             studioStore,
             userPrompt,
             workflowDemoLimited: Boolean(me?.workflow_demo_limited),
@@ -939,7 +940,7 @@ export function CabinetDataProvider({ children }) {
           const jobId = accepted.job_id
           const cleanupIds = [...tempIds]
           const maxWaitMs = mode === 'carousel'
-            ? Math.max(8 * 60 * 1000, (Number(appState.carouselCount) || 4) * 4 * 60 * 1000)
+            ? Math.max(8 * 60 * 1000, (Number(effState.carouselCount) || 4) * 4 * 60 * 1000)
             : 15 * 60 * 1000
           void waitForStudioJobResult(jobId, {
             maxWaitMs,
@@ -975,17 +976,18 @@ export function CabinetDataProvider({ children }) {
         setError(e?.message || String(e))
       }
     },
-    [selectedModelId, selectedAspect, uploadFiles, slotArchivePicks, archiveImages, models, me?.workflow_demo_limited, refreshArchivePending],
+    [selectedModelId, selectedAspect, uploadFiles, slotArchivePicks, archiveImages, models, me?.workflow_demo_limited, me, refreshArchivePending],
   )
 
   const generateFirstFrame = useCallback(
     async (appState, description) => {
+      const effState = effectiveStudioState(appState, me)
       setError(null)
       try {
         const { result } = await actions.runMotionFirstFrame({
           modelId: selectedModelId,
-          aspect: appState.vidFormat || selectedAspect,
-          nsfw: appState.contentMode === 'nsfw',
+          aspect: effState.vidFormat || selectedAspect,
+          nsfw: effState.contentMode === 'nsfw',
           videoFile: uploadFiles['motion-video'],
           frameFile: uploadFiles['motion-frame'],
           existingGenerationId: appState.carouselPickId || firstFrameGenId,
@@ -1007,11 +1009,12 @@ export function CabinetDataProvider({ children }) {
         throw e
       }
     },
-    [selectedModelId, selectedAspect, uploadFiles, firstFrameGenId, archiveImages, refreshArchiveFull],
+    [selectedModelId, selectedAspect, uploadFiles, firstFrameGenId, archiveImages, refreshArchiveFull, me],
   )
 
   const generateVideo = useCallback(
     async (appState) => {
+      const effState = effectiveStudioState(appState, me)
       const promptMode = (appState.vidMode || 'motion-control') === 'prompt'
       if (!selectedModelId) {
         setError('Выберите персонажа')
@@ -1055,8 +1058,8 @@ export function CabinetDataProvider({ children }) {
         if (!ffGenId && uploadFiles['motion-frame']) {
           const { result } = await actions.runMotionFirstFrame({
             modelId: selectedModelId,
-            aspect: appState.vidFormat || selectedAspect,
-            nsfw: appState.contentMode === 'nsfw',
+            aspect: effState.vidFormat || selectedAspect,
+            nsfw: effState.contentMode === 'nsfw',
             frameFile: uploadFiles['motion-frame'],
             description: promptMode ? prompt : '',
             autoMotionPrompt: false,
@@ -1085,7 +1088,7 @@ export function CabinetDataProvider({ children }) {
         setError(e?.message || String(e))
       }
     },
-    [selectedModelId, selectedAspect, uploadFiles, motionVideoFileId, firstFrameGenId, models, refreshArchiveFull],
+    [selectedModelId, selectedAspect, uploadFiles, motionVideoFileId, firstFrameGenId, models, refreshArchiveFull, me],
   )
 
   const setUploadFile = useCallback((key, file) => {
@@ -1260,6 +1263,17 @@ export function CabinetDataProvider({ children }) {
     async (email) => {
       await run(async () => {
         const meData = await actions.patchProfileEmail(email)
+        setMe(meData)
+        return meData
+      })
+    },
+    [run],
+  )
+
+  const saveUiSimplified = useCallback(
+    async (enabled) => {
+      await run(async () => {
+        const meData = await actions.patchUserPreferences({ ui_simplified: enabled })
         setMe(meData)
         return meData
       })
@@ -1543,6 +1557,7 @@ export function CabinetDataProvider({ children }) {
       createSupportTicket,
       fetchSupportTicketDetail,
       saveProfileEmail,
+      saveUiSimplified,
       changeAccountPassword,
       logout,
     }),
@@ -1649,6 +1664,7 @@ export function CabinetDataProvider({ children }) {
       createSupportTicket,
       fetchSupportTicketDetail,
       saveProfileEmail,
+      saveUiSimplified,
       changeAccountPassword,
       logout,
       clearBusy,

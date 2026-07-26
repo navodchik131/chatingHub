@@ -461,6 +461,13 @@ export async function patchProfileEmail(email) {
   })
 }
 
+export async function patchUserPreferences(payload) {
+  return apiJson('/api/auth/preferences', {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  })
+}
+
 export async function changePassword(currentPassword, newPassword) {
   await apiJson('/api/auth/password', {
     method: 'POST',
