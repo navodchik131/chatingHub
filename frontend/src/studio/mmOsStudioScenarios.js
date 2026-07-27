@@ -37,14 +37,10 @@ const LOCATION_ENV_DESC =
   'Image 2 — place materials/mood donor: architecture, palette, atmosphere, ambient light character. ' +
   'Re-project to Image 1 geometry. No people. Do NOT copy this image camera or framing.'
 const LOCATION_DEFAULT_PROMPT =
-  'Reconstruct the environment around the subject in Image 1 (photo-base reference).\n' +
-  'Keep the exact person, identity, pose, wardrobe, crop, and camera geometry from Image 1 — do not reframe or re-pose.\n\n' +
-  'Build a new environment inspired by Image 2 (location reference): its place type, materials, colors, atmosphere, and lighting mood — ' +
-  "but re-projected to match Image 1's camera height, angle, horizon line, floor plane, and subject scale.\n\n" +
-  "Place the subject's feet on the new ground with consistent contact shadows and grounding.\n" +
-  'Match key light direction from Image 1 onto skin and clothes; ambient fill and color cast may come from the new location mood.\n\n' +
-  'Image 2 is a MATERIAL/MOOD reference only — do NOT copy its camera angle, framing, perspective, or any people from it.\n' +
-  'Avoid cutout-composite, pasted-background, or floating-subject look.'
+  'Place the model from Image 1 in the same pose and camera angle in the new location from Image 2. ' +
+  'Adapt the location to the model. Make the whole scene look organic and natural. ' +
+  'Keep object proportions realistic. Let the location light fall on the model with contact shadows under the feet. ' +
+  'Unified grain and color grading across the entire frame.'
 
 const OUTFIT_BASE_ROLE = 'photo base / model'
 const OUTFIT_BASE_DESC = 'Кого и какой кадр редактируем — identity + pose + фон'
