@@ -123,9 +123,11 @@ def enrich_description_for_location_change(description: str) -> str:
 
 
 LOCATION_CHANGE_DEFAULT_PROMPT = (
-    "Place the model from Image 1 in the same pose and camera angle in the new location from Image 2. "
-    "Adapt the location to the model. Make the whole scene look organic and natural. "
-    "Keep object proportions realistic. Let the location light fall on the model with contact shadows under the feet. "
+    "Place the model from Image 1 in the same pose and camera angle in the new location from Image 2 — "
+    "do not carry over lighting or shadows from Image 1. Adapt the location to the model. "
+    "Make the whole scene look organic and natural. Keep object proportions realistic. "
+    "Adapt the overall location lighting to cast realistic shadows on the model; "
+    "the location alone is the source of truth for all light and illumination. "
     "Unified grain and color grading across the entire frame."
 )
 
