@@ -669,6 +669,21 @@ class InstagramOAuthState(Base):
     )
 
 
+class TelegramMobileAuthSession(Base):
+    __tablename__ = "telegram_mobile_auth_sessions"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    status: Mapped[str] = mapped_column(String(16), default="pending")
+    access_token: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    referral_code: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    telegram_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class FanvueOAuthState(Base):
     __tablename__ = "fanvue_oauth_states"
 

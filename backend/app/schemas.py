@@ -239,6 +239,21 @@ class TokenOut(BaseModel):
     token_type: str = "bearer"
 
 
+class TelegramMobileAuthStartIn(BaseModel):
+    referral_code: str | None = Field(default=None, max_length=16)
+
+
+class TelegramMobileAuthStartOut(BaseModel):
+    session_id: str
+    bot_username: str
+    telegram_url: str
+
+
+class TelegramMobileAuthPollOut(BaseModel):
+    status: Literal["pending", "done", "expired"]
+    access_token: str | None = None
+
+
 class PlanLimitsOut(BaseModel):
     max_users: int
     max_models: int

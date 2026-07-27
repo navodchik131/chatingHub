@@ -21,6 +21,9 @@ from app.schemas import (
     ProfilePatchIn,
     RegisterIn,
     TelegramLoginIn,
+    TelegramMobileAuthPollOut,
+    TelegramMobileAuthStartIn,
+    TelegramMobileAuthStartOut,
     TokenOut,
     UserMeOut,
     UserPreferencesPatchIn,
@@ -45,6 +48,11 @@ from app.services.telegram_identity import (
     link_telegram_to_owner,
     owner_email_setup_required,
     owner_telegram_linked,
+)
+from app.services.telegram_mobile_auth import (
+    create_mobile_auth_session,
+    poll_mobile_auth_session,
+    telegram_deep_link_for_session,
 )
 from app.services.workspace import is_workspace_owner, resolve_billing_user, workspace_owner_id
 
@@ -138,6 +146,30 @@ async def telegram_login_or_register(
         await record_funnel_event_once(session, user=user, event="signup_telegram")
     await session.commit()
     return TokenOut(access_token=create_access_token(str(user.id)))
+
+
+@router.post("/telegram/mobile/start", response_model=TelegramMobileAuthStartOut)
+async def telegram_mobile_auth_start(
+    body: TelegramMobileAuthStartIn,
+    session: AsyncSession = Depends(get_session),
+) -> TelegramMobileAuthStartOut:
+    row = await create_mobile_auth_session(session, referral_code=body.referral_code)
+    await session.commit()
+    bot_username = (settings.telegram_login_bot_username or "").strip().lstrip("@")
+    return TelegramMobileAuthStartOut(
+        session_id=row.id,
+        bot_username=bot_username,
+        telegram_url=telegram_deep_link_for_session(row.id),
+    )
+
+
+@router.get("/telegram/mobile/poll", response_model=TelegramMobileAuthPollOut)
+async def telegram_mobile_auth_poll(
+    session_id: str,
+    session: AsyncSession = Depends(get_session),
+) -> TelegramMobileAuthPollOut:
+    data = await poll_mobile_auth_session(session, session_id)
+    return TelegramMobileAuthPollOut(**data)
 
 
 @router.post("/telegram/link")

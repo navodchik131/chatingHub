@@ -70,6 +70,7 @@ from app.services.demo_generations import (
     model_profile_generation_free,
     owner_used_model_profile_generation,
     parse_onboarding_wizard_flag,
+    prepare_bootstrap_image_billing,
     prepare_studio_image_billing,
     raise_studio_access_denied,
     record_studio_image_billing,
@@ -6910,8 +6911,15 @@ async def _studio_job_execute_model_bootstrap_face_merge(
     )
 
     gen_row = await find_studio_generation_by_job_id(session, job.id)
-    cost = apply_studio_credit_cost(plan, settings.credit_cost_studio_prompt_refine)
-    billing = await ensure_can_consume_credits(session, user, cost)
+    billing_owner = await resolve_billing_user(session, user)
+    billing, cost, used_demo = await prepare_bootstrap_image_billing(
+        session,
+        user,
+        billing_owner,
+        plan=plan,
+        usage_kind="studio_model_bootstrap_face_merge",
+        wave_model_id="seedream-v5.0-pro",
+    )
 
     try:
         ws_res = await seedream_v50_pro_edit_image_url(
@@ -6939,13 +6947,14 @@ async def _studio_job_execute_model_bootstrap_face_merge(
     if gen_row is not None and gen_row.status == StudioGenerationStatus.READY:
         out_url = _studio_archive_image_url(oid, gen_row.id, arch_base)
 
-    await record_usage(
+    await record_studio_image_billing(
         session,
         user,
         billing,
-        "studio_model_bootstrap_face_merge",
-        cost,
-        {"studio_model_id": mid, "generation_id": gen_row.id if gen_row else None},
+        usage_kind="studio_model_bootstrap_face_merge",
+        cost=cost,
+        used_demo=used_demo,
+        meta={"studio_model_id": mid, "generation_id": gen_row.id if gen_row else None},
     )
     await session.commit()
 
@@ -7023,8 +7032,15 @@ async def _studio_job_execute_model_bootstrap_body_compose(
         )
 
     gen_row = await find_studio_generation_by_job_id(session, job.id)
-    cost = apply_studio_credit_cost(plan, settings.credit_cost_studio_prompt_refine)
-    billing = await ensure_can_consume_credits(session, user, cost)
+    billing_owner = await resolve_billing_user(session, user)
+    billing, cost, used_demo = await prepare_bootstrap_image_billing(
+        session,
+        user,
+        billing_owner,
+        plan=plan,
+        usage_kind="studio_model_bootstrap_body_compose",
+        wave_model_id="seedream-v5.0-pro",
+    )
 
     try:
         # Prompt: IMAGE 1 = face, IMAGE 2 = body
@@ -7053,13 +7069,14 @@ async def _studio_job_execute_model_bootstrap_body_compose(
     if gen_row is not None and gen_row.status == StudioGenerationStatus.READY:
         out_url = _studio_archive_image_url(oid, gen_row.id, arch_base)
 
-    await record_usage(
+    await record_studio_image_billing(
         session,
         user,
         billing,
-        "studio_model_bootstrap_body_compose",
-        cost,
-        {"studio_model_id": mid, "generation_id": gen_row.id if gen_row else None},
+        usage_kind="studio_model_bootstrap_body_compose",
+        cost=cost,
+        used_demo=used_demo,
+        meta={"studio_model_id": mid, "generation_id": gen_row.id if gen_row else None},
     )
     await session.commit()
 
@@ -7134,8 +7151,15 @@ async def _studio_job_execute_model_bootstrap_sheet(
         raise RuntimeError("Нет исходного изображения для развёртки.")
 
     gen_row = await find_studio_generation_by_job_id(session, job.id)
-    cost = apply_studio_credit_cost(plan, settings.credit_cost_studio_prompt_refine)
-    billing = await ensure_can_consume_credits(session, user, cost)
+    billing_owner = await resolve_billing_user(session, user)
+    billing, cost, used_demo = await prepare_bootstrap_image_billing(
+        session,
+        user,
+        billing_owner,
+        plan=plan,
+        usage_kind="studio_model_bootstrap_sheet",
+        wave_model_id="gpt-image-2",
+    )
 
     async def _on_sheet_task_submitted(task_id: str) -> None:
         if gen_row is not None:
@@ -7167,13 +7191,14 @@ async def _studio_job_execute_model_bootstrap_sheet(
                 out_url = _studio_archive_image_url(oid, gen_row.id, arch_base)
                 if gen_row.status != StudioGenerationStatus.READY:
                     out_url = (gen_row.source_url or "").strip() or out_url
-                await record_usage(
+                await record_studio_image_billing(
                     session,
                     user,
                     billing,
-                    "studio_model_bootstrap_sheet",
-                    cost,
-                    {"studio_model_id": mid, "generation_id": gen_row.id},
+                    usage_kind="studio_model_bootstrap_sheet",
+                    cost=cost,
+                    used_demo=used_demo,
+                    meta={"studio_model_id": mid, "generation_id": gen_row.id},
                 )
                 await session.commit()
                 return StudioModelBootstrapOut(
@@ -7200,13 +7225,14 @@ async def _studio_job_execute_model_bootstrap_sheet(
     if gen_row is not None and gen_row.status == StudioGenerationStatus.READY:
         out_url = _studio_archive_image_url(oid, gen_row.id, arch_base)
 
-    await record_usage(
+    await record_studio_image_billing(
         session,
         user,
         billing,
-        "studio_model_bootstrap_sheet",
-        cost,
-        {"studio_model_id": mid, "generation_id": gen_row.id if gen_row else None},
+        usage_kind="studio_model_bootstrap_sheet",
+        cost=cost,
+        used_demo=used_demo,
+        meta={"studio_model_id": mid, "generation_id": gen_row.id if gen_row else None},
     )
     await session.commit()
 

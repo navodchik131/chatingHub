@@ -107,6 +107,7 @@ async def lifespan(app: FastAPI):
     companion_job_worker_task: asyncio.Task[None] | None = None
     exif_bot_polling_task: asyncio.Task[None] | None = None
     ig_bot_polling_task: asyncio.Task[None] | None = None
+    login_bot_polling_task: asyncio.Task[None] | None = None
     legacy_tok = settings.legacy_bot_token.strip()
     legacy_uid = settings.legacy_user_id
     if legacy_tok and legacy_uid > 0:
@@ -183,6 +184,14 @@ async def lifespan(app: FastAPI):
     else:
         ig_bot_polling_task = None
         log.info("IG download bot disabled (set IG_BOT_TOKEN to enable)")
+    if settings.telegram_login_configured:
+        from app.connectors.telegram.login_bot.bot import run_login_bot_polling
+
+        login_bot_polling_task = asyncio.create_task(run_login_bot_polling())
+        log.info("Telegram login bot polling enabled")
+    else:
+        login_bot_polling_task = None
+        log.info("Telegram login bot disabled (set TELEGRAM_LOGIN_BOT_TOKEN to enable)")
     if settings.smtp_configured:
         email_worker_task = asyncio.create_task(email_campaign_worker_loop())
         log.info("Email campaign worker started (SMTP: %s)", settings.smtp_host)
@@ -253,6 +262,12 @@ async def lifespan(app: FastAPI):
         ig_bot_polling_task.cancel()
         try:
             await ig_bot_polling_task
+        except asyncio.CancelledError:
+            pass
+    if login_bot_polling_task:
+        login_bot_polling_task.cancel()
+        try:
+            await login_bot_polling_task
         except asyncio.CancelledError:
             pass
     if bot:

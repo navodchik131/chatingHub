@@ -51,6 +51,23 @@ export async function loginTelegram(user: TelegramLoginUser) {
   });
 }
 
+export async function startTelegramMobileAuth(referralCode?: string | null) {
+  const body: { referral_code?: string } = {};
+  const ref = (referralCode || '').trim().toUpperCase();
+  if (ref) body.referral_code = ref;
+  return apiJson<{ session_id: string; bot_username: string; telegram_url: string }>(
+    '/api/auth/telegram/mobile/start',
+    { method: 'POST', body: JSON.stringify(body) },
+  );
+}
+
+export async function pollTelegramMobileAuth(sessionId: string) {
+  const q = encodeURIComponent(sessionId.trim());
+  return apiJson<{ status: 'pending' | 'done' | 'expired'; access_token?: string | null }>(
+    `/api/auth/telegram/mobile/poll?session_id=${q}`,
+  );
+}
+
 export async function fetchHealth() {
   return apiJsonOptional<HealthOut>('/api/health', {}, {});
 }

@@ -381,6 +381,7 @@ async def init_db() -> None:
         await conn.run_sync(_migrate_exif_bot_tables)
         await conn.run_sync(_migrate_ig_bot_tables)
         await conn.run_sync(_migrate_mobile_push_tokens)
+        await conn.run_sync(_migrate_telegram_mobile_auth_sessions)
 
 
 def _migrate_mobile_push_tokens(sync_conn) -> None:
@@ -404,6 +405,32 @@ def _migrate_mobile_push_tokens(sync_conn) -> None:
     )
     sync_conn.exec_driver_sql(
         "CREATE INDEX IF NOT EXISTS ix_mobile_push_tokens_user_id ON mobile_push_tokens(user_id)"
+    )
+
+
+def _migrate_telegram_mobile_auth_sessions(sync_conn) -> None:
+    from sqlalchemy import inspect
+
+    insp = inspect(sync_conn)
+    if insp.has_table("telegram_mobile_auth_sessions"):
+        return
+    sync_conn.exec_driver_sql(
+        """
+        CREATE TABLE telegram_mobile_auth_sessions (
+            id VARCHAR(64) PRIMARY KEY,
+            status VARCHAR(16) NOT NULL DEFAULT 'pending',
+            access_token VARCHAR(512),
+            referral_code VARCHAR(16),
+            telegram_id BIGINT,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            expires_at TIMESTAMP NOT NULL,
+            completed_at TIMESTAMP
+        )
+        """
+    )
+    sync_conn.exec_driver_sql(
+        "CREATE INDEX IF NOT EXISTS ix_telegram_mobile_auth_sessions_status "
+        "ON telegram_mobile_auth_sessions(status)"
     )
 
 

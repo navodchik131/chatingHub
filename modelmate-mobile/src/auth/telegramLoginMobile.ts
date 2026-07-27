@@ -1,34 +1,11 @@
 import * as Linking from 'expo-linking';
-import * as WebBrowser from 'expo-web-browser';
-import { fetchHealth, loginTelegram } from '@/src/api/actions';
-import type { TelegramLoginUser } from '@/src/api/types';
-import { getSiteBaseUrl } from '@/src/api/config';
+import { fetchHealth, pollTelegramMobileAuth, startTelegramMobileAuth } from '@/src/api/actions';
 
-WebBrowser.maybeCompleteAuthSession();
+const POLL_INTERVAL_MS = 1500;
+const POLL_TIMEOUT_MS = 3 * 60 * 1000;
 
-function parseTelegramAuthUrl(url: string): TelegramLoginUser {
-  const parsed = Linking.parse(url);
-  const q = parsed.queryParams ?? {};
-  const pick = (key: string) => {
-    const v = q[key];
-    return typeof v === 'string' ? v : Array.isArray(v) ? v[0] : '';
-  };
-  const id = Number(pick('id'));
-  const auth_date = Number(pick('auth_date'));
-  const hash = pick('hash').trim();
-  if (!Number.isFinite(id) || id <= 0 || !Number.isFinite(auth_date) || auth_date <= 0 || !hash) {
-    throw new Error('Telegram не вернул данные авторизации');
-  }
-  const user: TelegramLoginUser = { id, auth_date, hash };
-  const first = pick('first_name').trim();
-  const last = pick('last_name').trim();
-  const username = pick('username').trim();
-  const photo = pick('photo_url').trim();
-  if (first) user.first_name = first;
-  if (last) user.last_name = last;
-  if (username) user.username = username;
-  if (photo) user.photo_url = photo;
-  return user;
+function sleep(ms: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, ms));
 }
 
 export async function fetchTelegramLoginBotUsername(): Promise<string | null> {
@@ -43,22 +20,33 @@ export async function fetchTelegramLoginBotUsername(): Promise<string | null> {
   return null;
 }
 
-/** Открывает Telegram Login Widget в браузере и возвращает JWT через API. */
+/** Открывает Telegram-бота и ждёт JWT через polling (без web widget). */
 export async function signInWithTelegram(): Promise<string> {
   const botUsername = await fetchTelegramLoginBotUsername();
   if (!botUsername) {
     throw new Error('Telegram Login не настроен на сервере');
   }
 
-  const redirectUrl = Linking.createURL('telegram-auth');
-  const authPage = `${getSiteBaseUrl()}/mobile-telegram-auth.html?bot=${encodeURIComponent(botUsername)}&return=${encodeURIComponent(redirectUrl)}`;
-
-  const result = await WebBrowser.openAuthSessionAsync(authPage, redirectUrl);
-  if (result.type !== 'success' || !result.url) {
-    throw new Error('Вход через Telegram отменён');
+  const started = await startTelegramMobileAuth();
+  const telegramUrl = (started.telegram_url || `https://t.me/${botUsername}?start=mm_${started.session_id}`).trim();
+  const canOpen = await Linking.canOpenURL(telegramUrl);
+  if (!canOpen) {
+    throw new Error('Не удалось открыть Telegram. Установите приложение Telegram.');
   }
 
-  const payload = parseTelegramAuthUrl(result.url);
-  const data = await loginTelegram(payload);
-  return data.access_token;
+  await Linking.openURL(telegramUrl);
+
+  const deadline = Date.now() + POLL_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    await sleep(POLL_INTERVAL_MS);
+    const poll = await pollTelegramMobileAuth(started.session_id);
+    if (poll.status === 'done' && poll.access_token) {
+      return poll.access_token;
+    }
+    if (poll.status === 'expired') {
+      throw new Error('Время входа истекло — попробуйте снова');
+    }
+  }
+
+  throw new Error('Вход через Telegram не завершён. Нажмите Start в боте и вернитесь в приложение.');
 }

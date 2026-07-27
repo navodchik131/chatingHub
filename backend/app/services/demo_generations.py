@@ -26,6 +26,9 @@ DEMO_ELIGIBLE_USAGE_KINDS = frozenset(
     {
         "studio_prompt_refine",
         "studio_inpaint",
+        "studio_model_bootstrap_face_merge",
+        "studio_model_bootstrap_body_compose",
+        "studio_model_bootstrap_sheet",
     }
 )
 
@@ -259,3 +262,33 @@ def resolve_image_credit_cost(
     if legacy_base is not None and quoted <= 0:
         quoted = legacy_base
     return apply_studio_credit_cost(plan, quoted)
+
+
+async def prepare_bootstrap_image_billing(
+    session: AsyncSession,
+    actor: User,
+    billing_owner: User,
+    *,
+    plan: str,
+    usage_kind: str,
+    wave_model_id: str,
+) -> tuple[User, int, bool]:
+    """Биллинг bootstrap-генераций (face/body/sheet) с учётом демо-слотов."""
+    quoted = quote_studio_image_credits(
+        wave_model_id=wave_model_id,
+        wan_edit_tier="standard",
+        grok_pipeline="none",
+    )
+    return await prepare_studio_image_billing(
+        session,
+        actor,
+        billing_owner,
+        plan=plan,
+        base_cost=quoted,
+        usage_kind=usage_kind,
+        quoted_cost=quoted,
+        wave_model_id=wave_model_id,
+        grok_pipeline="none",
+        wave_profile="nsfw",
+        wan_edit_tier="standard",
+    )
