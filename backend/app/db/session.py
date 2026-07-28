@@ -1560,8 +1560,21 @@ def _migrate_chat_message_features(sync_conn) -> None:
         )
     if "platform_message_id" not in cols:
         sync_conn.execute(
-            text("ALTER TABLE messages ADD COLUMN platform_message_id VARCHAR(128)")
+            text("ALTER TABLE messages ADD COLUMN platform_message_id VARCHAR(512)")
         )
+    elif dialect == "postgresql":
+        col = next(
+            (c for c in insp.get_columns("messages") if c["name"] == "platform_message_id"),
+            None,
+        )
+        type_str = str((col or {}).get("type") or "").lower()
+        if col and "512" not in type_str and "text" not in type_str:
+            sync_conn.execute(
+                text(
+                    "ALTER TABLE messages "
+                    "ALTER COLUMN platform_message_id TYPE VARCHAR(512)"
+                )
+            )
     if "reactions_json" not in cols:
         sync_conn.execute(text("ALTER TABLE messages ADD COLUMN reactions_json TEXT"))
     if "sender_user_id" not in cols:

@@ -1428,7 +1428,7 @@ class Message(Base):
         nullable=True,
         index=True,
     )
-    platform_message_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    platform_message_id: Mapped[str | None] = mapped_column(String(512), nullable=True, index=True)
     reactions_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     meta: Mapped[str | None] = mapped_column(Text, nullable=True)
     """Кто отправил исходящее (участник workspace или владелец). NULL — бот/система."""
