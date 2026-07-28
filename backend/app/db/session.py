@@ -410,13 +410,39 @@ def _migrate_mobile_push_tokens(sync_conn) -> None:
 
 
 def _migrate_telegram_login_bot_contacts(sync_conn) -> None:
-    from sqlalchemy import inspect
+    from sqlalchemy import inspect, text
 
     from app.db.models import TelegramLoginBotContact
 
     insp = inspect(sync_conn)
-    if not insp.has_table("telegram_login_bot_contacts"):
-        TelegramLoginBotContact.__table__.create(sync_conn, checkfirst=True)
+    if insp.has_table("telegram_login_bot_contacts"):
+        return
+
+    dialect = sync_conn.dialect.name
+    if dialect == "postgresql":
+        sync_conn.exec_driver_sql(
+            """
+            CREATE TABLE telegram_login_bot_contacts (
+                id SERIAL PRIMARY KEY,
+                telegram_id BIGINT NOT NULL UNIQUE,
+                username VARCHAR(64),
+                first_name VARCHAR(128),
+                last_name VARCHAR(128),
+                language_code VARCHAR(16),
+                blocked BOOLEAN NOT NULL DEFAULT FALSE,
+                start_count INTEGER NOT NULL DEFAULT 1,
+                first_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+            """
+        )
+        sync_conn.exec_driver_sql(
+            "CREATE INDEX IF NOT EXISTS ix_telegram_login_bot_contacts_telegram_id "
+            "ON telegram_login_bot_contacts (telegram_id)"
+        )
+        return
+
+    TelegramLoginBotContact.__table__.create(sync_conn, checkfirst=True)
 
 
 def _migrate_telegram_mobile_auth_sessions(sync_conn) -> None:

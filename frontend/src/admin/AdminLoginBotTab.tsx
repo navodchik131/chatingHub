@@ -39,14 +39,31 @@ export function AdminLoginBotTab({ onError }: { onError: (msg: string | null) =>
   const [textareaEl, setTextareaEl] = useState<HTMLTextAreaElement | null>(null)
 
   const loadAll = useCallback(async () => {
+    onError(null)
     const [cfgR, statsR] = await Promise.all([
       apiFetch('/api/admin/login-bot/config'),
       apiFetch('/api/admin/login-bot/stats'),
     ])
-    if (cfgR.ok) setConfig((await cfgR.json()) as AdminLoginBotConfig)
-    else onError(t('loginBot.configError'))
-    if (statsR.ok) setStats((await statsR.json()) as AdminLoginBotStats)
-  }, [onError, t])
+
+    const readDetail = async (r: Response) => {
+      const d = (await r.json().catch(() => ({}))) as { detail?: string | { msg?: string }[] }
+      if (typeof d.detail === 'string') return d.detail
+      if (Array.isArray(d.detail) && d.detail[0]?.msg) return d.detail[0].msg
+      return `${r.status} ${r.statusText}`
+    }
+
+    if (cfgR.ok) {
+      setConfig((await cfgR.json()) as AdminLoginBotConfig)
+    } else {
+      onError(await readDetail(cfgR))
+    }
+
+    if (statsR.ok) {
+      setStats((await statsR.json()) as AdminLoginBotStats)
+    } else if (cfgR.ok) {
+      onError(await readDetail(statsR))
+    }
+  }, [onError])
 
   useEffect(() => {
     void loadAll()

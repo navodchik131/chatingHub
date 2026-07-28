@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -27,7 +29,30 @@ from app.services.telegram_login_bot_templates import (
     render_login_bot_template,
 )
 
+log = logging.getLogger(__name__)
+
 router = APIRouter(tags=["admin-login-bot"])
+
+
+def _empty_stats() -> dict[str, int]:
+    return {
+        "total_contacts": 0,
+        "reachable_contacts": 0,
+        "blocked_contacts": 0,
+        "active_contacts_7d": 0,
+        "active_contacts_30d": 0,
+    }
+
+
+async def _load_stats(session: AsyncSession) -> dict[str, int]:
+    try:
+        stats = await build_login_bot_admin_stats(session)
+        await session.commit()
+        return stats
+    except Exception:
+        log.exception("login bot admin stats failed")
+        await session.rollback()
+        return _empty_stats()
 
 
 def _require_login_bot() -> None:
@@ -43,8 +68,7 @@ async def admin_login_bot_config(
     session: AsyncSession = Depends(get_session),
     _: User = Depends(get_platform_admin),
 ) -> AdminLoginBotConfigOut:
-    stats = await build_login_bot_admin_stats(session)
-    await session.commit()
+    stats = await _load_stats(session)
     username = (settings.telegram_login_bot_username or "").strip().lstrip("@")
     return AdminLoginBotConfigOut(
         bot_configured=settings.telegram_login_configured,
@@ -62,8 +86,7 @@ async def admin_login_bot_stats(
     session: AsyncSession = Depends(get_session),
     _: User = Depends(get_platform_admin),
 ) -> AdminLoginBotStatsOut:
-    stats = await build_login_bot_admin_stats(session)
-    await session.commit()
+    stats = await _load_stats(session)
     return AdminLoginBotStatsOut(**stats)
 
 

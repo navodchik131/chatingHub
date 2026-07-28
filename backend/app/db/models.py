@@ -680,7 +680,7 @@ class TelegramLoginBotContact(Base):
     first_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
     last_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
     language_code: Mapped[str | None] = mapped_column(String(16), nullable=True)
-    blocked: Mapped[bool] = mapped_column(default=False, server_default="0")
+    blocked: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     start_count: Mapped[int] = mapped_column(default=1, server_default="1")
     first_seen_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
