@@ -1,5 +1,14 @@
-/** Telegram Login Widget для frontend (без React). */
+/** Telegram login для PWA (mm-os-bridge): бот + polling. */
 ;(function (global) {
+  const POLL_INTERVAL_MS = 1500
+  const POLL_TIMEOUT_MS = 3 * 60 * 1000
+
+  function sleep(ms) {
+    return new Promise(function (resolve) {
+      setTimeout(resolve, ms)
+    })
+  }
+
   function mountTelegramLoginWidget(container, botUsername, onAuth) {
     const username = String(botUsername || '')
       .trim()
@@ -39,8 +48,49 @@
     })
   }
 
+  async function startTelegramMobileAuth(referralCode) {
+    const body = {}
+    const ref = String(referralCode || '')
+      .trim()
+      .toUpperCase()
+    if (ref) body.referral_code = ref
+    const res = await global.MMOS_API.apiFetch('/api/auth/telegram/mobile/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    const data = await global.MMOS_API.readJson(res)
+    if (!res.ok) throw new Error(global.MMOS_API.formatDetail(data) || 'Telegram start failed')
+    return data
+  }
+
+  async function pollTelegramMobileAuth(sessionId) {
+    const q = encodeURIComponent(String(sessionId || '').trim())
+    const res = await global.MMOS_API.apiFetch('/api/auth/telegram/mobile/poll?session_id=' + q)
+    const data = await global.MMOS_API.readJson(res)
+    if (!res.ok) throw new Error(global.MMOS_API.formatDetail(data) || 'Telegram poll failed')
+    return data
+  }
+
+  async function signInWithTelegramBot(referralCode) {
+    const started = await startTelegramMobileAuth(referralCode)
+    const url = String(started.telegram_url || '').trim()
+    if (!url) throw new Error('Telegram bot URL missing')
+    window.open(url, '_blank', 'noopener,noreferrer')
+
+    const deadline = Date.now() + POLL_TIMEOUT_MS
+    while (Date.now() < deadline) {
+      await sleep(POLL_INTERVAL_MS)
+      const poll = await pollTelegramMobileAuth(started.session_id)
+      if (poll.status === 'done' && poll.access_token) return poll.access_token
+      if (poll.status === 'expired') throw new Error('Сессия истекла — попробуйте снова')
+    }
+    throw new Error('Откройте Telegram, нажмите Start и вернитесь на эту страницу')
+  }
+
   global.MMOS_TELEGRAM_LOGIN = {
     mountTelegramLoginWidget,
     postTelegramAuth,
+    signInWithTelegramBot,
   }
 })(window)

@@ -1566,30 +1566,37 @@
     host.replaceChildren()
     if (!showTg) return
 
-    store.telegramWidgetCleanup = global.MMOS_TELEGRAM_LOGIN.mountTelegramLoginWidget(
-      host,
-      store.telegramBotUsername,
-      (user) => {
-        void telegramAuth(user)
-      },
-    )
+    const btn = document.createElement('button')
+    btn.type = 'button'
+    btn.className = 'mm-os-telegram-bot-btn'
+    btn.textContent = 'Войти через Telegram'
+    btn.addEventListener('click', () => {
+      void telegramBotAuth()
+    })
+    host.appendChild(btn)
+
+    store.telegramWidgetCleanup = function () {
+      host.replaceChildren()
+    }
   }
 
-  async function telegramAuth(user) {
+  async function telegramBotAuth() {
     store.busy = true
     store.error = null
     updateAuthUi()
     const busyEl = document.getElementById('mm-os-auth-telegram-busy')
-    if (busyEl) busyEl.style.display = 'block'
+    const btn = document.querySelector('.mm-os-telegram-bot-btn')
+    if (busyEl) {
+      busyEl.style.display = 'block'
+      busyEl.textContent = 'Откройте Telegram, нажмите Start и вернитесь сюда…'
+    }
+    if (btn) {
+      btn.disabled = true
+      btn.textContent = 'Ждём подтверждение…'
+    }
     try {
-      const res = await global.MMOS_TELEGRAM_LOGIN.postTelegramAuth(
-        '/api/auth/telegram',
-        user,
-        store.referralCode,
-      )
-      const data = await API.readJson(res)
-      if (!res.ok) throw new Error(API.formatDetail(data) || 'Telegram login failed')
-      API.setToken(data.access_token)
+      const token = await global.MMOS_TELEGRAM_LOGIN.signInWithTelegramBot(store.referralCode)
+      API.setToken(token)
       await afterAuthSuccess()
     } catch (e) {
       store.error = e.message || String(e)
@@ -1597,6 +1604,10 @@
     } finally {
       store.busy = false
       if (busyEl) busyEl.style.display = 'none'
+      if (btn) {
+        btn.disabled = false
+        btn.textContent = 'Войти через Telegram'
+      }
       updateAuthUi()
     }
   }

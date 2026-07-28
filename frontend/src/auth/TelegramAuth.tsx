@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { apiFetch, setToken } from '../api'
 import { formatHttpApiError } from '../apiErrors'
+import { signInWithTelegramBot } from './telegramBotLogin'
 import {
   mountTelegramLoginWidget,
   postTelegramAuth,
@@ -27,25 +28,19 @@ export function TelegramLoginButton({ botUsername, mode, referralCode, onSuccess
   onErrorRef.current = onError
 
   useEffect(() => {
+    if (mode !== 'link') return
     const el = hostRef.current
     if (!el || !botUsername.trim()) return
 
-    // Mount once per bot/mode/referral — do not depend on parent callbacks
-    // or every keystroke remounts the iframe and causes flicker.
     const cleanup = mountTelegramLoginWidget(el, botUsername, (user: TelegramLoginUser) => {
       void (async () => {
         setBusy(true)
         try {
-          const path = mode === 'link' ? '/api/auth/telegram/link' : '/api/auth/telegram'
-          const r = await postTelegramAuth(path, user, mode === 'login' ? referralCode : null)
+          const r = await postTelegramAuth('/api/auth/telegram/link', user, null)
           if (!r.ok) {
             const j = await r.json().catch(() => ({}))
             onErrorRef.current?.(formatHttpApiError(r, j))
             return
-          }
-          if (mode === 'login') {
-            const data = (await r.json()) as { access_token: string }
-            setToken(data.access_token)
           }
           await onSuccessRef.current()
         } finally {
@@ -56,10 +51,39 @@ export function TelegramLoginButton({ botUsername, mode, referralCode, onSuccess
     return cleanup
   }, [botUsername, mode, referralCode])
 
+  const runBotLogin = async () => {
+    setBusy(true)
+    try {
+      const token = await signInWithTelegramBot(referralCode)
+      setToken(token)
+      await onSuccessRef.current()
+    } catch (e) {
+      onErrorRef.current?.(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (mode === 'link') {
+    return (
+      <div className="telegram-login-wrap">
+        <div ref={hostRef} className="telegram-login-host" aria-busy={busy} />
+        {busy ? <p className="auth-hint">{t('telegramChecking')}</p> : null}
+      </div>
+    )
+  }
+
   return (
     <div className="telegram-login-wrap">
-      <div ref={hostRef} className="telegram-login-host" aria-busy={busy} />
-      {busy ? <p className="auth-hint">{t('telegramChecking')}</p> : null}
+      <button
+        type="button"
+        className="telegram-bot-btn"
+        disabled={busy}
+        onClick={() => void runBotLogin()}
+      >
+        {busy ? t('telegramWaiting') : t('telegramBotLogin')}
+      </button>
+      {busy ? <p className="auth-hint auth-hint--center">{t('telegramBotHint')}</p> : null}
     </div>
   )
 }
