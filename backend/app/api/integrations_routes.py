@@ -1197,8 +1197,8 @@ async def instagram_oauth_callback(
         username = str(profile.get("username") or "").strip() or None
         log.info(
             "instagram oauth profile ids primary=%s alt=%s username=%s",
-            ig_user_id[:16],
-            (ig_alt_user_id or "")[:16] or "—",
+            ig_user_id,
+            ig_alt_user_id or "—",
             username or "—",
         )
         await subscribe_instagram_webhooks(access, fields="messages")

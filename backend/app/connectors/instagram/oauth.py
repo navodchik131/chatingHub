@@ -173,19 +173,23 @@ def resolve_instagram_profile_ids(
 ) -> tuple[str, str | None]:
     """Return primary Graph API id and optional alternate id from /me.
 
-    Meta returns two identifiers (`id` and `user_id`); webhooks may use either.
+    Meta returns two identifiers: ``user_id`` (Instagram professional account ID,
+    used in webhook ``entry.id`` / ``recipient.id``) and ``id`` (app-scoped id).
+    Prefer ``user_id`` as primary so send API and webhook routing stay aligned.
     """
     payload = token_payload or {}
-    candidates: list[str] = []
-    for raw in (profile.get("id"), profile.get("user_id"), payload.get("user_id")):
-        value = str(raw or "").strip()
-        if value and value != "0" and value not in candidates:
-            candidates.append(value)
-    if not candidates:
-        return "", None
-    primary = candidates[0]
-    alt = candidates[1] if len(candidates) > 1 else None
-    return primary, alt
+
+    def _norm(raw: Any) -> str:
+        return str(raw or "").strip()
+
+    user_id = _norm(profile.get("user_id")) or _norm(payload.get("user_id"))
+    app_id = _norm(profile.get("id"))
+    if user_id and user_id != "0":
+        alt = app_id if app_id and app_id != "0" and app_id != user_id else None
+        return user_id, alt
+    if app_id and app_id != "0":
+        return app_id, None
+    return "", None
 
 
 def resolve_instagram_account_id(

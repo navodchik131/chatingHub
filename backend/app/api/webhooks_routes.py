@@ -207,7 +207,7 @@ async def instagram_webhook(
         "X-Hub-Signature-256"
     )
     if not verify_meta_webhook_signature(raw, sig, secret):
-        log.warning("instagram webhook: invalid signature")
+        log.warning("instagram webhook: invalid signature bytes=%s", len(raw))
         raise HTTPException(status_code=401, detail="invalid signature")
 
     try:
@@ -216,6 +216,13 @@ async def instagram_webhook(
         raise HTTPException(status_code=400, detail="invalid json body") from e
     if not isinstance(body, dict):
         raise HTTPException(status_code=400, detail="json must be an object")
+
+    log.info(
+        "instagram webhook hit bytes=%s object=%s entries=%s",
+        len(raw),
+        body.get("object"),
+        len(body.get("entry") or []),
+    )
 
     try:
         return await ingest_instagram_webhook_body(session, body)
