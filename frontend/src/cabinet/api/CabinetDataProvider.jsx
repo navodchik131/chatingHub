@@ -139,6 +139,7 @@ export function CabinetDataProvider({ children }) {
   const archiveVideosRef = useRef(archiveVideos)
   const donationOverviewRef = useRef(donationOverview)
   const donationEventsRef = useRef(donationEvents)
+  const conversationsRef = useRef(conversations)
 
   useEffect(() => { archiveImagesRef.current = archiveImages }, [archiveImages])
   useEffect(() => { archiveVideosRef.current = archiveVideos }, [archiveVideos])
@@ -146,6 +147,7 @@ export function CabinetDataProvider({ children }) {
   useEffect(() => { donationEventsRef.current = donationEvents }, [donationEvents])
   useEffect(() => { activeConvIdRef.current = activeConvId }, [activeConvId])
   useEffect(() => { notesByConvIdRef.current = notesByConvId }, [notesByConvId])
+  useEffect(() => { conversationsRef.current = conversations }, [conversations])
 
   const notesConvKey = useCallback((convId) => Number(convId), [])
 
@@ -1401,7 +1403,15 @@ export function CabinetDataProvider({ children }) {
           ) {
             const payload = msg.message
             if (payload?.id && convId) {
-              if (activeId && convId === activeId) {
+              const knownConv = conversationsRef.current.some(
+                (c) => Number(c.id) === convId,
+              )
+              if (!knownConv) {
+                void loadConversations()
+                if (activeId && convId === activeId) {
+                  void loadMessages(activeId)
+                }
+              } else if (activeId && convId === activeId) {
                 setMessages((prev) => mergeInboundMessage(prev, payload))
                 patchConversationPreview(convId, payload)
               } else {
