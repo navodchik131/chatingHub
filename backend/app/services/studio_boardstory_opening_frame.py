@@ -113,9 +113,13 @@ async def generate_boardstory_opening_still_url(
         user_pose_last=True,
         studio_mode="model_scene",
     )
-    from app.services.studio_model_bootstrap import append_workflow_first_frame_face_grid
+    from app.services.studio_model_bootstrap import (
+        append_motion_first_frame_overlay_removal,
+        append_workflow_first_frame_face_grid,
+    )
 
     wavespeed_prompt = append_workflow_first_frame_face_grid(wavespeed_prompt)
+    wavespeed_prompt = append_motion_first_frame_overlay_removal(wavespeed_prompt)
 
     try:
         ws_res = await nano_banana_pro_edit_image_url(

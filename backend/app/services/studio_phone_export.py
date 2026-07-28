@@ -68,7 +68,7 @@ def _add_grain_sharpen(rgb: Image.Image, sigma: float) -> Image.Image:
     )
     arr = np.clip(arr + noise.astype(np.float32), 0.0, 255.0).astype(np.uint8)
     im = Image.fromarray(arr, "RGB")
-    return im.filter(ImageFilter.UnsharpMask(radius=0.8, percent=100, threshold=3))
+    return im.filter(ImageFilter.UnsharpMask(radius=0.8, percent=85, threshold=6))
 
 
 def _float_to_exif_rational(val: float) -> tuple[int, int]:

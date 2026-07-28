@@ -57,7 +57,8 @@ PHONE_CANDID_PHOTO_CODA = (
     "visible skin pores and uneven tone, natural oil sheen where light hits, "
     "fine vellus hair catching sidelight, loose flyaways; mixed white balance, "
     "clipped highlight where sun hits, luminance noise in shadows, "
-    "slight chromatic aberration, minor handheld tilt, JPEG compression; "
+    "clean natural edge rendering without chromatic fringing or color-split contours, "
+    "minor handheld tilt, JPEG compression; "
     "candid unretouched amateur snapshot."
 )
 

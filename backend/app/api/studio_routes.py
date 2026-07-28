@@ -4366,9 +4366,13 @@ async def _studio_job_execute_refine_prompt(
                     location_geometry_block=location_geometry_block,
                 )
                 if workflow_first_frame:
-                    from app.services.studio_model_bootstrap import append_workflow_first_frame_face_grid
+                    from app.services.studio_model_bootstrap import (
+                        append_motion_first_frame_overlay_removal,
+                        append_workflow_first_frame_face_grid,
+                    )
 
                     wavespeed_prompt = append_workflow_first_frame_face_grid(wavespeed_prompt)
+                    wavespeed_prompt = append_motion_first_frame_overlay_removal(wavespeed_prompt)
                 size_for_ws: str | None
                 if settings.wavespeed_seedream_omit_size:
                     size_for_ws = None
@@ -5106,9 +5110,13 @@ async def _studio_job_execute_motion_first_frame(
                 studio_mode=mode_n,
             )
             if workflow_first_frame:
-                from app.services.studio_model_bootstrap import append_workflow_first_frame_face_grid
+                from app.services.studio_model_bootstrap import (
+                    append_motion_first_frame_overlay_removal,
+                    append_workflow_first_frame_face_grid,
+                )
 
                 wavespeed_prompt = append_workflow_first_frame_face_grid(wavespeed_prompt)
+                wavespeed_prompt = append_motion_first_frame_overlay_removal(wavespeed_prompt)
             if settings.wavespeed_seedream_omit_size:
                 size_for_ws: str | None = None
             else:

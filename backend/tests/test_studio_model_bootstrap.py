@@ -40,6 +40,14 @@ def test_append_workflow_first_frame_film_grain():
     assert again == out
 
 
+def test_append_motion_first_frame_overlay_removal():
+    from app.services.studio_model_bootstrap import append_motion_first_frame_overlay_removal
+
+    out = append_motion_first_frame_overlay_removal("Pose lock.")
+    assert "watermark" in out.lower()
+    assert "overlays_and_text" in out.lower()
+
+
 def test_resolve_workflow_model_sheet_prompt_includes_grid():
     out = resolve_workflow_model_sheet_prompt("")
     assert "grid" in out.lower()

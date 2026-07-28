@@ -41,7 +41,11 @@ SEEDANCE_MOTION_VIDEO_SWAP_PROMPT = (
     "The subject's skin is clean and matches @Image1 everywhere. Body areas not visible in the first frame — "
     "revealed by camera movement or new angles — must stay consistent with @Image1's clean skin. "
     "Do not add tattoos, marks, moles or any features that were not present in @Image1. "
-    "No detail from @Video1's performer appears on any newly revealed area."
+    "No detail from @Video1's performer appears on any newly revealed area.\n\n"
+    "NO TEXT OR OVERLAYS:\n"
+    "Do not reproduce any subtitles, captions, watermarks, logos, stickers, social handles, "
+    "URLs, timecode, or UI overlays from @Video1. @Video1 supplies motion and camera only — "
+    "never its on-screen text or graphics."
 )
 
 _SEEDANCE_MOTION_CAMERA_LINE = (

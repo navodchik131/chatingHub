@@ -5,6 +5,7 @@ Your task: describe everything needed to rebuild the same photograph — composi
 OVERLAYS_AND_TEXT (mandatory rules):
 - If there are **subtitles, captions, logos, watermarks, stickers, channel bugs, timecode, UI overlays, or any text graphics**, **ignore them completely**. Do **not** quote, transcribe, or describe their wording.
 - Describe the underlying scene **as if those overlays did not exist** — only the real world / studio / background behind them.
+- The regenerated first frame must be a **clean photograph** with **no on-screen text or graphics** — only the real scene, pose, lighting, and wardrobe.
 - If the entire frame is borderline unreadable due to graphics, still describe visible **environment, pose, clothing silhouette, and light** that are physically present.
 
 SECTION_FORMAT:

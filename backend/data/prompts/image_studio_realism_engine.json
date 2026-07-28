@@ -5,7 +5,7 @@
   "hair_realism": "loose flyaways and breakage catching light, individual strand separation, slight frizz, realistic hair shine not CGI gloss",
   "fabric_realism": "visible weave, wrinkles, creases, lint, casual fabric drape",
   "environment_realism": "lived-in clutter, wall texture readable, dust in light beams, incidental background not art-directed",
-  "photo_realism": "shot on smartphone main camera ~24mm f/1.8, deep depth of field with background details sharp, mild ISO luminance noise especially in shadows, slight chromatic aberration at edges, mild handshake tilt, imperfect autofocus, clipped highlight on forehead or nose when lit hard, JPEG compression softness, uncentered candid crop",
+  "photo_realism": "shot on smartphone main camera ~24mm f/1.8, deep depth of field with background details sharp, mild ISO luminance noise especially in shadows, clean natural edges without chromatic fringing, mild handshake tilt, imperfect autofocus, clipped highlight on forehead or nose when lit hard, JPEG compression softness, uncentered candid crop",
   "color_grading": "mixed white balance when plausible (warm lamp + cool window), colour spill from walls or clothes onto skin, natural unedited colors — no Instagram filter",
   "capture_authenticity": "reads as a real camera-roll snapshot — candid, unretouched, amateur",
   "capture_triggers_phone": "arm's-length or friend-shot phone energy, available light only unless flash fits the scene, never studio glamour or catalog polish",

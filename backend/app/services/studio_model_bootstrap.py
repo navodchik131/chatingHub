@@ -128,6 +128,14 @@ WORKFLOW_SINGLE_FRAME_FILM_GRAIN_INSTRUCTION = (
     "Do NOT add grid, mesh, wireframe, or face-tracking overlays."
 )
 
+MOTION_FIRST_FRAME_OVERLAY_REMOVAL_INSTRUCTION = (
+    "OVERLAYS_AND_TEXT (mandatory): The pose reference may contain subtitles, captions, "
+    "watermarks, logos, stickers, social handles, URLs, timecode, or UI overlays. "
+    "Do NOT reproduce any of them in the output. Rebuild the scene as a clean photograph "
+    "with only the real environment, subject, pose, lighting, and wardrobe — no on-screen text "
+    "or graphics."
+)
+
 
 def append_workflow_first_frame_film_grain(prompt: str) -> str:
     """Добавляет инструкцию зернистости для первого кадра workflow."""
@@ -143,6 +151,17 @@ def append_workflow_first_frame_film_grain(prompt: str) -> str:
 def append_workflow_first_frame_face_grid(prompt: str) -> str:
     """Deprecated alias — первый кадр использует film grain, не сетку."""
     return append_workflow_first_frame_film_grain(prompt)
+
+
+def append_motion_first_frame_overlay_removal(prompt: str) -> str:
+    """Убрать субтитры/водяные знаки с референс-кадра при генерации первого кадра."""
+    body = (prompt or "").strip()
+    marker = "overlays_and_text"
+    if marker in body.lower():
+        return body
+    if body:
+        return f"{body}\n\n{MOTION_FIRST_FRAME_OVERLAY_REMOVAL_INSTRUCTION}"
+    return MOTION_FIRST_FRAME_OVERLAY_REMOVAL_INSTRUCTION
 
 
 MODEL_SHEET_ASPECT_KEY = "16:9"
