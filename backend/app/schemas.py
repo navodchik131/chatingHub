@@ -1480,6 +1480,54 @@ class AdminEmailSendTestIn(BaseModel):
     body_text: str | None = None
 
 
+class AdminLoginBotTemplateOut(BaseModel):
+    id: str
+    name: str
+    text: str
+
+
+class AdminLoginBotConfigOut(BaseModel):
+    bot_configured: bool
+    bot_username: str | None = None
+    bot_url: str | None = None
+    channel_url: str | None = None
+    channel_label: str | None = None
+    recipient_count: int = 0
+    templates: list[AdminLoginBotTemplateOut] = []
+
+
+class AdminLoginBotStatsOut(BaseModel):
+    total_contacts: int = 0
+    reachable_contacts: int = 0
+    blocked_contacts: int = 0
+    active_contacts_7d: int = 0
+    active_contacts_30d: int = 0
+
+
+class AdminLoginBotBroadcastIn(BaseModel):
+    text: str = Field(default="", max_length=4096)
+    template_id: str | None = Field(default=None, max_length=64)
+    use_template_body: bool = Field(default=True)
+    parse_mode: str | None = Field(default="HTML")
+    disable_web_page_preview: bool = Field(default=False)
+    confirm: bool = Field(default=False, description="Подтверждение массовой рассылки")
+
+
+class AdminLoginBotBroadcastOut(BaseModel):
+    total: int = 0
+    sent: int = 0
+    failed: int = 0
+    blocked: int = 0
+    errors: list[dict[str, str | int]] = []
+
+
+class AdminLoginBotSendTestIn(BaseModel):
+    text: str = Field(..., max_length=4096)
+    telegram_id: int | None = None
+    parse_mode: str | None = Field(default="HTML")
+    disable_web_page_preview: bool = Field(default=False)
+
+
 class AdminExifBotStatsOut(BaseModel):
     total_users: int
     total_profiles: int

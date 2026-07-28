@@ -669,6 +669,27 @@ class InstagramOAuthState(Base):
     )
 
 
+class TelegramLoginBotContact(Base):
+    """Контакт login-бота: пользователь нажал /start и может получать рассылки."""
+
+    __tablename__ = "telegram_login_bot_contacts"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    telegram_id: Mapped[int] = mapped_column(BigInteger, unique=True, index=True)
+    username: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    first_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    last_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    language_code: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    blocked: Mapped[bool] = mapped_column(default=False, server_default="0")
+    start_count: Mapped[int] = mapped_column(default=1, server_default="1")
+    first_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    last_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+
 class TelegramMobileAuthSession(Base):
     __tablename__ = "telegram_mobile_auth_sessions"
 

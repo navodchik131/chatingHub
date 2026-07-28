@@ -488,6 +488,16 @@ class Settings(BaseSettings):
             and (self.telegram_login_bot_username or "").strip()
         )
 
+    telegram_login_news_channel_url: str = Field(
+        default="https://t.me/ModelMate_app",
+        validation_alias=AliasChoices("TELEGRAM_LOGIN_NEWS_CHANNEL_URL"),
+        description="Ссылка на TG-канал для быстрой вставки в рассылку login-бота.",
+    )
+    telegram_login_news_channel_label: str = Field(
+        default="ModelMate",
+        validation_alias=AliasChoices("TELEGRAM_LOGIN_NEWS_CHANNEL_LABEL"),
+    )
+
     # --- EXIF Telegram bot (отдельный бот, не SaaS-чат) ---
     exif_bot_token: str = Field(
         default="",

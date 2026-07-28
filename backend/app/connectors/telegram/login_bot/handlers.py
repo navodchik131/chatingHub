@@ -10,6 +10,7 @@ from aiogram.types import Message
 from fastapi import HTTPException
 
 from app.db.session import SessionLocal
+from app.services.telegram_login_bot_contacts import upsert_login_bot_contact
 from app.services.telegram_mobile_auth import (
     complete_mobile_auth_session,
     parse_mobile_auth_start_param,
@@ -24,6 +25,15 @@ router = Router()
 async def cmd_start(message: Message, command: CommandObject) -> None:
     if not message.from_user:
         return
+
+    tg_user = message.from_user
+    try:
+        async with SessionLocal() as session:
+            await upsert_login_bot_contact(session, tg_user)
+            await session.commit()
+    except Exception:
+        log.exception("login bot contact upsert failed tg=%s", tg_user.id)
+
     session_id = parse_mobile_auth_start_param(command.args)
     if not session_id:
         await message.answer(
@@ -32,7 +42,6 @@ async def cmd_start(message: Message, command: CommandObject) -> None:
         )
         return
 
-    tg_user = message.from_user
     try:
         async with SessionLocal() as session:
             await complete_mobile_auth_session(

@@ -7,6 +7,7 @@ export type AdminTabId =
   | 'overview'
   | 'users'
   | 'email'
+  | 'login_bot'
   | 'exif_bot'
   | 'ig_bot'
   | 'creator_donations'
@@ -52,6 +53,15 @@ const NAV_ICONS: Record<AdminTabId, ReactNode> = {
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
         <rect x="3" y="5" width="18" height="14" rx="3" />
         <path d="M4 7l8 6 8-6" />
+      </svg>
+    </NavIcon>
+  ),
+  login_bot: (
+    <NavIcon>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+        <path d="M21 5L12 11 3 5" />
+        <rect x="3" y="5" width="18" height="14" rx="3" />
+        <path d="M9 14l2 2 4-4" />
       </svg>
     </NavIcon>
   ),
@@ -123,6 +133,7 @@ export function AdminShell({
     { id: 'overview', label: t('tabs.overview'), icon: NAV_ICONS.overview },
     { id: 'users', label: t('tabs.users'), icon: NAV_ICONS.users },
     { id: 'email', label: t('tabs.email'), icon: NAV_ICONS.email },
+    { id: 'login_bot', label: t('tabs.loginBot'), icon: NAV_ICONS.login_bot },
     { id: 'exif_bot', label: t('tabs.exifBot'), icon: NAV_ICONS.exif_bot },
     { id: 'ig_bot', label: t('tabs.igBot'), icon: NAV_ICONS.ig_bot },
     { id: 'creator_donations', label: t('tabs.creatorDonations'), icon: NAV_ICONS.creator_donations },

@@ -265,3 +265,35 @@ export interface AdminIgBotUserRow {
 }
 
 export interface AdminIgBotUserDetail extends AdminIgBotUserRow {}
+
+export interface AdminLoginBotTemplate {
+  id: string
+  name: string
+  text: string
+}
+
+export interface AdminLoginBotConfig {
+  bot_configured: boolean
+  bot_username: string | null
+  bot_url: string | null
+  channel_url: string | null
+  channel_label: string | null
+  recipient_count: number
+  templates: AdminLoginBotTemplate[]
+}
+
+export interface AdminLoginBotStats {
+  total_contacts: number
+  reachable_contacts: number
+  blocked_contacts: number
+  active_contacts_7d: number
+  active_contacts_30d: number
+}
+
+export interface AdminLoginBotBroadcastResult {
+  total: number
+  sent: number
+  failed: number
+  blocked: number
+  errors: Array<{ telegram_id: number | string; error: string }>
+}

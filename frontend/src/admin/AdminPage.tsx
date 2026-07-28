@@ -8,6 +8,7 @@ import { AdminTicketsTab } from './AdminTicketsTab'
 import { AdminEmailTab } from './AdminEmailTab'
 import { AdminExifBotTab } from './AdminExifBotTab'
 import { AdminIgBotTab } from './AdminIgBotTab'
+import { AdminLoginBotTab } from './AdminLoginBotTab'
 import { AdminOverview } from './AdminOverview'
 import { AdminSegmentDrill } from './AdminSegmentDrill'
 import { AdminShell, type AdminTabId } from './AdminShell'
@@ -30,6 +31,7 @@ const TAB_TITLES: Record<AdminTabId, string> = {
   overview: 'overviewTitle',
   users: 'usersTitle',
   email: 'emailTitle',
+  login_bot: 'loginBotTitle',
   exif_bot: 'exifBotTitle',
   ig_bot: 'igBotTitle',
   creator_donations: 'creatorDonationsTitle',
@@ -285,6 +287,7 @@ export function AdminPage() {
         ) : null}
 
         {tab === 'email' ? <AdminEmailTab meEmail={meEmail} onError={setError} /> : null}
+        {tab === 'login_bot' ? <AdminLoginBotTab onError={setError} /> : null}
         {tab === 'exif_bot' ? <AdminExifBotTab onError={setError} /> : null}
         {tab === 'ig_bot' ? <AdminIgBotTab onError={setError} /> : null}
         {tab === 'creator_donations' ? <AdminCreatorDonationsTab /> : null}
