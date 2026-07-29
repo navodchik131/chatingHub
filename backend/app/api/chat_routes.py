@@ -280,6 +280,9 @@ async def api_list_conversations(
     oid = workspace_owner_id(user)
     convs = await list_conversations(session, oid)
     convs = await filter_conversations_for_member(session, user, convs)
+    from app.services.instagram_peer_profile import refresh_instagram_conversation_display_names
+
+    await refresh_instagram_conversation_display_names(session, oid, convs)
     outbound_ids = await conversation_ids_with_outbound(session, [c.id for c in convs])
     now = datetime.now(timezone.utc)
     rows: list[tuple[ConversationWithPreview, datetime]] = []

@@ -22,30 +22,14 @@ MAX_SEEDANCE_VIDEO_MODEL_IDENTITY_WITH_BODY = 3
 SEEDANCE_T2V_PROMPT_MAX_CHARS = 3000
 
 SEEDANCE_MOTION_VIDEO_SWAP_PROMPT = (
-    "SUBJECT — from @Image1 (single source of truth):\n"
-    "Animate the exact person shown in @Image1. Preserve their face, hairstyle, skin tone and texture, "
-    "body shape and proportions, and every visible detail exactly as in the reference frame. "
-    "@Image1 defines all appearance — the video defines none of it.\n\n"
-    "MOTION — from @Video1 (reference only):\n"
-    "Reproduce the camera movement, framing, angles, shot timing, choreography, body dynamics, "
-    "hand gestures, movement speed and rhythm from @Video1. Apply this motion to the @Image1 subject "
-    "as if @Image1 were the opening frame brought to life.\n\n"
-    "IDENTITY LOCK:\n"
-    "Keep facial identity and body proportions consistent and stable across the entire sequence. "
-    "When motion and appearance conflict, appearance always follows @Image1, motion always follows @Video1.\n\n"
-    "OBJECT PERSISTENCE:\n"
-    "The object held by the subject is defined by @Image1. If it leaves the frame and returns, or is occluded "
-    "and reappears, it must return as the exact same @Image1 object — never the object from @Video1. "
-    "The object's identity stays locked for the entire sequence regardless of visibility.\n\n"
-    "SKIN & BODY PERSISTENCE:\n"
-    "The subject's skin is clean and matches @Image1 everywhere. Body areas not visible in the first frame — "
-    "revealed by camera movement or new angles — must stay consistent with @Image1's clean skin. "
-    "Do not add tattoos, marks, moles or any features that were not present in @Image1. "
-    "No detail from @Video1's performer appears on any newly revealed area.\n\n"
-    "NO TEXT OR OVERLAYS:\n"
-    "Do not reproduce any subtitles, captions, watermarks, logos, stickers, social handles, "
-    "URLs, timecode, or UI overlays from @Video1. @Video1 supplies motion and camera only — "
-    "never its on-screen text or graphics."
+    "@Image1 is frame 0 of this video. The video starts exactly on @Image1 and continues from it.\n\n"
+    "Replace the person in @Video1 with the person from @Image1. The performer from @Video1 "
+    "does not appear in the output.\n\n"
+    "@Image1 defines all appearance: face, hair, skin, body proportions, outfit, and any held object. "
+    "Locked for the entire clip, including body areas revealed later by camera movement.\n\n"
+    "@Video1 defines motion only: camera path, framing, cuts, timing, choreography, gestures, speed. "
+    "Reproduce exactly.\n\n"
+    "No captions, watermarks or logos."
 )
 
 _SEEDANCE_MOTION_CAMERA_LINE = (

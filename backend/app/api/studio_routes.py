@@ -470,6 +470,7 @@ async def _accept_studio_job(
     job_type: str,
     params: dict[str, Any],
     placeholder: dict[str, Any] | None = None,
+    job_files: dict[str, tuple[bytes, str]] | None = None,
 ) -> JSONResponse:
     oid = workspace_owner_id(user)
     job = await studio_jobs.create_studio_job(
@@ -479,6 +480,14 @@ async def _accept_studio_job(
         job_type=job_type,
         params=params,
     )
+    if job_files:
+        merged = dict(params)
+        for key, (data, mime) in job_files.items():
+            merged[f"{key}_path"] = studio_jobs.save_studio_job_file(job.id, f"{key}.bin", data)
+            if mime:
+                merged[f"{key}_mime"] = mime
+        params = merged
+        await studio_jobs.update_studio_job_params(session, job, params)
     generation_id: int | None = None
     if placeholder:
         gen_row = await reserve_studio_generation_for_job(
@@ -5551,6 +5560,8 @@ async def api_studio_motion_render_video(
     output_aspect: str = Form("9:16"),
     motion_video_file_id: str = Form(""),
     first_frame_generation_id: str = Form(""),
+    existing_generation_id: str = Form(""),
+    image: UploadFile | None = File(None),
     motion_timeline: str = Form(""),
     outfit_generation_id: str = Form(""),
     negative_prompt: str = Form(""),
@@ -5584,7 +5595,7 @@ async def api_studio_motion_render_video(
     mv_id_early = str(motion_video_file_id or "").strip()
     auto_mp = _truthy_wavespeed_flag(auto_motion_prompt)
     ff_gid_early: int | None = None
-    raw_ff_early = (first_frame_generation_id or "").strip()
+    raw_ff_early = (first_frame_generation_id or existing_generation_id or "").strip()
     if raw_ff_early:
         try:
             ff_gid_early = int(raw_ff_early)
@@ -5594,10 +5605,29 @@ async def api_studio_motion_render_video(
                 detail="Некорректный first_frame_generation_id",
             ) from None
 
+    still_bytes: bytes | None = None
+    still_mime = "image/jpeg"
+    if image is not None and (image.filename or "").strip():
+        still_bytes = await image.read()
+        if len(still_bytes) > MAX_IMAGE_BYTES:
+            raise HTTPException(
+                status_code=400,
+                detail="Файл первого кадра слишком большой (макс. 12 МБ).",
+            )
+        if not still_bytes:
+            raise HTTPException(status_code=400, detail="Пустой файл первого кадра.")
+        ct = (image.content_type or "").strip().lower()
+        if ct and ct.startswith("image/"):
+            still_mime = ct.split(";")[0].strip()
+        else:
+            still_mime = (
+                mimetypes.guess_type(image.filename or "")[0] or "image/jpeg"
+            )
+
     if not (prompt or "").strip() and not (auto_mp and mv_id_early):
         raise HTTPException(status_code=400, detail="Опишите сцену, движение и при необходимости одежду.")
     if prompt_only and not mv_id_early:
-        if not ff_gid_early:
+        if not ff_gid_early and not still_bytes:
             raise HTTPException(
                 status_code=400,
                 detail="Для режима prompt-only нужен первый кадр (first_frame_generation_id).",
@@ -5715,6 +5745,9 @@ async def api_studio_motion_render_video(
         )
 
     try:
+        job_files = (
+            {"first_frame": (still_bytes, still_mime)} if still_bytes else None
+        )
         return await _accept_studio_job(
             session,
             user,
@@ -5743,6 +5776,7 @@ async def api_studio_motion_render_video(
                 "prompt_excerpt": (prompt or "").strip()[:2000] or None,
                 "preview_source_url": preview_url,
             },
+            job_files=job_files,
         )
     except HTTPException:
         raise
@@ -5910,6 +5944,34 @@ async def _studio_job_execute_motion_render_video(
             generation_id=first_frame_gen_id,
             actor=user,
         )
+        ff_url = generation_still_public_url(
+            owner_id=oid,
+            generation_id=first_frame_gen_id,
+            public_app_base=pub,
+            token_factory=create_generation_image_access_token,
+        )
+        if not ff_url:
+            raise RuntimeError("Не удалось подготовить URL первого кадра")
+        n_start = 1
+    elif params.get("first_frame_path"):
+        first_frame_bytes = studio_jobs.load_studio_job_file(str(params["first_frame_path"]))
+        first_frame_media = str(params.get("first_frame_mime") or "image/jpeg")
+        if len(first_frame_bytes) < 64:
+            raise RuntimeError("Загруженный первый кадр пустой или повреждён")
+        gen_row = await persist_studio_generation_from_uploaded_bytes(
+            session,
+            owner_id=oid,
+            data=first_frame_bytes,
+            content_type=first_frame_media,
+            output_aspect=output_aspect,
+            studio_model_id=mid,
+            refined_prompt=None,
+            motion_video_prompt_auto=None,
+            studio_job_id=job.id,
+        )
+        if gen_row is None:
+            raise RuntimeError("Не удалось сохранить загруженный первый кадр")
+        first_frame_gen_id = gen_row.id
         ff_url = generation_still_public_url(
             owner_id=oid,
             generation_id=first_frame_gen_id,

@@ -3586,8 +3586,10 @@
       const frameFile = store.uploadFiles['motion-frame']
       if (frameFile) fd.append('image', frameFile)
       const archId = s.carouselPickId || resolveLightboxId(s)
-      if (archId && !frameFile) fd.append('existing_generation_id', String(archId))
-      if (store.firstFrameGenId && !frameFile && !archId) fd.append('existing_generation_id', String(store.firstFrameGenId))
+      if (archId && !frameFile) fd.append('first_frame_generation_id', String(archId))
+      if (store.firstFrameGenId && !frameFile && !archId) {
+        fd.append('first_frame_generation_id', String(store.firstFrameGenId))
+      }
       const accepted = await API.postStudioJob('/api/studio/motion/render-video', fd)
       if (accepted.job_id) await API.pollStudioJob(accepted.job_id, { maxWaitMs: 15 * 60 * 1000 }).catch(() => {})
       await loadArchive()

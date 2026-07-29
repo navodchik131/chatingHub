@@ -1057,15 +1057,14 @@ export function CabinetDataProvider({ children }) {
       setArchiveVideos((prev) => prependOptimisticStudioArchive(prev, item))
       setError(null)
       try {
-        if (!ffGenId && uploadFiles['motion-frame']) {
+        if (!ffGenId && uploadFiles['motion-frame'] && motionControl) {
           const { result } = await actions.runMotionFirstFrame({
             modelId: selectedModelId,
             aspect: effState.vidFormat || selectedAspect,
             nsfw: effState.contentMode === 'nsfw',
             frameFile: uploadFiles['motion-frame'],
-            description: promptMode ? prompt : '',
             autoMotionPrompt: false,
-            useStillAsFinal: motionControl,
+            useStillAsFinal: true,
           })
           ffGenId = result?.generation_id || null
           if (!ffGenId) throw new Error('Не удалось загрузить первый кадр')
@@ -1078,6 +1077,7 @@ export function CabinetDataProvider({ children }) {
           durationSeconds: Number(appState.vidTime) || 5,
           motionVideoFileId: motionControl ? motionVideoFileId : null,
           firstFrameGenerationId: ffGenId,
+          frameFile: !ffGenId && uploadFiles['motion-frame'] ? uploadFiles['motion-frame'] : null,
           autoMotionPrompt: motionControl && Boolean(motionVideoFileId),
           promptOnlyMode: promptMode,
           generateAudio: appState.vidGenerateAudio !== false,

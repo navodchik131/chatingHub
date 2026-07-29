@@ -979,7 +979,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           if (!modelId) throw new Error(t.errSelectCharacter);
           const promptOnly = (nav.vidMode || 'motion-control') === 'prompt';
           const motionControl = !promptOnly && (nav.vidMode || 'motion-control') === 'motion-control';
-          let ffGenId: number | null = motionControl ? firstFrameGenId : null;
+          let ffGenId: number | null = firstFrameGenId;
           if (motionControl && !ffGenId && uploadFiles['motion-frame']) {
             const { result } = await actions.runMotionFirstFrame({
               modelId,
@@ -1000,7 +1000,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
             resolution: nav.vidQuality,
             durationSeconds: nav.vidDuration,
             motionVideoFileId: motionControl ? (motionVideoFileId || undefined) : undefined,
-            firstFrameGenerationId: motionControl ? ffGenId : null,
+            firstFrameGenerationId: ffGenId,
+            frameFile: !ffGenId && uploadFiles['motion-frame'] ? uploadFiles['motion-frame'] : undefined,
             autoMotionPrompt: motionControl && Boolean(motionVideoFileId),
             promptOnlyMode: promptOnly,
             generateAudio: nav.vidGenerateAudio !== false,

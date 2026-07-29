@@ -87,3 +87,47 @@ async def download_instagram_media(url: str) -> tuple[bytes, str] | None:
     if not ct.startswith("image/"):
         ct = "image/jpeg"
     return r.content, ct
+
+
+async def fetch_instagram_user_profile(
+    access_token: str,
+    instagram_scoped_user_id: str,
+    *,
+    fields: str = "name,username,profile_pic",
+) -> dict[str, Any] | None:
+    """User Profile API: IGSID из webhook → name / @username."""
+    token = (access_token or "").strip()
+    igsid = (instagram_scoped_user_id or "").strip()
+    if not token or not igsid:
+        return None
+    ver = _graph_version()
+    params = {
+        "fields": fields,
+        "access_token": token,
+    }
+    url = f"https://graph.instagram.com/v{ver}/{igsid}"
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        r = await client.get(url, params=params)
+    if r.status_code >= 400:
+        log.warning(
+            "instagram user profile failed igsid=%s status=%s %s",
+            igsid[:16],
+            r.status_code,
+            r.text[:400],
+        )
+        return None
+    try:
+        payload = r.json()
+    except Exception as e:
+        log.warning("instagram user profile not json igsid=%s: %s", igsid[:16], e)
+        return None
+    if not isinstance(payload, dict):
+        return None
+    if payload.get("error"):
+        log.warning(
+            "instagram user profile error igsid=%s: %s",
+            igsid[:16],
+            payload.get("error"),
+        )
+        return None
+    return payload

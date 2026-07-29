@@ -16,6 +16,7 @@ from app.services.chat_ingest import (
     broadcast_inbound_after_commit,
     persist_inbound_chat_message,
 )
+from app.services.instagram_peer_profile import resolve_instagram_peer_display
 from app.services.platform_connections import connection_studio_model_id
 from app.services.translation import translate_to_russian
 
@@ -150,7 +151,7 @@ async def ingest_instagram_messaging_event(
     if not user:
         raise ValueError("user not found")
 
-    display = f"Instagram {igsid[:10]}"
+    display = await resolve_instagram_peer_display(session, conn, igsid)
 
     conv = await get_or_create_conversation(
         session,
@@ -187,6 +188,14 @@ async def ingest_instagram_messaging_event(
     if payload is None:
         return {"ok": True, "skipped": "blocked"}
     await session.commit()
+    log.info(
+        "instagram webhook: saved user_id=%s conversation_id=%s peer=%s text=%r studio_model_id=%s",
+        conn.user_id,
+        conv_id,
+        igsid,
+        (text_s or "")[:120],
+        conv.studio_model_id,
+    )
     await broadcast_inbound_after_commit(
         owner_user_id=conn.user_id,
         conv_id=conv_id,
@@ -239,7 +248,7 @@ async def ingest_instagram_webhook_body(
                 if result.get("conversation_id"):
                     saved += 1
                     log.info(
-                        "instagram webhook: saved conversation_id=%s",
+                        "instagram webhook: ingest ok conversation_id=%s",
                         result.get("conversation_id"),
                     )
                 elif result.get("skipped"):

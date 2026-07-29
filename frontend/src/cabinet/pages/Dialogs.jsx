@@ -266,7 +266,7 @@ function ChatList() {
         )}
         {visible.map(({ c, i }) => {
           const st = c.status || false;
-          const active = cabinet.activeConvId === c.id;
+          const active = Number(cabinet.activeConvId) === Number(c.id);
           return (
             <Hoverable
               key={c.id}
@@ -279,7 +279,7 @@ function ChatList() {
               }}
               hover={active ? {} : { background: 'rgba(255,255,255,.05)' }}
               onClick={() => {
-                setS({ chatOpen: i, mobileChat: true, msgReact: null, emojiOpen: false });
+                setS({ mobileChat: true, msgReact: null, emojiOpen: false });
                 void cabinet.loadMessages(c.id);
               }}
             >
@@ -604,8 +604,12 @@ function Thread() {
   const [attachFile, setAttachFile] = useState(null);
   const [attachPreview, setAttachPreview] = useState(null);
   const dialogsRaw = cabinet.conversations.map((c, i) => mapDialogRow(c, i));
-  const cur = dialogsRaw.find((d) => d.id === cabinet.activeConvId) || dialogsRaw[s.chatOpen] || dialogsRaw[0];
-  const rawConv = cabinet.conversations.find((c) => c.id === cur?.id);
+  const cur = cabinet.activeConvId != null
+    ? dialogsRaw.find((d) => Number(d.id) === Number(cabinet.activeConvId))
+    : null;
+  const rawConv = cabinet.conversations.find(
+    (c) => cur && Number(c.id) === Number(cur.id),
+  );
   const personaName = modelNameById(cabinet.models, rawConv?.studio_model_id);
   const companionLabel = formatCompanionMode(rawConv?.effective_companion_mode, lang);
   const curSt = cur?.status || false;
