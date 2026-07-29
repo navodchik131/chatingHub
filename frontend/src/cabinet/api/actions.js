@@ -190,6 +190,13 @@ export async function deleteConversation(convId) {
   await apiFetch(`/api/conversations/${convId}`, { method: 'DELETE' })
 }
 
+export async function patchConversation(convId, patch) {
+  return apiJson(`/api/conversations/${convId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(patch),
+  })
+}
+
 export async function fetchConversationFolders() {
   return apiJsonOptional('/api/conversation-folders', {}, [])
 }

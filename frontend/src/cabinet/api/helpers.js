@@ -149,11 +149,58 @@ export const AV_GRADIENTS = [
 ]
 
 export const LANG_MAP = {
+  es: 'Español',
   'es*': 'Español',
+  en: 'English',
   'en*': 'English',
+  de: 'Deutsch',
   'de*': 'Deutsch',
+  ru: 'Русский',
   'ru*': 'Русский',
+  fr: 'Français',
+  it: 'Italiano',
+  pt: 'Português',
   nl: 'Nederlands',
+}
+
+export const OUTBOUND_LANG_CODES = ['ru', 'en', 'es', 'de', 'fr', 'it', 'pt', 'nl']
+
+export function normalizeLangCode(raw) {
+  return String(raw || '').trim().toLowerCase().replace('*', '')
+}
+
+export function replyLangDisplay(conv, lang = 'ru') {
+  const forced = normalizeLangCode(conv?.outbound_lang)
+  if (forced) return LANG_MAP[forced] || LANG_MAP[`${forced}*`] || forced.toUpperCase()
+  const detected = normalizeLangCode(conv?.user_lang)
+  if (detected) return LANG_MAP[detected] || LANG_MAP[`${detected}*`] || detected.toUpperCase()
+  return lang === 'ru' ? 'Авто' : 'Auto'
+}
+
+export function outboundLangOptions(lang, detectedCode) {
+  const autoLabel = `${lang === 'ru' ? 'Авто' : 'Auto'} · ${replyLangDisplay({ user_lang: detectedCode }, lang)}`
+  return [
+    { value: 'auto', label: autoLabel },
+    ...OUTBOUND_LANG_CODES.map((code) => ({
+      value: code,
+      label: LANG_MAP[code] || code.toUpperCase(),
+    })),
+  ]
+}
+
+export function companionModeShort(mode, lang = 'ru') {
+  const m = String(mode || 'off').toLowerCase()
+  if (m === 'off') return lang === 'ru' ? 'Откл' : 'Off'
+  if (m === 'semi_auto') return lang === 'ru' ? 'Полуавто' : 'Semi-auto'
+  if (m === 'auto') return lang === 'ru' ? 'Авто' : 'Auto'
+  if (m === 'draft') return lang === 'ru' ? 'Черновик' : 'Draft'
+  return m.toUpperCase()
+}
+
+export function dialogSettingsSummary(conv, lang = 'ru') {
+  const mode = conv?.companion_mode_override ?? conv?.effective_companion_mode ?? 'off'
+  const translateOn = !conv?.auto_translate_disabled
+  return companionModeShort(mode, lang) + (translateOn ? '' : (lang === 'ru' ? ' · без перевода' : ' · no translate'))
 }
 
 /** Backend: studio_model_images.STUDIO_MODEL_IMAGE_KINDS */

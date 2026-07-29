@@ -719,6 +719,23 @@ export function CabinetDataProvider({ children }) {
     [run, activeConvId, loadConversations, loadConversationFolders],
   )
 
+  const updateConversationSettings = useCallback(
+    async (convId, patch) => {
+      setError(null)
+      try {
+        const updated = await actions.patchConversation(convId, patch)
+        setConversations((prev) =>
+          prev.map((c) => (Number(c.id) === Number(convId) ? { ...c, ...updated } : c)),
+        )
+        return updated
+      } catch (e) {
+        setError(e?.message || String(e))
+        throw e
+      }
+    },
+    [],
+  )
+
   const createConversationFolder = useCallback(
     async (name, conversationIds = []) => {
       return run(async () => {
@@ -1533,6 +1550,7 @@ export function CabinetDataProvider({ children }) {
       requestPayout,
       savePayoutSettings,
       deleteConversation,
+      updateConversationSettings,
       createConversationFolder,
       renameConversationFolder,
       deleteConversationFolder,
@@ -1640,6 +1658,7 @@ export function CabinetDataProvider({ children }) {
       requestPayout,
       savePayoutSettings,
       deleteConversation,
+      updateConversationSettings,
       createConversationFolder,
       renameConversationFolder,
       deleteConversationFolder,

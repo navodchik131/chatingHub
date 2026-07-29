@@ -17,7 +17,10 @@ import {
 import { TextInput } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { fmtThreadDayKey, fmtThreadDayLabel } from '@/src/api/helpers';
+import { dialogSettingsSummary, replyLangDisplay, type ConversationSettingsPatch } from '@/src/api/dialogSettings';
+import type { ConversationOut } from '@/src/api/types';
 import { Avatar } from '@/src/components/ui';
+import { DialogSettingsSheet } from '@/src/components/DialogSettingsSheet';
 import { IcoBack, IcoSend, IcoThemeGrid } from '@/src/components/Icons';
 import { useAppSettings } from '@/src/context/AppSettingsContext';
 import { CHAT_THEMES, chatThemeById, type ChatThemeId } from '@/src/styles/chatThemes';
@@ -49,6 +52,8 @@ type ThreadViewProps = {
   onEmoji?: (emoji: string) => void;
   lang?: 'ru' | 'en';
   sending?: boolean;
+  rawConv?: ConversationOut | null;
+  onPatchSettings?: (patch: ConversationSettingsPatch) => void;
 };
 
 type ListItem =
@@ -190,6 +195,8 @@ export function ThreadView({
   onEmoji,
   lang = 'ru',
   sending = false,
+  rawConv = null,
+  onPatchSettings,
 }: ThreadViewProps) {
   const insets = useSafeAreaInsets();
   const scrollRef = useRef<ScrollView>(null);
@@ -198,8 +205,10 @@ export function ThreadView({
   const prevCountRef = useRef(0);
   const [keyboardPad, setKeyboardPad] = useState(0);
   const [themePickerOpen, setThemePickerOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const { chatTheme, setChatTheme } = useAppSettings();
   const theme = chatThemeById(chatTheme);
+  const settingsSummary = rawConv ? dialogSettingsSummary(rawConv, lang) : '';
 
   const items = useMemo(() => {
     const rows: ListItem[] = [];
@@ -281,7 +290,15 @@ export function ThreadView({
   }, [insets.bottom]);
 
   const platformLabel = platform.toUpperCase();
-  const subtitle = vip ? `${platformLabel} • VIP` : platformLabel;
+  const subtitleParts = [platformLabel];
+  if (vip) subtitleParts.push('VIP');
+  if (rawConv && !rawConv.auto_translate_disabled) {
+    const replyLang = replyLangDisplay(rawConv, lang);
+    if (replyLang && replyLang !== (lang === 'ru' ? 'Авто' : 'Auto')) {
+      subtitleParts.push(replyLang);
+    }
+  }
+  const subtitle = subtitleParts.join(' · ');
   const composerPadBottom = keyboardPad > 0 ? 12 + keyboardPad : Math.max(12, insets.bottom);
   const canSend = Boolean(draft.trim() || attachmentUri) && !sending;
 
@@ -307,6 +324,13 @@ export function ThreadView({
           </View>
           <Text style={styles.headSub}>{subtitle}</Text>
         </View>
+        {rawConv && onPatchSettings ? (
+          <Pressable style={styles.headSettingsBtn} onPress={() => setSettingsOpen(true)} hitSlop={6}>
+            <Text style={styles.headSettingsText} numberOfLines={1}>
+              ⚙ {settingsSummary}
+            </Text>
+          </Pressable>
+        ) : null}
         <Pressable style={styles.headThemeBtn} onPress={() => setThemePickerOpen(true)} hitSlop={8}>
           <IcoThemeGrid size={25} stroke={color.muted} />
         </Pressable>
@@ -401,6 +425,16 @@ export function ThreadView({
         onClose={() => setThemePickerOpen(false)}
         onPick={(id) => void setChatTheme(id)}
       />
+
+      {rawConv && onPatchSettings ? (
+        <DialogSettingsSheet
+          visible={settingsOpen}
+          conv={rawConv}
+          lang={lang}
+          onClose={() => setSettingsOpen(false)}
+          onPatch={(patch) => void onPatchSettings(patch)}
+        />
+      ) : null}
     </KeyboardAvoidingView>
   );
 }
@@ -429,6 +463,19 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   vipText: { fontFamily: font.monoBold, fontSize: 8, color: color.limeText, fontWeight: '700' },
+  headSettingsBtn: {
+    maxWidth: 108,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.14)',
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+  },
+  headSettingsText: {
+    fontFamily: font.mono,
+    fontSize: 10,
+    color: color.muted,
+  },
   headThemeBtn: { padding: 8, margin: -8 },
   scroll: { flex: 1 },
   scrollContent: { paddingHorizontal: 16, paddingVertical: 16, gap: 11 },

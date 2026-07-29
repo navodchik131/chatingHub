@@ -120,6 +120,13 @@ export async function markConversationRead(convId: number) {
   await apiFetch(`/api/conversations/${convId}/read`, { method: 'POST' });
 }
 
+export async function patchConversation(convId: number, patch: Record<string, unknown>) {
+  return apiJson(`/api/conversations/${convId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(patch),
+  });
+}
+
 export async function sendReply(convId: number, text: string) {
   return apiJson(`/api/conversations/${convId}/reply`, {
     method: 'POST',

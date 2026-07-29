@@ -4,8 +4,8 @@ import { IcoClip, IcoSendArrow } from '../components/Icons';
 import { Fade, PageTitle, Avatar } from '../components/ui';
 import { useApp } from '../hooks/useApp';
 import { color, line, font, avG } from '../styles/tokens';
-import { LANG_MAP, REACT_CHOICES, EMOJI_CHOICES } from '../api/helpers';
-import { mapDialogRow, mapMessage, mapNote, modelNameById, formatCompanionMode } from '../api/mappers';
+import { LANG_MAP, REACT_CHOICES, EMOJI_CHOICES, outboundLangOptions, replyLangDisplay, dialogSettingsSummary, normalizeLangCode } from '../api/helpers';
+import { mapDialogRow, mapMessage, mapNote, modelNameById } from '../api/mappers';
 import { inputSt, borderHoverOff } from '../styles/mixins';
 
 function platformMeta(platform) {
@@ -611,12 +611,36 @@ function Thread() {
     (c) => cur && Number(c.id) === Number(cur.id),
   );
   const personaName = modelNameById(cabinet.models, rawConv?.studio_model_id);
-  const companionLabel = formatCompanionMode(rawConv?.effective_companion_mode, lang);
   const curSt = cur?.status || false;
   const msgDefs = cabinet.messages.map(mapMessage);
   const reactChoices = REACT_CHOICES;
   const emojiChoices = EMOJI_CHOICES;
   const langMap = LANG_MAP;
+  const translateOn = !rawConv?.auto_translate_disabled;
+  const companionMode = rawConv?.companion_mode_override ?? rawConv?.effective_companion_mode ?? 'off';
+  const outboundLangValue = (rawConv?.outbound_lang || '').trim() ? normalizeLangCode(rawConv.outbound_lang) : 'auto';
+  const settingsSummary = rawConv ? dialogSettingsSummary(rawConv, lang) : '';
+  const langOptions = outboundLangOptions(lang, rawConv?.user_lang);
+  const modeOptions = [
+    { id: 'off', label: t.autoOff },
+    { id: 'semi_auto', label: t.autoSemi },
+    { id: 'auto', label: t.autoFull },
+  ];
+
+  const patchSettings = (patch) => {
+    if (!cur?.id) return;
+    void cabinet.updateConversationSettings(cur.id, patch);
+  };
+
+  const closeSettings = (e) => {
+    e?.stopPropagation?.();
+    setS({ dlgSettingsOpen: false });
+  };
+
+  const toggleSettings = (e) => {
+    e.stopPropagation();
+    setS({ dlgSettingsOpen: !s.dlgSettingsOpen, msgReact: null, emojiOpen: false });
+  };
 
   useEffect(() => () => {
     if (attachPreview) URL.revokeObjectURL(attachPreview);
@@ -704,7 +728,9 @@ function Thread() {
   };
 
   const closePops = () => {
-    if (s.msgReact !== null || s.emojiOpen) setS({ msgReact: null, emojiOpen: false });
+    if (s.msgReact !== null || s.emojiOpen || s.dlgSettingsOpen) {
+      setS({ msgReact: null, emojiOpen: false, dlgSettingsOpen: false });
+    }
   };
 
   const scrollDown = () => scrollToBottom('smooth');
@@ -773,22 +799,132 @@ function Thread() {
           <div style={{ fontSize: 10.5, color: color.textDim }}>
             {platformMeta(cur.platform).short} · {t.persona}:{' '}
             <span style={{ color: color.pink, fontWeight: 700 }}>{personaName}</span>
-            {cur.lang ? ` · ${t.replyLang}: ${langMap[cur.lang.replace('*', '')] || cur.lang}` : ''}
+            {' · '}{t.replyLang}: {rawConv ? replyLangDisplay(rawConv, lang) : '—'}
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 6 }}>
+        <div style={{ display: 'flex', gap: 6, position: 'relative' }}>
           <Hoverable
             as="span"
             style={{
               fontFamily: font.mono, fontSize: 9.5, border: `1px solid ${line.mid}`,
-              color: companionLabel === (lang === 'ru' ? 'ВЫКЛ' : 'OFF') ? color.textDim : color.lime,
-              padding: '4px 10px', borderRadius: 8, cursor: 'default',
+              color: color.textDim, padding: '4px 10px', borderRadius: 8, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap',
             }}
+            hover={{ color: color.text }}
+            onClick={toggleSettings}
           >
-            AI: {companionLabel}
+            ⚙ {settingsSummary}
           </Hoverable>
         </div>
       </div>
+
+      {s.dlgSettingsOpen && rawConv && (
+        <div
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            position: 'absolute', top: 54, right: 16, zIndex: 30, width: 270,
+            background: color.bgPanel, border: `1px solid ${line.mid}`, borderRadius: 14,
+            padding: 14, boxShadow: '0 14px 34px rgba(0,0,0,.5)',
+            display: 'flex', flexDirection: 'column', gap: 13,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontWeight: 800, fontSize: 12.5 }}>{t.dlgSettingsTitle}</span>
+            <Hoverable
+              as="span"
+              style={{ cursor: 'pointer', color: color.textDim, fontSize: 14, lineHeight: 1 }}
+              hover={{ color: color.text }}
+              onClick={closeSettings}
+            >
+              ✕
+            </Hoverable>
+          </div>
+
+          <div>
+            <div style={{ fontFamily: font.mono, fontSize: 8.5, letterSpacing: '1.2px', color: color.textGhost, marginBottom: 6 }}>
+              {t.dlgAutoMode}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+              {modeOptions.map((mo) => {
+                const active = companionMode === mo.id;
+                return (
+                  <Hoverable
+                    key={mo.id}
+                    style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+                      padding: '8px 9px', borderRadius: 9, cursor: 'pointer', fontSize: 11.5,
+                      ...(active
+                        ? { background: 'rgba(215,244,82,.1)', color: color.lime, fontWeight: 700 }
+                        : { color: color.textDim }),
+                    }}
+                    hover={active ? {} : { background: 'rgba(255,255,255,.05)' }}
+                    onClick={() => patchSettings({ companion_mode_override: mo.id })}
+                  >
+                    <span>{mo.label}</span>
+                    <span
+                      style={{
+                        width: 7, height: 7, borderRadius: '50%', flex: 'none',
+                        background: active ? color.lime : 'transparent',
+                      }}
+                    />
+                  </Hoverable>
+                );
+              })}
+            </div>
+          </div>
+
+          <div style={{ height: 1, background: line.hair }} />
+
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+            <span style={{ fontSize: 11.5, fontWeight: 600, lineHeight: 1.3 }}>{t.dlgTranslateToggle}</span>
+            <div
+              onClick={(e) => {
+                e.stopPropagation();
+                patchSettings({ auto_translate_disabled: translateOn });
+              }}
+              style={{
+                width: 38, height: 22, borderRadius: 11, cursor: 'pointer', position: 'relative',
+                transition: 'background .15s',
+                background: translateOn ? color.lime : 'rgba(255,255,255,.14)',
+              }}
+            >
+              <div
+                style={{
+                  width: 18, height: 18, borderRadius: '50%', background: '#fff',
+                  position: 'absolute', top: 2, transition: 'left .15s',
+                  left: translateOn ? 18 : 2,
+                }}
+              />
+            </div>
+          </div>
+
+          {translateOn && (
+            <div>
+              <div style={{ fontFamily: font.mono, fontSize: 8.5, letterSpacing: '1.2px', color: color.textGhost, marginBottom: 6 }}>
+                {t.dlgTranslateLang}
+              </div>
+              <select
+                value={outboundLangValue}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  patchSettings({ outbound_lang: v === 'auto' ? null : v });
+                }}
+                style={{
+                  width: '100%', background: color.bgDeep, border: `1px solid ${line.mid}`,
+                  borderRadius: 9, padding: '8px 10px', fontSize: 12, color: color.text, outline: 'none',
+                }}
+              >
+                {langOptions.map((lo) => (
+                  <option key={lo.value} value={lo.value}>{lo.label}</option>
+                ))}
+              </select>
+              <div style={{ fontSize: 10, color: color.textGhost, marginTop: 6, lineHeight: 1.4 }}>
+                {t.dlgTranslateAutoHint}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {curSt === 'blocked' && (
         <div

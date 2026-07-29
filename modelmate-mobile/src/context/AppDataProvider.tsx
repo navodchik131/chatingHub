@@ -149,6 +149,7 @@ type AppDataValue = {
   refreshConversations: () => Promise<void>;
   sendThreadMessage: (convId: number, text: string) => Promise<void>;
   sendThreadImage: (convId: number, text: string, file: LocalFile) => Promise<void>;
+  updateConversationSettings: (convId: number, patch: import('@/src/api/dialogSettings').ConversationSettingsPatch) => Promise<ConversationOut>;
   loadConversationFolders: () => Promise<void>;
   createConversationFolder: (name: string, conversationIds?: number[]) => Promise<void>;
   renameConversationFolder: (folderId: number, name: string) => Promise<void>;
@@ -730,6 +731,14 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       throw e;
     }
   }, [loadThread, mergeInboundMessage, patchConversationPreview]);
+
+  const updateConversationSettings = useCallback(async (convId: number, patch: Record<string, unknown>) => {
+    const updated = (await actions.patchConversation(convId, patch)) as ConversationOut;
+    setRawConversations((prev) =>
+      prev.map((c) => (Number(c.id) === Number(convId) ? { ...c, ...updated } : c)),
+    );
+    return updated;
+  }, []);
 
   const createConversationFolder = useCallback(async (name: string, conversationIds?: number[]) => {
     await withBusyAction(async () => {
@@ -1503,6 +1512,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       refreshConversations,
       sendThreadMessage,
       sendThreadImage,
+      updateConversationSettings,
       loadConversationFolders,
       createConversationFolder,
       renameConversationFolder,
@@ -1607,6 +1617,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       refreshConversations,
       sendThreadMessage,
       sendThreadImage,
+      updateConversationSettings,
       loadConversationFolders,
       createConversationFolder,
       renameConversationFolder,

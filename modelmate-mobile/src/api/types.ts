@@ -39,6 +39,11 @@ export type ConversationOut = {
   is_no_response?: boolean;
   manual_category?: string;
   user_lang?: string;
+  outbound_lang?: string | null;
+  auto_translate_disabled?: boolean;
+  companion_mode_override?: string | null;
+  effective_companion_mode?: string | null;
+  studio_model_id?: number | null;
   updated_at?: string;
   is_blocked?: boolean;
   peer_unavailable?: boolean;

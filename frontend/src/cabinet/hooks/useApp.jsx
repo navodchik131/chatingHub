@@ -58,6 +58,7 @@ const initial = {
   noteTag: 0,
   noteDraft: '',
   replyDraft: '',
+  dlgSettingsOpen: false,
   studioPrompt: '',
   motionPrompt: '',
   donForm: { title: '', description: '', minRub: 0, modelId: '' },

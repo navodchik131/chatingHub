@@ -149,6 +149,7 @@ export function ScreenRouter() {
     userEmail,
     me,
     conversations,
+    rawConversations,
     conversationFolders,
     messages,
     models,
@@ -211,6 +212,7 @@ export function ScreenRouter() {
     refreshConversations,
     sendThreadMessage,
     sendThreadImage,
+    updateConversationSettings,
     createConversationFolder,
     renameConversationFolder,
     deleteConversationFolder,
@@ -654,6 +656,7 @@ export function ScreenRouter() {
 
   if (cur === 'thread') {
     const d = conversations[chatIdx] ?? conversations[0];
+    const rawConv = rawConversations.find((c) => Number(c.id) === Number(d?.id)) ?? null;
     const threadSending = messages.some((m) => m.pending && m.side === 'out');
     if (!d) {
       return (
@@ -702,6 +705,11 @@ export function ScreenRouter() {
           }
         }}
         onEmoji={(emoji) => patch({ threadDraft: `${nav.threadDraft}${emoji}` })}
+        rawConv={rawConv}
+        onPatchSettings={(patch) => {
+          if (!d.id) return;
+          void updateConversationSettings(d.id, patch).catch(() => {});
+        }}
       />
     );
   }
