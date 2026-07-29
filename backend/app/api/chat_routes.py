@@ -81,6 +81,7 @@ from app.services.chat_messages import (
     message_preview_text,
     message_to_out,
 )
+from app.connectors.instagram.client import send_instagram_reaction
 from app.services.chat_outbound import (
     resolve_outbound_image,
     resolve_outbound_video,
@@ -968,6 +969,7 @@ async def api_message_reaction(
     reactions = toggle_owner_reaction(parse_reactions(row.reactions_json), emoji)
     row.reactions_json = reactions_to_json(reactions)
     telegram_synced: bool | None = None
+    instagram_synced: bool | None = None
 
     if conv.platform == Platform.telegram:
         tg_id_raw = row.platform_message_id or platform_message_id_from_meta(row.meta)
@@ -1020,6 +1022,40 @@ async def api_message_reaction(
         if telegram_synced is False:
             row.reactions_json = old_reactions_json
 
+    elif conv.platform == Platform.instagram:
+        ig_mid = row.platform_message_id or platform_message_id_from_meta(row.meta)
+        if ig_mid:
+            row_ig = await resolve_instagram_connection_for_conversation(session, conv, oid)
+            if row_ig:
+                from app.services.instagram_connection import ensure_instagram_access_token
+
+                ig_tok = await ensure_instagram_access_token(session, row_ig)
+                owner_has_emoji = any(
+                    r.get("actor") == "owner" and r.get("emoji") == emoji
+                    for r in reactions
+                )
+                instagram_synced = await send_instagram_reaction(
+                    access_token=ig_tok,
+                    ig_user_id=row_ig.instagram_user_id or "",
+                    recipient_id=conv.external_chat_id,
+                    message_id=ig_mid,
+                    emoji=emoji if owner_has_emoji else None,
+                )
+                if not instagram_synced:
+                    row.reactions_json = old_reactions_json
+            else:
+                instagram_synced = False
+                row.reactions_json = old_reactions_json
+        else:
+            instagram_synced = False
+            log.warning(
+                "instagram reaction skipped: no platform_message_id conv=%s msg=%s",
+                conv.id,
+                row.id,
+            )
+
+    platform_sync_ok = telegram_synced if conv.platform == Platform.telegram else instagram_synced
+
     await session.commit()
     await session.refresh(row, attribute_names=["attachments"])
     reply_preview = None
@@ -1037,7 +1073,7 @@ async def api_message_reaction(
         row,
         owner_id=oid,
         reply_preview=reply_preview,
-        platform_sync_ok=telegram_synced,
+        platform_sync_ok=platform_sync_ok,
     )
 
 

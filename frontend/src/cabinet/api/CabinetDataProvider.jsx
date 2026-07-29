@@ -1300,6 +1300,13 @@ export function CabinetDataProvider({ children }) {
     [run],
   )
 
+  const saveUiLocale = useCallback(async (locale) => {
+    const ui_locale = locale === 'en' ? 'en' : 'ru'
+    const meData = await actions.patchUserPreferences({ ui_locale })
+    setMe(meData)
+    return meData
+  }, [])
+
   const changeAccountPassword = useCallback(
     async (currentPassword, newPassword) => {
       await run(async () => actions.changePassword(currentPassword, newPassword))
@@ -1586,6 +1593,7 @@ export function CabinetDataProvider({ children }) {
       fetchSupportTicketDetail,
       saveProfileEmail,
       saveUiSimplified,
+      saveUiLocale,
       changeAccountPassword,
       logout,
     }),
@@ -1694,6 +1702,7 @@ export function CabinetDataProvider({ children }) {
       fetchSupportTicketDetail,
       saveProfileEmail,
       saveUiSimplified,
+      saveUiLocale,
       changeAccountPassword,
       logout,
       clearBusy,

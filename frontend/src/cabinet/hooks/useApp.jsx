@@ -1,6 +1,14 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useCabinetData } from '../api/CabinetDataProvider';
+import {
+  clearLocaleUserSet,
+  isLocaleUserSet,
+  localeFromMe,
+  markLocaleUserSet,
+  readStoredLocale,
+  writeStoredLocale,
+} from '../api/locale';
 import { pageFromPathname, pathnameFromPage, WORKFLOW_APP_URL } from '../CabinetRoute';
 import { dict } from '../data/i18n';
 import { BREAKPOINT_MOBILE, BREAKPOINT_NARROW } from '../styles/tokens';
@@ -65,6 +73,7 @@ const initial = {
   connForms: {},
   connFlash: null,
   opForm: { login: '', password: '', tribute: '15', modelIds: [] },
+  lang: readStoredLocale(),
 };
 
 function useViewport(forceMobile = false) {
@@ -95,7 +104,33 @@ export function AppProvider({ children, forceMobile = false }) {
   const [state, setState] = useState(initial);
   const { isMobile, isNarrow } = useViewport(forceMobile);
 
-  const lang = state.lang || (typeof localStorage !== 'undefined' && localStorage.getItem('i18nextLng')?.startsWith('en') ? 'en' : 'ru');
+  const lang = state.lang === 'en' ? 'en' : 'ru';
+
+  const setLang = useCallback((next) => {
+    const normalized = next === 'en' ? 'en' : 'ru';
+    writeStoredLocale(normalized);
+    markLocaleUserSet();
+    setState((prev) => (prev.lang === normalized ? prev : { ...prev, lang: normalized }));
+    void cabinet.saveUiLocale(normalized)
+      .then(() => clearLocaleUserSet())
+      .catch(() => {});
+  }, [cabinet]);
+
+  useEffect(() => {
+    if (!cabinet.me) return;
+    const fromMe = localeFromMe(cabinet.me);
+    if (!fromMe) return;
+    const stored = readStoredLocale();
+    if (isLocaleUserSet() && stored !== fromMe) {
+      void cabinet.saveUiLocale(stored)
+        .then(() => clearLocaleUserSet())
+        .catch(() => {});
+      return;
+    }
+    writeStoredLocale(fromMe);
+    setState((prev) => (prev.lang === fromMe ? prev : { ...prev, lang: fromMe }));
+    if (fromMe === stored) clearLocaleUserSet();
+  }, [cabinet.me?.id, cabinet.me?.ui_locale, cabinet]);
 
   const setS = useCallback((patch) => {
     setState((prev) => {
@@ -149,13 +184,14 @@ export function AppProvider({ children, forceMobile = false }) {
       lang,
       s: { ...state, page, lang },
       setS,
+      setLang,
       go,
       t,
       isMobile,
       isNarrow,
       cabinet,
     }),
-    [state, page, lang, isMobile, isNarrow, cabinet, t, setS, go],
+    [state, page, lang, isMobile, isNarrow, cabinet, t, setS, setLang, go],
   );
 
   return <AppCtx.Provider value={value}>{children}</AppCtx.Provider>;

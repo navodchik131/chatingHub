@@ -213,6 +213,7 @@ export function ScreenRouter() {
     sendThreadMessage,
     sendThreadImage,
     updateConversationSettings,
+    toggleThreadReaction,
     createConversationFolder,
     renameConversationFolder,
     deleteConversationFolder,
@@ -711,6 +712,10 @@ export function ScreenRouter() {
         onPatchSettings={(patch) => {
           if (!convId) return;
           void updateConversationSettings(convId, patch).catch(() => {});
+        }}
+        onToggleReaction={(messageId, emoji) => {
+          if (!convId) return;
+          void toggleThreadReaction(convId, messageId, emoji).catch(() => {});
         }}
       />
     );

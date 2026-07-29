@@ -25,6 +25,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { AppProvider } from '@/src/context/AppDataProvider';
 import { AppSettingsProvider } from '@/src/context/AppSettingsContext';
 import { MobilePushAuthSync } from '@/src/push/MobilePushAuthSync';
+import { LocaleAccountSync } from '@/src/components/LocaleAccountSync';
 import { color } from '@/src/styles/tokens';
 
 export { ErrorBoundary } from 'expo-router';
@@ -59,6 +60,7 @@ export default function RootLayout() {
       <SafeAreaProvider>
         <AppSettingsProvider>
           <AppProvider>
+            <LocaleAccountSync />
             <MobilePushAuthSync />
             <View style={{ flex: 1, backgroundColor: color.bg }}>
               <StatusBar style="light" />

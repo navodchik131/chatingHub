@@ -12,6 +12,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.connectors.instagram.client import download_instagram_media
 from app.db.models import InstagramConnection, Message, Platform
 from app.db.repo import get_or_create_conversation, get_user_with_billing
+from app.services.chat_message_meta import (
+    parse_reactions,
+    reactions_to_json,
+    sync_actor_reactions,
+)
 from app.services.chat_ingest import (
     broadcast_inbound_after_commit,
     persist_inbound_chat_message,
@@ -83,13 +88,93 @@ async def instagram_message_exists(
     return row is not None
 
 
+def _instagram_reaction_emoji(reaction: dict[str, Any]) -> str | None:
+    raw = str(reaction.get("emoji") or "").strip()
+    if raw:
+        return raw
+    name = str(reaction.get("reaction") or "").strip().lower()
+    mapping = {
+        "love": "❤️",
+        "like": "👍",
+        "laugh": "😂",
+        "wow": "😮",
+        "sad": "😢",
+        "angry": "😡",
+        "fire": "🔥",
+    }
+    return mapping.get(name)
+
+
+async def _find_instagram_message(
+    session: AsyncSession, owner_user_id: int, mid: str
+) -> Message | None:
+    if not mid:
+        return None
+    return await session.scalar(
+        select(Message)
+        .join(Message.conversation)
+        .where(
+            Message.conversation.has(user_id=owner_user_id),
+            Message.platform_message_id == mid,
+        )
+        .limit(1)
+    )
+
+
+async def ingest_instagram_reaction_event(
+    session: AsyncSession,
+    conn: InstagramConnection,
+    event: dict[str, Any],
+) -> dict[str, Any]:
+    reaction = event.get("reaction")
+    if not isinstance(reaction, dict):
+        return {"ok": True, "skipped": "bad_reaction"}
+
+    sender = event.get("sender") or {}
+    if not isinstance(sender, dict):
+        return {"ok": True, "skipped": "bad_sender"}
+    igsid = str(sender.get("id") or "").strip()
+    ig_account_id = (conn.instagram_user_id or "").strip()
+    ig_alt_account_id = (conn.instagram_alt_user_id or "").strip()
+    if not igsid:
+        return {"ok": True, "skipped": "missing_sender"}
+
+    mid = str(reaction.get("mid") or "").strip()
+    if not mid:
+        return {"ok": True, "skipped": "missing_mid"}
+
+    row = await _find_instagram_message(session, conn.user_id, mid)
+    if not row:
+        return {"ok": True, "skipped": "message_not_found"}
+
+    action = str(reaction.get("action") or "react").strip().lower()
+    actor = "owner" if igsid in {ig_account_id, ig_alt_account_id} else "peer"
+    if action == "unreact":
+        emojis: list[str] = []
+    else:
+        em = _instagram_reaction_emoji(reaction)
+        emojis = [em] if em else []
+
+    reactions = sync_actor_reactions(
+        parse_reactions(row.reactions_json),
+        actor=actor,
+        emojis=emojis,
+    )
+    row.reactions_json = reactions_to_json(reactions)
+    await session.commit()
+    return {"ok": True, "message_id": row.id}
+
+
 async def ingest_instagram_messaging_event(
     session: AsyncSession,
     conn: InstagramConnection,
     event: dict[str, Any],
 ) -> dict[str, Any]:
-    if event.get("read") or event.get("reaction") or event.get("postback"):
+    if event.get("read") or event.get("postback"):
         return {"ok": True, "skipped": "non_message_event"}
+
+    if event.get("reaction"):
+        return await ingest_instagram_reaction_event(session, conn, event)
 
     msg = event.get("message")
     if not isinstance(msg, dict):
@@ -130,19 +215,28 @@ async def ingest_instagram_messaging_event(
             if not isinstance(att, dict):
                 continue
             att_type = str(att.get("type") or "").lower()
-            if att_type in ("image", "story_mention", "share", "ig_reel", "reel", "video"):
-                payload = att.get("payload") or {}
-                url = payload.get("url") if isinstance(payload, dict) else None
-                if url and att_type == "image":
-                    img = await download_instagram_media(str(url))
-                    if img:
-                        image_bytes, image_mime = img
-                        break
-                elif url and not text_s:
+            payload = att.get("payload") or {}
+            url = payload.get("url") if isinstance(payload, dict) else None
+            if url and att_type in ("image", "animated_image", "story_mention", "share"):
+                img = await download_instagram_media(str(url))
+                if img:
+                    image_bytes, image_mime = img
+                    break
+            if url and att_type in ("video", "ig_reel", "reel") and not image_bytes:
+                vid = await download_instagram_media(str(url))
+                if vid and vid[1].startswith("video/"):
+                    image_bytes, image_mime = vid
+                    break
+                if not text_s:
                     text_s = str(url).strip()
             if att_type == "ephemeral":
                 if not text_s:
                     text_s = "[исчезающее медиа недоступно через API]"
+            if att_type in ("sticker", "like_heart") and url and not image_bytes:
+                img = await download_instagram_media(str(url))
+                if img:
+                    image_bytes, image_mime = img
+                    break
 
     if not text_s and not image_bytes:
         return {"ok": True, "skipped": "empty"}

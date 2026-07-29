@@ -163,9 +163,12 @@ async def ingest_telegram_dm(
     studio_model_id: int | None = None,
 ) -> None:
     text = (message.text or message.caption or "").strip()
-    has_photo = bool(message.photo) or (
+    has_photo = bool(message.photo) or bool(message.sticker) or bool(message.animation) or bool(message.video) or (
         message.document is not None
-        and (message.document.mime_type or "").lower().startswith("image/")
+        and (
+            (message.document.mime_type or "").lower().startswith("image/")
+            or (message.document.mime_type or "").lower().startswith("video/")
+        )
     )
     if not text and not has_photo:
         return

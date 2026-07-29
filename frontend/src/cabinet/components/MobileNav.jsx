@@ -10,7 +10,7 @@ import { goToAdmin } from '../../marketing/workspaceEntry';
 
 /** Top bar shown only on mobile. */
 export function MobileTopBar() {
-  const { t, page, lang, setS, go, cabinet } = useApp();
+  const { t, page, lang, setLang, go, cabinet } = useApp();
   const langLabel = lang === 'ru' ? 'RU → EN' : 'EN → RU';
   const credits = fmtCredits(cabinet.me?.credits_balance);
 
@@ -37,7 +37,7 @@ export function MobileTopBar() {
           borderRadius: 7, padding: '3px 7px', color: color.textDim, cursor: 'pointer',
         }}
         hover={{ color: color.text }}
-        onClick={() => setS({ lang: lang === 'ru' ? 'en' : 'ru' })}
+        onClick={() => setLang(lang === 'ru' ? 'en' : 'ru')}
       >
         {langLabel}
       </Hoverable>

@@ -257,3 +257,27 @@ export function engineLabelFromId(id: string): string {
 export function engineIdFromLabel(label: string): string {
   return AI_ENGINE_IDS[label] ?? 'nano-banana-pro';
 }
+
+export const REACT_CHOICES = ['👍', '❤️', '😂', '😮', '😢', '🔥'] as const;
+
+export function ownerReactionEmoji(reactions?: { emoji: string; actor: string }[] | null) {
+  if (!Array.isArray(reactions)) return null;
+  const hit = reactions.find((r) => r && r.actor === 'owner');
+  return hit?.emoji || null;
+}
+
+export function firstAttachmentUrl(
+  attachments?: { url?: string | null; mime_type?: string | null }[] | null,
+) {
+  if (!Array.isArray(attachments)) return null;
+  const hit = attachments.find((a) => a && a.url);
+  return hit?.url || null;
+}
+
+export function attachmentMediaKind(mime?: string | null): 'image' | 'video' | 'gif' | 'other' {
+  const m = String(mime || '').toLowerCase();
+  if (m.includes('gif')) return 'gif';
+  if (m.startsWith('video/')) return 'video';
+  if (m.startsWith('image/')) return 'image';
+  return 'other';
+}

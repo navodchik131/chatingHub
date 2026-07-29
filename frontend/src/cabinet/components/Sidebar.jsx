@@ -42,7 +42,7 @@ const NavItem = ({ item, active, onClick }) => (
 );
 
 export default function Sidebar() {
-  const { t, page, go, lang, setS, cabinet } = useApp();
+  const { t, page, go, lang, setLang, cabinet } = useApp();
   const langLabel = lang === 'ru' ? 'RU → EN' : 'EN → RU';
   const me = cabinet.me;
   const credits = fmtCredits(me?.credits_balance);
@@ -166,7 +166,7 @@ export default function Sidebar() {
               padding: '4px 8px', cursor: 'pointer', color: color.textDim,
             }}
             hover={{ color: color.text, borderColor: borderHoverOff }}
-            onClick={() => setS({ lang: lang === 'ru' ? 'en' : 'ru' })}
+            onClick={() => setLang(lang === 'ru' ? 'en' : 'ru')}
           >
             {langLabel}
           </Hoverable>

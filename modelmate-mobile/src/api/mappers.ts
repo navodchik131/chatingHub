@@ -11,7 +11,16 @@ import type {
   WorkspaceMemberOut,
 } from '@/src/api/types';
 import { resolveMediaUrl } from '@/src/api/config';
-import { fmtDateShort, fmtMoney, fmtTime, platformLabel, photoKindShortLabel, rightsFromMask } from '@/src/api/helpers';
+import {
+  fmtDateShort,
+  fmtMoney,
+  fmtTime,
+  firstAttachmentUrl,
+  ownerReactionEmoji,
+  platformLabel,
+  photoKindShortLabel,
+  rightsFromMask,
+} from '@/src/api/helpers';
 import { archiveThumbUrl, isArchivePending } from '@/src/api/media';
 import { gradients } from '@/src/styles/tokens';
 
@@ -38,6 +47,7 @@ export function mapMessage(m: MessageOut) {
   const translated = (m.text_translated || '').trim();
   const original = (m.text_original || '').trim();
   const tr = translated && translated !== original ? translated : null;
+  const attachments = m.attachments || [];
   return {
     id: m.id,
     side: outbound ? ('out' as const) : ('in' as const),
@@ -46,6 +56,10 @@ export function mapMessage(m: MessageOut) {
     time: fmtTime(m.created_at),
     created_at: m.created_at,
     pending: Boolean(m.pending),
+    attachments,
+    attachmentUrl: firstAttachmentUrl(attachments),
+    ownerReaction: ownerReactionEmoji(m.reactions),
+    reactions: m.reactions || [],
   };
 }
 

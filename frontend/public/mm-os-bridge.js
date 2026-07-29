@@ -26,6 +26,93 @@
   ]
 
   const DONATION_SEEN_KEY_PREFIX = 'mm_creator_donation_last_seen_event_'
+  const UI_LOCALE_KEY = 'mm_ui_locale'
+  const UI_LOCALE_USER_SET_KEY = 'mm_ui_locale_user_set'
+
+  function normalizeUiLocale(raw) {
+    return String(raw || '').toLowerCase().startsWith('en') ? 'en' : 'ru'
+  }
+
+  function readStoredLocale() {
+    try {
+      const v = localStorage.getItem(UI_LOCALE_KEY)
+      if (v === 'en') return 'en'
+      const legacy = localStorage.getItem('i18nextLng')
+      if (legacy && legacy.startsWith('en')) return 'en'
+    } catch (_) {}
+    return 'ru'
+  }
+
+  function writeStoredLocale(lang) {
+    try {
+      localStorage.setItem(UI_LOCALE_KEY, normalizeUiLocale(lang))
+    } catch (_) {}
+  }
+
+  function markLocaleUserSet() {
+    try {
+      localStorage.setItem(UI_LOCALE_USER_SET_KEY, '1')
+    } catch (_) {}
+  }
+
+  function clearLocaleUserSet() {
+    try {
+      localStorage.removeItem(UI_LOCALE_USER_SET_KEY)
+    } catch (_) {}
+  }
+
+  function isLocaleUserSet() {
+    try {
+      return localStorage.getItem(UI_LOCALE_USER_SET_KEY) === '1'
+    } catch (_) {
+      return false
+    }
+  }
+
+  function localeFromMe(me) {
+    if (!me || !me.ui_locale) return null
+    return normalizeUiLocale(me.ui_locale)
+  }
+
+  function applyUiLocaleToLogic(lang) {
+    const normalized = normalizeUiLocale(lang)
+    writeStoredLocale(normalized)
+    if (store.logic && store.logic.state.lang !== normalized) {
+      store.logic.setState({ lang: normalized })
+    }
+  }
+
+  async function persistUiLocale(lang) {
+    const normalized = normalizeUiLocale(lang)
+    writeStoredLocale(normalized)
+    markLocaleUserSet()
+    applyUiLocaleToLogic(normalized)
+    if (!store.authed) return normalized
+    try {
+      const me = await API.apiJson('/api/auth/preferences', {
+        method: 'PATCH',
+        body: JSON.stringify({ ui_locale: normalized }),
+      })
+      store.me = me
+      clearLocaleUserSet()
+    } catch (e) {
+      console.warn('[MMOS] ui_locale save failed', e)
+    }
+    return normalized
+  }
+
+  function syncUiLocaleFromMe(me) {
+    if (!me) return
+    const fromMe = localeFromMe(me)
+    if (!fromMe) return
+    const stored = readStoredLocale()
+    if (isLocaleUserSet() && stored !== fromMe) {
+      void persistUiLocale(stored)
+      return
+    }
+    applyUiLocaleToLogic(fromMe)
+    if (fromMe === stored) clearLocaleUserSet()
+  }
 
   const ICO_ADMIN = {
     __html:
@@ -1424,7 +1511,10 @@
   async function refreshAll() {
     if (!store.authed) return
     await Promise.all([
-      API.apiJson('/api/auth/me').then((m) => { store.me = m }),
+      API.apiJson('/api/auth/me').then((m) => {
+        store.me = m
+        syncUiLocaleFromMe(m)
+      }),
       API.apiJson('/api/health').then((h) => { store.health = h }),
       loadConversations(),
       loadModels(),
@@ -1512,6 +1602,7 @@
   async function afterAuthSuccess() {
     store.me = await API.apiJson('/api/auth/me')
     store.authed = true
+    syncUiLocaleFromMe(store.me)
     if (store.me?.email_setup_required) {
       showAuth(true)
       updateAuthUi()
@@ -1671,6 +1762,7 @@
     try {
       store.me = await API.apiJson('/api/auth/me')
       store.authed = true
+      syncUiLocaleFromMe(store.me)
       if (store.me?.email_setup_required) {
         showAuth(true)
       } else {
@@ -4534,6 +4626,7 @@
 
   function onMount(logic) {
     store.logic = logic
+    applyUiLocaleToLogic(readStoredLocale())
     if (typeof console !== 'undefined' && console.info) {
       console.info('[MMOS] bridge loaded', { donations: true, pollSec: 15 })
     }
@@ -4573,5 +4666,7 @@
     closeNoteForm,
     saveConversationNote,
     analyzeConversationNotes,
+    setUiLocale: persistUiLocale,
+    readStoredLocale,
   }
 })(window)

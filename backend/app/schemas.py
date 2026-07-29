@@ -309,10 +309,12 @@ class UserMeOut(BaseModel):
     telegram_login_available: bool = False
     tribute_billing_available: bool = False
     ui_simplified: bool = True
+    ui_locale: str = "ru"
 
 
 class UserPreferencesPatchIn(BaseModel):
     ui_simplified: bool | None = None
+    ui_locale: str | None = Field(default=None, pattern="^(ru|en)$")
 
 
 class WorkspaceMemberCreateIn(BaseModel):

@@ -11,8 +11,9 @@ from jose import JWTError, jwt
 from app.config import BACKEND_DIR, settings
 
 CHAT_MEDIA_ROOT = (BACKEND_DIR / "data" / "chat_media").resolve()
-_ALLOWED_EXT = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
+_ALLOWED_EXT = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".mp4"}
 MAX_CHAT_IMAGE_BYTES = 10 * 1024 * 1024
+MAX_CHAT_VIDEO_BYTES = 16 * 1024 * 1024
 
 
 def _ext_for_mime(mime: str | None) -> str:
@@ -23,17 +24,22 @@ def _ext_for_mime(mime: str | None) -> str:
         return ".webp"
     if "gif" in m:
         return ".gif"
+    if "mp4" in m or m.startswith("video/"):
+        return ".mp4"
     return ".jpeg"
 
 
-def save_chat_image_bytes(*, owner_id: int, raw: bytes, content_type: str | None) -> tuple[str, str]:
-    if len(raw) > MAX_CHAT_IMAGE_BYTES:
-        raise ValueError(f"Изображение слишком большое (макс. {MAX_CHAT_IMAGE_BYTES // (1024 * 1024)} МБ)")
+def save_chat_media_bytes(*, owner_id: int, raw: bytes, content_type: str | None) -> tuple[str, str]:
+    mime = (content_type or "image/jpeg").split(";")[0].strip().lower() or "image/jpeg"
+    limit = MAX_CHAT_VIDEO_BYTES if mime.startswith("video/") else MAX_CHAT_IMAGE_BYTES
+    if len(raw) > limit:
+        raise ValueError(
+            f"Файл слишком большой (макс. {limit // (1024 * 1024)} МБ)"
+        )
     if not raw:
         raise ValueError("Пустой файл")
     file_id = uuid.uuid4().hex
-    ext = _ext_for_mime(content_type)
-    mime = (content_type or "image/jpeg").split(";")[0].strip() or "image/jpeg"
+    ext = _ext_for_mime(mime)
     owner_dir = (CHAT_MEDIA_ROOT / str(int(owner_id))).resolve()
     if not str(owner_dir).startswith(str(CHAT_MEDIA_ROOT)):
         raise RuntimeError("invalid chat media path")
@@ -44,6 +50,10 @@ def save_chat_image_bytes(*, owner_id: int, raw: bytes, content_type: str | None
         raise RuntimeError("invalid chat media path")
     path.write_bytes(raw)
     return rel, mime
+
+
+def save_chat_image_bytes(*, owner_id: int, raw: bytes, content_type: str | None) -> tuple[str, str]:
+    return save_chat_media_bytes(owner_id=owner_id, raw=raw, content_type=content_type)
 
 
 def resolve_chat_attachment_file(owner_id: int, relative_path: str) -> Path | None:

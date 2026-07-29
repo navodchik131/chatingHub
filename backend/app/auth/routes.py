@@ -342,6 +342,7 @@ async def me(
         telegram_login_available=settings.telegram_login_configured,
         tribute_billing_available=settings.tribute_billing_configured,
         ui_simplified=bool(getattr(user, "ui_simplified", True)),
+        ui_locale="en" if str(getattr(user, "ui_locale", "ru") or "ru").lower().startswith("en") else "ru",
     )
 
 
@@ -353,5 +354,7 @@ async def patch_preferences(
 ) -> UserMeOut:
     if body.ui_simplified is not None:
         user.ui_simplified = bool(body.ui_simplified)
+    if body.ui_locale is not None:
+        user.ui_locale = "en" if body.ui_locale == "en" else "ru"
     await session.commit()
     return await me(user=user, session=session)

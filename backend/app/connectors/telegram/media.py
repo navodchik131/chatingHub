@@ -17,10 +17,19 @@ async def download_telegram_image(message: Message, bot: Bot) -> tuple[bytes, st
     if message.photo:
         file_id = message.photo[-1].file_id
         mime = "image/jpeg"
+    elif message.sticker:
+        file_id = message.sticker.file_id
+        mime = (message.sticker.mime_type or "image/webp").split(";")[0].strip() or "image/webp"
+    elif message.animation:
+        file_id = message.animation.file_id
+        mime = (message.animation.mime_type or "video/mp4").split(";")[0].strip() or "video/mp4"
+    elif message.video:
+        file_id = message.video.file_id
+        mime = (message.video.mime_type or "video/mp4").split(";")[0].strip() or "video/mp4"
     elif message.document:
         doc = message.document
         m = (doc.mime_type or "").lower()
-        if m.startswith("image/"):
+        if m.startswith("image/") or m.startswith("video/"):
             file_id = doc.file_id
             mime = m.split(";")[0].strip() or "image/jpeg"
     if not file_id:

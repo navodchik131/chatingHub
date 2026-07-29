@@ -71,7 +71,7 @@ def platform_message_id_from_meta(meta: str | None) -> str | None:
         return None
     if not isinstance(data, dict):
         return None
-    for key in ("message_id", "telegram_message_id", "fanvue_message_uuid"):
+    for key in ("message_id", "telegram_message_id", "fanvue_message_uuid", "instagram_mid"):
         val = data.get(key)
         if val is not None and str(val).strip():
             return str(val).strip()

@@ -10,11 +10,13 @@ import {
 import {
   AppLocale,
   loadAppPrefs,
+  markLocaleUserSet,
   saveBiometricLock,
   saveChatTheme,
   saveLocale,
   savePushEnabled,
 } from '@/src/i18n/prefs';
+import { persistLocaleToAccount } from '@/src/components/LocaleAccountSync';
 import {
   isPushPermissionGranted,
   syncMobilePushEnabled,
@@ -27,6 +29,8 @@ type AppSettingsValue = {
   locale: AppLocale;
   t: Strings;
   setLocale: (locale: AppLocale) => Promise<void>;
+  /** Обновить locale в UI/SecureStore без PATCH на сервер (синхронизация из профиля). */
+  setLocaleStateOnly: (locale: AppLocale) => void;
   biometricLock: boolean;
   setBiometricLock: (enabled: boolean) => Promise<void>;
   pushEnabled: boolean;
@@ -77,9 +81,15 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const setLocaleStateOnly = useCallback((next: AppLocale) => {
+    setLocaleState(next);
+  }, []);
+
   const setLocale = useCallback(async (next: AppLocale) => {
     setLocaleState(next);
     await saveLocale(next);
+    await markLocaleUserSet();
+    await persistLocaleToAccount(next);
   }, []);
 
   const setBiometricLock = useCallback(async (enabled: boolean) => {
@@ -150,6 +160,7 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
       locale,
       t: dict[locale],
       setLocale,
+      setLocaleStateOnly,
       biometricLock,
       setBiometricLock,
       pushEnabled,
@@ -166,6 +177,7 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
       ready,
       locale,
       setLocale,
+      setLocaleStateOnly,
       biometricLock,
       setBiometricLock,
       pushEnabled,

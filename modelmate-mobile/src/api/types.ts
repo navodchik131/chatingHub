@@ -26,6 +26,7 @@ export type UserMeOut = {
     limits?: Record<string, number>;
   };
   ui_simplified?: boolean;
+  ui_locale?: 'ru' | 'en' | string;
 };
 
 export type ConversationOut = {
@@ -62,7 +63,7 @@ export type MessageOut = {
   text_original: string;
   text_translated?: string | null;
   created_at: string;
-  attachments?: { id: number; url: string; kind?: string }[];
+  attachments?: { id: number; url: string; kind?: string; mime_type?: string }[];
   reactions?: { emoji: string; actor: string }[];
   pending?: boolean;
 };

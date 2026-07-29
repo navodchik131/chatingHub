@@ -4,6 +4,7 @@ import type { ChatThemeId } from '@/src/styles/chatThemes';
 export type AppLocale = 'ru' | 'en';
 
 const LOCALE_KEY = 'mm_locale';
+const LOCALE_USER_SET_KEY = 'mm_locale_user_set';
 const BIOMETRIC_LOCK_KEY = 'mm_biometric_lock';
 const PUSH_ENABLED_KEY = 'mm_push_enabled';
 const CHAT_THEME_KEY = 'mm_chat_theme';
@@ -46,6 +47,30 @@ export async function saveLocale(locale: AppLocale): Promise<void> {
     await SecureStore.setItemAsync(LOCALE_KEY, locale);
   } catch {
     /* ignore */
+  }
+}
+
+export async function markLocaleUserSet(): Promise<void> {
+  try {
+    await SecureStore.setItemAsync(LOCALE_USER_SET_KEY, '1');
+  } catch {
+    /* ignore */
+  }
+}
+
+export async function clearLocaleUserSet(): Promise<void> {
+  try {
+    await SecureStore.deleteItemAsync(LOCALE_USER_SET_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+export async function isLocaleUserSet(): Promise<boolean> {
+  try {
+    return (await SecureStore.getItemAsync(LOCALE_USER_SET_KEY)) === '1';
+  } catch {
+    return false;
   }
 }
 

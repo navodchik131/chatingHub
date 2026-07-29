@@ -83,10 +83,51 @@ async def download_instagram_media(url: str) -> tuple[bytes, str] | None:
         r = await client.get(u)
     if r.status_code >= 400 or not r.content:
         return None
-    ct = (r.headers.get("content-type") or "image/jpeg").split(";")[0].strip()
-    if not ct.startswith("image/"):
-        ct = "image/jpeg"
-    return r.content, ct
+    ct = (r.headers.get("content-type") or "image/jpeg").split(";")[0].strip().lower()
+    if ct.startswith("image/") or ct.startswith("video/"):
+        return r.content, ct
+    if "gif" in ct:
+        return r.content, "image/gif"
+    return r.content, "image/jpeg"
+
+
+async def send_instagram_reaction(
+    *,
+    access_token: str,
+    ig_user_id: str,
+    recipient_id: str,
+    message_id: str,
+    emoji: str | None,
+) -> bool:
+    """Send or remove a reaction on an Instagram message (emoji=None → unreact)."""
+    token = (access_token or "").strip()
+    ig_id = (ig_user_id or "").strip()
+    recipient = (recipient_id or "").strip()
+    mid = (message_id or "").strip()
+    if not token or not ig_id or not recipient or not mid:
+        raise InstagramAPIError("missing instagram reaction parameters")
+
+    payload: dict[str, Any] = {"message_id": mid}
+    body: dict[str, Any] = {
+        "recipient": {"id": recipient},
+        "sender_action": "react" if emoji else "unreact",
+        "payload": payload,
+    }
+    if emoji:
+        payload["reaction"] = emoji.strip()
+
+    ver = _graph_version()
+    url = f"https://graph.instagram.com/v{ver}/{ig_id}/messages"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+    }
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        r = await client.post(url, json=body, headers=headers)
+    if r.status_code >= 400:
+        log.warning("instagram reaction failed: %s %s", r.status_code, r.text[:800])
+        return False
+    return True
 
 
 async def fetch_instagram_user_profile(

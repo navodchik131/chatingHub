@@ -127,6 +127,13 @@ export async function patchConversation(convId: number, patch: Record<string, un
   });
 }
 
+export async function toggleMessageReaction(convId: number, messageId: number, emoji: string) {
+  return apiJson(`/api/conversations/${convId}/messages/${messageId}/reactions`, {
+    method: 'POST',
+    body: JSON.stringify({ emoji }),
+  });
+}
+
 export async function sendReply(convId: number, text: string) {
   return apiJson(`/api/conversations/${convId}/reply`, {
     method: 'POST',
@@ -322,7 +329,7 @@ export async function patchProfileEmail(email: string) {
   });
 }
 
-export async function patchUserPreferences(payload: { ui_simplified?: boolean }) {
+export async function patchUserPreferences(payload: { ui_simplified?: boolean; ui_locale?: 'ru' | 'en' }) {
   return apiJson<UserMeOut>('/api/auth/preferences', {
     method: 'PATCH',
     body: JSON.stringify(payload),

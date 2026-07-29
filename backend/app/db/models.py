@@ -124,6 +124,8 @@ class User(Base):
     auth_email_verified: Mapped[bool] = mapped_column(Boolean, default=True)
     """Упрощённый UI студии: скрыть SFW/NSFW и выбор модели; всегда NSFW + Seedream."""
     ui_simplified: Mapped[bool] = mapped_column(Boolean, default=True)
+    """Язык интерфейса кабинета: ru | en."""
+    ui_locale: Mapped[str] = mapped_column(String(8), default="ru")
 
     parent: Mapped[User | None] = relationship(
         "User",

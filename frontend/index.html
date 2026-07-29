@@ -1483,7 +1483,7 @@ input::placeholder,textarea::placeholder{color:#5C6066;}
 <script type="text/x-dc" data-dc-script data-props="{&quot;forceMobile&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: false, &quot;tsType&quot;: &quot;boolean&quot;, &quot;section&quot;: &quot;Просмотр&quot;}}">
 class Component extends DCLogic {
   state = {
-    page: 'overview', lang: 'ru', imgMode: 'ref', vidMode: 'motion-control',
+    page: 'overview', lang: (typeof localStorage !== 'undefined' && localStorage.getItem('mm_ui_locale') === 'en') ? 'en' : 'ru', imgMode: 'ref', vidMode: 'motion-control',
     connDetail: null, charDetail: null, donTab: 'overview',
     tier: 'standard', period: 'month', moreOpen: false,
     isMobile: false, chatOpen: 0,
@@ -2200,7 +2200,11 @@ class Component extends DCLogic {
     const __dcVals = {
       t, isMobile, showSidebar: !isMobile, page: s.page, moreOpen: s.moreOpen,
       langLabel: lang === 'ru' ? 'RU → EN' : 'EN → RU',
-      toggleLang: () => setS({ lang: lang === 'ru' ? 'en' : 'ru' }),
+      toggleLang: () => {
+        const next = lang === 'ru' ? 'en' : 'ru';
+        if (window.MMOS_BRIDGE?.setUiLocale) void window.MMOS_BRIDGE.setUiLocale(next);
+        else setS({ lang: next });
+      },
       pageTitle: pageTitles[s.page], todayLabel: dateStr,
       contentPad: isMobile ? 'padding:16px 14px 20px;height:100%;box-sizing:border-box;' : 'padding:24px 28px 32px;height:100%;box-sizing:border-box;max-width:1280px;margin:0 auto;',
       navGroups, mobileNav, moreItems,

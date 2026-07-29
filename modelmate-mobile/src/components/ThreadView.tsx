@@ -1,8 +1,7 @@
 import { LinearGradient } from 'expo-linear-gradient';
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   Image,
-  Keyboard,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -16,11 +15,19 @@ import {
 } from 'react-native';
 import { TextInput } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { fmtThreadDayKey, fmtThreadDayLabel } from '@/src/api/helpers';
+import {
+  attachmentMediaKind,
+  fmtThreadDayKey,
+  fmtThreadDayLabel,
+  REACT_CHOICES,
+} from '@/src/api/helpers';
+import { resolveMediaUrl } from '@/src/api/config';
 import { dialogSettingsSummary, replyLangDisplay, type ConversationSettingsPatch } from '@/src/api/dialogSettings';
 import type { ConversationOut } from '@/src/api/types';
 import { Avatar } from '@/src/components/ui';
 import { DialogSettingsSheet } from '@/src/components/DialogSettingsSheet';
+import { EmojiPickerSheet } from '@/src/components/EmojiPickerSheet';
+import { RemoteImage } from '@/src/components/RemoteImage';
 import { IcoBack, IcoSend, IcoThemeGrid } from '@/src/components/Icons';
 import { useAppSettings } from '@/src/context/AppSettingsContext';
 import { CHAT_THEMES, chatThemeById, type ChatThemeId } from '@/src/styles/chatThemes';
@@ -34,6 +41,9 @@ export type ThreadMessage = {
   time?: string;
   created_at?: string;
   pending?: boolean;
+  attachmentUrl?: string | null;
+  attachments?: { id: number; url: string; kind?: string; mime_type?: string }[];
+  ownerReaction?: string | null;
 };
 
 type ThreadViewProps = {
@@ -55,6 +65,7 @@ type ThreadViewProps = {
   convId?: number | null;
   rawConv?: ConversationOut | null;
   onPatchSettings?: (patch: ConversationSettingsPatch) => void;
+  onToggleReaction?: (messageId: number, emoji: string) => void;
 };
 
 type ListItem =
@@ -80,6 +91,10 @@ function ThreadBubble({
   time,
   pending,
   lang = 'ru',
+  attachmentUrl,
+  attachments,
+  ownerReaction,
+  onLongPress,
 }: {
   text: string;
   out?: boolean;
@@ -87,7 +102,16 @@ function ThreadBubble({
   time?: string;
   pending?: boolean;
   lang?: 'ru' | 'en';
+  attachmentUrl?: string | null;
+  attachments?: ThreadMessage['attachments'];
+  ownerReaction?: string | null;
+  onLongPress?: () => void;
 }) {
+  const att = attachments?.[0];
+  const mediaUrl = attachmentUrl ? resolveMediaUrl(attachmentUrl) : '';
+  const mediaKind = attachmentMediaKind(att?.mime_type);
+  const showText = Boolean(text && text !== '📷' && text !== '—');
+
   const footer = (
     <View style={styles.bubbleMeta}>
       <Text style={[styles.bubbleTime, out && styles.bubbleTimeOut]}>
@@ -98,9 +122,34 @@ function ThreadBubble({
     </View>
   );
 
+  const mediaBlock = mediaUrl ? (
+    <View style={[styles.mediaWrap, showText && styles.mediaWrapWithText]}>
+      {mediaKind === 'video' ? (
+        <View style={styles.mediaVideo}>
+          <RemoteImage uri={mediaUrl} style={styles.mediaImage} contentFit="cover" />
+          <View style={styles.mediaVideoBadge}>
+            <Text style={styles.mediaVideoBadgeText}>▶ {lang === 'ru' ? 'Видео' : 'Video'}</Text>
+          </View>
+        </View>
+      ) : (
+        <RemoteImage
+          uri={mediaUrl}
+          style={styles.mediaImage}
+          contentFit={mediaKind === 'gif' ? 'contain' : 'cover'}
+        />
+      )}
+    </View>
+  ) : null;
+
   const body = (
     <>
-      <Text style={[styles.bubbleText, out && styles.bubbleTextOut]}>{text || '—'}</Text>
+      {mediaBlock}
+      {showText ? (
+        <Text style={[styles.bubbleText, out && styles.bubbleTextOut]}>{text}</Text>
+      ) : null}
+      {!showText && !mediaUrl ? (
+        <Text style={[styles.bubbleText, out && styles.bubbleTextOut]}>—</Text>
+      ) : null}
       {translation ? (
         <View style={[styles.translation, out && styles.translationOut]}>
           <Text style={[styles.translationText, out && styles.translationTextOut]}>{translation}</Text>
@@ -112,21 +161,61 @@ function ThreadBubble({
 
   return (
     <View style={[styles.bubbleWrap, out && styles.bubbleWrapOut]}>
-      {out ? (
-        <LinearGradient
-          colors={[color.bubbleOutStart, color.bubbleOutEnd]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={[styles.bubble, styles.bubbleOut, pending && styles.bubblePending]}
-        >
-          {body}
-        </LinearGradient>
-      ) : (
-        <View style={[styles.bubble, styles.bubbleIn, pending && styles.bubblePending]}>
-          {body}
+      <Pressable onLongPress={pending ? undefined : onLongPress} delayLongPress={280}>
+        {out ? (
+          <LinearGradient
+            colors={[color.bubbleOutStart, color.bubbleOutEnd]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={[styles.bubble, styles.bubbleOut, pending && styles.bubblePending]}
+          >
+            {body}
+          </LinearGradient>
+        ) : (
+          <View style={[styles.bubble, styles.bubbleIn, pending && styles.bubblePending]}>
+            {body}
+          </View>
+        )}
+      </Pressable>
+      {ownerReaction ? (
+        <View style={[styles.reactionPill, out && styles.reactionPillOut]}>
+          <Text style={styles.reactionEmoji}>{ownerReaction}</Text>
         </View>
-      )}
+      ) : null}
     </View>
+  );
+}
+
+function ReactionPicker({
+  visible,
+  lang,
+  onClose,
+  onPick,
+}: {
+  visible: boolean;
+  lang: 'ru' | 'en';
+  onClose: () => void;
+  onPick: (emoji: string) => void;
+}) {
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={styles.reactOverlay} onPress={onClose}>
+        <View style={styles.reactBar}>
+          {REACT_CHOICES.map((emoji) => (
+            <Pressable
+              key={emoji}
+              style={styles.reactCell}
+              onPress={() => {
+                onPick(emoji);
+                onClose();
+              }}
+            >
+              <Text style={styles.reactEmoji}>{emoji}</Text>
+            </Pressable>
+          ))}
+        </View>
+      </Pressable>
+    </Modal>
   );
 }
 
@@ -199,15 +288,17 @@ export function ThreadView({
   convId = null,
   rawConv = null,
   onPatchSettings,
+  onToggleReaction,
 }: ThreadViewProps) {
   const insets = useSafeAreaInsets();
   const scrollRef = useRef<ScrollView>(null);
   const nearBottomRef = useRef(true);
   const didInitialScrollRef = useRef(false);
   const prevCountRef = useRef(0);
-  const [keyboardPad, setKeyboardPad] = useState(0);
   const [themePickerOpen, setThemePickerOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
+  const [reactMsgId, setReactMsgId] = useState<number | null>(null);
   const { chatTheme, setChatTheme } = useAppSettings();
   const theme = chatThemeById(chatTheme);
   const convForSettings = rawConv ?? (convId != null ? ({ id: convId, platform: platform.toUpperCase() } as ConversationOut) : null);
@@ -273,26 +364,6 @@ export function ThreadView({
     if (grew) scrollToBottomIfNear(true);
   }, [messages]);
 
-  useEffect(() => {
-    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
-    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-    const showSub = Keyboard.addListener(showEvent, (e) => {
-      if (Platform.OS === 'android') {
-        // resize mode in app.json + extra lift for gesture nav / OEM quirks
-        const lift = Math.max(0, e.endCoordinates.height - insets.bottom + 12);
-        setKeyboardPad(lift);
-      } else {
-        setKeyboardPad(0);
-      }
-      scrollToBottomIfNear(true);
-    });
-    const hideSub = Keyboard.addListener(hideEvent, () => setKeyboardPad(0));
-    return () => {
-      showSub.remove();
-      hideSub.remove();
-    };
-  }, [insets.bottom]);
-
   const platformLabel = platform.toUpperCase();
   const subtitleParts = [platformLabel];
   if (vip) subtitleParts.push('VIP');
@@ -303,15 +374,11 @@ export function ThreadView({
     }
   }
   const subtitle = subtitleParts.join(' · ');
-  const composerPadBottom = keyboardPad > 0 ? 12 + keyboardPad : Math.max(12, insets.bottom);
+  const composerPadBottom = Math.max(12, insets.bottom);
   const canSend = Boolean(draft.trim() || attachmentUri) && !sending;
 
-  return (
-    <KeyboardAvoidingView
-      style={styles.root}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}
-    >
+  const content = (
+    <>
       <View style={styles.head}>
         <Pressable onPress={onBack} hitSlop={8} style={styles.backBtn}>
           <IcoBack size={22} stroke={color.muted} />
@@ -343,7 +410,7 @@ export function ThreadView({
       <ScrollView
         ref={scrollRef}
         style={[styles.scroll, { backgroundColor: theme.background }]}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, styles.scrollContentGrow]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="interactive"
@@ -365,6 +432,14 @@ export function ThreadView({
               time={m.time}
               pending={m.pending}
               lang={lang}
+              attachmentUrl={m.attachmentUrl}
+              attachments={m.attachments}
+              ownerReaction={m.ownerReaction}
+              onLongPress={
+                onToggleReaction && !m.pending && m.id > 0
+                  ? () => setReactMsgId(m.id)
+                  : undefined
+              }
             />
           );
         })}
@@ -401,11 +476,11 @@ export function ThreadView({
             multiline
             onFocus={() => {
               nearBottomRef.current = true;
-              scrollToBottom(true);
+              setTimeout(() => scrollToBottom(true), 80);
             }}
             returnKeyType="send"
           />
-          <Pressable style={styles.emojiBtn} hitSlop={6} onPress={() => onEmoji?.('😊')}>
+          <Pressable style={styles.emojiBtn} hitSlop={6} onPress={() => setEmojiPickerOpen(true)}>
             <Text style={styles.emojiIcon}>😊</Text>
           </Pressable>
         </View>
@@ -439,8 +514,38 @@ export function ThreadView({
           onPatch={(patch) => void onPatchSettings?.(patch)}
         />
       ) : null}
-    </KeyboardAvoidingView>
+
+      <EmojiPickerSheet
+        visible={emojiPickerOpen}
+        lang={lang}
+        onClose={() => setEmojiPickerOpen(false)}
+        onPick={(emoji) => onEmoji?.(emoji)}
+      />
+
+      <ReactionPicker
+        visible={reactMsgId != null}
+        lang={lang}
+        onClose={() => setReactMsgId(null)}
+        onPick={(emoji) => {
+          if (reactMsgId != null) onToggleReaction?.(reactMsgId, emoji);
+        }}
+      />
+    </>
   );
+
+  if (Platform.OS === 'ios') {
+    return (
+      <KeyboardAvoidingView
+        style={styles.root}
+        behavior="padding"
+        keyboardVerticalOffset={insets.top}
+      >
+        {content}
+      </KeyboardAvoidingView>
+    );
+  }
+
+  return <View style={styles.root}>{content}</View>;
 }
 
 const styles = StyleSheet.create({
@@ -483,6 +588,7 @@ const styles = StyleSheet.create({
   headThemeBtn: { padding: 8, margin: -8 },
   scroll: { flex: 1 },
   scrollContent: { paddingHorizontal: 16, paddingVertical: 16, gap: 11 },
+  scrollContentGrow: { flexGrow: 1, justifyContent: 'flex-end' },
   dayWrap: { alignItems: 'center', marginVertical: 6 },
   dayPill: {
     backgroundColor: 'rgba(255,255,255,0.08)',
@@ -491,8 +597,61 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
   },
   dayText: { fontSize: 12, color: '#C9CDD1', fontFamily: font.bodySemi, fontWeight: '600' },
-  bubbleWrap: { flexDirection: 'row', justifyContent: 'flex-start' },
+  bubbleWrap: { flexDirection: 'row', justifyContent: 'flex-start', position: 'relative', marginBottom: 4 },
   bubbleWrapOut: { justifyContent: 'flex-end' },
+  mediaWrap: { marginBottom: 0, borderRadius: 10, overflow: 'hidden' },
+  mediaWrapWithText: { marginBottom: 8 },
+  mediaImage: { width: 220, height: 220, borderRadius: 10, backgroundColor: '#2A2D33' },
+  mediaVideo: { position: 'relative' },
+  mediaVideoBadge: {
+    position: 'absolute',
+    left: 8,
+    bottom: 8,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  mediaVideoBadgeText: { color: '#fff', fontSize: 11, fontFamily: font.bodySemi, fontWeight: '700' },
+  reactionPill: {
+    position: 'absolute',
+    bottom: -6,
+    left: 8,
+    backgroundColor: '#1F2126',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+    borderRadius: 12,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  reactionPillOut: { left: undefined, right: 8 },
+  reactionEmoji: { fontSize: 14 },
+  reactOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  reactBar: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#17181C',
+    borderRadius: 16,
+    padding: 14,
+    maxWidth: 320,
+  },
+  reactCell: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+  },
+  reactEmoji: { fontSize: 26 },
   bubble: {
     maxWidth: '84%',
     paddingHorizontal: 14,
