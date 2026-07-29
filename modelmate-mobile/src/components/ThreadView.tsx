@@ -52,6 +52,7 @@ type ThreadViewProps = {
   onEmoji?: (emoji: string) => void;
   lang?: 'ru' | 'en';
   sending?: boolean;
+  convId?: number | null;
   rawConv?: ConversationOut | null;
   onPatchSettings?: (patch: ConversationSettingsPatch) => void;
 };
@@ -195,6 +196,7 @@ export function ThreadView({
   onEmoji,
   lang = 'ru',
   sending = false,
+  convId = null,
   rawConv = null,
   onPatchSettings,
 }: ThreadViewProps) {
@@ -208,7 +210,9 @@ export function ThreadView({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const { chatTheme, setChatTheme } = useAppSettings();
   const theme = chatThemeById(chatTheme);
-  const settingsSummary = rawConv ? dialogSettingsSummary(rawConv, lang) : '';
+  const convForSettings = rawConv ?? (convId != null ? ({ id: convId, platform: platform.toUpperCase() } as ConversationOut) : null);
+  const settingsSummary = rawConv ? dialogSettingsSummary(rawConv, lang) : (lang === 'ru' ? 'Настр.' : 'Settings');
+  const showSettings = convId != null && Boolean(onPatchSettings);
 
   const items = useMemo(() => {
     const rows: ListItem[] = [];
@@ -324,7 +328,7 @@ export function ThreadView({
           </View>
           <Text style={styles.headSub}>{subtitle}</Text>
         </View>
-        {rawConv && onPatchSettings ? (
+        {showSettings ? (
           <Pressable style={styles.headSettingsBtn} onPress={() => setSettingsOpen(true)} hitSlop={6}>
             <Text style={styles.headSettingsText} numberOfLines={1}>
               ⚙ {settingsSummary}
@@ -426,13 +430,13 @@ export function ThreadView({
         onPick={(id) => void setChatTheme(id)}
       />
 
-      {rawConv && onPatchSettings ? (
+      {showSettings && convForSettings ? (
         <DialogSettingsSheet
           visible={settingsOpen}
-          conv={rawConv}
+          conv={convForSettings}
           lang={lang}
           onClose={() => setSettingsOpen(false)}
-          onPatch={(patch) => void onPatchSettings(patch)}
+          onPatch={(patch) => void onPatchSettings?.(patch)}
         />
       ) : null}
     </KeyboardAvoidingView>

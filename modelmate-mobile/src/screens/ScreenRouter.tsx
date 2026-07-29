@@ -656,7 +656,8 @@ export function ScreenRouter() {
 
   if (cur === 'thread') {
     const d = conversations[chatIdx] ?? conversations[0];
-    const rawConv = rawConversations.find((c) => Number(c.id) === Number(d?.id)) ?? null;
+    const convId = threadConvId ?? d?.id ?? null;
+    const rawConv = rawConversations.find((c) => Number(c.id) === Number(convId)) ?? null;
     const threadSending = messages.some((m) => m.pending && m.side === 'out');
     if (!d) {
       return (
@@ -705,10 +706,11 @@ export function ScreenRouter() {
           }
         }}
         onEmoji={(emoji) => patch({ threadDraft: `${nav.threadDraft}${emoji}` })}
+        convId={convId}
         rawConv={rawConv}
         onPatchSettings={(patch) => {
-          if (!d.id) return;
-          void updateConversationSettings(d.id, patch).catch(() => {});
+          if (!convId) return;
+          void updateConversationSettings(convId, patch).catch(() => {});
         }}
       />
     );
