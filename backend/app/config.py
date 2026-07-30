@@ -67,6 +67,12 @@ class Settings(BaseSettings):
         default="ModelMate Demo",
         description="Текст watermark на демо-изображениях.",
     )
+    demo_watermark_opacity: float = Field(
+        default=0.3,
+        ge=0.05,
+        le=0.9,
+        description="Прозрачность диагонального watermark (0.3 = 30%).",
+    )
     demo_studio_wave_model: str = Field(
         default="nano-banana-2",
         description="Модель WaveSpeed для демо (обычные фото). NSFW в демо — wan-2.7.",

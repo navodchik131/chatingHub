@@ -5,6 +5,12 @@ import { mobileNavDefs, moreItemDefs, pageTitles } from '../data/nav';
 import { filterMobileNavDefs, canAccessPage } from '../data/navAccess';
 import { color, line, font } from '../styles/tokens';
 import { fmtCredits } from '../api/helpers';
+import {
+  demoGenerationsGrant,
+  demoGenerationsRemaining,
+  formatDemoCounterShort,
+  isCreditsPlanWithDemo,
+} from '../../billing/demoCounter';
 import { assetUrl } from '../utils/assets';
 import { goToAdmin } from '../../marketing/workspaceEntry';
 
@@ -13,6 +19,10 @@ export function MobileTopBar() {
   const { t, page, lang, setLang, go, cabinet } = useApp();
   const langLabel = lang === 'ru' ? 'RU → EN' : 'EN → RU';
   const credits = fmtCredits(cabinet.me?.credits_balance);
+  const showDemo = isCreditsPlanWithDemo(cabinet.me);
+  const demoRemaining = demoGenerationsRemaining(cabinet.me);
+  const demoGrant = demoGenerationsGrant(cabinet.me);
+  const demoLabel = formatDemoCounterShort(lang, demoRemaining, demoGrant);
 
   return (
     <div
@@ -54,6 +64,18 @@ export function MobileTopBar() {
           <IcoBolt />
         </span>
         <span style={{ fontFamily: font.mono, fontSize: 11, fontWeight: 600, color: color.lime }}>{credits}</span>
+        {showDemo && (
+          <span
+            style={{
+              fontFamily: font.mono,
+              fontSize: 9.5,
+              fontWeight: 700,
+              color: demoRemaining > 0 ? color.limeOlive : color.orange,
+            }}
+          >
+            {demoLabel}
+          </span>
+        )}
       </Hoverable>
     </div>
   );

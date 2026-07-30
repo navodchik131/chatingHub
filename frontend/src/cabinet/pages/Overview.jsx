@@ -6,6 +6,12 @@ import { color, line, font, avG } from '../styles/tokens';
 import { borderHoverOff } from '../styles/mixins';
 import { guideDefs } from '../data/catalog';
 import { fmtCredits, fmtMoney, fmtToday, resolveDonationBalances } from '../api/helpers';
+import {
+  demoGenerationsGrant,
+  demoGenerationsRemaining,
+  formatDemoCounterLong,
+  isCreditsPlanWithDemo,
+} from '../../billing/demoCounter';
 import { mapDialogRow } from '../api/mappers';
 import { sumOutboundMessages } from '../api/studioHelpers';
 import { archiveThumbUrl } from '../api/actions';
@@ -33,6 +39,10 @@ export default function Overview() {
   const { me, conversations, donationOverview, donationEvents, archiveImages, chatterStats } = cabinet;
 
   const credits = fmtCredits(me?.credits_balance);
+  const showDemo = isCreditsPlanWithDemo(me);
+  const demoRemaining = demoGenerationsRemaining(me);
+  const demoGrant = demoGenerationsGrant(me);
+  const demoLabel = formatDemoCounterLong(lang, demoRemaining, demoGrant);
   const planName = me?.plan_display_name || me?.plan_tier || '—';
   const recentDialogs = conversations.slice(0, 4).map((c, i) => mapDialogRow(c, i));
   const recentFrames = archiveImages.slice(0, 4);
@@ -89,7 +99,21 @@ export default function Overview() {
             <span style={{ fontSize: 10.5, fontWeight: 800, color: color.lime }}>{t.topup} →</span>
           </div>
           <div style={{ fontFamily: font.display, fontWeight: 700, fontSize: 26, color: color.lime }}>{credits}</div>
-          <div style={{ fontSize: 11.5, color: color.textDim, marginTop: 4 }}>≈ {Math.floor(Number(credits) / 10)} {t.framesLeft}</div>
+          <div style={{ fontSize: 11.5, color: color.textDim, marginTop: 4 }}>
+            ≈ {Math.floor(Number(credits) / 10)} {t.framesLeft}
+          </div>
+          {showDemo && (
+            <div
+              style={{
+                fontSize: 11.5,
+                fontWeight: 700,
+                marginTop: 6,
+                color: demoRemaining > 0 ? color.limeOlive : color.orange,
+              }}
+            >
+              {demoLabel}
+            </div>
+          )}
         </KpiCard>
 
         <KpiCard onClick={go('billing')}>

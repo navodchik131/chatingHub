@@ -6,6 +6,12 @@ import { filterNavGroups } from '../data/navAccess';
 import { color, line, font } from '../styles/tokens';
 import { borderHoverOff } from '../styles/mixins';
 import { fmtCredits } from '../api/helpers';
+import {
+  demoGenerationsGrant,
+  demoGenerationsRemaining,
+  formatDemoCounterShort,
+  isCreditsPlanWithDemo,
+} from '../../billing/demoCounter';
 import { computeNavBadges } from '../api/mappers';
 import { assetUrl } from '../utils/assets';
 import { goToAdmin } from '../../marketing/workspaceEntry';
@@ -46,6 +52,10 @@ export default function Sidebar() {
   const langLabel = lang === 'ru' ? 'RU → EN' : 'EN → RU';
   const me = cabinet.me;
   const credits = fmtCredits(me?.credits_balance);
+  const showDemo = isCreditsPlanWithDemo(me);
+  const demoRemaining = demoGenerationsRemaining(me);
+  const demoGrant = demoGenerationsGrant(me);
+  const demoLabel = formatDemoCounterShort(lang, demoRemaining, demoGrant);
   const badges = computeNavBadges(cabinet, me);
   const groups = filterNavGroups(navGroups(t, badges), me, cabinet.opRights);
   const email = me?.email || '—';
@@ -138,6 +148,18 @@ export default function Sidebar() {
               {credits}
             </div>
             <div style={{ fontSize: 10.5, color: color.textDim }}>{t.credits}</div>
+            {showDemo && (
+              <div
+                style={{
+                  fontSize: 10,
+                  fontWeight: 700,
+                  marginTop: 4,
+                  color: demoRemaining > 0 ? color.limeOlive : color.orange,
+                }}
+              >
+                {demoLabel}
+              </div>
+            )}
           </div>
           <span style={{ fontSize: 11, fontWeight: 700, color: color.lime }}>{t.topup} →</span>
         </Hoverable>

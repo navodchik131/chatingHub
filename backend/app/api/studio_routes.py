@@ -74,6 +74,8 @@ from app.services.demo_generations import (
     prepare_studio_image_billing,
     raise_studio_access_denied,
     record_studio_image_billing,
+    reserve_bootstrap_image_demo_slot,
+    reserve_studio_image_demo_slot,
     resolve_image_credit_cost,
 )
 from app.services.device_signal import device_signal_from_mapping, merge_device_key_into_params
@@ -769,6 +771,116 @@ def _truthy_wavespeed_flag(raw: str | None) -> bool:
     if raw is None:
         return True
     return str(raw).strip().lower() not in ("0", "false", "no", "off", "")
+
+
+def _demo_slot_already_reserved(params: dict[str, Any]) -> bool:
+    return str(params.get("demo_slot_reserved") or "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+
+
+async def _reserve_refine_prompt_billing_at_accept(
+    session: AsyncSession,
+    user: User,
+    oid: int,
+    params: dict[str, Any],
+    *,
+    mask_bytes: bool,
+) -> None:
+    sub_b, _, _ws_row, plan, credits, demo = await load_owner_studio_billing(session, oid)
+    _require_studio_subscription(
+        user,
+        sub_b,
+        credits_balance=credits,
+        demo_generations_remaining=demo,
+    )
+
+    mode_n = _normalize_studio_mode(str(params.get("studio_mode") or "model_scene"))
+    wave_profile_n = _normalize_studio_wave_profile(
+        str(params.get("studio_wave_profile") or "nsfw")
+    )
+    wan_tier_n = _normalize_wan_edit_tier(str(params.get("wan_edit_tier") or "standard"))
+    workflow_wave_model = (str(params.get("workflow_wave_model") or "").strip().lower()) or None
+    workflow_source = params.get("workflow_source")
+
+    usage_kind = "studio_inpaint" if mask_bytes else "studio_prompt_refine"
+    grok_pipeline = grok_pipeline_for_studio_mode(mode_n, workflow=workflow_source)
+    billing_wave_model = (
+        workflow_wave_model
+        if workflow_wave_model
+        else effective_wave_model_for_billing(None, wave_profile=wave_profile_n)
+    )
+    base_studio_credit = (
+        settings.credit_cost_studio_inpaint
+        if mask_bytes
+        else settings.credit_cost_studio_prompt_refine
+    )
+    quoted_cost = resolve_image_credit_cost(
+        plan,
+        wave_model_id=billing_wave_model,
+        wan_edit_tier=wan_tier_n,
+        grok_pipeline=grok_pipeline,
+        legacy_base=base_studio_credit,
+    )
+    assert_demo_only_user_model_allowed(
+        plan=plan,
+        demo_remaining=demo,
+        credits_balance=credits,
+        wave_model_id=billing_wave_model,
+        grok_pipeline=grok_pipeline,
+        wave_profile=wave_profile_n,
+        wan_edit_tier=wan_tier_n,
+    )
+    billing_owner = await resolve_billing_user(session, user)
+    used_demo = await reserve_studio_image_demo_slot(
+        session,
+        user,
+        billing_owner,
+        plan=plan,
+        base_cost=base_studio_credit,
+        usage_kind=usage_kind,
+        quoted_cost=quoted_cost,
+        wave_model_id=billing_wave_model,
+        grok_pipeline=grok_pipeline,
+        wave_profile=wave_profile_n,
+        wan_edit_tier=wan_tier_n,
+        device_signal=device_signal_from_mapping(params),
+    )
+    if used_demo:
+        params["demo_slot_reserved"] = "1"
+
+
+async def _reserve_bootstrap_billing_at_accept(
+    session: AsyncSession,
+    user: User,
+    oid: int,
+    params: dict[str, Any],
+    *,
+    usage_kind: str,
+    wave_model_id: str,
+) -> None:
+    sub_b, _, _ws_row, plan, credits, demo = await load_owner_studio_billing(session, oid)
+    _require_studio_subscription(
+        user,
+        sub_b,
+        credits_balance=credits,
+        demo_generations_remaining=demo,
+    )
+    billing_owner = await resolve_billing_user(session, user)
+    used_demo = await reserve_bootstrap_image_demo_slot(
+        session,
+        user,
+        billing_owner,
+        plan=plan,
+        usage_kind=usage_kind,
+        wave_model_id=wave_model_id,
+        device_signal=device_signal_from_mapping(params),
+    )
+    if used_demo:
+        params["demo_slot_reserved"] = "1"
 
 
 def _effective_generate_wavespeed(generate_wavespeed: str | None) -> bool:
@@ -2844,6 +2956,13 @@ async def api_studio_refine_prompt(
         "reference_analysis_json": (reference_analysis_json or "").strip() or None,
     }
     merge_device_key_into_params(params, request)
+    await _reserve_refine_prompt_billing_at_accept(
+        session,
+        user,
+        oid,
+        params,
+        mask_bytes=bool(mask_bytes),
+    )
     job = await studio_jobs.create_studio_job(
         session,
         owner_id=oid,
@@ -3039,6 +3158,13 @@ async def _accept_studio_refine_job_from_workflow(
         params["workflow_first_frame"] = "1"
     if request is not None:
         merge_device_key_into_params(params, request)
+    await _reserve_refine_prompt_billing_at_accept(
+        session,
+        user,
+        oid,
+        params,
+        mask_bytes=False,
+    )
     job = await studio_jobs.create_studio_job(
         session,
         owner_id=oid,
@@ -3476,6 +3602,7 @@ async def _studio_job_execute_refine_prompt(
         wave_profile=wave_profile_n,
         wan_edit_tier=wan_tier_n,
         device_signal=device_signal,
+        demo_slot_reserved=_demo_slot_already_reserved(p),
     )
 
     gen_row: StudioGeneration | None = None
@@ -6681,6 +6808,14 @@ async def api_model_bootstrap_face_merge(
         "ref_face_mime": (ref_face.content_type or "").strip(),
     }
     merge_device_key_into_params(params, request)
+    await _reserve_bootstrap_billing_at_accept(
+        session,
+        user,
+        oid,
+        params,
+        usage_kind="studio_model_bootstrap_face_merge",
+        wave_model_id="seedream-v5.0-pro",
+    )
     job = await studio_jobs.create_studio_job(
         session,
         owner_id=oid,
@@ -6792,6 +6927,14 @@ async def api_model_bootstrap_body_compose(
         "ref_face_mime": face_mime,
     }
     merge_device_key_into_params(params, request)
+    await _reserve_bootstrap_billing_at_accept(
+        session,
+        user,
+        oid,
+        params,
+        usage_kind="studio_model_bootstrap_body_compose",
+        wave_model_id="seedream-v5.0-pro",
+    )
     job = await studio_jobs.create_studio_job(
         session,
         owner_id=oid,
@@ -6913,6 +7056,14 @@ async def api_model_bootstrap_sheet(
         "dedupe_key": dedupe_key,
     }
     merge_device_key_into_params(params, request)
+    await _reserve_bootstrap_billing_at_accept(
+        session,
+        user,
+        oid,
+        params,
+        usage_kind="studio_model_bootstrap_sheet",
+        wave_model_id="gpt-image-2",
+    )
     job = await studio_jobs.create_studio_job(
         session,
         owner_id=oid,
@@ -7005,6 +7156,7 @@ async def _studio_job_execute_model_bootstrap_face_merge(
         usage_kind="studio_model_bootstrap_face_merge",
         wave_model_id="seedream-v5.0-pro",
         device_signal=device_signal,
+        demo_slot_reserved=_demo_slot_already_reserved(p),
     )
 
     try:
@@ -7132,6 +7284,7 @@ async def _studio_job_execute_model_bootstrap_body_compose(
         usage_kind="studio_model_bootstrap_body_compose",
         wave_model_id="seedream-v5.0-pro",
         device_signal=device_signal,
+        demo_slot_reserved=_demo_slot_already_reserved(p),
     )
 
     try:
@@ -7257,6 +7410,7 @@ async def _studio_job_execute_model_bootstrap_sheet(
         usage_kind="studio_model_bootstrap_sheet",
         wave_model_id="gpt-image-2",
         device_signal=device_signal,
+        demo_slot_reserved=_demo_slot_already_reserved(p),
     )
 
     if used_demo and gen_row is not None:

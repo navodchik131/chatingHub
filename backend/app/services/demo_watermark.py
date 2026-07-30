@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import math
 from io import BytesIO
 
 from app.config import settings
@@ -22,6 +23,9 @@ def apply_demo_watermark(image_bytes: bytes, ext: str, media: str) -> tuple[byte
         return image_bytes, ext, media
 
     label = (settings.demo_watermark_text or "ModelMate Demo").strip() or "ModelMate Demo"
+    opacity = max(0.05, min(0.9, float(settings.demo_watermark_opacity)))
+    alpha = int(round(255 * opacity))
+
     try:
         base = Image.open(BytesIO(image_bytes))
     except Exception:
@@ -29,47 +33,32 @@ def apply_demo_watermark(image_bytes: bytes, ext: str, media: str) -> tuple[byte
         return image_bytes, ext, media
 
     rgba = base.convert("RGBA")
-    overlay = Image.new("RGBA", rgba.size, (0, 0, 0, 0))
-    draw = ImageDraw.Draw(overlay)
     width, height = rgba.size
-    font_size = max(18, min(width, height) // 28)
+    diag = math.hypot(width, height)
+    font_size = max(28, int(diag * 0.06))
     try:
         font = ImageFont.truetype("arial.ttf", font_size)
     except OSError:
         font = ImageFont.load_default()
 
-    text_bbox = draw.textbbox((0, 0), label, font=font)
-    text_w = text_bbox[2] - text_bbox[0]
-    text_h = text_bbox[3] - text_bbox[1]
-    pad_x, pad_y = 14, 8
-    box_w = text_w + pad_x * 2
-    box_h = text_h + pad_y * 2
-    x = max(12, width - box_w - 12)
-    y = max(12, height - box_h - 12)
-    draw.rounded_rectangle(
-        (x, y, x + box_w, y + box_h),
-        radius=8,
-        fill=(8, 8, 10, 150),
-    )
-    draw.text((x + pad_x, y + pad_y), label, font=font, fill=(242, 243, 240, 230))
+    probe = Image.new("RGBA", (8, 8), (0, 0, 0, 0))
+    pb = ImageDraw.Draw(probe).textbbox((0, 0), label, font=font)
+    text_w = max(1, pb[2] - pb[0])
+    text_h = max(1, pb[3] - pb[1])
+    pad_x, pad_y = 48, 72
+    tile_w = text_w + pad_x
+    tile_h = text_h + pad_y
 
-    # Диагональный полупрозрачный текст по центру
-    diag_font_size = max(22, min(width, height) // 10)
-    try:
-        diag_font = ImageFont.truetype("arial.ttf", diag_font_size)
-    except OSError:
-        diag_font = font
-    diag_layer = Image.new("RGBA", rgba.size, (0, 0, 0, 0))
-    diag_draw = ImageDraw.Draw(diag_layer)
-    diag_bbox = diag_draw.textbbox((0, 0), label, font=diag_font)
-    diag_w = diag_bbox[2] - diag_bbox[0]
-    diag_h = diag_bbox[3] - diag_bbox[1]
-    diag_img = Image.new("RGBA", (diag_w + 20, diag_h + 20), (0, 0, 0, 0))
-    ImageDraw.Draw(diag_img).text((10, 10), label, font=diag_font, fill=(255, 255, 255, 42))
-    diag_img = diag_img.rotate(32, expand=True, resample=Image.Resampling.BICUBIC)
-    dx = (width - diag_img.width) // 2
-    dy = (height - diag_img.height) // 2
-    overlay.alpha_composite(diag_img, (dx, dy))
+    tile = Image.new("RGBA", (tile_w, tile_h), (0, 0, 0, 0))
+    ImageDraw.Draw(tile).text((pad_x // 2, pad_y // 2), label, font=font, fill=(255, 255, 255, alpha))
+    tile = tile.rotate(-34, expand=True, resample=Image.Resampling.BICUBIC)
+
+    overlay = Image.new("RGBA", rgba.size, (0, 0, 0, 0))
+    step_x = max(1, int(tile.width * 0.72))
+    step_y = max(1, int(tile.height * 0.72))
+    for y in range(-tile.height, height + tile.height, step_y):
+        for x in range(-tile.width, width + tile.width, step_x):
+            overlay.alpha_composite(tile, (x, y))
 
     composed = Image.alpha_composite(rgba, overlay)
     out = BytesIO()

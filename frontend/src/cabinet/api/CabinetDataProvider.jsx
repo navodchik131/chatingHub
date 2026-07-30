@@ -954,7 +954,7 @@ export function CabinetDataProvider({ children }) {
         }
         setArchiveImages((prev) => applyJobToOptimisticArchive(prev, tempIds, accepted))
         void refreshArchivePending()
-        void apiJson('/api/auth/me').then(setMe)
+        setMe(await apiJson('/api/auth/me'))
         if (accepted?.job_id) {
           const jobId = accepted.job_id
           const cleanupIds = [...tempIds]

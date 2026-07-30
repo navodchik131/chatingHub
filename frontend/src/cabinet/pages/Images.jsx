@@ -17,6 +17,12 @@ import {
 } from '../api/studioHelpers';
 import { quoteStudioImageCredits } from '../../studioImagePricing';
 import { normalizeBillingPlan } from '../../billing/planCatalog';
+import {
+  demoGenerationsGrant,
+  demoGenerationsRemaining,
+  formatDemoCounterLong,
+  isCreditsPlanWithDemo,
+} from '../../billing/demoCounter';
 
 const ratios = ['9:16', '16:9', '1:1', '4:3', '3:4'];
 const countOptions = [2, 3, 4, 6, 8];
@@ -299,6 +305,10 @@ export default function Images() {
     [studioState.contentMode, studioState.aiModel, studioState.carouselCount, lang],
   );
   const isPro = normalizeBillingPlan(cabinet.me?.billing_plan) === 'pro';
+  const showDemo = isCreditsPlanWithDemo(cabinet.me);
+  const demoRemaining = demoGenerationsRemaining(cabinet.me);
+  const demoGrant = demoGenerationsGrant(cabinet.me);
+  const demoBannerText = formatDemoCounterLong(lang, demoRemaining, demoGrant);
   const modes = useMemo(() => {
     const defs = modeDefs(lang, t.cr);
     return defs.map((m) => {
@@ -359,6 +369,49 @@ export default function Images() {
         <PageTitle style={{ marginBottom: 5 }}>{t.navImages}</PageTitle>
         <div style={{ fontSize: 12.5, color: color.textDim }}>{t.imagesDesc}</div>
       </div>
+
+      {showDemo && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 12,
+            flexWrap: 'wrap',
+            marginBottom: 14,
+            padding: '10px 14px',
+            borderRadius: 12,
+            background: demoRemaining > 0 ? 'rgba(215,244,82,.08)' : 'rgba(248,113,113,.08)',
+            border: `1px solid ${demoRemaining > 0 ? 'rgba(215,244,82,.28)' : 'rgba(248,113,113,.28)'}`,
+          }}
+        >
+          <span
+            style={{
+              fontSize: 12.5,
+              fontWeight: 700,
+              lineHeight: 1.45,
+              color: demoRemaining > 0 ? color.lime : color.red,
+            }}
+          >
+            {demoBannerText}
+          </span>
+          {demoRemaining <= 0 && (
+            <Hoverable
+              style={{
+                fontSize: 11,
+                fontWeight: 800,
+                color: color.lime,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+              }}
+              hover={{ color: color.limeHi }}
+              onClick={go('billing')}
+            >
+              {t.topup} →
+            </Hoverable>
+          )}
+        </div>
+      )}
 
       {/* mode cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: 10, marginBottom: 18 }}>

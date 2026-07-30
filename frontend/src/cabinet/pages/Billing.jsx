@@ -7,6 +7,12 @@ import { color, line, font } from '../styles/tokens';
 import { segOn, segOff, borderHoverOff } from '../styles/mixins';
 import { fmtCredits, fmtMoney } from '../api/helpers';
 import { mapUsageBars, mapCreditHistory } from '../api/mappers';
+import {
+  demoGenerationsGrant,
+  demoGenerationsRemaining,
+  formatDemoCounterLong,
+  isCreditsPlanWithDemo,
+} from '../../billing/demoCounter';
 import { copyText } from '../utils/clipboard';
 import { fetchUsdRate, formatPlanPrice, getCachedRubPerUsd } from '../utils/money';
 import { cabinetPlanFeatures } from '../utils/planFeatures';
@@ -61,6 +67,10 @@ export default function Billing() {
   });
   const perLabel = s.period === 'month' ? (lang === 'ru' ? 'мес' : 'mo') : (lang === 'ru' ? 'год' : 'yr');
   const credits = fmtCredits(me?.credits_balance);
+  const showDemo = isCreditsPlanWithDemo(me);
+  const demoRemaining = demoGenerationsRemaining(me);
+  const demoGrant = demoGenerationsGrant(me);
+  const demoLabel = formatDemoCounterLong(lang, demoRemaining, demoGrant);
   const planName = me?.plan_display_name || me?.plan_tier || '—';
   const usageBars = mapUsageBars(me, lang);
   const historyRows = mapCreditHistory(creditHistory, lang);
@@ -133,9 +143,22 @@ export default function Billing() {
             <Eyebrow size={9.5} style={{ marginBottom: 0, color: color.limeOlive }}>{t.kpiCredits}</Eyebrow>
           </div>
           <div style={{ fontFamily: font.display, fontWeight: 700, fontSize: 30, color: color.lime }}>{credits}</div>
-          <div style={{ fontSize: 11.5, color: color.textDim, marginTop: 4, marginBottom: 14 }}>
+          <div style={{ fontSize: 11.5, color: color.textDim, marginTop: 4, marginBottom: showDemo ? 8 : 14 }}>
             {t.balance} · ≈ {Math.floor(Number(credits) / 10)} {t.framesLeft}
           </div>
+          {showDemo && (
+            <div
+              style={{
+                fontSize: 12,
+                fontWeight: 700,
+                lineHeight: 1.45,
+                color: demoRemaining > 0 ? color.limeOlive : color.orange,
+                marginBottom: 14,
+              }}
+            >
+              {demoLabel}
+            </div>
+          )}
           <Hoverable
             style={{
               background: color.lime, color: color.limeInk, fontWeight: 800, fontSize: 12.5,

@@ -82,12 +82,37 @@ async def try_consume_device_demo_slot(
     limit = demo_device_limit()
     if limit <= 0:
         return False
-    row = await get_or_create_device_quota(session, signal)
+    stmt = (
+        select(DemoDeviceQuota)
+        .where(DemoDeviceQuota.device_key == signal.device_key)
+        .with_for_update()
+    )
+    row = (await session.execute(stmt)).scalar_one_or_none()
+    if row is None:
+        row = DemoDeviceQuota(
+            device_key=signal.device_key,
+            ip_hash=signal.ip_hash,
+            ua_hash=signal.ua_hash,
+            fp_hash=signal.fp_hash,
+            demo_used_count=0,
+        )
+        session.add(row)
+        await session.flush()
+        stmt = (
+            select(DemoDeviceQuota)
+            .where(DemoDeviceQuota.device_key == signal.device_key)
+            .with_for_update()
+        )
+        row = (await session.execute(stmt)).scalar_one_or_none()
+        if row is None:
+            return False
     if int(row.demo_used_count or 0) >= limit:
         return False
     row.demo_used_count = int(row.demo_used_count or 0) + 1
     row.last_user_id = user_id
     row.last_seen_at = datetime.now(timezone.utc)
+    if signal.fp_hash and not row.fp_hash:
+        row.fp_hash = signal.fp_hash
     session.add(row)
     await session.flush()
     return True

@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.db.models import CreditAccount, UsageEvent, User
+from app.db.models import CreditAccount, DemoDeviceQuota, UsageEvent, User
 from app.services.billing_plan import is_credits_plan, normalize_billing_plan, studio_charges_credits
 from app.services.credits import ensure_can_consume_credits, record_usage
 from app.services.demo_device_limit import demo_device_limit, try_consume_device_demo_slot
@@ -143,6 +143,58 @@ def assert_demo_only_user_model_allowed(
     )
 
 
+async def _credit_account_for_update(
+    session: AsyncSession,
+    user_id: int,
+) -> CreditAccount | None:
+    stmt = (
+        select(CreditAccount)
+        .where(CreditAccount.user_id == user_id)
+        .with_for_update()
+    )
+    return (await session.execute(stmt)).scalar_one_or_none()
+
+
+async def reserve_studio_image_demo_slot(
+    session: AsyncSession,
+    actor: User,
+    billing: User,
+    *,
+    plan: str,
+    base_cost: int,
+    usage_kind: str,
+    quoted_cost: int | None = None,
+    wave_model_id: str | None = None,
+    grok_pipeline: str = "standard",
+    wave_profile: str | None = "nsfw",
+    wan_edit_tier: str | None = "standard",
+    device_signal: DeviceSignal | None = None,
+) -> bool:
+    """
+    Резервирует демо-слот при принятии job (до постановки в очередь).
+    Возвращает True, если списан демо-слот; иначе проверяет кредиты (402).
+    """
+    billing, cost, used_demo = await prepare_studio_image_billing(
+        session,
+        actor,
+        billing,
+        plan=plan,
+        base_cost=base_cost,
+        usage_kind=usage_kind,
+        quoted_cost=quoted_cost,
+        wave_model_id=wave_model_id,
+        grok_pipeline=grok_pipeline,
+        wave_profile=wave_profile,
+        wan_edit_tier=wan_edit_tier,
+        device_signal=device_signal,
+        lock_account=True,
+    )
+    if used_demo:
+        return True
+    await ensure_can_consume_credits(session, actor, cost)
+    return False
+
+
 async def prepare_studio_image_billing(
     session: AsyncSession,
     actor: User,
@@ -157,10 +209,15 @@ async def prepare_studio_image_billing(
     wave_profile: str | None = "nsfw",
     wan_edit_tier: str | None = "standard",
     device_signal: DeviceSignal | None = None,
+    lock_account: bool = False,
+    demo_slot_reserved: bool = False,
 ) -> tuple[User, int, bool]:
     """
     Демо-счётчик или кредиты. quoted_cost — из studio_image_pricing; иначе base_cost.
     """
+    if demo_slot_reserved:
+        return billing, 0, True
+
     if not studio_charges_credits(plan):
         return billing, 0, False
 
@@ -169,7 +226,9 @@ async def prepare_studio_image_billing(
         return billing, 0, False
 
     acc = billing.credit_account
-    if acc is None:
+    if lock_account:
+        acc = await _credit_account_for_update(session, billing.id)
+    elif acc is None:
         acc = await session.get(CreditAccount, billing.id)
     demo_rem = int(acc.demo_generations_remaining) if acc is not None else 0
 
@@ -284,6 +343,8 @@ async def prepare_bootstrap_image_billing(
     usage_kind: str,
     wave_model_id: str,
     device_signal: DeviceSignal | None = None,
+    lock_account: bool = False,
+    demo_slot_reserved: bool = False,
 ) -> tuple[User, int, bool]:
     """Биллинг bootstrap-генераций (face/body/sheet) с учётом демо-слотов."""
     quoted = quote_studio_image_credits(
@@ -304,4 +365,33 @@ async def prepare_bootstrap_image_billing(
         wave_profile="nsfw",
         wan_edit_tier="standard",
         device_signal=device_signal,
+        lock_account=lock_account,
+        demo_slot_reserved=demo_slot_reserved,
     )
+
+
+async def reserve_bootstrap_image_demo_slot(
+    session: AsyncSession,
+    actor: User,
+    billing_owner: User,
+    *,
+    plan: str,
+    usage_kind: str,
+    wave_model_id: str,
+    device_signal: DeviceSignal | None = None,
+) -> bool:
+    """Резервирует демо-слот для bootstrap при accept job."""
+    billing, cost, used_demo = await prepare_bootstrap_image_billing(
+        session,
+        actor,
+        billing_owner,
+        plan=plan,
+        usage_kind=usage_kind,
+        wave_model_id=wave_model_id,
+        device_signal=device_signal,
+        lock_account=True,
+    )
+    if used_demo:
+        return True
+    await ensure_can_consume_credits(session, actor, cost)
+    return False
