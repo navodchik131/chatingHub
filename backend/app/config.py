@@ -54,6 +54,19 @@ class Settings(BaseSettings):
         ge=0,
         description="Бесплатные генерации картинок для тарифа Credits.",
     )
+    demo_device_limit: int = Field(
+        default=3,
+        ge=0,
+        description="Максимум демо-генераций на одно устройство (IP+UA+client id) за всё время.",
+    )
+    demo_watermark_enabled: bool = Field(
+        default=True,
+        description="Накладывать watermark на результаты бесплатных демо-генераций.",
+    )
+    demo_watermark_text: str = Field(
+        default="ModelMate Demo",
+        description="Текст watermark на демо-изображениях.",
+    )
     demo_studio_wave_model: str = Field(
         default="nano-banana-2",
         description="Модель WaveSpeed для демо (обычные фото). NSFW в демо — wan-2.7.",

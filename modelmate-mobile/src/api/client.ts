@@ -1,4 +1,5 @@
 import { apiUrl } from '@/src/api/config';
+import { appendDeviceIdHeader } from '@/src/api/deviceId';
 import { formatHttpApiError } from '@/src/api/errors';
 import { getToken } from '@/src/api/token';
 
@@ -8,6 +9,7 @@ export async function apiFetch(
 ): Promise<Response> {
   const { timeoutMs, ...restInit } = init;
   const headers = new Headers(restInit.headers);
+  await appendDeviceIdHeader(headers);
   const t = await getToken();
   if (t) headers.set('Authorization', `Bearer ${t}`);
   if (!headers.has('Content-Type') && restInit.body && typeof restInit.body === 'string') {

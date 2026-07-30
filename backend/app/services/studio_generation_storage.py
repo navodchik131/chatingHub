@@ -17,6 +17,7 @@ from app.config import BACKEND_DIR, settings
 from app.db.models import StudioGeneration, UserStudioModel
 from app.db.session import SessionLocal
 from app.services.studio_generation_status import StudioGenerationStatus
+from app.services.demo_watermark import apply_demo_watermark
 from app.services.studio_model_images import exif_camera_is_selfie, normalize_exif_camera
 
 if TYPE_CHECKING:
@@ -355,6 +356,8 @@ async def _write_generation_file(
         ext=ext,
         media=media,
     )
+    if getattr(row, "is_demo", False):
+        data, ext, media = apply_demo_watermark(data, ext, media)
 
     rel = f"data/studio_generations/{row.user_id}/{uuid.uuid4().hex}{ext}"
     path = (BACKEND_DIR / rel).resolve()

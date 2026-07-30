@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.passwords import hash_password
 from app.db.models import User
 from app.services.auth_provision import provision_workspace_owner
+from app.services.device_signal import DeviceSignal
 
 _TELEGRAM_EMAIL_RE = re.compile(r"^tg(\d+)@telegram\.local$")
 
@@ -90,6 +91,7 @@ async def create_owner_from_telegram(
     telegram_id: int,
     telegram_username: str | None,
     referral_code: str | None = None,
+    device_signal: DeviceSignal | None = None,
 ) -> User:
     await assert_telegram_id_available(session, telegram_id)
     email = synthetic_telegram_email(telegram_id)
@@ -100,6 +102,7 @@ async def create_owner_from_telegram(
         hashed_password=hash_password(random_password),
         auth_email_verified=False,
         referral_code=referral_code,
+        device_signal=device_signal,
     )
     await link_telegram_to_owner(
         session,

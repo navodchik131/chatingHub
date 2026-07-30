@@ -1,7 +1,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -29,6 +29,7 @@ from app.schemas import (
     UserPreferencesPatchIn,
 )
 from app.services.admin_access import user_is_platform_admin
+from app.services.device_signal import device_signal_from_request
 from app.services.auth_provision import provision_workspace_owner
 from app.services.billing_plan import normalize_billing_plan
 from app.services.plan_catalog import normalize_plan_tier, plan_display_name
@@ -75,7 +76,11 @@ def _verify_telegram_body(body: TelegramLoginIn) -> TelegramLoginPayload:
 
 
 @router.post("/register", response_model=TokenOut)
-async def register(body: RegisterIn, session: AsyncSession = Depends(get_session)) -> TokenOut:
+async def register(
+    body: RegisterIn,
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+) -> TokenOut:
     stmt = select(User).where(User.email == body.email.lower().strip())
     if (await session.execute(stmt)).scalar_one_or_none():
         raise HTTPException(status_code=400, detail="email already registered")
@@ -85,6 +90,7 @@ async def register(body: RegisterIn, session: AsyncSession = Depends(get_session
         hashed_password=hash_password(body.password),
         auth_email_verified=True,
         referral_code=body.referral_code,
+        device_signal=device_signal_from_request(request),
     )
     await session.commit()
     token = create_access_token(str(user.id))
@@ -125,6 +131,7 @@ async def login(body: LoginIn, session: AsyncSession = Depends(get_session)) -> 
 @router.post("/telegram", response_model=TokenOut)
 async def telegram_login_or_register(
     body: TelegramLoginIn,
+    request: Request,
     session: AsyncSession = Depends(get_session),
 ) -> TokenOut:
     if not settings.telegram_login_configured:
@@ -142,6 +149,7 @@ async def telegram_login_or_register(
             telegram_id=payload.id,
             telegram_username=payload.username,
             referral_code=body.referral_code,
+            device_signal=device_signal_from_request(request),
         )
         await record_funnel_event_once(session, user=user, event="signup_telegram")
     await session.commit()
@@ -151,9 +159,14 @@ async def telegram_login_or_register(
 @router.post("/telegram/mobile/start", response_model=TelegramMobileAuthStartOut)
 async def telegram_mobile_auth_start(
     body: TelegramMobileAuthStartIn,
+    request: Request,
     session: AsyncSession = Depends(get_session),
 ) -> TelegramMobileAuthStartOut:
-    row = await create_mobile_auth_session(session, referral_code=body.referral_code)
+    row = await create_mobile_auth_session(
+        session,
+        referral_code=body.referral_code,
+        device_key=device_signal_from_request(request).device_key,
+    )
     await session.commit()
     bot_username = (settings.telegram_login_bot_username or "").strip().lstrip("@")
     return TelegramMobileAuthStartOut(

@@ -363,6 +363,9 @@ async def init_db() -> None:
         await conn.run_sync(_migrate_user_telegram_identity)
         await conn.run_sync(_migrate_user_ui_simplified)
         await conn.run_sync(_migrate_user_ui_locale)
+        await conn.run_sync(_migrate_demo_device_quotas_table)
+        await conn.run_sync(_migrate_studio_generation_is_demo)
+        await conn.run_sync(_migrate_telegram_mobile_auth_device_key)
         await conn.run_sync(_migrate_tribute_processed_events)
         await conn.run_sync(_migrate_email_campaigns_tables)
         await conn.run_sync(_migrate_fanvue_oauth_columns)
@@ -2082,6 +2085,48 @@ def _migrate_user_ui_locale(sync_conn) -> None:
         return
     sync_conn.execute(
         text("ALTER TABLE users ADD COLUMN ui_locale VARCHAR(8) NOT NULL DEFAULT 'ru'")
+    )
+
+
+def _migrate_demo_device_quotas_table(sync_conn) -> None:
+    from sqlalchemy import inspect
+
+    from app.db.models import DemoDeviceQuota
+
+    insp = inspect(sync_conn)
+    if not insp.has_table("demo_device_quotas"):
+        DemoDeviceQuota.__table__.create(sync_conn, checkfirst=True)
+
+
+def _migrate_studio_generation_is_demo(sync_conn) -> None:
+    from sqlalchemy import inspect, text
+
+    insp = inspect(sync_conn)
+    if not insp.has_table("studio_generations"):
+        return
+    cols = {c["name"] for c in insp.get_columns("studio_generations")}
+    if "is_demo" in cols:
+        return
+    dialect = sync_conn.dialect.name
+    bool_false = "0" if dialect == "sqlite" else "false"
+    sync_conn.execute(
+        text(
+            f"ALTER TABLE studio_generations ADD COLUMN is_demo BOOLEAN NOT NULL DEFAULT {bool_false}"
+        )
+    )
+
+
+def _migrate_telegram_mobile_auth_device_key(sync_conn) -> None:
+    from sqlalchemy import inspect, text
+
+    insp = inspect(sync_conn)
+    if not insp.has_table("telegram_mobile_auth_sessions"):
+        return
+    cols = {c["name"] for c in insp.get_columns("telegram_mobile_auth_sessions")}
+    if "device_key" in cols:
+        return
+    sync_conn.execute(
+        text("ALTER TABLE telegram_mobile_auth_sessions ADD COLUMN device_key VARCHAR(64)")
     )
 
 

@@ -5,6 +5,36 @@
 ;(function (global) {
   const TOKEN_KEY = 'chating_token'
   const COOKIE_MAX_AGE = 60 * 60 * 24 * 90
+  const DEVICE_ID_KEY = 'mm_device_id'
+
+  function readCookieDeviceId() {
+    const m = document.cookie.match(/(?:^|;\s*)mm_device_id=([^;]*)/)
+    return m ? decodeURIComponent(m[1]) : null
+  }
+
+  function writeCookieDeviceId(id) {
+    document.cookie =
+      DEVICE_ID_KEY +
+      '=' +
+      encodeURIComponent(id) +
+      '; path=/; max-age=' +
+      (60 * 60 * 24 * 365 * 2) +
+      '; SameSite=Lax'
+  }
+
+  function getOrCreateDeviceId() {
+    let id = localStorage.getItem(DEVICE_ID_KEY)
+    if (!id) id = readCookieDeviceId()
+    if (!id) {
+      id =
+        typeof crypto !== 'undefined' && crypto.randomUUID
+          ? crypto.randomUUID()
+          : 'mm-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 12)
+    }
+    localStorage.setItem(DEVICE_ID_KEY, id)
+    writeCookieDeviceId(id)
+    return id
+  }
 
   function readCookieToken() {
     const m = document.cookie.match(/(?:^|;\s*)chating_token=([^;]*)/)
@@ -59,6 +89,7 @@
 
   async function apiFetch(path, init = {}) {
     const headers = new Headers(init.headers || {})
+    headers.set('X-Device-Id', getOrCreateDeviceId())
     const token = getToken()
     if (token) headers.set('Authorization', 'Bearer ' + token)
     if (!headers.has('Accept')) headers.set('Accept', 'application/json')

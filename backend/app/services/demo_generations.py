@@ -13,6 +13,8 @@ from app.config import settings
 from app.db.models import CreditAccount, UsageEvent, User
 from app.services.billing_plan import is_credits_plan, normalize_billing_plan, studio_charges_credits
 from app.services.credits import ensure_can_consume_credits, record_usage
+from app.services.demo_device_limit import demo_device_limit, try_consume_device_demo_slot
+from app.services.device_signal import DeviceSignal
 from app.services.studio_image_pricing import (
     demo_allowed_models_label,
     demo_request_eligible_for_free_slot as pricing_demo_eligible,
@@ -154,6 +156,7 @@ async def prepare_studio_image_billing(
     grok_pipeline: str = "standard",
     wave_profile: str | None = "nsfw",
     wan_edit_tier: str | None = "standard",
+    device_signal: DeviceSignal | None = None,
 ) -> tuple[User, int, bool]:
     """
     Демо-счётчик или кредиты. quoted_cost — из studio_image_pricing; иначе base_cost.
@@ -181,6 +184,14 @@ async def prepare_studio_image_billing(
             wan_edit_tier=wan_edit_tier,
         )
     ):
+        if demo_device_limit() > 0:
+            if device_signal is None:
+                pass
+            elif not await try_consume_device_demo_slot(
+                session, device_signal, user_id=billing.id
+            ):
+                billing = await ensure_can_consume_credits(session, actor, cost)
+                return billing, cost, False
         if acc is None:
             acc = CreditAccount(
                 user_id=billing.id,
@@ -272,6 +283,7 @@ async def prepare_bootstrap_image_billing(
     plan: str,
     usage_kind: str,
     wave_model_id: str,
+    device_signal: DeviceSignal | None = None,
 ) -> tuple[User, int, bool]:
     """Биллинг bootstrap-генераций (face/body/sheet) с учётом демо-слотов."""
     quoted = quote_studio_image_credits(
@@ -291,4 +303,5 @@ async def prepare_bootstrap_image_billing(
         grok_pipeline="none",
         wave_profile="nsfw",
         wan_edit_tier="standard",
+        device_signal=device_signal,
     )

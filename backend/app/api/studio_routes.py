@@ -76,6 +76,7 @@ from app.services.demo_generations import (
     record_studio_image_billing,
     resolve_image_credit_cost,
 )
+from app.services.device_signal import device_signal_from_mapping, merge_device_key_into_params
 from app.services.entitlements import subscription_active
 from app.services.studio_image_pricing import (
     effective_wave_model_for_billing,
@@ -2842,6 +2843,7 @@ async def api_studio_refine_prompt(
         "onboarding_wizard": onboarding_wizard,
         "reference_analysis_json": (reference_analysis_json or "").strip() or None,
     }
+    merge_device_key_into_params(params, request)
     job = await studio_jobs.create_studio_job(
         session,
         owner_id=oid,
@@ -2900,6 +2902,7 @@ async def _accept_studio_refine_job_from_workflow(
     plan: WorkflowGenerationPlan,
     reference_images: list[tuple[bytes, str, WorkflowReferenceItem]],
     workflow_first_frame: bool = False,
+    request: Request | None = None,
 ) -> JSONResponse:
     """Workflow execute → фоновый refine_prompt."""
     workflow_pure_prompt = (
@@ -3034,6 +3037,8 @@ async def _accept_studio_refine_job_from_workflow(
     }
     if workflow_first_frame:
         params["workflow_first_frame"] = "1"
+    if request is not None:
+        merge_device_key_into_params(params, request)
     job = await studio_jobs.create_studio_job(
         session,
         owner_id=oid,
@@ -3093,6 +3098,7 @@ async def _studio_job_execute_refine_prompt(
     user: User,
 ) -> dict[str, Any]:
     p = studio_jobs.job_params(job)
+    device_signal = device_signal_from_mapping(p)
     description = str(p.get("description") or "")
     model_id = p.get("model_id")
     existing_generation_id = str(p.get("existing_generation_id") or "")
@@ -3469,6 +3475,7 @@ async def _studio_job_execute_refine_prompt(
         grok_pipeline=grok_pipeline,
         wave_profile=wave_profile_n,
         wan_edit_tier=wan_tier_n,
+        device_signal=device_signal,
     )
 
     gen_row: StudioGeneration | None = None
@@ -4506,6 +4513,10 @@ async def _studio_job_execute_refine_prompt(
 
     generation_id: int | None = None
     gen_mid = mid
+    if used_demo and gen_row is not None:
+        gen_row.is_demo = True
+        session.add(gen_row)
+        await session.flush()
     if do_wavespeed or regional_composed_png or generated_image_url:
         finished_row, cdn_preview = await studio_finish_image_generation(
             session,
@@ -6669,6 +6680,7 @@ async def api_model_bootstrap_face_merge(
         "ref_form_mime": (ref_form.content_type or "").strip(),
         "ref_face_mime": (ref_face.content_type or "").strip(),
     }
+    merge_device_key_into_params(params, request)
     job = await studio_jobs.create_studio_job(
         session,
         owner_id=oid,
@@ -6779,6 +6791,7 @@ async def api_model_bootstrap_body_compose(
         "face_generation_id": face_gen_id,
         "ref_face_mime": face_mime,
     }
+    merge_device_key_into_params(params, request)
     job = await studio_jobs.create_studio_job(
         session,
         owner_id=oid,
@@ -6899,6 +6912,7 @@ async def api_model_bootstrap_sheet(
         "source_generation_id": gen_id,
         "dedupe_key": dedupe_key,
     }
+    merge_device_key_into_params(params, request)
     job = await studio_jobs.create_studio_job(
         session,
         owner_id=oid,
@@ -6942,6 +6956,7 @@ async def _studio_job_execute_model_bootstrap_face_merge(
     user: User,
 ) -> dict[str, Any]:
     p = studio_jobs.job_params(job)
+    device_signal = device_signal_from_mapping(p)
     oid = workspace_owner_id(user)
     pub = _public_https_base_runtime()
 
@@ -6989,6 +7004,7 @@ async def _studio_job_execute_model_bootstrap_face_merge(
         plan=plan,
         usage_kind="studio_model_bootstrap_face_merge",
         wave_model_id="seedream-v5.0-pro",
+        device_signal=device_signal,
     )
 
     try:
@@ -7002,6 +7018,10 @@ async def _studio_job_execute_model_bootstrap_face_merge(
         raise RuntimeError(humanize_wavespeed_provider_error(str(e))) from e
 
     arch_base = _public_app_base(None)
+    if used_demo and gen_row is not None:
+        gen_row.is_demo = True
+        session.add(gen_row)
+        await session.flush()
     _, preview_url = await studio_finish_image_generation(
         session,
         gen_row=gen_row,
@@ -7042,6 +7062,7 @@ async def _studio_job_execute_model_bootstrap_body_compose(
     user: User,
 ) -> dict[str, Any]:
     p = studio_jobs.job_params(job)
+    device_signal = device_signal_from_mapping(p)
     oid = workspace_owner_id(user)
     pub = _public_https_base_runtime()
 
@@ -7110,6 +7131,7 @@ async def _studio_job_execute_model_bootstrap_body_compose(
         plan=plan,
         usage_kind="studio_model_bootstrap_body_compose",
         wave_model_id="seedream-v5.0-pro",
+        device_signal=device_signal,
     )
 
     try:
@@ -7124,6 +7146,10 @@ async def _studio_job_execute_model_bootstrap_body_compose(
         raise RuntimeError(humanize_wavespeed_provider_error(str(e))) from e
 
     arch_base = _public_app_base(None)
+    if used_demo and gen_row is not None:
+        gen_row.is_demo = True
+        session.add(gen_row)
+        await session.flush()
     _, preview_url = await studio_finish_image_generation(
         session,
         gen_row=gen_row,
@@ -7164,6 +7190,7 @@ async def _studio_job_execute_model_bootstrap_sheet(
     user: User,
 ) -> dict[str, Any]:
     p = studio_jobs.job_params(job)
+    device_signal = device_signal_from_mapping(p)
     oid = workspace_owner_id(user)
     pub = _public_https_base_runtime()
 
@@ -7229,7 +7256,13 @@ async def _studio_job_execute_model_bootstrap_sheet(
         plan=plan,
         usage_kind="studio_model_bootstrap_sheet",
         wave_model_id="gpt-image-2",
+        device_signal=device_signal,
     )
+
+    if used_demo and gen_row is not None:
+        gen_row.is_demo = True
+        session.add(gen_row)
+        await session.flush()
 
     async def _on_sheet_task_submitted(task_id: str) -> None:
         if gen_row is not None:

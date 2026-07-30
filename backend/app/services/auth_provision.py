@@ -8,6 +8,8 @@ from app.config import settings
 from app.db.models import CreditAccount, Subscription, SubscriptionStatus, User
 from app.services.billing_plan import BILLING_PLAN_CREDITS, BILLING_PLAN_STANDARD
 from app.services.funnel_analytics import record_funnel_event_once
+from app.services.demo_device_limit import demo_grant_for_device
+from app.services.device_signal import DeviceSignal
 from app.services.referral import apply_referral_on_signup, ensure_owner_referral_code
 from app.services.starter_plan import starter_managed_effective
 from app.services.studio_workflow_defaults import provision_demo_workflow_workspaces
@@ -20,6 +22,7 @@ async def provision_workspace_owner(
     hashed_password: str,
     auth_email_verified: bool = True,
     referral_code: str | None = None,
+    device_signal: DeviceSignal | None = None,
 ) -> User:
     user = User(
         email=email.lower().strip(),
@@ -41,6 +44,13 @@ async def provision_workspace_owner(
     else:
         reg_status = SubscriptionStatus.none
         reg_plan = BILLING_PLAN_CREDITS
+
+    if reg_plan == BILLING_PLAN_CREDITS and demo_grant > 0:
+        demo_grant = await demo_grant_for_device(
+            session,
+            device_signal,
+            default_grant=demo_grant,
+        )
 
     session.add(
         Subscription(

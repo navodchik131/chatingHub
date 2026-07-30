@@ -1,3 +1,5 @@
+import { appendDeviceIdHeader } from './deviceId'
+
 const TOKEN_KEY = 'chating_token'
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 90
 
@@ -41,6 +43,7 @@ export async function apiFetch(
 ): Promise<Response> {
   const { timeoutMs, ...restInit } = init
   const headers = new Headers(restInit.headers)
+  appendDeviceIdHeader(headers)
   const t = getToken()
   if (t) headers.set('Authorization', `Bearer ${t}`)
   if (!headers.has('Content-Type') && restInit.body && typeof restInit.body === 'string') {

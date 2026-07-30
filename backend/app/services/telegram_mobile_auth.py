@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.jwt_utils import create_access_token
 from app.config import settings
 from app.db.models import TelegramMobileAuthSession
+from app.services.device_signal import DeviceSignal
 from app.services.funnel_analytics import record_funnel_event_once
 from app.services.telegram_identity import create_owner_from_telegram, find_owner_by_telegram_id
 
@@ -39,6 +40,7 @@ async def create_mobile_auth_session(
     session: AsyncSession,
     *,
     referral_code: str | None = None,
+    device_key: str | None = None,
 ) -> TelegramMobileAuthSession:
     if not settings.telegram_login_configured:
         raise HTTPException(status_code=503, detail="Telegram Login не настроен на сервере")
@@ -51,6 +53,7 @@ async def create_mobile_auth_session(
         id=session_id,
         status="pending",
         referral_code=(referral_code or "").strip().upper()[:16] or None,
+        device_key=(device_key or "").strip()[:64] or None,
         expires_at=_now() + timedelta(seconds=SESSION_TTL_SECONDS),
     )
     session.add(row)
@@ -114,11 +117,20 @@ async def complete_mobile_auth_session(
         user = existing
         existing.telegram_username = (telegram_username or "").strip().lstrip("@")[:64] or None
     else:
+        device_signal = None
+        if row.device_key:
+            device_signal = DeviceSignal(
+                device_key=row.device_key,
+                ip_hash="",
+                ua_hash="",
+                fp_hash=None,
+            )
         user = await create_owner_from_telegram(
             session,
             telegram_id=telegram_id,
             telegram_username=telegram_username,
             referral_code=row.referral_code,
+            device_signal=device_signal,
         )
         await record_funnel_event_once(session, user=user, event="signup_telegram")
 

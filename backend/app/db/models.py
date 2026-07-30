@@ -253,6 +253,30 @@ class CreditAccount(Base):
     user: Mapped[User] = relationship("User", back_populates="credit_account")
 
 
+class DemoDeviceQuota(Base):
+    """Счётчик демо-генераций на устройство (IP + UA + client id)."""
+
+    __tablename__ = "demo_device_quotas"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    device_key: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    ip_hash: Mapped[str] = mapped_column(String(64), default="")
+    ua_hash: Mapped[str] = mapped_column(String(64), default="")
+    fp_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    demo_used_count: Mapped[int] = mapped_column(Integer, default=0)
+    last_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    last_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+
 class UsageEvent(Base):
     __tablename__ = "usage_events"
 
@@ -699,6 +723,7 @@ class TelegramMobileAuthSession(Base):
     status: Mapped[str] = mapped_column(String(16), default="pending")
     access_token: Mapped[str | None] = mapped_column(String(512), nullable=True)
     referral_code: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    device_key: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     telegram_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
@@ -1340,6 +1365,7 @@ class StudioGeneration(Base):
     error_step: Mapped[str | None] = mapped_column(String(32), nullable=True)
     # EXIF при сохранении в архив: selfie (фронталка) | main (основная камера) — задаётся при генерации.
     exif_camera: Mapped[str] = mapped_column(String(16), default="main", nullable=False)
+    is_demo: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

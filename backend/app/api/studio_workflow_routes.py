@@ -7,7 +7,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -359,6 +359,7 @@ async def api_workflow_get_reference(
     responses={202: {"model": StudioJobAcceptedOut}},
 )
 async def api_workflow_execute(
+    request: Request,
     graph: str = Form(...),
     target_node_id: str = Form(...),
     workspace_id: int | None = Form(default=None),
@@ -442,6 +443,7 @@ async def api_workflow_execute(
                 plan=plan,
                 reference_images=loaded_refs,
                 workflow_first_frame=(target_type == "firstFrameGeneration"),
+                request=request,
             )
 
         if target_type == "turnaroundSheet":
