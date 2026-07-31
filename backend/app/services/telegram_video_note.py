@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import subprocess
 import tempfile
+from functools import partial
 from pathlib import Path
 
 import anyio
@@ -98,8 +99,10 @@ async def convert_video_bytes_to_telegram_note_async(
     mime_hint: str | None = None,
 ) -> bytes:
     return await anyio.to_thread.run_sync(
-        convert_video_bytes_to_telegram_note,
-        raw,
-        max_seconds=max_seconds,
-        mime_hint=mime_hint,
+        partial(
+            convert_video_bytes_to_telegram_note,
+            raw,
+            max_seconds=max_seconds,
+            mime_hint=mime_hint,
+        ),
     )
