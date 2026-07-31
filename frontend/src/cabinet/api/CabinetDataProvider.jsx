@@ -117,6 +117,8 @@ export function CabinetDataProvider({ children }) {
   const [activeConvId, setActiveConvId] = useState(null)
   const [genModels, setGenModels] = useState([])
   const [selectedModelId, setSelectedModelId] = useState(null)
+  const [promptWithoutCharacter, setPromptWithoutCharacter] = useState(false)
+  const promptWithoutCharacterRef = useRef(false)
   const [selectedAspect, setSelectedAspect] = useState('9:16')
   const [uploadFiles, setUploadFiles] = useState({})
   const [uploadPreviewUrls, setUploadPreviewUrls] = useState({})
@@ -402,6 +404,7 @@ export function CabinetDataProvider({ children }) {
         modelOpts,
         camPresets,
         tributeSummary,
+        supportTicketsData,
       ] = await Promise.all([
         apiJson('/api/auth/me'),
         apiJsonOptional('/api/health', {}, null),
@@ -424,6 +427,7 @@ export function CabinetDataProvider({ children }) {
         apiJsonOptional('/api/studio/workflow/model-options', {}, null),
         apiJsonOptional('/api/studio/camera-presets', {}, []),
         apiJsonOptional('/api/tribute/earnings/summary', {}, null),
+        actions.fetchSupportTickets().catch(() => []),
       ])
 
       setMe(meData)
@@ -438,6 +442,7 @@ export function CabinetDataProvider({ children }) {
         setModels((prev) => reuseModelImageUrls(prev, modelRows))
         setModelsLoadError(null)
         setSelectedModelId((prev) => {
+          if (promptWithoutCharacterRef.current) return null
           if (prev != null && modelRows.some((m) => sameStudioModelId(m.id, prev))) return prev
           return modelRows[0]?.id ?? null
         })
@@ -474,6 +479,7 @@ export function CabinetDataProvider({ children }) {
       setGenModels(mapGenModelsFromApi(modelOpts))
       setCameraPresets(Array.isArray(camPresets) ? camPresets : [])
       setTributeEarnings(tributeSummary)
+      setSupportTickets(Array.isArray(supportTicketsData) ? supportTicketsData : [])
     } catch (e) {
       setError(e.message || String(e))
     } finally {
@@ -484,6 +490,14 @@ export function CabinetDataProvider({ children }) {
   }, [])
 
   const pickStudioModel = useCallback((id) => {
+    if (id == null || id === '') {
+      promptWithoutCharacterRef.current = true
+      setPromptWithoutCharacter(true)
+      setSelectedModelId(null)
+      return
+    }
+    promptWithoutCharacterRef.current = false
+    setPromptWithoutCharacter(false)
     setSelectedModelId(normalizeStudioModelId(id))
   }, [])
 
@@ -1517,6 +1531,7 @@ export function CabinetDataProvider({ children }) {
       setActiveConvId,
       genModels,
       selectedModelId,
+      promptWithoutCharacter,
       setSelectedModelId: pickStudioModel,
       modelsLoadError,
       selectedAspect,

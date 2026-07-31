@@ -93,6 +93,17 @@
   font-weight: 800;
 }
 
+.admin-nav__badge {
+  margin-left: auto;
+  font-family: ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 800;
+  background: rgba(215, 244, 82, 0.15);
+  color: #d7f452;
+  padding: 2px 7px;
+  border-radius: 20px;
+}
+
 .admin-nav__icon {
   display: flex;
   width: 17px;
@@ -1134,6 +1145,13 @@
 .admin-badge--off {
   background: rgba(220, 80, 80, 0.2);
   color: #ffb4b4;
+}
+
+.admin-badge--new {
+  margin-left: 0.45rem;
+  background: rgba(215, 244, 82, 0.15);
+  color: #d7f452;
+  font-weight: 800;
 }
 
 .admin-panel {

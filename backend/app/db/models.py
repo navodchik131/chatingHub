@@ -1598,6 +1598,8 @@ class SupportTicket(Base):
         default=SupportTicketStatus.submitted,
         index=True,
     )
+    user_has_unread: Mapped[bool] = mapped_column(Boolean, default=False)
+    admin_has_unread: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

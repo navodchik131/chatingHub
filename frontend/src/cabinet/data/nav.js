@@ -33,7 +33,7 @@ export const navGroups = (t, badges = {}) => [
     items: [
       { id: 'connections', label: t.navConnections, Icon: IcoPlug },
       { id: 'team', label: t.navTeam, Icon: IcoTeam },
-      { id: 'support', label: t.navSupport, Icon: IcoLifeBuoy },
+      { id: 'support', label: t.navSupport, Icon: IcoLifeBuoy, badge: badges.support },
       { id: 'profile', label: t.navProfile, Icon: IcoUser },
     ],
   },

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -17,6 +17,7 @@ from app.schemas import (
     AdminSupportTicketStatusPatchIn,
     SupportTicketReplyOut,
 )
+from app.services.support_push import notify_support_reply_to_user
 
 router = APIRouter(prefix="/admin/tickets", tags=["admin"])
 
@@ -44,6 +45,21 @@ def _admin_ticket_out(row: SupportTicket, user_email: str) -> AdminSupportTicket
     )
 
 
+def _admin_list_item(row: SupportTicket, user_email: str) -> AdminSupportTicketListItemOut:
+    return AdminSupportTicketListItemOut(
+        id=row.id,
+        user_id=row.user_id,
+        user_email=user_email,
+        type=row.type,
+        subject=row.subject,
+        status=row.status.value,
+        user_has_unread=bool(row.user_has_unread),
+        admin_has_unread=bool(row.admin_has_unread),
+        created_at=row.created_at,
+        updated_at=row.updated_at,
+    )
+
+
 async def _load_admin_ticket(
     session: AsyncSession, ticket_id: int
 ) -> tuple[SupportTicket, str]:
@@ -58,6 +74,20 @@ async def _load_admin_ticket(
         raise HTTPException(status_code=404, detail="Обращение не найдено")
     ticket, email = row[0], row[1]
     return ticket, email
+
+
+@router.get("/unread-count")
+async def admin_support_unread_count(
+    _admin: User = Depends(get_platform_admin),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, int]:
+    stmt = (
+        select(func.count())
+        .select_from(SupportTicket)
+        .where(SupportTicket.admin_has_unread.is_(True))
+    )
+    count = int((await session.execute(stmt)).scalar_one() or 0)
+    return {"count": count}
 
 
 @router.get("", response_model=list[AdminSupportTicketListItemOut])
@@ -81,19 +111,7 @@ async def admin_list_support_tickets(
             raise HTTPException(status_code=400, detail="Некорректный status") from e
         stmt = stmt.where(SupportTicket.status == st)
     rows = (await session.execute(stmt)).all()
-    return [
-        AdminSupportTicketListItemOut(
-            id=ticket.id,
-            user_id=ticket.user_id,
-            user_email=email,
-            type=ticket.type,
-            subject=ticket.subject,
-            status=ticket.status.value,
-            created_at=ticket.created_at,
-            updated_at=ticket.updated_at,
-        )
-        for ticket, email in rows
-    ]
+    return [_admin_list_item(ticket, email) for ticket, email in rows]
 
 
 @router.get("/{ticket_id}", response_model=AdminSupportTicketOut)
@@ -103,6 +121,10 @@ async def admin_get_support_ticket(
     session: AsyncSession = Depends(get_session),
 ) -> AdminSupportTicketOut:
     ticket, email = await _load_admin_ticket(session, ticket_id)
+    if ticket.admin_has_unread:
+        ticket.admin_has_unread = False
+        await session.commit()
+        await session.refresh(ticket, attribute_names=["replies", "updated_at"])
     return _admin_ticket_out(ticket, email)
 
 
@@ -114,18 +136,26 @@ async def admin_reply_support_ticket(
     session: AsyncSession = Depends(get_session),
 ) -> AdminSupportTicketOut:
     ticket, email = await _load_admin_ticket(session, ticket_id)
+    msg = body.message.strip()
     reply = SupportTicketReply(
         ticket_id=ticket.id,
         is_staff=True,
-        message=body.message.strip(),
+        message=msg,
     )
     session.add(reply)
     if ticket.status == SupportTicketStatus.submitted:
         ticket.status = SupportTicketStatus.in_review
     elif ticket.status == SupportTicketStatus.in_review:
         ticket.status = SupportTicketStatus.answered
+    ticket.user_has_unread = True
     await session.commit()
     await session.refresh(ticket, attribute_names=["replies", "updated_at"])
+    await notify_support_reply_to_user(
+        ticket.user_id,
+        ticket_id=ticket.id,
+        subject=ticket.subject,
+        preview=msg,
+    )
     return _admin_ticket_out(ticket, email)
 
 

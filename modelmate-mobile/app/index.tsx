@@ -9,6 +9,7 @@ import { NavigationProvider, useNav } from '@/src/context/NavigationContext';
 import { hideTabBar } from '@/src/navigation/types';
 import { ScreenRouter } from '@/src/screens/ScreenRouter';
 import { SplashScreen } from '@/src/screens/SplashScreen';
+import { MobilePushNavigation } from '@/src/push/MobilePushNavigation';
 import { color } from '@/src/styles/tokens';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
@@ -86,6 +87,7 @@ function MainApp() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
+      <MobilePushNavigation />
       <AppShell showTabBar={!hideTabBar(stack)}>
         <SwipeBackWrapper enabled={canGoBack || canReturnToOverview} onBack={handleBack}>
           <ScreenRouter />

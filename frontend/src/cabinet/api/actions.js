@@ -642,7 +642,7 @@ export async function runImageGeneration({ appState, studioStore, userPrompt, wo
   const scenarios = await ensureStudioScenarios()
   const mode = appState.imgMode || 'prompt'
   const modelId = studioStore.selectedModelId
-  const needsModel = mode === 'ref' || mode === 'swap' || mode === 'prompt'
+  const needsModel = mode === 'ref' || mode === 'swap'
   if (needsModel && !modelId) throw new Error('Выберите персонажа')
 
   const bridgeApi = {

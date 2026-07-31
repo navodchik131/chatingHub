@@ -233,6 +233,7 @@
     notesBusy: false,
     error: null,
     selectedModelId: null,
+    promptWithoutCharacter: false,
     selectedWaveModelId: null,
     genModels: [],
     selectedAspect: '9:16',
@@ -1270,7 +1271,7 @@
       if (!resolveStudioPrompt('edit')) errs.push(t.errNoPrompt)
       if (s.needsRef === 'yes' && !slotHasSource('edit', 1)) errs.push(t.errNoRef)
     }
-    if (mode !== 'outfit' && mode !== 'location' && !store.selectedModelId) errs.push(t.errNoChar)
+    if (mode !== 'outfit' && mode !== 'location' && mode !== 'edit' && mode !== 'prompt' && !store.selectedModelId) errs.push(t.errNoChar)
     return errs
   }
 
@@ -1396,7 +1397,7 @@
   async function loadModels() {
     const data = await API.apiJson('/api/studio/models').catch(() => [])
     store.models = Array.isArray(data) ? data : []
-    if (!store.selectedModelId && store.models[0]) {
+    if (!store.selectedModelId && store.models[0] && !store.promptWithoutCharacter) {
       store.selectedModelId = store.models[0].id
     }
   }
@@ -1508,6 +1509,10 @@
     store.tributeEarnings = await API.apiJson('/api/tribute/earnings/summary').catch(() => null)
   }
 
+  async function loadSupportTickets() {
+    store.supportTickets = await API.apiJson('/api/support/tickets').catch(() => [])
+  }
+
   async function refreshAll() {
     if (!store.authed) return
     await Promise.all([
@@ -1523,6 +1528,7 @@
       loadIntegrations(),
       loadTribute(),
       loadOwnerPanels(),
+      loadSupportTickets(),
     ])
     store.logic?.forceUpdate()
   }
@@ -1662,7 +1668,8 @@
     btn.className = 'mm-os-telegram-bot-btn'
     btn.textContent = 'Войти через Telegram'
     btn.addEventListener('click', () => {
-      void telegramBotAuth()
+      const preopenedPopup = window.open('about:blank', '_blank', 'noopener,noreferrer')
+      void telegramBotAuth(preopenedPopup)
     })
     host.appendChild(btn)
 
@@ -1671,7 +1678,7 @@
     }
   }
 
-  async function telegramBotAuth() {
+  async function telegramBotAuth(preopenedPopup) {
     store.busy = true
     store.error = null
     updateAuthUi()
@@ -1686,7 +1693,9 @@
       btn.textContent = 'Ждём подтверждение…'
     }
     try {
-      const token = await global.MMOS_TELEGRAM_LOGIN.signInWithTelegramBot(store.referralCode)
+      const token = await global.MMOS_TELEGRAM_LOGIN.signInWithTelegramBot(store.referralCode, {
+        preopenedPopup: preopenedPopup || null,
+      })
       API.setToken(token)
       await afterAuthSuccess()
     } catch (e) {
@@ -1699,6 +1708,26 @@
         btn.disabled = false
         btn.textContent = 'Войти через Telegram'
       }
+      updateAuthUi()
+    }
+  }
+
+  async function resumeTelegramBotAuthIfPending() {
+    if (!global.MMOS_TELEGRAM_LOGIN || !global.MMOS_TELEGRAM_LOGIN.hasPendingTelegramAuth()) return
+    if (store.authed) return
+    store.busy = true
+    updateAuthUi()
+    try {
+      const token = await global.MMOS_TELEGRAM_LOGIN.resumePendingTelegramBotAuth()
+      if (token) {
+        API.setToken(token)
+        await afterAuthSuccess()
+      }
+    } catch (e) {
+      store.error = e.message || String(e)
+      updateAuthUi()
+    } finally {
+      store.busy = false
       updateAuthUi()
     }
   }
@@ -1747,7 +1776,15 @@
     if (show) {
       updateAuthUi()
       mountAuthTelegramWidget()
+      void resumeTelegramBotAuthIfPending()
     }
+  }
+
+  if (!global.__mmosTgVisBound) {
+    global.__mmosTgVisBound = true
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') void resumeTelegramBotAuthIfPending()
+    })
   }
 
   async function bootAuth() {
@@ -4136,11 +4173,32 @@
     const chipOff =
       "font-family:'JetBrains Mono';font-size:10px;border:1px solid rgba(255,255,255,.12);color:#9BA0A6;padding:3px 10px;border-radius:20px;cursor:pointer;"
     const engine = mapEngineChips(logic, lang)
-    const charChips = store.models.map((m) => ({
+    const charChips = []
+    if ((s.imgMode || 'prompt') === 'prompt') {
+      charChips.push({
+        id: 'none',
+        label: lang === 'ru' ? 'Без персонажа' : 'No character',
+        pick: () => {
+          store.selectedModelId = null
+          store.promptWithoutCharacter = true
+          logic.forceUpdate()
+        },
+        style:
+          'font-size:12px;font-weight:' +
+          (store.promptWithoutCharacter ? '800' : '700') +
+          ';' +
+          (store.promptWithoutCharacter
+            ? 'background:rgba(240,168,200,.12);color:#F0A8C8;border:1px solid rgba(240,168,200,.4);'
+            : 'border:1px solid rgba(255,255,255,.12);color:#9BA0A6;') +
+          'padding:6px 14px;border-radius:9px;cursor:pointer;',
+      })
+    }
+    charChips.push(...store.models.map((m) => ({
       id: m.id,
       label: m.name,
       pick: () => {
         store.selectedModelId = m.id
+        store.promptWithoutCharacter = false
         logic.forceUpdate()
       },
       style:
@@ -4151,7 +4209,7 @@
           ? 'background:rgba(240,168,200,.12);color:#F0A8C8;border:1px solid rgba(240,168,200,.4);'
           : 'border:1px solid rgba(255,255,255,.12);color:#9BA0A6;') +
         'padding:6px 14px;border-radius:9px;cursor:pointer;',
-    }))
+    })))
 
     const stActive =
       "font-family:'JetBrains Mono';font-size:8.5px;letter-spacing:1px;padding:2px 8px;border-radius:20px;background:rgba(74,222,128,.12);color:#4ADE80;border:1px solid rgba(74,222,128,.3);"
@@ -4212,6 +4270,10 @@
         if (it.label === vals.t.navDonations) {
           const unseenDon = unseenDonationBadgeCount(store.donationOverview, ownerId)
           badge = unseenDon > 0 ? String(unseenDon) : false
+        }
+        if (it.label === vals.t.navSupport || (it.id && it.id === 'support')) {
+          const supportUnread = (store.supportTickets || []).filter((tk) => tk.user_has_unread).length
+          badge = supportUnread > 0 ? String(supportUnread) : false
         }
         return { ...it, badge }
       }),

@@ -16,6 +16,7 @@ interface TicketListItem {
   type: string
   subject: string
   status: string
+  admin_has_unread?: boolean
   created_at: string
   updated_at: string
 }
@@ -27,6 +28,8 @@ interface TicketDetail extends TicketListItem {
 
 interface Props {
   onError: (msg: string | null) => void
+  onUnreadChange?: () => void
+  initialTicketId?: number | null
 }
 
 const TYPE_LABELS: Record<string, { ru: string; en: string }> = {
@@ -38,7 +41,7 @@ const TYPE_LABELS: Record<string, { ru: string; en: string }> = {
 
 const STATUS_OPTIONS = ['submitted', 'in_review', 'answered', 'closed'] as const
 
-export function AdminTicketsTab({ onError }: Props) {
+export function AdminTicketsTab({ onError, onUnreadChange, initialTicketId }: Props) {
   const { t, i18n } = useTranslation('admin')
   const lang = i18n.language?.startsWith('ru') ? 'ru' : 'en'
   const [tickets, setTickets] = useState<TicketListItem[]>([])
@@ -55,17 +58,25 @@ export function AdminTicketsTab({ onError }: Props) {
     const r = await apiFetch(`/api/admin/tickets?${q}`)
     if (r.ok) setTickets((await r.json()) as TicketListItem[])
     else onError(t('tickets.loadFailed'))
-  }, [statusFilter, onError, t])
+    onUnreadChange?.()
+  }, [statusFilter, onError, onUnreadChange, t])
 
   const loadDetail = useCallback(async (id: number) => {
     const r = await apiFetch(`/api/admin/tickets/${id}`)
     if (r.ok) setDetail((await r.json()) as TicketDetail)
     else onError(t('tickets.loadFailed'))
-  }, [onError, t])
+    onUnreadChange?.()
+  }, [onError, onUnreadChange, t])
 
   useEffect(() => {
     void loadTickets()
   }, [loadTickets])
+
+  useEffect(() => {
+    if (initialTicketId != null && initialTicketId > 0) {
+      setSelectedId(initialTicketId)
+    }
+  }, [initialTicketId])
 
   useEffect(() => {
     if (selectedId == null) {
@@ -157,7 +168,10 @@ export function AdminTicketsTab({ onError }: Props) {
                   onClick={() => setSelectedId(tk.id)}
                 >
                   <div className="admin-tickets__row-head">
-                    <span className="admin-tickets__subject">{tk.subject}</span>
+                    <span className="admin-tickets__subject">
+                      {tk.subject}
+                      {tk.admin_has_unread ? <span className="admin-badge admin-badge--new">NEW</span> : null}
+                    </span>
                     <span className="admin-badge">{statusLabel(tk.status)}</span>
                   </div>
                   <div className="muted small">

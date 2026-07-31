@@ -57,7 +57,7 @@ import type {
   UserMeOut,
   WorkspaceMemberOut,
 } from '@/src/api/types';
-import { modelIdByName } from '@/src/studio/studioHelpers';
+import { modelIdByName, NO_CHARACTER } from '@/src/studio/studioHelpers';
 import { effectiveNavState, isUiSimplified } from '@/src/studio/simplifiedUi';
 import type { NavigationState } from '@/src/navigation/types';
 
@@ -74,6 +74,7 @@ type AppDataValue = {
   userEmail: string;
   conversations: ReturnType<typeof mapDialogRow>[];
   totalUnread: number;
+  supportUnread: number;
   rawConversations: ConversationOut[];
   conversationFolders: ConversationFolderOut[];
   messages: ReturnType<typeof mapMessage>[];
@@ -484,6 +485,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         payout,
         mems,
         stats,
+        supportRows,
       ] = await Promise.all([
         actions.fetchMe() as Promise<UserMeOut>,
         actions.fetchConversations() as Promise<ConversationOut[]>,
@@ -500,6 +502,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         actions.fetchPayoutSettings() as Promise<{ wallet_address?: string } | null>,
         actions.fetchMembers() as Promise<WorkspaceMemberOut[]>,
         actions.fetchChatterStats() as Promise<ChatterStatsSummaryOut | null>,
+        actions.fetchSupportTickets(),
       ]);
 
       setMe(meData);
@@ -520,6 +523,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       setPayoutWallet(String(payout?.wallet_address || ''));
       setRawMembers(Array.isArray(mems) ? mems : []);
       setChatterStatsRaw(stats);
+      setSupportTickets(Array.isArray(supportRows) ? supportRows : []);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       if (/401|403|сессия/i.test(msg)) {
@@ -864,7 +868,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       setError(null);
       const effNav = effectiveNavState(nav, isUiSimplified(me));
 
-      const modelId = modelIdByName(rawModels, effNav.imgChar || effNav.vidChar);
+      const modelId = key.startsWith('img:') && effNav.imgChar === NO_CHARACTER
+        ? null
+        : modelIdByName(rawModels, effNav.imgChar || effNav.vidChar);
 
       if (key === 'video') {
         const promptOnly = (nav.vidMode || 'motion-control') === 'prompt';
@@ -1414,6 +1420,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const { userName, userEmail } = userDisplayName(me);
   const conversations = rawConversations.map(mapDialogRow);
   const totalUnread = rawConversations.reduce((sum, c) => sum + (c.unread_count || 0), 0);
+  const supportUnread = supportTickets.filter((t) => t.user_has_unread).length;
   const messages = rawMessages.map(mapMessage);
   const models = rawModels.map((m, i) => mapCharacter(m, i, locale));
   const modelNames = rawModels.map((m) => m.name);
@@ -1445,6 +1452,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       userEmail,
       conversations,
       totalUnread,
+      supportUnread,
       rawConversations,
       conversationFolders,
       messages,
@@ -1562,6 +1570,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       userEmail,
       conversations,
       totalUnread,
+      supportUnread,
       rawConversations,
       conversationFolders,
       messages,

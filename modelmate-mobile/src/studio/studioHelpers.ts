@@ -1,3 +1,5 @@
+export const NO_CHARACTER = '__none__';
+
 export function extractStudioJobImageUrl(result: Record<string, unknown> | null | undefined): string {
   if (!result) return '';
   const direct = String(result.generated_image_url || result.image_url || '').trim();

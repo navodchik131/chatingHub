@@ -15,7 +15,7 @@ self.addEventListener('push', (event) => {
       body: data.body || '',
       data: { url: data.url || '/' },
       icon: new URL('brand-icon.svg', self.location).href,
-      tag: 'chating-msg',
+      tag: data.tag || 'modelmate-notification',
     }),
   )
 })

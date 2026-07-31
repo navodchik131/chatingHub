@@ -57,7 +57,7 @@ import {
   StudioShortcut,
   TopBar,
 } from '@/src/components/ui';
-import { useAppData } from '@/src/context/AppDataProvider';
+import { NO_CHARACTER } from '@/src/studio/studioHelpers';
 import { useAppSettings } from '@/src/context/AppSettingsContext';
 import { useNav } from '@/src/context/NavigationContext';
 import {
@@ -162,6 +162,7 @@ export function ScreenRouter() {
     videoArchiveHasMore,
     loadMoreVideoArchive,
     supportTickets,
+    supportUnread,
     refreshSupportTickets,
     createSupportTicket,
     fetchSupportTicket,
@@ -317,8 +318,11 @@ export function ScreenRouter() {
     }
     const id = Number(cur.slice(7));
     if (!id) return;
-    void fetchSupportTicket(id).then(setActiveTicket).catch(() => setActiveTicket(null));
-  }, [cur, fetchSupportTicket]);
+    void fetchSupportTicket(id).then((row) => {
+      setActiveTicket(row);
+      void refreshSupportTickets();
+    }).catch(() => setActiveTicket(null));
+  }, [cur, fetchSupportTicket, refreshSupportTickets]);
 
   useEffect(() => {
     if (cur === 'profileEdit') patch({ profileEditEmail: userEmail });
@@ -334,7 +338,7 @@ export function ScreenRouter() {
       return;
     }
     const fixes: Partial<typeof nav> = {};
-    if (!modelNames.includes(nav.imgChar)) fixes.imgChar = modelNames[0];
+    if (!modelNames.includes(nav.imgChar) && nav.imgChar !== NO_CHARACTER) fixes.imgChar = modelNames[0];
     if (!modelNames.includes(nav.vidChar)) fixes.vidChar = modelNames[0];
     if (!modelNames.includes(nav.connChar)) fixes.connChar = modelNames[0];
     if (Object.keys(fixes).length) patch(fixes);
@@ -345,8 +349,12 @@ export function ScreenRouter() {
     push('new-character');
   };
 
-  const renderCharacterPicker = (value: string, onChange: (name: string) => void) => {
-    if (!modelNames.length) {
+  const renderCharacterPicker = (
+    value: string,
+    onChange: (name: string) => void,
+    opts?: { allowNoCharacter?: boolean },
+  ) => {
+    if (!modelNames.length && !opts?.allowNoCharacter) {
       return (
         <View style={s.gap8}>
           <Text style={s.charSub}>{t.studioNoCharacters}</Text>
@@ -356,7 +364,15 @@ export function ScreenRouter() {
         </View>
       );
     }
-    return <ChipPicker items={modelNames} value={value} onChange={onChange} />;
+    const items = opts?.allowNoCharacter ? [t.studioNoCharacter, ...modelNames] : modelNames;
+    const pickerValue = value === NO_CHARACTER ? t.studioNoCharacter : value;
+    return (
+      <ChipPicker
+        items={items}
+        value={pickerValue}
+        onChange={(name) => onChange(name === t.studioNoCharacter ? NO_CHARACTER : name)}
+      />
+    );
   };
 
   const patchGenStatus = (key: string, status: 'loading' | 'done' | null) => {
@@ -915,7 +931,7 @@ export function ScreenRouter() {
             </>
           ) : null}
           <SectionLabel>{t.studioCharacter}</SectionLabel>
-          {renderCharacterPicker(nav.imgChar, (c) => patch({ imgChar: c }))}
+          {renderCharacterPicker(nav.imgChar, (c) => patch({ imgChar: c }), { allowNoCharacter: modeId === 'prompt' })}
           <SectionLabel>{t.studioFormat}</SectionLabel>
           <ChipPicker
             items={[...IMG_FORMATS]}
@@ -1815,7 +1831,7 @@ export function ScreenRouter() {
         <SectionLabel>{t.sectionAccount}</SectionLabel>
         <Card>
           <MenuRow icon={<IcoUser size={17} stroke={color.muted} />} label={t.profileEditTitle} onPress={() => push('profileEdit')} />
-          <MenuRow icon={<IcoLifebuoy size={17} stroke={color.muted} />} label={t.supportTitle} onPress={() => push('support')} />
+          <MenuRow icon={<IcoLifebuoy size={17} stroke={color.muted} />} label={t.supportTitle} badge={supportUnread > 0 ? (supportUnread > 99 ? '99+' : String(supportUnread)) : undefined} onPress={() => push('support')} />
         </Card>
         <SectionLabel>{t.sectionSystem}</SectionLabel>
         <Card>
@@ -2230,7 +2246,10 @@ export function ScreenRouter() {
         {supportTickets.map((tk) => (
           <Card key={tk.id} onPress={() => push(`ticket:${tk.id}`)}>
             <View style={s.between}>
-              <Text style={[s.opLabel, s.flex1]} numberOfLines={2}>{tk.subject}</Text>
+              <Text style={[s.opLabel, s.flex1]} numberOfLines={2}>
+                {tk.subject}
+                {tk.user_has_unread ? ` · ${locale === 'ru' ? 'новый ответ' : 'new reply'}` : ''}
+              </Text>
               <Pill
                 text={ticketStatusForLocale(tk.status, locale)}
                 bg="rgba(255,255,255,0.06)"

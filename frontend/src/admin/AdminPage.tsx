@@ -52,6 +52,11 @@ export function AdminPage() {
   const [selectedDetail, setSelectedDetail] = useState<AdminUserDetail | null>(null)
   const [drillSegment, setDrillSegment] = useState<string | null>(null)
   const [drillTitle, setDrillTitle] = useState('')
+  const [ticketsUnreadCount, setTicketsUnreadCount] = useState(0)
+  const initialAdminTicketId = useMemo(() => {
+    const id = Number(new URLSearchParams(window.location.search).get('tickets'))
+    return id > 0 ? id : null
+  }, [])
 
   const pageTitle = t(`shell.${TAB_TITLES[tab]}`)
 
@@ -80,6 +85,14 @@ export function AdminPage() {
   const loadUserDetail = useCallback(async (id: number) => {
     const r = await apiFetch(`/api/admin/users/${id}`)
     if (r.ok) setSelectedDetail((await r.json()) as AdminUserDetail)
+  }, [])
+
+  const loadTicketsUnreadCount = useCallback(async () => {
+    const r = await apiFetch('/api/admin/tickets/unread-count')
+    if (r.ok) {
+      const data = (await r.json()) as { count?: number }
+      setTicketsUnreadCount(Number(data.count) || 0)
+    }
   }, [])
 
   const onSelectUserFromDrill = useCallback(
@@ -117,8 +130,25 @@ export function AdminPage() {
   useEffect(() => {
     if (gate !== 'ok') return
     setBusy(true)
-    void Promise.all([loadStats(), loadUsers('')]).finally(() => setBusy(false))
-  }, [gate, loadStats, loadUsers])
+    void Promise.all([loadStats(), loadUsers(''), loadTicketsUnreadCount()]).finally(() => setBusy(false))
+  }, [gate, loadStats, loadUsers, loadTicketsUnreadCount])
+
+  useEffect(() => {
+    if (gate !== 'ok') return
+    const params = new URLSearchParams(window.location.search)
+    const ticketId = Number(params.get('tickets'))
+    if (ticketId > 0) {
+      setTab('tickets')
+    }
+  }, [gate])
+
+  useEffect(() => {
+    if (gate !== 'ok') return
+    const id = window.setInterval(() => {
+      void loadTicketsUnreadCount()
+    }, 30000)
+    return () => window.clearInterval(id)
+  }, [gate, loadTicketsUnreadCount])
 
   useEffect(() => {
     if (selectedId == null) {
@@ -130,7 +160,7 @@ export function AdminPage() {
 
   const refreshAll = () => {
     setBusy(true)
-    void Promise.all([loadStats(), loadUsers(userSearch)]).finally(() => setBusy(false))
+    void Promise.all([loadStats(), loadUsers(userSearch), loadTicketsUnreadCount()]).finally(() => setBusy(false))
   }
 
   const onUserUpdated = (row: AdminUserRow) => {
@@ -178,6 +208,7 @@ export function AdminPage() {
         meEmail={meEmail}
         busy={busy}
         onRefresh={refreshAll}
+        ticketsUnreadCount={ticketsUnreadCount}
       >
         {error ? (
           <div className="admin-banner admin-banner--error" role="alert">
@@ -291,7 +322,13 @@ export function AdminPage() {
         {tab === 'exif_bot' ? <AdminExifBotTab onError={setError} /> : null}
         {tab === 'ig_bot' ? <AdminIgBotTab onError={setError} /> : null}
         {tab === 'creator_donations' ? <AdminCreatorDonationsTab /> : null}
-        {tab === 'tickets' ? <AdminTicketsTab onError={setError} /> : null}
+        {tab === 'tickets' ? (
+          <AdminTicketsTab
+            onError={setError}
+            onUnreadChange={() => void loadTicketsUnreadCount()}
+            initialTicketId={initialAdminTicketId}
+          />
+        ) : null}
       </AdminShell>
 
       <AdminSegmentDrill

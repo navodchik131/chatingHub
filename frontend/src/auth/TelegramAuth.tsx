@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { apiFetch, setToken } from '../api'
 import { formatHttpApiError } from '../apiErrors'
-import { signInWithTelegramBot } from './telegramBotLogin'
+import { signInWithTelegramBot, hasPendingTelegramAuth, resumePendingTelegramBotAuth } from './telegramBotLogin'
 import {
   mountTelegramLoginWidget,
   postTelegramAuth,
@@ -51,10 +51,43 @@ export function TelegramLoginButton({ botUsername, mode, referralCode, onSuccess
     return cleanup
   }, [botUsername, mode, referralCode])
 
+  useEffect(() => {
+    if (mode !== 'login') return
+
+    const finish = async (token: string) => {
+      setBusy(true)
+      try {
+        setToken(token)
+        await onSuccessRef.current()
+      } catch (e) {
+        onErrorRef.current?.(e instanceof Error ? e.message : String(e))
+      } finally {
+        setBusy(false)
+      }
+    }
+
+    const tryResume = async () => {
+      if (!hasPendingTelegramAuth()) return
+      const token = await resumePendingTelegramBotAuth()
+      if (token) await finish(token)
+    }
+
+    void tryResume()
+
+    const onVis = () => {
+      if (document.visibilityState === 'visible') void tryResume()
+    }
+    document.addEventListener('visibilitychange', onVis)
+    return () => document.removeEventListener('visibilitychange', onVis)
+  }, [mode])
+
   const runBotLogin = async () => {
     setBusy(true)
+    const preopenedPopup = typeof window !== 'undefined'
+      ? window.open('about:blank', '_blank', 'noopener,noreferrer')
+      : null
     try {
-      const token = await signInWithTelegramBot(referralCode)
+      const token = await signInWithTelegramBot(referralCode, { preopenedPopup })
       setToken(token)
       await onSuccessRef.current()
     } catch (e) {

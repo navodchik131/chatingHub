@@ -355,6 +355,22 @@ async def delete_push_subscription_by_id(
         await session.delete(row)
 
 
+async def list_platform_admin_user_ids(session: AsyncSession) -> list[int]:
+    from app.db.models import User
+    from app.services.admin_access import _admin_email_allowlist
+
+    allowlist = _admin_email_allowlist()
+    stmt = select(User.id, User.email, User.is_platform_admin).where(
+        User.parent_user_id.is_(None)
+    )
+    rows = (await session.execute(stmt)).all()
+    ids: list[int] = []
+    for uid, email, is_admin in rows:
+        if is_admin or email.lower() in allowlist:
+            ids.append(int(uid))
+    return ids
+
+
 async def list_mobile_push_tokens(
     session: AsyncSession, user_id: int
 ) -> list:

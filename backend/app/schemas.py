@@ -1646,6 +1646,7 @@ class SupportTicketListItemOut(BaseModel):
     type: str
     subject: str
     status: str
+    user_has_unread: bool = False
     created_at: datetime
     updated_at: datetime
 
@@ -1653,6 +1654,7 @@ class SupportTicketListItemOut(BaseModel):
 class AdminSupportTicketListItemOut(SupportTicketListItemOut):
     user_id: int
     user_email: str
+    admin_has_unread: bool = False
 
 
 class AdminSupportTicketOut(SupportTicketOut):

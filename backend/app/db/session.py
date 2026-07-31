@@ -387,6 +387,36 @@ async def init_db() -> None:
         await conn.run_sync(_migrate_mobile_push_tokens)
         await conn.run_sync(_migrate_telegram_mobile_auth_sessions)
         await conn.run_sync(_migrate_telegram_login_bot_contacts)
+        await conn.run_sync(_migrate_support_ticket_unread_flags)
+
+
+def _migrate_support_ticket_unread_flags(sync_conn) -> None:
+    from sqlalchemy import inspect, text
+
+    insp = inspect(sync_conn)
+    if not insp.has_table("support_tickets"):
+        return
+    cols = {c["name"] for c in insp.get_columns("support_tickets")}
+    dialect = sync_conn.dialect.name
+    bool_type = "BOOLEAN NOT NULL DEFAULT 0" if dialect == "sqlite" else "BOOLEAN NOT NULL DEFAULT false"
+    if "user_has_unread" not in cols:
+        sync_conn.execute(text(f"ALTER TABLE support_tickets ADD COLUMN user_has_unread {bool_type}"))
+    if "admin_has_unread" not in cols:
+        sync_conn.execute(text(f"ALTER TABLE support_tickets ADD COLUMN admin_has_unread {bool_type}"))
+        if dialect == "sqlite":
+            sync_conn.execute(
+                text(
+                    "UPDATE support_tickets SET admin_has_unread = 1 "
+                    "WHERE status IN ('submitted', 'in_review')"
+                )
+            )
+        else:
+            sync_conn.execute(
+                text(
+                    "UPDATE support_tickets SET admin_has_unread = true "
+                    "WHERE status IN ('submitted', 'in_review')"
+                )
+            )
 
 
 def _migrate_mobile_push_tokens(sync_conn) -> None:

@@ -17,6 +17,7 @@ type NavItem = {
   id: AdminTabId
   label: string
   icon: ReactNode
+  badge?: string
 }
 
 function NavIcon({ children }: { children: ReactNode }) {
@@ -109,6 +110,7 @@ export function AdminShell({
   meEmail,
   busy,
   onRefresh,
+  ticketsUnreadCount = 0,
   children,
 }: {
   tab: AdminTabId
@@ -117,6 +119,7 @@ export function AdminShell({
   meEmail: string
   busy: boolean
   onRefresh: () => void
+  ticketsUnreadCount?: number
   children: ReactNode
 }) {
   const { t } = useTranslation('admin')
@@ -137,7 +140,7 @@ export function AdminShell({
     { id: 'exif_bot', label: t('tabs.exifBot'), icon: NAV_ICONS.exif_bot },
     { id: 'ig_bot', label: t('tabs.igBot'), icon: NAV_ICONS.ig_bot },
     { id: 'creator_donations', label: t('tabs.creatorDonations'), icon: NAV_ICONS.creator_donations },
-    { id: 'tickets', label: t('tabs.tickets'), icon: NAV_ICONS.tickets },
+    { id: 'tickets', label: t('tabs.tickets'), icon: NAV_ICONS.tickets, badge: ticketsUnreadCount > 0 ? (ticketsUnreadCount > 99 ? '99+' : String(ticketsUnreadCount)) : undefined },
   ]
 
   const initial = (meEmail || '?').trim().charAt(0).toUpperCase()
@@ -163,6 +166,7 @@ export function AdminShell({
               >
                 {item.icon}
                 <span>{item.label}</span>
+                {item.badge ? <span className="admin-nav__badge">{item.badge}</span> : null}
               </button>
             ))}
           </nav>

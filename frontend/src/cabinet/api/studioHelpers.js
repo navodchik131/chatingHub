@@ -135,7 +135,7 @@ export function validateStudioForm(appState, studioStore, t) {
     if (!(appState.studioPrompt || '').trim()) errs.push(t.errNoPrompt)
     if (appState.needsRef === 'yes' && !slotHasSource('edit', 1, uploadFiles, slotArchivePicks)) errs.push(t.errNoRef)
   }
-  if (mode !== 'outfit' && mode !== 'location' && mode !== 'edit' && !selectedModelId) errs.push(t.errNoChar)
+  if (mode !== 'outfit' && mode !== 'location' && mode !== 'edit' && mode !== 'prompt' && !selectedModelId) errs.push(t.errNoChar)
 
   return errs
 }

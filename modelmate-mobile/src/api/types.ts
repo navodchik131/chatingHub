@@ -235,6 +235,7 @@ export type SupportTicketListItemOut = {
   type: string;
   subject: string;
   status: string;
+  user_has_unread?: boolean;
   created_at: string;
   updated_at: string;
 };

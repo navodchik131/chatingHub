@@ -623,7 +623,7 @@ export function validateImageGeneration(params: {
   const t = params.labels;
   const { navState, uploadFiles, slotArchivePicks, slotSource, selectedModelId } = params;
 
-  const needsModel = mode === 'ref' || mode === 'swap' || mode === 'prompt';
+  const needsModel = mode === 'ref' || mode === 'swap';
   if (needsModel && !selectedModelId) return t.errSelectCharacter;
 
   if (mode === 'prompt' && !String(navState.imgPrompt || '').trim()) {
@@ -684,7 +684,7 @@ export async function runImageGeneration(params: {
 }) {
   const mode = params.modeId === 'loc' ? 'location' : params.modeId;
   const modelId = params.selectedModelId;
-  const needsModel = mode === 'ref' || mode === 'swap' || mode === 'prompt';
+  const needsModel = mode === 'ref' || mode === 'swap';
   if (needsModel && !modelId) throw new Error('Выберите персонажа');
 
   const appState = {

@@ -128,11 +128,13 @@ export function formatCompanionMode(mode, lang) {
 export function computeNavBadges(cabinet, me) {
   const unread = (cabinet.conversations || []).reduce((a, c) => a + (c.unread_count || 0), 0)
   const moderation = (cabinet.donations || []).filter((d) => d.status === 'moderation').length
+  const supportUnread = (cabinet.supportTickets || []).filter((t) => t.user_has_unread).length
   const plan = String(me?.billing_plan || '').toLowerCase()
   const isPro = plan === 'pro' || plan === 'byok'
   const badges = {}
   if (unread > 0) badges.dialogs = unread > 99 ? '99+' : String(unread)
   if (moderation > 0) badges.donations = String(moderation)
+  if (supportUnread > 0) badges.support = supportUnread > 99 ? '99+' : String(supportUnread)
   if (isPro) badges.workflow = 'PRO'
   return badges
 }

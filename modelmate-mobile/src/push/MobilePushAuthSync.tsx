@@ -5,7 +5,7 @@ import { useAppSettings } from '@/src/context/AppSettingsContext';
 
 /** Регистрирует push-токен после авторизации и обновляет badge непрочитанных. */
 export function MobilePushAuthSync() {
-  const { ready, authenticated, totalUnread } = useAppData();
+  const { ready, authenticated, totalUnread, supportUnread } = useAppData();
   const { pushEnabled, syncPushRegistration } = useAppSettings();
 
   useEffect(() => {
@@ -15,8 +15,8 @@ export function MobilePushAuthSync() {
 
   useEffect(() => {
     if (!ready || !authenticated) return;
-    void Notifications.setBadgeCountAsync(Math.max(0, totalUnread));
-  }, [ready, authenticated, totalUnread]);
+    void Notifications.setBadgeCountAsync(Math.max(0, totalUnread + supportUnread));
+  }, [ready, authenticated, totalUnread, supportUnread]);
 
   return null;
 }

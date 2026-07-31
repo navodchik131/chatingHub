@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import Hoverable from '../components/Hoverable';
 import { Fade, PageTitle, Eyebrow, Chip } from '../components/ui';
 import { useApp } from '../hooks/useApp';
@@ -41,6 +42,7 @@ function typeLabel(type, lang) {
 
 export default function Support() {
   const { t, lang, cabinet } = useApp();
+  const location = useLocation();
   const [formOpen, setFormOpen] = useState(false);
   const [ticketType, setTicketType] = useState('general');
   const [subject, setSubject] = useState('');
@@ -53,11 +55,19 @@ export default function Support() {
   }, [cabinet]);
 
   useEffect(() => {
+    const ticketId = Number(new URLSearchParams(location.search).get('ticket'));
+    if (ticketId > 0) setDetailId(ticketId);
+  }, [location.search]);
+
+  useEffect(() => {
     if (detailId == null) {
       setDetail(null);
       return;
     }
-    void cabinet.fetchSupportTicketDetail(detailId).then(setDetail).catch(() => setDetail(null));
+    void cabinet.fetchSupportTicketDetail(detailId).then((row) => {
+      setDetail(row);
+      void cabinet.loadSupportTickets();
+    }).catch(() => setDetail(null));
   }, [detailId, cabinet]);
 
   const tickets = cabinet.supportTickets || [];
@@ -208,7 +218,19 @@ export default function Support() {
                     onClick={() => setDetailId(tk.id)}
                   >
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 6 }}>
-                      <span style={{ fontWeight: 700, fontSize: 13, lineHeight: 1.4 }}>{tk.subject}</span>
+                      <span style={{ fontWeight: 700, fontSize: 13, lineHeight: 1.4 }}>
+                        {tk.subject}
+                        {tk.user_has_unread ? (
+                          <span style={{
+                            marginLeft: 8, fontFamily: font.mono, fontSize: 9, fontWeight: 800,
+                            background: 'rgba(215,244,82,.15)', color: color.lime,
+                            padding: '2px 7px', borderRadius: 20, verticalAlign: 'middle',
+                          }}
+                          >
+                            {lang === 'ru' ? 'НОВЫЙ' : 'NEW'}
+                          </span>
+                        ) : null}
+                      </span>
                       <span style={statusStyle(tk.status)}>{statusLabel(tk.status, t)}</span>
                     </div>
                     <div style={{ fontSize: 11, color: color.textDim }}>

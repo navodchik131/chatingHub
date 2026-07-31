@@ -2,11 +2,73 @@
 ;(function (global) {
   const POLL_INTERVAL_MS = 1500
   const POLL_TIMEOUT_MS = 3 * 60 * 1000
+  const PENDING_KEY = 'mm_pending_tg_auth'
 
   function sleep(ms) {
     return new Promise(function (resolve) {
       setTimeout(resolve, ms)
     })
+  }
+
+  function isMobileLikeClient() {
+    return (
+      window.matchMedia('(pointer: coarse)').matches ||
+      window.matchMedia('(max-width: 768px)').matches ||
+      window.matchMedia('(display-mode: standalone)').matches ||
+      (global.navigator && global.navigator.standalone === true)
+    )
+  }
+
+  function openExternalUrl(url) {
+    const href = String(url || '').trim()
+    if (!href) return
+    if (isMobileLikeClient()) {
+      global.location.assign(href)
+      return
+    }
+    const popup = global.open(href, '_blank', 'noopener,noreferrer')
+    if (!popup) global.location.assign(href)
+  }
+
+  function openExternalUrlDeferred(url, popup) {
+    const href = String(url || '').trim()
+    if (!href) return
+    if (popup && !popup.closed) {
+      try {
+        popup.location.href = href
+        return
+      } catch (_) {
+        /* fallback */
+      }
+    }
+    openExternalUrl(href)
+  }
+
+  function savePending(sessionId) {
+    global.sessionStorage.setItem(
+      PENDING_KEY,
+      JSON.stringify({ sessionId: sessionId, at: Date.now() }),
+    )
+  }
+
+  function clearPending() {
+    global.sessionStorage.removeItem(PENDING_KEY)
+  }
+
+  function loadPending() {
+    const raw = global.sessionStorage.getItem(PENDING_KEY)
+    if (!raw) return null
+    try {
+      const parsed = JSON.parse(raw)
+      if (!parsed.sessionId || Date.now() - parsed.at > POLL_TIMEOUT_MS) {
+        clearPending()
+        return null
+      }
+      return parsed.sessionId
+    } catch (_) {
+      clearPending()
+      return null
+    }
   }
 
   function mountTelegramLoginWidget(container, botUsername, onAuth) {
@@ -72,25 +134,59 @@
     return data
   }
 
-  async function signInWithTelegramBot(referralCode) {
-    const started = await startTelegramMobileAuth(referralCode)
-    const url = String(started.telegram_url || '').trim()
-    if (!url) throw new Error('Telegram bot URL missing')
-    window.open(url, '_blank', 'noopener,noreferrer')
-
+  async function pollUntilDone(sessionId) {
     const deadline = Date.now() + POLL_TIMEOUT_MS
     while (Date.now() < deadline) {
       await sleep(POLL_INTERVAL_MS)
-      const poll = await pollTelegramMobileAuth(started.session_id)
-      if (poll.status === 'done' && poll.access_token) return poll.access_token
-      if (poll.status === 'expired') throw new Error('Сессия истекла — попробуйте снова')
+      const poll = await pollTelegramMobileAuth(sessionId)
+      if (poll.status === 'done' && poll.access_token) {
+        clearPending()
+        return poll.access_token
+      }
+      if (poll.status === 'expired') {
+        clearPending()
+        throw new Error('Сессия истекла — попробуйте снова')
+      }
     }
     throw new Error('Откройте Telegram, нажмите Start и вернитесь на эту страницу')
+  }
+
+  async function resumePendingTelegramBotAuth() {
+    const sessionId = loadPending()
+    if (!sessionId) return null
+    try {
+      return await pollUntilDone(sessionId)
+    } catch (_) {
+      return null
+    }
+  }
+
+  function hasPendingTelegramAuth() {
+    return loadPending() != null
+  }
+
+  async function signInWithTelegramBot(referralCode, options) {
+    const preopenedPopup = options && options.preopenedPopup
+    const started = await startTelegramMobileAuth(referralCode)
+    const url = String(started.telegram_url || '').trim()
+    if (!url) throw new Error('Telegram bot URL missing')
+
+    savePending(started.session_id)
+
+    if (isMobileLikeClient()) {
+      openExternalUrl(url)
+      return pollUntilDone(started.session_id)
+    }
+
+    openExternalUrlDeferred(url, preopenedPopup || null)
+    return pollUntilDone(started.session_id)
   }
 
   global.MMOS_TELEGRAM_LOGIN = {
     mountTelegramLoginWidget,
     postTelegramAuth,
     signInWithTelegramBot,
+    resumePendingTelegramBotAuth,
+    hasPendingTelegramAuth,
   }
 })(window)

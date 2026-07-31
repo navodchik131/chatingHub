@@ -237,20 +237,20 @@ function buildOutfitChangeGraph(baseRefId, clothesRefId, opts) {
 function buildPromptOnlyGraph(modelId, opts) {
   const targetNodeId = 'imageGeneration-1'
   const realism = realismBlock(targetNodeId, 'realism-in', opts.realismEnabled !== false)
-  const graph = {
-    nodes: [
-      ...realism.nodes,
-      node('model-1', 'model', { modelId }),
-      node('prompt-1', 'prompt', { prompt: (opts.userPrompt || '').trim() }),
-      node(targetNodeId, 'imageGeneration', imageGenData(opts)),
-    ],
-    edges: [
-      ...realism.edges,
-      edge('e-model-gen', 'model-1', targetNodeId, 'model-out', 'model-in'),
-      edge('e-prompt-gen', 'prompt-1', targetNodeId, 'prompt-out', 'prompt-in'),
-    ],
+  const nodes = [
+    ...realism.nodes,
+    node('prompt-1', 'prompt', { prompt: (opts.userPrompt || '').trim() }),
+    node(targetNodeId, 'imageGeneration', imageGenData(opts)),
+  ]
+  const edges = [
+    ...realism.edges,
+    edge('e-prompt-gen', 'prompt-1', targetNodeId, 'prompt-out', 'prompt-in'),
+  ]
+  if (modelId != null && modelId !== '') {
+    nodes.splice(realism.nodes.length, 0, node('model-1', 'model', { modelId }))
+    edges.splice(realism.edges.length, 0, edge('e-model-gen', 'model-1', targetNodeId, 'model-out', 'model-in'))
   }
-  return { graph, targetNodeId }
+  return { graph: { nodes, edges }, targetNodeId }
 }
 
 function buildDetailEditGraph(baseRefId, detailRefId, _modelId, opts) {

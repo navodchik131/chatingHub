@@ -534,6 +534,15 @@ export default function Images() {
           <div>
             <Eyebrow>{t.character}</Eyebrow>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {s.imgMode === 'prompt' ? (
+                <SelectPill
+                  accent="pink"
+                  on={cabinet.promptWithoutCharacter}
+                  onClick={() => cabinet.setSelectedModelId(null)}
+                >
+                  {t.noCharacter}
+                </SelectPill>
+              ) : null}
               {(cabinet.models || []).map((m) => (
                 <SelectPill
                   key={m.id}
