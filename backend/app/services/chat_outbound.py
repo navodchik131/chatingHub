@@ -205,6 +205,7 @@ async def send_telegram_outbound(
     video_bytes: bytes | None = None,
     video_mime: str | None = None,
     send_as_video_note: bool = False,
+    video_note_already_converted: bool = False,
     reply_to_telegram_message_id: int | None = None,
 ) -> int | None:
     proxy = (settings.telegram_proxy or "").strip()
@@ -217,13 +218,14 @@ async def send_telegram_outbound(
         if video_bytes:
             payload = video_bytes
             if send_as_video_note:
-                try:
-                    payload = await convert_video_bytes_to_telegram_note_async(
-                        video_bytes,
-                        mime_hint=video_mime,
-                    )
-                except (RuntimeError, ValueError) as exc:
-                    raise HTTPException(status_code=502, detail=str(exc)[:500]) from exc
+                if not video_note_already_converted:
+                    try:
+                        payload = await convert_video_bytes_to_telegram_note_async(
+                            video_bytes,
+                            mime_hint=video_mime,
+                        )
+                    except (RuntimeError, ValueError) as exc:
+                        raise HTTPException(status_code=502, detail=str(exc)[:500]) from exc
                 note = BufferedInputFile(payload, filename="video_note.mp4")
                 sent = await bot.send_video_note(
                     chat_id=chat_id,

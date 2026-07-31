@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 
-from telethon.tl.types import DocumentAttributeSticker, Message as TlMessage
+from telethon.tl.types import DocumentAttributeSticker, DocumentAttributeVideo, Message as TlMessage
 
 log = logging.getLogger(__name__)
 
@@ -20,6 +20,16 @@ def sticker_alt_text(message: TlMessage) -> str | None:
             alt = (attr.alt or "").strip()
             return alt or "🎭"
     return None
+
+
+def is_video_note_message(message: TlMessage) -> bool:
+    doc = message.document
+    if not doc:
+        return False
+    for attr in doc.attributes or []:
+        if isinstance(attr, DocumentAttributeVideo) and bool(getattr(attr, "round_message", False)):
+            return True
+    return False
 
 
 def _resolve_mime(message: TlMessage) -> str | None:
@@ -51,7 +61,7 @@ def _resolve_mime(message: TlMessage) -> str | None:
 async def download_telegram_user_media(
     message: TlMessage,
     client,
-) -> tuple[bytes, str] | None:
+) -> tuple[bytes, str, bool] | None:
     mime = _resolve_mime(message)
     if not mime or client is None:
         return None
@@ -59,7 +69,7 @@ async def download_telegram_user_media(
         raw = await client.download_media(message, bytes)
         if not raw:
             return None
-        return raw, mime
+        return raw, mime, is_video_note_message(message)
     except Exception:
         log.exception("telegram_user media download failed msg=%s", message.id)
         return None

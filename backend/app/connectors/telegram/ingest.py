@@ -163,7 +163,7 @@ async def ingest_telegram_dm(
     studio_model_id: int | None = None,
 ) -> None:
     text = (message.text or message.caption or "").strip()
-    has_photo = bool(message.photo) or bool(message.sticker) or bool(message.animation) or bool(message.video) or (
+    has_photo = bool(message.photo) or bool(message.sticker) or bool(message.animation) or bool(message.video) or bool(message.video_note) or (
         message.document is not None
         and (
             (message.document.mime_type or "").lower().startswith("image/")
@@ -204,6 +204,9 @@ async def ingest_telegram_dm(
         photo_fid: str | None = None
         image_bytes: bytes | None = None
         image_mime: str | None = None
+        attachment_kind = None
+        from app.db.models import MessageAttachmentKind
+
         bot, close_bot = await open_telegram_bot_for_owner(
             session, owner_user_id, telegram_connection_id=telegram_connection_id
         )
@@ -213,7 +216,9 @@ async def ingest_telegram_dm(
             if bot and has_photo:
                 img = await download_telegram_image(message, bot)
                 if img:
-                    image_bytes, image_mime = img
+                    image_bytes, image_mime, is_video_note = img
+                    if is_video_note:
+                        attachment_kind = MessageAttachmentKind.video_note
         finally:
             if close_bot and bot:
                 await bot.session.close()
@@ -266,6 +271,7 @@ async def ingest_telegram_dm(
             meta=meta,
             image_bytes=image_bytes,
             image_mime=image_mime,
+            attachment_kind=attachment_kind,
             reply_to_message_id=reply_to_message_id,
             platform_message_id=str(message.message_id),
         )

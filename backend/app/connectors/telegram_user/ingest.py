@@ -74,10 +74,15 @@ async def ingest_telegram_user_dm(
 
     image_bytes: bytes | None = None
     image_mime: str | None = None
+    attachment_kind = None
+    from app.db.models import MessageAttachmentKind
+
     if has_media and client is not None:
         media = await download_telegram_user_media(message, client)
         if media:
-            image_bytes, image_mime = media
+            image_bytes, image_mime, is_video_note = media
+            if is_video_note:
+                attachment_kind = MessageAttachmentKind.video_note
         elif message.sticker and not text:
             text = sticker_alt_text(message) or "🎭"
 
@@ -140,6 +145,7 @@ async def ingest_telegram_user_dm(
             meta=meta,
             image_bytes=image_bytes,
             image_mime=image_mime,
+            attachment_kind=attachment_kind,
             reply_to_message_id=reply_to_message_id,
             platform_message_id=str(message.id),
         )

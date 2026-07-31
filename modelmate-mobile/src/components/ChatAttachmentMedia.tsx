@@ -8,32 +8,45 @@ import { RemoteImage } from '@/src/components/RemoteImage';
 type Props = {
   url?: string | null;
   mime?: string | null;
+  kind?: string | null;
   style?: StyleProp<ViewStyle>;
   withText?: boolean;
 };
 
-export function ChatAttachmentMedia({ url, mime, style, withText }: Props) {
+const VIDEO_NOTE_SIZE = 200;
+
+export function ChatAttachmentMedia({ url, mime, kind, style, withText }: Props) {
   const resolved = resolveMediaUrl(url);
-  const kind = attachmentMediaKind(mime);
+  const isVideoNote = kind === 'video_note';
+  const mediaKind = attachmentMediaKind(mime);
   const videoRef = useRef<Video>(null);
   const [videoFailed, setVideoFailed] = useState(false);
 
   useEffect(() => {
-    if (kind !== 'video' && kind !== 'gif') return;
+    if (mediaKind !== 'video' && mediaKind !== 'gif') return;
     void videoRef.current?.playAsync().catch(() => setVideoFailed(true));
-  }, [kind, resolved]);
+  }, [mediaKind, resolved]);
 
   if (!resolved) return null;
 
-  const wrapStyle = [styles.wrap, withText && styles.wrapWithText, style];
+  const wrapStyle = [
+    styles.wrap,
+    isVideoNote && styles.wrapVideoNote,
+    withText && styles.wrapWithText,
+    style,
+  ];
+  const mediaStyle = [
+    styles.media,
+    isVideoNote && styles.mediaVideoNote,
+  ];
 
-  if ((kind === 'video' || kind === 'gif') && !videoFailed) {
+  if ((mediaKind === 'video' || mediaKind === 'gif') && !videoFailed) {
     return (
       <View style={wrapStyle}>
         <Video
           ref={videoRef}
           source={{ uri: resolved }}
-          style={styles.media}
+          style={mediaStyle}
           resizeMode={ResizeMode.COVER}
           isLooping
           isMuted
@@ -49,8 +62,8 @@ export function ChatAttachmentMedia({ url, mime, style, withText }: Props) {
     <View style={wrapStyle}>
       <RemoteImage
         uri={resolved}
-        style={styles.media}
-        contentFit={kind === 'gif' ? 'contain' : 'cover'}
+        style={mediaStyle}
+        contentFit={mediaKind === 'gif' ? 'contain' : 'cover'}
       />
     </View>
   );
@@ -64,10 +77,18 @@ const styles = StyleSheet.create({
   wrapWithText: {
     marginBottom: 8,
   },
+  wrapVideoNote: {
+    borderRadius: VIDEO_NOTE_SIZE / 2,
+  },
   media: {
     width: 220,
     height: 220,
     borderRadius: 10,
     backgroundColor: '#2A2D33',
+  },
+  mediaVideoNote: {
+    width: VIDEO_NOTE_SIZE,
+    height: VIDEO_NOTE_SIZE,
+    borderRadius: VIDEO_NOTE_SIZE / 2,
   },
 });

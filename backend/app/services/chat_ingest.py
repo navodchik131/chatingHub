@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import Conversation, Message, MessageDirection
+from app.db.models import Conversation, Message, MessageAttachmentKind, MessageDirection
 from app.db.repo import add_message
 from app.services.chat_attachment import save_chat_image_bytes
 from app.services.chat_messages import add_message_attachment, message_to_out
@@ -30,6 +30,7 @@ async def persist_inbound_chat_message(
     meta: str | None,
     image_bytes: bytes | None = None,
     image_mime: str | None = None,
+    attachment_kind: MessageAttachmentKind | None = None,
     silent: bool = False,
     reply_to_message_id: int | None = None,
     platform_message_id: str | None = None,
@@ -66,6 +67,7 @@ async def persist_inbound_chat_message(
                 message_id=row.id,
                 relative_path=rel,
                 mime_type=mime,
+                kind=attachment_kind,
             )
         except ValueError as e:
             log.warning("chat inbound image save failed: %s", e)
@@ -87,7 +89,13 @@ async def persist_inbound_chat_message(
         )
         preview = (text_translated or text_original or "").strip()
         if not preview and image_bytes:
-            preview = "📷 Изображение"
+            from app.db.models import MessageAttachmentKind
+
+            preview = (
+                "🎬 Кружок"
+                if attachment_kind == MessageAttachmentKind.video_note
+                else "📷 Изображение"
+            )
         else:
             preview = preview[:200]
         await notify_inbound_message(

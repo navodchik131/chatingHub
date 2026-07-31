@@ -124,7 +124,19 @@ async def load_messages_for_api(
         rr = await session.execute(select(Message).where(Message.id.in_(reply_ids)))
         for rm in rr.scalars().all():
             text = (rm.text_original or rm.text_translated or "").strip()
-            reply_previews[rm.id] = text[:160] if text else "📷 Изображение"
+            if text:
+                reply_previews[rm.id] = text[:160]
+            elif rm.attachments:
+                from app.db.models import MessageAttachmentKind
+
+                if any(
+                    a.kind == MessageAttachmentKind.video_note
+                    or (hasattr(a.kind, "value") and a.kind.value == MessageAttachmentKind.video_note.value)
+                    for a in rm.attachments
+                ):
+                    reply_previews[rm.id] = "🎬 Кружок"
+                else:
+                    reply_previews[rm.id] = "📷 Изображение"
 
     ratings = await _companion_ratings_for_messages(session, ids)
 
@@ -150,6 +162,14 @@ def message_preview_text(msg: Message) -> str | None:
     if text:
         return text[:280]
     if msg.attachments:
+        from app.db.models import MessageAttachmentKind
+
+        if any(
+            (a.kind == MessageAttachmentKind.video_note)
+            or (hasattr(a.kind, "value") and a.kind.value == MessageAttachmentKind.video_note.value)
+            for a in msg.attachments
+        ):
+            return "🎬 Кружок"
         return "📷 Изображение"
     return None
 
@@ -160,12 +180,13 @@ async def add_message_attachment(
     message_id: int,
     relative_path: str,
     mime_type: str,
+    kind: "MessageAttachmentKind | None" = None,
 ) -> MessageAttachment:
     from app.db.models import MessageAttachmentKind
 
     att = MessageAttachment(
         message_id=message_id,
-        kind=MessageAttachmentKind.image,
+        kind=kind or MessageAttachmentKind.image,
         relative_path=relative_path,
         mime_type=mime_type,
     )

@@ -11,15 +11,20 @@ from aiogram.types import Message
 log = logging.getLogger(__name__)
 
 
-async def download_telegram_image(message: Message, bot: Bot) -> tuple[bytes, str] | None:
+async def download_telegram_image(message: Message, bot: Bot) -> tuple[bytes, str, bool] | None:
     file_id: str | None = None
     mime = "image/jpeg"
+    is_video_note = False
     if message.photo:
         file_id = message.photo[-1].file_id
         mime = "image/jpeg"
     elif message.sticker:
         file_id = message.sticker.file_id
         mime = (message.sticker.mime_type or "image/webp").split(";")[0].strip() or "image/webp"
+    elif message.video_note:
+        file_id = message.video_note.file_id
+        mime = "video/mp4"
+        is_video_note = True
     elif message.animation:
         file_id = message.animation.file_id
         mime = (message.animation.mime_type or "video/mp4").split(";")[0].strip() or "video/mp4"
@@ -43,7 +48,7 @@ async def download_telegram_image(message: Message, bot: Bot) -> tuple[bytes, st
         data = buf.getvalue()
         if not data:
             return None
-        return data, mime
+        return data, mime, is_video_note
     except Exception as e:
         log.warning("telegram image download failed: %s", e)
         return None

@@ -43,6 +43,7 @@ class ConversationNoteKind(str, enum.Enum):
 
 class MessageAttachmentKind(str, enum.Enum):
     image = "image"
+    video_note = "video_note"
 
 
 class CompanionBotMode(str, enum.Enum):

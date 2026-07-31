@@ -809,6 +809,35 @@ async def api_reply(
     if video_pair:
         video_bytes, video_mime = video_pair
 
+    from app.db.models import MessageAttachmentKind
+    from app.services.telegram_video_note import convert_video_bytes_to_telegram_note_async
+
+    send_video_bytes = video_bytes
+    send_video_mime = video_mime
+    video_note_already_converted = False
+    attachment_video_bytes: bytes | None = None
+    attachment_video_mime: str | None = None
+    attachment_kind: MessageAttachmentKind | None = None
+    if video_bytes:
+        if telegram_video_note:
+            try:
+                converted = await convert_video_bytes_to_telegram_note_async(
+                    video_bytes,
+                    mime_hint=video_mime,
+                )
+            except (RuntimeError, ValueError) as exc:
+                raise HTTPException(status_code=502, detail=str(exc)[:500]) from exc
+            send_video_bytes = converted
+            send_video_mime = "video/mp4"
+            video_note_already_converted = True
+            attachment_video_bytes = converted
+            attachment_video_mime = "video/mp4"
+            attachment_kind = MessageAttachmentKind.video_note
+        else:
+            attachment_video_bytes = video_bytes
+            attachment_video_mime = video_mime or "video/mp4"
+            attachment_kind = MessageAttachmentKind.image
+
     platform_message_id: str | None = None
     if conv.platform == Platform.telegram:
         row_tg = await resolve_telegram_connection_for_conversation(session, conv, oid)
@@ -847,9 +876,10 @@ async def api_reply(
             text=outgoing,
             image_bytes=image_bytes,
             image_mime=image_mime,
-            video_bytes=video_bytes,
-            video_mime=video_mime,
+            video_bytes=send_video_bytes,
+            video_mime=send_video_mime,
             send_as_video_note=telegram_video_note,
+            video_note_already_converted=video_note_already_converted,
             reply_to_telegram_message_id=tg_reply_id,
         )
         if sent_id is not None:
@@ -888,9 +918,10 @@ async def api_reply(
             text=outgoing,
             image_bytes=image_bytes,
             image_mime=image_mime,
-            video_bytes=video_bytes,
-            video_mime=video_mime,
+            video_bytes=send_video_bytes,
+            video_mime=send_video_mime,
             send_as_video_note=telegram_video_note,
+            video_note_already_converted=video_note_already_converted,
             reply_to_telegram_message_id=tg_reply_id,
         )
         if sent_id is not None:
@@ -991,6 +1022,22 @@ async def api_reply(
                 message_id=row.id,
                 relative_path=rel,
                 mime_type=mime,
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+    elif attachment_video_bytes:
+        try:
+            rel, mime = save_chat_image_bytes(
+                owner_id=oid,
+                raw=attachment_video_bytes,
+                content_type=attachment_video_mime,
+            )
+            await add_message_attachment(
+                session,
+                message_id=row.id,
+                relative_path=rel,
+                mime_type=mime,
+                kind=attachment_kind,
             )
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e

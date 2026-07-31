@@ -1,5 +1,6 @@
 import { useRef, useState, useEffect, useCallback } from 'react';
 import Hoverable from '../components/Hoverable';
+import { ChatMessageMedia } from '../components/ChatMessageMedia';
 import { IcoClip, IcoSendArrow } from '../components/Icons';
 import { Fade, PageTitle, Avatar } from '../components/ui';
 import { useApp } from '../hooks/useApp';
@@ -953,9 +954,15 @@ function Thread() {
         {msgDefs.map((m, i) => {
           const rx = m.ownerReaction;
           const out = m.side === 'out';
+          const isVideoNote = m.attachmentKind === 'video_note';
+          const showText = Boolean(m.text && m.text !== '—');
+          const mediaOnly = Boolean(m.attachmentUrl && isVideoNote && !showText);
+          const bubbleStyle = mediaOnly
+            ? { maxWidth: '80%', background: 'transparent', border: 'none', boxShadow: 'none', padding: 0, position: 'relative' }
+            : (out ? bubbleOut : bubbleIn);
           return (
             <div key={m.id ?? i} style={{ display: 'flex', flexDirection: 'column', gap: 3, alignItems: out ? 'flex-end' : 'flex-start' }}>
-              <div style={{ ...(out ? bubbleOut : bubbleIn), opacity: m.pending ? 0.7 : 1 }}>
+              <div style={{ ...bubbleStyle, opacity: m.pending ? 0.7 : 1 }}>
                 {m.replyPreview && (
                   <div
                     style={{
@@ -969,40 +976,19 @@ function Thread() {
                 <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
                   <div style={{ flex: 1, fontSize: out ? 12.5 : 13, lineHeight: 1.5, color: out ? '#fff' : color.text }}>
                     {m.attachmentUrl && (
-                      <a href={m.attachmentUrl} target="_blank" rel="noreferrer" style={{ display: 'block', marginBottom: m.text ? 8 : 0 }}>
-                        {String(m.attachmentMime || '').startsWith('video/') ? (
-                          <video
-                            src={m.attachmentUrl}
-                            autoPlay
-                            loop
-                            muted
-                            playsInline
-                            onLoadedData={() => {
-                              if (stickToBottomRef.current) scrollToBottom('auto');
-                              else updateScrollState();
-                            }}
-                            style={{
-                              display: 'block', width: '100%', maxWidth: 240, maxHeight: 280,
-                              borderRadius: 10, objectFit: 'cover', background: color.bgPanel,
-                            }}
-                          />
-                        ) : (
-                          <img
-                            src={m.attachmentUrl}
-                            alt=""
-                            onLoad={() => {
-                              if (stickToBottomRef.current) scrollToBottom('auto');
-                              else updateScrollState();
-                            }}
-                            style={{
-                              display: 'block', width: '100%', maxWidth: 240, maxHeight: 280,
-                              borderRadius: 10, objectFit: 'cover', background: color.bgPanel,
-                            }}
-                          />
-                        )}
+                      <a href={m.attachmentUrl} target="_blank" rel="noreferrer" style={{ display: 'block', marginBottom: showText ? 8 : 0 }}>
+                        <ChatMessageMedia
+                          url={m.attachmentUrl}
+                          mime={m.attachmentMime}
+                          kind={m.attachmentKind}
+                          onMediaLoaded={() => {
+                            if (stickToBottomRef.current) scrollToBottom('auto');
+                            else updateScrollState();
+                          }}
+                        />
                       </a>
                     )}
-                    {m.text || (!m.attachmentUrl && '—')}
+                    {showText || (!m.attachmentUrl && '—')}
                   </div>
                   {!m.pending && (
                   <Hoverable

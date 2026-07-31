@@ -25,13 +25,14 @@ async def _send_via_client(
     video_bytes: bytes | None,
     video_mime: str | None,
     send_as_video_note: bool = False,
+    video_note_already_converted: bool = False,
     reply_to_telegram_message_id: int | None,
 ) -> int | None:
     reply_to = reply_to_telegram_message_id if reply_to_telegram_message_id else None
     sent = None
     if video_bytes:
         payload = video_bytes
-        if send_as_video_note:
+        if send_as_video_note and not video_note_already_converted:
             try:
                 payload = await convert_video_bytes_to_telegram_note_async(
                     video_bytes,
@@ -115,6 +116,7 @@ async def send_telegram_user_outbound(
     video_bytes: bytes | None = None,
     video_mime: str | None = None,
     send_as_video_note: bool = False,
+    video_note_already_converted: bool = False,
     reply_to_telegram_message_id: int | None = None,
 ) -> int | None:
     return await run_with_telegram_user_client(
@@ -129,6 +131,7 @@ async def send_telegram_user_outbound(
             video_bytes=video_bytes,
             video_mime=video_mime,
             send_as_video_note=send_as_video_note,
+            video_note_already_converted=video_note_already_converted,
             reply_to_telegram_message_id=reply_to_telegram_message_id,
         ),
     )

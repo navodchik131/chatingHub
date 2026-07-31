@@ -58,6 +58,7 @@ export function mapMessage(m: MessageOut) {
     pending: Boolean(m.pending),
     attachments,
     attachmentUrl: firstAttachmentUrl(attachments),
+    attachmentKind: attachments[0]?.kind || null,
     ownerReaction: ownerReactionEmoji(m.reactions),
     reactions: m.reactions || [],
   };

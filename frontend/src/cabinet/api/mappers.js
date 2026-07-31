@@ -54,6 +54,7 @@ export function mapMessage(m) {
     ownerReaction: ownerReactionEmoji(m.reactions),
     attachmentUrl: firstAttachmentUrl(m.attachments),
     attachmentMime: m.attachments?.[0]?.mime_type || null,
+    attachmentKind: m.attachments?.[0]?.kind || null,
     attachments: m.attachments || [],
     pending: Boolean(m.pending),
     replyPreview: m.reply_preview || null,

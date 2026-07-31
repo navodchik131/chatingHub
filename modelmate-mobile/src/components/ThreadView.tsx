@@ -107,7 +107,9 @@ function ThreadBubble({
 }) {
   const att = attachments?.[0];
   const hasMedia = Boolean(attachmentUrl);
+  const isVideoNote = att?.kind === 'video_note';
   const showText = Boolean(text && text !== '📷' && text !== '—');
+  const mediaOnly = hasMedia && isVideoNote && !showText;
 
   const footer = (
     <View style={styles.bubbleMeta}>
@@ -123,6 +125,7 @@ function ThreadBubble({
     <ChatAttachmentMedia
       url={attachmentUrl}
       mime={att?.mime_type}
+      kind={att?.kind}
       style={styles.mediaWrap}
       withText={showText}
     />
@@ -149,7 +152,7 @@ function ThreadBubble({
   return (
     <View style={[styles.bubbleWrap, out && styles.bubbleWrapOut]}>
       <Pressable onLongPress={pending ? undefined : onLongPress} delayLongPress={280}>
-        {out ? (
+        {out && !mediaOnly ? (
           <LinearGradient
             colors={[color.bubbleOutStart, color.bubbleOutEnd]}
             start={{ x: 0, y: 0 }}
@@ -158,6 +161,10 @@ function ThreadBubble({
           >
             {body}
           </LinearGradient>
+        ) : mediaOnly ? (
+          <View style={[styles.bubble, styles.bubbleMediaOnly, pending && styles.bubblePending]}>
+            {body}
+          </View>
         ) : (
           <View style={[styles.bubble, styles.bubbleIn, pending && styles.bubblePending]}>
             {body}
@@ -647,6 +654,12 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   bubblePending: { opacity: 0.72 },
+  bubbleMediaOnly: {
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+    backgroundColor: 'transparent',
+    borderWidth: 0,
+  },
   bubbleText: { fontSize: 17, lineHeight: 24, color: color.text },
   bubbleTextOut: { color: '#fff', fontSize: 16.5, lineHeight: 23 },
   translation: {
