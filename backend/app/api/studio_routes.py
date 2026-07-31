@@ -1382,7 +1382,7 @@ async def api_motion_render_video_note(
         session, owner_id=oid, render_id=render_id
     )
     try:
-        note = await convert_video_bytes_to_telegram_note_async(raw)
+        note = await convert_video_bytes_to_telegram_note_async(raw, mime_hint=_mime)
     except (RuntimeError, ValueError) as e:
         raise HTTPException(status_code=502, detail=str(e)[:500]) from e
     return Response(
@@ -1415,11 +1415,11 @@ async def api_generation_video_note(
     from app.services.chat_outbound import load_studio_generation_video_bytes
     from app.services.telegram_video_note import convert_video_bytes_to_telegram_note_async
 
-    raw, _mime = await load_studio_generation_video_bytes(
+    raw, mime = await load_studio_generation_video_bytes(
         session, owner_id=oid, generation_id=generation_id
     )
     try:
-        note = await convert_video_bytes_to_telegram_note_async(raw)
+        note = await convert_video_bytes_to_telegram_note_async(raw, mime_hint=mime)
     except (RuntimeError, ValueError) as e:
         raise HTTPException(status_code=502, detail=str(e)[:500]) from e
     return Response(

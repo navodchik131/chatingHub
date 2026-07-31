@@ -10,6 +10,7 @@ from telethon import TelegramClient
 
 from app.connectors.telegram_user.session_runtime import run_with_telegram_user_client
 from app.services.telegram_video_note import convert_video_bytes_to_telegram_note_async
+from fastapi import HTTPException
 
 log = logging.getLogger(__name__)
 
@@ -31,7 +32,13 @@ async def _send_via_client(
     if video_bytes:
         payload = video_bytes
         if send_as_video_note:
-            payload = await convert_video_bytes_to_telegram_note_async(video_bytes)
+            try:
+                payload = await convert_video_bytes_to_telegram_note_async(
+                    video_bytes,
+                    mime_hint=video_mime,
+                )
+            except (RuntimeError, ValueError) as exc:
+                raise HTTPException(status_code=502, detail=str(exc)[:500]) from exc
         ext = ".mp4" if send_as_video_note else ".mp4"
         if not send_as_video_note and video_mime and "webm" in video_mime:
             ext = ".webm"

@@ -17,6 +17,21 @@ TELEGRAM_VIDEO_NOTE_MAX_SECONDS = 60
 TELEGRAM_VIDEO_NOTE_SIZE = 640
 
 
+def _guess_video_suffix(raw: bytes, mime_hint: str | None = None) -> str:
+    hint = (mime_hint or "").lower()
+    if "webm" in hint:
+        return ".webm"
+    if "quicktime" in hint or "mp4" in hint or "mpeg" in hint:
+        return ".mp4"
+    if len(raw) >= 12 and raw[4:8] == b"ftyp":
+        return ".mp4"
+    if raw[:4] == b"\x1aE\xdf\xa3":
+        return ".webm"
+    if len(raw) >= 12 and raw[:4] == b"RIFF" and raw[8:12] == b"WEBM":
+        return ".webm"
+    return ".mp4"
+
+
 def _run_ffmpeg(input_path: Path, output_path: Path, *, max_seconds: int) -> None:
     vf = (
         f"scale={TELEGRAM_VIDEO_NOTE_SIZE}:{TELEGRAM_VIDEO_NOTE_SIZE}:"
@@ -33,6 +48,8 @@ def _run_ffmpeg(input_path: Path, output_path: Path, *, max_seconds: int) -> Non
         str(input_path),
         "-t",
         str(max(1, int(max_seconds))),
+        "-map",
+        "0:v:0",
         "-vf",
         vf,
         "-c:v",
@@ -43,10 +60,7 @@ def _run_ffmpeg(input_path: Path, output_path: Path, *, max_seconds: int) -> Non
         "fast",
         "-crf",
         "23",
-        "-c:a",
-        "aac",
-        "-b:a",
-        "96k",
+        "-an",
         "-movflags",
         "+faststart",
         str(output_path),
@@ -57,12 +71,18 @@ def _run_ffmpeg(input_path: Path, output_path: Path, *, max_seconds: int) -> Non
         raise RuntimeError(f"ffmpeg video note failed: {err or proc.returncode}")
 
 
-def convert_video_bytes_to_telegram_note(raw: bytes, *, max_seconds: int = TELEGRAM_VIDEO_NOTE_MAX_SECONDS) -> bytes:
+def convert_video_bytes_to_telegram_note(
+    raw: bytes,
+    *,
+    max_seconds: int = TELEGRAM_VIDEO_NOTE_MAX_SECONDS,
+    mime_hint: str | None = None,
+) -> bytes:
     if not raw:
         raise ValueError("empty video")
+    suffix = _guess_video_suffix(raw, mime_hint)
     with tempfile.TemporaryDirectory(prefix="mm-vnote-") as tmp:
         tmp_dir = Path(tmp)
-        src = tmp_dir / "in.bin"
+        src = tmp_dir / f"in{suffix}"
         dst = tmp_dir / "note.mp4"
         src.write_bytes(raw)
         _run_ffmpeg(src, dst, max_seconds=max_seconds)
@@ -75,9 +95,11 @@ async def convert_video_bytes_to_telegram_note_async(
     raw: bytes,
     *,
     max_seconds: int = TELEGRAM_VIDEO_NOTE_MAX_SECONDS,
+    mime_hint: str | None = None,
 ) -> bytes:
     return await anyio.to_thread.run_sync(
         convert_video_bytes_to_telegram_note,
         raw,
         max_seconds=max_seconds,
+        mime_hint=mime_hint,
     )

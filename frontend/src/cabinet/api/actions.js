@@ -1,4 +1,5 @@
 import { apiFetch } from '../../api'
+import { formatHttpApiError } from '../../apiErrors'
 import { mergeVideoArchiveWithMotionRenders } from '../../studioArchive'
 import { withVideoDownloadParam } from './archiveDownload'
 import { postStudioJobStart, waitForStudioJobResult } from '../../studioJobs'
@@ -316,22 +317,27 @@ export async function downloadVideoNote(renderId, filename = 'modelmate-video-no
   const res = await apiFetch(`/api/studio/motion/renders/${renderId}/video-note`)
   if (!res.ok) {
     const data = await res.json().catch(() => ({}))
-    throw new Error(typeof data.detail === 'string' ? data.detail : res.statusText)
+    throw new Error(formatHttpApiError(res, data))
   }
   const blob = await res.blob()
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = filename
-  a.click()
-  URL.revokeObjectURL(url)
+  const objectUrl = URL.createObjectURL(blob)
+  try {
+    const a = document.createElement('a')
+    a.href = objectUrl
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+  } finally {
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000)
+  }
 }
 
 export async function downloadVideoNoteByPath(apiPath, filename = 'modelmate-video-note.mp4') {
   const res = await apiFetch(apiPath)
   if (!res.ok) {
     const data = await res.json().catch(() => ({}))
-    throw new Error(typeof data.detail === 'string' ? data.detail : res.statusText)
+    throw new Error(formatHttpApiError(res, data))
   }
   const blob = await res.blob()
   const objectUrl = URL.createObjectURL(blob)

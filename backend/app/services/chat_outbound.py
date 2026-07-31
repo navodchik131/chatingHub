@@ -52,8 +52,11 @@ async def load_studio_generation_video_bytes(
             return data, ct
     src = (row.source_url or "").strip()
     if src.startswith("https://"):
-        async with httpx.AsyncClient(timeout=120.0, follow_redirects=True) as client:
-            r = await client.get(src)
+        try:
+            async with httpx.AsyncClient(timeout=120.0, follow_redirects=True) as client:
+                r = await client.get(src)
+        except httpx.HTTPError as exc:
+            raise HTTPException(status_code=502, detail="Не удалось загрузить видео") from exc
         if r.status_code >= 400:
             raise HTTPException(status_code=502, detail="Не удалось загрузить видео")
         ct = (row.content_type or r.headers.get("content-type") or "video/mp4").split(";")[0].strip()
@@ -114,11 +117,25 @@ async def load_studio_motion_render_bytes(
     row = await session.get(StudioMotionRender, render_id)
     if not row or row.user_id != owner_id:
         raise HTTPException(status_code=404, detail="Видео не найдено")
+    gid = row.studio_generation_id
+    if gid is not None and gid > 0:
+        gen = await session.get(StudioGeneration, gid)
+        if gen and gen.user_id == owner_id and (gen.content_type or "").startswith("video/"):
+            try:
+                return await load_studio_generation_video_bytes(
+                    session, owner_id=owner_id, generation_id=gid
+                )
+            except HTTPException as exc:
+                if exc.status_code not in (404, 502):
+                    raise
     url = (row.video_url or "").strip()
     if not url:
         raise HTTPException(status_code=404, detail="URL видео отсутствует")
-    async with httpx.AsyncClient(timeout=120.0, follow_redirects=True) as client:
-        r = await client.get(url)
+    try:
+        async with httpx.AsyncClient(timeout=120.0, follow_redirects=True) as client:
+            r = await client.get(url)
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail="Не удалось загрузить видео") from exc
     if r.status_code >= 400:
         raise HTTPException(status_code=502, detail="Не удалось загрузить видео")
     ct = (r.headers.get("content-type") or "video/mp4").split(";")[0].strip()
@@ -200,7 +217,13 @@ async def send_telegram_outbound(
         if video_bytes:
             payload = video_bytes
             if send_as_video_note:
-                payload = await convert_video_bytes_to_telegram_note_async(video_bytes)
+                try:
+                    payload = await convert_video_bytes_to_telegram_note_async(
+                        video_bytes,
+                        mime_hint=video_mime,
+                    )
+                except (RuntimeError, ValueError) as exc:
+                    raise HTTPException(status_code=502, detail=str(exc)[:500]) from exc
                 note = BufferedInputFile(payload, filename="video_note.mp4")
                 sent = await bot.send_video_note(
                     chat_id=chat_id,
@@ -268,6 +291,14 @@ async def send_telegram_outbound(
         else:
             raise HTTPException(status_code=400, detail="Пустое сообщение")
         return int(sent.message_id) if sent and sent.message_id else None
+    except HTTPException:
+        raise
+    except Exception as exc:
+        from aiogram.exceptions import TelegramAPIError
+
+        if isinstance(exc, TelegramAPIError):
+            raise HTTPException(status_code=502, detail=str(exc)[:500]) from exc
+        raise
     finally:
         await bot.session.close()
 
