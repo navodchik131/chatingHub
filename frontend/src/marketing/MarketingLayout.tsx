@@ -109,6 +109,9 @@ export function MarketingLayout() {
             <NavLink to={path('/pricing')} className="mm-nav__link">
               {t('layout.navPricing')}
             </NavLink>
+            <NavLink to={path('/about')} className="mm-nav__link">
+              {t('layout.navAbout')}
+            </NavLink>
             <NavLink to={path('/faq')} className="mm-nav__link">
               {t('layout.navFaq')}
             </NavLink>
@@ -187,6 +190,9 @@ export function MarketingLayout() {
               <ul>
                 <li>
                   <NavLink to={path('/faq')}>{t('layout.footerHelpFaq')}</NavLink>
+                </li>
+                <li>
+                  <NavLink to={path('/about')}>{t('layout.footerHelpAbout')}</NavLink>
                 </li>
                 <li>
                   <a href={path('/login')}>{t('layout.footerHelpLogin')}</a>

@@ -6,6 +6,7 @@
     "navStudio": "Studio",
     "navShowcase": "Showcase",
     "navPricing": "Pricing",
+    "navAbout": "About",
     "navFaq": "FAQ",
     "headerLogin": "Log in",
     "headerWorkspace": "Dashboard",
@@ -21,6 +22,7 @@
     "footerPricingTrial": "Demo & credits",
     "footerHelp": "Help",
     "footerHelpFaq": "FAQ",
+    "footerHelpAbout": "About the service",
     "footerHelpLogin": "Log in",
     "footerLegal": "Legal",
     "footerLegalTerms": "Terms",
@@ -639,6 +641,9 @@
     "legalTerms": "Terms of Service",
     "legalAnd": "and",
     "legalPrivacy": "Privacy Policy"
+  },
+  "aboutService": {
+    "iframeTitle": "About ModelMate"
   },
   "faq": {
     "title": "Frequently asked questions",

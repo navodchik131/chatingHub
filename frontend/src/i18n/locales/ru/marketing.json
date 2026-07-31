@@ -6,6 +6,7 @@
     "navStudio": "Студия",
     "navShowcase": "Примеры",
     "navPricing": "Тарифы",
+    "navAbout": "О сервисе",
     "navFaq": "FAQ",
     "headerLogin": "Войти",
     "headerWorkspace": "Кабинет",
@@ -21,6 +22,7 @@
     "footerPricingTrial": "Демо и кредиты",
     "footerHelp": "Помощь",
     "footerHelpFaq": "FAQ",
+    "footerHelpAbout": "О сервисе",
     "footerHelpLogin": "Вход",
     "footerLegal": "Юр.",
     "footerLegalTerms": "Соглашение",
@@ -639,6 +641,9 @@
     "legalTerms": "соглашением",
     "legalAnd": "и",
     "legalPrivacy": "политикой конфиденциальности"
+  },
+  "aboutService": {
+    "iframeTitle": "О сервисе ModelMate"
   },
   "faq": {
     "title": "Частые вопросы",
