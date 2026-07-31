@@ -17,6 +17,7 @@ from app.api.referral_routes import router as referral_router
 from app.api.chat_routes import router as chat_router
 from app.api.creator_donation_routes import router as creator_donation_router
 from app.api.integrations_routes import router as integrations_router
+from app.api.telegram_user_routes import router as telegram_user_router
 from app.api.push_routes import router as push_router
 from app.api.studio_routes import router as studio_router
 from app.api.studio_workflow_routes import router as studio_workflow_router
@@ -35,6 +36,7 @@ router.include_router(webhooks_router)
 router.include_router(tribute_router)
 router.include_router(creator_donation_router)
 router.include_router(integrations_router)
+router.include_router(telegram_user_router)
 router.include_router(billing_router)
 router.include_router(referral_router)
 router.include_router(studio_router)

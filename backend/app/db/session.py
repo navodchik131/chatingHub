@@ -388,6 +388,30 @@ async def init_db() -> None:
         await conn.run_sync(_migrate_telegram_mobile_auth_sessions)
         await conn.run_sync(_migrate_telegram_login_bot_contacts)
         await conn.run_sync(_migrate_support_ticket_unread_flags)
+        await conn.run_sync(_migrate_telegram_user_sessions)
+
+
+def _migrate_telegram_user_sessions(sync_conn) -> None:
+    from sqlalchemy import inspect, text
+
+    from app.db.models import TelegramUserSession
+
+    insp = inspect(sync_conn)
+    if not insp.has_table("telegram_user_sessions"):
+        TelegramUserSession.__table__.create(sync_conn, checkfirst=True)
+
+    if insp.has_table("conversations"):
+        cols = {c["name"] for c in insp.get_columns("conversations")}
+        if "telegram_user_session_id" not in cols:
+            sync_conn.execute(
+                text("ALTER TABLE conversations ADD COLUMN telegram_user_session_id INTEGER")
+            )
+            sync_conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_conversations_telegram_user_session_id "
+                    "ON conversations(telegram_user_session_id)"
+                )
+            )
 
 
 def _migrate_support_ticket_unread_flags(sync_conn) -> None:

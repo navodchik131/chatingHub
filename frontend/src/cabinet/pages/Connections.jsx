@@ -11,6 +11,7 @@ import { connDefs, connFieldSets } from '../data/catalog';
 import { mapConnectionStatus, mapIntegrationConnections, mapIntegrationCurrent } from '../api/mappers';
 import { copyText } from '../utils/clipboard';
 import { isPlausibleTelegramBotToken } from '../api/helpers';
+import * as actions from '../api/actions';
 import { goToAdmin } from '../../marketing/workspaceEntry';
 
 const connIcons = { tg: IcoTg, wave: IcoWave, heart: IcoHeart, gift: IcoGift, cam: IcoCam, bell: IcoBell };
@@ -103,7 +104,10 @@ function ConnectionDetail() {
   const ig = cabinet.integrations;
   const modelOptions = (cabinet.models || []).map((m) => ({ id: String(m.id), name: m.name }));
 
-  const form = s.connForms?.[data.id] || { token: '', apiKey: '', label: '', modelId: modelOptions[0]?.id || '' };
+  const form = s.connForms?.[data.id] || {
+    token: '', apiKey: '', label: '', modelId: modelOptions[0]?.id || '',
+    phone: '', code: '', password: '', tgUserStep: 'phone', tgUserConnectionId: null,
+  };
   const [oauthBusy, setOauthBusy] = useState(false);
   const saving = cabinet.busy || oauthBusy;
   const setForm = (patch) =>
@@ -118,6 +122,9 @@ function ConnectionDetail() {
     }
     if (data.id === 'tg') {
       return lang === 'ru' ? 'Telegram-бот подключён.' : 'Telegram bot connected.';
+    }
+    if (data.id === 'tg-user') {
+      return lang === 'ru' ? 'Личный Telegram подключён.' : 'Personal Telegram connected.';
     }
     if (data.id === 'tribute') {
       return lang === 'ru' ? 'Tribute API настроен.' : 'Tribute API configured.';
@@ -150,6 +157,66 @@ function ConnectionDetail() {
       }
       ok = await cabinet.saveIntegration('tg', { token, modelId: form.modelId });
       if (ok) setForm({ token: '' });
+    } else if (data.id === 'tg-user') {
+      const step = form.tgUserStep || 'phone';
+      if (step === 'phone') {
+        if (!(form.phone || '').trim()) return;
+        setOauthBusy(true);
+        try {
+          const res = await actions.startTelegramUserLogin(form.phone, form.modelId);
+          setForm({
+            tgUserStep: res.needs_password ? 'password' : 'code',
+            tgUserConnectionId: res.connection_id,
+            code: '',
+            password: '',
+          });
+          cabinet.setError(null);
+        } catch (e) {
+          cabinet.setError(e?.message || String(e));
+          ok = false;
+        } finally {
+          setOauthBusy(false);
+        }
+        return;
+      }
+      if (step === 'code') {
+        if (!(form.code || '').trim() || !form.tgUserConnectionId) return;
+        setOauthBusy(true);
+        try {
+          const res = await actions.confirmTelegramUserCode(form.tgUserConnectionId, form.code);
+          if (res.needs_password) {
+            setForm({ tgUserStep: 'password', code: '' });
+          } else {
+            await cabinet.refreshAll();
+            setForm({ phone: '', code: '', password: '', tgUserStep: 'phone', tgUserConnectionId: null });
+            ok = true;
+          }
+        } catch (e) {
+          cabinet.setError(e?.message || String(e));
+          ok = false;
+        } finally {
+          setOauthBusy(false);
+        }
+        if (ok) setS({ connFlash: 'ok' });
+        return;
+      }
+      if (step === 'password') {
+        if (!(form.password || '').trim() || !form.tgUserConnectionId) return;
+        setOauthBusy(true);
+        try {
+          await actions.confirmTelegramUserPassword(form.tgUserConnectionId, form.password);
+          await cabinet.refreshAll();
+          setForm({ phone: '', code: '', password: '', tgUserStep: 'phone', tgUserConnectionId: null });
+          ok = true;
+        } catch (e) {
+          cabinet.setError(e?.message || String(e));
+          ok = false;
+        } finally {
+          setOauthBusy(false);
+        }
+        if (ok) setS({ connFlash: 'ok' });
+        return;
+      }
     } else if (data.id === 'fanvue') {
       setOauthBusy(true);
       try {
@@ -173,7 +240,7 @@ function ConnectionDetail() {
       });
       if (ok) setForm({ apiKey: '' });
     }
-    if (!['fanvue', 'ig'].includes(data.id)) {
+    if (!['fanvue', 'ig', 'tg-user'].includes(data.id)) {
       setS({ connFlash: ok ? 'ok' : 'error' });
     }
   };
@@ -216,7 +283,7 @@ function ConnectionDetail() {
     <div>
       <BackLink onClick={() => setS({ connDetail: null, connFlash: null })}>{t.allConnections}</BackLink>
 
-      {s.connFlash && ['fanvue', 'ig', 'wavespeed', 'tg', 'tribute'].includes(data.id) && (
+      {s.connFlash && ['fanvue', 'ig', 'wavespeed', 'tg', 'tg-user', 'tribute'].includes(data.id) && (
         <NoteBlock
           style={{
             marginBottom: 12,
@@ -315,6 +382,52 @@ function ConnectionDetail() {
                 />
               </>
             )}
+            {data.id === 'tg-user' && (
+              <>
+                {!ig?.telegram_user_available && (
+                  <NoteBlock style={{ gridColumn: '1 / -1' }}>
+                    {lang === 'ru'
+                      ? 'MTProto не настроен на сервере (TELEGRAM_API_ID / TELEGRAM_API_HASH).'
+                      : 'MTProto is not configured on the server (TELEGRAM_API_ID / TELEGRAM_API_HASH).'}
+                  </NoteBlock>
+                )}
+                {(form.tgUserStep || 'phone') === 'phone' && (
+                  <>
+                    <Field
+                      label={lang === 'ru' ? 'ТЕЛЕФОН' : 'PHONE'}
+                      value={form.phone}
+                      onChange={(e) => setForm({ phone: e.target.value })}
+                      placeholder="+79001234567"
+                      style={{ gridColumn: '1 / -1' }}
+                    />
+                    <ModelSelect
+                      label={lang === 'ru' ? 'ПЕРСОНАЖ' : 'CHARACTER'}
+                      value={form.modelId}
+                      options={modelOptions}
+                      lang={lang}
+                      onChange={(e) => setForm({ modelId: e.target.value })}
+                    />
+                  </>
+                )}
+                {(form.tgUserStep || 'phone') === 'code' && (
+                  <Field
+                    label={lang === 'ru' ? 'КОД ИЗ TELEGRAM / SMS' : 'CODE FROM TELEGRAM / SMS'}
+                    value={form.code}
+                    onChange={(e) => setForm({ code: e.target.value })}
+                    style={{ gridColumn: '1 / -1' }}
+                  />
+                )}
+                {(form.tgUserStep || 'phone') === 'password' && (
+                  <Field
+                    label={lang === 'ru' ? 'ПАРОЛЬ 2FA (облачный)' : '2FA PASSWORD (cloud)'}
+                    value={form.password}
+                    onChange={(e) => setForm({ password: e.target.value })}
+                    type="password"
+                    style={{ gridColumn: '1 / -1' }}
+                  />
+                )}
+              </>
+            )}
             {data.id === 'fanvue' && (
               <>
                 {!fanvueOAuthReady && (
@@ -376,7 +489,7 @@ function ConnectionDetail() {
                 />
               </>
             )}
-            {['wavespeed', 'tg', 'fanvue', 'ig', 'tribute'].includes(data.id) ? null : cfs.fields.map((f, i) => {
+            {['wavespeed', 'tg', 'tg-user', 'fanvue', 'ig', 'tribute'].includes(data.id) ? null : cfs.fields.map((f, i) => {
               const wrap = f.half ? undefined : { gridColumn: '1 / -1' };
               if (f.kind === 'text') {
                 return <Field key={i} label={f.lbl} value={f.val} placeholder={f.ph} style={wrap} />;
@@ -425,6 +538,7 @@ function ConnectionDetail() {
                 || saving
                 || (data.id === 'fanvue' && !fanvueOAuthReady)
                 || (data.id === 'ig' && !instagramOAuthReady)
+                || (data.id === 'tg-user' && !ig?.telegram_user_available)
                   ? {}
                   : { filter: 'brightness(1.08)' }
               }
@@ -433,12 +547,19 @@ function ConnectionDetail() {
                 || saving
                 || (data.id === 'fanvue' && !fanvueOAuthReady)
                 || (data.id === 'ig' && !instagramOAuthReady)
+                || (data.id === 'tg-user' && !ig?.telegram_user_available)
                   ? undefined
                   : () => void handleSave()
               }
             >
               {saving
                 ? (lang === 'ru' ? 'Сохранение…' : 'Saving…')
+                : data.id === 'tg-user'
+                ? ((form.tgUserStep || 'phone') === 'password'
+                  ? (lang === 'ru' ? 'Подтвердить пароль' : 'Confirm password')
+                  : (form.tgUserStep || 'phone') === 'code'
+                  ? (lang === 'ru' ? 'Подтвердить код' : 'Confirm code')
+                  : (lang === 'ru' ? 'Отправить код' : 'Send code'))
                 : data.id === 'fanvue'
                 ? (fanvueConnected
                   ? (lang === 'ru' ? 'Переподключить Fanvue' : 'Reconnect Fanvue')

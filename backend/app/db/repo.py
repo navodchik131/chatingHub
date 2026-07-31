@@ -40,6 +40,7 @@ async def get_or_create_conversation(
     telegram_photo_file_id: str | None = None,
     *,
     telegram_connection_id: int | None = None,
+    telegram_user_session_id: int | None = None,
     fanvue_connection_id: int | None = None,
     instagram_connection_id: int | None = None,
     studio_model_id: int | None = None,
@@ -67,6 +68,8 @@ async def get_or_create_conversation(
             conv.telegram_photo_file_id = telegram_photo_file_id
         if telegram_connection_id and conv.telegram_connection_id != telegram_connection_id:
             conv.telegram_connection_id = telegram_connection_id
+        if telegram_user_session_id and conv.telegram_user_session_id != telegram_user_session_id:
+            conv.telegram_user_session_id = telegram_user_session_id
         if fanvue_connection_id and conv.fanvue_connection_id != fanvue_connection_id:
             conv.fanvue_connection_id = fanvue_connection_id
         if instagram_connection_id and conv.instagram_connection_id != instagram_connection_id:
@@ -87,6 +90,9 @@ async def get_or_create_conversation(
         telegram_connection_id=telegram_connection_id
         if platform == Platform.telegram
         else None,
+        telegram_user_session_id=telegram_user_session_id
+        if platform == Platform.telegram_user
+        else None,
         fanvue_connection_id=fanvue_connection_id
         if platform == Platform.fanvue
         else None,
@@ -106,6 +112,8 @@ async def get_or_create_conversation(
         if existing is not None:
             if telegram_connection_id and existing.telegram_connection_id != telegram_connection_id:
                 existing.telegram_connection_id = telegram_connection_id
+            if telegram_user_session_id and existing.telegram_user_session_id != telegram_user_session_id:
+                existing.telegram_user_session_id = telegram_user_session_id
             if fanvue_connection_id and existing.fanvue_connection_id != fanvue_connection_id:
                 existing.fanvue_connection_id = fanvue_connection_id
             if instagram_connection_id and existing.instagram_connection_id != instagram_connection_id:

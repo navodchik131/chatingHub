@@ -135,6 +135,32 @@ export async function deleteTelegramConnection(connectionId) {
   return apiJson(`/api/integrations/telegram/${connectionId}`, { method: 'DELETE' })
 }
 
+export async function startTelegramUserLogin(phone, studioModelId) {
+  const body = {
+    phone: String(phone || '').trim(),
+    studio_model_id: studioModelId ? Number(studioModelId) : null,
+  }
+  return apiJson('/api/integrations/telegram-user/start', { method: 'POST', body: JSON.stringify(body) })
+}
+
+export async function confirmTelegramUserCode(connectionId, code) {
+  return apiJson('/api/integrations/telegram-user/confirm-code', {
+    method: 'POST',
+    body: JSON.stringify({ connection_id: Number(connectionId), code: String(code || '').trim() }),
+  })
+}
+
+export async function confirmTelegramUserPassword(connectionId, password) {
+  return apiJson('/api/integrations/telegram-user/confirm-password', {
+    method: 'POST',
+    body: JSON.stringify({ connection_id: Number(connectionId), password: String(password || '') }),
+  })
+}
+
+export async function deleteTelegramUserConnection(connectionId) {
+  return apiJson(`/api/integrations/telegram-user/${connectionId}`, { method: 'DELETE' })
+}
+
 export async function deleteFanvueConnection(connectionId) {
   const q = connectionId ? `?connection_id=${connectionId}` : ''
   return apiJson(`/api/integrations/fanvue${q}`, { method: 'DELETE' })

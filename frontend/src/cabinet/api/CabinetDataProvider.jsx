@@ -603,6 +603,7 @@ export function CabinetDataProvider({ children }) {
     async (type, connectionId) => {
       await run(async () => {
         if (type === 'tg') await actions.deleteTelegramConnection(connectionId)
+        else if (type === 'tg-user') await actions.deleteTelegramUserConnection(connectionId)
         else if (type === 'fanvue') await actions.deleteFanvueConnection(connectionId)
         else if (type === 'ig') await actions.deleteInstagramConnection(connectionId)
         else if (type === 'tribute') await actions.deleteTributeConnection(connectionId)

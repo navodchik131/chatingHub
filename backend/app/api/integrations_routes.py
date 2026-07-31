@@ -49,6 +49,8 @@ from app.db.models import (
     Platform,
     Subscription,
     TelegramConnection,
+    TelegramUserSession,
+    TelegramUserSessionStatus,
     TributeConnection,
     User,
     WavespeedConnection,
@@ -229,6 +231,31 @@ def _tribute_connection_out(tr: TributeConnection) -> PlatformConnectionOut:
     )
 
 
+def _telegram_user_connection_out(row: TelegramUserSession) -> PlatformConnectionOut:
+    import re
+
+    username = (row.telegram_username or "").strip()
+    phone = row.phone or ""
+    digits = re.sub(r"\D", "", phone)
+    masked = f"***{digits[-4:]}" if len(digits) >= 4 else phone or None
+    return PlatformConnectionOut(
+        id=row.id,
+        platform="telegram_user",
+        label=row.label,
+        studio_model_id=row.studio_model_id,
+        telegram_username=username or None,
+        bot_username=f"@{username}" if username else None,
+        session_status=row.status,
+        phone_masked=masked,
+        last_seen_at=row.last_seen_at,
+        is_active=bool(row.is_active and row.status == TelegramUserSessionStatus.active.value),
+        companion_mode=row.companion_mode or "off",
+        companion_delay_min_sec=int(row.companion_delay_min_sec or 5),
+        companion_delay_max_sec=int(row.companion_delay_max_sec or 45),
+        companion_max_replies_per_hour=int(row.companion_max_replies_per_hour or 60),
+    )
+
+
 async def _integration_status(session: AsyncSession, user: User) -> IntegrationStatusOut:
     oid = workspace_owner_id(user)
     tg_rows = list(
@@ -237,6 +264,18 @@ async def _integration_status(session: AsyncSession, user: User) -> IntegrationS
                 select(TelegramConnection)
                 .where(TelegramConnection.user_id == oid)
                 .order_by(TelegramConnection.id.asc())
+            )
+        ).all()
+    )
+    tg_user_rows = list(
+        (
+            await session.scalars(
+                select(TelegramUserSession)
+                .where(
+                    TelegramUserSession.user_id == oid,
+                    TelegramUserSession.is_active.is_(True),
+                )
+                .order_by(TelegramUserSession.id.asc())
             )
         ).all()
     )
@@ -336,6 +375,12 @@ async def _integration_status(session: AsyncSession, user: User) -> IntegrationS
         telegram_connections=[
             _telegram_connection_out(r, base=base) for r in tg_rows if r.is_active
         ],
+        telegram_user_connections=[
+            _telegram_user_connection_out(r)
+            for r in tg_user_rows
+            if r.status == TelegramUserSessionStatus.active.value
+        ],
+        telegram_user_available=settings.telegram_mtproto_configured,
         fanvue_connections=[_fanvue_connection_out(r) for r in fv_rows],
         instagram_connections=[_instagram_connection_out(r) for r in ig_rows],
         tribute_configured=bool(tr and tr.is_active),

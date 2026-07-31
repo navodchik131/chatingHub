@@ -153,6 +153,16 @@ export function mapIntegrationConnections(platformId, integrations, models, lang
       ].join(' · '),
     }))
   }
+  if (platformId === 'tg-user') {
+    return (ig.telegram_user_connections || []).map((c) => ({
+      id: c.id,
+      name: c.telegram_username ? `@${c.telegram_username}` : (c.phone_masked || c.label || `#${c.id}`),
+      meta: [
+        c.session_status === 'active' ? (lang === 'ru' ? 'активен' : 'active') : (c.session_status || '?'),
+        modelLabel(c.studio_model_id),
+      ].join(' · '),
+    }))
+  }
   if (platformId === 'fanvue') {
     return (ig.fanvue_connections || []).map((c) => ({
       id: c.id,
@@ -200,6 +210,16 @@ export function mapIntegrationCurrent(platformId, integrations, models, lang) {
     return [
       { k: lang === 'ru' ? 'Бот' : 'Bot', v: c.bot_username ? `@${c.bot_username}` : '—' },
       { k: 'Webhook', v: c.webhook_registered ? (lang === 'ru' ? 'активен' : 'active') : '?' },
+      { k: lang === 'ru' ? 'Персонаж' : 'Character', v: modelLabel(c.studio_model_id) },
+    ]
+  }
+  if (platformId === 'tg-user') {
+    const rows = ig.telegram_user_connections || []
+    if (!rows.length) return []
+    const c = rows[0]
+    return [
+      { k: lang === 'ru' ? 'Аккаунт' : 'Account', v: c.telegram_username ? `@${c.telegram_username}` : (c.phone_masked || '—') },
+      { k: lang === 'ru' ? 'Статус' : 'Status', v: c.session_status === 'active' ? (lang === 'ru' ? 'активен' : 'active') : (c.session_status || '—') },
       { k: lang === 'ru' ? 'Персонаж' : 'Character', v: modelLabel(c.studio_model_id) },
     ]
   }
@@ -291,6 +311,16 @@ export function mapConnectionStatus(integrations, connId, lang) {
   const fvN = (ig.fanvue_connections || []).length
   const trN = (ig.tribute_connections || []).length
   const igN = (ig.instagram_connections || []).length
+  const tgUserN = (ig.telegram_user_connections || []).length
+  if (connId === 'tg-user') {
+    if (!ig.telegram_user_available) {
+      return { st: lang === 'ru' ? 'НЕДОСТУПНО' : 'UNAVAILABLE', tone: 'dim' }
+    }
+    return {
+      st: tgUserN ? `${tgUserN} ${lang === 'ru' ? 'АКК.' : 'ACC.'}` : lang === 'ru' ? 'НЕ НАСТРОЕН' : 'NOT SET',
+      tone: tgUserN ? 'active' : 'warn',
+    }
+  }
   if (connId === 'tg') {
     return {
       st: tgN ? `${tgN} ${lang === 'ru' ? 'БОТА' : 'BOTS'}` : lang === 'ru' ? 'НЕ НАСТРОЕН' : 'NOT SET',

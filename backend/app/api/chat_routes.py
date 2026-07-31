@@ -82,6 +82,10 @@ from app.services.chat_messages import (
     message_to_out,
 )
 from app.connectors.instagram.client import send_instagram_reaction
+from app.connectors.telegram_user.outbound import (
+    download_telegram_user_avatar,
+    send_telegram_user_outbound,
+)
 from app.services.chat_outbound import (
     resolve_outbound_image,
     resolve_outbound_video,
@@ -144,6 +148,7 @@ from app.services.platform_connections import (
     resolve_fanvue_connection_for_conversation,
     resolve_instagram_connection_for_conversation,
     resolve_telegram_connection_for_conversation,
+    resolve_telegram_user_session_for_conversation,
 )
 from app.services.workspace_model_access import (
     filter_conversations_for_member,
@@ -482,29 +487,48 @@ async def api_conversation_avatar(
     await _require_chat_plan(session, user)
     oid = workspace_owner_id(user)
     conv = await require_conversation_chat_access(session, user, conv_id, oid)
-    if conv.platform != Platform.telegram or not (conv.telegram_photo_file_id or "").strip():
+    if conv.platform != Platform.telegram and conv.platform != Platform.telegram_user:
         raise HTTPException(status_code=404, detail="no avatar")
-
-    bot, close_bot = await open_telegram_bot_for_owner(
-        session, oid, telegram_connection_id=conv.telegram_connection_id
-    )
-    if not bot:
-        raise HTTPException(
-            status_code=503,
-            detail="Нет доступа к Telegram Bot API: подключите бота или legacy polling.",
-        )
-    try:
-        tg_file = await bot.get_file(conv.telegram_photo_file_id)
-        if not tg_file.file_path:
+    if conv.platform == Platform.telegram:
+        if not (conv.telegram_photo_file_id or "").strip():
             raise HTTPException(status_code=404, detail="no avatar")
-        buf = BytesIO()
-        await bot.download_file(tg_file.file_path, buf)
-        data = buf.getvalue()
-    finally:
-        if close_bot:
-            await bot.session.close()
 
-    media_type = mimetypes.guess_type(tg_file.file_path)[0] or "application/octet-stream"
+        bot, close_bot = await open_telegram_bot_for_owner(
+            session, oid, telegram_connection_id=conv.telegram_connection_id
+        )
+        if not bot:
+            raise HTTPException(
+                status_code=503,
+                detail="Нет доступа к Telegram Bot API: подключите бота или legacy polling.",
+            )
+        try:
+            tg_file = await bot.get_file(conv.telegram_photo_file_id)
+            if not tg_file.file_path:
+                raise HTTPException(status_code=404, detail="no avatar")
+            buf = BytesIO()
+            await bot.download_file(tg_file.file_path, buf)
+            data = buf.getvalue()
+        finally:
+            if close_bot:
+                await bot.session.close()
+
+        media_type = mimetypes.guess_type(tg_file.file_path)[0] or "application/octet-stream"
+        return Response(content=data, media_type=media_type)
+
+    row_tu = await resolve_telegram_user_session_for_conversation(session, conv, oid)
+    if not row_tu or not row_tu.session_encrypted:
+        raise HTTPException(status_code=503, detail="Подключите личный Telegram в интеграциях")
+    try:
+        peer_id = int(conv.external_chat_id)
+    except ValueError as e:
+        raise HTTPException(status_code=500, detail="bad telegram peer id") from e
+    avatar = await download_telegram_user_avatar(
+        session_encrypted=row_tu.session_encrypted,
+        peer_user_id=peer_id,
+    )
+    if not avatar:
+        raise HTTPException(status_code=404, detail="no avatar")
+    data, media_type = avatar
     return Response(content=data, media_type=media_type)
 
 
@@ -808,6 +832,45 @@ async def api_reply(
             token=token,
             chat_id=cid,
             topic_id=tid,
+            text=outgoing,
+            image_bytes=image_bytes,
+            image_mime=image_mime,
+            video_bytes=video_bytes,
+            video_mime=video_mime,
+            reply_to_telegram_message_id=tg_reply_id,
+        )
+        if sent_id is not None:
+            platform_message_id = str(sent_id)
+    elif conv.platform == Platform.telegram_user:
+        row_tu = await resolve_telegram_user_session_for_conversation(session, conv, oid)
+        if not row_tu or not row_tu.session_encrypted:
+            raise HTTPException(
+                status_code=503,
+                detail="Подключите личный Telegram (@username) в настройках интеграций",
+            )
+        try:
+            peer_id = int(conv.external_chat_id)
+        except ValueError as e:
+            raise HTTPException(status_code=500, detail="bad telegram peer id") from e
+        tg_reply_id: int | None = None
+        if reply_target:
+            if reply_target.platform_message_id:
+                try:
+                    tg_reply_id = int(reply_target.platform_message_id)
+                except ValueError:
+                    tg_reply_id = None
+            if tg_reply_id is None:
+                from app.services.chat_message_meta import platform_message_id_from_meta
+
+                raw = platform_message_id_from_meta(reply_target.meta)
+                if raw:
+                    try:
+                        tg_reply_id = int(raw)
+                    except ValueError:
+                        tg_reply_id = None
+        sent_id = await send_telegram_user_outbound(
+            session_encrypted=row_tu.session_encrypted,
+            peer_user_id=peer_id,
             text=outgoing,
             image_bytes=image_bytes,
             image_mime=image_mime,

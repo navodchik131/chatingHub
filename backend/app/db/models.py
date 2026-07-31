@@ -24,6 +24,7 @@ class Base(DeclarativeBase):
 
 class Platform(str, enum.Enum):
     telegram = "telegram"
+    telegram_user = "telegram_user"
     fanvue = "fanvue"
     instagram = "instagram"
 
@@ -152,6 +153,9 @@ class User(Base):
     )
     telegram_connections: Mapped[list[TelegramConnection]] = relationship(
         "TelegramConnection", back_populates="user"
+    )
+    telegram_user_sessions: Mapped[list["TelegramUserSession"]] = relationship(
+        "TelegramUserSession", back_populates="user"
     )
     fanvue_connections: Mapped[list[FanvueConnection]] = relationship(
         "FanvueConnection", back_populates="user"
@@ -372,6 +376,63 @@ class TelegramConnection(Base):
     )
 
     user: Mapped[User] = relationship("User", back_populates="telegram_connections")
+    studio_model: Mapped[UserStudioModel | None] = relationship("UserStudioModel")
+
+
+class TelegramUserSessionStatus(str, enum.Enum):
+    pending_otp = "pending_otp"
+    pending_2fa = "pending_2fa"
+    active = "active"
+    disconnected = "disconnected"
+    error = "error"
+
+
+class TelegramUserSession(Base):
+    """MTProto (User API) сессия личного аккаунта @username модели."""
+
+    __tablename__ = "telegram_user_sessions"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    label: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    studio_model_id: Mapped[int | None] = mapped_column(
+        ForeignKey("user_studio_models.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    phone: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    phone_code_hash_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    session_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    telegram_user_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True, index=True)
+    telegram_username: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    status: Mapped[str] = mapped_column(
+        String(16), default=TelegramUserSessionStatus.pending_otp.value, index=True
+    )
+    error_message: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    last_seen_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    companion_mode: Mapped[str] = mapped_column(
+        String(16), default=CompanionBotMode.off.value, server_default="off"
+    )
+    companion_delay_min_sec: Mapped[int] = mapped_column(Integer, default=5, server_default="5")
+    companion_delay_max_sec: Mapped[int] = mapped_column(Integer, default=45, server_default="45")
+    companion_max_replies_per_hour: Mapped[int] = mapped_column(
+        Integer, default=60, server_default="60"
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    user: Mapped[User] = relationship("User", back_populates="telegram_user_sessions")
     studio_model: Mapped[UserStudioModel | None] = relationship("UserStudioModel")
 
 
@@ -770,6 +831,11 @@ class Conversation(Base):
     )
     telegram_connection_id: Mapped[int | None] = mapped_column(
         ForeignKey("telegram_connections.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    telegram_user_session_id: Mapped[int | None] = mapped_column(
+        ForeignKey("telegram_user_sessions.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
     )

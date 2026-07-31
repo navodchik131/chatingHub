@@ -13,6 +13,7 @@ from app.db.models import (
     Platform,
     Subscription,
     TelegramConnection,
+    TelegramUserSession,
 )
 from app.services.billing_plan import is_credits_plan
 from app.services.entitlements import subscription_is_paid_active
@@ -29,6 +30,21 @@ async def count_telegram_connections(session: AsyncSession, owner_id: int) -> in
             .where(
                 TelegramConnection.user_id == owner_id,
                 TelegramConnection.is_active.is_(True),
+            )
+        )
+        or 0
+    )
+
+
+async def count_telegram_user_sessions(session: AsyncSession, owner_id: int) -> int:
+    return int(
+        await session.scalar(
+            select(func.count())
+            .select_from(TelegramUserSession)
+            .where(
+                TelegramUserSession.user_id == owner_id,
+                TelegramUserSession.is_active.is_(True),
+                TelegramUserSession.status == "active",
             )
         )
         or 0
@@ -131,6 +147,8 @@ async def assert_can_add_platform_connection(
 
     if platform == Platform.telegram:
         n = await count_telegram_connections(session, owner_id)
+    elif platform == Platform.telegram_user:
+        n = await count_telegram_user_sessions(session, owner_id)
     elif platform == Platform.instagram:
         n = await count_instagram_connections(session, owner_id)
     else:
@@ -138,6 +156,7 @@ async def assert_can_add_platform_connection(
     if n >= lim.max_models:
         plat = {
             Platform.telegram: "Telegram",
+            Platform.telegram_user: "Telegram @username",
             Platform.fanvue: "Fanvue",
             Platform.instagram: "Instagram",
         }.get(platform, str(platform.value))
@@ -158,7 +177,7 @@ async def validate_connection_studio_model(
 
 
 def connection_studio_model_id(
-    conn: TelegramConnection | FanvueConnection | InstagramConnection | None,
+    conn: TelegramConnection | FanvueConnection | InstagramConnection | TelegramUserSession | None,
 ) -> int | None:
     if conn is None:
         return None
@@ -176,6 +195,12 @@ async def sync_conversations_model_from_connection(
         stmt = (
             update(Conversation)
             .where(Conversation.telegram_connection_id == connection_id)
+            .values(studio_model_id=studio_model_id)
+        )
+    elif platform == Platform.telegram_user:
+        stmt = (
+            update(Conversation)
+            .where(Conversation.telegram_user_session_id == connection_id)
             .values(studio_model_id=studio_model_id)
         )
     elif platform == Platform.instagram:
@@ -271,6 +296,45 @@ async def resolve_telegram_connection_for_conversation(
             session, owner_id, connection_id=conv.telegram_connection_id
         )
     return await get_telegram_connection_for_owner(session, owner_id)
+
+
+async def get_telegram_user_session_for_owner(
+    session: AsyncSession,
+    owner_id: int,
+    *,
+    session_id: int | None = None,
+) -> TelegramUserSession | None:
+    if session_id is not None:
+        return await session.scalar(
+            select(TelegramUserSession).where(
+                TelegramUserSession.id == session_id,
+                TelegramUserSession.user_id == owner_id,
+                TelegramUserSession.is_active.is_(True),
+                TelegramUserSession.status == "active",
+            )
+        )
+    return await session.scalar(
+        select(TelegramUserSession)
+        .where(
+            TelegramUserSession.user_id == owner_id,
+            TelegramUserSession.is_active.is_(True),
+            TelegramUserSession.status == "active",
+        )
+        .order_by(TelegramUserSession.id.asc())
+        .limit(1)
+    )
+
+
+async def resolve_telegram_user_session_for_conversation(
+    session: AsyncSession,
+    conv: Conversation,
+    owner_id: int,
+) -> TelegramUserSession | None:
+    if conv.telegram_user_session_id:
+        return await get_telegram_user_session_for_owner(
+            session, owner_id, session_id=conv.telegram_user_session_id
+        )
+    return await get_telegram_user_session_for_owner(session, owner_id)
 
 
 async def get_instagram_connection_for_owner(

@@ -12,10 +12,12 @@ from app.db.models import (
     FanvueConnection,
     Platform,
     TelegramConnection,
+    TelegramUserSession,
 )
 from app.services.platform_connections import (
     resolve_fanvue_connection_for_conversation,
     resolve_telegram_connection_for_conversation,
+    resolve_telegram_user_session_for_conversation,
 )
 
 
@@ -41,7 +43,7 @@ def _parse_mode(raw: str | None) -> CompanionBotMode:
 
 def _resolve_effective_mode(
     conv: Conversation,
-    conn: TelegramConnection | FanvueConnection,
+    conn: TelegramConnection | FanvueConnection | TelegramUserSession,
 ) -> CompanionBotMode:
     override = (conv.companion_mode_override or "").strip().lower()
     if override:
@@ -50,7 +52,7 @@ def _resolve_effective_mode(
 
 
 def _config_from_connection(
-    conn: TelegramConnection | FanvueConnection,
+    conn: TelegramConnection | FanvueConnection | TelegramUserSession,
     *,
     platform: Platform,
     mode: CompanionBotMode,
@@ -77,12 +79,17 @@ async def get_companion_config_for_conversation(
     owner_id: int | None = None,
 ) -> CompanionConnectionConfig | None:
     oid = owner_id if owner_id is not None else conv.user_id
-    conn: TelegramConnection | FanvueConnection | None = None
+    conn: TelegramConnection | FanvueConnection | TelegramUserSession | None = None
     platform: Platform | None = None
 
     if conv.platform == Platform.telegram:
         conn = await resolve_telegram_connection_for_conversation(session, conv, oid)
         platform = Platform.telegram
+        if conn and not conn.is_active:
+            conn = None
+    elif conv.platform == Platform.telegram_user:
+        conn = await resolve_telegram_user_session_for_conversation(session, conv, oid)
+        platform = Platform.telegram_user
         if conn and not conn.is_active:
             conn = None
     elif conv.platform == Platform.fanvue:

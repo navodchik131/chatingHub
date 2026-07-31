@@ -670,6 +670,31 @@ class TelegramIntegrationIn(BaseModel):
         return str(v).strip()
 
 
+class TelegramUserLoginStartIn(BaseModel):
+    phone: str = Field(min_length=8, max_length=32)
+    label: str | None = Field(default=None, max_length=128)
+    studio_model_id: int | None = Field(default=None, ge=1)
+    connection_id: int | None = Field(default=None, ge=1)
+
+
+class TelegramUserLoginCodeIn(BaseModel):
+    connection_id: int = Field(ge=1)
+    code: str = Field(min_length=3, max_length=16)
+
+
+class TelegramUserLoginPasswordIn(BaseModel):
+    connection_id: int = Field(ge=1)
+    password: str = Field(min_length=1, max_length=256)
+
+
+class TelegramUserLoginOut(BaseModel):
+    connection_id: int
+    status: str
+    needs_password: bool = False
+    telegram_username: str | None = None
+    phone_masked: str | None = None
+
+
 class FanvueIntegrationIn(BaseModel):
     access_token: str = Field(min_length=10)
     creator_uuid: str = Field(min_length=8, max_length=64)
@@ -707,10 +732,14 @@ class PlatformConnectionPatchIn(BaseModel):
 
 class PlatformConnectionOut(BaseModel):
     id: int
-    platform: Literal["telegram", "fanvue", "instagram", "tribute"]
+    platform: Literal["telegram", "telegram_user", "fanvue", "instagram", "tribute"]
     label: str | None = None
     studio_model_id: int | None = None
     bot_username: str | None = None
+    telegram_username: str | None = None
+    session_status: str | None = None
+    phone_masked: str | None = None
+    last_seen_at: datetime | None = None
     webhook_registered: bool = False
     creator_uuid: str | None = None
     instagram_user_id: str | None = None
@@ -1040,6 +1069,8 @@ class IntegrationStatusOut(BaseModel):
     wavespeed_managed_by_platform: bool = False
     llm_configured: bool = False
     telegram_connections: list[PlatformConnectionOut] = Field(default_factory=list)
+    telegram_user_connections: list[PlatformConnectionOut] = Field(default_factory=list)
+    telegram_user_available: bool = False
     fanvue_connections: list[PlatformConnectionOut] = Field(default_factory=list)
     instagram_connections: list[PlatformConnectionOut] = Field(default_factory=list)
     tribute_configured: bool = False

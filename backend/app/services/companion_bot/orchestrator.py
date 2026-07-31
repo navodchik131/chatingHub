@@ -142,6 +142,8 @@ async def _count_recent_sends(
     )
     if platform == Platform.telegram:
         q = q.where(Conversation.telegram_connection_id == connection_id)
+    elif platform == Platform.telegram_user:
+        q = q.where(Conversation.telegram_user_session_id == connection_id)
     else:
         q = q.where(Conversation.fanvue_connection_id == connection_id)
     n = int(await session.scalar(q) or 0)

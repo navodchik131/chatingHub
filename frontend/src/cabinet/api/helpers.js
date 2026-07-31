@@ -137,6 +137,7 @@ export function platformLabel(p) {
   const x = String(p || '').toLowerCase()
   if (x === 'fanvue') return 'FANVUE'
   if (x === 'instagram') return 'INSTAGRAM'
+  if (x === 'telegram_user') return 'TG @USER'
   return 'TELEGRAM'
 }
 

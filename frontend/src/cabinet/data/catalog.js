@@ -133,6 +133,13 @@ export const connDefs = (lang) => [
     help: lang === 'ru' ? 'Создайте бота у @BotFather, вставьте токен — вебхук настроится сам. Затем привяжите персонажа и включите AI-компаньона, если нужны автоответы.' : 'Create a bot via @BotFather, paste the token — the webhook configures itself.',
   },
   {
+    id: 'tg-user', name: lang === 'ru' ? 'Telegram @username' : 'Telegram @username', icon: 'tg', tone: 'dim',
+    iconCol: { background: 'rgba(56,189,248,.12)', color: '#38BDF8' },
+    st: '…',
+    desc: lang === 'ru' ? 'Личные сообщения на @username модели (MTProto User API)' : 'Personal DMs to model @username (MTProto User API)',
+    help: lang === 'ru' ? 'Войдите по номеру телефона аккаунта модели. Фаны пишут на @username — сообщения попадают в Диалоги. Channel Direct через бота работает отдельно.' : 'Sign in with the model account phone. Fans message @username — DMs appear in Dialogs. Channel Direct via bot stays separate.',
+  },
+  {
     id: 'wavespeed', name: 'WaveSpeed', icon: 'wave', tone: 'dim',
     iconCol: { background: 'rgba(215,244,82,.12)', color: '#D7F452' },
     st: '…',
@@ -197,6 +204,16 @@ export const connFieldSets = (lang) => {
         F.text(lang === 'ru' ? 'ЗАДЕРЖКА МАКС (с)' : 'DELAY MAX (s)', '45', '', true),
         F.text(lang === 'ru' ? 'АВТО / ЧАС' : 'AUTO / HOUR', '60', '', true),
         F.note(lang === 'ru' ? 'Несколько ботов по тарифу. Персонаж на подключении — все диалоги бота наследуют его. В каждом чате можно переопределить в шапке диалога.' : "Multiple bots per plan. The connection character is inherited by all the bot's dialogs."),
+      ],
+      list: [],
+    },
+    'tg-user': {
+      title: lang === 'ru' ? 'Личный Telegram' : 'Personal Telegram',
+      prim: lang === 'ru' ? 'Подключить' : 'Connect',
+      fields: [
+        F.text(lang === 'ru' ? 'ТЕЛЕФОН (+7…)' : 'PHONE (+1…)', '', '+79001234567'),
+        F.select(lang === 'ru' ? 'ПЕРСОНАЖ' : 'CHARACTER', notAssigned, [notAssigned], true),
+        F.note(lang === 'ru' ? 'После отправки номера придёт код в Telegram/SMS. Если включена 2FA — потребуется пароль облачного доступа.' : 'After submitting the phone you will receive a code. Cloud password required if 2FA is on.'),
       ],
       list: [],
     },

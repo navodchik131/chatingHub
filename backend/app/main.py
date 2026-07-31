@@ -108,6 +108,7 @@ async def lifespan(app: FastAPI):
     exif_bot_polling_task: asyncio.Task[None] | None = None
     ig_bot_polling_task: asyncio.Task[None] | None = None
     login_bot_polling_task: asyncio.Task[None] | None = None
+    telegram_user_worker_task: asyncio.Task[None] | None = None
     legacy_tok = settings.legacy_bot_token.strip()
     legacy_uid = settings.legacy_user_id
     if legacy_tok and legacy_uid > 0:
@@ -192,6 +193,15 @@ async def lifespan(app: FastAPI):
     else:
         login_bot_polling_task = None
         log.info("Telegram login bot disabled (set TELEGRAM_LOGIN_BOT_TOKEN to enable)")
+    if settings.telegram_user_worker_enabled and settings.telegram_mtproto_configured:
+        from app.connectors.telegram_user.worker import telegram_user_worker_loop
+
+        telegram_user_worker_task = asyncio.create_task(telegram_user_worker_loop())
+        log.info("Telegram user MTProto worker enabled")
+    else:
+        telegram_user_worker_task = None
+        if not settings.telegram_mtproto_configured:
+            log.info("Telegram user MTProto worker disabled (TELEGRAM_API_ID/HASH not set)")
     if settings.smtp_configured:
         email_worker_task = asyncio.create_task(email_campaign_worker_loop())
         log.info("Email campaign worker started (SMTP: %s)", settings.smtp_host)
@@ -270,6 +280,15 @@ async def lifespan(app: FastAPI):
             await login_bot_polling_task
         except asyncio.CancelledError:
             pass
+    if telegram_user_worker_task:
+        telegram_user_worker_task.cancel()
+        try:
+            await telegram_user_worker_task
+        except asyncio.CancelledError:
+            pass
+        from app.connectors.telegram_user.worker import shutdown_telegram_user_worker
+
+        await shutdown_telegram_user_worker()
     if bot:
         await bot.session.close()
         log.info("Telegram bot session closed")

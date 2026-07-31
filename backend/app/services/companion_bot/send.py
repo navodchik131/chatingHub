@@ -15,10 +15,12 @@ from app.db.repo import add_message, mark_conversation_read
 from app.services.chat_messages import message_to_out
 from app.services.chat_message_meta import platform_message_id_from_meta
 from app.services.chat_outbound import send_fanvue_outbound, send_telegram_outbound
+from app.connectors.telegram_user.outbound import send_telegram_user_outbound
 from app.services.crypto_secret import decrypt_secret
 from app.services.platform_connections import (
     resolve_fanvue_connection_for_conversation,
     resolve_telegram_connection_for_conversation,
+    resolve_telegram_user_session_for_conversation,
 )
 from app.services.realtime import hub
 from app.services.translation import translate_to_russian
@@ -70,6 +72,35 @@ async def send_companion_outbound(
             token=token,
             chat_id=cid,
             topic_id=tid,
+            text=outgoing,
+            image_bytes=None,
+            image_mime=None,
+            reply_to_telegram_message_id=tg_reply_id,
+        )
+        if sent_id is not None:
+            platform_message_id = str(sent_id)
+    elif conv.platform == Platform.telegram_user:
+        row_tu = await resolve_telegram_user_session_for_conversation(session, conv, owner_id)
+        if not row_tu or not row_tu.session_encrypted:
+            raise RuntimeError("telegram user session missing")
+        peer_id = int(conv.external_chat_id)
+        tg_reply_id: int | None = None
+        if reply_target:
+            if reply_target.platform_message_id:
+                try:
+                    tg_reply_id = int(reply_target.platform_message_id)
+                except ValueError:
+                    tg_reply_id = None
+            if tg_reply_id is None:
+                raw = platform_message_id_from_meta(reply_target.meta)
+                if raw:
+                    try:
+                        tg_reply_id = int(raw)
+                    except ValueError:
+                        tg_reply_id = None
+        sent_id = await send_telegram_user_outbound(
+            session_encrypted=row_tu.session_encrypted,
+            peer_user_id=peer_id,
             text=outgoing,
             image_bytes=None,
             image_mime=None,

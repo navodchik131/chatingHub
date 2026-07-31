@@ -482,6 +482,24 @@ class Settings(BaseSettings):
     )
     legacy_user_id: int = Field(default=0, validation_alias=AliasChoices("LEGACY_USER_ID"))
     telegram_proxy: str | None = None
+    telegram_api_id: int = Field(
+        default=0,
+        validation_alias=AliasChoices("TELEGRAM_API_ID"),
+        description="api_id с my.telegram.org для MTProto (личный @username).",
+    )
+    telegram_api_hash: str = Field(
+        default="",
+        validation_alias=AliasChoices("TELEGRAM_API_HASH"),
+        description="api_hash с my.telegram.org для MTProto.",
+    )
+    telegram_user_worker_enabled: bool = Field(
+        default=True,
+        validation_alias=AliasChoices("TELEGRAM_USER_WORKER_ENABLED"),
+    )
+
+    @property
+    def telegram_mtproto_configured(self) -> bool:
+        return bool(self.telegram_api_id and (self.telegram_api_hash or "").strip())
 
     # --- Telegram Login (владелец: вход / привязка; домен в BotFather → Login Widget) ---
     telegram_login_bot_token: str = Field(
