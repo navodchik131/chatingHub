@@ -8,6 +8,11 @@ import httpx
 from langdetect import LangDetectException, detect
 
 from app.config import settings
+from app.services.grok_translation import (
+    grok_translate_from_russian,
+    grok_translate_to_russian,
+    grok_translation_configured,
+)
 
 log = logging.getLogger(__name__)
 
@@ -119,6 +124,12 @@ async def translate_to_russian(text: str) -> tuple[str, str]:
     src = detect_lang(text)
     if src.startswith("ru"):
         return text, src
+    if grok_translation_configured():
+        try:
+            out = await grok_translate_to_russian(text, src)
+            return out, src
+        except Exception as e:
+            log.warning("grok to ru failed: %s", e)
     try:
         if settings.deepl_api_key:
             out = await _deepl_translate(text, "ru", None)
@@ -142,6 +153,11 @@ async def translate_from_russian(text: str, target_lang: str) -> str:
     """Ответ на русском → язык пользователя."""
     if target_lang.startswith("ru"):
         return text
+    if grok_translation_configured():
+        try:
+            return await grok_translate_from_russian(text, target_lang)
+        except Exception as e:
+            log.warning("grok from ru failed: %s", e)
     try:
         if settings.deepl_api_key:
             return await _deepl_translate(text, target_lang, "ru")

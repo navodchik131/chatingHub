@@ -131,6 +131,19 @@ class Settings(BaseSettings):
         default="grok-4",
         validation_alias=AliasChoices("GROK_MOTION_FULL_VIDEO_MODEL"),
     )
+    # Перевод сообщений в диалогах через Grok (отдельная лёгкая текстовая модель)
+    grok_translation_enabled: bool = Field(default=False)
+    grok_translation_model: str = Field(
+        default="grok-4.1-fast",
+        description="xAI chat model for dialog translation (grok-4.3-non-reasoning for higher quality).",
+    )
+    grok_translation_system_path: str = Field(
+        default="data/prompts/grok_chat_translation_system.txt"
+    )
+    grok_translation_system_inline: str = Field(default="")
+    grok_translation_max_tokens: int = Field(default=1024, ge=64, le=4096)
+    grok_translation_temperature: float = Field(default=0.2, ge=0.0, le=1.0)
+    grok_translation_timeout_seconds: float = Field(default=45.0, ge=10.0, le=120.0)
     grok_motion_xai_upload_max_bytes: int = Field(
         default=45 * 1024 * 1024,
         ge=5 * 1024 * 1024,
