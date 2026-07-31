@@ -852,6 +852,7 @@
           "list": [
             "attempt unauthorized access to the Service, other workspaces, or user data;",
             "use the Service in a way that creates excessive load or security risk;",
+            "generate, upload, or distribute content involving minors (persons under 18), including attempts to create such images or videos in the AI studio;",
             "violate third-party rights or applicable law."
           ]
         },

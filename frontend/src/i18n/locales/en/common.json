@@ -6,6 +6,7 @@
     "payloadTooLarge": "File too large to upload (413).",
     "sessionExpired": "Session expired — sign in again.",
     "forbidden": "No access to this operation (403).",
+    "minorContentProhibited": "ModelMate does not support generating content involving minors. Change the description, model profile, or references.",
     "serverError": "Server error ({{status}}{{statusText}}). Retry later or refresh the page.",
     "clientError": "Request rejected ({{status}}{{statusText}}).",
     "abortTimeout": "Response timed out.",

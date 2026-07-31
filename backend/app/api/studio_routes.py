@@ -166,6 +166,11 @@ from app.services.studio_openai import (
     resolve_studio_prompt_brief_mode,
 )
 from app.services.studio_camera_presets import get_camera_preset_by_id, list_camera_presets
+from app.services.content_safety import (
+    assert_studio_generation_allowed,
+    minor_content_http_exception,
+    validate_model_profile_text,
+)
 from app.services.studio_carousel import (
     build_carousel_grok_wave_prompt,
     build_carousel_wave_prompt,
@@ -1829,6 +1834,11 @@ async def api_studio_carousel(
 
     master_text = (row.refined_prompt or row.prompt_excerpt or "").strip()
     user_notes = (payload.user_notes or "").strip()
+    await assert_studio_generation_allowed(
+        description=user_notes,
+        refined_prompt=master_text,
+        use_moderation=False,
+    )
     if len(master_text) < 80 and not user_notes and not grok_scene_compose_configured():
         raise HTTPException(
             status_code=400,
@@ -1946,6 +1956,11 @@ async def api_studio_carousel_from_upload(
             status_code=400,
             detail="Опишите, что меняется от кадра к кадру (промпт карусели).",
         )
+
+    await assert_studio_generation_allowed(
+        description=(description or "").strip(),
+        use_moderation=False,
+    )
 
     sub_b, _, ws_row, plan, _credits, _demo = await load_owner_studio_billing(session, oid)
     _require_studio_subscription(user, sub_b, credits_balance=_credits, demo_generations_remaining=_demo)
@@ -2313,6 +2328,8 @@ async def api_generate_model_profile(
         )
     except RuntimeError as e:
         raise HTTPException(status_code=502, detail=str(e)) from e
+    if validate_model_profile_text(text):
+        raise minor_content_http_exception()
     await record_usage(
         session,
         user,
@@ -2359,10 +2376,14 @@ async def api_create_studio_model(
     lat, lon = _parse_optional_lat_lon_form(export_lat, export_lon)
     preset_norm = _coerce_camera_preset_id(camera_preset_id)
 
+    profile_norm = (profile_text or "").strip()
+    if validate_model_profile_text(profile_norm):
+        raise minor_content_http_exception()
+
     m = UserStudioModel(
         user_id=oid,
         name=name.strip(),
-        profile_text=(profile_text or "").strip(),
+        profile_text=profile_norm,
         camera_preset_id=preset_norm,
         export_lat=lat,
         export_lon=lon,
@@ -2427,7 +2448,10 @@ async def api_patch_studio_model(
     if "name" in data and data["name"] is not None:
         m.name = str(data["name"]).strip()
     if "profile_text" in data:
-        m.profile_text = (data["profile_text"] or "").strip()
+        next_profile = (data["profile_text"] or "").strip()
+        if validate_model_profile_text(next_profile):
+            raise minor_content_http_exception()
+        m.profile_text = next_profile
     if "companion_persona" in data:
         from app.services.companion_bot.persona import (
             CompanionPersona,
@@ -2914,6 +2938,12 @@ async def api_studio_refine_prompt(
 
     assert_permission(user, PERM_STUDIO_GENERATE)
     oid = workspace_owner_id(user)
+
+    await assert_studio_generation_allowed(
+        description=(description or "").strip(),
+        reference_analysis_json=(reference_analysis_json or "").strip() or None,
+        use_moderation=False,
+    )
 
     image_bytes: bytes | None = None
     if image is not None and (image.filename or "").strip():
@@ -3505,6 +3535,13 @@ async def _studio_job_execute_refine_prompt(
             detail="Добавьте описание, референс и/или выберите сохранённую модель",
         )
 
+    await assert_studio_generation_allowed(
+        description=desc,
+        profile_text=model_profile_text,
+        reference_analysis_json=str(p.get("reference_analysis_json") or "") or None,
+        use_moderation=False,
+    )
+
     if mask_bytes and not image_bytes:
         raise HTTPException(
             status_code=400,
@@ -3951,6 +3988,12 @@ async def _studio_job_execute_refine_prompt(
     wavespeed_deferred_pending = False
     regional_composed_png: bytes | None = None
     if do_wavespeed:
+        await assert_studio_generation_allowed(
+            description=desc,
+            refined_prompt=refined or "",
+            profile_text=model_profile_text,
+            use_moderation=True,
+        )
         pub = (settings.public_app_url or "").strip().rstrip("/")
         if mask_bytes:
             assert image_bytes is not None
@@ -5801,6 +5844,12 @@ async def api_studio_motion_render_video(
     sm = (await session.execute(stmt)).scalar_one_or_none()
     if not sm:
         raise HTTPException(status_code=404, detail="Модель не найдена")
+    await assert_studio_generation_allowed(
+        prompt=(prompt or "").strip(),
+        negative_prompt=(negative_prompt or "").strip(),
+        profile_text=(sm.profile_text or "").strip() or None,
+        use_moderation=False,
+    )
     if not prompt_only and not sort_model_images_for_seedance_t2v(list(sm.images)):
         raise HTTPException(
             status_code=400,
@@ -6799,6 +6848,7 @@ async def api_model_bootstrap_face_merge(
 
     mid = _parse_optional_model_id(model_id)
     resolved_prompt = resolve_face_merge_prompt(prompt)
+    await assert_studio_generation_allowed(prompt=resolved_prompt, use_moderation=False)
 
     params: dict[str, Any] = {
         "output_aspect": aspect_key,
@@ -6918,6 +6968,7 @@ async def api_model_bootstrap_body_compose(
             await require_studio_model_access(session, user, mid)
 
     resolved_prompt = resolve_body_compose_prompt(prompt)
+    await assert_studio_generation_allowed(prompt=resolved_prompt, use_moderation=False)
     params: dict[str, Any] = {
         "output_aspect": aspect_key,
         "prompt": resolved_prompt,
@@ -7022,6 +7073,7 @@ async def api_model_bootstrap_sheet(
     mid = _parse_optional_model_id(model_id)
     aspect_key = MODEL_SHEET_ASPECT_KEY
     resolved_prompt = resolve_model_sheet_prompt(prompt)
+    await assert_studio_generation_allowed(prompt=resolved_prompt, use_moderation=False)
 
     if gen_id is not None:
         dedupe_key = f"sheet:gen:{gen_id}"

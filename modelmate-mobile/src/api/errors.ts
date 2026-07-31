@@ -1,8 +1,15 @@
+const MINOR_CONTENT_MESSAGE =
+  'ModelMate не поддерживает генерацию контента с несовершеннолетними. Измените описание, профиль модели или референсы.';
+
 export function formatApiErrorDetail(data: unknown): string {
   if (!data || typeof data !== 'object') return '';
   const o = data as Record<string, unknown>;
   if (typeof o.message === 'string' && o.message.trim()) return o.message.trim();
   const d = o.detail;
+  if (d && typeof d === 'object' && !Array.isArray(d)) {
+    const code = (d as { code?: string }).code;
+    if (code === 'minor_content_prohibited') return MINOR_CONTENT_MESSAGE;
+  }
   if (typeof d === 'string') return d;
   if (Array.isArray(d)) {
     return d

@@ -12,6 +12,12 @@ export function formatApiErrorDetail(data: unknown): string {
     return m
   }
   const d = o.detail
+  if (d && typeof d === 'object' && !Array.isArray(d)) {
+    const code = (d as { code?: string }).code
+    if (code === 'minor_content_prohibited') {
+      return i18n.t('errors.minorContentProhibited', { ns: COMMON_NS })
+    }
+  }
   if (typeof d === 'string') {
     const trimmed = d.trim()
     if (trimmed.startsWith('{')) {
@@ -22,6 +28,9 @@ export function formatApiErrorDetail(data: unknown): string {
           /invalid user uuid/i.test(parsed.message)
         ) {
           return i18n.t('errors.fanvueInvalidUser', { ns: COMMON_NS })
+        }
+        if (parsed.code === 'minor_content_prohibited') {
+          return i18n.t('errors.minorContentProhibited', { ns: COMMON_NS })
         }
       } catch {
         /* not JSON */

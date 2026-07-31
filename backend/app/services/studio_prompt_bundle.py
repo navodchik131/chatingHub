@@ -18,13 +18,16 @@ log = logging.getLogger(__name__)
 
 # Не включать plastic/smooth/porcelain skin: у edit-моделей (Nano Banana / GPT Image /
 # Seedream) negative часто игнорируется или подмешивается в позитив и усиливает «глянец».
+from app.services.content_safety import MINOR_CONTENT_NEGATIVE_SUPPLEMENT
+
 _CANONICAL_STUDIO_NEGATIVE = (
     "deformed hands, extra fingers, fused fingers, missing fingers, bad anatomy, "
     "duplicate limbs, extra arms, malformed joints, watermark, text, logo, "
     "uncanny symmetry, Facetune, beauty-filter face, influencer glamour, "
     "dead eyes, glassy eyes, empty stare, CGI, 3d render, heavy fake bokeh, "
     "stock photo, catalog lighting, TikTok reshaped eyes or jaw, composite collage, "
-    "face pasted on wrong body, mismatched skin tone face vs body"
+    "face pasted on wrong body, mismatched skin tone face vs body, "
+    + MINOR_CONTENT_NEGATIVE_SUPPLEMENT
 )
 
 # Слова про «запрет гладкой кожи» — выкидываем из любого negative (Grok / profile always_avoid).

@@ -9,8 +9,9 @@ You will receive a **JSON schema template** (same keys and nesting every time). 
 6. `signature_traits`: 5–10 bullet strings of the most distinctive visible traits.
 7. `identity_lock_keywords`: one dense paragraph locking identity for downstream AI.
 8. For body fields: use neutral silhouette terms (hourglass, athletic, curvy, slim, petite) — no bra cup letters, no explicit genital anatomy.
-9. Do **not** describe: current pose, outfit, scene, background, camera, lighting.
-10. Do **not** invent features you cannot see; if body not visible, use cautious neutral wording from face/visible parts only.
+9. **`age` must be 18 or older** (numeric years or phrasing like "mid-20s"). If the person appears under 18, do not fill the profile — the service rejects minor subjects.
+10. Do **not** describe: current pose, outfit, scene, background, camera, lighting.
+11. Do **not** invent features you cannot see; if body not visible, use cautious neutral wording from face/visible parts only.
 
 Output requirements:
 - Return **only** a single JSON object. No markdown, no code fences, no text before or after.

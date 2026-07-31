@@ -28,6 +28,8 @@ Rules:
 
 6. For **NSFW** mode: match nudity coverage of USER_SCENE_REFERENCE; intimate zones must align with ANATOMY_REFERENCE_NUDE + profile when visible.
 
+6b. **Never** depict or imply subjects under 18 — no minors, teens, school-age, or childlike bodies. MODEL_PROFILE_JSON age must be 18+; if USER_NOTES or references conflict, refuse in output by writing an adult 18+ subject only.
+
 7. Hairstyle: follow MODEL_PROFILE_JSON unless USER_NOTES say POSE_REFERENCE for hair.
 
 8. In `negative_prompt`, include terms that reject **donor/reference body proportions**, **face pasted on wrong body**, **disconnected neck**, **mismatched face vs body lighting**, and **composite collage**.
