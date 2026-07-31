@@ -1580,23 +1580,68 @@ html {
 }
 
 @media (max-width: 720px) {
+  :root {
+    --rail-h: 104px;
+  }
+
   .mm-nav {
     display: none;
   }
 
+  .mm-header {
+    height: auto;
+  }
+
   .mm-header__inner {
-    flex-wrap: wrap;
-    justify-content: center;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    grid-template-rows: auto auto;
+    align-items: center;
+    gap: 10px 12px;
+    padding: 12px 0;
+    flex-wrap: unset;
+    justify-content: unset;
+  }
+
+  .mm-wordmark {
+    grid-column: 1;
+    grid-row: 1;
+    justify-self: start;
+    font-size: 0.9375rem;
   }
 
   .mm-header__inner .mm-lang-switch {
-    order: 3;
+    grid-column: 2;
+    grid-row: 1;
+    order: unset;
     width: auto;
-    max-width: max-content;
-    justify-content: center;
-    margin-top: 0.25rem;
-    margin-left: auto;
-    margin-right: auto;
+    max-width: none;
+    margin: 0;
+    justify-self: end;
+  }
+
+  .mm-header__actions {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    width: 100%;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: nowrap;
+  }
+
+  .mm-header__login {
+    font-size: 0.8125rem;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .mm-header__actions .mm-btn--sm {
+    height: 36px;
+    padding: 0 14px;
+    font-size: 0.8125rem;
+    white-space: nowrap;
+    flex-shrink: 1;
+    min-width: 0;
   }
 }
 
