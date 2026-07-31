@@ -19,6 +19,7 @@ from app.connectors.instagram.client import InstagramAPIError, send_instagram_me
 from app.db.models import StudioGeneration, StudioMotionRender
 from app.services.chat_attachment import chat_media_public_absolute_url, save_chat_image_bytes
 from app.services.studio_generation_storage import generation_has_archive_file
+from app.services.telegram_video_note import convert_video_bytes_to_telegram_note_async
 
 log = logging.getLogger(__name__)
 
@@ -114,11 +115,25 @@ async def resolve_outbound_video(
     *,
     owner_id: int,
     studio_motion_render_id: int | None,
+    studio_generation_id: int | None = None,
 ) -> tuple[bytes, str] | None:
-    if studio_motion_render_id is None or studio_motion_render_id <= 0:
+    render_id = studio_motion_render_id
+    if (render_id is None or render_id <= 0) and studio_generation_id and studio_generation_id > 0:
+        from sqlalchemy import select
+
+        from app.db.models import StudioMotionRender
+
+        render_id = await session.scalar(
+            select(StudioMotionRender.id)
+            .where(StudioMotionRender.user_id == owner_id)
+            .where(StudioMotionRender.studio_generation_id == studio_generation_id)
+            .order_by(StudioMotionRender.id.desc())
+            .limit(1)
+        )
+    if render_id is None or render_id <= 0:
         return None
     return await load_studio_motion_render_bytes(
-        session, owner_id=owner_id, render_id=studio_motion_render_id
+        session, owner_id=owner_id, render_id=int(render_id)
     )
 
 
@@ -132,6 +147,7 @@ async def send_telegram_outbound(
     image_mime: str | None,
     video_bytes: bytes | None = None,
     video_mime: str | None = None,
+    send_as_video_note: bool = False,
     reply_to_telegram_message_id: int | None = None,
 ) -> int | None:
     proxy = (settings.telegram_proxy or "").strip()
@@ -142,10 +158,29 @@ async def send_telegram_outbound(
         reply_kw["reply_to_message_id"] = reply_to_telegram_message_id
     try:
         if video_bytes:
+            payload = video_bytes
+            if send_as_video_note:
+                payload = await convert_video_bytes_to_telegram_note_async(video_bytes)
+                note = BufferedInputFile(payload, filename="video_note.mp4")
+                sent = await bot.send_video_note(
+                    chat_id=chat_id,
+                    video_note=note,
+                    direct_messages_topic_id=topic_id,
+                    length=640,
+                    **reply_kw,
+                )
+                if (text or "").strip():
+                    await bot.send_message(
+                        chat_id=chat_id,
+                        text=text,
+                        direct_messages_topic_id=topic_id,
+                    )
+                return int(sent.message_id) if sent and sent.message_id else None
+
             ext = ".mp4"
             if video_mime and "webm" in video_mime:
                 ext = ".webm"
-            vid = BufferedInputFile(video_bytes, filename=f"video{ext}")
+            vid = BufferedInputFile(payload, filename=f"video{ext}")
             if (text or "").strip():
                 sent = await bot.send_video(
                     chat_id=chat_id,

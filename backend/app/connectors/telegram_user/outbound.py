@@ -9,6 +9,7 @@ from pathlib import Path
 from telethon import TelegramClient
 
 from app.connectors.telegram_user.session_runtime import run_with_telegram_user_client
+from app.services.telegram_video_note import convert_video_bytes_to_telegram_note_async
 
 log = logging.getLogger(__name__)
 
@@ -22,19 +23,32 @@ async def _send_via_client(
     image_mime: str | None,
     video_bytes: bytes | None,
     video_mime: str | None,
+    send_as_video_note: bool = False,
     reply_to_telegram_message_id: int | None,
 ) -> int | None:
     reply_to = reply_to_telegram_message_id if reply_to_telegram_message_id else None
     sent = None
     if video_bytes:
-        ext = ".mp4"
-        if video_mime and "webm" in video_mime:
+        payload = video_bytes
+        if send_as_video_note:
+            payload = await convert_video_bytes_to_telegram_note_async(video_bytes)
+        ext = ".mp4" if send_as_video_note else ".mp4"
+        if not send_as_video_note and video_mime and "webm" in video_mime:
             ext = ".webm"
         with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
-            tmp.write(video_bytes)
+            tmp.write(payload)
             tmp_path = tmp.name
         try:
-            if (text or "").strip():
+            if send_as_video_note:
+                sent = await client.send_file(
+                    peer_user_id,
+                    tmp_path,
+                    reply_to=reply_to,
+                    video_note=True,
+                )
+                if (text or "").strip():
+                    await client.send_message(peer_user_id, text, reply_to=reply_to)
+            elif (text or "").strip():
                 sent = await client.send_file(
                     peer_user_id,
                     tmp_path,
@@ -93,6 +107,7 @@ async def send_telegram_user_outbound(
     image_mime: str | None = None,
     video_bytes: bytes | None = None,
     video_mime: str | None = None,
+    send_as_video_note: bool = False,
     reply_to_telegram_message_id: int | None = None,
 ) -> int | None:
     return await run_with_telegram_user_client(
@@ -106,6 +121,7 @@ async def send_telegram_user_outbound(
             image_mime=image_mime,
             video_bytes=video_bytes,
             video_mime=video_mime,
+            send_as_video_note=send_as_video_note,
             reply_to_telegram_message_id=reply_to_telegram_message_id,
         ),
     )

@@ -125,8 +125,11 @@ class ConversationFolderPatchIn(BaseModel):
 
 
 class ReplyIn(BaseModel):
-    text: str
+    text: str = ""
     reply_to_message_id: int | None = None
+    studio_motion_render_id: int | None = None
+    studio_generation_id: int | None = None
+    telegram_video_note: bool = False
 
 
 class MessageReactionOut(BaseModel):

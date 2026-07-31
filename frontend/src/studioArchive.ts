@@ -159,6 +159,30 @@ export function motionRenderArchiveId(renderId: number): number {
   return -renderId
 }
 
+export function motionRenderIdFromArchiveItem(item: StudioArchiveItem): number | null {
+  if (isMotionRenderArchiveId(item.id)) return -item.id
+  return null
+}
+
+export function videoNoteDownloadPath(item: StudioArchiveItem): string | null {
+  const renderId = motionRenderIdFromArchiveItem(item)
+  if (renderId != null) return `/api/studio/motion/renders/${renderId}/video-note`
+  if (item.media_kind === 'video' && item.id > 0) {
+    return `/api/studio/generations/${item.id}/video-note`
+  }
+  return null
+}
+
+export function videoNoteSendPayload(item: StudioArchiveItem): {
+  renderId?: number
+  generationId?: number
+} | null {
+  const renderId = motionRenderIdFromArchiveItem(item)
+  if (renderId != null) return { renderId }
+  if (item.media_kind === 'video' && item.id > 0) return { generationId: item.id }
+  return null
+}
+
 /**
  * Дополняет список video-архива роликами из /studio/motion/renders
  * (как на главной), если их ещё нет в generations.

@@ -1357,6 +1357,64 @@ async def api_list_motion_renders(
     return StudioMotionRendersPageOut(items=out_items, has_more=has_more)
 
 
+@router.get("/studio/motion/renders/{render_id}/video-note")
+async def api_motion_render_video_note(
+    render_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> Response:
+    """Square MP4 for Telegram video notes (download or preview)."""
+    assert_permission(user, PERM_STUDIO_GENERATE)
+    oid = workspace_owner_id(user)
+    allowed = await member_allowed_studio_model_ids(session, user)
+    stmt = select(StudioMotionRender).where(
+        StudioMotionRender.id == render_id,
+        StudioMotionRender.user_id == oid,
+    )
+    stmt = apply_studio_model_id_filter(stmt, StudioMotionRender.studio_model_id, allowed)
+    row = await session.scalar(stmt)
+    if not row:
+        raise HTTPException(status_code=404, detail="Видео не найдено")
+    from app.services.chat_outbound import load_studio_motion_render_bytes
+    from app.services.telegram_video_note import convert_video_bytes_to_telegram_note_async
+
+    raw, _mime = await load_studio_motion_render_bytes(
+        session, owner_id=oid, render_id=render_id
+    )
+    try:
+        note = await convert_video_bytes_to_telegram_note_async(raw)
+    except (RuntimeError, ValueError) as e:
+        raise HTTPException(status_code=502, detail=str(e)[:500]) from e
+    return Response(
+        content=note,
+        media_type="video/mp4",
+        headers={
+            "Content-Disposition": f'attachment; filename="modelmate-video-note-{render_id}.mp4"',
+        },
+    )
+
+
+@router.get("/studio/generations/{generation_id}/video-note")
+async def api_generation_video_note(
+    generation_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> Response:
+    """Video note MP4 for a studio generation (via linked motion render)."""
+    assert_permission(user, PERM_STUDIO_GENERATE)
+    oid = workspace_owner_id(user)
+    row = await session.scalar(
+        select(StudioMotionRender.id)
+        .where(StudioMotionRender.user_id == oid)
+        .where(StudioMotionRender.studio_generation_id == generation_id)
+        .order_by(StudioMotionRender.id.desc())
+        .limit(1)
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Видео не найдено")
+    return await api_motion_render_video_note(int(row), session=session, user=user)
+
+
 def _apply_studio_generation_media_kind_filter(stmt, media_kind: str | None):
     if media_kind == "video":
         return stmt.where(StudioGeneration.content_type.like("video/%"))

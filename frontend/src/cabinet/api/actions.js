@@ -300,6 +300,48 @@ export async function sendReplyWithImage(convId, text, imageFile) {
   return data
 }
 
+export async function sendVideoNoteReply(convId, { text = '', renderId = null, generationId = null, replyToMessageId = null } = {}) {
+  const body = { text: text || '', telegram_video_note: true }
+  if (renderId != null) body.studio_motion_render_id = renderId
+  else if (generationId != null) body.studio_generation_id = generationId
+  else throw new Error('video source required')
+  if (replyToMessageId) body.reply_to_message_id = replyToMessageId
+  return apiJson(`/api/conversations/${convId}/reply`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
+export async function downloadVideoNote(renderId, filename = 'modelmate-video-note.mp4') {
+  const res = await apiFetch(`/api/studio/motion/renders/${renderId}/video-note`)
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}))
+    throw new Error(typeof data.detail === 'string' ? data.detail : res.statusText)
+  }
+  const blob = await res.blob()
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+export async function downloadVideoNoteByPath(apiPath, filename = 'modelmate-video-note.mp4') {
+  const res = await apiFetch(apiPath)
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}))
+    throw new Error(typeof data.detail === 'string' ? data.detail : res.statusText)
+  }
+  const blob = await res.blob()
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 const ARCHIVE_PAGE_LIMIT = 40
 
 export async function refreshArchiveImages(skip = 0) {

@@ -705,6 +705,7 @@ async def api_reply(
     studio_generation_id: int | None = None
     studio_motion_render_id: int | None = None
     reply_to_message_id: int | None = None
+    telegram_video_note = False
 
     if "multipart/form-data" in content_type:
         form = await request.form()
@@ -727,6 +728,9 @@ async def api_reply(
                 reply_to_message_id = int(str(raw_reply).strip())
             except ValueError as e:
                 raise HTTPException(status_code=400, detail="invalid reply_to_message_id") from e
+        raw_vnote = form.get("telegram_video_note")
+        if raw_vnote not in (None, ""):
+            telegram_video_note = str(raw_vnote).strip().lower() in ("1", "true", "yes", "on")
         img_field = form.get("image")
         if img_field is not None and hasattr(img_field, "read"):
             upload = img_field  # type: ignore[assignment]
@@ -738,6 +742,9 @@ async def api_reply(
         body = ReplyIn.model_validate(data)
         text_ru = body.text.strip()
         reply_to_message_id = body.reply_to_message_id
+        studio_motion_render_id = body.studio_motion_render_id
+        studio_generation_id = body.studio_generation_id
+        telegram_video_note = bool(body.telegram_video_note)
 
     image_pair = await resolve_outbound_image(
         session,
@@ -749,9 +756,12 @@ async def api_reply(
         session,
         owner_id=oid,
         studio_motion_render_id=studio_motion_render_id,
+        studio_generation_id=studio_generation_id if not studio_motion_render_id else None,
     )
     if video_pair and image_pair:
         raise HTTPException(status_code=400, detail="image and video conflict")
+    if telegram_video_note and not video_pair:
+        raise HTTPException(status_code=400, detail="telegram_video_note requires video")
     if not text_ru and not image_pair and not video_pair:
         raise HTTPException(status_code=400, detail="empty message")
 
@@ -839,6 +849,7 @@ async def api_reply(
             image_mime=image_mime,
             video_bytes=video_bytes,
             video_mime=video_mime,
+            send_as_video_note=telegram_video_note,
             reply_to_telegram_message_id=tg_reply_id,
         )
         if sent_id is not None:
@@ -879,11 +890,17 @@ async def api_reply(
             image_mime=image_mime,
             video_bytes=video_bytes,
             video_mime=video_mime,
+            send_as_video_note=telegram_video_note,
             reply_to_telegram_message_id=tg_reply_id,
         )
         if sent_id is not None:
             platform_message_id = str(sent_id)
     elif video_bytes:
+        if telegram_video_note:
+            raise HTTPException(
+                status_code=400,
+                detail="Видеокружки поддерживаются только для Telegram",
+            )
         raise HTTPException(
             status_code=400,
             detail="Видео из студии пока поддерживается только для Telegram",

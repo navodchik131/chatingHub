@@ -1,4 +1,4 @@
-import { useEffect, useRef, useMemo } from 'react';
+import { useEffect, useRef, useMemo, useState } from 'react';
 import Hoverable from '../components/Hoverable';
 import { IcoFilm, IcoSpark, IcoUpload, IcoPlay, IcoText, IcoZoom } from '../components/Icons';
 import { Fade, PageTitle, Eyebrow, Chip, SelectPill, Overlay, CloseButton } from '../components/ui';
@@ -6,12 +6,19 @@ import { useApp } from '../hooks/useApp';
 import { color, line, font, G } from '../styles/tokens';
 import { modeCardStyle, refUploadStyle, borderHoverOff, cardPickStyle } from '../styles/mixins';
 import { videoModeDefs } from '../data/catalog';
-import { archiveThumbUrl, archiveDownloadUrl, archiveVideoUrl, isArchivePending } from '../api/actions';
+import { archiveThumbUrl, archiveDownloadUrl, archiveVideoUrl, isArchivePending, downloadVideoNoteByPath } from '../api/actions';
 import { downloadArchiveBlob } from '../api/archiveDownload';
 import { sameStudioModelId, enginesForNsfw, isUiSimplified } from '../api/studioHelpers';
 import { computeMotionVideoCreditCost } from '../../studioMotionPricing';
+import { videoNoteDownloadPath, videoNoteSendPayload } from '../../studioArchive';
+import { mapDialogRow } from '../api/mappers';
 
 const vidModeIcons = { film: IcoFilm, text: IcoText };
+
+function isTelegramConversation(c) {
+  const p = String(c?.platform || '').toLowerCase();
+  return p === 'telegram' || p === 'telegram_user';
+}
 
 /** Как на бэкенде: 720/1080/4k → Seedance resolution (4k в API уходит как 1080p). */
 function vidQualityToResolution(vidQuality) {
@@ -36,6 +43,43 @@ export default function Video() {
   const videoRef = useRef(null);
   const frameRef = useRef(null);
   const timer = useRef(null);
+  const [vidNotePick, setVidNotePick] = useState(null);
+  const [vidNoteSending, setVidNoteSending] = useState(false);
+
+  const tgConversations = useMemo(
+    () => (cabinet.conversations || []).filter(isTelegramConversation),
+    [cabinet.conversations],
+  );
+
+  const sendVideoNoteToConv = async (convId, payload) => {
+    if (!convId || !payload || vidNoteSending) return;
+    setVidNoteSending(true);
+    try {
+      await cabinet.sendVideoNoteReply(convId, payload);
+      setVidNotePick(null);
+    } finally {
+      setVidNoteSending(false);
+    }
+  };
+
+  const openVideoNoteSend = (item, e) => {
+    e?.stopPropagation?.();
+    const payload = videoNoteSendPayload(item);
+    if (!payload) return;
+    if (tgConversations.length === 0) return;
+    if (tgConversations.length === 1) {
+      void sendVideoNoteToConv(tgConversations[0].id, payload);
+      return;
+    }
+    setVidNotePick(payload);
+  };
+
+  const downloadVideoNoteForItem = (item, e) => {
+    e?.stopPropagation?.();
+    const path = videoNoteDownloadPath(item);
+    if (!path) return;
+    void downloadVideoNoteByPath(path, `modelmate-video-note-${Math.abs(item.id)}.mp4`);
+  };
 
   useEffect(() => () => clearTimeout(timer.current), []);
 
@@ -668,6 +712,8 @@ export default function Video() {
               const poster = archiveThumbUrl(item);
               const videoUrl = archiveVideoUrl(item);
               const downloadUrl = archiveDownloadUrl(item) || videoUrl;
+              const videoNotePath = videoNoteDownloadPath(item);
+              const canVideoNote = Boolean(videoNotePath) && tgConversations.length > 0;
               const pending = isArchivePending(item);
               const failed = (item.status || '').trim() === 'failed';
               const model = (cabinet.models || []).find((m) => m.id === item.studio_model_id);
@@ -690,6 +736,9 @@ export default function Video() {
                         who: model?.name || '—',
                         ratio,
                         downloadUrl,
+                        id: item.id,
+                        videoNotePath,
+                        videoNotePayload: videoNoteSendPayload(item),
                       },
                     });
                   }
@@ -761,21 +810,43 @@ export default function Video() {
                   </div>
                   )}
                 </div>
-                <div style={{ padding: '8px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ padding: '8px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                   <span style={{ fontWeight: 700, fontSize: 11 }}>{model?.name || '—'}</span>
-                  {downloadUrl && !pending && (
-                    <Hoverable
-                      as="span"
-                      style={{ fontSize: 10, fontWeight: 700, color: color.textDim, cursor: 'pointer' }}
-                      hover={{ color: color.lime }}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        void downloadArchiveBlob(downloadUrl, `modelmate-video-${item.id}.mp4`);
-                      }}
-                    >
-                      ↓ MP4
-                    </Hoverable>
-                  )}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto' }}>
+                    {videoNotePath && !pending && (
+                      <Hoverable
+                        as="span"
+                        style={{ fontSize: 10, fontWeight: 700, color: color.textDim, cursor: 'pointer' }}
+                        hover={{ color: color.lime }}
+                        onClick={(e) => downloadVideoNoteForItem(item, e)}
+                      >
+                        ⭕
+                      </Hoverable>
+                    )}
+                    {canVideoNote && !pending && (
+                      <Hoverable
+                        as="span"
+                        style={{ fontSize: 10, fontWeight: 700, color: color.textDim, cursor: 'pointer' }}
+                        hover={{ color: color.lime }}
+                        onClick={(e) => openVideoNoteSend(item, e)}
+                      >
+                        TG
+                      </Hoverable>
+                    )}
+                    {downloadUrl && !pending && (
+                      <Hoverable
+                        as="span"
+                        style={{ fontSize: 10, fontWeight: 700, color: color.textDim, cursor: 'pointer' }}
+                        hover={{ color: color.lime }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void downloadArchiveBlob(downloadUrl, `modelmate-video-${item.id}.mp4`);
+                        }}
+                      >
+                        ↓ MP4
+                      </Hoverable>
+                    )}
+                  </div>
                 </div>
               </Hoverable>
             );})}
@@ -872,6 +943,84 @@ export default function Video() {
                 ↓ {lang === 'ru' ? 'Скачать MP4' : 'Download MP4'}
               </Hoverable>
             )}
+            {s.vidLightbox.videoNotePath && (
+              <Hoverable
+                style={{
+                  alignSelf: 'center', fontSize: 12, fontWeight: 700, color: color.textDim,
+                  padding: '8px 16px', cursor: 'pointer',
+                }}
+                hover={{ color: color.lime }}
+                onClick={() => void downloadVideoNoteByPath(
+                  s.vidLightbox.videoNotePath,
+                  `modelmate-video-note-${Math.abs(s.vidLightbox.id || 0)}.mp4`,
+                )}
+              >
+                ⭕ {t.vidVideoNoteDownload}
+              </Hoverable>
+            )}
+            {s.vidLightbox.videoNotePayload && tgConversations.length > 0 && (
+              <Hoverable
+                style={{
+                  alignSelf: 'center', fontSize: 12, fontWeight: 700, color: color.lime,
+                  padding: '8px 16px', cursor: 'pointer',
+                  border: '1px solid rgba(215,244,82,.35)', borderRadius: 10,
+                }}
+                hover={{ background: 'rgba(215,244,82,.08)' }}
+                onClick={() => {
+                  const payload = s.vidLightbox.videoNotePayload;
+                  if (tgConversations.length === 1) {
+                    void sendVideoNoteToConv(tgConversations[0].id, payload);
+                    return;
+                  }
+                  setVidNotePick(payload);
+                }}
+              >
+                {t.vidVideoNoteSend}
+              </Hoverable>
+            )}
+            {s.vidLightbox.videoNotePayload && tgConversations.length === 0 && (
+              <div style={{ alignSelf: 'center', fontSize: 11, color: color.textDim }}>
+                {t.vidVideoNoteNoChat}
+              </div>
+            )}
+          </div>
+        </Overlay>
+      )}
+
+      {vidNotePick && (
+        <Overlay onClose={() => !vidNoteSending && setVidNotePick(null)}>
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: 'min(96vw, 420px)', maxHeight: '70vh', overflow: 'auto',
+              background: color.surface, borderRadius: 14, border: `1px solid ${line.hair}`,
+              padding: 16,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 12 }}>
+              <div style={{ fontWeight: 800, fontSize: 14 }}>{t.vidVideoNotePick}</div>
+              <CloseButton onClick={() => !vidNoteSending && setVidNotePick(null)} label={t.close} />
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {tgConversations.map((c, i) => {
+                const row = mapDialogRow(c, i);
+                return (
+                  <Hoverable
+                    key={c.id}
+                    style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
+                      padding: '10px 12px', borderRadius: 10, cursor: vidNoteSending ? 'default' : 'pointer',
+                      border: `1px solid ${line.hair}`, opacity: vidNoteSending ? 0.6 : 1,
+                    }}
+                    hover={vidNoteSending ? {} : { borderColor: borderHoverOff, background: color.bgPanel }}
+                    onClick={() => void sendVideoNoteToConv(c.id, vidNotePick)}
+                  >
+                    <span style={{ fontWeight: 700, fontSize: 13 }}>{row.name}</span>
+                    <span style={{ fontFamily: font.mono, fontSize: 9, color: color.textDim }}>{row.platform}</span>
+                  </Hoverable>
+                );
+              })}
+            </div>
           </div>
         </Overlay>
       )}
