@@ -26,6 +26,13 @@ def request_telegram_user_worker_refresh() -> None:
     _worker_refresh.set()
 
 
+def get_worker_client(session_id: int):
+    client = _running_clients.get(session_id)
+    if client is not None and getattr(client, "is_connected", lambda: False)():
+        return client
+    return None
+
+
 async def _load_active_sessions() -> list[TelegramUserSession]:
     async with SessionLocal() as session:
         rows = list(
@@ -124,6 +131,7 @@ async def _start_client(row: TelegramUserSession) -> None:
             finally:
                 _running_clients.pop(session_id, None)
                 _running_tasks.pop(session_id, None)
+                request_telegram_user_worker_refresh()
 
         _running_tasks[session_id] = asyncio.create_task(_pump())
 
@@ -155,8 +163,12 @@ async def _sync_clients() -> None:
         if sid not in active_ids:
             await _stop_client(sid)
     for row in active_rows:
-        if row.id not in _running_clients:
-            await _start_client(row)
+        existing = _running_clients.get(row.id)
+        if existing is not None and getattr(existing, "is_connected", lambda: False)():
+            continue
+        if existing is not None:
+            await _stop_client(row.id)
+        await _start_client(row)
 
 
 async def telegram_user_worker_loop() -> None:

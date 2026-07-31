@@ -99,6 +99,7 @@ async def send_companion_outbound(
                     except ValueError:
                         tg_reply_id = None
         sent_id = await send_telegram_user_outbound(
+            session_id=row_tu.id,
             session_encrypted=row_tu.session_encrypted,
             peer_user_id=peer_id,
             text=outgoing,

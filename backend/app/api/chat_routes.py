@@ -524,6 +524,7 @@ async def api_conversation_avatar(
     except ValueError as e:
         raise HTTPException(status_code=500, detail="bad telegram peer id") from e
     avatar = await download_telegram_user_avatar(
+        session_id=row_tu.id,
         session_encrypted=row_tu.session_encrypted,
         peer_user_id=peer_id,
     )
@@ -870,6 +871,7 @@ async def api_reply(
                     except ValueError:
                         tg_reply_id = None
         sent_id = await send_telegram_user_outbound(
+            session_id=row_tu.id,
             session_encrypted=row_tu.session_encrypted,
             peer_user_id=peer_id,
             text=outgoing,
@@ -1089,6 +1091,7 @@ async def api_message_reaction(
                         tg_mid = 0
                     if peer_id and tg_mid:
                         telegram_synced = await set_telegram_user_message_reaction(
+                            session_id=row_tu.id,
                             session_encrypted=row_tu.session_encrypted,
                             peer_user_id=peer_id,
                             telegram_message_id=tg_mid,
