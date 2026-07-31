@@ -118,17 +118,8 @@ export function MarketingLayout() {
           </nav>
           <div className="mm-header__actions">
             <LanguageSwitcher />
-            {hasToken ? (
-              <NavLink to="/workspace" className="mm-header__login">
-                {t('layout.headerWorkspace')}
-              </NavLink>
-            ) : (
-              <NavLink to={path('/login')} className="mm-header__login">
-                {t('layout.headerLogin')}
-              </NavLink>
-            )}
-            <MmButton to={hasToken ? '/workspace' : '/login'} size="sm">
-              {t('layout.headerCta')}
+            <MmButton to={hasToken ? '/workspace' : path('/login')} size="sm">
+              {hasToken ? t('layout.headerWorkspace') : t('layout.headerCta')}
             </MmButton>
           </div>
         </MmContainer>

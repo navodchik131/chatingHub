@@ -1581,67 +1581,43 @@ html {
 
 @media (max-width: 720px) {
   :root {
-    --rail-h: 104px;
+    --gutter: 16px;
+    --rail-h: 56px;
   }
 
   .mm-nav {
     display: none;
   }
 
-  .mm-header {
-    height: auto;
-  }
-
   .mm-header__inner {
-    display: grid;
-    grid-template-columns: 1fr auto;
-    grid-template-rows: auto auto;
+    display: flex;
     align-items: center;
-    gap: 10px 12px;
-    padding: 12px 0;
-    flex-wrap: unset;
-    justify-content: unset;
+    justify-content: space-between;
+    gap: 12px;
+    height: var(--rail-h);
+    padding: 0;
   }
 
   .mm-wordmark {
-    grid-column: 1;
-    grid-row: 1;
-    justify-self: start;
-    font-size: 0.9375rem;
-  }
-
-  .mm-header__inner .mm-lang-switch {
-    grid-column: 2;
-    grid-row: 1;
-    order: unset;
-    width: auto;
-    max-width: none;
-    margin: 0;
-    justify-self: end;
+    flex: 1 1 auto;
+    font-size: 0.875rem;
+    min-width: 0;
   }
 
   .mm-header__actions {
-    grid-column: 1 / -1;
-    grid-row: 2;
-    width: 100%;
-    justify-content: space-between;
-    gap: 10px;
-    flex-wrap: nowrap;
-  }
-
-  .mm-header__login {
-    font-size: 0.8125rem;
-    white-space: nowrap;
-    flex-shrink: 0;
+    flex: 0 0 auto;
+    gap: 8px;
   }
 
   .mm-header__actions .mm-btn--sm {
-    height: 36px;
-    padding: 0 14px;
-    font-size: 0.8125rem;
+    height: 34px;
+    padding: 0 12px;
+    font-size: 0.75rem;
     white-space: nowrap;
-    flex-shrink: 1;
-    min-width: 0;
+  }
+
+  .mm-lang-switch__btn {
+    padding: 0.3rem 0.45rem;
   }
 }
 
