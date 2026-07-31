@@ -24,6 +24,45 @@ from app.services.telegram_video_note import convert_video_bytes_to_telegram_not
 log = logging.getLogger(__name__)
 
 
+async def load_studio_generation_video_bytes(
+    session: AsyncSession,
+    *,
+    owner_id: int,
+    generation_id: int,
+) -> tuple[bytes, str]:
+    import httpx
+
+    row = await session.get(StudioGeneration, generation_id)
+    if not row or row.user_id != owner_id:
+        raise HTTPException(status_code=404, detail="Генерация не найдена")
+    if not (row.content_type or "").startswith("video/"):
+        raise HTTPException(status_code=404, detail="Не видео")
+    rel = (row.relative_path or "").strip()
+    if rel:
+        abs_path = (BACKEND_DIR / rel).resolve()
+        try:
+            abs_path.relative_to(BACKEND_DIR.resolve())
+        except ValueError:
+            raise HTTPException(status_code=404, detail="Не найдено") from None
+        if abs_path.is_file():
+            data = await anyio.to_thread.run_sync(abs_path.read_bytes)
+            ct = (row.content_type or "").strip() or mimetypes.guess_type(abs_path.name)[0] or "video/mp4"
+            if not ct.startswith("video/"):
+                ct = "video/mp4"
+            return data, ct
+    src = (row.source_url or "").strip()
+    if src.startswith("https://"):
+        async with httpx.AsyncClient(timeout=120.0, follow_redirects=True) as client:
+            r = await client.get(src)
+        if r.status_code >= 400:
+            raise HTTPException(status_code=502, detail="Не удалось загрузить видео")
+        ct = (row.content_type or r.headers.get("content-type") or "video/mp4").split(";")[0].strip()
+        if not ct.startswith("video/"):
+            ct = "video/mp4"
+        return r.content, ct
+    raise HTTPException(status_code=404, detail="Видео ещё не готово")
+
+
 async def read_upload_image(upload: UploadFile | None) -> tuple[bytes, str] | None:
     if upload is None:
         return None
@@ -100,10 +139,7 @@ async def resolve_outbound_image(
     if studio_generation_id is not None and studio_generation_id > 0:
         row = await session.get(StudioGeneration, studio_generation_id)
         if row and (row.content_type or "").startswith("video/"):
-            raise HTTPException(
-                status_code=400,
-                detail="Для видео из архива используйте studio_motion_render_id",
-            )
+            return None
         return await load_studio_generation_image_bytes(
             session, owner_id=owner_id, generation_id=studio_generation_id
         )
@@ -130,11 +166,15 @@ async def resolve_outbound_video(
             .order_by(StudioMotionRender.id.desc())
             .limit(1)
         )
-    if render_id is None or render_id <= 0:
-        return None
-    return await load_studio_motion_render_bytes(
-        session, owner_id=owner_id, render_id=int(render_id)
-    )
+    if render_id is not None and render_id > 0:
+        return await load_studio_motion_render_bytes(
+            session, owner_id=owner_id, render_id=int(render_id)
+        )
+    if studio_generation_id and studio_generation_id > 0:
+        return await load_studio_generation_video_bytes(
+            session, owner_id=owner_id, generation_id=studio_generation_id
+        )
+    return None
 
 
 async def send_telegram_outbound(

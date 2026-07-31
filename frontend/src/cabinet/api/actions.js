@@ -334,12 +334,17 @@ export async function downloadVideoNoteByPath(apiPath, filename = 'modelmate-vid
     throw new Error(typeof data.detail === 'string' ? data.detail : res.statusText)
   }
   const blob = await res.blob()
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = filename
-  a.click()
-  URL.revokeObjectURL(url)
+  const objectUrl = URL.createObjectURL(blob)
+  try {
+    const a = document.createElement('a')
+    a.href = objectUrl
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+  } finally {
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000)
+  }
 }
 
 const ARCHIVE_PAGE_LIMIT = 40

@@ -1410,9 +1410,25 @@ async def api_generation_video_note(
         .order_by(StudioMotionRender.id.desc())
         .limit(1)
     )
-    if not row:
-        raise HTTPException(status_code=404, detail="Видео не найдено")
-    return await api_motion_render_video_note(int(row), session=session, user=user)
+    if row:
+        return await api_motion_render_video_note(int(row), session=session, user=user)
+    from app.services.chat_outbound import load_studio_generation_video_bytes
+    from app.services.telegram_video_note import convert_video_bytes_to_telegram_note_async
+
+    raw, _mime = await load_studio_generation_video_bytes(
+        session, owner_id=oid, generation_id=generation_id
+    )
+    try:
+        note = await convert_video_bytes_to_telegram_note_async(raw)
+    except (RuntimeError, ValueError) as e:
+        raise HTTPException(status_code=502, detail=str(e)[:500]) from e
+    return Response(
+        content=note,
+        media_type="video/mp4",
+        headers={
+            "Content-Disposition": f'attachment; filename="modelmate-video-note-{generation_id}.mp4"',
+        },
+    )
 
 
 def _apply_studio_generation_media_kind_filter(stmt, media_kind: str | None):

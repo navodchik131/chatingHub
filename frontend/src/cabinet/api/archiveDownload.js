@@ -58,5 +58,8 @@ export async function downloadArchiveBlob(url, filename) {
     return
   }
 
-  window.open(src, '_blank', 'noopener,noreferrer')
+  const opened = window.open(src, '_blank', 'noopener,noreferrer')
+  if (!opened) {
+    throw new Error('Не удалось скачать файл. Разрешите всплывающие окна или попробуйте ещё раз.')
+  }
 }

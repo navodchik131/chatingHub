@@ -77,8 +77,25 @@ export default function Video() {
   const downloadVideoNoteForItem = (item, e) => {
     e?.stopPropagation?.();
     const path = videoNoteDownloadPath(item);
-    if (!path) return;
-    void downloadVideoNoteByPath(path, `modelmate-video-note-${Math.abs(item.id)}.mp4`);
+    if (!path) {
+      cabinet.setError(lang === 'ru' ? 'Кружок недоступен для этого видео' : 'Video note unavailable for this clip');
+      return;
+    }
+    cabinet.setError(null);
+    void downloadVideoNoteByPath(path, `modelmate-video-note-${Math.abs(item.id)}.mp4`).catch((err) => {
+      cabinet.setError(err?.message || String(err));
+    });
+  };
+
+  const downloadArchiveVideo = (url, filename) => {
+    if (!url) {
+      cabinet.setError(lang === 'ru' ? 'Файл недоступен для скачивания' : 'File unavailable for download');
+      return;
+    }
+    cabinet.setError(null);
+    void downloadArchiveBlob(url, filename).catch((err) => {
+      cabinet.setError(err?.message || String(err));
+    });
   };
 
   useEffect(() => () => clearTimeout(timer.current), []);
@@ -840,7 +857,7 @@ export default function Video() {
                         hover={{ color: color.lime }}
                         onClick={(e) => {
                           e.stopPropagation();
-                          void downloadArchiveBlob(downloadUrl, `modelmate-video-${item.id}.mp4`);
+                          downloadArchiveVideo(downloadUrl, `modelmate-video-${item.id}.mp4`);
                         }}
                       >
                         ↓ MP4
@@ -935,7 +952,7 @@ export default function Video() {
                   padding: '8px 16px', cursor: 'pointer',
                 }}
                 hover={{ color: color.limeHi }}
-                onClick={() => void downloadArchiveBlob(
+                onClick={() => downloadArchiveVideo(
                   s.vidLightbox.downloadUrl,
                   `modelmate-video-${s.vidLightbox.id || 'clip'}.mp4`,
                 )}
@@ -950,10 +967,17 @@ export default function Video() {
                   padding: '8px 16px', cursor: 'pointer',
                 }}
                 hover={{ color: color.lime }}
-                onClick={() => void downloadVideoNoteByPath(
-                  s.vidLightbox.videoNotePath,
-                  `modelmate-video-note-${Math.abs(s.vidLightbox.id || 0)}.mp4`,
-                )}
+                onClick={() => {
+                  const path = s.vidLightbox.videoNotePath;
+                  if (!path) return;
+                  cabinet.setError(null);
+                  void downloadVideoNoteByPath(
+                    path,
+                    `modelmate-video-note-${Math.abs(s.vidLightbox.id || 0)}.mp4`,
+                  ).catch((err) => {
+                    cabinet.setError(err?.message || String(err));
+                  });
+                }}
               >
                 ⭕ {t.vidVideoNoteDownload}
               </Hoverable>

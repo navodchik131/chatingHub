@@ -16,6 +16,8 @@ export type StudioArchiveItem = {
   job_id: number | null
   image_url: string
   video_url: string | null
+  /** Linked motion render when known (positive generation archive row). */
+  motion_render_id?: number | null
 }
 
 export type StudioGenerationsPage = {
@@ -160,6 +162,8 @@ export function motionRenderArchiveId(renderId: number): number {
 }
 
 export function motionRenderIdFromArchiveItem(item: StudioArchiveItem): number | null {
+  const explicit = item.motion_render_id
+  if (explicit != null && explicit > 0) return explicit
   if (isMotionRenderArchiveId(item.id)) return -item.id
   return null
 }
@@ -209,12 +213,14 @@ export function mergeVideoArchiveWithMotionRenders(
       const idx = enriched.findIndex((g) => g.id === gid && g.media_kind === 'video')
       if (idx >= 0) {
         const cur = enriched[idx]
+        let next = { ...cur, motion_render_id: r.id }
         if (frame && !(cur.image_url || '').trim()) {
-          enriched[idx] = { ...cur, image_url: frame }
+          next = { ...next, image_url: frame }
         }
         if (!(cur.video_url || '').trim()) {
-          enriched[idx] = { ...enriched[idx], video_url: url, status: 'ready' }
+          next = { ...next, video_url: url, status: 'ready' }
         }
+        enriched[idx] = next
         seenUrls.add(url)
         continue
       }
