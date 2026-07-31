@@ -163,7 +163,11 @@ function ConnectionDetail() {
         if (!(form.phone || '').trim()) return;
         setOauthBusy(true);
         try {
-          const res = await actions.startTelegramUserLogin(form.phone, form.modelId);
+          const res = await actions.startTelegramUserLogin(
+            form.phone,
+            form.modelId,
+            form.tgUserConnectionId,
+          );
           setForm({
             tgUserStep: res.needs_password ? 'password' : 'code',
             tgUserConnectionId: res.connection_id,
@@ -410,12 +414,19 @@ function ConnectionDetail() {
                   </>
                 )}
                 {(form.tgUserStep || 'phone') === 'code' && (
-                  <Field
-                    label={lang === 'ru' ? 'КОД ИЗ TELEGRAM / SMS' : 'CODE FROM TELEGRAM / SMS'}
-                    value={form.code}
-                    onChange={(e) => setForm({ code: e.target.value })}
-                    style={{ gridColumn: '1 / -1' }}
-                  />
+                  <>
+                    <Field
+                      label={lang === 'ru' ? 'КОД ИЗ TELEGRAM / SMS' : 'CODE FROM TELEGRAM / SMS'}
+                      value={form.code}
+                      onChange={(e) => setForm({ code: e.target.value })}
+                      style={{ gridColumn: '1 / -1' }}
+                    />
+                    <NoteBlock style={{ gridColumn: '1 / -1' }}>
+                      {lang === 'ru'
+                        ? 'Код приходит в приложение Telegram (чат «Telegram»), не путать с SMS. Если не подходит — вернитесь и запросите код заново.'
+                        : 'The code arrives in the Telegram app, not always via SMS. If it fails, go back and request a new code.'}
+                    </NoteBlock>
+                  </>
                 )}
                 {(form.tgUserStep || 'phone') === 'password' && (
                   <Field

@@ -135,10 +135,11 @@ export async function deleteTelegramConnection(connectionId) {
   return apiJson(`/api/integrations/telegram/${connectionId}`, { method: 'DELETE' })
 }
 
-export async function startTelegramUserLogin(phone, studioModelId) {
+export async function startTelegramUserLogin(phone, studioModelId, connectionId) {
   const body = {
     phone: String(phone || '').trim(),
     studio_model_id: studioModelId ? Number(studioModelId) : null,
+    connection_id: connectionId ? Number(connectionId) : null,
   }
   return apiJson('/api/integrations/telegram-user/start', { method: 'POST', body: JSON.stringify(body) })
 }

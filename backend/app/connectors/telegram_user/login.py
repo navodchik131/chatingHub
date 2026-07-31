@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -31,6 +32,10 @@ def _normalize_phone(phone: str) -> str:
     return raw
 
 
+def _normalize_code(code: str) -> str:
+    return re.sub(r"\D", "", (code or "").strip())
+
+
 async def start_telegram_user_login(
     session: AsyncSession,
     *,
@@ -47,11 +52,16 @@ async def start_telegram_user_login(
         if not row or row.user_id != owner_id:
             raise ValueError("session not found")
 
-    client = build_telegram_client()
+    client = build_telegram_client(
+        session_encrypted=row.session_encrypted if row else None,
+    )
+    pending_session_enc: str | None = None
     try:
         await client.connect()
         sent = await client.send_code_request(normalized)
         phone_code_hash = sent.phone_code_hash
+        # phone_code_hash привязан к auth key этой сессии — сохраняем до sign_in.
+        pending_session_enc = encrypt_secret(client.session.save())
     finally:
         await client.disconnect()
 
@@ -63,6 +73,7 @@ async def start_telegram_user_login(
             studio_model_id=studio_model_id,
             phone=normalized,
             phone_code_hash_encrypted=enc_hash,
+            session_encrypted=pending_session_enc,
             status=TelegramUserSessionStatus.pending_otp.value,
             is_active=True,
             error_message=None,
@@ -71,7 +82,7 @@ async def start_telegram_user_login(
     else:
         row.phone = normalized
         row.phone_code_hash_encrypted = enc_hash
-        row.session_encrypted = None
+        row.session_encrypted = pending_session_enc
         row.telegram_user_id = None
         row.telegram_username = None
         row.status = TelegramUserSessionStatus.pending_otp.value
@@ -100,14 +111,20 @@ async def confirm_telegram_user_code(
         raise ValueError("invalid session status")
     if not row.phone or not row.phone_code_hash_encrypted:
         raise ValueError("login not started")
+    if not row.session_encrypted:
+        raise ValueError("Сессия авторизации утеряна — запросите код заново.")
 
     phone = row.phone
     phone_code_hash = decrypt_secret(row.phone_code_hash_encrypted)
+    otp = _normalize_code(code)
+    if not otp:
+        raise ValueError("Введите код из Telegram или SMS.")
+
     client = build_telegram_client(session_encrypted=row.session_encrypted)
     try:
         await client.connect()
         try:
-            await client.sign_in(phone, (code or "").strip(), phone_code_hash=phone_code_hash)
+            await client.sign_in(phone, otp, phone_code_hash=phone_code_hash)
         except SessionPasswordNeededError:
             row.session_encrypted = encrypt_secret(client.session.save())
             row.status = TelegramUserSessionStatus.pending_2fa.value
@@ -115,12 +132,16 @@ async def confirm_telegram_user_code(
             row.updated_at = datetime.now(timezone.utc)
             await session.flush()
             return row, True
-        except (PhoneCodeInvalidError, PhoneCodeExpiredError) as e:
-            row.status = TelegramUserSessionStatus.error.value
-            row.error_message = str(e)[:500]
-            row.updated_at = datetime.now(timezone.utc)
-            await session.flush()
-            raise ValueError("invalid or expired code") from e
+        except PhoneCodeExpiredError as e:
+            log.warning("telegram_user login code expired phone=%s", phone[-4:])
+            raise ValueError(
+                "Код истёк. Нажмите «Отправить код» ещё раз и введите новый код."
+            ) from e
+        except PhoneCodeInvalidError as e:
+            log.warning("telegram_user login invalid code phone=%s", phone[-4:])
+            raise ValueError(
+                "Неверный код. Проверьте цифры из Telegram (не SMS, если код пришёл в приложение)."
+            ) from e
 
         me = await client.get_me()
         row.session_encrypted = encrypt_secret(client.session.save())
