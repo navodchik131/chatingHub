@@ -52,7 +52,7 @@ async def ingest_telegram_user_dm(
 ) -> None:
     if message.out:
         return
-    if not message.is_private:
+    if not isinstance(message.peer_id, PeerUser):
         return
 
     text = _message_text(message)

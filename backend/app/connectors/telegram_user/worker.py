@@ -19,6 +19,7 @@ log = logging.getLogger(__name__)
 
 _worker_refresh = asyncio.Event()
 _running_clients: dict[int, object] = {}
+_running_tasks: dict[int, asyncio.Task[None]] = {}
 
 
 def request_telegram_user_worker_refresh() -> None:
@@ -42,31 +43,42 @@ async def _load_active_sessions() -> list[TelegramUserSession]:
 
 
 async def _stop_client(session_id: int) -> None:
+    task = _running_tasks.pop(session_id, None)
     client = _running_clients.pop(session_id, None)
-    if client is None:
-        return
-    try:
-        await client.disconnect()
-    except Exception:
-        log.exception("telegram_user worker: disconnect failed session=%s", session_id)
+    if client is not None:
+        try:
+            await client.disconnect()
+        except Exception:
+            log.exception("telegram_user worker: disconnect failed session=%s", session_id)
+    if task is not None:
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
 
 
 async def _start_client(row: TelegramUserSession) -> None:
     if row.id in _running_clients:
-        return
+        client = _running_clients[row.id]
+        if getattr(client, "is_connected", lambda: False)():
+            return
+        await _stop_client(row.id)
+
     if not row.session_encrypted:
         return
+
     client = build_telegram_client(session_encrypted=row.session_encrypted)
     owner_id = row.user_id
     session_id = row.id
     studio_model_id = row.studio_model_id
 
-    @client.on(events.NewMessage(incoming=True))
+    @client.on(events.NewMessage())
     async def _on_new_message(event: events.NewMessage.Event) -> None:
-        msg = event.message
-        if not msg or msg.out:
+        if not event.is_private or event.out:
             return
-        if not event.is_private:
+        msg = event.message
+        if not msg:
             return
         sender = await event.get_sender()
         try:
@@ -86,7 +98,7 @@ async def _start_client(row: TelegramUserSession) -> None:
             )
 
     try:
-        await client.connect()
+        await client.start()
         if not await client.is_user_authorized():
             log.warning("telegram_user worker: session %s not authorized", session_id)
             await client.disconnect()
@@ -98,8 +110,23 @@ async def _start_client(row: TelegramUserSession) -> None:
                     db_row.updated_at = datetime.now(timezone.utc)
                     await session.commit()
             return
+
         _running_clients[session_id] = client
         me = await client.get_me()
+
+        async def _pump() -> None:
+            try:
+                await client.run_until_disconnected()
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                log.exception("telegram_user worker pump ended session=%s", session_id)
+            finally:
+                _running_clients.pop(session_id, None)
+                _running_tasks.pop(session_id, None)
+
+        _running_tasks[session_id] = asyncio.create_task(_pump())
+
         async with SessionLocal() as session:
             db_row = await session.get(TelegramUserSession, session_id)
             if db_row:
@@ -116,10 +143,7 @@ async def _start_client(row: TelegramUserSession) -> None:
         )
     except Exception:
         log.exception("telegram_user worker: start failed session=%s", session_id)
-        try:
-            await client.disconnect()
-        except Exception:
-            pass
+        await _stop_client(session_id)
 
 
 async def _sync_clients() -> None:

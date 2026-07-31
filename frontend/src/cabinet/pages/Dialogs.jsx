@@ -89,7 +89,11 @@ function ChatList() {
 
   const platDefs = [
     { id: 'all', label: lang === 'ru' ? 'Все площадки' : 'All', col: color.textDim, bg: 'rgba(255,255,255,.05)', bd: line.mid },
-    { id: 'TELEGRAM', label: `Telegram ${count((c) => c.platform === 'TELEGRAM')}`, ...platformMeta('TELEGRAM') },
+    {
+      id: 'TELEGRAM',
+      label: `Telegram ${count((c) => c.platform === 'TELEGRAM')}`,
+      ...platformMeta('TELEGRAM'),
+    },
     { id: 'FANVUE', label: `Fanvue ${count((c) => c.platform === 'FANVUE')}`, ...platformMeta('FANVUE') },
     { id: 'INSTAGRAM', label: `Instagram ${count((c) => c.platform === 'INSTAGRAM')}`, ...platformMeta('INSTAGRAM') },
   ].map(({ id, label, col, bg, bd }) => ({ id, label, col, bg, bd }));
