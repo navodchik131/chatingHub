@@ -1,7 +1,8 @@
-import { useEffect, useRef, useMemo, useState } from 'react';
+import { useEffect, useRef, useMemo } from 'react';
 import Hoverable from '../components/Hoverable';
 import { IcoFilm, IcoSpark, IcoUpload, IcoPlay, IcoText, IcoZoom } from '../components/Icons';
 import { Fade, PageTitle, Eyebrow, Chip, SelectPill, Overlay, CloseButton } from '../components/ui';
+import VideoPreviewModal from '../components/VideoPreviewModal';
 import { useApp } from '../hooks/useApp';
 import { color, line, font, G } from '../styles/tokens';
 import { modeCardStyle, refUploadStyle, borderHoverOff, cardPickStyle } from '../styles/mixins';
@@ -11,13 +12,28 @@ import { downloadArchiveBlob } from '../api/archiveDownload';
 import { sameStudioModelId, enginesForNsfw, isUiSimplified } from '../api/studioHelpers';
 import { computeMotionVideoCreditCost } from '../../studioMotionPricing';
 import { videoNoteDownloadPath, videoNoteSendPayload } from '../../studioArchive';
-import { mapDialogRow } from '../api/mappers';
 
 const vidModeIcons = { film: IcoFilm, text: IcoText };
 
 function isTelegramConversation(c) {
   const p = String(c?.platform || '').toLowerCase();
   return p === 'telegram' || p === 'telegram_user';
+}
+
+function vidQualityLabel(q) {
+  const v = String(q || '1080').toLowerCase();
+  if (v === '4k') return '4K';
+  if (v === '480' || v === '480p') return '480p';
+  if (v === '720' || v === '720p') return '720p';
+  return '1080p';
+}
+
+function buildVideoMetaLine({ quality, ratio, durationSec, lang }) {
+  const parts = [];
+  if (quality) parts.push(quality);
+  if (ratio) parts.push(ratio);
+  if (durationSec) parts.push(lang === 'ru' ? `${durationSec} с` : `${durationSec}s`);
+  return parts.join(' · ');
 }
 
 /** Как на бэкенде: 720/1080/4k → Seedance resolution (4k в API уходит как 1080p). */
@@ -43,49 +59,11 @@ export default function Video() {
   const videoRef = useRef(null);
   const frameRef = useRef(null);
   const timer = useRef(null);
-  const [vidNotePick, setVidNotePick] = useState(null);
-  const [vidNoteSending, setVidNoteSending] = useState(false);
 
   const tgConversations = useMemo(
     () => (cabinet.conversations || []).filter(isTelegramConversation),
     [cabinet.conversations],
   );
-
-  const sendVideoNoteToConv = async (convId, payload) => {
-    if (!convId || !payload || vidNoteSending) return;
-    setVidNoteSending(true);
-    try {
-      await cabinet.sendVideoNoteReply(convId, payload);
-      setVidNotePick(null);
-    } finally {
-      setVidNoteSending(false);
-    }
-  };
-
-  const openVideoNoteSend = (item, e) => {
-    e?.stopPropagation?.();
-    const payload = videoNoteSendPayload(item);
-    if (!payload) return;
-    if (tgConversations.length === 0) return;
-    if (tgConversations.length === 1) {
-      void sendVideoNoteToConv(tgConversations[0].id, payload);
-      return;
-    }
-    setVidNotePick(payload);
-  };
-
-  const downloadVideoNoteForItem = (item, e) => {
-    e?.stopPropagation?.();
-    const path = videoNoteDownloadPath(item);
-    if (!path) {
-      cabinet.setError(lang === 'ru' ? 'Кружок недоступен для этого видео' : 'Video note unavailable for this clip');
-      return;
-    }
-    cabinet.setError(null);
-    void downloadVideoNoteByPath(path, `modelmate-video-note-${Math.abs(item.id)}.mp4`).catch((err) => {
-      cabinet.setError(err?.message || String(err));
-    });
-  };
 
   const downloadArchiveVideo = (url, filename) => {
     if (!url) {
@@ -730,7 +708,6 @@ export default function Video() {
               const videoUrl = archiveVideoUrl(item);
               const downloadUrl = archiveDownloadUrl(item) || videoUrl;
               const videoNotePath = videoNoteDownloadPath(item);
-              const canVideoNote = Boolean(videoNotePath) && tgConversations.length > 0;
               const pending = isArchivePending(item);
               const failed = (item.status || '').trim() === 'failed';
               const model = (cabinet.models || []).find((m) => m.id === item.studio_model_id);
@@ -750,8 +727,15 @@ export default function Video() {
                     setS({
                       vidLightbox: {
                         url: videoUrl,
+                        poster: poster || '',
                         who: model?.name || '—',
                         ratio,
+                        metaLine: buildVideoMetaLine({
+                          quality: vidQualityLabel(s.vidQuality),
+                          ratio,
+                          durationSec: Number(s.vidTime) || null,
+                          lang,
+                        }),
                         downloadUrl,
                         id: item.id,
                         videoNotePath,
@@ -827,43 +811,11 @@ export default function Video() {
                   </div>
                   )}
                 </div>
-                <div style={{ padding: '8px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                <div style={{ padding: '8px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
                   <span style={{ fontWeight: 700, fontSize: 11 }}>{model?.name || '—'}</span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto' }}>
-                    {videoNotePath && !pending && (
-                      <Hoverable
-                        as="span"
-                        style={{ fontSize: 10, fontWeight: 700, color: color.textDim, cursor: 'pointer' }}
-                        hover={{ color: color.lime }}
-                        onClick={(e) => downloadVideoNoteForItem(item, e)}
-                      >
-                        ⭕
-                      </Hoverable>
-                    )}
-                    {canVideoNote && !pending && (
-                      <Hoverable
-                        as="span"
-                        style={{ fontSize: 10, fontWeight: 700, color: color.textDim, cursor: 'pointer' }}
-                        hover={{ color: color.lime }}
-                        onClick={(e) => openVideoNoteSend(item, e)}
-                      >
-                        TG
-                      </Hoverable>
-                    )}
-                    {downloadUrl && !pending && (
-                      <Hoverable
-                        as="span"
-                        style={{ fontSize: 10, fontWeight: 700, color: color.textDim, cursor: 'pointer' }}
-                        hover={{ color: color.lime }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          downloadArchiveVideo(downloadUrl, `modelmate-video-${item.id}.mp4`);
-                        }}
-                      >
-                        ↓ MP4
-                      </Hoverable>
-                    )}
-                  </div>
+                  {downloadUrl && !pending && (
+                    <span style={{ fontSize: 10, fontWeight: 700, color: color.textDim }}>MP4</span>
+                  )}
                 </div>
               </Hoverable>
             );})}
@@ -919,135 +871,41 @@ export default function Video() {
         </Overlay>
       )}
 
-      {s.vidLightbox?.url && (
-        <Overlay onClose={() => setS({ vidLightbox: null })}>
-          <div
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: 14,
-              width: 'min(96vw, 900px)', maxHeight: '92vh',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-              <div>
-                <div style={{ fontWeight: 800, fontSize: 15 }}>{s.vidLightbox.who}</div>
-                <div style={{ fontSize: 11, color: color.textDim }}>{s.vidLightbox.ratio || '9:16'}</div>
-              </div>
-              <CloseButton onClick={() => setS({ vidLightbox: null })} label={t.close} />
-            </div>
-            <video
-              src={s.vidLightbox.url}
-              controls
-              autoPlay
-              playsInline
-              style={{
-                width: '100%', maxHeight: 'min(calc(92vh - 140px), 80vh)',
-                borderRadius: 14, background: '#000', display: 'block',
-              }}
-            />
-            {s.vidLightbox.downloadUrl && (
-              <Hoverable
-                style={{
-                  alignSelf: 'center', fontSize: 12, fontWeight: 700, color: color.lime,
-                  padding: '8px 16px', cursor: 'pointer',
-                }}
-                hover={{ color: color.limeHi }}
-                onClick={() => downloadArchiveVideo(
-                  s.vidLightbox.downloadUrl,
-                  `modelmate-video-${s.vidLightbox.id || 'clip'}.mp4`,
-                )}
-              >
-                ↓ {lang === 'ru' ? 'Скачать MP4' : 'Download MP4'}
-              </Hoverable>
-            )}
-            {s.vidLightbox.videoNotePath && (
-              <Hoverable
-                style={{
-                  alignSelf: 'center', fontSize: 12, fontWeight: 700, color: color.textDim,
-                  padding: '8px 16px', cursor: 'pointer',
-                }}
-                hover={{ color: color.lime }}
-                onClick={() => {
-                  const path = s.vidLightbox.videoNotePath;
-                  if (!path) return;
-                  cabinet.setError(null);
-                  void downloadVideoNoteByPath(
-                    path,
-                    `modelmate-video-note-${Math.abs(s.vidLightbox.id || 0)}.mp4`,
-                  ).catch((err) => {
-                    cabinet.setError(err?.message || String(err));
-                  });
-                }}
-              >
-                ⭕ {t.vidVideoNoteDownload}
-              </Hoverable>
-            )}
-            {s.vidLightbox.videoNotePayload && tgConversations.length > 0 && (
-              <Hoverable
-                style={{
-                  alignSelf: 'center', fontSize: 12, fontWeight: 700, color: color.lime,
-                  padding: '8px 16px', cursor: 'pointer',
-                  border: '1px solid rgba(215,244,82,.35)', borderRadius: 10,
-                }}
-                hover={{ background: 'rgba(215,244,82,.08)' }}
-                onClick={() => {
-                  const payload = s.vidLightbox.videoNotePayload;
-                  if (tgConversations.length === 1) {
-                    void sendVideoNoteToConv(tgConversations[0].id, payload);
-                    return;
-                  }
-                  setVidNotePick(payload);
-                }}
-              >
-                {t.vidVideoNoteSend}
-              </Hoverable>
-            )}
-            {s.vidLightbox.videoNotePayload && tgConversations.length === 0 && (
-              <div style={{ alignSelf: 'center', fontSize: 11, color: color.textDim }}>
-                {t.vidVideoNoteNoChat}
-              </div>
-            )}
-          </div>
-        </Overlay>
-      )}
-
-      {vidNotePick && (
-        <Overlay onClose={() => !vidNoteSending && setVidNotePick(null)}>
-          <div
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              width: 'min(96vw, 420px)', maxHeight: '70vh', overflow: 'auto',
-              background: color.surface, borderRadius: 14, border: `1px solid ${line.hair}`,
-              padding: 16,
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 12 }}>
-              <div style={{ fontWeight: 800, fontSize: 14 }}>{t.vidVideoNotePick}</div>
-              <CloseButton onClick={() => !vidNoteSending && setVidNotePick(null)} label={t.close} />
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {tgConversations.map((c, i) => {
-                const row = mapDialogRow(c, i);
-                return (
-                  <Hoverable
-                    key={c.id}
-                    style={{
-                      display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
-                      padding: '10px 12px', borderRadius: 10, cursor: vidNoteSending ? 'default' : 'pointer',
-                      border: `1px solid ${line.hair}`, opacity: vidNoteSending ? 0.6 : 1,
-                    }}
-                    hover={vidNoteSending ? {} : { borderColor: borderHoverOff, background: color.bgPanel }}
-                    onClick={() => void sendVideoNoteToConv(c.id, vidNotePick)}
-                  >
-                    <span style={{ fontWeight: 700, fontSize: 13 }}>{row.name}</span>
-                    <span style={{ fontFamily: font.mono, fontSize: 9, color: color.textDim }}>{row.platform}</span>
-                  </Hoverable>
-                );
-              })}
-            </div>
-          </div>
-        </Overlay>
-      )}
+      <VideoPreviewModal
+        open={Boolean(s.vidLightbox?.url)}
+        onClose={() => setS({ vidLightbox: null })}
+        who={s.vidLightbox?.who}
+        metaLine={s.vidLightbox?.metaLine}
+        ratio={s.vidLightbox?.ratio || '9:16'}
+        videoUrl={s.vidLightbox?.url}
+        posterUrl={s.vidLightbox?.poster}
+        mp4Hint="MP4"
+        downloadUrl={s.vidLightbox?.downloadUrl}
+        videoNotePath={s.vidLightbox?.videoNotePath}
+        videoNotePayload={s.vidLightbox?.videoNotePayload}
+        tgConversations={tgConversations}
+        t={t}
+        lang={lang}
+        onDownloadMp4={() => downloadArchiveVideo(
+          s.vidLightbox?.downloadUrl,
+          `modelmate-video-${s.vidLightbox?.id || 'clip'}.mp4`,
+        )}
+        onDownloadVideoNote={() => {
+          const path = s.vidLightbox?.videoNotePath;
+          if (!path) {
+            cabinet.setError(lang === 'ru' ? 'Кружок недоступен для этого видео' : 'Video note unavailable for this clip');
+            return;
+          }
+          cabinet.setError(null);
+          void downloadVideoNoteByPath(
+            path,
+            `modelmate-video-note-${Math.abs(s.vidLightbox?.id || 0)}.mp4`,
+          ).catch((err) => {
+            cabinet.setError(err?.message || String(err));
+          });
+        }}
+        onSendVideoNote={(convId, payload) => cabinet.sendVideoNoteReply(convId, payload)}
+      />
     </Fade>
   );
 }

@@ -191,6 +191,19 @@ export const IcoSendArrow = () => (
   </Svg>
 );
 
+export const IcoVideoNote = () => (
+  <Svg>
+    <circle cx="12" cy="12" r="8.5" />
+    <circle cx="12" cy="12" r="3.2" fill="currentColor" stroke="none" />
+  </Svg>
+);
+
+export const IcoChevronRight = () => (
+  <Svg>
+    <path d="M9 6l6 6-6 6" />
+  </Svg>
+);
+
 export const IcoLayers = () => (
   <Svg>
     <path d="M12 3.5L21 8.5l-9 5-9-5z" />

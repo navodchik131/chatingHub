@@ -103,6 +103,7 @@ export type StudioGenerationOut = {
   studio_model_id?: number;
   job_id?: number;
   error_message?: string;
+  motion_render_id?: number | null;
 };
 
 export type TelegramLoginUser = {

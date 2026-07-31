@@ -18,6 +18,7 @@ import {
   normalizeWaveModel,
   waveModelFromState,
 } from '@/src/studio/studioHelpers';
+import { mergeMotionRendersIntoVideoArchive, type MotionRenderListItem } from '@/src/studio/videoArchive';
 
 function dedupeArchive(items: StudioGenerationOut[]): StudioGenerationOut[] {
   const seen = new Set<number>();
@@ -141,6 +142,20 @@ export async function sendReply(convId: number, text: string) {
   });
 }
 
+export async function sendVideoNoteReply(
+  convId: number,
+  opts: { renderId?: number | null; generationId?: number | null; text?: string },
+) {
+  const body: Record<string, unknown> = { text: opts.text || '', telegram_video_note: true };
+  if (opts.renderId != null) body.studio_motion_render_id = opts.renderId;
+  else if (opts.generationId != null) body.studio_generation_id = opts.generationId;
+  else throw new Error('video source required');
+  return apiJson(`/api/conversations/${convId}/reply`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
 export async function refreshArchiveImages() {
   const [page, pending] = await Promise.all([
     fetchArchiveImagesPage(0),
@@ -174,14 +189,15 @@ export async function refreshArchiveVideos() {
       {},
       { items: [] },
     ),
-    apiJsonOptional<{ items: StudioGenerationOut[] }>(
+    apiJsonOptional<{ items: MotionRenderListItem[] }>(
       '/api/studio/motion/renders?limit=40&skip=0',
       {},
       { items: [] },
     ),
   ]);
+  const merged = dedupeArchive([...(page.items || []), ...(pending.items || [])]);
   const motionItems = Array.isArray(motion?.items) ? motion.items : [];
-  return dedupeArchive([...(page.items || []), ...(pending.items || []), ...motionItems]);
+  return mergeMotionRendersIntoVideoArchive(merged, motionItems);
 }
 
 export async function fetchArchiveVideosPage(skip = 0, limit = 40) {

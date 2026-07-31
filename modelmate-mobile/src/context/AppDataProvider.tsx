@@ -150,6 +150,7 @@ type AppDataValue = {
   refreshConversations: () => Promise<void>;
   sendThreadMessage: (convId: number, text: string) => Promise<void>;
   sendThreadImage: (convId: number, text: string, file: LocalFile) => Promise<void>;
+  sendVideoNoteReply: (convId: number, payload: { renderId?: number; generationId?: number }) => Promise<void>;
   updateConversationSettings: (convId: number, patch: import('@/src/api/dialogSettings').ConversationSettingsPatch) => Promise<ConversationOut>;
   toggleThreadReaction: (convId: number, messageId: number, emoji: string) => Promise<void>;
   loadConversationFolders: () => Promise<void>;
@@ -711,6 +712,13 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       throw e;
     }
   }, [loadThread, mergeInboundMessage, patchConversationPreview]);
+
+  const sendVideoNoteReply = useCallback(async (
+    convId: number,
+    payload: { renderId?: number; generationId?: number },
+  ) => {
+    await actions.sendVideoNoteReply(convId, payload);
+  }, []);
 
   const sendThreadImage = useCallback(async (convId: number, text: string, file: LocalFile) => {
     const tempId = -Date.now();
@@ -1528,6 +1536,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       refreshConversations,
       sendThreadMessage,
       sendThreadImage,
+      sendVideoNoteReply,
       updateConversationSettings,
       toggleThreadReaction,
       loadConversationFolders,
@@ -1635,6 +1644,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       refreshConversations,
       sendThreadMessage,
       sendThreadImage,
+      sendVideoNoteReply,
       updateConversationSettings,
       toggleThreadReaction,
       loadConversationFolders,
