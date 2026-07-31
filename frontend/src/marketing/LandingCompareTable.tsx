@@ -7,7 +7,9 @@ import {
   type CatalogPlan,
   type PlanTier,
 } from '../billing/planCatalog'
-import { formatRub, usePublicHealth } from './usePublicHealth'
+import { parseReferralFromHealth } from '../billing/referral'
+import { useMarketingMoney, marketingI18nCtx } from './useMarketingMoney'
+import { usePublicHealth } from './usePublicHealth'
 import { useMarketingPath } from './i18n/useMarketingPath'
 
 const COMPARE_TIERS: PlanTier[] = ['solo', 'pro', 'studio']
@@ -20,9 +22,11 @@ export function LandingCompareTable() {
   const { t } = useTranslation('marketing')
   const { path } = useMarketingPath()
   const health = usePublicHealth()
+  const ref = parseReferralFromHealth(health)
+  const money = useMarketingMoney(health, ref)
+  const priceCtx = marketingI18nCtx(money)
   const plans = parseCatalogFromHealth(health)
   const demoGenerations = health?.demo_generations_grant ?? 3
-  const creditUnit = health?.billing_credits_unit_price_rub ?? 10
 
   const columns: Array<{ key: string; title: string; plan?: CatalogPlan; isCredits?: boolean }> = [
     { key: 'credits', title: t('landing.compare.colCredits'), isCredits: true },
@@ -43,7 +47,7 @@ export function LandingCompareTable() {
     if (col.isCredits) {
       switch (row) {
         case 'price':
-          return t('landing.compare.creditsPriceValue', { unit: creditUnit })
+          return t('landing.compare.creditsPriceValue', priceCtx)
         case 'users':
         case 'models':
           return '1'
@@ -61,7 +65,7 @@ export function LandingCompareTable() {
     const periodCredits = managedPeriodCredits(plan)
     switch (row) {
       case 'price':
-        return formatRub(plan.price_rub)
+        return money.formatPrice(plan.price_rub)
       case 'users':
         return String(plan.limits.max_users)
       case 'models':

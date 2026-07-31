@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { parseReferralFromHealth } from '../billing/referral'
 import { renderWithWavespeedRef } from '../billing/wavespeedRefLink'
 import { MmContainer } from './components/MmUi'
+import { useMarketingMoney, marketingI18nCtx } from './useMarketingMoney'
 import { usePublicHealth } from './usePublicHealth'
 import { useMarketingPath } from './i18n/useMarketingPath'
 import { resolveWorkspaceUrl, WORKSPACE_URL } from './workspaceEntry'
@@ -41,8 +42,9 @@ export function FaqPage() {
   const { path } = useMarketingPath()
   const health = usePublicHealth()
   const ref = parseReferralFromHealth(health)
+  const money = useMarketingMoney(health, ref)
   const demoGenerations = health?.demo_generations_grant ?? 3
-  const faqCtx = { ref, demoGenerations }
+  const faqCtx = { ...marketingI18nCtx(money), demoGenerations }
   const items = t('faq.items', { returnObjects: true, ...faqCtx }) as FaqItemData[]
 
   return (

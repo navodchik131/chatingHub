@@ -67,16 +67,16 @@
   "referral": {
     "eyebrow": "Реферальная программа",
     "title": "Приглашай креаторов — зарабатывай с каждой оплаты.",
-    "dek": "Пока друг с нами, вы получаете {{ref.referrer_payment_percent}}% от каждой его оплаты подписки — в кредитах по курсу 1 кр. = {{ref.credit_unit_price_rub}} ₽. Картой, кредитами или продление — без лимита по времени. Приглашённый стартует с +{{ref.friend_referral_credits}} кр. по вашей ссылке.",
+    "dek": "Пока друг с нами, вы получаете {{ref.referrer_payment_percent}}% от каждой его оплаты подписки — в кредитах по курсу 1 кр. = {{creditUnitPrice}}. Картой, кредитами или продление — без лимита по времени. Приглашённый стартует с +{{ref.friend_referral_credits}} кр. по вашей ссылке.",
     "note": "Персональная ссылка — в кабинете, раздел «Тариф и баланс». Подписку можно оплатить с баланса кредитов.",
     "cardFriendWho": "Друг по ссылке",
     "cardFriendValue": "+{{ref.friend_referral_credits}} кр.",
     "cardFriendHint": "Бонус при регистрации по вашей ссылке.",
     "cardReferrerWho": "Вы — реферер",
     "cardReferrerValue": "{{ref.referrer_payment_percent}}%",
-    "cardReferrerHint": "С каждой оплаты и продления — снова и снова. Пример за платёж: {{ref.referrer_reward_example_rub}} ₽ → ~{{ref.referrer_reward_example_credits}} кр.",
+    "cardReferrerHint": "С каждой оплаты и продления — снова и снова. Пример за платёж: {{referrerRewardExample}} → ~{{ref.referrer_reward_example_credits}} кр.",
     "cardPayWho": "Оплата подписки",
-    "cardPayValue": "{{ref.credit_unit_price_rub}} ₽/кр.",
+    "cardPayValue": "{{creditUnitPrice}}",
     "cardPayHint": "Любой тариф в кабинете можно оплатить кредитами с баланса по тому же курсу.",
     "ctaPrimary": "Зарегистрироваться и получить ссылку",
     "ctaSecondary": "Подробнее в FAQ"
@@ -282,7 +282,7 @@
       "rowChat": "Чат + перевод",
       "yes": "✓",
       "no": "—",
-      "creditsPriceValue": "от {{unit}} ₽/кр.",
+      "creditsPriceValue": "от {{creditUnitPrice}}",
       "creditsDemoValue": "{{count}} бесплатно",
       "standardCreditsValue": "{{count}} / мес"
     },
@@ -480,7 +480,7 @@
     "faq": [
       {
         "q": "Как оплачивать и что такое кредиты?",
-        "a": "1 кредит = 3.6 ₽, кредиты тратятся на генерации. Оплата картой, кредитами или через Tribute. На Pro генерации идут по вашему ключу WaveSpeed без списаний."
+        "a": "{{creditOneLiner}}, кредиты тратятся на генерации. Оплата картой, кредитами или через Tribute. На Pro генерации идут по вашему ключу WaveSpeed без списаний."
       },
       {
         "q": "Разрешён ли NSFW-контент?",
@@ -524,7 +524,7 @@
     "intro": "Шесть планов: Pro и Standard в трёх размерах (Solo, Pro, Studio). Оплата в кабинете через ЮKassa. Старт — {{demoGenerations}} бесплатных генераций.",
     "creditsEyebrow": "Standard · докупка",
     "creditsTitle": "Кредиты без пакетов",
-    "creditsDek": "Любое количество от {{creditsMin}} шт. — {{creditsUnit}} ₽/кредит; от {{creditsBulkFrom}} шт. — {{creditsBulkUnit}} ₽/кредит.",
+    "creditsDek": "Любое количество от {{creditsMin}} шт. — {{creditsUnit}}; от {{creditsBulkFrom}} шт. — {{creditsBulkUnit}}.",
     "creditsCta": "Пополнить в кабинете",
     "trialEyebrow": "Старт",
     "trialTitle": "Без карты",
@@ -549,7 +549,7 @@
       },
       {
         "title": "Получайте процент",
-        "text": "С каждой оплаты подписки приглашённого (карта, кредиты, продление) вам начисляется {{ref.referrer_payment_percent}}% в кредитах по курсу 1 кр. = {{ref.credit_unit_price_rub}} ₽."
+        "text": "С каждой оплаты подписки приглашённого (карта, кредиты, продление) вам начисляется {{ref.referrer_payment_percent}}% в кредитах по курсу 1 кр. = {{creditUnitPrice}}."
       }
     ],
     "examplesEyebrow": "Пример",
@@ -557,7 +557,7 @@
     "examples": [
       {
         "label": "Платёж друга",
-        "value": "{{ref.referrer_reward_example_rub}} ₽",
+        "value": "{{referrerRewardExample}}",
         "hint": "Условный платёж подписки — для ориентира по размеру награды."
       },
       {
@@ -570,7 +570,7 @@
     "conditionsTitle": "Что важно знать.",
     "conditions": [
       "Награда начисляется только с оплат подписки Standard / Pro (включая продления), а не с покупки чистых кредитов без подписки.",
-      "Процент считается от суммы платежа приглашённого и зачисляется вам кредитами по курсу 1 кр. = {{ref.credit_unit_price_rub}} ₽.",
+      "Процент считается от суммы платежа приглашённого и зачисляется вам кредитами по курсу 1 кр. = {{creditUnitPrice}}.",
       "Приглашённый получает +{{ref.friend_referral_credits}} кредитов один раз — при регистрации по вашей ссылке.",
       "Срок действия программы не ограничен: пока аккаунт друга активен и он оплачивает подписку, вы продолжаете получать процент.",
       "Подписку можно оплатить с баланса кредитов — реферальная награда всё равно учитывается.",
@@ -590,7 +590,7 @@
     "demoCardHint": "Бесплатные генерации на старте. Не сгорают по времени — пока не израсходуете.",
     "creditsCardLabel": "Кредиты",
     "creditsCardValue": "от {{creditsMin}} шт.",
-    "creditsCardHint": "Покупка от {{creditsMin}} кредитов — {{creditsUnit}} ₽/кредит. Кредиты не сгорают.",
+    "creditsCardHint": "Покупка от {{creditsMin}} кредитов — {{creditsUnitShort}} за кредит. Кредиты не сгорают.",
     "demoEyebrow": "Демо",
     "demoTitle": "Что такое демо-режим.",
     "demoDek": "Это пробный доступ к студии картинок на тарифе Credits — без привязки карты и без ключа WaveSpeed.",
@@ -604,7 +604,7 @@
     "creditsTitle": "Как работают кредиты.",
     "creditsDek": "Кредиты — внутренняя валюта студии. Ими оплачиваются генерации на Credits / Standard и можно оплатить подписку.",
     "creditPoints": [
-      "Пополнение в кабинете через ЮKassa — любое количество от {{creditsMin}} шт. по {{creditsUnit}} ₽/кредит.",
+      "Пополнение в кабинете через ЮKassa — любое количество от {{creditsMin}} шт. по {{creditsUnitShort}} за кредит.",
       "На Credits без подписки студия работает на платформенном WaveSpeed; чат недоступен.",
       "Standard — подписка с кредитами на генерацию, чат и команда в одном окне.",
       "Pro — свой ключ WaveSpeed: генерации оплачиваются у провайдера, платформа не списывает кредиты за картинки и видео.",
@@ -643,7 +643,11 @@
     "legalPrivacy": "политикой конфиденциальности"
   },
   "aboutService": {
-    "iframeTitle": "О сервисе ModelMate"
+    "pageAria": "Презентация ModelMate — о сервисе",
+    "motionOn": "анимация · вкл",
+    "motionOff": "анимация · выкл",
+    "motionTitleOn": "Выключить движение",
+    "motionTitleOff": "Движение выключено — нажмите, чтобы включить."
   },
   "faq": {
     "title": "Частые вопросы",
@@ -693,7 +697,7 @@
       {
         "question": "Реферальная программа",
         "paragraphs": [
-          "Ссылка в кабинете → «Тариф и баланс». Друг по ссылке получает +{{ref.friend_referral_credits}} кредитов. Вы получаете {{ref.referrer_payment_percent}}% от каждой оплаты приглашённого — подписка, продление, картой или кредитами — в кредитах по курсу 1 кр. = {{ref.credit_unit_price_rub}} ₽.",
+          "Ссылка в кабинете → «Тариф и баланс». Друг по ссылке получает +{{ref.friend_referral_credits}} кредитов. Вы получаете {{ref.referrer_payment_percent}}% от каждой оплаты приглашённого — подписка, продление, картой или кредитами — в кредитах по курсу 1 кр. = {{creditUnitPrice}}.",
           "Подписку Standard или Pro можно оплатить с баланса кредитами. На Pro генерации идут по вашему ключу WaveSpeed."
         ]
       },

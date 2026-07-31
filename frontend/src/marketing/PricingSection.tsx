@@ -7,9 +7,11 @@ import {
   filterPlans,
   WAVESPEED_REF_URL,
 } from '../billing/planCatalog'
-import { formatRub } from './usePublicHealth'
+import { parseReferralFromHealth } from '../billing/referral'
 import { marketingTierFeatures } from './i18n/pricingFeatures'
 import { MmButton, MmContainer, MmDisplayLg, MmEyebrow, MmSerifAccent } from './components/MmUi'
+import { useMarketingMoney } from './useMarketingMoney'
+import { usePublicHealth } from './usePublicHealth'
 
 export function PricingSection({
   plans,
@@ -21,6 +23,8 @@ export function PricingSection({
   compact?: boolean
 }) {
   const { t } = useTranslation('marketing')
+  const health = usePublicHealth()
+  const money = useMarketingMoney(health, parseReferralFromHealth(health))
   const [billing, setBilling] = useState<BillingPlanKind>('pro')
   const [period, setPeriod] = useState<BillingPeriod>('month')
   const visible = useMemo(() => filterPlans(plans, billing, period), [plans, billing, period])
@@ -81,7 +85,7 @@ export function PricingSection({
             <article key={plan.product} className={`mm-price-card${plan.popular ? ' featured' : ''}`}>
               {plan.popular ? <span className="mm-badge mm-badge--new">{t('pricing.cards.popular')}</span> : null}
               <h3>{plan.title}</h3>
-              <div className="mm-price-card__amount">{formatRub(plan.price_rub)}</div>
+              <div className="mm-price-card__amount">{money.formatPrice(plan.price_rub)}</div>
               <div className="mm-price-card__period">
                 {period === 'year' ? t('pricing.cards.periodYear') : t('pricing.cards.periodMonth')}
               </div>

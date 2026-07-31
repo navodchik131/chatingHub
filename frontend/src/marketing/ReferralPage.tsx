@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { parseReferralFromHealth } from '../billing/referral'
 import { MmButton, MmContainer, MmEyebrow } from './components/MmUi'
+import { useMarketingMoney, marketingI18nCtx } from './useMarketingMoney'
 import { usePublicHealth } from './usePublicHealth'
 import { useMarketingPath } from './i18n/useMarketingPath'
 
@@ -10,12 +11,14 @@ export function ReferralPage() {
   const { path } = useMarketingPath()
   const health = usePublicHealth()
   const ref = parseReferralFromHealth(health)
-  const steps = t('referralPage.steps', { returnObjects: true, ref }) as Array<{
+  const money = useMarketingMoney(health, ref)
+  const priceCtx = marketingI18nCtx(money)
+  const steps = t('referralPage.steps', { returnObjects: true, ...priceCtx }) as Array<{
     title: string
     text: string
   }>
-  const conditions = t('referralPage.conditions', { returnObjects: true, ref }) as string[]
-  const examples = t('referralPage.examples', { returnObjects: true, ref }) as Array<{
+  const conditions = t('referralPage.conditions', { returnObjects: true, ...priceCtx }) as string[]
+  const examples = t('referralPage.examples', { returnObjects: true, ...priceCtx }) as Array<{
     label: string
     value: string
     hint: string
@@ -27,23 +30,23 @@ export function ReferralPage() {
         <header className="mm-page-head">
           <MmEyebrow>{t('referralPage.eyebrow')}</MmEyebrow>
           <h1>{t('referralPage.title')}</h1>
-          <p>{t('referralPage.intro', { ref })}</p>
+          <p>{t('referralPage.intro', priceCtx)}</p>
         </header>
 
         <div className="mm-info-grid" role="list">
           <article className="mm-info-card" role="listitem">
             <span className="mm-info-card__label">{t('referral.cardFriendWho')}</span>
-            <strong className="mm-info-card__value">{t('referral.cardFriendValue', { ref })}</strong>
+            <strong className="mm-info-card__value">{t('referral.cardFriendValue', priceCtx)}</strong>
             <p>{t('referral.cardFriendHint')}</p>
           </article>
           <article className="mm-info-card mm-info-card--accent" role="listitem">
             <span className="mm-info-card__label">{t('referral.cardReferrerWho')}</span>
-            <strong className="mm-info-card__value">{t('referral.cardReferrerValue', { ref })}</strong>
-            <p>{t('referral.cardReferrerHint', { ref })}</p>
+            <strong className="mm-info-card__value">{t('referral.cardReferrerValue', priceCtx)}</strong>
+            <p>{t('referral.cardReferrerHint', priceCtx)}</p>
           </article>
           <article className="mm-info-card" role="listitem">
             <span className="mm-info-card__label">{t('referral.cardPayWho')}</span>
-            <strong className="mm-info-card__value">{t('referral.cardPayValue', { ref })}</strong>
+            <strong className="mm-info-card__value">{t('referral.cardPayValue', priceCtx)}</strong>
             <p>{t('referral.cardPayHint')}</p>
           </article>
         </div>
@@ -62,7 +65,7 @@ export function ReferralPage() {
                     </span>
                     <div>
                       <h3>{t(`referralPage.steps.${i}.title`, { defaultValue: step.title })}</h3>
-                      <p>{t(`referralPage.steps.${i}.text`, { ref, defaultValue: step.text })}</p>
+                      <p>{t(`referralPage.steps.${i}.text`, { ...priceCtx, defaultValue: step.text })}</p>
                     </div>
                   </li>
                 ))
@@ -83,9 +86,9 @@ export function ReferralPage() {
                       {t(`referralPage.examples.${i}.label`, { defaultValue: ex.label })}
                     </span>
                     <strong className="mm-info-card__value">
-                      {t(`referralPage.examples.${i}.value`, { ref, defaultValue: ex.value })}
+                      {t(`referralPage.examples.${i}.value`, { ...priceCtx, defaultValue: ex.value })}
                     </strong>
-                    <p>{t(`referralPage.examples.${i}.hint`, { ref, defaultValue: ex.hint })}</p>
+                    <p>{t(`referralPage.examples.${i}.hint`, { ...priceCtx, defaultValue: ex.hint })}</p>
                   </article>
                 ))
               : null}
@@ -100,7 +103,7 @@ export function ReferralPage() {
           <ul className="mm-info-list">
             {Array.isArray(conditions)
               ? conditions.map((item, i) => (
-                  <li key={item}>{t(`referralPage.conditions.${i}`, { ref, defaultValue: item })}</li>
+                  <li key={item}>{t(`referralPage.conditions.${i}`, { ...priceCtx, defaultValue: item })}</li>
                 ))
               : null}
           </ul>

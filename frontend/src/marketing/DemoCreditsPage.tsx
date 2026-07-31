@@ -1,24 +1,26 @@
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { MmButton, MmContainer, MmEyebrow } from './components/MmUi'
+import { parseReferralFromHealth } from '../billing/referral'
+import { useMarketingMoney, marketingI18nCtx } from './useMarketingMoney'
 import { usePublicHealth } from './usePublicHealth'
 import { useMarketingPath } from './i18n/useMarketingPath'
 
 const FALLBACK_CREDITS_MIN = 50
-const FALLBACK_UNIT = 3
 
 export function DemoCreditsPage() {
-  const { t, i18n } = useTranslation('marketing')
+  const { t } = useTranslation('marketing')
   const { path } = useMarketingPath()
   const health = usePublicHealth()
+  const ref = parseReferralFromHealth(health)
+  const money = useMarketingMoney(health, ref)
   const demoGenerations = health?.demo_generations_grant ?? 3
   const creditsMin = health?.billing_credits_min_purchase ?? FALLBACK_CREDITS_MIN
-  const creditsUnit = health?.billing_credits_unit_price_rub ?? FALLBACK_UNIT
-  const locale = i18n.language === 'en' ? 'en-US' : 'ru-RU'
   const ctx = {
+    ...marketingI18nCtx(money),
     demoGenerations,
     creditsMin,
-    creditsUnit: creditsUnit.toLocaleString(locale, { maximumFractionDigits: 2 }),
+    creditsUnitShort: money.creditsUnitShort,
   }
 
   const demoPoints = t('demoPage.demoPoints', { returnObjects: true, ...ctx }) as string[]

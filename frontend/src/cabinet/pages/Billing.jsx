@@ -14,7 +14,7 @@ import {
   isCreditsPlanWithDemo,
 } from '../../billing/demoCounter';
 import { copyText } from '../utils/clipboard';
-import { fetchUsdRate, formatPlanPrice, getCachedRubPerUsd } from '../utils/money';
+import { fetchUsdRate, formatPlanPrice, formatCreditOneLiner, fillPriceTemplate, getCachedRubPerUsd } from '../utils/money';
 import { cabinetPlanFeatures } from '../utils/planFeatures';
 
 function normalizePlan(raw) {
@@ -96,11 +96,17 @@ export default function Billing() {
     ? fmtMoney(tributeEarnings.display_minor, tributeEarnings.currency || 'RUB')
     : null;
 
+  const creditsPricing = (billingPlans?.items || []).find((x) => x.credits_pricing)?.credits_pricing;
+  const unitRub = creditsPricing?.unit_price_rub || 3.6;
+  const billingDescText = fillPriceTemplate(t.billingDesc, {
+    creditOneLiner: formatCreditOneLiner(unitRub, lang, rubPerUsd),
+  });
+
   return (
     <Fade data-screen-label="Тариф и баланс">
       <div style={{ marginBottom: 16 }}>
         <PageTitle style={{ marginBottom: 5 }}>{t.navBilling}</PageTitle>
-        <div style={{ fontSize: 12.5, color: color.textDim }}>{t.billingDesc}</div>
+        <div style={{ fontSize: 12.5, color: color.textDim }}>{billingDescText}</div>
         {lang === 'en' ? (
           <div style={{ fontSize: 11, color: color.textMuted, marginTop: 4 }}>{t.fxHint}</div>
         ) : null}

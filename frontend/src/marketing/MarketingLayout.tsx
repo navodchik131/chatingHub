@@ -1,5 +1,5 @@
 import { useEffect, useReducer, useState } from 'react'
-import { NavLink, Outlet, useNavigate, useSearchParams } from 'react-router-dom'
+import { NavLink, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { getToken } from '../api'
 import { MmButton, MmContainer } from './components/MmUi'
@@ -44,6 +44,8 @@ function useBillingBanner(param: string | null) {
 export function MarketingLayout() {
   const { t } = useTranslation('marketing')
   const { path } = useMarketingPath()
+  const location = useLocation()
+  const isAboutPage = /\/about\/?$/.test(location.pathname)
   const [, bump] = useReducer((x: number) => x + 1, 0)
   const [scrolled, setScrolled] = useState(false)
 
@@ -124,7 +126,7 @@ export function MarketingLayout() {
           </div>
         </MmContainer>
       </header>
-      <main id="main-content" className="mm-main">
+      <main id="main-content" className={`mm-main${isAboutPage ? ' mm-main--about' : ''}`}>
         {billingCopy ? (
           <div
             className={`billing-return-banner billing-return-banner--${billingCopy.variant}`}

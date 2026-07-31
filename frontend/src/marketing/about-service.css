@@ -1,25 +1,34 @@
-.mm-about-service {
-  width: 100%;
-  margin: 0;
+/* About service — full-page deck inside marketing shell (no iframe). */
+
+.mm-main.mm-main--about {
   padding: 0;
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-}
-
-.mm-about-service__frame {
-  display: block;
+  flex: none;
   width: 100%;
-  flex: 1;
-  height: auto;
-  min-height: 520px;
-  border: none;
-  background: #0a0b0d;
 }
 
-@media (max-width: 720px) {
-  .mm-about-service__frame {
-    min-height: calc(100dvh - var(--rail-h));
-  }
+html.mm-about-active .mm-root::before {
+  display: none;
+}
+
+html.mm-about-active {
+  scroll-behavior: smooth;
+}
+
+.mm-about-deck {
+  width: 100%;
+  position: relative;
+  isolation: isolate;
+}
+
+/* Fixed deck chrome sits below marketing sticky header (z-index 50). */
+html.mm-about-active .mm-about-deck .counter {
+  top: calc(var(--rail-h) + 8px);
+}
+
+html.mm-about-active .mm-about-deck .mtoggle {
+  top: calc(var(--rail-h) + 8px);
+}
+
+html.mm-about-active .mm-about-deck .rail {
+  top: calc(50% + var(--rail-h) * 0.15);
 }

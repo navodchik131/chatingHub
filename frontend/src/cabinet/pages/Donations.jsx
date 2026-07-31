@@ -8,6 +8,7 @@ import { fieldLbl, borderHoverOff, selectSt } from '../styles/mixins';
 import { fmtMoney } from '../api/helpers';
 import { mapDonationStats } from '../api/mappers';
 import { copyText } from '../utils/clipboard';
+import { fetchUsdRate, formatPlanPrice, fillPriceTemplate, getCachedRubPerUsd } from '../utils/money';
 
 const linkIcons = { tg: IcoTg, globe: IcoGlobe };
 
@@ -18,6 +19,20 @@ function DonOverview() {
   const ps = cabinet.payoutSettings;
   const [wallet, setWallet] = useState('');
   const [asset, setAsset] = useState('USDT');
+  const [rubPerUsd, setRubPerUsd] = useState(getCachedRubPerUsd);
+
+  useEffect(() => {
+    if (lang !== 'en') return undefined;
+    let cancelled = false;
+    void fetchUsdRate().then((rate) => {
+      if (!cancelled) setRubPerUsd(rate);
+    });
+    return () => { cancelled = true; };
+  }, [lang]);
+
+  const payoutHintText = fillPriceTemplate(t.payoutHint, {
+    payoutMinimum: formatPlanPrice(500, lang, rubPerUsd),
+  });
 
   useEffect(() => {
     setWallet(ps?.wallet_address || '');
@@ -64,7 +79,7 @@ function DonOverview() {
           }}
         >
           <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 8 }}>{t.payout}</div>
-          <div style={{ fontSize: 11.5, color: color.textDim, lineHeight: 1.6, marginBottom: 14 }}>{t.payoutHint}</div>
+          <div style={{ fontSize: 11.5, color: color.textDim, lineHeight: 1.6, marginBottom: 14 }}>{payoutHintText}</div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 14 }}>
             <Field

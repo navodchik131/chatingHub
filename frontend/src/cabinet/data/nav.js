@@ -60,7 +60,7 @@ export const moreItemDefs = (t, lang) => [
   { label: t.navVideo, desc: t.videoDesc, Icon: IcoFilm, go: 'video' },
   { label: t.navCharacters, desc: lang === 'ru' ? 'Ваши виртуальные модели' : 'Your virtual models', Icon: IcoStar, go: 'characters' },
   { label: t.navWorkflow, desc: lang === 'ru' ? 'Узловой конструктор (Pro)' : 'Node builder (Pro)', Icon: IcoFlow, go: 'workflow' },
-  { label: t.navBilling, desc: t.billingDesc, Icon: IcoCard, go: 'billing' },
+  { label: t.navBilling, desc: t.billingNavDesc, Icon: IcoCard, go: 'billing' },
   { label: t.navConnections, desc: t.connectionsDesc, Icon: IcoPlug, go: 'connections' },
   { label: t.navTeam, desc: t.teamDesc, Icon: IcoTeam, go: 'team' },
   { label: t.navSupport, desc: t.supportDesc, Icon: IcoLifeBuoy, go: 'support' },

@@ -517,7 +517,7 @@
     "durationLabel": "Duration",
     "durationSuffix": " · {{cost}} cr.",
     "durationSec": "{{sec}} s",
-    "costHint": "Cost: ${{usdPerSec}}/s (≈ {{creditPerSec}} cr./s, {{resolution}}, {{variant}}{{refVideoSuffix}}). Rate {{rubPerUsd}} ₽/$, {{rubPerCredit}} ₽/credit.",
+    "costHint": "Cost: ${{usdPerSec}}/s (≈ {{creditPerSec}} cr./s, {{resolution}}, {{variant}}{{refVideoSuffix}}). Rate {{rubPerUsd}} ₽/$, {{creditUnitPrice}}.",
     "costRefVideoSuffix": ", with ref video",
     "costVariantMini": "Mini",
     "costVariantStandard": "Standard",

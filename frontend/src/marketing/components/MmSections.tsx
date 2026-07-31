@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { renderWithWavespeedRef } from '../../billing/wavespeedRefLink'
 import { parseReferralFromHealth } from '../../billing/referral'
+import { useMarketingMoney, marketingI18nCtx } from '../useMarketingMoney'
 import { usePublicHealth } from '../usePublicHealth'
 import { useMarketingPath } from '../i18n/useMarketingPath'
 import {
@@ -147,6 +148,8 @@ export function MmReferralBand() {
   const { t } = useTranslation('marketing')
   const health = usePublicHealth()
   const ref = parseReferralFromHealth(health)
+  const money = useMarketingMoney(health, ref)
+  const priceCtx = marketingI18nCtx(money)
 
   return (
     <section id="referral" className="mm-section mm-section--compact mm-referral-section" aria-labelledby="mm-referral-title">
@@ -157,23 +160,23 @@ export function MmReferralBand() {
             <h2 id="mm-referral-title" className="mm-referral-band__title">
               {t('referral.title')}
             </h2>
-            <p className="mm-referral-band__dek">{t('referral.dek', { ref })}</p>
+            <p className="mm-referral-band__dek">{t('referral.dek', priceCtx)}</p>
             <p className="mm-muted mm-referral-band__note">{t('referral.note')}</p>
           </div>
           <div className="mm-referral-grid" role="list">
             <article className="mm-referral-card" role="listitem">
               <span className="mm-referral-card__who">{t('referral.cardFriendWho')}</span>
-              <strong className="mm-referral-card__value">{t('referral.cardFriendValue', { ref })}</strong>
-              <p className="mm-referral-card__hint">{t('referral.cardFriendHint', { ref })}</p>
+              <strong className="mm-referral-card__value">{t('referral.cardFriendValue', priceCtx)}</strong>
+              <p className="mm-referral-card__hint">{t('referral.cardFriendHint', priceCtx)}</p>
             </article>
             <article className="mm-referral-card mm-referral-card--accent" role="listitem">
               <span className="mm-referral-card__who">{t('referral.cardReferrerWho')}</span>
-              <strong className="mm-referral-card__value">{t('referral.cardReferrerValue', { ref })}</strong>
-              <p className="mm-referral-card__hint">{t('referral.cardReferrerHint', { ref })}</p>
+              <strong className="mm-referral-card__value">{t('referral.cardReferrerValue', priceCtx)}</strong>
+              <p className="mm-referral-card__hint">{t('referral.cardReferrerHint', priceCtx)}</p>
             </article>
             <article className="mm-referral-card" role="listitem">
               <span className="mm-referral-card__who">{t('referral.cardPayWho')}</span>
-              <strong className="mm-referral-card__value">{t('referral.cardPayValue', { ref })}</strong>
+              <strong className="mm-referral-card__value">{t('referral.cardPayValue', priceCtx)}</strong>
               <p className="mm-referral-card__hint">{t('referral.cardPayHint')}</p>
             </article>
           </div>

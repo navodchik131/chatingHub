@@ -3,25 +3,24 @@ import { useTranslation } from 'react-i18next'
 import { parseCatalogFromHealth } from '../billing/planCatalog'
 import { MmButton, MmContainer, MmEyebrow } from './components/MmUi'
 import { PricingSection } from './PricingSection'
+import { parseReferralFromHealth } from '../billing/referral'
+import { useMarketingMoney } from './useMarketingMoney'
 import { usePublicHealth } from './usePublicHealth'
 import { useMarketingPath } from './i18n/useMarketingPath'
 
 const FALLBACK_CREDITS_MIN = 50
 const FALLBACK_CREDITS_BULK_FROM = 200
-const FALLBACK_UNIT = 3
-const FALLBACK_BULK_UNIT = 2.7
 
 export function PricingPage() {
-  const { t, i18n } = useTranslation('marketing')
+  const { t } = useTranslation('marketing')
   const { path } = useMarketingPath()
   const health = usePublicHealth()
+  const ref = parseReferralFromHealth(health)
+  const money = useMarketingMoney(health, ref)
   const plans = parseCatalogFromHealth(health)
   const creditsMin = health?.billing_credits_min_purchase ?? FALLBACK_CREDITS_MIN
   const creditsBulkFrom = health?.billing_credits_bulk_from ?? FALLBACK_CREDITS_BULK_FROM
-  const creditsUnit = health?.billing_credits_unit_price_rub ?? FALLBACK_UNIT
-  const creditsBulkUnit = health?.billing_credits_bulk_unit_price_rub ?? FALLBACK_BULK_UNIT
   const demoGenerations = health?.demo_generations_grant ?? 3
-  const locale = i18n.language === 'en' ? 'en-US' : 'ru-RU'
 
   return (
     <div className="mm-main--page">
@@ -42,9 +41,9 @@ export function PricingPage() {
           <p className="mm-muted">
             {t('pricingPage.creditsDek', {
               creditsMin,
-              creditsUnit: creditsUnit.toLocaleString(locale, { maximumFractionDigits: 2 }),
+              creditsUnit: money.creditsUnit,
               creditsBulkFrom,
-              creditsBulkUnit: creditsBulkUnit.toLocaleString(locale, { maximumFractionDigits: 2 }),
+              creditsBulkUnit: money.creditsBulkUnit,
             })}
           </p>
           <div style={{ marginTop: 'var(--s-4)' }}>

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { parseReferralFromHealth } from '../../billing/referral'
+import { useMarketingMoney, marketingI18nCtx } from '../useMarketingMoney'
 import { usePublicHealth } from '../usePublicHealth'
 import { MmPainSection, TELEGRAM_CHANNEL_URL } from './MmSections'
 import { MmButton, MmContainer, MmDisplayLg, MmEyebrow, MmSerifAccent } from './MmUi'
@@ -395,6 +396,8 @@ export function MmTelegramReferralRow() {
   const { t } = useTranslation('marketing')
   const health = usePublicHealth()
   const ref = parseReferralFromHealth(health)
+  const money = useMarketingMoney(health, ref)
+  const priceCtx = marketingI18nCtx(money)
 
   return (
     <section className="mm-section mm-landing-duo" aria-label={t('landingV2.duoAria')}>
@@ -415,7 +418,7 @@ export function MmTelegramReferralRow() {
               🎁
             </div>
             <h2 className="mm-landing-duo__title">{t('referral.title')}</h2>
-            <p>{t('referral.dek', { ref })}</p>
+            <p>{t('referral.dek', priceCtx)}</p>
             <div className="mm-landing-duo__stats">
               <div>
                 <strong>+{ref.friend_referral_credits}</strong>
@@ -572,7 +575,11 @@ export function MmReviewsCarousel() {
 
 export function MmLandingFaq() {
   const { t } = useTranslation('marketing')
-  const items = t('landingV2.faq', { returnObjects: true }) as Array<{ q: string; a: string }>
+  const health = usePublicHealth()
+  const ref = parseReferralFromHealth(health)
+  const money = useMarketingMoney(health, ref)
+  const priceCtx = marketingI18nCtx(money)
+  const items = t('landingV2.faq', { returnObjects: true, ...priceCtx }) as Array<{ q: string; a: string }>
   const [open, setOpen] = useState<number | null>(0)
 
   return (
@@ -594,10 +601,14 @@ export function MmLandingFaq() {
                       aria-expanded={isOpen}
                       onClick={() => setOpen(isOpen ? null : i)}
                     >
-                      <span>{item.q}</span>
+                      <span>{t(`landingV2.faq.${i}.q`, { defaultValue: item.q })}</span>
                       <span aria-hidden>{isOpen ? '−' : '+'}</span>
                     </button>
-                    {isOpen ? <p className="mm-landing-faq__a">{item.a}</p> : null}
+                    {isOpen ? (
+                      <p className="mm-landing-faq__a">
+                        {t(`landingV2.faq.${i}.a`, { ...priceCtx, defaultValue: item.a })}
+                      </p>
+                    ) : null}
                   </div>
                 )
               })

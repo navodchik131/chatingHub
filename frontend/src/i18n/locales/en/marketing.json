@@ -67,16 +67,16 @@
   "referral": {
     "eyebrow": "Referral program",
     "title": "Invite creators — earn on every payment.",
-    "dek": "While your referral stays with us, you earn {{ref.referrer_payment_percent}}% of every subscription payment — as credits at 1 cr. = {{ref.credit_unit_price_rub}} ₽. Card, credits, or renewal — no time limit. Invited users start with +{{ref.friend_referral_credits}} cr. via your link.",
+    "dek": "While your referral stays with us, you earn {{ref.referrer_payment_percent}}% of every subscription payment — as credits at 1 cr. = {{creditUnitPrice}}. Card, credits, or renewal — no time limit. Invited users start with +{{ref.friend_referral_credits}} cr. via your link.",
     "note": "Your personal link is in the dashboard under Plan & balance. Subscriptions can be paid from your credit balance.",
     "cardFriendWho": "Invited friend",
     "cardFriendValue": "+{{ref.friend_referral_credits}} cr.",
     "cardFriendHint": "Signup bonus via your referral link.",
     "cardReferrerWho": "You — referrer",
     "cardReferrerValue": "{{ref.referrer_payment_percent}}%",
-    "cardReferrerHint": "On every payment and renewal — again and again. Example per payment: {{ref.referrer_reward_example_rub}} ₽ → ~{{ref.referrer_reward_example_credits}} cr.",
+    "cardReferrerHint": "On every payment and renewal — again and again. Example per payment: {{referrerRewardExample}} → ~{{ref.referrer_reward_example_credits}} cr.",
     "cardPayWho": "Paying for a plan",
-    "cardPayValue": "{{ref.credit_unit_price_rub}} ₽/cr.",
+    "cardPayValue": "{{creditUnitPrice}}",
     "cardPayHint": "Any plan in the dashboard can be paid with credits from your balance at the same rate.",
     "ctaPrimary": "Sign up and get your link",
     "ctaSecondary": "Learn more in FAQ"
@@ -282,7 +282,7 @@
       "rowChat": "Chat + translation",
       "yes": "✓",
       "no": "—",
-      "creditsPriceValue": "from {{unit}} ₽/cr.",
+      "creditsPriceValue": "from {{creditUnitPrice}}",
       "creditsDemoValue": "{{count}} free",
       "standardCreditsValue": "{{count}} / mo"
     },
@@ -480,7 +480,7 @@
     "faq": [
       {
         "q": "How to pay and what are credits?",
-        "a": "1 credit = 3.6 ₽, spent on generations. Pay by card, credits or Tribute. On Pro, generations run on your WaveSpeed key."
+        "a": "{{creditOneLiner}}, spent on generations. Pay by card, credits or Tribute. On Pro, generations run on your WaveSpeed key."
       },
       {
         "q": "Is NSFW content allowed?",
@@ -524,7 +524,7 @@
     "intro": "Six plans: Pro and Standard in three sizes (Solo, Pro, Studio). Pay in the dashboard via YooKassa. Start with {{demoGenerations}} free generations.",
     "creditsEyebrow": "Standard · top-up",
     "creditsTitle": "Credits without bundles",
-    "creditsDek": "Any amount from {{creditsMin}} — {{creditsUnit}} ₽/credit; from {{creditsBulkFrom}} — {{creditsBulkUnit}} ₽/credit.",
+    "creditsDek": "Any amount from {{creditsMin}} — {{creditsUnit}}; from {{creditsBulkFrom}} — {{creditsBulkUnit}}.",
     "creditsCta": "Top up in dashboard",
     "trialEyebrow": "Get started",
     "trialTitle": "No card required",
@@ -549,7 +549,7 @@
       },
       {
         "title": "Earn a share",
-        "text": "On every subscription payment they make (card, credits, or renewal) you receive {{ref.referrer_payment_percent}}% as credits at 1 cr. = {{ref.credit_unit_price_rub}} ₽."
+        "text": "On every subscription payment they make (card, credits, or renewal) you receive {{ref.referrer_payment_percent}}% as credits at 1 cr. = {{creditUnitPrice}}."
       }
     ],
     "examplesEyebrow": "Example",
@@ -557,7 +557,7 @@
     "examples": [
       {
         "label": "Friend’s payment",
-        "value": "{{ref.referrer_reward_example_rub}} ₽",
+        "value": "{{referrerRewardExample}}",
         "hint": "Sample subscription payment — for estimating reward size."
       },
       {
@@ -570,7 +570,7 @@
     "conditionsTitle": "What to know.",
     "conditions": [
       "Rewards apply only to Standard / Pro subscription payments (including renewals), not to standalone credit top-ups without a subscription.",
-      "The percentage is calculated from the invitee’s payment and credited to you at 1 cr. = {{ref.credit_unit_price_rub}} ₽.",
+      "The percentage is calculated from the invitee’s payment and credited to you at 1 cr. = {{creditUnitPrice}}.",
       "The invited user gets +{{ref.friend_referral_credits}} credits once — on signup via your link.",
       "There is no program end date: as long as their account is active and they pay for a subscription, you keep earning.",
       "Subscriptions can be paid from the credit balance — referral rewards still count.",
@@ -590,7 +590,7 @@
     "demoCardHint": "Free generations at the start. They do not expire by calendar — only when you use them.",
     "creditsCardLabel": "Credits",
     "creditsCardValue": "from {{creditsMin}}",
-    "creditsCardHint": "Buy from {{creditsMin}} credits — {{creditsUnit}} ₽ each. Credits never expire.",
+    "creditsCardHint": "Buy from {{creditsMin}} credits — {{creditsUnitShort}} each. Credits never expire.",
     "demoEyebrow": "Demo",
     "demoTitle": "What demo mode is.",
     "demoDek": "A trial of the image studio on the Credits plan — no card and no WaveSpeed key required.",
@@ -604,7 +604,7 @@
     "creditsTitle": "How credits work.",
     "creditsDek": "Credits are the studio’s internal currency. They pay for generations on Credits / Standard and can cover a subscription.",
     "creditPoints": [
-      "Top up in the dashboard via YooKassa — any amount from {{creditsMin}} at {{creditsUnit}} ₽ per credit.",
+      "Top up in the dashboard via YooKassa — any amount from {{creditsMin}} at {{creditsUnitShort}} per credit.",
       "On Credits without a subscription the studio runs on platform WaveSpeed; chat is unavailable.",
       "Standard — subscription with plan credits, chat, and team in one workspace.",
       "Pro — your own WaveSpeed key: generations are billed by the provider; the platform does not charge credits for images and video.",
@@ -643,7 +643,11 @@
     "legalPrivacy": "Privacy Policy"
   },
   "aboutService": {
-    "iframeTitle": "About ModelMate"
+    "pageAria": "ModelMate service presentation",
+    "motionOn": "animation · on",
+    "motionOff": "animation · off",
+    "motionTitleOn": "Turn motion off",
+    "motionTitleOff": "Motion is off — click to enable."
   },
   "faq": {
     "title": "Frequently asked questions",
@@ -693,7 +697,7 @@
       {
         "question": "Referral program",
         "paragraphs": [
-          "Your link is in the dashboard → Plan & balance. A friend who signs up via your link gets +{{ref.friend_referral_credits}} credits. You earn {{ref.referrer_payment_percent}}% of every payment they make — subscription, renewal, card, or credits — as credits at 1 cr. = {{ref.credit_unit_price_rub}} ₽.",
+          "Your link is in the dashboard → Plan & balance. A friend who signs up via your link gets +{{ref.friend_referral_credits}} credits. You earn {{ref.referrer_payment_percent}}% of every payment they make — subscription, renewal, card, or credits — as credits at 1 cr. = {{creditUnitPrice}}.",
           "Standard or Pro subscriptions can be paid from your credit balance. On Pro, generations use your WaveSpeed key."
         ]
       },
