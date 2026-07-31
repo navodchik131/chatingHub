@@ -313,6 +313,18 @@ export async function sendVideoNoteReply(convId, { text = '', renderId = null, g
   })
 }
 
+export async function sendVideoNoteUploadReply(convId, file, { text = '', replyToMessageId = null } = {}) {
+  const fd = new FormData()
+  if (text?.trim()) fd.append('text', text.trim())
+  fd.append('telegram_video_note', 'true')
+  fd.append('video_note_file', file, file.name || 'video-note.mp4')
+  if (replyToMessageId) fd.append('reply_to_message_id', String(replyToMessageId))
+  const res = await apiFetch(`/api/conversations/${convId}/reply`, { method: 'POST', body: fd })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'Не удалось отправить кружок')
+  return data
+}
+
 export async function downloadVideoNote(renderId, filename = 'modelmate-video-note.mp4') {
   const res = await apiFetch(`/api/studio/motion/renders/${renderId}/video-note`)
   if (!res.ok) {

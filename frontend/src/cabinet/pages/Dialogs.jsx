@@ -1,13 +1,20 @@
 import { useRef, useState, useEffect, useCallback } from 'react';
 import Hoverable from '../components/Hoverable';
 import { ChatMessageMedia } from '../components/ChatMessageMedia';
-import { IcoClip, IcoSendArrow } from '../components/Icons';
+import DialogVideoNoteModal from '../components/DialogVideoNoteModal';
+import { IcoClip, IcoSendArrow, IcoVideoNote } from '../components/Icons';
 import { Fade, PageTitle, Avatar } from '../components/ui';
 import { useApp } from '../hooks/useApp';
 import { color, line, font, avG } from '../styles/tokens';
 import { LANG_MAP, REACT_CHOICES, EMOJI_CHOICES, outboundLangOptions, replyLangDisplay, dialogSettingsSummary, normalizeLangCode } from '../api/helpers';
 import { mapDialogRow, mapMessage, mapNote, modelNameById } from '../api/mappers';
+import { videoNoteSendPayload } from '../../studioArchive';
 import { inputSt, borderHoverOff } from '../styles/mixins';
+
+function isTelegramConversation(c) {
+  const p = String(c?.platform || '').toLowerCase();
+  return p === 'telegram' || p === 'telegram_user';
+}
 
 function platformMeta(platform) {
   const x = String(platform || '').toUpperCase();
@@ -608,6 +615,8 @@ function Thread() {
   const [showScrollDown, setShowScrollDown] = useState(false);
   const [attachFile, setAttachFile] = useState(null);
   const [attachPreview, setAttachPreview] = useState(null);
+  const [videoNoteOpen, setVideoNoteOpen] = useState(false);
+  const [videoNoteSending, setVideoNoteSending] = useState(false);
   const dialogsRaw = cabinet.conversations.map((c, i) => mapDialogRow(c, i));
   const cur = cabinet.activeConvId != null
     ? dialogsRaw.find((d) => Number(d.id) === Number(cabinet.activeConvId))
@@ -736,6 +745,7 @@ function Thread() {
     if (s.msgReact !== null || s.emojiOpen || s.dlgSettingsOpen) {
       setS({ msgReact: null, emojiOpen: false, dlgSettingsOpen: false });
     }
+    if (videoNoteOpen && !videoNoteSending) setVideoNoteOpen(false);
   };
 
   const scrollDown = () => scrollToBottom('smooth');
@@ -759,6 +769,47 @@ function Thread() {
       clearAttach();
       scrollDown();
     });
+  };
+
+  const canVideoNote = isTelegramConversation(rawConv);
+
+  const closeVideoNoteModal = () => {
+    if (videoNoteSending) return;
+    setVideoNoteOpen(false);
+  };
+
+  const sendVideoNoteFromArchive = async (item) => {
+    const payload = videoNoteSendPayload(item);
+    if (!payload || !cur?.id) return;
+    setVideoNoteSending(true);
+    try {
+      await cabinet.sendVideoNoteReply(cur.id, {
+        ...payload,
+        text: (s.replyDraft || '').trim(),
+        replyToMessageId: s.replyToMessageId || null,
+      });
+      setS({ replyDraft: '', emojiOpen: false, msgReact: null, replyToMessageId: null });
+      setVideoNoteOpen(false);
+      scrollDown();
+    } finally {
+      setVideoNoteSending(false);
+    }
+  };
+
+  const sendVideoNoteFromUpload = async (file) => {
+    if (!file || !cur?.id) return;
+    setVideoNoteSending(true);
+    try {
+      await cabinet.sendVideoNoteUploadReply(cur.id, file, {
+        text: (s.replyDraft || '').trim(),
+        replyToMessageId: s.replyToMessageId || null,
+      });
+      setS({ replyDraft: '', emojiOpen: false, msgReact: null, replyToMessageId: null });
+      setVideoNoteOpen(false);
+      scrollDown();
+    } finally {
+      setVideoNoteSending(false);
+    }
   };
 
   return (
@@ -1106,6 +1157,17 @@ function Thread() {
         </Hoverable>
       )}
 
+      {/* video note picker */}
+      <DialogVideoNoteModal
+        open={videoNoteOpen}
+        onClose={closeVideoNoteModal}
+        archiveVideos={cabinet.archiveVideos || []}
+        onSendArchive={sendVideoNoteFromArchive}
+        onSendUpload={sendVideoNoteFromUpload}
+        sending={videoNoteSending}
+        t={t}
+      />
+
       {/* emoji picker */}
       {s.emojiOpen && (
         <div
@@ -1192,6 +1254,30 @@ function Thread() {
         >
           <span style={{ display: 'flex', width: 18, height: 18 }}><IcoClip /></span>
         </Hoverable>
+        {canVideoNote ? (
+        <Hoverable
+          title={t.vidVideoNoteSend}
+          style={{
+            width: 38, height: 38, flex: 'none', borderRadius: 10,
+            border: `1px solid ${videoNoteOpen ? 'rgba(192,132,252,.5)' : 'rgba(255,255,255,.1)'}`,
+            background: videoNoteOpen ? 'rgba(192,132,252,.12)' : 'transparent',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            color: videoNoteOpen ? color.purple : color.textDim, cursor: 'pointer',
+          }}
+          hover={{ color: color.purple, borderColor: 'rgba(192,132,252,.45)' }}
+          onClick={(e) => {
+            e.stopPropagation();
+            setVideoNoteOpen((v) => {
+              if (!v) void cabinet.refreshArchivePending?.();
+              return !v;
+            });
+            setS({ emojiOpen: false, msgReact: null });
+          }}
+          aria-label={t.vidVideoNoteSend}
+        >
+          <span style={{ display: 'flex', width: 18, height: 18 }}><IcoVideoNote /></span>
+        </Hoverable>
+        ) : null}
         <Hoverable
           style={{
             width: 38, height: 38, flex: 'none', borderRadius: 10, border: '1px solid rgba(255,255,255,.1)',
@@ -1201,6 +1287,7 @@ function Thread() {
           onClick={(e) => {
             e.stopPropagation();
             setS({ emojiOpen: !s.emojiOpen, msgReact: null });
+            setVideoNoteOpen(false);
           }}
           aria-label="Emoji"
         >

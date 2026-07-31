@@ -1,5 +1,5 @@
 import { LinearGradient } from 'expo-linear-gradient';
-import { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   Image,
   KeyboardAvoidingView,
@@ -26,7 +26,7 @@ import type { ConversationOut } from '@/src/api/types';
 import { Avatar } from '@/src/components/ui';
 import { DialogSettingsSheet } from '@/src/components/DialogSettingsSheet';
 import { EmojiPickerSheet } from '@/src/components/EmojiPickerSheet';
-import { IcoBack, IcoSend, IcoThemeGrid } from '@/src/components/Icons';
+import { IcoBack, IcoSend, IcoThemeGrid, IcoVideoNote } from '@/src/components/Icons';
 import { useAppSettings } from '@/src/context/AppSettingsContext';
 import { CHAT_THEMES, chatThemeById, type ChatThemeId } from '@/src/styles/chatThemes';
 import { color, font } from '@/src/styles/tokens';
@@ -64,6 +64,10 @@ type ThreadViewProps = {
   rawConv?: ConversationOut | null;
   onPatchSettings?: (patch: ConversationSettingsPatch) => void;
   onToggleReaction?: (messageId: number, emoji: string) => void;
+  canVideoNote?: boolean;
+  videoNoteActive?: boolean;
+  onVideoNotePress?: () => void;
+  videoNoteModal?: ReactNode;
 };
 
 type ListItem =
@@ -283,6 +287,10 @@ export function ThreadView({
   rawConv = null,
   onPatchSettings,
   onToggleReaction,
+  canVideoNote = false,
+  videoNoteActive = false,
+  onVideoNotePress,
+  videoNoteModal,
 }: ThreadViewProps) {
   const insets = useSafeAreaInsets();
   const scrollRef = useRef<ScrollView>(null);
@@ -455,6 +463,15 @@ export function ThreadView({
         <Pressable style={styles.sideBtn} hitSlop={6} onPress={onAttach}>
           <Text style={styles.sideBtnIcon}>📎</Text>
         </Pressable>
+        {canVideoNote ? (
+          <Pressable
+            style={[styles.sideBtn, videoNoteActive && styles.videoNoteBtnActive]}
+            hitSlop={6}
+            onPress={onVideoNotePress}
+          >
+            <IcoVideoNote size={18} stroke={videoNoteActive ? color.purple : color.dim} />
+          </Pressable>
+        ) : null}
         <View style={styles.composerField}>
           <TextInput
             style={styles.input}
@@ -491,6 +508,8 @@ export function ThreadView({
         </Pressable>
         </View>
       </View>
+
+      {videoNoteModal}
 
       <ThemePicker
         visible={themePickerOpen}
@@ -727,6 +746,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   sideBtnIcon: { fontSize: 22, color: color.muted },
+  videoNoteBtnActive: {
+    borderColor: 'rgba(192,132,252,.5)',
+    backgroundColor: 'rgba(192,132,252,.12)',
+  },
   composerField: {
     flex: 1,
     minHeight: 48,

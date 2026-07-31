@@ -150,7 +150,17 @@ type AppDataValue = {
   refreshConversations: () => Promise<void>;
   sendThreadMessage: (convId: number, text: string) => Promise<void>;
   sendThreadImage: (convId: number, text: string, file: LocalFile) => Promise<void>;
-  sendVideoNoteReply: (convId: number, payload: { renderId?: number; generationId?: number }) => Promise<void>;
+  sendVideoNoteReply: (convId: number, payload: {
+    renderId?: number;
+    generationId?: number;
+    text?: string;
+    replyToMessageId?: number | null;
+  }) => Promise<void>;
+  sendVideoNoteUploadReply: (
+    convId: number,
+    file: LocalFile,
+    opts?: { text?: string; replyToMessageId?: number | null },
+  ) => Promise<void>;
   updateConversationSettings: (convId: number, patch: import('@/src/api/dialogSettings').ConversationSettingsPatch) => Promise<ConversationOut>;
   toggleThreadReaction: (convId: number, messageId: number, emoji: string) => Promise<void>;
   loadConversationFolders: () => Promise<void>;
@@ -715,10 +725,45 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
   const sendVideoNoteReply = useCallback(async (
     convId: number,
-    payload: { renderId?: number; generationId?: number },
+    payload: {
+      renderId?: number;
+      generationId?: number;
+      text?: string;
+      replyToMessageId?: number | null;
+    },
   ) => {
-    await actions.sendVideoNoteReply(convId, payload);
-  }, []);
+    try {
+      const sent = (await actions.sendVideoNoteReply(convId, payload)) as MessageOut;
+      if (sent?.id) {
+        setRawMessages((prev) => mergeInboundMessage(prev, sent));
+        patchConversationPreview(convId, sent, { clearUnread: false });
+      } else {
+        await loadThread(convId);
+      }
+    } catch (e) {
+      reportError(e);
+      throw e;
+    }
+  }, [loadThread, mergeInboundMessage, patchConversationPreview, reportError]);
+
+  const sendVideoNoteUploadReply = useCallback(async (
+    convId: number,
+    file: LocalFile,
+    opts: { text?: string; replyToMessageId?: number | null } = {},
+  ) => {
+    try {
+      const sent = (await actions.sendVideoNoteUploadReply(convId, file, opts)) as MessageOut;
+      if (sent?.id) {
+        setRawMessages((prev) => mergeInboundMessage(prev, sent));
+        patchConversationPreview(convId, sent, { clearUnread: false });
+      } else {
+        await loadThread(convId);
+      }
+    } catch (e) {
+      reportError(e);
+      throw e;
+    }
+  }, [loadThread, mergeInboundMessage, patchConversationPreview, reportError]);
 
   const sendThreadImage = useCallback(async (convId: number, text: string, file: LocalFile) => {
     const tempId = -Date.now();
@@ -1537,6 +1582,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       sendThreadMessage,
       sendThreadImage,
       sendVideoNoteReply,
+      sendVideoNoteUploadReply,
       updateConversationSettings,
       toggleThreadReaction,
       loadConversationFolders,
@@ -1645,6 +1691,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       sendThreadMessage,
       sendThreadImage,
       sendVideoNoteReply,
+      sendVideoNoteUploadReply,
       updateConversationSettings,
       toggleThreadReaction,
       loadConversationFolders,

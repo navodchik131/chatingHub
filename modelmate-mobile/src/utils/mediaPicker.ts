@@ -28,3 +28,21 @@ export async function pickVideo(): Promise<LocalFile | null> {
     type: asset.mimeType || 'video/mp4',
   };
 }
+
+export async function pickVideoNoteMedia(): Promise<LocalFile | null> {
+  const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+  if (!perm.granted) throw new Error('Нужен доступ к галерее');
+  const result = await ImagePicker.launchImageLibraryAsync({
+    mediaTypes: ['images', 'videos'],
+    quality: 0.92,
+    videoMaxDuration: 60,
+  });
+  if (result.canceled || !result.assets?.[0]) return null;
+  const asset = result.assets[0];
+  const isVideo = asset.type === 'video';
+  return {
+    uri: asset.uri,
+    name: asset.fileName || (isVideo ? `video-${Date.now()}.mp4` : `photo-${Date.now()}.jpg`),
+    type: asset.mimeType || (isVideo ? 'video/mp4' : 'image/jpeg'),
+  };
+}

@@ -572,6 +572,30 @@ export function CabinetDataProvider({ children }) {
     [loadMessages, mergeInboundMessage, patchConversationPreview],
   )
 
+  const sendVideoNoteUploadReply = useCallback(
+    async (convId, file, { text = '', replyToMessageId = null } = {}) => {
+      if (!convId || !file) return
+      setError(null)
+      try {
+        const sent = await actions.sendVideoNoteUploadReply(convId, file, {
+          text,
+          replyToMessageId,
+        })
+        if (sent?.id) {
+          setMessages((prev) => mergeInboundMessage(prev, sent))
+          patchConversationPreview(convId, sent)
+        } else {
+          await loadMessages(convId)
+        }
+        return sent
+      } catch (e) {
+        setError(e?.message || String(e))
+        throw e
+      }
+    },
+    [loadMessages, mergeInboundMessage, patchConversationPreview],
+  )
+
   const saveNote = useCallback(
     async (convId, content, lang, tagLabel) => {
       if (!convId || !content?.trim()) throw new Error(lang === 'en' ? 'Enter note text' : 'Введите текст заметки')
@@ -1591,6 +1615,7 @@ export function CabinetDataProvider({ children }) {
       loadNotes,
       sendReply,
       sendVideoNoteReply,
+      sendVideoNoteUploadReply,
       saveNote,
       analyzeNotes,
       toggleReaction,
@@ -1701,6 +1726,7 @@ export function CabinetDataProvider({ children }) {
       loadNotes,
       sendReply,
       sendVideoNoteReply,
+      sendVideoNoteUploadReply,
       saveNote,
       analyzeNotes,
       toggleReaction,

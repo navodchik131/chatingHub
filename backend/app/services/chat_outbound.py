@@ -194,6 +194,30 @@ async def resolve_outbound_video(
     return None
 
 
+async def resolve_upload_video_note(
+    upload: UploadFile,
+) -> tuple[bytes, str, bool]:
+    """Upload from dialog composer: video file or photo → Telegram note bytes."""
+    from app.services.telegram_video_note import (
+        convert_image_bytes_to_telegram_note_async,
+    )
+
+    raw = await upload.read()
+    if not raw:
+        raise HTTPException(status_code=400, detail="Пустой файл")
+    ct = (upload.content_type or "application/octet-stream").split(";")[0].strip().lower()
+    if ct.startswith("image/"):
+        try:
+            converted = await convert_image_bytes_to_telegram_note_async(raw, mime_hint=ct)
+        except (RuntimeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)[:500]) from exc
+        return converted, "video/mp4", True
+    if ct.startswith("video/") or ct == "application/octet-stream":
+        mime = ct if ct.startswith("video/") else "video/mp4"
+        return raw, mime, False
+    raise HTTPException(status_code=400, detail="Нужно видео или фото")
+
+
 async def send_telegram_outbound(
     *,
     token: str,

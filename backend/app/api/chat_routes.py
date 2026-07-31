@@ -706,6 +706,7 @@ async def api_reply(
     studio_motion_render_id: int | None = None
     reply_to_message_id: int | None = None
     telegram_video_note = False
+    video_note_upload: UploadFile | None = None
 
     if "multipart/form-data" in content_type:
         form = await request.form()
@@ -731,8 +732,11 @@ async def api_reply(
         raw_vnote = form.get("telegram_video_note")
         if raw_vnote not in (None, ""):
             telegram_video_note = str(raw_vnote).strip().lower() in ("1", "true", "yes", "on")
+        vn_field = form.get("video_note_file")
+        if vn_field is not None and hasattr(vn_field, "read"):
+            video_note_upload = vn_field  # type: ignore[assignment]
         img_field = form.get("image")
-        if img_field is not None and hasattr(img_field, "read"):
+        if img_field is not None and hasattr(img_field, "read") and not (telegram_video_note and video_note_upload):
             upload = img_field  # type: ignore[assignment]
     else:
         try:
@@ -758,6 +762,12 @@ async def api_reply(
         studio_motion_render_id=studio_motion_render_id,
         studio_generation_id=studio_generation_id if not studio_motion_render_id else None,
     )
+    upload_video_note_preconverted = False
+    if not video_pair and telegram_video_note and video_note_upload is not None:
+        from app.services.chat_outbound import resolve_upload_video_note
+
+        vb, vm, upload_video_note_preconverted = await resolve_upload_video_note(video_note_upload)
+        video_pair = (vb, vm)
     if video_pair and image_pair:
         raise HTTPException(status_code=400, detail="image and video conflict")
     if telegram_video_note and not video_pair:
@@ -820,19 +830,27 @@ async def api_reply(
     attachment_kind: MessageAttachmentKind | None = None
     if video_bytes:
         if telegram_video_note:
-            try:
-                converted = await convert_video_bytes_to_telegram_note_async(
-                    video_bytes,
-                    mime_hint=video_mime,
-                )
-            except (RuntimeError, ValueError) as exc:
-                raise HTTPException(status_code=502, detail=str(exc)[:500]) from exc
-            send_video_bytes = converted
-            send_video_mime = "video/mp4"
-            video_note_already_converted = True
-            attachment_video_bytes = converted
-            attachment_video_mime = "video/mp4"
-            attachment_kind = MessageAttachmentKind.video_note
+            if upload_video_note_preconverted:
+                send_video_bytes = video_bytes
+                send_video_mime = video_mime or "video/mp4"
+                video_note_already_converted = True
+                attachment_video_bytes = video_bytes
+                attachment_video_mime = "video/mp4"
+                attachment_kind = MessageAttachmentKind.video_note
+            else:
+                try:
+                    converted = await convert_video_bytes_to_telegram_note_async(
+                        video_bytes,
+                        mime_hint=video_mime,
+                    )
+                except (RuntimeError, ValueError) as exc:
+                    raise HTTPException(status_code=502, detail=str(exc)[:500]) from exc
+                send_video_bytes = converted
+                send_video_mime = "video/mp4"
+                video_note_already_converted = True
+                attachment_video_bytes = converted
+                attachment_video_mime = "video/mp4"
+                attachment_kind = MessageAttachmentKind.video_note
         else:
             attachment_video_bytes = video_bytes
             attachment_video_mime = video_mime or "video/mp4"

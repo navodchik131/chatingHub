@@ -128,6 +128,13 @@ export type Strings = {
   folderChatsInFolder: string;
   folderAddChats: string;
   dialogTitle: string;
+  dlgVideoNoteTitle: string;
+  dlgVideoNoteArchive: string;
+  dlgVideoNoteArchiveEmpty: string;
+  dlgVideoNoteOr: string;
+  dlgVideoNoteUpload: string;
+  dlgVideoNoteUploadHint: string;
+  dlgVideoNoteSending: string;
   archiveItemTitle: string;
   archiveRetention: string;
   studioEditPromptPlaceholder: string;
@@ -419,6 +426,13 @@ const RU: Strings = {
   folderChatsInFolder: 'ЧАТЫ В ПАПКЕ',
   folderAddChats: 'ДОБАВИТЬ ЧАТЫ В ПАПКУ',
   dialogTitle: 'Диалог',
+  dlgVideoNoteTitle: 'Отправить кружок',
+  dlgVideoNoteArchive: 'ВЫБРАТЬ ВИДЕО ИЗ АРХИВА',
+  dlgVideoNoteArchiveEmpty: 'В архиве пока нет готовых видео.',
+  dlgVideoNoteOr: 'или',
+  dlgVideoNoteUpload: 'Загрузить своё видео или фото',
+  dlgVideoNoteUploadHint: 'Из фото соберём короткий кружок с лёгким движением. Видео обрежем в 1:1 до 60 секунд.',
+  dlgVideoNoteSending: 'Отправка…',
   archiveItemTitle: 'Кадр',
   archiveRetention: '⏳ хранится ~4 дня',
   studioEditPromptPlaceholder: 'Например: добавь солнцезащитные очки, убери фон…',
@@ -710,6 +724,13 @@ const EN: Strings = {
   folderChatsInFolder: 'CHATS IN FOLDER',
   folderAddChats: 'ADD CHATS TO FOLDER',
   dialogTitle: 'Dialog',
+  dlgVideoNoteTitle: 'Send video note',
+  dlgVideoNoteArchive: 'CHOOSE VIDEO FROM ARCHIVE',
+  dlgVideoNoteArchiveEmpty: 'No ready videos in the archive yet.',
+  dlgVideoNoteOr: 'or',
+  dlgVideoNoteUpload: 'Upload your video or photo',
+  dlgVideoNoteUploadHint: 'From a photo we build a short note with subtle motion. Video is cropped to 1:1, up to 60 seconds.',
+  dlgVideoNoteSending: 'Sending…',
   archiveItemTitle: 'Frame',
   archiveRetention: '⏳ stored ~4 days',
   studioEditPromptPlaceholder: 'e.g. add sunglasses, remove background…',
