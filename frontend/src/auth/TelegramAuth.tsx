@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { apiFetch, setToken } from '../api'
 import { formatHttpApiError } from '../apiErrors'
+import { openBlankPopupForDeferredNav } from '../utils/openExternalUrl'
 import {
   hasPendingTelegramAuth,
   resumePendingTelegramBotAuth,
@@ -112,9 +113,7 @@ export function TelegramLoginButton({ botUsername, mode, referralCode, onSuccess
     if (pollingRef.current) return
     pollingRef.current = true
     setBusy(true)
-    const preopenedPopup = typeof window !== 'undefined'
-      ? window.open('about:blank', '_blank', 'noopener,noreferrer')
-      : null
+    const preopenedPopup = typeof window !== 'undefined' ? openBlankPopupForDeferredNav() : null
     try {
       const token = await signInWithTelegramBot(referralCode, { preopenedPopup })
       setToken(token)

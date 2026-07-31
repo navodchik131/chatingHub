@@ -1668,7 +1668,8 @@
     btn.className = 'mm-os-telegram-bot-btn'
     btn.textContent = 'Войти через Telegram'
     btn.addEventListener('click', () => {
-      const preopenedPopup = window.open('about:blank', '_blank', 'noopener,noreferrer')
+      // noopener ломает deferred-nav: браузер возвращает null, вкладка остаётся about:blank
+      const preopenedPopup = window.open('about:blank', '_blank')
       void telegramBotAuth(preopenedPopup)
     })
     host.appendChild(btn)

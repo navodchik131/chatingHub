@@ -54,7 +54,11 @@
         popup.location.href = href
         return
       } catch (_) {
-        /* fallback */
+        try {
+          popup.close()
+        } catch (_) {
+          /* ignore */
+        }
       }
     }
     openTelegramBotUrl(href)

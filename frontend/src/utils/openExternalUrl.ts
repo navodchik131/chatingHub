@@ -58,6 +58,18 @@ export function openTelegramBotUrl(webUrl: string): void {
   }
 }
 
+/**
+ * Синхронно открыть пустую вкладку в обработчике клика для последующей навигации после async.
+ * Нельзя передавать noopener — браузер вернёт null, вкладка about:blank останется пустой.
+ */
+export function openBlankPopupForDeferredNav(): Window | null {
+  try {
+    return window.open('about:blank', '_blank')
+  } catch {
+    return null
+  }
+}
+
 /** Desktop: popup сразу по клику, URL — после async (обходит блокировку). */
 export function openExternalUrlDeferred(
   url: string,
@@ -71,7 +83,11 @@ export function openExternalUrlDeferred(
       popup.location.href = href
       return
     } catch {
-      /* cross-origin or blocked — fallback below */
+      try {
+        popup.close()
+      } catch {
+        /* ignore */
+      }
     }
   }
 
@@ -91,7 +107,11 @@ export function openTelegramBotUrlDeferred(
       popup.location.href = href
       return
     } catch {
-      /* fallback */
+      try {
+        popup.close()
+      } catch {
+        /* ignore */
+      }
     }
   }
 
