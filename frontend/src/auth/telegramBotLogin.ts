@@ -3,9 +3,8 @@
 import { apiFetch } from '../api'
 import { formatHttpApiError } from '../apiErrors'
 import {
-  isMobileLikeClient,
+  navigatePopupToTelegram,
   openTelegramBotUrl,
-  openTelegramBotUrlDeferred,
 } from '../utils/openExternalUrl'
 
 const POLL_INTERVAL_MS = 1500
@@ -137,10 +136,9 @@ export async function signInWithTelegramBot(
 
   savePending(started.session_id)
 
-  if (isMobileLikeClient()) {
+  const popup = options?.preopenedPopup ?? null
+  if (!navigatePopupToTelegram(popup, url)) {
     openTelegramBotUrl(url)
-  } else {
-    openTelegramBotUrlDeferred(url, options?.preopenedPopup ?? null)
   }
 
   return pollUntilTelegramAuthDone(started.session_id)

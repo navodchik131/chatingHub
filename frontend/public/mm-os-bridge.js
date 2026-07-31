@@ -1702,6 +1702,11 @@
     } catch (e) {
       store.error = e.message || String(e)
       updateAuthUi()
+      try {
+        if (preopenedPopup && !preopenedPopup.closed) preopenedPopup.close()
+      } catch (_) {
+        /* ignore */
+      }
     } finally {
       store.busy = false
       if (busyEl) busyEl.style.display = 'none'

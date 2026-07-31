@@ -19,13 +19,41 @@
     )
   }
 
-  function openTelegramBotUrl(webUrl) {
+  function telegramTargets(webUrl) {
     const href = String(webUrl || '').trim()
-    if (!href) return
+    if (!href) return { href: '', tgScheme: null }
     const tgMatch = href.match(/^https?:\/\/t\.me\/([^/?#]+)(?:\?(.*))?$/i)
     const tgScheme = tgMatch
       ? 'tg://resolve?domain=' + encodeURIComponent(tgMatch[1]) + (tgMatch[2] ? '&' + tgMatch[2] : '')
       : null
+    return { href: href, tgScheme: tgScheme }
+  }
+
+  function navigatePopupToTelegram(popup, webUrl) {
+    const targets = telegramTargets(webUrl)
+    if (!targets.href || !popup || popup.closed) return false
+    const urls = []
+    if (isMobileLikeClient() && targets.tgScheme) urls.push(targets.tgScheme)
+    urls.push(targets.href)
+    for (let i = 0; i < urls.length; i++) {
+      try {
+        popup.location.href = urls[i]
+        return true
+      } catch (_) {
+        /* try next target */
+      }
+    }
+    try {
+      popup.close()
+    } catch (_) {
+      /* ignore */
+    }
+    return false
+  }
+
+  function openTelegramBotUrl(webUrl) {
+    const targets = telegramTargets(webUrl)
+    if (!targets.href) return
 
     function tryAnchor(target) {
       const link = document.createElement('a')
@@ -38,30 +66,17 @@
       link.remove()
     }
 
-    if (isMobileLikeClient() && tgScheme) tryAnchor(tgScheme)
-    tryAnchor(href)
-    const popup = global.open(href, '_blank', 'noopener,noreferrer')
-    if (!popup && isMobileLikeClient() && tgScheme) {
-      global.open(tgScheme, '_blank', 'noopener,noreferrer')
+    if (isMobileLikeClient() && targets.tgScheme) tryAnchor(targets.tgScheme)
+    tryAnchor(targets.href)
+    const popup = global.open(targets.href, '_blank')
+    if (!popup && isMobileLikeClient() && targets.tgScheme) {
+      global.open(targets.tgScheme, '_blank')
     }
   }
 
   function openTelegramBotUrlDeferred(webUrl, popup) {
-    const href = String(webUrl || '').trim()
-    if (!href) return
-    if (popup && !popup.closed) {
-      try {
-        popup.location.href = href
-        return
-      } catch (_) {
-        try {
-          popup.close()
-        } catch (_) {
-          /* ignore */
-        }
-      }
-    }
-    openTelegramBotUrl(href)
+    if (navigatePopupToTelegram(popup, webUrl)) return
+    openTelegramBotUrl(webUrl)
   }
 
   function openExternalUrl(url) {
@@ -234,12 +249,9 @@
 
     savePending(started.session_id)
 
-    if (isMobileLikeClient()) {
+    if (!navigatePopupToTelegram(preopenedPopup, url)) {
       openTelegramBotUrl(url)
-      return pollUntilDone(started.session_id)
     }
-
-    openTelegramBotUrlDeferred(url, preopenedPopup || null)
     return pollUntilDone(started.session_id)
   }
 

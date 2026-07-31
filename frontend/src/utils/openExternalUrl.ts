@@ -27,14 +27,41 @@ export function openExternalUrl(url: string): void {
  * Открыть Telegram-бота, не уходя со страницы входа (polling должен продолжаться).
  * location.assign убивает страницу — в PWA после возврата UI зависает.
  */
-export function openTelegramBotUrl(webUrl: string): void {
+function telegramTargets(webUrl: string): { href: string; tgScheme: string | null } {
   const href = webUrl.trim()
-  if (!href) return
-
+  if (!href) return { href: '', tgScheme: null }
   const tgMatch = href.match(/^https?:\/\/t\.me\/([^/?#]+)(?:\?(.*))?$/i)
   const tgScheme = tgMatch
     ? `tg://resolve?domain=${encodeURIComponent(tgMatch[1])}${tgMatch[2] ? `&${tgMatch[2]}` : ''}`
     : null
+  return { href, tgScheme }
+}
+
+export function navigatePopupToTelegram(popup: Window | null, webUrl: string): boolean {
+  const { href, tgScheme } = telegramTargets(webUrl)
+  if (!href || !popup || popup.closed) return false
+  const urls: string[] = []
+  if (isMobileLikeClient() && tgScheme) urls.push(tgScheme)
+  urls.push(href)
+  for (const target of urls) {
+    try {
+      popup.location.href = target
+      return true
+    } catch {
+      /* try next */
+    }
+  }
+  try {
+    popup.close()
+  } catch {
+    /* ignore */
+  }
+  return false
+}
+
+export function openTelegramBotUrl(webUrl: string): void {
+  const { href, tgScheme } = telegramTargets(webUrl)
+  if (!href) return
 
   const tryAnchor = (target: string) => {
     const link = document.createElement('a')
@@ -52,9 +79,9 @@ export function openTelegramBotUrl(webUrl: string): void {
   }
   tryAnchor(href)
 
-  const popup = window.open(href, '_blank', 'noopener,noreferrer')
+  const popup = window.open(href, '_blank')
   if (!popup && isMobileLikeClient() && tgScheme) {
-    window.open(tgScheme, '_blank', 'noopener,noreferrer')
+    window.open(tgScheme, '_blank')
   }
 }
 
@@ -99,21 +126,6 @@ export function openTelegramBotUrlDeferred(
   webUrl: string,
   popup: Window | null,
 ): void {
-  const href = webUrl.trim()
-  if (!href) return
-
-  if (popup && !popup.closed) {
-    try {
-      popup.location.href = href
-      return
-    } catch {
-      try {
-        popup.close()
-      } catch {
-        /* ignore */
-      }
-    }
-  }
-
-  openTelegramBotUrl(href)
+  if (navigatePopupToTelegram(popup, webUrl)) return
+  openTelegramBotUrl(webUrl)
 }
