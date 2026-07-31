@@ -1595,7 +1595,7 @@ html {
     justify-content: space-between;
     gap: 12px;
     height: var(--rail-h);
-    padding: 0;
+    padding-inline: var(--gutter);
   }
 
   .mm-wordmark {
