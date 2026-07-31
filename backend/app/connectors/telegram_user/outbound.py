@@ -90,6 +90,45 @@ async def send_telegram_user_outbound(
         await client.disconnect()
 
 
+async def set_telegram_user_message_reaction(
+    *,
+    session_encrypted: str,
+    peer_user_id: int,
+    telegram_message_id: int,
+    emoji: str | None,
+) -> bool:
+    """emoji=None — снять реакцию. True если Telegram принял."""
+    from telethon.tl.functions.messages import SendReactionRequest
+    from telethon.tl.types import ReactionEmoji
+
+    client = build_telegram_client(session_encrypted=session_encrypted)
+    try:
+        await client.connect()
+        if not await client.is_user_authorized():
+            return False
+        reactions = []
+        if emoji and emoji.strip():
+            reactions = [ReactionEmoji(emoticon=emoji.strip())]
+        await client(
+            SendReactionRequest(
+                peer=peer_user_id,
+                msg_id=int(telegram_message_id),
+                reaction=reactions,
+            )
+        )
+        return True
+    except Exception:
+        log.exception(
+            "telegram_user set reaction failed peer=%s msg=%s emoji=%s",
+            peer_user_id,
+            telegram_message_id,
+            emoji,
+        )
+        return False
+    finally:
+        await client.disconnect()
+
+
 async def download_telegram_user_avatar(
     *,
     session_encrypted: str,

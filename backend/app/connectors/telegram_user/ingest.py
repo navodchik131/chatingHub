@@ -10,6 +10,7 @@ from telethon.tl.types import Message as TlMessage
 from telethon.tl.types import PeerUser
 from telethon.tl.types import User as TlUser
 
+from app.connectors.telegram_user.media import download_telegram_user_media, sticker_alt_text
 from app.db.models import Conversation, Message, MessageDirection, Platform
 from app.db.repo import get_or_create_conversation, get_user_with_billing
 from app.db.session import SessionLocal
@@ -74,18 +75,14 @@ async def ingest_telegram_user_dm(
     image_bytes: bytes | None = None
     image_mime: str | None = None
     if has_media and client is not None:
-        try:
-            raw = await client.download_media(message, bytes)
-            if raw:
-                image_bytes = raw
-                if message.photo:
-                    image_mime = "image/jpeg"
-                elif message.document and message.document.mime_type:
-                    image_mime = message.document.mime_type
-                else:
-                    image_mime = "application/octet-stream"
-        except Exception:
-            log.exception("telegram_user ingest: media download failed msg=%s", message.id)
+        media = await download_telegram_user_media(message, client)
+        if media:
+            image_bytes, image_mime = media
+        elif message.sticker and not text:
+            text = sticker_alt_text(message) or "🎭"
+
+    if not text and not image_bytes:
+        return
 
     async with SessionLocal() as session:
         user = await get_user_with_billing(session, owner_user_id)
@@ -126,6 +123,8 @@ async def ingest_telegram_user_dm(
                 "from_user_id": peer_id,
                 "ingest_source": source,
                 "has_image": bool(image_bytes),
+                "has_media": bool(image_bytes),
+                "media_mime": image_mime,
                 "telegram_route": "personal",
             },
             ensure_ascii=False,
@@ -156,10 +155,10 @@ async def ingest_telegram_user_dm(
     )
 
     log.info(
-        "ingested telegram_user DM user=%s conv=%s peer=%s source=%s image=%s",
+        "ingested telegram_user DM user=%s conv=%s peer=%s source=%s media=%s",
         owner_user_id,
         conv_id,
         peer_id,
         source,
-        bool(image_bytes),
+        image_mime if image_bytes else None,
     )

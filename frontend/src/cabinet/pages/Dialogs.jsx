@@ -970,18 +970,36 @@ function Thread() {
                   <div style={{ flex: 1, fontSize: out ? 12.5 : 13, lineHeight: 1.5, color: out ? '#fff' : color.text }}>
                     {m.attachmentUrl && (
                       <a href={m.attachmentUrl} target="_blank" rel="noreferrer" style={{ display: 'block', marginBottom: m.text ? 8 : 0 }}>
-                        <img
-                          src={m.attachmentUrl}
-                          alt=""
-                          onLoad={() => {
-                            if (stickToBottomRef.current) scrollToBottom('auto');
-                            else updateScrollState();
-                          }}
-                          style={{
-                            display: 'block', width: '100%', maxWidth: 240, maxHeight: 280,
-                            borderRadius: 10, objectFit: 'cover', background: color.bgPanel,
-                          }}
-                        />
+                        {String(m.attachmentMime || '').startsWith('video/') ? (
+                          <video
+                            src={m.attachmentUrl}
+                            autoPlay
+                            loop
+                            muted
+                            playsInline
+                            onLoadedData={() => {
+                              if (stickToBottomRef.current) scrollToBottom('auto');
+                              else updateScrollState();
+                            }}
+                            style={{
+                              display: 'block', width: '100%', maxWidth: 240, maxHeight: 280,
+                              borderRadius: 10, objectFit: 'cover', background: color.bgPanel,
+                            }}
+                          />
+                        ) : (
+                          <img
+                            src={m.attachmentUrl}
+                            alt=""
+                            onLoad={() => {
+                              if (stickToBottomRef.current) scrollToBottom('auto');
+                              else updateScrollState();
+                            }}
+                            style={{
+                              display: 'block', width: '100%', maxWidth: 240, maxHeight: 280,
+                              borderRadius: 10, objectFit: 'cover', background: color.bgPanel,
+                            }}
+                          />
+                        )}
                       </a>
                     )}
                     {m.text || (!m.attachmentUrl && '—')}

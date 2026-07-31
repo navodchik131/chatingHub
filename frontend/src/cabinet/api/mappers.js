@@ -53,6 +53,7 @@ export function mapMessage(m) {
     reactions: m.reactions || [],
     ownerReaction: ownerReactionEmoji(m.reactions),
     attachmentUrl: firstAttachmentUrl(m.attachments),
+    attachmentMime: m.attachments?.[0]?.mime_type || null,
     attachments: m.attachments || [],
     pending: Boolean(m.pending),
     replyPreview: m.reply_preview || null,

@@ -85,6 +85,7 @@ from app.connectors.instagram.client import send_instagram_reaction
 from app.connectors.telegram_user.outbound import (
     download_telegram_user_avatar,
     send_telegram_user_outbound,
+    set_telegram_user_message_reaction,
 )
 from app.services.chat_outbound import (
     resolve_outbound_image,
@@ -1034,47 +1035,78 @@ async def api_message_reaction(
     telegram_synced: bool | None = None
     instagram_synced: bool | None = None
 
-    if conv.platform == Platform.telegram:
+    if conv.platform in (Platform.telegram, Platform.telegram_user):
         tg_id_raw = row.platform_message_id or platform_message_id_from_meta(row.meta)
         if tg_id_raw:
-            row_tg = await resolve_telegram_connection_for_conversation(session, conv, oid)
-            if row_tg:
-                token = decrypt_secret(row_tg.bot_token_encrypted)
-                try:
-                    cid = int(conv.external_chat_id)
-                    tg_mid = int(tg_id_raw)
-                    topic_id = int(conv.external_topic_id)
-                except ValueError:
-                    cid = 0
-                    tg_mid = 0
-                    topic_id = 0
-                if cid and tg_mid:
-                    owner_has_emoji = any(
-                        r.get("actor") == "owner" and r.get("emoji") == emoji
-                        for r in reactions
-                    )
-                    telegram_synced = await set_telegram_message_reaction(
-                        token=token,
-                        chat_id=cid,
-                        telegram_message_id=tg_mid,
-                        emoji=emoji if owner_has_emoji else None,
-                        topic_id=topic_id or None,
-                    )
-                    if not telegram_synced:
-                        log.warning(
-                            "telegram reaction rejected conv=%s msg=%s "
-                            "chat=%s tg_msg=%s topic=%s emoji=%s",
-                            conv.id,
-                            row.id,
-                            cid,
-                            tg_mid,
-                            topic_id,
-                            emoji if owner_has_emoji else None,
+            owner_has_emoji = any(
+                r.get("actor") == "owner" and r.get("emoji") == emoji
+                for r in reactions
+            )
+            reaction_emoji = emoji if owner_has_emoji else None
+            if conv.platform == Platform.telegram:
+                row_tg = await resolve_telegram_connection_for_conversation(session, conv, oid)
+                if row_tg:
+                    token = decrypt_secret(row_tg.bot_token_encrypted)
+                    try:
+                        cid = int(conv.external_chat_id)
+                        tg_mid = int(tg_id_raw)
+                        topic_id = int(conv.external_topic_id)
+                    except ValueError:
+                        cid = 0
+                        tg_mid = 0
+                        topic_id = 0
+                    if cid and tg_mid:
+                        telegram_synced = await set_telegram_message_reaction(
+                            token=token,
+                            chat_id=cid,
+                            telegram_message_id=tg_mid,
+                            emoji=reaction_emoji,
+                            topic_id=topic_id or None,
                         )
+                        if not telegram_synced:
+                            log.warning(
+                                "telegram reaction rejected conv=%s msg=%s "
+                                "chat=%s tg_msg=%s topic=%s emoji=%s",
+                                conv.id,
+                                row.id,
+                                cid,
+                                tg_mid,
+                                topic_id,
+                                reaction_emoji,
+                            )
+                    else:
+                        telegram_synced = False
                 else:
                     telegram_synced = False
             else:
-                telegram_synced = False
+                row_tu = await resolve_telegram_user_session_for_conversation(session, conv, oid)
+                if row_tu and row_tu.session_encrypted:
+                    try:
+                        peer_id = int(conv.external_chat_id)
+                        tg_mid = int(tg_id_raw)
+                    except ValueError:
+                        peer_id = 0
+                        tg_mid = 0
+                    if peer_id and tg_mid:
+                        telegram_synced = await set_telegram_user_message_reaction(
+                            session_encrypted=row_tu.session_encrypted,
+                            peer_user_id=peer_id,
+                            telegram_message_id=tg_mid,
+                            emoji=reaction_emoji,
+                        )
+                        if not telegram_synced:
+                            log.warning(
+                                "telegram_user reaction rejected conv=%s msg=%s peer=%s tg_msg=%s emoji=%s",
+                                conv.id,
+                                row.id,
+                                peer_id,
+                                tg_mid,
+                                reaction_emoji,
+                            )
+                    else:
+                        telegram_synced = False
+                else:
+                    telegram_synced = False
         else:
             telegram_synced = False
             log.warning(
@@ -1117,7 +1149,11 @@ async def api_message_reaction(
                 row.id,
             )
 
-    platform_sync_ok = telegram_synced if conv.platform == Platform.telegram else instagram_synced
+    platform_sync_ok = (
+        telegram_synced
+        if conv.platform in (Platform.telegram, Platform.telegram_user)
+        else instagram_synced
+    )
 
     await session.commit()
     await session.refresh(row, attribute_names=["attachments"])
