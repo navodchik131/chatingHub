@@ -136,8 +136,8 @@ export const connDefs = (lang) => [
     id: 'tg-user', name: lang === 'ru' ? 'Telegram @username' : 'Telegram @username', icon: 'tg', tone: 'dim',
     iconCol: { background: 'rgba(56,189,248,.12)', color: '#38BDF8' },
     st: '…',
-    desc: lang === 'ru' ? 'Личные сообщения на @username модели (MTProto User API)' : 'Personal DMs to model @username (MTProto User API)',
-    help: lang === 'ru' ? 'Войдите по номеру телефона аккаунта модели. Фаны пишут на @username — сообщения попадают в Диалоги. Channel Direct через бота работает отдельно.' : 'Sign in with the model account phone. Fans message @username — DMs appear in Dialogs. Channel Direct via bot stays separate.',
+    desc: lang === 'ru' ? 'Личные сообщения на @username модели' : 'Personal DMs to model @username',
+    help: lang === 'ru' ? 'Войдите по номеру телефона аккаунта модели. Фаны пишут на @username — сообщения попадают в Диалоги.' : 'Sign in with the model account phone. Fans message @username — DMs appear in Dialogs.',
   },
   {
     id: 'wavespeed', name: 'WaveSpeed', icon: 'wave', tone: 'dim',

@@ -391,8 +391,8 @@ function ConnectionDetail() {
                 {!ig?.telegram_user_available && (
                   <NoteBlock style={{ gridColumn: '1 / -1' }}>
                     {lang === 'ru'
-                      ? 'MTProto не настроен на сервере (TELEGRAM_API_ID / TELEGRAM_API_HASH).'
-                      : 'MTProto is not configured on the server (TELEGRAM_API_ID / TELEGRAM_API_HASH).'}
+                      ? 'Подключение личного Telegram пока недоступно. Обратитесь к администратору.'
+                      : 'Personal Telegram connect is unavailable. Contact the administrator.'}
                   </NoteBlock>
                 )}
                 {(form.tgUserStep || 'phone') === 'phone' && (
