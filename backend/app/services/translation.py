@@ -17,6 +17,8 @@ from app.services.grok_translation import (
 
 log = logging.getLogger(__name__)
 
+_TRANSLATION_UNAVAILABLE = "[перевод недоступен]"
+
 # Только эмодзи / символы (без букв и цифр) — не гоняем через переводчик
 _EMOJI_ONLY_RE = re.compile(
     r"^[\s"
@@ -172,7 +174,7 @@ async def _legacy_translate_to_russian(text: str, src: str) -> str:
         return await _google_translate(text, "ru", src if src != "unknown" else None)
     except Exception as e:
         log.warning("google fallback to ru failed: %s", e)
-    return f"[перевод недоступен] {text}"
+    return _TRANSLATION_UNAVAILABLE
 
 
 async def _legacy_translate_from_russian(text: str, target_lang: str) -> str:
@@ -228,7 +230,7 @@ async def translate_to_russian(text: str) -> tuple[str, str]:
             deepl_out = await _deepl_fallback_to_russian(text)
             if deepl_out:
                 return deepl_out, src
-            return f"[перевод недоступен] {text}", src
+            return _TRANSLATION_UNAVAILABLE, src
     return await _legacy_translate_to_russian(text, src), src
 
 

@@ -13,9 +13,15 @@ from app.services.grok_translation import (
     grok_translation_configured,
     lang_display_name,
     load_grok_translation_system_prompt,
+    resolve_grok_translation_model,
     sanitize_translation_output,
 )
 from app.services.translation import should_translate_message_text
+
+
+def test_resolve_grok_translation_model_aliases() -> None:
+    assert resolve_grok_translation_model("grok-4.1-fast") == "grok-4-1-fast-non-reasoning"
+    assert resolve_grok_translation_model("grok-4-3") == "grok-4-3"
 
 
 def test_grok_translation_system_prompt_loads() -> None:

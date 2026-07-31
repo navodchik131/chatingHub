@@ -14,6 +14,22 @@ log = logging.getLogger(__name__)
 
 TranslationDirection = Literal["fan_to_operator", "operator_to_fan"]
 
+# Алиасы → официальные slug xAI (точки vs дефисы)
+_GROK_TRANSLATION_MODEL_ALIASES: Final[dict[str, str]] = {
+    "grok-4.1-fast": "grok-4-1-fast-non-reasoning",
+    "grok-4-1-fast": "grok-4-1-fast-non-reasoning",
+    "grok-4.1-fast-reasoning": "grok-4-1-fast-reasoning",
+    "grok-4.1-fast-non-reasoning": "grok-4-1-fast-non-reasoning",
+}
+
+
+def resolve_grok_translation_model(raw: str | None = None) -> str:
+    model = (raw if raw is not None else settings.grok_translation_model or "").strip()
+    if not model:
+        model = "grok-4-1-fast-non-reasoning"
+    return _GROK_TRANSLATION_MODEL_ALIASES.get(model.lower(), model)
+
+
 _LANG_NAMES: Final[dict[str, str]] = {
     "ru": "Russian",
     "en": "English",
@@ -188,7 +204,7 @@ async def grok_translate(
         source_lang=source_lang,
         target_lang=target_lang,
     )
-    model = (settings.grok_translation_model or "grok-4.1-fast").strip()
+    model = resolve_grok_translation_model()
     max_tokens = min(
         int(settings.grok_translation_max_tokens),
         max(128, len(body) * 3 + 64),

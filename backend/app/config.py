@@ -134,8 +134,8 @@ class Settings(BaseSettings):
     # Перевод сообщений в диалогах через Grok (отдельная лёгкая текстовая модель)
     grok_translation_enabled: bool = Field(default=False)
     grok_translation_model: str = Field(
-        default="grok-4.1-fast",
-        description="xAI chat model for dialog translation (grok-4.3-non-reasoning for higher quality).",
+        default="grok-4-1-fast-non-reasoning",
+        description="xAI chat model for dialog translation (grok-4.3 for higher quality).",
     )
     grok_translation_system_path: str = Field(
         default="data/prompts/grok_chat_translation_system.txt"
