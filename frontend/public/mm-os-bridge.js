@@ -4063,18 +4063,25 @@
       const outbound = m.direction === 'outbound'
       const rx = ownerReactionEmoji(m.reactions)
       const atts = Array.isArray(m.attachments) ? m.attachments : []
+      const firstAtt = atts.find((a) => a && a.url)
+      const attachmentMime = firstAtt?.mime_type || ''
       const imageUrl =
         m.localPreviewUrl ||
-        (atts.find((a) => a && a.url)?.url) ||
+        firstAtt?.url ||
         false
-      const text = (m.text_original || '').trim()
+      const isVideo = imageUrl && String(attachmentMime).startsWith('video/')
+      const textRaw = (m.text_original || '').trim()
+      const text =
+        textRaw && textRaw !== '📷' && textRaw !== '—' ? textRaw : false
       return {
         wrap:
           'display:flex;flex-direction:column;gap:3px;' +
           (outbound ? 'align-items:flex-end;' : 'align-items:flex-start;'),
         bubble: outbound ? bubbleOut : bubbleIn,
-        text: text || false,
+        text,
         imageUrl,
+        isVideo: isVideo || false,
+        imageNotVideo: imageUrl && !isVideo ? imageUrl : false,
         imageStyle:
           'display:block;width:100%;max-width:240px;max-height:280px;border-radius:10px;margin-bottom:' +
           (text ? '8px' : '0') +

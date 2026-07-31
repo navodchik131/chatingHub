@@ -44,7 +44,7 @@ export function RemoteImage({
         style={StyleSheet.absoluteFill}
         contentFit={contentFit}
         cachePolicy="memory-disk"
-        recyclingKey={(resolved || '').split('?')[0] || resolved}
+        recyclingKey={resolved}
         onError={() => setFailed(true)}
       />
       {pending ? (

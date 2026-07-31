@@ -400,8 +400,11 @@ input::placeholder,textarea::placeholder{color:#5C6066;}
                   <div style="{{ m.bubble }}">
                     <div style="display:flex;gap:8px;align-items:flex-start;">
                       <div style="flex:1;font-size:13px;line-height:1.5;min-width:0;">
-                        <sc-if value="{{ m.imageUrl }}" hint-placeholder-val="{{ false }}">
-                          <img src="{{ m.imageUrl }}" alt="" style="{{ m.imageStyle }}" loading="lazy" />
+                        <sc-if value="{{ m.isVideo }}" hint-placeholder-val="{{ false }}">
+                          <video src="{{ m.imageUrl }}" autoplay loop muted playsinline style="{{ m.imageStyle }}"></video>
+                        </sc-if>
+                        <sc-if value="{{ m.imageNotVideo }}" hint-placeholder-val="{{ false }}">
+                          <img src="{{ m.imageNotVideo }}" alt="" style="{{ m.imageStyle }}" loading="lazy" />
                         </sc-if>
                         <sc-if value="{{ m.text }}" hint-placeholder-val="{{ true }}">
                           <div>{{ m.text }}</div>

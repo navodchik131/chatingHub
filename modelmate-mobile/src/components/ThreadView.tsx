@@ -13,21 +13,19 @@ import {
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from 'react-native';
+import { ChatAttachmentMedia } from '@/src/components/ChatAttachmentMedia';
 import { TextInput } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-  attachmentMediaKind,
   fmtThreadDayKey,
   fmtThreadDayLabel,
   REACT_CHOICES,
 } from '@/src/api/helpers';
-import { resolveMediaUrl } from '@/src/api/config';
 import { dialogSettingsSummary, replyLangDisplay, type ConversationSettingsPatch } from '@/src/api/dialogSettings';
 import type { ConversationOut } from '@/src/api/types';
 import { Avatar } from '@/src/components/ui';
 import { DialogSettingsSheet } from '@/src/components/DialogSettingsSheet';
 import { EmojiPickerSheet } from '@/src/components/EmojiPickerSheet';
-import { RemoteImage } from '@/src/components/RemoteImage';
 import { IcoBack, IcoSend, IcoThemeGrid } from '@/src/components/Icons';
 import { useAppSettings } from '@/src/context/AppSettingsContext';
 import { CHAT_THEMES, chatThemeById, type ChatThemeId } from '@/src/styles/chatThemes';
@@ -108,8 +106,7 @@ function ThreadBubble({
   onLongPress?: () => void;
 }) {
   const att = attachments?.[0];
-  const mediaUrl = attachmentUrl ? resolveMediaUrl(attachmentUrl) : '';
-  const mediaKind = attachmentMediaKind(att?.mime_type);
+  const hasMedia = Boolean(attachmentUrl);
   const showText = Boolean(text && text !== '📷' && text !== '—');
 
   const footer = (
@@ -122,23 +119,13 @@ function ThreadBubble({
     </View>
   );
 
-  const mediaBlock = mediaUrl ? (
-    <View style={[styles.mediaWrap, showText && styles.mediaWrapWithText]}>
-      {mediaKind === 'video' ? (
-        <View style={styles.mediaVideo}>
-          <RemoteImage uri={mediaUrl} style={styles.mediaImage} contentFit="cover" />
-          <View style={styles.mediaVideoBadge}>
-            <Text style={styles.mediaVideoBadgeText}>▶ {lang === 'ru' ? 'Видео' : 'Video'}</Text>
-          </View>
-        </View>
-      ) : (
-        <RemoteImage
-          uri={mediaUrl}
-          style={styles.mediaImage}
-          contentFit={mediaKind === 'gif' ? 'contain' : 'cover'}
-        />
-      )}
-    </View>
+  const mediaBlock = hasMedia ? (
+    <ChatAttachmentMedia
+      url={attachmentUrl}
+      mime={att?.mime_type}
+      style={styles.mediaWrap}
+      withText={showText}
+    />
   ) : null;
 
   const body = (
@@ -147,7 +134,7 @@ function ThreadBubble({
       {showText ? (
         <Text style={[styles.bubbleText, out && styles.bubbleTextOut]}>{text}</Text>
       ) : null}
-      {!showText && !mediaUrl ? (
+      {!showText && !hasMedia ? (
         <Text style={[styles.bubbleText, out && styles.bubbleTextOut]}>—</Text>
       ) : null}
       {translation ? (
@@ -599,20 +586,7 @@ const styles = StyleSheet.create({
   dayText: { fontSize: 12, color: '#C9CDD1', fontFamily: font.bodySemi, fontWeight: '600' },
   bubbleWrap: { flexDirection: 'row', justifyContent: 'flex-start', position: 'relative', marginBottom: 4 },
   bubbleWrapOut: { justifyContent: 'flex-end' },
-  mediaWrap: { marginBottom: 0, borderRadius: 10, overflow: 'hidden' },
-  mediaWrapWithText: { marginBottom: 8 },
-  mediaImage: { width: 220, height: 220, borderRadius: 10, backgroundColor: '#2A2D33' },
-  mediaVideo: { position: 'relative' },
-  mediaVideoBadge: {
-    position: 'absolute',
-    left: 8,
-    bottom: 8,
-    backgroundColor: 'rgba(0,0,0,0.55)',
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  mediaVideoBadgeText: { color: '#fff', fontSize: 11, fontFamily: font.bodySemi, fontWeight: '700' },
+  mediaWrap: { marginBottom: 0 },
   reactionPill: {
     position: 'absolute',
     bottom: -6,
