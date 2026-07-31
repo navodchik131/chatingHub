@@ -4,8 +4,8 @@ import { apiFetch } from '../api'
 import { formatHttpApiError } from '../apiErrors'
 import {
   isMobileLikeClient,
-  openExternalUrl,
-  openExternalUrlDeferred,
+  openTelegramBotUrl,
+  openTelegramBotUrlDeferred,
 } from '../utils/openExternalUrl'
 
 const POLL_INTERVAL_MS = 1500
@@ -20,15 +20,33 @@ type PendingAuth = { sessionId: string; at: number }
 
 function savePending(sessionId: string) {
   const payload: PendingAuth = { sessionId, at: Date.now() }
-  sessionStorage.setItem(PENDING_KEY, JSON.stringify(payload))
+  const raw = JSON.stringify(payload)
+  sessionStorage.setItem(PENDING_KEY, raw)
+  try {
+    localStorage.setItem(PENDING_KEY, raw)
+  } catch {
+    /* ignore quota / private mode */
+  }
 }
 
 export function clearPendingTelegramAuth() {
   sessionStorage.removeItem(PENDING_KEY)
+  try {
+    localStorage.removeItem(PENDING_KEY)
+  } catch {
+    /* ignore */
+  }
 }
 
 function loadPending(): string | null {
-  const raw = sessionStorage.getItem(PENDING_KEY)
+  let raw = sessionStorage.getItem(PENDING_KEY)
+  if (!raw) {
+    try {
+      raw = localStorage.getItem(PENDING_KEY)
+    } catch {
+      raw = null
+    }
+  }
   if (!raw) return null
   try {
     const parsed = JSON.parse(raw) as PendingAuth
@@ -76,7 +94,7 @@ export async function pollTelegramMobileAuth(sessionId: string) {
   }
 }
 
-async function pollUntilDone(sessionId: string): Promise<string> {
+export async function pollUntilTelegramAuthDone(sessionId: string): Promise<string> {
   const deadline = Date.now() + POLL_TIMEOUT_MS
   while (Date.now() < deadline) {
     await sleep(POLL_INTERVAL_MS)
@@ -90,15 +108,16 @@ async function pollUntilDone(sessionId: string): Promise<string> {
       throw new Error('Session expired — try again')
     }
   }
+  clearPendingTelegramAuth()
   throw new Error('Open Telegram, tap Start, then return to this page')
 }
 
-/** Продолжить вход после возврата из Telegram (PWA / reload). */
+/** Продолжить вход после возврата из Telegram (PWA / reload / bfcache). */
 export async function resumePendingTelegramBotAuth(): Promise<string | null> {
   const sessionId = loadPending()
   if (!sessionId) return null
   try {
-    return await pollUntilDone(sessionId)
+    return await pollUntilTelegramAuthDone(sessionId)
   } catch {
     return null
   }
@@ -119,10 +138,10 @@ export async function signInWithTelegramBot(
   savePending(started.session_id)
 
   if (isMobileLikeClient()) {
-    openExternalUrl(url)
-    return pollUntilDone(started.session_id)
+    openTelegramBotUrl(url)
+  } else {
+    openTelegramBotUrlDeferred(url, options?.preopenedPopup ?? null)
   }
 
-  openExternalUrlDeferred(url, options?.preopenedPopup ?? null)
-  return pollUntilDone(started.session_id)
+  return pollUntilTelegramAuthDone(started.session_id)
 }

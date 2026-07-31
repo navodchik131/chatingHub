@@ -1785,6 +1785,14 @@
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') void resumeTelegramBotAuthIfPending()
     })
+    window.addEventListener('focus', () => {
+      void resumeTelegramBotAuthIfPending()
+    })
+    window.addEventListener('pageshow', (event) => {
+      if (event.persisted || (global.MMOS_TELEGRAM_LOGIN && global.MMOS_TELEGRAM_LOGIN.hasPendingTelegramAuth())) {
+        void resumeTelegramBotAuthIfPending()
+      }
+    })
   }
 
   async function bootAuth() {

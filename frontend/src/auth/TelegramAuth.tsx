@@ -2,7 +2,12 @@ import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { apiFetch, setToken } from '../api'
 import { formatHttpApiError } from '../apiErrors'
-import { signInWithTelegramBot, hasPendingTelegramAuth, resumePendingTelegramBotAuth } from './telegramBotLogin'
+import {
+  hasPendingTelegramAuth,
+  resumePendingTelegramBotAuth,
+  signInWithTelegramBot,
+  clearPendingTelegramAuth,
+} from './telegramBotLogin'
 import {
   mountTelegramLoginWidget,
   postTelegramAuth,
@@ -22,7 +27,8 @@ export function TelegramLoginButton({ botUsername, mode, referralCode, onSuccess
   const hostRef = useRef<HTMLDivElement>(null)
   const onSuccessRef = useRef(onSuccess)
   const onErrorRef = useRef(onError)
-  const [busy, setBusy] = useState(false)
+  const pollingRef = useRef(false)
+  const [busy, setBusy] = useState(() => mode === 'login' && hasPendingTelegramAuth())
 
   onSuccessRef.current = onSuccess
   onErrorRef.current = onError
@@ -55,21 +61,29 @@ export function TelegramLoginButton({ botUsername, mode, referralCode, onSuccess
     if (mode !== 'login') return
 
     const finish = async (token: string) => {
-      setBusy(true)
-      try {
-        setToken(token)
-        await onSuccessRef.current()
-      } catch (e) {
-        onErrorRef.current?.(e instanceof Error ? e.message : String(e))
-      } finally {
-        setBusy(false)
-      }
+      setToken(token)
+      await onSuccessRef.current()
     }
 
     const tryResume = async () => {
-      if (!hasPendingTelegramAuth()) return
-      const token = await resumePendingTelegramBotAuth()
-      if (token) await finish(token)
+      if (!hasPendingTelegramAuth() || pollingRef.current) return
+      pollingRef.current = true
+      setBusy(true)
+      try {
+        const token = await resumePendingTelegramBotAuth()
+        if (token) {
+          await finish(token)
+          return
+        }
+        if (hasPendingTelegramAuth()) {
+          onErrorRef.current?.(t('telegramBotHint'))
+        }
+      } catch (e) {
+        onErrorRef.current?.(e instanceof Error ? e.message : String(e))
+      } finally {
+        pollingRef.current = false
+        setBusy(false)
+      }
     }
 
     void tryResume()
@@ -77,11 +91,26 @@ export function TelegramLoginButton({ botUsername, mode, referralCode, onSuccess
     const onVis = () => {
       if (document.visibilityState === 'visible') void tryResume()
     }
+    const onFocus = () => {
+      void tryResume()
+    }
+    const onPageShow = (event: PageTransitionEvent) => {
+      if (event.persisted || hasPendingTelegramAuth()) void tryResume()
+    }
+
     document.addEventListener('visibilitychange', onVis)
-    return () => document.removeEventListener('visibilitychange', onVis)
-  }, [mode])
+    window.addEventListener('focus', onFocus)
+    window.addEventListener('pageshow', onPageShow)
+    return () => {
+      document.removeEventListener('visibilitychange', onVis)
+      window.removeEventListener('focus', onFocus)
+      window.removeEventListener('pageshow', onPageShow)
+    }
+  }, [mode, t])
 
   const runBotLogin = async () => {
+    if (pollingRef.current) return
+    pollingRef.current = true
     setBusy(true)
     const preopenedPopup = typeof window !== 'undefined'
       ? window.open('about:blank', '_blank', 'noopener,noreferrer')
@@ -91,10 +120,19 @@ export function TelegramLoginButton({ botUsername, mode, referralCode, onSuccess
       setToken(token)
       await onSuccessRef.current()
     } catch (e) {
-      onErrorRef.current?.(e instanceof Error ? e.message : String(e))
+      if (!hasPendingTelegramAuth()) {
+        onErrorRef.current?.(e instanceof Error ? e.message : String(e))
+      }
     } finally {
+      pollingRef.current = false
       setBusy(false)
     }
+  }
+
+  const cancelPending = () => {
+    clearPendingTelegramAuth()
+    pollingRef.current = false
+    setBusy(false)
   }
 
   if (mode === 'link') {
@@ -116,7 +154,14 @@ export function TelegramLoginButton({ botUsername, mode, referralCode, onSuccess
       >
         {busy ? t('telegramWaiting') : t('telegramBotLogin')}
       </button>
-      {busy ? <p className="auth-hint auth-hint--center">{t('telegramBotHint')}</p> : null}
+      {busy ? (
+        <>
+          <p className="auth-hint auth-hint--center">{t('telegramBotHint')}</p>
+          <button type="button" className="auth-link-btn" onClick={cancelPending}>
+            {t('telegramCancel', { defaultValue: 'Cancel' })}
+          </button>
+        </>
+      ) : null}
     </div>
   )
 }

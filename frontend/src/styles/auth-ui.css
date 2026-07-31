@@ -194,6 +194,17 @@
   cursor: not-allowed;
 }
 
+.auth-link-btn {
+  margin-top: 8px;
+  background: none;
+  border: none;
+  color: #9ba0a6;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
 .banner.error {
   margin: 0 0 12px;
   padding: 10px 12px;

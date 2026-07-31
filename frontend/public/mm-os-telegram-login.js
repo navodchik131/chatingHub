@@ -19,6 +19,47 @@
     )
   }
 
+  function openTelegramBotUrl(webUrl) {
+    const href = String(webUrl || '').trim()
+    if (!href) return
+    const tgMatch = href.match(/^https?:\/\/t\.me\/([^/?#]+)(?:\?(.*))?$/i)
+    const tgScheme = tgMatch
+      ? 'tg://resolve?domain=' + encodeURIComponent(tgMatch[1]) + (tgMatch[2] ? '&' + tgMatch[2] : '')
+      : null
+
+    function tryAnchor(target) {
+      const link = document.createElement('a')
+      link.href = target
+      link.target = '_blank'
+      link.rel = 'noopener noreferrer'
+      link.style.display = 'none'
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+    }
+
+    if (isMobileLikeClient() && tgScheme) tryAnchor(tgScheme)
+    tryAnchor(href)
+    const popup = global.open(href, '_blank', 'noopener,noreferrer')
+    if (!popup && isMobileLikeClient() && tgScheme) {
+      global.open(tgScheme, '_blank', 'noopener,noreferrer')
+    }
+  }
+
+  function openTelegramBotUrlDeferred(webUrl, popup) {
+    const href = String(webUrl || '').trim()
+    if (!href) return
+    if (popup && !popup.closed) {
+      try {
+        popup.location.href = href
+        return
+      } catch (_) {
+        /* fallback */
+      }
+    }
+    openTelegramBotUrl(href)
+  }
+
   function openExternalUrl(url) {
     const href = String(url || '').trim()
     if (!href) return
@@ -45,18 +86,33 @@
   }
 
   function savePending(sessionId) {
-    global.sessionStorage.setItem(
-      PENDING_KEY,
-      JSON.stringify({ sessionId: sessionId, at: Date.now() }),
-    )
+    const raw = JSON.stringify({ sessionId: sessionId, at: Date.now() })
+    global.sessionStorage.setItem(PENDING_KEY, raw)
+    try {
+      global.localStorage.setItem(PENDING_KEY, raw)
+    } catch (_) {
+      /* ignore */
+    }
   }
 
   function clearPending() {
     global.sessionStorage.removeItem(PENDING_KEY)
+    try {
+      global.localStorage.removeItem(PENDING_KEY)
+    } catch (_) {
+      /* ignore */
+    }
   }
 
   function loadPending() {
-    const raw = global.sessionStorage.getItem(PENDING_KEY)
+    let raw = global.sessionStorage.getItem(PENDING_KEY)
+    if (!raw) {
+      try {
+        raw = global.localStorage.getItem(PENDING_KEY)
+      } catch (_) {
+        raw = null
+      }
+    }
     if (!raw) return null
     try {
       const parsed = JSON.parse(raw)
@@ -148,6 +204,7 @@
         throw new Error('Сессия истекла — попробуйте снова')
       }
     }
+    clearPending()
     throw new Error('Откройте Telegram, нажмите Start и вернитесь на эту страницу')
   }
 
@@ -174,11 +231,11 @@
     savePending(started.session_id)
 
     if (isMobileLikeClient()) {
-      openExternalUrl(url)
+      openTelegramBotUrl(url)
       return pollUntilDone(started.session_id)
     }
 
-    openExternalUrlDeferred(url, preopenedPopup || null)
+    openTelegramBotUrlDeferred(url, preopenedPopup || null)
     return pollUntilDone(started.session_id)
   }
 
