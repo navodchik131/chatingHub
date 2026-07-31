@@ -15,6 +15,7 @@ from app.services.grok_translation import (
     load_grok_translation_system_prompt,
     sanitize_translation_output,
 )
+from app.services.translation import should_translate_message_text
 
 
 def test_grok_translation_system_prompt_loads() -> None:
@@ -85,14 +86,40 @@ def test_translate_to_russian_uses_grok_when_enabled(monkeypatch: pytest.MonkeyP
     assert src == "en"
 
 
-def test_translate_from_russian_falls_back_when_grok_fails(
+def test_should_translate_message_text_skips_media_and_emoji() -> None:
+    assert should_translate_message_text("") is False
+    assert should_translate_message_text("😘🔥") is False
+    assert should_translate_message_text("🎭") is False
+    assert should_translate_message_text("https://cdn.example/video.mp4") is False
+    assert should_translate_message_text("Hey babe 😘") is True
+    assert should_translate_message_text("Привет") is True
+
+
+def test_translate_to_russian_skips_emoji_only() -> None:
+    from app.services import translation as tr
+
+    async def _run() -> tuple[str, str]:
+        with patch(
+            "app.services.translation.grok_translate_to_russian",
+            new=AsyncMock(),
+        ) as mock_grok:
+            out, src = await tr.translate_to_russian("😘")
+        mock_grok.assert_not_called()
+        return out, src
+
+    out, src = asyncio.run(_run())
+    assert out == ""
+    assert src == "en"
+
+
+def test_translate_from_russian_falls_back_to_deepl_when_grok_fails(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from app.services import translation as tr
 
     monkeypatch.setattr(settings, "grok_translation_enabled", True)
     monkeypatch.setattr(settings, "grok_api_key", "xai-test")
-    monkeypatch.setattr(settings, "deepl_api_key", "")
+    monkeypatch.setattr(settings, "deepl_api_key", "deepl-test")
 
     async def _run() -> str:
         with patch(
@@ -100,11 +127,16 @@ def test_translate_from_russian_falls_back_when_grok_fails(
             new=AsyncMock(side_effect=RuntimeError("api down")),
         ):
             with patch(
-                "app.services.translation._libre_translate",
+                "app.services.translation._deepl_fallback_from_russian",
                 new=AsyncMock(return_value="Hey babe"),
-            ) as mock_libre:
-                out = await tr.translate_from_russian("Привет", "en")
-            mock_libre.assert_awaited_once()
+            ) as mock_deepl:
+                with patch(
+                    "app.services.translation._libre_translate",
+                    new=AsyncMock(),
+                ) as mock_libre:
+                    out = await tr.translate_from_russian("Привет", "en")
+            mock_deepl.assert_awaited_once()
+            mock_libre.assert_not_called()
             return out
 
     assert asyncio.run(_run()) == "Hey babe"

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from typing import Final
 
 import httpx
@@ -15,6 +16,26 @@ from app.services.grok_translation import (
 )
 
 log = logging.getLogger(__name__)
+
+# Только эмодзи / символы (без букв и цифр) — не гоняем через переводчик
+_EMOJI_ONLY_RE = re.compile(
+    r"^[\s"
+    r"\U0001F300-\U0001FAFF"
+    r"\U00002600-\U000027BF"
+    r"\U0001F1E0-\U0001F1FF"
+    r"\U000024C2-\U0001F251"
+    r"\u200d\ufe0f"
+    r"\uFE0F"
+    r"]+$",
+    flags=re.UNICODE,
+)
+
+_MEDIA_ONLY_PLACEHOLDERS: Final[frozenset[str]] = frozenset(
+    {
+        "🎭",
+        "[исчезающее медиа недоступно через API]",
+    }
+)
 
 # DeepL целевые коды (основные)
 _DEEPL_TARGETS: Final[dict[str, str]] = {
@@ -53,6 +74,23 @@ def detect_lang(text: str) -> str:
         return detect(text)
     except LangDetectException:
         return "en"
+
+
+def should_translate_message_text(text: str | None) -> bool:
+    """Пропускаем стикеры, чистые эмодзи, URL медиа и прочий не-текст."""
+    t = (text or "").strip()
+    if not t:
+        return False
+    if t in _MEDIA_ONLY_PLACEHOLDERS:
+        return False
+    if t.startswith("http://") or t.startswith("https://"):
+        return False
+    if _EMOJI_ONLY_RE.fullmatch(t):
+        return False
+    # Хотя бы одна буква или цифра — считаем переводимым текстом
+    if re.search(r"[\w]", t, flags=re.UNICODE):
+        return True
+    return False
 
 
 def _deepl_base() -> str:
@@ -119,45 +157,25 @@ async def _google_translate(text: str, target: str, source: str | None) -> str:
     return await asyncio.to_thread(_run)
 
 
-async def translate_to_russian(text: str) -> tuple[str, str]:
-    """Перевод входящего текста на русский. Возвращает (перевод, исходный_код_языка)."""
-    src = detect_lang(text)
-    if src.startswith("ru"):
-        return text, src
-    if grok_translation_configured():
-        try:
-            out = await grok_translate_to_russian(text, src)
-            return out, src
-        except Exception as e:
-            log.warning("grok to ru failed: %s", e)
+async def _legacy_translate_to_russian(text: str, src: str) -> str:
+    """DeepL → LibreTranslate → Google (когда Grok выключен)."""
     try:
         if settings.deepl_api_key:
-            out = await _deepl_translate(text, "ru", None)
-            return out, src
+            return await _deepl_translate(text, "ru", None)
     except Exception as e:
         log.warning("deepl to ru failed: %s", e)
     try:
-        out = await _libre_translate(text, "ru", src if src != "unknown" else None)
-        return out, src
+        return await _libre_translate(text, "ru", src if src != "unknown" else None)
     except Exception as e:
         log.warning("libre to ru failed: %s", e)
     try:
-        out = await _google_translate(text, "ru", src if src != "unknown" else None)
-        return out, src
+        return await _google_translate(text, "ru", src if src != "unknown" else None)
     except Exception as e:
         log.warning("google fallback to ru failed: %s", e)
-    return f"[перевод недоступен] {text}", src
+    return f"[перевод недоступен] {text}"
 
 
-async def translate_from_russian(text: str, target_lang: str) -> str:
-    """Ответ на русском → язык пользователя."""
-    if target_lang.startswith("ru"):
-        return text
-    if grok_translation_configured():
-        try:
-            return await grok_translate_from_russian(text, target_lang)
-        except Exception as e:
-            log.warning("grok from ru failed: %s", e)
+async def _legacy_translate_from_russian(text: str, target_lang: str) -> str:
     try:
         if settings.deepl_api_key:
             return await _deepl_translate(text, target_lang, "ru")
@@ -172,3 +190,61 @@ async def translate_from_russian(text: str, target_lang: str) -> str:
     except Exception as e:
         log.warning("google fallback from ru failed: %s", e)
     return text
+
+
+async def _deepl_fallback_to_russian(text: str) -> str | None:
+    if not settings.deepl_api_key:
+        return None
+    try:
+        return await _deepl_translate(text, "ru", None)
+    except Exception as e:
+        log.warning("deepl grok-fallback to ru failed: %s", e)
+        return None
+
+
+async def _deepl_fallback_from_russian(text: str, target_lang: str) -> str | None:
+    if not settings.deepl_api_key:
+        return None
+    try:
+        return await _deepl_translate(text, target_lang, "ru")
+    except Exception as e:
+        log.warning("deepl grok-fallback from ru failed: %s", e)
+        return None
+
+
+async def translate_to_russian(text: str) -> tuple[str, str]:
+    """Перевод входящего текста на русский. Возвращает (перевод, исходный_код_языка)."""
+    src = detect_lang(text) if (text or "").strip() else "unknown"
+    if not should_translate_message_text(text):
+        return "", src
+    if src.startswith("ru"):
+        return text, src
+    if grok_translation_configured():
+        try:
+            out = await grok_translate_to_russian(text, src)
+            return out, src
+        except Exception as e:
+            log.warning("grok to ru failed: %s", e)
+            deepl_out = await _deepl_fallback_to_russian(text)
+            if deepl_out:
+                return deepl_out, src
+            return f"[перевод недоступен] {text}", src
+    return await _legacy_translate_to_russian(text, src), src
+
+
+async def translate_from_russian(text: str, target_lang: str) -> str:
+    """Ответ на русском → язык пользователя."""
+    if not should_translate_message_text(text):
+        return (text or "").strip()
+    if target_lang.startswith("ru"):
+        return text
+    if grok_translation_configured():
+        try:
+            return await grok_translate_from_russian(text, target_lang)
+        except Exception as e:
+            log.warning("grok from ru failed: %s", e)
+            deepl_out = await _deepl_fallback_from_russian(text, target_lang)
+            if deepl_out:
+                return deepl_out
+            return text
+    return await _legacy_translate_from_russian(text, target_lang)
