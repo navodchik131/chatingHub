@@ -70,6 +70,17 @@ _ADULT_AGE_SAFE_RE = re.compile(
 
 _AGE_FIELD_RE = re.compile(r"^\s*(\d{1,3})\s*(?:years?\s*old|yo|y\.?o\.?|лет|года|год)?\s*$", re.I)
 
+# Safety blocklists embedded in model_profile JSON — not user-facing descriptions.
+_PROFILE_BLOCKLIST_KEYS = frozenset(
+    {
+        "always_avoid",
+        "never_include",
+        "negative_prompt",
+        "avoid",
+        "blocked_terms",
+    }
+)
+
 
 def minor_content_http_exception() -> HTTPException:
     return HTTPException(
@@ -118,6 +129,39 @@ def _extract_profile_age(profile: dict[str, Any]) -> str | None:
     return None
 
 
+def extract_profile_age_years(profile_text: str | None) -> int | None:
+    """Return numeric age from model_profile JSON when clearly >= 0, else None."""
+    raw = (profile_text or "").strip()
+    if not raw:
+        return None
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        m = re.search(r"\b(?:1[89]|[2-9]\d|\d{3,})\b", raw)
+        return int(m.group(0)) if m else None
+    if not isinstance(data, dict):
+        return None
+    mp = data.get("model_profile")
+    if not isinstance(mp, dict):
+        mp = data
+    age_raw = _extract_profile_age(mp) if isinstance(mp, dict) else None
+    if age_raw is None:
+        return None
+    text = str(age_raw).strip()
+    m = _AGE_FIELD_RE.match(text)
+    if m:
+        return int(m.group(1))
+    if isinstance(age_raw, (int, float)):
+        return int(age_raw)
+    m = re.search(r"\b(\d{1,3})\b", text)
+    return int(m.group(1)) if m else None
+
+
+def profile_declares_adult_age(profile_text: str | None) -> bool:
+    years = extract_profile_age_years(profile_text)
+    return years is not None and years >= 18
+
+
 def validate_profile_age_value(age_raw: str | int | float | None) -> str | None:
     if age_raw is None:
         return None
@@ -145,12 +189,22 @@ def validate_model_profile_dict(profile_root: dict[str, Any]) -> str | None:
     reason = validate_profile_age_value(_extract_profile_age(mp))
     if reason:
         return reason
-    for key in ("appearance", "bio", "personality", "description", "summary"):
-        val = mp.get(key)
+    for key, val in mp.items():
+        if key in _PROFILE_BLOCKLIST_KEYS:
+            continue
         if isinstance(val, str) and val.strip():
             hit = find_minor_content_violation(val)
             if hit:
                 return f"profile {key}: {hit}"
+    cons = mp.get("constraints")
+    if isinstance(cons, dict):
+        for key, val in cons.items():
+            if key in _PROFILE_BLOCKLIST_KEYS:
+                continue
+            if isinstance(val, str) and val.strip():
+                hit = find_minor_content_violation(val)
+                if hit:
+                    return f"profile constraints.{key}: {hit}"
     return None
 
 
@@ -158,12 +212,10 @@ def validate_model_profile_text(profile_text: str | None) -> str | None:
     raw = (profile_text or "").strip()
     if not raw:
         return None
-    if find_minor_content_violation(raw):
-        return "profile text mentions minors"
     try:
         data = json.loads(raw)
     except json.JSONDecodeError:
-        return None
+        return find_minor_content_violation(raw) and "profile text mentions minors"
     if isinstance(data, dict):
         return validate_model_profile_dict(data)
     return None
@@ -248,13 +300,18 @@ async def assert_studio_generation_allowed(
     ]
     reasons = collect_minor_content_violations(texts=texts_for_regex, profile_text=profile_text)
     if reasons:
+        log.info("content_safety regex block: %s", reasons[:3])
         raise minor_content_http_exception()
 
     if not use_moderation:
         return
 
+    # Profile JSON often embeds safety blocklists (always_avoid with "minor", "teen", …).
+    # When age is explicitly adult, trust profile age gate and skip OpenAI false positives.
+    if profile_declares_adult_age(profile_text):
+        return
+
     combined = "\n".join(t.strip() for t in texts_for_regex if (t or "").strip())
-    if profile_text and profile_text.strip():
-        combined = f"{combined}\n{profile_text.strip()}"
     if combined and await _openai_moderation_flags_minors(combined):
+        log.info("content_safety OpenAI moderation block")
         raise minor_content_http_exception()

@@ -12,6 +12,7 @@ from app.services.content_safety import (
     collect_minor_content_violations,
     find_minor_content_violation,
     minor_content_http_exception,
+    profile_declares_adult_age,
     validate_model_profile_text,
 )
 
@@ -53,6 +54,34 @@ def test_profile_age_under_18_blocked() -> None:
 def test_profile_age_adult_allowed() -> None:
     profile = '{"model_profile": {"age": "24", "name": "Test"}}'
     assert validate_model_profile_text(profile) is None
+
+
+def test_profile_with_safety_blocklist_and_adult_age_allowed() -> None:
+    profile = (
+        '{"model_profile": {"age": "28", "name": "Anna", "appearance": "tall brunette woman", '
+        '"always_avoid": "child, minor, underage, teenager, teen, preteen, schoolgirl"}}'
+    )
+    assert validate_model_profile_text(profile) is None
+    assert profile_declares_adult_age(profile) is True
+
+
+def test_profile_age_28_int_allowed() -> None:
+    profile = '{"model_profile": {"age": 28, "appearance": "adult woman"}}'
+    assert validate_model_profile_text(profile) is None
+    assert profile_declares_adult_age(profile) is True
+
+
+def test_assert_adult_profile_skips_moderation() -> None:
+    profile = '{"model_profile": {"age": "28", "always_avoid": "minor, teen, underage"}}'
+
+    async def _run() -> None:
+        await assert_studio_generation_allowed(
+            description="adult woman 28 years old, lingerie photoshoot",
+            profile_text=profile,
+            use_moderation=True,
+        )
+
+    asyncio.run(_run())
 
 
 def test_assert_raises_with_code() -> None:
