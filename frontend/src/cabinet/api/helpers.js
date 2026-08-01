@@ -162,6 +162,8 @@ export function formatArchiveErrorMessage(raw, lang = 'ru') {
   }
   return text.slice(0, 140)
 }
+
+export function fmtTime(iso) {
   if (!iso) return ''
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return ''
