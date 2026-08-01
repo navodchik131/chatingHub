@@ -9,7 +9,13 @@ export function formatApiErrorDetail(data: unknown): string {
     if (/invalid user uuid/i.test(m)) {
       return i18n.t('errors.fanvueInvalidUser', { ns: COMMON_NS })
     }
+    if (/insufficient scopes/i.test(m)) {
+      return i18n.t('errors.fanvueInsufficientScopes', { ns: COMMON_NS })
+    }
     return m
+  }
+  if (typeof o.error === 'string' && /insufficient scopes/i.test(o.error)) {
+    return i18n.t('errors.fanvueInsufficientScopes', { ns: COMMON_NS })
   }
   const d = o.detail
   if (d && typeof d === 'object' && !Array.isArray(d)) {
@@ -32,9 +38,18 @@ export function formatApiErrorDetail(data: unknown): string {
         if (parsed.code === 'minor_content_prohibited') {
           return i18n.t('errors.minorContentProhibited', { ns: COMMON_NS })
         }
+        if (
+          (typeof parsed.error === 'string' && /insufficient scopes/i.test(parsed.error))
+          || (typeof parsed.message === 'string' && /insufficient scopes/i.test(parsed.message))
+        ) {
+          return i18n.t('errors.fanvueInsufficientScopes', { ns: COMMON_NS })
+        }
       } catch {
         /* not JSON */
       }
+    }
+    if (/insufficient scopes/i.test(trimmed)) {
+      return i18n.t('errors.fanvueInsufficientScopes', { ns: COMMON_NS })
     }
     return d
   }

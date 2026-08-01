@@ -19,6 +19,20 @@ class FanvueAPIError(Exception):
         super().__init__(f"Fanvue API {status}: {body[:500]}")
 
 
+def fanvue_user_facing_error(body: str) -> str | None:
+    """Map Fanvue API body to a short operator-facing message."""
+    text = (body or "").strip()
+    if not text:
+        return None
+    lower = text.lower()
+    if "insufficient scopes" in lower:
+        return (
+            "Недостаточно прав Fanvue для отправки изображений. "
+            "Переподключите Fanvue в «Подключения» — нужны scopes write:media и write:creator."
+        )
+    return None
+
+
 def _fanvue_headers(access_token: str) -> dict[str, str]:
     return {
         "Authorization": f"Bearer {(access_token or '').strip()}",

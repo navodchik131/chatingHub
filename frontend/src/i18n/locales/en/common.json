@@ -1,6 +1,7 @@
 {
   "errors": {
     "fanvueInvalidUser": "Fanvue user unavailable: account deleted or blocked on the platform.",
+    "fanvueInsufficientScopes": "Insufficient Fanvue permissions to send images. Reconnect Fanvue in Connections (scopes write:media and write:creator required).",
     "gatewayTimeout": "Gateway or proxy timed out waiting for the server. Long generation may still have finished — refresh and check Saved / Recent videos.",
     "serviceUnavailable": "Service temporarily unavailable (503). Try again in a minute.",
     "payloadTooLarge": "File too large to upload (413).",

@@ -13,7 +13,7 @@ from fastapi import HTTPException, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import BACKEND_DIR, settings
-from app.connectors.fanvue.client import FanvueAPIError, send_direct_message
+from app.connectors.fanvue.client import FanvueAPIError, fanvue_user_facing_error, send_direct_message
 from app.connectors.fanvue.media import fanvue_upload_image_bytes
 from app.connectors.instagram.client import InstagramAPIError, send_instagram_message
 from app.db.models import StudioGeneration, StudioMotionRender
@@ -454,8 +454,9 @@ async def send_fanvue_outbound(
 
             if fanvue_api_body_indicates_invalid_user(e.body):
                 raise fanvue_peer_unavailable_http_exception() from e
+            detail = fanvue_user_facing_error(e.body) or (e.body or str(e))[:2000]
             st = e.status if e.status >= 400 else 502
-            raise HTTPException(status_code=st, detail=(e.body or str(e))[:2000]) from e
+            raise HTTPException(status_code=st, detail=detail) from e
     if not (text or "").strip() and not media_uuids:
         raise HTTPException(status_code=400, detail="Пустое сообщение")
     try:
@@ -479,9 +480,10 @@ async def send_fanvue_outbound(
             st = 502
         elif st < 400:
             st = 502
+        detail = fanvue_user_facing_error(e.body) or (e.body or str(e))[:2000]
         raise HTTPException(
             status_code=st,
-            detail=(e.body or str(e))[:2000],
+            detail=detail,
         ) from e
 
 

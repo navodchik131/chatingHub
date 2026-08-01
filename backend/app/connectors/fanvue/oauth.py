@@ -15,6 +15,12 @@ from app.config import settings
 
 log = logging.getLogger(__name__)
 
+# Media upload in chat requires write:media (+ write:creator for multipart part URLs).
+FANVUE_DEFAULT_OAUTH_SCOPES = (
+    "openid offline_access offline read:self read:chat write:chat "
+    "read:media write:media write:creator"
+)
+
 
 class FanvueOAuthError(Exception):
     def __init__(self, message: str, *, status: int = 0, body: str = "") -> None:
@@ -41,7 +47,7 @@ def fanvue_oauth_scopes() -> str:
     raw = (settings.fanvue_oauth_scopes or "").strip()
     if raw:
         return raw
-    return "openid offline_access offline read:self read:chat write:chat"
+    return FANVUE_DEFAULT_OAUTH_SCOPES
 
 
 def generate_pkce_pair() -> tuple[str, str]:

@@ -613,7 +613,10 @@ class Settings(BaseSettings):
     fanvue_client_secret: str = Field(default="", description="OAuth Client Secret приложения ChatingApp.")
     fanvue_oauth_authorize_url: str = "https://auth.fanvue.com/oauth2/auth"
     fanvue_oauth_token_url: str = "https://auth.fanvue.com/oauth2/token"
-    fanvue_oauth_scopes: str = "openid offline_access offline read:self read:chat write:chat"
+    fanvue_oauth_scopes: str = (
+        "openid offline_access offline read:self read:chat write:chat "
+        "read:media write:media write:creator"
+    )
     fanvue_api_version: str = "2025-06-26"
     fanvue_api_base: str = "https://api.fanvue.com"
     fanvue_sync_max_chats: int = Field(
