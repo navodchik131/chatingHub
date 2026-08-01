@@ -69,7 +69,7 @@ const initial = {
   dlgSettingsOpen: false,
   studioPrompt: '',
   motionPrompt: '',
-  donForm: { title: '', description: '', minRub: 0, modelId: '' },
+  donForm: { title: '', description: '', minAmount: 0, currency: 'RUB', modelId: '' },
   connForms: {},
   connFlash: null,
   connOauthReason: null,

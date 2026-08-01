@@ -100,10 +100,68 @@ export function fmtMoney(minor, currency = 'RUB') {
   if (c === 'RUB') {
     return `${rub.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₽`
   }
+  if (c === 'USD') {
+    return `$${rub.toFixed(2)}`
+  }
+  if (c === 'EUR') {
+    return `€${rub.toFixed(2)}`
+  }
   return `${rub.toFixed(2)} ${c}`
 }
 
-export function fmtTime(iso) {
+export const DONATION_CURRENCIES = ['RUB', 'USD', 'EUR']
+
+export const DONATION_MIN_MAJOR = {
+  RUB: 100,
+  USD: 5,
+  EUR: 1,
+}
+
+export function donationCurrencySymbol(currency) {
+  const c = String(currency || 'RUB').toUpperCase()
+  if (c === 'RUB') return '₽'
+  if (c === 'USD') return '$'
+  if (c === 'EUR') return '€'
+  return c
+}
+
+export function donationMinHint(currency, lang = 'ru') {
+  const c = String(currency || 'RUB').toUpperCase()
+  const min = DONATION_MIN_MAJOR[c] ?? 0
+  const sym = donationCurrencySymbol(c)
+  if (lang === 'ru') {
+    return `Минимум ${min} ${sym}`
+  }
+  return `Minimum ${sym}${min}`
+}
+
+/** Человекочитаемый текст ошибки из архива студии (в т.ч. Python-dict строки). */
+export function formatArchiveErrorMessage(raw, lang = 'ru') {
+  const text = (raw || '').trim()
+  if (!text) return lang === 'ru' ? 'Ошибка генерации' : 'Generation failed'
+  let parsed = null
+  if (text.startsWith('{')) {
+    try {
+      parsed = JSON.parse(text)
+    } catch {
+      try {
+        parsed = JSON.parse(text.replace(/'/g, '"'))
+      } catch {
+        parsed = null
+      }
+    }
+  }
+  if (parsed && typeof parsed === 'object') {
+    const fromDetail = formatApiErrorDetail({ detail: parsed })
+    if (fromDetail) return fromDetail
+    if (typeof parsed.message === 'string' && parsed.message.trim()) return parsed.message.trim()
+  }
+  if (/minor_content_prohibited/i.test(text)) {
+    const fromCode = formatApiErrorDetail({ detail: { code: 'minor_content_prohibited' } })
+    if (fromCode) return fromCode
+  }
+  return text.slice(0, 140)
+}
   if (!iso) return ''
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return ''

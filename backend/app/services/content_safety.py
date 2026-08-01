@@ -87,8 +87,7 @@ def find_minor_content_violation(text: str) -> str | None:
     if not raw:
         return None
     if _ADULT_AGE_SAFE_RE.search(raw):
-        # Explicit adult age (18+) — do not block on ambiguous teen words elsewhere in long text.
-        pass
+        return None
     for pat in _MINOR_TEXT_PATTERNS:
         if pat.search(raw):
             return f"blocked pattern: {pat.pattern}"
@@ -146,8 +145,13 @@ def validate_model_profile_dict(profile_root: dict[str, Any]) -> str | None:
     reason = validate_profile_age_value(_extract_profile_age(mp))
     if reason:
         return reason
-    blob = json.dumps(mp, ensure_ascii=False)
-    return find_minor_content_violation(blob)
+    for key in ("appearance", "bio", "personality", "description", "summary"):
+        val = mp.get(key)
+        if isinstance(val, str) and val.strip():
+            hit = find_minor_content_violation(val)
+            if hit:
+                return f"profile {key}: {hit}"
+    return None
 
 
 def validate_model_profile_text(profile_text: str | None) -> str | None:
@@ -215,7 +219,7 @@ async def _openai_moderation_flags_minors(text: str) -> bool:
             cats = row.get("category_scores") or row.get("categories") or {}
             if isinstance(cats, dict):
                 score = cats.get("sexual/minors")
-                if score is True or (isinstance(score, (int, float)) and score >= 0.35):
+                if score is True or (isinstance(score, (int, float)) and score >= 0.65):
                     return True
             if row.get("flagged") and isinstance(cats, dict) and cats.get("sexual/minors"):
                 return True
@@ -235,21 +239,21 @@ async def assert_studio_generation_allowed(
     use_moderation: bool = True,
 ) -> None:
     """Raise HTTP 403 if any supplied text/profile indicates minors."""
-    texts = [
+    # negative_prompt часто содержит блок-лист («teen», «young girl») — не проверяем regex'ом.
+    texts_for_regex = [
         description,
         prompt,
-        negative_prompt,
         refined_prompt,
         reference_analysis_json or "",
     ]
-    reasons = collect_minor_content_violations(texts=texts, profile_text=profile_text)
+    reasons = collect_minor_content_violations(texts=texts_for_regex, profile_text=profile_text)
     if reasons:
         raise minor_content_http_exception()
 
     if not use_moderation:
         return
 
-    combined = "\n".join(t.strip() for t in texts if (t or "").strip())
+    combined = "\n".join(t.strip() for t in texts_for_regex if (t or "").strip())
     if profile_text and profile_text.strip():
         combined = f"{combined}\n{profile_text.strip()}"
     if combined and await _openai_moderation_flags_minors(combined):

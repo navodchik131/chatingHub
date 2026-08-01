@@ -5,7 +5,7 @@ import { Fade, PageTitle, Eyebrow, Chip, SelectPill, Overlay, CloseButton } from
 import VideoPreviewModal from '../components/VideoPreviewModal';
 import { useApp } from '../hooks/useApp';
 import { color, line, font, G } from '../styles/tokens';
-import { modeCardStyle, refUploadStyle, borderHoverOff, cardPickStyle } from '../styles/mixins';
+import { modeCardStyle, refUploadStyle, borderHoverOff, refThumbStyle } from '../styles/mixins';
 import { videoModeDefs } from '../data/catalog';
 import { archiveThumbUrl, archiveDownloadUrl, archiveVideoUrl, isArchivePending, downloadVideoNoteByPath } from '../api/actions';
 import { downloadArchiveBlob } from '../api/archiveDownload';
@@ -214,6 +214,7 @@ export default function Video() {
           style={{
             background: color.surface, border: `1px solid ${line.hair}`, borderRadius: 16,
             padding: 18, display: 'flex', flexDirection: 'column', gap: 16, height: 'fit-content',
+            minWidth: 0, overflow: 'hidden',
           }}
         >
           <div>
@@ -575,17 +576,18 @@ export default function Video() {
                 {(cabinet.archiveImages || []).length > 0 && (
                   <div style={{ marginTop: 10 }}>
                     <div style={{ fontSize: 10.5, fontWeight: 700, color: color.textDim, marginBottom: 6 }}>{t.srcArchive}</div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 6 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 6, width: '100%' }}>
                       {(cabinet.archiveImages || []).slice(0, 4).map((item, i) => {
                         const thumb = archiveThumbUrl(item);
                         const picked = s.carouselPickId === item.id;
-                        const pickSt = cardPickStyle(picked);
+                        const pickSt = refThumbStyle(picked);
                         return (
                           <Hoverable
                             key={item.id}
                             style={{
                               ...pickSt.base,
-                              aspectRatio: '3/4',
+                              width: '100%',
+                              minWidth: 0,
                               background: thumb ? `center/cover url(${thumb})` : G[i % 6],
                             }}
                             hover={pickSt.hover}

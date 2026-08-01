@@ -43,11 +43,27 @@ export function mapMessage(m) {
   const outbound = m.direction === 'outbound'
   const translated = (m.text_translated || '').trim()
   const original = (m.text_original || '').trim()
-  const tr = translated && translated !== original ? translated : false
+
+  let text = original || ''
+  let tr = false
+  if (outbound) {
+    // Исходящие: сверху черновик оператора (RU), снизу — текст, ушедший фану.
+    if (original && translated && original !== translated) {
+      text = original
+      tr = translated
+    } else {
+      text = original || translated || ''
+      tr = false
+    }
+  } else {
+    tr = translated && translated !== original ? translated : false
+    text = original || ''
+  }
+
   return {
     id: m.id,
     side: outbound ? 'out' : 'in',
-    text: original || '',
+    text,
     tr,
     time: fmtTime(m.created_at),
     reactions: m.reactions || [],

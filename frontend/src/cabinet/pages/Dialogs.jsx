@@ -1006,11 +1006,13 @@ function Thread() {
           const rx = m.ownerReaction;
           const out = m.side === 'out';
           const isVideoNote = m.attachmentKind === 'video_note';
-          const showText = Boolean(m.text && m.text !== '—');
+          const showText = Boolean((m.text && m.text !== '—') || m.tr);
+          const hasBody = showText || Boolean(m.attachmentUrl);
           const mediaOnly = Boolean(m.attachmentUrl && isVideoNote && !showText);
           const bubbleStyle = mediaOnly
             ? { maxWidth: '80%', background: 'transparent', border: 'none', boxShadow: 'none', padding: 0, position: 'relative' }
             : (out ? bubbleOut : bubbleIn);
+          if (!hasBody && !m.pending) return null;
           return (
             <div key={m.id ?? i} style={{ display: 'flex', flexDirection: 'column', gap: 3, alignItems: out ? 'flex-end' : 'flex-start' }}>
               <div style={{ ...bubbleStyle, opacity: m.pending ? 0.7 : 1 }}>
@@ -1025,9 +1027,9 @@ function Thread() {
                   </div>
                 )}
                 <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                  <div style={{ flex: 1, fontSize: out ? 12.5 : 13, lineHeight: 1.5, color: out ? '#fff' : color.text }}>
+                  <div style={{ flex: 1, fontSize: out ? 13 : 13, lineHeight: 1.5, color: out ? '#fff' : color.text }}>
                     {m.attachmentUrl && (
-                      <a href={m.attachmentUrl} target="_blank" rel="noreferrer" style={{ display: 'block', marginBottom: showText ? 8 : 0 }}>
+                      <a href={m.attachmentUrl} target="_blank" rel="noreferrer" style={{ display: 'block', marginBottom: (m.text && m.text !== '—') ? 8 : 0 }}>
                         <ChatMessageMedia
                           url={m.attachmentUrl}
                           mime={m.attachmentMime}
@@ -1039,7 +1041,8 @@ function Thread() {
                         />
                       </a>
                     )}
-                    {showText || (!m.attachmentUrl && '—')}
+                    {m.text && m.text !== '—' ? m.text : null}
+                    {!m.text && !m.tr && !m.attachmentUrl ? '—' : null}
                   </div>
                   {!m.pending && (
                   <Hoverable
@@ -1074,12 +1077,12 @@ function Thread() {
                 {m.tr && (
                   <div
                     style={{
-                      fontSize: out ? 13 : 11.5,
+                      fontSize: out ? 11.5 : 11.5,
                       lineHeight: 1.45,
                       marginTop: 6,
                       paddingTop: 6,
                       borderTop: out ? '1px dashed rgba(255,255,255,.35)' : '1px dashed rgba(255,255,255,.1)',
-                      color: out ? 'rgba(255,255,255,.92)' : '#C9CDD1',
+                      color: out ? 'rgba(255,255,255,.78)' : '#C9CDD1',
                     }}
                   >
                     {m.tr}

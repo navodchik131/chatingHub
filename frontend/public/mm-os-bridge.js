@@ -4077,22 +4077,38 @@
         false
       const isVideo = imageUrl && String(attachmentMime).startsWith('video/')
       const textRaw = (m.text_original || '').trim()
-      const text =
-        textRaw && textRaw !== '📷' && textRaw !== '—' ? textRaw : false
+      const translatedRaw = (m.text_translated || '').trim()
+      const outbound = m.direction === 'outbound'
+      let text = textRaw
+      let tr = false
+      if (outbound) {
+        if (textRaw && translatedRaw && textRaw !== translatedRaw) {
+          text = textRaw
+          tr = translatedRaw
+        } else {
+          text = textRaw || translatedRaw
+          tr = false
+        }
+      } else {
+        tr = translatedRaw && translatedRaw !== textRaw ? translatedRaw : false
+        text = textRaw
+      }
+      const textDisplay =
+        text && text !== '📷' && text !== '—' ? text : false
       return {
         wrap:
           'display:flex;flex-direction:column;gap:3px;' +
           (outbound ? 'align-items:flex-end;' : 'align-items:flex-start;'),
         bubble: outbound ? bubbleOut : bubbleIn,
-        text,
+        text: textDisplay,
         imageUrl,
         isVideo: isVideo || false,
         imageNotVideo: imageUrl && !isVideo ? imageUrl : false,
         imageStyle:
           'display:block;width:100%;max-width:240px;max-height:280px;border-radius:10px;margin-bottom:' +
-          (text ? '8px' : '0') +
+          (textDisplay ? '8px' : '0') +
           ';object-fit:cover;background:#0A0B0D;',
-        tr: m.text_translated && m.text_translated !== m.text_original ? m.text_translated : false,
+        tr: tr || false,
         time:
           fmtDateShort(m.created_at) +
           ' · ' +

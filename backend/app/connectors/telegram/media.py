@@ -19,8 +19,17 @@ async def download_telegram_image(message: Message, bot: Bot) -> tuple[bytes, st
         file_id = message.photo[-1].file_id
         mime = "image/jpeg"
     elif message.sticker:
-        file_id = message.sticker.file_id
-        mime = (message.sticker.mime_type or "image/webp").split(";")[0].strip() or "image/webp"
+        st = message.sticker
+        mime = (st.mime_type or "image/webp").split(";")[0].strip() or "image/webp"
+        if mime == "application/x-tgs":
+            thumb = getattr(st, "thumbnail", None) or getattr(st, "thumb", None)
+            if thumb is not None:
+                file_id = thumb.file_id
+                mime = "image/jpeg"
+            else:
+                return None
+        else:
+            file_id = st.file_id
     elif message.video_note:
         file_id = message.video_note.file_id
         mime = "video/mp4"

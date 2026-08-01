@@ -5,7 +5,7 @@ import { Fade, PageTitle, Eyebrow, Chip, StatusChip, Panel, Field } from '../com
 import { useApp } from '../hooks/useApp';
 import { color, line, font } from '../styles/tokens';
 import { fieldLbl, borderHoverOff, selectSt } from '../styles/mixins';
-import { fmtMoney } from '../api/helpers';
+import { fmtMoney, DONATION_CURRENCIES, donationCurrencySymbol, donationMinHint } from '../api/helpers';
 import { mapDonationStats } from '../api/mappers';
 import { copyText } from '../utils/clipboard';
 import { fetchUsdRate, formatPlanPrice, fillPriceTemplate, getCachedRubPerUsd } from '../utils/money';
@@ -201,8 +201,9 @@ function DonOverview() {
 function DonCreate() {
   const { t, lang, s, setS, cabinet } = useApp();
   const editingId = cabinet.donationEditId;
-  const form = s.donForm || { title: '', description: '', minRub: 0, modelId: '' };
+  const form = s.donForm || { title: '', description: '', minAmount: 0, currency: 'RUB', modelId: '' };
   const setForm = (patch) => setS({ donForm: { ...form, ...patch } });
+  const currency = (form.currency || 'RUB').toUpperCase();
   const modelOptions = (cabinet.models || []).map((m) => ({ id: String(m.id), name: m.name }));
   const myDonations = (cabinet.donations || []).map((d) => ({
     id: d.id,
@@ -220,7 +221,8 @@ function DonCreate() {
       donForm: {
         title: row.title || '',
         description: row.description || '',
-        minRub: row.min_amount_minor ? Math.round(row.min_amount_minor / 100) : 0,
+        minAmount: row.min_amount_minor ? Math.round(row.min_amount_minor / 100) : 0,
+        currency: (row.currency || 'RUB').toUpperCase(),
         modelId: row.studio_model_id ? String(row.studio_model_id) : '',
       },
     });
@@ -229,7 +231,7 @@ function DonCreate() {
 
   const resetForm = () => {
     cabinet.setDonationEditId(null);
-    setS({ donForm: { title: '', description: '', minRub: 0, modelId: '' } });
+    setS({ donForm: { title: '', description: '', minAmount: 0, currency: 'RUB', modelId: '' } });
   };
 
   const startEdit = (row) => {
@@ -238,7 +240,8 @@ function DonCreate() {
       donForm: {
         title: row.title || '',
         description: row.description || '',
-        minRub: row.min_amount_minor ? Math.round(row.min_amount_minor / 100) : 0,
+        minAmount: row.min_amount_minor ? Math.round(row.min_amount_minor / 100) : 0,
+        currency: (row.currency || 'RUB').toUpperCase(),
         modelId: row.studio_model_id ? String(row.studio_model_id) : '',
       },
     });
@@ -270,12 +273,29 @@ function DonCreate() {
             value={form.description}
             onChange={(e) => setForm({ description: e.target.value })}
           />
-          <div style={{ maxWidth: 160 }}>
-            <Field
-              label={t.minSum}
-              value={String(form.minRub || '')}
-              onChange={(e) => setForm({ minRub: Number(e.target.value) || 0 })}
-            />
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, maxWidth: 320 }}>
+            <div>
+              <div style={fieldLbl}>{t.donCurrency}</div>
+              <select
+                value={currency}
+                onChange={(e) => setForm({ currency: e.target.value })}
+                style={selectSt}
+              >
+                {DONATION_CURRENCIES.map((c) => (
+                  <option key={c} value={c}>{c} ({donationCurrencySymbol(c)})</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <Field
+                label={t.minSum}
+                value={String(form.minAmount || '')}
+                onChange={(e) => setForm({ minAmount: Number(e.target.value) || 0 })}
+              />
+              <div style={{ fontSize: 10, color: color.textGhost, marginTop: 4 }}>
+                {donationMinHint(currency, lang)}
+              </div>
+            </div>
           </div>
           {modelOptions.length > 0 && (
             <div>

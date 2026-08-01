@@ -139,14 +139,18 @@ async def send_companion_outbound(
     else:
         raise RuntimeError(f"companion bot unsupported platform: {conv.platform.value}")
 
-    stored_original = outgoing
-    stored_translated: str | None = outgoing
+    stored_translated = outgoing
+    stored_original = ""
     try:
         ru_text, _src = await translate_to_russian(outgoing)
-        if ru_text.strip():
-            stored_original = ru_text.strip()
+        cleaned = (ru_text or "").strip()
+        if cleaned:
+            stored_original = cleaned
     except Exception as e:
         log.warning("companion outbound ru translate failed: %s", e)
+
+    if not stored_original.strip():
+        stored_original = outgoing
 
     meta = json.dumps(
         {

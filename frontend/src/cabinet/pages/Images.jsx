@@ -10,6 +10,7 @@ import { color, line, font, G } from '../styles/tokens';
 import { cardPickStyle, modeCardStyle, refThumbStyle, refUploadStyle, borderHoverOff } from '../styles/mixins';
 import { modeDefs } from '../data/catalog';
 import { resolveSlotSource, archiveThumbUrl, archiveDownloadUrl, isArchivePending } from '../api/actions';
+import { formatArchiveErrorMessage } from '../api/helpers';
 import { downloadArchiveBlob } from '../api/archiveDownload';
 import {
   validateStudioForm, syncRefArchivePicks, enginesForNsfw, sameStudioModelId,
@@ -750,7 +751,7 @@ export default function Images() {
                           lineHeight: 1.35, maxHeight: '4.2em', overflow: 'hidden', wordBreak: 'break-word',
                         }}
                       >
-                        {(item.error_message || '').trim().slice(0, 140) || (lang === 'ru' ? 'Ошибка генерации' : 'Generation failed')}
+                        {formatArchiveErrorMessage(item.error_message, lang)}
                       </span>
                     </div>
                   )}

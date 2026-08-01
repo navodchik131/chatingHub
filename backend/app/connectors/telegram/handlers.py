@@ -39,6 +39,17 @@ async def on_channel_direct_message(message: Message) -> None:
     )
 
 
+async def _ingest_legacy_dm(message: Message, *, source: str) -> None:
+    if settings.legacy_user_id <= 0:
+        return
+    await ingest_telegram_dm(settings.legacy_user_id, message, source=source)
+
+
+@router.message(F.direct_messages_topic, F.sticker | F.animation)
+async def on_channel_direct_sticker(message: Message) -> None:
+    await _ingest_legacy_dm(message, source="direct_messages_topic_sticker")
+
+
 @router.message(ChannelDMFallbackFilter())
 async def on_channel_dm_by_thread(message: Message) -> None:
     if settings.legacy_user_id <= 0:
@@ -51,6 +62,13 @@ async def on_channel_dm_by_thread(message: Message) -> None:
         message,
         source="message_thread_id",
     )
+
+
+@router.message(F.chat.is_direct_messages.is_(True), F.message_thread_id, F.sticker | F.animation)
+async def on_channel_dm_thread_sticker(message: Message) -> None:
+    if message.direct_messages_topic is not None:
+        return
+    await _ingest_legacy_dm(message, source="message_thread_id_sticker")
 
 
 @router.message(F.chat.is_direct_messages.is_(True), F.text | F.caption)
@@ -68,4 +86,7 @@ async def on_channel_dm_unroutable(message: Message) -> None:
 
 @router.message(F.direct_messages_topic)
 async def on_channel_dm_other(message: Message) -> None:
+    if message.sticker or message.animation or message.photo or message.video or message.video_note:
+        await _ingest_legacy_dm(message, source="direct_messages_topic_media")
+        return
     log.debug("skip non-text DM message_id=%s", message.message_id)

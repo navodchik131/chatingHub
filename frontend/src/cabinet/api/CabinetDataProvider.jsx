@@ -735,11 +735,13 @@ export function CabinetDataProvider({ children }) {
         return
       }
       await run(async () => {
+        const currency = String(form.currency || 'RUB').toUpperCase()
+        const minMajor = Number(form.minAmount) || 0
         const body = {
           title,
           description: form.description?.trim() || null,
-          currency: 'RUB',
-          min_amount_minor: form.minRub > 0 ? Math.round(form.minRub * 100) : null,
+          currency,
+          min_amount_minor: minMajor > 0 ? Math.round(minMajor * 100) : null,
           studio_model_id: form.modelId ? Number(form.modelId) : null,
           submit: !!submit,
         }

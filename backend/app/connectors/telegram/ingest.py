@@ -219,6 +219,8 @@ async def ingest_telegram_dm(
                     image_bytes, image_mime, is_video_note = img
                     if is_video_note:
                         attachment_kind = MessageAttachmentKind.video_note
+            if not text and not image_bytes and message.sticker:
+                text = (message.sticker.emoji or "").strip() or "🎭"
         finally:
             if close_bot and bot:
                 await bot.session.close()

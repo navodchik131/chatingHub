@@ -112,7 +112,7 @@ function ThreadBubble({
   const att = attachments?.[0];
   const hasMedia = Boolean(attachmentUrl);
   const isVideoNote = att?.kind === 'video_note';
-  const showText = Boolean(text && text !== '📷' && text !== '—');
+  const showText = Boolean((text && text !== '📷' && text !== '—') || translation);
   const mediaOnly = hasMedia && isVideoNote && !showText;
 
   const footer = (
@@ -138,7 +138,7 @@ function ThreadBubble({
   const body = (
     <>
       {mediaBlock}
-      {showText ? (
+      {showText && text && text !== '📷' && text !== '—' ? (
         <Text style={[styles.bubbleText, out && styles.bubbleTextOut]}>{text}</Text>
       ) : null}
       {!showText && !hasMedia ? (
