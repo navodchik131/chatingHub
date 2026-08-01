@@ -70,10 +70,40 @@ _ADULT_AGE_SAFE_RE = re.compile(
 
 _AGE_FIELD_RE = re.compile(r"^\s*(\d{1,3})\s*(?:years?\s*old|yo|y\.?o\.?|лет|года|год)?\s*$", re.I)
 
+_AGE_DECADE_ESTIMATE_RE = re.compile(
+    r"\b(?:early|mid|late)[\s-]*(\d{1,2})s?\b",
+    re.I,
+)
+
+_AGE_COMPACT_DECADE_RE = re.compile(r"\b(\d{2})s\b", re.I)
+
 _AGE_ESTIMATE_ADULT_RE = re.compile(
     r"\b(?:mid|late|early)[\s-]*(?:20|30|40|50)s\b|\b(?:twenty|thirty|forty)[\s-]*(?:one|two|three|four|five|six|seven|eight|nine)\b",
     re.I,
 )
+
+
+def _parse_age_years_from_text(text: str) -> int | None:
+    """Parse numeric age from profile age strings like 28, 28 yo, early 28s, early-28s."""
+    raw = (text or "").strip()
+    if not raw:
+        return None
+    m = _AGE_FIELD_RE.match(raw)
+    if m:
+        return int(m.group(1))
+    m = _AGE_DECADE_ESTIMATE_RE.search(raw)
+    if m:
+        return int(m.group(1))
+    m = _AGE_COMPACT_DECADE_RE.search(raw)
+    if m:
+        return int(m.group(1))
+    if _AGE_ESTIMATE_ADULT_RE.search(raw):
+        m2 = re.search(r"\b(?:early|mid|late)[\s-]*(\d{2})s\b", raw, re.I)
+        if m2:
+            return int(m2.group(1))
+        return 20
+    m = re.search(r"\b(\d{1,3})\b", raw)
+    return int(m.group(1)) if m else None
 
 # Safety blocklists embedded in model_profile JSON — not user-facing descriptions.
 _PROFILE_BLOCKLIST_KEYS = frozenset(
@@ -212,18 +242,19 @@ def extract_profile_age_years(profile_text: str | None) -> int | None:
     if not isinstance(mp, dict):
         mp = data
     age_raw = _extract_profile_age(mp) if isinstance(mp, dict) else None
-    if age_raw is None:
-        return None
-    text = str(age_raw).strip()
-    m = _AGE_FIELD_RE.match(text)
-    if m:
-        return int(m.group(1))
-    if isinstance(age_raw, (int, float)):
-        return int(age_raw)
-    if _AGE_ESTIMATE_ADULT_RE.search(text):
-        return 20
-    m = re.search(r"\b(\d{1,3})\b", text)
-    return int(m.group(1)) if m else None
+    if age_raw is not None:
+        if isinstance(age_raw, (int, float)):
+            return int(age_raw)
+        years = _parse_age_years_from_text(str(age_raw))
+        if years is not None:
+            return years
+    if isinstance(mp, dict):
+        ikw = mp.get("identity_lock_keywords")
+        if isinstance(ikw, str) and ikw.strip():
+            years = _parse_age_years_from_text(ikw)
+            if years is not None:
+                return years
+    return None
 
 
 def profile_declares_adult_age(profile_text: str | None) -> bool:
@@ -239,13 +270,14 @@ def validate_profile_age_value(age_raw: str | int | float | None) -> str | None:
         return None
     if find_minor_content_violation(text):
         return "profile age wording indicates a minor"
-    m = _AGE_FIELD_RE.match(text)
-    if m:
-        years = int(m.group(1))
+    if isinstance(age_raw, (int, float)):
+        years = int(age_raw)
+    else:
+        years = _parse_age_years_from_text(text)
+    if years is not None:
         if years < 18:
             return f"profile age {years} < 18"
         return None
-    # Non-numeric estimates: teen/minor keywords already caught above.
     return None
 
 
@@ -277,12 +309,10 @@ def validate_model_profile_dict(profile_root: dict[str, Any]) -> str | None:
         return reason
     years = None
     if age_raw is not None:
-        text = str(age_raw).strip()
-        m = _AGE_FIELD_RE.match(text)
-        if m:
-            years = int(m.group(1))
-        elif isinstance(age_raw, (int, float)):
+        if isinstance(age_raw, (int, float)):
             years = int(age_raw)
+        else:
+            years = _parse_age_years_from_text(str(age_raw).strip())
     if years is not None and years >= 18:
         return None
     for key, val in mp.items():

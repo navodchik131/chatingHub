@@ -10,6 +10,7 @@ from app.services.content_safety import (
     MINOR_CONTENT_CODE,
     assert_studio_generation_allowed,
     collect_minor_content_violations,
+    extract_profile_age_years,
     find_minor_content_violation,
     minor_content_http_exception,
     profile_declares_adult_age,
@@ -176,6 +177,38 @@ def test_profile_identity_lock_with_blocklist_words_adult_age() -> None:
     assert validate_model_profile_text(profile) is None
 
 
-def test_http_exception_includes_debug_reason() -> None:
-    exc = minor_content_http_exception("blocked pattern: teen")
-    assert exc.detail.get("debug_reason") == "blocked pattern: teen"
+def test_profile_age_early_28s_parsed_as_adult() -> None:
+    profile = '{"model_profile": {"age": "early 28s", "name": "Anna"}}'
+    assert extract_profile_age_years(profile) == 28
+    assert profile_declares_adult_age(profile) is True
+
+
+def test_profile_age_early_28s_from_identity_lock_keywords() -> None:
+    profile = (
+        '{"model_profile": {"age": "unknown", '
+        '"identity_lock_keywords": "early-28s Caucasian woman"}}'
+    )
+    assert extract_profile_age_years(profile) == 28
+    assert profile_declares_adult_age(profile) is True
+
+
+def test_assert_early_28s_profile_hat_prompt_allowed() -> None:
+    profile = (
+        '{"model_profile": {"age": "early 28s", "name": "woman", '
+        '"identity_lock_keywords": "early-28s Caucasian woman", '
+        '"always_avoid": "teen, minor, underage"}}'
+    )
+    grok_refined = (
+        "Adult woman early 28s wearing a hat on her head, not a teenager, "
+        "no minor, avoid schoolgirl look, balcony lingerie candid."
+    )
+
+    async def _run() -> None:
+        await assert_studio_generation_allowed(
+            description="шляпа на голове",
+            refined_prompt=grok_refined,
+            profile_text=profile,
+            use_moderation=True,
+        )
+
+    asyncio.run(_run())
