@@ -46,6 +46,28 @@ def test_allows_adult_nsfw_prompts(text: str) -> None:
     assert find_minor_content_violation(text) is None
 
 
+@pytest.mark.parametrize(
+    "text",
+    [
+        "adult woman, not a teenager, lingerie photoshoot",
+        "must not look like a teen, 28 year old model",
+        "no minor, no underage — adult only",
+        "avoid schoolgirl aesthetic, mature woman 30 yo",
+        "child, minor, underage, teenager, teen, preteen, schoolgirl",
+    ],
+)
+def test_allows_safety_negations_and_blocklists(text: str) -> None:
+    assert find_minor_content_violation(text) is None
+
+
+def test_grok_prose_with_adult_age_allowed() -> None:
+    refined = (
+        "Model identity: brunette woman, 28, slim build. "
+        "She is an adult, not a teenager. Balcony sunset lingerie, phone candid realism."
+    )
+    assert find_minor_content_violation(refined) is None
+
+
 def test_profile_age_under_18_blocked() -> None:
     profile = '{"model_profile": {"age": "16", "name": "Test"}}'
     assert validate_model_profile_text(profile) is not None

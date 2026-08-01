@@ -70,6 +70,11 @@ _ADULT_AGE_SAFE_RE = re.compile(
 
 _AGE_FIELD_RE = re.compile(r"^\s*(\d{1,3})\s*(?:years?\s*old|yo|y\.?o\.?|лет|года|год)?\s*$", re.I)
 
+_AGE_ESTIMATE_ADULT_RE = re.compile(
+    r"\b(?:mid|late|early)[\s-]*(?:20|30|40|50)s\b|\b(?:twenty|thirty|forty)[\s-]*(?:one|two|three|four|five|six|seven|eight|nine)\b",
+    re.I,
+)
+
 # Safety blocklists embedded in model_profile JSON — not user-facing descriptions.
 _PROFILE_BLOCKLIST_KEYS = frozenset(
     {
@@ -79,6 +84,26 @@ _PROFILE_BLOCKLIST_KEYS = frozenset(
         "avoid",
         "blocked_terms",
     }
+)
+
+# Grok/LLM prose often negates minors («not a teenager», «no minor») — not a request.
+_NEGATED_MINOR_PHRASE_RES: tuple[re.Pattern[str], ...] = tuple(
+    re.compile(p, re.I)
+    for p in (
+        r"\bnot\s+(?:a\s+)?(?:teen(?:ager)?s?|underage|minor?s?|juvenile|child(?:ren)?)\b",
+        r"\bno\s+(?:minor?s?|teen?s?|underage|school\s*girl[s]?|school\s*boy[s]?|child(?:ren)?)\b",
+        r"\b(?:never|without)\s+(?:\w+\s+){0,3}(?:teen|minor|underage|schoolgirl|juvenile)\w*\b",
+        r"\b(?:must\s+not|do\s+not)\s+(?:\w+\s+){0,5}(?:look\s+like\s+a\s+)?(?:teen|minor|underage|schoolgirl|juvenile)\w*\b",
+        r"\bavoid\s+(?:the\s+)?(?:school\s*girl[s]?|school\s*boy[s]?|teen(?:ager)?s?|minor?s?|underage)\w*\b",
+        r"\bне\s+(?:\w+\s+){0,2}(?:подрост\w+|несовершеннолет\w+|школьниц\w+|реб[её]н\w+)\b",
+    )
+)
+
+_BLOCKLIST_CSV_RE = re.compile(
+    r"(?:\b(?:child(?:ren)?|minor?s?|under\s*[- ]?age|underage|teen(?:ager)?s?|preteen[s]?|"
+    r"school\s*girl[s]?|school\s*boy[s]?|schoolgirl[s]?|schoolboy[s]?|loli|shota|"
+    r"young\s+girl[s]?|young\s+boy[s]?|little\s+girl[s]?|little\s+boy[s]?)\b\s*,?\s*){2,}",
+    re.I,
 )
 
 
@@ -126,9 +151,18 @@ def text_for_minor_content_regex(text: str) -> str:
     return json.dumps(sanitized, ensure_ascii=False)
 
 
+def sanitize_text_for_minor_regex(text: str) -> str:
+    """Strip JSON blocklists, negated safety lines, and CSV minor-ban lists before regex."""
+    raw = text_for_minor_content_regex(text)
+    for pat in _NEGATED_MINOR_PHRASE_RES:
+        raw = pat.sub(" ", raw)
+    raw = _BLOCKLIST_CSV_RE.sub(" ", raw)
+    return re.sub(r"\s+", " ", raw).strip()
+
+
 def find_minor_content_violation(text: str) -> str | None:
     """Return a short reason if *text* requests or describes minors, else None."""
-    raw = (text or "").strip()
+    raw = sanitize_text_for_minor_regex(text)
     if not raw:
         return None
     if _ADULT_AGE_SAFE_RE.search(raw):
@@ -140,26 +174,25 @@ def find_minor_content_violation(text: str) -> str | None:
 
 
 def _extract_profile_age(profile: dict[str, Any]) -> str | None:
-    for key in ("age", "apparent_age", "estimated_age", "возраст"):
-        val = profile.get(key)
-        if val is None:
-            continue
-        if isinstance(val, (int, float)):
-            return str(int(val))
-        if isinstance(val, str) and val.strip():
-            return val.strip()
-    subject = profile.get("subject")
-    if isinstance(subject, dict):
-        identity = subject.get("identity")
-        if isinstance(identity, dict):
-            for key in ("age", "apparent_age", "estimated_age", "возраст"):
-                val = identity.get(key)
-                if val is None:
-                    continue
-                if isinstance(val, (int, float)):
-                    return str(int(val))
-                if isinstance(val, str) and val.strip():
-                    return val.strip()
+    def _from_dict(data: dict[str, Any]) -> str | None:
+        for key in ("age", "apparent_age", "estimated_age", "возраст"):
+            val = data.get(key)
+            if val is None:
+                continue
+            if isinstance(val, (int, float)):
+                return str(int(val))
+            if isinstance(val, str) and val.strip():
+                return val.strip()
+        return None
+
+    hit = _from_dict(profile)
+    if hit:
+        return hit
+    for val in profile.values():
+        if isinstance(val, dict):
+            nested = _extract_profile_age(val)
+            if nested:
+                return nested
     return None
 
 
@@ -187,6 +220,8 @@ def extract_profile_age_years(profile_text: str | None) -> int | None:
         return int(m.group(1))
     if isinstance(age_raw, (int, float)):
         return int(age_raw)
+    if _AGE_ESTIMATE_ADULT_RE.search(text):
+        return 20
     m = re.search(r"\b(\d{1,3})\b", text)
     return int(m.group(1)) if m else None
 
@@ -262,7 +297,7 @@ def collect_minor_content_violations(
 ) -> list[str]:
     reasons: list[str] = []
     for t in texts or []:
-        hit = find_minor_content_violation(text_for_minor_content_regex(t))
+        hit = find_minor_content_violation(t)
         if hit:
             reasons.append(hit)
     prof = validate_model_profile_text(profile_text)
@@ -332,8 +367,7 @@ async def assert_studio_generation_allowed(
         refined_prompt,
         reference_analysis_json or "",
     ]
-    texts_for_regex = [text_for_minor_content_regex(t) for t in raw_texts]
-    reasons = collect_minor_content_violations(texts=texts_for_regex, profile_text=profile_text)
+    reasons = collect_minor_content_violations(texts=raw_texts, profile_text=profile_text)
     if reasons:
         log.info("content_safety regex block: %s", reasons[:3])
         raise minor_content_http_exception()
@@ -341,12 +375,17 @@ async def assert_studio_generation_allowed(
     if not use_moderation:
         return
 
-    # Profile JSON often embeds safety blocklists (always_avoid with "minor", "teen", …).
-    # When age is explicitly adult, trust profile age gate and skip OpenAI false positives.
+    # OpenAI omni-moderation false-flags adult NSFW studio output too often.
+    # When profile validates or declares adult age, regex gate is enough.
     if profile_declares_adult_age(profile_text):
         return
-
-    combined = "\n".join(t.strip() for t in texts_for_regex if (t or "").strip())
+    if (profile_text or "").strip() and validate_model_profile_text(profile_text) is None:
+        return
+    combined = "\n".join(
+        sanitize_text_for_minor_regex(t) for t in raw_texts if (t or "").strip()
+    )
+    if _ADULT_AGE_SAFE_RE.search(combined):
+        return
     if combined and await _openai_moderation_flags_minors(combined):
         log.info("content_safety OpenAI moderation block")
         raise minor_content_http_exception()
