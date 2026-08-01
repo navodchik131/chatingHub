@@ -18,7 +18,8 @@ async def _log_incoming_updates(handler, event: Update, data: dict):
         m = event.message
         log.info(
             "update.message chat_id=%s chat_type=%s is_direct_messages=%s "
-            "direct_messages_topic=%s message_thread_id=%s from_id=%s text_len=%s",
+            "direct_messages_topic=%s message_thread_id=%s from_id=%s "
+            "text_len=%s has_photo=%s has_sticker=%s has_video=%s",
             m.chat.id,
             m.chat.type,
             getattr(m.chat, "is_direct_messages", None),
@@ -26,6 +27,9 @@ async def _log_incoming_updates(handler, event: Update, data: dict):
             m.message_thread_id,
             m.from_user.id if m.from_user else None,
             len((m.text or m.caption or "")),
+            bool(m.photo),
+            bool(m.sticker),
+            bool(m.video or m.animation or m.video_note),
         )
     elif event.edited_message:
         log.info("update.edited_message (ignored by app)")

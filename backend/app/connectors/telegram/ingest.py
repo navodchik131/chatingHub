@@ -13,6 +13,7 @@ from app.connectors.telegram.bot_for_user import (
     open_telegram_bot_for_owner,
     telegram_profile_photo_file_id,
 )
+from app.connectors.telegram.channel_dm import media_fallback_text, resolve_channel_dm_topic_id
 from app.connectors.telegram.media import download_telegram_image
 from app.db.models import Conversation, Message, MessageDirection, Platform
 from app.db.repo import get_or_create_conversation, get_user_with_billing
@@ -173,16 +174,13 @@ async def ingest_telegram_dm(
     if not text and not has_photo:
         return
 
-    topic_id_str: str | None = None
-    if message.direct_messages_topic is not None:
-        topic_id_str = str(message.direct_messages_topic.topic_id)
-    elif message.message_thread_id is not None:
-        topic_id_str = str(message.message_thread_id)
+    topic_id_str = resolve_channel_dm_topic_id(message)
     if topic_id_str is None:
         log.warning(
-            "telegram ingest: no topic chat_id=%s msg_id=%s",
+            "telegram ingest: no topic chat_id=%s msg_id=%s is_direct_messages=%s",
             message.chat.id,
             message.message_id,
+            getattr(message.chat, "is_direct_messages", None),
         )
         return
 
@@ -219,8 +217,17 @@ async def ingest_telegram_dm(
                     image_bytes, image_mime, is_video_note = img
                     if is_video_note:
                         attachment_kind = MessageAttachmentKind.video_note
-            if not text and not image_bytes and message.sticker:
-                text = (message.sticker.emoji or "").strip() or "🎭"
+            if not text and not image_bytes:
+                fallback = media_fallback_text(message)
+                if fallback:
+                    text = fallback
+                elif has_photo:
+                    log.warning(
+                        "telegram ingest: media download failed chat_id=%s msg_id=%s",
+                        message.chat.id,
+                        message.message_id,
+                    )
+                    text = "📎 Медиа"
         finally:
             if close_bot and bot:
                 await bot.session.close()
