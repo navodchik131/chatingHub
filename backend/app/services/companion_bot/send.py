@@ -110,7 +110,9 @@ async def send_companion_outbound(
         if sent_id is not None:
             platform_message_id = str(sent_id)
     elif conv.platform == Platform.fanvue:
-        row_fv = await resolve_fanvue_connection_for_conversation(session, conv, owner_id)
+        row_fv = await resolve_fanvue_connection_for_conversation(
+            session, conv, owner_id, repair=True
+        )
         if not row_fv:
             raise RuntimeError("fanvue connection missing")
         from app.services.fanvue_connection import ensure_fanvue_access_token

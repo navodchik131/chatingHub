@@ -858,7 +858,7 @@ async def api_reply(
 
     platform_message_id: str | None = None
     if conv.platform == Platform.telegram:
-        row_tg = await resolve_telegram_connection_for_conversation(session, conv, oid)
+        row_tg = await resolve_telegram_connection_for_conversation(session, conv, oid, repair=True)
         if not row_tg:
             raise HTTPException(
                 status_code=503,
@@ -955,7 +955,7 @@ async def api_reply(
             detail="Видео из студии пока поддерживается только для Telegram",
         )
     elif conv.platform == Platform.fanvue:
-        row_fv = await resolve_fanvue_connection_for_conversation(session, conv, oid)
+        row_fv = await resolve_fanvue_connection_for_conversation(session, conv, oid, repair=True)
         if not row_fv:
             raise HTTPException(
                 status_code=503,
@@ -986,7 +986,7 @@ async def api_reply(
                 await session.commit()
             raise
     elif conv.platform == Platform.instagram:
-        row_ig = await resolve_instagram_connection_for_conversation(session, conv, oid)
+        row_ig = await resolve_instagram_connection_for_conversation(session, conv, oid, repair=True)
         if not row_ig:
             raise HTTPException(
                 status_code=503,
@@ -1128,7 +1128,7 @@ async def api_message_reaction(
             )
             reaction_emoji = emoji if owner_has_emoji else None
             if conv.platform == Platform.telegram:
-                row_tg = await resolve_telegram_connection_for_conversation(session, conv, oid)
+                row_tg = await resolve_telegram_connection_for_conversation(session, conv, oid, repair=True)
                 if row_tg:
                     token = decrypt_secret(row_tg.bot_token_encrypted)
                     try:
@@ -1205,7 +1205,7 @@ async def api_message_reaction(
     elif conv.platform == Platform.instagram:
         ig_mid = row.platform_message_id or platform_message_id_from_meta(row.meta)
         if ig_mid:
-            row_ig = await resolve_instagram_connection_for_conversation(session, conv, oid)
+            row_ig = await resolve_instagram_connection_for_conversation(session, conv, oid, repair=True)
             if row_ig:
                 from app.services.instagram_connection import ensure_instagram_access_token
 
