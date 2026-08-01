@@ -35,12 +35,11 @@ _MINOR_TEXT_PATTERNS: tuple[re.Pattern[str], ...] = tuple(
     for p in (
         r"\bunder\s*[- ]?age\b",
         r"\bunderage\b",
-        r"\bminor[s]?\b",
+        r"\bminors?\b(?!\s+(?:details|adjustments?|changes?|issues?|roles?|damage|scratches?|blemishes?|imperfections?|skin|cosmetic|wear|repairs?))",
         r"\bchild(?:ren)?\b",
         r"\bkid[s]?\b",
         r"\bpreteen[s]?\b",
         r"\bteen(?:ager|age|aged)?\b",
-        r"\bjuv(?:enile|enility)\b",
         r"\bschool\s*girl[s]?\b",
         r"\bschool\s*boy[s]?\b",
         r"\bschoolgirl[s]?\b",
@@ -48,10 +47,10 @@ _MINOR_TEXT_PATTERNS: tuple[re.Pattern[str], ...] = tuple(
         r"\bloli\b",
         r"\bshota\b",
         r"\b(?:young|little)\s+(?:girl|boy)\b",
-        r"\b(?:year[s]?\s*old|yo|y\.?o\.?)\s*(?:1[0-7]|[0-9])\b",
-        r"\b(?:1[0-7]|[0-9])\s*(?:year[s]?\s*old|yo|y\.?o\.?)\b",
-        r"\bage\s*(?:1[0-7]|[0-9])\b",
-        r"\b(?:1[0-7]|[0-9])\s*(?:years?\s*old|лет|года|год)\b",
+        r"(?<![0-9])(?:1[0-7])\s*(?:year[s]?\s*old|yo|y\.?o\.?|лет|года|год)\b",
+        r"(?<![0-9])[0-9]\s*(?:year[s]?\s*old|yo|y\.?o\.?|лет|года|год)\b",
+        r"\bage\s*(?:1[0-7]|(?<![0-9])[0-9])\b",
+        r"\b(?:1[0-7])\s*(?:years?\s*old|лет|года|год)\b",
         r"\bнесовершеннолетн",
         r"\bреб[её]нок\b",
         r"\bдет(?:и|ск(?:ий|ая|ое|ого|ой|им|ими|ом|их|ими)?)\b",
@@ -59,6 +58,7 @@ _MINOR_TEXT_PATTERNS: tuple[re.Pattern[str], ...] = tuple(
         r"\bшкольниц",
         r"\bшкольник",
         r"\bмалолетн",
+        r"\bjuvenile\s+(?:appearance|look|features|face|body|build|subject)\b",
     )
 )
 
@@ -107,14 +107,14 @@ _BLOCKLIST_CSV_RE = re.compile(
 )
 
 
-def minor_content_http_exception() -> HTTPException:
-    return HTTPException(
-        status_code=403,
-        detail={
-            "code": MINOR_CONTENT_CODE,
-            "message": MINOR_CONTENT_MESSAGE_RU,
-        },
-    )
+def minor_content_http_exception(reason: str | None = None) -> HTTPException:
+    detail: dict[str, str] = {
+        "code": MINOR_CONTENT_CODE,
+        "message": MINOR_CONTENT_MESSAGE_RU,
+    }
+    if reason:
+        detail["debug_reason"] = reason[:200]
+    return HTTPException(status_code=403, detail=detail)
 
 
 def _strip_blocklist_keys_from_json(value: Any) -> Any:
@@ -249,15 +249,42 @@ def validate_profile_age_value(age_raw: str | int | float | None) -> str | None:
     return None
 
 
+def validate_profile_age_only(profile_text: str | None) -> str | None:
+    raw = (profile_text or "").strip()
+    if not raw:
+        return None
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(data, dict):
+        return None
+    mp = data.get("model_profile")
+    if not isinstance(mp, dict):
+        mp = data
+    return validate_profile_age_value(_extract_profile_age(mp) if isinstance(mp, dict) else None)
+
+
 def validate_model_profile_dict(profile_root: dict[str, Any]) -> str | None:
     mp = profile_root.get("model_profile")
     if not isinstance(mp, dict):
         mp = profile_root
     if not isinstance(mp, dict):
         return None
-    reason = validate_profile_age_value(_extract_profile_age(mp))
+    age_raw = _extract_profile_age(mp)
+    reason = validate_profile_age_value(age_raw)
     if reason:
         return reason
+    years = None
+    if age_raw is not None:
+        text = str(age_raw).strip()
+        m = _AGE_FIELD_RE.match(text)
+        if m:
+            years = int(m.group(1))
+        elif isinstance(age_raw, (int, float)):
+            years = int(age_raw)
+    if years is not None and years >= 18:
+        return None
     for key, val in mp.items():
         if key in _PROFILE_BLOCKLIST_KEYS:
             continue
@@ -360,7 +387,20 @@ async def assert_studio_generation_allowed(
     use_moderation: bool = True,
 ) -> None:
     """Raise HTTP 403 if any supplied text/profile indicates minors."""
-    # negative_prompt часто содержит блок-лист («teen», «young girl») — не проверяем regex'ом.
+    _ = negative_prompt, use_moderation  # OpenAI moderation removed — too many false positives on adult NSFW.
+
+    if profile_declares_adult_age(profile_text):
+        age_reason = validate_profile_age_only(profile_text)
+        if age_reason:
+            log.info("content_safety adult profile age block: %s", age_reason)
+            raise minor_content_http_exception(age_reason)
+        for t in (description, prompt):
+            hit = find_minor_content_violation(t)
+            if hit:
+                log.info("content_safety user prompt block (adult profile): %s", hit)
+                raise minor_content_http_exception(hit)
+        return
+
     raw_texts = [
         description,
         prompt,
@@ -370,22 +410,4 @@ async def assert_studio_generation_allowed(
     reasons = collect_minor_content_violations(texts=raw_texts, profile_text=profile_text)
     if reasons:
         log.info("content_safety regex block: %s", reasons[:3])
-        raise minor_content_http_exception()
-
-    if not use_moderation:
-        return
-
-    # OpenAI omni-moderation false-flags adult NSFW studio output too often.
-    # When profile validates or declares adult age, regex gate is enough.
-    if profile_declares_adult_age(profile_text):
-        return
-    if (profile_text or "").strip() and validate_model_profile_text(profile_text) is None:
-        return
-    combined = "\n".join(
-        sanitize_text_for_minor_regex(t) for t in raw_texts if (t or "").strip()
-    )
-    if _ADULT_AGE_SAFE_RE.search(combined):
-        return
-    if combined and await _openai_moderation_flags_minors(combined):
-        log.info("content_safety OpenAI moderation block")
-        raise minor_content_http_exception()
+        raise minor_content_http_exception(reasons[0])

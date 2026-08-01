@@ -3022,8 +3022,17 @@ async def api_studio_refine_prompt(
     assert_permission(user, PERM_STUDIO_GENERATE)
     oid = workspace_owner_id(user)
 
+    model_profile_text_early: str | None = None
+    parsed_mid_early = _parse_optional_model_id(model_id if model_id is not None else None)
+    if parsed_mid_early is not None:
+        sm_early = await require_studio_model_access(
+            session, user, parsed_mid_early, load_images=False
+        )
+        model_profile_text_early = (sm_early.profile_text or "").strip() or None
+
     await assert_studio_generation_allowed(
         description=(description or "").strip(),
+        profile_text=model_profile_text_early,
         reference_analysis_json=(reference_analysis_json or "").strip() or None,
         use_moderation=False,
     )

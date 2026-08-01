@@ -146,7 +146,36 @@ def test_assert_raises_with_code() -> None:
     assert detail.get("code") == MINOR_CONTENT_CODE
 
 
-def test_http_exception_helper() -> None:
-    exc = minor_content_http_exception()
-    assert exc.status_code == 403
-    assert collect_minor_content_violations(texts=["adult 28 yo"], profile_text=None) == []
+def test_assert_adult_profile_skips_grok_refined_scan() -> None:
+    profile = '{"model_profile": {"age": "28", "identity_lock_keywords": "adult brunette woman"}}'
+    grok_refined = (
+        "She is 28 years old, adult woman in lingerie. Not a teenager. "
+        "Avoid schoolgirl look. minor skin blemishes on shoulder."
+    )
+
+    async def _run() -> None:
+        await assert_studio_generation_allowed(
+            description="woman on balcony at sunset",
+            refined_prompt=grok_refined,
+            profile_text=profile,
+            use_moderation=True,
+        )
+
+    asyncio.run(_run())
+
+
+def test_age_28_not_matched_as_8_years_old() -> None:
+    assert find_minor_content_violation("beautiful woman 28 years old") is None
+
+
+def test_profile_identity_lock_with_blocklist_words_adult_age() -> None:
+    profile = (
+        '{"model_profile": {"age": "28", '
+        '"identity_lock_keywords": "never teen, no minor, avoid underage look"}}'
+    )
+    assert validate_model_profile_text(profile) is None
+
+
+def test_http_exception_includes_debug_reason() -> None:
+    exc = minor_content_http_exception("blocked pattern: teen")
+    assert exc.detail.get("debug_reason") == "blocked pattern: teen"
