@@ -212,3 +212,24 @@ def test_assert_early_28s_profile_hat_prompt_allowed() -> None:
         )
 
     asyncio.run(_run())
+
+
+def test_detail_edit_enriched_description_allowed() -> None:
+    from app.services.studio_workflow_scenarios import enrich_description_for_detail_edit
+
+    desc = enrich_description_for_detail_edit("красная шляпа на голове")
+
+    async def _run() -> None:
+        await assert_studio_generation_allowed(description=desc, use_moderation=False)
+
+    asyncio.run(_run())
+
+
+def test_detail_edit_legacy_minor_retouch_hint_stripped() -> None:
+    legacy = (
+        "шляпа\n\nSCENARIO — detail edit (in-place retouch of one frame):\n"
+        "PRIORITY 2 — apply ONLY the local change (color, prop, garment detail, "
+        "small object, minor retouch).\n"
+        "FORBIDDEN: new location, reframe, re-pose, new identity, face-swap, inventing a different shot."
+    )
+    assert find_minor_content_violation(legacy) is None

@@ -292,7 +292,7 @@ def enrich_description_for_detail_edit(description: str) -> str:
         "PRIORITY 1 — photo-base / frame-to-edit reference is the FULL edit canvas: keep the same person, "
         "pose, camera, crop, lighting, background and overall composition unless USER_NOTES explicitly change them.\n"
         "PRIORITY 2 — apply ONLY the local change described in USER_NOTES (color, prop, garment detail, "
-        "small object, minor retouch).\n"
+        "small object, subtle retouch).\n"
         "If a detail / element reference is attached, use it ONLY as the look of that element — "
         "do NOT replace the whole scene with it. WaveSpeed receives Image 1 = edit canvas, Image 2 = detail ref "
         "when present — the composed prompt MUST explicitly cite Image 2 / detail reference for that element.\n"

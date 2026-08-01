@@ -35,7 +35,7 @@ _MINOR_TEXT_PATTERNS: tuple[re.Pattern[str], ...] = tuple(
     for p in (
         r"\bunder\s*[- ]?age\b",
         r"\bunderage\b",
-        r"\bminors?\b(?!\s+(?:details|adjustments?|changes?|issues?|roles?|damage|scratches?|blemishes?|imperfections?|skin|cosmetic|wear|repairs?))",
+        r"\bminors?\b(?!\s+(?:details|adjustments?|changes?|issues?|roles?|damage|scratches?|blemishes?|imperfections?|skin|cosmetic|wear|repairs?|retouch(?:es|ing)?|lighting|crop|tilt|handheld|pose\s+tweaks?))",
         r"\bchild(?:ren)?\b",
         r"\bkid[s]?\b",
         r"\bpreteen[s]?\b",
@@ -136,6 +136,12 @@ _BLOCKLIST_CSV_RE = re.compile(
     re.I,
 )
 
+# Auto-appended workflow hint for «Изменить детали» — not user intent.
+_DETAIL_EDIT_HINT_RE = re.compile(
+    r"\n*SCENARIO\s*[—-]\s*detail edit.*?FORBIDDEN:.*?(?:different shot\.|$)",
+    re.I | re.S,
+)
+
 
 def minor_content_http_exception(reason: str | None = None) -> HTTPException:
     detail: dict[str, str] = {
@@ -184,6 +190,7 @@ def text_for_minor_content_regex(text: str) -> str:
 def sanitize_text_for_minor_regex(text: str) -> str:
     """Strip JSON blocklists, negated safety lines, and CSV minor-ban lists before regex."""
     raw = text_for_minor_content_regex(text)
+    raw = _DETAIL_EDIT_HINT_RE.sub(" ", raw)
     for pat in _NEGATED_MINOR_PHRASE_RES:
         raw = pat.sub(" ", raw)
     raw = _BLOCKLIST_CSV_RE.sub(" ", raw)
