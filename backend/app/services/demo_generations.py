@@ -10,14 +10,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.db.models import CreditAccount, DemoDeviceQuota, UsageEvent, User
-from app.services.billing_plan import is_credits_plan, normalize_billing_plan, studio_charges_credits
+from app.db.models import CreditAccount, UsageEvent, User
+from app.services.billing_plan import is_credits_plan, studio_charges_credits
 from app.services.credits import ensure_can_consume_credits, record_usage
-from app.services.demo_device_limit import (
-    demo_device_limit,
-    device_demo_slots_remaining,
-    try_consume_device_demo_slot,
-)
 from app.services.device_signal import DeviceSignal
 from app.services.studio_image_pricing import (
     demo_allowed_models_label,
@@ -75,33 +70,6 @@ def demo_generations_grant() -> int:
     return max(0, int(settings.demo_generations_grant))
 
 
-async def _release_device_demo_slot(
-    session: AsyncSession,
-    signal: DeviceSignal,
-) -> None:
-    from datetime import datetime, timezone
-
-    limit = demo_device_limit()
-    if limit <= 0:
-        return
-    row = (
-        await session.execute(
-            select(DemoDeviceQuota)
-            .where(DemoDeviceQuota.device_key == signal.device_key)
-            .with_for_update()
-        )
-    ).scalar_one_or_none()
-    if row is None:
-        return
-    used = int(row.demo_used_count or 0)
-    if used <= 0:
-        return
-    row.demo_used_count = used - 1
-    row.last_seen_at = datetime.now(timezone.utc)
-    session.add(row)
-    await session.flush()
-
-
 async def release_reserved_demo_slot(
     session: AsyncSession,
     *,
@@ -118,8 +86,6 @@ async def release_reserved_demo_slot(
         return False
     acc.demo_generations_remaining = min(cap, before + 1)
     await session.flush()
-    if device_signal is not None:
-        await _release_device_demo_slot(session, device_signal)
     return True
 
 
@@ -264,13 +230,6 @@ async def assert_studio_image_billing_available(
             wan_edit_tier=wan_edit_tier,
         )
     ):
-        if demo_device_limit() > 0 and device_signal is not None:
-            remaining = await device_demo_slots_remaining(
-                session, device_signal.device_key
-            )
-            if remaining <= 0:
-                await ensure_can_consume_credits(session, actor, cost)
-                return
         return
     if demo_rem <= 0 and credits <= 0:
         raise_studio_access_denied(demo_remaining=demo_rem, credits=credits)
@@ -397,14 +356,7 @@ async def prepare_studio_image_billing(
             wan_edit_tier=wan_edit_tier,
         )
     ):
-        if demo_device_limit() > 0:
-            if device_signal is None:
-                pass
-            elif not await try_consume_device_demo_slot(
-                session, device_signal, user_id=billing.id
-            ):
-                billing = await ensure_can_consume_credits(session, actor, cost)
-                return billing, cost, False
+        # Account demo balance is authoritative; device cap applies only at signup grant.
         if acc is None:
             acc = CreditAccount(
                 user_id=billing.id,
