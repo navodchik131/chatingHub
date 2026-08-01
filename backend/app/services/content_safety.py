@@ -92,6 +92,40 @@ def minor_content_http_exception() -> HTTPException:
     )
 
 
+def _strip_blocklist_keys_from_json(value: Any) -> Any:
+    """Remove safety blocklist fields from parsed JSON before regex scans."""
+    if isinstance(value, dict):
+        out: dict[str, Any] = {}
+        for key, val in value.items():
+            if key in _PROFILE_BLOCKLIST_KEYS:
+                continue
+            if key == "constraints" and isinstance(val, dict):
+                cons = {
+                    ck: cv for ck, cv in val.items() if ck not in _PROFILE_BLOCKLIST_KEYS
+                }
+                if cons:
+                    out[key] = _strip_blocklist_keys_from_json(cons)
+                continue
+            out[key] = _strip_blocklist_keys_from_json(val)
+        return out
+    if isinstance(value, list):
+        return [_strip_blocklist_keys_from_json(x) for x in value]
+    return value
+
+
+def text_for_minor_content_regex(text: str) -> str:
+    """Strip embedded negative/avoid lists from JSON prompt payloads before regex."""
+    raw = (text or "").strip()
+    if not raw:
+        return ""
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        return raw
+    sanitized = _strip_blocklist_keys_from_json(data)
+    return json.dumps(sanitized, ensure_ascii=False)
+
+
 def find_minor_content_violation(text: str) -> str | None:
     """Return a short reason if *text* requests or describes minors, else None."""
     raw = (text or "").strip()
@@ -106,7 +140,7 @@ def find_minor_content_violation(text: str) -> str | None:
 
 
 def _extract_profile_age(profile: dict[str, Any]) -> str | None:
-    for key in ("age", "apparent_age", "estimated_age"):
+    for key in ("age", "apparent_age", "estimated_age", "возраст"):
         val = profile.get(key)
         if val is None:
             continue
@@ -118,7 +152,7 @@ def _extract_profile_age(profile: dict[str, Any]) -> str | None:
     if isinstance(subject, dict):
         identity = subject.get("identity")
         if isinstance(identity, dict):
-            for key in ("age", "apparent_age", "estimated_age"):
+            for key in ("age", "apparent_age", "estimated_age", "возраст"):
                 val = identity.get(key)
                 if val is None:
                     continue
@@ -228,7 +262,7 @@ def collect_minor_content_violations(
 ) -> list[str]:
     reasons: list[str] = []
     for t in texts or []:
-        hit = find_minor_content_violation(t)
+        hit = find_minor_content_violation(text_for_minor_content_regex(t))
         if hit:
             reasons.append(hit)
     prof = validate_model_profile_text(profile_text)
@@ -292,12 +326,13 @@ async def assert_studio_generation_allowed(
 ) -> None:
     """Raise HTTP 403 if any supplied text/profile indicates minors."""
     # negative_prompt часто содержит блок-лист («teen», «young girl») — не проверяем regex'ом.
-    texts_for_regex = [
+    raw_texts = [
         description,
         prompt,
         refined_prompt,
         reference_analysis_json or "",
     ]
+    texts_for_regex = [text_for_minor_content_regex(t) for t in raw_texts]
     reasons = collect_minor_content_violations(texts=texts_for_regex, profile_text=profile_text)
     if reasons:
         log.info("content_safety regex block: %s", reasons[:3])

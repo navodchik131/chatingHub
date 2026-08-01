@@ -84,6 +84,30 @@ def test_assert_adult_profile_skips_moderation() -> None:
     asyncio.run(_run())
 
 
+def test_refined_prompt_negative_blocklist_not_scanned() -> None:
+    import json
+
+    profile = '{"model_profile": {"age": "28", "appearance": "adult woman"}}'
+    refined = json.dumps(
+        {
+            "positive_prompt": "woman in lingerie on balcony",
+            "negative_prompt": (
+                "child, minor, underage, teenager, teen, preteen, schoolgirl, schoolboy"
+            ),
+        }
+    )
+
+    async def _run() -> None:
+        await assert_studio_generation_allowed(
+            description="woman on balcony",
+            refined_prompt=refined,
+            profile_text=profile,
+            use_moderation=True,
+        )
+
+    asyncio.run(_run())
+
+
 def test_assert_raises_with_code() -> None:
     async def _run() -> None:
         await assert_studio_generation_allowed(
