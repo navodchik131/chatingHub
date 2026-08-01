@@ -34,6 +34,7 @@ export function AdminUserPanel({
 }) {
   const { t } = useTranslation('admin')
   const [creditDelta, setCreditDelta] = useState('')
+  const [demoDelta, setDemoDelta] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const isOwner = user.parent_user_id == null
   const periodKey = `admin-panel-period-${user.id}-${user.subscription_period_end ?? 'none'}`
@@ -136,6 +137,33 @@ export function AdminUserPanel({
     }
   }
 
+  const applyDemoGenerations = async () => {
+    const delta = parseInt(demoDelta, 10)
+    if (Number.isNaN(delta) || delta === 0) {
+      onError(t('userPanel.demoDeltaError'))
+      return
+    }
+    onError(null)
+    onBusy(true)
+    try {
+      const r = await apiFetch(`/api/admin/users/${user.id}/demo-generations`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ delta, note: 'admin panel' }),
+      })
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        onError(formatHttpApiError(r, j))
+        return
+      }
+      setDemoDelta('')
+      const detail = await apiFetch(`/api/admin/users/${user.id}`)
+      if (detail.ok) onUpdated((await detail.json()) as AdminUserDetail)
+    } finally {
+      onBusy(false)
+    }
+  }
+
   return (
     <aside className="admin-panel" aria-label={t('userPanel.ariaLabel')}>
       <div className="admin-panel__head">
@@ -161,6 +189,10 @@ export function AdminUserPanel({
         <div>
           <dt>{t('userPanel.creditsBalance')}</dt>
           <dd className="mono">{user.credits_balance}</dd>
+        </div>
+        <div>
+          <dt>{t('userPanel.demoGenerationsRemaining')}</dt>
+          <dd className="mono">{user.demo_generations_remaining ?? 0}</dd>
         </div>
         <div>
           <dt>{t('userPanel.studioModels')}</dt>
@@ -338,6 +370,19 @@ export function AdminUserPanel({
             onChange={(e) => setCreditDelta(e.target.value)}
           />
           <button type="button" className="ghost-btn" disabled={busy} onClick={() => void applyCredits()}>
+            {t('userPanel.apply')}
+          </button>
+        </div>
+        <div className="admin-credit-row">
+          <input
+            type="text"
+            inputMode="numeric"
+            placeholder={t('userPanel.demoDeltaPlaceholder')}
+            value={demoDelta}
+            disabled={busy}
+            onChange={(e) => setDemoDelta(e.target.value)}
+          />
+          <button type="button" className="ghost-btn" disabled={busy} onClick={() => void applyDemoGenerations()}>
             {t('userPanel.apply')}
           </button>
         </div>

@@ -13,7 +13,11 @@ from app.config import settings
 from app.db.models import CreditAccount, DemoDeviceQuota, UsageEvent, User
 from app.services.billing_plan import is_credits_plan, normalize_billing_plan, studio_charges_credits
 from app.services.credits import ensure_can_consume_credits, record_usage
-from app.services.demo_device_limit import demo_device_limit, try_consume_device_demo_slot
+from app.services.demo_device_limit import (
+    demo_device_limit,
+    device_demo_slots_remaining,
+    try_consume_device_demo_slot,
+)
 from app.services.device_signal import DeviceSignal
 from app.services.studio_image_pricing import (
     demo_allowed_models_label,
@@ -28,6 +32,7 @@ DEMO_ELIGIBLE_USAGE_KINDS = frozenset(
     {
         "studio_prompt_refine",
         "studio_inpaint",
+        # Bootstrap kinds: demo only for non-Credits plans; Credits uses free onboarding or paid credits.
         "studio_model_bootstrap_face_merge",
         "studio_model_bootstrap_body_compose",
         "studio_model_bootstrap_sheet",
@@ -44,8 +49,78 @@ _OWNER_PAYMENT_USAGE_KINDS = frozenset(
 )
 
 
+def demo_slot_reserved_from_params(params: dict[str, Any] | None) -> bool:
+    if not params:
+        return False
+    return str(params.get("demo_slot_reserved") or "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+
+
+def demo_slot_released_from_params(params: dict[str, Any] | None) -> bool:
+    if not params:
+        return False
+    return str(params.get("demo_slot_released") or "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+
+
 def demo_generations_grant() -> int:
     return max(0, int(settings.demo_generations_grant))
+
+
+async def _release_device_demo_slot(
+    session: AsyncSession,
+    signal: DeviceSignal,
+) -> None:
+    from datetime import datetime, timezone
+
+    limit = demo_device_limit()
+    if limit <= 0:
+        return
+    row = (
+        await session.execute(
+            select(DemoDeviceQuota)
+            .where(DemoDeviceQuota.device_key == signal.device_key)
+            .with_for_update()
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        return
+    used = int(row.demo_used_count or 0)
+    if used <= 0:
+        return
+    row.demo_used_count = used - 1
+    row.last_seen_at = datetime.now(timezone.utc)
+    session.add(row)
+    await session.flush()
+
+
+async def release_reserved_demo_slot(
+    session: AsyncSession,
+    *,
+    owner_id: int,
+    device_signal: DeviceSignal | None = None,
+) -> bool:
+    """Вернуть демо-слот, зарезервированный при accept job, если задача упала."""
+    acc = await _credit_account_for_update(session, owner_id)
+    if acc is None:
+        return False
+    cap = demo_generations_grant()
+    before = int(acc.demo_generations_remaining or 0)
+    if before >= cap:
+        return False
+    acc.demo_generations_remaining = min(cap, before + 1)
+    await session.flush()
+    if device_signal is not None:
+        await _release_device_demo_slot(session, device_signal)
+    return True
 
 
 MODEL_PROFILE_GEN_KIND = "studio_model_profile_generate"
@@ -153,6 +228,85 @@ async def _credit_account_for_update(
         .with_for_update()
     )
     return (await session.execute(stmt)).scalar_one_or_none()
+
+
+async def assert_studio_image_billing_available(
+    session: AsyncSession,
+    actor: User,
+    billing_owner: User,
+    *,
+    plan: str,
+    usage_kind: str,
+    quoted_cost: int,
+    wave_model_id: str | None = None,
+    grok_pipeline: str = "standard",
+    wave_profile: str | None = "nsfw",
+    wan_edit_tier: str | None = "standard",
+    device_signal: DeviceSignal | None = None,
+) -> None:
+    """Проверка доступности оплаты без списания (перед постановкой job в очередь)."""
+    if not studio_charges_credits(plan):
+        return
+    cost = apply_studio_credit_cost(plan, quoted_cost)
+    if cost <= 0:
+        return
+    acc = await session.get(CreditAccount, billing_owner.id)
+    demo_rem = int(acc.demo_generations_remaining) if acc is not None else 0
+    credits = int(acc.balance) if acc is not None else 0
+    if (
+        usage_kind in DEMO_ELIGIBLE_USAGE_KINDS
+        and demo_rem > 0
+        and is_credits_plan(plan)
+        and demo_request_eligible_for_free_slot(
+            wave_model_id=wave_model_id,
+            grok_pipeline=grok_pipeline,
+            wave_profile=wave_profile,
+            wan_edit_tier=wan_edit_tier,
+        )
+    ):
+        if demo_device_limit() > 0 and device_signal is not None:
+            remaining = await device_demo_slots_remaining(
+                session, device_signal.device_key
+            )
+            if remaining <= 0:
+                await ensure_can_consume_credits(session, actor, cost)
+                return
+        return
+    if demo_rem <= 0 and credits <= 0:
+        raise_studio_access_denied(demo_remaining=demo_rem, credits=credits)
+    await ensure_can_consume_credits(session, actor, cost)
+
+
+async def admin_adjust_demo_generations(
+    session: AsyncSession,
+    *,
+    billing_user_id: int,
+    delta: int,
+    admin_user_id: int,
+    note: str | None,
+) -> int:
+    """Ручное изменение остатка демо-генераций владельца workspace."""
+    if delta == 0:
+        raise ValueError("delta must be non-zero")
+    acc = await _credit_account_for_update(session, billing_user_id)
+    if acc is None:
+        acc = CreditAccount(user_id=billing_user_id, balance=0, demo_generations_remaining=0)
+        session.add(acc)
+        await session.flush()
+    before = int(acc.demo_generations_remaining or 0)
+    new_val = max(0, before + delta)
+    acc.demo_generations_remaining = new_val
+    meta = {"by_admin": admin_user_id, "note": (note or "")[:2000], "delta": delta}
+    session.add(
+        UsageEvent(
+            user_id=billing_user_id,
+            kind="admin_demo_generations_adjustment",
+            credits_delta=0,
+            meta=json.dumps(meta, ensure_ascii=False),
+        )
+    )
+    await session.flush()
+    return new_val
 
 
 async def reserve_studio_image_demo_slot(
@@ -393,5 +547,7 @@ async def reserve_bootstrap_image_demo_slot(
     )
     if used_demo:
         return True
+    if cost <= 0:
+        return False
     await ensure_can_consume_credits(session, actor, cost)
     return False

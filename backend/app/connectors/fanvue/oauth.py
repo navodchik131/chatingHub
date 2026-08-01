@@ -72,6 +72,8 @@ def build_fanvue_authorize_url(*, state: str, code_challenge: str) -> str:
         "state": state,
         "code_challenge": code_challenge,
         "code_challenge_method": "S256",
+        # Force consent so reconnect grants newly added scopes (write:media, write:creator).
+        "prompt": "consent",
     }
     auth_base = (settings.fanvue_oauth_authorize_url or "https://auth.fanvue.com/oauth2/auth").strip()
     return f"{auth_base}?{urlencode(params)}"

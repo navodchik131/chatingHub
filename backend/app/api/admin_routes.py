@@ -22,6 +22,8 @@ from app.db.session import get_session
 from app.schemas import (
     AdminCreditsIn,
     AdminCreditsOut,
+    AdminDemoGenerationsIn,
+    AdminDemoGenerationsOut,
     AdminPasswordResetIn,
     AdminSegmentOut,
     AdminStatsOut,
@@ -35,6 +37,7 @@ from app.services.funnel_analytics import build_activation_funnel
 from app.services.admin_segments import VALID_ADMIN_SEGMENTS, list_admin_segment
 from app.services.billing_plan import normalize_billing_plan
 from app.services.credits import admin_adjust_credits
+from app.services.demo_generations import admin_adjust_demo_generations
 from app.services.workspace import workspace_owner_id
 
 router = APIRouter(tags=["admin"])
@@ -81,14 +84,16 @@ async def _user_row(
     u: User,
     *,
     owner_bal: dict[int, int],
+    owner_demo: dict[int, int],
     owner_sub: dict[int, tuple[str, str, str | None, datetime | None]],
     owner_models: dict[int, int],
     owner_gens: dict[int, int],
 ) -> AdminUserRow:
     oid = workspace_owner_id(u)
-    if oid not in owner_bal:
+    if oid not in owner_bal or oid not in owner_demo:
         acc = await session.get(CreditAccount, oid)
         owner_bal[oid] = acc.balance if acc else 0
+        owner_demo[oid] = int(acc.demo_generations_remaining) if acc else 0
     if oid not in owner_sub:
         ow_stmt = (
             select(User)
@@ -112,6 +117,7 @@ async def _user_row(
         plan_tier=tier,
         subscription_period_end=pend,
         credits_balance=owner_bal[oid],
+        demo_generations_remaining=owner_demo[oid],
         studio_models_count=owner_models.get(oid, 0),
         studio_generations_count=owner_gens.get(oid, 0),
     )
@@ -169,6 +175,7 @@ async def admin_list_users(
     rows = (await session.execute(stmt)).scalars().all()
 
     owner_bal: dict[int, int] = {}
+    owner_demo: dict[int, int] = {}
     owner_sub: dict[int, tuple[str, str, str | None, datetime | None]] = {}
     owner_ids = list({workspace_owner_id(u) for u in rows})
     owner_models, owner_gens = await _owner_studio_counts(session, owner_ids)
@@ -179,6 +186,7 @@ async def admin_list_users(
                 session,
                 u,
                 owner_bal=owner_bal,
+                owner_demo=owner_demo,
                 owner_sub=owner_sub,
                 owner_models=owner_models,
                 owner_gens=owner_gens,
@@ -203,6 +211,7 @@ async def admin_get_user(
         session,
         u,
         owner_bal={},
+        owner_demo={},
         owner_sub={},
         owner_models=owner_models,
         owner_gens=owner_gens,
@@ -266,6 +275,7 @@ async def admin_patch_user(
         session,
         u,
         owner_bal={},
+        owner_demo={},
         owner_sub={},
         owner_models=owner_models,
         owner_gens=owner_gens,
@@ -310,6 +320,34 @@ async def admin_user_credits(
         raise HTTPException(status_code=400, detail=str(e)) from e
     await session.commit()
     return AdminCreditsOut(new_balance=new_bal, billing_user_id=billing_id)
+
+
+@router.post("/admin/users/{user_id}/demo-generations", response_model=AdminDemoGenerationsOut)
+async def admin_user_demo_generations(
+    user_id: int,
+    body: AdminDemoGenerationsIn,
+    session: AsyncSession = Depends(get_session),
+    admin: User = Depends(get_platform_admin),
+) -> AdminDemoGenerationsOut:
+    target = await session.get(User, user_id)
+    if not target:
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
+    billing_id = workspace_owner_id(target)
+    try:
+        new_demo = await admin_adjust_demo_generations(
+            session,
+            billing_user_id=billing_id,
+            delta=body.delta,
+            admin_user_id=admin.id,
+            note=body.note,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    await session.commit()
+    return AdminDemoGenerationsOut(
+        demo_generations_remaining=new_demo,
+        billing_user_id=billing_id,
+    )
 
 
 @router.patch("/admin/users/{user_id}/subscription")

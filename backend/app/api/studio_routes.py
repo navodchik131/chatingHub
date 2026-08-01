@@ -67,6 +67,7 @@ from app.services.billing_plan import is_credits_plan, normalize_billing_plan
 from app.services.credits import ensure_can_consume_credits, record_usage
 from app.services.demo_generations import (
     assert_demo_only_user_model_allowed,
+    assert_studio_image_billing_available,
     model_profile_generation_free,
     owner_used_model_profile_generation,
     parse_onboarding_wizard_flag,
@@ -74,7 +75,6 @@ from app.services.demo_generations import (
     prepare_studio_image_billing,
     raise_studio_access_denied,
     record_studio_image_billing,
-    reserve_bootstrap_image_demo_slot,
     reserve_studio_image_demo_slot,
     resolve_image_credit_cost,
 )
@@ -83,6 +83,7 @@ from app.services.entitlements import subscription_active
 from app.services.studio_image_pricing import (
     effective_wave_model_for_billing,
     grok_pipeline_for_studio_mode,
+    quote_studio_image_credits,
 )
 from app.services.admin_access import user_is_platform_admin
 from app.services.studio_keys import (
@@ -858,7 +859,7 @@ async def _reserve_refine_prompt_billing_at_accept(
         params["demo_slot_reserved"] = "1"
 
 
-async def _reserve_bootstrap_billing_at_accept(
+async def _assert_bootstrap_billing_available_at_accept(
     session: AsyncSession,
     user: User,
     oid: int,
@@ -867,6 +868,7 @@ async def _reserve_bootstrap_billing_at_accept(
     usage_kind: str,
     wave_model_id: str,
 ) -> None:
+    """Bootstrap: только проверка оплаты. Списание — после успешной генерации в job."""
     sub_b, _, _ws_row, plan, credits, demo = await load_owner_studio_billing(session, oid)
     _require_studio_subscription(
         user,
@@ -875,17 +877,24 @@ async def _reserve_bootstrap_billing_at_accept(
         demo_generations_remaining=demo,
     )
     billing_owner = await resolve_billing_user(session, user)
-    used_demo = await reserve_bootstrap_image_demo_slot(
+    quoted = quote_studio_image_credits(
+        wave_model_id=wave_model_id,
+        wan_edit_tier="standard",
+        grok_pipeline="none",
+    )
+    await assert_studio_image_billing_available(
         session,
         user,
         billing_owner,
         plan=plan,
         usage_kind=usage_kind,
+        quoted_cost=quoted,
         wave_model_id=wave_model_id,
+        grok_pipeline="none",
+        wave_profile="nsfw",
+        wan_edit_tier="standard",
         device_signal=device_signal_from_mapping(params),
     )
-    if used_demo:
-        params["demo_slot_reserved"] = "1"
 
 
 def _effective_generate_wavespeed(generate_wavespeed: str | None) -> bool:
@@ -6932,7 +6941,7 @@ async def api_model_bootstrap_face_merge(
         "ref_face_mime": (ref_face.content_type or "").strip(),
     }
     merge_device_key_into_params(params, request)
-    await _reserve_bootstrap_billing_at_accept(
+    await _assert_bootstrap_billing_available_at_accept(
         session,
         user,
         oid,
@@ -7052,7 +7061,7 @@ async def api_model_bootstrap_body_compose(
         "ref_face_mime": face_mime,
     }
     merge_device_key_into_params(params, request)
-    await _reserve_bootstrap_billing_at_accept(
+    await _assert_bootstrap_billing_available_at_accept(
         session,
         user,
         oid,
@@ -7182,7 +7191,7 @@ async def api_model_bootstrap_sheet(
         "dedupe_key": dedupe_key,
     }
     merge_device_key_into_params(params, request)
-    await _reserve_bootstrap_billing_at_accept(
+    await _assert_bootstrap_billing_available_at_accept(
         session,
         user,
         oid,
@@ -7273,17 +7282,6 @@ async def _studio_job_execute_model_bootstrap_face_merge(
     )
 
     gen_row = await find_studio_generation_by_job_id(session, job.id)
-    billing_owner = await resolve_billing_user(session, user)
-    billing, cost, used_demo = await prepare_bootstrap_image_billing(
-        session,
-        user,
-        billing_owner,
-        plan=plan,
-        usage_kind="studio_model_bootstrap_face_merge",
-        wave_model_id="seedream-v5.0-pro",
-        device_signal=device_signal,
-        demo_slot_reserved=_demo_slot_already_reserved(p),
-    )
 
     try:
         ws_res = await seedream_v50_pro_edit_image_url(
@@ -7294,6 +7292,18 @@ async def _studio_job_execute_model_bootstrap_face_merge(
         )
     except RuntimeError as e:
         raise RuntimeError(humanize_wavespeed_provider_error(str(e))) from e
+
+    billing_owner = await resolve_billing_user(session, user)
+    billing, cost, used_demo = await prepare_bootstrap_image_billing(
+        session,
+        user,
+        billing_owner,
+        plan=plan,
+        usage_kind="studio_model_bootstrap_face_merge",
+        wave_model_id="seedream-v5.0-pro",
+        device_signal=device_signal,
+        lock_account=True,
+    )
 
     arch_base = _public_app_base(None)
     if used_demo and gen_row is not None:
@@ -7401,17 +7411,6 @@ async def _studio_job_execute_model_bootstrap_body_compose(
         )
 
     gen_row = await find_studio_generation_by_job_id(session, job.id)
-    billing_owner = await resolve_billing_user(session, user)
-    billing, cost, used_demo = await prepare_bootstrap_image_billing(
-        session,
-        user,
-        billing_owner,
-        plan=plan,
-        usage_kind="studio_model_bootstrap_body_compose",
-        wave_model_id="seedream-v5.0-pro",
-        device_signal=device_signal,
-        demo_slot_reserved=_demo_slot_already_reserved(p),
-    )
 
     try:
         # Prompt: IMAGE 1 = face, IMAGE 2 = body
@@ -7423,6 +7422,18 @@ async def _studio_job_execute_model_bootstrap_body_compose(
         )
     except RuntimeError as e:
         raise RuntimeError(humanize_wavespeed_provider_error(str(e))) from e
+
+    billing_owner = await resolve_billing_user(session, user)
+    billing, cost, used_demo = await prepare_bootstrap_image_billing(
+        session,
+        user,
+        billing_owner,
+        plan=plan,
+        usage_kind="studio_model_bootstrap_body_compose",
+        wave_model_id="seedream-v5.0-pro",
+        device_signal=device_signal,
+        lock_account=True,
+    )
 
     arch_base = _public_app_base(None)
     if used_demo and gen_row is not None:
@@ -7527,22 +7538,24 @@ async def _studio_job_execute_model_bootstrap_sheet(
         raise RuntimeError("Нет исходного изображения для развёртки.")
 
     gen_row = await find_studio_generation_by_job_id(session, job.id)
-    billing_owner = await resolve_billing_user(session, user)
-    billing, cost, used_demo = await prepare_bootstrap_image_billing(
-        session,
-        user,
-        billing_owner,
-        plan=plan,
-        usage_kind="studio_model_bootstrap_sheet",
-        wave_model_id="gpt-image-2",
-        device_signal=device_signal,
-        demo_slot_reserved=_demo_slot_already_reserved(p),
-    )
 
-    if used_demo and gen_row is not None:
-        gen_row.is_demo = True
-        session.add(gen_row)
-        await session.flush()
+    async def _charge_sheet_billing() -> tuple[Any, int, bool]:
+        billing_owner = await resolve_billing_user(session, user)
+        billing, cost, used_demo = await prepare_bootstrap_image_billing(
+            session,
+            user,
+            billing_owner,
+            plan=plan,
+            usage_kind="studio_model_bootstrap_sheet",
+            wave_model_id="gpt-image-2",
+            device_signal=device_signal,
+            lock_account=True,
+        )
+        if used_demo and gen_row is not None:
+            gen_row.is_demo = True
+            session.add(gen_row)
+            await session.flush()
+        return billing, cost, used_demo
 
     async def _on_sheet_task_submitted(task_id: str) -> None:
         if gen_row is not None:
@@ -7574,6 +7587,7 @@ async def _studio_job_execute_model_bootstrap_sheet(
                 out_url = _studio_archive_image_url(oid, gen_row.id, arch_base)
                 if gen_row.status != StudioGenerationStatus.READY:
                     out_url = (gen_row.source_url or "").strip() or out_url
+                billing, cost, used_demo = await _charge_sheet_billing()
                 await record_studio_image_billing(
                     session,
                     user,
@@ -7592,6 +7606,7 @@ async def _studio_job_execute_model_bootstrap_sheet(
                 ).model_dump()
         raise RuntimeError(humanize_wavespeed_provider_error(str(e))) from e
 
+    billing, cost, used_demo = await _charge_sheet_billing()
     arch_base = _public_app_base(None)
     _, preview_url = await studio_finish_image_generation(
         session,

@@ -159,6 +159,35 @@ def schedule_studio_job(job_id: int) -> None:
     asyncio.create_task(_run_studio_job(job_id))
 
 
+async def _maybe_release_demo_slot_after_failure(
+    session: AsyncSession,
+    job: StudioJob,
+) -> None:
+    from app.services.demo_generations import (
+        demo_slot_released_from_params,
+        demo_slot_reserved_from_params,
+        release_reserved_demo_slot,
+    )
+    from app.services.device_signal import device_signal_from_mapping
+
+    params = job_params(job)
+    if not demo_slot_reserved_from_params(params):
+        return
+    if demo_slot_released_from_params(params):
+        return
+    released = await release_reserved_demo_slot(
+        session,
+        owner_id=job.user_id,
+        device_signal=device_signal_from_mapping(params),
+    )
+    if not released:
+        return
+    params["demo_slot_released"] = "1"
+    job.params_json = json.dumps(params, ensure_ascii=False)
+    session.add(job)
+    await session.flush()
+
+
 async def _run_studio_job(job_id: int) -> None:
     from app.services.studio_job_runner import execute_studio_job
 
@@ -181,6 +210,7 @@ async def _run_studio_job(job_id: int) -> None:
                 job.status = StudioJobStatus.failed.value
                 job.error_message = "Пользователь задачи не найден"
                 job.completed_at = datetime.now(timezone.utc)
+                await _maybe_release_demo_slot_after_failure(session, job)
                 await session.commit()
                 await _notify_job(job)
                 return
@@ -204,6 +234,8 @@ async def _run_studio_job(job_id: int) -> None:
                 job.status = StudioJobStatus.failed.value
                 job.error_message = (str(e) or type(e).__name__)[:4000]
                 job.result_json = None
+            if job.status == StudioJobStatus.failed.value:
+                await _maybe_release_demo_slot_after_failure(session, job)
             job.completed_at = datetime.now(timezone.utc)
             job.updated_at = datetime.now(timezone.utc)
             await session.commit()
@@ -229,6 +261,7 @@ async def _run_studio_job(job_id: int) -> None:
                     job.status = StudioJobStatus.failed.value
                     job.error_message = "Внутренняя ошибка выполнения задачи"
                     job.completed_at = datetime.now(timezone.utc)
+                    await _maybe_release_demo_slot_after_failure(session, job)
                     await session.commit()
                     try:
                         from app.services.studio_generation_placeholders import (

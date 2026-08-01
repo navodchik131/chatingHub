@@ -16,6 +16,23 @@ import { goToAdmin } from '../../marketing/workspaceEntry';
 
 const connIcons = { tg: IcoTg, wave: IcoWave, heart: IcoHeart, gift: IcoGift, cam: IcoCam, bell: IcoBell };
 
+function oauthFlashErrorMessage(platformId, reason, t) {
+  const r = (reason || '').trim().toLowerCase();
+  if (platformId === 'fanvue') {
+    if (r === 'access_denied') return t.fanvueOauthErrorDenied;
+    if (r === 'invalid_scope' || r.includes('scope')) return t.fanvueOauthErrorScopes;
+    if (r === 'invalid_state' || r === 'state_expired' || r === 'missing_code') return t.fanvueOauthErrorState;
+    if (reason && reason.length > 8 && r !== 'callback_failed') return reason;
+    return t.fanvueOauthErrorGeneric;
+  }
+  if (platformId === 'ig') {
+    if (r === 'access_denied') return t.fanvueOauthErrorDenied.replace('Fanvue', 'Instagram');
+    if (reason && reason.length > 8 && r !== 'callback_failed') return reason;
+    return t.igOauthErrorGeneric;
+  }
+  return t.fanvueOauthErrorGeneric.replace('Fanvue', platformId);
+}
+
 function ModelSelect({ label, value, options, onChange, lang, style }) {
   if (!options.length) return null;
   return (
@@ -285,7 +302,7 @@ function ConnectionDetail() {
 
   return (
     <div>
-      <BackLink onClick={() => setS({ connDetail: null, connFlash: null })}>{t.allConnections}</BackLink>
+      <BackLink onClick={() => setS({ connDetail: null, connFlash: null, connOauthReason: null })}>{t.allConnections}</BackLink>
 
       {s.connFlash && ['fanvue', 'ig', 'wavespeed', 'tg', 'tg-user', 'tribute'].includes(data.id) && (
         <NoteBlock
@@ -298,7 +315,9 @@ function ConnectionDetail() {
         >
           {s.connFlash === 'ok'
             ? flashSuccessMessage()
-            : (lang === 'ru' ? 'Не удалось сохранить. Проверьте ключ и попробуйте снова.' : 'Could not save. Check the key and try again.')}
+            : (['fanvue', 'ig'].includes(data.id)
+              ? oauthFlashErrorMessage(data.id, s.connOauthReason, t)
+              : (lang === 'ru' ? 'Не удалось сохранить. Проверьте ключ и попробуйте снова.' : 'Could not save. Check the key and try again.'))}
         </NoteBlock>
       )}
 
@@ -451,6 +470,13 @@ function ConnectionDetail() {
                 {fanvueConnected && (
                   <NoteBlock style={{ gridColumn: '1 / -1', borderColor: 'rgba(74,222,128,.35)', background: 'rgba(74,222,128,.08)' }}>
                     {lang === 'ru' ? 'Fanvue уже подключён. Можно переподключить аккаунт.' : 'Fanvue is connected. You can reconnect the account.'}
+                  </NoteBlock>
+                )}
+                {fanvueOAuthReady && (
+                  <NoteBlock style={{ gridColumn: '1 / -1' }}>
+                    {lang === 'ru'
+                      ? 'Для отправки изображений в Fanvue-чат нужны scopes write:media и write:creator. Если картинки не отправляются: включите их в Fanvue Developer Area → Authentication, отзовите доступ на fanvue.com/settings/account/third-party-apps и нажмите «Переподключить Fanvue».'
+                      : 'Sending images in Fanvue chat requires write:media and write:creator scopes. If images fail: enable them in Fanvue Developer Area → Authentication, revoke access at fanvue.com/settings/account/third-party-apps, then click Reconnect Fanvue.'}
                   </NoteBlock>
                 )}
                 <ModelSelect

@@ -1387,6 +1387,8 @@ class AdminUserRow(BaseModel):
     subscription_period_end: datetime | None = None
     credits_balance: int
     """Баланс счёта владельца пространства (для участника — тот же, что у владельца)."""
+    demo_generations_remaining: int = 0
+    """Остаток бесплатных демо-генераций владельца."""
     studio_models_count: int = 0
     """Модели студии владельца пространства."""
     studio_generations_count: int = 0
@@ -1416,6 +1418,16 @@ class AdminCreditsIn(BaseModel):
 
 class AdminCreditsOut(BaseModel):
     new_balance: int
+    billing_user_id: int
+
+
+class AdminDemoGenerationsIn(BaseModel):
+    delta: int
+    note: str | None = Field(default=None, max_length=2000)
+
+
+class AdminDemoGenerationsOut(BaseModel):
+    demo_generations_remaining: int
     billing_user_id: int
 
 

@@ -27,8 +27,10 @@ def fanvue_user_facing_error(body: str) -> str | None:
     lower = text.lower()
     if "insufficient scopes" in lower:
         return (
-            "Недостаточно прав Fanvue для отправки изображений. "
-            "Переподключите Fanvue в «Подключения» — нужны scopes write:media и write:creator."
+            "Недостаточно прав Fanvue для отправки изображений (нужны write:media и write:creator). "
+            "1) В Fanvue Developer Area включите эти scopes для OAuth-приложения. "
+            "2) Отзовите доступ: fanvue.com/settings/account/third-party-apps. "
+            "3) В кабинете «Подключения» → «Переподключить Fanvue»."
         )
     return None
 

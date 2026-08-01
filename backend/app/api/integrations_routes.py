@@ -774,6 +774,35 @@ async def fanvue_oauth_start(
     )
 
 
+def _fanvue_oauth_error_reason(exc: Exception) -> str:
+    if isinstance(exc, HTTPException):
+        detail = exc.detail
+        if isinstance(detail, str):
+            return detail[:500]
+        return str(detail)[:500]
+    if isinstance(exc, FanvueOAuthError):
+        body = (exc.body or "").lower()
+        if "invalid_scope" in body or "insufficient scope" in body:
+            return "invalid_scope"
+        if "invalid_grant" in body:
+            return "invalid_grant"
+        if exc.body:
+            return exc.body[:300]
+        return str(exc)[:300]
+    return "callback_failed"
+
+
+def _fanvue_oauth_fail_redirect(*, base: str, reason: str) -> RedirectResponse:
+    q = urlencode(
+        {
+            "account": "integrations",
+            "fanvue": "error",
+            "reason": (reason or "callback_failed")[:500],
+        }
+    )
+    return RedirectResponse(url=f"{base}/?{q}", status_code=302)
+
+
 @router.get("/fanvue/oauth/callback")
 async def fanvue_oauth_callback(
     background_tasks: BackgroundTasks,
@@ -793,13 +822,13 @@ async def fanvue_oauth_callback(
         return RedirectResponse(url=f"{base}/?{q}", status_code=302)
 
     if not code or not state:
-        return RedirectResponse(url=fail, status_code=302)
+        return _fanvue_oauth_fail_redirect(base=base, reason="missing_code")
 
     pending = await session.scalar(
         select(FanvueOAuthState).where(FanvueOAuthState.state == state.strip())
     )
     if not pending:
-        return RedirectResponse(url=fail, status_code=302)
+        return _fanvue_oauth_fail_redirect(base=base, reason="invalid_state")
 
     mobile_oauth = (pending.label or "").strip() == "__mobile__"
     if mobile_oauth:
@@ -812,7 +841,7 @@ async def fanvue_oauth_callback(
     if datetime.now(timezone.utc) - created > timedelta(minutes=15):
         await session.execute(delete(FanvueOAuthState).where(FanvueOAuthState.state == state))
         await session.commit()
-        return RedirectResponse(url=fail, status_code=302)
+        return _fanvue_oauth_fail_redirect(base=base, reason="state_expired")
 
     user_id = pending.user_id
     code_verifier = pending.code_verifier
@@ -844,17 +873,22 @@ async def fanvue_oauth_callback(
         )
         saved_conn_id = saved.id
     except FanvueOAuthError as e:
-        log.warning("fanvue oauth callback failed user=%s: %s", user_id, e)
+        reason = _fanvue_oauth_error_reason(e)
+        log.warning("fanvue oauth callback failed user=%s: %s", user_id, reason)
         if mobile_oauth:
             return RedirectResponse(url=fail, status_code=302)
-        q = urlencode({"account": "integrations", "fanvue": "error"})
-        return RedirectResponse(url=f"{base}/?{q}", status_code=302)
+        return _fanvue_oauth_fail_redirect(base=base, reason=reason)
+    except HTTPException as e:
+        reason = _fanvue_oauth_error_reason(e)
+        log.warning("fanvue oauth callback rejected user=%s: %s", user_id, reason)
+        if mobile_oauth:
+            return RedirectResponse(url=fail, status_code=302)
+        return _fanvue_oauth_fail_redirect(base=base, reason=reason)
     except Exception:
         log.exception("fanvue oauth callback failed user=%s", user_id)
         if mobile_oauth:
             return RedirectResponse(url=fail, status_code=302)
-        q = urlencode({"account": "integrations", "fanvue": "error"})
-        return RedirectResponse(url=f"{base}/?{q}", status_code=302)
+        return _fanvue_oauth_fail_redirect(base=base, reason="callback_failed")
 
     background_tasks.add_task(_background_fanvue_history_sync, user_id, saved_conn_id)
     return RedirectResponse(url=ok, status_code=302)

@@ -72,6 +72,7 @@ const initial = {
   donForm: { title: '', description: '', minRub: 0, modelId: '' },
   connForms: {},
   connFlash: null,
+  connOauthReason: null,
   opForm: { login: '', password: '', tribute: '15', modelIds: [] },
   lang: readStoredLocale(),
 };
@@ -161,11 +162,21 @@ export function AppProvider({ children, forceMobile = false }) {
     const instagram = params.get('instagram');
     if (page !== 'connections' || (!fanvue && !instagram)) return;
     if (fanvue) {
-      setS({ connDetail: 'fanvue', connFlash: fanvue === 'connected' ? 'ok' : 'error' });
+      const reason = params.get('reason');
+      setS({
+        connDetail: 'fanvue',
+        connFlash: fanvue === 'connected' ? 'ok' : 'error',
+        connOauthReason: fanvue === 'connected' ? null : (reason || null),
+      });
       params.delete('fanvue');
     }
     if (instagram) {
-      setS({ connDetail: 'ig', connFlash: instagram === 'connected' ? 'ok' : 'error' });
+      const reason = params.get('reason');
+      setS({
+        connDetail: 'ig',
+        connFlash: instagram === 'connected' ? 'ok' : 'error',
+        connOauthReason: instagram === 'connected' ? null : (reason || null),
+      });
       params.delete('instagram');
     }
     cabinet.clearBusy();
