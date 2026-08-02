@@ -121,7 +121,16 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             set_telegram_api_error(str(e))
             log.error("Нет связи с api.telegram.org (legacy): %s", e)
-        polling_task = asyncio.create_task(dp.start_polling(bot))
+        polling_task = asyncio.create_task(
+            dp.start_polling(
+                bot,
+                allowed_updates=[
+                    "message",
+                    "edited_message",
+                    "message_reaction",
+                ],
+            )
+        )
         log.info("Telegram legacy polling started for user_id=%s", legacy_uid)
     else:
         set_bot_dp(None, None)

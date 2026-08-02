@@ -13,7 +13,11 @@ from app.connectors.telegram.bot_for_user import (
     open_telegram_bot_for_owner,
     telegram_profile_photo_file_id,
 )
-from app.connectors.telegram.channel_dm import media_fallback_text, resolve_channel_dm_topic_id
+from app.connectors.telegram.channel_dm import (
+    canonical_channel_dm_thread_id,
+    media_fallback_text,
+    resolve_channel_dm_topic_id,
+)
 from app.connectors.telegram.media import download_telegram_image
 from app.db.models import Conversation, Message, MessageDirection, Platform
 from app.db.repo import get_or_create_conversation, get_user_with_billing
@@ -155,6 +159,62 @@ async def ingest_telegram_message_reaction(
         )
 
 
+async def _get_or_create_channel_dm_conversation(
+    session,
+    owner_user_id: int,
+    *,
+    chat_id: str,
+    topic_id_str: str,
+    peer_user_id: int | None,
+    display: str,
+    telegram_photo_file_id: str | None,
+    telegram_connection_id: int | None,
+    studio_model_id: int | None,
+) -> Conversation:
+    """Find/create conv; merge legacy peer-id topic into real thread id when it appears."""
+    if peer_user_id is not None and topic_id_str != str(peer_user_id):
+        legacy = await session.scalar(
+            select(Conversation).where(
+                Conversation.user_id == owner_user_id,
+                Conversation.platform == Platform.telegram,
+                Conversation.external_chat_id == chat_id,
+                Conversation.external_topic_id == str(peer_user_id),
+            )
+        )
+        thread_existing = await session.scalar(
+            select(Conversation).where(
+                Conversation.user_id == owner_user_id,
+                Conversation.platform == Platform.telegram,
+                Conversation.external_chat_id == chat_id,
+                Conversation.external_topic_id == topic_id_str,
+            )
+        )
+        if thread_existing is not None:
+            return thread_existing
+        if legacy is not None:
+            legacy.external_topic_id = topic_id_str
+            if display and legacy.user_display_name != display:
+                legacy.user_display_name = display
+            if telegram_photo_file_id and legacy.telegram_photo_file_id != telegram_photo_file_id:
+                legacy.telegram_photo_file_id = telegram_photo_file_id
+            if telegram_connection_id and legacy.telegram_connection_id != telegram_connection_id:
+                legacy.telegram_connection_id = telegram_connection_id
+            await session.flush()
+            return legacy
+
+    return await get_or_create_conversation(
+        session,
+        owner_user_id,
+        Platform.telegram,
+        chat_id,
+        topic_id_str,
+        display,
+        telegram_photo_file_id=telegram_photo_file_id,
+        telegram_connection_id=telegram_connection_id,
+        studio_model_id=studio_model_id,
+    )
+
+
 async def ingest_telegram_dm(
     owner_user_id: int,
     message: TelegramMessage,
@@ -186,6 +246,7 @@ async def ingest_telegram_dm(
 
     chat_id = str(message.chat.id)
     from_user = message.from_user
+    platform_msg_id = str(message.message_id)
     display = None
     if from_user:
         parts = [from_user.first_name or "", from_user.last_name or ""]
@@ -197,6 +258,21 @@ async def ingest_telegram_dm(
         user = await get_user_with_billing(session, owner_user_id)
         if not user:
             log.warning("telegram ingest: user %s not found", owner_user_id)
+            return
+
+        existing = await _find_telegram_message_in_chat(
+            session,
+            owner_user_id=owner_user_id,
+            chat_id=chat_id,
+            telegram_message_id=platform_msg_id,
+        )
+        if existing:
+            log.debug(
+                "telegram ingest: duplicate chat=%s msg=%s source=%s",
+                chat_id,
+                platform_msg_id,
+                source,
+            )
             return
 
         photo_fid: str | None = None
@@ -232,17 +308,21 @@ async def ingest_telegram_dm(
             if close_bot and bot:
                 await bot.session.close()
 
-        conv = await get_or_create_conversation(
+        conv = await _get_or_create_channel_dm_conversation(
             session,
             owner_user_id,
-            Platform.telegram,
-            chat_id,
-            topic_id_str,
-            display,
+            chat_id=chat_id,
+            topic_id_str=topic_id_str,
+            peer_user_id=from_user.id if from_user else None,
+            display=display,
             telegram_photo_file_id=photo_fid,
             telegram_connection_id=telegram_connection_id,
             studio_model_id=studio_model_id,
         )
+
+        thread_id = canonical_channel_dm_thread_id(message)
+        if thread_id and conv.external_topic_id != thread_id:
+            conv.external_topic_id = thread_id
 
         if text and not conv.auto_translate_disabled:
             translated, src_lang = await translate_to_russian(text)
@@ -282,7 +362,7 @@ async def ingest_telegram_dm(
             image_mime=image_mime,
             attachment_kind=attachment_kind,
             reply_to_message_id=reply_to_message_id,
-            platform_message_id=str(message.message_id),
+            platform_message_id=platform_msg_id,
         )
         if payload is None:
             return

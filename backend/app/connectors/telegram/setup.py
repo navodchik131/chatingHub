@@ -31,6 +31,14 @@ async def _log_incoming_updates(handler, event: Update, data: dict):
             bool(m.sticker),
             bool(m.video or m.animation or m.video_note),
         )
+    elif event.message_reaction:
+        r = event.message_reaction
+        log.info(
+            "update.message_reaction chat_id=%s msg_id=%s user_id=%s",
+            r.chat.id,
+            r.message_id,
+            r.user.id if r.user else None,
+        )
     elif event.edited_message:
         log.info("update.edited_message (ignored by app)")
     return await handler(event, data)

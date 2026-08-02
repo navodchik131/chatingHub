@@ -4,14 +4,14 @@ import logging
 
 from aiogram import F, Router
 from aiogram.filters import BaseFilter
-from aiogram.types import Message
+from aiogram.types import Message, MessageReactionUpdated
 
 from app.config import settings
 from app.connectors.telegram.channel_dm import (
     channel_dm_has_ingestable_content,
     is_channel_dm_message,
 )
-from app.connectors.telegram.ingest import ingest_telegram_dm
+from app.connectors.telegram.ingest import ingest_telegram_dm, ingest_telegram_message_reaction
 
 log = logging.getLogger(__name__)
 
@@ -29,6 +29,17 @@ async def on_channel_dm(message: Message) -> None:
         return
     source = "direct_messages_topic" if message.direct_messages_topic is not None else "message_thread_id"
     await ingest_telegram_dm(settings.legacy_user_id, message, source=source)
+
+
+@router.message_reaction()
+async def on_channel_dm_reaction(reaction: MessageReactionUpdated) -> None:
+    if settings.legacy_user_id <= 0:
+        return
+    await ingest_telegram_message_reaction(
+        settings.legacy_user_id,
+        reaction,
+        source="polling",
+    )
 
 
 @router.message(

@@ -218,6 +218,44 @@ async def resolve_upload_video_note(
     raise HTTPException(status_code=400, detail="Нужно видео или фото")
 
 
+def _telegram_channel_dm_extras(topic_id: int) -> list[dict[str, int]]:
+    if topic_id <= 0:
+        return [{}]
+    return [
+        {"direct_messages_topic_id": topic_id},
+        {"message_thread_id": topic_id},
+        {},
+    ]
+
+
+async def _telegram_send_with_dm_topic_fallback(
+    bot: Bot,
+    *,
+    chat_id: int,
+    topic_id: int,
+    send_once,
+):
+    """Try direct_messages_topic_id, then message_thread_id, then plain send."""
+    from aiogram.exceptions import TelegramAPIError
+
+    last_exc: Exception | None = None
+    for extra in _telegram_channel_dm_extras(topic_id):
+        try:
+            return await send_once(extra)
+        except TelegramAPIError as exc:
+            last_exc = exc
+            log.info(
+                "telegram send retry chat=%s topic=%s extra=%s: %s",
+                chat_id,
+                topic_id,
+                extra or "plain",
+                exc,
+            )
+    if last_exc is not None:
+        raise last_exc
+    raise RuntimeError("telegram send failed without exception")
+
+
 async def send_telegram_outbound(
     *,
     token: str,
@@ -251,18 +289,36 @@ async def send_telegram_outbound(
                     except (RuntimeError, ValueError) as exc:
                         raise HTTPException(status_code=502, detail=str(exc)[:500]) from exc
                 note = BufferedInputFile(payload, filename="video_note.mp4")
-                sent = await bot.send_video_note(
+
+                async def _send_note(extra: dict[str, int]):
+                    return await bot.send_video_note(
+                        chat_id=chat_id,
+                        video_note=note,
+                        length=640,
+                        **extra,
+                        **reply_kw,
+                    )
+
+                sent = await _telegram_send_with_dm_topic_fallback(
+                    bot,
                     chat_id=chat_id,
-                    video_note=note,
-                    direct_messages_topic_id=topic_id,
-                    length=640,
-                    **reply_kw,
+                    topic_id=topic_id,
+                    send_once=_send_note,
                 )
                 if (text or "").strip():
-                    await bot.send_message(
+
+                    async def _send_caption(extra: dict[str, int]):
+                        return await bot.send_message(
+                            chat_id=chat_id,
+                            text=text,
+                            **extra,
+                        )
+
+                    await _telegram_send_with_dm_topic_fallback(
+                        bot,
                         chat_id=chat_id,
-                        text=text,
-                        direct_messages_topic_id=topic_id,
+                        topic_id=topic_id,
+                        send_once=_send_caption,
                     )
                 return int(sent.message_id) if sent and sent.message_id else None
 
@@ -270,21 +326,29 @@ async def send_telegram_outbound(
             if video_mime and "webm" in video_mime:
                 ext = ".webm"
             vid = BufferedInputFile(payload, filename=f"video{ext}")
-            if (text or "").strip():
-                sent = await bot.send_video(
+
+            async def _send_video(extra: dict[str, int]):
+                if (text or "").strip():
+                    return await bot.send_video(
+                        chat_id=chat_id,
+                        video=vid,
+                        caption=text,
+                        **extra,
+                        **reply_kw,
+                    )
+                return await bot.send_video(
                     chat_id=chat_id,
                     video=vid,
-                    caption=text,
-                    direct_messages_topic_id=topic_id,
+                    **extra,
                     **reply_kw,
                 )
-            else:
-                sent = await bot.send_video(
-                    chat_id=chat_id,
-                    video=vid,
-                    direct_messages_topic_id=topic_id,
-                    **reply_kw,
-                )
+
+            sent = await _telegram_send_with_dm_topic_fallback(
+                bot,
+                chat_id=chat_id,
+                topic_id=topic_id,
+                send_once=_send_video,
+            )
         elif image_bytes:
             ext = ".jpg"
             if image_mime and "png" in image_mime:
@@ -292,27 +356,44 @@ async def send_telegram_outbound(
             elif image_mime and "webp" in image_mime:
                 ext = ".webp"
             photo = BufferedInputFile(image_bytes, filename=f"image{ext}")
-            if (text or "").strip():
-                sent = await bot.send_photo(
+
+            async def _send_photo(extra: dict[str, int]):
+                if (text or "").strip():
+                    return await bot.send_photo(
+                        chat_id=chat_id,
+                        photo=photo,
+                        caption=text,
+                        **extra,
+                        **reply_kw,
+                    )
+                return await bot.send_photo(
                     chat_id=chat_id,
                     photo=photo,
-                    caption=text,
-                    direct_messages_topic_id=topic_id,
+                    **extra,
                     **reply_kw,
                 )
-            else:
-                sent = await bot.send_photo(
-                    chat_id=chat_id,
-                    photo=photo,
-                    direct_messages_topic_id=topic_id,
-                    **reply_kw,
-                )
-        elif (text or "").strip():
-            sent = await bot.send_message(
+
+            sent = await _telegram_send_with_dm_topic_fallback(
+                bot,
                 chat_id=chat_id,
-                text=text,
-                direct_messages_topic_id=topic_id,
-                **reply_kw,
+                topic_id=topic_id,
+                send_once=_send_photo,
+            )
+        elif (text or "").strip():
+
+            async def _send_text(extra: dict[str, int]):
+                return await bot.send_message(
+                    chat_id=chat_id,
+                    text=text,
+                    **extra,
+                    **reply_kw,
+                )
+
+            sent = await _telegram_send_with_dm_topic_fallback(
+                bot,
+                chat_id=chat_id,
+                topic_id=topic_id,
+                send_once=_send_text,
             )
         else:
             raise HTTPException(status_code=400, detail="Пустое сообщение")

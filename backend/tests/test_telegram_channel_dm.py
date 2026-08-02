@@ -69,3 +69,14 @@ def test_threadless_media_is_routed_as_channel_dm():
     message = _msg(sticker=SimpleNamespace(emoji="😀", file_id="s1"))
     assert is_channel_dm_message(message)
     assert channel_dm_has_ingestable_content(message)
+
+
+def test_channel_inbox_without_is_direct_messages_flag():
+    """Media updates may omit is_direct_messages but keep thread id."""
+    message = _msg(
+        message_thread_id=55,
+        photo=[SimpleNamespace(file_id="p1")],
+        chat=SimpleNamespace(is_direct_messages=False, type="channel", id=-100123),
+    )
+    assert is_channel_dm_message(message)
+    assert resolve_channel_dm_topic_id(message) == "55"
