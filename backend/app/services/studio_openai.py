@@ -1713,13 +1713,27 @@ _MODEL_PROFILE_REQUIRED_SECTIONS = (
     "always_avoid",
 )
 
+_V1_PROFILE_REQUIRED_SECTIONS = (
+    "identity",
+    "head_and_face",
+    "hair",
+    "body",
+    "consistency",
+)
+
+_V1_UNFILLED_SKIP_PREFIXES = (
+    "generation_packs.",
+    "visibility_hints.",
+)
+
 
 def load_model_profile_gen_system() -> str:
     rel = _relative_prompt_path(
         settings.image_studio_model_profile_gen_system_path,
-        "data/prompts/model_profile_from_photos_system.txt",
+        "data/prompts/female_character_appearance_from_photos_system.txt",
     )
-    for path in _model_profile_prompt_candidates(rel, "model_profile_from_photos_system.txt"):
+    fallback_name = rel.rsplit("/", 1)[-1] if rel else "female_character_appearance_from_photos_system.txt"
+    for path in _model_profile_prompt_candidates(rel, fallback_name):
         if path.is_file():
             t = path.read_text(encoding="utf-8").strip()
             if t:
@@ -1734,9 +1748,10 @@ def load_model_profile_gen_system() -> str:
 def load_model_profile_json_template() -> str:
     rel = _relative_prompt_path(
         settings.image_studio_model_profile_template_path,
-        "data/prompts/model_profile_template.json",
+        "data/prompts/female_character_appearance_template.json",
     )
-    for path in _model_profile_prompt_candidates(rel, "model_profile_template.json"):
+    fallback_name = rel.rsplit("/", 1)[-1] if rel else "female_character_appearance_template.json"
+    for path in _model_profile_prompt_candidates(rel, fallback_name):
         if path.is_file():
             t = path.read_text(encoding="utf-8").strip()
             if t:
@@ -1752,38 +1767,75 @@ def _load_model_profile_template_dict() -> dict:
         return {"model_profile": {}}
     if not isinstance(data, dict):
         return {"model_profile": {}}
+    from app.services.studio_character_profile import is_v1_template_dict
+
+    if is_v1_template_dict(data):
+        return data
     if "model_profile" not in data:
         return {"model_profile": data}
     return data
 
 
-def _collect_model_profile_unfilled_paths(obj, path: str = "model_profile") -> list[str]:
+def _collect_model_profile_unfilled_paths(
+    obj,
+    path: str = "model_profile",
+    *,
+    skip_prefixes: tuple[str, ...] = (),
+) -> list[str]:
     """Пути полей, где остались placeholder <FILL…> (кроме name на верхнем уровне)."""
     out: list[str] = []
     if isinstance(obj, dict):
         for key, val in obj.items():
-            child = f"{path}.{key}"
+            child = f"{path}.{key}" if path else str(key)
             if key in ("name", "_note"):
                 continue
-            out.extend(_collect_model_profile_unfilled_paths(val, child))
+            if skip_prefixes and any(child.startswith(p) for p in skip_prefixes):
+                continue
+            out.extend(
+                _collect_model_profile_unfilled_paths(
+                    val,
+                    child,
+                    skip_prefixes=skip_prefixes,
+                )
+            )
     elif isinstance(obj, list):
         for idx, val in enumerate(obj):
-            out.extend(_collect_model_profile_unfilled_paths(val, f"{path}[{idx}]"))
-    elif isinstance(obj, str) and "<FILL" in obj.upper():
-        out.append(path)
+            child = f"{path}[{idx}]"
+            if skip_prefixes and any(child.startswith(p) for p in skip_prefixes):
+                continue
+            out.extend(
+                _collect_model_profile_unfilled_paths(
+                    val,
+                    child,
+                    skip_prefixes=skip_prefixes,
+                )
+            )
+    elif isinstance(obj, str):
+        upper = obj.upper()
+        if "<FILL" in upper or "FILL_OR_LEAVE" in upper:
+            if skip_prefixes and any(path.startswith(p) for p in skip_prefixes):
+                return out
+            out.append(path)
     return out
 
 
-def _model_profile_section_complete(profile: dict) -> bool:
+def _model_profile_section_complete(profile: dict, *, v1: bool = False) -> bool:
     if not isinstance(profile, dict):
         return False
-    return all(k in profile for k in _MODEL_PROFILE_REQUIRED_SECTIONS)
+    required = _V1_PROFILE_REQUIRED_SECTIONS if v1 else _MODEL_PROFILE_REQUIRED_SECTIONS
+    return all(k in profile for k in required)
 
 
-def _model_profile_filled(profile: dict) -> bool:
-    if not _model_profile_section_complete(profile):
+def _model_profile_filled(profile: dict, *, v1: bool = False) -> bool:
+    if not _model_profile_section_complete(profile, v1=v1):
         return False
-    return not _collect_model_profile_unfilled_paths(profile)
+    root = "" if v1 else "model_profile"
+    skip = _V1_UNFILLED_SKIP_PREFIXES if v1 else ()
+    return not _collect_model_profile_unfilled_paths(
+        profile,
+        root,
+        skip_prefixes=skip,
+    )
 
 
 def _deep_merge_model_profile(base: dict, overlay: dict) -> dict:
@@ -1801,6 +1853,12 @@ def _deep_merge_model_profile(base: dict, overlay: dict) -> dict:
 
 def _merge_model_profile_response(raw_text: str, *, template: dict | None = None) -> tuple[dict, list[str]]:
     """Парсит ответ модели, мержит со скелетом, возвращает (data, unfilled_paths)."""
+    from app.services.studio_character_profile import (
+        finalize_v1_profile_document,
+        is_v1_character_profile,
+        is_v1_template_dict,
+    )
+
     t = _strip_code_fences(raw_text)
     try:
         data = json.loads(t)
@@ -1808,13 +1866,30 @@ def _merge_model_profile_response(raw_text: str, *, template: dict | None = None
         raise RuntimeError(f"Модель вернула не JSON: {e}") from e
     if not isinstance(data, dict):
         raise RuntimeError("Ответ должен быть JSON-объектом")
+
+    tpl = template if template is not None else _load_model_profile_template_dict()
+    v1_mode = is_v1_template_dict(tpl) or is_v1_character_profile(data)
+
+    if v1_mode:
+        if "model_profile" in data and not is_v1_character_profile(data):
+            inner = data.get("model_profile")
+            if isinstance(inner, dict):
+                data = inner
+        merged = _deep_merge_model_profile(tpl, data) if tpl else data
+        merged = finalize_v1_profile_document(merged)
+        unfilled = _collect_model_profile_unfilled_paths(
+            merged,
+            "",
+            skip_prefixes=_V1_UNFILLED_SKIP_PREFIXES,
+        )
+        return merged, unfilled
+
     if "model_profile" not in data:
         data = {"model_profile": data}
     profile = data.get("model_profile")
     if not isinstance(profile, dict):
         raise RuntimeError("model_profile должен быть объектом")
 
-    tpl = template if template is not None else _load_model_profile_template_dict()
     tpl_profile = tpl.get("model_profile") if isinstance(tpl.get("model_profile"), dict) else {}
     if tpl_profile:
         data["model_profile"] = _deep_merge_model_profile(tpl_profile, profile)
@@ -1855,17 +1930,32 @@ async def generate_model_profile_json_from_images(
         raise RuntimeError("Пустой системный промпт генерации профиля")
     template = load_model_profile_json_template()
     template_dict = _load_model_profile_template_dict()
+    from app.services.studio_character_profile import is_v1_template_dict
+
+    v1_template = is_v1_template_dict(template_dict)
+    if v1_template:
+        schema_hint = (
+            "Fill the female_character_appearance v1 JSON schema below with traits from THIS person only. "
+            "Keep the exact same keys and nesting. Fill identity, head_and_face, hair, body, skin, "
+            "distinguishing_marks, accessories (if any), grooming, and consistency "
+            "(short_prompt_summary, identity_anchors, negative_traits). "
+            "Do NOT wrap in model_profile.\n\n"
+        )
+    else:
+        schema_hint = (
+            "These reference photos show one person. Fill the JSON schema template below "
+            "with traits from THIS person only. Keep the exact same keys and nesting — "
+            "every section (face, eyes, nose, lips, skin, hair, body, distinctive_marks, "
+            "signature_traits, always_avoid, default_style, default_mood) must be filled.\n\n"
+        )
     user_content: list[dict] = [
         {
             "type": "text",
             "text": (
-                "These reference photos show one person. Fill the JSON schema template below "
-                "with traits from THIS person only. Keep the exact same keys and nesting — "
-                "every section (face, eyes, nose, lips, skin, hair, body, distinctive_marks, "
-                "signature_traits, always_avoid, default_style, default_mood) must be filled.\n\n"
-                f"Number of images: {len(image_items)}.\n\n"
-                "JSON SCHEMA TEMPLATE (replace every placeholder value):\n"
-                f"{template}"
+                schema_hint
+                + f"Number of images: {len(image_items)}.\n\n"
+                + "JSON SCHEMA TEMPLATE (replace every placeholder value):\n"
+                + f"{template}"
             ),
         }
     ]
@@ -1972,16 +2062,20 @@ async def generate_model_profile_json_from_images(
             len(unfilled),
         )
         preview = ", ".join(unfilled[:10])
+        retry_hint = (
+            "Return the FULL female_character_appearance v1 JSON again — same schema, "
+            "every nested field filled from the photos, no <FILL> tokens, no markdown, "
+            "no model_profile wrapper."
+            if v1_template
+            else (
+                f"Your JSON still has {len(unfilled)} unfilled placeholder fields "
+                f"(e.g. {preview}). Return the FULL model_profile JSON again — same schema, "
+                "every nested field filled from the photos, no <FILL> tokens, no markdown."
+            )
+        )
         messages.extend([
             {"role": "assistant", "content": raw_text},
-            {
-                "role": "user",
-                "content": (
-                    f"Your JSON still has {len(unfilled)} unfilled placeholder fields "
-                    f"(e.g. {preview}). Return the FULL model_profile JSON again — same schema, "
-                    "every nested field filled from the photos, no <FILL> tokens, no markdown."
-                ),
-            },
+            {"role": "user", "content": retry_hint},
         ])
 
     preview = ", ".join(last_unfilled[:12])

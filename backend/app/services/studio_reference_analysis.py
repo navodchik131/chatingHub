@@ -623,30 +623,9 @@ def filter_model_profile_for_visibility(
     model_profile_text: str | None,
     visibility: IdentityVisibility,
 ) -> str | None:
-    if not (model_profile_text or "").strip():
-        return model_profile_text
-    try:
-        data = json.loads(model_profile_text)
-    except json.JSONDecodeError:
-        return model_profile_text
-    if not isinstance(data, dict):
-        return model_profile_text
+    from app.services.studio_character_profile import filter_model_profile_json_for_visibility
 
-    def scrub(obj: dict[str, Any]) -> None:
-        if not visibility.include_face:
-            obj.pop("face_features", None)
-            obj.pop("face", None)
-        if not visibility.include_hair:
-            obj.pop("hair", None)
-        if not visibility.include_expression:
-            obj.pop("expression", None)
-
-    if "model_profile" in data and isinstance(data["model_profile"], dict):
-        scrub(data["model_profile"])
-    else:
-        scrub(data)
-
-    return json.dumps(data, ensure_ascii=False)
+    return filter_model_profile_json_for_visibility(model_profile_text, visibility)
 
 
 def prune_skeleton_for_visibility(

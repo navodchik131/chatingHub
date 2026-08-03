@@ -206,11 +206,11 @@ class Settings(BaseSettings):
     )
     motion_first_frame_scene_describe_inline: str = Field(default="")
     image_studio_model_profile_gen_system_path: str = Field(
-        default="data/prompts/model_profile_from_photos_system.txt",
+        default="data/prompts/female_character_appearance_from_photos_system.txt",
     )
     image_studio_model_profile_gen_system_inline: str = Field(default="")
     image_studio_model_profile_template_path: str = Field(
-        default="data/prompts/model_profile_template.json",
+        default="data/prompts/female_character_appearance_template.json",
     )
     credit_cost_studio_model_profile_generate: int = Field(default=1)
     # Локальная отладка: клиент может передать generate_wavespeed=0 и получить только refined_prompt без WaveSpeed

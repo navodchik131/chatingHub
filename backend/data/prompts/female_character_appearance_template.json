@@ -1,0 +1,129 @@
+{
+  "_meta": {
+    "schema_name": "female_character_appearance",
+    "schema_version": "1.0",
+    "character_slug": "<FILL_SLUG>",
+    "source": "<FILL_SOURCE>",
+    "confidence_note": "Fields marked (est) are estimates from photos; set manually for consistency."
+  },
+  "identity": {
+    "character_id": "<FILL_ID>",
+    "name": "<FILL_NAME>",
+    "apparent_age": "<FILL_18_PLUS>",
+    "age_range": "<FILL>",
+    "phenotype": "<FILL>",
+    "origin_region": "<FILL>",
+    "overall_impression": "<FILL>",
+    "one_line_descriptor": "<FILL_ONE_LINE>"
+  },
+  "skin": {
+    "tone": "<FILL>",
+    "undertone": "<FILL>",
+    "texture": "<FILL>",
+    "finish": "<FILL>",
+    "freckles": { "present": false, "density": "<FILL>", "areas": [] },
+    "imperfections": ["<FILL>"]
+  },
+  "head_and_face": {
+    "face_shape": "<FILL>",
+    "forehead": { "height": "<FILL>", "width": "<FILL>", "hairline_shape": "<FILL>" },
+    "eyebrows": {
+      "shape": "<FILL>",
+      "thickness": "<FILL>",
+      "color": "<FILL>",
+      "notes": "<FILL>"
+    },
+    "eyes": {
+      "shape": "<FILL>",
+      "iris_color": "<FILL>",
+      "spacing": "<FILL>",
+      "gaze_character": "<FILL>"
+    },
+    "nose": { "type": "<FILL_OR_UNDEFINED>", "profile_notes": "<FILL>" },
+    "mouth": { "lip_type": "<FILL_OR_UNDEFINED>", "resting_expression": "<FILL>" },
+    "jaw_and_chin": { "jaw_type": "<FILL>", "chin_shape": "<FILL>" },
+    "ears": { "size": "<FILL>", "visible_by_default": false, "note": "<FILL>" }
+  },
+  "hair": {
+    "color": "<FILL>",
+    "color_details": "<FILL>",
+    "texture": "<FILL>",
+    "length": "<FILL>",
+    "length_cm": 0,
+    "default_style": "<FILL>",
+    "parting": "<FILL>"
+  },
+  "neck_and_shoulders": {
+    "neck_length": "<FILL>",
+    "collarbones": "<FILL>",
+    "shoulder_width": "<FILL>"
+  },
+  "body": {
+    "height_cm": 0,
+    "build": "<FILL>",
+    "silhouette_type": "<FILL>",
+    "posture_default": "<FILL>",
+    "anatomical_proportions": {
+      "shoulder_to_hip_ratio": 0,
+      "waist_to_hip_ratio": 0,
+      "overall_proportion_notes": "<FILL>"
+    },
+    "measurements_cm": {
+      "bust": 0,
+      "waist": 0,
+      "hips": 0,
+      "shoulder_width": 0,
+      "weight_kg": 0
+    },
+    "segments": {
+      "chest": { "size": "<FILL>", "shape": "<FILL>" },
+      "torso": { "waist_definition": "<FILL>", "abdomen": "<FILL>" },
+      "hips_and_glutes": { "hip_width": "<FILL>", "glute_volume": "<FILL>" },
+      "legs": { "thigh_shape": "<FILL>", "calf_shape": "<FILL>" }
+    }
+  },
+  "distinguishing_marks": {
+    "tattoos": { "has_tattoos": false, "items": [] },
+    "scars": { "has_scars": false, "items": [] },
+    "piercings": { "has_piercings": false, "items": [] }
+  },
+  "accessories": {
+    "has_accessories": false,
+    "items": [
+      {
+        "id": "<FILL>",
+        "type": "<FILL>",
+        "name": "<FILL>",
+        "mandatory": false,
+        "always_worn": false,
+        "obscures_face": false,
+        "shape_details": "<FILL>",
+        "notes": "<FILL>"
+      }
+    ]
+  },
+  "grooming": {
+    "makeup_default": { "present": false, "intensity": "<FILL>", "notes": "<FILL>" }
+  },
+  "consistency": {
+    "mandatory_in_every_shot": ["<FILL>"],
+    "identity_anchors": ["<FILL_5_TO_8>"],
+    "must_never_change": ["<FILL>"],
+    "negative_traits": ["<FILL>"],
+    "short_prompt_summary": "<FILL_DENSE_ENGLISH_SUMMARY_MAX_600_CHARS>"
+  },
+  "generation_packs": {
+    "short_prompt_summary": "<FILL_OR_LEAVE_FOR_AUTO_DERIVE>",
+    "figure_lock": "<FILL_OR_LEAVE_FOR_AUTO_DERIVE>",
+    "face_lock": "<FILL_OR_LEAVE_FOR_AUTO_DERIVE>",
+    "hair_lock": "<FILL_OR_LEAVE_FOR_AUTO_DERIVE>",
+    "accessory_lock": "<FILL_OR_LEAVE_FOR_AUTO_DERIVE>",
+    "negative_lock": ["<FILL>"]
+  },
+  "visibility_hints": {
+    "face": ["head_and_face", "skin", "identity.overall_impression"],
+    "hair": ["hair"],
+    "body": ["body", "neck_and_shoulders"],
+    "accessories_face": ["accessories"]
+  }
+}

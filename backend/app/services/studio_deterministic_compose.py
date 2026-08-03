@@ -5,13 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from app.services.studio_prompt_bundle import (
-    _compact_body_proportions_clause,
     _merge_grok_scene_negative,
-    _profile_identity_fields,
-    _truncate_profile_clause,
     extract_creative_notes_from_workflow_description,
-    grok_figure_anchor_from_profile,
-    STUDIO_IDENTITY_LINE_MAX,
     strip_soft_dof_from_scene_prose,
 )
 from app.services.studio_reference_analysis import (
@@ -118,51 +113,10 @@ def build_deterministic_identity_line(
     model_profile_text: str | None,
     visibility: IdentityVisibility,
 ) -> str:
-    """Короткая identity-строка — без чеклиста из 20 «Oval; Smooth; Full…»."""
-    raw = (model_profile_text or "").strip()
-    if not raw:
-        return grok_figure_anchor_from_profile(None, visibility=visibility)
+    """Короткая identity-строка — visibility-aware, generation_packs или legacy fallback."""
+    from app.services.studio_character_profile import build_identity_line_from_profile
 
-    try:
-        import json
-
-        data = json.loads(raw)
-    except json.JSONDecodeError:
-        return grok_figure_anchor_from_profile(model_profile_text, visibility=visibility)
-
-    prof: dict | None = None
-    if isinstance(data, dict):
-        mp = data.get("model_profile")
-        prof = mp if isinstance(mp, dict) else data
-    fields = _profile_identity_fields(prof if isinstance(prof, dict) else None)
-
-    bits: list[str] = []
-    if visibility.include_body_proportions and fields.get("body_proportions"):
-        body = _compact_body_proportions_clause(fields["body_proportions"])
-        if body:
-            bits.append(f"Build: {body}")
-    subj = (fields.get("subject") or "").strip()
-    if subj:
-        bits.append(subj)
-    if visibility.include_hair and fields.get("hair"):
-        hair = _compact_body_proportions_clause(fields["hair"], max_parts=2, max_len=80)
-        # subject уже содержит color — добавим только то, чего там нет (длина/стиль).
-        if hair and hair.lower() not in (subj or "").lower():
-            extra_hair_parts = [
-                p.strip()
-                for p in hair.split(",")
-                if p.strip() and p.strip().lower() not in (subj or "").lower()
-            ]
-            if extra_hair_parts:
-                bits.append(", ".join(extra_hair_parts[:2]))
-    # face_features-чеклист не кладём: likeness с model thumbnails, каталог только размывает сцену.
-
-    if bits:
-        return _truncate_profile_clause(
-            f"{'; '.join(bits)}. Same person on all visible skin.",
-            STUDIO_IDENTITY_LINE_MAX,
-        )
-    return grok_figure_anchor_from_profile(model_profile_text, visibility=visibility)
+    return build_identity_line_from_profile(model_profile_text, visibility)
 
 
 def compose_studio_scene_deterministic(

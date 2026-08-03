@@ -521,49 +521,9 @@ def grok_figure_anchor_from_profile(
     visibility: "IdentityVisibility | None" = None,
 ) -> str:
     """Короткий FIGURE_LOCK для Grok compose — объёмы из профиля только для видимых регионов."""
-    from app.services.studio_reference_analysis import IdentityVisibility, prompt_regions_to_mention
+    from app.services.studio_character_profile import build_figure_anchor_from_profile
 
-    vis: IdentityVisibility | None = visibility
-    regions = vis.visible_regions if vis is not None else frozenset()
-
-    def scoped_default() -> str:
-        if vis is None:
-            return (
-                "Model body proportions from BODY_REFERENCE and MODEL_PROFILE — "
-                "not the pose-reference sitter silhouette."
-            )
-        mention = prompt_regions_to_mention(vis)
-        return (
-            f"Model body on visible regions only ({'; '.join(mention)}). "
-            "Do not copy donor silhouette from pose reference."
-        )
-
-    raw = (model_profile_text or "").strip()
-    if not raw:
-        return scoped_default()
-    try:
-        data = json.loads(raw)
-    except (json.JSONDecodeError, TypeError):
-        return scoped_default()
-    prof: dict[str, Any] | None = None
-    if isinstance(data, dict):
-        mp = data.get("model_profile")
-        prof = mp if isinstance(mp, dict) else data
-    fields = _profile_identity_fields(prof if isinstance(prof, dict) else None)
-    body = _compact_body_proportions_clause(fields.get("body_proportions") or "")
-    subj = (fields.get("subject") or "").strip()
-    bits: list[str] = []
-    if body:
-        bits.append(f"Build: {body}")
-    if subj:
-        bits.append(subj)
-    if bits and vis is not None and regions:
-        joined = _truncate_profile_clause("; ".join(bits), STUDIO_IDENTITY_LINE_MAX)
-        region_hint = ", ".join(sorted(regions))
-        return f"Visible regions [{region_hint}]: {joined}."
-    if bits:
-        return _truncate_profile_clause("; ".join(bits), STUDIO_IDENTITY_LINE_MAX)
-    return scoped_default()
+    return build_figure_anchor_from_profile(model_profile_text, visibility)
 
 
 _IDENTITY_OPENER_RE = re.compile(
@@ -874,6 +834,11 @@ def coerce_compact_pose_positive(
 
 
 def _always_avoid_from_profile(model_profile_text: str | None) -> str:
+    from app.services.studio_character_profile import profile_negative_traits
+
+    v1_neg = profile_negative_traits(model_profile_text)
+    if v1_neg:
+        return _filter_avoid_csv(v1_neg)
     prof = _parse_model_profile_root(model_profile_text)
     if not prof:
         return ""
