@@ -137,6 +137,10 @@ def build_deterministic_identity_line(
     fields = _profile_identity_fields(prof if isinstance(prof, dict) else None)
 
     bits: list[str] = []
+    if visibility.include_body_proportions and fields.get("body_proportions"):
+        body = _compact_body_proportions_clause(fields["body_proportions"])
+        if body:
+            bits.append(f"Build: {body}")
     subj = (fields.get("subject") or "").strip()
     if subj:
         bits.append(subj)
@@ -152,10 +156,6 @@ def build_deterministic_identity_line(
             if extra_hair_parts:
                 bits.append(", ".join(extra_hair_parts[:2]))
     # face_features-чеклист не кладём: likeness с model thumbnails, каталог только размывает сцену.
-    if visibility.include_body_proportions and fields.get("body_proportions"):
-        body = _compact_body_proportions_clause(fields["body_proportions"])
-        if body:
-            bits.append(f"Build: {body}")
 
     if bits:
         return _truncate_profile_clause(

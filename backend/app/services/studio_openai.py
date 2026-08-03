@@ -199,6 +199,13 @@ _GROK_MAIN_PROSE_WAN_PREFIX = (
     "One model from attached reference photos. Recreate the scene described below.\n\n"
 )
 
+_GROK_MODEL_SCENE_NO_POSE_WAN_PREFIX = (
+    "One model from attached reference photos. Recreate the scene described below. "
+    "Image 1 (body reference) is the primary anchor for bust, waist, hip width, thigh volume, and overall build — "
+    "match those volumes even when the scene pose is athletic or revealing. "
+    "Face and hair from the face reference; do not slim the figure toward a generic model silhouette.\n\n"
+)
+
 _LOCATION_CHANGE_WAN_PREFIX = (
     "[LOCATION CHANGE — reconstruct environment; NOT flat background paste]\n"
     "Image 1 = photo-base EDIT CANVAS: keep this exact person (face, skin, hair, body, clothes, props), "
@@ -220,6 +227,13 @@ _LOCATION_CHANGE_WAN_SUFFIX = (
 
 _GROK_MAIN_PROSE_NANO_PREFIX = (
     "Attached images = one saved model. Generate the scene described below.\n\n"
+)
+
+_GROK_MODEL_SCENE_NO_POSE_NANO_PREFIX = (
+    "Attached images = one saved model. Generate the scene described below. "
+    "First image (body reference) anchors bust, waist, hip width, thigh volume, and overall build — "
+    "preserve those volumes; face reference supplies likeness. "
+    "Do not slim the figure toward a generic model silhouette.\n\n"
 )
 
 _WAN_COMPACT_NO_FACE_PREFIX = (
@@ -329,9 +343,17 @@ def finalize_wavespeed_studio_prompt(
     elif brief == "grok_composed_text":
         out = _GROK_TEXT_SCENE_WAN_PREFIX.strip() if not p else _GROK_TEXT_SCENE_WAN_PREFIX + p
     elif brief == "grok_main_prose":
-        out = _GROK_MAIN_PROSE_WAN_PREFIX.strip() if not p else _GROK_MAIN_PROSE_WAN_PREFIX + p
+        if mode == "model_scene" and not user_image_first:
+            prefix = _GROK_MODEL_SCENE_NO_POSE_WAN_PREFIX
+        else:
+            prefix = _GROK_MAIN_PROSE_WAN_PREFIX
+        out = prefix.strip() if not p else prefix + p
     elif brief == "deterministic_compose":
-        out = _GROK_MAIN_PROSE_WAN_PREFIX.strip() if not p else _GROK_MAIN_PROSE_WAN_PREFIX + p
+        if mode == "model_scene" and not user_image_first:
+            prefix = _GROK_MODEL_SCENE_NO_POSE_WAN_PREFIX
+        else:
+            prefix = _GROK_MAIN_PROSE_WAN_PREFIX
+        out = prefix.strip() if not p else prefix + p
     else:
         out = p
     if headless and brief != "compact_pose_image" and not skip_no_face_suffix:
@@ -473,9 +495,12 @@ def finalize_nano_banana_studio_prompt(
             out = _GROK_COMPOSED_NANO_PREFIX.strip() if not p else _GROK_COMPOSED_NANO_PREFIX + p
     elif brief == "grok_composed_text":
         out = _GROK_TEXT_SCENE_NANO_PREFIX.strip() if not p else _GROK_TEXT_SCENE_NANO_PREFIX + p
-    elif brief == "grok_main_prose":
+    elif brief in ("grok_main_prose", "deterministic_compose"):
         if mode == "face_swap":
             head = _NANO_BANANA_FACE_SWAP_IDENTITY_PREFIX
+            out = head.strip() if not p else head + p
+        elif mode == "model_scene" and not user_pose_reference_is_last:
+            head = _GROK_MODEL_SCENE_NO_POSE_NANO_PREFIX
             out = head.strip() if not p else head + p
         else:
             out = (

@@ -148,7 +148,8 @@ def select_model_scene_wavespeed_identity_images(
     max_count: int = 6,
 ) -> list[UserStudioModelImage]:
     """
-    Режим «Модель + промпт»: только снимки модели (развёртка, тело, лицо, анатомия) — без референса сцены.
+    Режим «Модель + промпт» / po-refu без bitmap позы: body → face → genitals.
+    Без turnaround — character sheet в одежде тянет нейтральный силуэт и перебивает body-ref.
     """
     if not imgs:
         return []
@@ -161,9 +162,9 @@ def select_model_scene_wavespeed_identity_images(
         if k not in by_kind:
             by_kind[k] = im
 
-    order: list[str] = ["turnaround", "body", "face", "genitals"]
+    order: list[str] = ["body", "face", "genitals"]
     if wp == "regular":
-        order = ["turnaround", "body", "face"]
+        order = ["body", "face"]
 
     picked: list[UserStudioModelImage] = []
     seen: set[int] = set()
@@ -176,16 +177,20 @@ def select_model_scene_wavespeed_identity_images(
         picked.append(im)
         seen.add(im.id)
     if not picked:
-        for im in sorted_imgs[:cap]:
-            if im.id not in seen:
+        for kind in ("turnaround", "face", "body", "other"):
+            im = by_kind.get(kind)
+            if im is not None and im.id not in seen:
                 picked.append(im)
+                seen.add(im.id)
+            if len(picked) >= cap:
+                break
     return sort_model_images_for_wan_identity(picked)[:cap]
 
 
 _WAVESPEED_KIND_LEGEND: dict[str, str] = {
-    "turnaround": "character sheet — face, hair, clothed silhouette",
+    "turnaround": "character sheet — face, hair, clothed silhouette (fallback only)",
     "face": "face likeness and skin tone",
-    "body": "body proportions and overall build",
+    "body": "body proportions and overall build — primary bust/waist/hip anchor",
     "genitals": "nude anatomy",
     "other": "model reference",
 }

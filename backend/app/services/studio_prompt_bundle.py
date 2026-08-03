@@ -552,17 +552,16 @@ def grok_figure_anchor_from_profile(
     fields = _profile_identity_fields(prof if isinstance(prof, dict) else None)
     body = _compact_body_proportions_clause(fields.get("body_proportions") or "")
     subj = (fields.get("subject") or "").strip()
-    bits = [b for b in (subj, body) if b]
+    bits: list[str] = []
+    if body:
+        bits.append(f"Build: {body}")
+    if subj:
+        bits.append(subj)
     if bits and vis is not None and regions:
         joined = _truncate_profile_clause("; ".join(bits), STUDIO_IDENTITY_LINE_MAX)
         region_hint = ", ".join(sorted(regions))
         return f"Visible regions [{region_hint}]: {joined}."
     if bits:
-        if subj and body:
-            return _truncate_profile_clause(
-                f"{subj}. Build: {body}.",
-                STUDIO_IDENTITY_LINE_MAX,
-            )
         return _truncate_profile_clause("; ".join(bits), STUDIO_IDENTITY_LINE_MAX)
     return scoped_default()
 
