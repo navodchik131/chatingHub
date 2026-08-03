@@ -58,6 +58,7 @@ import {
   TopBar,
 } from '@/src/components/ui';
 import { NO_CHARACTER } from '@/src/studio/studioHelpers';
+import { useAppData } from '@/src/context/AppDataProvider';
 import { useAppSettings } from '@/src/context/AppSettingsContext';
 import { useNav } from '@/src/context/NavigationContext';
 import {

@@ -342,7 +342,7 @@ const styles = StyleSheet.create({
     backgroundColor: color.card,
   },
   playOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(0,0,0,.28)',
