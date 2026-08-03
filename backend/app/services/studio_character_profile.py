@@ -23,6 +23,19 @@ if TYPE_CHECKING:
 
 V1_SCHEMA_NAME = "female_character_appearance"
 _HIDDEN_MARKERS = ("undefined", "permanently_hidden", "not visible", "скрыт")
+_PLACEHOLDER_RE = re.compile(r"<FILL[^>]*>|FILL_OR_LEAVE_FOR_AUTO_DERIVE", re.I)
+
+
+def _is_unfilled_placeholder(text: str) -> bool:
+    s = (text or "").strip()
+    if not s:
+        return True
+    if _PLACEHOLDER_RE.search(s):
+        parts = [p.strip() for p in re.split(r"[;,|]+", s) if p.strip()]
+        if not parts:
+            return True
+        return all(_PLACEHOLDER_RE.search(p) for p in parts)
+    return False
 
 
 def is_v1_template_dict(data: dict[str, Any]) -> bool:
@@ -85,6 +98,13 @@ def _as_text(value: Any) -> str:
     return ""
 
 
+def _usable_pack_text(value: Any) -> str:
+    t = _as_text(value)
+    if not t or _is_unfilled_placeholder(t):
+        return ""
+    return t
+
+
 def _is_hidden_value(text: str) -> bool:
     s = (text or "").strip().lower()
     if not s:
@@ -97,7 +117,7 @@ def _is_hidden_value(text: str) -> bool:
 def _first_non_hidden(*values: Any) -> str:
     for v in values:
         t = _as_text(v)
-        if t and not _is_hidden_value(t):
+        if t and not _is_hidden_value(t) and not _is_unfilled_placeholder(t):
             return t
     return ""
 
@@ -109,7 +129,7 @@ def _join_non_empty(parts: list[str], sep: str = "; ") -> str:
 def _build_figure_lock_v1(doc: dict[str, Any]) -> str:
     packs = doc.get("generation_packs")
     if isinstance(packs, dict):
-        existing = _as_text(packs.get("figure_lock"))
+        existing = _usable_pack_text(packs.get("figure_lock"))
         if existing:
             return existing
 
@@ -156,7 +176,7 @@ def _build_figure_lock_v1(doc: dict[str, Any]) -> str:
 def _build_face_lock_v1(doc: dict[str, Any]) -> str:
     packs = doc.get("generation_packs")
     if isinstance(packs, dict):
-        existing = _as_text(packs.get("face_lock"))
+        existing = _usable_pack_text(packs.get("face_lock"))
         if existing:
             return existing
 
@@ -197,7 +217,7 @@ def _build_face_lock_v1(doc: dict[str, Any]) -> str:
 def _build_hair_lock_v1(doc: dict[str, Any]) -> str:
     packs = doc.get("generation_packs")
     if isinstance(packs, dict):
-        existing = _as_text(packs.get("hair_lock"))
+        existing = _usable_pack_text(packs.get("hair_lock"))
         if existing:
             return existing
 
@@ -215,7 +235,7 @@ def _build_hair_lock_v1(doc: dict[str, Any]) -> str:
 def _build_accessory_lock_v1(doc: dict[str, Any]) -> str:
     packs = doc.get("generation_packs")
     if isinstance(packs, dict):
-        existing = _as_text(packs.get("accessory_lock"))
+        existing = _usable_pack_text(packs.get("accessory_lock"))
         if existing:
             return existing
 
@@ -241,12 +261,12 @@ def _build_accessory_lock_v1(doc: dict[str, Any]) -> str:
 
 
 def _build_short_summary_v1(doc: dict[str, Any], packs: dict[str, Any]) -> str:
-    existing = _as_text(packs.get("short_prompt_summary"))
+    existing = _usable_pack_text(packs.get("short_prompt_summary"))
     if existing:
         return existing
     consistency = doc.get("consistency")
     if isinstance(consistency, dict):
-        s = _as_text(consistency.get("short_prompt_summary"))
+        s = _usable_pack_text(consistency.get("short_prompt_summary"))
         if s:
             return s
     bits = [
@@ -289,11 +309,24 @@ def build_generation_packs(doc: dict[str, Any]) -> dict[str, Any]:
     if is_v1_character_profile(doc):
         existing = doc.get("generation_packs")
         packs: dict[str, Any] = dict(existing) if isinstance(existing, dict) else {}
-        packs.setdefault("figure_lock", _build_figure_lock_v1(doc))
-        packs.setdefault("face_lock", _build_face_lock_v1(doc))
-        packs.setdefault("hair_lock", _build_hair_lock_v1(doc))
-        packs.setdefault("accessory_lock", _build_accessory_lock_v1(doc))
-        packs.setdefault("negative_lock", _build_negative_lock_v1(doc))
+        derived = {
+            "figure_lock": _build_figure_lock_v1(doc),
+            "face_lock": _build_face_lock_v1(doc),
+            "hair_lock": _build_hair_lock_v1(doc),
+            "accessory_lock": _build_accessory_lock_v1(doc),
+            "negative_lock": _build_negative_lock_v1(doc),
+        }
+        for key, value in derived.items():
+            if key == "negative_lock":
+                if not packs.get(key):
+                    packs[key] = value
+                continue
+            if _usable_pack_text(packs.get(key)):
+                continue
+            if value:
+                packs[key] = value
+            else:
+                packs.pop(key, None)
         packs["short_prompt_summary"] = _build_short_summary_v1(doc, packs)
         return packs
 
@@ -476,29 +509,29 @@ def build_identity_line_from_profile(
     bits: list[str] = []
 
     if vis is None or vis.include_body_proportions:
-        figure = _as_text(packs.get("figure_lock"))
+        figure = _usable_pack_text(packs.get("figure_lock"))
         if figure:
             body = _compact_body_proportions_clause(figure, max_len=STUDIO_BODY_PROPORTIONS_MAX)
             if body:
                 bits.append(f"Build: {body}")
 
     if vis is None or vis.include_face:
-        accessory = _as_text(packs.get("accessory_lock"))
+        accessory = _usable_pack_text(packs.get("accessory_lock"))
         if accessory:
             bits.append(accessory)
-        face = _as_text(packs.get("face_lock"))
+        face = _usable_pack_text(packs.get("face_lock"))
         if face:
             bits.append(face)
 
     if vis is None or vis.include_hair:
-        hair = _as_text(packs.get("hair_lock"))
+        hair = _usable_pack_text(packs.get("hair_lock"))
         if hair:
             subj_blob = " ".join(bits).lower()
             if hair.lower() not in subj_blob:
                 bits.append(hair)
 
     if not bits:
-        summary = _as_text(packs.get("short_prompt_summary"))
+        summary = _usable_pack_text(packs.get("short_prompt_summary"))
         if summary:
             bits.append(summary[:STUDIO_IDENTITY_LINE_MAX])
 
@@ -515,7 +548,7 @@ def build_identity_line_from_profile(
         )
         return joined
 
-    summary = _as_text(packs.get("short_prompt_summary"))
+    summary = _usable_pack_text(packs.get("short_prompt_summary"))
     if summary:
         return _truncate_profile_clause(summary, STUDIO_IDENTITY_LINE_MAX)
 

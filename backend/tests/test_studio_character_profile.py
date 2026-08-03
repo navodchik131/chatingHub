@@ -80,6 +80,26 @@ def test_build_generation_packs_from_v1():
     assert "no unmasked face" in packs["negative_lock"]
 
 
+def test_generation_packs_replace_placeholder_locks():
+    doc = _mask_character_v1()
+    doc["generation_packs"] = {
+        "figure_lock": "<FILL_OR_LEAVE_FOR_AUTO_DERIVE>",
+        "face_lock": "<FILL_OR_LEAVE_FOR_AUTO_DERIVE>",
+        "hair_lock": "<FILL_OR_LEAVE_FOR_AUTO_DERIVE>",
+        "accessory_lock": "<FILL_OR_LEAVE_FOR_AUTO_DERIVE>",
+        "short_prompt_summary": "<FILL_OR_LEAVE_FOR_AUTO_DERIVE>",
+    }
+    packs = build_generation_packs(doc)
+    assert "FILL" not in json.dumps(packs)
+    assert "waist 60 hips 91" in packs["figure_lock"]
+    vis = build_identity_visibility(
+        ReferenceAnalysis(face_in_frame=True, hair_in_frame=True, visible_regions=["FACE", "TORSO"])
+    )
+    line = build_identity_line_from_profile(json.dumps(doc), vis)
+    assert "FILL" not in line
+    assert "waist" in line.lower() or "build:" in line.lower()
+
+
 def test_identity_line_face_visible_includes_mask():
     vis = build_identity_visibility(
         ReferenceAnalysis(face_in_frame=True, hair_in_frame=True, visible_regions=["FACE", "TORSO"])
