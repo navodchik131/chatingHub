@@ -99,42 +99,6 @@ export function IcoSend({ size, stroke }: IconProps) {
   );
 }
 
-export function IcoDownload({ size, stroke }: IconProps) {
-  return (
-    <IconBase size={size} stroke={stroke}>
-      <Path d="M12 4v11" />
-      <Path d="M7.5 10.5L12 15l4.5-4.5" />
-      <Path d="M4 18.5h16" />
-    </IconBase>
-  );
-}
-
-export function IcoVideoNote({ size, stroke }: IconProps) {
-  return (
-    <IconBase size={size} stroke={stroke}>
-      <Circle cx="12" cy="12" r="8.5" />
-      <Circle cx="12" cy="12" r="3.2" fill={stroke || color.text} stroke="none" />
-    </IconBase>
-  );
-}
-
-export function IcoSendPlane({ size, stroke }: IconProps) {
-  return (
-    <IconBase size={size} stroke={stroke}>
-      <Path d="M5 12l15-7-6 16-3-6z" />
-      <Path d="M11 15l3-6" />
-    </IconBase>
-  );
-}
-
-export function IcoPlay({ size, stroke }: IconProps) {
-  return (
-    <IconBase size={size} stroke={stroke}>
-      <Path d="M10 8.5l6 3.5-6 3.5z" />
-    </IconBase>
-  );
-}
-
 export function IcoPlus({ size, stroke }: IconProps) {
   return (
     <IconBase size={size} stroke={stroke}>

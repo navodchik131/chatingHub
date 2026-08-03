@@ -18,7 +18,6 @@ import {
   normalizeWaveModel,
   waveModelFromState,
 } from '@/src/studio/studioHelpers';
-import { mergeMotionRendersIntoVideoArchive, type MotionRenderListItem } from '@/src/studio/videoArchive';
 
 function dedupeArchive(items: StudioGenerationOut[]): StudioGenerationOut[] {
   const seen = new Set<number>();
@@ -142,42 +141,6 @@ export async function sendReply(convId: number, text: string) {
   });
 }
 
-export async function sendVideoNoteReply(
-  convId: number,
-  opts: {
-    renderId?: number | null;
-    generationId?: number | null;
-    text?: string;
-    replyToMessageId?: number | null;
-  },
-) {
-  const body: Record<string, unknown> = { text: opts.text || '', telegram_video_note: true };
-  if (opts.renderId != null) body.studio_motion_render_id = opts.renderId;
-  else if (opts.generationId != null) body.studio_generation_id = opts.generationId;
-  else throw new Error('video source required');
-  if (opts.replyToMessageId) body.reply_to_message_id = opts.replyToMessageId;
-  return apiJson(`/api/conversations/${convId}/reply`, {
-    method: 'POST',
-    body: JSON.stringify(body),
-  });
-}
-
-export async function sendVideoNoteUploadReply(
-  convId: number,
-  file: LocalFile,
-  opts: { text?: string; replyToMessageId?: number | null } = {},
-) {
-  const fd = new FormData();
-  if (opts.text?.trim()) fd.append('text', opts.text.trim());
-  fd.append('telegram_video_note', 'true');
-  await appendLocalFile(fd, 'video_note_file', file);
-  if (opts.replyToMessageId) fd.append('reply_to_message_id', String(opts.replyToMessageId));
-  const res = await apiFetch(`/api/conversations/${convId}/reply`, { method: 'POST', body: fd });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'Не удалось отправить кружок');
-  return data;
-}
-
 export async function refreshArchiveImages() {
   const [page, pending] = await Promise.all([
     fetchArchiveImagesPage(0),
@@ -211,15 +174,14 @@ export async function refreshArchiveVideos() {
       {},
       { items: [] },
     ),
-    apiJsonOptional<{ items: MotionRenderListItem[] }>(
+    apiJsonOptional<{ items: StudioGenerationOut[] }>(
       '/api/studio/motion/renders?limit=40&skip=0',
       {},
       { items: [] },
     ),
   ]);
-  const merged = dedupeArchive([...(page.items || []), ...(pending.items || [])]);
   const motionItems = Array.isArray(motion?.items) ? motion.items : [];
-  return mergeMotionRendersIntoVideoArchive(merged, motionItems);
+  return dedupeArchive([...(page.items || []), ...(pending.items || []), ...motionItems]);
 }
 
 export async function fetchArchiveVideosPage(skip = 0, limit = 40) {

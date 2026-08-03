@@ -1,5 +1,5 @@
 import { LinearGradient } from 'expo-linear-gradient';
-import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   Image,
   KeyboardAvoidingView,
@@ -26,7 +26,7 @@ import type { ConversationOut } from '@/src/api/types';
 import { Avatar } from '@/src/components/ui';
 import { DialogSettingsSheet } from '@/src/components/DialogSettingsSheet';
 import { EmojiPickerSheet } from '@/src/components/EmojiPickerSheet';
-import { IcoBack, IcoSend, IcoThemeGrid, IcoVideoNote } from '@/src/components/Icons';
+import { IcoBack, IcoSend, IcoThemeGrid } from '@/src/components/Icons';
 import { useAppSettings } from '@/src/context/AppSettingsContext';
 import { CHAT_THEMES, chatThemeById, type ChatThemeId } from '@/src/styles/chatThemes';
 import { color, font } from '@/src/styles/tokens';
@@ -64,10 +64,6 @@ type ThreadViewProps = {
   rawConv?: ConversationOut | null;
   onPatchSettings?: (patch: ConversationSettingsPatch) => void;
   onToggleReaction?: (messageId: number, emoji: string) => void;
-  canVideoNote?: boolean;
-  videoNoteActive?: boolean;
-  onVideoNotePress?: () => void;
-  videoNoteModal?: ReactNode;
 };
 
 type ListItem =
@@ -111,9 +107,7 @@ function ThreadBubble({
 }) {
   const att = attachments?.[0];
   const hasMedia = Boolean(attachmentUrl);
-  const isVideoNote = att?.kind === 'video_note';
-  const showText = Boolean((text && text !== '📷' && text !== '—') || translation);
-  const mediaOnly = hasMedia && isVideoNote && !showText;
+  const showText = Boolean(text && text !== '📷' && text !== '—');
 
   const footer = (
     <View style={styles.bubbleMeta}>
@@ -129,7 +123,6 @@ function ThreadBubble({
     <ChatAttachmentMedia
       url={attachmentUrl}
       mime={att?.mime_type}
-      kind={att?.kind}
       style={styles.mediaWrap}
       withText={showText}
     />
@@ -138,7 +131,7 @@ function ThreadBubble({
   const body = (
     <>
       {mediaBlock}
-      {showText && text && text !== '📷' && text !== '—' ? (
+      {showText ? (
         <Text style={[styles.bubbleText, out && styles.bubbleTextOut]}>{text}</Text>
       ) : null}
       {!showText && !hasMedia ? (
@@ -156,7 +149,7 @@ function ThreadBubble({
   return (
     <View style={[styles.bubbleWrap, out && styles.bubbleWrapOut]}>
       <Pressable onLongPress={pending ? undefined : onLongPress} delayLongPress={280}>
-        {out && !mediaOnly ? (
+        {out ? (
           <LinearGradient
             colors={[color.bubbleOutStart, color.bubbleOutEnd]}
             start={{ x: 0, y: 0 }}
@@ -165,10 +158,6 @@ function ThreadBubble({
           >
             {body}
           </LinearGradient>
-        ) : mediaOnly ? (
-          <View style={[styles.bubble, styles.bubbleMediaOnly, pending && styles.bubblePending]}>
-            {body}
-          </View>
         ) : (
           <View style={[styles.bubble, styles.bubbleIn, pending && styles.bubblePending]}>
             {body}
@@ -287,10 +276,6 @@ export function ThreadView({
   rawConv = null,
   onPatchSettings,
   onToggleReaction,
-  canVideoNote = false,
-  videoNoteActive = false,
-  onVideoNotePress,
-  videoNoteModal,
 }: ThreadViewProps) {
   const insets = useSafeAreaInsets();
   const scrollRef = useRef<ScrollView>(null);
@@ -463,15 +448,6 @@ export function ThreadView({
         <Pressable style={styles.sideBtn} hitSlop={6} onPress={onAttach}>
           <Text style={styles.sideBtnIcon}>📎</Text>
         </Pressable>
-        {canVideoNote ? (
-          <Pressable
-            style={[styles.sideBtn, videoNoteActive && styles.videoNoteBtnActive]}
-            hitSlop={6}
-            onPress={onVideoNotePress}
-          >
-            <IcoVideoNote size={18} stroke={videoNoteActive ? color.purple : color.dim} />
-          </Pressable>
-        ) : null}
         <View style={styles.composerField}>
           <TextInput
             style={styles.input}
@@ -508,8 +484,6 @@ export function ThreadView({
         </Pressable>
         </View>
       </View>
-
-      {videoNoteModal}
 
       <ThemePicker
         visible={themePickerOpen}
@@ -673,12 +647,6 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   bubblePending: { opacity: 0.72 },
-  bubbleMediaOnly: {
-    paddingHorizontal: 0,
-    paddingVertical: 0,
-    backgroundColor: 'transparent',
-    borderWidth: 0,
-  },
   bubbleText: { fontSize: 17, lineHeight: 24, color: color.text },
   bubbleTextOut: { color: '#fff', fontSize: 16.5, lineHeight: 23 },
   translation: {
@@ -746,10 +714,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   sideBtnIcon: { fontSize: 22, color: color.muted },
-  videoNoteBtnActive: {
-    borderColor: 'rgba(192,132,252,.5)',
-    backgroundColor: 'rgba(192,132,252,.12)',
-  },
   composerField: {
     flex: 1,
     minHeight: 48,

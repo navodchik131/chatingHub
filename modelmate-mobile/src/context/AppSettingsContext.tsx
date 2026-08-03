@@ -70,22 +70,16 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
   }, [pushEnabled]);
 
   useEffect(() => {
-    void loadAppPrefs().then((prefs) => {
+    void loadAppPrefs().then(async (prefs) => {
       setLocaleState(prefs.locale);
       setBiometricLockState(prefs.biometricLock);
       setChatThemeState(prefs.chatTheme);
-      setPushEnabledState(prefs.pushEnabled);
+      const granted = await isPushPermissionGranted();
+      const enabled = prefs.pushEnabled && granted;
+      setPushEnabledState(enabled);
       setReady(true);
     });
   }, []);
-
-  useEffect(() => {
-    if (!ready) return;
-    const timer = setTimeout(() => {
-      void refreshPushStatus();
-    }, 1500);
-    return () => clearTimeout(timer);
-  }, [ready, refreshPushStatus]);
 
   const setLocaleStateOnly = useCallback((next: AppLocale) => {
     setLocaleState(next);

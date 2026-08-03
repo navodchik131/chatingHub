@@ -83,7 +83,7 @@ import {
 } from '@/src/navigation/types';
 import { effectiveStudioNav, isUiSimplified } from '@/src/studio/simplifiedUi';
 import { color, font, gradients } from '@/src/styles/tokens';
-import { pickImage, pickVideo, pickVideoNoteMedia } from '@/src/utils/mediaPicker';
+import { pickImage, pickVideo } from '@/src/utils/mediaPicker';
 import type { LocalFile } from '@/src/api/types';
 import { RemoteImage } from '@/src/components/RemoteImage';
 import { CharacterGenPanel } from '@/src/components/CharacterGenPanel';
@@ -95,9 +95,6 @@ import { charFieldsFromModel, fmtDateShort, fmtMoney, fmtRub, fmtTime, photoTagK
 import { mapCharPhotoTags, mapIntegrationConnections, mapIntegrationCurrent } from '@/src/api/mappers';
 import { StudioSlotInput } from '@/src/components/StudioSlotInput';
 import { slotStateKey } from '@/src/api/actions';
-import { VideoPreviewModal } from '@/src/components/VideoPreviewModal';
-import { DialogVideoNoteModal } from '@/src/components/DialogVideoNoteModal';
-import { videoNoteDownloadPath, videoNoteSendPayload } from '@/src/studio/videoArchive';
 import { downloadMedia } from '@/src/utils/downloadMedia';
 import type { SupportTicketOut } from '@/src/api/types';
 import {
@@ -136,11 +133,6 @@ function connIcon(kind: string, rgb: string) {
     case 'card': return <IcoCard size={16} stroke={stroke} />;
     default: return <IcoChat size={16} stroke={stroke} />;
   }
-}
-
-function isTelegramConversation(c: { platform?: string | null } | null | undefined) {
-  const p = String(c?.platform || '').toLowerCase();
-  return p === 'telegram' || p === 'telegram_user';
 }
 
 export function ScreenRouter() {
@@ -253,8 +245,6 @@ export function ScreenRouter() {
     refreshArchive,
     refreshArchiveVideos,
     logout,
-    sendVideoNoteReply,
-    sendVideoNoteUploadReply,
   } = app;
   const downloadOrError = (url: string, opts?: { filename?: string; mimeType?: string }) => {
     void downloadMedia(url, opts).catch((e) => {
@@ -271,19 +261,7 @@ export function ScreenRouter() {
   const [newCharDraftId, setNewCharDraftId] = useState<number | null>(null);
   const [motionVideoUploading, setMotionVideoUploading] = useState(false);
   const [charPhotoUploading, setCharPhotoUploading] = useState(false);
-  const [videoPreviewIdx, setVideoPreviewIdx] = useState<number | null>(null);
-  const [videoNoteOpen, setVideoNoteOpen] = useState(false);
-  const [videoNoteSelectedId, setVideoNoteSelectedId] = useState<number | null>(null);
-  const [videoNoteUpload, setVideoNoteUpload] = useState<LocalFile | null>(null);
-  const [videoNoteSending, setVideoNoteSending] = useState(false);
   const threadConvId = conversations[chatIdx]?.id ?? null;
-  const tgConversations = useMemo(
-    () => rawConversations.filter((c) => {
-      const p = String(c.platform || '').toLowerCase();
-      return p === 'telegram' || p === 'telegram_user';
-    }),
-    [rawConversations],
-  );
   const simplifiedUi = isUiSimplified(me);
   const studioOpts = useMemo(
     () => effectiveStudioNav(nav, simplifiedUi),
@@ -699,42 +677,6 @@ export function ScreenRouter() {
     const convId = threadConvId ?? d?.id ?? null;
     const rawConv = rawConversations.find((c) => Number(c.id) === Number(convId)) ?? null;
     const threadSending = messages.some((m) => m.pending && m.side === 'out');
-    const canVideoNote = isTelegramConversation(rawConv);
-    const clearVideoNoteState = () => {
-      setVideoNoteSelectedId(null);
-      setVideoNoteUpload(null);
-    };
-    const closeVideoNote = () => {
-      if (videoNoteSending) return;
-      setVideoNoteOpen(false);
-      clearVideoNoteState();
-    };
-    const sendDialogVideoNote = async () => {
-      if (!d?.id || videoNoteSending) return;
-      setVideoNoteSending(true);
-      try {
-        const text = nav.threadDraft.trim();
-        if (videoNoteUpload) {
-          await sendVideoNoteUploadReply(d.id, videoNoteUpload, { text });
-        } else if (videoNoteSelectedId != null) {
-          const tile = archiveVideoTiles.find((x) => x.id === videoNoteSelectedId);
-          const payload = tile?.raw ? videoNoteSendPayload(tile.raw) : null;
-          if (!payload) throw new Error(locale === 'ru' ? 'Видео недоступно' : 'Video unavailable');
-          await sendVideoNoteReply(d.id, { ...payload, text });
-        } else {
-          return;
-        }
-        patch({ threadDraft: '' });
-        closeVideoNote();
-      } catch (e) {
-        Alert.alert(
-          locale === 'ru' ? 'Кружок' : 'Video note',
-          e instanceof Error ? e.message : String(e),
-        );
-      } finally {
-        setVideoNoteSending(false);
-      }
-    };
     if (!d) {
       return (
         <ScreenScroll>
@@ -792,43 +734,6 @@ export function ScreenRouter() {
           if (!convId) return;
           void toggleThreadReaction(convId, messageId, emoji).catch(() => {});
         }}
-        canVideoNote={canVideoNote}
-        videoNoteActive={videoNoteOpen}
-        onVideoNotePress={() => {
-          if (!videoNoteOpen) void refreshArchiveVideos();
-          setVideoNoteOpen((v) => !v);
-        }}
-        videoNoteModal={canVideoNote ? (
-          <DialogVideoNoteModal
-            visible={videoNoteOpen}
-            onClose={closeVideoNote}
-            archiveTiles={archiveVideoTiles}
-            uploadFile={videoNoteUpload}
-            onPickUpload={async () => {
-              try {
-                const file = await pickVideoNoteMedia();
-                if (file) {
-                  setVideoNoteUpload(file);
-                  setVideoNoteSelectedId(null);
-                }
-              } catch (e) {
-                Alert.alert(
-                  locale === 'ru' ? 'Файл' : 'File',
-                  e instanceof Error ? e.message : String(e),
-                );
-              }
-            }}
-            onClearUpload={() => setVideoNoteUpload(null)}
-            onSelectArchive={(tile) => {
-              setVideoNoteSelectedId(tile.id);
-              setVideoNoteUpload(null);
-            }}
-            selectedTileId={videoNoteSelectedId}
-            onSend={() => void sendDialogVideoNote()}
-            sending={videoNoteSending}
-            t={t}
-          />
-        ) : null}
       />
     );
   }
@@ -2430,58 +2335,61 @@ export function ScreenRouter() {
   }
 
   if (cur === 'video-archive') {
-    const previewTile = videoPreviewIdx != null ? archiveVideoTiles[videoPreviewIdx] : null;
-    const previewRaw = previewTile?.raw;
-    const previewWho = previewTile?.who.split('·')[0]?.trim() || previewTile?.who || '—';
-    const previewRatio = previewRaw?.output_aspect || '9:16';
-    const previewVideoUrl = previewRaw?.video_url || previewTile?.videoUrl || '';
-    const previewMeta = ['1080p', previewRatio, nav.vidDuration ? `${nav.vidDuration} ${t.studioSecondsSuffix}` : null]
-      .filter(Boolean)
-      .join(' · ');
     return (
-      <>
-        <ScreenScroll>
-          <TopBar title={t.studioVideoArchive} onBack={pop} />
-          <Card style={s.warnCard}><Text style={s.warnText}>{t.archiveRetention}</Text></Card>
-          <View style={s.grid2}>
-            {archiveVideoTiles.map((tile, i) => (
-              <Pressable key={tile.id ?? i} style={s.archTile} onPress={() => setVideoPreviewIdx(i)}>
+      <ScreenScroll>
+        <TopBar title={t.studioVideoArchive} onBack={pop} />
+        <Card style={s.warnCard}><Text style={s.warnText}>{t.archiveRetention}</Text></Card>
+        <View style={s.grid2}>
+          {archiveVideoTiles.map((tile, i) => (
+            <View key={tile.id ?? i} style={s.archTile}>
+              <Pressable onPress={() => { patch({ videoArchiveIdx: i }); push('video-item'); }}>
                 <View style={s.videoTilePreview}>
                   <RemoteImage uri={tile.imageUrl} style={s.archImg} gradIndex={tile.gradIndex} pending={tile.pending} />
                   <View style={s.playCircleSmall}><IcoFilm size={12} stroke="#fff" /></View>
                 </View>
                 <Text style={s.archWho}>{tile.who}</Text>
               </Pressable>
-            ))}
-          </View>
-          {videoArchiveHasMore ? (
-            <Pressable style={s.showMoreBtn} onPress={() => void loadMoreVideoArchive()}>
-              <Text style={s.showMoreText}>{t.commonShowMore}</Text>
-            </Pressable>
-          ) : null}
-        </ScreenScroll>
-        {previewTile && previewVideoUrl ? (
-          <VideoPreviewModal
-            visible={videoPreviewIdx != null}
-            onClose={() => setVideoPreviewIdx(null)}
-            who={previewWho}
-            metaLine={previewMeta}
-            videoUrl={previewVideoUrl}
-            posterUrl={previewTile.imageUrl}
-            downloadUrl={previewVideoUrl}
-            videoNotePath={previewRaw ? videoNoteDownloadPath(previewRaw) : null}
-            videoNotePayload={previewRaw ? videoNoteSendPayload(previewRaw) : null}
-            tgConversations={tgConversations}
-            t={t}
-            onDownloadMp4={() => downloadOrError(previewVideoUrl, { filename: 'video.mp4', mimeType: 'video/mp4' })}
-            onDownloadVideoNote={() => {
-              const path = previewRaw ? videoNoteDownloadPath(previewRaw) : null;
-              if (path) downloadOrError(path, { filename: 'video-note.mp4', mimeType: 'video/mp4' });
-            }}
-            onSendVideoNote={(convId, payload) => sendVideoNoteReply(convId, payload)}
-          />
+              <Pressable
+                style={s.videoTileDownload}
+                onPress={() => {
+                  const url = tile.raw?.video_url || tile.videoUrl;
+                  if (url) downloadOrError(url, { filename: 'video.mp4', mimeType: 'video/mp4' });
+                }}
+              >
+                <Text style={s.videoTileDownloadText}>{t.studioDownload}</Text>
+              </Pressable>
+            </View>
+          ))}
+        </View>
+        {videoArchiveHasMore ? (
+          <Pressable style={s.showMoreBtn} onPress={() => void loadMoreVideoArchive()}>
+            <Text style={s.showMoreText}>{t.commonShowMore}</Text>
+          </Pressable>
         ) : null}
-      </>
+      </ScreenScroll>
+    );
+  }
+
+  if (cur === 'video-item') {
+    const tile = archiveVideoTiles[nav.videoArchiveIdx] ?? archiveVideoTiles[0];
+    const videoUrl = tile?.raw?.video_url || tile?.videoUrl;
+    return (
+      <ScreenScroll>
+        <TopBar title={t.studioVideo} onBack={pop} />
+        <View style={s.lightboxWrap}>
+          <RemoteImage uri={tile?.imageUrl} style={s.lightbox} gradIndex={tile?.gradIndex ?? 0} pending={tile?.pending} />
+          <View style={s.playCircle}><IcoFilm size={13} stroke="#fff" /></View>
+          <Text style={s.lightboxBadge}>{tile?.who}</Text>
+        </View>
+        <Pressable
+          style={s.limeHalf}
+          onPress={() => {
+            if (videoUrl) downloadOrError(videoUrl, { filename: 'video.mp4', mimeType: 'video/mp4' });
+          }}
+        >
+          <Text style={s.limeHalfText}>{t.studioDownloadMp4}</Text>
+        </Pressable>
+      </ScreenScroll>
     );
   }
 

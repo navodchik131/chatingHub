@@ -46,34 +46,18 @@ export function mapMessage(m: MessageOut) {
   const outbound = m.direction === 'outbound';
   const translated = (m.text_translated || '').trim();
   const original = (m.text_original || '').trim();
-
-  let text = original || '';
-  let tr: string | null = null;
-  if (outbound) {
-    if (original && translated && original !== translated) {
-      text = original;
-      tr = translated;
-    } else {
-      text = original || translated || '';
-      tr = null;
-    }
-  } else {
-    tr = translated && translated !== original ? translated : null;
-    text = original || '';
-  }
-
+  const tr = translated && translated !== original ? translated : null;
   const attachments = m.attachments || [];
   return {
     id: m.id,
     side: outbound ? ('out' as const) : ('in' as const),
-    text,
+    text: original || '',
     tr,
     time: fmtTime(m.created_at),
     created_at: m.created_at,
     pending: Boolean(m.pending),
     attachments,
     attachmentUrl: firstAttachmentUrl(attachments),
-    attachmentKind: attachments[0]?.kind || null,
     ownerReaction: ownerReactionEmoji(m.reactions),
     reactions: m.reactions || [],
   };

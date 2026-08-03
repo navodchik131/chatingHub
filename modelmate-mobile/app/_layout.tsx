@@ -19,14 +19,13 @@ import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
-import { Platform, View } from 'react-native';
+import { View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { AppProvider } from '@/src/context/AppDataProvider';
 import { AppSettingsProvider } from '@/src/context/AppSettingsContext';
 import { MobilePushAuthSync } from '@/src/push/MobilePushAuthSync';
 import { LocaleAccountSync } from '@/src/components/LocaleAccountSync';
-import { MobileStartupErrorBoundary } from '@/src/components/MobileStartupErrorBoundary';
 import { color } from '@/src/styles/tokens';
 
 export { ErrorBoundary } from 'expo-router';
@@ -47,40 +46,31 @@ export default function RootLayout() {
   });
 
   useEffect(() => {
-    if (error) console.error('[ModelMate] font load failed', error);
+    if (error) throw error;
   }, [error]);
 
   useEffect(() => {
-    if (loaded || error) SplashScreen.hideAsync();
-  }, [loaded, error]);
+    if (loaded) SplashScreen.hideAsync();
+  }, [loaded]);
 
-  if (!loaded && !error) return null;
+  if (!loaded) return null;
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <AppSettingsProvider>
-          <MobileStartupErrorBoundary>
-            <AppProvider>
-              <LocaleAccountSync />
-              <MobilePushAuthSync />
-              <View style={{ flex: 1, backgroundColor: color.bg }}>
-                <StatusBar style="light" />
-                <Stack
-                  screenOptions={{
-                    headerShown: false,
-                    contentStyle: { backgroundColor: color.bg },
-                    // RN 0.86 Android Fabric crash in SurfaceMountingManager during stack transitions.
-                    animation: Platform.OS === 'android' ? 'none' : 'default',
-                  }}
-                >
-                  <Stack.Screen name="index" />
-                  <Stack.Screen name="system/lock" />
-                  <Stack.Screen name="system/biometric" />
-                </Stack>
-              </View>
-            </AppProvider>
-          </MobileStartupErrorBoundary>
+          <AppProvider>
+            <LocaleAccountSync />
+            <MobilePushAuthSync />
+            <View style={{ flex: 1, backgroundColor: color.bg }}>
+              <StatusBar style="light" />
+              <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: color.bg } }}>
+                <Stack.Screen name="index" />
+                <Stack.Screen name="system/lock" />
+                <Stack.Screen name="system/biometric" />
+              </Stack>
+            </View>
+          </AppProvider>
         </AppSettingsProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
