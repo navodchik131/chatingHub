@@ -1,4 +1,3 @@
-import 'react-native-reanimated';
 import { ReactNode } from 'react';
 import { StyleSheet } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';

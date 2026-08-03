@@ -27,7 +27,6 @@ import { AppSettingsProvider } from '@/src/context/AppSettingsContext';
 import { MobilePushAuthSync } from '@/src/push/MobilePushAuthSync';
 import { LocaleAccountSync } from '@/src/components/LocaleAccountSync';
 import { MobileStartupErrorBoundary } from '@/src/components/MobileStartupErrorBoundary';
-import { ensureNotificationHandler } from '@/src/push/notifications';
 import { color } from '@/src/styles/tokens';
 
 export { ErrorBoundary } from 'expo-router';
@@ -54,10 +53,6 @@ export default function RootLayout() {
   useEffect(() => {
     if (loaded || error) SplashScreen.hideAsync();
   }, [loaded, error]);
-
-  useEffect(() => {
-    ensureNotificationHandler();
-  }, []);
 
   if (!loaded && !error) return null;
 
