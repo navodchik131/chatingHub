@@ -1,4 +1,4 @@
-import { AppState, BackHandler, StyleSheet } from 'react-native';
+import { AppState, ActivityIndicator, BackHandler, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { BiometricUnlock } from '@/src/components/BiometricUnlock';
 import { AppShell } from '@/src/components/TabBar';
@@ -8,18 +8,39 @@ import { useAppData } from '@/src/context/AppDataProvider';
 import { useAppSettings } from '@/src/context/AppSettingsContext';
 import { NavigationProvider, useNav } from '@/src/context/NavigationContext';
 import { hideTabBar } from '@/src/navigation/types';
-import { ScreenRouter } from '@/src/screens/ScreenRouter';
 import { SplashScreen } from '@/src/screens/SplashScreen';
 import { MobilePushNavigation } from '@/src/push/MobilePushNavigation';
 import { color } from '@/src/styles/tokens';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ComponentType } from 'react';
+
+type ScreenRouterComponent = ComponentType;
+
+function ScreenRouterFallback() {
+  return (
+    <View style={styles.loader}>
+      <ActivityIndicator size="large" color={color.lime} />
+    </View>
+  );
+}
 
 function MainApp() {
   const app = useAppData();
   const { biometricLock } = useAppSettings();
   const { stack, cur, resetTo, patch, pop } = useNav();
+  const [ScreenRouter, setScreenRouter] = useState<ScreenRouterComponent | null>(null);
   const canGoBack = stack.length > 1 && cur !== 'auth' && cur !== 'splash';
   const canReturnToOverview = cur !== 'overview' && cur !== 'auth' && cur !== 'splash';
+
+  useEffect(() => {
+    if (cur === 'splash' || ScreenRouter) return;
+    let cancelled = false;
+    void import('@/src/screens/ScreenRouter').then((mod) => {
+      if (!cancelled) setScreenRouter(() => mod.ScreenRouter);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [cur, ScreenRouter]);
 
   const handleBack = useCallback(() => {
     if (canGoBack) {
@@ -92,7 +113,7 @@ function MainApp() {
       <AppShell showTabBar={!hideTabBar(stack)}>
         <SwipeBackWrapper enabled={canGoBack || canReturnToOverview} onBack={handleBack}>
           <MobileStartupErrorBoundary>
-            <ScreenRouter />
+            {ScreenRouter ? <ScreenRouter /> : <ScreenRouterFallback />}
           </MobileStartupErrorBoundary>
         </SwipeBackWrapper>
       </AppShell>
@@ -113,4 +134,5 @@ export default function Index() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: color.bg },
+  loader: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: color.bg },
 });
