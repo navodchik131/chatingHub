@@ -4,15 +4,22 @@ import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import { apiJson } from '@/src/api/client';
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
+let notificationHandlerReady = false;
+
+/** Отложенная инициализация — не трогаем native-модуль уведомлений до первого кадра UI. */
+export function ensureNotificationHandler() {
+  if (notificationHandlerReady) return;
+  notificationHandlerReady = true;
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: true,
+      shouldShowBanner: true,
+      shouldShowList: true,
+    }),
+  });
+}
 
 let registeredToken: string | null = null;
 
@@ -37,11 +44,13 @@ export async function ensureNotificationChannel() {
 }
 
 export async function isPushPermissionGranted(): Promise<boolean> {
+  ensureNotificationHandler();
   const { status } = await Notifications.getPermissionsAsync();
   return status === 'granted';
 }
 
 export async function registerMobilePush(): Promise<PushSetupResult> {
+  ensureNotificationHandler();
   await ensureNotificationChannel();
 
   const { status: existing } = await Notifications.getPermissionsAsync();

@@ -2,9 +2,9 @@
   "expo": {
     "name": "ModelMate",
     "slug": "modelmate",
-    "version": "1.0.11",
+    "version": "1.0.12",
     "orientation": "portrait",
-    "icon": "./assets/logo-m.jpeg",
+    "icon": "./assets/images/icon.png",
     "scheme": "modelmate",
     "userInterfaceStyle": "dark",
     "ios": {
@@ -13,26 +13,27 @@
     },
     "android": {
       "package": "app.modelmate.mobile",
-      "versionCode": 12,
+      "versionCode": 13,
       "googleServicesFile": "./google-services.json",
       "usesCleartextTraffic": true,
       "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "backgroundColor": "#0A0B0D",
-        "foregroundImage": "./assets/logo-m.jpeg"
+        "foregroundImage": "./assets/images/android-icon-foreground.png",
+        "monochromeImage": "./assets/images/android-icon-monochrome.png"
       }
     },
     "web": {
       "bundler": "metro",
       "output": "static",
-      "favicon": "./assets/logo-m.jpeg"
+      "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
       "expo-router",
       [
         "expo-splash-screen",
         {
-          "image": "./assets/logo-m.jpeg",
+          "image": "./assets/images/splash-icon.png",
           "resizeMode": "contain",
           "backgroundColor": "#0A0B0D"
         }
@@ -42,7 +43,7 @@
       [
         "expo-notifications",
         {
-          "icon": "./assets/logo-m.jpeg",
+          "icon": "./assets/images/android-icon-monochrome.png",
           "color": "#D7F452",
           "defaultChannel": "messages"
         }
@@ -53,6 +54,17 @@
           "photosPermission": "ModelMate сохраняет сгенерированные фото и видео в галерею.",
           "savePhotosPermission": "ModelMate сохраняет сгенерированные фото и видео в галерею.",
           "isAccessMediaLocationEnabled": false
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "newArchEnabled": false
+          },
+          "ios": {
+            "newArchEnabled": false
+          }
         }
       ]
     ],

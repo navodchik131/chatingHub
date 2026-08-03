@@ -26,6 +26,8 @@ import { AppProvider } from '@/src/context/AppDataProvider';
 import { AppSettingsProvider } from '@/src/context/AppSettingsContext';
 import { MobilePushAuthSync } from '@/src/push/MobilePushAuthSync';
 import { LocaleAccountSync } from '@/src/components/LocaleAccountSync';
+import { MobileStartupErrorBoundary } from '@/src/components/MobileStartupErrorBoundary';
+import { ensureNotificationHandler } from '@/src/push/notifications';
 import { color } from '@/src/styles/tokens';
 
 export { ErrorBoundary } from 'expo-router';
@@ -46,31 +48,37 @@ export default function RootLayout() {
   });
 
   useEffect(() => {
-    if (error) throw error;
+    if (error) console.error('[ModelMate] font load failed', error);
   }, [error]);
 
   useEffect(() => {
-    if (loaded) SplashScreen.hideAsync();
-  }, [loaded]);
+    if (loaded || error) SplashScreen.hideAsync();
+  }, [loaded, error]);
 
-  if (!loaded) return null;
+  useEffect(() => {
+    ensureNotificationHandler();
+  }, []);
+
+  if (!loaded && !error) return null;
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <AppSettingsProvider>
-          <AppProvider>
-            <LocaleAccountSync />
-            <MobilePushAuthSync />
-            <View style={{ flex: 1, backgroundColor: color.bg }}>
-              <StatusBar style="light" />
-              <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: color.bg } }}>
-                <Stack.Screen name="index" />
-                <Stack.Screen name="system/lock" />
-                <Stack.Screen name="system/biometric" />
-              </Stack>
-            </View>
-          </AppProvider>
+          <MobileStartupErrorBoundary>
+            <AppProvider>
+              <LocaleAccountSync />
+              <MobilePushAuthSync />
+              <View style={{ flex: 1, backgroundColor: color.bg }}>
+                <StatusBar style="light" />
+                <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: color.bg } }}>
+                  <Stack.Screen name="index" />
+                  <Stack.Screen name="system/lock" />
+                  <Stack.Screen name="system/biometric" />
+                </Stack>
+              </View>
+            </AppProvider>
+          </MobileStartupErrorBoundary>
         </AppSettingsProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
