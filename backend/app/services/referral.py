@@ -64,11 +64,15 @@ async def apply_referral_on_signup(
     referral_code: str | None,
 ) -> int | None:
     """Привязка реферера и 25 кр. приглашённому. Возвращает referrer_id или None."""
+    if getattr(new_owner, "referred_by_user_id", None):
+        return new_owner.referred_by_user_id
     ref_code = (referral_code or "").strip().upper()
     if not ref_code:
         return None
     referrer = await find_referrer_by_code(session, ref_code)
     if referrer is None or referrer.id == new_owner.id:
+        return None
+    if getattr(referrer, "is_partner", False):
         return None
     new_owner.referred_by_user_id = referrer.id
     bonus = max(0, int(settings.referral_signup_bonus_credits))
@@ -108,6 +112,9 @@ async def grant_referrer_reward_if_needed(
     if not referred or not referred.referred_by_user_id:
         return
     referrer_id = referred.referred_by_user_id
+    referrer = await session.get(User, referrer_id)
+    if referrer is not None and getattr(referrer, "is_partner", False):
+        return
 
     amount = payment_amount_rub if payment_amount_rub is not None else Decimal(0)
     reward = referrer_reward_credits_from_payment_rub(amount)

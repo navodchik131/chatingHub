@@ -389,6 +389,56 @@ async def init_db() -> None:
         await conn.run_sync(_migrate_telegram_login_bot_contacts)
         await conn.run_sync(_migrate_support_ticket_unread_flags)
         await conn.run_sync(_migrate_telegram_user_sessions)
+        await conn.run_sync(_migrate_partner_program)
+
+
+def _migrate_partner_program(sync_conn) -> None:
+    from sqlalchemy import inspect, text
+
+    from app.db.models import (
+        PartnerCommission,
+        PartnerLink,
+        PartnerPayoutRequest,
+        PartnerPayoutSettings,
+    )
+
+    insp = inspect(sync_conn)
+    if not insp.has_table("partner_links"):
+        PartnerLink.__table__.create(sync_conn, checkfirst=True)
+    if not insp.has_table("partner_payout_settings"):
+        PartnerPayoutSettings.__table__.create(sync_conn, checkfirst=True)
+    if not insp.has_table("partner_payout_requests"):
+        PartnerPayoutRequest.__table__.create(sync_conn, checkfirst=True)
+    if not insp.has_table("partner_commissions"):
+        PartnerCommission.__table__.create(sync_conn, checkfirst=True)
+
+    if insp.has_table("users"):
+        cols = {c["name"] for c in insp.get_columns("users")}
+        dialect = sync_conn.dialect.name
+        bool_def = "BOOLEAN NOT NULL DEFAULT 0" if dialect == "sqlite" else "BOOLEAN NOT NULL DEFAULT false"
+        additions = [
+            ("is_partner", bool_def),
+            ("partner_slug", "VARCHAR(32)"),
+            ("referral_source_tag", "VARCHAR(64)"),
+            ("partner_discount_eligible", bool_def),
+            ("partner_discount_used", bool_def),
+        ]
+        for name, ddl in additions:
+            if name not in cols:
+                sync_conn.execute(text(f"ALTER TABLE users ADD COLUMN {name} {ddl}"))
+        if "referred_by_partner_link_id" not in cols and insp.has_table("partner_links"):
+            sync_conn.execute(
+                text(
+                    "ALTER TABLE users ADD COLUMN referred_by_partner_link_id INTEGER "
+                    "REFERENCES partner_links(id) ON DELETE SET NULL"
+                )
+            )
+            sync_conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_users_referred_by_partner_link_id "
+                    "ON users(referred_by_partner_link_id)"
+                )
+            )
 
 
 def _migrate_telegram_user_sessions(sync_conn) -> None:

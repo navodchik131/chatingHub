@@ -70,7 +70,7 @@ export function AdminUserPanel({
     }
   }
 
-  const patchUser = async (body: { is_active?: boolean; is_platform_admin?: boolean }) => {
+  const patchUser = async (body: { is_active?: boolean; is_platform_admin?: boolean; is_partner?: boolean }) => {
     onError(null)
     const r = await apiFetch(`/api/admin/users/${user.id}`, {
       method: 'PATCH',
@@ -330,6 +330,17 @@ export function AdminUserPanel({
           />
           {t('userPanel.accountActive')}
         </label>
+        {isOwner ? (
+          <label className="admin-check">
+            <input
+              type="checkbox"
+              checked={user.is_partner}
+              disabled={busy}
+              onChange={(e) => void patchUser({ is_partner: e.target.checked })}
+            />
+            {t('userPanel.partnerAccount')}
+          </label>
+        ) : null}
         {isOwner ? (
           <label className="admin-check">
             <input

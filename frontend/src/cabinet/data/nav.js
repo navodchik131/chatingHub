@@ -1,10 +1,9 @@
-import {
-  IcoGrid, IcoChat, IcoImage, IcoFilm, IcoStar, IcoFlow,
-  IcoHeart, IcoCard, IcoPlug, IcoTeam, IcoSpark, IcoLayers, IcoLifeBuoy, IcoUser,
+import { IcoGrid, IcoChat, IcoImage, IcoFilm, IcoStar, IcoFlow,
+  IcoHeart, IcoCard, IcoPlug, IcoTeam, IcoSpark, IcoLayers, IcoLifeBuoy, IcoUser, IcoHandshake,
 } from '../components/Icons';
 
 /** Sidebar groups — badges come from live cabinet data via computeNavBadges. */
-export const navGroups = (t, badges = {}) => [
+export const navGroups = (t, badges = {}, { isPartner = false } = {}) => [
   {
     label: t.grpWork,
     items: [
@@ -26,7 +25,7 @@ export const navGroups = (t, badges = {}) => [
     items: [
       { id: 'donations', label: t.navDonations, Icon: IcoHeart, badge: badges.donations },
       { id: 'billing', label: t.navBilling, Icon: IcoCard },
-    ],
+    ].concat(isPartner ? [{ id: 'partner', label: t.navPartner, Icon: IcoHandshake, badge: '30%' }] : []),
   },
   {
     label: t.grpSettings,
@@ -42,7 +41,7 @@ export const navGroups = (t, badges = {}) => [
 export const pageTitles = (t) => ({
   overview: t.navOverview, dialogs: t.navDialogs, images: t.navImages,
   video: t.navVideo, characters: t.navCharacters, workflow: t.navWorkflow,
-  donations: t.navDonations, billing: t.navBilling, connections: t.navConnections,
+  donations: t.navDonations, billing: t.navBilling, partner: t.navPartner, connections: t.navConnections,
   team: t.navTeam, support: t.navSupport, profile: t.navProfile,
 });
 

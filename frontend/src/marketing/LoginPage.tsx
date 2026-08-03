@@ -24,6 +24,8 @@ export function LoginPage() {
   const [params] = useSearchParams()
   const next = safeNext(params.get('next'))
   const referralCode = params.get('ref') || params.get('referral') || undefined
+  const partnerSlug = params.get('pref') || params.get('partner') || undefined
+  const partnerSourceTag = params.get('src') || undefined
   const session = useAuthSessionGate()
 
   useEffect(() => {
@@ -43,7 +45,12 @@ export function LoginPage() {
   return (
     <div className="auth-page">
       <div className="auth-page-inner">
-        <AuthPanel onSuccess={onSuccess} referralCode={referralCode} />
+        <AuthPanel
+          onSuccess={onSuccess}
+          referralCode={referralCode}
+          partnerSlug={partnerSlug}
+          partnerSourceTag={partnerSourceTag}
+        />
         <p className="auth-page-back">
           <a href="/">{t('backToSite', { defaultValue: '← На главную' })}</a>
         </p>

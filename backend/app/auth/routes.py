@@ -90,6 +90,8 @@ async def register(
         hashed_password=hash_password(body.password),
         auth_email_verified=True,
         referral_code=body.referral_code,
+        partner_slug=body.partner_slug,
+        partner_source_tag=body.partner_source_tag,
         device_signal=device_signal_from_request(request),
     )
     await session.commit()
@@ -356,6 +358,13 @@ async def me(
         tribute_billing_available=settings.tribute_billing_configured,
         ui_simplified=bool(getattr(user, "ui_simplified", True)),
         ui_locale="en" if str(getattr(user, "ui_locale", "ru") or "ru").lower().startswith("en") else "ru",
+        is_partner=bool(getattr(owner_for_identity, "is_partner", False)) if is_workspace_owner(user) else False,
+        partner_discount_eligible=bool(getattr(owner_for_identity, "partner_discount_eligible", False))
+        if is_workspace_owner(user)
+        else False,
+        partner_discount_used=bool(getattr(owner_for_identity, "partner_discount_used", False))
+        if is_workspace_owner(user)
+        else False,
     )
 
 

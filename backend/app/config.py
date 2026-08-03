@@ -87,6 +87,28 @@ class Settings(BaseSettings):
         le=100,
         description="Доля каждой оплаты приглашённого, начисляемая рефереру в кредитах (курс — billing_credits_unit_price_rub).",
     )
+    partner_commission_percent: int = Field(
+        default=30,
+        ge=0,
+        le=100,
+        description="Доля каждой оплаты приглашённого партнёру (в рублях, выплата).",
+    )
+    partner_referred_first_payment_discount_percent: int = Field(
+        default=10,
+        ge=0,
+        le=100,
+        description="Скидка на первую оплату пользователя, пришедшего от партнёра.",
+    )
+    partner_payout_hold_days: int = Field(
+        default=14,
+        ge=0,
+        description="Дней холда комиссии партнёра после оплаты.",
+    )
+    partner_payout_min_rub: int = Field(
+        default=3000,
+        ge=0,
+        description="Минимальная сумма выплаты партнёру (₽).",
+    )
     marketing_beta_creators_count: int = Field(default=19)
     credit_cost_inbound_translation: int = Field(default=1)
     credit_cost_outbound_translation: int = Field(default=1)

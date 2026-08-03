@@ -24,6 +24,7 @@
     "exifBotTitle": "EXIF-бот",
     "igBotTitle": "IG-бот",
     "creatorDonationsTitle": "Донаты креаторов",
+    "partnersTitle": "Партнёры · выплаты",
     "ticketsTitle": "Обращения в поддержку"
   },
   "tabs": {
@@ -34,6 +35,7 @@
     "exifBot": "EXIF-бот",
     "igBot": "IG-бот",
     "creatorDonations": "Донаты креаторов",
+    "partners": "Партнёры",
     "tickets": "Поддержка"
   },
   "common": {
@@ -209,6 +211,7 @@
     "accessSection": "Доступ и кредиты",
     "accountActive": "Аккаунт активен",
     "platformAdmin": "Администратор платформы",
+    "partnerAccount": "Партнёр (кабинет партнёра)",
     "creditDeltaPlaceholder": "+/- кредиты",
     "apply": "Применить",
     "creditDeltaError": "Укажите целое число кредитов (не 0).",
@@ -456,6 +459,26 @@
       "in_review": "На рассмотрении",
       "answered": "Получен ответ",
       "closed": "Завершено"
+    }
+  },
+  "partners": {
+    "payoutStatus": {
+      "requested": "Новая",
+      "processing": "В обработке",
+      "paid": "Выплачено",
+      "rejected": "Отклонено"
+    },
+    "payouts": {
+      "lead": "Заявки партнёров на вывод комиссии (30% с оплат приведённых пользователей).",
+      "empty": "Нет заявок на выплату.",
+      "amount": "Сумма",
+      "wallet": "Кошелёк",
+      "asset": "Актив",
+      "requested": "Запрошено",
+      "markProcessing": "В обработку",
+      "markPaid": "Выплачено",
+      "reject": "Отклонить",
+      "rejectNotes": "Причина отклонения (необязательно):"
     }
   }
 }

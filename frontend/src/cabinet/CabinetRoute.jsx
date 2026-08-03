@@ -36,6 +36,7 @@ export const CABINET_PAGES = new Set([
   'characters',
   'donations',
   'billing',
+  'partner',
   'connections',
   'team',
   'newOperator',

@@ -110,6 +110,13 @@ export default function Billing() {
         {lang === 'en' ? (
           <div style={{ fontSize: 11, color: color.textMuted, marginTop: 4 }}>{t.fxHint}</div>
         ) : null}
+        {me?.partner_discount_eligible && !me?.partner_discount_used ? (
+          <div style={{ marginTop: 10, fontSize: 12, color: color.lime, background: 'rgba(215,244,82,.08)', border: '1px solid rgba(215,244,82,.25)', borderRadius: 10, padding: '10px 12px' }}>
+            {lang === 'ru'
+              ? 'У вас скидка партнёра 10% на первую оплату картой (ЮKassa).'
+              : 'You have a 10% partner discount on your first card payment (YooKassa).'}
+          </div>
+        ) : null}
       </div>
 
       {/* current plan + balance + referral */}

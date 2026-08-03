@@ -11,6 +11,7 @@ export type AdminTabId =
   | 'exif_bot'
   | 'ig_bot'
   | 'creator_donations'
+  | 'partners'
   | 'tickets'
 
 type NavItem = {
@@ -101,6 +102,14 @@ const NAV_ICONS: Record<AdminTabId, ReactNode> = {
       </svg>
     </NavIcon>
   ),
+  partners: (
+    <NavIcon>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+        <path d="M7 11.5V8.5a2 2 0 0 1 2-2h1.5M17 11.5V8.5a2 2 0 0 0-2-2H13.5" />
+        <path d="M8.5 14.5L11 17l2.5-2.5 2 2L18 14" />
+      </svg>
+    </NavIcon>
+  ),
 }
 
 export function AdminShell({
@@ -111,6 +120,7 @@ export function AdminShell({
   busy,
   onRefresh,
   ticketsUnreadCount = 0,
+  partnersOpenPayouts = 0,
   children,
 }: {
   tab: AdminTabId
@@ -120,6 +130,7 @@ export function AdminShell({
   busy: boolean
   onRefresh: () => void
   ticketsUnreadCount?: number
+  partnersOpenPayouts?: number
   children: ReactNode
 }) {
   const { t } = useTranslation('admin')
@@ -140,6 +151,12 @@ export function AdminShell({
     { id: 'exif_bot', label: t('tabs.exifBot'), icon: NAV_ICONS.exif_bot },
     { id: 'ig_bot', label: t('tabs.igBot'), icon: NAV_ICONS.ig_bot },
     { id: 'creator_donations', label: t('tabs.creatorDonations'), icon: NAV_ICONS.creator_donations },
+    {
+      id: 'partners',
+      label: t('tabs.partners'),
+      icon: NAV_ICONS.partners,
+      badge: partnersOpenPayouts > 0 ? String(partnersOpenPayouts) : undefined,
+    },
     { id: 'tickets', label: t('tabs.tickets'), icon: NAV_ICONS.tickets, badge: ticketsUnreadCount > 0 ? (ticketsUnreadCount > 99 ? '99+' : String(ticketsUnreadCount)) : undefined },
   ]
 

@@ -40,6 +40,7 @@ from app.services.plan_catalog import (
     resolve_product_id,
 )
 from app.services.workspace import is_workspace_owner, workspace_owner_id
+from app.services.partner import partner_first_payment_discount_rub
 from app.services.yookassa_apply import apply_yookassa_payment_succeeded
 from app.services.yookassa_client import create_payment, parse_notification_body
 from app.connectors.tribute.signature import verify_tribute_webhook_signature
@@ -172,7 +173,11 @@ async def yookassa_start_payment(
         raise HTTPException(status_code=503, detail="ЮKassa не настроена на сервере")
 
     billing_uid = workspace_owner_id(user)
+    owner = await session.get(User, billing_uid)
+    if owner is None:
+        raise HTTPException(status_code=400, detail="owner not found")
     product = resolve_product_id(body.product)
+    discount_rub = 0
 
     if body.product == "credits_pack":
         sub_row = await session.scalar(
@@ -196,15 +201,26 @@ async def yookassa_start_payment(
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
         amount_value = credits_amount_yookassa_value(q)
+        try:
+            pack_rub = int(float(amount_value))
+        except ValueError:
+            pack_rub = credits_total_rub(q)
+        pack_rub, discount_rub = await partner_first_payment_discount_rub(session, owner, pack_rub)
+        amount_value = _rub_amount_str(pack_rub)
         desc = f"Кредиты студии ({q} шт.)"
+        if discount_rub > 0:
+            desc += f" (скидка партнёра −{discount_rub} ₽)"
         meta_product = "credits_pack"
     else:
         spec = get_plan_spec(product)
         if spec is None:
             raise HTTPException(status_code=400, detail="Неизвестный продукт")
         price = spec.price_rub
+        price, discount_rub = await partner_first_payment_discount_rub(session, owner, price)
         period = "год" if spec.period == "year" else "30 дн."
         desc = f"Подписка ModelMate ({spec.title_ru}), {period}"
+        if discount_rub > 0:
+            desc += f" (скидка партнёра −{discount_rub} ₽)"
         amount_value = _rub_amount_str(price)
         meta_product = spec.product
 
@@ -214,6 +230,8 @@ async def yookassa_start_payment(
     meta: dict[str, str] = {"user_id": str(billing_uid), "product": meta_product}
     if body.product == "credits_pack":
         meta["credits_quantity"] = str(body.credits_quantity)
+    if discount_rub > 0:
+        meta["partner_discount_rub"] = str(discount_rub)
 
     try:
         pay = await create_payment(

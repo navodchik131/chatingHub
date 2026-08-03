@@ -61,6 +61,35 @@ export const IcoHeart = () => (
   </Svg>
 );
 
+export const IcoHandshake = () => (
+  <Svg>
+    <path d="M7 11.5V8.5a2 2 0 0 1 2-2h1.5" />
+    <path d="M17 11.5V8.5a2 2 0 0 0-2-2H13.5" />
+    <path d="M8.5 14.5L11 17l2.5-2.5 2 2L18 14" />
+    <path d="M6 12.5l2 2M18 12.5l-2 2" />
+  </Svg>
+);
+
+export const IcoCoin = () => (
+  <Svg>
+    <circle cx="12" cy="12" r="8" />
+    <path d="M12 8v8M9.5 10.5h5a1.5 1.5 0 0 0 0-3h-3a1.5 1.5 0 0 1 0-3h5" />
+  </Svg>
+);
+
+export const IcoTrend = () => (
+  <Svg>
+    <path d="M4 18l6-6 4 4 6-8" />
+    <path d="M17 8h3v3" />
+  </Svg>
+);
+
+export const IcoCheck = () => (
+  <Svg>
+    <path d="M5 12.5l4 4L19 7" />
+  </Svg>
+);
+
 export const IcoCard = () => (
   <Svg>
     <rect x="3" y="5.5" width="18" height="13" rx="3" />

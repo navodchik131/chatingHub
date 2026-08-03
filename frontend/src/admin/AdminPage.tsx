@@ -9,7 +9,7 @@ import { AdminEmailTab } from './AdminEmailTab'
 import { AdminExifBotTab } from './AdminExifBotTab'
 import { AdminIgBotTab } from './AdminIgBotTab'
 import { AdminLoginBotTab } from './AdminLoginBotTab'
-import { AdminOverview } from './AdminOverview'
+import { AdminPartnerPayoutsTab } from './AdminPartnerPayoutsTab'
 import { AdminSegmentDrill } from './AdminSegmentDrill'
 import { AdminShell, type AdminTabId } from './AdminShell'
 import { AdminUserPanel } from './AdminUserPanel'
@@ -35,6 +35,7 @@ const TAB_TITLES: Record<AdminTabId, string> = {
   exif_bot: 'exifBotTitle',
   ig_bot: 'igBotTitle',
   creator_donations: 'creatorDonationsTitle',
+  partners: 'partnersTitle',
   tickets: 'ticketsTitle',
 }
 
@@ -53,6 +54,7 @@ export function AdminPage() {
   const [drillSegment, setDrillSegment] = useState<string | null>(null)
   const [drillTitle, setDrillTitle] = useState('')
   const [ticketsUnreadCount, setTicketsUnreadCount] = useState(0)
+  const [partnersOpenPayouts, setPartnersOpenPayouts] = useState(0)
   const initialAdminTicketId = useMemo(() => {
     const id = Number(new URLSearchParams(window.location.search).get('tickets'))
     return id > 0 ? id : null
@@ -95,6 +97,14 @@ export function AdminPage() {
     }
   }, [])
 
+  const loadPartnersOpenPayouts = useCallback(async () => {
+    const r = await apiFetch('/api/admin/partner/payout-requests/open-count')
+    if (r.ok) {
+      const data = (await r.json()) as { open_count?: number }
+      setPartnersOpenPayouts(Number(data.open_count) || 0)
+    }
+  }, [])
+
   const onSelectUserFromDrill = useCallback(
     (userId: number) => {
       setDrillSegment(null)
@@ -130,8 +140,8 @@ export function AdminPage() {
   useEffect(() => {
     if (gate !== 'ok') return
     setBusy(true)
-    void Promise.all([loadStats(), loadUsers(''), loadTicketsUnreadCount()]).finally(() => setBusy(false))
-  }, [gate, loadStats, loadUsers, loadTicketsUnreadCount])
+    void Promise.all([loadStats(), loadUsers(''), loadTicketsUnreadCount(), loadPartnersOpenPayouts()]).finally(() => setBusy(false))
+  }, [gate, loadStats, loadUsers, loadTicketsUnreadCount, loadPartnersOpenPayouts])
 
   useEffect(() => {
     if (gate !== 'ok') return
@@ -160,7 +170,7 @@ export function AdminPage() {
 
   const refreshAll = () => {
     setBusy(true)
-    void Promise.all([loadStats(), loadUsers(userSearch), loadTicketsUnreadCount()]).finally(() => setBusy(false))
+    void Promise.all([loadStats(), loadUsers(userSearch), loadTicketsUnreadCount(), loadPartnersOpenPayouts()]).finally(() => setBusy(false))
   }
 
   const onUserUpdated = (row: AdminUserRow) => {
@@ -209,6 +219,7 @@ export function AdminPage() {
         busy={busy}
         onRefresh={refreshAll}
         ticketsUnreadCount={ticketsUnreadCount}
+        partnersOpenPayouts={partnersOpenPayouts}
       >
         {error ? (
           <div className="admin-banner admin-banner--error" role="alert">
@@ -322,6 +333,7 @@ export function AdminPage() {
         {tab === 'exif_bot' ? <AdminExifBotTab onError={setError} /> : null}
         {tab === 'ig_bot' ? <AdminIgBotTab onError={setError} /> : null}
         {tab === 'creator_donations' ? <AdminCreatorDonationsTab /> : null}
+        {tab === 'partners' ? <AdminPartnerPayoutsTab /> : null}
         {tab === 'tickets' ? (
           <AdminTicketsTab
             onError={setError}

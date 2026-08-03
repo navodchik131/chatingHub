@@ -12,7 +12,10 @@ from app.api.admin_email_routes import router as admin_email_router
 from app.api.admin_exif_bot_routes import router as admin_exif_bot_router
 from app.api.admin_ig_bot_routes import router as admin_ig_bot_router
 from app.api.admin_login_bot_routes import router as admin_login_bot_router
+from app.api.admin_partner_routes import router as admin_partner_router
 from app.api.billing_routes import router as billing_router
+from app.api.partner_routes import redirect_router as partner_redirect_router
+from app.api.partner_routes import router as partner_router
 from app.api.referral_routes import router as referral_router
 from app.api.chat_routes import router as chat_router
 from app.api.creator_donation_routes import router as creator_donation_router
@@ -39,6 +42,7 @@ router.include_router(integrations_router)
 router.include_router(telegram_user_router)
 router.include_router(billing_router)
 router.include_router(referral_router)
+router.include_router(partner_router)
 router.include_router(studio_router)
 router.include_router(studio_workflow_router)
 router.include_router(support_router)
@@ -50,3 +54,4 @@ router.include_router(admin_email_router)
 router.include_router(admin_exif_bot_router)
 router.include_router(admin_ig_bot_router)
 router.include_router(admin_login_bot_router)
+router.include_router(admin_partner_router)

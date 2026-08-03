@@ -8,9 +8,13 @@ import { TelegramLoginButton } from './auth/TelegramAuth'
 export function AuthPanel({
   onSuccess,
   referralCode,
+  partnerSlug,
+  partnerSourceTag,
 }: {
   onSuccess: (fromRegister?: boolean) => void | Promise<void>
   referralCode?: string | null
+  partnerSlug?: string | null
+  partnerSourceTag?: string | null
 }) {
   const { t } = useTranslation('auth')
   const [tab, setTab] = useState<'login' | 'register'>('login')
@@ -45,8 +49,13 @@ export function AuthPanel({
       const body =
         tab === 'login' && ml
           ? { email, password, member_login: ml }
-          : tab === 'register' && referralCode
-            ? { email, password, referral_code: referralCode }
+          : tab === 'register' && (partnerSlug || referralCode)
+            ? {
+                email,
+                password,
+                ...(referralCode ? { referral_code: referralCode } : {}),
+                ...(partnerSlug ? { partner_slug: partnerSlug, partner_source_tag: partnerSourceTag || undefined } : {}),
+              }
             : { email, password }
       const r = await apiFetch(path, {
         method: 'POST',

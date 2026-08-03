@@ -116,6 +116,21 @@ class User(Base):
         nullable=True,
         index=True,
     )
+    """Партнёрская программа: доступ к кабинету партнёра и выплатам."""
+    is_partner: Mapped[bool] = mapped_column(Boolean, default=False)
+    """Человекочитаемый slug для ссылок /r/{slug}."""
+    partner_slug: Mapped[str | None] = mapped_column(String(32), nullable=True, unique=True, index=True)
+    """Тег канала (src=…) при регистрации по партнёрской ссылке."""
+    referral_source_tag: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    """FK на partner_links — какая ссылка привела пользователя."""
+    referred_by_partner_link_id: Mapped[int | None] = mapped_column(
+        ForeignKey("partner_links.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    """10% скидка на первую оплату (пришёл от партнёра)."""
+    partner_discount_eligible: Mapped[bool] = mapped_column(Boolean, default=False)
+    partner_discount_used: Mapped[bool] = mapped_column(Boolean, default=False)
     """Не слать маркетинговые письма (транзакционные — отдельно)."""
     email_marketing_opt_out: Mapped[bool] = mapped_column(Boolean, default=False)
     """Telegram user id владельца (для Login и Tribute billing)."""
@@ -1724,4 +1739,101 @@ class EmailCampaignRecipient(Base):
 
     campaign: Mapped[EmailCampaign] = relationship(
         "EmailCampaign", back_populates="recipients"
+    )
+
+
+class PartnerLink(Base):
+    """Тегированная партнёрская ссылка (src=…) для аналитики каналов."""
+
+    __tablename__ = "partner_links"
+    __table_args__ = (UniqueConstraint("partner_user_id", "tag", name="uq_partner_link_tag"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    partner_user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    tag: Mapped[str] = mapped_column(String(64))
+    note: Mapped[str] = mapped_column(String(255), default="")
+    """home | pricing | studio | chats"""
+    dest: Mapped[str] = mapped_column(String(32), default="home")
+    clicks: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+    partner: Mapped[User] = relationship("User", foreign_keys=[partner_user_id])
+
+
+class PartnerCommission(Base):
+    """Начисление партнёру (% от оплаты приглашённого)."""
+
+    __tablename__ = "partner_commissions"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    partner_user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    referred_user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    partner_link_id: Mapped[int | None] = mapped_column(
+        ForeignKey("partner_links.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    payment_ref: Mapped[str] = mapped_column(String(128), index=True)
+    payment_amount_kopecks: Mapped[int] = mapped_column(Integer, default=0)
+    commission_kopecks: Mapped[int] = mapped_column(Integer, default=0)
+    """hold | available | paid | cancelled"""
+    status: Mapped[str] = mapped_column(String(16), default="hold", index=True)
+    payout_request_id: Mapped[int | None] = mapped_column(
+        ForeignKey("partner_payout_requests.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    available_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+    partner: Mapped[User] = relationship("User", foreign_keys=[partner_user_id])
+    referred: Mapped[User] = relationship("User", foreign_keys=[referred_user_id])
+    partner_link: Mapped[PartnerLink | None] = relationship("PartnerLink")
+    payout_request: Mapped["PartnerPayoutRequest | None"] = relationship(
+        "PartnerPayoutRequest", back_populates="commissions"
+    )
+
+
+class PartnerPayoutSettings(Base):
+    __tablename__ = "partner_payout_settings"
+
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    wallet_address: Mapped[str] = mapped_column(String(256))
+    payout_currency: Mapped[str] = mapped_column(String(16))
+    payout_asset: Mapped[str] = mapped_column(String(32))
+    network: Mapped[str] = mapped_column(String(32), default="")
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+
+class PartnerPayoutRequest(Base):
+    __tablename__ = "partner_payout_requests"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    amount_kopecks: Mapped[int] = mapped_column(Integer)
+    """requested | processing | paid | rejected"""
+    status: Mapped[str] = mapped_column(String(16), default="requested", index=True)
+    wallet_address: Mapped[str] = mapped_column(String(256))
+    payout_currency: Mapped[str] = mapped_column(String(16))
+    payout_asset: Mapped[str] = mapped_column(String(32))
+    network: Mapped[str] = mapped_column(String(32), default="")
+    requested_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    admin_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    user: Mapped[User] = relationship("User")
+    commissions: Mapped[list[PartnerCommission]] = relationship(
+        "PartnerCommission", back_populates="payout_request"
     )

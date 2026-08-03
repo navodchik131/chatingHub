@@ -57,7 +57,7 @@ export default function Sidebar() {
   const demoGrant = demoGenerationsGrant(me);
   const demoLabel = formatDemoCounterShort(lang, demoRemaining, demoGrant);
   const badges = computeNavBadges(cabinet, me);
-  const groups = filterNavGroups(navGroups(t, badges), me, cabinet.opRights);
+  const groups = filterNavGroups(navGroups(t, badges, { isPartner: me?.is_partner }), me, cabinet.opRights);
   const email = me?.email || '—';
   const userInitial = (email[0] || '?').toUpperCase();
   const planLabel = me?.plan_display_name || me?.plan_tier || '—';

@@ -32,6 +32,7 @@ from app.services.billing_subscription import activate_subscription_product
 from app.services.entitlements import subscription_is_paid_active
 from app.services.plan_catalog import get_plan_spec, resolve_product_id
 from app.services.referral import grant_referrer_reward_if_needed
+from app.services.partner import grant_partner_commission_if_needed, mark_partner_discount_used
 from app.services.studio_workflow_defaults import provision_full_workflow_workspaces
 
 log = logging.getLogger(__name__)
@@ -140,7 +141,15 @@ async def apply_yookassa_payment_succeeded(
             expected = legacy_pack_total_rub()
 
         if paid_rub != expected:
-            log.error(
+            owner = await session.get(User, billing_uid)
+            allowed = {Decimal(str(expected))}
+            if owner is not None:
+                from app.services.partner import partner_first_payment_discount_rub
+
+                disc_rub, _ = await partner_first_payment_discount_rub(session, owner, expected)
+                allowed.add(Decimal(str(disc_rub)))
+            if paid_rub not in allowed:
+                log.error(
                 "yookassa: amount mismatch payment %s paid=%s expected=%s credits=%s",
                 pid,
                 paid_rub,
@@ -187,6 +196,13 @@ async def apply_yookassa_payment_succeeded(
             trigger_product="credits_pack",
             payment_amount_rub=paid_rub,
         )
+        await grant_partner_commission_if_needed(
+            session,
+            billing_uid,
+            payment_ref=pid,
+            payment_amount_rub=int(paid_rub),
+        )
+        await mark_partner_discount_used(session, billing_uid)
         await provision_full_workflow_workspaces(session, owner_id=billing_uid)
         await session.commit()
         return {"ok": True, "payment_id": pid, "granted": "credits", "amount": n}

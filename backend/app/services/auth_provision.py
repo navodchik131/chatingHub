@@ -10,6 +10,7 @@ from app.services.billing_plan import BILLING_PLAN_CREDITS, BILLING_PLAN_STANDAR
 from app.services.funnel_analytics import record_funnel_event_once
 from app.services.demo_device_limit import demo_grant_for_device
 from app.services.device_signal import DeviceSignal
+from app.services.partner import apply_partner_referral_on_signup
 from app.services.referral import apply_referral_on_signup, ensure_owner_referral_code
 from app.services.starter_plan import starter_managed_effective
 from app.services.studio_workflow_defaults import provision_demo_workflow_workspaces
@@ -22,6 +23,8 @@ async def provision_workspace_owner(
     hashed_password: str,
     auth_email_verified: bool = True,
     referral_code: str | None = None,
+    partner_slug: str | None = None,
+    partner_source_tag: str | None = None,
     device_signal: DeviceSignal | None = None,
 ) -> User:
     user = User(
@@ -71,7 +74,15 @@ async def provision_workspace_owner(
         )
     )
     await session.flush()
-    await apply_referral_on_signup(session, new_owner=user, referral_code=referral_code)
+    if (partner_slug or "").strip():
+        await apply_partner_referral_on_signup(
+            session,
+            new_owner=user,
+            partner_slug=partner_slug,
+            source_tag=partner_source_tag,
+        )
+    else:
+        await apply_referral_on_signup(session, new_owner=user, referral_code=referral_code)
     await ensure_owner_referral_code(session, user)
     await record_funnel_event_once(session, user=user, event="signup")
     await provision_demo_workflow_workspaces(session, owner_id=user.id)

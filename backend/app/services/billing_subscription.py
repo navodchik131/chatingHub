@@ -13,6 +13,7 @@ from app.services.billing_credits import rub_to_credits_ceil
 from app.services.plan_catalog import get_plan_spec, managed_period_credits, resolve_product_id
 from app.services.plan_entitlements import subscription_period_days
 from app.services.referral import grant_referrer_reward_if_needed
+from app.services.partner import grant_partner_commission_if_needed, mark_partner_discount_used
 
 
 def subscription_period_end(product: str) -> datetime:
@@ -86,6 +87,13 @@ async def activate_subscription_product(
         trigger_product=resolved,
         payment_amount_rub=Decimal(payment_amount_rub),
     )
+    await grant_partner_commission_if_needed(
+        session,
+        billing_uid,
+        payment_ref=payment_ref,
+        payment_amount_rub=payment_amount_rub,
+    )
+    await mark_partner_discount_used(session, billing_uid)
     return {
         "product": resolved,
         "managed_bonus_credits": bonus,

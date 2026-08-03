@@ -212,6 +212,8 @@ class RegisterIn(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8, max_length=128)
     referral_code: str | None = Field(default=None, max_length=16)
+    partner_slug: str | None = Field(default=None, max_length=32)
+    partner_source_tag: str | None = Field(default=None, max_length=64)
 
 
 class LoginIn(BaseModel):
@@ -230,6 +232,8 @@ class TelegramLoginIn(BaseModel):
     auth_date: int = Field(gt=0)
     hash: str = Field(min_length=1)
     referral_code: str | None = Field(default=None, max_length=16)
+    partner_slug: str | None = Field(default=None, max_length=32)
+    partner_source_tag: str | None = Field(default=None, max_length=64)
 
 
 class CompleteOwnerEmailIn(BaseModel):
@@ -313,6 +317,9 @@ class UserMeOut(BaseModel):
     tribute_billing_available: bool = False
     ui_simplified: bool = True
     ui_locale: str = "ru"
+    is_partner: bool = False
+    partner_discount_eligible: bool = False
+    partner_discount_used: bool = False
 
 
 class UserPreferencesPatchIn(BaseModel):
@@ -1116,6 +1123,77 @@ class ReferralMeOut(BaseModel):
     referrer_reward_summary: str
 
 
+class PartnerLinkCreateIn(BaseModel):
+    tag: str = Field(min_length=2, max_length=48)
+    note: str = Field(default="", max_length=255)
+    dest: str = Field(default="home", max_length=32)
+
+
+class PartnerLinkOut(BaseModel):
+    id: int
+    tag: str
+    note: str
+    dest: str
+    url: str
+    clicks: int
+    registrations: int
+    paying_users: int
+    earned_kopecks: int
+
+
+class PartnerMeOut(BaseModel):
+    is_partner: bool
+    partner_slug: str | None = None
+    base_link: str | None = None
+    commission_percent: int
+    discount_percent: int
+    payout_hold_days: int
+    payout_min_kopecks: int
+    analytics: dict[str, Any] = Field(default_factory=dict)
+    payout_balance: dict[str, int] = Field(default_factory=dict)
+    payout_settings: dict[str, Any] | None = None
+
+
+class PartnerReferralRowOut(BaseModel):
+    user_id: int
+    email_masked: str
+    source_tag: str
+    plan: str
+    joined_at: str | None
+    paid_kopecks: int
+    reward_kopecks: int
+    status: str
+
+
+class PartnerPayoutSettingsIn(BaseModel):
+    wallet_address: str = Field(min_length=8, max_length=256)
+    payout_asset: str = Field(min_length=2, max_length=32)
+
+
+class PartnerPayoutRequestCreateIn(BaseModel):
+    note: str | None = Field(default=None, max_length=2000)
+
+
+class AdminPartnerPayoutRequestOut(BaseModel):
+    id: int
+    user_id: int
+    user_email: str | None = None
+    amount_kopecks: int
+    status: str
+    wallet_address: str
+    payout_currency: str
+    payout_asset: str
+    network: str
+    admin_note: str | None = None
+    requested_at: str | None = None
+    processed_at: str | None = None
+
+
+class AdminPartnerPayoutRequestUpdateIn(BaseModel):
+    status: Literal["processing", "paid", "rejected"]
+    admin_notes: str | None = Field(default=None, max_length=2000)
+
+
 class SubscribeWithCreditsIn(BaseModel):
     product: str = Field(min_length=3, max_length=64)
 
@@ -1376,6 +1454,7 @@ class AdminUserRow(BaseModel):
     created_at: datetime
     is_active: bool
     is_platform_admin: bool
+    is_partner: bool = False
     parent_user_id: int | None = None
     parent_email: str | None = None
     member_login: str | None = None
@@ -1405,6 +1484,7 @@ class AdminUserDetailOut(AdminUserRow):
 class AdminUserPatchIn(BaseModel):
     is_active: bool | None = None
     is_platform_admin: bool | None = None
+    is_partner: bool | None = None
 
 
 class AdminPasswordResetIn(BaseModel):

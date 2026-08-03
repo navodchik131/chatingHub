@@ -15,6 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api.routes import router as api_router
+from app.api.partner_routes import redirect_router as partner_redirect_router
 from app.config import settings
 from app.connectors.telegram.setup import dp
 from app.connectors.telegram.state import (
@@ -312,6 +313,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(api_router)
+app.include_router(partner_redirect_router)
 
 _frontend_root = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "..", "frontend")

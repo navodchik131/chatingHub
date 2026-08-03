@@ -128,6 +128,7 @@ export interface AdminUserRow {
   created_at: string
   is_active: boolean
   is_platform_admin: boolean
+  is_partner: boolean
   parent_user_id: number | null
   parent_email: string | null
   member_login: string | null

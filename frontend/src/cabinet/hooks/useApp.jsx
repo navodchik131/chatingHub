@@ -20,6 +20,7 @@ const initial = {
   connDetail: null,
   charDetail: null,
   donTab: 'overview',
+  partnerTab: 'overview',
   tier: 'standard',
   period: 'month',
   moreOpen: false,

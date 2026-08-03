@@ -24,6 +24,7 @@
     "exifBotTitle": "EXIF bot",
     "igBotTitle": "IG bot",
     "creatorDonationsTitle": "Creator donations",
+    "partnersTitle": "Partners · payouts",
     "ticketsTitle": "Support tickets"
   },
   "tabs": {
@@ -34,6 +35,7 @@
     "exifBot": "EXIF bot",
     "igBot": "IG bot",
     "creatorDonations": "Creator donations",
+    "partners": "Partners",
     "tickets": "Support"
   },
   "common": {
@@ -209,6 +211,7 @@
     "accessSection": "Access and credits",
     "accountActive": "Account active",
     "platformAdmin": "Platform administrator",
+    "partnerAccount": "Partner (partner cabinet access)",
     "creditDeltaPlaceholder": "+/- credits",
     "apply": "Apply",
     "creditDeltaError": "Enter a whole number of credits (not 0).",
@@ -456,6 +459,26 @@
       "in_review": "In review",
       "answered": "Answered",
       "closed": "Closed"
+    }
+  },
+  "partners": {
+    "payoutStatus": {
+      "requested": "New",
+      "processing": "Processing",
+      "paid": "Paid",
+      "rejected": "Rejected"
+    },
+    "payouts": {
+      "lead": "Partner withdrawal requests for referral commission (30% of referred users' payments).",
+      "empty": "No payout requests.",
+      "amount": "Amount",
+      "wallet": "Wallet",
+      "asset": "Asset",
+      "requested": "Requested",
+      "markProcessing": "Mark processing",
+      "markPaid": "Mark paid",
+      "reject": "Reject",
+      "rejectNotes": "Rejection reason (optional):"
     }
   }
 }

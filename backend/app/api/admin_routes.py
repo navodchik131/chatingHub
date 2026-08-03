@@ -109,6 +109,7 @@ async def _user_row(
         created_at=u.created_at,
         is_active=u.is_active,
         is_platform_admin=bool(u.is_platform_admin),
+        is_partner=bool(getattr(u, "is_partner", False)),
         parent_user_id=u.parent_user_id,
         parent_email=u.parent.email if u.parent else None,
         member_login=u.member_login,
@@ -267,6 +268,17 @@ async def admin_patch_user(
         u.is_platform_admin = body.is_platform_admin
     if body.is_active is not None:
         u.is_active = body.is_active
+    if body.is_partner is not None:
+        if u.parent_user_id is not None:
+            raise HTTPException(
+                status_code=400,
+                detail="Партнёрский статус только у аккаунта владельца",
+            )
+        u.is_partner = body.is_partner
+        if body.is_partner:
+            from app.services.partner import ensure_partner_slug
+
+            await ensure_partner_slug(session, u)
     await session.commit()
     await session.refresh(u)
     oid = workspace_owner_id(u)

@@ -15,6 +15,7 @@ export function canAccessPage(pageId, me, opRights) {
       return !!r.studio
     case 'donations':
     case 'billing':
+    case 'partner':
       return !!r.billing
     case 'connections':
       return !!r.keys
