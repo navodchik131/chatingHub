@@ -120,6 +120,10 @@ _NUDE_CLOTHING_RE = re.compile(
 
 _COMPACT_IDENTITY_FIELD_MAX = 420
 _COMPACT_SCENE_NOTES_MAX = 720
+# Max chars for "Model identity: …" prepended to WaveSpeed prose (subject + Build + hair).
+STUDIO_IDENTITY_LINE_MAX = 600
+# Body proportions clause inside identity line (before final join/truncate).
+STUDIO_BODY_PROPORTIONS_MAX = 400
 
 _SCENE_NOTE_KEYS = (
     "POSE:",
@@ -436,7 +440,12 @@ def _truncate_profile_clause(text: str, max_len: int = 520) -> str:
     return cut + "…"
 
 
-def _compact_body_proportions_clause(body: str, *, max_parts: int = 3, max_len: int = 140) -> str:
+def _compact_body_proportions_clause(
+    body: str,
+    *,
+    max_parts: int = 5,
+    max_len: int = STUDIO_BODY_PROPORTIONS_MAX,
+) -> str:
     """Сжать чеклист пропорций в короткую фразу — иначе съедает вес сцены/кожи."""
     parts = [p.strip(" .") for p in re.split(r"[;|]+", body or "") if p.strip(" .")]
     if not parts:
@@ -545,13 +554,16 @@ def grok_figure_anchor_from_profile(
     subj = (fields.get("subject") or "").strip()
     bits = [b for b in (subj, body) if b]
     if bits and vis is not None and regions:
-        joined = _truncate_profile_clause("; ".join(bits), 220)
+        joined = _truncate_profile_clause("; ".join(bits), STUDIO_IDENTITY_LINE_MAX)
         region_hint = ", ".join(sorted(regions))
         return f"Visible regions [{region_hint}]: {joined}."
     if bits:
         if subj and body:
-            return _truncate_profile_clause(f"{subj}. Build: {body}.", 240)
-        return _truncate_profile_clause("; ".join(bits), 220)
+            return _truncate_profile_clause(
+                f"{subj}. Build: {body}.",
+                STUDIO_IDENTITY_LINE_MAX,
+            )
+        return _truncate_profile_clause("; ".join(bits), STUDIO_IDENTITY_LINE_MAX)
     return scoped_default()
 
 

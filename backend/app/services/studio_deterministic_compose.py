@@ -11,6 +11,7 @@ from app.services.studio_prompt_bundle import (
     _truncate_profile_clause,
     extract_creative_notes_from_workflow_description,
     grok_figure_anchor_from_profile,
+    STUDIO_IDENTITY_LINE_MAX,
     strip_soft_dof_from_scene_prose,
 )
 from app.services.studio_reference_analysis import (
@@ -159,7 +160,7 @@ def build_deterministic_identity_line(
     if bits:
         return _truncate_profile_clause(
             f"{'; '.join(bits)}. Same person on all visible skin.",
-            240,
+            STUDIO_IDENTITY_LINE_MAX,
         )
     return grok_figure_anchor_from_profile(model_profile_text, visibility=visibility)
 
