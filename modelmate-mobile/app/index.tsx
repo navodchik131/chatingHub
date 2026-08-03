@@ -1,4 +1,4 @@
-import { AppState, BackHandler, StyleSheet, ActivityIndicator, View } from 'react-native';
+import { AppState, BackHandler, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { BiometricUnlock } from '@/src/components/BiometricUnlock';
 import { AppShell } from '@/src/components/TabBar';
@@ -8,23 +8,11 @@ import { useAppData } from '@/src/context/AppDataProvider';
 import { useAppSettings } from '@/src/context/AppSettingsContext';
 import { NavigationProvider, useNav } from '@/src/context/NavigationContext';
 import { hideTabBar } from '@/src/navigation/types';
+import { ScreenRouter } from '@/src/screens/ScreenRouter';
 import { SplashScreen } from '@/src/screens/SplashScreen';
 import { MobilePushNavigation } from '@/src/push/MobilePushNavigation';
 import { color } from '@/src/styles/tokens';
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
-
-const ScreenRouter = lazy(async () => {
-  const mod = await import('@/src/screens/ScreenRouter');
-  return { default: mod.ScreenRouter };
-});
-
-function ScreenRouterFallback() {
-  return (
-    <View style={styles.loader}>
-      <ActivityIndicator size="large" color={color.lime} />
-    </View>
-  );
-}
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 function MainApp() {
   const app = useAppData();
@@ -104,9 +92,7 @@ function MainApp() {
       <AppShell showTabBar={!hideTabBar(stack)}>
         <SwipeBackWrapper enabled={canGoBack || canReturnToOverview} onBack={handleBack}>
           <MobileStartupErrorBoundary>
-            <Suspense fallback={<ScreenRouterFallback />}>
-              <ScreenRouter />
-            </Suspense>
+            <ScreenRouter />
           </MobileStartupErrorBoundary>
         </SwipeBackWrapper>
       </AppShell>
@@ -127,5 +113,4 @@ export default function Index() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: color.bg },
-  loader: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: color.bg },
 });

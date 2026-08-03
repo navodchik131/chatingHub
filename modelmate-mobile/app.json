@@ -2,9 +2,9 @@
   "expo": {
     "name": "ModelMate",
     "slug": "modelmate",
-    "version": "1.0.12",
+    "version": "1.0.13",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/logo-m.jpeg",
     "scheme": "modelmate",
     "userInterfaceStyle": "dark",
     "ios": {
@@ -13,27 +13,26 @@
     },
     "android": {
       "package": "app.modelmate.mobile",
-      "versionCode": 13,
+      "versionCode": 14,
       "googleServicesFile": "./google-services.json",
       "usesCleartextTraffic": true,
       "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "backgroundColor": "#0A0B0D",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+        "foregroundImage": "./assets/logo-m.jpeg"
       }
     },
     "web": {
       "bundler": "metro",
       "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/logo-m.jpeg"
     },
     "plugins": [
       "expo-router",
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-icon.png",
+          "image": "./assets/logo-m.jpeg",
           "resizeMode": "contain",
           "backgroundColor": "#0A0B0D"
         }
@@ -43,7 +42,7 @@
       [
         "expo-notifications",
         {
-          "icon": "./assets/images/android-icon-monochrome.png",
+          "icon": "./assets/logo-m.jpeg",
           "color": "#D7F452",
           "defaultChannel": "messages"
         }
