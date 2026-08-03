@@ -19,7 +19,7 @@ import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
-import { View } from 'react-native';
+import { Platform, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { AppProvider } from '@/src/context/AppDataProvider';
@@ -64,7 +64,13 @@ export default function RootLayout() {
             <MobilePushAuthSync />
             <View style={{ flex: 1, backgroundColor: color.bg }}>
               <StatusBar style="light" />
-              <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: color.bg } }}>
+              <Stack
+                screenOptions={{
+                  headerShown: false,
+                  contentStyle: { backgroundColor: color.bg },
+                  animation: Platform.OS === 'android' ? 'none' : 'default',
+                }}
+              >
                 <Stack.Screen name="index" />
                 <Stack.Screen name="system/lock" />
                 <Stack.Screen name="system/biometric" />

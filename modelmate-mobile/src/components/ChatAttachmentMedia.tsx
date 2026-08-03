@@ -1,5 +1,3 @@
-import { Video, ResizeMode } from 'expo-av';
-import { useEffect, useRef, useState } from 'react';
 import { StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
 import { attachmentMediaKind } from '@/src/api/helpers';
 import { resolveMediaUrl } from '@/src/api/config';
@@ -12,45 +10,21 @@ type Props = {
   withText?: boolean;
 };
 
+/** Chat attachments without expo-av — native libexpo-av.so crashes on RN 0.86 startup. */
 export function ChatAttachmentMedia({ url, mime, style, withText }: Props) {
   const resolved = resolveMediaUrl(url);
   const kind = attachmentMediaKind(mime);
-  const videoRef = useRef<Video>(null);
-  const [videoFailed, setVideoFailed] = useState(false);
-
-  useEffect(() => {
-    if (kind !== 'video' && kind !== 'gif') return;
-    void videoRef.current?.playAsync().catch(() => setVideoFailed(true));
-  }, [kind, resolved]);
 
   if (!resolved) return null;
 
   const wrapStyle = [styles.wrap, withText && styles.wrapWithText, style];
-
-  if ((kind === 'video' || kind === 'gif') && !videoFailed) {
-    return (
-      <View style={wrapStyle}>
-        <Video
-          ref={videoRef}
-          source={{ uri: resolved }}
-          style={styles.media}
-          resizeMode={ResizeMode.COVER}
-          isLooping
-          isMuted
-          shouldPlay
-          useNativeControls={false}
-          onError={() => setVideoFailed(true)}
-        />
-      </View>
-    );
-  }
 
   return (
     <View style={wrapStyle}>
       <RemoteImage
         uri={resolved}
         style={styles.media}
-        contentFit={kind === 'gif' ? 'contain' : 'cover'}
+        contentFit={kind === 'gif' || kind === 'video' ? 'contain' : 'cover'}
       />
     </View>
   );
