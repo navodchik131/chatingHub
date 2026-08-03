@@ -1,7 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { MmButton } from './components/MmUi'
-import { useMarketingPath } from './i18n/useMarketingPath'
 import { formatRub } from './usePublicHealth'
 
 const PLAN_DEFS = [
@@ -36,8 +35,7 @@ function fmtNum(n: number, locale: string) {
 
 export function PartnersPage() {
   const { t, i18n } = useTranslation('marketing')
-  const { path } = useMarketingPath()
-  const registerPath = path('/partners/register')
+  const registerPath = '/partners/register'
   const [refs, setRefs] = useState(12)
   const [planId, setPlanId] = useState<(typeof PLAN_DEFS)[number]['id']>('studio')
   const [faqOpen, setFaqOpen] = useState(-1)

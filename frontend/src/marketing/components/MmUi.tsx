@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { useMarketingPath } from '../i18n/useMarketingPath'
+import { stripMarketingLocalePrefix } from '../i18n/marketingLocale'
 import { isWorkspaceAuthPath, resolveWorkspaceUrl, WORKSPACE_URL } from '../workspaceEntry'
 
 export function MmContainer({ children, className = '' }: { children: ReactNode; className?: string }) {
@@ -29,7 +30,9 @@ export function MmButton({ children, variant = 'primary', size = 'md', to, href,
   const skipLocalePath =
     Boolean(to?.startsWith('/workspace')) || Boolean(to && isWorkspaceAuthPath(to))
   const toResolved =
-    to && to.startsWith('/') && !skipLocalePath ? path(to) : to
+    to && to.startsWith('/') && !skipLocalePath
+      ? path(stripMarketingLocalePrefix(to))
+      : to
   if (
     toResolved?.startsWith('/workspace') ||
     (toResolved && isWorkspaceAuthPath(toResolved))

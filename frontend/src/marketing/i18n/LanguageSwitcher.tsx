@@ -8,6 +8,7 @@ import {
   stripMarketingLocalePrefix,
   type MarketingLocale,
 } from './marketingLocale'
+import { syncI18nMarketingLocale } from '../../i18n'
 
 export function LanguageSwitcher() {
   const { t } = useTranslation('marketing')
@@ -18,6 +19,7 @@ export function LanguageSwitcher() {
   const setLocale = (next: MarketingLocale) => {
     if (next === current) return
     persistMarketingLocale(next)
+    syncI18nMarketingLocale(next)
     const base = stripMarketingLocalePrefix(location.pathname)
     navigate(
       {

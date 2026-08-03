@@ -1,18 +1,17 @@
 import { useCallback, useMemo } from 'react'
+import { useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 
 import {
-  isMarketingLocale,
   localeFromPathname,
   marketingPath,
   type MarketingLocale,
 } from './marketingLocale'
 
 export function useMarketingPath() {
+  const location = useLocation()
   const { i18n } = useTranslation('marketing')
-  const locale: MarketingLocale = isMarketingLocale(i18n.language)
-    ? i18n.language
-    : localeFromPathname(typeof window !== 'undefined' ? window.location.pathname : '/')
+  const locale: MarketingLocale = localeFromPathname(location.pathname || i18n.language || '/')
 
   const prefix = locale === 'en' ? '/en' : ''
 

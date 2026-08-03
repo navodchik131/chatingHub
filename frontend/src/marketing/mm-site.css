@@ -153,6 +153,7 @@ html {
   cursor: pointer;
   border: 1px solid transparent;
   white-space: nowrap;
+  background-image: none;
   transition:
     background var(--d-ui) var(--ease-studio),
     border-color var(--d-ui) var(--ease-studio),
@@ -187,8 +188,10 @@ html {
   color: var(--fg-on-accent);
 }
 
-.mm-btn--primary:hover {
+.mm-btn--primary:hover,
+.mm-btn--primary:focus-visible {
   background: var(--accent-hover);
+  color: var(--fg-on-accent);
 }
 
 .mm-btn--secondary {
