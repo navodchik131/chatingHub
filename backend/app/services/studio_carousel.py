@@ -99,7 +99,8 @@ def parse_carousel_grok_prompts(raw: str, *, count: int) -> list[str]:
                 master_read = data.get("master_read")
                 if isinstance(master_read, dict) and master_read:
                     log.info(
-                        "carousel grok master_read camera=%s pose=%s gaze=%s expression=%s",
+                        "carousel grok master_read capture=%s camera=%s pose=%s gaze=%s expression=%s",
+                        str(master_read.get("capture_type") or "")[:40],
                         str(master_read.get("camera") or "")[:80],
                         str(master_read.get("pose") or "")[:80],
                         str(master_read.get("gaze") or "")[:80],
@@ -193,8 +194,10 @@ _CAROUSEL_IDENTITY_REINFORCE = (
 )
 
 _CAROUSEL_VARIATION_APPLY = (
-    "\n\n[APPLY_SHOT] Execute this frame's camera angle, body pose, gaze direction, and expression "
-    "from SHOT_VARIATION. Do not keep the master's identical pose/angle unless SHOT_VARIATION says so."
+    "\n\n[APPLY_SHOT] Execute this frame's camera geometry, crop, body pose, gaze, expression, "
+    "and any prop interaction from SHOT_VARIATION. Preserve the master's capture grammar "
+    "(selfie stays selfie, mirror stays mirror). Do not keep the master's identical pose/angle "
+    "unless SHOT_VARIATION says so."
 )
 
 
@@ -248,13 +251,12 @@ async def grok_compose_carousel_prompts(
     system = load_grok_carousel_compose_system()
     n = max(2, min(8, int(count)))
     direction = (user_direction or "").strip() or (
-        "Design a premium Instagram feed carousel from THIS photo. "
-        "Analyze the current pose, camera side, gaze and emotion first. "
-        "Then invent complementary frames: change camera angle, body pose, gaze direction "
-        "and micro-expression so the set feels like one continuous mini-session — "
-        "scroll-stopping variety, same person/outfit/room. "
-        "Frame 1 must clearly differ from the master's angle; include left AND right coverage, "
-        "at least one over-shoulder/back, and a real pose change when count ≥ 4."
+        "Plan a scroll-stopping Instagram carousel tailored to THIS exact master photo. "
+        "First classify capture type (selfie / mirror selfie / candid / fixed camera) and "
+        "keep that grammar in every frame. Be creatively bold: vary emotions when the mood "
+        "allows, use real camera moves (high/low, punch-in detail crops, wider pull-back), "
+        "and natural prop/environment interactions when the scene supports them — same person, "
+        "outfit, and room throughout. Avoid generic near-duplicate three-quarters."
     )
     scene = (master_scene_text or "").strip()
 
@@ -267,9 +269,12 @@ async def grok_compose_carousel_prompts(
         {
             "type": "text",
             "text": (
-                "Task: (1) read MASTER_IMAGE — camera, pose, gaze, expression, framing; "
-                "(2) decide which complementary Instagram carousel shots would look great "
-                "with THIS specific photo; (3) write exactly FRAME_COUNT img2img SHOT_VARIATION briefs.\n\n"
+                "Task: (1) read MASTER_IMAGE — capture grammar (selfie/mirror/candid), environment, "
+                "camera, pose, gaze, expression, framing; "
+                "(2) design FRAME_COUNT complementary Instagram frames that stay faithful to capture "
+                "grammar but feel creatively distinct (emotions, camera height/distance, detail crops, "
+                "prop interaction when natural); "
+                "(3) write exactly FRAME_COUNT img2img SHOT_VARIATION briefs.\n\n"
                 f"FRAME_COUNT: {n}\n\n"
                 f"USER_DIRECTION:\n{direction}\n\n"
                 f"MASTER_SCENE_TEXT:\n{scene or '(none — infer everything from MASTER_IMAGE)'}\n\n"
@@ -283,9 +288,9 @@ async def grok_compose_carousel_prompts(
     ]
 
     model = _carousel_grok_vision_model()
-    # Slightly warmer than default scene-compose — carousel needs creative shot variety.
+    # Carousel planning needs more creative latitude than deterministic scene compose.
     temp = float(settings.grok_scene_compose_temperature)
-    temp = min(1.0, max(temp, 0.55))
+    temp = min(1.0, max(temp, 0.68))
     raw_out = await chat_completion_openai_compatible_text(
         model=model,
         messages=[

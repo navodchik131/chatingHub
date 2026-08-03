@@ -83,6 +83,17 @@ def test_carousel_variation_order_spreads_sides() -> None:
     assert first_three[0] != first_three[1]
 
 
+def test_load_grok_carousel_compose_system_capture_grammar() -> None:
+    from app.services.studio_carousel import load_grok_carousel_compose_system
+
+    system = load_grok_carousel_compose_system()
+    low = system.lower()
+    assert "capture_type" in low or "capture grammar" in low
+    assert "mirror_selfie" in low or "mirror selfie" in low
+    assert "phone_selfie" in low or "phone selfie" in low
+    assert "environment" in low
+
+
 def test_parse_carousel_grok_prompts_too_few_raises() -> None:
     with pytest.raises(RuntimeError):
         parse_carousel_grok_prompts('{"prompts": ["only one"]}', count=3)

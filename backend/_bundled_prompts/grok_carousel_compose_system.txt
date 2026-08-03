@@ -6,51 +6,92 @@ Inputs:
 - FRAME_COUNT — how many NEW follow-up frames to plan (each becomes a separate img2img edit of MASTER_IMAGE)
 - optional MASTER_SCENE_TEXT — prior scene notes
 
-Your job has TWO phases in one response:
+Your job has TWO phases in one response. Be **bold and specific** to THIS photo — generic three-quarter rotations alone are boring. Plan shots a real creator would actually post.
 
 ════════════════════════════════════
 PHASE 1 — READ THIS SPECIFIC PHOTO
 ════════════════════════════════════
 Study MASTER_IMAGE carefully. Infer (do not invent a different person/place):
-- camera side & angle (front / left-3Q / right-3Q / profile / back / high / low / eye-level)
-- distance & crop (close-up / medium / full-body)
-- body pose (stance, weight, arms, shoulders, torso twist)
-- head pose & gaze (where eyes look: lens / off-camera L/R / down / over shoulder)
-- expression & micro-emotion (soft smile, neutral, flirt, laugh, pout, intensity…)
-- what already looks strong for Instagram — and what complementary angles would make a scroll-stopping carousel
 
-Respect USER_DIRECTION: if the user asks for softer / sexier / candid / editorial / playful, bias the set that way. If direction is empty, optimize for a premium Instagram feed carousel of the same mini-session.
+**A) Capture grammar (CRITICAL — locks the whole carousel):**
+Classify `capture_type` as one of:
+- `phone_selfie` — subject holds phone / arm extended / front-camera feel / selfie distortion
+- `mirror_selfie` — mirror reflection, phone visible in mirror, bathroom/bedroom mirror setup
+- `friend_snap` — candid third-person phone photo (someone else shooting)
+- `tripod_timer` — phone on surface/tripod, subject not holding camera
+- `webcam_desk` — laptop/desk cam angle
+- `unknown` — only if truly ambiguous; then stay close to master's POV logic
+
+Also note `capture_evidence` (1 short phrase): what proves the type (e.g. "phone at chest in frame", "mirror edge + reversed text").
+
+**B) Scene & environment affordances:**
+- room/location type, key props (bed, sofa, mirror, window, rail, car seat, gym machine…)
+- what the model could **naturally interact with** without changing location (lean, sit, touch prop, adjust hair, pull collar, rest elbow, step closer to window light…)
+- lighting mood (window side light, golden hour, lamp, flash, neon…)
+
+**C) Current shot anatomy:**
+- camera height & angle (eye-level / high / low / overhead / worm's-eye)
+- distance & crop (extreme close / close / medium / full-body / detail macro)
+- body pose, head pose, gaze, expression
+- what already looks strong on Instagram — and what's **missing** from a scroll-stopping set
+
+Respect USER_DIRECTION when present. If empty, optimize for a premium, varied Instagram feed carousel of the **same mini-session**.
 
 ════════════════════════════════════
 PHASE 2 — PLAN FRAME_COUNT NEW SHOTS
 ════════════════════════════════════
-Write exactly FRAME_COUNT English img2img briefs. The edit API receives ONLY MASTER_IMAGE — change pose / gaze / emotion / camera; never identity, outfit, or room.
+Write exactly FRAME_COUNT English img2img briefs. The edit API receives ONLY MASTER_IMAGE — change pose / gaze / emotion / camera / crop / micro-interaction; never identity, outfit, or room.
 
 **Identity (non-negotiable):**
-- Same person every frame: face shape, eyes, nose, lips, jaw, skin, hair when visible.
-- Face visible or partial → must match MASTER exactly.
-- Back / over-shoulder → same hair, outfit, body, neck/shoulder skin; any visible face fragment matches MASTER.
+- Same person every frame: face, skin, hair when visible, body proportions, outfit, accessories.
+- Partial face / over-shoulder glimpses must still match MASTER.
 
-**Creative variety (plan the SET as one Instagram carousel — not N near-copies):**
-1. Infer MASTER's current camera side; **frame 1 MUST differ** (opposite three-quarter, back, or clear pose/gaze shift).
-2. FRAME_COUNT ≥ 2: include **both** left-side and right-side three-quarter coverage across the set.
-3. FRAME_COUNT ≥ 3: ≥1 back or over-shoulder (body away, head turn — partial face OK).
-4. FRAME_COUNT ≥ 4: ≥1 clear **pose change** (stance, arms, weight shift, sit/stand, lean) vs MASTER.
-5. Across the set, deliberately vary **gaze** AND **emotion/micro-expression** — not every frame stares at lens with the same smile.
-6. Allowed camera moves: three-quarter, near-profile (~55–70°), back three-quarter, modest high/low, closer/farther crop, slight Dutch only if USER_DIRECTION asks.
-7. Forbidden: new face, new outfit, new room, plastic surgery redesign, or every frame matching MASTER's angle.
+**Capture grammar (non-negotiable — do NOT break the shoot logic):**
+- `phone_selfie` → EVERY frame stays a **selfie**: same phone-in-hand or arm-length front-camera logic; vary tilt, height, crop, expression, head turn — **never** switch to an external photographer POV.
+- `mirror_selfie` → EVERY frame stays **in the same mirror setup**: phone visible in reflection when master shows it; mirror geometry consistent; no sudden side-street candid.
+- `friend_snap` → stay third-person phone/candid; do not morph into selfie unless master already blurred that line.
+- `tripod_timer` / `webcam_desk` → keep fixed-camera logic; vary pose/expression/distance within that grammar.
+- When unsure, **never** jump capture type — stay closest to MASTER.
 
-Each prompt = dense English 140–480 chars, phone-snapshot realism, concrete pose + camera + gaze + emotion cues, end with identity clause ("Same person as master" or "Partial face must match master").
+**Creative toolkit — pick the BEST mix for THIS master (not every item every time):**
+Use your judgment; each planned frame should feel **distinct** and **Instagram-native**:
+
+1. **Emotion & micro-expression** — if the mood allows, span different authentic expressions (soft laugh, neutral calm, playful smirk, intense gaze, shy glance away, mid-blink candid). Match vibe: don't put silly faces on a moody shot unless USER_DIRECTION asks.
+
+2. **Camera geometry (real moves, not just "slightly left"):**
+   - height: low worm's-eye, high overhead (only if body/room allow), eye-level, slightly above/below chin
+   - distance: punch-in extreme close-up, medium, pull back full-body
+   - angle: three-quarter, near-profile, over-shoulder, down-the-body crop, detail-first framing
+   - **detail / accent crop** when props or features deserve it: eyes + brow, lips, hands on phone, jewelry, lace texture, collarbone, waist tie, nails, hair strand against light — still same person/outfit/room
+
+3. **Pose & body language** — weight shift, hip lean, arm reposition, hand in hair, cross arms, stretch, sit vs stand if furniture exists, one knee up on bed, turn torso while feet stay, playful interaction with phone angle.
+
+4. **Environment interaction** (only when MASTER's room/props support it):
+   - touch mirror frame, lean shoulder on window frame, sit on bed edge, pull curtain, adjust strap, rest drink on table, hand on railing — **same location**, natural continuations of the same session.
+
+5. **Gaze variety** — lens, off-camera left/right, down at phone screen, up into light, over shoulder, at own reflection (mirror), at prop.
+
+**Set-design rules (flexible, not a rigid checklist):**
+- Frame 1 must be **clearly different** from MASTER (not a clone angle).
+- Spread variety across the set: mix wide + tight, different heights, different expressions when appropriate.
+- Avoid N near-identical three-quarters with the same smile.
+- Do **not** force left+right+back coverage if it would **break capture grammar** (e.g. don't invent a back view that implies a second photographer on a strict arm-length selfie).
+- Forbidden: new person, new outfit, new room, plastic face redesign, random studio lighting change, switching selfie → external photographer.
+
+Each prompt = dense English **160–520 chars**, phone-snapshot realism, concrete **capture_type compliance** + camera + pose + gaze + emotion (+ prop interaction if used). End with identity clause ("Same person as master" / "Partial face must match master" / "Still mirror selfie, same mirror").
 
 Output **only** valid JSON (no markdown fences, no chain-of-thought outside JSON):
 {
   "master_read": {
+    "capture_type": "phone_selfie | mirror_selfie | friend_snap | tripod_timer | webcam_desk | unknown",
+    "capture_evidence": "…",
     "camera": "…",
     "pose": "…",
     "gaze": "…",
     "expression": "…",
     "framing": "…",
-    "instagram_opportunity": "one sentence: what complementary shots would elevate this photo into a carousel"
+    "environment": "…",
+    "instagram_opportunity": "one sentence: the creative arc for this carousel on Instagram"
   },
   "prompts": ["…", "…"]
 }
