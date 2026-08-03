@@ -337,13 +337,13 @@ export default function Partner() {
                 </div>
               ))}
             </Panel>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <div style={{ background: 'linear-gradient(140deg,rgba(74,222,128,.1),rgba(74,222,128,.02))', border: '1px solid rgba(74,222,128,.3)', borderRadius: 16, padding: '16px 18px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
+              <div style={{ background: 'linear-gradient(140deg,rgba(74,222,128,.1),rgba(74,222,128,.02))', border: '1px solid rgba(74,222,128,.3)', borderRadius: 16, padding: '16px 18px', minWidth: 0, overflow: 'hidden' }}>
                 <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 6 }}>{t.partnerPayout}</div>
                 <div style={{ fontSize: 11.5, color: color.textDim, lineHeight: 1.55, marginBottom: 13 }}>{t.partnerPayoutHint}</div>
-                <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-                  <input value={wallet} onChange={(e) => setWallet(e.target.value)} placeholder={t.walletAddress} style={{ flex: 1, background: color.bgDeep, border: `1px solid ${line.mid}`, borderRadius: 9, padding: '9px 12px', color: color.text, fontFamily: font.mono, fontSize: 11.5 }} />
-                  <select value={asset} onChange={(e) => setAsset(e.target.value)} style={{ ...selectSt, flex: 'none' }}>
+                <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap', alignItems: 'stretch' }}>
+                  <input value={wallet} onChange={(e) => setWallet(e.target.value)} placeholder={t.walletAddress} style={{ flex: '1 1 140px', minWidth: 0, background: color.bgDeep, border: `1px solid ${line.mid}`, borderRadius: 9, padding: '9px 12px', color: color.text, fontFamily: font.mono, fontSize: 11.5, boxSizing: 'border-box' }} />
+                  <select value={asset} onChange={(e) => setAsset(e.target.value)} style={{ ...selectSt, width: 'auto', minWidth: 118, maxWidth: '100%', flex: '0 0 auto', boxSizing: 'border-box' }}>
                     {payoutAssets.map((a) => <option key={a} value={a}>{a.replace('_', ' ')}</option>)}
                   </select>
                 </div>
