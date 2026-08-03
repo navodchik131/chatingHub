@@ -10,6 +10,10 @@ import { LoginPage } from './marketing/LoginPage'
 
 import { MarketingLayout } from './marketing/MarketingLayout'
 
+import { PartnersPage } from './marketing/PartnersPage'
+
+import { PartnerRegisterPage } from './marketing/PartnerRegisterPage'
+
 import { PricingPage } from './marketing/PricingPage'
 
 import { PrivacyPage } from './marketing/PrivacyPage'
@@ -43,6 +47,10 @@ function marketingRouteChildren() {
       <Route path="pricing" element={<PricingPage />} />
 
       <Route path="referral" element={<ReferralPage />} />
+
+      <Route path="partners" element={<PartnersPage />} />
+
+      <Route path="partners/register" element={<PartnerRegisterPage />} />
 
       <Route path="demo" element={<DemoCreditsPage />} />
 

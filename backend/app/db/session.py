@@ -366,6 +366,7 @@ async def init_db() -> None:
         await conn.run_sync(_migrate_demo_device_quotas_table)
         await conn.run_sync(_migrate_studio_generation_is_demo)
         await conn.run_sync(_migrate_telegram_mobile_auth_device_key)
+        await conn.run_sync(_migrate_telegram_mobile_auth_is_partner)
         await conn.run_sync(_migrate_tribute_processed_events)
         await conn.run_sync(_migrate_email_campaigns_tables)
         await conn.run_sync(_migrate_fanvue_oauth_columns)
@@ -2231,6 +2232,24 @@ def _migrate_telegram_mobile_auth_device_key(sync_conn) -> None:
         return
     sync_conn.execute(
         text("ALTER TABLE telegram_mobile_auth_sessions ADD COLUMN device_key VARCHAR(64)")
+    )
+
+
+def _migrate_telegram_mobile_auth_is_partner(sync_conn) -> None:
+    from sqlalchemy import inspect, text
+
+    insp = inspect(sync_conn)
+    if not insp.has_table("telegram_mobile_auth_sessions"):
+        return
+    cols = {c["name"] for c in insp.get_columns("telegram_mobile_auth_sessions")}
+    if "is_partner" in cols:
+        return
+    bool_false = "FALSE" if sync_conn.dialect.name != "sqlite" else "0"
+    sync_conn.execute(
+        text(
+            f"ALTER TABLE telegram_mobile_auth_sessions "
+            f"ADD COLUMN is_partner BOOLEAN NOT NULL DEFAULT {bool_false}"
+        )
     )
 
 

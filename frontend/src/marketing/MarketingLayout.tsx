@@ -117,6 +117,9 @@ export function MarketingLayout() {
             <NavLink to={path('/faq')} className="mm-nav__link">
               {t('layout.navFaq')}
             </NavLink>
+            <NavLink to={path('/partners')} className="mm-nav__link">
+              {t('layout.navPartners')}
+            </NavLink>
           </nav>
           <div className="mm-header__actions">
             <LanguageSwitcher />
@@ -172,6 +175,9 @@ export function MarketingLayout() {
                 </li>
                 <li>
                   <NavLink to={path('/referral')}>{t('layout.footerPricingReferral')}</NavLink>
+                </li>
+                <li>
+                  <NavLink to={path('/partners')}>{t('layout.footerPricingPartners')}</NavLink>
                 </li>
                 <li>
                   <NavLink to={path('/demo')}>{t('layout.footerPricingTrial')}</NavLink>

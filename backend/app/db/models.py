@@ -800,6 +800,7 @@ class TelegramMobileAuthSession(Base):
     status: Mapped[str] = mapped_column(String(16), default="pending")
     access_token: Mapped[str | None] = mapped_column(String(512), nullable=True)
     referral_code: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    is_partner: Mapped[bool] = mapped_column(default=False)
     device_key: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     telegram_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     created_at: Mapped[datetime] = mapped_column(

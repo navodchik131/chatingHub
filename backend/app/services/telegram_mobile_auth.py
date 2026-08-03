@@ -40,6 +40,7 @@ async def create_mobile_auth_session(
     session: AsyncSession,
     *,
     referral_code: str | None = None,
+    is_partner: bool = False,
     device_key: str | None = None,
 ) -> TelegramMobileAuthSession:
     if not settings.telegram_login_configured:
@@ -53,6 +54,7 @@ async def create_mobile_auth_session(
         id=session_id,
         status="pending",
         referral_code=(referral_code or "").strip().upper()[:16] or None,
+        is_partner=bool(is_partner),
         device_key=(device_key or "").strip()[:64] or None,
         expires_at=_now() + timedelta(seconds=SESSION_TTL_SECONDS),
     )
@@ -130,6 +132,7 @@ async def complete_mobile_auth_session(
             telegram_id=telegram_id,
             telegram_username=telegram_username,
             referral_code=row.referral_code,
+            is_partner=bool(getattr(row, "is_partner", False)),
             device_signal=device_signal,
         )
         await record_funnel_event_once(session, user=user, event="signup_telegram")

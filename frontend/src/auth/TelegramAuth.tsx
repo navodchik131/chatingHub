@@ -19,11 +19,12 @@ type Props = {
   botUsername: string
   mode: 'login' | 'link'
   referralCode?: string | null
+  isPartner?: boolean
   onSuccess: () => void | Promise<void>
   onError?: (message: string) => void
 }
 
-export function TelegramLoginButton({ botUsername, mode, referralCode, onSuccess, onError }: Props) {
+export function TelegramLoginButton({ botUsername, mode, referralCode, isPartner, onSuccess, onError }: Props) {
   const { t } = useTranslation('auth')
   const hostRef = useRef<HTMLDivElement>(null)
   const onSuccessRef = useRef(onSuccess)
@@ -115,7 +116,7 @@ export function TelegramLoginButton({ botUsername, mode, referralCode, onSuccess
     setBusy(true)
     const preopenedPopup = typeof window !== 'undefined' ? openBlankPopupForDeferredNav() : null
     try {
-      const token = await signInWithTelegramBot(referralCode, { preopenedPopup })
+      const token = await signInWithTelegramBot(referralCode, { preopenedPopup, isPartner })
       setToken(token)
       await onSuccessRef.current()
     } catch (e) {

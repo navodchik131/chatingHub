@@ -214,6 +214,7 @@ class RegisterIn(BaseModel):
     referral_code: str | None = Field(default=None, max_length=16)
     partner_slug: str | None = Field(default=None, max_length=32)
     partner_source_tag: str | None = Field(default=None, max_length=64)
+    is_partner: bool = False
 
 
 class LoginIn(BaseModel):
@@ -234,6 +235,7 @@ class TelegramLoginIn(BaseModel):
     referral_code: str | None = Field(default=None, max_length=16)
     partner_slug: str | None = Field(default=None, max_length=32)
     partner_source_tag: str | None = Field(default=None, max_length=64)
+    is_partner: bool = False
 
 
 class CompleteOwnerEmailIn(BaseModel):
@@ -248,6 +250,7 @@ class TokenOut(BaseModel):
 
 class TelegramMobileAuthStartIn(BaseModel):
     referral_code: str | None = Field(default=None, max_length=16)
+    is_partner: bool = False
 
 
 class TelegramMobileAuthStartOut(BaseModel):

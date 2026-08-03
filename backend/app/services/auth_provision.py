@@ -10,7 +10,7 @@ from app.services.billing_plan import BILLING_PLAN_CREDITS, BILLING_PLAN_STANDAR
 from app.services.funnel_analytics import record_funnel_event_once
 from app.services.demo_device_limit import demo_grant_for_device
 from app.services.device_signal import DeviceSignal
-from app.services.partner import apply_partner_referral_on_signup
+from app.services.partner import apply_partner_referral_on_signup, ensure_partner_slug
 from app.services.referral import apply_referral_on_signup, ensure_owner_referral_code
 from app.services.starter_plan import starter_managed_effective
 from app.services.studio_workflow_defaults import provision_demo_workflow_workspaces
@@ -25,6 +25,7 @@ async def provision_workspace_owner(
     referral_code: str | None = None,
     partner_slug: str | None = None,
     partner_source_tag: str | None = None,
+    is_partner: bool = False,
     device_signal: DeviceSignal | None = None,
 ) -> User:
     user = User(
@@ -32,9 +33,12 @@ async def provision_workspace_owner(
         hashed_password=hashed_password,
         is_active=True,
         auth_email_verified=auth_email_verified,
+        is_partner=bool(is_partner),
     )
     session.add(user)
     await session.flush()
+    if is_partner:
+        await ensure_partner_slug(session, user)
 
     demo_grant = max(0, int(settings.demo_generations_grant))
     if starter_managed_effective():

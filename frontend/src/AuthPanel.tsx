@@ -10,14 +10,19 @@ export function AuthPanel({
   referralCode,
   partnerSlug,
   partnerSourceTag,
+  partnerSignup = false,
+  registerOnly = false,
 }: {
   onSuccess: (fromRegister?: boolean) => void | Promise<void>
   referralCode?: string | null
   partnerSlug?: string | null
   partnerSourceTag?: string | null
+  partnerSignup?: boolean
+  registerOnly?: boolean
 }) {
   const { t } = useTranslation('auth')
-  const [tab, setTab] = useState<'login' | 'register'>('login')
+  const { t: tm } = useTranslation('marketing')
+  const [tab, setTab] = useState<'login' | 'register'>(registerOnly || partnerSignup ? 'register' : 'login')
   const [email, setEmail] = useState('')
   const [memberLogin, setMemberLogin] = useState('')
   const [password, setPassword] = useState('')
@@ -49,12 +54,13 @@ export function AuthPanel({
       const body =
         tab === 'login' && ml
           ? { email, password, member_login: ml }
-          : tab === 'register' && (partnerSlug || referralCode)
+          : tab === 'register'
             ? {
                 email,
                 password,
                 ...(referralCode ? { referral_code: referralCode } : {}),
                 ...(partnerSlug ? { partner_slug: partnerSlug, partner_source_tag: partnerSourceTag || undefined } : {}),
+                ...(partnerSignup ? { is_partner: true } : {}),
               }
             : { email, password }
       const r = await apiFetch(path, {
@@ -91,33 +97,35 @@ export function AuthPanel({
   return (
     <div className="auth-card">
       <div className="auth-card-inner">
-        <h2 className="auth-title">{t('title')}</h2>
-        <p className="auth-sub">{t('subtitle')}</p>
-        <div className="auth-tabs" role="tablist" aria-label={t('tabsAria')}>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tab === 'login'}
-            className={tab === 'login' ? 'auth-tab active' : 'auth-tab'}
-            onClick={() => {
-              setTab('login')
-            }}
-          >
-            {t('login')}
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tab === 'register'}
-            className={tab === 'register' ? 'auth-tab active' : 'auth-tab'}
-            onClick={() => {
-              setTab('register')
-              setMemberLogin('')
-            }}
-          >
-            {t('register')}
-          </button>
-        </div>
+        <h2 className="auth-title">{partnerSignup ? tm('partnerRegisterPage.title') : t('title')}</h2>
+        <p className="auth-sub">{partnerSignup ? tm('partnerRegisterPage.subtitle') : t('subtitle')}</p>
+        {registerOnly ? null : (
+          <div className="auth-tabs" role="tablist" aria-label={t('tabsAria')}>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={tab === 'login'}
+              className={tab === 'login' ? 'auth-tab active' : 'auth-tab'}
+              onClick={() => {
+                setTab('login')
+              }}
+            >
+              {t('login')}
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={tab === 'register'}
+              className={tab === 'register' ? 'auth-tab active' : 'auth-tab'}
+              onClick={() => {
+                setTab('register')
+                setMemberLogin('')
+              }}
+            >
+              {t('register')}
+            </button>
+          </div>
+        )}
         {err ? <div className="banner error">{err}</div> : null}
         {tgBotUsername ? (
           <div
@@ -129,6 +137,7 @@ export function AuthPanel({
               botUsername={tgBotUsername}
               mode="login"
               referralCode={referralCode}
+              isPartner={partnerSignup && tab === 'register'}
               onSuccess={tab === 'register' ? onTelegramSuccess : onTelegramLoginSuccess}
               onError={setErr}
             />
@@ -165,6 +174,15 @@ export function AuthPanel({
               onChange={(e) => setMemberLogin(e.target.value)}
               placeholder={t('teamLoginPlaceholder')}
             />
+          </label>
+        ) : null}
+        {tab === 'register' && partnerSignup ? (
+          <label className="auth-partner-flag">
+            <input type="checkbox" checked readOnly disabled />
+            <span>
+              <strong>{t('partnerSignupLabel')}</strong>
+              <small>{t('partnerSignupHint')}</small>
+            </span>
           </label>
         ) : null}
         <button
