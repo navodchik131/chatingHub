@@ -20,8 +20,7 @@ async def download_telegram_image(message: Message, bot: Bot) -> tuple[bytes, st
         mime = "image/jpeg"
     elif message.sticker:
         st = message.sticker
-        mime = (st.mime_type or "image/webp").split(";")[0].strip() or "image/webp"
-        if mime == "application/x-tgs":
+        if st.is_animated or st.is_video:
             thumb = getattr(st, "thumbnail", None) or getattr(st, "thumb", None)
             if thumb is not None:
                 file_id = thumb.file_id
@@ -30,6 +29,7 @@ async def download_telegram_image(message: Message, bot: Bot) -> tuple[bytes, st
                 return None
         else:
             file_id = st.file_id
+            mime = "image/webp"
     elif message.video_note:
         file_id = message.video_note.file_id
         mime = "video/mp4"
