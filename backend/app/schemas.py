@@ -1477,6 +1477,13 @@ class AdminUserRow(BaseModel):
     """Архив генераций владельца пространства."""
 
 
+class AdminUserListOut(BaseModel):
+    items: list[AdminUserRow]
+    total: int
+    skip: int
+    limit: int
+
+
 class AdminUserDetailOut(AdminUserRow):
     invited_users_count: int = 0
     referred_by_email: str | None = None

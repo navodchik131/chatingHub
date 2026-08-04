@@ -142,6 +142,13 @@ export interface AdminUserRow {
   studio_generations_count: number
 }
 
+export interface AdminUserListResponse {
+  items: AdminUserRow[]
+  total: number
+  skip: number
+  limit: number
+}
+
 export interface AdminUserDetail extends AdminUserRow {
   studio_models_count: number
   studio_generations_count: number

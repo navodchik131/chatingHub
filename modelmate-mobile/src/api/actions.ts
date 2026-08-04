@@ -457,7 +457,9 @@ export async function fetchAdminUsers(search = '') {
   const q = new URLSearchParams();
   q.set('limit', '200');
   if (search.trim()) q.set('q', search.trim());
-  return apiJsonOptional(`/api/admin/users?${q}`, {}, []);
+  const data = await apiJsonOptional(`/api/admin/users?${q}`, {}, null);
+  if (Array.isArray(data)) return data;
+  return data?.items ?? [];
 }
 
 export async function patchAdminUserSubscription(userId: number, payload: Record<string, unknown>) {

@@ -29,6 +29,7 @@ from app.schemas import (
     AdminStatsOut,
     AdminSubscriptionPatchIn,
     AdminUserDetailOut,
+    AdminUserListOut,
     AdminUserPatchIn,
     AdminUserRow,
 )
@@ -67,6 +68,30 @@ async def _owner_studio_counts(
     ).all():
         gens[int(uid)] = int(n or 0)
     return models, gens
+
+
+def _admin_users_base_stmt(*, q: str | None, partners_only: bool):
+    stmt = select(User).options(selectinload(User.parent))
+    if q and str(q).strip():
+        pat = f"%{str(q).strip()}%"
+        stmt = stmt.where(User.email.ilike(pat))
+    if partners_only:
+        stmt = stmt.where(User.is_partner.is_(True), User.parent_user_id.is_(None))
+    return stmt
+
+
+async def _admin_users_total(
+    session: AsyncSession, *, q: str | None, partners_only: bool
+) -> int:
+    count_stmt = select(func.count()).select_from(User)
+    if q and str(q).strip():
+        pat = f"%{str(q).strip()}%"
+        count_stmt = count_stmt.where(User.email.ilike(pat))
+    if partners_only:
+        count_stmt = count_stmt.where(
+            User.is_partner.is_(True), User.parent_user_id.is_(None)
+        )
+    return int(await session.scalar(count_stmt) or 0)
 
 
 def _owner_subscription_tuple(
@@ -155,25 +180,25 @@ async def admin_stats_segment(
     return AdminSegmentOut(**data)
 
 
-@router.get("/admin/users", response_model=list[AdminUserRow])
+@router.get("/admin/users", response_model=AdminUserListOut)
 async def admin_list_users(
     session: AsyncSession = Depends(get_session),
     _: User = Depends(get_platform_admin),
-    skip: int = 0,
-    limit: int = 50,
-    q: str | None = None,
-) -> list[AdminUserRow]:
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=20, ge=1, le=200),
+    q: str | None = Query(default=None, max_length=120),
+    partners_only: bool = Query(default=False),
+) -> AdminUserListOut:
+    page_limit = min(200, max(1, limit))
+    page_skip = max(0, skip)
     stmt = (
-        select(User)
-        .options(selectinload(User.parent))
+        _admin_users_base_stmt(q=q, partners_only=partners_only)
         .order_by(User.id.desc())
-        .offset(max(0, skip))
-        .limit(min(200, max(1, limit)))
+        .offset(page_skip)
+        .limit(page_limit)
     )
-    if q and str(q).strip():
-        pat = f"%{str(q).strip()}%"
-        stmt = stmt.where(User.email.ilike(pat))
     rows = (await session.execute(stmt)).scalars().all()
+    total = await _admin_users_total(session, q=q, partners_only=partners_only)
 
     owner_bal: dict[int, int] = {}
     owner_demo: dict[int, int] = {}
@@ -193,7 +218,12 @@ async def admin_list_users(
                 owner_gens=owner_gens,
             )
         )
-    return out
+    return AdminUserListOut(
+        items=out,
+        total=total,
+        skip=page_skip,
+        limit=page_limit,
+    )
 
 
 @router.get("/admin/users/{user_id}", response_model=AdminUserDetailOut)

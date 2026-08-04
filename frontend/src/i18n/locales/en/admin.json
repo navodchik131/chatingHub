@@ -189,7 +189,15 @@
   },
   "users": {
     "searchPlaceholder": "Search by email",
-    "placeholder": "Select a user in the table to edit subscription, credits and access."
+    "placeholder": "Select a user in the table to edit subscription, credits and access.",
+    "filterAll": "All users",
+    "filterPartners": "Partners only",
+    "partnerBadge": "partner",
+    "paginationRange": "Showing {{from}}–{{to}} of {{total}}",
+    "paginationEmpty": "No users",
+    "pageOf": "Page {{page}} of {{total}}",
+    "prevPage": "Previous",
+    "nextPage": "Next"
   },
   "userPanel": {
     "ariaLabel": "User card",

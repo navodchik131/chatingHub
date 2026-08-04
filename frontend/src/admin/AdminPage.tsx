@@ -19,7 +19,7 @@ import {
   planTierLabel,
   subscriptionStatusLabel,
 } from './constants'
-import type { AdminStats, AdminUserDetail, AdminUserRow } from './types'
+import type { AdminStats, AdminUserDetail, AdminUserListResponse, AdminUserRow } from './types'
 import { formatDateTimeRu } from './utils'
 import './admin.css'
 
@@ -40,6 +40,8 @@ const TAB_TITLES: Record<AdminTabId, string> = {
   tickets: 'ticketsTitle',
 }
 
+const USERS_PAGE_SIZE = 20
+
 export function AdminPage() {
   const { t } = useTranslation('admin')
   const [gate, setGate] = useState<'loading' | 'ok' | 'denied' | 'anon'>('loading')
@@ -48,6 +50,9 @@ export function AdminPage() {
   const [stats, setStats] = useState<AdminStats | null>(null)
   const [users, setUsers] = useState<AdminUserRow[]>([])
   const [userSearch, setUserSearch] = useState('')
+  const [userPage, setUserPage] = useState(0)
+  const [userTotal, setUserTotal] = useState(0)
+  const [partnersOnly, setPartnersOnly] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<number | null>(null)
@@ -77,12 +82,19 @@ export function AdminPage() {
     setError(t('gate.statsLoadFailed'))
   }, [t])
 
-  const loadUsers = useCallback(async (search: string) => {
+  const loadUsers = useCallback(async (search: string, page: number, onlyPartners: boolean) => {
     const q = new URLSearchParams()
-    q.set('limit', '200')
+    q.set('limit', String(USERS_PAGE_SIZE))
+    q.set('skip', String(Math.max(0, page) * USERS_PAGE_SIZE))
     if (search.trim()) q.set('q', search.trim())
+    if (onlyPartners) q.set('partners_only', 'true')
     const r = await apiFetch(`/api/admin/users?${q}`)
-    if (r.ok) setUsers((await r.json()) as AdminUserRow[])
+    if (r.ok) {
+      const data = (await r.json()) as AdminUserListResponse
+      setUsers(data.items)
+      setUserTotal(data.total)
+      setUserPage(Math.floor(data.skip / USERS_PAGE_SIZE))
+    }
   }, [])
 
   const loadUserDetail = useCallback(async (id: number) => {
@@ -141,7 +153,7 @@ export function AdminPage() {
   useEffect(() => {
     if (gate !== 'ok') return
     setBusy(true)
-    void Promise.all([loadStats(), loadUsers(''), loadTicketsUnreadCount(), loadPartnersOpenPayouts()]).finally(() => setBusy(false))
+    void Promise.all([loadStats(), loadUsers('', 0, false), loadTicketsUnreadCount(), loadPartnersOpenPayouts()]).finally(() => setBusy(false))
   }, [gate, loadStats, loadUsers, loadTicketsUnreadCount, loadPartnersOpenPayouts])
 
   useEffect(() => {
@@ -171,7 +183,18 @@ export function AdminPage() {
 
   const refreshAll = () => {
     setBusy(true)
-    void Promise.all([loadStats(), loadUsers(userSearch), loadTicketsUnreadCount(), loadPartnersOpenPayouts()]).finally(() => setBusy(false))
+    void Promise.all([
+      loadStats(),
+      loadUsers(userSearch, userPage, partnersOnly),
+      loadTicketsUnreadCount(),
+      loadPartnersOpenPayouts(),
+    ]).finally(() => setBusy(false))
+  }
+
+  const runUserSearch = (page = 0) => {
+    setUserPage(page)
+    setBusy(true)
+    void loadUsers(userSearch, page, partnersOnly).finally(() => setBusy(false))
   }
 
   const onUserUpdated = (row: AdminUserRow) => {
@@ -182,11 +205,9 @@ export function AdminPage() {
     }
   }
 
-  const filteredUsers = useMemo(() => {
-    const q = userSearch.trim().toLowerCase()
-    if (!q) return users
-    return users.filter((u) => u.email.toLowerCase().includes(q))
-  }, [users, userSearch])
+  const userPageCount = Math.max(1, Math.ceil(userTotal / USERS_PAGE_SIZE))
+  const userRangeFrom = userTotal === 0 ? 0 : userPage * USERS_PAGE_SIZE + 1
+  const userRangeTo = Math.min(userTotal, (userPage + 1) * USERS_PAGE_SIZE)
 
   if (gate === 'loading') {
     return (
@@ -250,9 +271,26 @@ export function AdminPage() {
                   placeholder={t('users.searchPlaceholder')}
                   value={userSearch}
                   onChange={(e) => setUserSearch(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') runUserSearch(0)
+                  }}
                   className="admin-user-search"
                 />
-                <button type="button" className="ghost-btn" disabled={busy} onClick={() => void loadUsers(userSearch)}>
+                <select
+                  className="admin-user-filter"
+                  value={partnersOnly ? 'partners' : 'all'}
+                  onChange={(e) => {
+                    const next = e.target.value === 'partners'
+                    setPartnersOnly(next)
+                    setBusy(true)
+                    setUserPage(0)
+                    void loadUsers(userSearch, 0, next).finally(() => setBusy(false))
+                  }}
+                >
+                  <option value="all">{t('users.filterAll')}</option>
+                  <option value="partners">{t('users.filterPartners')}</option>
+                </select>
+                <button type="button" className="ghost-btn" disabled={busy} onClick={() => runUserSearch(0)}>
                   {t('common.search')}
                 </button>
                 <button
@@ -261,7 +299,10 @@ export function AdminPage() {
                   disabled={busy}
                   onClick={() => {
                     setUserSearch('')
-                    void loadUsers('')
+                    setPartnersOnly(false)
+                    setUserPage(0)
+                    setBusy(true)
+                    void loadUsers('', 0, false).finally(() => setBusy(false))
                   }}
                 >
                   {t('common.reset')}
@@ -282,7 +323,7 @@ export function AdminPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredUsers.map((u) => {
+                    {users.map((u) => {
                       const isOwner = u.parent_user_id == null
                       const active = selectedId === u.id
                       return (
@@ -294,9 +335,14 @@ export function AdminPage() {
                           <td className="mono">{u.id}</td>
                           <td>
                             <div>{u.email}</div>
-                            {!u.is_active ? (
-                              <span className="admin-badge admin-badge--off">{t('roles.disabled')}</span>
-                            ) : null}
+                            <div className="admin-user-badges">
+                              {!u.is_active ? (
+                                <span className="admin-badge admin-badge--off">{t('roles.disabled')}</span>
+                              ) : null}
+                              {u.is_partner && isOwner ? (
+                                <span className="admin-badge admin-badge--partner">{t('users.partnerBadge')}</span>
+                              ) : null}
+                            </div>
                           </td>
                           <td>{isOwner ? t('roles.owner') : u.member_login ?? t('roles.member')}</td>
                           <td>{subscriptionStatusLabel(u.subscription_status)}</td>
@@ -309,8 +355,44 @@ export function AdminPage() {
                         </tr>
                       )
                     })}
+                    {!users.length && !busy ? (
+                      <tr>
+                        <td colSpan={7} className="muted admin-user-table__empty">
+                          {t('common.noRecords')}
+                        </td>
+                      </tr>
+                    ) : null}
                   </tbody>
                 </table>
+              </div>
+
+              <div className="admin-user-pagination">
+                <span className="muted small">
+                  {userTotal
+                    ? t('users.paginationRange', { from: userRangeFrom, to: userRangeTo, total: userTotal })
+                    : t('users.paginationEmpty')}
+                </span>
+                <div className="admin-user-pagination__controls">
+                  <button
+                    type="button"
+                    className="ghost-btn"
+                    disabled={busy || userPage <= 0}
+                    onClick={() => runUserSearch(userPage - 1)}
+                  >
+                    {t('users.prevPage')}
+                  </button>
+                  <span className="muted small">
+                    {t('users.pageOf', { page: userPage + 1, total: userPageCount })}
+                  </span>
+                  <button
+                    type="button"
+                    className="ghost-btn"
+                    disabled={busy || userPage + 1 >= userPageCount}
+                    onClick={() => runUserSearch(userPage + 1)}
+                  >
+                    {t('users.nextPage')}
+                  </button>
+                </div>
               </div>
             </div>
 

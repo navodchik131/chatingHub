@@ -189,7 +189,15 @@
   },
   "users": {
     "searchPlaceholder": "Поиск по email",
-    "placeholder": "Выберите пользователя в таблице, чтобы изменить подписку, кредиты и доступ."
+    "placeholder": "Выберите пользователя в таблице, чтобы изменить подписку, кредиты и доступ.",
+    "filterAll": "Все пользователи",
+    "filterPartners": "Только партнёры",
+    "partnerBadge": "партнёр",
+    "paginationRange": "Показано {{from}}–{{to}} из {{total}}",
+    "paginationEmpty": "Нет пользователей",
+    "pageOf": "Стр. {{page}} из {{total}}",
+    "prevPage": "Назад",
+    "nextPage": "Вперёд"
   },
   "userPanel": {
     "ariaLabel": "Карточка пользователя",
