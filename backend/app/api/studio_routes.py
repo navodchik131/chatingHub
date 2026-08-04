@@ -1964,7 +1964,7 @@ async def api_studio_carousel(
 )
 async def api_studio_carousel_from_upload(
     request: Request,
-    model_id: str = Form(...),
+    model_id: str = Form(""),
     count: int = Form(4),
     description: str = Form(""),
     output_aspect: str = Form("9:16"),
@@ -1985,10 +1985,8 @@ async def api_studio_carousel_from_upload(
         raise HTTPException(status_code=400, detail="Количество кадров: от 2 до 8")
 
     parsed_mid = _parse_optional_model_id(model_id)
-    if parsed_mid is None:
-        raise HTTPException(status_code=400, detail="Укажите персонажа (model_id)")
-
-    await assert_studio_generation_access(session, user, parsed_mid)
+    if parsed_mid is not None:
+        await assert_studio_generation_access(session, user, parsed_mid)
 
     gen_id: int | None = None
     raw_arch = (existing_generation_id or "").strip()

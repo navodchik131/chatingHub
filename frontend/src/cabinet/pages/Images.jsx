@@ -535,7 +535,7 @@ export default function Images() {
           <div>
             <Eyebrow>{t.character}</Eyebrow>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              {s.imgMode === 'prompt' ? (
+              {s.imgMode === 'prompt' || s.imgMode === 'carousel' ? (
                 <SelectPill
                   accent="pink"
                   on={cabinet.promptWithoutCharacter}

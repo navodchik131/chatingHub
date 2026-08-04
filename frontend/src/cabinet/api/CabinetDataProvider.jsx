@@ -999,7 +999,6 @@ export function CabinetDataProvider({ children }) {
         }
         let accepted
         if (mode === 'carousel') {
-          if (!selectedModelId) throw new Error('Выберите персонажа')
           const src = actions.resolveSlotSource('carousel', 0, uploadFiles, slotArchivePicks)
           accepted = await actions.runCarouselGeneration({
             modelId: selectedModelId,

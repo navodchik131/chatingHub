@@ -932,7 +932,7 @@ export function ScreenRouter() {
             </>
           ) : null}
           <SectionLabel>{t.studioCharacter}</SectionLabel>
-          {renderCharacterPicker(nav.imgChar, (c) => patch({ imgChar: c }), { allowNoCharacter: modeId === 'prompt' })}
+          {renderCharacterPicker(nav.imgChar, (c) => patch({ imgChar: c }), { allowNoCharacter: modeId === 'prompt' || modeId === 'carousel' })}
           <SectionLabel>{t.studioFormat}</SectionLabel>
           <ChipPicker
             items={[...IMG_FORMATS]}

@@ -726,7 +726,7 @@ export async function runImageGeneration(params: {
 
   if (mode === 'carousel') {
     const fd = new FormData();
-    fd.append('model_id', String(modelId));
+    if (modelId) fd.append('model_id', String(modelId));
     fd.append('count', String(params.navState.carouselCount || 3));
     fd.append('description', String(params.navState.imgPrompt || ''));
     fd.append('output_aspect', String(params.navState.imgFormat || '9:16'));

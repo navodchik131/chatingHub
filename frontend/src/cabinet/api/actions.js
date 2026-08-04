@@ -484,7 +484,7 @@ export async function executeWorkflowGraph(graph, targetNodeId, opts = {}) {
 
 export async function runCarouselGeneration(params) {
   const fd = new FormData()
-  fd.append('model_id', String(params.modelId))
+  if (params.modelId) fd.append('model_id', String(params.modelId))
   fd.append('count', String(params.count))
   fd.append('description', params.prompt || '')
   fd.append('output_aspect', params.aspect || '9:16')

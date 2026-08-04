@@ -3535,11 +3535,6 @@
     store.error = null
 
     if (mode === 'carousel') {
-      if (!modelId) {
-        store.error = 'Выберите персонажа'
-        logic.forceUpdate()
-        return
-      }
       const { srcId, uploadFile } = resolveCarouselMasterSource(s)
       if (!srcId && !uploadFile) {
         store.error = 'Выберите кадр из архива или загрузите фото для карусели'
@@ -3566,7 +3561,7 @@
       scheduleArchivePoll()
       try {
         const fd = new FormData()
-        fd.append('model_id', String(modelId))
+        if (modelId) fd.append('model_id', String(modelId))
         fd.append('count', String(count))
         fd.append('description', prompt)
         fd.append('output_aspect', store.selectedAspect)
