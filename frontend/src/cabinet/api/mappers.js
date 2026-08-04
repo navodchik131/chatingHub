@@ -172,13 +172,17 @@ export function mapIntegrationConnections(platformId, integrations, models, lang
     }))
   }
   if (platformId === 'tg-user') {
+    const tgUserStatus = (status) => {
+      if (status === 'active') return lang === 'ru' ? 'активен' : 'active'
+      if (status === 'pending_otp') return lang === 'ru' ? 'ожидает код' : 'awaiting code'
+      if (status === 'pending_2fa') return lang === 'ru' ? 'ожидает 2FA' : 'awaiting 2FA'
+      return status || '?'
+    }
     return (ig.telegram_user_connections || []).map((c) => ({
       id: c.id,
       name: c.telegram_username ? `@${c.telegram_username}` : (c.phone_masked || c.label || `#${c.id}`),
-      meta: [
-        c.session_status === 'active' ? (lang === 'ru' ? 'активен' : 'active') : (c.session_status || '?'),
-        modelLabel(c.studio_model_id),
-      ].join(' · '),
+      meta: [tgUserStatus(c.session_status), modelLabel(c.studio_model_id)].join(' · '),
+      statusTone: c.session_status === 'active' ? 'active' : 'pending',
     }))
   }
   if (platformId === 'fanvue') {

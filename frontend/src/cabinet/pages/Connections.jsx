@@ -212,6 +212,8 @@ function ConnectionDetail() {
           const res = await actions.confirmTelegramUserCode(form.tgUserConnectionId, form.code);
           if (res.needs_password) {
             setForm({ tgUserStep: 'password', code: '' });
+            await cabinet.refreshAll();
+            cabinet.setError(null);
           } else {
             await cabinet.refreshAll();
             setForm({ phone: '', code: '', password: '', tgUserStep: 'phone', tgUserConnectionId: null, reconnectConnectionId: null });
@@ -406,12 +408,20 @@ function ConnectionDetail() {
                     border: `1px solid ${line.hair}`, borderRadius: 10, padding: '9px 12px',
                   }}
                 >
-                  <span style={{ width: 7, height: 7, borderRadius: '50%', background: color.green, flex: 'none' }} />
+                  <span
+                    style={{
+                      width: 7,
+                      height: 7,
+                      borderRadius: '50%',
+                      background: cl.statusTone === 'pending' ? color.yellow : color.green,
+                      flex: 'none',
+                    }}
+                  />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontWeight: 700, fontSize: 12 }}>{cl.name}</div>
                     <div style={{ fontSize: 10, color: color.textMuted }}>{cl.meta}</div>
                   </div>
-                  {['ig', 'fanvue', 'tg', 'tg-user'].includes(data.id) && (
+                  {['ig', 'fanvue', 'tg', 'tg-user'].includes(data.id) && cl.statusTone !== 'pending' && (
                     <Hoverable
                       as="span"
                       style={{ fontSize: 11, fontWeight: 700, color: color.textDim, cursor: 'pointer' }}
@@ -503,13 +513,26 @@ function ConnectionDetail() {
                   </>
                 )}
                 {(form.tgUserStep || 'phone') === 'password' && (
-                  <Field
-                    label={lang === 'ru' ? 'ПАРОЛЬ 2FA (облачный)' : '2FA PASSWORD (cloud)'}
-                    value={form.password}
-                    onChange={(e) => setForm({ password: e.target.value })}
-                    type="password"
-                    style={{ gridColumn: '1 / -1' }}
-                  />
+                  <>
+                    <NoteBlock
+                      style={{
+                        gridColumn: '1 / -1',
+                        borderColor: 'rgba(251,191,36,.35)',
+                        background: 'rgba(251,191,36,.08)',
+                      }}
+                    >
+                      {lang === 'ru'
+                        ? 'Код принят. На аккаунте включена двухфакторная защита — введите облачный пароль из Telegram (Настройки → Конфиденциальность → Облачный пароль) и нажмите «Подтвердить пароль». Аккаунт появится в списке после успешного входа.'
+                        : 'Code accepted. This account has 2FA enabled — enter the Telegram cloud password (Settings → Privacy → Cloud password) and click Confirm password. The account will appear in the list once login completes.'}
+                    </NoteBlock>
+                    <Field
+                      label={lang === 'ru' ? 'ПАРОЛЬ 2FA (облачный)' : '2FA PASSWORD (cloud)'}
+                      value={form.password}
+                      onChange={(e) => setForm({ password: e.target.value })}
+                      type="password"
+                      style={{ gridColumn: '1 / -1' }}
+                    />
+                  </>
                 )}
               </>
             )}

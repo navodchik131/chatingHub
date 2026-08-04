@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from telethon.errors import (
+    PasswordHashInvalidError,
     PhoneCodeExpiredError,
     PhoneCodeInvalidError,
     PhoneNumberInvalidError,
@@ -174,7 +175,12 @@ async def confirm_telegram_user_password(
     client = build_telegram_client(session_encrypted=row.session_encrypted)
     try:
         await client.connect()
-        await client.sign_in(password=(password or "").strip())
+        try:
+            await client.sign_in(password=(password or "").strip())
+        except PasswordHashInvalidError as e:
+            raise ValueError(
+                "Неверный облачный пароль 2FA. Проверьте пароль в настройках Telegram → Конфиденциальность."
+            ) from e
         me = await client.get_me()
         row.session_encrypted = encrypt_secret(client.session.save())
         row.telegram_user_id = int(me.id) if me else None

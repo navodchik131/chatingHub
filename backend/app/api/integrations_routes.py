@@ -378,7 +378,12 @@ async def _integration_status(session: AsyncSession, user: User) -> IntegrationS
         telegram_user_connections=[
             _telegram_user_connection_out(r)
             for r in tg_user_rows
-            if r.status == TelegramUserSessionStatus.active.value
+            if r.status
+            in (
+                TelegramUserSessionStatus.active.value,
+                TelegramUserSessionStatus.pending_otp.value,
+                TelegramUserSessionStatus.pending_2fa.value,
+            )
         ],
         telegram_user_available=settings.telegram_mtproto_configured,
         fanvue_connections=[_fanvue_connection_out(r) for r in fv_rows],
