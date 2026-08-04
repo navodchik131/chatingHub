@@ -124,6 +124,7 @@ function ConnectionDetail() {
   const form = s.connForms?.[data.id] || {
     token: '', apiKey: '', label: '', modelId: modelOptions[0]?.id || '',
     phone: '', code: '', password: '', tgUserStep: 'phone', tgUserConnectionId: null,
+    reconnectConnectionId: null,
   };
   const [oauthBusy, setOauthBusy] = useState(false);
   const saving = cabinet.busy || oauthBusy;
@@ -172,8 +173,12 @@ function ConnectionDetail() {
         );
         return;
       }
-      ok = await cabinet.saveIntegration('tg', { token, modelId: form.modelId });
-      if (ok) setForm({ token: '' });
+      ok = await cabinet.saveIntegration('tg', {
+        token,
+        modelId: form.modelId,
+        connectionId: form.reconnectConnectionId || undefined,
+      });
+      if (ok) setForm({ token: '', reconnectConnectionId: null });
     } else if (data.id === 'tg-user') {
       const step = form.tgUserStep || 'phone';
       if (step === 'phone') {
@@ -183,7 +188,7 @@ function ConnectionDetail() {
           const res = await actions.startTelegramUserLogin(
             form.phone,
             form.modelId,
-            form.tgUserConnectionId,
+            form.reconnectConnectionId ?? null,
           );
           setForm({
             tgUserStep: res.needs_password ? 'password' : 'code',
@@ -209,7 +214,7 @@ function ConnectionDetail() {
             setForm({ tgUserStep: 'password', code: '' });
           } else {
             await cabinet.refreshAll();
-            setForm({ phone: '', code: '', password: '', tgUserStep: 'phone', tgUserConnectionId: null });
+            setForm({ phone: '', code: '', password: '', tgUserStep: 'phone', tgUserConnectionId: null, reconnectConnectionId: null });
             ok = true;
           }
         } catch (e) {
@@ -227,7 +232,7 @@ function ConnectionDetail() {
         try {
           await actions.confirmTelegramUserPassword(form.tgUserConnectionId, form.password);
           await cabinet.refreshAll();
-          setForm({ phone: '', code: '', password: '', tgUserStep: 'phone', tgUserConnectionId: null });
+          setForm({ phone: '', code: '', password: '', tgUserStep: 'phone', tgUserConnectionId: null, reconnectConnectionId: null });
           ok = true;
         } catch (e) {
           cabinet.setError(e?.message || String(e));
@@ -241,14 +246,20 @@ function ConnectionDetail() {
     } else if (data.id === 'fanvue') {
       setOauthBusy(true);
       try {
-        ok = await cabinet.saveIntegration('fanvue', { modelId: form.modelId });
+        ok = await cabinet.saveIntegration('fanvue', {
+          modelId: form.modelId,
+          connectionId: form.reconnectConnectionId || undefined,
+        });
       } finally {
         setOauthBusy(false);
       }
     } else if (data.id === 'ig') {
       setOauthBusy(true);
       try {
-        ok = await cabinet.saveIntegration('ig', { modelId: form.modelId });
+        ok = await cabinet.saveIntegration('ig', {
+          modelId: form.modelId,
+          connectionId: form.reconnectConnectionId || undefined,
+        });
       } finally {
         setOauthBusy(false);
       }
@@ -281,6 +292,36 @@ function ConnectionDetail() {
   const fanvueConnected = Boolean(ig?.fanvue_oauth_connected);
   const instagramOAuthReady = ig?.instagram_oauth_available !== false;
   const instagramConnected = (ig?.instagram_connections || []).length > 0;
+  const maxConn = Number(ig?.max_connections_per_platform) || 1;
+  const canAddMore = list.length < maxConn;
+  const isReconnectMode = Boolean(form.reconnectConnectionId);
+  const limitLabel = lang === 'ru'
+    ? `Подключено: ${list.length} из ${maxConn}`
+    : `Connected: ${list.length} of ${maxConn}`;
+
+  const handleReconnectRow = (connectionId) => {
+    if (data.id === 'ig' || data.id === 'fanvue') {
+      setOauthBusy(true);
+      void cabinet
+        .saveIntegration(data.id, { modelId: form.modelId, connectionId })
+        .finally(() => setOauthBusy(false));
+      return;
+    }
+    if (data.id === 'tg') {
+      setForm({ reconnectConnectionId: connectionId, token: '' });
+      return;
+    }
+    if (data.id === 'tg-user') {
+      setForm({
+        reconnectConnectionId: connectionId,
+        tgUserStep: 'phone',
+        phone: '',
+        code: '',
+        password: '',
+        tgUserConnectionId: null,
+      });
+    }
+  };
 
   const webhookCopyUrl = () => {
     if (data.id === 'fanvue') {
@@ -334,7 +375,11 @@ function ConnectionDetail() {
         <Panel style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 14 }}>
           <div style={{ fontWeight: 800, fontSize: 13.5 }}>{cfs.title}</div>
 
-          {current.length > 0 && (
+          {['ig', 'fanvue', 'tg', 'tg-user'].includes(data.id) && maxConn > 1 && (
+            <NoteBlock>{limitLabel}</NoteBlock>
+          )}
+
+          {current.length > 0 && list.length <= 1 && (
             <div style={{ background: 'rgba(74,222,128,.05)', border: '1px solid rgba(74,222,128,.2)', borderRadius: 12, padding: '12px 14px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 9 }}>
                 <span style={{ width: 7, height: 7, borderRadius: '50%', background: color.green }} />
@@ -366,6 +411,16 @@ function ConnectionDetail() {
                     <div style={{ fontWeight: 700, fontSize: 12 }}>{cl.name}</div>
                     <div style={{ fontSize: 10, color: color.textMuted }}>{cl.meta}</div>
                   </div>
+                  {['ig', 'fanvue', 'tg', 'tg-user'].includes(data.id) && (
+                    <Hoverable
+                      as="span"
+                      style={{ fontSize: 11, fontWeight: 700, color: color.textDim, cursor: 'pointer' }}
+                      hover={{ color: color.green }}
+                      onClick={() => handleReconnectRow(cl.id)}
+                    >
+                      {lang === 'ru' ? 'Переподключить' : 'Reconnect'}
+                    </Hoverable>
+                  )}
                   <Hoverable
                     as="span"
                     style={{ fontSize: 11, fontWeight: 700, color: color.textDim, cursor: 'pointer' }}
@@ -469,7 +524,13 @@ function ConnectionDetail() {
                 )}
                 {fanvueConnected && (
                   <NoteBlock style={{ gridColumn: '1 / -1', borderColor: 'rgba(74,222,128,.35)', background: 'rgba(74,222,128,.08)' }}>
-                    {lang === 'ru' ? 'Fanvue уже подключён. Можно переподключить аккаунт.' : 'Fanvue is connected. You can reconnect the account.'}
+                    {canAddMore
+                      ? (lang === 'ru'
+                        ? 'Можно добавить ещё один аккаунт Fanvue или переподключить существующий из списка.'
+                        : 'You can add another Fanvue account or reconnect an existing one from the list.')
+                      : (lang === 'ru'
+                        ? 'Достигнут лимит подключений Fanvue на вашем тарифе.'
+                        : 'Fanvue connection limit reached for your plan.')}
                   </NoteBlock>
                 )}
                 {fanvueOAuthReady && (
@@ -500,7 +561,13 @@ function ConnectionDetail() {
                 )}
                 {instagramConnected && (
                   <NoteBlock style={{ gridColumn: '1 / -1', borderColor: 'rgba(74,222,128,.35)', background: 'rgba(74,222,128,.08)' }}>
-                    {lang === 'ru' ? 'Instagram уже подключён. Можно переподключить аккаунт.' : 'Instagram is connected. You can reconnect the account.'}
+                    {canAddMore
+                      ? (lang === 'ru'
+                        ? 'Можно добавить ещё один Instagram или переподключить существующий из списка.'
+                        : 'You can add another Instagram account or reconnect an existing one from the list.')
+                      : (lang === 'ru'
+                        ? 'Достигнут лимит подключений Instagram на вашем тарифе.'
+                        : 'Instagram connection limit reached for your plan.')}
                   </NoteBlock>
                 )}
                 <ModelSelect
@@ -576,6 +643,7 @@ function ConnectionDetail() {
                 || (data.id === 'fanvue' && !fanvueOAuthReady)
                 || (data.id === 'ig' && !instagramOAuthReady)
                 || (data.id === 'tg-user' && !ig?.telegram_user_available)
+                || ((data.id === 'ig' || data.id === 'fanvue') && !canAddMore && !isReconnectMode && list.length > 0)
                   ? {}
                   : { filter: 'brightness(1.08)' }
               }
@@ -585,6 +653,7 @@ function ConnectionDetail() {
                 || (data.id === 'fanvue' && !fanvueOAuthReady)
                 || (data.id === 'ig' && !instagramOAuthReady)
                 || (data.id === 'tg-user' && !ig?.telegram_user_available)
+                || ((data.id === 'ig' || data.id === 'fanvue') && !canAddMore && !isReconnectMode && list.length > 0)
                   ? undefined
                   : () => void handleSave()
               }
@@ -596,15 +665,23 @@ function ConnectionDetail() {
                   ? (lang === 'ru' ? 'Подтвердить пароль' : 'Confirm password')
                   : (form.tgUserStep || 'phone') === 'code'
                   ? (lang === 'ru' ? 'Подтвердить код' : 'Confirm code')
-                  : (lang === 'ru' ? 'Отправить код' : 'Send code'))
+                  : (form.reconnectConnectionId
+                    ? (lang === 'ru' ? 'Переподключить аккаунт' : 'Reconnect account')
+                    : (lang === 'ru' ? 'Отправить код' : 'Send code')))
                 : data.id === 'fanvue'
-                ? (fanvueConnected
+                ? (isReconnectMode
                   ? (lang === 'ru' ? 'Переподключить Fanvue' : 'Reconnect Fanvue')
-                  : (lang === 'ru' ? 'OAuth Fanvue' : 'Fanvue OAuth'))
+                  : (fanvueConnected && canAddMore
+                    ? (lang === 'ru' ? 'Добавить Fanvue' : 'Add Fanvue account')
+                    : (lang === 'ru' ? 'OAuth Fanvue' : 'Fanvue OAuth')))
                 : data.id === 'ig'
-                ? (instagramConnected
+                ? (isReconnectMode
                   ? (lang === 'ru' ? 'Переподключить Instagram' : 'Reconnect Instagram')
-                  : (lang === 'ru' ? 'Подключить Instagram' : 'Connect Instagram'))
+                  : (instagramConnected && canAddMore
+                    ? (lang === 'ru' ? 'Добавить Instagram' : 'Add Instagram account')
+                    : (lang === 'ru' ? 'Подключить Instagram' : 'Connect Instagram')))
+                : data.id === 'tg' && isReconnectMode
+                ? (lang === 'ru' ? 'Обновить токен бота' : 'Update bot token')
                 : cfs.prim}
             </Hoverable>
             {hasCopy && (

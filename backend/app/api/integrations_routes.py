@@ -581,23 +581,9 @@ async def put_telegram(
             if not row:
                 raise HTTPException(status_code=404, detail="Подключение Telegram не найдено")
         else:
-            existing = list(
-                (
-                    await session.scalars(
-                        select(TelegramConnection).where(TelegramConnection.user_id == oid)
-                    )
-                ).all()
+            await assert_can_add_platform_connection(
+                session, oid, sub, platform=Platform.telegram
             )
-            if len(existing) == 1:
-                row = existing[0]
-            elif len(existing) == 0:
-                await assert_can_add_platform_connection(
-                    session, oid, sub, platform=Platform.telegram
-                )
-            else:
-                await assert_can_add_platform_connection(
-                    session, oid, sub, platform=Platform.telegram
-                )
 
         label = (body.label or "").strip() or None
         if row:
@@ -673,17 +659,6 @@ async def _save_fanvue_oauth_tokens(
                 FanvueConnection.user_id == user_id,
             )
         )
-    if row is None:
-        existing = list(
-            (
-                await session.scalars(
-                    select(FanvueConnection).where(FanvueConnection.user_id == user_id)
-                )
-            ).all()
-        )
-        if len(existing) == 1 and connection_id is None:
-            row = existing[0]
-
     now = datetime.now(timezone.utc)
     if row:
         row.creator_uuid = creator_uuid
@@ -756,6 +731,11 @@ async def fanvue_oauth_start(
         )
         if not row:
             raise HTTPException(status_code=404, detail="Подключение Fanvue не найдено")
+    else:
+        sub = await session.scalar(select(Subscription).where(Subscription.user_id == oid))
+        await assert_can_add_platform_connection(
+            session, oid, sub, platform=Platform.fanvue
+        )
     state = generate_oauth_state()
     code_verifier, code_challenge = generate_pkce_pair()
     session.add(
@@ -1126,17 +1106,6 @@ async def _save_instagram_oauth_tokens(
                 InstagramConnection.user_id == user_id,
             )
         )
-    if row is None:
-        existing = list(
-            (
-                await session.scalars(
-                    select(InstagramConnection).where(InstagramConnection.user_id == user_id)
-                )
-            ).all()
-        )
-        if len(existing) == 1 and connection_id is None:
-            row = existing[0]
-
     now = datetime.now(timezone.utc)
     if row:
         row.instagram_user_id = instagram_user_id
@@ -1209,6 +1178,11 @@ async def instagram_oauth_start(
         )
         if not row:
             raise HTTPException(status_code=404, detail="Подключение Instagram не найдено")
+    else:
+        sub = await session.scalar(select(Subscription).where(Subscription.user_id == oid))
+        await assert_can_add_platform_connection(
+            session, oid, sub, platform=Platform.instagram
+        )
     state = generate_instagram_oauth_state()
     session.add(
         InstagramOAuthState(

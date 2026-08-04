@@ -696,15 +696,15 @@ export function CabinetDataProvider({ children }) {
       try {
         let status = null
         if (type === 'wavespeed') status = await actions.saveWavespeedKey(fields.apiKey)
-        else if (type === 'tg') status = await actions.addTelegramBot(fields.token, fields.modelId)
+        else if (type === 'tg') status = await actions.addTelegramBot(fields.token, fields.modelId, fields.connectionId)
         else if (type === 'fanvue') {
-          const data = await actions.startFanvueOAuth(fields.modelId)
+          const data = await actions.startFanvueOAuth(fields.modelId, fields.connectionId)
           const url = data.authorize_url || data.url
           if (url) window.location.assign(url)
           else throw new Error('OAuth URL не получен')
           return true
         } else if (type === 'ig') {
-          const data = await actions.startInstagramOAuth(fields.modelId)
+          const data = await actions.startInstagramOAuth(fields.modelId, fields.connectionId)
           const url = data.authorize_url || data.url
           if (url) window.location.assign(url)
           else throw new Error('OAuth URL не получен')

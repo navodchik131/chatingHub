@@ -39,24 +39,27 @@ export async function saveWavespeedKey(apiKey) {
   })
 }
 
-export async function addTelegramBot(botToken, studioModelId) {
+export async function addTelegramBot(botToken, studioModelId, connectionId) {
   const body = { bot_token: botToken }
   if (studioModelId) body.studio_model_id = Number(studioModelId)
+  if (connectionId) body.connection_id = Number(connectionId)
   return apiJson('/api/integrations/telegram', { method: 'PUT', body: JSON.stringify(body) })
 }
 
-export async function startFanvueOAuth(studioModelId) {
+export async function startFanvueOAuth(studioModelId, connectionId) {
   const body = {}
   if (studioModelId) body.studio_model_id = Number(studioModelId)
+  if (connectionId) body.connection_id = Number(connectionId)
   return apiJson('/api/integrations/fanvue/oauth/start', {
     method: 'POST',
     body: JSON.stringify(body),
   })
 }
 
-export async function startInstagramOAuth(studioModelId) {
+export async function startInstagramOAuth(studioModelId, connectionId) {
   const body = {}
   if (studioModelId) body.studio_model_id = Number(studioModelId)
+  if (connectionId) body.connection_id = Number(connectionId)
   return apiJson('/api/integrations/instagram/oauth/start', {
     method: 'POST',
     body: JSON.stringify(body),
