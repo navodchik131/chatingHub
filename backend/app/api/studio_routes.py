@@ -3497,6 +3497,9 @@ async def _studio_job_execute_refine_prompt(
         )
         model_profile_text = (sm_loaded.profile_text or "").strip() or None
 
+    lock_hair_req = _truthy_lock_model_hairstyle(lock_model_hairstyle)
+    effective_lock_hairstyle = bool(lock_hair_req) if image_bytes else True
+
     prompt_plan = None
     visibility_block: str | None = None
     skip_no_face_suffix = False
@@ -3511,8 +3514,11 @@ async def _studio_job_execute_refine_prompt(
             build_studio_prompt_plan,
             build_visibility_plan_block,
             filter_model_images_for_visibility,
+            merge_vision_describe_with_analysis,
             parse_reference_analysis_json,
         )
+        from app.services.studio_openai import describe_reference_image_openai
+        from dataclasses import replace
 
         analysis = parse_reference_analysis_json(str(p.get("reference_analysis_json") or ""))
         if analysis is None:
@@ -3534,6 +3540,26 @@ async def _studio_job_execute_refine_prompt(
                 requested_studio_mode=mode_n,
                 wave_profile=wave_profile_n,
             )
+            if mode_n == "model_scene" and image_bytes:
+                try:
+                    vision_desc = await describe_reference_image_openai(
+                        image_bytes=image_bytes,
+                        image_media_type=image_mime,
+                        hairstyle_from_pose_reference=not effective_lock_hairstyle,
+                        no_face_framing=prompt_plan.visibility.headless_crop,
+                        credentials=llm_creds,
+                    )
+                    prompt_plan = replace(
+                        prompt_plan,
+                        reference_scene_description=merge_vision_describe_with_analysis(
+                            vision_desc,
+                            analysis,
+                        ),
+                    )
+                except Exception as e:
+                    log.warning(
+                        "reference vision describe failed conv=%s: %s", job.id, e
+                    )
             visibility_block = build_visibility_plan_block(prompt_plan.visibility)
             skip_no_face_suffix = prompt_plan.skip_no_face_suffix
             if prompt_plan.filtered_model_profile_text is not None:
@@ -3757,8 +3783,6 @@ async def _studio_job_execute_refine_prompt(
             )
             await session.commit()
 
-    lock_hair_req = _truthy_lock_model_hairstyle(lock_model_hairstyle)
-    effective_lock_hairstyle = bool(lock_hair_req) if image_bytes else True
     if workflow_source and workflow_ref_loaded:
         # model_scene + saved model: pose только для analysis/prompt (как вкладка «Основная»),
         # не bitmap Image 1 в WAN — иначе силуэт донора перебивает FIGURE_LOCK.
@@ -3768,8 +3792,7 @@ async def _studio_job_execute_refine_prompt(
         else:
             send_pose_to_ws = not (mode_n == "model_scene" and not workflow_first_frame)
     elif mode_n == "model_scene":
-        # Референс позы — последним (identity first), иначе WAN копирует лицо/тело донора с Image 1.
-        send_pose_to_ws = bool(image_bytes)
+        send_pose_to_ws = False
     elif mode_n == "grok_compose":
         send_pose_to_ws = True
     else:
@@ -4532,10 +4555,7 @@ async def _studio_job_execute_refine_prompt(
                             user_pose_ref_prepended
                             and workflow_scenario != "scenarioLocationChange"
                             and mode_n != "photo_edit"
-                            and (
-                                wave_profile_n == "regular"
-                                or mode_n == "model_scene"
-                            )
+                            and wave_profile_n == "regular"
                         )
                         legend_offset = 0 if will_pose_be_last else (1 if user_pose_ref_prepended else 0)
                         ws_identity_legend = wavespeed_identity_image_legend(
@@ -4580,17 +4600,6 @@ async def _studio_job_execute_refine_prompt(
                     pose_is_last_after_reorder = False
                     if workflow_scenario != "scenarioLocationChange":
                         if wave_profile_n == "regular" and user_pose_ref_prepended and mode_n != "photo_edit" and len(image_urls) >= 2:
-                            pose_is_last_after_reorder = True
-                            image_urls = _nano_banana_reorder_image_urls(
-                                image_urls,
-                                studio_mode=mode_n,
-                                user_pose_ref_prepended=user_pose_ref_prepended,
-                            )
-                        elif (
-                            mode_n == "model_scene"
-                            and user_pose_ref_prepended
-                            and len(image_urls) >= 2
-                        ):
                             pose_is_last_after_reorder = True
                             image_urls = _nano_banana_reorder_image_urls(
                                 image_urls,

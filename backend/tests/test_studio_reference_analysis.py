@@ -13,6 +13,7 @@ from app.services.studio_reference_analysis import (
     filter_identity_reference_dict,
     filter_model_images_for_visibility,
     format_reference_scene_from_analysis,
+    merge_vision_describe_with_analysis,
     parse_reference_analysis_json,
     prompt_regions_to_omit,
     prune_skeleton_for_visibility,
@@ -128,6 +129,22 @@ def test_build_prompt_plan_keeps_requested_mode():
     assert plan.effective_studio_mode == "model_scene"
     assert plan.skip_no_face_suffix is True
     assert "FACE_IN_FRAME: false" in plan.reference_scene_description
+
+
+def test_merge_vision_describe_with_analysis():
+    analysis = ReferenceAnalysis(
+        face_in_frame=True,
+        clothing_summary="charcoal sports bra and scrunch shorts",
+        pose_summary="kneeling facing mirror",
+    )
+    merged = merge_vision_describe_with_analysis(
+        "CAPTURE_TYPE: mirror selfie\nPOSE: kneeling on floor, phone at chest height",
+        analysis,
+    )
+    assert "REFERENCE_VISION" in merged
+    assert "REFERENCE_ANALYSIS" in merged
+    assert "mirror selfie" in merged.lower()
+    assert "charcoal sports bra" in merged.lower()
 
 
 def test_build_prompt_plan_head_partial_keeps_mode():

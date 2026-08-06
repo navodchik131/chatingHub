@@ -217,6 +217,26 @@ def format_reference_scene_from_analysis(analysis: ReferenceAnalysis) -> str:
     return "\n".join(lines)
 
 
+def merge_vision_describe_with_analysis(
+    vision_describe: str,
+    analysis: ReferenceAnalysis,
+) -> str:
+    """
+    Полное описание референса для Grok/text-only WaveSpeed: детальный vision-describe
+    + структурный JSON-блок (visibility, регионы, lock).
+    """
+    describe = (vision_describe or "").strip()
+    structured = format_reference_scene_from_analysis(analysis).strip()
+    if describe and structured:
+        return (
+            "REFERENCE_VISION (authoritative scene geometry — not donor face/hair/skin identity):\n"
+            f"{describe}\n\n"
+            "REFERENCE_ANALYSIS (structured lock for crop/regions):\n"
+            f"{structured}"
+        )
+    return describe or structured
+
+
 def build_visibility_plan_block(visibility: IdentityVisibility) -> str:
     include: list[str] = []
     exclude: list[str] = []
@@ -478,7 +498,7 @@ async def analyze_reference_image(
                 ],
             },
         ],
-        max_tokens=2048,
+        max_tokens=4096,
         temperature=0.25,
         credentials=creds,
         timeout_seconds=120.0,

@@ -1,29 +1,34 @@
 Analyze the attached reference photo for image-edit generation. Output ONLY valid JSON (no markdown, no commentary).
 
+The downstream model will NOT receive this bitmap — your JSON + scene_notes must fully reconstruct pose, camera, wardrobe, and room so a DIFFERENT person (from separate model photos) can be placed in the same shot.
+
 Schema:
 {
   "face_in_frame": boolean,
   "hair_in_frame": boolean,
   "head_partial": boolean,
   "visible_regions": ["FACE"|"HAIR"|"NECK"|"CHEST"|"TORSO"|"HANDS"|"ARMS"|"LEGS"|"FEET"|"BUTT"|"FULL_BODY"],
-  "framing_crop": "string — what enters/leaves frame at each edge; subject scale",
-  "pose_summary": "string — limb angles, weight, hands, gaze if face visible",
-  "clothing_summary": "string — garments or nudity zones visible in this crop only",
-  "background_summary": "string",
-  "lighting_summary": "string — direction, hardness, how light wraps visible body",
-  "camera_summary": "string — distance, height, angle, lens feel, capture type",
-  "capture_type": "string — e.g. friend shot, mirror selfie, tripod, gym snapshot",
-  "wardrobe_coverage": "string — nude | topless | clothed | partial — match visible crop",
-  "ground_plane_notes": "string — floor/ground angle, where subject feet contact ground, visible ground area",
-  "perspective_vanishing": "string — horizon line, vanishing direction, wall/floor lines relative to camera",
-  "background_depth": "string — depth layers, background blur/bokeh level, foreground vs distant elements",
-  "subject_scale_in_frame": "string — how much of frame the subject occupies; headroom and legroom",
-  "scene_notes": "string — 4-8 sentences English prose for downstream prompt; state explicitly when face/head are NOT in frame; **never** hair color, hairstyle, skin tone, ethnicity, or face likeness — geometry/scene only"
+  "framing_crop": "string — what enters/leaves frame at EACH edge (top/left/right/bottom); foreground blur vs mirror reflection; subject scale",
+  "pose_summary": "string — FULL limb articulation: kneeling/standing/sitting, weight shift, torso lean, arm/hand/finger placement, leg bend, feet position, phone/mirror interaction if any",
+  "clothing_summary": "string — EVERY visible garment: type (sports bra, tank, shorts, skirt…), color, fabric, cut, layers; or explicit nudity zones",
+  "background_summary": "string — room, major props (mirror, bed, shelves, rug, window), clutter",
+  "lighting_summary": "string — key direction, hardness, color temperature, how light wraps visible body planes",
+  "camera_summary": "string — capture type, distance, height vs subject, horizontal/vertical angle, lens feel, mirror depth if mirror selfie",
+  "capture_type": "string — mirror selfie | arm-length selfie | third-party photo | tripod | etc.",
+  "wardrobe_coverage": "string — nude | topless | clothed | partial — match visible crop only",
+  "ground_plane_notes": "string — floor type, contact points for feet/knees, visible ground area",
+  "perspective_vanishing": "string — horizon, wall/floor lines, mirror plane if applicable",
+  "background_depth": "string — foreground vs reflection vs background layers, depth of field",
+  "subject_scale_in_frame": "string — how much of frame height/width the subject occupies; headroom/legroom",
+  "scene_notes": "string — 8-14 sentences English prose: one cohesive photo brief covering CAPTURE_TYPE, POSE geometry, FRAMING edges, every visible garment (colors/cut), room layout, camera distance/height/angle, light on body. Never hair color, hairstyle, skin tone, ethnicity, age, or face likeness — geometry/scene/wardrobe only"
 }
 
 Rules:
 - Be literal about crop: if forehead/chin/eyes are cut off, face_in_frame=false (head_partial=true only if a sliver of head skin/hair edge is visible).
 - visible_regions lists ONLY body parts actually visible in this bitmap.
-- Do NOT invent off-frame anatomy.
-- Do NOT describe donor identity (skin tone, ethnicity, face likeness) — geometry and scene only.
-- scene_notes must include a clear FRAMING line matching framing_crop.
+- Do NOT invent off-frame anatomy or garments.
+- Do NOT describe donor identity (skin tone, ethnicity, face likeness, hair color/style) — geometry and scene only.
+- clothing_summary and scene_notes MUST name specific garment types and colors visible in the image — not generic «top and shorts».
+- For mirror selfies: describe BOTH over-shoulder foreground AND reflection geometry (who is where, phone visible, mirror edges).
+- pose_summary must answer: what is the subject doing with each limb, where is weight, how is torso oriented.
+- scene_notes must be detailed enough that an artist could recreate the shot without seeing the image.
