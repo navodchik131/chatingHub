@@ -201,9 +201,16 @@ _GROK_MAIN_PROSE_WAN_PREFIX = (
 
 _GROK_MODEL_SCENE_NO_POSE_WAN_PREFIX = (
     "One model from attached reference photos. Recreate the scene described below. "
-    "Image 1 (body reference) is the primary anchor for bust, waist, hip width, thigh volume, and overall build — "
-    "match those volumes even when the scene pose is athletic or revealing. "
-    "Face and hair from the face reference; do not slim the figure toward a generic model silhouette.\n\n"
+    "Image 1 (character sheet / turnaround) is the primary anchor for face, hair, bust, waist, hip width, "
+    "thigh volume, and overall build — match those volumes even when the scene pose is athletic or revealing. "
+    "Extra face reference sharpens likeness; do not slim the figure toward a generic model silhouette.\n\n"
+)
+
+_GROK_MODEL_SCENE_NO_POSE_NANO_PREFIX = (
+    "Attached images = one saved model. Generate the scene described below. "
+    "First image (character sheet / turnaround) anchors face, hair, bust, waist, hip width, thigh volume, and overall build — "
+    "preserve those volumes; optional face reference sharpens likeness. "
+    "Do not slim the figure toward a generic model silhouette.\n\n"
 )
 
 _GROK_MODEL_SCENE_POSE_LAST_WAN_PREFIX = (
@@ -234,13 +241,6 @@ _LOCATION_CHANGE_WAN_SUFFIX = (
 
 _GROK_MAIN_PROSE_NANO_PREFIX = (
     "Attached images = one saved model. Generate the scene described below.\n\n"
-)
-
-_GROK_MODEL_SCENE_NO_POSE_NANO_PREFIX = (
-    "Attached images = one saved model. Generate the scene described below. "
-    "First image (body reference) anchors bust, waist, hip width, thigh volume, and overall build — "
-    "preserve those volumes; face reference supplies likeness. "
-    "Do not slim the figure toward a generic model silhouette.\n\n"
 )
 
 _WAN_COMPACT_NO_FACE_PREFIX = (

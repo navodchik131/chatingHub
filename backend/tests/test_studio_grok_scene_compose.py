@@ -163,7 +163,7 @@ def test_prompt_only_identity_body_face_genitals_nsfw() -> None:
     assert "turnaround" not in kinds
 
 
-def test_model_scene_identity_body_first_without_turnaround() -> None:
+def test_model_scene_identity_turnaround_first() -> None:
     imgs = [
         _im("turnaround", 1),
         _im("body", 2),
@@ -172,8 +172,15 @@ def test_model_scene_identity_body_first_without_turnaround() -> None:
     ]
     picked = select_model_scene_wavespeed_identity_images(imgs, wave_profile="nsfw")
     kinds = [(im.image_kind or "").lower() for im in picked]
+    assert kinds == ["turnaround", "face", "genitals"]
+    assert "body" not in kinds
+
+
+def test_model_scene_identity_fallback_body_without_turnaround() -> None:
+    imgs = [_im("body", 2), _im("face", 3), _im("genitals", 4)]
+    picked = select_model_scene_wavespeed_identity_images(imgs, wave_profile="nsfw")
+    kinds = [(im.image_kind or "").lower() for im in picked]
     assert kinds == ["body", "face", "genitals"]
-    assert "turnaround" not in kinds
 
 
 def test_prompt_only_identity_regular_body_and_face() -> None:
@@ -332,11 +339,11 @@ def test_wavespeed_identity_legend_offsets_pose_image() -> None:
     ]
     assert wavespeed_identity_image_legend(imgs) == (
         "Image 1: face likeness and skin tone; "
-        "Image 2: character sheet — face, hair, clothed silhouette (fallback only)"
+        "Image 2: character sheet — face, hair, clothed silhouette (primary identity)"
     )
     assert wavespeed_identity_image_legend(imgs, image_index_offset=1) == (
         "Image 2: face likeness and skin tone; "
-        "Image 3: character sheet — face, hair, clothed silhouette (fallback only)"
+        "Image 3: character sheet — face, hair, clothed silhouette (primary identity)"
     )
 
 

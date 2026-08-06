@@ -148,8 +148,9 @@ def select_model_scene_wavespeed_identity_images(
     max_count: int = 6,
 ) -> list[UserStudioModelImage]:
     """
-    Режим «Модель + промпт» / po-refu без bitmap позы: body → face → genitals.
-    Без turnaround — character sheet в одежде тянет нейтральный силуэт и перебивает body-ref.
+    Режим «Модель + промпт» без bitmap позы: turnaround → face → genitals (NSFW).
+    Character sheet — primary identity (face, hair, clothed silhouette); face ref дополняет likeness.
+    Без развёртки — fallback body → face → genitals.
     """
     if not imgs:
         return []
@@ -162,15 +163,18 @@ def select_model_scene_wavespeed_identity_images(
         if k not in by_kind:
             by_kind[k] = im
 
-    order: list[str] = ["body", "face", "genitals"]
-    if wp == "regular":
+    if by_kind.get("turnaround"):
+        order: list[str] = ["turnaround", "face"]
+        if wp == "nsfw":
+            order.append("genitals")
+    else:
         order = ["body", "face"]
+        if wp == "nsfw":
+            order.append("genitals")
 
     picked: list[UserStudioModelImage] = []
     seen: set[int] = set()
     for kind in order:
-        if kind == "genitals" and wp != "nsfw":
-            continue
         im = by_kind.get(kind)
         if im is None or im.id in seen:
             continue
@@ -184,13 +188,13 @@ def select_model_scene_wavespeed_identity_images(
                 seen.add(im.id)
             if len(picked) >= cap:
                 break
-    return sort_model_images_for_wan_identity(picked)[:cap]
+    return picked[:cap]
 
 
 _WAVESPEED_KIND_LEGEND: dict[str, str] = {
-    "turnaround": "character sheet — face, hair, clothed silhouette (fallback only)",
+    "turnaround": "character sheet — face, hair, clothed silhouette (primary identity)",
     "face": "face likeness and skin tone",
-    "body": "body proportions and overall build — primary bust/waist/hip anchor",
+    "body": "body proportions and overall build",
     "genitals": "nude anatomy",
     "other": "model reference",
 }
