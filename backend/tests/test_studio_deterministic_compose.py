@@ -113,6 +113,39 @@ def test_build_studio_prompt_plan_enables_deterministic_path():
     assert "POSE:" in plan.reference_scene_description
 
 
+def test_deterministic_uses_full_reference_analysis_block():
+    from app.services.studio_deterministic_compose import reference_analysis_text_to_scene_prose
+
+    ref = (
+        "FRAMING: Over-shoulder mirror selfie; back of head in foreground blur, full reflection in mirror.\n"
+        "POSE: Kneeling on wooden floor facing mirror, torso leaned forward, phone at chest height.\n"
+        "CLOTHING: Charcoal-grey athletic sports bra with back cutout and matching high-waisted scrunch shorts.\n"
+        "BACKGROUND: White walls, white floating shelves with anime figurines, circular rug, bed edge in mirror.\n"
+        "LIGHT: Soft even indoor ambient light from the side, gentle highlights on back and shoulders.\n"
+        "CAMERA_DISTANCE: Close mirror selfie from behind subject, slightly elevated angle.\n"
+        "CAPTURE_TYPE: mirror selfie\n"
+    )
+    prose = reference_analysis_text_to_scene_prose(ref)
+    assert "charcoal-grey" in prose.lower() or "sports bra" in prose.lower()
+    assert "anime" in prose.lower()
+    assert "kneeling" in prose.lower()
+
+    analysis = _analysis_mirror_selfie()
+    vis = build_identity_visibility(analysis, wave_profile="nsfw")
+    plan = StudioPromptPlan(
+        analysis=analysis,
+        visibility=vis,
+        reference_scene_description=ref,
+        pruned_skeleton="{}",
+        filtered_model_profile_text='{"model_profile":{"body_type":"hourglass"}}',
+        effective_studio_mode="model_scene",
+        skip_no_face_suffix=False,
+    )
+    out = compose_studio_scene_deterministic(prompt_plan=plan, model_profile_text=plan.filtered_model_profile_text)
+    assert "sports bra" in out.wavespeed_scene_prompt.lower() or "charcoal" in out.wavespeed_scene_prompt.lower()
+    assert len(out.wavespeed_scene_prompt) > 400
+
+
 def test_grok_figure_anchor_truncates_on_word_boundary():
     from app.services.studio_prompt_bundle import grok_figure_anchor_from_profile
 

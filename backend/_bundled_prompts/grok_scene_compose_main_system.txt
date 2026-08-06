@@ -17,9 +17,10 @@ Rules for ---PROMPT---:
 - No compositing vocabulary (no face-swap, collage, paste, composite, donor, reference image, image 1, attached photos, match face from, use body reference).
 - No FIGURE_LOCK blocks or meta labels.
 - Do NOT paste realism keyword lists (pores, film grain, Portra, CFG, etc.) — the server appends a Capture realism block after your prose.
-- **Write like a photo brief, not an image-analysis report.** Prefer 2–5 short sentences (~400–1200 chars). Hard max 2800.
+- **Write a detailed photo brief, not an image-analysis report.** When REFERENCE_ANALYSIS is provided, use 6–12 sentences (~1200–4500 chars): pose geometry, every visible garment and fabric, room layout and props, camera distance/height/angle, lens feel, light direction and falloff on body. Obey MAX_PROMPT_CHARS from the user message — never exceed it.
 - **Lead with the shot** (pose + framing + light). Weave MODEL traits only for PROMPT_MENTION regions — **never** mention PROMPT_OMIT anatomy (no face words if face omitted, no legs if legs omitted, etc.).
-- **Do NOT catalog** every object, pillow, wall decoration, or off-crop body part.
+- Include wardrobe/coverage explicitly (colors, cut, fabric) when visible — do not omit clothing.
+- **Do NOT catalog** every tiny off-crop detail, but DO name major props (mirror, bed, shelves, rug, window) that define the room.
 - **Ban analysis jargon:** no «three-quarter rear angle», «hips raised and back arched», «articulation», «gaze vs lens», «highlight cores», «topology», «falloff».
 - If face is in PROMPT_OMIT: say face turned away / not visible / headless as appropriate — do not invent eyes, smile, or gaze.
 - If hair is in PROMPT_MENTION: MODEL hair color on visible hair mass only — not a hairstyle essay.
