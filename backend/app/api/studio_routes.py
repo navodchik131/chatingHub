@@ -3768,7 +3768,8 @@ async def _studio_job_execute_refine_prompt(
         else:
             send_pose_to_ws = not (mode_n == "model_scene" and not workflow_first_frame)
     elif mode_n == "model_scene":
-        send_pose_to_ws = False
+        # Референс позы — последним (identity first), иначе WAN копирует лицо/тело донора с Image 1.
+        send_pose_to_ws = bool(image_bytes)
     elif mode_n == "grok_compose":
         send_pose_to_ws = True
     else:
@@ -3867,42 +3868,32 @@ async def _studio_job_execute_refine_prompt(
                 await session.flush()
         elif mode_n == "model_scene":
             assert image_bytes is not None
-            from app.services.studio_deterministic_compose import compose_studio_scene_deterministic
+            from app.services.plan_entitlements import assert_grok_allowed, record_grok_usage
+            from app.services.studio_grok_scene_compose import grok_compose_studio_main_scene
 
-            if settings.studio_deterministic_compose_enabled and prompt_plan is not None:
-                composed = compose_studio_scene_deterministic(
-                    prompt_plan=prompt_plan,
-                    model_profile_text=model_profile_text,
-                    user_notes=desc,
-                )
-                refined = composed.wavespeed_scene_prompt
-                reference_scene = prompt_plan.reference_scene_description
-                grok_negative_extra = composed.negative_prompt or None
-                prompt_brief_mode = "deterministic_compose"
-            else:
-                from app.services.plan_entitlements import assert_grok_allowed, record_grok_usage
-
-                await assert_grok_allowed(session, oid, sub_b)
-                await record_grok_usage(session, oid, source="model_scene")
-                grok_creds = grok_motion_studio_credentials()
-                composed = await grok_compose_studio_main_scene(
-                    user_ref_bytes=image_bytes,
-                    user_ref_mime=image_mime,
-                    model_images=imgs_model,
-                    model_profile_text=model_profile_text,
-                    wave_profile=wave_profile_n,
-                    user_notes=desc,
-                    lock_hairstyle=effective_lock_hairstyle,
-                    credentials=grok_creds,
-                    visibility=prompt_plan.visibility if prompt_plan else None,
-                    reference_scene_description=(
-                        prompt_plan.reference_scene_description if prompt_plan else None
-                    ),
-                )
-                refined = composed.wavespeed_scene_prompt
-                reference_scene = composed.reference_scene_lock or None
-                grok_negative_extra = composed.negative_prompt or None
-                prompt_brief_mode = "grok_main_prose"
+            await assert_grok_allowed(session, oid, sub_b)
+            await record_grok_usage(session, oid, source="model_scene")
+            grok_creds = grok_motion_studio_credentials()
+            composed = await grok_compose_studio_main_scene(
+                user_ref_bytes=image_bytes,
+                user_ref_mime=image_mime,
+                model_images=imgs_model,
+                model_profile_text=model_profile_text,
+                wave_profile=wave_profile_n,
+                user_notes=desc,
+                lock_hairstyle=effective_lock_hairstyle,
+                credentials=grok_creds,
+                visibility=prompt_plan.visibility if prompt_plan else None,
+                reference_scene_description=(
+                    prompt_plan.reference_scene_description if prompt_plan else None
+                ),
+            )
+            refined = composed.wavespeed_scene_prompt
+            reference_scene = (
+                prompt_plan.reference_scene_description if prompt_plan else None
+            ) or composed.reference_scene_lock or None
+            grok_negative_extra = composed.negative_prompt or None
+            prompt_brief_mode = "grok_main_prose"
             if gen_row is not None:
                 gen_row.refined_prompt = refined
                 gen_row.prompt_excerpt = (refined[:2000] if refined else None) or None
@@ -4377,6 +4368,7 @@ async def _studio_job_execute_refine_prompt(
             user_pose_ref_prepended = False
             ws_identity_legend: str | None = None
             workflow_prompt_only_t2i = False
+            pose_is_last_after_reorder = False
             if workflow_ref_loaded and send_pose_to_ws:
                 try:
                     refs_for_ws = workflow_ref_loaded
@@ -4535,15 +4527,17 @@ async def _studio_job_execute_refine_prompt(
                             f"{pub}/api/studio/public-model-image?t={quote(tok, safe='')}"
                         )
                     if imgs_ws_order:
-                        # WAN: scene is Image 1 → identity starts at Image 2 (offset=1).
-                        # Nano Banana reorders to [identity…, scene] → identity starts at Image 1.
-                        legend_offset = 1 if user_pose_ref_prepended else 0
-                        if (
-                            wave_profile_n == "regular"
-                            and user_pose_ref_prepended
+                        # WAN pose-first: identity legend starts at Image 2. Pose-last (Nano / model_scene): Image 1.
+                        will_pose_be_last = (
+                            user_pose_ref_prepended
+                            and workflow_scenario != "scenarioLocationChange"
                             and mode_n != "photo_edit"
-                        ):
-                            legend_offset = 0
+                            and (
+                                wave_profile_n == "regular"
+                                or mode_n == "model_scene"
+                            )
+                        )
+                        legend_offset = 0 if will_pose_be_last else (1 if user_pose_ref_prepended else 0)
                         ws_identity_legend = wavespeed_identity_image_legend(
                             imgs_ws_order,
                             image_index_offset=legend_offset,
@@ -4584,17 +4578,25 @@ async def _studio_job_execute_refine_prompt(
                             image_urls = image_urls[:9]
 
                     pose_is_last_after_reorder = False
-                    if wave_profile_n == "regular" and workflow_scenario != "scenarioLocationChange":
-                        pose_is_last_after_reorder = bool(
-                            user_pose_ref_prepended
-                            and mode_n != "photo_edit"
+                    if workflow_scenario != "scenarioLocationChange":
+                        if wave_profile_n == "regular" and user_pose_ref_prepended and mode_n != "photo_edit" and len(image_urls) >= 2:
+                            pose_is_last_after_reorder = True
+                            image_urls = _nano_banana_reorder_image_urls(
+                                image_urls,
+                                studio_mode=mode_n,
+                                user_pose_ref_prepended=user_pose_ref_prepended,
+                            )
+                        elif (
+                            mode_n == "model_scene"
+                            and user_pose_ref_prepended
                             and len(image_urls) >= 2
-                        )
-                        image_urls = _nano_banana_reorder_image_urls(
-                            image_urls,
-                            studio_mode=mode_n,
-                            user_pose_ref_prepended=user_pose_ref_prepended,
-                        )
+                        ):
+                            pose_is_last_after_reorder = True
+                            image_urls = _nano_banana_reorder_image_urls(
+                                image_urls,
+                                studio_mode=mode_n,
+                                user_pose_ref_prepended=user_pose_ref_prepended,
+                            )
                 else:
                     pose_is_last_after_reorder = False
                 from app.services.studio_workflow_scenarios import (

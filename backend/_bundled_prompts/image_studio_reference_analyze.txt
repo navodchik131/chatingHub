@@ -18,7 +18,7 @@ Schema:
   "perspective_vanishing": "string — horizon line, vanishing direction, wall/floor lines relative to camera",
   "background_depth": "string — depth layers, background blur/bokeh level, foreground vs distant elements",
   "subject_scale_in_frame": "string — how much of frame the subject occupies; headroom and legroom",
-  "scene_notes": "string — 4-8 sentences English prose for downstream prompt; state explicitly when face/head are NOT in frame"
+  "scene_notes": "string — 4-8 sentences English prose for downstream prompt; state explicitly when face/head are NOT in frame; **never** hair color, hairstyle, skin tone, ethnicity, or face likeness — geometry/scene only"
 }
 
 Rules:

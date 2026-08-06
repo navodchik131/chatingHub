@@ -8,6 +8,7 @@ from app.services.studio_prompt_bundle import (
     _merge_grok_scene_negative,
     extract_creative_notes_from_workflow_description,
     reference_scene_text_for_prompt,
+    strip_donor_identity_from_scene_prose,
     strip_soft_dof_from_scene_prose,
 )
 from app.services.studio_reference_analysis import (
@@ -60,7 +61,8 @@ def reference_analysis_text_to_scene_prose(text: str) -> str:
             parts.append(body.rstrip(".") + ".")
         else:
             parts.append(line.rstrip(".") + ".")
-    return strip_soft_dof_from_scene_prose(" ".join(parts).strip())
+    joined = " ".join(parts).strip()
+    return strip_soft_dof_from_scene_prose(strip_donor_identity_from_scene_prose(joined))
 
 
 def _action_sentence(pronoun: str, clause: str) -> str:
@@ -91,7 +93,7 @@ def build_deterministic_scene_prose(
     notes = strip_soft_dof_from_scene_prose((analysis.scene_notes or "").strip())
     ref_full = reference_scene_text_for_prompt(reference_scene_description)
     if notes and len(notes) >= 280:
-        out = notes
+        out = strip_donor_identity_from_scene_prose(notes)
     elif ref_full:
         out = reference_analysis_text_to_scene_prose(ref_full)
     else:

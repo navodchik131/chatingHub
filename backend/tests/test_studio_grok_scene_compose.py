@@ -108,6 +108,19 @@ def test_strip_donor_identity_from_scene_prose() -> None:
     assert "white mini skirt" in low
 
 
+def test_strip_donor_identity_removes_bare_hair_color() -> None:
+    from app.services.studio_prompt_bundle import strip_donor_identity_from_scene_prose
+
+    raw = (
+        "Black hair, grey tank top and shorts, bare feet, and raised arm holding the phone "
+        "are all visible in the reflection. Light wood flooring and white shelving."
+    )
+    out = strip_donor_identity_from_scene_prose(raw)
+    assert "black hair" not in out.lower()
+    assert "grey tank top" in out.lower()
+    assert "wood flooring" in out.lower()
+
+
 def test_grok_main_prose_prepare_strips_donor_identity() -> None:
     from app.services.studio_prompt_bundle import prepare_positive_prompt_json
 
@@ -275,6 +288,23 @@ def test_model_scene_wan_prefix_differs_from_grok_compose() -> None:
     assert "Image 1:" in grok
     assert "One model from attached reference photos" in main
     assert grok != main
+
+
+def test_model_scene_pose_last_wan_prefix() -> None:
+    from app.services.studio_openai import finalize_wavespeed_studio_prompt
+
+    out = finalize_wavespeed_studio_prompt(
+        "Kneeling mirror selfie, grey sports bra and scrunch shorts, wooden floor.",
+        studio_mode="model_scene",
+        user_image_first=True,
+        user_pose_reference_is_last=True,
+        prompt_brief_mode="grok_main_prose",
+    )
+    assert "Earlier images = ONE saved model" in out
+    assert "Last image = scene/pose donor ONLY" in out
+    assert "[LAST_INPUT_IMAGE]" in out
+    assert "never copy the sitter" in out.lower()
+    assert "Image 1 (body reference)" not in out
 
 
 def test_grok_main_prose_with_pose_uses_model_scene_prefix_not_reference_order() -> None:

@@ -588,6 +588,10 @@ _IDENTITY_CLAUSE_RES = (
         re.I,
     ),
     re.compile(
+        r"\b(?:black|blonde|blond|brunette|brown|auburn|red|dark|light|grey|gray)\s+hair\b",
+        re.I,
+    ),
+    re.compile(
         r"\b(?:warm\s+)?(?:golden|tan|pale|fair|dark|olive|bronze|caramel|medium[- ]brown)\s+(?:tan\s+)?skin\b",
         re.I,
     ),
@@ -1070,7 +1074,9 @@ def prepare_positive_prompt_json(
         from app.services.studio_deterministic_compose import build_deterministic_identity_line
 
         prose = strip_soft_dof_from_scene_prose(
-            strip_workflow_meta_from_wavespeed_prose((refined_text or "").strip())
+            strip_workflow_meta_from_wavespeed_prose(
+                strip_donor_identity_from_scene_prose((refined_text or "").strip())
+            )
         )
         re_prose = PHONE_CANDID_PHOTO_CODA if include_realism_engine else ""
         leg = (wavespeed_identity_legend or "").strip()

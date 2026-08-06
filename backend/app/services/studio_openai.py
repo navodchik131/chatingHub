@@ -206,6 +206,13 @@ _GROK_MODEL_SCENE_NO_POSE_WAN_PREFIX = (
     "Face and hair from the face reference; do not slim the figure toward a generic model silhouette.\n\n"
 )
 
+_GROK_MODEL_SCENE_POSE_LAST_WAN_PREFIX = (
+    "Earlier images = ONE saved model (face likeness, hair color, skin tone, body proportions). "
+    "Last image = scene/pose donor ONLY — match its pose, camera, framing, room, light, and wardrobe coverage; "
+    "never copy the sitter's face, hair, skin, or body identity from the last image. "
+    "If body shape conflicts, model identity from earlier images always wins.\n\n"
+)
+
 _LOCATION_CHANGE_WAN_PREFIX = (
     "[LOCATION CHANGE — reconstruct environment; NOT flat background paste]\n"
     "Image 1 = photo-base EDIT CANVAS: keep this exact person (face, skin, hair, body, clothes, props), "
@@ -260,6 +267,21 @@ _NANO_COMPACT_NO_FACE_LAST_SUFFIX = (
 )
 
 
+def _wan_pose_last_suffix(*, lock_model_hairstyle: bool) -> str:
+    hair = (
+        "Hairstyle must follow model identity images and MODEL_PROFILE, not the hair on the last image. "
+        if lock_model_hairstyle
+        else "Hairstyle may follow the last (pose) image when USER_NOTES request it. "
+    )
+    return (
+        "\n\n[LAST_INPUT_IMAGE] The last image is the only source for pose geometry, framing, camera, "
+        "outfit/coverage, background, and environmental light — including head tilt and gaze when face is visible. "
+        + hair
+        + "Ignore donor identity (face shape, hair color, skin) on the last image; the subject must match only "
+        "the earlier model reference images and the prose below."
+    )
+
+
 def finalize_wavespeed_studio_prompt(
     refined_prompt: str,
     *,
@@ -272,6 +294,7 @@ def finalize_wavespeed_studio_prompt(
     photo_edit_detail_ref_attached: bool = False,
     workflow_scenario_type: str | None = None,
     location_geometry_block: str | None = None,
+    user_pose_reference_is_last: bool = False,
 ) -> str:
     """Сборка финального текстового промпта для WaveSpeed в зависимости от режима студии."""
     from app.services.studio_reference_analysis import (
@@ -289,6 +312,21 @@ def finalize_wavespeed_studio_prompt(
     geo = (location_geometry_block or "").strip()
     if geo:
         geo = geo + "\n\n"
+    pose_last_model_scene = (
+        mode == "model_scene"
+        and user_pose_reference_is_last
+        and brief in ("grok_main_prose", "deterministic_compose")
+    )
+    if pose_last_model_scene:
+        out = (
+            _GROK_MODEL_SCENE_POSE_LAST_WAN_PREFIX.strip()
+            if not p
+            else _GROK_MODEL_SCENE_POSE_LAST_WAN_PREFIX + p
+        )
+        out = out.rstrip() + _wan_pose_last_suffix(lock_model_hairstyle=lock_model_hairstyle)
+        if headless and brief != "compact_pose_image" and not skip_no_face_suffix:
+            out = out.rstrip() + _WAVESPEED_NO_FACE_SUFFIX
+        return out
     if location_change:
         out = (
             (_LOCATION_CHANGE_WAN_PREFIX + geo + p).strip()
@@ -1666,6 +1704,7 @@ def assemble_wavespeed_image_edit_prompt(
             photo_edit_detail_ref_attached=photo_edit_detail_ref_attached,
             workflow_scenario_type=workflow_scenario_type,
             location_geometry_block=location_geometry_block,
+            user_pose_reference_is_last=user_pose_is_last,
         )
     if include_realism_engine:
         prompt = append_phone_candid_photo_coda(prompt, brief_mode=brief)
