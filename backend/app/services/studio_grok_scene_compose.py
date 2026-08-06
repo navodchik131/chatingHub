@@ -23,6 +23,7 @@ from app.services.studio_model_images import (
     sort_model_images_for_studio,
 )
 from app.services.studio_prompt_bundle import grok_figure_anchor_from_profile
+from app.services.studio_wavespeed_prompt_budget import grok_scene_prose_char_budget
 from app.services.studio_openai import (
     StudioOpenAiCredentials,
     _strip_code_fences,
@@ -301,9 +302,6 @@ def _parse_grok_main_prose_output(raw: str) -> GrokSceneComposeResult:
 
     if not prompt:
         prompt = t
-    lim = int(settings.grok_scene_compose_output_max_chars)
-    if len(prompt) > lim:
-        prompt = prompt[: lim - 1].rstrip() + "…"
     if not prompt:
         raise RuntimeError("Grok main compose: пустой промпт")
     return GrokSceneComposeResult(
@@ -376,7 +374,10 @@ async def grok_compose_studio_main_scene(
         if lock_hairstyle
         else "Hairstyle may follow USER_SCENE_REFERENCE when USER_NOTES request it."
     )
-    max_out = int(settings.grok_scene_compose_output_max_chars)
+    max_out = grok_scene_prose_char_budget(
+        wave_profile=wp,
+        include_realism_coda=True,
+    )
     vis_block = _grok_visibility_user_block(
         visibility=visibility,
         reference_scene_description=reference_scene_description,
@@ -887,7 +888,10 @@ async def grok_compose_studio_workflow_multi_ref(
             else "Hairstyle may follow workflow references when USER_NOTES request it."
         )
     )
-    max_out = int(settings.grok_scene_compose_output_max_chars)
+    max_out = grok_scene_prose_char_budget(
+        wave_profile=wp,
+        include_realism_coda=True,
+    )
 
     labeled: list[tuple[str, UserStudioModelImage]] = []
     if model_images:

@@ -185,7 +185,9 @@ class Settings(BaseSettings):
         default="data/prompts/grok_scene_compose_main_system.txt"
     )
     grok_scene_compose_main_system_inline: str = Field(default="")
-    grok_scene_compose_output_max_chars: int = Field(default=3000, ge=800, le=5000)
+    grok_scene_compose_output_max_chars: int = Field(default=5000, ge=800, le=10000)
+    # Полное vision-описание референса в compact JSON (pose reference + текст сцены).
+    studio_reference_scene_max_chars: int = Field(default=8000, ge=1500, le=16000)
     grok_scene_compose_system_inline: str = Field(default="")
     grok_scene_compose_text_system_inline: str = Field(default="")
     grok_scene_compose_model: str = Field(default="")

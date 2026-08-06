@@ -118,12 +118,12 @@ _NUDE_CLOTHING_RE = re.compile(
     re.I,
 )
 
-_COMPACT_IDENTITY_FIELD_MAX = 420
-_COMPACT_SCENE_NOTES_MAX = 720
+_COMPACT_IDENTITY_FIELD_MAX = 1200
+_COMPACT_SCENE_NOTES_MAX = 8000
 # Max chars for "Model identity: …" prepended to WaveSpeed prose (subject + Build + hair).
-STUDIO_IDENTITY_LINE_MAX = 600
+STUDIO_IDENTITY_LINE_MAX = 1200
 # Body proportions clause inside identity line (before final join/truncate).
-STUDIO_BODY_PROPORTIONS_MAX = 400
+STUDIO_BODY_PROPORTIONS_MAX = 800
 
 _SCENE_NOTE_KEYS = (
     "POSE:",
@@ -325,11 +325,41 @@ def _as_text(val: Any) -> str:
     return ""
 
 
+def _truncate_at_word_boundary(text: str, max_len: int) -> str:
+    """Последний резерв: обрезка по границе слова, не посередине предложения."""
+    s = (text or "").strip()
+    if len(s) <= max_len:
+        return s
+    if max_len <= 1:
+        return "…"
+    cut = s[: max_len - 1].rstrip()
+    if " " in cut:
+        cut = cut.rsplit(" ", 1)[0].rstrip()
+    return (cut or s[: max_len - 1].rstrip()) + "…"
+
+
+def _reference_scene_max_chars() -> int:
+    from app.config import settings
+
+    return max(_COMPACT_SCENE_NOTES_MAX, int(getattr(settings, "studio_reference_scene_max_chars", 8000)))
+
+
+def reference_scene_text_for_prompt(description: str | None) -> str:
+    """Полное описание референса для prompt (без выборочного POSE:/FRAMING: фильтра)."""
+    raw = (description or "").strip()
+    if not raw:
+        return ""
+    lim = _reference_scene_max_chars()
+    if len(raw) <= lim:
+        return raw
+    return _truncate_at_word_boundary(raw, lim)
+
+
 def _truncate_identity_field(text: str, *, max_len: int = _COMPACT_IDENTITY_FIELD_MAX) -> str:
     s = (text or "").strip()
     if len(s) <= max_len:
         return s
-    return s[: max_len - 1].rstrip() + "…"
+    return _truncate_at_word_boundary(s, max_len)
 
 
 def extract_wardrobe_from_reference(description: str | None) -> tuple[str, bool]:
@@ -358,8 +388,8 @@ def compact_studio_prompt_for_nano_banana(
     max_chars: int | None = None,
 ) -> str:
     """
-    Укорачивает промпт для Nano Banana Pro (лимит Google / WaveSpeed).
-    Сохраняет префиксы до JSON; внутри JSON режет scene_brief, убирает тяжёлый realism_engine.
+    Укорачивает промпт для Nano Banana Pro только если превышает лимит Google / WaveSpeed.
+    Сначала убирает realism_engine и negative в JSON; scene_brief / prose режем в последнюю очередь.
     """
     from app.config import settings
 
@@ -371,31 +401,46 @@ def compact_studio_prompt_for_nano_banana(
 
     brace = p.find("{")
     if brace < 0:
-        return p[: lim - 1] + "…"
+        return _truncate_at_word_boundary(p, lim)
 
     prefix = p[:brace]
     raw_json = p[brace:].strip()
     try:
         data = json.loads(raw_json)
     except (json.JSONDecodeError, TypeError):
-        return (prefix + raw_json)[: lim - 1] + "…"
+        combined = (prefix + raw_json).strip()
+        return combined if len(combined) <= lim else _truncate_at_word_boundary(combined, lim)
 
     if not isinstance(data, dict):
-        return p[: lim - 1] + "…"
+        return _truncate_at_word_boundary(p, lim)
 
     data.pop("realism_engine", None)
-    sb = str(data.get("scene_brief") or "").strip()
-    budget = max(800, lim - len(prefix) - 600)
-    if len(sb) > budget:
-        data["scene_brief"] = sb[: budget - 1] + "…"
+    cons = data.get("constraints")
+    if isinstance(cons, dict) and "avoid" in cons:
+        cons = dict(cons)
+        cons.pop("avoid", None)
+        data["constraints"] = cons
     neg = str(data.get("negative_prompt") or "")
-    if len(neg) > 900:
-        data["negative_prompt"] = neg[:899] + "…"
+    if len(neg) > 400:
+        data["negative_prompt"] = _truncate_at_word_boundary(neg, 400)
+
+    sb = str(data.get("scene_brief") or "").strip()
     compact = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
     out = (prefix + compact).strip()
     if len(out) <= lim:
         return out
-    return out[: lim - 1] + "…"
+
+    if sb:
+        overhead = len(out) - len(sb)
+        sb_budget = max(800, lim - overhead)
+        if len(sb) > sb_budget:
+            data["scene_brief"] = _truncate_at_word_boundary(sb, sb_budget)
+        compact = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
+        out = (prefix + compact).strip()
+        if len(out) <= lim:
+            return out
+
+    return _truncate_at_word_boundary(out, lim)
 
 
 def nano_banana_preflight_error(
@@ -589,25 +634,8 @@ def reference_pose_is_nude_or_minimal_coverage(description: str | None) -> bool:
 
 
 def compact_scene_notes_from_reference(description: str | None) -> str:
-    """Короткая выжимка REFERENCE_IMAGE для compact JSON (поза в тексте + image 1)."""
-    raw = (description or "").strip()
-    if not raw:
-        return ""
-    wardrobe_line, _ = extract_wardrobe_from_reference(raw)
-    lines: list[str] = []
-    if wardrobe_line:
-        lines.append(wardrobe_line)
-    for line in raw.splitlines():
-        t = line.strip()
-        if not t:
-            continue
-        upper = t.upper()
-        if upper.startswith("CLOTHING:"):
-            continue
-        if any(k in upper for k in _SCENE_NOTE_KEYS):
-            lines.append(t)
-    text = " ".join(lines) if lines else raw
-    return _truncate_identity_field(text, max_len=_COMPACT_SCENE_NOTES_MAX)
+    """Текст сцены из vision-описания референса (полный текст, без урезания до POSE:/FRAMING:)."""
+    return reference_scene_text_for_prompt(description)
 
 
 def _compact_profile_identity_fields(prof: dict[str, Any] | None) -> dict[str, str]:
@@ -1016,12 +1044,7 @@ def prepare_positive_prompt_json(
                 strip_donor_identity_from_scene_prose((refined_text or "").strip())
             )
         )
-        lim = int(settings.grok_scene_compose_output_max_chars)
         re_prose = PHONE_CANDID_PHOTO_CODA if include_realism_engine else ""
-        reserve = len(re_prose) + 2 if re_prose else 0
-        scene_budget = max(400, lim - reserve)
-        if len(prose) > scene_budget:
-            prose = prose[: scene_budget - 1].rstrip() + "…"
         leg = (wavespeed_identity_legend or "").strip()
         if leg:
             prose = f"Attached model reference photos — {leg}\n\n{prose}"
@@ -1049,12 +1072,7 @@ def prepare_positive_prompt_json(
         prose = strip_soft_dof_from_scene_prose(
             strip_workflow_meta_from_wavespeed_prose((refined_text or "").strip())
         )
-        lim = int(settings.grok_scene_compose_output_max_chars)
         re_prose = PHONE_CANDID_PHOTO_CODA if include_realism_engine else ""
-        reserve = len(re_prose) + 2 if re_prose else 0
-        scene_budget = max(400, lim - reserve)
-        if len(prose) > scene_budget:
-            prose = prose[: scene_budget - 1].rstrip() + "…"
         leg = (wavespeed_identity_legend or "").strip()
         if leg:
             prose = f"Attached model reference photos — {leg}\n\n{prose}"
