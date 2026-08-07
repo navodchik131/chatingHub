@@ -313,18 +313,15 @@ export default function Images() {
   const modes = useMemo(() => {
     const defs = modeDefs(lang, t.cr);
     return defs.map((m) => {
-      // На плане Pro генерации оплачиваются своим ключом WaveSpeed —
-      // кредиты не списываются, поэтому цену не показываем вовсе.
-      if (isPro) return { ...m, cost: null };
       if (m.id !== 'carousel') return m;
+      if (isPro) return { ...m, cost: 'Pro' };
       return { ...m, cost: carouselCosts.perLabel };
     });
   }, [lang, t.cr, carouselCosts.perLabel, isPro]);
   const curMode = modes.find((m) => m.id === s.imgMode) || modes[0];
-  const generateCostLabel = isPro
-    ? null
-    : s.imgMode === 'carousel'
-      ? carouselCosts.totalLabel
+  const generateCostLabel =
+    s.imgMode === 'carousel'
+      ? (isPro ? 'Pro' : carouselCosts.totalLabel)
       : curMode.cost;
   const displaySlots = s.imgMode === 'edit' && s.needsRef === 'yes'
     ? [...curMode.slots, { label: t.refImage, archive: false }]
@@ -444,9 +441,7 @@ export default function Images() {
               </div>
               <div style={{ fontWeight: 800, fontSize: 13.5, marginBottom: 4 }}>{m.title}</div>
               <div style={{ fontSize: 11, color: color.textDim, lineHeight: 1.45, marginBottom: 8 }}>{m.desc}</div>
-              {m.cost && (
-                <div style={{ fontFamily: font.mono, fontSize: 9.5, color: color.lime }}>{m.cost}</div>
-              )}
+              <div style={{ fontFamily: font.mono, fontSize: 9.5, color: color.lime }}>{m.cost}</div>
             </Hoverable>
           );
         })}
@@ -656,9 +651,7 @@ export default function Images() {
           >
             <span style={{ display: 'flex', width: 17, height: 17, color: color.limeInk }}><IcoSpark /></span>
             <span style={{ flex: 1, fontWeight: 800, fontSize: 14, color: color.limeInk }}>{t.generate}</span>
-            {generateCostLabel && (
-              <span style={{ fontFamily: font.mono, fontSize: 11, fontWeight: 600, color: color.limeInkSoft }}>{generateCostLabel}</span>
-            )}
+            <span style={{ fontFamily: font.mono, fontSize: 11, fontWeight: 600, color: color.limeInkSoft }}>{generateCostLabel}</span>
           </Hoverable>
         </div>
 
@@ -677,7 +670,7 @@ export default function Images() {
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(130px,1fr))', gap: 10 }}>
-            {(cabinet.archiveImages.length ? cabinet.archiveImages : []).map((item, i) => {
+            {((cabinet.archiveImages || []).length ? cabinet.archiveImages : []).map((item, i) => {
               const thumb = archiveThumbUrl(item);
               const pending = isArchivePending(item);
               const failed = (item.status || '').trim() === 'failed';
@@ -783,7 +776,7 @@ export default function Images() {
                 </div>
               </Hoverable>
             );})}
-            {!cabinet.archiveImages.length && (
+            {!(cabinet.archiveImages || []).length && (
               <div style={{ gridColumn: '1 / -1', fontSize: 12, color: color.textGhost, padding: 16 }}>
                 {lang === 'ru' ? 'Архив пуст — сгенерируйте первый кадр' : 'Archive is empty — generate your first frame'}
               </div>

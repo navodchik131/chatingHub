@@ -5,6 +5,7 @@ import {
   isOptimisticStudioArchiveId,
   mergeArchiveItemPreserveMedia,
   mergeStudioArchiveItems,
+  dedupeStudioArchiveById,
   preferStableArchiveMediaUrl,
   prependOptimisticStudioArchive,
   removeOptimisticStudioArchive,
@@ -340,24 +341,26 @@ export function CabinetDataProvider({ children }) {
 
   const loadMoreArchiveImages = useCallback(async () => {
     const { items, has_more } = await actions.refreshArchiveImages(archiveImagesSkip)
-    if (!items.length) {
-      setArchiveImagesHasMore(has_more)
+    const pageItems = Array.isArray(items) ? items : []
+    if (!pageItems.length) {
+      setArchiveImagesHasMore(Boolean(has_more))
       return
     }
-    setArchiveImages((prev) => mergeStudioArchiveItems([...prev, ...items]))
-    setArchiveImagesHasMore(has_more)
-    setArchiveImagesSkip((skip) => skip + items.length)
+    setArchiveImages((prev) => dedupeStudioArchiveById([...(prev || []), ...pageItems]))
+    setArchiveImagesHasMore(Boolean(has_more))
+    setArchiveImagesSkip((skip) => skip + pageItems.length)
   }, [archiveImagesSkip])
 
   const loadMoreArchiveVideos = useCallback(async () => {
     const { items, has_more } = await actions.refreshArchiveVideos(archiveVideosSkip)
-    if (!items.length) {
-      setArchiveVideosHasMore(has_more)
+    const pageItems = Array.isArray(items) ? items : []
+    if (!pageItems.length) {
+      setArchiveVideosHasMore(Boolean(has_more))
       return
     }
-    setArchiveVideos((prev) => mergeStudioArchiveItems([...prev, ...items]))
-    setArchiveVideosHasMore(has_more)
-    setArchiveVideosSkip((skip) => skip + items.length)
+    setArchiveVideos((prev) => dedupeStudioArchiveById([...(prev || []), ...pageItems]))
+    setArchiveVideosHasMore(Boolean(has_more))
+    setArchiveVideosSkip((skip) => skip + pageItems.length)
   }, [archiveVideosSkip])
 
   const refreshArchivePending = useCallback(async () => {
