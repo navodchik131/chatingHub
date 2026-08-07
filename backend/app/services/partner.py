@@ -57,6 +57,13 @@ def slugify_partner_base(email: str) -> str:
     return base if len(base) >= 3 else "partner"
 
 
+def normalize_partner_slug(raw: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "", (raw or "").strip().lower())[:32]
+    if len(slug) < 3:
+        raise ValueError("Партнёрский slug: от 3 до 32 символов, только латиница и цифры")
+    return slug
+
+
 async def ensure_partner_slug(session: AsyncSession, owner: User) -> str:
     slug = (getattr(owner, "partner_slug", None) or "").strip().lower()
     if slug:

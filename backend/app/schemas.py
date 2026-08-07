@@ -1458,6 +1458,7 @@ class AdminUserRow(BaseModel):
     is_active: bool
     is_platform_admin: bool
     is_partner: bool = False
+    partner_slug: str | None = None
     parent_user_id: int | None = None
     parent_email: str | None = None
     member_login: str | None = None
@@ -1495,6 +1496,16 @@ class AdminUserPatchIn(BaseModel):
     is_active: bool | None = None
     is_platform_admin: bool | None = None
     is_partner: bool | None = None
+    partner_slug: str | None = Field(default=None, max_length=32)
+
+    @field_validator("partner_slug")
+    @classmethod
+    def _normalize_partner_slug(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        from app.services.partner import normalize_partner_slug
+
+        return normalize_partner_slug(v)
 
 
 class AdminPasswordResetIn(BaseModel):

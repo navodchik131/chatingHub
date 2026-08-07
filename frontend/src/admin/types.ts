@@ -129,6 +129,7 @@ export interface AdminUserRow {
   is_active: boolean
   is_platform_admin: boolean
   is_partner: boolean
+  partner_slug: string | null
   parent_user_id: number | null
   parent_email: string | null
   member_login: string | null

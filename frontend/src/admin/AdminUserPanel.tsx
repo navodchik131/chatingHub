@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { apiFetch } from '../api'
 import { formatHttpApiError } from '../apiErrors'
@@ -36,8 +36,13 @@ export function AdminUserPanel({
   const [creditDelta, setCreditDelta] = useState('')
   const [demoDelta, setDemoDelta] = useState('')
   const [newPassword, setNewPassword] = useState('')
+  const [partnerSlugDraft, setPartnerSlugDraft] = useState(user.partner_slug ?? '')
   const isOwner = user.parent_user_id == null
   const periodKey = `admin-panel-period-${user.id}-${user.subscription_period_end ?? 'none'}`
+
+  useEffect(() => {
+    setPartnerSlugDraft(user.partner_slug ?? '')
+  }, [user.id, user.partner_slug])
 
   const patchSubscription = async (patch: {
     status?: string
@@ -70,7 +75,12 @@ export function AdminUserPanel({
     }
   }
 
-  const patchUser = async (body: { is_active?: boolean; is_platform_admin?: boolean; is_partner?: boolean }) => {
+  const patchUser = async (body: {
+    is_active?: boolean
+    is_platform_admin?: boolean
+    is_partner?: boolean
+    partner_slug?: string
+  }) => {
     onError(null)
     const r = await apiFetch(`/api/admin/users/${user.id}`, {
       method: 'PATCH',
@@ -340,6 +350,36 @@ export function AdminUserPanel({
             />
             {t('userPanel.partnerAccount')}
           </label>
+        ) : null}
+        {isOwner && user.is_partner ? (
+          <div className="admin-field">
+            <span>{t('userPanel.partnerSlug')}</span>
+            <div className="admin-period-row">
+              <input
+                type="text"
+                className="admin-period-inp"
+                value={partnerSlugDraft}
+                disabled={busy}
+                autoComplete="off"
+                spellCheck={false}
+                placeholder={t('userPanel.partnerSlugPlaceholder')}
+                onChange={(e) => setPartnerSlugDraft(e.target.value.toLowerCase())}
+              />
+              <button
+                type="button"
+                className="ghost-btn small"
+                disabled={busy || partnerSlugDraft.trim().length < 3}
+                onClick={() => void patchUser({ partner_slug: partnerSlugDraft.trim() })}
+              >
+                {t('common.save')}
+              </button>
+            </div>
+            {partnerSlugDraft.trim() ? (
+              <p className="mono small muted">
+                {t('userPanel.partnerLinkPreview', { slug: partnerSlugDraft.trim().toLowerCase() })}
+              </p>
+            ) : null}
+          </div>
         ) : null}
         {isOwner ? (
           <label className="admin-check">

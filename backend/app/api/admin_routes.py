@@ -135,6 +135,7 @@ async def _user_row(
         is_active=u.is_active,
         is_platform_admin=bool(u.is_platform_admin),
         is_partner=bool(getattr(u, "is_partner", False)),
+        partner_slug=(getattr(u, "partner_slug", None) or None),
         parent_user_id=u.parent_user_id,
         parent_email=u.parent.email if u.parent else None,
         member_login=u.member_login,
@@ -309,6 +310,30 @@ async def admin_patch_user(
             from app.services.partner import ensure_partner_slug
 
             await ensure_partner_slug(session, u)
+    if body.partner_slug is not None:
+        if u.parent_user_id is not None:
+            raise HTTPException(
+                status_code=400,
+                detail="Партнёрский slug только у аккаунта владельца",
+            )
+        is_partner = body.is_partner if body.is_partner is not None else bool(u.is_partner)
+        if not is_partner:
+            raise HTTPException(
+                status_code=400,
+                detail="Партнёрский slug задаётся только партнёрам",
+            )
+        dup_id = await session.scalar(
+            select(User.id).where(
+                User.partner_slug == body.partner_slug,
+                User.id != u.id,
+            )
+        )
+        if dup_id:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Slug «{body.partner_slug}» уже занят",
+            )
+        u.partner_slug = body.partner_slug
     await session.commit()
     await session.refresh(u)
     oid = workspace_owner_id(u)
