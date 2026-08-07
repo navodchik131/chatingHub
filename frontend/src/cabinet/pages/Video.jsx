@@ -5,7 +5,7 @@ import { Fade, PageTitle, Eyebrow, Chip, SelectPill, Overlay, CloseButton } from
 import VideoPreviewModal from '../components/VideoPreviewModal';
 import { useApp } from '../hooks/useApp';
 import { color, line, font, G } from '../styles/tokens';
-import { modeCardStyle, refUploadStyle, borderHoverOff, refThumbStyle } from '../styles/mixins';
+import { modeCardStyle, refUploadStyle, borderHoverOff, refThumbStyle, cardPickStyle } from '../styles/mixins';
 import { videoModeDefs } from '../data/catalog';
 import { archiveThumbUrl, archiveDownloadUrl, archiveVideoUrl, isArchivePending, downloadVideoNoteByPath } from '../api/actions';
 import { downloadArchiveBlob } from '../api/archiveDownload';
