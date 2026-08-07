@@ -52,6 +52,28 @@ async def activate_subscription_product(
     sub.status = SubscriptionStatus.active
     sub.current_period_end = subscription_period_end(resolved)
 
+    # Факт оплаты подписки — всегда, независимо от того, начисляется ли бонус.
+    # На планах Pro бонусных кредитов нет, и раньше оплата не оставляла следа
+    # в usage_events, из-за чего не попадала в выручку админки.
+    session.add(
+        UsageEvent(
+            user_id=billing_uid,
+            kind="subscription_payment",
+            credits_delta=0,
+            meta=json.dumps(
+                {
+                    "payment_ref": payment_ref,
+                    "payment_kind": payment_kind,
+                    "product": resolved,
+                    "tier": spec.tier,
+                    "billing_plan": spec.billing_plan,
+                    "amount_rub": int(payment_amount_rub),
+                },
+                ensure_ascii=False,
+            ),
+        )
+    )
+
     bonus = 0
     period_bonus = managed_period_credits(spec)
     if period_bonus > 0:

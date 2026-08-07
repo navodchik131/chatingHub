@@ -31,7 +31,12 @@ from app.services.studio_image_pricing import normalize_wave_model_id
 
 # События, не считающиеся «осмысленной» активностью владельца (бонусы при регистрации и т.п.)
 _USAGE_KINDS_NOT_ENGAGEMENT = frozenset(
-    {"referral_signup_bonus", "managed_subscription_bonus", "standard_subscription_bonus"}
+    {
+        "referral_signup_bonus",
+        "managed_subscription_bonus",
+        "standard_subscription_bonus",
+        "subscription_payment",
+    }
 )
 
 _PAID_SUBSCRIPTION_STATUSES = (
@@ -268,6 +273,20 @@ def _parse_usage_meta(raw: str | None) -> dict:
     return data if isinstance(data, dict) else {}
 
 
+# Оплата подписки. `subscription_payment` — актуальное событие (пишется всегда);
+# два *_subscription_bonus — legacy, когда выручка выводилась из начисления бонуса
+# и потому не фиксировалась на планах Pro (там бонусных кредитов нет).
+_SUBSCRIPTION_PAYMENT_KIND = "subscription_payment"
+_LEGACY_SUBSCRIPTION_BONUS_KINDS = (
+    "standard_subscription_bonus",
+    "managed_subscription_bonus",
+)
+_SUBSCRIPTION_REVENUE_KINDS = (
+    _SUBSCRIPTION_PAYMENT_KIND,
+    *_LEGACY_SUBSCRIPTION_BONUS_KINDS,
+)
+
+
 def _usage_event_revenue_rub(kind: str, meta: dict) -> int:
     if kind == "tribute_credits_pack":
         return max(0, int(meta.get("amount_rub") or 0))
@@ -286,11 +305,20 @@ def _usage_event_revenue_rub(kind: str, meta: dict) -> int:
     if kind == "tribute_subscription_renewed":
         spec = get_plan_spec(resolve_product_id(str(product)))
         return int(spec.price_rub) if spec else 0
-    if kind == "standard_subscription_bonus":
+    if kind in _SUBSCRIPTION_REVENUE_KINDS:
+        # Оплата кредитами — не новые деньги, выручка уже учтена при их покупке.
         if str(meta.get("payment_kind") or "") not in ("yookassa", "tribute"):
             return 0
         if not meta.get("payment_ref"):
             return 0
+        raw_amount = meta.get("amount_rub")
+        try:
+            paid = int(raw_amount) if raw_amount is not None else 0
+        except (TypeError, ValueError):
+            paid = 0
+        # Фактически уплаченное (с учётом партнёрской скидки), иначе цена каталога.
+        if paid > 0:
+            return paid
         spec = get_plan_spec(resolve_product_id(str(product)))
         return int(spec.price_rub) if spec else 0
     return 0
@@ -332,7 +360,7 @@ async def _build_revenue_stats(session: AsyncSession) -> dict:
         "yookassa_credits_pack",
         "tribute_credits_pack",
         "tribute_subscription_renewed",
-        "standard_subscription_bonus",
+        *_SUBSCRIPTION_REVENUE_KINDS,
     )
     rows = (
         await session.execute(
@@ -348,21 +376,38 @@ async def _build_revenue_stats(session: AsyncSession) -> dict:
     by_month: dict[str, int] = defaultdict(int)
     tribute_payments = 0
 
+    # На новых оплатах пишется и subscription_payment, и (для Standard) бонусное
+    # событие по тому же payment_ref — считаем такой платёж один раз.
+    parsed: list[tuple[str, dict, datetime | None]] = []
+    paid_refs: set[str] = set()
     for kind, meta_raw, created_at in rows:
+        k = str(kind or "")
         meta = _parse_usage_meta(meta_raw)
-        amount = _usage_event_revenue_rub(str(kind or ""), meta)
+        parsed.append((k, meta, created_at))
+        if k == _SUBSCRIPTION_PAYMENT_KIND:
+            ref = str(meta.get("payment_ref") or "")
+            if ref:
+                paid_refs.add(ref)
+
+    for kind, meta, created_at in parsed:
+        if kind in _LEGACY_SUBSCRIPTION_BONUS_KINDS:
+            ref = str(meta.get("payment_ref") or "")
+            if ref and ref in paid_refs:
+                continue
+        amount = _usage_event_revenue_rub(kind, meta)
         if amount <= 0:
             continue
         total_rub += amount
         if created_at:
-            mk = _month_key(created_at)
-            by_month[mk] += amount
-            if created_at >= month_start:
+            # SQLite отдаёт naive datetime — без приведения сравнение с aware падает.
+            at = created_at if created_at.tzinfo else created_at.replace(tzinfo=timezone.utc)
+            by_month[_month_key(at)] += amount
+            if at >= month_start:
                 month_rub += amount
-            elif prev_month_start <= created_at < month_start:
+            elif prev_month_start <= at < month_start:
                 prev_month_rub += amount
         if kind in ("tribute_credits_pack", "tribute_subscription_renewed") or (
-            kind == "standard_subscription_bonus"
+            kind in _SUBSCRIPTION_REVENUE_KINDS
             and str(meta.get("payment_kind") or "") == "tribute"
         ):
             tribute_payments += 1
