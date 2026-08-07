@@ -157,7 +157,7 @@ export interface ScenarioFirstFrameNodeData {
   [key: string]: unknown
 }
 
-export type SeedanceT2vVariant = 'standard' | 'mini'
+export type SeedanceT2vVariant = 'standard' | 'mini' | 'seedance_25'
 export type SeedanceT2vResolution = '480p' | '720p' | '1080p'
 export type GrokImagineI2vResolution = '480p' | '720p'
 export type WorkflowVideoProvider = 'seedance_t2v' | 'grok_imagine_i2v'

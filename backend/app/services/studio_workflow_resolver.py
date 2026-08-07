@@ -653,7 +653,7 @@ def resolve_workflow_video_plan(
         duration_seconds = 5
 
     seedance_variant = str(gen_data.get("seedanceVariant") or "standard").strip().lower()
-    if seedance_variant not in ("standard", "mini"):
+    if seedance_variant not in ("standard", "mini", "seedance_25"):
         seedance_variant = "standard"
 
     video_resolution = str(gen_data.get("videoResolution") or "720p").strip().lower()

@@ -1167,6 +1167,7 @@ export function CabinetDataProvider({ children }) {
           autoMotionPrompt: motionControl && Boolean(motionVideoFileId),
           promptOnlyMode: promptMode,
           generateAudio: appState.vidGenerateAudio !== false,
+          seedanceVariant: appState.vidSeedanceVariant || 'standard',
         })
         setArchiveVideos((prev) => applyJobToOptimisticArchive(prev, [tempId], accepted))
         await refreshArchiveFull()

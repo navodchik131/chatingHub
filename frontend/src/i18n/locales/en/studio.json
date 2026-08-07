@@ -513,6 +513,7 @@
     "seedanceModelLabel": "Model",
     "seedanceStandard": "Seedance 2.0",
     "seedanceMini": "Seedance 2.0 Mini",
+    "seedance25": "Seedance 2.5",
     "qualityLabel": "Quality",
     "durationLabel": "Duration",
     "durationSuffix": " · {{cost}} cr.",

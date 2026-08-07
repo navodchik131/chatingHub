@@ -514,6 +514,7 @@
     "seedanceModelLabel": "Модель",
     "seedanceStandard": "Seedance 2.0",
     "seedanceMini": "Seedance 2.0 Mini",
+    "seedance25": "Seedance 2.5",
     "qualityLabel": "Качество",
     "durationLabel": "Длительность",
     "durationSuffix": " · {{cost}} кр.",

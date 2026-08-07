@@ -539,6 +539,7 @@ export async function runMotionVideo(params) {
   if (params.promptOnlyMode) fd.append('prompt_only_mode', '1')
   if (params.frameFile) fd.append('image', params.frameFile, params.frameFile.name || 'frame.jpg')
   fd.append('generate_audio', params.generateAudio === false ? '0' : '1')
+  if (params.seedanceVariant) fd.append('seedance_variant', String(params.seedanceVariant))
   return postStudioJob('/api/studio/motion/render-video', { method: 'POST', body: fd })
 }
 

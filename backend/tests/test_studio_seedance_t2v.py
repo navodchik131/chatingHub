@@ -333,6 +333,9 @@ def test_seedance_t2v_post_path_fast_with_reference_videos():
     assert _seedance_20_t2v_post_path(variant="mini", use_fast=False) == (
         "/api/v3/bytedance/seedance-2.0-mini/text-to-video"
     )
+    assert _seedance_20_t2v_post_path(variant="seedance_25", use_fast=False) == (
+        "/api/v3/bytedance/seedance-2.5/text-to-video"
+    )
 
 
 def test_seedance_optional_user_notes_skips_placeholder():

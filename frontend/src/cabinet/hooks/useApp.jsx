@@ -52,6 +52,7 @@ const initial = {
   vidFormat: '9:16',
   vidTime: '5',
   vidGenerateAudio: true,
+  vidSeedanceVariant: 'standard',
   charTab: 'photos',
   lightbox: null,
   showGenError: false,

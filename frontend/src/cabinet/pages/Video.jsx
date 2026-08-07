@@ -10,7 +10,8 @@ import { videoModeDefs } from '../data/catalog';
 import { archiveThumbUrl, archiveDownloadUrl, archiveVideoUrl, isArchivePending, downloadVideoNoteByPath } from '../api/actions';
 import { downloadArchiveBlob } from '../api/archiveDownload';
 import { sameStudioModelId, enginesForNsfw, isUiSimplified } from '../api/studioHelpers';
-import { computeMotionVideoCreditCost } from '../../studioMotionPricing';
+import { normalizeBillingPlan } from '../../billing/planCatalog';
+import { computeMotionVideoCreditCost, computeMotionVideoUsdCost, formatMotionUsd } from '../../studioMotionPricing';
 import { videoNoteDownloadPath, videoNoteSendPayload } from '../../studioArchive';
 
 const vidModeIcons = { film: IcoFilm, text: IcoText };
@@ -56,6 +57,7 @@ function aspectCss(ratio) {
 export default function Video() {
   const { t, lang, s, setS, isMobile, go, cabinet } = useApp();
   const simplifiedUi = isUiSimplified(cabinet.me);
+  const isPro = normalizeBillingPlan(cabinet.me?.billing_plan) === 'pro';
   const videoRef = useRef(null);
   const frameRef = useRef(null);
   const timer = useRef(null);
@@ -135,11 +137,33 @@ export default function Video() {
     const duration = Number(s.vidTime) || 5;
     const hasReferenceVideo = motionControl && Boolean(cabinet.motionVideoFileId);
     const pricing = cabinet.health?.studio_motion_video_pricing;
+    const variant = s.vidSeedanceVariant || 'standard';
     return computeMotionVideoCreditCost(duration, hasReferenceVideo, pricing, {
-      variant: 'standard',
+      variant,
       resolution: vidQualityToResolution(s.vidQuality),
+      referenceVideoDuration: hasReferenceVideo ? duration : null,
     });
-  }, [cabinet.health, cabinet.motionVideoFileId, s.vidTime, s.vidQuality, motionControl]);
+  }, [cabinet.health, cabinet.motionVideoFileId, s.vidTime, s.vidQuality, s.vidSeedanceVariant, motionControl]);
+
+  const vidUsd = useMemo(() => {
+    const duration = Number(s.vidTime) || 5;
+    const hasReferenceVideo = motionControl && Boolean(cabinet.motionVideoFileId);
+    const pricing = cabinet.health?.studio_motion_video_pricing;
+    const variant = s.vidSeedanceVariant || 'standard';
+    return computeMotionVideoUsdCost(duration, hasReferenceVideo, pricing, {
+      variant,
+      resolution: vidQualityToResolution(s.vidQuality),
+      referenceVideoDuration: hasReferenceVideo ? duration : null,
+    });
+  }, [cabinet.health, cabinet.motionVideoFileId, s.vidTime, s.vidQuality, s.vidSeedanceVariant, motionControl]);
+
+  const vidCostLabel = isPro ? formatMotionUsd(vidUsd) : `−${vidCost} ${t.cr}`;
+
+  const seedanceModelOpts = [
+    { v: 'standard', l: t.vidModelStandard },
+    { v: 'seedance_25', l: t.vidModel25, hot: true },
+    { v: 'mini', l: t.vidModelMini },
+  ];
   const ffImgStyle = { width: 70, aspectRatio: '9/16', borderRadius: 10, flex: 'none', background: G[3] };
 
   const qualityOpts = [{ l: '480p', v: '480' }, { l: '720p', v: '720' }, { l: '1080p', v: '1080' }, { l: '4K', v: '4k' }];
@@ -620,6 +644,27 @@ export default function Video() {
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                 <div>
+                  <Eyebrow size={9} spacing="1.4px" style={{ marginBottom: 7 }}>{t.vidModel}</Eyebrow>
+                  <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                    {seedanceModelOpts.map((m) => (
+                      <Chip key={m.v} on={s.vidSeedanceVariant === m.v} onClick={() => setS({ vidSeedanceVariant: m.v })}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                          {m.l}
+                          {m.hot ? (
+                            <span style={{
+                              fontFamily: font.mono, fontSize: 8, fontWeight: 800, letterSpacing: '0.5px',
+                              background: 'rgba(255,120,80,.18)', color: '#ffb088', borderRadius: 4, padding: '2px 5px',
+                            }}
+                            >
+                              {t.vidHot}
+                            </span>
+                          ) : null}
+                        </span>
+                      </Chip>
+                    ))}
+                  </div>
+                </div>
+                <div>
                   <Eyebrow size={9} spacing="1.4px" style={{ marginBottom: 7 }}>{t.vidQuality}</Eyebrow>
                   <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
                     {qualityOpts.map((q) => (
@@ -648,7 +693,7 @@ export default function Video() {
                 <span style={{ display: 'flex', width: 17, height: 17, color: color.limeInk }}><IcoFilm /></span>
                 <span style={{ flex: 1, fontWeight: 800, fontSize: 14, color: color.limeInk }}>{t.generateVideo}</span>
                 <span style={{ fontFamily: font.mono, fontSize: 11, fontWeight: 600, color: color.limeInkSoft }}>
-                  −{vidCost} {t.cr}
+                  {vidCostLabel}
                 </span>
               </Hoverable>
             </>
@@ -658,6 +703,27 @@ export default function Video() {
           <>
           {/* quality / duration / audio */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div>
+              <Eyebrow size={9} spacing="1.4px" style={{ marginBottom: 7 }}>{t.vidModel}</Eyebrow>
+              <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                {seedanceModelOpts.map((m) => (
+                  <Chip key={m.v} on={s.vidSeedanceVariant === m.v} onClick={() => setS({ vidSeedanceVariant: m.v })}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                      {m.l}
+                      {m.hot ? (
+                        <span style={{
+                          fontFamily: font.mono, fontSize: 8, fontWeight: 800, letterSpacing: '0.5px',
+                          background: 'rgba(255,120,80,.18)', color: '#ffb088', borderRadius: 4, padding: '2px 5px',
+                        }}
+                        >
+                          {t.vidHot}
+                        </span>
+                      ) : null}
+                    </span>
+                  </Chip>
+                ))}
+              </div>
+            </div>
             <div>
               <Eyebrow size={9} spacing="1.4px" style={{ marginBottom: 7 }}>{t.vidQuality}</Eyebrow>
               <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
@@ -694,7 +760,7 @@ export default function Video() {
             <span style={{ display: 'flex', width: 17, height: 17, color: color.limeInk }}><IcoFilm /></span>
             <span style={{ flex: 1, fontWeight: 800, fontSize: 14, color: color.limeInk }}>{t.generateVideo}</span>
             <span style={{ fontFamily: font.mono, fontSize: 11, fontWeight: 600, color: color.limeInkSoft }}>
-              −{vidCost} {t.cr}
+              {vidCostLabel}
             </span>
           </Hoverable>
           </>

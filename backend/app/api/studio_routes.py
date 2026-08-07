@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import math
 import mimetypes
 import shutil
 import uuid
@@ -5982,10 +5983,16 @@ async def api_studio_motion_render_video(
             ) from None
 
     mv_id = str(motion_video_file_id).strip()
+    ref_video_duration: int | None = None
     if mv_id:
         vpath = resolve_motion_video_file(oid, mv_id)
         if vpath is None or not vpath.is_file():
             raise HTTPException(status_code=404, detail="Референс-видео не найдено.")
+        from app.services.studio_motion_video import probe_video_duration_seconds
+
+        probed = probe_video_duration_seconds(vpath)
+        if probed is not None and probed > 0:
+            ref_video_duration = int(math.ceil(probed))
 
     ff_gid: int | None = ff_gid_early
     raw_ff = (first_frame_generation_id or "").strip()
@@ -6019,6 +6026,7 @@ async def api_studio_motion_render_video(
         variant=seedance_v,
         resolution=video_res,
         has_motion_reference_video=bool(mv_id),
+        reference_video_duration=ref_video_duration,
     )
     motion_cost_billed = apply_studio_credit_cost(plan, motion_cost)
     await ensure_can_consume_credits(session, user, motion_cost_billed)
@@ -6352,6 +6360,13 @@ async def _studio_job_execute_motion_render_video(
         video_res = normalize_seedance_t2v_resolution(
             video_resolution or settings.wavespeed_seedance_20_t2v_resolution
         )
+        ref_video_duration: int | None = None
+        if mv_id and vpath is not None and vpath.is_file():
+            from app.services.studio_motion_video import probe_video_duration_seconds
+
+            probed = probe_video_duration_seconds(vpath)
+            if probed is not None and probed > 0:
+                ref_video_duration = int(math.ceil(probed))
         cost = apply_studio_credit_cost(
             plan,
             motion_video_credit_cost(
@@ -6359,6 +6374,7 @@ async def _studio_job_execute_motion_render_video(
                 variant=seedance_v,
                 resolution=video_res,
                 has_motion_reference_video=bool(mv_id),
+                reference_video_duration=ref_video_duration,
             ),
         )
         from app.services.studio_workflow_boardstory import boardstory_user_supplied_workflow_refs

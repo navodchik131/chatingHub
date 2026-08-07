@@ -5,7 +5,10 @@ import {
   DEFAULT_GROK_IMAGINE_I2V_PRICING,
   DEFAULT_MOTION_VIDEO_PRICING,
   computeGrokImagineI2vCreditCost,
+  computeGrokImagineI2vUsdCost,
   computeMotionVideoCreditCost,
+  computeMotionVideoUsdCost,
+  formatMotionUsd,
   mergeMotionVideoPricing,
   type GrokImagineI2vResolution,
   type StudioMotionVideoPricing,
@@ -30,13 +33,15 @@ function isAbortError(error: unknown): boolean {
 
 const DEFAULT_ASPECT = '9:16'
 
-type VideoModelKey = 'seedance-standard' | 'seedance-mini' | 'grok-imagine-i2v'
+type VideoModelKey = 'seedance-standard' | 'seedance-mini' | 'seedance-25' | 'grok-imagine-i2v'
 
 function modelKeyFromNodeData(data: VideoGenerationNodeData): VideoModelKey {
   if (data.videoProvider === 'grok_imagine_i2v') {
     return 'grok-imagine-i2v'
   }
-  return data.seedanceVariant === 'mini' ? 'seedance-mini' : 'seedance-standard'
+  if (data.seedanceVariant === 'mini') return 'seedance-mini'
+  if (data.seedanceVariant === 'seedance_25') return 'seedance-25'
+  return 'seedance-standard'
 }
 
 function patchFromModelKey(key: VideoModelKey): Partial<VideoGenerationNodeData> {
@@ -46,6 +51,12 @@ function patchFromModelKey(key: VideoModelKey): Partial<VideoGenerationNodeData>
       seedanceVariant: 'standard',
       generateAudio: false,
       autoMotionPrompt: false,
+    }
+  }
+  if (key === 'seedance-25') {
+    return {
+      videoProvider: 'seedance_t2v',
+      seedanceVariant: 'seedance_25',
     }
   }
   return {
@@ -95,6 +106,20 @@ function VideoGenerationNodeComponent({ id, data }: NodeProps) {
     return computeMotionVideoCreditCost(durationSeconds, true, pricing, {
       variant: seedanceVariant,
       resolution: videoResolution as SeedanceT2vResolution,
+      referenceVideoDuration: durationSeconds,
+    })
+  }, [pricing, durationSeconds, seedanceVariant, videoResolution, isGrok])
+
+  const costUsd = useMemo(() => {
+    if (isGrok) {
+      return computeGrokImagineI2vUsdCost(durationSeconds, pricing, {
+        resolution: videoResolution as GrokImagineI2vResolution,
+      })
+    }
+    return computeMotionVideoUsdCost(durationSeconds, true, pricing, {
+      variant: seedanceVariant,
+      resolution: videoResolution as SeedanceT2vResolution,
+      referenceVideoDuration: durationSeconds,
     })
   }, [pricing, durationSeconds, seedanceVariant, videoResolution, isGrok])
 
@@ -401,6 +426,7 @@ function VideoGenerationNodeComponent({ id, data }: NodeProps) {
             disabled={nodeData.isRunning}
           >
             <option value="seedance-standard">Seedance 2.0</option>
+            <option value="seedance-25">Seedance 2.5 · HOT</option>
             <option value="seedance-mini">Seedance 2.0 Mini</option>
             <option value="grok-imagine-i2v">Grok Imagine Video v1.5</option>
           </select>
@@ -527,7 +553,7 @@ function VideoGenerationNodeComponent({ id, data }: NodeProps) {
         {nodeData.isRunning ? t('gen.cancel') : t('nodeUi.videoGen.generate')}
         {!nodeData.isRunning ? (
           <span className="workflow-node__btn-cost">
-            {isPro ? 'Pro' : `${costCredits} ${t('gen.creditsUnit')}`}
+            {isPro ? formatMotionUsd(costUsd) : `${costCredits} ${t('gen.creditsUnit')}`}
           </span>
         ) : null}
       </button>

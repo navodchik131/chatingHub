@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 from datetime import datetime, timezone
 from typing import Any
 
@@ -791,11 +792,22 @@ async def _accept_workflow_video_job(
         seedance_v = normalize_seedance_t2v_variant(plan.seedance_variant)
         video_res = normalize_seedance_t2v_resolution(plan.video_resolution)
         has_motion_ref = bool(str(plan.motion_video_file_id or "").strip())
+        ref_video_duration: int | None = None
+        if has_motion_ref:
+            mv_fid = str(plan.motion_video_file_id or "").strip()
+            vpath = resolve_motion_video_file(oid, mv_fid)
+            if vpath is not None and vpath.is_file():
+                from app.services.studio_motion_video import probe_video_duration_seconds
+
+                probed = probe_video_duration_seconds(vpath)
+                if probed is not None and probed > 0:
+                    ref_video_duration = int(math.ceil(probed))
         motion_cost = motion_video_credit_cost(
             ds_effective,
             variant=seedance_v,
             resolution=video_res,
             has_motion_reference_video=has_motion_ref,
+            reference_video_duration=ref_video_duration,
         )
     seedance_v = normalize_seedance_t2v_variant(plan.seedance_variant)
     motion_cost_billed = apply_studio_credit_cost(billing_plan, motion_cost)

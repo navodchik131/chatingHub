@@ -1552,7 +1552,10 @@ def _seedance_20_t2v_post_path(*, variant: str = "standard", use_fast: bool = Fa
     from app.services.studio_motion_pricing import normalize_seedance_t2v_variant
 
     v = normalize_seedance_t2v_variant(variant)
-    if v == "mini":
+    if v == "seedance_25":
+        p = (settings.wavespeed_seedance_25_t2v_path or "").strip()
+        p = p or "/api/v3/bytedance/seedance-2.5/text-to-video"
+    elif v == "mini":
         p = (settings.wavespeed_seedance_20_mini_t2v_path or "").strip()
         p = p or "/api/v3/bytedance/seedance-2.0-mini/text-to-video"
     elif use_fast:
@@ -1603,20 +1606,22 @@ async def seedance_20_text_to_video_url(
     vids = [u.strip() for u in (reference_videos or []) if (u or "").strip()]
     from app.services.studio_motion_pricing import normalize_seedance_t2v_variant
 
-    use_fast = normalize_seedance_t2v_variant(variant) != "mini" and bool(vids)
+    v_norm = normalize_seedance_t2v_variant(variant)
+    use_fast = v_norm == "standard" and bool(vids)
     path = _seedance_20_t2v_post_path(variant=variant, use_fast=use_fast)
     url = f"{_wavespeed_base()}{path}"
     body: dict[str, Any] = {
         "prompt": prompt.strip(),
         "resolution": res,
         "duration": dur,
-        "enable_web_search": bool(
+        "generate_audio": bool(generate_audio),
+    }
+    if v_norm != "seedance_25":
+        body["enable_web_search"] = bool(
             enable_web_search
             if enable_web_search is not None
             else settings.wavespeed_seedance_20_t2v_web_search
-        ),
-        "generate_audio": bool(generate_audio),
-    }
+        )
     ar = (aspect_ratio or "").strip()
     if ar:
         body["aspect_ratio"] = ar
@@ -1782,7 +1787,10 @@ def _seedance_20_video_edit_post_path(*, variant: str = "standard") -> str:
     from app.services.studio_motion_pricing import normalize_seedance_t2v_variant
 
     v = normalize_seedance_t2v_variant(variant)
-    if v == "mini":
+    if v == "seedance_25":
+        p = (settings.wavespeed_seedance_25_video_edit_path or "").strip()
+        p = p or "/api/v3/bytedance/seedance-2.5/video-edit-turbo"
+    elif v == "mini":
         p = (settings.wavespeed_seedance_20_mini_video_edit_path or "").strip()
         p = p or "/api/v3/bytedance/seedance-2.0-mini/video-edit-turbo"
     else:
