@@ -29,6 +29,7 @@ DEST_PATHS = {
     "studio": "/workspace/images",
     "chats": "/workspace/dialogs",
 }
+PUBLIC_DESTS = frozenset({"home", "pricing"})
 
 
 def _now() -> datetime:
@@ -195,6 +196,26 @@ def partner_login_redirect_url(partner: User, *, source_tag: str | None, dest: s
     path = DEST_PATHS.get(d, "/")
     params.append(f"next={path}")
     return f"{base}/login?{'&'.join(params)}"
+
+
+def partner_public_redirect_url(partner: User, *, source_tag: str | None, dest: str) -> str:
+    """Публичные страницы — сразу на лендинг/тарифы с pref/src для атрибуции при регистрации."""
+    base = settings.public_app_url.rstrip("/")
+    slug = (partner.partner_slug or "").strip()
+    d = dest if dest in PUBLIC_DESTS else "home"
+    path = DEST_PATHS.get(d, "/")
+    params = [f"pref={slug}"]
+    tag = normalize_partner_tag(source_tag or "")
+    if tag:
+        params.append(f"src={tag}")
+    return f"{base}{path}?{'&'.join(params)}"
+
+
+def partner_redirect_url(partner: User, *, source_tag: str | None, dest: str) -> str:
+    d = dest if dest in VALID_DESTS else "home"
+    if d in PUBLIC_DESTS:
+        return partner_public_redirect_url(partner, source_tag=source_tag, dest=d)
+    return partner_login_redirect_url(partner, source_tag=source_tag, dest=d)
 
 
 async def partner_first_payment_discount_rub(

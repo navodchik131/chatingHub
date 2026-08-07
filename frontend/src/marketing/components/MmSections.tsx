@@ -5,6 +5,7 @@ import { parseReferralFromHealth } from '../../billing/referral'
 import { useMarketingMoney, marketingI18nCtx } from '../useMarketingMoney'
 import { usePublicHealth } from '../usePublicHealth'
 import { useMarketingPath } from '../i18n/useMarketingPath'
+import { marketingLoginPath } from '../partnerAttribution'
 import {
   MmBadge,
   MmButton,
@@ -232,8 +233,9 @@ type ToolCardProps = {
 
 function MmToolCard({ tone, eyebrow, title, desc, cta, badges, img }: ToolCardProps) {
   const { path } = useMarketingPath()
+  const loginTo = marketingLoginPath(path)
   return (
-    <Link to={path('/login')} className={`mm-tool-card mm-tool-card--${tone}`}>
+    <Link to={loginTo} className={`mm-tool-card mm-tool-card--${tone}`}>
       <div className="mm-tool-card__media" style={{ backgroundImage: `url(${img})` }}>
         <div className="mm-tool-card__badges">
           {badges.map((b, i) => (
@@ -270,7 +272,7 @@ export function MmToolGrid() {
               {t('tools.titleLine2')}
             </MmDisplayLg>
           </div>
-          <Link to={path('/login')} className="mm-link-arrow">
+          <Link to={marketingLoginPath(path)} className="mm-link-arrow">
             {t('tools.linkCabinet')}
           </Link>
         </div>

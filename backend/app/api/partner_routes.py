@@ -26,8 +26,8 @@ from app.services.partner import (
     find_partner_by_slug,
     partner_analytics,
     partner_link_url,
-    partner_login_redirect_url,
     partner_public_base_link,
+    partner_redirect_url,
     partner_referrals_list,
     record_partner_link_click,
     ensure_partner_slug,
@@ -66,7 +66,7 @@ async def partner_redirect(
         return RedirectResponse(url=f"{base}/login", status_code=302)
     await record_partner_link_click(session, partner=partner, source_tag=src)
     await session.commit()
-    url = partner_login_redirect_url(partner, source_tag=src, dest=to)
+    url = partner_redirect_url(partner, source_tag=src, dest=to)
     return RedirectResponse(url=url, status_code=302)
 
 

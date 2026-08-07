@@ -1,11 +1,12 @@
 import { useEffect, useReducer, useState } from 'react'
-import { NavLink, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, NavLink, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { getToken } from '../api'
 import { MmButton, MmContainer } from './components/MmUi'
 import { LanguageSwitcher } from './i18n/LanguageSwitcher'
 import { MarketingI18nSync } from './i18n/MarketingI18nSync'
 import { useMarketingPath } from './i18n/useMarketingPath'
+import { mergePartnerAttribution, marketingLoginPath } from './partnerAttribution'
 import './mm-tokens.css'
 import './mm-site.css'
 
@@ -71,6 +72,10 @@ export function MarketingLayout() {
   const year = new Date().getFullYear()
 
   useEffect(() => {
+    mergePartnerAttribution(searchParams)
+  }, [searchParams])
+
+  useEffect(() => {
     if (!hasToken) return
     if (searchParams.get('account') !== 'integrations') return
     const next = new URLSearchParams()
@@ -123,7 +128,7 @@ export function MarketingLayout() {
           </nav>
           <div className="mm-header__actions">
             <LanguageSwitcher />
-            <MmButton to={hasToken ? '/workspace' : path('/login')} size="sm">
+            <MmButton to={hasToken ? '/workspace' : '/login'} size="sm">
               {hasToken ? t('layout.headerWorkspace') : t('layout.headerCta')}
             </MmButton>
           </div>
@@ -194,7 +199,7 @@ export function MarketingLayout() {
                   <NavLink to={path('/about')}>{t('layout.footerHelpAbout')}</NavLink>
                 </li>
                 <li>
-                  <a href={path('/login')}>{t('layout.footerHelpLogin')}</a>
+                  <Link to={marketingLoginPath(path)}>{t('layout.footerHelpLogin')}</Link>
                 </li>
               </ul>
             </div>

@@ -1,6 +1,7 @@
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { AuthCheckingScreen } from '../auth/AuthCheckingScreen'
 import { useAuthSessionGate } from '../auth/useAuthSessionGate'
+import { appendPartnerAttributionToLoginPath } from '../marketing/partnerAttribution'
 import CabinetApp from './App'
 import { CabinetDataProvider } from './api/CabinetDataProvider'
 import './styles/global.css'
@@ -16,7 +17,8 @@ export function CabinetRoute() {
 
   if (session === 'anonymous') {
     const next = encodeURIComponent(location.pathname + location.search)
-    return <Navigate to={`/login?next=${next}`} replace />
+    const loginPath = appendPartnerAttributionToLoginPath(`/login?next=${next}`)
+    return <Navigate to={loginPath} replace />
   }
 
   return (

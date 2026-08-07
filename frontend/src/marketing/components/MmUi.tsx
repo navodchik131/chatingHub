@@ -2,7 +2,8 @@ import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { useMarketingPath } from '../i18n/useMarketingPath'
 import { stripMarketingLocalePrefix } from '../i18n/marketingLocale'
-import { isWorkspaceAuthPath, resolveWorkspaceUrl, WORKSPACE_URL } from '../workspaceEntry'
+import { marketingLoginPath } from '../partnerAttribution'
+import { resolveWorkspaceUrl, WORKSPACE_URL } from '../workspaceEntry'
 
 export function MmContainer({ children, className = '' }: { children: ReactNode; className?: string }) {
   return <div className={`mm-container ${className}`.trim()}>{children}</div>
@@ -27,16 +28,24 @@ export function MmButton({ children, variant = 'primary', size = 'md', to, href,
   const { path } = useMarketingPath()
   const cls = `mm-btn mm-btn--${variant} mm-btn--${size} ${className}`.trim()
   const icon = variant === 'primary' && size !== 'sm' ? <MmArrowRight /> : null
-  const skipLocalePath =
-    Boolean(to?.startsWith('/workspace')) || Boolean(to && isWorkspaceAuthPath(to))
+  const skipLocalePath = Boolean(to?.startsWith('/workspace'))
   const toResolved =
     to && to.startsWith('/') && !skipLocalePath
       ? path(stripMarketingLocalePrefix(to))
       : to
-  if (
-    toResolved?.startsWith('/workspace') ||
-    (toResolved && isWorkspaceAuthPath(toResolved))
-  ) {
+  const loginPath =
+    toResolved && stripMarketingLocalePrefix(toResolved.split('?')[0] || '') === '/login'
+      ? marketingLoginPath(path)
+      : null
+  if (loginPath) {
+    return (
+      <Link to={loginPath} className={cls}>
+        {children}
+        {icon}
+      </Link>
+    )
+  }
+  if (toResolved?.startsWith('/workspace')) {
     const workspaceHref =
       toResolved?.startsWith('/workspace') && toResolved !== '/workspace'
         ? resolveWorkspaceUrl(toResolved)

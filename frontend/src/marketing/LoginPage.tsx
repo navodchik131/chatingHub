@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { AuthCheckingScreen } from '../auth/AuthCheckingScreen'
 import { useAuthSessionGate } from '../auth/useAuthSessionGate'
 import { AuthPanel } from '../AuthPanel'
+import { mergePartnerAttribution } from './partnerAttribution'
 import '../styles/auth-ui.css'
 
 function safeNext(raw: string | null): string {
@@ -24,8 +25,9 @@ export function LoginPage() {
   const [params] = useSearchParams()
   const next = safeNext(params.get('next'))
   const referralCode = params.get('ref') || params.get('referral') || undefined
-  const partnerSlug = params.get('pref') || params.get('partner') || undefined
-  const partnerSourceTag = params.get('src') || undefined
+  const partnerAtt = mergePartnerAttribution(params)
+  const partnerSlug = params.get('pref') || params.get('partner') || partnerAtt.pref || undefined
+  const partnerSourceTag = params.get('src') || partnerAtt.src || undefined
   const session = useAuthSessionGate()
 
   useEffect(() => {
