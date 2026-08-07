@@ -88,6 +88,7 @@ export default function Partner() {
 
   const analytics = data?.analytics || {};
   const links = analytics.links || [];
+  const baseLinkStats = analytics.base_link || { clicks: 0, registrations: 0, paying_users: 0 };
   const slug = data?.partner_slug || '';
   const baseLink = data?.base_link || '';
 
@@ -103,11 +104,11 @@ export default function Partner() {
   }, [baseLink]);
 
   const heroPick = heroLink === 'all' ? null : links.find((l) => l.tag === heroLink);
-  const heroTotals = links.reduce((a, l) => ({
-    clicks: a.clicks + (l.clicks || 0),
-    regs: a.regs + (l.registrations || 0),
-    paid: a.paid + (l.paying_users || 0),
-  }), { clicks: analytics.total_clicks || 0, regs: analytics.referred_total || 0, paid: analytics.subscribed_count || 0 });
+  const heroTotals = {
+    clicks: baseLinkStats.clicks || 0,
+    regs: baseLinkStats.registrations || 0,
+    paid: baseLinkStats.paying_users || 0,
+  };
   const heroScope = heroPick
     ? { clicks: heroPick.clicks, regs: heroPick.registrations, paid: heroPick.paying_users }
     : heroTotals;

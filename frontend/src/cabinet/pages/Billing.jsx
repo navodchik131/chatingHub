@@ -72,6 +72,7 @@ export default function Billing() {
   const demoGrant = demoGenerationsGrant(me);
   const demoLabel = formatDemoCounterLong(lang, demoRemaining, demoGrant);
   const planName = me?.plan_display_name || me?.plan_tier || '—';
+  const subscriptionActive = String(me?.subscription_status || '').toLowerCase() === 'active';
   const usageBars = mapUsageBars(me, lang);
   const historyRows = mapCreditHistory(creditHistory, lang);
   const packs = (billingPlans?.items || [])
@@ -125,10 +126,10 @@ export default function Billing() {
           <Eyebrow size={9} style={{ marginBottom: 10 }}>{t.currentPlan}</Eyebrow>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
             <span style={{ fontFamily: font.display, fontWeight: 600, fontSize: 18 }}>{planName}</span>
-            <StatusChip tone="active">{t.active}</StatusChip>
+            <StatusChip tone={subscriptionActive ? 'active' : 'warn'}>{subscriptionActive ? t.active : (lang === 'ru' ? 'НЕТ ПОДПИСКИ' : 'NO SUB')}</StatusChip>
           </div>
           <div style={{ fontSize: 11.5, color: color.textDim, marginBottom: 14 }}>
-            {me?.subscription_expires_at ? `${t.until} ${new Date(me.subscription_expires_at).toLocaleDateString(lang === 'ru' ? 'ru-RU' : 'en-GB')}` : '—'}
+            {me?.subscription_period_end ? `${t.until} ${new Date(me.subscription_period_end).toLocaleDateString(lang === 'ru' ? 'ru-RU' : 'en-GB')}` : '—'}
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {usageBars.map((u) => (

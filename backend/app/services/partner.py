@@ -21,6 +21,7 @@ from app.services.referral import REFERRER_REWARD_KIND
 log = logging.getLogger(__name__)
 
 PARTNER_COMMISSION_KIND = "partner_commission"
+PARTNER_BASE_LINK_TAG = "_base"
 VALID_DESTS = frozenset({"home", "pricing", "studio", "chats"})
 
 DEST_PATHS = {
@@ -96,6 +97,22 @@ async def find_partner_by_slug(session: AsyncSession, slug: str) -> User | None:
     return (await session.execute(stmt)).scalar_one_or_none()
 
 
+async def ensure_partner_base_link(session: AsyncSession, partner_id: int) -> PartnerLink:
+    link = await get_partner_link(session, partner_id=partner_id, tag=PARTNER_BASE_LINK_TAG)
+    if link is not None:
+        return link
+    link = PartnerLink(
+        partner_user_id=partner_id,
+        tag=PARTNER_BASE_LINK_TAG,
+        note="",
+        dest="home",
+        clicks=0,
+    )
+    session.add(link)
+    await session.flush()
+    return link
+
+
 async def get_partner_link(
     session: AsyncSession, *, partner_id: int, tag: str
 ) -> PartnerLink | None:
@@ -132,6 +149,9 @@ async def apply_partner_referral_on_signup(
         link = await get_partner_link(session, partner_id=partner.id, tag=tag)
         if link is not None:
             new_owner.referred_by_partner_link_id = link.id
+    else:
+        base_link = await ensure_partner_base_link(session, partner.id)
+        new_owner.referred_by_partner_link_id = base_link.id
 
     await session.flush()
     return partner.id
@@ -144,9 +164,10 @@ async def record_partner_link_click(
     source_tag: str | None,
 ) -> None:
     tag = normalize_partner_tag(source_tag or "")
-    if not tag:
-        return
-    link = await get_partner_link(session, partner_id=partner.id, tag=tag)
+    if tag:
+        link = await get_partner_link(session, partner_id=partner.id, tag=tag)
+    else:
+        link = await ensure_partner_base_link(session, partner.id)
     if link is None:
         return
     link.clicks = int(link.clicks or 0) + 1
@@ -325,6 +346,8 @@ async def create_partner_link(
     t = normalize_partner_tag(tag)
     if not t:
         raise ValueError("invalid tag")
+    if t == PARTNER_BASE_LINK_TAG:
+        raise ValueError("reserved tag")
     d = dest if dest in VALID_DESTS else "home"
     existing = await get_partner_link(session, partner_id=partner_id, tag=t)
     if existing:
@@ -562,7 +585,11 @@ async def partner_analytics(session: AsyncSession, partner_id: int) -> dict:
     ).scalars().all()
 
     link_stats: list[dict] = []
+    tagged_regs_sum = 0
+    tagged_paid_sum = 0
     for link in links:
+        if link.tag == PARTNER_BASE_LINK_TAG:
+            continue
         regs = int(
             await session.scalar(
                 select(func.count()).select_from(User).where(
@@ -589,6 +616,8 @@ async def partner_analytics(session: AsyncSession, partner_id: int) -> dict:
             )
             or 0
         )
+        tagged_regs_sum += regs
+        tagged_paid_sum += paid_users
         link_stats.append(
             {
                 "id": link.id,
@@ -601,6 +630,15 @@ async def partner_analytics(session: AsyncSession, partner_id: int) -> dict:
                 "earned_kopecks": earned,
             }
         )
+
+    base_link_row = await ensure_partner_base_link(session, partner_id)
+    base_regs = max(0, referred_total - tagged_regs_sum)
+    base_paid = max(0, subscribed - tagged_paid_sum)
+    base_link_stats = {
+        "clicks": int(base_link_row.clicks or 0),
+        "registrations": base_regs,
+        "paying_users": base_paid,
+    }
 
     top_clients: list[dict] = []
     top_rows = (
@@ -653,7 +691,7 @@ async def partner_analytics(session: AsyncSession, partner_id: int) -> dict:
             }
         )
 
-    total_clicks = sum(int(l.clicks or 0) for l in links)
+    total_clicks = int(base_link_row.clicks or 0) + sum(int(l["clicks"]) for l in link_stats)
 
     return {
         "referred_total": referred_total,
@@ -665,6 +703,7 @@ async def partner_analytics(session: AsyncSession, partner_id: int) -> dict:
         "referred_prev_month": referred_prev,
         "avg_payment_kopecks": avg_payment,
         "total_clicks": total_clicks,
+        "base_link": base_link_stats,
         "chart": chart,
         "links": link_stats,
         "top_clients": top_clients,

@@ -285,12 +285,13 @@ export function mapIntegrationCurrent(platformId, integrations, models, lang) {
 }
 
 export function mapUsageBars(me, lang) {
-  const lim = me?.limits || {}
-  const usedUsers = me?.team_members_count ?? 0
+  const usage = me?.plan_usage || {}
+  const lim = usage.limits || {}
+  const usedUsers = usage.users ?? 0
   const maxUsers = lim.max_users ?? 1
-  const usedModels = me?.models_count ?? 0
+  const usedModels = usage.models ?? 0
   const maxModels = lim.max_models ?? 1
-  const dialogs = me?.dialogs_this_month ?? 0
+  const dialogs = usage.dialogs_this_month ?? 0
   const maxDialogs = lim.max_dialogs_per_month
   const pct = (used, max) => (max > 0 ? Math.min(100, Math.round((used / max) * 100)) : 0)
   return [

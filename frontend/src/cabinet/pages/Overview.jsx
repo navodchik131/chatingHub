@@ -131,7 +131,7 @@ export default function Overview() {
             </span>
           </div>
           <div style={{ fontSize: 11.5, color: color.textDim, marginTop: 6 }}>
-            {me?.subscription_expires_at ? `${t.until} ${new Date(me.subscription_expires_at).toLocaleDateString(lang === 'ru' ? 'ru-RU' : 'en-GB')}` : '—'}
+            {me?.subscription_period_end ? `${t.until} ${new Date(me.subscription_period_end).toLocaleDateString(lang === 'ru' ? 'ru-RU' : 'en-GB')}` : '—'}
           </div>
         </KpiCard>
 
