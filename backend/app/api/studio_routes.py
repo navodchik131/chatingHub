@@ -6278,11 +6278,13 @@ async def _studio_job_execute_motion_render_video(
             raise RuntimeError("Не удалось подготовить URL первого кадра")
         n_start = 1
 
+    # prompt-only: первый кадр в reference_images (@Image1) + T2V, не отдельный I2V-endpoint
     use_seedance_i2v = (
         not mv_id
         and ff_url
         and prompt.strip()
-        and (prompt_only_mode or video_provider == "seedance_i2v")
+        and video_provider == "seedance_i2v"
+        and not prompt_only_mode
     )
 
     if outfit_gid is not None:
@@ -6698,6 +6700,8 @@ async def _studio_job_execute_motion_render_video(
                         "Добавьте снимок «Лицо / идентичность» в кабинете модели "
                         "или сгенерируйте/выберите первый кадр."
                     )
+            elif prompt_only_mode and ff_url:
+                model_imgs = filter_model_images_for_seedance_motion_swap(list(sm.images))
             else:
                 model_imgs = filter_model_images_for_seedance_video(
                     list(sm.images),

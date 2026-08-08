@@ -98,6 +98,12 @@ export default function Video() {
   const engineModels = enginesForNsfw(s.contentMode === 'nsfw', cabinet.genModels);
   const activeEngine = engineModels.find((m) => m.id === s.aiModel) || engineModels[0];
   const ffPreviewUrl = cabinet.firstFrameUrl
+    || (() => {
+      const pickId = s.carouselPickId ?? cabinet.firstFrameGenId
+      if (pickId == null) return ''
+      const hit = (cabinet.archiveImages || []).find((x) => Number(x.id) === Number(pickId))
+      return hit ? archiveThumbUrl(hit) : ''
+    })()
     || cabinet.uploadPreviewUrls?.['motion-frame']
     || '';
   const ffRatio = s.vidFormat || cabinet.selectedAspect || '9:16';
@@ -417,7 +423,7 @@ export default function Video() {
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 5, marginTop: 8 }}>
                   {(cabinet.archiveImages || []).slice(0, 8).map((item, i) => {
                     const thumb = archiveThumbUrl(item);
-                    const picked = s.carouselPickId === item.id;
+                    const picked = Number(s.carouselPickId ?? cabinet.firstFrameGenId) === Number(item.id);
                     return (
                       <Hoverable
                         key={item.id || i}
@@ -428,6 +434,7 @@ export default function Video() {
                         }}
                         hover={{ borderColor: 'rgba(215,244,82,.5)' }}
                         onClick={() => {
+                          cabinet.pickFirstFrameFromArchive(item);
                           setS({ carouselPickId: item.id });
                           cabinet.setUploadFile('motion-frame', null);
                         }}
@@ -588,6 +595,9 @@ export default function Video() {
                     borderRadius: 12, padding: 16,
                     display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, cursor: 'pointer',
                     ...refUploadStyle(Boolean(cabinet.uploadFiles['motion-frame'] || ffPreviewUrl)).base,
+                    ...(ffPreviewUrl && !cabinet.uploadFiles['motion-frame']
+                      ? { background: `center/cover url(${ffPreviewUrl})`, minHeight: 140 }
+                      : {}),
                   }}
                   hover={refUploadStyle(Boolean(cabinet.uploadFiles['motion-frame'] || ffPreviewUrl)).hover}
                   onClick={() => frameRef.current?.click()}
@@ -603,7 +613,7 @@ export default function Video() {
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 6, width: '100%' }}>
                       {(cabinet.archiveImages || []).slice(0, 4).map((item, i) => {
                         const thumb = archiveThumbUrl(item);
-                        const picked = s.carouselPickId === item.id;
+                        const picked = Number(s.carouselPickId ?? cabinet.firstFrameGenId) === Number(item.id);
                         const pickSt = refThumbStyle(picked);
                         return (
                           <Hoverable
@@ -616,6 +626,7 @@ export default function Video() {
                             }}
                             hover={pickSt.hover}
                             onClick={() => {
+                              cabinet.pickFirstFrameFromArchive(item);
                               setS({ carouselPickId: item.id });
                               cabinet.setUploadFile('motion-frame', null);
                             }}

@@ -1067,6 +1067,14 @@ export function CabinetDataProvider({ children }) {
     [selectedModelId, selectedAspect, uploadFiles, slotArchivePicks, archiveImages, models, me?.workflow_demo_limited, me, refreshArchivePending],
   )
 
+  const pickFirstFrameFromArchive = useCallback((item) => {
+    const id = item?.id != null ? Number(item.id) : null
+    if (!id || !Number.isFinite(id)) return
+    setFirstFrameGenId(id)
+    const thumb = actions.archiveThumbUrl(item)
+    if (thumb) setFirstFrameUrl(thumb)
+  }, [])
+
   const generateFirstFrame = useCallback(
     async (appState, description) => {
       const effState = effectiveStudioState(appState, me)
@@ -1118,7 +1126,11 @@ export function CabinetDataProvider({ children }) {
         setError('Опишите движение')
         return
       }
-      let ffGenId = appState.carouselPickId || firstFrameGenId
+      let ffGenId = appState.carouselPickId ?? firstFrameGenId
+      if (ffGenId != null) {
+        const n = Number(ffGenId)
+        ffGenId = Number.isFinite(n) ? n : null
+      }
       if (promptMode && !ffGenId && !uploadFiles['motion-frame']) {
         setError('Загрузите или выберите первый кадр')
         return
@@ -1647,6 +1659,7 @@ export function CabinetDataProvider({ children }) {
       deleteSnippet,
       generateImages,
       generateFirstFrame,
+      pickFirstFrameFromArchive,
       generateVideo,
       uploadDrivingVideo,
       createCharacter,
@@ -1758,6 +1771,7 @@ export function CabinetDataProvider({ children }) {
       deleteSnippet,
       generateImages,
       generateFirstFrame,
+      pickFirstFrameFromArchive,
       generateVideo,
       uploadDrivingVideo,
       createCharacter,
