@@ -9,6 +9,7 @@ from PIL import Image, ImageDraw
 
 from app.services.studio_eye_liveness import (
     build_eye_region_mask_png,
+    inpaint_edit_is_full_frame,
     should_run_auto_eye_inpaint,
 )
 
@@ -68,3 +69,19 @@ def test_build_eye_region_mask_returns_png() -> None:
 def test_build_eye_region_mask_rejects_tiny() -> None:
     raw = _solid_jpeg(64, 64)
     assert build_eye_region_mask_png(raw) is None
+
+
+def test_inpaint_edit_rejects_eye_crop() -> None:
+    full = _solid_jpeg(720, 1280)
+    crop_buf = BytesIO()
+    Image.new("RGB", (256, 256), (120, 90, 80)).save(crop_buf, format="JPEG")
+    crop = crop_buf.getvalue()
+    assert not inpaint_edit_is_full_frame(full, crop)
+
+
+def test_inpaint_edit_accepts_matching_size() -> None:
+    full = _solid_jpeg(720, 1280)
+    same_buf = BytesIO()
+    Image.new("RGB", (720, 1280), (120, 90, 80)).save(same_buf, format="JPEG")
+    same = same_buf.getvalue()
+    assert inpaint_edit_is_full_frame(full, same)

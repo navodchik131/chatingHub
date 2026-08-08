@@ -168,6 +168,51 @@ def build_eye_region_mask_png(image_bytes: bytes) -> bytes | None:
     return buf.getvalue()
 
 
+def _image_rgb_size(image_bytes: bytes) -> tuple[int, int]:
+    im = ImageOps.exif_transpose(Image.open(BytesIO(image_bytes))).convert("RGB")
+    return im.size
+
+
+def inpaint_edit_is_full_frame(
+    original_bytes: bytes,
+    edited_bytes: bytes,
+    *,
+    min_side_ratio: float = 0.85,
+    max_aspect_drift: float = 0.08,
+) -> bool:
+    """
+    Z-Image иногда отдаёт только кроп маски (глаза), а не полный кадр.
+    Такой результат нельзя подменять финальной генерации.
+    """
+    ow, oh = _image_rgb_size(original_bytes)
+    ew, eh = _image_rgb_size(edited_bytes)
+    if ow < 1 or oh < 1 or ew < 1 or eh < 1:
+        return False
+    if ew < ow * min_side_ratio or eh < oh * min_side_ratio:
+        return False
+    orig_ar = ow / oh
+    edit_ar = ew / eh
+    if abs(orig_ar - edit_ar) / max(orig_ar, 1e-6) > max_aspect_drift:
+        return False
+    return True
+
+
+def blend_eye_inpaint_into_full_frame(
+    original_bytes: bytes,
+    edited_bytes: bytes,
+    aligned_mask_bytes: bytes,
+    *,
+    feather_radius: float,
+) -> bytes:
+    """Вклеивает правку глаз обратно в исходный полный кадр."""
+    return composite_fullframe_edit_preserving_unmasked(
+        original_bytes,
+        edited_bytes,
+        aligned_mask_bytes,
+        feather_radius=feather_radius,
+    )
+
+
 async def _download_image_bytes(url: str) -> bytes | None:
     u = (url or "").strip()
     if not u:
@@ -248,37 +293,54 @@ async def apply_auto_eye_liveness_inpaint(
 
     out_url = (ws_res.url or "").strip()
     if not out_url:
-        return ws_res
+        log.warning("eye inpaint: empty provider URL — keeping original")
+        return None
 
     edited = await _download_image_bytes(out_url)
     if not edited:
-        return ws_res
+        log.warning("eye inpaint: could not download provider output — keeping original")
+        return None
+
+    is_full_frame = await anyio.to_thread.run_sync(
+        inpaint_edit_is_full_frame,
+        raw,
+        edited,
+    )
+    if not is_full_frame:
+        ew, eh = await anyio.to_thread.run_sync(_image_rgb_size, edited)
+        ow, oh = await anyio.to_thread.run_sync(_image_rgb_size, raw)
+        log.warning(
+            "eye inpaint: provider returned crop/wrong geometry edited=%sx%s original=%sx%s — keeping original",
+            ew,
+            eh,
+            ow,
+            oh,
+        )
+        return None
 
     feather = (
         settings.studio_eye_inpaint_blend_feather_radius
         if feather_radius is None
         else feather_radius
     )
-    if feather > 0:
-        try:
-            blended = await anyio.to_thread.run_sync(
-                composite_fullframe_edit_preserving_unmasked,
-                raw,
-                edited,
-                aligned_mask,
-                feather_radius=feather,
-            )
-            blended_url = await wavespeed_upload_image_bytes(
-                api_key=api_key,
-                data=blended,
-                filename="eye_inpaint_out.jpg",
-                content_type="image/jpeg",
-            )
-            return WaveSpeedImageResult(url=blended_url, task_id=ws_res.task_id)
-        except Exception as e:
-            log.warning("eye inpaint blend failed, using raw inpaint URL: %s", e)
-
-    return ws_res
+    try:
+        blended = await anyio.to_thread.run_sync(
+            blend_eye_inpaint_into_full_frame,
+            raw,
+            edited,
+            aligned_mask,
+            feather_radius=max(float(feather), 0.0),
+        )
+        blended_url = await wavespeed_upload_image_bytes(
+            api_key=api_key,
+            data=blended,
+            filename="eye_inpaint_out.jpg",
+            content_type="image/jpeg",
+        )
+        return WaveSpeedImageResult(url=blended_url, task_id=ws_res.task_id)
+    except Exception as e:
+        log.warning("eye inpaint blend failed — keeping original: %s", e)
+        return None
 
 
 def eye_inpaint_billing_meta(applied: bool) -> dict[str, Any]:
