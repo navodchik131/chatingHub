@@ -740,6 +740,19 @@ export default function Video() {
                 ))}
               </div>
             </div>
+            <div
+              style={{
+                border: `1px dashed rgba(251,191,36,.5)`,
+                borderRadius: 10,
+                padding: '10px 12px',
+                background: 'rgba(251,191,36,.07)',
+                fontSize: 12,
+                lineHeight: 1.5,
+                color: color.textDim,
+              }}
+            >
+              {t.vidRefSoundMusicHint}
+            </div>
             <div>
               <Eyebrow size={9} spacing="1.4px" style={{ marginBottom: 7 }}>{t.vidRefSound}</Eyebrow>
               <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
