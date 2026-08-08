@@ -135,12 +135,12 @@ async def _estimate_boardstory_model_image_count(
     actor: User,
     send_video_reference: bool = True,
 ) -> int:
-    from app.services.studio_seedance_t2v import filter_model_images_for_seedance_video_face_only
+    from app.services.studio_seedance_t2v import filter_model_images_for_seedance_motion_swap
     from app.services.workspace_model_access import require_studio_model_access
 
     sm = await require_studio_model_access(session, actor, model_id, load_images=True)
     if send_video_reference:
-        return len(filter_model_images_for_seedance_video_face_only(list(sm.images)))
+        return len(filter_model_images_for_seedance_motion_swap(list(sm.images)))
     return len(filter_model_images_for_boardstory(list(sm.images)))
 
 

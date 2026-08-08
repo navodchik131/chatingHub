@@ -282,11 +282,14 @@ def test_assemble_reference_prompt_binds_refs_not_invented_scene():
 def test_assemble_reference_prompt_motion_video_swap_short():
     p = assemble_seedance_t2v_reference_prompt(
         n_start_frame=1,
-        n_model_images=1,
+        n_model_images=2,
         n_motion_videos=1,
     )
     assert "Replace the person in @Video1" in p
     assert "@Image1 is frame 0" in p
+    assert "@Image2" in p
+    assert "@Image3" in p
+    assert "not character identity" in p.lower()
     assert "@Video1" in p
     assert "No captions, watermarks or logos" in p
     assert "замени персонажа" not in p.lower()
@@ -301,6 +304,49 @@ def test_build_seedance_motion_video_swap_prompt_includes_guide_blocks():
     assert "@Image1 defines all appearance" in p
     assert "No captions, watermarks or logos" in p
     assert "Slow turn toward camera." in p
+
+
+def test_build_seedance_motion_video_swap_prompt_with_opening_and_identity():
+    from app.services.studio_seedance_t2v import build_seedance_motion_video_swap_prompt
+
+    p = build_seedance_motion_video_swap_prompt(
+        n_start_frame=1,
+        n_model_images=2,
+    )
+    assert "@Image1 is frame 0" in p
+    assert "@Image2" in p
+    assert "@Image3" in p
+    assert "not character identity" in p.lower()
+    assert "Character likeness must match these references, not @Image1" in p
+    assert "@Video1 defines motion only" in p
+
+
+def test_build_seedance_motion_video_swap_prompt_identity_only_multi_ref():
+    from app.services.studio_seedance_t2v import build_seedance_motion_video_swap_prompt
+
+    p = build_seedance_motion_video_swap_prompt(n_start_frame=0, n_model_images=2)
+    assert "@Image1–@Image2" in p
+    assert "@Image1 defines all appearance" not in p
+    assert "Replace the person in @Video1" in p
+
+
+def test_filter_model_images_for_seedance_motion_swap():
+    from app.services.studio_seedance_t2v import filter_model_images_for_seedance_motion_swap
+
+    imgs = [
+        UserStudioModelImage(id=1, image_kind="turnaround"),
+        UserStudioModelImage(id=2, image_kind="face"),
+        UserStudioModelImage(id=3, image_kind="body"),
+    ]
+    out = filter_model_images_for_seedance_motion_swap(imgs)
+    assert [im.image_kind for im in out] == ["face", "turnaround"]
+
+    no_turn = [
+        UserStudioModelImage(id=1, image_kind="face"),
+        UserStudioModelImage(id=2, image_kind="body"),
+    ]
+    out2 = filter_model_images_for_seedance_motion_swap(no_turn)
+    assert [im.image_kind for im in out2] == ["face", "body"]
 
 
 def test_append_seedance_quality_lock_dedupes():

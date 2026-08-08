@@ -511,6 +511,8 @@ def finalize_boardstory_t2v_prompt(
     *,
     layout: BoardStoryReferenceLayout | None = None,
     n_motion_videos: int = 0,
+    n_start_frame: int = 0,
+    n_model_images: int = 0,
     max_chars: int | None = None,
 ) -> str:
     """Финализация BoardStory-промпта перед Seedance T2V."""
@@ -520,7 +522,12 @@ def finalize_boardstory_t2v_prompt(
     )
 
     if n_motion_videos > 0:
-        return build_seedance_motion_video_swap_prompt(max_chars=max_chars)
+        n_model = n_model_images or (layout.n_model_images if layout else 0)
+        return build_seedance_motion_video_swap_prompt(
+            max_chars=max_chars,
+            n_start_frame=n_start_frame,
+            n_model_images=n_model,
+        )
 
     body = (prompt or "").strip()
     if not body:
@@ -570,8 +577,13 @@ def build_boardstory_opening_frame_t2v_prompt(
     """Seedance T2V с opening still + motion ref — короткий swap-промпт."""
     from app.services.studio_seedance_t2v import build_seedance_motion_video_swap_prompt
 
-    _ = (layout, n_motion_videos, negative)
-    return build_seedance_motion_video_swap_prompt(user_notes, max_chars=max_chars)
+    _ = (n_motion_videos, negative)
+    return build_seedance_motion_video_swap_prompt(
+        user_notes,
+        n_start_frame=1,
+        n_model_images=layout.n_model_images,
+        max_chars=max_chars,
+    )
 
 
 def build_boardstory_reference_urls(

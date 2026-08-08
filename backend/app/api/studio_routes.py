@@ -241,6 +241,7 @@ from app.services.studio_seedance_t2v import (
     build_seedance_t2v_prompt,
     build_seedance_motion_video_swap_prompt,
     filter_model_images_for_seedance_video,
+    filter_model_images_for_seedance_motion_swap,
     filter_model_images_for_seedance_video_face_only,
     generation_still_public_url,
     model_reference_public_urls,
@@ -6189,14 +6190,13 @@ async def _studio_job_execute_motion_render_video(
     skip_model_ref_check = video_provider == "seedance_i2v" or prompt_only_mode
     if video_provider != "grok_imagine_i2v" and not skip_model_ref_check:
         if mv_id and send_video_reference:
-            if first_frame_gen_id_early is None:
-                model_ref_ok = filter_model_images_for_seedance_video_face_only(list(sm.images))
-                if not model_ref_ok:
-                    raise RuntimeError(
-                        "У модели нет фото лица для swap по видео. "
-                        "Добавьте снимок «Лицо / идентичность» в кабинете модели "
-                        "или сгенерируйте/выберите первый кадр."
-                    )
+            model_ref_ok = filter_model_images_for_seedance_motion_swap(list(sm.images))
+            if not model_ref_ok and first_frame_gen_id_early is None:
+                raise RuntimeError(
+                    "У модели нет фото лица для swap по видео. "
+                    "Добавьте снимок «Лицо / идентичность» в кабинете модели "
+                    "или сгенерируйте/выберите первый кадр."
+                )
         else:
             model_ref_ok = (
                 filter_model_images_for_boardstory(list(sm.images))
@@ -6529,7 +6529,7 @@ async def _studio_job_execute_motion_render_video(
                 n_start = 0
             else:
                 if motion_vid_url and send_video_reference:
-                    model_imgs = filter_model_images_for_seedance_video_face_only(list(sm.images))
+                    model_imgs = filter_model_images_for_seedance_motion_swap(list(sm.images))
                     if not model_imgs:
                         raise RuntimeError(
                             "У модели нет фото лица для swap по видео. "
@@ -6649,8 +6649,11 @@ async def _studio_job_execute_motion_render_video(
                 )
 
                 if ref_videos:
+                    n_start_bs = 1 if opening_still_url else 0
                     seed_prompt = build_seedance_motion_video_swap_prompt(
                         prompt.strip(),
+                        n_start_frame=n_start_bs,
+                        n_model_images=n_model,
                     )
                     prompt_source = "motion_video_swap"
                 elif opening_still_url:
@@ -6688,16 +6691,13 @@ async def _studio_job_execute_motion_render_video(
                     sheet_gen_id = None
 
             if motion_vid_url and send_video_reference:
-                if ff_url:
-                    model_imgs = []
-                else:
-                    model_imgs = filter_model_images_for_seedance_video_face_only(list(sm.images))
-                    if not model_imgs:
-                        raise RuntimeError(
-                            "У модели нет фото лица для swap по видео. "
-                            "Добавьте снимок «Лицо / идентичность» в кабинете модели "
-                            "или сгенерируйте/выберите первый кадр."
-                        )
+                model_imgs = filter_model_images_for_seedance_motion_swap(list(sm.images))
+                if not model_imgs and not ff_url:
+                    raise RuntimeError(
+                        "У модели нет фото лица для swap по видео. "
+                        "Добавьте снимок «Лицо / идентичность» в кабинете модели "
+                        "или сгенерируйте/выберите первый кадр."
+                    )
             else:
                 model_imgs = filter_model_images_for_seedance_video(
                     list(sm.images),

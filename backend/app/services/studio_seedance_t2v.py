@@ -169,6 +169,39 @@ def filter_model_images_for_seedance_video_face_only(
     return []
 
 
+def filter_model_images_for_seedance_motion_swap(
+    imgs: list[UserStudioModelImage],
+) -> list[UserStudioModelImage]:
+    """
+    Motion control swap: face + turnaround (до 2 refs).
+    Если развёртки нет — face + body. Порядок: face, затем turnaround/body.
+    """
+    by_kind: dict[str, UserStudioModelImage] = {}
+    for im in imgs:
+        k = (im.image_kind or "other").lower()
+        if k in ("face", "turnaround", "body") and k not in by_kind:
+            by_kind[k] = im
+
+    picked: list[UserStudioModelImage] = []
+    if "face" in by_kind:
+        picked.append(by_kind["face"])
+    if "turnaround" in by_kind:
+        picked.append(by_kind["turnaround"])
+    elif "body" in by_kind:
+        picked.append(by_kind["body"])
+
+    if picked:
+        return picked[:2]
+
+    for im in sort_model_images_for_seedance_t2v(imgs):
+        if (im.image_kind or "other").lower() == "face":
+            return [im]
+    for im in sort_model_images_for_seedance_t2v(imgs):
+        if (im.image_kind or "other").lower() == "turnaround":
+            return [im]
+    return []
+
+
 def seedance_motion_camera_line(*, n_motion_videos: int = 1) -> str:
     if n_motion_videos <= 0:
         return ""
@@ -194,13 +227,57 @@ def append_seedance_quality_lock(
     return truncate_seedance_t2v_prompt(combined, max_chars=max_chars)
 
 
+def _motion_swap_prompt_core(
+    *,
+    n_start_frame: int,
+    n_model_images: int,
+) -> str:
+    identity_tags = seedance_model_identity_tag_expr(n_start_frame, n_model_images)
+
+    if n_start_frame > 0 and n_model_images > 0 and identity_tags:
+        return (
+            "@Image1 is frame 0 of this video. The video starts exactly on @Image1 and continues from it.\n"
+            "@Image1 sets opening pose, scene, environment, lighting, wardrobe, and framing at t=0 only — "
+            "not character identity.\n\n"
+            f"Replace the person in @Video1 with the character from {identity_tags}. "
+            "The performer from @Video1 does not appear in the output.\n\n"
+            f"{identity_tags} define face, hair, skin tone, and body proportions for the entire clip — "
+            "locked even when the camera reveals new body areas. "
+            "Character likeness must match these references, not @Image1.\n\n"
+            "@Video1 defines motion only: camera path, framing, cuts, timing, choreography, gestures, speed. "
+            "Reproduce exactly.\n\n"
+            "No captions, watermarks or logos."
+        )
+
+    if n_start_frame == 0 and n_model_images > 1 and identity_tags:
+        return (
+            f"Replace the person in @Video1 with the character from {identity_tags}. "
+            "The performer from @Video1 does not appear in the output.\n\n"
+            f"{identity_tags} define all appearance: face, hair, skin tone, body proportions, outfit, "
+            "and any held object. Locked for the entire clip, including body areas revealed later "
+            "by camera movement.\n\n"
+            "@Video1 defines motion only: camera path, framing, cuts, timing, choreography, gestures, speed. "
+            "Reproduce exactly.\n\n"
+            "No captions, watermarks or logos."
+        )
+
+    return SEEDANCE_MOTION_VIDEO_SWAP_PROMPT
+
+
 def build_seedance_motion_video_swap_prompt(
     user_notes: str | None = None,
     *,
+    n_start_frame: int = 0,
+    n_model_images: int = 0,
     max_chars: int | None = None,
 ) -> str:
-    """Промпт для Seedance T2V motion control: @Image1 = identity, @Video1 = motion only."""
-    parts = [SEEDANCE_MOTION_VIDEO_SWAP_PROMPT]
+    """Промпт для Seedance T2V motion control: opening frame + identity refs + @Video1 motion."""
+    parts = [
+        _motion_swap_prompt_core(
+            n_start_frame=n_start_frame,
+            n_model_images=n_model_images,
+        )
+    ]
     notes = seedance_optional_user_notes(user_notes)
     if notes:
         parts.append(notes)
@@ -526,6 +603,8 @@ def assemble_seedance_t2v_reference_prompt(
     if n_motion_videos > 0:
         return build_seedance_motion_video_swap_prompt(
             user_notes,
+            n_start_frame=n_start_frame,
+            n_model_images=n_model_images,
             max_chars=settings.studio_seedance_t2v_prompt_max_chars,
         )
 
@@ -612,6 +691,8 @@ def assemble_boardstory_seedance_prompt(
     if n_motion_videos > 0:
         return build_seedance_motion_video_swap_prompt(
             user_prompt,
+            n_start_frame=0,
+            n_model_images=n_model_images,
             max_chars=settings.studio_seedance_t2v_prompt_max_chars,
         )
 
@@ -725,7 +806,12 @@ async def build_seedance_t2v_prompt(
     lock_lang = "zh" if settings.studio_seedance_grok_prompt_zh else "en"
 
     if n_motion_videos > 0:
-        p = build_seedance_motion_video_swap_prompt(user_brief, max_chars=lim)
+        p = build_seedance_motion_video_swap_prompt(
+            user_brief,
+            n_start_frame=n_start_frame,
+            n_model_images=n_model_images,
+            max_chars=lim,
+        )
         if remove_face_grid:
             p = append_workflow_face_grid_removal(p, language=lock_lang)
         return (p, "motion_video_swap")
