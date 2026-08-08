@@ -967,6 +967,7 @@ def format_realism_engine_for_prose_prompt(scene_text: str | None = None) -> str
     parts: list[str] = []
     for key in (
         "skin_realism",
+        "eye_realism",
         "photo_realism",
         "hair_realism",
         "color_grading",

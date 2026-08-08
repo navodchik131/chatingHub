@@ -13,7 +13,7 @@ CAMERA_ANGLE: (horizontal: straight-on / three-quarter left or right / profile l
 LENS_AND_PERSPECTIVE: (wide selfie distortion or stretched near arm / normal phone main-lens look / slightly compressed background; mention if foreshortening or strong perspective is obvious)
 SETTING: (room/place, objects, bed/furniture, clutter)
 LIGHT: (direction, hard/soft, color temperature of **light sources** — not the person's skin hue; indoor/outdoor time-of-day feel)
-HEAD_GEOMETRY: (**pose geometry only** — neck, head tilt/yaw, chin pitch, gaze vs lens axis if obvious — mechanical wording only; «the subject»; no ethnicity/face-feature description beyond geometry.)
+HEAD_GEOMETRY: (**pose geometry only** — neck, head tilt/yaw, chin pitch, gaze vs lens axis if obvious — mechanical wording only; «the subject»; no ethnicity/face-feature description beyond geometry. Describe gaze **direction** only — do NOT prescribe vacant stare, dead eyes, or blank model gaze.)
 LIGHT_ON_FORM: (**shadow/highlight layout on anatomy in frame**) Where key catches shoulders, limbs, torso, cheek planes if visible; where shadows pool — reproduce this **exact wrap** when identity skin is substituted.)
 
 Rules:

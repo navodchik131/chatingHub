@@ -55,6 +55,11 @@ _COMPACT_MUST_KEEP = [
 
     # Короткий хвост в КОНЕЦ prose-промпта — у edit-моделей конец весит больше,
     # чем длинный realism_engine в середине после FACE_SWAP-префикса.
+EYE_LIVENESS_CODA = (
+    "Eyes alive — asymmetric catchlights, subtle squint or soft mid-blink, "
+    "moist natural sclera, candid micro-expression; not vacant stare, not glassy doll eyes."
+)
+
 PHONE_CANDID_PHOTO_CODA = (
     "Photoreal phone look — deep focus with background details sharp; "
     "visible skin pores and uneven tone, natural oil sheen where light hits, "
@@ -62,7 +67,8 @@ PHONE_CANDID_PHOTO_CODA = (
     "clipped highlight where sun hits, luminance noise in shadows, "
     "clean natural edge rendering without chromatic fringing or color-split contours, "
     "minor handheld tilt, JPEG compression; "
-    "candid unretouched amateur snapshot."
+    "candid unretouched amateur snapshot. "
+    + EYE_LIVENESS_CODA
 )
 
 _SOFT_DOF_PHRASE_RE = re.compile(

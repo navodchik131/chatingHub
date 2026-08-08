@@ -1,7 +1,7 @@
 {
   "_comment": "CANONICAL — server overwrites model output for this block if present on disk. Keep short: edit models dilute long realism lists.",
   "skin_realism": "visible pores on nose forehead cheeks, uneven tone with redness around nostrils and on elbows, fine vellus hair on cheeks catching light, natural oil sheen on T-zone only, faint under-eye shadows and fine lines, dry patches on lips with gloss only at center, subtle skin creases at neck armpit or belly when posing",
-  "eye_realism": "natural catchlights, detailed iris, moist eyes, slight redness in corners, candid micro-expression, mild facial asymmetry",
+  "eye_realism": "asymmetric catchlights offset from pupil center, subtle natural squint or mid-blink softness, moist sclera with faint inner-corner pink, relaxed orbicular muscle — alive candid gaze, not vacant doll stare or glassy AI eyes",
   "hair_realism": "loose flyaways and breakage catching light, individual strand separation, slight frizz, realistic hair shine not CGI gloss",
   "fabric_realism": "visible weave, wrinkles, creases, lint, casual fabric drape",
   "environment_realism": "lived-in clutter, wall texture readable, dust in light beams, incidental background not art-directed",

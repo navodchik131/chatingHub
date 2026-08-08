@@ -25,6 +25,7 @@ Rules for ---PROMPT---:
 - **Do NOT catalog** every tiny off-crop detail, but DO name major props (mirror, bed, shelves, rug, window) that define the room.
 - **Ban analysis jargon:** no «three-quarter rear angle», «hips raised and back arched», «articulation», «gaze vs lens», «highlight cores», «topology», «falloff».
 - If face is in PROMPT_OMIT: say face turned away / not visible / headless as appropriate — do not invent eyes, smile, or gaze.
+- If face is in PROMPT_MENTION: weave one brief candid micro-moment (soft half-smile, slight squint, mid-blink softness, asymmetric catchlights) — never vacant doll stare or glassy model gaze.
 - If hair is in PROMPT_MENTION: MODEL hair color on visible hair mass only — not a hairstyle essay.
 - **Never** end with instructions about which reference photo to use.
 

@@ -261,6 +261,10 @@ from app.services.studio_workflow_boardstory import (
     workflow_reference_public_url,
 )
 from app.services.studio_boardstory_opening_frame import generate_boardstory_opening_still_url
+from app.services.studio_eye_liveness import (
+    eye_inpaint_billing_meta,
+    maybe_apply_eye_liveness_postpass,
+)
 from app.services.studio_model_bootstrap import (
     MODEL_SHEET_ASPECT_KEY,
     humanize_wavespeed_provider_error,
@@ -4784,6 +4788,27 @@ async def _studio_job_execute_refine_prompt(
                             "в «Сохранённые» и в workflow через минуту."
                         )
 
+    eye_inpaint_applied = False
+    if (
+        generated_image_url
+        and not regional_composed_png
+        and ws_key
+        and not wavespeed_deferred_pending
+    ):
+        face_visible: bool | None = None
+        include_face: bool | None = None
+        if prompt_plan is not None:
+            face_visible = bool(prompt_plan.analysis.face_in_frame)
+            include_face = bool(prompt_plan.visibility.include_face)
+        generated_image_url, eye_inpaint_applied = await maybe_apply_eye_liveness_postpass(
+            api_key=ws_key,
+            source_image_url=generated_image_url,
+            manual_inpaint_mask=bool(mask_bytes),
+            studio_mode=mode_n,
+            face_in_frame=face_visible,
+            include_face=include_face,
+        )
+
     generation_id: int | None = None
     gen_mid = mid
     if used_demo and gen_row is not None:
@@ -4872,6 +4897,7 @@ async def _studio_job_execute_refine_prompt(
                 if mask_bytes
                 else None
             ),
+            **eye_inpaint_billing_meta(eye_inpaint_applied),
         },
     )
     await session.commit()
@@ -5449,6 +5475,14 @@ async def _studio_job_execute_motion_first_frame(
                     str(e),
                     wave_profile=wave_profile_n,
                 )
+
+        if generated_image_url and ws_key:
+            generated_image_url, _eye_applied = await maybe_apply_eye_liveness_postpass(
+                api_key=ws_key,
+                source_image_url=generated_image_url,
+                studio_mode="model",
+                force=True,
+            )
 
         if generated_image_url and gen_row is not None:
             finished_row, cdn_preview = await studio_finish_image_generation(
@@ -7331,6 +7365,14 @@ async def _studio_job_execute_model_bootstrap_face_merge(
     except RuntimeError as e:
         raise RuntimeError(humanize_wavespeed_provider_error(str(e))) from e
 
+    out_ws_url = ws_res.url
+    out_ws_url, _eye_applied = await maybe_apply_eye_liveness_postpass(
+        api_key=ws_key,
+        source_image_url=out_ws_url,
+        studio_mode="model",
+        force=True,
+    )
+
     billing_owner = await resolve_billing_user(session, user)
     billing, cost, used_demo = await prepare_bootstrap_image_billing(
         session,
@@ -7355,7 +7397,7 @@ async def _studio_job_execute_model_bootstrap_face_merge(
         studio_model_id=mid,
         output_aspect=aspect_key,
         refined_prompt=prompt,
-        source_url=ws_res.url,
+        source_url=out_ws_url,
         wavespeed_task_id=ws_res.task_id,
     )
 
@@ -7370,7 +7412,11 @@ async def _studio_job_execute_model_bootstrap_face_merge(
         usage_kind="studio_model_bootstrap_face_merge",
         cost=cost,
         used_demo=used_demo,
-        meta={"studio_model_id": mid, "generation_id": gen_row.id if gen_row else None},
+        meta={
+            "studio_model_id": mid,
+            "generation_id": gen_row.id if gen_row else None,
+            **eye_inpaint_billing_meta(_eye_applied),
+        },
     )
     await session.commit()
 
@@ -7461,6 +7507,14 @@ async def _studio_job_execute_model_bootstrap_body_compose(
     except RuntimeError as e:
         raise RuntimeError(humanize_wavespeed_provider_error(str(e))) from e
 
+    out_ws_url = ws_res.url
+    out_ws_url, _eye_applied = await maybe_apply_eye_liveness_postpass(
+        api_key=ws_key,
+        source_image_url=out_ws_url,
+        studio_mode="model",
+        force=True,
+    )
+
     billing_owner = await resolve_billing_user(session, user)
     billing, cost, used_demo = await prepare_bootstrap_image_billing(
         session,
@@ -7485,7 +7539,7 @@ async def _studio_job_execute_model_bootstrap_body_compose(
         studio_model_id=mid,
         output_aspect=aspect_key,
         refined_prompt=prompt,
-        source_url=ws_res.url,
+        source_url=out_ws_url,
         wavespeed_task_id=ws_res.task_id,
     )
 
@@ -7500,7 +7554,11 @@ async def _studio_job_execute_model_bootstrap_body_compose(
         usage_kind="studio_model_bootstrap_body_compose",
         cost=cost,
         used_demo=used_demo,
-        meta={"studio_model_id": mid, "generation_id": gen_row.id if gen_row else None},
+        meta={
+            "studio_model_id": mid,
+            "generation_id": gen_row.id if gen_row else None,
+            **eye_inpaint_billing_meta(_eye_applied),
+        },
     )
     await session.commit()
 
