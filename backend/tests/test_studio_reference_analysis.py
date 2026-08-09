@@ -222,6 +222,73 @@ def test_sanitize_drops_face_and_meta_when_headless():
     assert "all fours" in low or "bedding" in low
 
 
+def test_sanitize_preserves_model_identity_block() -> None:
+    from app.services.studio_reference_analysis import sanitize_wavespeed_prose_for_visibility
+
+    vis = build_identity_visibility(
+        ReferenceAnalysis(
+            face_in_frame=False,
+            visible_regions=["BACK"],
+            framing_crop="upper back only",
+        )
+    )
+    raw = (
+        "Model identity: Visible regions [BACK]: Build: slender, narrow waist, full bust, wide hips. "
+        "Same person on all visible skin. "
+        "She stands with her back to the window in soft daylight."
+    )
+    out = sanitize_wavespeed_prose_for_visibility(raw, vis)
+    assert "Model identity:" in out
+    assert "narrow waist" in out.lower()
+    assert "back to the window" in out.lower()
+
+
+def test_face_swap_injects_identity_after_sanitize() -> None:
+    from app.services.studio_openai import assemble_wavespeed_image_edit_prompt
+    from app.services.studio_reference_analysis import (
+        ReferenceAnalysis,
+        build_identity_visibility,
+    )
+
+    vis = build_identity_visibility(
+        ReferenceAnalysis(
+            face_in_frame=False,
+            head_partial=True,
+            hair_in_frame=True,
+            visible_regions=["BACK", "TORSO", "HAIR", "LEGS"],
+            framing_crop="rear view",
+        )
+    )
+    profile = json.dumps(
+        {
+            "model_profile": {
+                "body_type": "slender, ectomorphic, narrow shoulders, waist 60 hips 91",
+                "hair": {"color": "blonde", "length": "long"},
+            }
+        }
+    )
+    prose = (
+        "Subject stands centered in front of a large window. "
+        "Both legs are straight with weight evenly distributed."
+    )
+    out = assemble_wavespeed_image_edit_prompt(
+        prose,
+        studio_mode="face_swap",
+        user_pose_in_api=True,
+        user_pose_is_last=False,
+        lock_model_hairstyle=True,
+        prompt_brief_mode="grok_main_prose",
+        model_profile_text=profile,
+        wave_profile="nsfw",
+        visibility=vis,
+    )
+    low = out.lower()
+    assert "[body_identity_swap" in low
+    assert "model identity:" in low
+    assert "build:" in low or "waist" in low or "slender" in low
+    assert "both legs are straight" in low
+
+
 def test_format_reference_scene():
     text = format_reference_scene_from_analysis(
         ReferenceAnalysis(

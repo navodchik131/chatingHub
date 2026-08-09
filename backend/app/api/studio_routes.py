@@ -3493,11 +3493,13 @@ async def _studio_job_execute_refine_prompt(
 
     sm_loaded: UserStudioModel | None = None
     model_profile_text: str | None = None
+    model_profile_text_full: str | None = None
     if mid is not None:
         sm_loaded = await require_studio_model_access(
             session, user, mid, load_images=True
         )
-        model_profile_text = (sm_loaded.profile_text or "").strip() or None
+        model_profile_text_full = (sm_loaded.profile_text or "").strip() or None
+        model_profile_text = model_profile_text_full
 
     lock_hair_req = _truthy_lock_model_hairstyle(lock_model_hairstyle)
     effective_lock_hairstyle = bool(lock_hair_req) if image_bytes else True
@@ -4465,6 +4467,11 @@ async def _studio_job_execute_refine_prompt(
             if not wavespeed_message:
                 attach_model_urls = False
                 grok_ws_identity: list[UserStudioModelImage] = []
+                _ms_include_face = (
+                    prompt_plan.visibility.include_face
+                    if prompt_plan is not None
+                    else None
+                )
                 if mode_n == "grok_compose":
                     grok_ws_identity = select_grok_compose_wavespeed_identity_images(
                         imgs_for_ws,
@@ -4476,7 +4483,9 @@ async def _studio_job_execute_refine_prompt(
                 elif mode_n == "model_scene":
                     attach_model_urls = bool(
                         select_model_scene_wavespeed_identity_images(
-                            imgs_for_ws, wave_profile=wave_profile_n
+                            imgs_for_ws,
+                            wave_profile=wave_profile_n,
+                            include_face=_ms_include_face,
                         )
                     )
                 elif mode_n == "model":
@@ -4517,7 +4526,9 @@ async def _studio_job_execute_refine_prompt(
                             )
                         else:
                             imgs_ws_order = select_model_scene_wavespeed_identity_images(
-                                imgs_for_ws, wave_profile=wave_profile_n
+                                imgs_for_ws,
+                                wave_profile=wave_profile_n,
+                                include_face=_ms_include_face,
                             )
                     elif mode_n == "model" and not image_bytes:
                         imgs_ws_order = select_prompt_only_wavespeed_identity_images(
@@ -4633,6 +4644,7 @@ async def _studio_job_execute_refine_prompt(
                     lock_model_hairstyle=effective_lock_hairstyle,
                     prompt_brief_mode=prompt_brief_mode,
                     model_profile_text=model_profile_text,
+                    model_profile_text_for_identity=model_profile_text_full,
                     wave_profile=wave_profile_n,
                     reference_scene_description=reference_scene,
                     extra_negative=ws_extra_negative,

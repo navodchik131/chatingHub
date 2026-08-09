@@ -408,6 +408,8 @@ _FORBIDDEN_TERM_GROUPS: dict[str, tuple[str, ...]] = {
     "torso": (" waist", " midsection", " abs", " torso", " stomach", " belly"),
 }
 
+_MODEL_IDENTITY_SENTENCE_RE = re.compile(r"^Model identity:\s", re.I)
+
 
 def sanitize_wavespeed_prose_for_visibility(
     prose: str,
@@ -441,6 +443,9 @@ def sanitize_wavespeed_prose_for_visibility(
     for sentence in parts:
         s = sentence.strip()
         if not s:
+            continue
+        if _MODEL_IDENTITY_SENTENCE_RE.match(s):
+            kept.append(s)
             continue
         low = s.lower()
         if _META_PROSE_RE.search(s):

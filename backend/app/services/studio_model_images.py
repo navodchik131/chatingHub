@@ -146,11 +146,14 @@ def select_model_scene_wavespeed_identity_images(
     *,
     wave_profile: str,
     max_count: int = 6,
+    include_face: bool | None = None,
 ) -> list[UserStudioModelImage]:
     """
-    Режим «Модель + промпт» без bitmap позы: turnaround → face → genitals (NSFW).
-    Character sheet — primary identity (face, hair, clothed silhouette); face ref дополняет likeness.
-    Без развёртки — fallback body → face → genitals.
+    Режим «Модель + промпт» / «Основная» без bitmap позы в WaveSpeed.
+
+    Лицо в кадре: turnaround → face → genitals (NSFW).
+    Спина/без лица: turnaround → body → genitals (NSFW) — face ref не шлём, body держит силуэт.
+    Без развёртки — fallback body → face или body → genitals.
     """
     if not imgs:
         return []
@@ -163,12 +166,21 @@ def select_model_scene_wavespeed_identity_images(
         if k not in by_kind:
             by_kind[k] = im
 
+    face_scope = True if include_face is None else bool(include_face)
+
     if by_kind.get("turnaround"):
-        order: list[str] = ["turnaround", "face"]
+        if face_scope:
+            order: list[str] = ["turnaround", "face"]
+        else:
+            order = ["turnaround", "body"]
+        if wp == "nsfw":
+            order.append("genitals")
+    elif face_scope:
+        order = ["body", "face"]
         if wp == "nsfw":
             order.append("genitals")
     else:
-        order = ["body", "face"]
+        order = ["body"]
         if wp == "nsfw":
             order.append("genitals")
 

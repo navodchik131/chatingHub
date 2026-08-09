@@ -243,6 +243,35 @@ _GROK_MODEL_SCENE_NO_POSE_NANO_PREFIX = (
     "Do not slim the figure toward a generic model silhouette.\n\n"
 )
 
+
+def _grok_model_scene_no_pose_wan_prefix(
+    visibility: "IdentityVisibility | None" = None,
+) -> str:
+    if visibility is not None and not visibility.include_face:
+        return (
+            "One model from attached reference photos. Recreate the scene described below. "
+            "Image 1 (character sheet / turnaround) anchors hair, bust, waist, hip width, thigh volume, and overall build — "
+            "match those volumes on visible anatomy even when the scene pose is athletic or revealing. "
+            "Extra body reference refines back/side silhouette; do not slim toward a generic model silhouette. "
+            "Do NOT turn the subject to show a face or paste facial features from model photos — "
+            "the scene crop does not include a front face.\n\n"
+        )
+    return _GROK_MODEL_SCENE_NO_POSE_WAN_PREFIX
+
+
+def _grok_model_scene_no_pose_nano_prefix(
+    visibility: "IdentityVisibility | None" = None,
+) -> str:
+    if visibility is not None and not visibility.include_face:
+        return (
+            "Attached images = one saved model. Generate the scene described below. "
+            "First image (character sheet / turnaround) anchors hair, bust, waist, hip width, thigh volume, and overall build — "
+            "preserve those volumes on visible anatomy; optional body reference refines back/side silhouette. "
+            "Do not slim toward a generic model silhouette. "
+            "Do NOT invent or paste a front face — the scene crop has no visible face.\n\n"
+        )
+    return _GROK_MODEL_SCENE_NO_POSE_NANO_PREFIX
+
 _GROK_MODEL_SCENE_POSE_LAST_WAN_PREFIX = (
     "Earlier images = ONE saved model (face likeness, hair color, skin tone, body proportions). "
     "Last image = scene/pose donor ONLY — match its pose, camera, framing, room, light, and wardrobe coverage; "
@@ -413,13 +442,13 @@ def finalize_wavespeed_studio_prompt(
         out = _GROK_TEXT_SCENE_WAN_PREFIX.strip() if not p else _GROK_TEXT_SCENE_WAN_PREFIX + p
     elif brief == "grok_main_prose":
         if mode == "model_scene" and not user_image_first:
-            prefix = _GROK_MODEL_SCENE_NO_POSE_WAN_PREFIX
+            prefix = _grok_model_scene_no_pose_wan_prefix(vis)
         else:
             prefix = _GROK_MAIN_PROSE_WAN_PREFIX
         out = prefix.strip() if not p else prefix + p
     elif brief == "deterministic_compose":
         if mode == "model_scene" and not user_image_first:
-            prefix = _GROK_MODEL_SCENE_NO_POSE_WAN_PREFIX
+            prefix = _grok_model_scene_no_pose_wan_prefix(vis)
         else:
             prefix = _GROK_MAIN_PROSE_WAN_PREFIX
         out = prefix.strip() if not p else prefix + p
@@ -569,7 +598,7 @@ def finalize_nano_banana_studio_prompt(
             head = _NANO_BANANA_FACE_SWAP_IDENTITY_PREFIX
             out = head.strip() if not p else head + p
         elif mode == "model_scene" and not user_pose_reference_is_last:
-            head = _GROK_MODEL_SCENE_NO_POSE_NANO_PREFIX
+            head = _grok_model_scene_no_pose_nano_prefix(vis)
             out = head.strip() if not p else head + p
         else:
             out = (
@@ -1678,11 +1707,14 @@ def assemble_wavespeed_image_edit_prompt(
     photo_edit_detail_ref_attached: bool = False,
     workflow_scenario_type: str | None = None,
     location_geometry_block: str | None = None,
+    model_profile_text_for_identity: str | None = None,
 ) -> str:
     """Позитивный промпт для WaveSpeed (без negative-суффикса — API его не поддерживает)."""
     from app.services.studio_prompt_bundle import (
+        _WAVESPEED_PROSE_BRIEF_MODES,
         append_negative_to_wavespeed_prompt,
         append_phone_candid_photo_coda,
+        inject_wavespeed_model_identity,
         prepare_positive_prompt_json,
     )
     from app.services.studio_reference_analysis import IdentityVisibility
@@ -1700,6 +1732,9 @@ def assemble_wavespeed_image_edit_prompt(
         visibility=visibility,
     )
     brief = (prompt_brief_mode or "full").strip().lower()
+    mode = (studio_mode or "model").strip().lower()
+    identity_profile = (model_profile_text_for_identity or model_profile_text or "").strip() or None
+    prose_positive = not (positive or "").lstrip().startswith("{")
     if visibility is not None and brief in (
         "grok_main_prose",
         "deterministic_compose",
@@ -1709,7 +1744,16 @@ def assemble_wavespeed_image_edit_prompt(
         from app.services.studio_reference_analysis import sanitize_wavespeed_prose_for_visibility
 
         positive = sanitize_wavespeed_prose_for_visibility(positive, visibility)
-    mode = (studio_mode or "model").strip().lower()
+    if prose_positive and (
+        brief in _WAVESPEED_PROSE_BRIEF_MODES
+        or mode in ("face_swap", "model_scene", "model", "grok_compose", "no_face")
+    ):
+        positive = inject_wavespeed_model_identity(
+            positive,
+            model_profile_text=identity_profile,
+            visibility=visibility,
+            wavespeed_identity_legend=wavespeed_identity_legend,
+        )
     if (wave_profile or "").strip().lower() == "regular":
         prompt = finalize_nano_banana_studio_prompt(
             positive,

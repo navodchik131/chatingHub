@@ -133,8 +133,7 @@ def test_grok_main_prose_prepare_strips_donor_identity() -> None:
         model_profile_text='{"model_profile":{"body_type":"hourglass"}}',
     )
     assert "blonde" not in positive.lower()
-    assert "Model identity" in positive
-    assert PRIORITY_IDENTITY_OVER_POSE in positive
+    assert "Model identity" not in positive
     assert "mirror selfie" in positive.lower()
 
 
@@ -174,6 +173,23 @@ def test_model_scene_identity_turnaround_first() -> None:
     kinds = [(im.image_kind or "").lower() for im in picked]
     assert kinds == ["turnaround", "face", "genitals"]
     assert "body" not in kinds
+
+
+def test_model_scene_identity_rear_view_turnaround_body_genitals() -> None:
+    imgs = [
+        _im("turnaround", 1),
+        _im("body", 2),
+        _im("face", 3),
+        _im("genitals", 4),
+    ]
+    picked = select_model_scene_wavespeed_identity_images(
+        imgs,
+        wave_profile="nsfw",
+        include_face=False,
+    )
+    kinds = [(im.image_kind or "").lower() for im in picked]
+    assert kinds == ["turnaround", "body", "genitals"]
+    assert "face" not in kinds
 
 
 def test_model_scene_identity_fallback_body_without_turnaround() -> None:
@@ -238,27 +254,40 @@ def test_grok_main_system_prefers_photo_brief_not_catalog() -> None:
     assert "photo brief" in low or "not an image-analysis report" in low
     assert "PROMPT_REGION_POLICY" in text
     assert "End the prose with one short sentence naming" not in text
-    from app.services.studio_prompt_bundle import (
-        append_negative_to_wavespeed_prompt,
-        prepare_positive_prompt_json,
-    )
+    from app.services.studio_openai import assemble_wavespeed_image_edit_prompt
+    from app.services.studio_prompt_bundle import append_negative_to_wavespeed_prompt
+
+    from app.services.studio_prompt_bundle import prepare_positive_prompt_json
 
     positive, neg = prepare_positive_prompt_json(
         "Seated on sofa, soft window light, casual phone snapshot.",
         brief_mode="grok_main_prose",
         model_profile_text='{"model_profile":{"body_type":"athletic"}}',
         extra_negative="wrong person",
-        wavespeed_identity_legend="Image 2: character sheet; Image 3: body",
     )
     assert not positive.strip().startswith("{")
-    assert "Image 2: character sheet" in positive
-    assert "Model identity" in positive
-    assert PRIORITY_IDENTITY_OVER_POSE in positive
     assert "Seated on sofa" in positive
-    assert "Photoreal phone look" in positive or "Capture realism:" in positive
-    assert "pores" in positive.lower() or "vellus" in positive.lower() or "grain" in positive.lower()
-    assert "on-camera phone flash" not in positive.lower()
-    ws = append_negative_to_wavespeed_prompt(positive, neg, brief_mode="grok_main_prose")
+    assert "Model identity" not in positive
+    ws = assemble_wavespeed_image_edit_prompt(
+        "Seated on sofa, soft window light, casual phone snapshot.",
+        studio_mode="model_scene",
+        user_pose_in_api=False,
+        user_pose_is_last=False,
+        lock_model_hairstyle=True,
+        prompt_brief_mode="grok_main_prose",
+        model_profile_text='{"model_profile":{"body_type":"athletic"}}',
+        wave_profile="nsfw",
+        wavespeed_identity_legend="Image 2: character sheet; Image 3: body",
+        extra_negative="wrong person",
+    )
+    assert "Image 2: character sheet" in ws
+    assert "Model identity" in ws
+    assert PRIORITY_IDENTITY_OVER_POSE in ws
+    assert "Seated on sofa" in ws
+    assert "Photoreal phone look" in ws
+    assert "pores" in ws.lower() or "vellus" in ws.lower() or "grain" in ws.lower()
+    assert "on-camera phone flash" not in ws.lower()
+    ws = append_negative_to_wavespeed_prompt(ws, neg, brief_mode="grok_main_prose")
     assert "[NEGATIVE_PROMPT]" not in ws
     assert '"realism_engine"' not in ws
 
@@ -486,3 +515,51 @@ def test_phone_candid_coda_omits_eyes_when_face_not_visible() -> None:
     assert "Photoreal phone look" in out
     assert EYE_LIVENESS_CODA not in out
     assert "Eyes alive" not in out
+
+
+def test_model_scene_rear_view_prefix_and_identity_in_full_assemble() -> None:
+    from app.services.studio_openai import assemble_wavespeed_image_edit_prompt
+    from app.services.studio_reference_analysis import (
+        ReferenceAnalysis,
+        build_identity_visibility,
+    )
+
+    vis = build_identity_visibility(
+        ReferenceAnalysis(
+            face_in_frame=False,
+            head_partial=True,
+            hair_in_frame=True,
+            visible_regions=["BACK", "TORSO", "BUTT", "HAIR"],
+            framing_crop="rear view, back to camera",
+        )
+    )
+    prose = (
+        "Woman standing with her back to the camera in front of a large window, "
+        "sheer curtains, daylight on shoulders and back."
+    )
+    profile = json.dumps(
+        {
+            "model_profile": {
+                "body_type": "slender, narrow shoulders, graceful neck",
+                "hair": {"color": "blonde", "length": "long"},
+            }
+        }
+    )
+    out = assemble_wavespeed_image_edit_prompt(
+        prose,
+        studio_mode="model_scene",
+        user_pose_in_api=False,
+        user_pose_is_last=False,
+        lock_model_hairstyle=True,
+        prompt_brief_mode="grok_main_prose",
+        model_profile_text=profile,
+        wave_profile="nsfw",
+        visibility=vis,
+        wavespeed_identity_legend="Image 1: character sheet; Image 2: body; Image 3: nude anatomy",
+    )
+    low = out.lower()
+    assert "model identity:" in low
+    assert "build:" in low or "slender" in low
+    assert "extra face reference" not in low
+    assert "paste facial features" in low or "does not include a front face" in low
+    assert "eyes alive" not in low

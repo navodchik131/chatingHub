@@ -244,6 +244,56 @@ def _prepend_priority_rule(prose: str) -> str:
     return f"{PRIORITY_IDENTITY_OVER_POSE}\n\n{body}"
 
 
+_MODEL_IDENTITY_LINE_RE = re.compile(r"(?m)^Model identity:\s", re.I)
+
+
+def inject_wavespeed_model_identity(
+    prose: str,
+    *,
+    model_profile_text: str | None,
+    visibility: "IdentityVisibility | None" = None,
+    wavespeed_identity_legend: str | None = None,
+) -> str:
+    """
+    Гарантированный блок Model identity для WaveSpeed prose-режимов.
+    Вызывается после sanitize — иначе identity-строку с «bust/waist/face» съедает post-filter.
+    """
+    text = (prose or "").strip()
+    if not text:
+        return text
+    if _MODEL_IDENTITY_LINE_RE.search(text):
+        return text
+
+    anchor = grok_figure_anchor_from_profile(
+        model_profile_text,
+        visibility=visibility,
+    ).strip()
+    if not anchor and model_profile_text is None and visibility is None:
+        return _prepend_priority_rule(text)
+
+    body = text
+    leg = (wavespeed_identity_legend or "").strip()
+    if leg and "Attached model reference photos" not in body:
+        body = f"Attached model reference photos — {leg}\n\n{body}"
+
+    if anchor:
+        body = f"Model identity: {anchor}\n\n{body}"
+    return _prepend_priority_rule(body)
+
+
+def _prepare_grok_scene_prose_body(refined_text: str) -> str:
+    return strip_soft_dof_from_scene_prose(
+        strip_workflow_meta_from_wavespeed_prose(
+            strip_donor_identity_from_scene_prose((refined_text or "").strip())
+        )
+    )
+
+
+_WAVESPEED_PROSE_BRIEF_MODES = frozenset(
+    {"grok_main_prose", "deterministic_compose", "grok_composed", "grok_composed_text"}
+)
+
+
 def _merge_negative_parts(*parts: str | None) -> str:
     seen: set[str] = set()
     out: list[str] = []
@@ -1071,33 +1121,7 @@ def prepare_positive_prompt_json(
     """
     mode = (brief_mode or "full").strip().lower()
     if mode == "grok_main_prose":
-        prose = strip_soft_dof_from_scene_prose(
-            strip_workflow_meta_from_wavespeed_prose(
-                strip_donor_identity_from_scene_prose((refined_text or "").strip())
-            )
-        )
-        re_prose = (
-            phone_candid_photo_coda(
-                include_eyes=visibility is None or bool(getattr(visibility, "include_face", True))
-            )
-            if include_realism_engine
-            else ""
-        )
-        leg = (wavespeed_identity_legend or "").strip()
-        if leg:
-            prose = f"Attached model reference photos — {leg}\n\n{prose}"
-        anchor = grok_figure_anchor_from_profile(
-            model_profile_text,
-            visibility=visibility,
-        ).strip()
-        if anchor:
-            prose = _prepend_priority_rule(
-                f"Model identity: {anchor}\n\n{prose}"
-            )
-        else:
-            prose = _prepend_priority_rule(prose)
-        if re_prose:
-            prose = f"{prose}\n\n{re_prose}".strip()
+        prose = _prepare_grok_scene_prose_body(refined_text)
         negative = _merge_grok_scene_negative(
             model_profile_text=model_profile_text,
             extra_negative=extra_negative,
@@ -1105,38 +1129,7 @@ def prepare_positive_prompt_json(
         )
         return prose, negative
     if mode == "deterministic_compose":
-        from app.services.studio_deterministic_compose import build_deterministic_identity_line
-
-        prose = strip_soft_dof_from_scene_prose(
-            strip_workflow_meta_from_wavespeed_prose(
-                strip_donor_identity_from_scene_prose((refined_text or "").strip())
-            )
-        )
-        re_prose = (
-            phone_candid_photo_coda(
-                include_eyes=visibility is None or bool(getattr(visibility, "include_face", True))
-            )
-            if include_realism_engine
-            else ""
-        )
-        leg = (wavespeed_identity_legend or "").strip()
-        if leg:
-            prose = f"Attached model reference photos — {leg}\n\n{prose}"
-        if visibility is not None:
-            identity_line = build_deterministic_identity_line(
-                model_profile_text,
-                visibility,
-            ).strip()
-        else:
-            identity_line = grok_figure_anchor_from_profile(model_profile_text, visibility=visibility).strip()
-        if identity_line:
-            prose = _prepend_priority_rule(
-                f"Model identity: {identity_line}\n\n{prose}"
-            )
-        else:
-            prose = _prepend_priority_rule(prose)
-        if re_prose:
-            prose = f"{prose}\n\n{re_prose}".strip()
+        prose = _prepare_grok_scene_prose_body(refined_text)
         negative = _merge_grok_scene_negative(
             model_profile_text=model_profile_text,
             extra_negative=extra_negative,
