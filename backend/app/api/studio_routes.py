@@ -4481,11 +4481,13 @@ async def _studio_job_execute_refine_prompt(
                     )
                     attach_model_urls = bool(grok_ws_identity)
                 elif mode_n == "model_scene":
+                    _ms_pose_nude = reference_pose_is_nude_or_minimal_coverage(reference_scene)
                     attach_model_urls = bool(
                         select_model_scene_wavespeed_identity_images(
                             imgs_for_ws,
                             wave_profile=wave_profile_n,
                             include_face=_ms_include_face,
+                            pose_reference_nude=_ms_pose_nude,
                         )
                     )
                 elif mode_n == "model":
@@ -4517,19 +4519,14 @@ async def _studio_job_execute_refine_prompt(
                     if mode_n == "grok_compose":
                         imgs_ws_order = grok_ws_identity
                     elif mode_n == "model_scene":
-                        if user_pose_ref_prepended:
-                            imgs_ws_order = select_grok_compose_wavespeed_identity_images(
-                                imgs_for_ws,
-                                pose_reference_nude=reference_pose_is_nude_or_minimal_coverage(
-                                    reference_scene
-                                ),
-                            )
-                        else:
-                            imgs_ws_order = select_model_scene_wavespeed_identity_images(
-                                imgs_for_ws,
-                                wave_profile=wave_profile_n,
-                                include_face=_ms_include_face,
-                            )
+                        imgs_ws_order = select_model_scene_wavespeed_identity_images(
+                            imgs_for_ws,
+                            wave_profile=wave_profile_n,
+                            include_face=_ms_include_face,
+                            pose_reference_nude=reference_pose_is_nude_or_minimal_coverage(
+                                reference_scene
+                            ),
+                        )
                     elif mode_n == "model" and not image_bytes:
                         imgs_ws_order = select_prompt_only_wavespeed_identity_images(
                             imgs_for_ws, wave_profile=wave_profile_n

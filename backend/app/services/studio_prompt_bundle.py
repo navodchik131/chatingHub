@@ -281,6 +281,43 @@ def inject_wavespeed_model_identity(
     return _prepend_priority_rule(body)
 
 
+def append_figure_lock_enforcement_tail(
+    prose: str,
+    *,
+    model_profile_text: str | None,
+    visibility: "IdentityVisibility | None" = None,
+) -> str:
+    """Короткий повтор Build: в конце prose — WAN/Seedream лучше держит пропорции у хвоста."""
+    text = (prose or "").rstrip()
+    if not text or "Mandatory figure lock" in text:
+        return text
+    if visibility is not None and not visibility.include_body_proportions:
+        return text
+    anchor = grok_figure_anchor_from_profile(
+        model_profile_text,
+        visibility=visibility,
+    ).strip()
+    if not anchor:
+        return text
+    build = anchor
+    if "Build:" in anchor:
+        build = anchor.split("Build:", 1)[1].strip()
+        build = build.split("Same person", 1)[0].strip().rstrip(".,;")
+    elif anchor.lower().startswith("visible regions"):
+        parts = anchor.split(":", 2)
+        build = parts[-1].split("Same person", 1)[0].strip().rstrip(".,;") if len(parts) > 2 else anchor
+    if not build or len(build) < 12:
+        return text
+    tail = (
+        f"Mandatory figure lock — NOT a slim/fashion-model body: match turnaround + body reference photos; "
+        f"bust/waist/hip volumes exactly: {build}."
+    )
+    if "Photoreal phone look —" in text:
+        head, _sep, rest = text.partition("\n\nPhotoreal phone look —")
+        return f"{head.rstrip()}\n\n{tail}\n\nPhotoreal phone look —{rest}".strip()
+    return f"{text}\n\n{tail}".strip()
+
+
 def _prepare_grok_scene_prose_body(refined_text: str) -> str:
     return strip_soft_dof_from_scene_prose(
         strip_workflow_meta_from_wavespeed_prose(
@@ -549,6 +586,7 @@ def _compact_body_proportions_clause(
     max_len: int = STUDIO_BODY_PROPORTIONS_MAX,
 ) -> str:
     """Сжать чеклист пропорций в короткую фразу — иначе съедает вес сцены/кожи."""
+    body = harmonize_figure_lock_clause(body)
     parts = [p.strip(" .") for p in re.split(r"[;|]+", body or "") if p.strip(" .")]
     if not parts:
         return ""
@@ -681,8 +719,41 @@ _IDENTITY_CLAUSE_RES = (
     re.compile(r"\b(?:narrow|wide|slim|tiny|snatched)\s+waist\b", re.I),
     re.compile(r"\b(?:bright|blue|brown|green|hazel|medium[- ]brown)\s+eyes\b", re.I),
     re.compile(r"\boval\s+face\b", re.I),
-    re.compile(r"\b(?:hourglass|petite|curvy|athletic|slender)\s+(?:figure|build|body)\b", re.I),
+    re.compile(r"\b(?:hourglass|petite|curvy|athletic|slender|lean)\s+(?:figure|build|body|physique)\b", re.I),
+    re.compile(r"\b(?:lean|slim|skinny|athletic)\s+(?:and\s+)?(?:toned|muscular)?\s*(?:woman|man|subject|model)?\b", re.I),
+    re.compile(r"\b(?:long\s+)?(?:straight\s+)?lean\s+legs\b", re.I),
 )
+
+
+def harmonize_figure_lock_clause(body: str) -> str:
+    """
+    Убрать slim/lean/athletic из Build, когда в профиле явный hourglass (waist+hips / WHR).
+    Иначе WAN тянет к худой athletic, игнорируя wide hips на развёртке.
+    """
+    text = (body or "").strip()
+    if not text:
+        return text
+    low = text.lower()
+    curvy_signal = (
+        "wide hip" in low
+        or "hourglass" in low
+        or re.search(r"whr\s*0\.[56]", low)
+        or ("waist" in low and "hip" in low and re.search(r"\d{2,3}", low))
+    )
+    if not curvy_signal:
+        return text
+    slim_terms = re.compile(
+        r"\b(lean athletic|lean\s+athletic|ectomorphic|skinny|petite frame|"
+        r"fashion[- ]model|long straight lean legs|lean legs|lean build)\b",
+        re.I,
+    )
+    had_slim = bool(slim_terms.search(text))
+    cleaned = slim_terms.sub("", text)
+    cleaned = re.sub(r"(?:,\s*){2,}", ", ", cleaned)
+    cleaned = re.sub(r"\s{2,}", " ", cleaned).strip(" ,;")
+    if had_slim and curvy_signal and "hourglass" not in cleaned.lower():
+        cleaned = f"pronounced hourglass, wide hips, narrow waist; {cleaned}"
+    return cleaned
 
 
 def strip_donor_identity_from_scene_prose(prose: str) -> str:

@@ -147,13 +147,14 @@ def select_model_scene_wavespeed_identity_images(
     wave_profile: str,
     max_count: int = 6,
     include_face: bool | None = None,
+    pose_reference_nude: bool = False,
 ) -> list[UserStudioModelImage]:
     """
     Режим «Модель + промпт» / «Основная» без bitmap позы в WaveSpeed.
 
-    Лицо в кадре: turnaround → face → genitals (NSFW).
-    Спина/без лица: turnaround → body → genitals (NSFW) — face ref не шлём, body держит силуэт.
-    Без развёртки — fallback body → face или body → genitals.
+    Лицо в кадре: turnaround → body → face; genitals только если референс nude.
+    Спина/без лица: turnaround → body → genitals (NSFW nude ref).
+    Без развёртки — fallback body → face.
     """
     if not imgs:
         return []
@@ -167,21 +168,22 @@ def select_model_scene_wavespeed_identity_images(
             by_kind[k] = im
 
     face_scope = True if include_face is None else bool(include_face)
+    nude_ref = bool(pose_reference_nude)
 
     if by_kind.get("turnaround"):
         if face_scope:
-            order: list[str] = ["turnaround", "face"]
+            order: list[str] = ["turnaround", "body", "face"]
         else:
             order = ["turnaround", "body"]
-        if wp == "nsfw":
+        if wp == "nsfw" and nude_ref:
             order.append("genitals")
     elif face_scope:
         order = ["body", "face"]
-        if wp == "nsfw":
+        if wp == "nsfw" and nude_ref:
             order.append("genitals")
     else:
         order = ["body"]
-        if wp == "nsfw":
+        if wp == "nsfw" and nude_ref:
             order.append("genitals")
 
     picked: list[UserStudioModelImage] = []
@@ -198,6 +200,63 @@ def select_model_scene_wavespeed_identity_images(
             if im is not None and im.id not in seen:
                 picked.append(im)
                 seen.add(im.id)
+            if len(picked) >= cap:
+                break
+    return picked[:cap]
+
+
+def select_model_scene_pose_wavespeed_identity_images(
+    imgs: list[UserStudioModelImage],
+    *,
+    wave_profile: str,
+    pose_reference_nude: bool = False,
+    include_face: bool | None = None,
+    max_count: int = 4,
+) -> list[UserStudioModelImage]:
+    """
+    «Основная» + pose ref = Image 1: turnaround первым (силуэт с character sheet),
+    в отличие от grok_compose (без turnaround на одетых сценах).
+    """
+    if not imgs:
+        return []
+    wp = (wave_profile or "nsfw").strip().lower()
+    cap = max(1, min(5, int(max_count)))
+    sorted_imgs = sort_model_images_for_studio(imgs)
+    by_kind: dict[str, UserStudioModelImage] = {}
+    for im in sorted_imgs:
+        k = (im.image_kind or "other").lower()
+        if k not in by_kind:
+            by_kind[k] = im
+
+    face_scope = True if include_face is None else bool(include_face)
+    picked: list[UserStudioModelImage] = []
+
+    def take(kind: str) -> None:
+        if len(picked) >= cap:
+            return
+        im = by_kind.get(kind)
+        if im is not None and im not in picked:
+            picked.append(im)
+
+    if pose_reference_nude:
+        take("body")
+        if face_scope:
+            take("face")
+        if wp == "nsfw":
+            take("genitals")
+    elif by_kind.get("turnaround"):
+        take("turnaround")
+        if face_scope:
+            take("face")
+        take("body")
+    else:
+        take("body")
+        if face_scope:
+            take("face")
+
+    if not picked:
+        for kind in ("turnaround", "body", "face", "other"):
+            take(kind)
             if len(picked) >= cap:
                 break
     return picked[:cap]

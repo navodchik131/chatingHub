@@ -171,8 +171,24 @@ def test_model_scene_identity_turnaround_first() -> None:
     ]
     picked = select_model_scene_wavespeed_identity_images(imgs, wave_profile="nsfw")
     kinds = [(im.image_kind or "").lower() for im in picked]
-    assert kinds == ["turnaround", "face", "genitals"]
-    assert "body" not in kinds
+    assert kinds == ["turnaround", "body", "face"]
+    assert "genitals" not in kinds
+
+
+def test_model_scene_identity_turnaround_nude_ref_adds_genitals() -> None:
+    imgs = [
+        _im("turnaround", 1),
+        _im("body", 2),
+        _im("face", 3),
+        _im("genitals", 4),
+    ]
+    picked = select_model_scene_wavespeed_identity_images(
+        imgs,
+        wave_profile="nsfw",
+        pose_reference_nude=True,
+    )
+    kinds = [(im.image_kind or "").lower() for im in picked]
+    assert kinds == ["turnaround", "body", "face", "genitals"]
 
 
 def test_model_scene_identity_rear_view_turnaround_body_genitals() -> None:
@@ -188,15 +204,34 @@ def test_model_scene_identity_rear_view_turnaround_body_genitals() -> None:
         include_face=False,
     )
     kinds = [(im.image_kind or "").lower() for im in picked]
-    assert kinds == ["turnaround", "body", "genitals"]
+    assert kinds == ["turnaround", "body"]
     assert "face" not in kinds
+    assert "genitals" not in kinds
+
+
+def test_model_scene_identity_rear_view_nude_ref_adds_genitals() -> None:
+    imgs = [
+        _im("turnaround", 1),
+        _im("body", 2),
+        _im("face", 3),
+        _im("genitals", 4),
+    ]
+    picked = select_model_scene_wavespeed_identity_images(
+        imgs,
+        wave_profile="nsfw",
+        include_face=False,
+        pose_reference_nude=True,
+    )
+    kinds = [(im.image_kind or "").lower() for im in picked]
+    assert kinds == ["turnaround", "body", "genitals"]
 
 
 def test_model_scene_identity_fallback_body_without_turnaround() -> None:
     imgs = [_im("body", 2), _im("face", 3), _im("genitals", 4)]
     picked = select_model_scene_wavespeed_identity_images(imgs, wave_profile="nsfw")
     kinds = [(im.image_kind or "").lower() for im in picked]
-    assert kinds == ["body", "face", "genitals"]
+    assert kinds == ["body", "face"]
+    assert "genitals" not in kinds
 
 
 def test_prompt_only_identity_regular_body_and_face() -> None:
@@ -214,6 +249,54 @@ def test_grok_figure_anchor_from_profile() -> None:
     assert "hourglass" in anchor.lower() or "curvy" in anchor.lower()
 
 
+def test_model_scene_no_pose_prefix_turnaround_body_authoritative() -> None:
+    from app.services.studio_openai import finalize_wavespeed_studio_prompt
+
+    out = finalize_wavespeed_studio_prompt(
+        "Full-body muddy road scene, SUV behind.",
+        studio_mode="model_scene",
+        user_image_first=False,
+        prompt_brief_mode="grok_main_prose",
+    )
+    assert "turnaround" in out.lower() or "character sheet" in out.lower()
+    assert "body-reference" in out.lower() or "body reference" in out.lower()
+    assert "Do not slim" in out
+    assert "[MODEL_SCENE — Image 1 = pose/scene ONLY]" not in out
+
+
+def test_model_scene_pose_identity_order_turnaround_first() -> None:
+    from app.services.studio_model_images import select_model_scene_pose_wavespeed_identity_images
+
+    imgs = [
+        _im("turnaround", 1),
+        _im("body", 2),
+        _im("face", 3),
+        _im("genitals", 4),
+    ]
+    picked = select_model_scene_pose_wavespeed_identity_images(
+        imgs,
+        wave_profile="nsfw",
+        pose_reference_nude=False,
+    )
+    kinds = [(im.image_kind or "").lower() for im in picked]
+    assert kinds == ["turnaround", "face", "body"]
+    assert "genitals" not in kinds
+
+
+def test_figure_lock_enforcement_tail() -> None:
+    from app.services.studio_prompt_bundle import append_figure_lock_enforcement_tail
+
+    profile = '{"model_profile":{"body_type":"very narrow waist 60 cm, wide hips 91 cm"}}'
+    out = append_figure_lock_enforcement_tail(
+        "Scene prose here.\n\nPhotoreal phone look — deep focus.",
+        model_profile_text=profile,
+    )
+    assert "Mandatory figure lock" in out
+    assert "NOT a slim" in out
+    assert "waist" in out.lower() or "hips" in out.lower()
+    assert out.index("Mandatory figure lock") < out.index("Photoreal phone look")
+
+
 def test_model_scene_wan_prefix_uses_main_prose() -> None:
     from app.services.studio_openai import finalize_wavespeed_studio_prompt
 
@@ -224,6 +307,7 @@ def test_model_scene_wan_prefix_uses_main_prose() -> None:
         prompt_brief_mode="grok_main_prose",
     )
     assert "One model from attached reference photos" in main
+    assert "body-reference" in main.lower() or "body reference" in main.lower()
     assert "JSON" not in main
     assert "face-swap" not in main.lower()
 
@@ -343,7 +427,7 @@ def test_model_scene_pose_last_wan_prefix() -> None:
     assert "Image 1 (body reference)" not in out
 
 
-def test_grok_main_prose_with_pose_uses_model_scene_prefix_not_reference_order() -> None:
+def test_grok_main_prose_with_pose_uses_role_prefix_when_pose_in_api() -> None:
     from app.services.studio_openai import finalize_wavespeed_studio_prompt
 
     out = finalize_wavespeed_studio_prompt(
@@ -352,7 +436,7 @@ def test_grok_main_prose_with_pose_uses_model_scene_prefix_not_reference_order()
         user_image_first=True,
         prompt_brief_mode="grok_main_prose",
     )
-    assert "Image 1:" in out
+    assert "pose, crop, camera" in out.lower()
     assert "model identity wins" in out.lower()
     assert "REFERENCE_IMAGE_ORDER" not in out
 

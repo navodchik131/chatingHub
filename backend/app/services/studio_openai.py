@@ -211,6 +211,16 @@ _WAN_COMPACT_POSE_PREFIX = _IMAGE_EDIT_ROLE_PREFIX
 
 _GROK_COMPOSED_WAN_PREFIX = _IMAGE_EDIT_ROLE_PREFIX
 
+_GROK_MODEL_SCENE_POSE_FIRST_WAN_PREFIX = (
+    "[MODEL_SCENE — Image 1 = pose/scene ONLY] **Image 1** locks pose, limb angles, head tilt, camera height/angle/distance, "
+    "crop, background, props, environmental light, and wardrobe coverage — **not** the incidental sitter's face, hair, skin, "
+    "or body mass.\n"
+    "**Images 2+** = OUR saved model (character sheet / turnaround, body, face): **bust, waist, hip width, glute volume, "
+    "shoulder line, thigh caliber, and overall build must match those refs exactly** — even in athletic, muddy, or revealing scenes.\n"
+    "**Replace** the person in Image 1 with the model from Images 2+; never slim toward a generic catalog silhouette. "
+    "If Image 1 body shape conflicts with model identity, **model identity always wins**.\n\n"
+)
+
 _GROK_MODEL_SCENE_WAN_PREFIX = _IMAGE_EDIT_ROLE_PREFIX
 
 _GROK_COMPOSED_NANO_PREFIX = _NANO_EDIT_ROLE_PREFIX
@@ -231,9 +241,10 @@ _GROK_MAIN_PROSE_WAN_PREFIX = (
 
 _GROK_MODEL_SCENE_NO_POSE_WAN_PREFIX = (
     "One model from attached reference photos. Recreate the scene described below. "
-    "Image 1 (character sheet / turnaround) is the primary anchor for face, hair, bust, waist, hip width, "
-    "thigh volume, and overall build — match those volumes even when the scene pose is athletic or revealing. "
-    "Extra face reference sharpens likeness; do not slim the figure toward a generic model silhouette.\n\n"
+    "Image 1 (character sheet / turnaround) and the body-reference image (if present) are the **authoritative** "
+    "anchor for bust volume, waist width, hip width, thigh caliber, and overall build — match those photos exactly; "
+    "scene text below is pose, camera, light, room, and wardrobe only — **never** body mass or silhouette. "
+    "Extra face reference sharpens likeness. Do not slim toward a generic, athletic-catalog, or fashion-model silhouette.\n\n"
 )
 
 _GROK_MODEL_SCENE_NO_POSE_NANO_PREFIX = (
@@ -1712,6 +1723,7 @@ def assemble_wavespeed_image_edit_prompt(
     """Позитивный промпт для WaveSpeed (без negative-суффикса — API его не поддерживает)."""
     from app.services.studio_prompt_bundle import (
         _WAVESPEED_PROSE_BRIEF_MODES,
+        append_figure_lock_enforcement_tail,
         append_negative_to_wavespeed_prompt,
         append_phone_candid_photo_coda,
         inject_wavespeed_model_identity,
@@ -1753,6 +1765,11 @@ def assemble_wavespeed_image_edit_prompt(
             model_profile_text=identity_profile,
             visibility=visibility,
             wavespeed_identity_legend=wavespeed_identity_legend,
+        )
+        positive = append_figure_lock_enforcement_tail(
+            positive,
+            model_profile_text=identity_profile,
+            visibility=visibility,
         )
     if (wave_profile or "").strip().lower() == "regular":
         prompt = finalize_nano_banana_studio_prompt(

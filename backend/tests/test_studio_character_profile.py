@@ -193,3 +193,19 @@ def test_grok_figure_anchor_delegates_to_character_profile():
     )
     a = grok_figure_anchor_from_profile(legacy, visibility=vis)
     assert "athletic" in a.lower() or "build:" in a.lower()
+
+
+def test_harmonize_figure_lock_strips_lean_when_hourglass_measurements():
+    from app.services.studio_prompt_bundle import harmonize_figure_lock_clause
+
+    raw = (
+        "172 cm, lean athletic, long straight lean legs, "
+        "waist 60 cm, wide hips 91 cm, WHR 0.66"
+    )
+    out = harmonize_figure_lock_clause(raw)
+    low = out.lower()
+    assert "lean athletic" not in low
+    assert "lean legs" not in low
+    assert "waist 60" in low
+    assert "hips 91" in low or "wide hip" in low
+    assert "hourglass" in low
