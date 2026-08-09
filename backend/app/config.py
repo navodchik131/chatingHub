@@ -408,9 +408,6 @@ class Settings(BaseSettings):
     # True = не передавать size (размер остаётся как у входного изображения).
     wavespeed_z_image_inpaint_omit_size: bool = Field(default=True)
     credit_cost_studio_inpaint: int = Field(default=2)
-    # Auto eye-liveness inpaint после основной генерации (Z-Image, маска глаз).
-    studio_eye_inpaint_enabled: bool = Field(default=True)
-    studio_eye_inpaint_blend_feather_radius: float = Field(default=8.0, ge=0.0, le=64.0)
     # Маска студии в Nano/WAN: см. studio_routes + STUDIO_MASKED_FULLFRAME_*.
     # False = только Z-Image Turbo Inpaint (полное поле mask_image этого API).
     studio_regional_masked_edit: bool = Field(default=True)

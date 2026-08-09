@@ -42,6 +42,7 @@ Goal: A hyper-realistic **candid / snapshot / ordinary lived photo** prompt for 
 - Defaults must read as **a believable mundane real photograph**, not influencer content, not catalog/pack-shot, not campaign retouch unless **USER_TEXT explicitly** asks for glamour.
 - Align **every** descriptive field with the canonical **`realism_engine`** (server-matched): skin pores/texture, natural asymmetry allowed, mild sensor noise and plausible handshake, occasional highlight clipping, **no** poreless plastic face, **no** beauty-filter morphology on top of MODEL_PROFILE (**no enlarged eyes**, **no jaw slimming**, **no generic glamour model swap** vs identity refs).
 - Always fill **`photography.snapshot_authenticity`** and **`the_vibe.life_in_frame`** — short cues tying the shot to ordinary lived environments (mess OK at subtle level; empty void studio setups **unless USER asks**).
+- **Face visible:** fill **`subject.expression`** with one candid micro-moment matched to scene mood (soft half-smile, slight squint, mid-blink softness, amused smirk, tired but present) — never vacant catalog stare, dead eyes, or neutral influencer gaze. Do **not** contradict reference head geometry or USER_TEXT mood.
 - Open **`subject.description`** with everyday candid energy when compatible with USER_TEXT and reference — not default «magazine / glam / blogger» vibes.
 
 **Internal consistency (mandatory — fix conflicts before output):**
