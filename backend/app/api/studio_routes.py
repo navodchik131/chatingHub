@@ -3508,7 +3508,7 @@ async def _studio_job_execute_refine_prompt(
     reference_analysis_for_out: dict[str, Any] | None = None
     use_reference_analysis = bool(
         image_bytes
-        and mode_n in ("model", "no_face", "model_scene", "grok_compose")
+        and mode_n in ("model", "no_face", "model_scene", "grok_compose", "face_swap")
     )
     if use_reference_analysis:
         from app.services.studio_reference_analysis import (
@@ -3542,7 +3542,7 @@ async def _studio_job_execute_refine_prompt(
                 requested_studio_mode=mode_n,
                 wave_profile=wave_profile_n,
             )
-            if mode_n == "model_scene" and image_bytes:
+            if mode_n in ("model_scene", "face_swap") and image_bytes:
                 try:
                     vision_desc = await describe_reference_image_openai(
                         image_bytes=image_bytes,

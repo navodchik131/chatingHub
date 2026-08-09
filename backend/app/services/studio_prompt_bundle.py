@@ -60,16 +60,17 @@ EYE_LIVENESS_CODA = (
     "moist natural sclera, candid micro-expression; not vacant stare, not glassy doll eyes."
 )
 
-PHONE_CANDID_PHOTO_CODA = (
+_PHONE_CANDID_PHOTO_BASE = (
     "Photoreal phone look — deep focus with background details sharp; "
     "visible skin pores and uneven tone, natural oil sheen where light hits, "
     "fine vellus hair catching sidelight, loose flyaways; mixed white balance, "
     "clipped highlight where sun hits, luminance noise in shadows, "
     "clean natural edge rendering without chromatic fringing or color-split contours, "
     "minor handheld tilt, JPEG compression; "
-    "candid unretouched amateur snapshot. "
-    + EYE_LIVENESS_CODA
+    "candid unretouched amateur snapshot."
 )
+
+PHONE_CANDID_PHOTO_CODA = f"{_PHONE_CANDID_PHOTO_BASE} {EYE_LIVENESS_CODA}"
 
 _SOFT_DOF_PHRASE_RE = re.compile(
     r"\b("
@@ -547,15 +548,36 @@ def strip_workflow_meta_from_wavespeed_prose(prose: str) -> str:
     return t
 
 
-def append_phone_candid_photo_coda(prompt: str, *, brief_mode: str = "full") -> str:
+def phone_candid_photo_coda(*, include_eyes: bool = True) -> str:
+    """Photoreal phone tail; eye liveness only when the reference crop shows a face."""
+    if include_eyes:
+        return PHONE_CANDID_PHOTO_CODA
+    return _PHONE_CANDID_PHOTO_BASE
+
+
+def append_phone_candid_photo_coda(
+    prompt: str,
+    *,
+    brief_mode: str = "full",
+    visibility: "IdentityVisibility | None" = None,
+) -> str:
     """Гарантированный короткий photoreal-хвост в конце prose-промпта."""
+    from app.services.studio_reference_analysis import IdentityVisibility
+
     mode = (brief_mode or "full").strip().lower()
     if mode in ("grok_composed", "grok_composed_text"):
         return (prompt or "").rstrip()
+    include_eyes = visibility is None or bool(getattr(visibility, "include_face", True))
+    coda = phone_candid_photo_coda(include_eyes=include_eyes)
     base = (prompt or "").rstrip()
     if not base:
-        return PHONE_CANDID_PHOTO_CODA
+        return coda
     if "Photoreal phone look —" in base:
+        if not include_eyes and "Eyes alive —" in base:
+            base = base.replace(EYE_LIVENESS_CODA, "").strip()
+            base = re.sub(r"\s{2,}", " ", base).rstrip()
+        elif include_eyes and "Eyes alive —" not in base and _PHONE_CANDID_PHOTO_BASE.rstrip(".") in base:
+            return f"{base} {EYE_LIVENESS_CODA}".strip()
         return base
     # Длинный Capture realism в середине после FACE_SWAP почти не читается — заменяем хвостом.
     if "\n\nCapture realism:" in base:
@@ -563,8 +585,8 @@ def append_phone_candid_photo_coda(prompt: str, *, brief_mode: str = "full") -> 
     elif base.startswith("Capture realism:"):
         base = ""
     if base:
-        return f"{base}\n\n{PHONE_CANDID_PHOTO_CODA}"
-    return PHONE_CANDID_PHOTO_CODA
+        return f"{base}\n\n{coda}"
+    return coda
 
 
 def grok_figure_anchor_from_profile(
@@ -1054,7 +1076,13 @@ def prepare_positive_prompt_json(
                 strip_donor_identity_from_scene_prose((refined_text or "").strip())
             )
         )
-        re_prose = PHONE_CANDID_PHOTO_CODA if include_realism_engine else ""
+        re_prose = (
+            phone_candid_photo_coda(
+                include_eyes=visibility is None or bool(getattr(visibility, "include_face", True))
+            )
+            if include_realism_engine
+            else ""
+        )
         leg = (wavespeed_identity_legend or "").strip()
         if leg:
             prose = f"Attached model reference photos — {leg}\n\n{prose}"
@@ -1084,7 +1112,13 @@ def prepare_positive_prompt_json(
                 strip_donor_identity_from_scene_prose((refined_text or "").strip())
             )
         )
-        re_prose = PHONE_CANDID_PHOTO_CODA if include_realism_engine else ""
+        re_prose = (
+            phone_candid_photo_coda(
+                include_eyes=visibility is None or bool(getattr(visibility, "include_face", True))
+            )
+            if include_realism_engine
+            else ""
+        )
         leg = (wavespeed_identity_legend or "").strip()
         if leg:
             prose = f"Attached model reference photos — {leg}\n\n{prose}"

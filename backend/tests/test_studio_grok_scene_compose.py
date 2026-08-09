@@ -440,3 +440,49 @@ def test_wan_face_swap_grok_main_prose_keeps_scene_as_image_1() -> None:
     assert "model identity wins" not in out.lower() or "FACE_SWAP" in out
     # Must not fall through to generic model-scene / generate-scene prose prefix alone.
     assert out.startswith("[FACE_SWAP — WAN]")
+
+
+def test_wan_face_swap_rear_view_uses_body_prefix_not_face_gaze() -> None:
+    from app.services.studio_openai import finalize_wavespeed_studio_prompt
+    from app.services.studio_reference_analysis import (
+        IdentityVisibility,
+        build_identity_visibility,
+        ReferenceAnalysis,
+    )
+
+    vis = build_identity_visibility(
+        ReferenceAnalysis(
+            face_in_frame=False,
+            head_partial=True,
+            hair_in_frame=True,
+            visible_regions=["BACK", "TORSO", "HAIR", "ARMS"],
+            framing_crop="rear view, back to camera",
+        )
+    )
+    prose = "Woman standing with her back to the camera in front of a large window."
+    out = finalize_wavespeed_studio_prompt(
+        prose,
+        studio_mode="face_swap",
+        user_image_first=True,
+        prompt_brief_mode="grok_main_prose",
+        visibility=vis,
+    )
+    assert out.startswith("[BODY_IDENTITY_SWAP — WAN]")
+    assert "Do NOT" in out and "invent eyes" in out.lower()
+    assert "gaze vs lens" not in out.lower()
+
+
+def test_phone_candid_coda_omits_eyes_when_face_not_visible() -> None:
+    from app.services.studio_prompt_bundle import append_phone_candid_photo_coda, EYE_LIVENESS_CODA
+    from app.services.studio_reference_analysis import (
+        ReferenceAnalysis,
+        build_identity_visibility,
+    )
+
+    vis = build_identity_visibility(
+        ReferenceAnalysis(face_in_frame=False, visible_regions=["BACK", "TORSO"])
+    )
+    out = append_phone_candid_photo_coda("Scene prose.", visibility=vis)
+    assert "Photoreal phone look" in out
+    assert EYE_LIVENESS_CODA not in out
+    assert "Eyes alive" not in out

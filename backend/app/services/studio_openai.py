@@ -69,12 +69,42 @@ def _wavespeed_pose_ref_prefix_no_face(*, lock_model_hairstyle: bool) -> str:
     )
 
 
+def _wavespeed_face_swap_prefix_face_hidden(*, lock_model_hairstyle: bool) -> str:
+    hair_clause = (
+        "**Visible hair mass** (back/side) follows the pose reference crop; color/texture from MODEL only. "
+        if lock_model_hairstyle
+        else "Hair visible in the pose reference may keep that layout; color from MODEL when applicable. "
+    )
+    return (
+        "[BODY_IDENTITY_SWAP — WAN] **Image 1** is the **SOURCE snapshot** (scene + pose framing). "
+        "Following URL(s): **studio portraits of OUR target MODEL** — **body proportions and skin tone on visible anatomy only**. "
+        "**Replace** every visible epidermis region of the Image‑1 performer with MODEL identity continuously — "
+        "same underlying undertone and highlight texture **as one person** on shoulders, back, neck, arms, legs in **this** lighting. "
+        "**Harmonize** white balance and subsurface dispersion so shoulders, back, and torso **do not** read like mismatched halves. "
+        "Preserve strictly from Image 1: **camera geometry** (FoV crop, viewpoint, body yaw, head orientation), limb articulation, "
+        "garment seams, shadows on fabric — **not** micro-skin pigmentation from the incidental sitter. "
+        "**Do NOT** turn the subject toward camera, invent eyes/nose/mouth, or paste a front face from model references — "
+        "face is NOT visible in Image 1. "
+        f"{hair_clause}"
+        "MODEL thumbnails win for body proportions and skin tone; Image 1 defines room + illumination topology.\n\n"
+    )
+
+
 def wavespeed_prompt_with_face_swap_first(
     refined_prompt: str,
     *,
     lock_model_hairstyle: bool = True,
+    pose_prefix_kind: str | None = None,
 ) -> str:
     """WAN: первое фото — сцена/донор; следующие URL — студийная модель (целевая личность)."""
+    kind = (pose_prefix_kind or "face_visible").strip().lower()
+    if kind in ("face_hidden", "headless"):
+        prefix = _wavespeed_face_swap_prefix_face_hidden(lock_model_hairstyle=lock_model_hairstyle)
+        p = (refined_prompt or "").strip()
+        if not p:
+            return prefix.strip()
+        return prefix + p
+
     hair_clause = (
         "**Hairstyle** (cut/color/texture) берётся из JSON-брифа и thumbnails модели — не как у незнакомого человека на Image 1. "
         if lock_model_hairstyle
@@ -349,6 +379,7 @@ def finalize_wavespeed_studio_prompt(
             out = wavespeed_prompt_with_face_swap_first(
                 p,
                 lock_model_hairstyle=lock_model_hairstyle,
+                pose_prefix_kind=prefix_kind,
             )
         elif brief == "grok_composed":
             prefix = (
@@ -1708,7 +1739,11 @@ def assemble_wavespeed_image_edit_prompt(
             user_pose_reference_is_last=user_pose_is_last,
         )
     if include_realism_engine:
-        prompt = append_phone_candid_photo_coda(prompt, brief_mode=brief)
+        prompt = append_phone_candid_photo_coda(
+            prompt,
+            brief_mode=brief,
+            visibility=visibility,
+        )
     return append_negative_to_wavespeed_prompt(
         prompt, negative, brief_mode=brief
     )

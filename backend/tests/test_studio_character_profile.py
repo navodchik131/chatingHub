@@ -152,6 +152,38 @@ def test_legacy_profile_still_works():
     assert anchor
 
 
+def test_identity_line_rear_view_includes_build_not_face() -> None:
+    vis = build_identity_visibility(
+        ReferenceAnalysis(
+            face_in_frame=False,
+            head_partial=True,
+            hair_in_frame=True,
+            visible_regions=["BACK", "TORSO", "HAIR"],
+            framing_crop="rear view, back to camera",
+        )
+    )
+    line = build_identity_line_from_profile(json.dumps(_mask_character_v1()), vis)
+    low = line.lower()
+    assert "build:" in low or "waist" in low
+    assert "respirator" not in low
+    assert "eyes:" not in low
+    assert "green eyes" not in low
+    assert "visible regions" in low
+    assert "hair" in low or "platinum" in low or "braid" in low
+
+
+def test_visibility_back_region_enables_body_proportions() -> None:
+    vis = build_identity_visibility(
+        ReferenceAnalysis(
+            face_in_frame=False,
+            visible_regions=["BACK"],
+            framing_crop="upper back only",
+        )
+    )
+    assert vis.include_body_proportions is True
+    assert vis.include_face is False
+
+
 def test_grok_figure_anchor_delegates_to_character_profile():
     from app.services.studio_prompt_bundle import grok_figure_anchor_from_profile
 

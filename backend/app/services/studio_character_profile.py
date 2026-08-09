@@ -214,6 +214,21 @@ def _build_face_lock_v1(doc: dict[str, Any]) -> str:
     return _join_non_empty(bits[:4], "; ")
 
 
+def _build_skin_tone_only_v1(doc: dict[str, Any]) -> str:
+    """Skin tone/undertone for visible epidermis when face features are out of frame."""
+    skin = doc.get("skin")
+    if not isinstance(skin, dict):
+        return ""
+    bits = [
+        _first_non_hidden(skin.get("tone"), skin.get("undertone")),
+        _first_non_hidden(skin.get("texture"), skin.get("finish")),
+    ]
+    tone = _join_non_empty(bits, ", ")
+    if not tone:
+        return ""
+    return f"{tone} skin tone on all visible epidermis"
+
+
 def _build_hair_lock_v1(doc: dict[str, Any]) -> str:
     packs = doc.get("generation_packs")
     if isinstance(packs, dict):
@@ -514,6 +529,22 @@ def build_identity_line_from_profile(
             body = _compact_body_proportions_clause(figure, max_len=STUDIO_BODY_PROPORTIONS_MAX)
             if body:
                 bits.append(f"Build: {body}")
+        elif vis is not None and vis.include_body_proportions:
+            body_doc = doc.get("body")
+            if isinstance(body_doc, dict):
+                fallback = _build_figure_lock_v1(doc)
+                if fallback:
+                    body = _compact_body_proportions_clause(
+                        fallback,
+                        max_len=STUDIO_BODY_PROPORTIONS_MAX,
+                    )
+                    if body:
+                        bits.append(f"Build: {body}")
+
+    if vis is not None and not vis.include_face:
+        skin = _build_skin_tone_only_v1(doc)
+        if skin:
+            bits.append(skin)
 
     if vis is None or vis.include_face:
         accessory = _usable_pack_text(packs.get("accessory_lock"))

@@ -38,6 +38,8 @@ _REGION_ALIASES = {
     "FOOT": "FEET",
     "BUTT": "BUTT",
     "GLUTES": "BUTT",
+    "BACK": "BACK",
+    "SHOULDERS": "NECK",
     "FULL_BODY": "FULL_BODY",
     "FULLBODY": "FULL_BODY",
 }
@@ -151,7 +153,18 @@ def build_identity_visibility(
     hair = bool(analysis.hair_in_frame) or "HAIR" in regions
     body_visible = bool(
         regions
-        & {"TORSO", "CHEST", "NECK", "LEGS", "FEET", "BUTT", "FULL_BODY", "ARMS", "HANDS"}
+        & {
+            "TORSO",
+            "CHEST",
+            "NECK",
+            "BACK",
+            "LEGS",
+            "FEET",
+            "BUTT",
+            "FULL_BODY",
+            "ARMS",
+            "HANDS",
+        }
     )
     hands = bool(regions & {"HANDS", "ARMS"})
     head_partial = bool(analysis.head_partial)
