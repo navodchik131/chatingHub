@@ -21,6 +21,7 @@ import {
   mergeEvolinkVideoPricing,
 } from '../../studioMotionPricing';
 import { videoNoteDownloadPath, videoNoteSendPayload } from '../../studioArchive';
+import SeedanceSaleLabel from '../components/SeedanceSaleLabel';
 
 const vidModeIcons = { film: IcoFilm, text: IcoText };
 
@@ -226,7 +227,9 @@ export function VideoStudioPage({ backend = 'wavespeed' }) {
   return (
     <Fade data-screen-label="Студия — Видео">
       <div style={{ marginBottom: 16 }}>
-        <PageTitle style={{ marginBottom: 5 }}>{isEvolink ? t.navSeedanceSale : t.navVideo}</PageTitle>
+        <PageTitle style={{ marginBottom: 5 }}>
+          {isEvolink ? <SeedanceSaleLabel active style={{ fontSize: 'inherit', fontWeight: 'inherit' }} /> : t.navVideo}
+        </PageTitle>
         <div style={{ fontSize: 12.5, color: color.textDim }}>{isEvolink ? t.seedanceSaleDesc : t.videoDesc}</div>
         {isEvolink && !evolinkEnabled && (
           <div style={{ marginTop: 10, fontSize: 12, color: '#fbbf24', lineHeight: 1.45 }}>

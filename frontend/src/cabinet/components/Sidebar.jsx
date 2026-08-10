@@ -15,6 +15,7 @@ import {
 import { computeNavBadges } from '../api/mappers';
 import { assetUrl } from '../utils/assets';
 import { goToAdmin } from '../../marketing/workspaceEntry';
+import SeedanceSaleLabel from './SeedanceSaleLabel';
 
 const NavItem = ({ item, active, onClick }) => (
   <Hoverable
@@ -32,7 +33,13 @@ const NavItem = ({ item, active, onClick }) => (
     <span style={{ display: 'flex', width: 17, height: 17, flex: 'none' }}>
       <item.Icon />
     </span>
-    <span style={{ flex: 1 }}>{item.label}</span>
+    <span style={{ flex: 1 }}>
+      {item.id === 'seedance-sale' ? (
+        <SeedanceSaleLabel active={active} />
+      ) : (
+        item.label
+      )}
+    </span>
     {item.badge && (
       <span
         style={{

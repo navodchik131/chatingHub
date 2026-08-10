@@ -13,6 +13,7 @@ import {
 } from '../../billing/demoCounter';
 import { assetUrl } from '../utils/assets';
 import { goToAdmin } from '../../marketing/workspaceEntry';
+import SeedanceSaleLabel from './SeedanceSaleLabel';
 
 /** Top bar shown only on mobile. */
 export function MobileTopBar() {
@@ -39,7 +40,9 @@ export function MobileTopBar() {
       >
         <img src={assetUrl('assets/logo-m.jpeg')} alt="ModelMate" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
       </div>
-      <div style={{ fontWeight: 800, fontSize: 14, flex: 1 }}>{pageTitles(t)[page]}</div>
+      <div style={{ fontWeight: 800, fontSize: 14, flex: 1 }}>
+        {page === 'seedance-sale' ? <SeedanceSaleLabel active /> : pageTitles(t)[page]}
+      </div>
       <Hoverable
         as="div"
         style={{
@@ -161,7 +164,9 @@ export function MoreSheet() {
               <span style={{ width: 18, flex: 'none', textAlign: 'center', color: color.orange }}>⚙</span>
             )}
             <div style={{ flex: 1 }}>
-              <div style={{ fontWeight: 700, fontSize: 13.5 }}>{mi.label}</div>
+              <div style={{ fontWeight: 700, fontSize: 13.5 }}>
+                {mi.go === 'seedance-sale' ? <SeedanceSaleLabel active={false} /> : mi.label}
+              </div>
               <div style={{ fontSize: 11, color: color.textMuted }}>{mi.desc}</div>
             </div>
             <span style={{ color: color.textGhost }}>→</span>
