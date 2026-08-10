@@ -336,7 +336,13 @@ class Settings(BaseSettings):
     # Seedance 2.5 @ 720p (WaveSpeed: $0.36/с без ref, $0.22/с с ref; 480p/1080p через множители)
     studio_motion_seedance_25_usd_per_sec_with_ref: float = Field(default=0.22, ge=0.0)
     studio_motion_seedance_25_usd_per_sec_no_ref: float = Field(default=0.36, ge=0.0)
+    # Видео: USD/сек → кредиты через (курс ЦБ + STUDIO_MOTION_RUB_PER_USD_MARGIN) / STUDIO_MOTION_RUB_PER_CREDIT
     studio_motion_rub_per_usd: float = Field(default=80.0, ge=0.01)
+    studio_motion_rub_per_usd_margin: float = Field(
+        default=4.0,
+        ge=0.0,
+        description="Надбавка к курсу ЦБ (₽) при переводе USD-стоимости видео в кредиты.",
+    )
     studio_motion_rub_per_credit: float = Field(default=3.6, ge=0.01)
     # --- EvoLink Seedance Sale ---
     evolink_api_base: str = Field(default="https://api.evolink.ai")

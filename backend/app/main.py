@@ -96,6 +96,12 @@ async def _studio_archive_retry_loop() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
+    try:
+        from app.services.fx_rate import get_usd_rate
+
+        await get_usd_rate()
+    except Exception:
+        log.warning("Initial CBR USD/RUB fetch failed", exc_info=True)
     log.info("Database URL: %s", settings.database_url)
     bot: Bot | None = None
     polling_task: asyncio.Task[None] | None = None

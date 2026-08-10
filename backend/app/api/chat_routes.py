@@ -209,6 +209,9 @@ async def api_health(session: AsyncSession = Depends(get_session)) -> dict:
         or 0
     )
     tg = get_telegram_api_status()
+    from app.services.fx_rate import get_usd_rate
+
+    await get_usd_rate()
     return {
         "ok": True,
         "mode": "saas",

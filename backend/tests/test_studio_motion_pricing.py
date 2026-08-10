@@ -1,4 +1,5 @@
 import math
+from contextlib import ExitStack
 from unittest.mock import patch
 
 from app.config import settings
@@ -11,17 +12,26 @@ from app.services.studio_motion_pricing import (
 
 
 def _patch_motion_pricing_defaults():
-    return patch.multiple(
-        settings,
-        studio_motion_usd_per_sec_with_ref=0.13,
-        studio_motion_usd_per_sec_no_ref=0.24,
-        studio_motion_mini_usd_per_sec_with_ref=0.0975,
-        studio_motion_mini_usd_per_sec_no_ref=0.15,
-        studio_motion_seedance_25_usd_per_sec_with_ref=0.22,
-        studio_motion_seedance_25_usd_per_sec_no_ref=0.36,
-        studio_motion_rub_per_usd=80.0,
-        studio_motion_rub_per_credit=3.6,
+    stack = ExitStack()
+    stack.enter_context(
+        patch.multiple(
+            settings,
+            studio_motion_usd_per_sec_with_ref=0.13,
+            studio_motion_usd_per_sec_no_ref=0.24,
+            studio_motion_mini_usd_per_sec_with_ref=0.0975,
+            studio_motion_mini_usd_per_sec_no_ref=0.15,
+            studio_motion_seedance_25_usd_per_sec_with_ref=0.22,
+            studio_motion_seedance_25_usd_per_sec_no_ref=0.36,
+            studio_motion_rub_per_credit=3.6,
+        )
     )
+    stack.enter_context(
+        patch(
+            "app.services.studio_motion_pricing.studio_motion_rub_per_usd_effective",
+            return_value=80.0,
+        )
+    )
+    return stack
 
 
 def test_duration_clamp_api_minimum_four_seconds() -> None:
@@ -121,34 +131,41 @@ def test_mini_cheaper_than_standard_at_same_resolution() -> None:
 
 
 def test_matches_settings_formula_without_ref() -> None:
-    for dur in (4, 10, 15):
-        usd = settings.studio_motion_usd_per_sec_no_ref * dur
-        expected = max(
-            1,
-            math.ceil(
-                usd * settings.studio_motion_rub_per_usd / settings.studio_motion_rub_per_credit
-            ),
-        )
-        assert (
-            motion_video_credit_cost(
-                dur,
-                variant="standard",
-                resolution="720p",
-                has_motion_reference_video=False,
+    rub_per_usd = 80.0
+    with _patch_motion_pricing_defaults():
+        for dur in (4, 10, 15):
+            usd = settings.studio_motion_usd_per_sec_no_ref * dur
+            expected = max(
+                1,
+                math.ceil(
+                    usd * rub_per_usd / settings.studio_motion_rub_per_credit
+                ),
             )
-            == expected
-        )
+            assert (
+                motion_video_credit_cost(
+                    dur,
+                    variant="standard",
+                    resolution="720p",
+                    has_motion_reference_video=False,
+                )
+                == expected
+            )
 
 
 def test_grok_imagine_i2v_credit_cost():
     from app.services.studio_motion_pricing import grok_imagine_i2v_credit_cost
 
-    # 6s @ 720p: 0.14*6 + 0.01 = 0.85 USD
-    expected = max(
-        1,
-        math.ceil(
-            0.85 * settings.studio_motion_rub_per_usd / settings.studio_motion_rub_per_credit
-        ),
-    )
-    assert grok_imagine_i2v_credit_cost(6, resolution="720p") == expected
-    assert grok_imagine_i2v_credit_cost(1, resolution="480p") >= 1
+    rub_per_usd = 80.0
+    with patch(
+        "app.services.studio_motion_pricing.studio_motion_rub_per_usd_effective",
+        return_value=rub_per_usd,
+    ):
+        # 6s @ 720p: 0.14*6 + 0.01 = 0.85 USD
+        expected = max(
+            1,
+            math.ceil(
+                0.85 * rub_per_usd / settings.studio_motion_rub_per_credit
+            ),
+        )
+        assert grok_imagine_i2v_credit_cost(6, resolution="720p") == expected
+        assert grok_imagine_i2v_credit_cost(1, resolution="480p") >= 1

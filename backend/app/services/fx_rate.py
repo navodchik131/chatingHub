@@ -58,6 +58,21 @@ async def _fetch_cbr_rub_per_usd() -> float:
     return value
 
 
+def cached_cbr_rub_per_usd_sync() -> float:
+    """Последний закэшированный курс ЦБ (sync, для биллинга студии)."""
+    v = _cache.get("rub_per_usd")
+    if isinstance(v, (int, float)) and float(v) > 0:
+        return float(v)
+    return float(_FALLBACK_RUB_PER_USD)
+
+
+def studio_motion_rub_per_usd_effective() -> float:
+    """USD/RUB для видео-студии: курс ЦБ + маржа (оплата провайдеру дороже номинала)."""
+    from app.config import settings
+
+    return cached_cbr_rub_per_usd_sync() + float(settings.studio_motion_rub_per_usd_margin)
+
+
 async def get_usd_rate(*, force: bool = False) -> dict[str, Any]:
     """Возвращает { rub_per_usd, usd_per_rub, updated_at, source, next_refresh_at }."""
     now = datetime.now(timezone.utc)

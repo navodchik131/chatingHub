@@ -6,6 +6,7 @@ import math
 from typing import Literal
 
 from app.config import settings
+from app.services.fx_rate import cached_cbr_rub_per_usd_sync, studio_motion_rub_per_usd_effective
 
 SeedanceT2vVariant = Literal["standard", "mini", "seedance_25"]
 SeedanceT2vResolution = Literal["480p", "720p", "1080p"]
@@ -84,7 +85,7 @@ def grok_imagine_i2v_credit_cost(
     resolution: GrokImagineI2vResolution | str = "720p",
 ) -> int:
     usd = grok_imagine_i2v_usd_total(duration_seconds, resolution=resolution)
-    rub_total = usd * float(settings.studio_motion_rub_per_usd)
+    rub_total = usd * studio_motion_rub_per_usd_effective()
     per_credit = float(settings.studio_motion_rub_per_credit)
     if per_credit <= 0:
         return max(1, grok_imagine_i2v_duration_seconds(duration_seconds))
@@ -206,7 +207,7 @@ def _motion_video_credit_cost_raw(
         has_motion_reference_video=has_motion_reference_video,
         reference_video_duration=reference_video_duration,
     )
-    rub_total = usd * float(settings.studio_motion_rub_per_usd)
+    rub_total = usd * studio_motion_rub_per_usd_effective()
     per_credit = float(settings.studio_motion_rub_per_credit)
     if per_credit <= 0:
         return max(1, dur)
@@ -295,7 +296,7 @@ def video_upscale_credit_cost(
     min_sec = max(1, int(settings.studio_video_upscale_min_billed_seconds))
     dur = max(min_sec, int(duration_seconds or min_sec))
     usd = _video_upscale_usd_per_5s(target_resolution) * (dur / 5.0)
-    rub_total = usd * float(settings.studio_motion_rub_per_usd)
+    rub_total = usd * studio_motion_rub_per_usd_effective()
     per_credit = float(settings.studio_motion_rub_per_credit)
     if per_credit <= 0:
         return max(1, int(math.ceil(dur / 5.0)))
@@ -334,7 +335,9 @@ def motion_video_pricing_public() -> dict[str, float | int | dict | list]:
             resolution="720p",
             has_motion_reference_video=False,
         ),
-        "rub_per_usd": float(settings.studio_motion_rub_per_usd),
+        "rub_per_usd": studio_motion_rub_per_usd_effective(),
+        "rub_per_usd_cbr": cached_cbr_rub_per_usd_sync(),
+        "rub_per_usd_margin": float(settings.studio_motion_rub_per_usd_margin),
         "rub_per_credit": float(settings.studio_motion_rub_per_credit),
         "duration_min": int(settings.studio_motion_video_duration_min),
         "duration_max": int(settings.studio_motion_video_duration_max),

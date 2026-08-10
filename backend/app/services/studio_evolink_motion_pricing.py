@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 
 from app.config import settings
+from app.services.fx_rate import cached_cbr_rub_per_usd_sync, studio_motion_rub_per_usd_effective
 from app.services.studio_motion_pricing import (
     SeedanceT2vResolution,
     SeedanceT2vVariant,
@@ -156,7 +157,7 @@ def _credit_cost_raw(
         has_motion_reference_video=has_motion_reference_video,
         reference_video_duration=reference_video_duration,
     )
-    rub_total = usd * float(settings.studio_motion_rub_per_usd)
+    rub_total = usd * studio_motion_rub_per_usd_effective()
     per_credit = float(settings.studio_motion_rub_per_credit)
     if per_credit <= 0:
         return max(1, dur)
@@ -219,7 +220,9 @@ def evolink_video_pricing_public() -> dict:
     default_res = normalize_evolink_resolution(None, variant="standard")
     return {
         "backend": "evolink",
-        "rub_per_usd": float(settings.studio_motion_rub_per_usd),
+        "rub_per_usd": studio_motion_rub_per_usd_effective(),
+        "rub_per_usd_cbr": cached_cbr_rub_per_usd_sync(),
+        "rub_per_usd_margin": float(settings.studio_motion_rub_per_usd_margin),
         "rub_per_credit": float(settings.studio_motion_rub_per_credit),
         "duration_min": int(settings.evolink_video_duration_min),
         "duration_max_20": int(settings.evolink_video_duration_max_20),
