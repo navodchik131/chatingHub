@@ -7020,33 +7020,34 @@ async def _studio_job_execute_motion_render_video(
         )
 
     try:
-        await record_usage(
-            session,
-            user,
-            billing,
-            "studio_motion_control",
-            cost,
-            {
-                "studio_model_id": mid,
-                "first_frame_generation_id": first_frame_gen_id,
-                "outfit_generation_id": outfit_gen_id,
-                "motion_video_file_id": mv_id or None,
-                "motion_video_provider": motion_provider,
-                "seedance_t2v_variant": seedance_v,
-                "seedance_20_t2v_path": (
-                    settings.wavespeed_seedance_20_mini_t2v_path
-                    if seedance_v == "mini"
-                    else settings.wavespeed_seedance_20_t2v_path
-                ),
-                "seedance_20_t2v_resolution": video_res,
-                "seedance_20_t2v_duration": ds_effective,
-                "reference_images": len(ref_images),
-                "reference_videos": len(ref_videos),
-                "seedance_t2v_prompt_source": prompt_source,
-                "seedance_t2v_prompt_chars": len(seed_prompt),
-                "ok": bool(video_url),
-            },
-        )
+        if video_url and cost > 0:
+            await record_usage(
+                session,
+                user,
+                billing,
+                "studio_motion_control",
+                cost,
+                {
+                    "studio_model_id": mid,
+                    "first_frame_generation_id": first_frame_gen_id,
+                    "outfit_generation_id": outfit_gen_id,
+                    "motion_video_file_id": mv_id or None,
+                    "motion_video_provider": motion_provider,
+                    "seedance_t2v_variant": seedance_v,
+                    "seedance_20_t2v_path": (
+                        settings.wavespeed_seedance_20_mini_t2v_path
+                        if seedance_v == "mini"
+                        else settings.wavespeed_seedance_20_t2v_path
+                    ),
+                    "seedance_20_t2v_resolution": video_res,
+                    "seedance_20_t2v_duration": ds_effective,
+                    "reference_images": len(ref_images),
+                    "reference_videos": len(ref_videos),
+                    "seedance_t2v_prompt_source": prompt_source,
+                    "seedance_t2v_prompt_chars": len(seed_prompt),
+                    "ok": True,
+                },
+            )
         await session.commit()
     except Exception as e:
         log.exception("motion_render_video commit failed job=%s", job.id)

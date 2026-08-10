@@ -15,6 +15,9 @@ log = logging.getLogger(__name__)
 
 EvolinkSeedanceVariant = Literal["standard", "mini", "seedance_25"]
 
+_EVOLINK_ADAPTIVE_ASPECT_SUFFIXES = ("-image-to-video", "-video-edit")
+_EVOLINK_VIDEO_EDIT_MODELS = frozenset({"seedance-2.5-video-edit"})
+
 
 def evolink_base() -> str:
     return (settings.evolink_api_base or "https://api.evolink.ai").rstrip("/")
@@ -50,6 +53,40 @@ def _normalize_evolink_quality(resolution: str | None, *, variant: str) -> str:
     return "720p"
 
 
+def evolink_model_requires_adaptive_aspect(model: str) -> bool:
+    m = (model or "").strip().lower()
+    if m in _EVOLINK_VIDEO_EDIT_MODELS:
+        return True
+    return any(m.endswith(sfx) for sfx in _EVOLINK_ADAPTIVE_ASPECT_SUFFIXES)
+
+
+def normalize_evolink_aspect_ratio(model: str, aspect_ratio: str | None) -> str | None:
+    """EvoLink i2v/video-edit принимают только adaptive; t2v/ref — фиксированные ratio."""
+    if evolink_model_requires_adaptive_aspect(model):
+        return "adaptive"
+    ar = (aspect_ratio or "").strip()
+    return ar or None
+
+
+def normalize_evolink_duration(model: str, duration: int | None) -> int:
+    """Video-edit: только -1 (длина = входное видео)."""
+    m = (model or "").strip().lower()
+    if m in _EVOLINK_VIDEO_EDIT_MODELS or m.endswith("-video-edit"):
+        return -1
+    return int(duration or settings.evolink_video_duration_default)
+
+
+def format_evolink_video_edit_prompt(prompt: str) -> str:
+    """EvoLink video-edit требует явного editing intent в промпте."""
+    text = wavespeed_tags_to_evolink((prompt or "").strip())
+    if not text:
+        return "Edit the video."
+    low = text.lower()
+    if low.startswith("edit the video"):
+        return text
+    return f"Edit the video: {text}"
+
+
 def resolve_evolink_model(
     *,
     variant: EvolinkSeedanceVariant | str,
@@ -59,7 +96,9 @@ def resolve_evolink_model(
 ) -> str:
     v = (variant or "standard").strip().lower().replace("-", "_")
     if v in ("seedance_25", "seedance25", "v25", "2_5"):
-        if has_reference_video or (has_reference_images and not image_to_video):
+        if has_reference_video:
+            return "seedance-2.5-video-edit"
+        if has_reference_images and not image_to_video:
             return "seedance-2.5-reference-to-video"
         if image_to_video:
             return "seedance-2.5-image-to-video"
@@ -155,16 +194,23 @@ async def seedance_evolink_video_url(
         image_to_video=image_to_video,
     )
     quality = _normalize_evolink_quality(resolution, variant=variant)
+    prompt_text = wavespeed_tags_to_evolink(prompt)
+    if has_vids and model.endswith("-video-edit"):
+        prompt_text = format_evolink_video_edit_prompt(prompt_text)
     body: dict[str, Any] = {
         "model": model,
-        "prompt": wavespeed_tags_to_evolink(prompt),
-        "duration": int(duration or settings.evolink_video_duration_default),
+        "prompt": prompt_text,
+        "duration": normalize_evolink_duration(model, duration),
         "quality": quality,
         "generate_audio": bool(generate_audio),
         "content_filter": True,
     }
-    ar = (aspect_ratio or "").strip()
-    if ar:
+    ar = normalize_evolink_aspect_ratio(model, aspect_ratio)
+    if has_vids:
+        body["aspect_ratio"] = "adaptive"
+        if "reference-to-video" in model:
+            body["duration"] = -1
+    elif ar:
         body["aspect_ratio"] = ar
     if has_imgs:
         body["image_urls"] = imgs[:30]

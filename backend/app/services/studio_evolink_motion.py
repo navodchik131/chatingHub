@@ -336,24 +336,25 @@ async def execute_evolink_motion_render_video(
             step="evolink",
         )
 
-    await record_usage(
-        session,
-        user,
-        billing,
-        "studio_seedance_sale",
-        cost,
-        {
-            "studio_model_id": mid,
-            "video_backend": VIDEO_BACKEND_EVOLINK,
-            "seedance_variant": seedance_v,
-            "duration": ds_effective,
-            "resolution": video_res,
-            "reference_videos": len(ref_videos),
-            "reference_images": len(evolink_images or []),
-            "prompt_source": prompt_source,
-            "ok": bool(video_url),
-        },
-    )
+    if video_url and cost > 0:
+        await record_usage(
+            session,
+            user,
+            billing,
+            "studio_seedance_sale",
+            cost,
+            {
+                "studio_model_id": mid,
+                "video_backend": VIDEO_BACKEND_EVOLINK,
+                "seedance_variant": seedance_v,
+                "duration": ds_effective,
+                "resolution": video_res,
+                "reference_videos": len(ref_videos),
+                "reference_images": len(evolink_images or []),
+                "prompt_source": prompt_source,
+                "ok": True,
+            },
+        )
     await session.commit()
 
     if not video_url and msg:

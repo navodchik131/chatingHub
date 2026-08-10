@@ -1,4 +1,7 @@
 from app.services.evolink_client import (
+    format_evolink_video_edit_prompt,
+    normalize_evolink_aspect_ratio,
+    normalize_evolink_duration,
     resolve_evolink_model,
     wavespeed_tags_to_evolink,
     _normalize_evolink_quality,
@@ -33,10 +36,33 @@ def test_resolve_evolink_model_variants():
     ) == "seedance-2.0-mini-reference-to-video"
     assert resolve_evolink_model(
         variant="seedance_25",
+        has_reference_video=True,
+        has_reference_images=True,
+        image_to_video=False,
+    ) == "seedance-2.5-video-edit"
+    assert resolve_evolink_model(
+        variant="seedance_25",
         has_reference_video=False,
         has_reference_images=True,
         image_to_video=True,
     ) == "seedance-2.5-image-to-video"
+
+
+def test_evolink_aspect_and_duration_normalization():
+    assert normalize_evolink_aspect_ratio("seedance-2.5-image-to-video", "9:16") == "adaptive"
+    assert normalize_evolink_aspect_ratio("seedance-2.5-text-to-video", "9:16") == "9:16"
+    assert normalize_evolink_duration("seedance-2.5-video-edit", 8) == -1
+    assert normalize_evolink_duration("seedance-2.5-text-to-video", 8) == 8
+
+
+def test_format_evolink_video_edit_prompt():
+    assert format_evolink_video_edit_prompt("Replace @Video1 with @Image1").startswith(
+        "Edit the video:"
+    )
+    assert " @video1" in format_evolink_video_edit_prompt("Replace @Video1").lower()
+    assert format_evolink_video_edit_prompt("Edit the video: keep motion").startswith(
+        "Edit the video:"
+    )
 
 
 def test_normalize_evolink_quality_seedance_25():

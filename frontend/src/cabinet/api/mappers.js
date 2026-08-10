@@ -313,16 +313,68 @@ export function mapUsageBars(me, lang) {
   ]
 }
 
+const CREDIT_HISTORY_KIND_LABELS = {
+  ru: {
+    studio_seedance_sale: 'Seedance Sale · видео',
+    studio_motion_control: 'Motion control · видео',
+    studio_motion_first_frame: 'Первый кадр видео',
+    studio_motion_compose_video_prompt: 'Промпт для видео',
+    studio_prompt_refine: 'Уточнение промпта',
+    studio_model_profile_generate: 'Профиль модели',
+    studio_image_upscale: 'Апскейл изображения',
+    studio_video_upscale: 'Апскейл видео',
+    studio_carousel_shot: 'Кадр карусели',
+    grok_prompt_generation: 'Grok · промпт',
+    yookassa_credits_pack: 'Покупка кредитов',
+    tribute_credits_pack: 'Покупка кредитов (Tribute)',
+    managed_subscription_bonus: 'Бонус подписки',
+    referral_bonus: 'Реферальный бонус',
+    referrer_reward: 'Награда реферала',
+    admin_credit_adjustment: 'Корректировка админа',
+    demo_generation: 'Демо-генерация',
+    workflow_compose_video_prompt: 'Workflow · промпт видео',
+  },
+  en: {
+    studio_seedance_sale: 'Seedance Sale · video',
+    studio_motion_control: 'Motion control · video',
+    studio_motion_first_frame: 'Video first frame',
+    studio_motion_compose_video_prompt: 'Video prompt',
+    studio_prompt_refine: 'Prompt refine',
+    studio_model_profile_generate: 'Model profile',
+    studio_image_upscale: 'Image upscale',
+    studio_video_upscale: 'Video upscale',
+    studio_carousel_shot: 'Carousel shot',
+    grok_prompt_generation: 'Grok · prompt',
+    yookassa_credits_pack: 'Credit pack purchase',
+    tribute_credits_pack: 'Credit pack (Tribute)',
+    managed_subscription_bonus: 'Subscription bonus',
+    referral_bonus: 'Referral bonus',
+    referrer_reward: 'Referrer reward',
+    admin_credit_adjustment: 'Admin adjustment',
+    demo_generation: 'Demo generation',
+    workflow_compose_video_prompt: 'Workflow · video prompt',
+  },
+}
+
+function creditHistoryKindLabel(kind, lang) {
+  const k = String(kind || '').trim()
+  const labels = CREDIT_HISTORY_KIND_LABELS[lang === 'en' ? 'en' : 'ru'] || {}
+  return labels[k] || k || '—'
+}
+
 export function mapCreditHistory(rows, lang) {
   return (rows || []).map((row) => {
-    const deltaNum = Number(row.delta || 0)
-    const positive = deltaNum >= 0
-    const delta = row.delta_display || (positive ? `+${deltaNum}` : String(deltaNum))
+    const deltaNum = Number(row.credits_delta ?? row.delta ?? 0)
+    const positive = deltaNum > 0
+    const zero = deltaNum === 0
+    const suffix = lang === 'en' ? ' cr' : ' кр.'
+    const delta = row.delta_display
+      || (zero ? `0${suffix}` : `${positive ? '+' : ''}${deltaNum}${suffix}`)
     return {
       date: fmtDateShort(row.created_at, lang),
-      what: row.description || row.kind || '—',
+      what: row.description || creditHistoryKindLabel(row.kind, lang),
       delta,
-      color: positive ? '#4ADE80' : '#F87171',
+      color: zero ? '#94A3B8' : positive ? '#4ADE80' : '#F87171',
     }
   })
 }
