@@ -8,6 +8,7 @@ import {
   computeGrokImagineI2vUsdCost,
   computeMotionVideoCreditCost,
   computeMotionVideoUsdCost,
+  formatMotionCreditCost,
   formatMotionUsd,
   mergeMotionVideoPricing,
   type GrokImagineI2vResolution,
@@ -553,7 +554,7 @@ function VideoGenerationNodeComponent({ id, data }: NodeProps) {
         {nodeData.isRunning ? t('gen.cancel') : t('nodeUi.videoGen.generate')}
         {!nodeData.isRunning ? (
           <span className="workflow-node__btn-cost">
-            {isPro ? formatMotionUsd(costUsd) : `${costCredits} ${t('gen.creditsUnit')}`}
+            {isPro ? formatMotionUsd(costUsd) : formatMotionCreditCost(costCredits, pricing, t('gen.creditsUnit'))}
           </span>
         ) : null}
       </button>

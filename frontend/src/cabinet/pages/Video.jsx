@@ -17,6 +17,7 @@ import {
   computeMotionVideoCreditCost,
   computeMotionVideoUsdCost,
   evolinkDurationMax,
+  formatMotionCreditCost,
   formatMotionUsd,
   mergeEvolinkVideoPricing,
 } from '../../studioMotionPricing';
@@ -195,7 +196,11 @@ export function VideoStudioPage({ backend = 'wavespeed' }) {
     });
   }, [isEvolink, cabinet.health, cabinet.motionVideoFileId, s.vidTime, s.vidQuality, s.vidSeedanceVariant, motionControl]);
 
-  const vidCostLabel = isEvolink || !isPro ? `−${vidCost} ${t.cr}` : formatMotionUsd(vidUsd);
+  const activePricing = isEvolink ? evolinkPricing : cabinet.health?.studio_motion_video_pricing;
+
+  const vidCostLabel = isEvolink || !isPro
+    ? `−${formatMotionCreditCost(vidCost, activePricing, t.cr)}`
+    : formatMotionUsd(vidUsd);
 
   const seedanceModelOptsAll = [
     { v: 'standard', l: t.vidModelStandard },

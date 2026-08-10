@@ -234,6 +234,28 @@ export function formatMotionUsd(usd: number): string {
   return `$${usd.toFixed(2)}`
 }
 
+/** USD-эквивалент стоимости в кредитах (кредиты × ₽/кредит ÷ ₽/$). */
+export function computeUsdFromCredits(
+  credits: number,
+  pricing?: Partial<StudioMotionVideoPricing> | null,
+): number {
+  const p = mergeMotionVideoPricing(pricing)
+  if (!Number.isFinite(credits) || credits <= 0) return 0
+  if (!Number.isFinite(p.rub_per_credit) || p.rub_per_credit <= 0) return 0
+  if (!Number.isFinite(p.rub_per_usd) || p.rub_per_usd <= 0) return 0
+  return (credits * p.rub_per_credit) / p.rub_per_usd
+}
+
+/** «5 кр. ($0.21)» — USD по цене кредита, не по тарифу провайдера. */
+export function formatMotionCreditCost(
+  credits: number,
+  pricing?: Partial<StudioMotionVideoPricing> | null,
+  creditsSuffix = 'cr.',
+): string {
+  const usd = computeUsdFromCredits(credits, pricing)
+  return `${credits} ${creditsSuffix} (${formatMotionUsd(usd)})`
+}
+
 export function motionVideoUsdPerSec(
   variant: SeedanceT2vVariant,
   resolution: SeedanceT2vResolution,
