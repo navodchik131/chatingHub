@@ -10,6 +10,7 @@ export function canAccessPage(pageId, me, opRights) {
       return !!r.chat
     case 'images':
     case 'video':
+    case 'seedance-sale':
     case 'characters':
     case 'workflow':
       return !!r.studio

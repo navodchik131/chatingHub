@@ -1449,6 +1449,8 @@ class StudioGeneration(Base):
     # EXIF при сохранении в архив: selfie (фронталка) | main (основная камера) — задаётся при генерации.
     exif_camera: Mapped[str] = mapped_column(String(16), default="main", nullable=False)
     is_demo: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    """wavespeed | evolink — провайдер видео (Seedance Sale = evolink)."""
+    video_backend: Mapped[str] = mapped_column(String(16), default="wavespeed", nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
@@ -1512,6 +1514,7 @@ class StudioMotionRender(Base):
         index=True,
     )
     video_url: Mapped[str] = mapped_column(Text, nullable=False)
+    video_backend: Mapped[str] = mapped_column(String(16), default="wavespeed", nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

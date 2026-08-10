@@ -35,6 +35,7 @@ export const CABINET_PAGES = new Set([
   'dialogs',
   'images',
   'video',
+  'seedance-sale',
   'characters',
   'donations',
   'billing',

@@ -322,6 +322,108 @@ export function computeGrokImagineI2vCreditCost(
   return Math.max(1, Math.ceil(rub / perCredit))
 }
 
+export type StudioEvolinkVideoPricing = StudioMotionVideoPricing & {
+  backend?: string
+  duration_max_20?: number
+  duration_max_25?: number
+  always_charges_credits?: boolean
+  nsfw_supported?: boolean
+  resolutions_by_variant?: Partial<Record<SeedanceT2vVariant, SeedanceT2vResolution[]>>
+}
+
+export const DEFAULT_EVOLINK_VIDEO_PRICING: StudioEvolinkVideoPricing = {
+  ...DEFAULT_MOTION_VIDEO_PRICING,
+  usd_per_sec_with_reference_video: 0.08,
+  usd_per_sec_without_reference_video: 0.056,
+  duration_max_20: 15,
+  duration_max_25: 30,
+  always_charges_credits: true,
+  nsfw_supported: false,
+  variants: {
+    standard: {
+      usd_per_sec_720p_with_reference_video: 0.08,
+      usd_per_sec_720p_without_reference_video: 0.056,
+    },
+    mini: {
+      usd_per_sec_720p_with_reference_video: 0.06,
+      usd_per_sec_720p_without_reference_video: 0.045,
+    },
+    seedance_25: {
+      usd_per_sec_720p_with_reference_video: 0.12,
+      usd_per_sec_720p_without_reference_video: 0.09,
+    },
+  },
+  resolutions_by_variant: {
+    standard: ['480p', '720p', '1080p'],
+    mini: ['480p', '720p', '1080p'],
+    seedance_25: ['480p', '720p'],
+  },
+}
+
+export function mergeEvolinkVideoPricing(
+  fromHealth?: Partial<StudioEvolinkVideoPricing> | null,
+): StudioEvolinkVideoPricing {
+  const base = mergeMotionVideoPricing(fromHealth)
+  return {
+    ...DEFAULT_EVOLINK_VIDEO_PRICING,
+    ...base,
+    ...fromHealth,
+    duration_max_20: Number(fromHealth?.duration_max_20 ?? DEFAULT_EVOLINK_VIDEO_PRICING.duration_max_20),
+    duration_max_25: Number(fromHealth?.duration_max_25 ?? DEFAULT_EVOLINK_VIDEO_PRICING.duration_max_25),
+    variants: {
+      ...DEFAULT_EVOLINK_VIDEO_PRICING.variants,
+      ...(fromHealth?.variants ?? {}),
+      ...(base.variants ?? {}),
+    },
+    resolutions_by_variant: {
+      ...DEFAULT_EVOLINK_VIDEO_PRICING.resolutions_by_variant,
+      ...(fromHealth?.resolutions_by_variant ?? {}),
+    },
+  }
+}
+
+export function evolinkDurationMax(
+  variant: SeedanceT2vVariant,
+  pricing?: Partial<StudioEvolinkVideoPricing> | null,
+): number {
+  const p = mergeEvolinkVideoPricing(pricing)
+  return variant === 'seedance_25' ? (p.duration_max_25 ?? 30) : (p.duration_max_20 ?? 15)
+}
+
+export function computeEvolinkVideoCreditCost(
+  durationSeconds: number,
+  hasReferenceVideo: boolean,
+  pricing?: Partial<StudioEvolinkVideoPricing> | null,
+  options?: {
+    variant?: SeedanceT2vVariant
+    resolution?: SeedanceT2vResolution
+    referenceVideoDuration?: number | null
+  },
+): number {
+  const p = mergeEvolinkVideoPricing(pricing)
+  const variant = options?.variant ?? p.default_variant ?? 'standard'
+  const maxDur = evolinkDurationMax(variant, p)
+  const dur = Math.max(p.duration_min, Math.min(maxDur, Math.round(durationSeconds)))
+  return computeMotionVideoCreditCost(dur, hasReferenceVideo, p, options)
+}
+
+export function computeEvolinkVideoUsdCost(
+  durationSeconds: number,
+  hasReferenceVideo: boolean,
+  pricing?: Partial<StudioEvolinkVideoPricing> | null,
+  options?: {
+    variant?: SeedanceT2vVariant
+    resolution?: SeedanceT2vResolution
+    referenceVideoDuration?: number | null
+  },
+): number {
+  const p = mergeEvolinkVideoPricing(pricing)
+  const variant = options?.variant ?? p.default_variant ?? 'standard'
+  const maxDur = evolinkDurationMax(variant, p)
+  const dur = Math.max(p.duration_min, Math.min(maxDur, Math.round(durationSeconds)))
+  return computeMotionVideoUsdCost(dur, hasReferenceVideo, p, options)
+}
+
 /** Кредиты за Video Upscaler Pro (мин. 5 с биллинга WaveSpeed). */
 export function computeVideoUpscaleCreditCost(
   targetResolution: VideoUpscaleResolution | string,

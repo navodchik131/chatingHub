@@ -49,6 +49,7 @@ async def reserve_studio_generation_for_job(
     prompt_excerpt: str | None = None,
     preview_source_url: str | None = None,
     exif_camera: str | None = None,
+    video_backend: str | None = None,
 ) -> StudioGeneration:
     """Создаёт запись processing, привязанную к job (идемпотентно по studio_job_id)."""
     existing = await find_studio_generation_by_job_id(session, studio_job_id)
@@ -57,6 +58,8 @@ async def reserve_studio_generation_for_job(
 
     excerpt = (prompt_excerpt or "").strip()[:2000] or None
     preview = (preview_source_url or "").strip()[:2000] or None
+
+    vb = (video_backend or "wavespeed").strip().lower() or "wavespeed"
 
     row = StudioGeneration(
         user_id=owner_id,
@@ -69,6 +72,7 @@ async def reserve_studio_generation_for_job(
         prompt_excerpt=excerpt,
         source_url=preview,
         exif_camera=normalize_exif_camera(exif_camera),
+        video_backend=vb,
     )
     session.add(row)
     await session.flush()

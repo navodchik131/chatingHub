@@ -481,6 +481,7 @@ class StudioMotionRenderOut(BaseModel):
     studio_model_id: int | None = None
     video_url: str
     frame_image_url: str
+    video_backend: str = "wavespeed"
 
 
 class StudioMotionRendersPageOut(BaseModel):
@@ -538,6 +539,7 @@ class StudioGenerationOut(BaseModel):
     job_id: int | None = None
     image_url: str = ""
     video_url: str | None = None
+    video_backend: str = "wavespeed"
 
 
 class StudioGenerationsPageOut(BaseModel):

@@ -10,6 +10,7 @@ import Guide, { MediaModal } from './pages/Guide';
 import Dialogs from './pages/Dialogs';
 import Images, { Lightbox } from './pages/Images';
 import Video from './pages/Video';
+import SeedanceSale from './pages/SeedanceSale';
 import Characters from './pages/Characters';
 import Donations from './pages/Donations';
 import Billing from './pages/Billing';
@@ -27,6 +28,7 @@ const pages = {
   dialogs: Dialogs,
   images: Images,
   video: Video,
+  'seedance-sale': SeedanceSale,
   characters: Characters,
   donations: Donations,
   billing: Billing,

@@ -385,18 +385,20 @@ export async function refreshArchiveImages(skip = 0) {
   return { items, has_more: Boolean(page.has_more) }
 }
 
-export async function refreshArchiveVideos(skip = 0) {
+export async function refreshArchiveVideos(skip = 0, { videoBackend = 'wavespeed' } = {}) {
+  const vb = videoBackend === 'evolink' ? 'evolink' : 'wavespeed'
+  const vbQs = vb === 'evolink' ? '&video_backend=evolink' : '&video_backend=wavespeed'
   const [page, pending, motion] = await Promise.all([
     apiJsonOptional(
-      `/api/studio/generations?limit=${ARCHIVE_PAGE_LIMIT}&skip=${skip}&media_kind=video`,
+      `/api/studio/generations?limit=${ARCHIVE_PAGE_LIMIT}&skip=${skip}&media_kind=video${vbQs}`,
       {},
       { items: [], has_more: false },
     ),
     skip === 0
-      ? apiJsonOptional('/api/studio/generations/pending?media_kind=video', {}, { items: [] })
+      ? apiJsonOptional(`/api/studio/generations/pending?media_kind=video${vbQs}`, {}, { items: [] })
       : Promise.resolve({ items: [] }),
     skip === 0
-      ? apiJsonOptional(`/api/studio/motion/renders?limit=${ARCHIVE_PAGE_LIMIT}&skip=0`, {}, [])
+      ? apiJsonOptional(`/api/studio/motion/renders?limit=${ARCHIVE_PAGE_LIMIT}&skip=0${vbQs}`, {}, [])
       : Promise.resolve([]),
   ])
   const merged = mergeArchiveItems([...(page.items || []), ...(pending.items || [])])
@@ -540,7 +542,10 @@ export async function runMotionVideo(params) {
   if (params.frameFile) fd.append('image', params.frameFile, params.frameFile.name || 'frame.jpg')
   fd.append('generate_audio', params.generateAudio === false ? '0' : '1')
   if (params.seedanceVariant) fd.append('seedance_variant', String(params.seedanceVariant))
-  return postStudioJob('/api/studio/motion/render-video', { method: 'POST', body: fd })
+  const endpoint = params.videoBackend === 'evolink'
+    ? '/api/studio/seedance-sale/render-video'
+    : '/api/studio/motion/render-video'
+  return postStudioJob(endpoint, { method: 'POST', body: fd })
 }
 
 export async function fetchSupportTickets() {

@@ -98,12 +98,13 @@ export async function refreshPendingArchiveImages(current) {
   return { items: dedupeById(next), changed }
 }
 
-export async function refreshPendingArchiveVideos(current) {
+export async function refreshPendingArchiveVideos(current, { videoBackend = 'wavespeed' } = {}) {
   const tracked = current.filter((g) => isArchivePending(g) || isOptimisticStudioArchiveId(g.id))
   const hasOptimistic = current.some((g) => isOptimisticStudioArchiveId(g.id))
   if (!tracked.length && !hasOptimistic) return { items: current, changed: false }
 
-  const pending = await apiJsonOptional('/api/studio/generations/pending?media_kind=video', {}, { items: [] })
+  const vbQs = videoBackend === 'evolink' ? '&video_backend=evolink' : '&video_backend=wavespeed'
+  const pending = await apiJsonOptional(`/api/studio/generations/pending?media_kind=video${vbQs}`, {}, { items: [] })
   const pendingItems = pending.items || []
   const pendingById = new Map(pendingItems.map((p) => [p.id, p]))
   let changed = false
@@ -131,7 +132,7 @@ export async function refreshPendingArchiveVideos(current) {
   })
 
   if (maybeCompletedIds.length || hasOptimistic) {
-    const freshPage = await refreshArchiveVideos()
+    const freshPage = await refreshArchiveVideos(0, { videoBackend })
     const freshList = freshPage.items || []
     const freshById = new Map(freshList.map((p) => [p.id, p]))
 

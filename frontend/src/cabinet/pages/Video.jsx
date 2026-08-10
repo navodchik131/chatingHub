@@ -11,7 +11,14 @@ import { archiveThumbUrl, archiveDownloadUrl, archiveVideoUrl, isArchivePending,
 import { downloadArchiveBlob } from '../api/archiveDownload';
 import { sameStudioModelId, enginesForNsfw, isUiSimplified } from '../api/studioHelpers';
 import { normalizeBillingPlan } from '../../billing/planCatalog';
-import { computeMotionVideoCreditCost, computeMotionVideoUsdCost, formatMotionUsd } from '../../studioMotionPricing';
+import {
+  computeEvolinkVideoCreditCost,
+  computeMotionVideoCreditCost,
+  computeMotionVideoUsdCost,
+  evolinkDurationMax,
+  formatMotionUsd,
+  mergeEvolinkVideoPricing,
+} from '../../studioMotionPricing';
 import { videoNoteDownloadPath, videoNoteSendPayload } from '../../studioArchive';
 
 const vidModeIcons = { film: IcoFilm, text: IcoText };
@@ -54,10 +61,16 @@ function aspectCss(ratio) {
   return '9 / 16';
 }
 
-export default function Video() {
+export function VideoStudioPage({ backend = 'wavespeed' }) {
+  const isEvolink = backend === 'evolink';
   const { t, lang, s, setS, isMobile, go, cabinet } = useApp();
   const simplifiedUi = isUiSimplified(cabinet.me);
-  const isPro = normalizeBillingPlan(cabinet.me?.billing_plan) === 'pro';
+  const isPro = !isEvolink && normalizeBillingPlan(cabinet.me?.billing_plan) === 'pro';
+  const evolinkEnabled = cabinet.health?.evolink_video_enabled !== false;
+  const evolinkPricing = mergeEvolinkVideoPricing(cabinet.health?.studio_evolink_video_pricing);
+  const pageArchiveVideos = isEvolink ? (cabinet.archiveSeedanceVideos || []) : (cabinet.archiveVideos || []);
+  const pageArchiveHasMore = isEvolink ? cabinet.archiveSeedanceVideosHasMore : cabinet.archiveVideosHasMore;
+  const loadMoreArchiveVideos = isEvolink ? cabinet.loadMoreArchiveSeedanceVideos : cabinet.loadMoreArchiveVideos;
   const videoRef = useRef(null);
   const frameRef = useRef(null);
   const timer = useRef(null);
@@ -89,7 +102,7 @@ export default function Video() {
   };
 
   const handleGenerateVideo = () => {
-    void cabinet.generateVideo(s);
+    void cabinet.generateVideo(s, { backend: isEvolink ? 'evolink' : 'wavespeed' });
   };
 
   const vidModes = videoModeDefs(lang);
@@ -142,16 +155,24 @@ export default function Video() {
   const vidCost = useMemo(() => {
     const duration = Number(s.vidTime) || 5;
     const hasReferenceVideo = motionControl && Boolean(cabinet.motionVideoFileId);
-    const pricing = cabinet.health?.studio_motion_video_pricing;
     const variant = s.vidSeedanceVariant || 'standard';
-    return computeMotionVideoCreditCost(duration, hasReferenceVideo, pricing, {
+    const resolution = vidQualityToResolution(s.vidQuality);
+    if (isEvolink) {
+      return computeEvolinkVideoCreditCost(duration, hasReferenceVideo, evolinkPricing, {
+        variant,
+        resolution,
+        referenceVideoDuration: hasReferenceVideo ? duration : null,
+      });
+    }
+    return computeMotionVideoCreditCost(duration, hasReferenceVideo, cabinet.health?.studio_motion_video_pricing, {
       variant,
-      resolution: vidQualityToResolution(s.vidQuality),
+      resolution,
       referenceVideoDuration: hasReferenceVideo ? duration : null,
     });
-  }, [cabinet.health, cabinet.motionVideoFileId, s.vidTime, s.vidQuality, s.vidSeedanceVariant, motionControl]);
+  }, [isEvolink, evolinkPricing, cabinet.health, cabinet.motionVideoFileId, s.vidTime, s.vidQuality, s.vidSeedanceVariant, motionControl]);
 
   const vidUsd = useMemo(() => {
+    if (isEvolink) return 0;
     const duration = Number(s.vidTime) || 5;
     const hasReferenceVideo = motionControl && Boolean(cabinet.motionVideoFileId);
     const pricing = cabinet.health?.studio_motion_video_pricing;
@@ -161,9 +182,9 @@ export default function Video() {
       resolution: vidQualityToResolution(s.vidQuality),
       referenceVideoDuration: hasReferenceVideo ? duration : null,
     });
-  }, [cabinet.health, cabinet.motionVideoFileId, s.vidTime, s.vidQuality, s.vidSeedanceVariant, motionControl]);
+  }, [isEvolink, cabinet.health, cabinet.motionVideoFileId, s.vidTime, s.vidQuality, s.vidSeedanceVariant, motionControl]);
 
-  const vidCostLabel = isPro ? formatMotionUsd(vidUsd) : `−${vidCost} ${t.cr}`;
+  const vidCostLabel = isEvolink || !isPro ? `−${vidCost} ${t.cr}` : formatMotionUsd(vidUsd);
 
   const seedanceModelOpts = [
     { v: 'standard', l: t.vidModelStandard },
@@ -172,18 +193,41 @@ export default function Video() {
   ];
   const ffImgStyle = { width: 70, aspectRatio: '9/16', borderRadius: 10, flex: 'none', background: G[3] };
 
-  const qualityOpts = [{ l: '480p', v: '480' }, { l: '720p', v: '720' }, { l: '1080p', v: '1080' }, { l: '4K', v: '4k' }];
+  const variant = s.vidSeedanceVariant || 'standard';
+  const qualityOptsAll = [{ l: '480p', v: '480' }, { l: '720p', v: '720' }, { l: '1080p', v: '1080' }, { l: '4K', v: '4k' }];
+  const qualityOpts = useMemo(() => {
+    if (!isEvolink) return qualityOptsAll;
+    const allowed = evolinkPricing.resolutions_by_variant?.[variant] || ['480p', '720p'];
+    return qualityOptsAll.filter((q) => allowed.includes(vidQualityToResolution(q.v)));
+  }, [isEvolink, evolinkPricing, variant]);
   const vfmtOpts = ['9:16', '16:9', '1:1', '4:3', '3:4'];
-  const vtimeOpts = Array.from({ length: 12 }, (_, i) => {
-    const sec = i + 4;
-    return { l: lang === 'ru' ? `${sec} с` : `${sec}s`, v: String(sec) };
-  });
+  const vtimeOpts = useMemo(() => {
+    const maxDur = isEvolink
+      ? evolinkDurationMax(variant, evolinkPricing)
+      : 15;
+    const minDur = isEvolink ? (evolinkPricing.duration_min ?? 4) : 4;
+    const len = Math.max(1, maxDur - minDur + 1);
+    return Array.from({ length: len }, (_, i) => {
+      const sec = i + minDur;
+      return { l: lang === 'ru' ? `${sec} с` : `${sec}s`, v: String(sec) };
+    });
+  }, [isEvolink, evolinkPricing, variant, lang]);
 
   return (
     <Fade data-screen-label="Студия — Видео">
       <div style={{ marginBottom: 16 }}>
-        <PageTitle style={{ marginBottom: 5 }}>{t.navVideo}</PageTitle>
-        <div style={{ fontSize: 12.5, color: color.textDim }}>{t.videoDesc}</div>
+        <PageTitle style={{ marginBottom: 5 }}>{isEvolink ? t.navSeedanceSale : t.navVideo}</PageTitle>
+        <div style={{ fontSize: 12.5, color: color.textDim }}>{isEvolink ? t.seedanceSaleDesc : t.videoDesc}</div>
+        {isEvolink && !evolinkEnabled && (
+          <div style={{ marginTop: 10, fontSize: 12, color: '#fbbf24', lineHeight: 1.45 }}>
+            {t.seedanceSaleDisabled}
+          </div>
+        )}
+        {isEvolink && evolinkEnabled && (
+          <div style={{ marginTop: 10, fontSize: 11.5, color: color.textDim, lineHeight: 1.45 }}>
+            {t.seedanceSaleCreditsHint}
+          </div>
+        )}
       </div>
 
       {/* mode cards */}
@@ -291,7 +335,7 @@ export default function Video() {
             </div>
           </div>
 
-          {!simplifiedUi ? (
+          {!simplifiedUi && !isEvolink ? (
           <div>
             <Eyebrow>{t.contentType}</Eyebrow>
             <div style={{ display: 'flex', gap: 6, background: color.bgPanel, border: `1px solid ${line.soft}`, borderRadius: 11, padding: 4 }}>
@@ -795,7 +839,7 @@ export default function Video() {
         <div>
           <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 10 }}>{t.archive}</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(150px,1fr))', gap: 10 }}>
-            {(cabinet.archiveVideos || []).map((item, i) => {
+            {(pageArchiveVideos || []).map((item, i) => {
               const poster = archiveThumbUrl(item);
               const videoUrl = archiveVideoUrl(item);
               const downloadUrl = archiveDownloadUrl(item) || videoUrl;
@@ -912,7 +956,7 @@ export default function Video() {
               </Hoverable>
             );})}
           </div>
-          {cabinet.archiveVideosHasMore && (
+          {pageArchiveHasMore && (
             <Hoverable
               style={{
                 marginTop: 12, display: 'inline-flex', alignItems: 'center', gap: 8,
@@ -920,7 +964,7 @@ export default function Video() {
                 border: '1px solid rgba(215,244,82,.35)', borderRadius: 10, padding: '8px 16px',
               }}
               hover={{ background: 'rgba(215,244,82,.08)' }}
-              onClick={() => void cabinet.loadMoreArchiveVideos()}
+              onClick={() => void loadMoreArchiveVideos?.()}
             >
               {t.showMore}
             </Hoverable>
@@ -1000,4 +1044,8 @@ export default function Video() {
       />
     </Fade>
   );
+}
+
+export default function Video() {
+  return <VideoStudioPage backend="wavespeed" />;
 }

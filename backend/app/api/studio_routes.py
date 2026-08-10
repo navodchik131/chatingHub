@@ -458,6 +458,7 @@ def _studio_generation_to_out(
         job_id=row.studio_job_id,
         image_url=image_url,
         video_url=video_url,
+        video_backend=(getattr(row, "video_backend", None) or "wavespeed").strip().lower(),
     )
 
 
@@ -510,6 +511,7 @@ async def _accept_studio_job(
             content_type=str(placeholder.get("content_type") or "image/png"),
             prompt_excerpt=placeholder.get("prompt_excerpt"),
             preview_source_url=placeholder.get("preview_source_url"),
+            video_backend=placeholder.get("video_backend"),
         )
         generation_id = gen_row.id
         params = {**params, "placeholder_generation_id": generation_id}
@@ -1324,6 +1326,7 @@ async def api_list_motion_renders(
     request: Request,
     limit: int = Query(20, ge=1, le=50),
     skip: int = Query(0, ge=0, le=50_000),
+    video_backend: Literal["wavespeed", "evolink"] | None = Query(None),
     session: AsyncSession = Depends(get_session),
     user: User = Depends(get_current_user),
 ) -> StudioMotionRendersPageOut:
@@ -1338,6 +1341,17 @@ async def api_list_motion_renders(
         .offset(int(skip))
         .limit(take)
     )
+    vb = (video_backend or "").strip().lower()
+    if vb == "evolink":
+        stmt = stmt.where(StudioMotionRender.video_backend == "evolink")
+    elif vb == "wavespeed":
+        stmt = stmt.where(
+            or_(
+                StudioMotionRender.video_backend == "wavespeed",
+                StudioMotionRender.video_backend.is_(None),
+                StudioMotionRender.video_backend == "",
+            )
+        )
     stmt = apply_studio_model_id_filter(stmt, StudioMotionRender.studio_model_id, allowed)
     rows = list((await session.execute(stmt)).scalars().all())
     has_more = len(rows) > limit
@@ -1363,6 +1377,7 @@ async def api_list_motion_renders(
                     studio_model_id=r.studio_model_id,
                     video_url=url,
                     frame_image_url=img or url,
+                    video_backend=(getattr(r, "video_backend", None) or "wavespeed").strip().lower(),
                 )
             )
     return StudioMotionRendersPageOut(items=out_items, has_more=has_more)
@@ -1456,6 +1471,21 @@ def _apply_studio_generation_media_kind_filter(stmt, media_kind: str | None):
     return stmt
 
 
+def _apply_studio_generation_video_backend_filter(stmt, video_backend: str | None):
+    vb = (video_backend or "").strip().lower()
+    if vb == "evolink":
+        return stmt.where(StudioGeneration.video_backend == "evolink")
+    if vb == "wavespeed":
+        return stmt.where(
+            or_(
+                StudioGeneration.video_backend == "wavespeed",
+                StudioGeneration.video_backend.is_(None),
+                StudioGeneration.video_backend == "",
+            )
+        )
+    return stmt
+
+
 @router.get("/studio/generations", response_model=StudioGenerationsPageOut)
 async def api_list_studio_generations(
     request: Request,
@@ -1464,6 +1494,10 @@ async def api_list_studio_generations(
     media_kind: Literal["image", "video"] | None = Query(
         None,
         description="Фильтр истории: только картинки или только видео",
+    ),
+    video_backend: Literal["wavespeed", "evolink"] | None = Query(
+        None,
+        description="Фильтр видео-архива по провайдеру (Seedance Sale = evolink)",
     ),
     session: AsyncSession = Depends(get_session),
     user: User = Depends(get_current_user),
@@ -1488,6 +1522,7 @@ async def api_list_studio_generations(
         .limit(take)
     )
     stmt = _apply_studio_generation_media_kind_filter(stmt, media_kind)
+    stmt = _apply_studio_generation_video_backend_filter(stmt, video_backend)
     stmt = apply_studio_model_id_filter(stmt, StudioGeneration.studio_model_id, allowed)
     rows = list((await session.execute(stmt)).scalars().all())
     has_more = len(rows) > limit
@@ -1547,6 +1582,7 @@ async def api_list_pending_studio_generations(
         None,
         description="Только незавершённые картинки или видео",
     ),
+    video_backend: Literal["wavespeed", "evolink"] | None = Query(None),
     session: AsyncSession = Depends(get_session),
     user: User = Depends(get_current_user),
 ) -> StudioGenerationsPendingOut:
@@ -1576,6 +1612,7 @@ async def api_list_pending_studio_generations(
         .limit(int(limit))
     )
     stmt = _apply_studio_generation_media_kind_filter(stmt, media_kind)
+    stmt = _apply_studio_generation_video_backend_filter(stmt, video_backend)
     stmt = apply_studio_model_id_filter(stmt, StudioGeneration.studio_model_id, allowed)
     rows = list((await session.execute(stmt)).scalars().all())
     base = _public_app_base(request)
@@ -5865,17 +5902,26 @@ async def api_studio_motion_render_video(
     auto_motion_prompt: str = Form("0"),
     video_provider: str = Form("seedance_t2v"),
     prompt_only_mode: str = Form("0"),
+    video_backend: str = Form("wavespeed"),
     session: AsyncSession = Depends(get_session),
     user: User = Depends(get_current_user),
 ) -> StudioMotionVideoOut | JSONResponse:
     _ = request
+    vb = (video_backend or "wavespeed").strip().lower()
+    if vb not in ("wavespeed", "evolink"):
+        vb = "wavespeed"
+    is_evolink = vb == "evolink"
+    if is_evolink and not settings.evolink_video_enabled:
+        raise HTTPException(status_code=503, detail="Seedance Sale временно недоступен.")
     assert_permission(user, PERM_STUDIO_GENERATE)
     oid = workspace_owner_id(user)
     sub_b, _llm, ws_row, plan, _credits, _demo = await load_owner_studio_billing(session, oid)
     _require_studio_subscription(user, sub_b, credits_balance=_credits, demo_generations_remaining=_demo)
 
     vp = str(video_provider or "seedance_t2v").strip().lower()
-    if vp not in ("seedance_t2v", "grok_imagine_i2v", "seedance_i2v"):
+    if is_evolink:
+        vp = "seedance_t2v"
+    elif vp not in ("seedance_t2v", "grok_imagine_i2v", "seedance_i2v"):
         vp = "seedance_t2v"
     prompt_only = _truthy_wavespeed_flag(prompt_only_mode) or vp == "seedance_i2v"
 
@@ -5940,13 +5986,21 @@ async def api_studio_motion_render_video(
     if not pub.lower().startswith("https://"):
         raise HTTPException(
             status_code=400,
-            detail="Нужен публичный HTTPS (PUBLIC_APP_URL) для WaveSpeed.",
+            detail="Нужен публичный HTTPS (PUBLIC_APP_URL) для ref URL.",
         )
 
-    try:
-        studio_wavespeed_api_key(plan=plan, ws_row=ws_row, owner_subscription=sub_b, demo_generations_remaining=_demo)
-    except HTTPException:
-        raise
+    if is_evolink:
+        from app.services.evolink_client import evolink_platform_api_key
+
+        try:
+            evolink_platform_api_key()
+        except RuntimeError as e:
+            raise HTTPException(status_code=503, detail=str(e)) from e
+    else:
+        try:
+            studio_wavespeed_api_key(plan=plan, ws_row=ws_row, owner_subscription=sub_b, demo_generations_remaining=_demo)
+        except HTTPException:
+            raise
 
     stmt = (
         select(UserStudioModel)
@@ -5974,12 +6028,26 @@ async def api_studio_motion_render_video(
         normalize_seedance_t2v_resolution,
         normalize_seedance_t2v_variant,
     )
-
-    ds_effective = motion_video_duration_seconds(duration_seconds)
-    seedance_v = normalize_seedance_t2v_variant(seedance_variant)
-    video_res = normalize_seedance_t2v_resolution(
-        video_resolution or settings.wavespeed_seedance_20_t2v_resolution
+    from app.services.studio_evolink_motion_pricing import (
+        apply_seedance_sale_credit_cost,
+        evolink_video_credit_cost,
+        evolink_video_duration_seconds,
+        normalize_evolink_resolution,
     )
+
+    if is_evolink:
+        seedance_v = normalize_seedance_t2v_variant(seedance_variant)
+        ds_effective = evolink_video_duration_seconds(duration_seconds, variant=seedance_v)
+        video_res = normalize_evolink_resolution(
+            video_resolution or settings.evolink_video_default_resolution,
+            variant=seedance_v,
+        )
+    else:
+        ds_effective = motion_video_duration_seconds(duration_seconds)
+        seedance_v = normalize_seedance_t2v_variant(seedance_variant)
+        video_res = normalize_seedance_t2v_resolution(
+            video_resolution or settings.wavespeed_seedance_20_t2v_resolution
+        )
 
     outfit_gid: int | None = None
     raw_outfit = (outfit_generation_id or "").strip()
@@ -6031,14 +6099,28 @@ async def api_studio_motion_render_video(
             detail="motion_timeline слишком длинный — сократите или отключите Grok timeline на шаге 1.",
         )
 
-    motion_cost = motion_video_credit_cost(
-        ds_effective,
-        variant=seedance_v,
-        resolution=video_res,
-        has_motion_reference_video=bool(mv_id),
-        reference_video_duration=ref_video_duration,
+    motion_cost = (
+        evolink_video_credit_cost(
+            ds_effective,
+            variant=seedance_v,
+            resolution=video_res,
+            has_motion_reference_video=bool(mv_id),
+            reference_video_duration=ref_video_duration,
+        )
+        if is_evolink
+        else motion_video_credit_cost(
+            ds_effective,
+            variant=seedance_v,
+            resolution=video_res,
+            has_motion_reference_video=bool(mv_id),
+            reference_video_duration=ref_video_duration,
+        )
     )
-    motion_cost_billed = apply_studio_credit_cost(plan, motion_cost)
+    motion_cost_billed = (
+        apply_seedance_sale_credit_cost(plan, motion_cost)
+        if is_evolink
+        else apply_studio_credit_cost(plan, motion_cost)
+    )
     await ensure_can_consume_credits(session, user, motion_cost_billed)
 
     preview_url: str | None = None
@@ -6074,6 +6156,7 @@ async def api_studio_motion_render_video(
                 "auto_motion_prompt": (auto_motion_prompt or "0").strip(),
                 "video_provider": vp,
                 "prompt_only_mode": "1" if prompt_only else "0",
+                "video_backend": vb,
             },
             placeholder={
                 "studio_model_id": mid,
@@ -6081,6 +6164,7 @@ async def api_studio_motion_render_video(
                 "content_type": "video/mp4",
                 "prompt_excerpt": (prompt or "").strip()[:2000] or None,
                 "preview_source_url": preview_url,
+                "video_backend": vb,
             },
             job_files=job_files,
         )
@@ -6094,12 +6178,68 @@ async def api_studio_motion_render_video(
         ) from e
 
 
+@router.post(
+    "/studio/seedance-sale/render-video",
+    response_model=StudioMotionVideoOut,
+    responses={202: {"model": StudioJobAcceptedOut}},
+)
+async def api_seedance_sale_render_video(
+    request: Request,
+    model_id: str = Form(...),
+    prompt: str = Form(""),
+    output_aspect: str = Form("9:16"),
+    motion_video_file_id: str = Form(""),
+    first_frame_generation_id: str = Form(""),
+    existing_generation_id: str = Form(""),
+    image: UploadFile | None = File(None),
+    motion_timeline: str = Form(""),
+    outfit_generation_id: str = Form(""),
+    negative_prompt: str = Form(""),
+    generate_audio: str = Form("1"),
+    duration_seconds: str = Form(""),
+    seedance_variant: str = Form("standard"),
+    video_resolution: str = Form(""),
+    auto_motion_prompt: str = Form("0"),
+    prompt_only_mode: str = Form("0"),
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> StudioMotionVideoOut | JSONResponse:
+    """Seedance 2.0/2.5 Sale — EvoLink, всегда кредиты (включая Pro)."""
+    return await api_studio_motion_render_video(
+        request=request,
+        model_id=model_id,
+        prompt=prompt,
+        output_aspect=output_aspect,
+        motion_video_file_id=motion_video_file_id,
+        first_frame_generation_id=first_frame_generation_id,
+        existing_generation_id=existing_generation_id,
+        image=image,
+        motion_timeline=motion_timeline,
+        outfit_generation_id=outfit_generation_id,
+        negative_prompt=negative_prompt,
+        generate_audio=generate_audio,
+        duration_seconds=duration_seconds,
+        seedance_variant=seedance_variant,
+        video_resolution=video_resolution,
+        auto_motion_prompt=auto_motion_prompt,
+        video_provider="seedance_t2v",
+        prompt_only_mode=prompt_only_mode,
+        video_backend="evolink",
+        session=session,
+        user=user,
+    )
+
+
 async def _studio_job_execute_motion_render_video(
     session: AsyncSession,
     job: StudioJob,
     user: User,
 ) -> dict[str, Any]:
     params = studio_jobs.job_params(job)
+    if str(params.get("video_backend") or "wavespeed").strip().lower() == "evolink":
+        from app.services.studio_evolink_motion import execute_evolink_motion_render_video
+
+        return await execute_evolink_motion_render_video(session, job, user)
     oid = workspace_owner_id(user)
     mid = int(params["model_id"])
     sheet_gid_raw = params.get("sheet_generation_id")

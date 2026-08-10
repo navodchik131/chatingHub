@@ -99,10 +99,13 @@ export function CabinetDataProvider({ children }) {
   const [models, setModels] = useState([])
   const [archiveImages, setArchiveImages] = useState([])
   const [archiveVideos, setArchiveVideos] = useState([])
+  const [archiveSeedanceVideos, setArchiveSeedanceVideos] = useState([])
   const [archiveImagesHasMore, setArchiveImagesHasMore] = useState(false)
   const [archiveVideosHasMore, setArchiveVideosHasMore] = useState(false)
+  const [archiveSeedanceVideosHasMore, setArchiveSeedanceVideosHasMore] = useState(false)
   const [archiveImagesSkip, setArchiveImagesSkip] = useState(0)
   const [archiveVideosSkip, setArchiveVideosSkip] = useState(0)
+  const [archiveSeedanceVideosSkip, setArchiveSeedanceVideosSkip] = useState(0)
   const [supportTickets, setSupportTickets] = useState([])
   const [integrations, setIntegrations] = useState(null)
   const [donationOverview, setDonationOverview] = useState(null)
@@ -140,12 +143,14 @@ export function CabinetDataProvider({ children }) {
   const refreshAllInFlightRef = useRef(false)
   const archiveImagesRef = useRef(archiveImages)
   const archiveVideosRef = useRef(archiveVideos)
+  const archiveSeedanceVideosRef = useRef(archiveSeedanceVideos)
   const donationOverviewRef = useRef(donationOverview)
   const donationEventsRef = useRef(donationEvents)
   const conversationsRef = useRef(conversations)
 
   useEffect(() => { archiveImagesRef.current = archiveImages }, [archiveImages])
   useEffect(() => { archiveVideosRef.current = archiveVideos }, [archiveVideos])
+  useEffect(() => { archiveSeedanceVideosRef.current = archiveSeedanceVideos }, [archiveSeedanceVideos])
   useEffect(() => { donationOverviewRef.current = donationOverview }, [donationOverview])
   useEffect(() => { donationEventsRef.current = donationEvents }, [donationEvents])
   useEffect(() => { activeConvIdRef.current = activeConvId }, [activeConvId])
@@ -317,12 +322,17 @@ export function CabinetDataProvider({ children }) {
     const localVidPending = archiveVideosRef.current.filter(
       (g) => isOptimisticStudioArchiveId(g.id) || actions.isArchivePending(g),
     )
-    const [imgPage, vidPage] = await Promise.all([
+    const localSeedancePending = archiveSeedanceVideosRef.current.filter(
+      (g) => isOptimisticStudioArchiveId(g.id) || actions.isArchivePending(g),
+    )
+    const [imgPage, vidPage, seedancePage] = await Promise.all([
       actions.refreshArchiveImages(0),
-      actions.refreshArchiveVideos(0),
+      actions.refreshArchiveVideos(0, { videoBackend: 'wavespeed' }),
+      actions.refreshArchiveVideos(0, { videoBackend: 'evolink' }),
     ])
     const prevImgById = new Map(archiveImagesRef.current.map((g) => [g.id, g]))
     const prevVidById = new Map(archiveVideosRef.current.map((g) => [g.id, g]))
+    const prevSeedanceById = new Map(archiveSeedanceVideosRef.current.map((g) => [g.id, g]))
     const imgMerged = (imgPage.items || []).map((item) => {
       const prev = prevImgById.get(item.id)
       return prev ? mergeArchiveItemPreserveMedia(prev, item) : item
@@ -331,12 +341,19 @@ export function CabinetDataProvider({ children }) {
       const prev = prevVidById.get(item.id)
       return prev ? mergeArchiveItemPreserveMedia(prev, item) : item
     })
+    const seedanceMerged = (seedancePage.items || []).map((item) => {
+      const prev = prevSeedanceById.get(item.id)
+      return prev ? mergeArchiveItemPreserveMedia(prev, item) : item
+    })
     setArchiveImages(mergeStudioArchiveItems(imgMerged, localImgPending))
     setArchiveVideos(mergeStudioArchiveItems(vidMerged, localVidPending))
+    setArchiveSeedanceVideos(mergeStudioArchiveItems(seedanceMerged, localSeedancePending))
     setArchiveImagesHasMore(imgPage.has_more)
     setArchiveVideosHasMore(vidPage.has_more)
+    setArchiveSeedanceVideosHasMore(seedancePage.has_more)
     setArchiveImagesSkip(imgPage.items.length)
     setArchiveVideosSkip(vidPage.items.length)
+    setArchiveSeedanceVideosSkip(seedancePage.items.length)
   }, [])
 
   const loadMoreArchiveImages = useCallback(async () => {
@@ -352,7 +369,7 @@ export function CabinetDataProvider({ children }) {
   }, [archiveImagesSkip])
 
   const loadMoreArchiveVideos = useCallback(async () => {
-    const { items, has_more } = await actions.refreshArchiveVideos(archiveVideosSkip)
+    const { items, has_more } = await actions.refreshArchiveVideos(archiveVideosSkip, { videoBackend: 'wavespeed' })
     const pageItems = Array.isArray(items) ? items : []
     if (!pageItems.length) {
       setArchiveVideosHasMore(Boolean(has_more))
@@ -363,14 +380,28 @@ export function CabinetDataProvider({ children }) {
     setArchiveVideosSkip((skip) => skip + pageItems.length)
   }, [archiveVideosSkip])
 
+  const loadMoreArchiveSeedanceVideos = useCallback(async () => {
+    const { items, has_more } = await actions.refreshArchiveVideos(archiveSeedanceVideosSkip, { videoBackend: 'evolink' })
+    const pageItems = Array.isArray(items) ? items : []
+    if (!pageItems.length) {
+      setArchiveSeedanceVideosHasMore(Boolean(has_more))
+      return
+    }
+    setArchiveSeedanceVideos((prev) => dedupeStudioArchiveById([...(prev || []), ...pageItems]))
+    setArchiveSeedanceVideosHasMore(Boolean(has_more))
+    setArchiveSeedanceVideosSkip((skip) => skip + pageItems.length)
+  }, [archiveSeedanceVideosSkip])
+
   const refreshArchivePending = useCallback(async () => {
-    const [imgResult, vidResult] = await Promise.all([
+    const [imgResult, vidResult, seedanceResult] = await Promise.all([
       refreshPendingArchiveImages(archiveImagesRef.current),
-      refreshPendingArchiveVideos(archiveVideosRef.current),
+      refreshPendingArchiveVideos(archiveVideosRef.current, { videoBackend: 'wavespeed' }),
+      refreshPendingArchiveVideos(archiveSeedanceVideosRef.current, { videoBackend: 'evolink' }),
     ])
     if (imgResult.changed) setArchiveImages(imgResult.items)
     if (vidResult.changed) setArchiveVideos(vidResult.items)
-    return imgResult.changed || vidResult.changed
+    if (seedanceResult.changed) setArchiveSeedanceVideos(seedanceResult.items)
+    return imgResult.changed || vidResult.changed || seedanceResult.changed
   }, [])
 
   const refreshArchive = refreshArchiveFull
@@ -393,6 +424,7 @@ export function CabinetDataProvider({ children }) {
         modelsData,
         archiveImg,
         archiveVid,
+        archiveSeedance,
         integrationsData,
         donationOv,
         dons,
@@ -415,7 +447,8 @@ export function CabinetDataProvider({ children }) {
         apiJsonOptional('/api/conversation-folders', {}, []),
         apiJsonOptional('/api/studio/models', {}, null),
         actions.refreshArchiveImages(0).catch(() => ({ items: [], has_more: false })),
-        actions.refreshArchiveVideos(0).catch(() => ({ items: [], has_more: false })),
+        actions.refreshArchiveVideos(0, { videoBackend: 'wavespeed' }).catch(() => ({ items: [], has_more: false })),
+        actions.refreshArchiveVideos(0, { videoBackend: 'evolink' }).catch(() => ({ items: [], has_more: false })),
         apiJsonOptional('/api/integrations', {}, null),
         apiJsonOptional('/api/creator-donations/overview', {}, null),
         apiJsonOptional('/api/creator-donations', {}, []),
@@ -454,10 +487,13 @@ export function CabinetDataProvider({ children }) {
       }
       setArchiveImages(Array.isArray(archiveImg?.items) ? archiveImg.items : [])
       setArchiveVideos(Array.isArray(archiveVid?.items) ? archiveVid.items : [])
+      setArchiveSeedanceVideos(Array.isArray(archiveSeedance?.items) ? archiveSeedance.items : [])
       setArchiveImagesHasMore(Boolean(archiveImg?.has_more))
       setArchiveVideosHasMore(Boolean(archiveVid?.has_more))
+      setArchiveSeedanceVideosHasMore(Boolean(archiveSeedance?.has_more))
       setArchiveImagesSkip(Array.isArray(archiveImg?.items) ? archiveImg.items.length : 0)
       setArchiveVideosSkip(Array.isArray(archiveVid?.items) ? archiveVid.items.length : 0)
+      setArchiveSeedanceVideosSkip(Array.isArray(archiveSeedance?.items) ? archiveSeedance.items.length : 0)
       setIntegrations(integrationsData)
       if (meData?.is_workspace_owner) {
         if (donationOv) {
@@ -1109,7 +1145,13 @@ export function CabinetDataProvider({ children }) {
   )
 
   const generateVideo = useCallback(
-    async (appState) => {
+    async (appState, { backend = 'wavespeed' } = {}) => {
+      const isEvolink = backend === 'evolink'
+      if (isEvolink && health?.evolink_video_enabled === false) {
+        setError('Seedance Sale временно недоступен')
+        return
+      }
+      const setArchive = isEvolink ? setArchiveSeedanceVideos : setArchiveVideos
       const effState = effectiveStudioState(appState, me)
       const promptMode = (appState.vidMode || 'motion-control') === 'prompt'
       if (!selectedModelId) {
@@ -1152,14 +1194,14 @@ export function CabinetDataProvider({ children }) {
         modelName: model?.name ?? null,
         outputAspect: appState.vidFormat || selectedAspect,
       })
-      setArchiveVideos((prev) => prependOptimisticStudioArchive(prev, item))
+      setArchive((prev) => prependOptimisticStudioArchive(prev, item))
       setError(null)
       try {
         if (!ffGenId && uploadFiles['motion-frame'] && motionControl) {
           const { result } = await actions.runMotionFirstFrame({
             modelId: selectedModelId,
             aspect: effState.vidFormat || selectedAspect,
-            nsfw: effState.contentMode === 'nsfw',
+            nsfw: isEvolink ? false : effState.contentMode === 'nsfw',
             frameFile: uploadFiles['motion-frame'],
             autoMotionPrompt: false,
             useStillAsFinal: true,
@@ -1180,16 +1222,17 @@ export function CabinetDataProvider({ children }) {
           promptOnlyMode: promptMode,
           generateAudio: appState.vidGenerateAudio !== false,
           seedanceVariant: appState.vidSeedanceVariant || 'standard',
+          videoBackend: isEvolink ? 'evolink' : 'wavespeed',
         })
-        setArchiveVideos((prev) => applyJobToOptimisticArchive(prev, [tempId], accepted))
+        setArchive((prev) => applyJobToOptimisticArchive(prev, [tempId], accepted))
         await refreshArchiveFull()
         setMe(await apiJson('/api/auth/me'))
       } catch (e) {
-        setArchiveVideos((prev) => removeOptimisticStudioArchive(prev, tempId))
+        setArchive((prev) => removeOptimisticStudioArchive(prev, tempId))
         setError(e?.message || String(e))
       }
     },
-    [selectedModelId, selectedAspect, uploadFiles, motionVideoFileId, firstFrameGenId, models, refreshArchiveFull, me],
+    [selectedModelId, selectedAspect, uploadFiles, motionVideoFileId, firstFrameGenId, models, refreshArchiveFull, me, health],
   )
 
   const setUploadFile = useCallback((key, file) => {
@@ -1412,13 +1455,15 @@ export function CabinetDataProvider({ children }) {
   useEffect(() => {
     if (!ready) return
     const pending =
-      archiveImages.some(actions.isArchivePending) || archiveVideos.some(actions.isArchivePending)
+      archiveImages.some(actions.isArchivePending)
+      || archiveVideos.some(actions.isArchivePending)
+      || archiveSeedanceVideos.some(actions.isArchivePending)
     if (!pending) return
     const timer = window.setInterval(() => {
       void refreshArchivePending()
     }, 3_000)
     return () => window.clearInterval(timer)
-  }, [ready, archiveImages, archiveVideos, refreshArchivePending])
+  }, [ready, archiveImages, archiveVideos, archiveSeedanceVideos, refreshArchivePending])
 
   const refreshDonationOverview = useCallback(async (opts = {}) => {
     if (!me?.is_workspace_owner) return
@@ -1579,10 +1624,13 @@ export function CabinetDataProvider({ children }) {
       models,
       archiveImages,
       archiveVideos,
+      archiveSeedanceVideos,
       archiveImagesHasMore,
       archiveVideosHasMore,
+      archiveSeedanceVideosHasMore,
       loadMoreArchiveImages,
       loadMoreArchiveVideos,
+      loadMoreArchiveSeedanceVideos,
       supportTickets,
       integrations,
       donationOverview,
@@ -1699,10 +1747,13 @@ export function CabinetDataProvider({ children }) {
       models,
       archiveImages,
       archiveVideos,
+      archiveSeedanceVideos,
       archiveImagesHasMore,
       archiveVideosHasMore,
+      archiveSeedanceVideosHasMore,
       loadMoreArchiveImages,
       loadMoreArchiveVideos,
+      loadMoreArchiveSeedanceVideos,
       supportTickets,
       integrations,
       donationOverview,

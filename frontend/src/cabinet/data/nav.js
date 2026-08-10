@@ -3,7 +3,7 @@ import { IcoGrid, IcoChat, IcoImage, IcoFilm, IcoStar, IcoFlow,
 } from '../components/Icons';
 
 /** Sidebar groups — badges come from live cabinet data via computeNavBadges. */
-export const navGroups = (t, badges = {}, { isPartner = false } = {}) => [
+export const navGroups = (t, badges = {}, { isPartner = false, evolinkEnabled = true } = {}) => [
   {
     label: t.grpWork,
     items: [
@@ -16,6 +16,12 @@ export const navGroups = (t, badges = {}, { isPartner = false } = {}) => [
     items: [
       { id: 'images', label: t.navImages, Icon: IcoImage },
       { id: 'video', label: t.navVideo, Icon: IcoFilm },
+      ...(evolinkEnabled ? [{
+        id: 'seedance-sale',
+        label: t.navSeedanceSale,
+        Icon: IcoSpark,
+        badge: 'Sale',
+      }] : []),
       { id: 'characters', label: t.navCharacters, Icon: IcoStar },
       { id: 'workflow', label: t.navWorkflow, Icon: IcoFlow, badge: badges.workflow },
     ],
@@ -40,7 +46,7 @@ export const navGroups = (t, badges = {}, { isPartner = false } = {}) => [
 
 export const pageTitles = (t) => ({
   overview: t.navOverview, dialogs: t.navDialogs, images: t.navImages,
-  video: t.navVideo, characters: t.navCharacters, workflow: t.navWorkflow,
+  video: t.navVideo, 'seedance-sale': t.navSeedanceSale, characters: t.navCharacters, workflow: t.navWorkflow,
   donations: t.navDonations, billing: t.navBilling, partner: t.navPartner, connections: t.navConnections,
   team: t.navTeam, support: t.navSupport, profile: t.navProfile,
 });
@@ -49,7 +55,7 @@ export const pageTitles = (t) => ({
 export const mobileNavDefs = (t, lang) => [
   { label: t.navOverview, Icon: IcoGrid, pages: ['overview'], go: 'overview' },
   { label: t.navDialogs, Icon: IcoChat, pages: ['dialogs'], go: 'dialogs' },
-  { label: lang === 'ru' ? 'Студия' : 'Studio', Icon: IcoSpark, pages: ['images', 'video', 'characters'], go: 'images' },
+  { label: lang === 'ru' ? 'Студия' : 'Studio', Icon: IcoSpark, pages: ['images', 'video', 'seedance-sale', 'characters'], go: 'images' },
   { label: lang === 'ru' ? 'Финансы' : 'Money', Icon: IcoHeart, pages: ['donations', 'billing'], go: 'donations' },
   { label: lang === 'ru' ? 'Ещё' : 'More', Icon: IcoLayers, pages: [], more: true },
 ];
@@ -57,6 +63,7 @@ export const mobileNavDefs = (t, lang) => [
 /** "More" sheet contents on mobile. */
 export const moreItemDefs = (t, lang) => [
   { label: t.navVideo, desc: t.videoDesc, Icon: IcoFilm, go: 'video' },
+  { label: t.navSeedanceSale, desc: t.seedanceSaleDesc, Icon: IcoSpark, go: 'seedance-sale' },
   { label: t.navCharacters, desc: lang === 'ru' ? 'Ваши виртуальные модели' : 'Your virtual models', Icon: IcoStar, go: 'characters' },
   { label: t.navWorkflow, desc: lang === 'ru' ? 'Узловой конструктор (Pro)' : 'Node builder (Pro)', Icon: IcoFlow, go: 'workflow' },
   { label: t.navBilling, desc: t.billingNavDesc, Icon: IcoCard, go: 'billing' },

@@ -365,6 +365,7 @@ async def init_db() -> None:
         await conn.run_sync(_migrate_user_ui_locale)
         await conn.run_sync(_migrate_demo_device_quotas_table)
         await conn.run_sync(_migrate_studio_generation_is_demo)
+        await conn.run_sync(_migrate_studio_video_backend)
         await conn.run_sync(_migrate_telegram_mobile_auth_device_key)
         await conn.run_sync(_migrate_telegram_mobile_auth_is_partner)
         await conn.run_sync(_migrate_tribute_processed_events)
@@ -2219,6 +2220,23 @@ def _migrate_studio_generation_is_demo(sync_conn) -> None:
             f"ALTER TABLE studio_generations ADD COLUMN is_demo BOOLEAN NOT NULL DEFAULT {bool_false}"
         )
     )
+
+
+def _migrate_studio_video_backend(sync_conn) -> None:
+    from sqlalchemy import inspect, text
+
+    insp = inspect(sync_conn)
+    for table in ("studio_generations", "studio_motion_renders"):
+        if not insp.has_table(table):
+            continue
+        cols = {c["name"] for c in insp.get_columns(table)}
+        if "video_backend" in cols:
+            continue
+        sync_conn.execute(
+            text(
+                f"ALTER TABLE {table} ADD COLUMN video_backend VARCHAR(16) NOT NULL DEFAULT 'wavespeed'"
+            )
+        )
 
 
 def _migrate_telegram_mobile_auth_device_key(sync_conn) -> None:
