@@ -24,7 +24,7 @@ def evolink_platform_api_key() -> str:
     key = (settings.evolink_platform_api_key or "").strip()
     if not key:
         raise RuntimeError(
-            "EvoLink временно недоступен. Обратитесь к администратору (EVOLINK_PLATFORM_API_KEY)."
+            "Seedance Sale временно недоступен. Обратитесь в поддержку."
         )
     return key
 
@@ -80,10 +80,12 @@ def resolve_evolink_model(
 def format_evolink_user_error(message: str) -> str:
     raw = (message or "").strip()
     if not raw:
-        return "EvoLink: ошибка запроса к провайдеру."
+        return "Не удалось создать видео. Попробуйте позже."
     if raw.lower().startswith("evolink:"):
-        return raw
-    return f"EvoLink: {raw}"
+        raw = raw.split(":", 1)[1].strip()
+    if not raw:
+        return "Не удалось создать видео. Попробуйте позже."
+    return raw
 
 
 async def _poll_evolink_task(

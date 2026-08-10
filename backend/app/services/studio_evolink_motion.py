@@ -93,7 +93,7 @@ async def execute_evolink_motion_render_video(
 
     pub = (settings.public_app_url or "").strip().rstrip("/")
     if not pub.lower().startswith("https://"):
-        raise RuntimeError("Нужен PUBLIC_APP_URL=https://… для публичных ref URL EvoLink.")
+        raise RuntimeError("Нужен PUBLIC_APP_URL=https://… для публичных ref URL.")
 
     stmt = (
         select(UserStudioModel)
