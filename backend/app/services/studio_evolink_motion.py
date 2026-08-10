@@ -31,6 +31,7 @@ from app.services.studio_jobs import job_params
 from app.services.studio_keys import load_owner_studio_billing
 from app.services.studio_image_token import (
     create_generation_image_access_token,
+    create_model_image_access_token,
     create_motion_video_access_token,
 )
 from app.services.studio_motion_video import resolve_motion_video_file
@@ -202,7 +203,7 @@ async def execute_evolink_motion_render_video(
             owner_id=oid,
             images=model_imgs,
             public_app_base=pub,
-            token_factory=create_generation_image_access_token,
+            token_factory=create_model_image_access_token,
         )
     )
     n_model = len(model_imgs)
