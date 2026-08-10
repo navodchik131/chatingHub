@@ -10,6 +10,7 @@ import { videoModeDefs } from '../data/catalog';
 import { archiveThumbUrl, archiveDownloadUrl, archiveVideoUrl, isArchivePending, downloadVideoNoteByPath } from '../api/actions';
 import { downloadArchiveBlob } from '../api/archiveDownload';
 import { sameStudioModelId, enginesForNsfw, isUiSimplified } from '../api/studioHelpers';
+import { formatArchiveErrorMessage } from '../api/helpers';
 import { normalizeBillingPlan } from '../../billing/planCatalog';
 import {
   computeEvolinkVideoCreditCost,
@@ -927,12 +928,29 @@ export function VideoStudioPage({ backend = 'wavespeed' }) {
                   {failed && (
                     <div
                       style={{
-                        position: 'absolute', inset: 0, background: 'rgba(248,113,113,.25)',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontFamily: font.mono, fontSize: 9, fontWeight: 700, color: color.red,
+                        position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
+                        alignItems: 'center', justifyContent: 'center', gap: 6,
+                        background: 'rgba(40,10,12,.82)', padding: '10px 8px',
                       }}
+                      title={formatArchiveErrorMessage(item.error_message, lang)}
                     >
-                      {lang === 'ru' ? 'ОШИБКА' : 'FAILED'}
+                      <span
+                        style={{
+                          fontFamily: font.mono, fontSize: 8, letterSpacing: '.8px', fontWeight: 800,
+                          color: color.red, background: 'rgba(248,113,113,.12)',
+                          border: '1px solid rgba(248,113,113,.35)', borderRadius: 6, padding: '3px 7px',
+                        }}
+                      >
+                        {lang === 'ru' ? 'ОШИБКА' : 'FAILED'}
+                      </span>
+                      <span
+                        style={{
+                          fontSize: 10, fontWeight: 600, color: '#FECACA', textAlign: 'center',
+                          lineHeight: 1.35, maxHeight: '4.2em', overflow: 'hidden', wordBreak: 'break-word',
+                        }}
+                      >
+                        {formatArchiveErrorMessage(item.error_message, lang)}
+                      </span>
                     </div>
                   )}
                   {!pending && !failed && (
