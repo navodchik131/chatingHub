@@ -148,7 +148,7 @@
       "tributePayHint": "Tribute — карта / Stars / крипта (международная оплата). Откроется страница оплаты; доступ обновится автоматически в течение минуты.",
       "month": "Месяц",
       "year": "Год",
-      "creditsPackUnavailable": "Покупка кредитов доступна на тарифе Credits или после оплаты подписки Standard (статус «Активна»).",
+      "creditsPackUnavailable": "Покупка кредитов доступна на тарифе Credits или при активной подписке Standard / Pro.",
       "unavailable": "Недоступно",
       "creditsQtyLabel": "Количество кредитов:",
       "creditsPricing": "От {{min}} шт. — {{unit}} ₽/кредит; от {{bulkFrom}} шт. — {{bulkUnit}} ₽/кредит.",

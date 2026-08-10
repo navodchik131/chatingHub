@@ -74,7 +74,7 @@ export function canPurchaseCredits(me: BillingMeLike | null | undefined): boolea
   if (!me?.online_payment_available) return false
   const plan = normalizeBillingPlan(me.billing_plan)
   if (plan === 'credits') return true
-  if (plan === 'standard') {
+  if (plan === 'standard' || plan === 'pro') {
     return (me.subscription_status || '').toLowerCase() === 'active'
   }
   return false

@@ -23,13 +23,8 @@ from app.db.models import (
     User,
     YookassaProcessedPayment,
 )
-from app.services.billing_plan import (
-    is_credits_plan,
-    normalize_billing_plan,
-    platform_covers_studio_api_costs,
-)
+from app.services.billing_plan import can_purchase_credits_pack, normalize_billing_plan
 from app.services.billing_subscription import activate_subscription_product
-from app.services.entitlements import subscription_is_paid_active
 from app.services.plan_catalog import get_plan_spec, resolve_product_id
 from app.services.referral import grant_referrer_reward_if_needed
 from app.services.partner import grant_partner_commission_if_needed, mark_partner_discount_used
@@ -160,14 +155,12 @@ async def apply_yookassa_payment_succeeded(
             return {"ok": False, "error": "amount_mismatch", "payment_id": pid}
 
         plan_norm = normalize_billing_plan(sub.billing_plan)
-        credits_plan_topup = is_credits_plan(plan_norm)
-        if not credits_plan_topup and (
-            not subscription_is_paid_active(sub) or not platform_covers_studio_api_costs(plan_norm)
-        ):
+        if not can_purchase_credits_pack(plan_norm, sub):
             log.warning(
-                "yookassa: credits_pack rejected — no paid Managed subscription user=%s payment=%s",
+                "yookassa: credits_pack rejected — subscription required user=%s payment=%s plan=%s",
                 billing_uid,
                 pid,
+                plan_norm,
             )
             await session.rollback()
             return {"ok": False, "error": "subscription_required", "payment_id": pid}

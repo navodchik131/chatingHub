@@ -20,9 +20,8 @@ from app.db.models import (
     UsageEvent,
 )
 from app.services.billing_credits import assert_credits_quantity_allowed, credits_total_rub
-from app.services.billing_plan import is_credits_plan, is_standard_plan, normalize_billing_plan, platform_covers_studio_api_costs
+from app.services.billing_plan import can_purchase_credits_pack, normalize_billing_plan
 from app.services.billing_subscription import activate_subscription_product, subscription_period_end
-from app.services.entitlements import subscription_is_paid_active
 from app.services.plan_catalog import get_plan_spec, resolve_product_id
 from app.services.referral import grant_referrer_reward_if_needed
 from app.services.studio_workflow_defaults import provision_full_workflow_workspaces
@@ -107,10 +106,7 @@ async def _grant_credits_pack(
         await session.flush()
 
     plan_norm = normalize_billing_plan(sub.billing_plan)
-    credits_plan_topup = is_credits_plan(plan_norm)
-    if not credits_plan_topup and (
-        not subscription_is_paid_active(sub) or not platform_covers_studio_api_costs(plan_norm)
-    ):
+    if not can_purchase_credits_pack(plan_norm, sub):
         return {"ok": False, "error": "subscription_required", "payment_ref": payment_ref}
 
     try:

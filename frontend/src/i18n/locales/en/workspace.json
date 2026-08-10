@@ -148,7 +148,7 @@
       "tributePayHint": "Tribute — card / Stars / crypto (international). Payment page opens; access updates within a minute.",
       "month": "Month",
       "year": "Year",
-      "creditsPackUnavailable": "Credit packs are available on Credits or after paying Standard subscription (status Active).",
+      "creditsPackUnavailable": "Credit packs are available on Credits or with an active Standard / Pro subscription.",
       "unavailable": "Unavailable",
       "creditsQtyLabel": "Credit quantity:",
       "creditsPricing": "From {{min}} — {{unit}}; from {{bulkFrom}} — {{bulkUnit}}.",

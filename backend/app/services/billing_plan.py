@@ -1,6 +1,11 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from app.db.models import LlmConnection, WavespeedConnection
+
+if TYPE_CHECKING:
+    from app.db.models import Subscription
 
 BILLING_PLAN_CREDITS = "credits"
 BILLING_PLAN_STANDARD = "standard"
@@ -41,6 +46,18 @@ def platform_covers_studio_api_costs(plan: str) -> bool:
     """Credits и Standard — платформенный/гибридный WS и списание кредитов."""
     p = normalize_billing_plan(plan)
     return p in (BILLING_PLAN_CREDITS, BILLING_PLAN_STANDARD)
+
+
+def can_purchase_credits_pack(plan: str, sub: Subscription | None) -> bool:
+    """Credits — всегда; Standard / Pro — при активной оплаченной подписке."""
+    from app.services.entitlements import subscription_is_paid_active
+
+    plan_n = normalize_billing_plan(plan)
+    if is_credits_plan(plan_n):
+        return True
+    if plan_n in (BILLING_PLAN_STANDARD, BILLING_PLAN_PRO):
+        return subscription_is_paid_active(sub)
+    return False
 
 
 def studio_charges_credits(plan: str) -> bool:

@@ -30,8 +30,7 @@ from app.services.billing_credits import (
 )
 from app.services.billing_subscription import activate_subscription_product
 from app.services.credits import ensure_can_consume_credits, record_usage
-from app.services.entitlements import subscription_is_paid_active
-from app.services.billing_plan import is_credits_plan, is_standard_plan, normalize_billing_plan
+from app.services.billing_plan import can_purchase_credits_pack, normalize_billing_plan
 from app.services.plan_catalog import (
     catalog_public_dict,
     get_plan_spec,
@@ -184,14 +183,11 @@ async def yookassa_start_payment(
             select(Subscription).where(Subscription.user_id == billing_uid)
         )
         plan = normalize_billing_plan(sub_row.billing_plan if sub_row else None)
-        can_buy = is_credits_plan(plan) or (
-            is_standard_plan(plan) and subscription_is_paid_active(sub_row)
-        )
-        if not can_buy:
+        if not can_purchase_credits_pack(plan, sub_row):
             raise HTTPException(
                 status_code=402,
                 detail=(
-                    "Покупка кредитов доступна на тарифе Credits или при активной подписке Standard."
+                    "Покупка кредитов доступна на тарифе Credits или при активной подписке Standard / Pro."
                 ),
             )
         q = body.credits_quantity
