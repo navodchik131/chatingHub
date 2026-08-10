@@ -20,7 +20,7 @@ export const navGroups = (t, badges = {}, { isPartner = false, evolinkEnabled = 
         id: 'seedance-sale',
         label: t.navSeedanceSale,
         Icon: IcoSpark,
-        badge: 'Sale',
+        badge: 'Best',
       }] : []),
       { id: 'characters', label: t.navCharacters, Icon: IcoStar },
       { id: 'workflow', label: t.navWorkflow, Icon: IcoFlow, badge: badges.workflow },
