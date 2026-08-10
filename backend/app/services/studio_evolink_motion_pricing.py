@@ -24,6 +24,16 @@ def apply_seedance_sale_credit_cost(_plan: str, base_cost: int) -> int:
     return max(0, int(base_cost))
 
 
+def normalize_evolink_seedance_variant(raw: str | None) -> SeedanceT2vVariant:
+    """Seedance Sale: только 2.0 (standard) и 2.5."""
+    v = normalize_seedance_t2v_variant(raw if isinstance(raw, str) else "standard")
+    if v == "mini":
+        return "standard"
+    if v != "seedance_25":
+        return "standard"
+    return v
+
+
 def evolink_video_duration_seconds(
     raw: str | int | None,
     *,
@@ -48,13 +58,11 @@ def evolink_video_duration_seconds(
 
 
 def normalize_evolink_resolution(raw: str | None, *, variant: str) -> SeedanceT2vResolution:
-    v = normalize_seedance_t2v_variant(variant)
+    _ = normalize_seedance_t2v_variant(variant)
     r = normalize_seedance_t2v_resolution(raw or settings.evolink_video_default_resolution)
-    if v == "seedance_25" and r == "1080p":
-        return "720p"
-    if r not in ("480p", "720p", "1080p"):
-        return "720p"
-    return r  # type: ignore[return-value]
+    if r == "480p":
+        return "480p"
+    return "720p"
 
 
 def _usd_per_sec_at_720p(
@@ -218,16 +226,14 @@ def evolink_video_pricing_public() -> dict:
         "duration_max_25": int(settings.evolink_video_duration_max_25),
         "duration_default": dur_default,
         "default_resolution": default_res,
-        "resolutions": ["480p", "720p"] if True else ["480p", "720p", "1080p"],
+        "resolutions": ["480p", "720p"],
         "resolutions_by_variant": {
-            "standard": ["480p", "720p", "1080p"],
-            "mini": ["480p", "720p", "1080p"],
+            "standard": ["480p", "720p"],
             "seedance_25": ["480p", "720p"],
         },
         "default_variant": "standard",
         "variants": {
             "standard": _variant_block("standard"),
-            "mini": _variant_block("mini"),
             "seedance_25": _variant_block("seedance_25"),
         },
         "credits_example_default_duration_with_ref": evolink_video_credit_cost(

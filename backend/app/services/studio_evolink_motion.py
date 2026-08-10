@@ -21,6 +21,7 @@ from app.services.studio_evolink_motion_pricing import (
     evolink_video_credit_cost,
     evolink_video_duration_seconds,
     normalize_evolink_resolution,
+    normalize_evolink_seedance_variant,
 )
 from app.services.studio_generation_placeholders import find_studio_generation_by_job_id
 from app.services.studio_generation_storage import (
@@ -105,7 +106,7 @@ async def execute_evolink_motion_render_video(
     if not sm:
         raise RuntimeError("Модель не найдена")
 
-    seedance_v = normalize_seedance_t2v_variant(seedance_variant)
+    seedance_v = normalize_evolink_seedance_variant(seedance_variant)
     ds_effective = evolink_video_duration_seconds(duration_seconds, variant=seedance_v)
     video_res = normalize_evolink_resolution(video_resolution, variant=seedance_v)
 

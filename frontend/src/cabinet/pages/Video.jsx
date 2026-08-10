@@ -94,6 +94,15 @@ export function VideoStudioPage({ backend = 'wavespeed' }) {
 
   useEffect(() => () => clearTimeout(timer.current), []);
 
+  useEffect(() => {
+    if (!isEvolink) return;
+    const patches = {};
+    if (s.vidSeedanceVariant === 'mini') patches.vidSeedanceVariant = 'standard';
+    const res = vidQualityToResolution(s.vidQuality);
+    if (res !== '480p' && res !== '720p') patches.vidQuality = '720';
+    if (Object.keys(patches).length) setS(patches);
+  }, [isEvolink, s.vidSeedanceVariant, s.vidQuality, setS]);
+
   const genFirstFrame = () => {
     setS({ ffState: 'loading' });
     void cabinet
@@ -187,20 +196,20 @@ export function VideoStudioPage({ backend = 'wavespeed' }) {
 
   const vidCostLabel = isEvolink || !isPro ? `−${vidCost} ${t.cr}` : formatMotionUsd(vidUsd);
 
-  const seedanceModelOpts = [
+  const seedanceModelOptsAll = [
     { v: 'standard', l: t.vidModelStandard },
     { v: 'seedance_25', l: t.vidModel25, hot: true },
     { v: 'mini', l: t.vidModelMini },
   ];
+  const seedanceModelOpts = isEvolink
+    ? seedanceModelOptsAll.filter((m) => m.v !== 'mini')
+    : seedanceModelOptsAll;
   const ffImgStyle = { width: 70, aspectRatio: '9/16', borderRadius: 10, flex: 'none', background: G[3] };
 
   const variant = s.vidSeedanceVariant || 'standard';
   const qualityOptsAll = [{ l: '480p', v: '480' }, { l: '720p', v: '720' }, { l: '1080p', v: '1080' }, { l: '4K', v: '4k' }];
-  const qualityOpts = useMemo(() => {
-    if (!isEvolink) return qualityOptsAll;
-    const allowed = evolinkPricing.resolutions_by_variant?.[variant] || ['480p', '720p'];
-    return qualityOptsAll.filter((q) => allowed.includes(vidQualityToResolution(q.v)));
-  }, [isEvolink, evolinkPricing, variant]);
+  const qualityOptsEvolink = [{ l: '480p', v: '480' }, { l: '720p', v: '720' }];
+  const qualityOpts = isEvolink ? qualityOptsEvolink : qualityOptsAll;
   const vfmtOpts = ['9:16', '16:9', '1:1', '4:3', '3:4'];
   const vtimeOpts = useMemo(() => {
     const maxDur = isEvolink

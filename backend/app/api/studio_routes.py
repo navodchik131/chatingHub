@@ -6033,10 +6033,11 @@ async def api_studio_motion_render_video(
         evolink_video_credit_cost,
         evolink_video_duration_seconds,
         normalize_evolink_resolution,
+        normalize_evolink_seedance_variant,
     )
 
     if is_evolink:
-        seedance_v = normalize_seedance_t2v_variant(seedance_variant)
+        seedance_v = normalize_evolink_seedance_variant(seedance_variant)
         ds_effective = evolink_video_duration_seconds(duration_seconds, variant=seedance_v)
         video_res = normalize_evolink_resolution(
             video_resolution or settings.evolink_video_default_resolution,

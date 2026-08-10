@@ -344,18 +344,13 @@ export const DEFAULT_EVOLINK_VIDEO_PRICING: StudioEvolinkVideoPricing = {
       usd_per_sec_720p_with_reference_video: 0.08,
       usd_per_sec_720p_without_reference_video: 0.056,
     },
-    mini: {
-      usd_per_sec_720p_with_reference_video: 0.06,
-      usd_per_sec_720p_without_reference_video: 0.045,
-    },
     seedance_25: {
       usd_per_sec_720p_with_reference_video: 0.12,
       usd_per_sec_720p_without_reference_video: 0.09,
     },
   },
   resolutions_by_variant: {
-    standard: ['480p', '720p', '1080p'],
-    mini: ['480p', '720p', '1080p'],
+    standard: ['480p', '720p'],
     seedance_25: ['480p', '720p'],
   },
 }

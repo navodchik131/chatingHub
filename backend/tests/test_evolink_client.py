@@ -43,6 +43,14 @@ def test_normalize_evolink_quality_seedance_25():
     assert _normalize_evolink_quality("1080p", variant="seedance_25") == "720p"
     assert _normalize_evolink_quality("480p", variant="seedance_25") == "480p"
     assert normalize_evolink_resolution("4k", variant="seedance_25") == "720p"
+    assert normalize_evolink_resolution("1080p", variant="standard") == "720p"
+
+
+def test_normalize_evolink_seedance_variant():
+    from app.services.studio_evolink_motion_pricing import normalize_evolink_seedance_variant
+
+    assert normalize_evolink_seedance_variant("mini") == "standard"
+    assert normalize_evolink_seedance_variant("seedance_25") == "seedance_25"
 
 
 def test_evolink_duration_limits():
