@@ -100,7 +100,13 @@ async def _yookassa_payment_attributions(
     rows = (
         await session.execute(
             select(UsageEvent).where(
-                UsageEvent.kind.in_(("yookassa_credits_pack", "managed_subscription_bonus"))
+                UsageEvent.kind.in_(
+                    (
+                        "yookassa_credits_pack",
+                        "managed_subscription_bonus",
+                        "subscription_payment",
+                    )
+                )
             )
         )
     ).scalars().all()
@@ -121,7 +127,17 @@ async def _yookassa_payment_attributions(
             continue
         if ev.kind == "yookassa_credits_pack":
             n = meta.get("credits_quantity", "?")
+            amt = meta.get("amount_rub")
             detail = f"Пакет кредитов: {n} шт."
+            if amt is not None:
+                detail += f" · {amt} ₽"
+        elif ev.kind == "subscription_payment":
+            product = meta.get("product") or "подписка"
+            tier = meta.get("tier") or ""
+            amt = meta.get("amount_rub")
+            detail = f"Подписка: {product}" + (f" · {tier}" if tier else "")
+            if amt is not None:
+                detail += f" · {amt} ₽"
         else:
             product = meta.get("product") or "подписка"
             tier = meta.get("tier") or ""

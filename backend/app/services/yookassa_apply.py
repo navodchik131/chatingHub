@@ -27,7 +27,11 @@ from app.services.billing_plan import can_purchase_credits_pack, normalize_billi
 from app.services.billing_subscription import activate_subscription_product
 from app.services.plan_catalog import get_plan_spec, resolve_product_id
 from app.services.referral import grant_referrer_reward_if_needed
-from app.services.partner import grant_partner_commission_if_needed, mark_partner_discount_used
+from app.services.partner import (
+    grant_partner_commission_if_needed,
+    mark_partner_discount_used,
+    partner_first_payment_discount_rub,
+)
 from app.services.studio_workflow_defaults import provision_full_workflow_workspaces
 
 log = logging.getLogger(__name__)
@@ -40,6 +44,25 @@ def _payment_amount_rub(payment_object: dict[str, Any]) -> Decimal:
             Decimal("0.01"), rounding=ROUND_HALF_UP
         )
     return Decimal(0)
+
+
+def credits_pack_allowed_amounts_rub(
+    expected: Decimal,
+    *,
+    discounted_pay_rub: int | None = None,
+    meta_partner_discount_rub: int | None = None,
+) -> set[Decimal]:
+    """Допустимые суммы оплаты пакета кредитов (полная цена и партнёрская скидка)."""
+    q = Decimal("0.01")
+    full = expected.quantize(q, rounding=ROUND_HALF_UP)
+    allowed = {full}
+    if meta_partner_discount_rub is not None and meta_partner_discount_rub > 0:
+        allowed.add(
+            (full - Decimal(int(meta_partner_discount_rub))).quantize(q, rounding=ROUND_HALF_UP)
+        )
+    if discounted_pay_rub is not None:
+        allowed.add(Decimal(int(discounted_pay_rub)).quantize(q, rounding=ROUND_HALF_UP))
+    return allowed
 
 
 async def apply_yookassa_payment_succeeded(
@@ -122,36 +145,50 @@ async def apply_yookassa_payment_succeeded(
                 n = int(q_raw)
             except ValueError:
                 log.warning("yookassa: bad credits_quantity for payment %s", pid)
-                await session.commit()
+                await session.rollback()
                 return {"ok": False, "error": "credits_quantity"}
             try:
                 assert_credits_quantity_allowed(n)
             except ValueError as e:
                 log.warning("yookassa: credits quantity invalid payment %s: %s", pid, e)
-                await session.commit()
+                await session.rollback()
                 return {"ok": False, "error": "credits_quantity_range"}
             expected = credits_total_rub(n)
         else:
             n = max(1, int(settings.billing_credit_pack_credits))
             expected = legacy_pack_total_rub()
 
-        if paid_rub != expected:
-            owner = await session.get(User, billing_uid)
-            allowed = {Decimal(str(expected))}
-            if owner is not None:
-                from app.services.partner import partner_first_payment_discount_rub
+        meta_disc: int | None = None
+        meta_disc_raw = (meta.get("partner_discount_rub") or "").strip()
+        if meta_disc_raw:
+            try:
+                meta_disc = int(meta_disc_raw)
+            except ValueError:
+                meta_disc = None
 
-                disc_rub, _ = await partner_first_payment_discount_rub(session, owner, expected)
-                allowed.add(Decimal(str(disc_rub)))
-            if paid_rub not in allowed:
-                log.error(
-                "yookassa: amount mismatch payment %s paid=%s expected=%s credits=%s",
+        discounted_pay_rub: int | None = None
+        owner_row = await session.get(User, billing_uid)
+        if owner_row is not None:
+            discounted_pay_rub, _ = await partner_first_payment_discount_rub(
+                session, owner_row, int(expected)
+            )
+
+        allowed = credits_pack_allowed_amounts_rub(
+            expected,
+            discounted_pay_rub=discounted_pay_rub,
+            meta_partner_discount_rub=meta_disc,
+        )
+        paid_q = paid_rub.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        if paid_q not in allowed:
+            log.error(
+                "yookassa: amount mismatch payment %s paid=%s expected=%s allowed=%s credits=%s",
                 pid,
-                paid_rub,
+                paid_q,
                 expected,
+                sorted(allowed),
                 n,
             )
-            await session.commit()
+            await session.rollback()
             return {"ok": False, "error": "amount_mismatch", "payment_id": pid}
 
         plan_norm = normalize_billing_plan(sub.billing_plan)
@@ -178,7 +215,13 @@ async def apply_yookassa_payment_succeeded(
                 kind="yookassa_credits_pack",
                 credits_delta=n,
                 meta=json.dumps(
-                    {"payment_id": pid, "product": product, "credits_quantity": n},
+                    {
+                        "payment_id": pid,
+                        "product": product,
+                        "credits_quantity": n,
+                        "amount_rub": int(paid_q),
+                        **({"partner_discount_rub": meta_disc} if meta_disc else {}),
+                    },
                     ensure_ascii=False,
                 ),
             )
@@ -201,5 +244,5 @@ async def apply_yookassa_payment_succeeded(
         return {"ok": True, "payment_id": pid, "granted": "credits", "amount": n}
 
     log.warning("yookassa: unknown product %s payment %s", product, pid)
-    await session.commit()
+    await session.rollback()
     return {"ok": False, "error": "unknown product"}
