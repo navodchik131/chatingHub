@@ -503,6 +503,8 @@ export async function runMotionFirstFrame(params) {
   if (params.modelId) fd.append('model_id', String(params.modelId))
   fd.append('output_aspect', params.aspect || '9:16')
   fd.append('studio_wave_profile', params.nsfw ? 'nsfw' : 'regular')
+  if (params.waveModelId) fd.append('workflow_wave_model', params.waveModelId)
+  if (params.wanTier) fd.append('wan_edit_tier', params.wanTier)
   if (params.videoFile) fd.append('video', params.videoFile)
   if (params.frameFile) fd.append('first_frame_image', params.frameFile)
   if (params.existingGenerationId) fd.append('existing_generation_id', String(params.existingGenerationId))

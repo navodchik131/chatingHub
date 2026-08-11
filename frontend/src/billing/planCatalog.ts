@@ -85,15 +85,15 @@ export const FALLBACK_CATALOG_PLANS: CatalogPlan[] = [
   spec('pro', 'solo', 'month', 990, 0),
   spec('pro', 'pro', 'month', 2490, 0),
   spec('pro', 'studio', 'month', 5990, 0),
-  spec('standard', 'solo', 'month', 1990, 150),
-  spec('standard', 'pro', 'month', 4990, 400),
-  spec('standard', 'studio', 'month', 11990, 1200),
+  spec('standard', 'solo', 'month', 1990, 1100),
+  spec('standard', 'pro', 'month', 4990, 2750),
+  spec('standard', 'studio', 'month', 11990, 6650),
   spec('pro', 'solo', 'year', 8900, 0),
   spec('pro', 'pro', 'year', 22400, 0),
   spec('pro', 'studio', 'year', 53900, 0),
-  spec('standard', 'solo', 'year', 17900, 150),
-  spec('standard', 'pro', 'year', 44900, 400),
-  spec('standard', 'studio', 'year', 107900, 1200),
+  spec('standard', 'solo', 'year', 17900, 1100),
+  spec('standard', 'pro', 'year', 44900, 2750),
+  spec('standard', 'studio', 'year', 107900, 6650),
 ]
 
 function normalizeCatalogPlan(raw: unknown): CatalogPlan | null {
@@ -147,7 +147,7 @@ export function tierFeatures(
     'История генераций',
   ]
   if (billing === 'standard' && LIMITS[tier]) {
-    const monthly = managedMonthlyCredits ?? { solo: 150, pro: 400, studio: 1200 }[tier]
+    const monthly = managedMonthlyCredits ?? { solo: 1100, pro: 2750, studio: 6650 }[tier]
     const total = period === 'year' ? monthly * 12 : monthly
     base[2] =
       period === 'year'

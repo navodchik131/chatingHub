@@ -5004,6 +5004,7 @@ async def api_studio_motion_first_frame(
     output_aspect: str = Form("9:16"),
     wan_edit_tier: str = Form("standard"),
     studio_wave_profile: str = Form("regular"),
+    workflow_wave_model: str | None = Form(None),
     auto_motion_prompt: str = Form("1"),
     lock_model_hairstyle: str = Form("1"),
     use_still_as_final: str = Form("0"),
@@ -5067,6 +5068,7 @@ async def api_studio_motion_first_frame(
         "output_aspect": output_aspect,
         "wan_edit_tier": wan_edit_tier,
         "studio_wave_profile": studio_wave_profile,
+        "workflow_wave_model": (workflow_wave_model or "").strip().lower() or None,
         "auto_motion_prompt": auto_motion_prompt,
         "lock_model_hairstyle": lock_model_hairstyle,
         "use_still_as_final": use_still_as_final,
@@ -5134,6 +5136,7 @@ async def _studio_job_execute_motion_first_frame(
     output_aspect = str(p.get("output_aspect") or "9:16")
     wan_edit_tier = str(p.get("wan_edit_tier") or "standard")
     studio_wave_profile = str(p.get("studio_wave_profile") or "regular")
+    workflow_wave_model = str(p.get("workflow_wave_model") or "").strip().lower()
     auto_motion_prompt = str(p.get("auto_motion_prompt") or "1")
     lock_model_hairstyle = str(p.get("lock_model_hairstyle") or "1")
     use_still_as_final = str(p.get("use_still_as_final") or "0")
@@ -5451,7 +5454,11 @@ async def _studio_job_execute_motion_first_frame(
 
         if not wavespeed_message:
             pose_is_last_after_reorder = False
-            if wave_profile_n == "regular":
+            use_nano_reorder = wave_profile_n == "regular" and (
+                not workflow_wave_model
+                or workflow_wave_model in ("nano-banana-pro", "nano-banana-2")
+            )
+            if use_nano_reorder:
                 pose_is_last_after_reorder = bool(
                     user_pose_ref_prepended and len(image_urls) >= 2
                 )
@@ -5479,12 +5486,43 @@ async def _studio_job_execute_motion_first_frame(
 
                 wavespeed_prompt = append_workflow_first_frame_face_grid(wavespeed_prompt)
                 wavespeed_prompt = append_motion_first_frame_overlay_removal(wavespeed_prompt)
+            from app.services.studio_workflow_image_resolution import (
+                default_workflow_image_resolution,
+                normalize_workflow_image_resolution,
+                workflow_wavespeed_size_for_resolution,
+            )
+
+            workflow_wave_resolution = (
+                normalize_workflow_image_resolution(workflow_wave_model, None)
+                if workflow_wave_model
+                else None
+            )
             if settings.wavespeed_seedream_omit_size:
                 size_for_ws: str | None = None
+            elif workflow_wave_model == "wan-2.7" and workflow_wave_resolution:
+                size_for_ws = workflow_wavespeed_size_for_resolution(
+                    aspect_key, workflow_wave_resolution
+                )
             else:
                 size_for_ws = wavespeed_size_string(aspect_key)
             try:
-                if wave_profile_n == "regular":
+                if workflow_wave_model:
+                    from app.services.wavespeed_client import workflow_edit_image_url
+
+                    ws_res = await workflow_edit_image_url(
+                        api_key=ws_key,
+                        wave_model_id=workflow_wave_model,
+                        image_urls=image_urls,
+                        prompt=wavespeed_prompt,
+                        aspect_ratio=aspect_key,
+                        wan_edit_tier=wan_tier_n,
+                        wave_profile=wave_profile_n,
+                        reference_scene_description=reference_scene,
+                        size=size_for_ws,
+                        resolution=workflow_wave_resolution
+                        or default_workflow_image_resolution(workflow_wave_model),
+                    )
+                elif wave_profile_n == "regular":
                     ws_res = await nano_banana_pro_edit_image_url(
                         api_key=ws_key,
                         image_urls=image_urls,
@@ -5494,11 +5532,6 @@ async def _studio_job_execute_motion_first_frame(
                         reference_scene_description=reference_scene,
                     )
                 else:
-                    from app.services.studio_workflow_image_resolution import (
-                        default_workflow_image_resolution,
-                    )
-                    from app.services.wavespeed_client import workflow_edit_image_url
-
                     ws_res = await workflow_edit_image_url(
                         api_key=ws_key,
                         wave_model_id="seedream-v5.0-pro",
@@ -5573,6 +5606,8 @@ async def _studio_job_execute_motion_first_frame(
             "generation_id": generation_id,
             "auto_motion_prompt": bool(motion_clip_summary and motion_clip_summary.strip()),
             "studio_wave_profile": wave_profile_n,
+            "workflow_wave_model": workflow_wave_model or None,
+            "wan_edit_tier": wan_tier_n,
         },
     )
     await session.commit()

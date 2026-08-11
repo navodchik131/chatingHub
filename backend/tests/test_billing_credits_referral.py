@@ -7,6 +7,7 @@ from app.services.billing_credits import (
     credits_total_rub,
     referrer_reward_credits_from_payment_rub,
     rub_to_credits_ceil,
+    standard_subscription_monthly_credits,
 )
 
 
@@ -29,3 +30,10 @@ def test_purchase_bonus_15_percent():
     base = 5000
     granted = apply_purchase_bonus_credits(base, 4500)
     assert granted == 5750
+
+
+def test_standard_subscription_monthly_credits_about_half_at_cbr_90():
+    with patch("app.services.billing_credits.cached_cbr_rub_per_usd_sync", return_value=90.0):
+        assert standard_subscription_monthly_credits(1990) == 1100
+        assert standard_subscription_monthly_credits(4990) == 2750
+        assert standard_subscription_monthly_credits(11990) == 6650

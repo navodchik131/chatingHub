@@ -131,10 +131,12 @@ def _build_specs() -> dict[str, PlanSpec]:
         TIER_PRO: 44900,
         TIER_STUDIO: 107900,
     }
+    # ~50% цены подписки → cent-credits по курсу ЦБ (см. standard_subscription_monthly_credits).
+    from app.services.billing_credits import standard_subscription_monthly_credits
+
     standard_credits: dict[PlanTier, int] = {
-        TIER_SOLO: 700,
-        TIER_PRO: 1850,
-        TIER_STUDIO: 5550,
+        tier: standard_subscription_monthly_credits(prices_month_standard[tier])
+        for tier in TIERS
     }
     titles: dict[tuple[BillingPlanKind, PlanTier], str] = {
         (BILLING_PLAN_PRO, TIER_SOLO): "Pro Solo",

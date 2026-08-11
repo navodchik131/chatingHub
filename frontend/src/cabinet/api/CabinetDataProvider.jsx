@@ -1114,12 +1114,15 @@ export function CabinetDataProvider({ children }) {
   const generateFirstFrame = useCallback(
     async (appState, description) => {
       const effState = effectiveStudioState(appState, me)
+      const wave = waveModelParamsFromState(effState)
       setError(null)
       try {
         const { result } = await actions.runMotionFirstFrame({
           modelId: selectedModelId,
           aspect: effState.vidFormat || selectedAspect,
           nsfw: effState.contentMode === 'nsfw',
+          waveModelId: wave.waveModelId,
+          wanTier: wave.wanTier,
           videoFile: uploadFiles['motion-video'],
           frameFile: uploadFiles['motion-frame'],
           existingGenerationId: appState.carouselPickId || firstFrameGenId,

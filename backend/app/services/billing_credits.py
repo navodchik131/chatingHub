@@ -31,6 +31,21 @@ def rub_to_credits_ceil(amount_rub: int | Decimal) -> int:
     return int((amt * Decimal(CREDITS_PER_USD) / cbr).to_integral_value(rounding=ROUND_UP))
 
 
+def standard_subscription_monthly_credits(
+    price_rub: int,
+    *,
+    share: float = 0.5,
+    round_to: int = 50,
+) -> int:
+    """Cent-credits в Standard: ~share от цены подписки по курсу ЦБ (округление вниз)."""
+    if price_rub <= 0 or share <= 0:
+        return 0
+    half_rub = int(Decimal(price_rub) * Decimal(str(share)))
+    raw = rub_to_credits_ceil(half_rub)
+    step = max(1, int(round_to))
+    return max(step, (raw // step) * step)
+
+
 def credits_to_rub_value(credits: int) -> Decimal:
     return (Decimal(max(0, credits)) * rub_per_credit_purchase()).quantize(
         Decimal("0.01"), rounding=ROUND_HALF_UP
