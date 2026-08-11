@@ -5,7 +5,7 @@ import { useApp } from '../hooks/useApp';
 import { color, line, font, avG } from '../styles/tokens';
 import { borderHoverOff } from '../styles/mixins';
 import { guideDefs } from '../data/catalog';
-import { fmtCredits, fmtMoney, fmtToday, resolveDonationBalances } from '../api/helpers';
+import { fmtCreditsWithUsd, fmtMoney, fmtToday, resolveDonationBalances } from '../api/helpers';
 import {
   demoGenerationsGrant,
   demoGenerationsRemaining,
@@ -38,7 +38,9 @@ export default function Overview() {
   const { t, lang, go, cabinet } = useApp();
   const { me, conversations, donationOverview, donationEvents, archiveImages, chatterStats } = cabinet;
 
-  const credits = fmtCredits(me?.credits_balance);
+  const credits = fmtCreditsWithUsd(me?.credits_balance, lang);
+  const creditsNum = Math.max(0, Math.round(Number(me?.credits_balance) || 0));
+  const estFrames = Math.max(0, Math.floor(creditsNum / 13));
   const showDemo = isCreditsPlanWithDemo(me);
   const demoRemaining = demoGenerationsRemaining(me);
   const demoGrant = demoGenerationsGrant(me);
@@ -65,6 +67,61 @@ export default function Overview() {
 
   return (
     <Fade data-screen-label="Обзор">
+      {/* billing v2 announcement */}
+      <Hoverable
+        style={{
+          marginBottom: 20,
+          padding: '16px 18px',
+          borderRadius: 16,
+          background: 'linear-gradient(135deg,rgba(215,244,82,.14),rgba(215,244,82,.03))',
+          border: '1px solid rgba(215,244,82,.35)',
+          boxShadow: '0 0 0 1px rgba(215,244,82,.08) inset',
+        }}
+        hover={{ borderColor: 'rgba(215,244,82,.55)' }}
+        onClick={go('billing')}
+      >
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+          <div style={{ flex: '1 1 280px', minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+              <span
+                style={{
+                  fontFamily: font.mono,
+                  fontSize: 9.5,
+                  letterSpacing: '1.6px',
+                  fontWeight: 800,
+                  color: color.bg,
+                  background: color.lime,
+                  borderRadius: 6,
+                  padding: '3px 8px',
+                }}
+              >
+                {t.billingNewsBadge}
+              </span>
+              <span style={{ fontFamily: font.display, fontWeight: 700, fontSize: 16, color: color.lime }}>
+                {t.billingNewsTitle}
+              </span>
+            </div>
+            <div style={{ fontSize: 13, lineHeight: 1.55, color: color.textMid, marginBottom: 6 }}>
+              {t.billingNewsBody}
+            </div>
+            <div style={{ fontSize: 12, lineHeight: 1.5, color: color.textDim }}>
+              {t.billingNewsDetail}
+            </div>
+          </div>
+          <div
+            style={{
+              alignSelf: 'center',
+              fontSize: 12,
+              fontWeight: 800,
+              color: color.lime,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {t.billingNewsCta}
+          </div>
+        </div>
+      </Hoverable>
+
       {/* header */}
       <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', marginBottom: 20 }}>
         <div>
@@ -100,7 +157,7 @@ export default function Overview() {
           </div>
           <div style={{ fontFamily: font.display, fontWeight: 700, fontSize: 26, color: color.lime }}>{credits}</div>
           <div style={{ fontSize: 11.5, color: color.textDim, marginTop: 4 }}>
-            ≈ {Math.floor(Number(credits) / 10)} {t.framesLeft}
+            ≈ {estFrames} {t.framesLeft}
           </div>
           {showDemo && (
             <div
