@@ -1111,10 +1111,17 @@ export function CabinetDataProvider({ children }) {
     if (thumb) setFirstFrameUrl(thumb)
   }, [])
 
+  const clearFirstFrameArchivePick = useCallback(() => {
+    setFirstFrameGenId(null)
+    setFirstFrameUrl(null)
+  }, [])
+
   const generateFirstFrame = useCallback(
     async (appState, description) => {
       const effState = effectiveStudioState(appState, me)
       const wave = waveModelParamsFromState(effState)
+      const frameFile = uploadFiles['motion-frame'] || null
+      const archiveId = frameFile ? null : (appState.carouselPickId ?? firstFrameGenId)
       setError(null)
       try {
         const { result } = await actions.runMotionFirstFrame({
@@ -1124,10 +1131,13 @@ export function CabinetDataProvider({ children }) {
           waveModelId: wave.waveModelId,
           wanTier: wave.wanTier,
           videoFile: uploadFiles['motion-video'],
-          frameFile: uploadFiles['motion-frame'],
-          existingGenerationId: appState.carouselPickId || firstFrameGenId,
+          frameFile,
+          existingGenerationId: archiveId,
           description,
         })
+        if (result?.motion_video_file_id) {
+          setMotionVideoFileId(String(result.motion_video_file_id).trim())
+        }
         if (result?.generation_id) setFirstFrameGenId(result.generation_id)
         const url = (result?.generated_image_url || result?.image_url || '').trim()
         if (url) setFirstFrameUrl(url)
@@ -1171,12 +1181,13 @@ export function CabinetDataProvider({ children }) {
         setError('Опишите движение')
         return
       }
-      let ffGenId = appState.carouselPickId ?? firstFrameGenId
+      const frameFile = uploadFiles['motion-frame'] || null
+      let ffGenId = frameFile ? null : (appState.carouselPickId ?? firstFrameGenId)
       if (ffGenId != null) {
         const n = Number(ffGenId)
         ffGenId = Number.isFinite(n) ? n : null
       }
-      if (promptMode && !ffGenId && !uploadFiles['motion-frame']) {
+      if (promptMode && !ffGenId && !frameFile) {
         setError('Загрузите или выберите первый кадр')
         return
       }
@@ -1184,7 +1195,7 @@ export function CabinetDataProvider({ children }) {
         setError('Сначала сгенерируйте первый кадр')
         return
       }
-      if (motionControl && appState.hasFirstFrame === 'yes' && !ffGenId && !uploadFiles['motion-frame']) {
+      if (motionControl && appState.hasFirstFrame === 'yes' && !ffGenId && !frameFile) {
         setError('Загрузите или выберите первый кадр из архива')
         return
       }
@@ -1200,12 +1211,12 @@ export function CabinetDataProvider({ children }) {
       setArchive((prev) => prependOptimisticStudioArchive(prev, item))
       setError(null)
       try {
-        if (!ffGenId && uploadFiles['motion-frame'] && motionControl) {
+        if (!ffGenId && frameFile && motionControl) {
           const { result } = await actions.runMotionFirstFrame({
             modelId: selectedModelId,
             aspect: effState.vidFormat || selectedAspect,
             nsfw: isEvolink ? false : effState.contentMode === 'nsfw',
-            frameFile: uploadFiles['motion-frame'],
+            frameFile,
             autoMotionPrompt: false,
             useStillAsFinal: true,
           })
@@ -1220,7 +1231,7 @@ export function CabinetDataProvider({ children }) {
           durationSeconds: Number(appState.vidTime) || 5,
           motionVideoFileId: motionControl ? motionVideoFileId : null,
           firstFrameGenerationId: ffGenId,
-          frameFile: !ffGenId && uploadFiles['motion-frame'] ? uploadFiles['motion-frame'] : null,
+          frameFile: !ffGenId && frameFile ? frameFile : null,
           autoMotionPrompt: motionControl && Boolean(motionVideoFileId),
           promptOnlyMode: promptMode,
           generateAudio: appState.vidGenerateAudio !== false,
@@ -1258,6 +1269,9 @@ export function CabinetDataProvider({ children }) {
   const uploadDrivingVideo = useCallback(
     async (file) => {
       await run(async () => {
+        setMotionVideoFileId(null)
+        setFirstFrameGenId(null)
+        setFirstFrameUrl(null)
         setUploadFile('motion-video', file)
         const id = await actions.uploadMotionDrivingVideo(file)
         setMotionVideoFileId(id)
@@ -1711,6 +1725,7 @@ export function CabinetDataProvider({ children }) {
       generateImages,
       generateFirstFrame,
       pickFirstFrameFromArchive,
+      clearFirstFrameArchivePick,
       generateVideo,
       uploadDrivingVideo,
       createCharacter,
@@ -1826,6 +1841,7 @@ export function CabinetDataProvider({ children }) {
       generateImages,
       generateFirstFrame,
       pickFirstFrameFromArchive,
+      clearFirstFrameArchivePick,
       generateVideo,
       uploadDrivingVideo,
       createCharacter,

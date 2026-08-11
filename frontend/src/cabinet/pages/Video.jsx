@@ -122,17 +122,73 @@ export function VideoStudioPage({ backend = 'wavespeed' }) {
   const motionControl = s.vidMode === 'motion-control';
   const engineModels = enginesForNsfw(s.contentMode === 'nsfw', cabinet.genModels);
   const activeEngine = engineModels.find((m) => m.id === s.aiModel) || engineModels[0];
-  const ffPreviewUrl = cabinet.firstFrameUrl
-    || (() => {
+  const pickedArchiveId = s.carouselPickId ?? cabinet.firstFrameGenId;
+  const hasFrameUpload = Boolean(cabinet.uploadFiles['motion-frame']);
+  const ffPreviewUrl = cabinet.uploadPreviewUrls?.['motion-frame']
+    || (hasFrameUpload ? '' : cabinet.firstFrameUrl)
+    || (hasFrameUpload ? '' : (() => {
       const pickId = s.carouselPickId ?? cabinet.firstFrameGenId
       if (pickId == null) return ''
       const hit = (cabinet.archiveImages || []).find((x) => Number(x.id) === Number(pickId))
       return hit ? archiveThumbUrl(hit) : ''
-    })()
-    || cabinet.uploadPreviewUrls?.['motion-frame']
-    || '';
+    })());
   const ffRatio = s.vidFormat || cabinet.selectedAspect || '9:16';
   const ffWho = cabinet.models.find((m) => sameStudioModelId(m.id, cabinet.selectedModelId))?.name || '—';
+
+  const clearArchiveFramePick = () => {
+    cabinet.clearFirstFrameArchivePick();
+    setS({ carouselPickId: null });
+  };
+
+  const pickArchiveFrame = (item) => {
+    const id = Number(item.id);
+    if (Number(pickedArchiveId) === id) {
+      clearArchiveFramePick();
+      return;
+    }
+    cabinet.pickFirstFrameFromArchive(item);
+    setS({ carouselPickId: item.id });
+    cabinet.setUploadFile('motion-frame', null);
+  };
+
+  const onFrameFilePicked = (file) => {
+    cabinet.setUploadFile('motion-frame', file);
+    clearArchiveFramePick();
+  };
+
+  const onDrivingVideoPicked = (file) => {
+    setS({ carouselPickId: null, ffState: 'idle' });
+    cabinet.clearFirstFrameArchivePick();
+    void cabinet.uploadDrivingVideo(file);
+  };
+
+  const uploadClearBtn = (onClear, title) => (
+    <button
+      type="button"
+      title={title}
+      aria-label={title}
+      onClick={(e) => {
+        e.stopPropagation();
+        onClear();
+      }}
+      style={{
+        position: 'absolute',
+        top: 6,
+        right: 6,
+        zIndex: 2,
+        border: 'none',
+        borderRadius: 6,
+        padding: '2px 7px',
+        background: 'rgba(0,0,0,.65)',
+        color: '#fff',
+        fontSize: 11,
+        fontWeight: 700,
+        cursor: 'pointer',
+      }}
+    >
+      ✕
+    </button>
+  );
 
   const pickContentMode = (contentMode) => {
     const list = enginesForNsfw(contentMode === 'nsfw', cabinet.genModels);
@@ -409,12 +465,13 @@ export function VideoStudioPage({ backend = 'wavespeed' }) {
               style={{ display: 'none' }}
               onChange={(e) => {
                 const file = e.target.files?.[0];
-                if (file) void cabinet.uploadDrivingVideo(file);
+                if (file) onDrivingVideoPicked(file);
                 e.target.value = '';
               }}
             />
             <Hoverable
               style={{
+                position: 'relative',
                 borderRadius: 12, padding: 20,
                 display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, cursor: 'pointer',
                 ...refUploadStyle(Boolean(cabinet.motionVideoFileId)).base,
@@ -426,6 +483,16 @@ export function VideoStudioPage({ backend = 'wavespeed' }) {
               }}
               onClick={() => videoRef.current?.click()}
             >
+              {cabinet.uploadFiles['motion-video']
+                ? uploadClearBtn(
+                    () => {
+                      cabinet.setUploadFile('motion-video', null);
+                      setS({ carouselPickId: null, ffState: 'idle' });
+                      cabinet.clearFirstFrameArchivePick();
+                    },
+                    t.clearUpload,
+                  )
+                : null}
               <span style={{ display: 'flex', width: 22, height: 22, color: color.textMuted }}><IcoFilm /></span>
               <span style={{ fontSize: 11.5, fontWeight: 700, color: color.textDim, textAlign: 'center' }}>
                 {cabinet.uploadFiles['motion-video']?.name || t.dropVideo}
@@ -457,24 +524,33 @@ export function VideoStudioPage({ backend = 'wavespeed' }) {
                 style={{ display: 'none' }}
                 onChange={(e) => {
                   const file = e.target.files?.[0];
-                  if (file) cabinet.setUploadFile('motion-frame', file);
+                  if (file) onFrameFilePicked(file);
                   e.target.value = '';
                 }}
               />
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 <Hoverable
                   style={{
+                    position: 'relative',
                     flex: 1, borderRadius: 12, padding: '16px 12px',
                     display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, cursor: 'pointer',
-                    ...refUploadStyle(Boolean(cabinet.uploadFiles['motion-frame'])).base,
+                    ...refUploadStyle(hasFrameUpload).base,
+                    ...(hasFrameUpload && cabinet.uploadPreviewUrls?.['motion-frame']
+                      ? { background: `center/cover url(${cabinet.uploadPreviewUrls['motion-frame']})`, minHeight: 120 }
+                      : {}),
                   }}
                   hover={{
-                    ...refUploadStyle(Boolean(cabinet.uploadFiles['motion-frame'])).hover,
+                    ...refUploadStyle(hasFrameUpload).hover,
                     background: 'rgba(215,244,82,.03)',
                   }}
                   onClick={() => frameRef.current?.click()}
                 >
-                  <span style={{ display: 'flex', width: 20, height: 20, color: color.textMuted }}><IcoUpload /></span>
+                  {hasFrameUpload
+                    ? uploadClearBtn(() => cabinet.setUploadFile('motion-frame', null), t.clearUpload)
+                    : null}
+                  {!hasFrameUpload && (
+                    <span style={{ display: 'flex', width: 20, height: 20, color: color.textMuted }}><IcoUpload /></span>
+                  )}
                   <span style={{ fontSize: 11, fontWeight: 700, color: color.textDim, textAlign: 'center' }}>
                     {cabinet.uploadFiles['motion-frame']?.name || t.uploadFirst}
                   </span>
@@ -483,9 +559,28 @@ export function VideoStudioPage({ backend = 'wavespeed' }) {
               <div style={{ fontSize: 10.5, color: color.textGhost, marginTop: 6 }}>{t.pickFromArchive}</div>
               {(cabinet.archiveImages || []).slice(0, 8).length > 0 && (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 5, marginTop: 8 }}>
-                  {(cabinet.archiveImages || []).slice(0, 8).map((item, i) => {
+                  <Hoverable
+                    style={{
+                      aspectRatio: '9/16', borderRadius: 8, cursor: 'pointer',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      border: pickedArchiveId == null && !hasFrameUpload
+                        ? '2px solid rgba(215,244,82,.7)'
+                        : '1px dashed rgba(255,255,255,.18)',
+                      background: color.bgPanel,
+                      color: color.textDim,
+                      fontSize: 10,
+                      fontWeight: 700,
+                      textAlign: 'center',
+                      padding: 4,
+                    }}
+                    hover={{ borderColor: 'rgba(215,244,82,.5)' }}
+                    onClick={clearArchiveFramePick}
+                  >
+                    {t.archiveNone}
+                  </Hoverable>
+                  {(cabinet.archiveImages || []).slice(0, 7).map((item, i) => {
                     const thumb = archiveThumbUrl(item);
-                    const picked = Number(s.carouselPickId ?? cabinet.firstFrameGenId) === Number(item.id);
+                    const picked = Number(pickedArchiveId) === Number(item.id);
                     return (
                       <Hoverable
                         key={item.id || i}
@@ -495,11 +590,7 @@ export function VideoStudioPage({ backend = 'wavespeed' }) {
                           background: thumb ? `url(${thumb}) center/cover` : G[i % 6],
                         }}
                         hover={{ borderColor: 'rgba(215,244,82,.5)' }}
-                        onClick={() => {
-                          cabinet.pickFirstFrameFromArchive(item);
-                          setS({ carouselPickId: item.id });
-                          cabinet.setUploadFile('motion-frame', null);
-                        }}
+                        onClick={() => pickArchiveFrame(item)}
                       />
                     );
                   })}
@@ -648,23 +739,32 @@ export function VideoStudioPage({ backend = 'wavespeed' }) {
                   style={{ display: 'none' }}
                   onChange={(e) => {
                     const file = e.target.files?.[0];
-                    if (file) cabinet.setUploadFile('motion-frame', file);
+                    if (file) onFrameFilePicked(file);
                     e.target.value = '';
                   }}
                 />
                 <Hoverable
                   style={{
+                    position: 'relative',
                     borderRadius: 12, padding: 16,
                     display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, cursor: 'pointer',
                     ...refUploadStyle(Boolean(cabinet.uploadFiles['motion-frame'] || ffPreviewUrl)).base,
                     ...(ffPreviewUrl && !cabinet.uploadFiles['motion-frame']
                       ? { background: `center/cover url(${ffPreviewUrl})`, minHeight: 140 }
                       : {}),
+                    ...(hasFrameUpload && cabinet.uploadPreviewUrls?.['motion-frame']
+                      ? { background: `center/cover url(${cabinet.uploadPreviewUrls['motion-frame']})`, minHeight: 140 }
+                      : {}),
                   }}
                   hover={refUploadStyle(Boolean(cabinet.uploadFiles['motion-frame'] || ffPreviewUrl)).hover}
                   onClick={() => frameRef.current?.click()}
                 >
-                  <span style={{ display: 'flex', width: 22, height: 22, color: color.textMuted }}><IcoUpload /></span>
+                  {hasFrameUpload
+                    ? uploadClearBtn(() => cabinet.setUploadFile('motion-frame', null), t.clearUpload)
+                    : null}
+                  {!hasFrameUpload && (
+                    <span style={{ display: 'flex', width: 22, height: 22, color: color.textMuted }}><IcoUpload /></span>
+                  )}
                   <span style={{ fontSize: 11.5, fontWeight: 700, color: color.textDim, textAlign: 'center' }}>
                     {cabinet.uploadFiles['motion-frame']?.name || (lang === 'ru' ? 'Загрузите первый кадр' : 'Upload first frame')}
                   </span>
@@ -673,9 +773,32 @@ export function VideoStudioPage({ backend = 'wavespeed' }) {
                   <div style={{ marginTop: 10 }}>
                     <div style={{ fontSize: 10.5, fontWeight: 700, color: color.textDim, marginBottom: 6 }}>{t.srcArchive}</div>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 6, width: '100%' }}>
-                      {(cabinet.archiveImages || []).slice(0, 4).map((item, i) => {
+                      <Hoverable
+                        style={{
+                          aspectRatio: '9/16',
+                          borderRadius: 8,
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          border: pickedArchiveId == null && !hasFrameUpload
+                            ? '2px solid rgba(215,244,82,.7)'
+                            : '1px dashed rgba(255,255,255,.18)',
+                          background: color.bgPanel,
+                          color: color.textDim,
+                          fontSize: 10,
+                          fontWeight: 700,
+                          textAlign: 'center',
+                          padding: 4,
+                        }}
+                        hover={{ borderColor: 'rgba(215,244,82,.5)' }}
+                        onClick={clearArchiveFramePick}
+                      >
+                        {t.archiveNone}
+                      </Hoverable>
+                      {(cabinet.archiveImages || []).slice(0, 3).map((item, i) => {
                         const thumb = archiveThumbUrl(item);
-                        const picked = Number(s.carouselPickId ?? cabinet.firstFrameGenId) === Number(item.id);
+                        const picked = Number(pickedArchiveId) === Number(item.id);
                         const pickSt = refThumbStyle(picked);
                         return (
                           <Hoverable
@@ -687,11 +810,7 @@ export function VideoStudioPage({ backend = 'wavespeed' }) {
                               background: thumb ? `center/cover url(${thumb})` : G[i % 6],
                             }}
                             hover={pickSt.hover}
-                            onClick={() => {
-                              cabinet.pickFirstFrameFromArchive(item);
-                              setS({ carouselPickId: item.id });
-                              cabinet.setUploadFile('motion-frame', null);
-                            }}
+                            onClick={() => pickArchiveFrame(item)}
                           />
                         );
                       })}
