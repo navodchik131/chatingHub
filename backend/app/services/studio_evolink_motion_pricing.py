@@ -5,7 +5,9 @@ from __future__ import annotations
 import math
 
 from app.config import settings
-from app.services.fx_rate import cached_cbr_rub_per_usd_sync, studio_motion_rub_per_usd_effective
+from app.services.credit_units import credit_units_public, usd_to_credits
+from app.services.fx_rate import cached_cbr_rub_per_usd_sync
+from app.services.studio_provider_pricing import video_evolink_usd_per_sec_720p
 from app.services.studio_motion_pricing import (
     SeedanceT2vResolution,
     SeedanceT2vVariant,
@@ -71,17 +73,10 @@ def _usd_per_sec_at_720p(
     variant: SeedanceT2vVariant,
     has_motion_reference_video: bool,
 ) -> float:
-    if variant == "seedance_25":
-        if has_motion_reference_video:
-            return float(settings.studio_evolink_25_usd_per_sec_with_ref)
-        return float(settings.studio_evolink_25_usd_per_sec_no_ref)
-    if variant == "mini":
-        if has_motion_reference_video:
-            return float(settings.studio_evolink_mini_usd_per_sec_with_ref)
-        return float(settings.studio_evolink_mini_usd_per_sec_no_ref)
-    if has_motion_reference_video:
-        return float(settings.studio_evolink_20_usd_per_sec_with_ref)
-    return float(settings.studio_evolink_20_usd_per_sec_no_ref)
+    return video_evolink_usd_per_sec_720p(
+        variant=variant if isinstance(variant, str) else "standard",
+        has_ref=has_motion_reference_video,
+    )
 
 
 def evolink_video_usd_per_sec(
@@ -157,11 +152,7 @@ def _credit_cost_raw(
         has_motion_reference_video=has_motion_reference_video,
         reference_video_duration=reference_video_duration,
     )
-    rub_total = usd * studio_motion_rub_per_usd_effective()
-    per_credit = float(settings.studio_motion_rub_per_credit)
-    if per_credit <= 0:
-        return max(1, dur)
-    return max(1, int(math.ceil(rub_total / per_credit)))
+    return usd_to_credits(usd, markup_usd=0.0)
 
 
 def evolink_video_credit_cost(
@@ -218,12 +209,13 @@ def evolink_video_pricing_public() -> dict:
     v25 = "seedance_25"
     dur_default = int(settings.evolink_video_duration_default)
     default_res = normalize_evolink_resolution(None, variant="standard")
+    units = credit_units_public()
     return {
+        **units,
         "backend": "evolink",
-        "rub_per_usd": studio_motion_rub_per_usd_effective(),
+        "rub_per_usd": cached_cbr_rub_per_usd_sync(),
         "rub_per_usd_cbr": cached_cbr_rub_per_usd_sync(),
-        "rub_per_usd_margin": float(settings.studio_motion_rub_per_usd_margin),
-        "rub_per_credit": float(settings.studio_motion_rub_per_credit),
+        "rub_per_credit": units.get("rub_per_credit", 0),
         "duration_min": int(settings.evolink_video_duration_min),
         "duration_max_20": int(settings.evolink_video_duration_max_20),
         "duration_max_25": int(settings.evolink_video_duration_max_25),

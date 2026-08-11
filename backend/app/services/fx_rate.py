@@ -89,6 +89,10 @@ async def get_usd_rate(*, force: bool = False) -> dict[str, Any]:
                 _cache["updated_at"] = now
                 _cache["source"] = "fallback"
 
+    from app.services.studio_provider_pricing import refresh_provider_pricing
+
+    refresh_provider_pricing(force=force)
+
     rub_per_usd = float(_cache["rub_per_usd"])
     updated = _cache["updated_at"] or now
     # следующий слот после now

@@ -89,10 +89,11 @@ export function formatCreditOneLiner(
   lang: string,
   rubPerUsd = getCachedRubPerUsd(),
 ): string {
+  const usdPerCredit = 0.01
   if (!isEnglishLocale(lang)) {
-    return `1 кредит = ${formatUnitPrice(rubPerCredit, lang, rubPerUsd)} ₽`
+    return `1 кредит = $0.01 (≈ ${formatUnitPrice(rubPerCredit, lang, rubPerUsd)} ₽ по курсу ЦБ)`
   }
-  return `1 credit = $${formatUnitPrice(rubPerCredit, lang, rubPerUsd)}`
+  return `1 credit = $0.01 (≈ ${formatUnitPrice(rubPerCredit, lang, rubPerUsd)} ₽ at CBR rate)`
 }
 
 export function formatPerCreditLabel(

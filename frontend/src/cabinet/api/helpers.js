@@ -23,8 +23,19 @@ export async function apiJsonOptional(path, init, fallback) {
   }
 }
 
-export function fmtCredits(n) {
-  return String(Math.max(0, Math.round(Number(n) || 0)))
+export function fmtCredits(n, lang = 'ru') {
+  const v = Math.max(0, Math.round(Number(n) || 0))
+  const loc = String(lang || 'ru').startsWith('en') ? 'en-US' : 'ru-RU'
+  return v.toLocaleString(loc)
+}
+
+export function fmtCreditsWithUsd(n, lang = 'ru') {
+  const credits = fmtCredits(n, lang)
+  const usd = (Math.max(0, Math.round(Number(n) || 0)) / 100).toFixed(2)
+  if (String(lang || 'ru').startsWith('en')) {
+    return `${credits} cr. ($${usd})`
+  }
+  return `${credits} кр. ($${usd})`
 }
 
 export function pickCurrencyAmount(map, preferred = 'RUB') {

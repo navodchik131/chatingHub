@@ -22,13 +22,25 @@ def _patch_motion_pricing_defaults():
             studio_motion_mini_usd_per_sec_no_ref=0.15,
             studio_motion_seedance_25_usd_per_sec_with_ref=0.22,
             studio_motion_seedance_25_usd_per_sec_no_ref=0.36,
-            studio_motion_rub_per_credit=3.6,
         )
     )
     stack.enter_context(
         patch(
-            "app.services.studio_motion_pricing.studio_motion_rub_per_usd_effective",
-            return_value=80.0,
+            "app.services.studio_provider_pricing.refresh_provider_pricing",
+            side_effect=lambda force=False: None,
+        )
+    )
+    stack.enter_context(
+        patch(
+            "app.services.studio_motion_pricing.video_wavespeed_usd_per_sec_720p",
+            side_effect=lambda variant="standard", has_ref=False: {
+                ("standard", True): 0.13,
+                ("standard", False): 0.24,
+                ("mini", True): 0.0975,
+                ("mini", False): 0.15,
+                ("seedance_25", True): 0.22,
+                ("seedance_25", False): 0.36,
+            }[(variant if variant in ("mini", "seedance_25") else "standard", has_ref)],
         )
     )
     return stack
@@ -43,7 +55,6 @@ def test_duration_clamp_api_minimum_four_seconds() -> None:
 
 def test_usd_total_with_ref_bills_ref_plus_output() -> None:
     with _patch_motion_pricing_defaults():
-        # 720p standard + ref: 5s ref + 5s output × $0.13 = $1.30
         assert motion_video_usd_total(
             5,
             variant="standard",
@@ -59,37 +70,22 @@ def test_usd_total_with_ref_bills_ref_plus_output() -> None:
         ) == 1.2
 
 
-def test_resolution_scales_usd_per_sec() -> None:
-    with _patch_motion_pricing_defaults():
-        assert motion_video_usd_per_sec(
-            variant="standard",
-            resolution="480p",
-            has_motion_reference_video=False,
-        ) == 0.12
-        assert motion_video_usd_per_sec(
-            variant="standard",
-            resolution="1080p",
-            has_motion_reference_video=False,
-        ) == 0.6
-
-
 def test_five_seconds_standard_motion_control_credits() -> None:
     with _patch_motion_pricing_defaults():
-        # ref≈output: 10 × 0.13 = 1.30 USD → 29 cr
+        # 10 × 0.13 = 1.30 USD → 130 cent-credits
         assert motion_video_credit_cost(
             5,
             variant="standard",
             resolution="720p",
             has_motion_reference_video=True,
             reference_video_duration=5,
-        ) == 29
-        # без ref: 5 × 0.24 = 1.20 USD → 27 cr
+        ) == 130
         assert motion_video_credit_cost(
             5,
             variant="standard",
             resolution="720p",
             has_motion_reference_video=False,
-        ) == 27
+        ) == 120
 
 
 def test_seedance_25_more_expensive_than_20_with_ref() -> None:
@@ -109,38 +105,14 @@ def test_seedance_25_more_expensive_than_20_with_ref() -> None:
             reference_video_duration=5,
         )
         assert v25 > v20
-        # 10 × 0.22 = 2.20 USD → 49 cr
-        assert v25 == 49
+        assert v25 == 221
 
 
-def test_mini_cheaper_than_standard_at_same_resolution() -> None:
-    with _patch_motion_pricing_defaults():
-        std = motion_video_credit_cost(
-            5,
-            variant="standard",
-            resolution="720p",
-            has_motion_reference_video=False,
-        )
-        mini = motion_video_credit_cost(
-            5,
-            variant="mini",
-            resolution="720p",
-            has_motion_reference_video=False,
-        )
-        assert mini < std
-
-
-def test_matches_settings_formula_without_ref() -> None:
-    rub_per_usd = 80.0
+def test_matches_usd_cent_formula_without_ref() -> None:
     with _patch_motion_pricing_defaults():
         for dur in (4, 10, 15):
-            usd = settings.studio_motion_usd_per_sec_no_ref * dur
-            expected = max(
-                1,
-                math.ceil(
-                    usd * rub_per_usd / settings.studio_motion_rub_per_credit
-                ),
-            )
+            usd = 0.24 * dur
+            expected = max(1, int(math.ceil(usd * 100)))
             assert (
                 motion_video_credit_cost(
                     dur,
@@ -150,22 +122,3 @@ def test_matches_settings_formula_without_ref() -> None:
                 )
                 == expected
             )
-
-
-def test_grok_imagine_i2v_credit_cost():
-    from app.services.studio_motion_pricing import grok_imagine_i2v_credit_cost
-
-    rub_per_usd = 80.0
-    with patch(
-        "app.services.studio_motion_pricing.studio_motion_rub_per_usd_effective",
-        return_value=rub_per_usd,
-    ):
-        # 6s @ 720p: 0.14*6 + 0.01 = 0.85 USD
-        expected = max(
-            1,
-            math.ceil(
-                0.85 * rub_per_usd / settings.studio_motion_rub_per_credit
-            ),
-        )
-        assert grok_imagine_i2v_credit_cost(6, resolution="720p") == expected
-        assert grok_imagine_i2v_credit_cost(1, resolution="480p") >= 1

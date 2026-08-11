@@ -19,7 +19,11 @@ from app.db.models import (
     TributeProcessedEvent,
     UsageEvent,
 )
-from app.services.billing_credits import assert_credits_quantity_allowed, credits_total_rub
+from app.services.billing_credits import (
+    apply_purchase_bonus_credits,
+    assert_credits_quantity_allowed,
+    credits_total_rub,
+)
 from app.services.billing_plan import can_purchase_credits_pack, normalize_billing_plan
 from app.services.billing_subscription import activate_subscription_product, subscription_period_end
 from app.services.plan_catalog import get_plan_spec, resolve_product_id
@@ -120,16 +124,19 @@ async def _grant_credits_pack(
         session.add(acc)
         await session.flush()
 
-    acc.balance += credits_quantity
+    granted = apply_purchase_bonus_credits(credits_quantity, int(amount_rub))
+    acc.balance += granted
     session.add(
         UsageEvent(
             user_id=billing_uid,
             kind="tribute_credits_pack",
-            credits_delta=credits_quantity,
+            credits_delta=granted,
             meta=json.dumps(
                 {
                     "payment_ref": payment_ref,
                     "credits_quantity": credits_quantity,
+                    "credits_granted": granted,
+                    "purchase_bonus_credits": max(0, granted - credits_quantity),
                     "amount_rub": amount_rub,
                 },
                 ensure_ascii=False,
@@ -143,7 +150,7 @@ async def _grant_credits_pack(
         payment_amount_rub=Decimal(amount_rub),
     )
     await provision_full_workflow_workspaces(session, owner_id=billing_uid)
-    return {"ok": True, "granted": "credits", "amount": credits_quantity}
+    return {"ok": True, "granted": "credits", "amount": granted}
 
 
 async def _apply_target(

@@ -23,6 +23,7 @@ from app.schemas import (
 )
 from app.services.billing_credits import (
     assert_credits_quantity_allowed,
+    billing_credits_pricing_public,
     credit_unit_price_rub,
     credits_amount_yookassa_value,
     credits_total_rub,
@@ -78,16 +79,17 @@ async def billing_plans() -> BillingPlansOut:
                 price_rub=spec.price_rub,
             )
         )
+    credits_pricing = billing_credits_pricing_public()
     items.append(
         BillingPlanItemOut(
             product="credits_pack",
-            title="Кредиты студии — любое количество от 50 шт.",
+            title="Кредиты студии — 1 кр. = $0.01, оплата по курсу ЦБ",
             price_rub=int(credits_total_rub(settings.billing_credits_min_purchase)),
             credits_pricing=BillingCreditsPricingOut(
-                min_quantity=settings.billing_credits_min_purchase,
-                bulk_from=settings.billing_credits_bulk_from,
-                unit_price_rub=float(settings.billing_credits_unit_price_rub),
-                bulk_unit_price_rub=float(settings.billing_credits_bulk_unit_price_rub),
+                min_quantity=credits_pricing["min_quantity"],
+                bulk_from=credits_pricing["bulk_from"],
+                unit_price_rub=float(credits_pricing["unit_price_rub"]),
+                bulk_unit_price_rub=float(credits_pricing["bulk_unit_price_rub"]),
             ),
         )
     )
@@ -144,15 +146,11 @@ async def subscribe_with_credits(
 
 @router.get("/catalog")
 async def billing_catalog() -> dict:
+    credits_pricing = billing_credits_pricing_public()
     return {
         **catalog_public_dict(),
         "signup_bonus_credits": settings.signup_bonus_credits,
-        "credits_pricing": {
-            "min_quantity": settings.billing_credits_min_purchase,
-            "bulk_from": settings.billing_credits_bulk_from,
-            "unit_price_rub": float(settings.billing_credits_unit_price_rub),
-            "bulk_unit_price_rub": float(settings.billing_credits_bulk_unit_price_rub),
-        },
+        "credits_pricing": credits_pricing,
         "marketing_beta_creators_count": settings.marketing_beta_creators_count,
     }
 

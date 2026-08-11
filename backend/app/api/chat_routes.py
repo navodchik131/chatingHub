@@ -122,6 +122,9 @@ from app.services.studio_grok_scene_compose import grok_scene_compose_configured
 from app.services.plan_catalog import catalog_public_dict
 from app.services.plan_entitlements import assert_chat_allowed_for_plan
 from app.services.studio_image_pricing import image_pricing_public_dict
+from app.services.billing_credits import billing_credits_pricing_public
+from app.services.studio_operation_pricing import studio_operations_pricing_public
+from app.services.studio_provider_pricing import provider_pricing_public
 from app.services.studio_evolink_motion_pricing import evolink_video_pricing_public
 from app.services.studio_motion_pricing import (
     motion_video_credit_cost,
@@ -212,6 +215,8 @@ async def api_health(session: AsyncSession = Depends(get_session)) -> dict:
     from app.services.fx_rate import get_usd_rate
 
     await get_usd_rate()
+    ops = studio_operations_pricing_public()
+    credits_pricing = billing_credits_pricing_public()
     return {
         "ok": True,
         "mode": "saas",
@@ -247,17 +252,21 @@ async def api_health(session: AsyncSession = Depends(get_session)) -> dict:
         "billing_credit_pack_credits": settings.billing_credit_pack_credits,
         "billing_credits_min_purchase": settings.billing_credits_min_purchase,
         "billing_credits_bulk_from": settings.billing_credits_bulk_from,
-        "billing_credits_unit_price_rub": float(settings.billing_credits_unit_price_rub),
-        "billing_credits_bulk_unit_price_rub": float(settings.billing_credits_bulk_unit_price_rub),
+        "billing_credits_unit_price_rub": credits_pricing["unit_price_rub"],
+        "billing_credits_bulk_unit_price_rub": credits_pricing["bulk_unit_price_rub"],
+        "billing_credits_pricing": credits_pricing,
+        "credit_units": credits_pricing,
+        "studio_provider_pricing": provider_pricing_public(),
         "openai_studio_configured": bool((settings.openai_api_key or "").strip()),
         "wavespeed_platform_configured": bool((settings.wavespeed_platform_api_key or "").strip()),
-        "studio_prompt_credit_cost": settings.credit_cost_studio_prompt_refine,
-        "studio_inpaint_credit_cost": settings.credit_cost_studio_inpaint,
-        "studio_upscale_credit_cost": settings.credit_cost_studio_upscale,
+        "studio_prompt_credit_cost": ops["prompt_refine"],
+        "studio_inpaint_credit_cost": ops["inpaint"],
+        "studio_upscale_credit_cost": ops["upscale"],
         "studio_wan_edit_tier_switch": studio_wan_edit_tier_switch_available(),
         "studio_allow_prompt_only": settings.studio_allow_prompt_only,
         "studio_regional_masked_edit": settings.studio_regional_masked_edit,
-        "studio_carousel_credit_cost": settings.credit_cost_studio_carousel_shot,
+        "studio_carousel_credit_cost": ops["carousel_shot"],
+        "studio_operations_pricing": ops,
         "studio_generations_retention_days": settings.studio_generations_retention_days,
         "studio_generations_retention_interval_hours": settings.studio_generations_retention_interval_hours,
         "studio_motion_video_pricing": motion_video_pricing_public(),

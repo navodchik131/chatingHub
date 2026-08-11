@@ -78,8 +78,8 @@ class Settings(BaseSettings):
         description="Модель WaveSpeed для демо (обычные фото). NSFW в демо — wan-2.7.",
     )
     referral_signup_bonus_credits: int = Field(
-        default=25,
-        description="Кредиты приглашённому по реферальному коду (доп. к signup_bonus).",
+        default=115,
+        description="Cent-credits приглашённому по реферальному коду (≈ $1.15).",
     )
     referral_referrer_payment_percent: int = Field(
         default=10,
@@ -206,6 +206,37 @@ class Settings(BaseSettings):
     studio_seedance_t2v_prompt_max_chars: int = Field(default=3000, ge=500, le=5000)
     # Grok: итоговый Seedance-промпт на китайском (true) или английском (false, по умолчанию).
     studio_seedance_grok_prompt_zh: bool = Field(default=False)
+    # --- Кредиты v2: 1 credit = 1 USD cent ---
+    studio_operation_markup_usd: float = Field(
+        default=0.002,
+        ge=0.0,
+        description="Надбавка к USD-стоимости API при списании (0.002 = 0.2 ¢).",
+    )
+    credits_migration_old_rub_per_credit: float = Field(
+        default=2.97,
+        ge=0.01,
+        description="Средняя ₽/кредит до миграции v2 (bulk ~2.97).",
+    )
+    credits_migration_cbr_rub: float = Field(
+        default=90.0,
+        ge=1.0,
+        description="Курс ЦБ для одноразовой миграции балансов.",
+    )
+    studio_image_usd_nano_banana_2: float = Field(default=0.126, ge=0.0)
+    studio_image_usd_nano_banana_pro: float = Field(default=0.15, ge=0.0)
+    studio_image_usd_gpt_image_2: float = Field(default=0.08, ge=0.0)
+    studio_image_usd_wan_2_7: float = Field(default=0.05, ge=0.0)
+    studio_image_usd_wan_2_7_pro: float = Field(default=0.08, ge=0.0)
+    studio_image_usd_seedream_v5_pro: float = Field(default=0.06, ge=0.0)
+    studio_grok_pipeline_usd_light: float = Field(default=0.01, ge=0.0)
+    studio_grok_pipeline_usd_standard: float = Field(default=0.02, ge=0.0)
+    studio_grok_pipeline_usd_heavy: float = Field(default=0.03, ge=0.0)
+    studio_grok_pipeline_usd_workflow: float = Field(default=0.03, ge=0.0)
+    studio_prompt_refine_usd: float = Field(default=0.02, ge=0.0)
+    studio_model_profile_generate_usd: float = Field(default=0.02, ge=0.0)
+    studio_carousel_shot_usd: float = Field(default=0.05, ge=0.0)
+    studio_upscale_usd: float = Field(default=0.03, ge=0.0)
+    studio_inpaint_usd: float = Field(default=0.05, ge=0.0)
     credit_cost_studio_prompt_refine: int = Field(default=2)
     image_studio_skeleton_path: str = Field(default="data/prompts/image_studio_skeleton.txt")
     image_studio_skeleton_inline: str = Field(default="")
@@ -505,13 +536,22 @@ class Settings(BaseSettings):
     billing_credit_pack_credits: int = Field(default=100)
     billing_credit_pack_price_rub: int = Field(default=990)
     # Покупка кредитов: произвольное количество (старый фиксированный пакет — только для совместимости вебхуков)
-    billing_credits_min_purchase: int = Field(default=50)
-    billing_credits_bulk_from: int = Field(default=200)
-    billing_credits_unit_price_rub: Decimal = Field(
-        default=Decimal("3.7"),
-        description="1 кредит = N ₽ (оплата подписки кредитами, реферальный пересчёт, докупка до bulk_from).",
+    billing_credits_min_purchase: int = Field(
+        default=500,
+        description="Мин. покупка cent-credits (500 = $5).",
     )
-    billing_credits_bulk_unit_price_rub: Decimal = Field(default=Decimal("2.70"))
+    billing_credits_bulk_from: int = Field(
+        default=5000,
+        description="От этого объёма — бонус +5%/+10%/+15% к начисленным кредитам.",
+    )
+    billing_credits_bonus_from_rub_5pct: int = Field(default=1000, ge=0)
+    billing_credits_bonus_from_rub_10pct: int = Field(default=2000, ge=0)
+    billing_credits_bonus_from_rub_15pct: int = Field(default=4000, ge=0)
+    billing_credits_unit_price_rub: Decimal = Field(
+        default=Decimal("0.9"),
+        description="Legacy fallback; покупка считается от CBR/100 ₽ за кредит.",
+    )
+    billing_credits_bulk_unit_price_rub: Decimal = Field(default=Decimal("0.9"))
     billing_credits_max_purchase: int = Field(default=500_000)
     billing_subscription_period_days: int = Field(default=30)
 

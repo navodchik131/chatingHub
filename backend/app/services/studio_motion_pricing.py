@@ -6,7 +6,11 @@ import math
 from typing import Literal
 
 from app.config import settings
-from app.services.fx_rate import cached_cbr_rub_per_usd_sync, studio_motion_rub_per_usd_effective
+from app.services.credit_units import credit_units_public, usd_to_credits
+from app.services.studio_provider_pricing import (
+    provider_pricing_catalog,
+    video_wavespeed_usd_per_sec_720p,
+)
 
 SeedanceT2vVariant = Literal["standard", "mini", "seedance_25"]
 SeedanceT2vResolution = Literal["480p", "720p", "1080p"]
@@ -85,11 +89,7 @@ def grok_imagine_i2v_credit_cost(
     resolution: GrokImagineI2vResolution | str = "720p",
 ) -> int:
     usd = grok_imagine_i2v_usd_total(duration_seconds, resolution=resolution)
-    rub_total = usd * studio_motion_rub_per_usd_effective()
-    per_credit = float(settings.studio_motion_rub_per_credit)
-    if per_credit <= 0:
-        return max(1, grok_imagine_i2v_duration_seconds(duration_seconds))
-    return max(1, int(math.ceil(rub_total / per_credit)))
+    return usd_to_credits(usd, markup_usd=0.0)
 
 
 def motion_video_duration_seconds(raw: str | int | None, *, default: int | None = None) -> int:
@@ -112,17 +112,10 @@ def _usd_per_sec_at_720p(
     has_motion_reference_video: bool,
 ) -> float:
     """Базовая ставка USD/с при 720p (масштабируется по resolution)."""
-    if variant == "seedance_25":
-        if has_motion_reference_video:
-            return float(settings.studio_motion_seedance_25_usd_per_sec_with_ref)
-        return float(settings.studio_motion_seedance_25_usd_per_sec_no_ref)
-    if variant == "mini":
-        if has_motion_reference_video:
-            return float(settings.studio_motion_mini_usd_per_sec_with_ref)
-        return float(settings.studio_motion_mini_usd_per_sec_no_ref)
-    if has_motion_reference_video:
-        return float(settings.studio_motion_usd_per_sec_with_ref)
-    return float(settings.studio_motion_usd_per_sec_no_ref)
+    return video_wavespeed_usd_per_sec_720p(
+        variant=variant if isinstance(variant, str) else "standard",
+        has_ref=has_motion_reference_video,
+    )
 
 
 def _clamp_reference_video_seconds(raw: float | int | None, *, fallback: int) -> int:
@@ -207,11 +200,7 @@ def _motion_video_credit_cost_raw(
         has_motion_reference_video=has_motion_reference_video,
         reference_video_duration=reference_video_duration,
     )
-    rub_total = usd * studio_motion_rub_per_usd_effective()
-    per_credit = float(settings.studio_motion_rub_per_credit)
-    if per_credit <= 0:
-        return max(1, dur)
-    return max(1, int(math.ceil(rub_total / per_credit)))
+    return usd_to_credits(usd, markup_usd=0.0)
 
 
 def motion_video_credit_cost(
@@ -296,11 +285,7 @@ def video_upscale_credit_cost(
     min_sec = max(1, int(settings.studio_video_upscale_min_billed_seconds))
     dur = max(min_sec, int(duration_seconds or min_sec))
     usd = _video_upscale_usd_per_5s(target_resolution) * (dur / 5.0)
-    rub_total = usd * studio_motion_rub_per_usd_effective()
-    per_credit = float(settings.studio_motion_rub_per_credit)
-    if per_credit <= 0:
-        return max(1, int(math.ceil(dur / 5.0)))
-    return max(1, int(math.ceil(rub_total / per_credit)))
+    return usd_to_credits(usd, markup_usd=0.0)
 
 
 def video_upscale_pricing_public() -> dict[str, float | int | list[str] | dict[str, int]]:
@@ -321,9 +306,13 @@ def video_upscale_pricing_public() -> dict[str, float | int | list[str] | dict[s
 
 def motion_video_pricing_public() -> dict[str, float | int | dict | list]:
     """Поля для /api/health — фронт считает стоимость по длительности, варианту и качеству."""
+    from app.services.fx_rate import cached_cbr_rub_per_usd_sync
+
     dur_default = settings.wavespeed_seedance_20_t2v_duration
     default_res = normalize_seedance_t2v_resolution(None)
+    units = credit_units_public()
     return {
+        **units,
         # Обратная совместимость (720p, standard)
         "usd_per_sec_with_reference_video": motion_video_usd_per_sec(
             variant="standard",
@@ -335,10 +324,9 @@ def motion_video_pricing_public() -> dict[str, float | int | dict | list]:
             resolution="720p",
             has_motion_reference_video=False,
         ),
-        "rub_per_usd": studio_motion_rub_per_usd_effective(),
+        "rub_per_usd": cached_cbr_rub_per_usd_sync(),
         "rub_per_usd_cbr": cached_cbr_rub_per_usd_sync(),
-        "rub_per_usd_margin": float(settings.studio_motion_rub_per_usd_margin),
-        "rub_per_credit": float(settings.studio_motion_rub_per_credit),
+        "rub_per_credit": units.get("rub_per_credit", 0),
         "duration_min": int(settings.studio_motion_video_duration_min),
         "duration_max": int(settings.studio_motion_video_duration_max),
         "duration_default": dur_default,

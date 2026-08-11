@@ -1,4 +1,15 @@
-export type SeedanceT2vVariant = 'standard' | 'mini' | 'seedance_25'
+/** 1 credit = $0.01 USD (cent-credits). */
+export const CREDITS_PER_USD = 100
+
+export function usdToCredits(usd: number, markupUsd = 0.002): number {
+  const total = Math.max(0, Number(usd) + Number(markupUsd))
+  if (!Number.isFinite(total) || total <= 0) return 1
+  return Math.max(1, Math.ceil(total * CREDITS_PER_USD))
+}
+
+export function creditsToUsd(credits: number): number {
+  return Math.max(0, Math.round(Number(credits) || 0)) / CREDITS_PER_USD
+}
 export type SeedanceT2vResolution = '480p' | '720p' | '1080p'
 export type GrokImagineI2vResolution = '480p' | '720p'
 
@@ -234,25 +245,18 @@ export function formatMotionUsd(usd: number): string {
   return `$${usd.toFixed(2)}`
 }
 
-/** USD-эквивалент стоимости в кредитах (кредиты × ₽/кредит ÷ ₽/$). */
-export function computeUsdFromCredits(
-  credits: number,
-  pricing?: Partial<StudioMotionVideoPricing> | null,
-): number {
-  const p = mergeMotionVideoPricing(pricing)
-  if (!Number.isFinite(credits) || credits <= 0) return 0
-  if (!Number.isFinite(p.rub_per_credit) || p.rub_per_credit <= 0) return 0
-  if (!Number.isFinite(p.rub_per_usd) || p.rub_per_usd <= 0) return 0
-  return (credits * p.rub_per_credit) / p.rub_per_usd
+/** USD-эквивалент cent-credits. */
+export function computeUsdFromCredits(credits: number): number {
+  return creditsToUsd(credits)
 }
 
-/** «5 кр. ($0.21)» — USD по цене кредита, не по тарифу провайдера. */
+/** «130 кр. ($1.30)». */
 export function formatMotionCreditCost(
   credits: number,
-  pricing?: Partial<StudioMotionVideoPricing> | null,
+  _pricing?: Partial<StudioMotionVideoPricing> | null,
   creditsSuffix = 'cr.',
 ): string {
-  const usd = computeUsdFromCredits(credits, pricing)
+  const usd = creditsToUsd(credits)
   return `${credits} ${creditsSuffix} (${formatMotionUsd(usd)})`
 }
 
@@ -267,7 +271,7 @@ export function motionVideoUsdPerSec(
   return Math.max(0, base * resolutionMultiplier(resolution, p))
 }
 
-/** Кредиты за ролик (как на бэкенде: ceil(USD × курс / 3.6 ₽ за кредит)). */
+/** Кредиты за ролик: ceil(USD × 100). */
 export function computeMotionVideoCreditCost(
   durationSeconds: number,
   hasReferenceVideo: boolean,
@@ -278,17 +282,8 @@ export function computeMotionVideoCreditCost(
     referenceVideoDuration?: number | null
   },
 ): number {
-  const p = mergeMotionVideoPricing(pricing)
-  const perCredit = p.rub_per_credit
-  const usd = computeMotionVideoUsdCost(durationSeconds, hasReferenceVideo, p, options)
-  if (!Number.isFinite(usd) || usd < 0) {
-    return Math.max(1, Math.round(durationSeconds))
-  }
-  if (!Number.isFinite(perCredit) || perCredit <= 0) {
-    return Math.max(1, Math.round(durationSeconds))
-  }
-  const rub = usd * p.rub_per_usd
-  return Math.max(1, Math.ceil(rub / perCredit))
+  const usd = computeMotionVideoUsdCost(durationSeconds, hasReferenceVideo, pricing, options)
+  return usdToCredits(usd, 0)
 }
 
 function mergeGrokImagineI2vPricing(
@@ -328,20 +323,13 @@ export function computeGrokImagineI2vUsdCost(
   return Math.max(0, rate * sec + grok.usd_per_image)
 }
 
-/** Кредиты за Grok Imagine Video v1.5 I2V (USD/с × длительность + фикс. за кадр). */
 export function computeGrokImagineI2vCreditCost(
   durationSeconds: number,
   pricing?: Partial<StudioMotionVideoPricing> | null,
   options?: { resolution?: GrokImagineI2vResolution },
 ): number {
-  const p = mergeMotionVideoPricing(pricing)
-  const perCredit = p.rub_per_credit
-  const usd = computeGrokImagineI2vUsdCost(durationSeconds, p, options)
-  if (!Number.isFinite(perCredit) || perCredit <= 0) {
-    return Math.max(1, Math.round(durationSeconds))
-  }
-  const rub = usd * p.rub_per_usd
-  return Math.max(1, Math.ceil(rub / perCredit))
+  const usd = computeGrokImagineI2vUsdCost(durationSeconds, pricing, options)
+  return usdToCredits(usd, 0)
 }
 
 export type StudioEvolinkVideoPricing = StudioMotionVideoPricing & {
@@ -460,10 +448,5 @@ export function computeVideoUpscaleCreditCost(
     '4k': up.usd_per_5s_4k ?? 0.25,
   }
   const usd = usdMap[res in usdMap ? res : '1080p']
-  const perCredit = p.rub_per_credit
-  if (!Number.isFinite(perCredit) || perCredit <= 0) {
-    return 4
-  }
-  const rub = usd * p.rub_per_usd
-  return Math.max(1, Math.ceil(rub / perCredit))
+  return usdToCredits(usd, 0)
 }

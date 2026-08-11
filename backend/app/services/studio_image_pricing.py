@@ -1,10 +1,12 @@
-"""Стоимость генерации картинок в кредитах: модель WaveSpeed + пайплайн (внутренний расчёт)."""
+"""Стоимость генерации картинок: USD провайдера → cent-credits."""
 
 from __future__ import annotations
 
 from typing import Literal
 
 from app.config import settings
+from app.services.credit_units import usd_to_credits
+from app.services.studio_provider_pricing import grok_pipeline_usd, image_model_usd
 
 WaveModelId = Literal[
     "nano-banana-2",
@@ -16,30 +18,14 @@ WaveModelId = Literal[
 WanEditTier = Literal["standard", "pro"]
 GrokPipelineKind = Literal["none", "light", "standard", "heavy", "workflow"]
 
-# База WaveSpeed (кредиты), ориентиры по прайсу провайдера + маржа
-_WS_BASE_CREDITS: dict[str, int] = {
-    "nano-banana-2": 2,
-    "nano-banana-pro": 3,
-    "gpt-image-2": 3,
-    "wan-2.7": 2,
-    "seedream-v5.0-pro": 3,
-}
-
-# Внутренние надбавки (промпт/vision на сервере) — не показываем пользователю отдельно
-_GROK_SURCHARGE: dict[GrokPipelineKind, int] = {
-    "none": 0,
-    "light": 1,
-    "standard": 2,
-    "heavy": 3,
-    "workflow": 3,
-}
-
-_WAN_PRO_EXTRA = 2
+_WAVE_MODELS = frozenset(
+    {"nano-banana-2", "nano-banana-pro", "gpt-image-2", "wan-2.7", "seedream-v5.0-pro"}
+)
 
 
 def normalize_wave_model_id(raw: str | None) -> str:
     m = (raw or "wan-2.7").strip().lower()
-    if m in _WS_BASE_CREDITS:
+    if m in _WAVE_MODELS:
         return m
     return "wan-2.7"
 
@@ -55,9 +41,18 @@ def grok_pipeline_for_studio_mode(mode: str, *, workflow: bool = False) -> GrokP
     m = (mode or "").strip().lower()
     if m in ("model", "model_scene", "grok_compose"):
         return "standard"
-    if m in ("model",) and not workflow:
-        return "standard"
     return "light"
+
+
+def _image_model_usd(
+    *,
+    wave_model_id: str,
+    wan_edit_tier: WanEditTier,
+) -> float:
+    model = normalize_wave_model_id(wave_model_id)
+    if model == "wan-2.7" and wan_edit_tier == "pro":
+        return image_model_usd("wan-2.7-pro")
+    return image_model_usd(model)
 
 
 def quote_studio_image_credits(
@@ -67,24 +62,22 @@ def quote_studio_image_credits(
     grok_pipeline: GrokPipelineKind = "standard",
     extra_reference_count: int = 0,
 ) -> int:
-    """Итоговая цена операции в кредитах (одна цифра для UI)."""
-    model = normalize_wave_model_id(wave_model_id)
+    """Итоговая цена операции в cent-credits."""
     tier = normalize_wan_edit_tier(wan_edit_tier)
-    base = _WS_BASE_CREDITS.get(model, 2)
-    if model == "wan-2.7" and tier == "pro":
-        base += _WAN_PRO_EXTRA
-    grok = _GROK_SURCHARGE.get(grok_pipeline, 2)
+    base_usd = _image_model_usd(
+        wave_model_id=normalize_wave_model_id(wave_model_id),
+        wan_edit_tier=tier,
+    )
+    grok_usd = grok_pipeline_usd(grok_pipeline)
     refs = max(0, int(extra_reference_count))
-    ref_extra = min(2, refs // 2)
-    total = base + grok + ref_extra
-    return max(1, total)
+    ref_usd = min(0.04, refs * 0.005)
+    return usd_to_credits(base_usd + grok_usd + ref_usd, markup_usd=0.0)
 
 
 DEMO_WAN_WAVE_MODEL = "wan-2.7"
 
 
 def normalize_studio_wave_profile(raw: str | None) -> str:
-    """regular = Nano Banana; nsfw = WAN / Seedream."""
     p = (raw or "nsfw").strip().lower()
     return "regular" if p == "regular" else "nsfw"
 
@@ -102,9 +95,8 @@ def effective_wave_model_for_billing(
     *,
     wave_profile: str | None = None,
 ) -> str:
-    """Модель для биллинга/демо: явный workflow_wave_model или дефолт по профилю."""
     explicit = (wave_model_id or "").strip().lower()
-    if explicit in _WS_BASE_CREDITS:
+    if explicit in _WAVE_MODELS:
         return explicit
     if normalize_studio_wave_profile(wave_profile) == "regular":
         return "nano-banana-pro"
@@ -118,9 +110,6 @@ def demo_request_eligible_for_free_slot(
     wave_profile: str | None = "nsfw",
     wan_edit_tier: str | None = "standard",
 ) -> bool:
-    """
-    Бесплатная демо-генерация: любая модель профиля (regular / NSFW), кроме Wan Pro tier.
-    """
     profile = normalize_studio_wave_profile(wave_profile)
     model = effective_wave_model_for_billing(wave_model_id, wave_profile=profile)
     tier = normalize_wan_edit_tier(wan_edit_tier)
@@ -152,9 +141,10 @@ def quote_demo_image_credits() -> int:
 
 
 def image_pricing_public_dict() -> dict:
-    """Таблица «от N кр.» для health / UI."""
+    from app.services.credit_units import credit_units_public
+
     models = []
-    for mid in _WS_BASE_CREDITS:
+    for mid in sorted(_WAVE_MODELS):
         std = quote_studio_image_credits(
             wave_model_id=mid, wan_edit_tier="standard", grok_pipeline="standard"
         )
@@ -168,11 +158,15 @@ def image_pricing_public_dict() -> dict:
         models.append(
             {
                 "wave_model_id": mid,
+                "usd_standard_tier": round(
+                    _image_model_usd(wave_model_id=mid, wan_edit_tier="standard"), 4
+                ),
                 "credits_standard_tier": std,
                 "credits_pro_tier": pro,
             }
         )
     return {
+        **credit_units_public(),
         "models": models,
         "demo_generations_grant": max(0, int(settings.demo_generations_grant)),
         "demo_credits_per_generation": quote_demo_image_credits(),

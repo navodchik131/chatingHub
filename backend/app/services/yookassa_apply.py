@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.services.billing_credits import (
+    apply_purchase_bonus_credits,
     assert_credits_quantity_allowed,
     credits_total_rub,
     legacy_pack_total_rub,
@@ -208,17 +209,20 @@ async def apply_yookassa_payment_succeeded(
             session.add(acc)
             await session.flush()
 
-        acc.balance += n
+        granted = apply_purchase_bonus_credits(n, int(paid_q))
+        acc.balance += granted
         session.add(
             UsageEvent(
                 user_id=billing_uid,
                 kind="yookassa_credits_pack",
-                credits_delta=n,
+                credits_delta=granted,
                 meta=json.dumps(
                     {
                         "payment_id": pid,
                         "product": product,
                         "credits_quantity": n,
+                        "credits_granted": granted,
+                        "purchase_bonus_credits": max(0, granted - n),
                         "amount_rub": int(paid_q),
                         **({"partner_discount_rub": meta_disc} if meta_disc else {}),
                     },
@@ -241,7 +245,7 @@ async def apply_yookassa_payment_succeeded(
         await mark_partner_discount_used(session, billing_uid)
         await provision_full_workflow_workspaces(session, owner_id=billing_uid)
         await session.commit()
-        return {"ok": True, "payment_id": pid, "granted": "credits", "amount": n}
+        return {"ok": True, "payment_id": pid, "granted": "credits", "amount": granted}
 
     log.warning("yookassa: unknown product %s payment %s", product, pid)
     await session.rollback()

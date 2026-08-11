@@ -132,9 +132,9 @@ def _build_specs() -> dict[str, PlanSpec]:
         TIER_STUDIO: 107900,
     }
     standard_credits: dict[PlanTier, int] = {
-        TIER_SOLO: 150,
-        TIER_PRO: 400,
-        TIER_STUDIO: 1200,
+        TIER_SOLO: 700,
+        TIER_PRO: 1850,
+        TIER_STUDIO: 5550,
     }
     titles: dict[tuple[BillingPlanKind, PlanTier], str] = {
         (BILLING_PLAN_PRO, TIER_SOLO): "Pro Solo",

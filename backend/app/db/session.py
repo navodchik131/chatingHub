@@ -392,6 +392,61 @@ async def init_db() -> None:
         await conn.run_sync(_migrate_support_ticket_unread_flags)
         await conn.run_sync(_migrate_telegram_user_sessions)
         await conn.run_sync(_migrate_partner_program)
+        await conn.run_sync(_migrate_credits_usd_cent_v2)
+
+
+def _migrate_credits_usd_cent_v2(sync_conn) -> None:
+    """Перевод балансов на cent-credits (1 credit = $0.01), сохраняя уплаченную ₽-стоимость."""
+    from sqlalchemy import inspect, text
+
+    from app.config import settings
+
+    insp = inspect(sync_conn)
+    if not insp.has_table("credit_accounts"):
+        return
+
+    if not insp.has_table("app_meta"):
+        sync_conn.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS app_meta (
+                    key VARCHAR(64) PRIMARY KEY,
+                    value TEXT NOT NULL,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+        )
+
+    done = sync_conn.execute(
+        text("SELECT value FROM app_meta WHERE key = 'credits_usd_cent_v2'")
+    ).fetchone()
+    if done and str(done[0]).startswith("done"):
+        return
+
+    old_rub = float(settings.credits_migration_old_rub_per_credit)
+    cbr = float(settings.credits_migration_cbr_rub)
+    if old_rub <= 0 or cbr <= 0:
+        return
+    factor = old_rub * 100.0 / cbr
+
+    sync_conn.execute(
+        text(
+            """
+            UPDATE credit_accounts
+            SET balance = CAST(ROUND(balance * :factor) AS INTEGER)
+            WHERE balance > 0
+            """
+        ),
+        {"factor": factor},
+    )
+
+    sync_conn.execute(
+        text(
+            "INSERT INTO app_meta (key, value) VALUES ('credits_usd_cent_v2', :val)"
+        ),
+        {"val": f"done factor={factor:.6f} cbr={cbr} old_rub={old_rub}"},
+    )
 
 
 def _migrate_partner_program(sync_conn) -> None:

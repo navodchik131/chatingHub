@@ -1,0 +1,53 @@
+{
+  "updated_at": "2026-07-31T00:00:00Z",
+  "source": "manual",
+  "images": {
+    "nano-banana-2": 0.126,
+    "nano-banana-pro": 0.15,
+    "gpt-image-2": 0.08,
+    "wan-2.7": 0.05,
+    "wan-2.7-pro": 0.08,
+    "seedream-v5.0-pro": 0.06
+  },
+  "grok_pipeline_usd": {
+    "none": 0.0,
+    "light": 0.01,
+    "standard": 0.02,
+    "heavy": 0.03,
+    "workflow": 0.03
+  },
+  "operations_usd": {
+    "prompt_refine": 0.02,
+    "model_profile_generate": 0.02,
+    "carousel_shot": 0.05,
+    "upscale": 0.03,
+    "inpaint": 0.05
+  },
+  "video": {
+    "wavespeed": {
+      "standard_with_ref_720p": 0.13,
+      "standard_no_ref_720p": 0.24,
+      "mini_with_ref_720p": 0.0975,
+      "mini_no_ref_720p": 0.15,
+      "seedance_25_with_ref_720p": 0.22,
+      "seedance_25_no_ref_720p": 0.36
+    },
+    "evolink": {
+      "standard_with_ref_720p": 0.08,
+      "standard_no_ref_720p": 0.056,
+      "seedance_25_with_ref_720p": 0.12,
+      "seedance_25_no_ref_720p": 0.09
+    },
+    "grok_imagine_i2v": {
+      "usd_per_sec_480p": 0.08,
+      "usd_per_sec_720p": 0.14,
+      "usd_per_image": 0.01
+    },
+    "video_upscale_per_5s": {
+      "720p": 0.1,
+      "1080p": 0.15,
+      "2k": 0.2,
+      "4k": 0.25
+    }
+  }
+}

@@ -5,7 +5,7 @@ import { Fade, PageTitle, Eyebrow, Panel, StatusChip } from '../components/ui';
 import { useApp } from '../hooks/useApp';
 import { color, line, font } from '../styles/tokens';
 import { segOn, segOff, borderHoverOff } from '../styles/mixins';
-import { fmtCredits, fmtMoney } from '../api/helpers';
+import { fmtCredits, fmtCreditsWithUsd, fmtMoney } from '../api/helpers';
 import { mapUsageBars, mapCreditHistory } from '../api/mappers';
 import {
   demoGenerationsGrant,
@@ -66,7 +66,7 @@ export default function Billing() {
     };
   });
   const perLabel = s.period === 'month' ? (lang === 'ru' ? 'мес' : 'mo') : (lang === 'ru' ? 'год' : 'yr');
-  const credits = fmtCredits(me?.credits_balance);
+  const credits = fmtCreditsWithUsd(me?.credits_balance, lang);
   const showDemo = isCreditsPlanWithDemo(me);
   const demoRemaining = demoGenerationsRemaining(me);
   const demoGrant = demoGenerationsGrant(me);
@@ -75,30 +75,40 @@ export default function Billing() {
   const subscriptionActive = String(me?.subscription_status || '').toLowerCase() === 'active';
   const usageBars = mapUsageBars(me, lang);
   const historyRows = mapCreditHistory(creditHistory, lang);
-  const packs = (billingPlans?.items || [])
-    .filter((x) => x.credits_pricing)
-    .slice(0, 4)
-    .map((x) => {
-      const cp = x.credits_pricing;
-      const qty = cp?.bulk_from || 100;
-      const unit = cp?.unit_price_rub || 0;
-      const bulk = cp?.bulk_unit_price_rub || unit;
-      const price = Math.round(qty * bulk);
-      return {
-        cr: String(qty),
-        price: formatPlanPrice(price, lang, rubPerUsd),
-        bonus: qty >= 600 ? '+15%' : qty >= 300 ? '+10%' : qty >= 150 ? '+5%' : null,
-        product: x.product,
-        creditsQty: qty,
-      };
-    });
+  const packs = (() => {
+    const presets = creditsPricing?.pack_presets
+    if (Array.isArray(presets) && presets.length) {
+      return presets.slice(0, 4).map((p) => ({
+        cr: String(p.credits),
+        price: formatPlanPrice(p.rub ?? 0, lang, rubPerUsd),
+        bonus: (p.credits >= 5000 ? '+15%' : p.credits >= 2500 ? '+10%' : p.credits >= 1110 ? '+5%' : null),
+        product: 'credits_pack',
+        creditsQty: p.credits,
+        usdLabel: `$${Number(p.usd ?? p.credits / 100).toFixed(2)}`,
+      }))
+    }
+    const cp = creditsPricing
+    const qty = cp?.bulk_from || cp?.min_quantity || 500
+    const unit = cp?.unit_price_rub || 0.9
+    const price = Math.round(qty * unit)
+    return [{
+      cr: String(qty),
+      price: formatPlanPrice(price, lang, rubPerUsd),
+      bonus: null,
+      product: 'credits_pack',
+      creditsQty: qty,
+      usdLabel: `$${(qty / 100).toFixed(2)}`,
+    }]
+  })()
   const referralLink = referral?.referral_link || '—';
   const tributeAmount = tributeEarnings?.display_minor != null
     ? fmtMoney(tributeEarnings.display_minor, tributeEarnings.currency || 'RUB')
     : null;
 
-  const creditsPricing = (billingPlans?.items || []).find((x) => x.credits_pricing)?.credits_pricing;
-  const unitRub = creditsPricing?.unit_price_rub || 3.6;
+  const creditsPricing = cabinet.health?.billing_credits_pricing
+    || (billingPlans?.items || []).find((x) => x.credits_pricing)?.credits_pricing
+    || cabinet.health?.credit_units;
+  const unitRub = creditsPricing?.unit_price_rub || (rubPerUsd / 100);
   const billingDescText = fillPriceTemplate(t.billingDesc, {
     creditOneLiner: formatCreditOneLiner(unitRub, lang, rubPerUsd),
   });

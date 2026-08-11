@@ -86,6 +86,13 @@ from app.services.studio_image_pricing import (
     grok_pipeline_for_studio_mode,
     quote_studio_image_credits,
 )
+from app.services.studio_operation_pricing import (
+    studio_carousel_shot_credit_cost,
+    studio_inpaint_credit_cost,
+    studio_model_profile_generate_credit_cost,
+    studio_prompt_refine_credit_cost,
+    studio_upscale_credit_cost,
+)
 from app.services.admin_access import user_is_platform_admin
 from app.services.studio_keys import (
     apply_studio_credit_cost,
@@ -824,9 +831,9 @@ async def _reserve_refine_prompt_billing_at_accept(
         else effective_wave_model_for_billing(None, wave_profile=wave_profile_n)
     )
     base_studio_credit = (
-        settings.credit_cost_studio_inpaint
+        studio_inpaint_credit_cost()
         if mask_bytes
-        else settings.credit_cost_studio_prompt_refine
+        else studio_prompt_refine_credit_cost()
     )
     quoted_cost = resolve_image_credit_cost(
         plan,
@@ -1753,7 +1760,7 @@ async def _studio_job_execute_upscale(
             target_resolution=tr,
         ).model_dump()
 
-    cost = apply_studio_credit_cost(plan, settings.credit_cost_studio_upscale)
+    cost = apply_studio_credit_cost(plan, studio_upscale_credit_cost())
     billing = await ensure_can_consume_credits(session, user, cost)
     msg: str | None = None
     out_url: str | None = None
@@ -2255,7 +2262,7 @@ async def _studio_job_execute_carousel(
         wave_model_id=billing_wave_model or None,
         wan_edit_tier=wan_tier_n,
         grok_pipeline="light",
-        legacy_base=settings.credit_cost_studio_carousel_shot,
+        legacy_base=studio_carousel_shot_credit_cost(),
     )
     items: list[StudioCarouselItemOut] = []
     last_msg: str | None = None
@@ -2449,7 +2456,7 @@ async def api_generate_model_profile(
             status_code=400,
             detail="Пустые файлы",
         )
-    cost = apply_studio_credit_cost(plan, settings.credit_cost_studio_model_profile_generate)
+    cost = apply_studio_credit_cost(plan, studio_model_profile_generate_credit_cost())
     prior_profile = await owner_used_model_profile_generation(session, oid)
     if model_profile_generation_free(
         plan=plan,
@@ -3778,9 +3785,9 @@ async def _studio_job_execute_refine_prompt(
         else effective_wave_model_for_billing(None, wave_profile=wave_profile_n)
     )
     base_studio_credit = (
-        settings.credit_cost_studio_inpaint
+        studio_inpaint_credit_cost()
         if mask_bytes
-        else settings.credit_cost_studio_prompt_refine
+        else studio_prompt_refine_credit_cost()
     )
     quoted_cost = resolve_image_credit_cost(
         plan,
@@ -5339,7 +5346,7 @@ async def _studio_job_execute_motion_first_frame(
         wave_profile=wave_profile_n,
     )
 
-    cost = apply_studio_credit_cost(plan, settings.credit_cost_studio_prompt_refine)
+    cost = apply_studio_credit_cost(plan, studio_prompt_refine_credit_cost())
     billing = await ensure_can_consume_credits(session, user, cost)
 
     arch_base = _public_app_base(None)
@@ -5744,7 +5751,7 @@ async def _studio_job_execute_motion_compose_video_prompt(
     except RuntimeError as e:
         log.warning("motion compose: still describe skipped: %s", e)
 
-    cost = apply_studio_credit_cost(plan, settings.credit_cost_studio_prompt_refine)
+    cost = apply_studio_credit_cost(plan, studio_prompt_refine_credit_cost())
     billing = await ensure_can_consume_credits(session, user, cost)
     await record_usage(
         session,
@@ -5875,7 +5882,7 @@ async def _studio_job_execute_workflow_compose_video_prompt(
         job_id=job.id,
     )
 
-    cost = apply_studio_credit_cost(plan, settings.credit_cost_studio_prompt_refine)
+    cost = apply_studio_credit_cost(plan, studio_prompt_refine_credit_cost())
     billing = await ensure_can_consume_credits(session, user, cost)
     await record_usage(
         session,
@@ -6571,7 +6578,7 @@ async def _studio_job_execute_motion_render_video(
             )
         ):
             cost += apply_studio_credit_cost(
-                plan, settings.credit_cost_studio_prompt_refine
+                plan, studio_prompt_refine_credit_cost()
             )
 
     billing = await ensure_can_consume_credits(session, user, cost)
