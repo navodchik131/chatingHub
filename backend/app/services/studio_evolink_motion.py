@@ -169,13 +169,16 @@ async def execute_evolink_motion_render_video(
         vpath = resolve_motion_video_file(oid, mv_id)
         if vpath is None or not vpath.is_file():
             raise RuntimeError("Референс-видео не найдено.")
-        vid_tok = create_motion_video_access_token(user_id=oid, file_id=mv_id)
-        motion_vid_url = f"{pub}/api/studio/public-motion-video?t={quote(vid_tok, safe='')}"
-        from app.services.studio_motion_video import probe_video_duration_seconds
+        from app.services.studio_motion_video import prepare_motion_video_file_for_duration
 
-        probed = probe_video_duration_seconds(vpath)
-        if probed is not None and probed > 0:
-            ref_video_duration = int(math.ceil(probed))
+        mv_id_eff, _vpath_eff, ref_video_duration = prepare_motion_video_file_for_duration(
+            owner_id=oid,
+            file_id=mv_id,
+            source_path=vpath,
+            target_sec=ds_effective,
+        )
+        vid_tok = create_motion_video_access_token(user_id=oid, file_id=mv_id_eff)
+        motion_vid_url = f"{pub}/api/studio/public-motion-video?t={quote(vid_tok, safe='')}"
 
     ref_images: list[str] = []
     ref_videos = [motion_vid_url] if motion_vid_url else []

@@ -208,8 +208,6 @@ async def seedance_evolink_video_url(
     ar = normalize_evolink_aspect_ratio(model, aspect_ratio)
     if has_vids:
         body["aspect_ratio"] = "adaptive"
-        if "reference-to-video" in model:
-            body["duration"] = -1
     elif ar:
         body["aspect_ratio"] = ar
     if has_imgs:

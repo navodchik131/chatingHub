@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import math
 import os
 import shutil
 import subprocess
@@ -70,6 +71,101 @@ def probe_video_duration_seconds(video_path: Path) -> float | None:
         return float(str(r.stdout).strip())
     except Exception:
         return None
+
+
+def fit_motion_video_to_duration(source: Path, target_sec: int) -> tuple[Path, bool]:
+    """
+    Подгоняет референс под целевую длительность: обрезка или дополнение последним кадром.
+    Возвращает (path, is_temp). При is_temp=True вызывающий код должен удалить файл.
+    """
+    target = max(1, min(30, int(target_sec)))
+    src_dur = probe_video_duration_seconds(source)
+    if src_dur is None or src_dur <= 0:
+        return source, False
+    if abs(src_dur - target) < 0.35:
+        return source, False
+
+    fd, tmp_path_str = tempfile.mkstemp(prefix="motion_fit_", suffix=".mp4")
+    os.close(fd)
+    out_path = Path(tmp_path_str)
+    try:
+        cmd: list[str] = [
+            _ffmpeg_bin(),
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-i",
+            str(source),
+        ]
+        if src_dur > target + 0.25:
+            cmd.extend(["-t", str(target)])
+        else:
+            pad = max(0.05, target - src_dur)
+            cmd.extend(["-vf", f"tpad=stop_mode=clone:stop_duration={pad:.3f}"])
+        cmd.extend(
+            [
+                "-movflags",
+                "+faststart",
+                "-c:v",
+                "libx264",
+                "-preset",
+                "veryfast",
+                "-crf",
+                "23",
+                "-pix_fmt",
+                "yuv420p",
+                "-c:a",
+                "aac",
+                "-b:a",
+                "128k",
+                str(out_path),
+            ]
+        )
+        subprocess.run(cmd, check=True, timeout=600, capture_output=True)
+        log_motion.info(
+            "motion video fit %.2fs -> %ss (src=%.2fs)",
+            src_dur,
+            target,
+            src_dur,
+        )
+        return out_path, True
+    except Exception:
+        out_path.unlink(missing_ok=True)
+        log_motion.warning("motion video fit failed, using source as-is", exc_info=True)
+        return source, False
+
+
+def prepare_motion_video_file_for_duration(
+    *,
+    owner_id: int,
+    file_id: str,
+    source_path: Path,
+    target_sec: int,
+) -> tuple[str, Path, int | None]:
+    """
+    При необходимости подгоняет длительность и сохраняет копию на диск.
+    Возвращает (file_id_for_url, path_on_disk, duration_sec).
+    """
+    fit_path, is_temp = fit_motion_video_to_duration(source_path, target_sec)
+    out_id = file_id
+    out_path = source_path
+    try:
+        if is_temp:
+            out_id = save_motion_video_bytes(
+                owner_id=owner_id,
+                raw=fit_path.read_bytes(),
+                filename=f"motion_{target_sec}s.mp4",
+            )
+            resolved = resolve_motion_video_file(owner_id, out_id)
+            if resolved is not None:
+                out_path = resolved
+        probed = probe_video_duration_seconds(out_path)
+        dur = int(math.ceil(probed)) if probed and probed > 0 else int(target_sec)
+        return out_id, out_path, dur
+    finally:
+        if is_temp:
+            fit_path.unlink(missing_ok=True)
 
 
 def extract_video_timeline_frames_jpeg(

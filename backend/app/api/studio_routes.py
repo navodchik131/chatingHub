@@ -6457,7 +6457,17 @@ async def _studio_job_execute_motion_render_video(
     if mv_id:
         vpath = resolve_motion_video_file(oid, mv_id)
         if vpath is not None and vpath.is_file():
-            vid_tok = create_motion_video_access_token(user_id=oid, file_id=mv_id)
+            from app.services.studio_motion_pricing import motion_video_duration_seconds
+            from app.services.studio_motion_video import prepare_motion_video_file_for_duration
+
+            ds_for_fit = motion_video_duration_seconds(duration_seconds)
+            mv_id_eff, _, _ = prepare_motion_video_file_for_duration(
+                owner_id=oid,
+                file_id=mv_id,
+                source_path=vpath,
+                target_sec=ds_for_fit,
+            )
+            vid_tok = create_motion_video_access_token(user_id=oid, file_id=mv_id_eff)
             motion_vid_url = (
                 f"{pub}/api/studio/public-motion-video?t={quote(vid_tok, safe='')}"
             )

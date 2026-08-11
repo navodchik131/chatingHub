@@ -532,7 +532,7 @@ export async function runMotionVideo(params) {
         ? '480p'
         : '720p'
   fd.append('video_resolution', videoResolution)
-  if (params.durationSeconds) fd.append('duration_seconds', String(params.durationSeconds))
+  fd.append('duration_seconds', String(params.durationSeconds ?? 5))
   if (params.motionVideoFileId) fd.append('motion_video_file_id', params.motionVideoFileId)
   if (params.firstFrameGenerationId) {
     fd.append('first_frame_generation_id', String(params.firstFrameGenerationId))
