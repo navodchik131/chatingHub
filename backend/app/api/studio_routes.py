@@ -1245,9 +1245,25 @@ async def public_studio_generation_image(
     if not abs_path.is_file():
         src = (row.source_url or "").strip()
         if row.status == StudioGenerationStatus.PROVIDER_READY and src.startswith("https://"):
-            from fastapi.responses import RedirectResponse
-
-            return RedirectResponse(url=src, status_code=302)
+            # EvoLink/WaveSpeed не всегда следуют 302 — отдаём байты напрямую.
+            timeout = float(settings.studio_archive_download_timeout_seconds)
+            try:
+                async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+                    resp = await client.get(src)
+                    resp.raise_for_status()
+            except Exception:
+                raise HTTPException(status_code=404, detail="Файл отсутствует на сервере") from None
+            mime = (
+                row.content_type
+                or resp.headers.get("content-type", "").split(";")[0].strip()
+                or mimetypes.guess_type(src)[0]
+                or "image/png"
+            )
+            return Response(
+                content=resp.content,
+                media_type=mime,
+                headers={"Cache-Control": "private, max-age=3600"},
+            )
         if row.status == StudioGenerationStatus.READY:
             await session.delete(row)
             await session.commit()
