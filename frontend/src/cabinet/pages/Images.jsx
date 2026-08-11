@@ -16,7 +16,7 @@ import {
   validateStudioForm, syncRefArchivePicks, enginesForNsfw, sameStudioModelId,
   normalizeWaveModel, waveModelFromState, isNsfwMode, isUiSimplified, effectiveStudioState,
 } from '../api/studioHelpers';
-import { quoteStudioImageCredits } from '../../studioImagePricing';
+import { quoteStudioImageCredits, formatImageCostBadge } from '../../studioImagePricing';
 import { normalizeBillingPlan } from '../../billing/planCatalog';
 import {
   demoGenerationsGrant,
@@ -28,7 +28,7 @@ import {
 const ratios = ['9:16', '16:9', '1:1', '4:3', '3:4'];
 const countOptions = [2, 3, 4, 6, 8];
 
-function carouselCreditLabels(appState, lang) {
+function carouselCreditLabels(appState, lang, imagePricing) {
   const nsfw = isNsfwMode(appState);
   const wave = normalizeWaveModel(waveModelFromState(appState), nsfw);
   const per = quoteStudioImageCredits({
@@ -38,13 +38,40 @@ function carouselCreditLabels(appState, lang) {
     grokPipeline: 'light',
     studioMode: 'photo_edit',
     workflow: false,
-  });
+  }, imagePricing);
   const frames = Math.max(2, Math.min(8, Number(appState.carouselCount) || 4));
   const total = per * frames;
-  if (lang === 'ru') {
-    return { perLabel: `−${per} кр/кадр`, totalLabel: `−${total} кр` };
+  return {
+    perLabel: formatImageCostBadge(per, lang, { perFrame: true }),
+    totalLabel: formatImageCostBadge(total, lang),
+  };
+}
+
+const MODE_STUDIO_MODE = {
+  ref: 'model_scene',
+  swap: 'model',
+  outfit: 'model_scene',
+  location: 'model_scene',
+  prompt: 'model_scene',
+  edit: 'photo_edit',
+  carousel: 'photo_edit',
+};
+
+function imageModeCost(appState, modeId, lang, imagePricing) {
+  const nsfw = isNsfwMode(appState);
+  const wave = normalizeWaveModel(waveModelFromState(appState), nsfw);
+  const credits = quoteStudioImageCredits({
+    waveModelId: wave.apiId,
+    waveProfile: appState.contentMode === 'sfw' ? 'regular' : 'nsfw',
+    wanEditTier: wave.tier,
+    grokPipeline: modeId === 'swap' ? 'light' : 'standard',
+    studioMode: MODE_STUDIO_MODE[modeId] || 'model_scene',
+    workflow: false,
+  }, imagePricing);
+  if (modeId === 'carousel') {
+    return formatImageCostBadge(credits, lang, { perFrame: true });
   }
-  return { perLabel: `−${per} cr/frame`, totalLabel: `−${total} cr` };
+  return formatImageCostBadge(credits, lang);
 }
 
 const modeIcons = {
@@ -301,9 +328,11 @@ export default function Images() {
   const simplifiedUi = isUiSimplified(cabinet.me);
   const studioState = effectiveStudioState(s, cabinet.me);
 
+  const imagePricing = cabinet.health?.studio_image_pricing;
+
   const carouselCosts = useMemo(
-    () => carouselCreditLabels(studioState, lang),
-    [studioState.contentMode, studioState.aiModel, studioState.carouselCount, lang],
+    () => carouselCreditLabels(studioState, lang, imagePricing),
+    [studioState.contentMode, studioState.aiModel, studioState.carouselCount, lang, imagePricing],
   );
   const isPro = normalizeBillingPlan(cabinet.me?.billing_plan) === 'pro';
   const showDemo = isCreditsPlanWithDemo(cabinet.me);
@@ -313,11 +342,14 @@ export default function Images() {
   const modes = useMemo(() => {
     const defs = modeDefs(lang, t.cr);
     return defs.map((m) => {
-      if (m.id !== 'carousel') return m;
+      if (m.id === 'carousel') {
+        if (isPro) return { ...m, cost: 'Pro' };
+        return { ...m, cost: carouselCosts.perLabel };
+      }
       if (isPro) return { ...m, cost: 'Pro' };
-      return { ...m, cost: carouselCosts.perLabel };
+      return { ...m, cost: imageModeCost(studioState, m.id, lang, imagePricing) };
     });
-  }, [lang, t.cr, carouselCosts.perLabel, isPro]);
+  }, [lang, t.cr, carouselCosts.perLabel, isPro, studioState, imagePricing]);
   const curMode = modes.find((m) => m.id === s.imgMode) || modes[0];
   const generateCostLabel =
     s.imgMode === 'carousel'

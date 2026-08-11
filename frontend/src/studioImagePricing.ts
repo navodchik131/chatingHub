@@ -4,15 +4,25 @@ export type GrokPipelineKind = 'none' | 'light' | 'standard' | 'heavy' | 'workfl
 export type WaveProfile = 'regular' | 'nsfw'
 export type WanEditTier = 'standard' | 'pro'
 
-const WS_BASE_CREDITS: Record<string, number> = {
-  'nano-banana-2': 2,
-  'nano-banana-pro': 3,
-  'gpt-image-2': 3,
-  'wan-2.7': 2,
-  'seedream-v5.0-pro': 3,
+export type StudioImagePricingHealth = {
+  models?: Array<{
+    wave_model_id: string
+    credits_standard_tier?: number
+    credits_pro_tier?: number | null
+    usd_standard_tier?: number
+  }>
 }
 
-const GROK_SURCHARGE: Record<GrokPipelineKind, number> = {
+/** Fallback cent-credits (1 cr = $0.01), aligned with backend defaults. */
+const DEFAULT_CREDITS: Record<string, number> = {
+  'nano-banana-2': 13,
+  'nano-banana-pro': 17,
+  'gpt-image-2': 10,
+  'wan-2.7': 8,
+  'seedream-v5.0-pro': 9,
+}
+
+const GROK_SURCHARGE_CREDITS: Record<GrokPipelineKind, number> = {
   none: 0,
   light: 1,
   standard: 2,
@@ -20,12 +30,12 @@ const GROK_SURCHARGE: Record<GrokPipelineKind, number> = {
   workflow: 3,
 }
 
-const WAN_PRO_EXTRA = 2
+const WAN_PRO_EXTRA = 3
 
 export function normalizeWaveModelId(raw: string | null | undefined): string {
   const m = (raw || 'wan-2.7').trim().toLowerCase()
   if (m === 'wan-2.7-pro') return 'wan-2.7'
-  return m in WS_BASE_CREDITS ? m : 'wan-2.7'
+  return m in DEFAULT_CREDITS ? m : 'wan-2.7'
 }
 
 export function wanEditTierFromUiModelId(raw: string | null | undefined): WanEditTier {
@@ -36,13 +46,12 @@ export function normalizeWaveProfile(raw: string | null | undefined): WaveProfil
   return (raw || '').trim().toLowerCase() === 'regular' ? 'regular' : 'nsfw'
 }
 
-/** Модель для расчёта, если workflow_wave_model не задан (как в студии). */
 export function effectiveWaveModelForStudio(
   waveModelId: string | null | undefined,
   waveProfile: WaveProfile,
 ): string {
   const explicit = (waveModelId || '').trim().toLowerCase()
-  if (explicit in WS_BASE_CREDITS) return explicit
+  if (explicit in DEFAULT_CREDITS) return explicit
   return waveProfile === 'regular' ? 'nano-banana-pro' : 'wan-2.7'
 }
 
@@ -56,14 +65,36 @@ export function grokPipelineForStudioMode(
   return 'light'
 }
 
-export function quoteStudioImageCredits(params: {
-  waveModelId?: string | null
-  waveProfile?: WaveProfile | string | null
-  wanEditTier?: WanEditTier | string | null
-  grokPipeline?: GrokPipelineKind
-  studioMode?: string
-  workflow?: boolean
-}): number {
+function lookupHealthCredits(
+  health: StudioImagePricingHealth | null | undefined,
+  model: string,
+  tier: WanEditTier,
+): number | null {
+  const rows = health?.models
+  if (!Array.isArray(rows)) return null
+  const row = rows.find((r) => r.wave_model_id === model)
+  if (!row) return null
+  if (model === 'wan-2.7' && tier === 'pro') {
+    const pro = row.credits_pro_tier
+    if (typeof pro === 'number' && pro > 0) return pro
+  }
+  const std = row.credits_standard_tier
+  if (typeof std === 'number' && std > 0) return std
+  return null
+}
+
+export function quoteStudioImageCredits(
+  params: {
+    waveModelId?: string | null
+    waveProfile?: WaveProfile | string | null
+    wanEditTier?: WanEditTier | string | null
+    grokPipeline?: GrokPipelineKind
+    studioMode?: string
+    workflow?: boolean
+    extraReferenceCount?: number
+  },
+  health?: StudioImagePricingHealth | null,
+): number {
   const profile = normalizeWaveProfile(params.waveProfile ?? 'nsfw')
   const model = params.waveModelId
     ? normalizeWaveModelId(params.waveModelId)
@@ -75,9 +106,15 @@ export function quoteStudioImageCredits(params: {
       workflow: params.workflow,
     })
 
-  let base = WS_BASE_CREDITS[model] ?? 2
-  if (model === 'wan-2.7' && tier === 'pro') base += WAN_PRO_EXTRA
-  const total = base + (GROK_SURCHARGE[grok] ?? 2)
+  let base = lookupHealthCredits(health, model, tier)
+  if (base == null) {
+    base = DEFAULT_CREDITS[model] ?? 8
+    if (model === 'wan-2.7' && tier === 'pro') base += WAN_PRO_EXTRA
+  }
+
+  const refs = Math.max(0, Number(params.extraReferenceCount) || 0)
+  const refExtra = Math.min(2, Math.floor(refs / 2))
+  const total = base + (GROK_SURCHARGE_CREDITS[grok] ?? 2) + refExtra
   return Math.max(1, total)
 }
 
@@ -111,10 +148,27 @@ export function studioGenerationUsesDemo(params: {
 
 export function formatStudioImageCostLabel(
   credits: number | null,
-  opts?: { isProPlan?: boolean; demoRemaining?: number; useDemo?: boolean },
+  opts?: { isProPlan?: boolean; demoRemaining?: number; useDemo?: boolean; lang?: string },
 ): string {
   if (opts?.isProPlan) return 'Pro'
   if (opts?.useDemo && (opts.demoRemaining ?? 0) > 0) return '0'
   if (credits == null) return '—'
+  const usd = (credits / 100).toFixed(2)
+  const lang = opts?.lang
+  if (lang === 'ru') return `${credits} кр. ($${usd})`
+  if (lang === 'en') return `${credits} cr ($${usd})`
   return String(credits)
+}
+
+export function formatImageCostBadge(
+  credits: number,
+  lang: string,
+  opts?: { perFrame?: boolean },
+): string {
+  const cr = lang === 'ru' ? 'кр.' : 'cr'
+  const usd = `$${(credits / 100).toFixed(2)}`
+  if (opts?.perFrame) {
+    return lang === 'ru' ? `−${credits} ${cr}/кадр (${usd})` : `−${credits} ${cr}/frame (${usd})`
+  }
+  return lang === 'ru' ? `−${credits} ${cr} (${usd})` : `−${credits} ${cr} (${usd})`
 }

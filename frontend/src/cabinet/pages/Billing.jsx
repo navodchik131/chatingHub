@@ -66,6 +66,12 @@ export default function Billing() {
     };
   });
   const perLabel = s.period === 'month' ? (lang === 'ru' ? 'мес' : 'mo') : (lang === 'ru' ? 'год' : 'yr');
+  const creditsPricing = cabinet.health?.billing_credits_pricing
+    || (billingPlans?.items || []).find((x) => x.credits_pricing)?.credits_pricing
+    || cabinet.health?.credit_units;
+  const unitRub = creditsPricing?.unit_price_rub || (rubPerUsd / 100);
+  const creditsBalanceNum = Math.max(0, Math.round(Number(me?.credits_balance) || 0));
+  const estFrames = Math.max(0, Math.floor(creditsBalanceNum / 13));
   const credits = fmtCreditsWithUsd(me?.credits_balance, lang);
   const showDemo = isCreditsPlanWithDemo(me);
   const demoRemaining = demoGenerationsRemaining(me);
@@ -105,10 +111,6 @@ export default function Billing() {
     ? fmtMoney(tributeEarnings.display_minor, tributeEarnings.currency || 'RUB')
     : null;
 
-  const creditsPricing = cabinet.health?.billing_credits_pricing
-    || (billingPlans?.items || []).find((x) => x.credits_pricing)?.credits_pricing
-    || cabinet.health?.credit_units;
-  const unitRub = creditsPricing?.unit_price_rub || (rubPerUsd / 100);
   const billingDescText = fillPriceTemplate(t.billingDesc, {
     creditOneLiner: formatCreditOneLiner(unitRub, lang, rubPerUsd),
   });
@@ -168,7 +170,7 @@ export default function Billing() {
           </div>
           <div style={{ fontFamily: font.display, fontWeight: 700, fontSize: 30, color: color.lime }}>{credits}</div>
           <div style={{ fontSize: 11.5, color: color.textDim, marginTop: 4, marginBottom: showDemo ? 8 : 14 }}>
-            {t.balance} · ≈ {Math.floor(Number(credits) / 10)} {t.framesLeft}
+            {t.balance} · ≈ {estFrames} {t.framesLeft}
           </div>
           {showDemo && (
             <div
