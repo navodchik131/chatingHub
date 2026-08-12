@@ -1204,6 +1204,21 @@ async def instagram_oauth_start(
     )
 
 
+def _instagram_oauth_redirect(
+    base: str,
+    *,
+    ok: bool,
+    reason: str | None = None,
+) -> RedirectResponse:
+    params: dict[str, str] = {
+        "account": "integrations",
+        "instagram": "connected" if ok else "error",
+    }
+    if reason:
+        params["reason"] = reason.strip()[:240]
+    return RedirectResponse(url=f"{base}/?{urlencode(params)}", status_code=302)
+
+
 @router.get("/instagram/oauth/callback")
 async def instagram_oauth_callback(
     session: AsyncSession = Depends(get_session),
@@ -1213,22 +1228,20 @@ async def instagram_oauth_callback(
     error_description: str | None = Query(default=None),
 ) -> RedirectResponse:
     base = settings.public_app_url.rstrip("/")
-    fail = f"{base}/?account=integrations&instagram=error"
-    ok = f"{base}/?account=integrations&instagram=connected"
 
     if error:
         log.warning("instagram oauth denied: %s %s", error, error_description or "")
-        q = urlencode({"account": "integrations", "instagram": "error", "reason": error})
-        return RedirectResponse(url=f"{base}/?{q}", status_code=302)
+        reason = (error_description or error or "access_denied").strip()
+        return _instagram_oauth_redirect(base, ok=False, reason=reason)
 
     if not code or not state:
-        return RedirectResponse(url=fail, status_code=302)
+        return _instagram_oauth_redirect(base, ok=False, reason="missing_code")
 
     pending = await session.scalar(
         select(InstagramOAuthState).where(InstagramOAuthState.state == state.strip())
     )
     if not pending:
-        return RedirectResponse(url=fail, status_code=302)
+        return _instagram_oauth_redirect(base, ok=False, reason="invalid_state")
 
     created = pending.created_at
     if created.tzinfo is None:
@@ -1236,7 +1249,7 @@ async def instagram_oauth_callback(
     if datetime.now(timezone.utc) - created > timedelta(minutes=15):
         await session.execute(delete(InstagramOAuthState).where(InstagramOAuthState.state == state))
         await session.commit()
-        return RedirectResponse(url=fail, status_code=302)
+        return _instagram_oauth_redirect(base, ok=False, reason="state_expired")
 
     user_id = pending.user_id
     oauth_connection_id = pending.connection_id
@@ -1273,12 +1286,12 @@ async def instagram_oauth_callback(
         )
     except InstagramOAuthError as e:
         log.warning("instagram oauth callback failed user=%s: %s", user_id, e)
-        return RedirectResponse(url=fail, status_code=302)
+        return _instagram_oauth_redirect(base, ok=False, reason=str(e))
     except Exception:
         log.exception("instagram oauth callback failed user=%s", user_id)
-        return RedirectResponse(url=fail, status_code=302)
+        return _instagram_oauth_redirect(base, ok=False, reason="callback_failed")
 
-    return RedirectResponse(url=ok, status_code=302)
+    return _instagram_oauth_redirect(base, ok=True)
 
 
 @router.patch("/instagram/{connection_id}", response_model=IntegrationStatusOut)

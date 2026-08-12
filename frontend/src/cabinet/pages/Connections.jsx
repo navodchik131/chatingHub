@@ -26,7 +26,11 @@ function oauthFlashErrorMessage(platformId, reason, t) {
     return t.fanvueOauthErrorGeneric;
   }
   if (platformId === 'ig') {
-    if (r === 'access_denied') return t.fanvueOauthErrorDenied.replace('Fanvue', 'Instagram');
+    if (r === 'access_denied') return t.igOauthErrorDenied;
+    if (r === 'invalid_state' || r === 'state_expired' || r === 'missing_code') return t.igOauthErrorState;
+    if (r.includes('webhook')) return t.igOauthErrorWebhook;
+    if (r.includes('token')) return t.igOauthErrorToken;
+    if (r.includes('/me') || r.includes('profile')) return t.igOauthErrorProfile;
     if (reason && reason.length > 8 && r !== 'callback_failed') return reason;
     return t.igOauthErrorGeneric;
   }

@@ -110,31 +110,70 @@ async def exchange_instagram_long_lived_token(short_lived_token: str) -> dict[st
     token = (short_lived_token or "").strip()
     if not token:
         raise InstagramOAuthError("empty short-lived token")
-    ver = _graph_version()
-    params = {
+    data = {
         "grant_type": "ig_exchange_token",
         "client_secret": settings.instagram_app_secret.strip(),
         "access_token": token,
     }
+    # Meta docs historically used GET; since ~2024/2025 many apps get
+    # IGApiException code 100 "Unsupported request - method type: get" — POST required.
+    endpoints = (
+        "https://graph.instagram.com/access_token",
+        f"https://graph.instagram.com/v{_graph_version()}/access_token",
+    )
+    last_error: InstagramOAuthError | None = None
     async with httpx.AsyncClient(timeout=60.0) as client:
-        r = await client.get(f"https://graph.instagram.com/v{ver}/access_token", params=params)
-    if r.status_code >= 400:
-        log.warning("instagram long-lived token failed: %s %s", r.status_code, r.text[:800])
-        raise InstagramOAuthError(
-            "Instagram long-lived token exchange failed",
-            status=r.status_code,
-            body=r.text[:2000],
-        )
-    try:
-        payload = r.json()
-    except Exception as e:
-        raise InstagramOAuthError("Instagram long-lived response is not JSON") from e
-    if not isinstance(payload, dict):
-        raise InstagramOAuthError("Instagram long-lived response must be a JSON object")
-    access = str(payload.get("access_token") or "").strip()
-    if not access:
-        raise InstagramOAuthError("Instagram long-lived response missing access_token")
-    return payload
+        for url in endpoints:
+            r = await client.post(url, data=data)
+            if r.status_code < 400:
+                try:
+                    payload = r.json()
+                except Exception as e:
+                    raise InstagramOAuthError("Instagram long-lived response is not JSON") from e
+                if not isinstance(payload, dict):
+                    raise InstagramOAuthError("Instagram long-lived response must be a JSON object")
+                access = str(payload.get("access_token") or "").strip()
+                if not access:
+                    raise InstagramOAuthError("Instagram long-lived response missing access_token")
+                return payload
+            log.warning(
+                "instagram long-lived token POST failed url=%s: %s %s",
+                url,
+                r.status_code,
+                r.text[:800],
+            )
+            last_error = InstagramOAuthError(
+                "Instagram long-lived token exchange failed",
+                status=r.status_code,
+                body=r.text[:2000],
+            )
+            # Legacy fallback for environments that still accept GET on versioned URL.
+            r_get = await client.get(url, params=data)
+            if r_get.status_code < 400:
+                try:
+                    payload = r_get.json()
+                except Exception as e:
+                    raise InstagramOAuthError("Instagram long-lived response is not JSON") from e
+                if not isinstance(payload, dict):
+                    raise InstagramOAuthError("Instagram long-lived response must be a JSON object")
+                access = str(payload.get("access_token") or "").strip()
+                if not access:
+                    raise InstagramOAuthError("Instagram long-lived response missing access_token")
+                log.info("instagram long-lived token exchange succeeded via GET fallback url=%s", url)
+                return payload
+            log.warning(
+                "instagram long-lived token GET failed url=%s: %s %s",
+                url,
+                r_get.status_code,
+                r_get.text[:800],
+            )
+            last_error = InstagramOAuthError(
+                "Instagram long-lived token exchange failed",
+                status=r_get.status_code,
+                body=r_get.text[:2000],
+            )
+    assert last_error is not None
+    raise last_error
 
 
 async def refresh_instagram_access_token(access_token: str) -> dict[str, Any]:
