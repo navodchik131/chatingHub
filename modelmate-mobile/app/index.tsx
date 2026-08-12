@@ -44,13 +44,22 @@ function MainApp() {
   }, [app.ready, app.authenticated, cur, resetTo, patch, app]);
 
   useEffect(() => {
+    if (!app.ready || !app.authenticated) return;
+    const root = stack[0];
+    if (!app.me?.is_platform_admin && (root === 'admin' || cur === 'admin' || cur.startsWith('admin-'))) {
+      resetTo('profile');
+    }
+  }, [app.ready, app.authenticated, app.me?.is_platform_admin, cur, stack, resetTo]);
+
+  useEffect(() => {
+    if (!app.me?.is_platform_admin) return;
     if (cur === 'admin' || cur.startsWith('admin-')) {
       void app.loadAdmin();
     }
     if (cur === 'admin-users') {
       void app.searchAdminUsers('');
     }
-  }, [cur, app]);
+  }, [cur, app, app.me?.is_platform_admin]);
 
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', handleBack);

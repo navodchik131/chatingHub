@@ -1,3 +1,9 @@
+import type { UserMeOut } from '@/src/api/types';
+
+export function isPlatformAdmin(me: Pick<UserMeOut, 'is_platform_admin'> | null | undefined): boolean {
+  return Boolean(me?.is_platform_admin);
+}
+
 export function fmtCredits(n: number | undefined | null): string {
   return String(Math.max(0, Math.round(Number(n) || 0)));
 }

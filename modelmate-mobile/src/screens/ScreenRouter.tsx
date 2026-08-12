@@ -91,6 +91,8 @@ import { SwipeableChatRow } from '@/src/components/SwipeableChatRow';
 import { ThreadView } from '@/src/components/ThreadView';
 import { resolveMediaUrl } from '@/src/api/config';
 import { archiveThumbUrl } from '@/src/api/media';
+import { isPlatformAdmin } from '@/src/api/helpers';
+import { isAdminRoute } from '@/src/navigation/types';
 import { charFieldsFromModel, fmtDateShort, fmtMoney, fmtRub, fmtTime, photoTagKindByIndex } from '@/src/api/helpers';
 import { mapCharPhotoTags, mapIntegrationConnections, mapIntegrationCurrent } from '@/src/api/mappers';
 import { StudioSlotInput } from '@/src/components/StudioSlotInput';
@@ -254,7 +256,8 @@ export function ScreenRouter() {
       );
     });
   };
-  const { cur, pop, push, resetTo, openThread, startGen, regen, patch, chatIdx } = nav;
+  const { cur, pop, push, resetTo, openThread, startGen, regen, patch, chatIdx, stack } = nav;
+  const platformAdmin = isPlatformAdmin(me);
   const [ticketReply, setTicketReply] = useState('');
   const [charNameEdit, setCharNameEdit] = useState('');
   const [threadAttachment, setThreadAttachment] = useState<LocalFile | null>(null);
@@ -1836,7 +1839,9 @@ export function ScreenRouter() {
         </Card>
         <SectionLabel>{t.sectionSystem}</SectionLabel>
         <Card>
-          <MenuRow icon={<IcoShield size={17} stroke={color.orange} />} label={t.adminPanel} badge="ADMIN" onPress={() => resetTo('admin')} />
+          {platformAdmin ? (
+            <MenuRow icon={<IcoShield size={17} stroke={color.orange} />} label={t.adminPanel} badge="ADMIN" onPress={() => resetTo('admin')} />
+          ) : null}
           <MenuRow icon={<IcoCog size={17} stroke={color.muted} />} label={t.settingsTitle} onPress={() => push('settings')} />
         </Card>
         <Card>
@@ -2393,6 +2398,15 @@ export function ScreenRouter() {
     );
   }
 
+  if (isAdminRoute(cur, stack[0]) && !platformAdmin) {
+    return (
+      <ScreenScroll>
+        <TopBar title={t.adminPanel} onBack={() => resetTo('profile')} />
+        <Text style={s.charSub}>{t.adminAccessDenied}</Text>
+      </ScreenScroll>
+    );
+  }
+
   if (cur === 'admin') {
     return (
       <ScreenScroll>
@@ -2409,16 +2423,12 @@ export function ScreenRouter() {
         </View>
         <SectionLabel>ТАРИФЫ ПО ПОПУЛЯРНОСТИ</SectionLabel>
         <Card style={s.gap10}>
-          {(adminStats?.top_plans?.length ? adminStats.top_plans : [
-            { label: 'Studio', pct: 46 },
-            { label: 'Solo', pct: 26 },
-            { label: 'Pro Pro', pct: 15 },
-          ]).map((p, i) => {
+          {adminStats?.top_plans?.length ? adminStats.top_plans.map((p, i) => {
             const barColors = [color.lime, color.blue, color.purple, color.green, color.orange];
             return (
               <ProgressBar key={p.label} label={p.label} pct={p.pct} barColor={barColors[i % barColors.length]} />
             );
-          })}
+          }) : <Text style={s.charSub}>Нет данных</Text>}
         </Card>
         <SectionLabel>РАЗДЕЛЫ</SectionLabel>
         <Card>

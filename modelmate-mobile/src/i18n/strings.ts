@@ -34,6 +34,7 @@ export type Strings = {
   settingsSimplifiedUi: string;
   settingsSimplifiedUiHint: string;
   adminPanel: string;
+  adminAccessDenied: string;
   logout: string;
   authLogin: string;
   authRegister: string;
@@ -319,6 +320,7 @@ const RU: Strings = {
   settingsSimplifiedUi: 'Упрощённый интерфейс',
   settingsSimplifiedUiHint: 'Скрывает SFW/NSFW и выбор модели. Генерации идут через Seedream 5 Pro (NSFW).',
   adminPanel: 'Admin-панель',
+  adminAccessDenied: 'Нет доступа к админ-панели.',
   logout: 'Выйти',
   authLogin: 'Вход',
   authRegister: 'Регистрация',
@@ -604,6 +606,7 @@ const EN: Strings = {
   settingsSimplifiedUi: 'Simplified interface',
   settingsSimplifiedUiHint: 'Hides SFW/NSFW and model picker. Generations use Seedream 5 Pro (NSFW).',
   adminPanel: 'Admin panel',
+  adminAccessDenied: 'You do not have access to the admin panel.',
   logout: 'Sign out',
   authLogin: 'Sign in',
   authRegister: 'Register',

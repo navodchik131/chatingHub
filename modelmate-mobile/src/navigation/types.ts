@@ -189,6 +189,10 @@ export function hideTabBar(stack: string[]): boolean {
   if (cur === 'settings' || cur.startsWith('settings-')) return true;
   if (cur === 'profileEdit' || cur === 'support' || cur.startsWith('ticket:')) return true;
   if (cur === 'video-archive' || cur === 'video-item') return true;
-  if (root === 'admin' || cur === 'admin' || cur.startsWith('admin-')) return true;
+  if (isAdminRoute(cur, root)) return true;
   return false;
+}
+
+export function isAdminRoute(cur: string, root?: string): boolean {
+  return root === 'admin' || cur === 'admin' || cur.startsWith('admin-');
 }
