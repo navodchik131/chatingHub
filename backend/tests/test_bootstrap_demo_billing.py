@@ -8,6 +8,7 @@ from app.services.demo_generations import (
     DEMO_ELIGIBLE_USAGE_KINDS,
     demo_slot_reserved_from_params,
     demo_slot_released_from_params,
+    effective_demo_remaining_for_access,
 )
 
 
@@ -27,6 +28,13 @@ def test_demo_slot_reserved_from_params() -> None:
 def test_demo_slot_released_from_params() -> None:
     assert demo_slot_released_from_params({"demo_slot_released": "yes"})
     assert not demo_slot_released_from_params({"demo_slot_reserved": "1"})
+
+
+def test_effective_demo_remaining_for_access() -> None:
+    assert effective_demo_remaining_for_access(0, demo_slot_reserved=False) == 0
+    assert effective_demo_remaining_for_access(1, demo_slot_reserved=False) == 1
+    assert effective_demo_remaining_for_access(0, demo_slot_reserved=True) == 1
+    assert effective_demo_remaining_for_access(2, demo_slot_reserved=True) == 2
 
 
 def test_parse_mobile_auth_start_param() -> None:

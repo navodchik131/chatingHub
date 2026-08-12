@@ -187,6 +187,12 @@ export const RU = {
   heroLinkAll: 'Общая', copied: 'Скопировано', partnerKpiReferred: 'ПРИВЕДЕНО', partnerKpiSubscribed: 'С ПОДПИСКОЙ',
   partnerKpiEarned: 'ЗАРАБОТАНО ВСЕГО', partnerKpiAvg: 'СРЕДНИЙ ЧЕК', funnelClicks: 'КЛИКОВ', funnelRegs: 'РЕГИСТРАЦИЙ',
   funnelConv: 'КОНВЕРСИЯ В ОПЛАТУ', sortByEarned: 'По доходу', sortByRegs: 'По регистрациям', sortByConv: 'По конверсии',
+  telegramTitle: 'Telegram',
+  telegramLinked: 'Привязан{{username}}. Нужен для международной оплаты через Tribute.',
+  telegramLinkHint: 'Привяжите Telegram к аккаунту владельца — для оплаты без российской карты и входа в один клик.',
+  telegramNotConfigured: 'Telegram Login на сервере не настроен.',
+  telegramUnlinkConfirm: 'Отвязать Telegram? Понадобится email и пароль для входа.',
+  telegramUnlink: 'Отвязать Telegram',
 };
 
 export const EN = {
@@ -376,6 +382,12 @@ export const EN = {
   heroLinkAll: 'Base', copied: 'Copied', partnerKpiReferred: 'REFERRED', partnerKpiSubscribed: 'SUBSCRIBED',
   partnerKpiEarned: 'EARNED TOTAL', partnerKpiAvg: 'AVG PAYMENT', funnelClicks: 'CLICKS', funnelRegs: 'SIGNUPS',
   funnelConv: 'PAID CONVERSION', sortByEarned: 'By revenue', sortByRegs: 'By signups', sortByConv: 'By conversion',
+  telegramTitle: 'Telegram',
+  telegramLinked: 'Linked{{username}}. Required for international payments via Tribute.',
+  telegramLinkHint: 'Link Telegram to the owner account — for non-Russian card payments and one-click sign-in.',
+  telegramNotConfigured: 'Telegram Login is not configured on the server.',
+  telegramUnlinkConfirm: 'Unlink Telegram? You will need email and password to sign in.',
+  telegramUnlink: 'Unlink Telegram',
 };
 
 export const dict = { ru: RU, en: EN };

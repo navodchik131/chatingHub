@@ -70,6 +70,18 @@ def demo_generations_grant() -> int:
     return max(0, int(settings.demo_generations_grant))
 
 
+def effective_demo_remaining_for_access(
+    demo_remaining: int,
+    *,
+    demo_slot_reserved: bool = False,
+) -> int:
+    """Учитывает слот, уже зарезервированный при accept job (баланс в БД уже уменьшен)."""
+    rem = max(0, int(demo_remaining))
+    if demo_slot_reserved and rem <= 0:
+        return 1
+    return rem
+
+
 async def release_reserved_demo_slot(
     session: AsyncSession,
     *,

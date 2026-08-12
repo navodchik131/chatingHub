@@ -15,6 +15,7 @@ import {
 import { mapDialogRow } from '../api/mappers';
 import { sumOutboundMessages } from '../api/studioHelpers';
 import { archiveThumbUrl } from '../api/actions';
+import TelegramAccountLink from '../components/TelegramAccountLink';
 
 const KpiCard = ({ children, onClick, accent }) => (
   <Hoverable
@@ -36,7 +37,7 @@ const KpiCard = ({ children, onClick, accent }) => (
 
 export default function Overview() {
   const { t, lang, go, cabinet } = useApp();
-  const { me, conversations, donationOverview, donationEvents, archiveImages, chatterStats } = cabinet;
+  const { me, conversations, donationOverview, donationEvents, archiveImages, chatterStats, health, refreshAll } = cabinet;
 
   const credits = fmtCreditsWithUsd(me?.credits_balance, lang);
   const creditsNum = Math.max(0, Math.round(Number(me?.credits_balance) || 0));
@@ -206,6 +207,14 @@ export default function Overview() {
           </div>
         </KpiCard>
       </div>
+
+      <TelegramAccountLink
+        me={me}
+        health={health}
+        t={t}
+        lang={lang}
+        onRefresh={() => refreshAll({ busy: false })}
+      />
 
       {/* Where to start */}
       <div

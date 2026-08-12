@@ -67,6 +67,7 @@ from app.schemas import (
 from app.services.billing_plan import is_credits_plan, normalize_billing_plan
 from app.services.credits import ensure_can_consume_credits, record_usage
 from app.services.demo_generations import (
+    effective_demo_remaining_for_access,
     assert_demo_only_user_model_allowed,
     assert_studio_image_billing_available,
     model_profile_generation_free,
@@ -3475,10 +3476,16 @@ async def _studio_job_execute_refine_prompt(
 
     assert_permission(user, PERM_STUDIO_GENERATE)
     oid = workspace_owner_id(user)
+    demo_slot_reserved = _demo_slot_already_reserved(p)
     sub_b, llm_row, ws_row, plan, _credits, _demo = await load_owner_studio_billing(
         session, oid
     )
-    _require_studio_subscription(user, sub_b, credits_balance=_credits, demo_generations_remaining=_demo)
+    _demo_access = effective_demo_remaining_for_access(
+        _demo, demo_slot_reserved=demo_slot_reserved
+    )
+    _require_studio_subscription(
+        user, sub_b, credits_balance=_credits, demo_generations_remaining=_demo_access
+    )
     llm_creds = studio_llm_credentials(plan=plan, llm_row=llm_row)
     wan_tier_n = _normalize_wan_edit_tier(wan_edit_tier)
     wave_profile_n = _normalize_studio_wave_profile(studio_wave_profile)
@@ -3766,7 +3773,7 @@ async def _studio_job_execute_refine_prompt(
         plan=plan,
         ws_row=ws_row,
         owner_subscription=sub_b,
-        demo_generations_remaining=_demo,
+        demo_generations_remaining=_demo_access,
         mode_n=mode_n,
         mid=mid,
         sm_loaded=sm_loaded,
@@ -3798,7 +3805,7 @@ async def _studio_job_execute_refine_prompt(
     )
     assert_demo_only_user_model_allowed(
         plan=plan,
-        demo_remaining=_demo,
+        demo_remaining=_demo_access,
         credits_balance=_credits,
         wave_model_id=billing_wave_model,
         grok_pipeline=grok_pipeline,
@@ -3819,7 +3826,7 @@ async def _studio_job_execute_refine_prompt(
         wave_profile=wave_profile_n,
         wan_edit_tier=wan_tier_n,
         device_signal=device_signal,
-        demo_slot_reserved=_demo_slot_already_reserved(p),
+        demo_slot_reserved=demo_slot_reserved,
     )
 
     gen_row: StudioGeneration | None = None
