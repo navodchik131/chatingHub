@@ -193,6 +193,14 @@ export const RU = {
   telegramNotConfigured: 'Telegram Login на сервере не настроен.',
   telegramUnlinkConfirm: 'Отвязать Telegram? Понадобится email и пароль для входа.',
   telegramUnlink: 'Отвязать Telegram',
+  telegramLinkViaApp: 'Привязать через Telegram-приложение',
+  telegramLinkViaAppHint: 'Откроется бот — можно переключить аккаунт в Telegram и нажать Start.',
+  telegramShowBrowserLogin: 'Или через браузер (текущий аккаунт web.telegram.org)',
+  telegramHideBrowserLogin: 'Скрыть вход через браузер',
+  telegramWidgetHint: 'Виджет использует аккаунт, залогиненный в браузере Telegram — не подходит, если нужен другой.',
+  telegramWaiting: 'Ждём подтверждение…',
+  telegramBotHint: 'Откройте Telegram, нажмите Start в боте и вернитесь на эту страницу.',
+  telegramCancel: 'Отмена',
 };
 
 export const EN = {
@@ -388,6 +396,14 @@ export const EN = {
   telegramNotConfigured: 'Telegram Login is not configured on the server.',
   telegramUnlinkConfirm: 'Unlink Telegram? You will need email and password to sign in.',
   telegramUnlink: 'Unlink Telegram',
+  telegramLinkViaApp: 'Link via Telegram app',
+  telegramLinkViaAppHint: 'Opens the bot — switch account in Telegram, then tap Start.',
+  telegramShowBrowserLogin: 'Or via browser (current web.telegram.org account)',
+  telegramHideBrowserLogin: 'Hide browser login',
+  telegramWidgetHint: 'The widget uses the account logged into Telegram in your browser — not for switching accounts.',
+  telegramWaiting: 'Waiting for confirmation…',
+  telegramBotHint: 'Open Telegram, tap Start in the bot, then return to this page.',
+  telegramCancel: 'Cancel',
 };
 
 export const dict = { ru: RU, en: EN };

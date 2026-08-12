@@ -24,6 +24,7 @@ from app.schemas import (
     TelegramMobileAuthPollOut,
     TelegramMobileAuthStartIn,
     TelegramMobileAuthStartOut,
+    TelegramMobileLinkStartOut,
     TokenOut,
     UserMeOut,
     UserPreferencesPatchIn,
@@ -52,8 +53,11 @@ from app.services.telegram_identity import (
 )
 from app.services.telegram_mobile_auth import (
     create_mobile_auth_session,
+    create_mobile_link_session,
     poll_mobile_auth_session,
+    poll_mobile_link_session,
     telegram_deep_link_for_session,
+    telegram_link_deep_link_for_session,
 )
 from app.services.workspace import is_workspace_owner, resolve_billing_user, workspace_owner_id
 
@@ -234,6 +238,35 @@ async def telegram_unlink(
     user.telegram_linked_at = None
     await session.commit()
     return {"ok": True, "telegram_linked": False}
+
+
+@router.post("/telegram/link/mobile/start", response_model=TelegramMobileLinkStartOut)
+async def telegram_mobile_link_start(
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> TelegramMobileLinkStartOut:
+    if not is_workspace_owner(user):
+        raise HTTPException(status_code=403, detail="Привязка Telegram только для владельца")
+    row = await create_mobile_link_session(session, owner_user_id=user.id)
+    await session.commit()
+    bot_username = (settings.telegram_login_bot_username or "").strip().lstrip("@")
+    return TelegramMobileLinkStartOut(
+        session_id=row.id,
+        bot_username=bot_username,
+        telegram_url=telegram_link_deep_link_for_session(row.id),
+    )
+
+
+@router.get("/telegram/link/mobile/poll", response_model=TelegramMobileAuthPollOut)
+async def telegram_mobile_link_poll(
+    session_id: str,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> TelegramMobileAuthPollOut:
+    if not is_workspace_owner(user):
+        raise HTTPException(status_code=403, detail="Привязка Telegram только для владельца")
+    data = await poll_mobile_link_session(session, session_id, owner_user_id=user.id)
+    return TelegramMobileAuthPollOut(**data)
 
 
 @router.post("/email/complete", response_model=TokenOut)

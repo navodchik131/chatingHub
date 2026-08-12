@@ -368,6 +368,7 @@ async def init_db() -> None:
         await conn.run_sync(_migrate_studio_video_backend)
         await conn.run_sync(_migrate_telegram_mobile_auth_device_key)
         await conn.run_sync(_migrate_telegram_mobile_auth_is_partner)
+        await conn.run_sync(_migrate_telegram_mobile_auth_link_owner)
         await conn.run_sync(_migrate_tribute_processed_events)
         await conn.run_sync(_migrate_email_campaigns_tables)
         await conn.run_sync(_migrate_fanvue_oauth_columns)
@@ -2322,6 +2323,23 @@ def _migrate_telegram_mobile_auth_is_partner(sync_conn) -> None:
         text(
             f"ALTER TABLE telegram_mobile_auth_sessions "
             f"ADD COLUMN is_partner BOOLEAN NOT NULL DEFAULT {bool_false}"
+        )
+    )
+
+
+def _migrate_telegram_mobile_auth_link_owner(sync_conn) -> None:
+    from sqlalchemy import inspect, text
+
+    insp = inspect(sync_conn)
+    if not insp.has_table("telegram_mobile_auth_sessions"):
+        return
+    cols = {c["name"] for c in insp.get_columns("telegram_mobile_auth_sessions")}
+    if "link_owner_user_id" in cols:
+        return
+    sync_conn.execute(
+        text(
+            "ALTER TABLE telegram_mobile_auth_sessions "
+            "ADD COLUMN link_owner_user_id INTEGER REFERENCES users(id) ON DELETE CASCADE"
         )
     )
 

@@ -802,6 +802,9 @@ class TelegramMobileAuthSession(Base):
     referral_code: Mapped[str | None] = mapped_column(String(16), nullable=True)
     is_partner: Mapped[bool] = mapped_column(default=False)
     device_key: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    link_owner_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True
+    )
     telegram_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)

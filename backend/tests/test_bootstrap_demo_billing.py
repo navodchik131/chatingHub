@@ -38,8 +38,14 @@ def test_effective_demo_remaining_for_access() -> None:
 
 
 def test_parse_mobile_auth_start_param() -> None:
-    from app.services.telegram_mobile_auth import parse_mobile_auth_start_param
+    from app.services.telegram_mobile_auth import (
+        parse_mobile_auth_start_param,
+        parse_mobile_link_start_param,
+    )
 
     assert parse_mobile_auth_start_param("mm_abc123") == "abc123"
+    assert parse_mobile_auth_start_param("mml_abc123") is None
+    assert parse_mobile_link_start_param("mml_abc123") == "abc123"
+    assert parse_mobile_link_start_param("mm_abc123") is None
     assert parse_mobile_auth_start_param("hello") is None
     assert parse_mobile_auth_start_param(None) is None

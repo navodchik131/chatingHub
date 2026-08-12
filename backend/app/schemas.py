@@ -262,6 +262,14 @@ class TelegramMobileAuthStartOut(BaseModel):
 class TelegramMobileAuthPollOut(BaseModel):
     status: Literal["pending", "done", "expired"]
     access_token: str | None = None
+    telegram_linked: bool | None = None
+    telegram_username: str | None = None
+
+
+class TelegramMobileLinkStartOut(BaseModel):
+    session_id: str
+    bot_username: str
+    telegram_url: str
 
 
 class PlanLimitsOut(BaseModel):
