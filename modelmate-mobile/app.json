@@ -2,18 +2,19 @@
   "expo": {
     "name": "ModelMate",
     "slug": "modelmate",
-    "version": "1.0.17",
+    "version": "1.0.18",
     "orientation": "portrait",
     "icon": "./assets/logo-m.jpeg",
     "scheme": "modelmate",
     "userInterfaceStyle": "dark",
+    "platforms": ["ios", "android"],
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "app.modelmate.mobile"
     },
     "android": {
       "package": "app.modelmate.mobile",
-      "versionCode": 18,
+      "versionCode": 19,
       "googleServicesFile": "./google-services.json",
       "usesCleartextTraffic": true,
       "softwareKeyboardLayoutMode": "resize",
