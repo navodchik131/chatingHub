@@ -121,7 +121,7 @@ def probe_motion_video_stream(path: Path) -> tuple[int, int, float]:
             "-show_entries",
             "format=duration",
             "-of",
-            "csv=p=0",
+            "json",
             str(path),
         ],
         timeout=60,
@@ -131,13 +131,24 @@ def probe_motion_video_stream(path: Path) -> tuple[int, int, float]:
         if "moov atom not found" in err.lower():
             raise RuntimeError("Файл видео повреждён или не докачан (moov atom not found).")
         raise RuntimeError(f"Не удалось прочитать видео: {err[:500] or r.returncode}")
-    parts = [p.strip() for p in (r.stdout or "").strip().split(",") if p.strip()]
-    if len(parts) < 3:
-        raise RuntimeError("В файле нет видеодорожки.")
     try:
-        w, h, dur = int(parts[0]), int(parts[1]), float(parts[2])
+        payload = json.loads(r.stdout or "{}")
+    except json.JSONDecodeError as e:
+        raise RuntimeError("Не удалось прочитать метаданные видео.") from e
+    streams = payload.get("streams")
+    if not isinstance(streams, list) or not streams:
+        raise RuntimeError("В файле нет видеодорожки.")
+    stream0 = streams[0] if isinstance(streams[0], dict) else {}
+    try:
+        w = int(stream0.get("width") or 0)
+        h = int(stream0.get("height") or 0)
     except (TypeError, ValueError) as e:
-        raise RuntimeError("Не удалось прочитать параметры видео.") from e
+        raise RuntimeError("Не удалось прочитать размер кадра видео.") from e
+    fmt = payload.get("format") if isinstance(payload.get("format"), dict) else {}
+    try:
+        dur = float(fmt.get("duration") or 0)
+    except (TypeError, ValueError) as e:
+        raise RuntimeError("Не удалось прочитать длительность видео.") from e
     if w <= 0 or h <= 0 or dur <= 0:
         raise RuntimeError("Видеодорожка пустая или повреждена.")
     return w, h, dur
@@ -152,7 +163,7 @@ def validate_motion_video_upload(path: Path, *, raw_size: int) -> MotionVideoInp
         raise RuntimeError("Пустой файл видео.")
 
     suf = path.suffix.lower()
-    if suf not in {".mp4", ".mov", ".webm", ".m4v"}:
+    if suf and suf not in {".mp4", ".mov", ".webm", ".m4v"}:
         raise RuntimeError("Поддерживаются только MP4, MOV и WebM.")
 
     if not _moov_valid(path):

@@ -1356,13 +1356,16 @@ async def api_studio_motion_upload_driving_video(
 
     from app.services.motion_video_outline import (
         motion_outline_video_prompt_block,
-        process_motion_video_outline,
         publish_outline_for_owner,
         save_motion_video_source_bytes,
+        try_motion_outline_from_cache,
         validate_motion_video_upload,
     )
 
-    fd, tmp_path_str = tempfile.mkstemp(prefix="motion_upload_", suffix=Path(video.filename or "v.mp4").suffix)
+    fd, tmp_path_str = tempfile.mkstemp(
+        prefix="motion_upload_",
+        suffix=Path(video.filename or "v.mp4").suffix or ".mp4",
+    )
     import os
 
     os.close(fd)

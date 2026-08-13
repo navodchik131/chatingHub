@@ -1,7 +1,11 @@
+import json
+from pathlib import Path
+
 from app.services.motion_video_outline import (
     choose_edge_params,
     motion_outline_video_prompt_block,
     output_size_for_source,
+    probe_motion_video_stream,
 )
 
 
@@ -22,3 +26,26 @@ def test_motion_outline_prompt_block():
     assert "@Video1" in text
     assert "edge-outline" in text
     assert "@Image1" in text
+
+
+def test_probe_motion_video_stream_parses_ffprobe_json(monkeypatch):
+    sample = json.dumps(
+        {
+            "streams": [{"width": 1080, "height": 1920}],
+            "format": {"duration": "14.52"},
+        }
+    )
+
+    def fake_run(cmd, *, timeout):
+        class R:
+            returncode = 0
+            stdout = sample
+            stderr = ""
+
+        return R()
+
+    monkeypatch.setattr("app.services.motion_video_outline._run_cmd", fake_run)
+    monkeypatch.setattr("app.services.motion_video_outline._ffprobe_bin", lambda: "ffprobe")
+    w, h, dur = probe_motion_video_stream(Path("/tmp/fake.mp4"))
+    assert (w, h) == (1080, 1920)
+    assert abs(dur - 14.52) < 0.01
