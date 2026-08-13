@@ -241,8 +241,15 @@ def resolve_motion_video_file(owner_id: int, file_id: str) -> Path | None:
     fid = str(file_id).strip()[:128]
     if not fid:
         return None
+    preferred = base / f"{fid}.mp4"
+    if preferred.is_file():
+        rp = preferred.resolve()
+        if str(rp).startswith(str(base)):
+            return rp
     for p in base.glob(f"{fid}.*"):
         if not p.is_file():
+            continue
+        if ".source." in p.name.lower():
             continue
         rp = p.resolve()
         if not str(rp).startswith(str(base)):

@@ -15,6 +15,7 @@ async def execute_studio_job(session: AsyncSession, job: StudioJob, user: User) 
     handlers: dict[str, Any] = {
         "refine_prompt": sr._studio_job_execute_refine_prompt,
         "motion_first_frame": sr._studio_job_execute_motion_first_frame,
+        "motion_video_outline": sr._studio_job_execute_motion_video_outline,
         "motion_compose_video_prompt": sr._studio_job_execute_motion_compose_video_prompt,
         "workflow_compose_video_prompt": sr._studio_job_execute_workflow_compose_video_prompt,
         "motion_render_video": sr._studio_job_execute_motion_render_video,

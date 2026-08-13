@@ -1319,30 +1319,111 @@ async def public_studio_workflow_ref(t: str) -> Response:
 @router.post(
     "/studio/motion/upload-driving-video",
     response_model=StudioMotionDrivingVideoUploadOut,
+    responses={202: {"model": StudioJobAcceptedOut}},
 )
 async def api_studio_motion_upload_driving_video(
     video: UploadFile | None = File(None),
     session: AsyncSession = Depends(get_session),
     user: User = Depends(get_current_user),
-) -> StudioMotionDrivingVideoUploadOut:
-    """Сохраняет референс-видео на диск без шага «Создать кадр» — для прямого «Сделать видео» с архивным кадром."""
+) -> StudioMotionDrivingVideoUploadOut | JSONResponse:
+    """Сохраняет референс-видео, обрабатывает в контурный motion-ref (ffmpeg, фон)."""
     assert_permission(user, PERM_STUDIO_GENERATE)
     oid = workspace_owner_id(user)
     sub_b, _llm, _ws, _plan, _credits, _demo = await load_owner_studio_billing(session, oid)
     _require_studio_subscription(user, sub_b, credits_balance=_credits, demo_generations_remaining=_demo)
-    max_v = max(1, int(settings.studio_motion_max_upload_mb)) * 1024 * 1024
+    if not settings.motion_outline_enabled:
+        max_v = max(1, int(settings.studio_motion_max_upload_mb)) * 1024 * 1024
+        if video is None or not (video.filename or "").strip():
+            raise HTTPException(status_code=400, detail="Выберите файл видео (MP4/WebM/MOV).")
+        raw_video = await video.read()
+        if len(raw_video) > max_v:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Видео слишком большое (макс. {settings.studio_motion_max_upload_mb} МБ).",
+            )
+        if not raw_video:
+            raise HTTPException(status_code=400, detail="Пустой файл видео.")
+        fid = save_motion_video_bytes(owner_id=oid, raw=raw_video, filename=video.filename)
+        return StudioMotionDrivingVideoUploadOut(motion_video_file_id=fid, status="ready")
+
     if video is None or not (video.filename or "").strip():
         raise HTTPException(status_code=400, detail="Выберите файл видео (MP4/WebM/MOV).")
     raw_video = await video.read()
-    if len(raw_video) > max_v:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Видео слишком большое (макс. {settings.studio_motion_max_upload_mb} МБ).",
-        )
     if not raw_video:
         raise HTTPException(status_code=400, detail="Пустой файл видео.")
-    fid = save_motion_video_bytes(owner_id=oid, raw=raw_video, filename=video.filename)
-    return StudioMotionDrivingVideoUploadOut(motion_video_file_id=fid)
+
+    import tempfile
+
+    from app.services.motion_video_outline import (
+        motion_outline_video_prompt_block,
+        process_motion_video_outline,
+        publish_outline_for_owner,
+        save_motion_video_source_bytes,
+        validate_motion_video_upload,
+    )
+
+    fd, tmp_path_str = tempfile.mkstemp(prefix="motion_upload_", suffix=Path(video.filename or "v.mp4").suffix)
+    import os
+
+    os.close(fd)
+    tmp_path = Path(tmp_path_str)
+    try:
+        tmp_path.write_bytes(raw_video)
+        meta = validate_motion_video_upload(tmp_path, raw_size=len(raw_video))
+    except RuntimeError as e:
+        tmp_path.unlink(missing_ok=True)
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    file_id = save_motion_video_source_bytes(owner_id=oid, raw=raw_video, filename=video.filename)
+    prompt_block = motion_outline_video_prompt_block(
+        appearance_refs="@Image1, @Image2 and @Image3",
+    )
+
+    try:
+        cached_result = await anyio.to_thread.run_sync(try_motion_outline_from_cache, tmp_path)
+        if cached_result is not None:
+            try:
+                publish_outline_for_owner(
+                    owner_id=oid, file_id=file_id, outline=cached_result.outline_path
+                )
+            finally:
+                cached_result.outline_path.unlink(missing_ok=True)
+            return StudioMotionDrivingVideoUploadOut(
+                motion_video_file_id=file_id,
+                status="ready",
+                motion_reference_prompt=prompt_block,
+                cached=True,
+                duration_seconds=meta.duration_sec,
+                message="Референс-видео готово (из кеша).",
+            )
+    except RuntimeError as e:
+        tmp_path.unlink(missing_ok=True)
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    finally:
+        if tmp_path.is_file():
+            tmp_path.unlink(missing_ok=True)
+
+    job = await studio_jobs.create_studio_job(
+        session,
+        owner_id=oid,
+        actor_user_id=user.id,
+        job_type="motion_video_outline",
+        params={
+            "motion_video_file_id": file_id,
+            "content_sha256": meta.content_sha256,
+            "duration_seconds": meta.duration_sec,
+        },
+    )
+    studio_jobs.schedule_studio_job(job.id)
+    return JSONResponse(
+        status_code=202,
+        content=StudioJobAcceptedOut(
+            job_id=job.id,
+            status="pending",
+            job_type="motion_video_outline",
+            message="Обрабатываем референс-видео (контуры движения). Обычно 1–2 минуты.",
+        ).model_dump(),
+    )
 
 
 @router.get("/studio/motion/renders", response_model=StudioMotionRendersPageOut)
@@ -6296,6 +6377,56 @@ async def api_seedance_sale_render_video(
     )
 
 
+async def _studio_job_execute_motion_video_outline(
+    session: AsyncSession,
+    job: StudioJob,
+    user: User,
+) -> dict[str, Any]:
+    from app.services.motion_video_outline import (
+        motion_outline_video_prompt_block,
+        process_motion_video_outline,
+        publish_outline_for_owner,
+        resolve_motion_video_source,
+    )
+    from app.services.studio_jobs import job_params
+    from app.services.studio_motion_video import probe_video_duration_seconds
+
+    _ = session
+    oid = workspace_owner_id(user)
+    params = job_params(job)
+    file_id = str(params.get("motion_video_file_id") or "").strip()
+    if not file_id:
+        raise RuntimeError("Не указан motion_video_file_id.")
+    source = resolve_motion_video_source(oid, file_id)
+    if source is None or not source.is_file():
+        raise RuntimeError("Исходное референс-видео не найдено. Загрузите файл снова.")
+
+    result = await anyio.to_thread.run_sync(process_motion_video_outline, source)
+    try:
+        publish_outline_for_owner(owner_id=oid, file_id=file_id, outline=result.outline_path)
+    finally:
+        result.outline_path.unlink(missing_ok=True)
+
+    outline_path = resolve_motion_video_file(oid, file_id)
+    dur = probe_video_duration_seconds(outline_path) if outline_path else None
+    prompt_block = motion_outline_video_prompt_block(
+        appearance_refs="@Image1, @Image2 and @Image3",
+    )
+    out: dict[str, Any] = {
+        "motion_video_file_id": file_id,
+        "motion_reference_prompt": prompt_block,
+        "cached": result.from_cache,
+        "duration_seconds": dur,
+    }
+    if result.face_detection_warning:
+        out["face_detection_warning"] = True
+        out["message"] = (
+            "Контурное видео готово, но на части кадров всё ещё возможно читаемое лицо. "
+            "При необходимости выберите другой референс."
+        )
+    return out
+
+
 async def _studio_job_execute_motion_render_video(
     session: AsyncSession,
     job: StudioJob,
@@ -6520,6 +6651,10 @@ async def _studio_job_execute_motion_render_video(
     motion_summary: str | None = motion_timeline or None
     vpath = None
     if mv_id:
+        if settings.motion_outline_enabled:
+            from app.services.motion_video_outline import ensure_motion_outline_ready
+
+            await ensure_motion_outline_ready(oid, mv_id)
         vpath = resolve_motion_video_file(oid, mv_id)
         if vpath is not None and vpath.is_file():
             from app.services.studio_motion_pricing import motion_video_duration_seconds

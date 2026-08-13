@@ -97,6 +97,14 @@ async def _studio_archive_retry_loop() -> None:
 async def lifespan(app: FastAPI):
     await init_db()
     try:
+        from app.services.motion_video_outline import assert_ffmpeg_tools_available
+
+        assert_ffmpeg_tools_available()
+        log.info("ffmpeg/ffprobe OK for motion outline")
+    except Exception as e:
+        log.error("ffmpeg/ffprobe unavailable: %s", e)
+        raise
+    try:
         from app.services.fx_rate import get_usd_rate
 
         await get_usd_rate()

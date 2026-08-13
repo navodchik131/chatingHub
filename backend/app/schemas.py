@@ -479,7 +479,14 @@ class StudioJobStatusOut(BaseModel):
 
 
 class StudioMotionDrivingVideoUploadOut(BaseModel):
-    motion_video_file_id: str
+    motion_video_file_id: str | None = None
+    job_id: int | None = None
+    status: str | None = None
+    motion_reference_prompt: str | None = None
+    face_detection_warning: bool = False
+    cached: bool = False
+    duration_seconds: float | None = None
+    message: str | None = None
 
 
 class StudioMotionRenderOut(BaseModel):

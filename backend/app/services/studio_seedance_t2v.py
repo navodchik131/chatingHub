@@ -232,11 +232,24 @@ def _motion_swap_prompt_core(
     n_start_frame: int,
     n_model_images: int,
 ) -> str:
+    from app.config import settings
+
     identity_tags = seedance_model_identity_tag_expr(n_start_frame, n_model_images)
+    outline_block = ""
+    if settings.motion_outline_enabled:
+        from app.services.motion_video_outline import motion_outline_video_prompt_block
+
+        appearance = identity_tags or "@Image1"
+        if n_start_frame > 0 and n_model_images > 0 and identity_tags:
+            appearance = f"@Image1, {identity_tags}"
+        elif n_start_frame > 0:
+            appearance = "@Image1"
+        outline_block = motion_outline_video_prompt_block(appearance_refs=appearance) + "\n\n"
 
     if n_start_frame > 0 and n_model_images > 0 and identity_tags:
         return (
-            "@Image1 is frame 0 of this video. The video starts exactly on @Image1 and continues from it.\n"
+            outline_block
+            + "@Image1 is frame 0 of this video. The video starts exactly on @Image1 and continues from it.\n"
             "@Image1 sets opening pose, scene, environment, lighting, wardrobe, and framing at t=0 only — "
             "not character identity.\n\n"
             f"Replace the person in @Video1 with the character from {identity_tags}. "
@@ -251,7 +264,8 @@ def _motion_swap_prompt_core(
 
     if n_start_frame == 0 and n_model_images > 1 and identity_tags:
         return (
-            f"Replace the person in @Video1 with the character from {identity_tags}. "
+            outline_block
+            + f"Replace the person in @Video1 with the character from {identity_tags}. "
             "The performer from @Video1 does not appear in the output.\n\n"
             f"{identity_tags} define all appearance: face, hair, skin tone, body proportions, outfit, "
             "and any held object. Locked for the entire clip, including body areas revealed later "
@@ -261,7 +275,10 @@ def _motion_swap_prompt_core(
             "No captions, watermarks or logos."
         )
 
-    return SEEDANCE_MOTION_VIDEO_SWAP_PROMPT
+    core = SEEDANCE_MOTION_VIDEO_SWAP_PROMPT
+    if outline_block:
+        return outline_block + core
+    return core
 
 
 def build_seedance_motion_video_swap_prompt(

@@ -1273,7 +1273,7 @@ export function CabinetDataProvider({ children }) {
         setFirstFrameGenId(null)
         setFirstFrameUrl(null)
         setUploadFile('motion-video', file)
-        const id = await actions.uploadMotionDrivingVideo(file)
+        const { motionVideoFileId: id } = await actions.uploadMotionDrivingVideo(file)
         setMotionVideoFileId(id)
         return id
       })
