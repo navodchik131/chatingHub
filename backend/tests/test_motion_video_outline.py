@@ -67,3 +67,23 @@ def test_resolve_motion_video_uploaded_finds_source(tmp_path, monkeypatch):
     outline = owner_dir / "abc123.mp4"
     outline.write_bytes(b"outline")
     assert smv.resolve_motion_video_uploaded(42, "abc123") == outline.resolve()
+
+
+def test_measure_gray_stats_accepts_binary_stdout(monkeypatch):
+    from app.services.motion_video_outline import measure_gray_stats
+
+    payload = bytes([50] * 128)
+
+    def fake_run(cmd, *, timeout, binary_stdout=False):
+        class R:
+            returncode = 0
+            stdout = payload if binary_stdout else ""
+            stderr = b"" if binary_stdout else ""
+
+        return R()
+
+    monkeypatch.setattr("app.services.motion_video_outline._run_cmd", fake_run)
+    monkeypatch.setattr("app.services.motion_video_outline._ffmpeg_bin", lambda: "ffmpeg")
+    mean, stddev = measure_gray_stats(Path("/tmp/fake.mp4"))
+    assert mean == 50.0
+    assert stddev == 0.0

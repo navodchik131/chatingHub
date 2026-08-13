@@ -74,14 +74,37 @@ def motion_outline_video_prompt_block(*, appearance_refs: str) -> str:
     return MOTION_OUTLINE_VIDEO_PROMPT_TEMPLATE.format(appearance_refs=refs)
 
 
-def _run_cmd(cmd: list[str], *, timeout: float) -> subprocess.CompletedProcess[str]:
+def _run_cmd(
+    cmd: list[str],
+    *,
+    timeout: float,
+    binary_stdout: bool = False,
+) -> subprocess.CompletedProcess[str | bytes]:
+    if binary_stdout:
+        return subprocess.run(
+            cmd,
+            check=False,
+            capture_output=True,
+            timeout=timeout,
+        )
     return subprocess.run(
         cmd,
         check=False,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         timeout=timeout,
     )
+
+
+def _stderr_text(proc: subprocess.CompletedProcess[str | bytes]) -> str:
+    err = proc.stderr
+    if err is None:
+        return ""
+    if isinstance(err, bytes):
+        return err.decode("utf-8", errors="replace")
+    return err
 
 
 def _moov_valid(path: Path) -> bool:
@@ -100,7 +123,7 @@ def _moov_valid(path: Path) -> bool:
             timeout=60,
         )
         if r.returncode != 0:
-            err = (r.stderr or "").lower()
+            err = _stderr_text(r).lower()
             if "moov atom not found" in err:
                 return False
             return False
@@ -128,12 +151,13 @@ def probe_motion_video_stream(path: Path) -> tuple[int, int, float]:
         timeout=60,
     )
     if r.returncode != 0:
-        err = (r.stderr or "").strip()
+        err = _stderr_text(r).strip()
         if "moov atom not found" in err.lower():
             raise RuntimeError("Файл видео повреждён или не докачан (moov atom not found).")
         raise RuntimeError(f"Не удалось прочитать видео: {err[:500] or r.returncode}")
     try:
-        payload = json.loads(r.stdout or "{}")
+        stdout = r.stdout if isinstance(r.stdout, str) else (r.stdout or b"").decode("utf-8", errors="replace")
+        payload = json.loads(stdout or "{}")
     except json.JSONDecodeError as e:
         raise RuntimeError("Не удалось прочитать метаданные видео.") from e
     streams = payload.get("streams")
@@ -219,10 +243,13 @@ def measure_gray_stats(path: Path) -> tuple[float, float]:
             "-",
         ],
         timeout=120,
+        binary_stdout=True,
     )
     if r.returncode != 0:
-        raise RuntimeError(f"Не удалось проанализировать яркость видео: {(r.stderr or '')[:400]}")
-    data = (r.stdout or "").encode("latin1", errors="ignore")
+        raise RuntimeError(
+            f"Не удалось проанализировать яркость видео: {_stderr_text(r)[:400]}"
+        )
+    data = r.stdout if isinstance(r.stdout, (bytes, bytearray)) else b""
     if len(data) < 64:
         raise RuntimeError("Не удалось проанализировать яркость видео (мало данных).")
     vals = list(data)
@@ -312,7 +339,7 @@ def _render_outline(source: Path, dest: Path, params: EdgeOutlineParams) -> None
     timeout = max(30, int(settings.motion_outline_render_timeout_sec))
     r = _run_cmd(cmd, timeout=timeout)
     if r.returncode != 0:
-        log.error("motion outline ffmpeg failed: %s", (r.stderr or "")[:2000])
+        log.error("motion outline ffmpeg failed: %s", _stderr_text(r)[:2000])
         dest.unlink(missing_ok=True)
         raise RuntimeError("Не удалось обработать референс-видео. Попробуйте другой файл.")
     if not dest.is_file() or dest.stat().st_size < 1024:
@@ -340,10 +367,11 @@ def _mean_adjacent_frame_delta(path: Path) -> float:
             "-",
         ],
         timeout=120,
+        binary_stdout=True,
     )
     if r.returncode != 0:
         return 0.0
-    data = (r.stdout or "").encode("latin1", errors="ignore")
+    data = r.stdout if isinstance(r.stdout, (bytes, bytearray)) else b""
     frame_size = 64 * 64
     if len(data) < frame_size * 2:
         return 0.0
