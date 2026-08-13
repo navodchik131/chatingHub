@@ -1,4 +1,5 @@
 import json
+import sys
 from pathlib import Path
 
 from app.services.motion_video_outline import (
@@ -87,3 +88,18 @@ def test_measure_gray_stats_accepts_binary_stdout(monkeypatch):
     mean, stddev = measure_gray_stats(Path("/tmp/fake.mp4"))
     assert mean == 50.0
     assert stddev == 0.0
+
+
+def test_detect_face_in_jpeg_graceful_without_cascade(monkeypatch):
+    from app.services.motion_video_outline import _detect_face_in_jpeg
+
+    class FakeCv2:
+        IMREAD_GRAYSCALE = 0
+
+        @staticmethod
+        def imdecode(arr, flag):
+            return [[0]]
+
+    monkeypatch.setitem(sys.modules, "cv2", FakeCv2())
+    monkeypatch.setitem(sys.modules, "numpy", __import__("numpy"))
+    assert _detect_face_in_jpeg(b"\xff\xd8\xff") is False

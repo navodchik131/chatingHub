@@ -443,22 +443,39 @@ def _detect_face_in_jpeg(jpeg: bytes) -> bool:
         import numpy as np
     except ImportError:
         return False
-    arr = np.frombuffer(jpeg, dtype=np.uint8)
-    img = cv2.imdecode(arr, cv2.IMREAD_GRAYSCALE)
-    if img is None:
+    try:
+        cascade_cls = getattr(cv2, "CascadeClassifier", None)
+        if cascade_cls is None:
+            return False
+        data = getattr(cv2, "data", None)
+        haarcascades = getattr(data, "haarcascades", "") if data is not None else ""
+        if not haarcascades:
+            return False
+        arr = np.frombuffer(jpeg, dtype=np.uint8)
+        imdecode = getattr(cv2, "imdecode", None)
+        if imdecode is None:
+            return False
+        img = imdecode(arr, cv2.IMREAD_GRAYSCALE)
+        if img is None:
+            return False
+        cascade_path = haarcascades + "haarcascade_frontalface_default.xml"
+        cascade = cascade_cls(cascade_path)
+        if cascade.empty():
+            return False
+        faces = cascade.detectMultiScale(img, scaleFactor=1.1, minNeighbors=4, minSize=(24, 24))
+        return len(faces) > 0
+    except Exception:
+        log.warning("motion outline face check skipped", exc_info=True)
         return False
-    cascade_path = cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
-    cascade = cv2.CascadeClassifier(cascade_path)
-    if cascade.empty():
-        return False
-    faces = cascade.detectMultiScale(img, scaleFactor=1.1, minNeighbors=4, minSize=(24, 24))
-    return len(faces) > 0
 
 
 def _faces_detected_in_video(path: Path) -> bool:
-    for frame in _extract_sample_jpegs(path, count=10):
-        if _detect_face_in_jpeg(frame):
-            return True
+    try:
+        for frame in _extract_sample_jpegs(path, count=10):
+            if _detect_face_in_jpeg(frame):
+                return True
+    except Exception:
+        log.warning("motion outline face scan failed", exc_info=True)
     return False
 
 
