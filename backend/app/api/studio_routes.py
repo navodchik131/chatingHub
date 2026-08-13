@@ -239,6 +239,7 @@ from app.services.studio_motion_video import (
     extract_first_frame_jpeg,
     extract_video_sample_frames_jpeg,
     resolve_motion_video_file,
+    resolve_motion_video_uploaded,
     save_motion_video_bytes,
 )
 from app.services.studio_seedance_t2v import (
@@ -5264,7 +5265,7 @@ async def _studio_job_execute_motion_first_frame(
         )
     elif str(p.get("motion_video_file_id") or "").strip():
         motion_video_file_id = str(p["motion_video_file_id"]).strip()
-        video_path = resolve_motion_video_file(oid, motion_video_file_id)
+        video_path = resolve_motion_video_uploaded(oid, motion_video_file_id)
         if video_path is None:
             raise RuntimeError("Motion-видео не найдено — загрузите файл в ноду «Motion-видео».")
         try:
@@ -5702,7 +5703,7 @@ async def api_studio_motion_compose_video_prompt(
     mv_id = str(motion_video_file_id or "").strip()
     if not mv_id:
         raise HTTPException(status_code=400, detail="Загрузите референс-видео на сервер.")
-    if resolve_motion_video_file(oid, mv_id) is None:
+    if resolve_motion_video_uploaded(oid, mv_id) is None:
         raise HTTPException(status_code=404, detail="Референс-видео не найдено. Загрузите снова.")
 
     still_bytes: bytes | None = None
@@ -5761,7 +5762,7 @@ async def _studio_job_execute_motion_compose_video_prompt(
     sub_b, llm_row, _ws_row, plan, _credits, _demo = await load_owner_studio_billing(session, oid)
     _require_studio_subscription(user, sub_b, credits_balance=_credits, demo_generations_remaining=_demo)
 
-    vpath = resolve_motion_video_file(oid, mv_id)
+    vpath = resolve_motion_video_uploaded(oid, mv_id)
     if vpath is None:
         raise RuntimeError("Референс-видео не найдено.")
 
@@ -6172,7 +6173,7 @@ async def api_studio_motion_render_video(
     mv_id = str(motion_video_file_id).strip()
     ref_video_duration: int | None = None
     if mv_id:
-        vpath = resolve_motion_video_file(oid, mv_id)
+        vpath = resolve_motion_video_uploaded(oid, mv_id)
         if vpath is None or not vpath.is_file():
             raise HTTPException(status_code=404, detail="Референс-видео не найдено.")
         from app.services.studio_motion_video import probe_video_duration_seconds

@@ -20,6 +20,7 @@ from app.services.studio_motion_video import (
     _ffmpeg_bin,
     _ffprobe_bin,
     resolve_motion_video_file,
+    resolve_motion_video_source,
 )
 
 log = logging.getLogger(__name__)
@@ -560,24 +561,6 @@ def save_motion_video_source_bytes(*, owner_id: int, raw: bytes, filename: str |
     path = owner_dir / f"{file_id}.source{ext}"
     path.write_bytes(raw)
     return file_id
-
-
-def resolve_motion_video_source(owner_id: int, file_id: str) -> Path | None:
-    from app.services.studio_motion_video import MOTION_VIDEO_ROOT, _VIDEO_SUFFIX
-
-    root = MOTION_VIDEO_ROOT.resolve()
-    base = (MOTION_VIDEO_ROOT / str(int(owner_id))).resolve()
-    if not str(base).startswith(str(root)) or not base.is_dir():
-        return None
-    fid = str(file_id).strip()[:128]
-    if not fid:
-        return None
-    for p in base.glob(f"{fid}.source.*"):
-        if p.is_file() and p.suffix.lower() in _VIDEO_SUFFIX:
-            rp = p.resolve()
-            if str(rp).startswith(str(base)):
-                return rp
-    return None
 
 
 async def ensure_motion_outline_ready(owner_id: int, file_id: str) -> None:

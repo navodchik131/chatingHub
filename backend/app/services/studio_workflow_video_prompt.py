@@ -20,7 +20,7 @@ from app.services.studio_motion_grok_pipeline import (
     extract_video_first_frame_or_raise,
     motion_grok_timeline_from_video_path,
 )
-from app.services.studio_motion_video import resolve_motion_video_file
+from app.services.studio_motion_video import resolve_motion_video_uploaded
 from app.services.studio_openai import describe_reference_image_openai
 from app.services.studio_workflow_boardstory import (
     BoardStoryImageSlot,
@@ -177,7 +177,7 @@ async def compose_workflow_video_generation_prompt(
         )
 
     mv_id = (motion_video_file_id or "").strip()
-    vpath = resolve_motion_video_file(owner_id, mv_id)
+    vpath = resolve_motion_video_uploaded(owner_id, mv_id)
     if vpath is None:
         raise RuntimeError("Motion-видео не найдено. Загрузите снова.")
 

@@ -49,3 +49,21 @@ def test_probe_motion_video_stream_parses_ffprobe_json(monkeypatch):
     w, h, dur = probe_motion_video_stream(Path("/tmp/fake.mp4"))
     assert (w, h) == (1080, 1920)
     assert abs(dur - 14.52) < 0.01
+
+
+def test_resolve_motion_video_uploaded_finds_source(tmp_path, monkeypatch):
+    from app.services import studio_motion_video as smv
+
+    root = tmp_path / "motion_videos"
+    owner_dir = root / "42"
+    owner_dir.mkdir(parents=True)
+    source = owner_dir / "abc123.source.mp4"
+    source.write_bytes(b"fake")
+    monkeypatch.setattr(smv, "MOTION_VIDEO_ROOT", root)
+
+    assert smv.resolve_motion_video_file(42, "abc123") is None
+    assert smv.resolve_motion_video_uploaded(42, "abc123") == source.resolve()
+
+    outline = owner_dir / "abc123.mp4"
+    outline.write_bytes(b"outline")
+    assert smv.resolve_motion_video_uploaded(42, "abc123") == outline.resolve()

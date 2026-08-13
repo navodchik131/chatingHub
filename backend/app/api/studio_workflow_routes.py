@@ -708,7 +708,7 @@ async def _accept_workflow_video_job(
         normalize_workflow_video_provider,
     )
     from app.services.studio_workflow_boardstory import boardstory_slot_to_json
-    from app.services.studio_motion_video import resolve_motion_video_file
+    from app.services.studio_motion_video import resolve_motion_video_uploaded
     from app.services.credits import ensure_can_consume_credits
     from app.services.studio_keys import (
         apply_studio_credit_cost,
@@ -741,7 +741,7 @@ async def _accept_workflow_video_job(
     if (
         video_provider != "grok_imagine_i2v"
         and plan.motion_video_file_id
-        and resolve_motion_video_file(oid, plan.motion_video_file_id) is None
+        and resolve_motion_video_uploaded(oid, plan.motion_video_file_id) is None
     ):
         raise HTTPException(status_code=404, detail="Motion-видео не найдено. Загрузите снова.")
 
@@ -795,7 +795,7 @@ async def _accept_workflow_video_job(
         ref_video_duration: int | None = None
         if has_motion_ref:
             mv_fid = str(plan.motion_video_file_id or "").strip()
-            vpath = resolve_motion_video_file(oid, mv_fid)
+            vpath = resolve_motion_video_uploaded(oid, mv_fid)
             if vpath is not None and vpath.is_file():
                 from app.services.studio_motion_video import probe_video_duration_seconds
 
@@ -892,7 +892,7 @@ async def _accept_workflow_video_prompt_compose_job(
     from app.services.studio_jobs import create_studio_job, schedule_studio_job
     from app.services.studio_keys import load_owner_studio_billing
     from app.services.studio_workflow_boardstory import boardstory_slot_to_json
-    from app.services.studio_motion_video import resolve_motion_video_file
+    from app.services.studio_motion_video import resolve_motion_video_uploaded
 
     assert_permission(user, PERM_STUDIO_GENERATE)
     if not grok_motion_api_configured():
@@ -907,7 +907,7 @@ async def _accept_workflow_video_prompt_compose_job(
 
     _require_studio_subscription(user, sub_b, credits_balance=credits, demo_generations_remaining=demo)
 
-    if resolve_motion_video_file(oid, plan.motion_video_file_id) is None:
+    if resolve_motion_video_uploaded(oid, plan.motion_video_file_id) is None:
         raise HTTPException(status_code=404, detail="Motion-видео не найдено. Загрузите снова.")
 
     if plan.first_frame_generation_id is not None:

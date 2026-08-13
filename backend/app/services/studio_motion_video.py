@@ -259,6 +259,31 @@ def resolve_motion_video_file(owner_id: int, file_id: str) -> Path | None:
     return None
 
 
+def resolve_motion_video_source(owner_id: int, file_id: str) -> Path | None:
+    """Исходник до outline-обработки ({file_id}.source.ext)."""
+    root = MOTION_VIDEO_ROOT.resolve()
+    base = (MOTION_VIDEO_ROOT / str(int(owner_id))).resolve()
+    if not str(base).startswith(str(root)) or not base.is_dir():
+        return None
+    fid = str(file_id).strip()[:128]
+    if not fid:
+        return None
+    for p in base.glob(f"{fid}.source.*"):
+        if p.is_file() and p.suffix.lower() in _VIDEO_SUFFIX:
+            rp = p.resolve()
+            if str(rp).startswith(str(base)):
+                return rp
+    return None
+
+
+def resolve_motion_video_uploaded(owner_id: int, file_id: str) -> Path | None:
+    """Готовый outline/legacy upload или исходник, ожидающий outline при генерации."""
+    path = resolve_motion_video_file(owner_id, file_id)
+    if path is not None:
+        return path
+    return resolve_motion_video_source(owner_id, file_id)
+
+
 def extract_first_frame_jpeg(video_path: Path) -> bytes:
     """Первый кадр ролика — для референса позы (Nano Banana) и опционально vision."""
     out: Path | None = None
