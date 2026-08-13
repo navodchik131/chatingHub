@@ -545,7 +545,7 @@ def process_motion_video_outline(source: Path) -> MotionOutlineProcessResult:
 
 
 def save_motion_video_source_bytes(*, owner_id: int, raw: bytes, filename: str | None) -> str:
-    """Сохраняет исходник; outline появится после job."""
+    """Сохраняет исходник; outline появится при генерации (ensure_motion_outline_ready)."""
     import uuid
 
     from app.services.studio_motion_video import MOTION_VIDEO_ROOT

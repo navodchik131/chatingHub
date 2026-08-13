@@ -1319,14 +1319,13 @@ async def public_studio_workflow_ref(t: str) -> Response:
 @router.post(
     "/studio/motion/upload-driving-video",
     response_model=StudioMotionDrivingVideoUploadOut,
-    responses={202: {"model": StudioJobAcceptedOut}},
 )
 async def api_studio_motion_upload_driving_video(
     video: UploadFile | None = File(None),
     session: AsyncSession = Depends(get_session),
     user: User = Depends(get_current_user),
-) -> StudioMotionDrivingVideoUploadOut | JSONResponse:
-    """Сохраняет референс-видео, обрабатывает в контурный motion-ref (ffmpeg, фон)."""
+) -> StudioMotionDrivingVideoUploadOut:
+    """Сохраняет референс-видео; контурная обработка — при нажатии «Сгенерировать»."""
     assert_permission(user, PERM_STUDIO_GENERATE)
     oid = workspace_owner_id(user)
     sub_b, _llm, _ws, _plan, _credits, _demo = await load_owner_studio_billing(session, oid)
@@ -1356,9 +1355,7 @@ async def api_studio_motion_upload_driving_video(
 
     from app.services.motion_video_outline import (
         motion_outline_video_prompt_block,
-        publish_outline_for_owner,
         save_motion_video_source_bytes,
-        try_motion_outline_from_cache,
         validate_motion_video_upload,
     )
 
@@ -1374,58 +1371,20 @@ async def api_studio_motion_upload_driving_video(
         tmp_path.write_bytes(raw_video)
         meta = validate_motion_video_upload(tmp_path, raw_size=len(raw_video))
     except RuntimeError as e:
-        tmp_path.unlink(missing_ok=True)
         raise HTTPException(status_code=400, detail=str(e)) from e
+    finally:
+        tmp_path.unlink(missing_ok=True)
 
     file_id = save_motion_video_source_bytes(owner_id=oid, raw=raw_video, filename=video.filename)
     prompt_block = motion_outline_video_prompt_block(
         appearance_refs="@Image1, @Image2 and @Image3",
     )
-
-    try:
-        cached_result = await anyio.to_thread.run_sync(try_motion_outline_from_cache, tmp_path)
-        if cached_result is not None:
-            try:
-                publish_outline_for_owner(
-                    owner_id=oid, file_id=file_id, outline=cached_result.outline_path
-                )
-            finally:
-                cached_result.outline_path.unlink(missing_ok=True)
-            return StudioMotionDrivingVideoUploadOut(
-                motion_video_file_id=file_id,
-                status="ready",
-                motion_reference_prompt=prompt_block,
-                cached=True,
-                duration_seconds=meta.duration_sec,
-                message="Референс-видео готово (из кеша).",
-            )
-    except RuntimeError as e:
-        tmp_path.unlink(missing_ok=True)
-        raise HTTPException(status_code=400, detail=str(e)) from e
-    finally:
-        if tmp_path.is_file():
-            tmp_path.unlink(missing_ok=True)
-
-    job = await studio_jobs.create_studio_job(
-        session,
-        owner_id=oid,
-        actor_user_id=user.id,
-        job_type="motion_video_outline",
-        params={
-            "motion_video_file_id": file_id,
-            "content_sha256": meta.content_sha256,
-            "duration_seconds": meta.duration_sec,
-        },
-    )
-    studio_jobs.schedule_studio_job(job.id)
-    return JSONResponse(
-        status_code=202,
-        content=StudioJobAcceptedOut(
-            job_id=job.id,
-            status="pending",
-            job_type="motion_video_outline",
-            message="Обрабатываем референс-видео (контуры движения). Обычно 1–2 минуты.",
-        ).model_dump(),
+    return StudioMotionDrivingVideoUploadOut(
+        motion_video_file_id=file_id,
+        status="uploaded",
+        motion_reference_prompt=prompt_block,
+        duration_seconds=meta.duration_sec,
+        message="Видео загружено. Контурная обработка начнётся при генерации.",
     )
 
 

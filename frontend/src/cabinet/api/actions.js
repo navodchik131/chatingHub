@@ -599,10 +599,13 @@ export async function uploadWorkflowReference(file) {
 export async function uploadMotionDrivingVideo(file) {
   const fd = new FormData()
   fd.append('video', file)
-  const data = await postStudioJobAndWait('/api/studio/motion/upload-driving-video', {
+  const res = await apiFetch('/api/studio/motion/upload-driving-video', {
     method: 'POST',
     body: fd,
-  }, { pollMs: 3000, maxWaitMs: 8 * 60 * 1000 })
+    timeoutMs: 120_000,
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(formatHttpApiError(res, data))
   const id = String(data.motion_video_file_id || '').trim()
   if (!id) throw new Error('Сервер не вернул id видео')
   return {
