@@ -4792,9 +4792,9 @@ async def _studio_job_execute_refine_prompt(
                 else:
                     size_for_ws = wavespeed_size_string(aspect_key)
                 try:
-                    if workflow_source and workflow_wave_model:
-                        from app.services.wavespeed_client import workflow_edit_image_url
+                    from app.services.wavespeed_client import workflow_edit_image_url
 
+                    if workflow_source and workflow_wave_model:
                         ws_res = await workflow_edit_image_url(
                             api_key=ws_key,
                             wave_model_id=workflow_wave_model,
@@ -5557,9 +5557,9 @@ async def _studio_job_execute_motion_first_frame(
             else:
                 size_for_ws = wavespeed_size_string(aspect_key)
             try:
-                if workflow_wave_model:
-                    from app.services.wavespeed_client import workflow_edit_image_url
+                from app.services.wavespeed_client import workflow_edit_image_url
 
+                if workflow_wave_model:
                     ws_res = await workflow_edit_image_url(
                         api_key=ws_key,
                         wave_model_id=workflow_wave_model,

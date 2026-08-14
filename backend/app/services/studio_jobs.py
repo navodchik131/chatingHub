@@ -161,7 +161,9 @@ def schedule_studio_job(job_id: int) -> None:
 
 
 async def recover_studio_jobs_on_startup() -> None:
-    """После рестарта API: pending и прерванные running jobs снова ставятся в очередь."""
+    """После рестарта API: только прерванные running и свежие pending (<30 мин)."""
+    now = datetime.now(timezone.utc)
+    pending_cutoff = now - timedelta(minutes=30)
     async with SessionLocal() as session:
         stmt = select(StudioJob).where(
             StudioJob.status.in_(
@@ -174,19 +176,31 @@ async def recover_studio_jobs_on_startup() -> None:
         rows = list((await session.execute(stmt)).scalars().all())
         if not rows:
             return
+        to_run: list[StudioJob] = []
         for job in rows:
-            if job.status == StudioJobStatus.running.value:
+            st = (job.status or "").strip()
+            if st == StudioJobStatus.running.value:
                 job.status = StudioJobStatus.pending.value
                 job.started_at = None
                 job.error_message = None
-                job.updated_at = datetime.now(timezone.utc)
+                job.updated_at = now
                 session.add(job)
+                to_run.append(job)
+            elif st == StudioJobStatus.pending.value:
+                created = job.created_at
+                if created is not None and created.tzinfo is None:
+                    created = created.replace(tzinfo=timezone.utc)
+                if created is not None and created >= pending_cutoff:
+                    to_run.append(job)
+        if not to_run:
+            return
         await session.commit()
-    for job in rows:
+    for job in to_run:
         schedule_studio_job(job.id)
     log.info(
-        "studio jobs: re-queued %s pending/running job(s) after startup",
-        len(rows),
+        "studio jobs: re-queued %s job(s) after startup (skipped %s stale pending)",
+        len(to_run),
+        len(rows) - len(to_run),
     )
 
 
