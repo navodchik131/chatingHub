@@ -333,6 +333,40 @@ def generation_still_public_url(
     return f"{base}/api/studio/public-generation-image?t={quote(tok, safe='')}"
 
 
+def generation_still_fetch_url(
+    *,
+    row,
+    owner_id: int,
+    public_app_base: str,
+    token_factory,
+) -> str | None:
+    """URL для внешних API (EvoLink): локальный архив или прямой CDN провайдера.
+
+    В UI архив часто показывает source_url (WaveSpeed CDN), а public-generation-image
+    отдаёт 404, если файл ещё не скачан на диск или CDN-ссылка уже протухла.
+    """
+    from app.services.studio_generation_status import StudioGenerationStatus
+    from app.services.studio_generation_storage import generation_has_archive_file
+
+    st = (row.status or StudioGenerationStatus.READY).strip()
+    if generation_has_archive_file(row) and st == StudioGenerationStatus.READY:
+        return generation_still_public_url(
+            owner_id=owner_id,
+            generation_id=row.id,
+            public_app_base=public_app_base,
+            token_factory=token_factory,
+        )
+    src = (row.source_url or "").strip()
+    if src.startswith("https://") and not src.lower().endswith((".mp4", ".webm", ".mov")):
+        return src
+    return generation_still_public_url(
+        owner_id=owner_id,
+        generation_id=row.id,
+        public_app_base=public_app_base,
+        token_factory=token_factory,
+    )
+
+
 def prepare_motion_notes_for_seedance(
     notes: str | None,
     *,

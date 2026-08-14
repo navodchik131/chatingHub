@@ -41,6 +41,7 @@ from app.services.studio_seedance_t2v import (
     build_seedance_t2v_prompt,
     filter_model_images_for_seedance_motion_swap,
     filter_model_images_for_seedance_video,
+    generation_still_fetch_url,
     generation_still_public_url,
     model_reference_public_urls,
 )
@@ -122,9 +123,9 @@ async def execute_evolink_motion_render_video(
         ff_row = await session.get(StudioGeneration, first_frame_gen_id)
         if not ff_row or ff_row.user_id != oid:
             raise RuntimeError("Первый кадр не найден")
-        ff_url = generation_still_public_url(
+        ff_url = generation_still_fetch_url(
+            row=ff_row,
             owner_id=oid,
-            generation_id=first_frame_gen_id,
             public_app_base=pub,
             token_factory=create_generation_image_access_token,
         )
@@ -153,9 +154,9 @@ async def execute_evolink_motion_render_video(
         if gen_row is None:
             raise RuntimeError("Не удалось сохранить первый кадр")
         first_frame_gen_id = gen_row.id
-        ff_url = generation_still_public_url(
+        ff_url = generation_still_fetch_url(
+            row=gen_row,
             owner_id=oid,
-            generation_id=first_frame_gen_id,
             public_app_base=pub,
             token_factory=create_generation_image_access_token,
         )
@@ -228,9 +229,9 @@ async def execute_evolink_motion_render_video(
         if not row_outfit or row_outfit.user_id != oid:
             raise RuntimeError("Снимок наряда не найден")
         await assert_studio_generation_access(session, user, row_outfit.studio_model_id)
-        outfit_url = generation_still_public_url(
+        outfit_url = generation_still_fetch_url(
+            row=row_outfit,
             owner_id=oid,
-            generation_id=outfit_gen_id,
             public_app_base=pub,
             token_factory=create_generation_image_access_token,
         )

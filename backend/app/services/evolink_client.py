@@ -167,6 +167,41 @@ async def _poll_evolink_task(
     raise RuntimeError(format_evolink_user_error("timeout waiting for video"))
 
 
+async def assert_evolink_media_urls_reachable(
+    urls: list[str],
+    *,
+    label: str = "Reference",
+) -> None:
+    """Проверка, что ref URL отдаёт картинку/видео (как fetcher EvoLink, не браузер)."""
+    cleaned = [u.strip() for u in urls if (u or "").strip()]
+    if not cleaned:
+        return
+    async with httpx.AsyncClient(timeout=45.0, follow_redirects=True) as client:
+        for i, url in enumerate(cleaned, start=1):
+            try:
+                r = await client.get(url)
+            except httpx.HTTPError as e:
+                raise RuntimeError(
+                    format_evolink_user_error(
+                        f"{label} {i}: URL could not be fetched ({e}). "
+                        "Перегенерируйте кадр или выберите другой из архива."
+                    )
+                ) from e
+            if r.status_code >= 400:
+                raise RuntimeError(
+                    format_evolink_user_error(
+                        f"{label} {i}: HTTP {r.status_code}. "
+                        "Файл мог протухнуть — выберите свежий кадр из архива."
+                    )
+                )
+            if len(r.content or b"") < 64:
+                raise RuntimeError(
+                    format_evolink_user_error(
+                        f"{label} {i}: пустой ответ. Перегенерируйте кадр и повторите."
+                    )
+                )
+
+
 async def seedance_evolink_video_url(
     *,
     prompt: str,
@@ -214,6 +249,9 @@ async def seedance_evolink_video_url(
         body["image_urls"] = imgs[:30]
     if has_vids:
         body["video_urls"] = vids[:10]
+
+    await assert_evolink_media_urls_reachable(imgs, label="Image")
+    await assert_evolink_media_urls_reachable(vids, label="Video")
 
     headers = {
         "Authorization": f"Bearer {api_key}",
