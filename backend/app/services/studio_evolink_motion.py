@@ -25,11 +25,12 @@ from app.services.studio_evolink_motion_pricing import (
 )
 from app.services.studio_generation_placeholders import find_studio_generation_by_job_id
 from app.services.studio_generation_storage import (
+    ensure_studio_generation_image_archived_for_external_fetch,
     mark_studio_generation_failed,
     studio_finish_video_generation,
 )
 from app.services.studio_jobs import job_params
-from app.services.studio_keys import load_owner_studio_billing
+from app.services.studio_keys import load_owner_studio_billing, studio_wavespeed_api_key
 from app.services.studio_image_token import (
     create_generation_image_access_token,
     create_model_image_access_token,
@@ -91,8 +92,18 @@ async def execute_evolink_motion_render_video(
     if not prompt.strip() and not (_truthy_flag(auto_motion_prompt) and mv_id):
         raise RuntimeError("Опишите сцену и движение для видео.")
 
-    sub_b, _llm, _ws, plan, _credits, _demo = await load_owner_studio_billing(session, oid)
+    sub_b, _llm, ws_row, plan, _credits, _demo = await load_owner_studio_billing(session, oid)
     _require_studio_subscription(user, sub_b, credits_balance=_credits, demo_generations_remaining=_demo)
+    ws_key: str | None = None
+    try:
+        ws_key = studio_wavespeed_api_key(
+            plan=plan,
+            ws_row=ws_row,
+            owner_subscription=sub_b,
+            demo_generations_remaining=_demo,
+        )
+    except Exception:
+        ws_key = None
 
     pub = (settings.public_app_url or "").strip().rstrip("/")
     if not pub.lower().startswith("https://"):
@@ -123,6 +134,12 @@ async def execute_evolink_motion_render_video(
         ff_row = await session.get(StudioGeneration, first_frame_gen_id)
         if not ff_row or ff_row.user_id != oid:
             raise RuntimeError("Первый кадр не найден")
+        await ensure_studio_generation_image_archived_for_external_fetch(
+            session,
+            ff_row,
+            wavespeed_api_key=ws_key,
+            label="Первый кадр",
+        )
         ff_url = generation_still_fetch_url(
             row=ff_row,
             owner_id=oid,
@@ -154,6 +171,12 @@ async def execute_evolink_motion_render_video(
         if gen_row is None:
             raise RuntimeError("Не удалось сохранить первый кадр")
         first_frame_gen_id = gen_row.id
+        await ensure_studio_generation_image_archived_for_external_fetch(
+            session,
+            gen_row,
+            wavespeed_api_key=ws_key,
+            label="Загруженный первый кадр",
+        )
         ff_url = generation_still_fetch_url(
             row=gen_row,
             owner_id=oid,
@@ -229,6 +252,12 @@ async def execute_evolink_motion_render_video(
         if not row_outfit or row_outfit.user_id != oid:
             raise RuntimeError("Снимок наряда не найден")
         await assert_studio_generation_access(session, user, row_outfit.studio_model_id)
+        await ensure_studio_generation_image_archived_for_external_fetch(
+            session,
+            row_outfit,
+            wavespeed_api_key=ws_key,
+            label="Снимок наряда",
+        )
         outfit_url = generation_still_fetch_url(
             row=row_outfit,
             owner_id=oid,
@@ -288,6 +317,7 @@ async def execute_evolink_motion_render_video(
             resolution=video_res,
             duration=ds_effective,
             generate_audio=_truthy_flag(generate_audio),
+            session=session,
         )
         log.info(
             "evolink motion_render ok job=%s variant=%s imgs=%s vids=%s src=%s",

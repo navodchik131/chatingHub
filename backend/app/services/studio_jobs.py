@@ -160,6 +160,36 @@ def schedule_studio_job(job_id: int) -> None:
     asyncio.create_task(_run_studio_job(job_id))
 
 
+async def recover_studio_jobs_on_startup() -> None:
+    """После рестарта API: pending и прерванные running jobs снова ставятся в очередь."""
+    async with SessionLocal() as session:
+        stmt = select(StudioJob).where(
+            StudioJob.status.in_(
+                (
+                    StudioJobStatus.pending.value,
+                    StudioJobStatus.running.value,
+                )
+            )
+        )
+        rows = list((await session.execute(stmt)).scalars().all())
+        if not rows:
+            return
+        for job in rows:
+            if job.status == StudioJobStatus.running.value:
+                job.status = StudioJobStatus.pending.value
+                job.started_at = None
+                job.error_message = None
+                job.updated_at = datetime.now(timezone.utc)
+                session.add(job)
+        await session.commit()
+    for job in rows:
+        schedule_studio_job(job.id)
+    log.info(
+        "studio jobs: re-queued %s pending/running job(s) after startup",
+        len(rows),
+    )
+
+
 async def _maybe_release_demo_slot_after_failure(
     session: AsyncSession,
     job: StudioJob,

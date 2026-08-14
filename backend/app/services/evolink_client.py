@@ -5,11 +5,14 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 import httpx
 
 from app.config import settings
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 log = logging.getLogger(__name__)
 
@@ -171,6 +174,7 @@ async def assert_evolink_media_urls_reachable(
     urls: list[str],
     *,
     label: str = "Reference",
+    session: "AsyncSession | None" = None,
 ) -> None:
     """Проверка, что ref URL отдаёт картинку/видео (как fetcher EvoLink, не браузер)."""
     cleaned = [u.strip() for u in urls if (u or "").strip()]
@@ -178,26 +182,43 @@ async def assert_evolink_media_urls_reachable(
         return
     async with httpx.AsyncClient(timeout=45.0, follow_redirects=True) as client:
         for i, url in enumerate(cleaned, start=1):
+            payload: bytes | None = None
+            if session is not None:
+                from app.services.studio_public_media import read_studio_public_media_bytes
+
+                payload = await read_studio_public_media_bytes(session, url)
+            if payload is not None:
+                if len(payload) < 64:
+                    raise RuntimeError(
+                        format_evolink_user_error(
+                            f"{label} {i}: файл на сервере пустой. Загрузите кадр заново."
+                        )
+                    )
+                continue
             try:
                 r = await client.get(url)
             except httpx.HTTPError as e:
                 raise RuntimeError(
                     format_evolink_user_error(
                         f"{label} {i}: URL could not be fetched ({e}). "
-                        "Перегенерируйте кадр или выберите другой из архива."
+                        "Загрузите кадр заново или проверьте PUBLIC_APP_URL."
                     )
                 ) from e
             if r.status_code >= 400:
+                hint = (
+                    "Файл не найден на сервере — загрузите кадр заново."
+                    if "/studio/public-" in url
+                    else "Ссылка провайдера недоступна — перегенерируйте кадр или загрузите новый файл."
+                )
                 raise RuntimeError(
                     format_evolink_user_error(
-                        f"{label} {i}: HTTP {r.status_code}. "
-                        "Файл мог протухнуть — выберите свежий кадр из архива."
+                        f"{label} {i}: HTTP {r.status_code}. {hint}"
                     )
                 )
             if len(r.content or b"") < 64:
                 raise RuntimeError(
                     format_evolink_user_error(
-                        f"{label} {i}: пустой ответ. Перегенерируйте кадр и повторите."
+                        f"{label} {i}: пустой ответ. Загрузите кадр заново и повторите."
                     )
                 )
 
@@ -212,6 +233,7 @@ async def seedance_evolink_video_url(
     resolution: str | None = None,
     duration: int | None = None,
     generate_audio: bool = True,
+    session: "AsyncSession | None" = None,
 ) -> str:
     """
     Создать задачу POST /v1/videos/generations и дождаться results[0].
@@ -250,8 +272,18 @@ async def seedance_evolink_video_url(
     if has_vids:
         body["video_urls"] = vids[:10]
 
-    await assert_evolink_media_urls_reachable(imgs, label="Image")
-    await assert_evolink_media_urls_reachable(vids, label="Video")
+    await assert_evolink_media_urls_reachable(imgs, label="Image", session=session)
+    await assert_evolink_media_urls_reachable(vids, label="Video", session=session)
+
+    log.info(
+        "evolink submit prepare model=%s dur=%s quality=%s imgs=%s vids=%s i2v=%s",
+        model,
+        body.get("duration"),
+        quality,
+        len(imgs),
+        len(vids),
+        image_to_video,
+    )
 
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -274,7 +306,11 @@ async def seedance_evolink_video_url(
             except Exception:
                 pass
             log.warning("evolink submit %s: %s", r.status_code, detail[:500])
-            raise RuntimeError(format_evolink_user_error(detail or f"HTTP {r.status_code}"))
+            raise RuntimeError(
+                format_evolink_user_error(
+                    detail or f"HTTP {r.status_code} (задача в EvoLink не создана)"
+                )
+            )
         try:
             resp = r.json()
         except Exception as e:

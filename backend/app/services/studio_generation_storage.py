@@ -53,6 +53,55 @@ def generation_has_archive_file(row: StudioGeneration) -> bool:
     return path.is_file()
 
 
+async def ensure_studio_generation_image_archived_for_external_fetch(
+    session: AsyncSession,
+    row: StudioGeneration,
+    *,
+    wavespeed_api_key: str | None = None,
+    label: str = "Кадр",
+) -> None:
+    """Скачивает кадр в локальный архив, если EvoLink/WaveSpeed не смогут взять CDN URL."""
+    if generation_has_archive_file(row):
+        if (row.status or "").strip() != StudioGenerationStatus.READY:
+            row.status = StudioGenerationStatus.READY
+            session.add(row)
+            await session.flush()
+        return
+
+    url = (row.source_url or "").strip()
+    if url.startswith("https://") and not url.lower().endswith((".mp4", ".webm", ".mov")):
+        log.info(
+            "studio ensure archive gen=%s: download from provider url",
+            row.id,
+        )
+        if await archive_studio_generation_from_url(session, row, source_url=url):
+            await session.flush()
+            if generation_has_archive_file(row):
+                return
+
+    ws_key = (wavespeed_api_key or "").strip()
+    tid = (row.wavespeed_task_id or "").strip()
+    if ws_key and tid:
+        log.info(
+            "studio ensure archive gen=%s: recover wavespeed task=%s",
+            row.id,
+            tid,
+        )
+        if await try_recover_studio_generation_from_wavespeed(
+            session,
+            row,
+            api_key=ws_key,
+        ):
+            await session.flush()
+            if generation_has_archive_file(row):
+                return
+
+    raise RuntimeError(
+        f"{label}: файл недоступен — CDN-ссылка протухла или архив не сохранён. "
+        "Перегенерируйте кадр, загрузите новый файл или выберите другой из архива."
+    )
+
+
 async def begin_studio_generation_run(
     session: AsyncSession,
     *,

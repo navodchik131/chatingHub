@@ -97,6 +97,12 @@ async def _studio_archive_retry_loop() -> None:
 async def lifespan(app: FastAPI):
     await init_db()
     try:
+        from app.services.studio_jobs import recover_studio_jobs_on_startup
+
+        await recover_studio_jobs_on_startup()
+    except Exception:
+        log.exception("studio jobs startup recovery failed")
+    try:
         from app.services.motion_video_outline import assert_ffmpeg_tools_available
 
         assert_ffmpeg_tools_available()
