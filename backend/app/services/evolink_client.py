@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import mimetypes
 import re
 from typing import TYPE_CHECKING, Any, Literal
+from urllib.parse import urlparse
 
 import httpx
 
@@ -170,6 +172,169 @@ async def _poll_evolink_task(
     raise RuntimeError(format_evolink_user_error("timeout waiting for video"))
 
 
+_EVOLINK_DIRECT_MEDIA_SUFFIXES = (
+    ".jpg",
+    ".jpeg",
+    ".png",
+    ".webp",
+    ".gif",
+    ".mp4",
+    ".webm",
+    ".mov",
+)
+
+
+def evolink_files_api_base() -> str:
+    return (getattr(settings, "evolink_files_api_base", None) or "https://files-api.evolink.ai").rstrip(
+        "/"
+    )
+
+
+def _url_has_direct_media_suffix(url: str) -> bool:
+    path = urlparse((url or "").strip()).path.lower()
+    return any(path.endswith(ext) for ext in _EVOLINK_DIRECT_MEDIA_SUFFIXES)
+
+
+def _url_is_evolink_hosted(url: str) -> bool:
+    host = urlparse((url or "").strip()).netloc.lower()
+    return host.endswith("evolink.ai") or host.endswith("files.evolink.ai")
+
+
+def _url_is_studio_public_media(url: str) -> bool:
+    from app.services.studio_public_media import _studio_public_url_paths
+
+    return _studio_public_url_paths(url) is not None
+
+
+def _needs_evolink_file_mirror(url: str) -> bool:
+    u = (url or "").strip()
+    if not u:
+        return False
+    if _url_is_studio_public_media(u):
+        return True
+    if _url_is_evolink_hosted(u) and _url_has_direct_media_suffix(u):
+        return False
+    if _url_has_direct_media_suffix(u):
+        return False
+    return True
+
+
+def _upload_filename_for_bytes(url: str, data: bytes, *, default_stem: str) -> tuple[str, str]:
+    path = urlparse((url or "").strip()).path
+    name = path.rsplit("/", 1)[-1] if path else ""
+    if name and "." in name:
+        ext = "." + name.rsplit(".", 1)[-1].lower()
+        stem = name.rsplit(".", 1)[0][:48] or default_stem
+    else:
+        ext = ".jpg"
+        stem = default_stem
+    if ext.lower() in (".bin", ".dat", ""):
+        ext = ".jpg"
+    mime = mimetypes.guess_type(f"{stem}{ext}")[0] or "application/octet-stream"
+    if ext in (".mp4", ".webm", ".mov") and not mime.startswith("video/"):
+        mime = "video/mp4" if ext == ".mp4" else mime
+    if ext in (".jpg", ".jpeg", ".png", ".webp") and not mime.startswith("image/"):
+        mime = "image/jpeg"
+    return f"{stem}{ext}", mime
+
+
+def _parse_evolink_file_upload_payload(payload: Any) -> str:
+    if not isinstance(payload, dict):
+        raise RuntimeError(format_evolink_user_error("неожиданный ответ загрузки файла"))
+    data = payload.get("data") if isinstance(payload.get("data"), dict) else payload
+    if not isinstance(data, dict):
+        raise RuntimeError(format_evolink_user_error("неожиданный ответ загрузки файла"))
+    for key in ("file_url", "download_url", "url"):
+        u = str(data.get(key) or "").strip()
+        if u.startswith("http"):
+            return u
+    raise RuntimeError(format_evolink_user_error("EvoLink не вернул URL загруженного файла"))
+
+
+async def evolink_upload_file_bytes(
+    *,
+    data: bytes,
+    filename: str,
+    content_type: str,
+) -> str:
+    if len(data) < 64:
+        raise RuntimeError(format_evolink_user_error("файл для EvoLink пустой"))
+    api_key = evolink_platform_api_key()
+    upload_url = f"{evolink_files_api_base()}/api/v1/files/upload/stream"
+    headers = {"Authorization": f"Bearer {api_key}"}
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        r = await client.post(
+            upload_url,
+            headers=headers,
+            files={"file": (filename, data, content_type or "application/octet-stream")},
+        )
+    if r.status_code >= 400:
+        detail = (r.text or "")[:1000]
+        log.warning("evolink file upload %s: %s", r.status_code, detail[:300])
+        raise RuntimeError(
+            format_evolink_user_error(detail or f"HTTP {r.status_code} при загрузке файла")
+        )
+    try:
+        payload = r.json()
+    except Exception as e:
+        raise RuntimeError(format_evolink_user_error("невалидный JSON при загрузке файла")) from e
+    file_url = _parse_evolink_file_upload_payload(payload)
+    log.info("evolink file upload ok name=%s bytes=%s url=%s", filename, len(data), file_url[:120])
+    return file_url
+
+
+async def _load_media_bytes_for_evolink_mirror(
+    url: str,
+    *,
+    session: "AsyncSession | None",
+) -> bytes:
+    if session is not None:
+        from app.services.studio_public_media import read_studio_public_media_bytes
+
+        local = await read_studio_public_media_bytes(session, url)
+        if local is not None:
+            return local
+    async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
+        r = await client.get(url)
+        if r.status_code >= 400:
+            raise RuntimeError(
+                format_evolink_user_error(
+                    f"HTTP {r.status_code} при чтении медиа для EvoLink"
+                )
+            )
+        data = r.content or b""
+        if len(data) < 64:
+            raise RuntimeError(format_evolink_user_error("пустой файл медиа для EvoLink"))
+        return data
+
+
+async def evolink_mirror_media_urls(
+    urls: list[str],
+    *,
+    session: "AsyncSession | None" = None,
+    label: str = "Reference",
+) -> list[str]:
+    """EvoLink fetcher принимает прямые .jpg/.png URL — studio JWT URL зеркалим в files-api."""
+    out: list[str] = []
+    for i, raw in enumerate(urls, start=1):
+        url = (raw or "").strip()
+        if not url:
+            continue
+        if not _needs_evolink_file_mirror(url):
+            out.append(url)
+            continue
+        data = await _load_media_bytes_for_evolink_mirror(url, session=session)
+        default_stem = f"{label.lower()}_{i}"
+        filename, mime = _upload_filename_for_bytes(url, data, default_stem=default_stem)
+        mirrored = await evolink_upload_file_bytes(
+            data=data,
+            filename=filename,
+            content_type=mime,
+        )
+        out.append(mirrored)
+    return out
+
+
 async def assert_evolink_media_urls_reachable(
     urls: list[str],
     *,
@@ -241,6 +406,8 @@ async def seedance_evolink_video_url(
     api_key = evolink_platform_api_key()
     imgs = [u.strip() for u in (image_urls or []) if (u or "").strip()]
     vids = [u.strip() for u in (video_urls or []) if (u or "").strip()]
+    imgs = await evolink_mirror_media_urls(imgs, session=session, label="Image")
+    vids = await evolink_mirror_media_urls(vids, session=session, label="Video")
     has_vids = bool(vids)
     has_imgs = bool(imgs)
     image_to_video = has_imgs and not has_vids and len(imgs) == 1

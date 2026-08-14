@@ -1,4 +1,5 @@
 from app.services.evolink_client import (
+    _needs_evolink_file_mirror,
     format_evolink_video_edit_prompt,
     normalize_evolink_aspect_ratio,
     normalize_evolink_duration,
@@ -88,3 +89,11 @@ def test_apply_seedance_sale_credit_cost_always_charges():
     assert apply_seedance_sale_credit_cost("pro", 12) == 12
     assert apply_seedance_sale_credit_cost("standard", 12) == 12
     assert evolink_video_credit_cost(5, has_motion_reference_video=False, variant="standard") >= 1
+
+
+def test_needs_evolink_file_mirror():
+    assert _needs_evolink_file_mirror(
+        "https://model-mate.online/api/studio/public-generation-image?t=abc"
+    )
+    assert not _needs_evolink_file_mirror("https://files.evolink.ai/photos/frame.jpg")
+    assert not _needs_evolink_file_mirror("https://cdn.example.com/out.png")
