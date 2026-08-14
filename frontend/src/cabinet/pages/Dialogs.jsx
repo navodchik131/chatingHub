@@ -93,7 +93,7 @@ function enrichDialogRow(c, i, models) {
   return {
     ...row,
     hasAvatar: Boolean(c.has_avatar),
-    avatarUrl: c.has_avatar ? `/api/conversations/${c.id}/avatar` : null,
+    avatarUrl: c.avatar_url || null,
     modelId: c.studio_model_id ?? null,
     modelName: modelNameById(models, c.studio_model_id),
   };

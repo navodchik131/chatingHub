@@ -97,6 +97,8 @@ class ConversationOut(BaseModel):
     assigned_member_login: str | None = None
     updated_at: datetime
     has_avatar: bool = False
+    """Подписанный URL для <img src> (JWT в query, без Bearer)."""
+    avatar_url: str | None = None
 
 
 class ConversationWithPreview(ConversationOut):

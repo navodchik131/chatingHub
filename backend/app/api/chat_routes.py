@@ -16,6 +16,7 @@ from fastapi import (
     WebSocketDisconnect,
 )
 from fastapi.responses import FileResponse, Response
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -70,7 +71,9 @@ from app.schemas import (
     ReplyIn,
 )
 from app.services.chat_attachment import (
+    conversation_avatar_url,
     decode_chat_attachment_access_token,
+    decode_conversation_avatar_access_token,
     decode_chat_media_public_token,
     resolve_chat_attachment_file,
     save_chat_image_bytes,
@@ -163,6 +166,7 @@ from app.services.workspace_model_access import (
 log = logging.getLogger(__name__)
 
 router = APIRouter(tags=["chat"])
+_bearer_optional = HTTPBearer(auto_error=False)
 
 
 async def _conversation_out(
@@ -182,6 +186,9 @@ async def _conversation_out(
         update={
             "effective_companion_mode": mode.value if mode else None,
             "assigned_member_login": assignee_login,
+            "avatar_url": conversation_avatar_url(owner_id=owner_id, conversation_id=conv.id)
+            if conv.has_avatar
+            else None,
         }
     )
 
@@ -495,14 +502,46 @@ async def api_mark_read(
 @router.get("/conversations/{conv_id}/avatar")
 async def api_conversation_avatar(
     conv_id: int,
+    t: str | None = Query(None, min_length=10),
     session: AsyncSession = Depends(get_session),
-    user: User = Depends(get_current_user),
+    creds: HTTPAuthorizationCredentials | None = Depends(_bearer_optional),
 ) -> Response:
     """Фото профиля собеседника — прокси через бэкенд (Telegram / Instagram)."""
-    assert_permission(user, PERM_CHAT)
-    await _require_chat_plan(session, user)
-    oid = workspace_owner_id(user)
-    conv = await require_conversation_chat_access(session, user, conv_id, oid)
+    oid: int
+    if t:
+        try:
+            uid, cid = decode_conversation_avatar_access_token(t)
+        except ValueError:
+            raise HTTPException(status_code=401, detail="invalid token") from None
+        if cid != conv_id:
+            raise HTTPException(status_code=401, detail="invalid token")
+        conv = await session.get(Conversation, conv_id)
+        if not conv or conv.user_id != uid:
+            raise HTTPException(status_code=404, detail="not found")
+        oid = uid
+    else:
+        if creds is None or creds.scheme.lower() != "bearer":
+            raise HTTPException(status_code=401, detail="not authenticated")
+        try:
+            user_id = int(decode_token(creds.credentials))
+        except (ValueError, TypeError):
+            raise HTTPException(status_code=401, detail="invalid token") from None
+        user = await session.get(User, user_id)
+        if not user or not user.is_active:
+            raise HTTPException(status_code=401, detail="user not found")
+        assert_permission(user, PERM_CHAT)
+        await _require_chat_plan(session, user)
+        oid = workspace_owner_id(user)
+        conv = await require_conversation_chat_access(session, user, conv_id, oid)
+
+    return await _conversation_avatar_response(session, conv, oid)
+
+
+async def _conversation_avatar_response(
+    session: AsyncSession,
+    conv: Conversation,
+    oid: int,
+) -> Response:
     if conv.platform == Platform.instagram:
         import httpx
 

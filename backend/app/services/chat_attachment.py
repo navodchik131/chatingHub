@@ -138,3 +138,41 @@ def chat_media_public_absolute_url(*, owner_id: int, relative_path: str) -> str:
     tok = create_chat_media_public_token(owner_id=owner_id, relative_path=relative_path)
     base = (settings.public_app_url or "").strip().rstrip("/")
     return f"{base}/api/chat/media-public?t={tok}"
+
+
+def create_conversation_avatar_access_token(
+    *, owner_id: int, conversation_id: int, days: int = 7
+) -> str:
+    expire = datetime.now(timezone.utc) + timedelta(days=days)
+    payload = {
+        "typ": "conv_avatar",
+        "uid": owner_id,
+        "cid": conversation_id,
+        "exp": expire,
+    }
+    return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
+
+
+def decode_conversation_avatar_access_token(token: str) -> tuple[int, int]:
+    try:
+        data = jwt.decode(
+            token,
+            settings.jwt_secret,
+            algorithms=[settings.jwt_algorithm],
+        )
+    except JWTError as e:
+        raise ValueError("invalid token") from e
+    if data.get("typ") != "conv_avatar":
+        raise ValueError("wrong token type")
+    uid = data.get("uid")
+    cid = data.get("cid")
+    if uid is None or cid is None:
+        raise ValueError("missing claims")
+    return int(uid), int(cid)
+
+
+def conversation_avatar_url(*, owner_id: int, conversation_id: int) -> str:
+    tok = create_conversation_avatar_access_token(
+        owner_id=owner_id, conversation_id=conversation_id
+    )
+    return f"/api/conversations/{conversation_id}/avatar?t={tok}"

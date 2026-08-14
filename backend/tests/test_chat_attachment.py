@@ -34,6 +34,22 @@ def test_chat_attachment_token_roundtrip():
     assert aid == 99
 
 
+def test_conversation_avatar_token_roundtrip():
+    from app.services.chat_attachment import (
+        conversation_avatar_url,
+        create_conversation_avatar_access_token,
+        decode_conversation_avatar_access_token,
+    )
+
+    tok = create_conversation_avatar_access_token(owner_id=5, conversation_id=42)
+    uid, cid = decode_conversation_avatar_access_token(tok)
+    assert uid == 5
+    assert cid == 42
+    assert conversation_avatar_url(owner_id=5, conversation_id=42).startswith(
+        "/api/conversations/42/avatar?t="
+    )
+
+
 def test_message_to_out_attachments():
     from datetime import datetime, timezone
     from types import SimpleNamespace
