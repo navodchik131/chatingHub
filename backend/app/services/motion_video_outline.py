@@ -612,17 +612,36 @@ async def ensure_motion_outline_ready(owner_id: int, file_id: str) -> None:
     """Если outline ещё не готов — обработать синхронно в worker (fallback)."""
     import anyio
 
-    if resolve_motion_video_file(owner_id, file_id) is not None:
+    if not settings.motion_outline_enabled:
         return
-    source = resolve_motion_video_source(owner_id, file_id)
-    if source is None:
-        legacy = resolve_motion_video_file(owner_id, file_id)
-        if legacy is not None:
+
+    fid = str(file_id or "").strip()[:128]
+    if not fid:
+        raise RuntimeError("Не указан motion_video_file_id.")
+
+    source = resolve_motion_video_source(owner_id, fid)
+    if source is not None:
+        if resolve_motion_video_file(owner_id, fid) is not None:
             return
-        raise RuntimeError("Референс-видео не найдено. Загрузите файл снова.")
+        log.info("motion outline: processing source for file_id=%s", fid)
+    else:
+        legacy = resolve_motion_video_file(owner_id, fid)
+        if legacy is None:
+            raise RuntimeError("Референс-видео не найдено. Загрузите файл снова.")
+        marker = legacy.parent / f"{fid}.outlined"
+        if marker.is_file():
+            return
+        log.info("motion outline: legacy raw clip file_id=%s (no .source)", fid)
+        source = legacy
+
     result = await anyio.to_thread.run_sync(process_motion_video_outline, source)
     try:
-        publish_outline_for_owner(owner_id=owner_id, file_id=file_id, outline=result.outline_path)
+        publish_outline_for_owner(owner_id=owner_id, file_id=fid, outline=result.outline_path)
+        if resolve_motion_video_source(owner_id, fid) is None:
+            marker_path = (
+                resolve_motion_video_file(owner_id, fid) or source
+            ).parent / f"{fid}.outlined"
+            marker_path.write_text("1", encoding="utf-8")
     finally:
         result.outline_path.unlink(missing_ok=True)
 
