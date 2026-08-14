@@ -60,10 +60,18 @@ def _default_catalog() -> dict[str, Any]:
                 "seedance_25_no_ref_720p": float(settings.studio_motion_seedance_25_usd_per_sec_no_ref),
             },
             "evolink": {
-                "standard_with_ref_720p": float(settings.studio_evolink_20_usd_per_sec_with_ref),
-                "standard_no_ref_720p": float(settings.studio_evolink_20_usd_per_sec_no_ref),
-                "seedance_25_with_ref_720p": float(settings.studio_evolink_25_usd_per_sec_with_ref),
-                "seedance_25_no_ref_720p": float(settings.studio_evolink_25_usd_per_sec_no_ref),
+                "standard_output_720p": float(settings.studio_evolink_20_usd_per_sec_output_720p),
+                "standard_output_480p": float(settings.studio_evolink_20_usd_per_sec_output_480p),
+                "standard_video_ref_720p": float(settings.studio_evolink_20_usd_per_sec_video_ref_720p),
+                "standard_video_ref_480p": float(settings.studio_evolink_20_usd_per_sec_video_ref_480p),
+                "seedance_25_output_720p": float(settings.studio_evolink_25_usd_per_sec_output_720p),
+                "seedance_25_output_480p": float(settings.studio_evolink_25_usd_per_sec_output_480p),
+                "seedance_25_video_ref_720p": float(settings.studio_evolink_25_usd_per_sec_video_ref_720p),
+                "seedance_25_video_ref_480p": float(settings.studio_evolink_25_usd_per_sec_video_ref_480p),
+                "standard_with_ref_720p": float(settings.studio_evolink_20_usd_per_sec_video_ref_720p),
+                "standard_no_ref_720p": float(settings.studio_evolink_20_usd_per_sec_output_720p),
+                "seedance_25_with_ref_720p": float(settings.studio_evolink_25_usd_per_sec_video_ref_720p),
+                "seedance_25_no_ref_720p": float(settings.studio_evolink_25_usd_per_sec_output_720p),
             },
             "grok_imagine_i2v": {
                 "usd_per_sec_480p": float(settings.studio_grok_imagine_i2v_usd_per_sec_480p),
@@ -193,22 +201,60 @@ def video_wavespeed_usd_per_sec_720p(*, variant: str, has_ref: bool) -> float:
     return float(settings.studio_motion_usd_per_sec_with_ref if has_ref else settings.studio_motion_usd_per_sec_no_ref)
 
 
-def video_evolink_usd_per_sec_720p(*, variant: str, has_ref: bool) -> float:
+def video_evolink_usd_per_sec(
+    *,
+    variant: str,
+    billing_kind: str = "output_seconds",
+    resolution: str = "720p",
+    has_ref: bool | None = None,
+) -> float:
+    """USD/s для EvoLink Seedance (официальный прайс evolink.ai/seedance-2-0)."""
+    if has_ref is not None:
+        billing_kind = "video_reference_seconds" if has_ref else "output_seconds"
     cat = provider_pricing_catalog()
     ev = (cat.get("video") or {}).get("evolink") if isinstance(cat.get("video"), dict) else {}
     ev = ev if isinstance(ev, dict) else {}
     v = (variant or "standard").strip().lower().replace("-", "_")
-    if v in ("seedance_25", "seedance25", "2_5", "25"):
-        key = "seedance_25_with_ref_720p" if has_ref else "seedance_25_no_ref_720p"
-    else:
-        key = "standard_with_ref_720p" if has_ref else "standard_no_ref_720p"
+    is_25 = v in ("seedance_25", "seedance25", "2_5", "25")
+    prefix = "seedance_25" if is_25 else "standard"
+    res = (resolution or "720p").strip().lower()
+    res_key = "480p" if res in ("480p", "480") else "720p"
+    kind = "video_ref" if billing_kind == "video_reference_seconds" else "output"
+    key = f"{prefix}_{kind}_{res_key}"
     val = ev.get(key)
     if isinstance(val, (int, float)) and float(val) >= 0:
         return float(val)
+    if is_25:
+        if billing_kind == "video_reference_seconds":
+            return float(
+                settings.studio_evolink_25_usd_per_sec_video_ref_480p
+                if res_key == "480p"
+                else settings.studio_evolink_25_usd_per_sec_video_ref_720p
+            )
+        return float(
+            settings.studio_evolink_25_usd_per_sec_output_480p
+            if res_key == "480p"
+            else settings.studio_evolink_25_usd_per_sec_output_720p
+        )
+    if billing_kind == "video_reference_seconds":
+        return float(
+            settings.studio_evolink_20_usd_per_sec_video_ref_480p
+            if res_key == "480p"
+            else settings.studio_evolink_20_usd_per_sec_video_ref_720p
+        )
     return float(
-        settings.studio_evolink_20_usd_per_sec_with_ref
-        if has_ref
-        else settings.studio_evolink_20_usd_per_sec_no_ref
+        settings.studio_evolink_20_usd_per_sec_output_480p
+        if res_key == "480p"
+        else settings.studio_evolink_20_usd_per_sec_output_720p
+    )
+
+
+def video_evolink_usd_per_sec_720p(*, variant: str, has_ref: bool) -> float:
+    """Legacy: has_ref=True → video-reference tier."""
+    return video_evolink_usd_per_sec(
+        variant=variant,
+        billing_kind="video_reference_seconds" if has_ref else "output_seconds",
+        resolution="720p",
     )
 
 

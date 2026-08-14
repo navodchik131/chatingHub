@@ -118,16 +118,20 @@ def _usd_per_sec_at_720p(
     )
 
 
-def _clamp_reference_video_seconds(raw: float | int | None, *, fallback: int) -> int:
-    """WaveSpeed: ref video 2–15 с при биллинге ref+output."""
+def _clamp_reference_video_seconds(
+    raw: float | int | None,
+    *,
+    output_duration: int,
+) -> int | None:
+    """WaveSpeed: ref video 2–15 с; None если длина ref неизвестна."""
     if raw is None:
-        ref = fallback
-    else:
-        try:
-            ref = int(math.ceil(float(raw)))
-        except (TypeError, ValueError):
-            ref = fallback
-    return max(2, min(15, ref))
+        return None
+    try:
+        ref = int(math.ceil(float(raw)))
+    except (TypeError, ValueError):
+        return None
+    out = max(1, int(output_duration))
+    return max(2, min(15, min(ref, out)))
 
 
 def motion_video_billed_seconds(
@@ -140,7 +144,9 @@ def motion_video_billed_seconds(
     out = motion_video_duration_seconds(output_duration)
     if not has_motion_reference_video:
         return out
-    ref = _clamp_reference_video_seconds(reference_video_duration, fallback=out)
+    ref = _clamp_reference_video_seconds(reference_video_duration, output_duration=out)
+    if ref is None:
+        return out
     return ref + out
 
 

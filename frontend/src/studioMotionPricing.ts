@@ -200,9 +200,10 @@ function usdPerSecAt720p(
     : pricing.usd_per_sec_without_reference_video
 }
 
-function clampReferenceVideoSeconds(raw: number | null | undefined, fallback: number): number {
-  const ref = raw == null || !Number.isFinite(raw) ? fallback : Math.ceil(raw)
-  return Math.max(2, Math.min(15, ref))
+function clampReferenceVideoSeconds(raw: number, outputDuration: number): number {
+  const out = Math.max(1, Math.round(outputDuration))
+  const ref = Math.ceil(raw)
+  return Math.max(2, Math.min(30, Math.min(ref, out)))
 }
 
 function motionVideoBilledSeconds(
@@ -212,6 +213,9 @@ function motionVideoBilledSeconds(
 ): number {
   const out = Math.max(1, Math.round(outputDuration))
   if (!hasReferenceVideo) return out
+  if (referenceVideoDuration == null || !Number.isFinite(referenceVideoDuration)) {
+    return out
+  }
   const ref = clampReferenceVideoSeconds(referenceVideoDuration, out)
   return ref + out
 }
@@ -343,20 +347,28 @@ export type StudioEvolinkVideoPricing = StudioMotionVideoPricing & {
 
 export const DEFAULT_EVOLINK_VIDEO_PRICING: StudioEvolinkVideoPricing = {
   ...DEFAULT_MOTION_VIDEO_PRICING,
-  usd_per_sec_with_reference_video: 0.08,
-  usd_per_sec_without_reference_video: 0.056,
+  usd_per_sec_with_reference_video: 0.121,
+  usd_per_sec_without_reference_video: 0.199,
   duration_max_20: 15,
   duration_max_25: 30,
   always_charges_credits: true,
   nsfw_supported: false,
   variants: {
     standard: {
-      usd_per_sec_720p_with_reference_video: 0.08,
-      usd_per_sec_720p_without_reference_video: 0.056,
+      usd_per_sec_720p_output: 0.199,
+      usd_per_sec_720p_video_reference: 0.121,
+      usd_per_sec_480p_output: 0.092,
+      usd_per_sec_480p_video_reference: 0.056,
+      usd_per_sec_720p_with_reference_video: 0.121,
+      usd_per_sec_720p_without_reference_video: 0.199,
     },
     seedance_25: {
-      usd_per_sec_720p_with_reference_video: 0.12,
-      usd_per_sec_720p_without_reference_video: 0.09,
+      usd_per_sec_720p_output: 0.293,
+      usd_per_sec_720p_video_reference: 0.179,
+      usd_per_sec_480p_output: 0.136,
+      usd_per_sec_480p_video_reference: 0.083,
+      usd_per_sec_720p_with_reference_video: 0.179,
+      usd_per_sec_720p_without_reference_video: 0.293,
     },
   },
   resolutions_by_variant: {
@@ -395,21 +407,28 @@ export function evolinkDurationMax(
   return variant === 'seedance_25' ? (p.duration_max_25 ?? 30) : (p.duration_max_20 ?? 15)
 }
 
-export function computeEvolinkVideoCreditCost(
-  durationSeconds: number,
+function evolinkUsdPerSec(
+  variant: SeedanceT2vVariant,
+  resolution: SeedanceT2vResolution,
   hasReferenceVideo: boolean,
-  pricing?: Partial<StudioEvolinkVideoPricing> | null,
-  options?: {
-    variant?: SeedanceT2vVariant
-    resolution?: SeedanceT2vResolution
-    referenceVideoDuration?: number | null
-  },
+  pricing: StudioEvolinkVideoPricing,
 ): number {
-  const p = mergeEvolinkVideoPricing(pricing)
-  const variant = options?.variant ?? p.default_variant ?? 'standard'
-  const maxDur = evolinkDurationMax(variant, p)
-  const dur = Math.max(p.duration_min, Math.min(maxDur, Math.round(durationSeconds)))
-  return computeMotionVideoCreditCost(dur, hasReferenceVideo, p, options)
+  const block = pricing.variants?.[variant] as Record<string, number | undefined> | undefined
+  const resKey = resolution === '480p' ? '480p' : '720p'
+  const kind = hasReferenceVideo ? 'video_reference' : 'output'
+  const primary = block?.[`usd_per_sec_${resKey}_${kind}`]
+  if (typeof primary === 'number' && Number.isFinite(primary) && primary >= 0) {
+    return primary
+  }
+  const legacy720 = hasReferenceVideo
+    ? block?.usd_per_sec_720p_with_reference_video
+    : block?.usd_per_sec_720p_without_reference_video
+  if (typeof legacy720 === 'number' && Number.isFinite(legacy720) && legacy720 >= 0) {
+    return legacy720
+  }
+  return hasReferenceVideo
+    ? (pricing.usd_per_sec_with_reference_video ?? 0.121)
+    : (pricing.usd_per_sec_without_reference_video ?? 0.199)
 }
 
 export function computeEvolinkVideoUsdCost(
@@ -425,8 +444,28 @@ export function computeEvolinkVideoUsdCost(
   const p = mergeEvolinkVideoPricing(pricing)
   const variant = options?.variant ?? p.default_variant ?? 'standard'
   const maxDur = evolinkDurationMax(variant, p)
-  const dur = Math.max(p.duration_min, Math.min(maxDur, Math.round(durationSeconds)))
-  return computeMotionVideoUsdCost(dur, hasReferenceVideo, p, options)
+  const out = Math.max(p.duration_min, Math.min(maxDur, Math.round(durationSeconds)))
+  const resolution = options?.resolution ?? p.default_resolution ?? '720p'
+  const rate = evolinkUsdPerSec(variant, resolution, hasReferenceVideo, p)
+  if (hasReferenceVideo) {
+    const billed = motionVideoBilledSeconds(out, true, options?.referenceVideoDuration)
+    return Math.max(0, rate * billed)
+  }
+  return Math.max(0, rate * out)
+}
+
+export function computeEvolinkVideoCreditCost(
+  durationSeconds: number,
+  hasReferenceVideo: boolean,
+  pricing?: Partial<StudioEvolinkVideoPricing> | null,
+  options?: {
+    variant?: SeedanceT2vVariant
+    resolution?: SeedanceT2vResolution
+    referenceVideoDuration?: number | null
+  },
+): number {
+  const usd = computeEvolinkVideoUsdCost(durationSeconds, hasReferenceVideo, pricing, options)
+  return usdToCredits(usd, 0)
 }
 
 /** Кредиты за Video Upscaler Pro (мин. 5 с биллинга WaveSpeed). */

@@ -6180,7 +6180,7 @@ async def api_studio_motion_render_video(
 
         probed = probe_video_duration_seconds(vpath)
         if probed is not None and probed > 0:
-            ref_video_duration = int(math.ceil(probed))
+            ref_video_duration = int(math.ceil(min(float(probed), float(ds_effective))))
 
     ff_gid: int | None = ff_gid_early
     raw_ff = (first_frame_generation_id or "").strip()

@@ -196,7 +196,8 @@ async def execute_evolink_motion_render_video(
                 "У модели нет фото лица для motion control. Добавьте face или первый кадр."
             )
     elif prompt_only_mode and ff_url:
-        model_imgs = filter_model_images_for_seedance_motion_swap(list(sm.images))
+        # Prompt-only: анимируем приложенный кадр, без подмены лицом из кабинета модели.
+        model_imgs = []
     else:
         model_imgs = filter_model_images_for_seedance_video(
             list(sm.images),
@@ -258,6 +259,9 @@ async def execute_evolink_motion_render_video(
         soft_identity=False,
     )
 
+    image_to_video = prompt_only_mode and ff_url and not mv_id and not model_imgs
+    evolink_images = [ff_url] if image_to_video and ff_url else ref_images
+
     cost = apply_seedance_sale_credit_cost(
         plan,
         evolink_video_credit_cost(
@@ -266,14 +270,10 @@ async def execute_evolink_motion_render_video(
             resolution=video_res,
             has_motion_reference_video=bool(mv_id),
             reference_video_duration=ref_video_duration,
+            reference_image_count=len(evolink_images or []),
         ),
     )
     billing = await ensure_can_consume_credits(session, user, cost)
-
-    image_to_video = prompt_only_mode and ff_url and not mv_id and not model_imgs
-    evolink_images = ref_images
-    if image_to_video and ff_url:
-        evolink_images = [ff_url]
 
     video_url: str | None = None
     msg: str | None = None

@@ -108,6 +108,28 @@ def test_seedance_25_more_expensive_than_20_with_ref() -> None:
         assert v25 == 221
 
 
+def test_motion_ref_unknown_duration_bills_output_only() -> None:
+    with _patch_motion_pricing_defaults():
+        assert motion_video_usd_total(
+            5,
+            variant="standard",
+            resolution="720p",
+            has_motion_reference_video=True,
+            reference_video_duration=None,
+        ) == 0.65
+
+
+def test_motion_ref_shorter_than_output_uses_actual_ref() -> None:
+    with _patch_motion_pricing_defaults():
+        assert motion_video_usd_total(
+            5,
+            variant="standard",
+            resolution="720p",
+            has_motion_reference_video=True,
+            reference_video_duration=3,
+        ) == 1.04
+
+
 def test_matches_usd_cent_formula_without_ref() -> None:
     with _patch_motion_pricing_defaults():
         for dur in (4, 10, 15):

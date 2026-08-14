@@ -801,7 +801,9 @@ async def _accept_workflow_video_job(
 
                 probed = probe_video_duration_seconds(vpath)
                 if probed is not None and probed > 0:
-                    ref_video_duration = int(math.ceil(probed))
+                    ref_video_duration = int(
+                        math.ceil(min(float(probed), float(ds_effective)))
+                    )
         motion_cost = motion_video_credit_cost(
             ds_effective,
             variant=seedance_v,

@@ -225,19 +225,20 @@ export function VideoStudioPage({ backend = 'wavespeed' }) {
     const hasReferenceVideo = motionControl && Boolean(cabinet.motionVideoFileId);
     const variant = s.vidSeedanceVariant || 'standard';
     const resolution = vidQualityToResolution(s.vidQuality);
+    const referenceVideoDuration = hasReferenceVideo ? cabinet.motionVideoDurationSec : null
     if (isEvolink) {
       return computeEvolinkVideoCreditCost(duration, hasReferenceVideo, evolinkPricing, {
         variant,
         resolution,
-        referenceVideoDuration: hasReferenceVideo ? duration : null,
+        referenceVideoDuration,
       });
     }
     return computeMotionVideoCreditCost(duration, hasReferenceVideo, cabinet.health?.studio_motion_video_pricing, {
       variant,
       resolution,
-      referenceVideoDuration: hasReferenceVideo ? duration : null,
+      referenceVideoDuration,
     });
-  }, [isEvolink, evolinkPricing, cabinet.health, cabinet.motionVideoFileId, s.vidTime, s.vidQuality, s.vidSeedanceVariant, motionControl]);
+  }, [isEvolink, evolinkPricing, cabinet.health, cabinet.motionVideoFileId, cabinet.motionVideoDurationSec, s.vidTime, s.vidQuality, s.vidSeedanceVariant, motionControl]);
 
   const vidUsd = useMemo(() => {
     if (isEvolink) return 0;
@@ -245,12 +246,13 @@ export function VideoStudioPage({ backend = 'wavespeed' }) {
     const hasReferenceVideo = motionControl && Boolean(cabinet.motionVideoFileId);
     const pricing = cabinet.health?.studio_motion_video_pricing;
     const variant = s.vidSeedanceVariant || 'standard';
+    const referenceVideoDuration = hasReferenceVideo ? cabinet.motionVideoDurationSec : null
     return computeMotionVideoUsdCost(duration, hasReferenceVideo, pricing, {
       variant,
       resolution: vidQualityToResolution(s.vidQuality),
-      referenceVideoDuration: hasReferenceVideo ? duration : null,
+      referenceVideoDuration,
     });
-  }, [isEvolink, cabinet.health, cabinet.motionVideoFileId, s.vidTime, s.vidQuality, s.vidSeedanceVariant, motionControl]);
+  }, [isEvolink, cabinet.health, cabinet.motionVideoFileId, cabinet.motionVideoDurationSec, s.vidTime, s.vidQuality, s.vidSeedanceVariant, motionControl]);
 
   const activePricing = isEvolink ? evolinkPricing : cabinet.health?.studio_motion_video_pricing;
 

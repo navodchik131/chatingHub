@@ -129,6 +129,7 @@ export function CabinetDataProvider({ children }) {
   const [cameraPresets, setCameraPresets] = useState([])
   const [slotArchivePicks, setSlotArchivePicks] = useState({})
   const [motionVideoFileId, setMotionVideoFileId] = useState(null)
+  const [motionVideoDurationSec, setMotionVideoDurationSec] = useState(null)
   const [firstFrameGenId, setFirstFrameGenId] = useState(null)
   const [firstFrameUrl, setFirstFrameUrl] = useState(null)
   const [tributeEarnings, setTributeEarnings] = useState(null)
@@ -1263,18 +1264,23 @@ export function CabinetDataProvider({ children }) {
       else delete next[key]
       return next
     })
-    if (key === 'motion-video' && !file) setMotionVideoFileId(null)
+    if (key === 'motion-video' && !file) {
+      setMotionVideoFileId(null)
+      setMotionVideoDurationSec(null)
+    }
   }, [])
 
   const uploadDrivingVideo = useCallback(
     async (file) => {
       await run(async () => {
         setMotionVideoFileId(null)
+        setMotionVideoDurationSec(null)
         setFirstFrameGenId(null)
         setFirstFrameUrl(null)
         setUploadFile('motion-video', file)
-        const { motionVideoFileId: id } = await actions.uploadMotionDrivingVideo(file)
+        const { motionVideoFileId: id, durationSeconds } = await actions.uploadMotionDrivingVideo(file)
         setMotionVideoFileId(id)
+        setMotionVideoDurationSec(durationSeconds)
         return id
       })
     },
@@ -1675,6 +1681,7 @@ export function CabinetDataProvider({ children }) {
       slotArchivePicks,
       setSlotArchivePicks,
       motionVideoFileId,
+      motionVideoDurationSec,
       setMotionVideoFileId,
       firstFrameGenId,
       firstFrameUrl,
@@ -1795,6 +1802,7 @@ export function CabinetDataProvider({ children }) {
       setUploadFile,
       slotArchivePicks,
       motionVideoFileId,
+      motionVideoDurationSec,
       firstFrameGenId,
       firstFrameUrl,
       tributeEarnings,
